@@ -1,0 +1,116 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PHOENIX · Superficie de artefactos inline</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f8fafc;
+    --fg: #172033;
+    --muted: #5b6475;
+    --line: #64748b;
+    --neutral: #e2e8f0;
+    --input: #bfdbfe;
+    --process: #c7d2fe;
+    --storage: #99f6e4;
+    --external: #fde68a;
+    --risk: #fecaca;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f172a; --fg:#e5e7eb; --muted:#a3adbd; --line:#94a3b8; --neutral:#334155; --input:#1d4ed8; --process:#4338ca; --storage:#0f766e; --external:#92400e; --risk:#991b1b; }
+  }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  main { max-width:1120px; margin:32px auto; padding:0 20px; }
+  svg { width:100%; height:auto; display:block; }
+  .title { font-size:20px; font-weight:650; fill:var(--fg); }
+  .label { font-size:14px; font-weight:600; fill:var(--fg); }
+  .small { font-size:12px; fill:var(--muted); }
+  .node { stroke:var(--line); stroke-width:1; }
+  .neutral { fill:var(--neutral); }
+  .input { fill:var(--input); }
+  .process { fill:var(--process); }
+  .storage { fill:var(--storage); }
+  .external { fill:var(--external); }
+  .risk { fill:var(--risk); }
+  .edge { stroke:var(--line); stroke-width:1.5; fill:none; }
+  .zone { fill:none; stroke:var(--line); stroke-width:1; stroke-dasharray:6 5; opacity:.8; }
+  .alt { max-width:900px; margin:16px 0 0; color:var(--muted); }
+</style>
+<main>
+  <svg viewBox="0 0 1120 650" role="img" aria-labelledby="diagram-title diagram-desc">
+    <title id="diagram-title">Arquitectura de artefactos inline de PHOENIX</title>
+    <desc id="diagram-desc">Un resultado de una skill entra al ensamblador de artefactos, pasa por un host seguro y se muestra inline como HTML, SVG o A2UI. Desde allí puede emitir estado listo, captura y descarga, o abrir una URL de respaldo.</desc>
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)" /></marker>
+    </defs>
+
+    <text x="40" y="38" class="title">PHOENIX · Superficie de artefactos inline</text>
+    <text x="40" y="64" class="small">Arquitectura objetivo inspirada en las capacidades Canvas/A2UI observadas en OpenClaw</text>
+
+    <rect x="24" y="92" width="1072" height="194" rx="16" class="zone" />
+    <text x="44" y="119" class="small">Flujo de entrega dentro del chat</text>
+
+    <!-- Conectores antes de los nodos -->
+    <path d="M 194 190 H 250" class="edge" marker-end="url(#arrow)" />
+    <path d="M 420 190 H 476" class="edge" marker-end="url(#arrow)" />
+    <path d="M 646 190 H 702" class="edge" marker-end="url(#arrow)" />
+    <path d="M 872 190 H 928" class="edge" marker-end="url(#arrow)" />
+    <path d="M 787 235 V 350" class="edge" marker-end="url(#arrow)" />
+    <path d="M 787 490 V 555" class="edge" marker-end="url(#arrow)" />
+
+    <g>
+      <rect x="44" y="145" width="150" height="90" rx="12" class="node input" />
+      <text x="119" y="177" text-anchor="middle" class="label">Skill / tool</text>
+      <text x="119" y="198" text-anchor="middle" class="small">resultado asentado</text>
+      <text x="119" y="216" text-anchor="middle" class="small">HTML · JSON · media</text>
+    </g>
+    <g>
+      <rect x="250" y="145" width="170" height="90" rx="12" class="node process" />
+      <text x="335" y="177" text-anchor="middle" class="label">Artifact assembler</text>
+      <text x="335" y="198" text-anchor="middle" class="small">id · MIME · permisos</text>
+      <text x="335" y="216" text-anchor="middle" class="small">estado · errores</text>
+    </g>
+    <g>
+      <rect x="476" y="145" width="170" height="90" rx="12" class="node risk" />
+      <text x="561" y="177" text-anchor="middle" class="label">Safe host</text>
+      <text x="561" y="198" text-anchor="middle" class="small">CSP · sandbox</text>
+      <text x="561" y="216" text-anchor="middle" class="small">root seguro · MIME</text>
+    </g>
+    <g>
+      <rect x="702" y="145" width="170" height="90" rx="12" class="node storage" />
+      <text x="787" y="177" text-anchor="middle" class="label">Inline preview</text>
+      <text x="787" y="198" text-anchor="middle" class="small">HTML · SVG · A2UI</text>
+      <text x="787" y="216" text-anchor="middle" class="small">page-ready · resize</text>
+    </g>
+    <g>
+      <rect x="928" y="145" width="150" height="90" rx="12" class="node external" />
+      <text x="1003" y="177" text-anchor="middle" class="label">Chat surface</text>
+      <text x="1003" y="198" text-anchor="middle" class="small">visible y colapsable</text>
+      <text x="1003" y="216" text-anchor="middle" class="small">acciones explícitas</text>
+    </g>
+
+    <rect x="24" y="318" width="1072" height="274" rx="16" class="zone" />
+    <text x="44" y="345" class="small">Capacidades que hoy faltan o están parciales</text>
+
+    <g>
+      <rect x="644" y="350" width="286" height="140" rx="12" class="node neutral" />
+      <text x="787" y="382" text-anchor="middle" class="label">Control bridge</text>
+      <text x="787" y="406" text-anchor="middle" class="small">postMessage tipado</text>
+      <text x="787" y="427" text-anchor="middle" class="small">ready · error · capture</text>
+      <text x="787" y="448" text-anchor="middle" class="small">reload · interaction</text>
+      <text x="787" y="469" text-anchor="middle" class="small">altura automática</text>
+    </g>
+    <g>
+      <rect x="644" y="555" width="286" height="40" rx="12" class="node external" />
+      <text x="787" y="580" text-anchor="middle" class="label">PNG · descarga · URL fallback</text>
+    </g>
+    <g>
+      <rect x="90" y="380" width="380" height="120" rx="12" class="node process" />
+      <text x="280" y="414" text-anchor="middle" class="label">Estado operativo visible</text>
+      <text x="280" y="438" text-anchor="middle" class="small">Loading · Ready · Blocked · Error</text>
+      <text x="280" y="460" text-anchor="middle" class="small">dependencias · permisos · entrada faltante</text>
+      <text x="280" y="482" text-anchor="middle" class="small">sin confundir preflight con ejecución real</text>
+    </g>
+  </svg>
+  <p class="alt"><strong>Resumen accesible:</strong> el flujo conserva el resultado dentro del chat, protege la ejecución con un host seguro y expone estado, interacción, captura, descarga y URL de respaldo como acciones separadas.</p>
+</main>

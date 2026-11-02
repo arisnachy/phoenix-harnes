@@ -1,0 +1,57 @@
+{
+  "name": "@phoenix-ai/dsh-session-query",
+  "description": "Combined session query service contract with concrete reads, traces, and filters",
+  "version": "0.1.1-rc.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
+    "directory": "packages/session-query/session-query"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-session-title": "workspace:^",
+    "@phoenix-ai/dsh-session-persistence": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^"
+  },
+  "peerDependenciesMeta": {
+    "@phoenix-ai/dsh-session-persistence": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-session-title": "workspace:^",
+    "@phoenix-ai/dsh-session-persistence": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^"
+  }
+}

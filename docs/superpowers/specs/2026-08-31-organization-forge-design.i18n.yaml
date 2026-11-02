@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/superpowers/specs/2026-08-31-organization-forge-design.md
+2026-08-31-organization-forge-design.md: 5d3b0793229621e035c4820c2d9de8b786bc08ed
+2026-08-31-organization-forge-design.zh.md: 730ae33d0b41e2c18f3e5a95bad4809aee69781f

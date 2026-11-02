@@ -1,0 +1,46 @@
+.editor {
+  width: min(100%, 940px);
+  max-height: min(68vh, 650px);
+  overflow: auto;
+  margin: 15px auto 0;
+  padding: 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  background: var(--dsw-alias-background-primary);
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  box-sizing: border-box;
+}
+.heading, .actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.heading button { padding: 4px 10px; border: 0; background: transparent; cursor: pointer; color: inherit; font-size: 20px; }
+.columns { display: grid; grid-template-columns: minmax(0,1.05fr) minmax(0,.95fr); gap: 16px; margin-top: 12px; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-content: start; }
+.fields label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.fields label:nth-of-type(2), .fields label:nth-of-type(3), .fields label:nth-of-type(8),
+.fields label:nth-of-type(10) { grid-column: 1 / -1; }
+.fields input, .fields textarea, .fields select {
+  width: 100%; box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px; padding: 7px 9px; background: transparent; color: inherit;
+  font: inherit; font-size: 13px;
+}
+.fields small { grid-column: 1 / -1; color: var(--dsw-alias-label-tertiary); font-size: 11px; }
+.preview {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px;
+  padding: 24px 18px; min-height: 330px; background: #fffefa; color: #1a2732; border: 1px solid #e6dfd1;
+  text-align: center; font-family: Georgia, "Times New Roman", serif; box-sizing: border-box;
+}
+.logo { width: 70px; height: 70px; object-fit: contain; }
+.logoPlaceholder { padding: 15px; border: 1px dashed #aaa; font-size: 10px; color: #777; }
+.preview h3 { margin: 22px 0 10px; font-size: 17px; line-height: 1.4; overflow-wrap: anywhere; }
+.preview span { font-size: 12px; }
+.preview div { white-space: pre-line; overflow-wrap: anywhere; font-size: 12px; }
+.actions { justify-content: flex-end; margin-top: 14px; }
+.actions button { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: transparent; color: inherit; cursor: pointer; }
+.actions button:last-child { background: var(--dsw-specific-phoenix-accent); color: white; border-color: transparent; }
+@media(max-width: 720px) {
+  .editor { max-height: 55vh; padding: 10px; }
+  .columns { grid-template-columns: 1fr; }
+  .fields { grid-template-columns: 1fr; }
+  .fields label { grid-column: 1 / -1; }
+  .preview { min-height: 260px; }
+}

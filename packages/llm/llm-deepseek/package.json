@@ -1,0 +1,66 @@
+{
+  "name": "@phoenix-ai/dsh-llm-deepseek",
+  "description": "DeepSeek chat-completions adapter for the PHOENIX LLM seam",
+  "version": "0.1.1-rc.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
+    "directory": "packages/llm/llm-deepseek"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@phoenix-ai/dsh-attachment": "workspace:^",
+    "@phoenix-ai/dsh-atomic-write": "workspace:^",
+    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-credentials": "workspace:^",
+    "@phoenix-ai/dsh-launch-environment": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-home-paths": "workspace:^",
+    "@phoenix-ai/dsh-settings": "workspace:^",
+    "@phoenix-ai/dsh-timeout": "workspace:^",
+    "@phoenix-ai/dsh-anonymous-user-id": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^"
+  },
+  "dependencies": {
+    "eventsource-parser": "^3.1.0",
+    "@phoenix-ai/schemastery": "workspace:^"
+  },
+  "devDependencies": {
+    "@phoenix-ai/dsh-attachment": "workspace:^",
+    "@phoenix-ai/dsh-atomic-write": "workspace:^",
+    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-credentials": "workspace:^",
+    "@phoenix-ai/dsh-launch-environment": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-home-paths": "workspace:^",
+    "@phoenix-ai/dsh-settings": "workspace:^",
+    "@phoenix-ai/dsh-timeout": "workspace:^",
+    "@phoenix-ai/dsh-anonymous-user-id": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^"
+  }
+}

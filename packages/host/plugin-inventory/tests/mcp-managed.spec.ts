@@ -1,0 +1,1337 @@
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  ManagedMcpController,
+  MANAGED_MCP_INJECT,
+  managedMcpPatchPath,
+  type ManagedMcpLoader,
+  type ManagedMcpRegistrySearch,
+} from '../src/mcp-managed.ts'
+import type { McpRegistryCandidate, McpRegistrySearchSnapshot } from '../src/types.ts'
+
+const roots: string[] = []
+
+afterEach(() => {
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+  vi.restoreAllMocks()
+})
+
+function tempPatch(): string {
+  const root = mkdtempSync(join(tmpdir(), 'phoenix-managed-mcp-'))
+  roots.push(root)
+  return join(root, 'nested', 'managed.patch.yml')
+}
+
+function candidate(overrides: Partial<McpRegistryCandidate> = {}): McpRegistryCandidate {
+  return {
+    name: 'io.example/calendar',
+    title: 'Calendar',
+    description: 'Calendar tools.',
+    version: '1.0.0',
+    status: 'active',
+    trust: 'registry-listed',
+    icons: [],
+    transports: ['streamable-http'],
+    packages: [],
+    remoteUrl: 'https://mcp.example.com/calendar',
+    ...overrides,
+  }
+}
+
+function registry(values: readonly McpRegistryCandidate[]): ManagedMcpRegistrySearch & ReturnType<typeof vi.fn> {
+  return vi.fn(async ({ query }: { query: string; limit?: number }): Promise<McpRegistrySearchSnapshot> => ({
+    source: 'official-mcp-registry',
+    query,
+    fetchedAt: '2026-09-18T12:00:00.000Z',
+    stale: false,
+    candidates: values,
+  }))
+}
+
+function loader(options: { createError?: Error; updateError?: Error; removeError?: Error } = {}): ManagedMcpLoader & {
+  create: ReturnType<typeof vi.fn>
+  update: ReturnType<typeof vi.fn>
+  remove: ReturnType<typeof vi.fn>
+} {
+  return {
+    create: vi.fn(async () => {
+      if (options.createError !== undefined) throw options.createError
+      return 'live-entry-id'
+    }),
+    update: vi.fn(async () => {
+      if (options.updateError !== undefined) throw options.updateError
+    }),
+    remove: vi.fn(async () => {
+      if (options.removeError !== undefined) throw options.removeError
+    }),
+  }
+}
+
+describe('ManagedMcpController', () => {
+  it('starts empty, installs a verified remote, persists it, and remains idempotent', async () => {
+    const patchPath = tempPatch()
+    const search = registry([candidate()])
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: search })
+
+    await expect(controller.snapshot()).resolves.toEqual([])
+    const installed = await controller.install({ name: ' io.example/calendar ', version: '1.0.0' })
+    expect(installed).toMatchObject({
+      status: 'installed',
+      connector: {
+        entryId: 'live-entry-id',
+        url: 'https://mcp.example.com/calendar',
+        source: { kind: 'registry', name: 'io.example/calendar', version: '1.0.0' },
+      },
+    })
+    expect(installed.connector.serverName).toMatch(/^calendar-[a-f0-9]{7}$/)
+    expect(search).toHaveBeenCalledWith({ query: 'io.example/calendar', limit: 20 })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
+      config: {
+        transport: 'streamable-http',
+        serverName: installed.connector.serverName,
+        url: 'https://mcp.example.com/calendar',
+        headers: {},
+        oauth: true,
+      },
+    })
+    const persisted = JSON.parse(readFileSync(patchPath, 'utf8')) as unknown[]
+    expect(persisted).toHaveLength(1)
+    await expect(controller.snapshot()).resolves.toEqual([{
+      entryId: 'live-entry-id',
+      serverName: installed.connector.serverName,
+      url: 'https://mcp.example.com/calendar',
+      source: { kind: 'registry', name: 'io.example/calendar', version: '1.0.0' },
+    }])
+
+    await expect(controller.install({ name: 'io.example/calendar' })).resolves.toMatchObject({
+      status: 'already-installed',
+      connector: { entryId: 'live-entry-id' },
+    })
+    expect(live.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not duplicate an installed MCP namespace when the registry upgrades its remote URL', async () => {
+    const patchPath = tempPatch()
+    let newest = candidate()
+    const search = vi.fn(async ({ query }: { query: string }): Promise<McpRegistrySearchSnapshot> => ({
+      source: 'official-mcp-registry',
+      query,
+      fetchedAt: '2026-10-07T12:00:00.000Z',
+      stale: false,
+      candidates: [newest],
+    }))
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: search })
+    const installed = await controller.install({ name: newest.name, version: newest.version })
+    newest = candidate({ version: '2.0.0', remoteUrl: 'https://mcp.example.com/calendar-v2' })
+    await expect(controller.install({ name: newest.name, version: newest.version }))
+      .resolves.toMatchObject({ status: 'already-installed', connector: { entryId: installed.connector.entryId } })
+    expect(live.create).toHaveBeenCalledTimes(1)
+    await expect(controller.snapshot()).resolves.toHaveLength(1)
+  })
+
+  it('installs, persists, and repairs the pinned official Devpost Hackathons MCP', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create
+      .mockResolvedValueOnce('devpost-entry')
+      .mockResolvedValueOnce('devpost-repaired')
+    const search = registry([])
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: search })
+
+    const installed = await controller.installDevpostHackathons()
+    expect(installed).toEqual({
+      status: 'installed',
+      connector: {
+        entryId: 'devpost-entry',
+        serverName: 'devpost',
+        url: 'https://devpost.com/mcp',
+        source: { kind: 'curated', connectorId: 'devpost' },
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
+      config: {
+        transport: 'streamable-http',
+        serverName: 'devpost',
+        url: 'https://devpost.com/mcp',
+        headers: {},
+        oauth: true,
+      },
+    })
+    expect(search).not.toHaveBeenCalled()
+    expect(readFileSync(patchPath, 'utf8')).toContain('https://devpost.com/mcp')
+
+    await expect(controller.installDevpostHackathons()).resolves.toMatchObject({
+      status: 'already-installed',
+      connector: { entryId: 'devpost-entry' },
+    })
+    expect(live.create).toHaveBeenCalledTimes(1)
+
+    const repaired = await controller.repair({ entryId: 'devpost-entry' })
+    expect(live.remove).toHaveBeenCalledWith('devpost-entry')
+    expect(repaired).toMatchObject({
+      status: 'installed',
+      connector: {
+        entryId: 'devpost-repaired',
+        serverName: 'devpost',
+        url: 'https://devpost.com/mcp',
+        source: { kind: 'curated', connectorId: 'devpost' },
+      },
+    })
+    expect(search).not.toHaveBeenCalled()
+
+    await expect(controller.removeDevpostHackathons()).resolves.toBe(true)
+    expect(live.remove).toHaveBeenCalledWith('devpost-repaired')
+    await expect(controller.snapshot()).resolves.toEqual([])
+  })
+
+
+  it('installs Cloudflare Code Mode through official OAuth instead of requiring an API key', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    const installed = await controller.installCuratedMcp('cloudflare')
+    expect(installed.connector).toMatchObject({
+      serverName: 'cloudflare',
+      url: 'https://mcp.cloudflare.com/mcp',
+      source: { kind: 'curated', connectorId: 'cloudflare' },
+    })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
+      config: expect.objectContaining({
+        serverName: 'cloudflare',
+        url: 'https://mcp.cloudflare.com/mcp',
+        transport: 'streamable-http',
+        oauth: true,
+        headers: {},
+      }),
+    })
+    const config = live.create.mock.calls[0]?.[0]?.config
+    expect(config).not.toHaveProperty('bearerTokenRef')
+    expect(config).not.toHaveProperty('oauthClientIdRef')
+    expect(config).not.toHaveProperty('oauthClientSecretRef')
+  })
+
+  it('installs, persists, repairs, and removes Canva\'s pinned official MCP', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create
+      .mockResolvedValueOnce('canva-entry')
+      .mockResolvedValueOnce('canva-repaired')
+    const search = registry([])
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: search })
+
+    const installed = await controller.installCanva()
+    expect(installed).toEqual({
+      status: 'installed',
+      connector: {
+        entryId: 'canva-entry',
+        serverName: 'canva',
+        url: 'https://mcp.canva.com/mcp',
+        source: { kind: 'curated', connectorId: 'canva' },
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
+      config: {
+        transport: 'streamable-http',
+        serverName: 'canva',
+        url: 'https://mcp.canva.com/mcp',
+        headers: {},
+        oauth: true,
+        toolCallTimeoutMs: 60_000,
+        startupTimeoutMs: 5_000,
+        failOnStartupError: false,
+      },
+    })
+    expect(search).not.toHaveBeenCalled()
+    expect(readFileSync(patchPath, 'utf8')).toContain('https://mcp.canva.com/mcp')
+
+    await expect(controller.installCanva()).resolves.toMatchObject({
+      status: 'already-installed',
+      connector: { entryId: 'canva-entry' },
+    })
+    expect(live.create).toHaveBeenCalledTimes(1)
+
+    const repaired = await controller.repair({ entryId: 'canva-entry' })
+    expect(live.remove).toHaveBeenCalledWith('canva-entry')
+    expect(repaired).toMatchObject({
+      status: 'installed',
+      connector: {
+        entryId: 'canva-repaired',
+        serverName: 'canva',
+        url: 'https://mcp.canva.com/mcp',
+        source: { kind: 'curated', connectorId: 'canva' },
+      },
+    })
+    expect(search).not.toHaveBeenCalled()
+
+    await expect(controller.removeCanva()).resolves.toBe(true)
+    expect(live.remove).toHaveBeenCalledWith('canva-repaired')
+    await expect(controller.snapshot()).resolves.toEqual([])
+  })
+
+  it('restores the Phoenix core MCP pack with pinned remotes and local runners', async () => {
+    const patchPath = tempPatch()
+    type CreateOptions = Parameters<ManagedMcpLoader['create']>[0]
+    const created: CreateOptions[] = []
+    const live: ManagedMcpLoader = {
+      create(options) {
+        created.push(options)
+        return Promise.resolve(`entry-${options.config.serverName}`)
+      },
+      update() {
+        return Promise.resolve()
+      },
+      remove() {
+        return Promise.resolve()
+      },
+    }
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+
+    const restored = await controller.ensureCoreMcpPack()
+    expect(restored.failed).toEqual([])
+    expect(restored.installed).toEqual(expect.arrayContaining([
+      'microsoft-learn', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack',
+      'brave-search', 'filesystem', 'memory', 'fetch',
+    ]))
+    expect(restored.installed).not.toContain('devpost')
+    expect(restored.installed).not.toContain('microsoft-workiq')
+    expect(restored.installed).not.toContain('microsoft-azure')
+
+    expect(created.every(options =>
+      JSON.stringify(options.inject) === JSON.stringify(MANAGED_MCP_INJECT))).toBe(true)
+    const configs = new Map(created.map(({ config }) => [config.serverName, config]))
+    expect(configs.get('microsoft-learn')).toMatchObject({
+      transport: 'streamable-http', serverName: 'microsoft-learn',
+      url: 'https://learn.microsoft.com/api/mcp', oauth: false, headers: {},
+    })
+    expect(configs.get('supabase')).toMatchObject({
+      transport: 'streamable-http',
+      serverName: 'supabase',
+      url: 'https://mcp.supabase.com/mcp',
+      oauth: true,
+    })
+    expect(configs.get('heygen')).toMatchObject({
+      transport: 'streamable-http',
+      serverName: 'heygen',
+      url: 'https://mcp.heygen.com/mcp/v1/',
+      oauth: true,
+    })
+    expect(configs.get('figma')).toMatchObject({
+      transport: 'streamable-http',
+      serverName: 'figma',
+      url: 'https://mcp.figma.com/mcp',
+      oauth: true,
+    })
+    expect(configs.get('slack')).toMatchObject({
+      transport: 'streamable-http',
+      serverName: 'slack',
+      url: 'https://mcp.slack.com/mcp',
+      oauth: true,
+      oauthClientIdRef: 'SLACK_MCP_CLIENT_ID',
+      oauthClientSecretRef: 'SLACK_MCP_CLIENT_SECRET',
+      oauthCallbackPort: 17844,
+      oauthTokenEndpointAuthMethod: 'client_secret_post',
+    })
+    expect(configs.get('brave-search')).toMatchObject({
+      transport: 'stdio',
+      serverName: 'brave-search',
+      command: 'npx',
+      envCredentialRefs: { BRAVE_API_KEY: 'BRAVE_API_KEY' },
+    })
+    expect(configs.get('filesystem')).toMatchObject({
+      transport: 'stdio',
+      serverName: 'filesystem',
+      args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
+    })
+    expect(configs.get('fetch')).toMatchObject({
+      transport: 'stdio',
+      serverName: 'fetch',
+      command: 'uvx',
+      args: ['mcp-server-fetch'],
+    })
+
+    const snapshot = await controller.snapshot()
+    expect(snapshot).toHaveLength(restored.installed.length)
+    expect(snapshot).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        serverName: 'linear',
+        url: 'https://mcp.linear.app/mcp',
+        source: { kind: 'curated', connectorId: 'linear' },
+      }),
+      expect.objectContaining({
+        serverName: 'figma',
+        url: 'https://mcp.figma.com/mcp',
+        source: { kind: 'curated', connectorId: 'figma' },
+      }),
+      expect.objectContaining({
+        serverName: 'memory',
+        url: 'stdio://memory',
+        source: { kind: 'curated', connectorId: 'memory' },
+      }),
+    ]))
+
+    const second = await controller.ensureCoreMcpPack()
+    expect(second.installed).toEqual([])
+    expect(second.alreadyInstalled).toEqual(expect.arrayContaining([...restored.installed]))
+    expect(created).toHaveLength(restored.installed.length)
+  })
+
+  it('migrates a legacy installed OAuth MCP to wait for authorization services', async () => {
+    const patchPath = tempPatch()
+    mkdirSync(dirname(patchPath), { recursive: true })
+    writeFileSync(patchPath, JSON.stringify([{
+      insert: [{
+        id: 'legacy-notion',
+        name: '@phoenix-ai/dsh-mcp-client',
+        config: {
+          transport: 'streamable-http',
+          serverName: 'notion',
+          url: 'https://mcp.notion.com/mcp',
+          headers: {},
+          oauth: true,
+          toolCallTimeoutMs: 60_000,
+          startupTimeoutMs: 5_000,
+          failOnStartupError: false,
+        },
+        source: { kind: 'curated', connectorId: 'notion' },
+      }],
+    }]))
+
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+
+    await expect(controller.installCuratedMcp('notion')).resolves.toMatchObject({
+      status: 'already-installed',
+      connector: { entryId: 'legacy-notion', serverName: 'notion' },
+    })
+
+    expect(live.update).toHaveBeenCalledWith('legacy-notion', {
+      inject: [...MANAGED_MCP_INJECT],
+    })
+    expect(live.create).not.toHaveBeenCalled()
+
+    const persisted = JSON.parse(readFileSync(patchPath, 'utf8')) as Array<{
+      insert: Array<{ id: string; inject?: string[] }>
+    }>
+    expect(persisted[0]?.insert[0]).toMatchObject({
+      id: 'legacy-notion',
+      inject: [...MANAGED_MCP_INJECT],
+    })
+  })
+
+  it('repairs a curated Supabase MCP from the Host-pinned endpoint', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create
+      .mockResolvedValueOnce('supabase-entry')
+      .mockResolvedValueOnce('supabase-repaired')
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+
+    const installed = await controller.installCuratedMcp('supabase')
+    expect(installed.connector).toEqual({
+      entryId: 'supabase-entry',
+      serverName: 'supabase',
+      url: 'https://mcp.supabase.com/mcp',
+      source: { kind: 'curated', connectorId: 'supabase' },
+    })
+    await expect(controller.repair({ entryId: 'supabase-entry' })).resolves.toMatchObject({
+      status: 'installed',
+      connector: {
+        entryId: 'supabase-repaired',
+        serverName: 'supabase',
+        url: 'https://mcp.supabase.com/mcp',
+        source: { kind: 'curated', connectorId: 'supabase' },
+      },
+    })
+  })
+
+  it('offers GitHub official MCP without requiring GitHub Copilot model auth', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(controller.installCuratedMcp('github')).resolves.toMatchObject({
+      connector: {
+        serverName: 'github',
+        url: 'https://api.githubcopilot.com/mcp/',
+        source: { kind: 'curated', connectorId: 'github' },
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({
+        transport: 'streamable-http', serverName: 'github',
+        url: 'https://api.githubcopilot.com/mcp/', oauth: false,
+        bearerTokenRef: 'GITHUB_MCP_TOKEN',
+      }),
+    }))
+  })
+
+  it('reads the GitHub PAT config in row 16 without breaking the MCP catalog', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await controller.installCuratedMcp('github')
+    const official = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert[0]
+    const prefix = Array.from({ length: 16 }, (_, index) => ({
+      id: `oauth-${index}`,
+      name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
+      config: { transport: 'streamable-http', serverName: `oauth-${index}`,
+        url: `https://provider${index}.example.test/mcp`, headers: {}, oauth: true },
+      source: { kind: 'registry', name: `test/provider-${index}` },
+    }))
+    mkdirSync(dirname(patchPath), { recursive: true })
+    writeFileSync(patchPath, JSON.stringify([{ insert: [...prefix, official] }]))
+    const before = readFileSync(patchPath, 'utf8')
+    await expect(controller.snapshot()).resolves.toHaveLength(17)
+    await expect(controller.snapshot()).resolves.toEqual(expect.arrayContaining([{
+      entryId: official.id,
+      serverName: 'github', url: 'https://api.githubcopilot.com/mcp/',
+      source: { kind: 'curated', connectorId: 'github' },
+    }]))
+    await expect(controller.installCuratedMcp('github')).resolves.toMatchObject({
+      status: 'already-installed', connector: { entryId: official.id },
+    })
+    expect(readFileSync(patchPath, 'utf8')).toBe(before)
+  })
+
+  it('accepts only the exact pinned GitHub token reference, URL and headers', async () => {
+    const patchPath = tempPatch()
+    const controller = new ManagedMcpController(loader(), { patchPath, registrySearch: registry([]) })
+    await controller.installCuratedMcp('github')
+    const official = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert[0]
+    for (const tampered of [
+      { ...official.config, bearerTokenRef: 'OTHER_TOKEN' },
+      { ...official.config, url: 'https://untrusted.example.test/mcp' },
+      { ...official.config, headers: { Authorization: 'not-allowed' } },
+      { ...official.config, oauthClientIdRef: 'UNEXPECTED_APP' },
+      { ...official.config, bearerTokenRef: undefined },
+    ]) {
+      writeFileSync(patchPath, JSON.stringify([{ insert: [{ ...official, config: tampered }] }]))
+      await expect(controller.snapshot()).rejects.toThrow(/managed MCP patch row 0 is invalid/)
+    }
+  })
+
+  it('installs X OAuth MCP independently of the failing public registry, never advertising it authenticated', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create.mockResolvedValueOnce('x-api-entry').mockResolvedValueOnce('x-docs-entry')
+    const registrySearch = vi.fn(async () => { throw new Error('official registry unavailable') })
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch })
+    const api = await controller.installCuratedMcp('x')
+    const docs = await controller.installCuratedMcp('x-docs')
+    expect(api.connector).toMatchObject({
+      entryId: 'x-api-entry', serverName: 'x-api',
+      source: { kind: 'curated', connectorId: 'x' },
+    })
+    expect(docs.connector).toMatchObject({
+      entryId: 'x-docs-entry', serverName: 'x-docs',
+      source: { kind: 'curated', connectorId: 'x-docs' },
+    })
+    expect(live.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      config: expect.objectContaining({
+        transport: 'stdio', serverName: 'x-api', command: 'npx',
+        args: ['-y', '@xdevplatform/xurl', 'mcp', 'https://api.x.com/mcp'],
+        envCredentialRefs: { CLIENT_ID: 'X_CLIENT_ID', CLIENT_SECRET: 'X_CLIENT_SECRET' },
+      }),
+    }))
+    expect(registrySearch).not.toHaveBeenCalled()
+    await expect(controller.installCuratedMcp('x')).resolves.toMatchObject({ status: 'already-installed' })
+    const rows = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert
+    expect(JSON.stringify(rows)).not.toContain('oauth_access_token')
+    expect(JSON.stringify(rows)).not.toContain('real_secret_value')
+  })
+
+  it('installs Meta Graph publishing with vault-only token references and no registry lookup', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const registrySearch = vi.fn(async () => { throw new Error('registry unavailable') })
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch })
+    await expect(controller.installCuratedMcp('meta-publishing')).resolves.toMatchObject({
+      connector: { serverName: 'meta-publishing',
+        source: { kind: 'curated', connectorId: 'meta-publishing' } },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({
+        transport: 'stdio', command: 'node', args: ['scripts/phoenix-social-mcp.mjs'],
+        env: {},
+        envCredentialRefs: {
+          PHOENIX_SOCIAL_FACEBOOK_PAGE_TOKEN: 'PHOENIX_META_PAGE_TOKEN',
+          PHOENIX_SOCIAL_FACEBOOK_PAGE_ID: 'PHOENIX_META_PAGE_ID',
+          PHOENIX_SOCIAL_INSTAGRAM_TOKEN: 'PHOENIX_META_INSTAGRAM_TOKEN',
+          PHOENIX_SOCIAL_INSTAGRAM_USER_ID: 'PHOENIX_META_INSTAGRAM_USER_ID',
+        },
+      }),
+    }))
+    expect(registrySearch).not.toHaveBeenCalled()
+    const persisted = readFileSync(patchPath, 'utf8')
+    expect(persisted).not.toContain('actual_page_access_token_value')
+    expect(persisted).toContain('PHOENIX_META_PAGE_TOKEN')
+  })
+
+  it('pins Meta DevTools and WhatsApp Business to their exact official endpoints without secrets', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create.mockResolvedValueOnce('meta-devtools-instance').mockResolvedValueOnce('meta-whatsapp-instance')
+    const registrySearch = registry([])
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch })
+    const devtools = await controller.installCuratedMcp('meta-devtools')
+    const whatsapp = await controller.installCuratedMcp('meta-whatsapp-business')
+    expect(devtools).toMatchObject({ status: 'installed', connector: {
+      entryId: 'meta-devtools-instance', serverName: 'meta-devtools',
+      url: 'https://mcp.facebook.com/devtools',
+      source: { kind: 'curated', connectorId: 'meta-devtools' },
+    } })
+    expect(whatsapp).toMatchObject({ status: 'installed', connector: {
+      entryId: 'meta-whatsapp-instance', serverName: 'meta-whatsapp-business',
+      url: 'https://mcp.facebook.com/whatsapp_business_tools',
+      source: { kind: 'curated', connectorId: 'meta-whatsapp-business' },
+    } })
+    expect(live.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      inject: [...MANAGED_MCP_INJECT],
+      config: expect.objectContaining({
+        serverName: 'meta-devtools', transport: 'streamable-http',
+        url: 'https://mcp.facebook.com/devtools', headers: {}, oauth: true,
+      }),
+    }))
+    expect(live.create).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      inject: [...MANAGED_MCP_INJECT],
+      config: expect.objectContaining({
+        serverName: 'meta-whatsapp-business', transport: 'streamable-http',
+        url: 'https://mcp.facebook.com/whatsapp_business_tools', headers: {}, oauth: true,
+      }),
+    }))
+    expect(registrySearch).not.toHaveBeenCalled()
+    await expect(controller.snapshot()).resolves.toHaveLength(2)
+    expect(await controller.installCuratedMcp('meta-devtools')).toMatchObject({
+      status: 'already-installed', connector: { entryId: 'meta-devtools-instance' },
+    })
+    expect(await controller.installCuratedMcp('meta-whatsapp-business')).toMatchObject({
+      status: 'already-installed', connector: { entryId: 'meta-whatsapp-instance' },
+    })
+    expect(readFileSync(patchPath, 'utf8')).not.toContain('access_token')
+    expect(readFileSync(patchPath, 'utf8')).not.toContain('client_secret')
+  })
+
+  it('pins free Microsoft Learn MCP without OAuth and rejects any altered endpoint/credentials', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create.mockResolvedValueOnce('learn-entry')
+    const ctl = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(ctl.installCuratedMcp('microsoft-learn')).resolves.toMatchObject({
+      connector: { entryId: 'learn-entry', serverName: 'microsoft-learn',
+        url: 'https://learn.microsoft.com/api/mcp',
+        source: { kind: 'curated', connectorId: 'microsoft-learn' } },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      inject: [...MANAGED_MCP_INJECT],
+      config: expect.objectContaining({ transport: 'streamable-http', oauth: false,
+        serverName: 'microsoft-learn', headers: {},
+        url: 'https://learn.microsoft.com/api/mcp' }),
+    }))
+    await expect(ctl.snapshot()).resolves.toHaveLength(1)
+    const raw = JSON.parse(readFileSync(patchPath, 'utf8'))
+    const row = raw[0].insert[0]
+    for (const changed of [
+      { ...row.config, url: 'https://third-party.example.test/api/mcp' },
+      { ...row.config, bearerTokenRef: 'UNTRUSTED_TOKEN' },
+      { ...row.config, headers: { Authorization: 'secret' } },
+      { ...row.config, oauth: true },
+    ]) {
+      writeFileSync(patchPath, JSON.stringify([{ insert: [{ ...row, config: changed }] }]))
+      await expect(ctl.snapshot()).rejects.toThrow(/managed MCP patch row/)
+    }
+  })
+
+  it('installs independent Microsoft service MCPs with immutable launcher args and namespaces', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    let nextId = 0
+    live.create.mockImplementation(async () => `microsoft-scoped-${++nextId}`)
+    const ctl = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    const services = [
+      ['outlook-mail', 'mail'], ['outlook-calendar', 'calendar'],
+      ['microsoft-contacts', 'contacts'], ['onedrive', 'onedrive'],
+      ['microsoft-teams', 'teams'], ['sharepoint', 'sharepoint'],
+    ] as const
+    for (const [connectorId, service] of services) {
+      const receipt = await ctl.installCuratedMcp(connectorId)
+      expect(receipt.connector.serverName).toBe(connectorId)
+      expect(receipt.connector.source).toMatchObject({ kind: 'curated', connectorId })
+      const config = live.create.mock.lastCall?.[0]?.config
+      expect(config).toMatchObject({
+        transport: 'stdio', serverName: connectorId, command: 'node',
+        args: ['scripts/phoenix-microsoft-personal-mcp.mjs', service],
+        env: {}, envCredentialRefs: {},
+      })
+    }
+    expect((await ctl.snapshot()).map(row => row.serverName)).toEqual(services.map(([name]) => name))
+    const managed = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert
+    expect(managed).toHaveLength(6)
+    const altered = { ...managed[0], config: { ...managed[0].config,
+      args: ['scripts/phoenix-microsoft-personal-mcp.mjs', 'teams'] } }
+    writeFileSync(patchPath, JSON.stringify([{ insert: [altered, ...managed.slice(1)] }]))
+    await expect(ctl.snapshot()).rejects.toThrow(/managed MCP patch row/)
+  })
+
+  it('pins the free Microsoft personal Graph MCP to local Node and rejects modified persisted launchers', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const ctl = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(ctl.installCuratedMcp('microsoft-personal')).resolves.toMatchObject({
+      connector: { serverName: 'microsoft-personal', url: 'stdio://microsoft-personal',
+        source: { kind: 'curated', connectorId: 'microsoft-personal' } },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({
+        transport: 'stdio', serverName: 'microsoft-personal', command: 'node',
+        args: ['scripts/phoenix-microsoft-personal-mcp.mjs'], env: {}, envCredentialRefs: {},
+      }),
+    }))
+    const original = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert[0]
+    for (const config of [
+      { ...original.config, command: 'powershell.exe' },
+      { ...original.config, args: ['http://evil.example'] },
+      { ...original.config, env: { ACCESS_TOKEN: 'untrusted' } },
+    ]) {
+      writeFileSync(patchPath, JSON.stringify([{ insert: [{ ...original, config }] }]))
+      await expect(ctl.snapshot()).rejects.toThrow(/managed MCP patch row/)
+    }
+  })
+
+  it('pins Phoenix Social Engine to an audited local CLI and rejects modified launcher', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(controller.installCuratedMcp('social-engine')).resolves.toMatchObject({
+      connector: {
+        serverName: 'social-engine', url: 'stdio://social-engine',
+        source: { kind: 'curated', connectorId: 'social-engine' },
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({ transport: 'stdio', serverName: 'social-engine',
+        command: 'node', args: ['scripts/phoenix-social-mcp.mjs'],
+        env: {}, envCredentialRefs: {} }),
+    }))
+    const row = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert[0]
+    writeFileSync(patchPath, JSON.stringify([{ insert: [{ ...row, config: { ...row.config, command: 'cmd.exe' } }] }]))
+    await expect(controller.snapshot()).rejects.toThrow(/managed MCP patch row/)
+  })
+
+  it('pins Work IQ and Azure to Microsoft-owned local packages, opt-in and distinct', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create.mockResolvedValueOnce('workiq-entry').mockResolvedValueOnce('azure-entry')
+    const ctl = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(ctl.installCuratedMcp('microsoft-workiq')).resolves.toMatchObject({
+      connector: { entryId: 'workiq-entry', serverName: 'microsoft-workiq',
+        source: { kind: 'curated', connectorId: 'microsoft-workiq' } },
+    })
+    await expect(ctl.installCuratedMcp('microsoft-azure')).resolves.toMatchObject({
+      connector: { entryId: 'azure-entry', serverName: 'microsoft-azure',
+        source: { kind: 'curated', connectorId: 'microsoft-azure' } },
+    })
+    expect(live.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      inject: [...MANAGED_MCP_INJECT],
+      config: expect.objectContaining({ transport: 'stdio', serverName: 'microsoft-workiq',
+        command: 'npx', args: ['-y', '@microsoft/workiq', 'mcp'], envCredentialRefs: {} }),
+    }))
+    expect(live.create).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      inject: [...MANAGED_MCP_INJECT],
+      config: expect.objectContaining({ transport: 'stdio', serverName: 'microsoft-azure',
+        command: 'npx', args: ['-y', '@azure/mcp@latest', 'server', 'start', '--mode', 'consolidated'], envCredentialRefs: {} }),
+    }))
+    await expect(ctl.snapshot()).resolves.toHaveLength(2)
+    await expect(ctl.installCuratedMcp('microsoft-workiq')).resolves.toMatchObject({ status: 'already-installed' })
+    await expect(ctl.installCuratedMcp('microsoft-azure')).resolves.toMatchObject({ status: 'already-installed' })
+    expect(live.create).toHaveBeenCalledTimes(2)
+    expect(readFileSync(patchPath, 'utf8')).not.toContain('access_token')
+  })
+
+  it('installs official Vercel MCP over HTTPS with OAuth', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(controller.installCuratedMcp('vercel')).resolves.toMatchObject({
+      connector: {
+        serverName: 'vercel', url: 'https://mcp.vercel.com',
+        source: { kind: 'curated', connectorId: 'vercel' },
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      inject: [...MANAGED_MCP_INJECT],
+      config: expect.objectContaining({
+        transport: 'streamable-http', serverName: 'vercel',
+        url: 'https://mcp.vercel.com', oauth: true,
+      }),
+    }))
+  })
+
+  it('preserves local Figma Desktop MCP and oauth=false when repairing', async () => {
+    const patchPath = tempPatch()
+    mkdirSync(dirname(patchPath), { recursive: true })
+    writeFileSync(patchPath, JSON.stringify([{ insert: [{
+      id: 'old-figma', name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
+      source: { kind: 'curated', connectorId: 'figma' },
+      config: {
+        transport: 'streamable-http', serverName: 'figma',
+        url: 'http://127.0.0.1:3845/mcp', headers: {}, oauth: false,
+        toolCallTimeoutMs: 60_000, startupTimeoutMs: 2_000,
+        failOnStartupError: false, reconnect: {
+          enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 120,
+        },
+      },
+    }] }]))
+    const live = loader()
+    live.create.mockResolvedValueOnce('new-figma')
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(controller.repair({ entryId: 'old-figma' })).resolves.toMatchObject({
+      connector: { entryId: 'new-figma', serverName: 'figma',
+        url: 'http://127.0.0.1:3845/mcp' },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({ oauth: false,
+        url: 'http://127.0.0.1:3845/mcp' }),
+    }))
+  })
+
+  it('installs and removes only the pinned official Binance Agent OS connector', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+
+    await expect(controller.installBinanceAgentOs()).resolves.toEqual({
+      status: 'installed',
+      connector: {
+        entryId: 'live-entry-id',
+        serverName: 'binance-agent-os',
+        url: 'https://agent.binance.com/mcp/agentic',
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
+      config: {
+        transport: 'streamable-http',
+        serverName: 'binance-agent-os',
+        url: 'https://agent.binance.com/mcp/agentic',
+        headers: {},
+        oauth: true,
+        toolCallTimeoutMs: 60_000,
+        startupTimeoutMs: 5_000,
+        failOnStartupError: false,
+        reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 3 },
+      },
+    })
+    await expect(controller.installBinanceAgentOs()).resolves.toMatchObject({
+      status: 'already-installed',
+      connector: { serverName: 'binance-agent-os' },
+    })
+    expect(live.create).toHaveBeenCalledTimes(1)
+
+    await expect(controller.removeBinanceAgentOs()).resolves.toBe(true)
+    expect(live.remove).toHaveBeenCalledWith('live-entry-id')
+    await expect(controller.snapshot()).resolves.toEqual([])
+    await expect(controller.removeBinanceAgentOs()).resolves.toBe(false)
+  })
+
+  it('repairs an existing Binance MCP without deleting its managed identity', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await controller.installBinanceAgentOs()
+    const repaired = await controller.repairBinanceAgentOs()
+    expect(repaired).toMatchObject({
+      status: 'installed',
+      connector: { serverName: 'binance-agent-os',
+        url: 'https://agent.binance.com/mcp/agentic' },
+    })
+    expect(live.remove).toHaveBeenCalledWith('live-entry-id')
+    expect(live.create).toHaveBeenCalledTimes(2)
+    expect(await controller.snapshot()).toHaveLength(1)
+  })
+
+  it('installs and removes only the pinned official X API and Docs MCP pair', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+
+    await expect(controller.installXMcp()).resolves.toEqual({
+      docs: {
+        status: 'installed',
+        connector: {
+          entryId: 'live-entry-id',
+          serverName: 'x-docs',
+          url: 'https://docs.x.com/mcp',
+        },
+      },
+      api: {
+        status: 'installed',
+        connector: {
+          entryId: 'live-entry-id',
+          serverName: 'x-api',
+          url: 'https://api.x.com/mcp',
+        },
+      },
+    })
+    expect(live.create).toHaveBeenNthCalledWith(1, {
+      name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
+      config: {
+        transport: 'streamable-http',
+        serverName: 'x-docs',
+        url: 'https://docs.x.com/mcp',
+        headers: {},
+        oauth: false,
+      },
+    })
+    expect(live.create).toHaveBeenNthCalledWith(2, {
+      name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
+      config: {
+        transport: 'stdio',
+        serverName: 'x-api',
+        command: 'npx',
+        args: ['-y', '@xdevplatform/xurl', 'mcp', 'https://api.x.com/mcp'],
+        env: {},
+        envCredentialRefs: {
+          CLIENT_ID: 'X_CLIENT_ID',
+          CLIENT_SECRET: 'X_CLIENT_SECRET',
+        },
+        cwd: '',
+        toolCallTimeoutMs: 60_000,
+        startupTimeoutMs: 300_000,
+        failOnStartupError: false,
+        reconnect: {
+          enabled: true,
+          initialDelayMs: 1000,
+          maxDelayMs: 30_000,
+          maxAttempts: 10,
+        },
+      },
+    })
+    const persisted = readFileSync(patchPath, 'utf8')
+    expect(persisted).toContain('X_CLIENT_ID')
+    expect(persisted).toContain('X_CLIENT_SECRET')
+    expect(persisted).not.toContain('client-secret-value')
+
+    await expect(controller.installXMcp()).resolves.toMatchObject({
+      api: { status: 'already-installed' },
+      docs: { status: 'already-installed' },
+    })
+    expect(live.create).toHaveBeenCalledTimes(2)
+
+    await expect(controller.installXMcp({
+      identity: 'phoenix',
+      username: '@PhoenixAI',
+    })).resolves.toMatchObject({
+      api: {
+        status: 'installed',
+        connector: {
+          serverName: 'x-api-phoenix',
+          url: 'https://api.x.com/mcp',
+        },
+      },
+      docs: { status: 'already-installed' },
+    })
+    expect(live.create).toHaveBeenNthCalledWith(3, {
+      name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
+      config: {
+        transport: 'stdio',
+        serverName: 'x-api-phoenix',
+        command: 'npx',
+        args: ['-y', '@xdevplatform/xurl', 'mcp', '-u', 'PhoenixAI', 'https://api.x.com/mcp'],
+        env: {},
+        envCredentialRefs: {
+          CLIENT_ID: 'X_CLIENT_ID',
+          CLIENT_SECRET: 'X_CLIENT_SECRET',
+        },
+        cwd: '',
+        toolCallTimeoutMs: 60_000,
+        startupTimeoutMs: 300_000,
+        failOnStartupError: false,
+        reconnect: {
+          enabled: true,
+          initialDelayMs: 1000,
+          maxDelayMs: 30_000,
+          maxAttempts: 10,
+        },
+      },
+    })
+    await expect(controller.installXMcp({ identity: 'phoenix' }))
+      .rejects.toThrow('requires its X username')
+    await expect(controller.installXMcp({ identity: 'phoenix', username: 'bad-name!' }))
+      .rejects.toThrow('1-15 characters')
+    await expect(controller.installXMcp({ identity: 'phoenix', username: 'abcdefghijklmnop' }))
+      .rejects.toThrow('1-15 characters')
+
+    await expect(controller.removeXMcp()).resolves.toBe(true)
+    expect(live.remove).toHaveBeenCalledTimes(3)
+    await expect(controller.snapshot()).resolves.toEqual([])
+    await expect(controller.removeXMcp()).resolves.toBe(false)
+  })
+
+  it('retires a legacy managed Jev row without touching other managed MCPs', async () => {
+    const patchPath = tempPatch()
+    mkdirSync(dirname(patchPath), { recursive: true })
+    writeFileSync(patchPath, JSON.stringify([{
+      insert: [
+        {
+          id: 'legacy-jev',
+          name: '@phoenix-ai/dsh-mcp-client',
+          inject: [...MANAGED_MCP_INJECT],
+          config: {
+            transport: 'streamable-http',
+            serverName: 'jev',
+            url: 'https://www.jevai.org/api/mcp',
+            headers: {},
+            oauth: false,
+            bearerTokenRef: 'JEV_API_KEY',
+            toolCallTimeoutMs: 1800,
+            startupTimeoutMs: 1200,
+            failOnStartupError: false,
+            reconnect: {
+              enabled: true,
+              initialDelayMs: 1000,
+              maxDelayMs: 30_000,
+              maxAttempts: 3,
+            },
+          },
+        },
+        {
+          id: 'calendar-managed',
+          name: '@phoenix-ai/dsh-mcp-client',
+          inject: [...MANAGED_MCP_INJECT],
+          config: {
+            transport: 'streamable-http',
+            serverName: 'calendar-a1b2c3d',
+            url: 'https://mcp.example.com/calendar',
+            headers: {},
+            oauth: true,
+          },
+        },
+      ],
+    }]))
+
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+
+    await expect(controller.retireJev()).resolves.toBe(true)
+    expect(live.remove).toHaveBeenCalledTimes(1)
+    expect(live.remove).toHaveBeenCalledWith('legacy-jev')
+    await expect(controller.snapshot()).resolves.toEqual([{
+      entryId: 'calendar-managed',
+      serverName: 'calendar-a1b2c3d',
+      url: 'https://mcp.example.com/calendar',
+    }])
+    const persisted = readFileSync(patchPath, 'utf8')
+    expect(persisted).not.toContain('JEV_API_KEY')
+    expect(persisted).not.toContain('jevai.org')
+    expect(persisted).toContain('calendar-managed')
+    await expect(controller.retireJev()).resolves.toBe(false)
+  })
+
+  it('removes one exact managed connector from persistence and the live loader', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([candidate()]) })
+    const installed = await controller.install({ name: 'io.example/calendar', version: '1.0.0' })
+
+    await expect(controller.remove({ entryId: installed.connector.entryId })).resolves.toEqual({
+      removed: true,
+      liveUnloaded: true,
+    })
+    expect(live.remove).toHaveBeenCalledWith(installed.connector.entryId)
+    await expect(controller.snapshot()).resolves.toEqual([])
+    await expect(controller.remove({ entryId: installed.connector.entryId })).resolves.toEqual({
+      removed: false,
+      liveUnloaded: true,
+    })
+  })
+
+  it('keeps generic uninstall persistence-first when live unload fails', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([candidate()]) })
+    const installed = await controller.install({ name: 'io.example/calendar', version: '1.0.0' })
+    live.remove.mockRejectedValueOnce(new Error('live unload failed'))
+
+    await expect(controller.remove({ entryId: installed.connector.entryId })).resolves.toEqual({
+      removed: true,
+      liveUnloaded: false,
+    })
+    await expect(controller.snapshot()).resolves.toEqual([])
+    expect(readFileSync(patchPath, 'utf8')).not.toContain(installed.connector.entryId)
+  })
+
+  it('repairs a registry-managed connector by re-resolving its exact registry source', async () => {
+    const patchPath = tempPatch()
+    let values: readonly McpRegistryCandidate[] = [candidate()]
+    const search = vi.fn(async ({ query }: { query: string; limit?: number }): Promise<McpRegistrySearchSnapshot> => ({
+      source: 'official-mcp-registry',
+      query,
+      fetchedAt: '2026-10-04T12:00:00.000Z',
+      stale: false,
+      candidates: [...values],
+    }))
+    const live = loader()
+    live.create
+      .mockResolvedValueOnce('old-entry')
+      .mockResolvedValueOnce('repaired-entry')
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: search })
+    const installed = await controller.install({ name: 'io.example/calendar', version: '1.0.0' })
+
+    values = [candidate({ version: '2.0.0', remoteUrl: 'https://mcp.example.com/calendar-v2' })]
+    const repaired = await controller.repair({ entryId: installed.connector.entryId })
+
+    expect(live.remove).toHaveBeenCalledWith('old-entry')
+    expect(repaired).toMatchObject({
+      status: 'installed',
+      connector: {
+        entryId: 'repaired-entry',
+        url: 'https://mcp.example.com/calendar-v2',
+        source: { kind: 'registry', name: 'io.example/calendar', version: '2.0.0' },
+      },
+    })
+    expect(search).toHaveBeenLastCalledWith({ query: 'io.example/calendar', limit: 20 })
+  })
+
+  it('preserves the previous registry config when a replacement MCP cannot start', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create.mockResolvedValueOnce('old-entry').mockRejectedValueOnce(new Error('remote unavailable'))
+    const controller = new ManagedMcpController(live, {
+      patchPath,
+      registrySearch: registry([candidate()]),
+    })
+    await controller.install({ name: 'io.example/calendar', version: '1.0.0' })
+    await expect(controller.repair({ entryId: 'old-entry' }))
+      .rejects.toThrow('previous configuration was preserved')
+    await expect(controller.snapshot()).resolves.toEqual([
+      expect.objectContaining({ entryId: 'old-entry', url: 'https://mcp.example.com/calendar' }),
+    ])
+  })
+
+  it('migrates existing core connectors at startup without auto-installing missing services', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    const boot = await controller.ensureCoreMcpPack({ installMissing: false })
+    expect(boot.installed).toEqual([])
+    expect(boot.alreadyInstalled).toEqual([])
+    expect(boot.failed).toEqual([])
+    expect(live.create).not.toHaveBeenCalled()
+    await expect(controller.snapshot()).resolves.toEqual([])
+  })
+
+  it('does not invent a repair source for legacy managed rows', async () => {
+    const patchPath = tempPatch()
+    mkdirSync(dirname(patchPath), { recursive: true })
+    writeFileSync(patchPath, JSON.stringify([{
+      insert: [{
+        id: 'legacy-calendar',
+        name: '@phoenix-ai/dsh-mcp-client',
+        config: {
+          transport: 'streamable-http',
+          serverName: 'calendar-legacy',
+          url: 'https://mcp.example.com/calendar',
+          headers: {},
+          oauth: true,
+        },
+      }],
+    }]))
+    const controller = new ManagedMcpController(loader(), { patchPath, registrySearch: registry([candidate()]) })
+
+    await expect(controller.repair({ entryId: 'legacy-calendar' }))
+      .rejects.toThrow('has no trusted repair source')
+    await expect(controller.snapshot()).resolves.toHaveLength(1)
+  })
+
+  it('refuses to configure or reinstall retired Jev', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const jevCandidate = candidate({
+      name: 'ai.jev/jev',
+      title: 'Jev',
+      remoteUrl: 'https://www.jevai.org/api/mcp',
+    })
+    const controller = new ManagedMcpController(live, {
+      patchPath,
+      registrySearch: registry([jevCandidate]),
+    })
+
+    await expect(controller.configureJev()).rejects.toThrow('Jev integration is retired')
+    await expect(controller.install({ name: 'ai.jev/jev' })).rejects.toThrow('Jev integration is retired')
+    expect(live.create).not.toHaveBeenCalled()
+  })
+
+
+  it('fails closed when registry identity, status, or transport is not installable', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+
+    await expect(new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+      .install({ name: 'io.example/missing' }))
+      .rejects.toThrow('changed or is no longer available')
+
+    await expect(new ManagedMcpController(live, {
+      patchPath,
+      registrySearch: registry([candidate({ status: 'deprecated' })]),
+    }).install({ name: 'io.example/calendar' }))
+      .rejects.toThrow('is not active')
+
+    const { remoteUrl: _remoteUrl, ...withoutRemote } = candidate()
+    await expect(new ManagedMcpController(live, {
+      patchPath,
+      registrySearch: registry([withoutRemote]),
+    }).install({ name: 'io.example/calendar' }))
+      .rejects.toThrow('Streamable HTTP')
+
+    await expect(new ManagedMcpController(live, {
+      patchPath,
+      registrySearch: registry([candidate()]),
+    }).install({ name: 'io.example/calendar', version: '9.9.9' }))
+      .rejects.toThrow('changed or is no longer available')
+
+    await expect(new ManagedMcpController(live, {
+      patchPath,
+      registrySearch: registry([candidate()]),
+    }).install({ name: ' ' }))
+      .rejects.toThrow('valid server name')
+    expect(live.create).not.toHaveBeenCalled()
+  })
+
+  it('refuses to persist registry entries requiring unsupported headers or tenant variables', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const { remoteUrl: _protectedUrl, ...protectedServer } = candidate({ remoteSetupRequired: 'headers' })
+    const { remoteUrl: _templatedUrl, ...templatedServer } = candidate({ remoteSetupRequired: 'variables' })
+    const headers = new ManagedMcpController(live, {
+      patchPath, registrySearch: registry([protectedServer]),
+    })
+    await expect(headers.install({ name: protectedServer.name })).rejects.toThrow('provider-specific authorization headers')
+    const variables = new ManagedMcpController(live, {
+      patchPath, registrySearch: registry([templatedServer]),
+    })
+    await expect(variables.install({ name: templatedServer.name })).rejects.toThrow('tenant-specific URL')
+    expect(live.create).not.toHaveBeenCalled()
+    await expect(headers.snapshot()).resolves.toEqual([])
+  })
+
+  it('uses a bounded readable server name even when the registry tail is unusable or very long', async () => {
+    const firstPath = tempPatch()
+    const first = new ManagedMcpController(loader(), {
+      patchPath: firstPath,
+      registrySearch: registry([candidate({
+        name: '!!',
+        remoteUrl: 'https://mcp.example.com/symbols',
+      })]),
+    })
+    const symbolic = await first.install({ name: '!!' })
+    expect(symbolic.connector.serverName).toMatch(/^mcp-[a-f0-9]{7}$/)
+
+    const longName = 'io.example/this-is-an-extremely-long-connector-name-that-needs-truncation'
+    const second = new ManagedMcpController(loader(), {
+      patchPath: tempPatch(),
+      registrySearch: registry([candidate({
+        name: longName,
+        remoteUrl: 'https://mcp.example.com/long',
+      })]),
+    })
+    const long = await second.install({ name: longName })
+    expect(long.connector.serverName.length).toBeLessThanOrEqual(32)
+  })
+
+  it('does not persist anything when live activation fails', async () => {
+    const patchPath = tempPatch()
+    const controller = new ManagedMcpController(loader({ createError: new Error('live failed') }), {
+      patchPath,
+      registrySearch: registry([candidate()]),
+    })
+    await expect(controller.install({ name: 'io.example/calendar' })).rejects.toThrow('live failed')
+    await expect(controller.snapshot()).resolves.toEqual([])
+  })
+
+  it('quarantines corrupt rows with a full private backup and recovers only validated connections', async () => {
+    const patchPath = tempPatch()
+    const controller = new ManagedMcpController(loader(), { patchPath, registrySearch: registry([]) })
+    await controller.installCuratedMcp('github')
+    const valid = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert[0]
+    const corrupted = JSON.stringify([{ insert: [
+      valid,
+      { ...valid, id: 'malicious', config: { ...valid.config, url: 'https://untrusted.example/mcp' } },
+    ] }])
+    writeFileSync(patchPath, corrupted)
+    await expect(controller.snapshot()).rejects.toThrow(/managed MCP patch row 1 is invalid/)
+    await expect(controller.recoverInvalidOverlay()).resolves.toEqual({
+      recovered: 1, quarantined: 1, backupCreated: true,
+    })
+    await expect(controller.snapshot()).resolves.toMatchObject([{ entryId: valid.id }])
+    const files = readdirSync(dirname(patchPath)).filter(name => name.includes('.quarantined-'))
+    expect(files).toHaveLength(1)
+    expect(readFileSync(join(dirname(patchPath), files[0]!), 'utf8')).toBe(corrupted)
+    expect(await controller.recoverInvalidOverlay()).toMatchObject({ backupCreated: false })
+  })
+
+  it('recovers unreadable JSON without activating or discarding its original', async () => {
+    const patchPath = tempPatch()
+    mkdirSync(dirname(patchPath), { recursive: true })
+    writeFileSync(patchPath, '[{"insert":')
+    const controller = new ManagedMcpController(loader(), { patchPath, registrySearch: registry([]) })
+    await expect(controller.recoverInvalidOverlay()).resolves.toEqual({
+      recovered: 0, quarantined: 1, backupCreated: true,
+    })
+    await expect(controller.snapshot()).resolves.toEqual([])
+    expect(readdirSync(dirname(patchPath)).some(name => name.includes('.quarantined-'))).toBe(true)
+  })
+
+  it('rejects a corrupted managed overlay instead of executing altered configuration', async () => {
+    const patchPath = tempPatch()
+    mkdirSync(dirname(patchPath), { recursive: true })
+
+    for (const value of [
+      {},
+      [],
+      [{ nope: [] }],
+      [{ insert: [null] }],
+      [{ insert: [{ id: 'x', name: 'evil-package', config: {} }] }],
+      [{ insert: [{ id: 'x', name: '@phoenix-ai/dsh-mcp-client', config: {
+        transport: 'streamable-http', serverName: 'x', url: 'http://unsafe.example.com', headers: {}, oauth: true,
+      } }] }],
+      [{ insert: [{ id: 'x-api', name: '@phoenix-ai/dsh-mcp-client', config: {
+        transport: 'stdio',
+        serverName: 'x-api',
+        command: 'npx',
+        args: ['-y', '@xdevplatform/xurl', 'mcp', 'https://evil.example.com/mcp'],
+        env: {},
+        envCredentialRefs: { CLIENT_ID: 'X_CLIENT_ID', CLIENT_SECRET: 'X_CLIENT_SECRET' },
+        cwd: '',
+        toolCallTimeoutMs: 60_000,
+        startupTimeoutMs: 300_000,
+        failOnStartupError: false,
+        reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 10 },
+      } }] }],
+    ]) {
+      writeFileSync(patchPath, JSON.stringify(value))
+      const controller = new ManagedMcpController(loader(), { patchPath, registrySearch: registry([candidate()]) })
+      await expect(controller.snapshot()).rejects.toThrow(/managed MCP patch/)
+    }
+  })
+
+  it('exports the generated default overlay path under the PHOENIX MCP directory', () => {
+    expect(managedMcpPatchPath()).toMatch(/[\\/]mcp[\\/]managed\.patch\.yml$/)
+  })
+})

@@ -1,0 +1,149 @@
+/** Zod schemas for the browser authorization domain. */
+
+import { z } from 'zod'
+import type { RequestPayload, ResponseValue } from './rpc-map.ts'
+import type { Wire } from './rpc.schema.ts'
+import type {
+  AuthorizationAttemptView, AuthorizationPromptView, AuthorizationNoticeView, AuthorizationTelemetry,
+} from './authorization.ts'
+
+const authorizationKeySchema = z.string().regex(/^[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/)
+const attemptIdSchema = z.uuid()
+const promptIdSchema = z.uuid()
+
+const authorizationMethodSchema = z.object({ id: z.string().min(1), label: z.string().min(1) })
+const rateLimitWindowSchema = z.object({
+  usedPercent: z.number().min(0).max(100),
+  windowDurationMins: z.number().nonnegative().optional(),
+  resetsAt: z.number().nonnegative().optional(),
+})
+const creditsTelemetrySchema = z.object({
+  hasCredits: z.boolean(),
+  unlimited: z.boolean(),
+  balance: z.string().optional(),
+})
+const usageTelemetrySchema = z.object({
+  lifetimeTokens: z.number().nonnegative().optional(),
+  peakDailyTokens: z.number().nonnegative().optional(),
+  longestRunningTurnSec: z.number().nonnegative().optional(),
+  currentStreakDays: z.number().nonnegative().optional(),
+  longestStreakDays: z.number().nonnegative().optional(),
+})
+const connectorTelemetrySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  iconUrl: z.string().min(1).optional(),
+  iconUrlDark: z.string().min(1).optional(),
+  category: z.string().optional(),
+  installUrl: z.string().min(1).optional(),
+  accessible: z.boolean(),
+  enabled: z.boolean(),
+  installed: z.boolean().optional(),
+  callable: z.boolean().optional(),
+})
+const authorizationTelemetrySchema = z.object({
+  kind: z.literal('account'),
+  provider: z.string().min(1),
+  accountType: z.string().optional(),
+  email: z.string().optional(),
+  plan: z.string().optional(),
+  primaryLimit: rateLimitWindowSchema.optional(),
+  secondaryLimit: rateLimitWindowSchema.optional(),
+  credits: creditsTelemetrySchema.optional(),
+  usage: usageTelemetrySchema.optional(),
+  connectors: z.array(connectorTelemetrySchema).optional(),
+}) satisfies z.ZodType<Wire<AuthorizationTelemetry>>
+
+const authorizationEntrySchema = z.object({
+  key: authorizationKeySchema,
+  label: z.string().min(1),
+  methods: z.array(authorizationMethodSchema).min(1),
+  inFlight: z.boolean(),
+  connectors: z.array(connectorTelemetrySchema).optional(),
+  disconnectable: z.literal(true).optional(),
+  stored: z.object({ kind: z.union([z.literal('api-key'), z.literal('grant')]) }).optional(),
+  telemetry: authorizationTelemetrySchema.optional(),
+})
+
+const authorizationNoticeSchema = z.object({
+  seq: z.number().int().nonnegative(),
+  notice: z.object({
+    message: z.string(),
+    url: z.url().optional(),
+    code: z.string().optional(),
+  }),
+}) satisfies z.ZodType<Wire<AuthorizationNoticeView>>
+
+const authorizationPromptSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('text'), message: z.string(), placeholder: z.string().optional() }),
+  z.object({ kind: z.literal('secret'), message: z.string(), placeholder: z.string().optional() }),
+  z.object({
+    kind: z.literal('select'),
+    message: z.string(),
+    options: z.array(z.object({
+      id: z.string(), label: z.string(), description: z.string().optional(),
+    })),
+  }),
+]) satisfies z.ZodType<Wire<AuthorizationPromptView>>
+
+const authorizationAttemptSchema = z.object({
+  attemptId: attemptIdSchema,
+  key: authorizationKeySchema,
+  method: z.string().min(1),
+  status: z.union([
+    z.literal('pending'), z.literal('authorized'), z.literal('cancelled'), z.literal('failed'),
+  ]),
+  notices: z.array(authorizationNoticeSchema),
+  nextSeq: z.number().int().nonnegative(),
+  prompt: authorizationPromptSchema.and(z.object({ promptId: promptIdSchema })).optional(),
+  error: z.string().optional(),
+}) satisfies z.ZodType<Wire<AuthorizationAttemptView>>
+
+/** Validates an authorization catalog request. */
+export const authorizationListRequestSchema = z.object({}) satisfies z.ZodType<Wire<RequestPayload<'authorization.list'>>>
+/** Validates the credential-free authorization catalog returned to the browser. */
+export const authorizationListValueSchema = z.object({ entries: z.array(authorizationEntrySchema) }) satisfies z.ZodType<Wire<ResponseValue<'authorization.list'>>>
+
+/** Validates the registered flow and optional method selected by the browser. */
+export const authorizationBeginRequestSchema = z.object({
+  key: authorizationKeySchema,
+  method: z.string().min(1).optional(),
+}) satisfies z.ZodType<Wire<RequestPayload<'authorization.begin'>>>
+/** Validates the opaque identifier returned for a newly pending flow. */
+export const authorizationBeginValueSchema = z.object({
+  attemptId: attemptIdSchema,
+  status: z.literal('pending'),
+}) satisfies z.ZodType<Wire<ResponseValue<'authorization.begin'>>>
+
+/** Validates a cursor-based read of an authorization attempt. */
+export const authorizationStatusRequestSchema = z.object({
+  attemptId: attemptIdSchema,
+  after: z.number().int().nonnegative().optional(),
+}) satisfies z.ZodType<Wire<RequestPayload<'authorization.status'>>>
+/** Validates the wire-safe attempt projection returned to the browser. */
+export const authorizationStatusValueSchema = authorizationAttemptSchema satisfies z.ZodType<Wire<ResponseValue<'authorization.status'>>>
+
+/** Validates a write-only answer to the currently pending flow prompt. */
+export const authorizationAnswerRequestSchema = z.object({
+  attemptId: attemptIdSchema,
+  promptId: promptIdSchema,
+  // Empty answers are meaningful to a few device flows; the flow decides whether they are valid.
+  value: z.string(),
+}) satisfies z.ZodType<Wire<RequestPayload<'authorization.answer'>>>
+/** Validates acknowledgement that the host accepted a prompt answer. */
+export const authorizationAnswerValueSchema = z.object({ accepted: z.literal(true) }) satisfies z.ZodType<Wire<ResponseValue<'authorization.answer'>>>
+
+/** Validates cancellation of an opaque authorization attempt. */
+export const authorizationCancelRequestSchema = z.object({
+  attemptId: attemptIdSchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'authorization.cancel'>>>
+/** Validates acknowledgement that cancellation was requested. */
+export const authorizationCancelValueSchema = z.object({ cancelled: z.literal(true) }) satisfies z.ZodType<Wire<ResponseValue<'authorization.cancel'>>>
+
+/** Validates provider-owned account disconnect by credential key. */
+export const authorizationDisconnectRequestSchema = z.object({
+  key: authorizationKeySchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'authorization.disconnect'>>>
+/** Validates acknowledgement that provider teardown completed. */
+export const authorizationDisconnectValueSchema = z.object({ disconnected: z.literal(true) }) satisfies z.ZodType<Wire<ResponseValue<'authorization.disconnect'>>>

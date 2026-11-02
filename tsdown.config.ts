@@ -1,0 +1,40 @@
+import { defineConfig } from 'tsdown'
+import { decoratorLoweringPlugin } from './packages/typert/generator/lib/types/tsdown-plugin.js'
+import { optimizePhoenixTsdownInput } from './scripts/tsdown-performance.ts'
+import { phoenixTsdownWorkspace } from './scripts/tsdown-workspace.ts'
+
+function isBuildFaceClient(value: unknown): boolean {
+  if (value === undefined || value === 'host') return false
+  if (value === 'client') return true
+  throw new Error(`tsdown: --env.DSH_BUILD_FACE must be host or client, received ${String(value)}`)
+}
+
+/**
+ * The ordinary workspace build consumes JavaScript emitted by the Host
+ * TypeScript project. Host Typert contracts are generated beforehand by the
+ * explicit incremental build:typert phase, outside Rolldown. The Client pass selects packages that
+ * declare a browser bundle and lets their package-local configs emit both
+ * their Node loader entry and browser artifact.
+ */
+export default defineConfig(({ env }) => {
+  const client = isBuildFaceClient(env?.DSH_BUILD_FACE)
+  return {
+    workspace: phoenixTsdownWorkspace(process.cwd()),
+    entry: client ? '' : ['lib/types/{index,invariant,startup}.js'],
+    outDir: 'lib',
+    format: ['esm'],
+    platform: 'node',
+    target: 'es2024',
+    fixedExtension: false,
+    dts: false,
+    clean: false,
+    // Size/gzip reporting is expensive across hundreds of tiny workspace
+    // bundles and adds no artifact correctness signal.
+    report: false,
+    // Normal builds do not pay Rolldown's per-hook timing instrumentation.
+    // Opt back in explicitly while profiling with PHOENIX_BUILD_TIMINGS=1.
+    checks: { pluginTimings: process.env.PHOENIX_BUILD_TIMINGS === '1' },
+    inputOptions: options => optimizePhoenixTsdownInput(options),
+    plugins: client ? [] : [decoratorLoweringPlugin()],
+  }
+})

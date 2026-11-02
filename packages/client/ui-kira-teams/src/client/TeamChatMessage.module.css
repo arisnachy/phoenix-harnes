@@ -1,0 +1,649 @@
+/* Real KIRA Team messages live inside the existing Phoenix chat flow. */
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 3px 0 5px;
+}
+
+.avatar {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+}
+
+.avatar > span {
+  width: 100%;
+  height: 100%;
+}
+
+/* The Lead and specialists share the same portrait / engine badge frame. */
+.meta > .avatar {
+  width: 44px;
+  height: 44px;
+  margin-right: 4px;
+}
+
+.column {
+  min-width: 0;
+  max-width: min(760px, calc(100% - 48px));
+}
+
+.meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.meta strong {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 700;
+}
+
+.meta > span {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* Engine provenance is independent from the name and portrait, with its own space. */
+.meta > span[data-engine-family] {
+  color: var(--engine-accent);
+  margin: 0 2px;
+}
+
+.target {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assignmentStatus {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  min-height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 70%, transparent);
+  color: var(--dsw-alias-label-secondary) !important;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.assignmentStatus[data-team-target-status='working'],
+.assignmentStatus[data-team-target-status='running'],
+.assignmentStatus[data-team-target-status='active'] {
+  color: var(--dsw-alias-state-success-primary) !important;
+}
+
+.assignmentStatus[data-team-target-status='failed'],
+.assignmentStatus[data-team-target-status='error'] {
+  color: var(--dsw-alias-status-warning) !important;
+}
+
+.purpose {
+  display: inline-flex;
+  min-height: 18px;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 82%, transparent);
+  color: var(--dsw-alias-label-secondary) !important;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.purpose[data-purpose='blocker'] {
+  background: color-mix(in srgb, var(--dsw-alias-status-warning) 12%, transparent);
+  color: var(--dsw-alias-status-warning) !important;
+}
+
+.bubble {
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 80%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 82%, transparent);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 6%, transparent);
+}
+
+.row[data-team-activity='true'] .bubble {
+  padding: 7px 10px;
+  border-style: dashed;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 55%, transparent);
+  box-shadow: none;
+}
+
+.row[data-team-activity='true'] .bubble > div {
+  font-size: 12px;
+  line-height: 18px;
+}
+.bubble > div {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.bubble > div > :first-child { margin-top: 0; }
+.bubble > div > :last-child { margin-bottom: 0; }
+
+.messageActions {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  margin-top: 4px;
+}
+
+.messageActions .reactions {
+  margin-top: 0;
+  padding-left: 0;
+}
+
+.reactions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  padding-left: 4px;
+}
+
+[data-chat-flow-kind="user"] .reactions[data-author-kind="user"] {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  margin-top: 0;
+  padding-left: 0;
+}
+
+[data-chat-flow-kind="kira-team-message"] .reactions {
+  padding-left: 0;
+}
+
+.reaction {
+  display: inline-flex;
+  min-width: 30px;
+  height: 26px;
+  align-items: center;
+  gap: 3px;
+  padding: 0 7px 0 3px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transform-origin: center;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.reaction:hover:not(:disabled),
+.reaction:focus-visible {
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 84%, transparent);
+  outline: none;
+}
+
+.reaction[data-user-reacted='true'] {
+  border-color: color-mix(in srgb, var(--dsw-specific-phoenix-accent) 42%, var(--dsw-alias-border-l1));
+  background: color-mix(in srgb, var(--dsw-specific-phoenix-accent) 8%, var(--dsw-alias-bg-layer-1));
+}
+
+.reaction:disabled {
+  cursor: default;
+}
+
+.reactionEmoji {
+  display: inline-block;
+  font-size: 15px;
+  line-height: 1;
+  transform-origin: center;
+}
+
+.reactionCount {
+  min-width: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.reactionsToolbar {
+  position: relative;
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  height: 28px;
+  margin-top: 0;
+  padding-left: 0;
+}
+
+.reactionsToolbar .reaction {
+  height: 28px;
+}
+
+.reactionsToolbar [data-chat-flow-kind="user"] .reactions .reactionAdd,
+.messageActions .reactionAdd {
+  width: 28px;
+  height: 28px;
+}
+
+[data-chat-flow-kind="user"] .reactions .reactionAdd svg,
+.messageActions .reactionAdd svg {
+  width: 18px;
+  height: 18px;
+}
+
+.reactionAdd {
+  width: 28px;
+  height: 28px;
+}
+
+.reactionsToolbar .reactionAdd svg {
+  width: 18px;
+  height: 18px;
+}
+
+.reactionsToolbar .emojiMenu {
+  position: absolute;
+  z-index: 120;
+  top: 32px;
+  left: 0;
+  width: min(350px, calc(100vw - 48px));
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 14%, transparent);
+}
+
+.reactionAdd {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.reactionAdd:hover:not(:disabled),
+.reactionAdd:focus-visible {
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 78%, transparent);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.reactionAdd:active:not(:disabled) {
+  transform: scale(.94);
+}
+
+.reactionAdd:disabled {
+  cursor: default;
+  opacity: .45;
+}
+
+.reactionAvatar {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  transform-origin: center;
+}
+
+.reactionAvatar > span {
+  width: 100%;
+  height: 100%;
+}
+
+@media (max-width: 620px) {
+  .row { gap: 7px; }
+  .avatar { width: 32px; }
+  .avatar { height: 32px; }
+  .column { max-width: calc(100% - 39px); }
+  [data-chat-flow-kind="kira-team-message"] .reactions:not([data-author-kind="user"]) { padding-left: 39px; }
+  .bubble { padding: 8px 10px; }
+}
+
+.mentionMenu {
+  display: grid;
+  width: min(420px, calc(100% - 12px));
+  max-height: 320px;
+  overflow: auto;
+  gap: 2px;
+  margin: 0 0 6px;
+  padding: 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 14px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 12%, transparent);
+}
+
+.mentionRow {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 8px;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 44px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mentionRow:hover,
+.mentionRow:focus-visible {
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 78%, transparent);
+  outline: none;
+}
+
+.mentionAvatar {
+  width: 34px;
+  height: 34px;
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.mentionAvatar > span {
+  width: 100%;
+  height: 100%;
+}
+
+.mentionCopy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.mentionCopy strong,
+.mentionCopy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mentionCopy strong {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.mentionCopy span {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.mentionStatus {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-success-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent);
+}
+
+.emojiMenu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: min(350px, 100%);
+  padding: 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+.emojiMenu button { padding: 4px; border: 0; background: transparent; cursor: pointer; font-size: 18px; }
+
+.row[data-team-highlighted="true"] .bubble { outline: 2px solid var(--dsw-alias-border-l1); }
+
+.replyContext { position: relative; padding: 8px 40px 8px 12px; }
+.replyContext blockquote { margin: 4px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.replyContext button { position: absolute; top: 8px; right: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reaction,
+  .reactionEmoji,
+  .reactionAvatar { transition: none !important; }
+}
+
+
+/* Agent messages use a quiet two-tier card; the conversation canvas and
+   navigation keep their existing colors and layout. */
+.row:not([data-team-sender-kind='user']) {
+  gap: 0;
+  padding: 4px 0 8px;
+}
+
+.row:not([data-team-sender-kind='user']) .avatar {
+  position: relative;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  margin-top: 7px;
+  margin-right: -13px;
+  filter: drop-shadow(0 3px 5px rgb(90 62 28 / 10%));
+}
+
+.row:not([data-team-sender-kind='user']) .column {
+  flex: 1 1 0;
+  max-width: min(760px, calc(100% - 31px));
+}
+
+.card {
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 76%, transparent);
+  border-radius: 20px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 6%, transparent);
+}
+
+.card .meta {
+  min-height: 52px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 18px 10px 27px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 68%, transparent);
+  border-radius: 20px 20px 0 0;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 36%, var(--dsw-alias-bg-layer-1));
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.card .meta strong {
+  font-size: 14px;
+}
+
+.card .bubble {
+  padding: 12px 18px 15px;
+  border: 0;
+  border-radius: 0 0 20px 20px;
+  background: transparent;
+  box-shadow: none;
+}
+
+ .card .bubble > div {
+  font-size: 15px;
+  line-height: 1.62;
+}
+
+.card + .messageActions {
+  padding-left: 8px;
+}
+
+@media (max-width: 620px) {
+  .row:not([data-team-sender-kind='user']) .avatar {
+    width: 36px;
+    height: 36px;
+    margin-right: -12px;
+  }
+
+  .row:not([data-team-sender-kind='user']) .column {
+    max-width: calc(100% - 24px);
+  }
+
+  .card .meta {
+    min-height: 51px;
+    padding: 10px 12px 10px 22px;
+  }
+
+  .card .bubble {
+    padding: 13px 15px 15px;
+  }
+}
+
+/* Kira's identity header is intentionally as compact as the ordinary message header. */
+.meta[data-team-author='kira'] { gap: 7px; align-items:center; min-height:42px; }
+.meta[data-team-author='kira'] .avatar { width:42px; height:42px; margin-right:5px; }
+.meta[data-team-author='kira'] strong { font-size:13px; }
+@media (max-width:620px) {
+ .row:not([data-team-sender-kind='user']) .avatar { width:38px; height:38px; margin-right:-11px; }
+ .card .meta { padding:8px 10px 8px 25px; min-height:48px; }
+ .card .bubble { padding:9px 12px 12px; }
+ .card .bubble > div { font-size:14px; line-height:1.55; }
+}
+
+/* A conversational team thread, not giant repeated dashboard cards. */
+.row:not([data-team-sender-kind='user']) { gap: 7px; padding: 3px 0 5px; }
+.row:not([data-team-sender-kind='user']) .avatar {
+  width: 38px; height: 38px; margin: 3px 0 0;
+}
+.row:not([data-team-sender-kind='user']) .column {
+  flex: 0 1 auto; max-width: min(700px, calc(100% - 52px));
+}
+.card { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.card .meta {
+  min-height: 0; padding: 2px 4px 6px; gap: 7px;
+  border: 0; border-radius: 0; background: transparent;
+}
+.card .meta strong { font-size: 13px; }
+.card .bubble {
+  padding: 9px 13px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 72%, transparent);
+  border-radius: 4px 14px 14px 14px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 73%, var(--dsw-alias-bg-layer-1));
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 5%, transparent);
+}
+.card .bubble > div { font-size: 14px; line-height: 1.55; }
+.row[data-team-sender-kind='kira'] .card .bubble {
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 30%, var(--dsw-alias-bg-layer-1));
+}
+.card + .messageActions { margin-top: 1px; padding-left: 2px; }
+@media (max-width: 620px) {
+  .row:not([data-team-sender-kind='user']) .avatar { width: 34px; height: 34px; margin: 2px 0 0; }
+  .row:not([data-team-sender-kind='user']) .column { max-width: calc(100% - 43px); }
+  .card .meta { min-height: 0; padding: 2px 4px 5px; }
+  .card .bubble { padding: 8px 11px; }
+}
+
+/* MarkdownText uses a CSS module, not a global .markdown class. Target its
+   actual root so the team-card typography applies to every rich block. */
+.bubble { min-width: 0; }
+.bubble > div { min-width: 0; }
+.replyQuote {
+  margin: 4px 0 8px;
+  padding: 5px 10px;
+  border-left: 2px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+}
+.replyQuote > div { min-width: 0; font-size: 13px; line-height: 1.5; }
+
+/* Keep addressees visible as people, not files or administrative banners. */
+.target {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 70%, transparent);
+  border-radius: 999px;
+  color: var(--dsw-alias-label-secondary) !important;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 58%, transparent);
+  font-size: 11px;
+  line-height: 17px;
+  font-weight: 500;
+}
+.audience {
+  margin-left: auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 44%, transparent);
+  color: var(--dsw-alias-label-secondary) !important;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+}
+.row[data-team-audience='team'] .card .bubble {
+  border-color: color-mix(in srgb, var(--dsw-alias-border-l2) 62%, transparent);
+  box-shadow: none;
+}
+.row[data-team-sender-kind='agent'] .meta { color: var(--dsw-alias-label-secondary); }
+
+/* Clear audience without badges that turn a conversation into a dashboard.
+   The person speaking is always the prominent identity; the destination
+   remains a small readable line of metadata. */
+.meta .role { display: none; }
+.meta .audience {
+  display: inline;
+  margin-left: 1px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--dsw-alias-label-tertiary) !important;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.meta .audience::before {
+  content: '·';
+  margin-right: 7px;
+  color: var(--dsw-alias-label-caption);
+}
+.meta .target {
+  display: inline;
+  flex: initial;
+  max-width: min(100%, 230px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--dsw-alias-label-tertiary) !important;
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.meta .target::before {
+  content: '·';
+  margin-right: 7px;
+  color: var(--dsw-alias-label-caption);
+}
+@media (max-width: 620px) {
+  .meta .audience, .meta .target { font-size: 11px; }
+}

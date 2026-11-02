@@ -1,0 +1,37 @@
+name: Phoenix Auto Visible Plan Regression
+
+on:
+  pull_request:
+    branches: [main, stable]
+    paths:
+      - 'packages/core/agent/src/model-selection.ts'
+      - 'packages/core/agent/tests/model-selection.spec.ts'
+      - 'packages/core/agent/tests/model-selection-boundaries.spec.ts'
+      - 'apps/cli/config/agent-presets/standard/agent.cordis.yml'
+      - '.github/workflows/phoenix-auto-visible-plan-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  visible-plan:
+    name: Sol plan and Luna Team handoff
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify routed models, visible planning and real Team continuation
+        run: |
+          pnpm exec vitest run \
+            packages/core/agent/tests/model-selection.spec.ts \
+            packages/core/agent/tests/model-selection-boundaries.spec.ts

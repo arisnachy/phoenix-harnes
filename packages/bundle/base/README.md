@@ -1,0 +1,28 @@
+# `@phoenix-ai/dsh-base`
+
+English | [中文](README.zh.md)
+
+The shared dsh core as a profile bundle: [`cordis.patch.yml`](cordis.patch.yml) inserts every base plugin row — model adapters, the shared [`agent-default-model`](../../core/agent-default-model/README.md) selection, tools, persistence, policy, settings/credentials, telemetry, and the core spawn/fork subagent providers — over the empty profile root, as the first layer of every profile's `dsh.profile.bundles` list. The optional Codex and Claude Code providers stay outside this package and its production dependency closure; a Profile installs either [product provider Bundle](../../subagent/README.md) only when needed. The default `@phoenix-ai/dsh` production closure therefore includes neither product provider, the Claude Agent SDK, nor the Codex wrapper and platform payloads. Later bundle layers (e.g. [`dsh-web-app`](../web-app/README.md)) and the user's profile `cordis.patch.yml` override these rows by id; a patch replaces a row's whole `config`, so mode-specific values live in mode bundles, not here. The package has no runtime API; the profile composer resolves the patch through the `dsh.bundle.patch` manifest field, never through code. The base also mounts the low-latency [`quality-policy`](../../guard/quality-policy/README.md), which keeps verification evidence fresh across mutations without adding a model round on the compliant path.
+
+Sports queries are served directly in conversation by [`tool-sports`](../../core/tool-sports/README.md): sourced fixture data, market quotes and simulation-only ticket cards. It creates no sidebar or standalone menu entry.
+
+The host mounts `image_generation` once so existing and newly authored presets inherit it, subject to explicit tool filters. Image backend availability and account limits are checked by the existing image worker.
+
+The patch gates both shell stacks by platform on its own rows: `bash-sandbox`/`tool-bash` carry `disabled: !!js process.platform === 'win32'` (bash has no Windows runner), and their twins `pwsh-sandbox`/`tool-pwsh` mount on win32 only with the inverted expression — one shared patch file, exactly one shell stack per host. The permission surface stays exactly as on POSIX: `sandbox`/`sandbox-policy` enforce the file-effect policy through the Windows ACL restricted-token runner (the win32 chain of `dsh-sandbox-local` → `@phoenix-ai/dsh-sandbox-windows-acl`), the permission switcher and the approval service run unchanged, and `fs-sandbox` keeps fencing `ctx.fs` writes — mounting `dsh-fs-local` alongside it would double-register `ctx.fs` and fail the load. A Windows host that prefers the unconfined local pwsh executor or full access overrides these rows through its profile or home `cordis.patch.yml` (the bash-restore recipe must be complete: disable `pwsh-sandbox`/`tool-pwsh` AND re-enable `bash-sandbox`/`tool-bash` — both executor families register the same `bash` service, so an incomplete recipe fails loud at load). POSIX hosts see the pwsh rows disabled.
+
+The optional Home Assistant rows are disabled unless `PHOENIX_HOME_ASSISTANT_URL` is present. Enabling them also requires explicit JSON entity and service allowlists; the token is referenced by environment-variable name and is never stored in the bundle patch.
+
+The row set and its rationale are documented inline in the patch file; the [generated composition graph](../../../apps/cli/composition.md) renders it.
+
+## Model Experience
+
+Indirectly, through the inserted rows: this bundle selects the shipped persona-less prompt base, tool set, the OpenRouter-backed default model route, and the adapters that mode bundles specialize. It contributes no model-visible text of its own.
+
+#### KV Cache effect
+
+None directly; each inserted row's package owns its effect.
+
+## Known Limitations and Deferred Work
+
+- **A patch replaces whole row configs** — profile overrides must restate every field a row keeps; there is no deep-merge layer.
+- **The Windows temp grant is a private per-session subdirectory** — `workspace-write` confines writes to the workspace plus the session's own temp subdirectory (`<temp>\dsh-<hash>`, TMP/TEMP rewritten for confined children); `read-only` grants nothing. See `@phoenix-ai/dsh-sandbox-windows-acl`.

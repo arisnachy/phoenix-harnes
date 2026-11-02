@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-21-eclipse-two-role-routing.md
+2026-10-21-eclipse-two-role-routing.md: 5c1411213a3ffc57002c0a77540d8dab47b23ec2
+2026-10-21-eclipse-two-role-routing.zh.md: 684b7919845bc47dbb054c07c2f0d88c62b14514

@@ -1,0 +1,717 @@
+/**
+ * Generic pi-ai-backed implementation of the Harness LLM seam.
+ *
+ * Each resolution produces one **immutable** snapshot — the profiles plus a
+ * `Models` collection holding the `Provider` each route built — and an
+ * operation captures a whole snapshot before its first `await`. A
+ * configuration change builds a *new* collection rather than mutating the one
+ * in use, because `Models.streamSimple()` is lazy: it resolves the provider
+ * when the stream is first consumed, which is after the credential await, so a
+ * mutated collection would let a request that started under one configuration
+ * finish under another — or fail with a provider that no longer exists. This is
+ * what makes the seam's per-step call freeze (`llm.prepareCall()`) hold all the
+ * way down: switching models mid-reply takes effect on the next step, never
+ * inside the one in flight.
+ *
+ * A route naming a credential reference still resolves it through the harness
+ * seam and passes it as the request's `apiKey` option, which pi-ai treats as
+ * the highest-priority auth override — that is what keeps the fail-loud
+ * reference semantics. Everything that override does not cover reaches pi-ai
+ * through the collection's own auth: the credential store holds the records a
+ * login wrote and a refresh rotates, and the auth context answers the ambient
+ * questions a provider asks while resolving. Both are stable across snapshots,
+ * so a configuration change rebuilds the collection without forgetting who is
+ * signed in.
+ *
+ * @module dsh-llm-pi-ai/adapter
+ */
+
+import { createModels, getSupportedThinkingLevels } from '@earendil-works/pi-ai'
+import { openAIResponsesApi } from '@earendil-works/pi-ai/api/openai-responses.lazy'
+import type {
+  Api,
+  AuthContext,
+  CredentialStore,
+  Model,
+  Models,
+  ModelThinkingLevel,
+  MutableModels,
+  SimpleStreamOptions,
+  ThinkingLevel,
+} from '@earendil-works/pi-ai'
+import {
+  attributionHeaders,
+  CONTEXT_WINDOW_EXCEEDED_CODE,
+  contentHasFile,
+  contentHasImage,
+  errorChain,
+  isContextWindowExceededError,
+  LlmAdapter,
+  LlmError,
+  ReasoningEffortId,
+} from '@phoenix-ai/dsh-llm'
+import type {
+  GenerateOptions,
+  LlmModelInfo,
+  LlmModelReasoningInfo,
+  LlmProviderInfo,
+  LlmResolvedModelInfo,
+  PreparedAdapterCall,
+  ReasoningEffortId as ReasoningEffortIdType,
+  ResolvedRetryPolicy,
+  StreamChunk,
+} from '@phoenix-ai/dsh-llm'
+import type { AttachmentStore } from '@phoenix-ai/dsh-attachment'
+import { idleWatchdog, timeoutOf } from '@phoenix-ai/dsh-timeout'
+import {
+  CHATGPT_WEB_LOCAL_AUTHORIZATION,
+  CHATGPT_WEB_PROVIDER,
+} from './config.ts'
+import type { ResolvedPiAiProviderProfile } from './config.ts'
+import { CODEX_PROVIDER } from './codex-live-catalog.ts'
+import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
+import { applyMondayCodexMembrane, normalizeCodexToolSchemas, recoverRejectedCodexFunctionSchema, scopeCodexToolsForPaint, normalizeOpenAiFunctionToolPayload, surfaceRejectedCodexSchemaEvent, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
+import { fitGenerateOptionsToContext, toPiContext } from './context.ts'
+import { toStreamChunks } from './stream.ts'
+import { isNonCodexRecoveryModel } from './provider-recovery.ts'
+
+/** One resolution's frozen view: the profiles and the collection built from them. */
+interface PiAiSnapshot {
+  /** The resolved profiles this collection was built from, used as its identity. */
+  profiles: ReadonlyMap<string, ResolvedPiAiProviderProfile>
+  /** Providers for exactly those profiles; never mutated once published. */
+  models: Models
+}
+
+/** Constructor options for {@link PiAiAdapter}: the two resolution hooks the plugin owns. */
+export interface PiAiAdapterOptions {
+  /** Current validated profiles by provider route; called once per operation. */
+  profiles: () => ReadonlyMap<string, ResolvedPiAiProviderProfile>
+  /**
+   * Resolve the credential for one already-resolved profile; called once per
+   * stream call and frozen for that call. `undefined` defers to the route's own
+   * pi-ai auth, which for an installed catalog route is its provider-native
+   * ambient discovery; the plugin allows that only for a profile naming no
+   * credential at all, because a named reference that misses throws `LlmError`
+   * `MISSING_CREDENTIAL` rather than falling back.
+   */
+  resolveApiKey: (provider: string, profile: ResolvedPiAiProviderProfile) => Promise<string | undefined>
+  /**
+   * How every collection this adapter builds resolves auth the request-level
+   * `apiKey` override does not cover. Required rather than optional: a
+   * collection built without them gets pi-ai's in-memory default store, which
+   * is empty at every boot and discarded on every configuration change, so a
+   * route whose only method is a login would report itself unconfigured on
+   * every request no matter how often the human signed in.
+   */
+  auth: PiAiAuthInjection
+  /**
+   * Refresh one provider's advisory model catalog before listing it, or on an
+   * exact-model miss. The plugin owns caching/fallback; the adapter only asks.
+   */
+  refreshModels?: (provider: string, force?: boolean) => Promise<readonly string[] | undefined>
+  /** Account-visible replacement for a model removed from a live catalog. */
+  preferredModel?: (provider: string, model: string, needsImage: boolean) => string | undefined
+  /** Quarantine HTTP 410, refresh, and choose at most one replacement per turn. */
+  onModelUnavailable?: (provider: string, model: string, needsImage: boolean) => Promise<string | undefined>
+  /**
+   * Authoritative per-model reasoning metadata supplied by a live provider
+   * catalog. Codex uses this to preserve effort names added after pi-ai's
+   * fixed thinking-level vocabulary.
+   */
+  reasoningForModel?: (provider: string, model: string) => LlmModelReasoningInfo | undefined
+  /** Resolve the optional durable attachment service at request time. */
+  resolveAttachments?: () => AttachmentStore | undefined
+  /**
+   * Observe one assistant history message degrading to provider-neutral
+   * conversion because its stored replay state is unusable by this build.
+   */
+  onReplayDegrade?: (detail: { provider: string; model: string; reason: string }) => void
+}
+
+/** The two auth injectables a pi-ai collection is built with. */
+export interface PiAiAuthInjection {
+  /** Durable storage for credentials pi-ai itself writes: logins, and the refreshes it runs under its own lock. */
+  credentials: CredentialStore
+  /** Ambient lookups a provider performs while resolving its own auth. */
+  authContext: AuthContext
+}
+
+/** Copy profile stream knobs into pi-ai's common option vocabulary. */
+function profileOptions(
+  profile: ResolvedPiAiProviderProfile,
+  reasoning: ModelThinkingLevel | undefined,
+  apiKey: string | undefined,
+): SimpleStreamOptions {
+  const enabledReasoning: ThinkingLevel | undefined = reasoning === 'off' ? undefined : reasoning
+  return {
+    ...apiKey === undefined ? {} : { apiKey },
+    ...enabledReasoning === undefined ? {} : { reasoning: enabledReasoning },
+    ...profile.thinkingBudgets === undefined ? {} : { thinkingBudgets: profile.thinkingBudgets },
+    ...profile.cacheRetention === undefined ? {} : { cacheRetention: profile.cacheRetention },
+    ...profile.transport === undefined ? {} : { transport: profile.transport },
+    ...profile.timeoutMs === undefined ? {} : { timeoutMs: profile.timeoutMs },
+    ...profile.websocketConnectTimeoutMs === undefined ? {} : { websocketConnectTimeoutMs: profile.websocketConnectTimeoutMs },
+    // The agent recovery layer owns visible attempts; one adapter call is one SDK attempt.
+    maxRetries: 0,
+  }
+}
+
+/**
+ * The profile default this exact model can actually take, for DESCRIBING it.
+ * A configured level the model does not support yields none rather than
+ * throwing: `resolveModel` builds the model catalog, and a catalog that fails
+ * takes its whole provider out of every picker — so one mis-set profile field
+ * would hide every model on the route, including the ones that support the
+ * level. The request path still refuses, which is where a bad configuration
+ * belongs: describing what a model can do must not fail because a deployment
+ * asked it for something it cannot.
+ * @param model - the resolved model descriptor.
+ * @param effort - the profile's configured level, if any.
+ * @returns the level when this model supports it, otherwise undefined.
+ */
+function describableReasoningLevel(
+  model: Model<Api>,
+  effort: ReasoningEffortIdType | ModelThinkingLevel | undefined,
+): ModelThinkingLevel | undefined {
+  if (effort === undefined) return undefined
+  return getSupportedThinkingLevels(model).some(level => level === effort)
+    ? effort as ModelThinkingLevel
+    : undefined
+}
+
+/** Validate an explicit Harness/profile effort without invoking pi-ai's clamp. */
+function resolveReasoningLevel(
+  model: Model<Api>,
+  effort: ReasoningEffortIdType | ModelThinkingLevel | undefined,
+): ModelThinkingLevel | undefined {
+  if (effort === undefined) return undefined
+  const supported = getSupportedThinkingLevels(model)
+  if (supported.some(level => level === effort)) return effort as ModelThinkingLevel
+  throw new LlmError(
+    `pi-ai provider "${model.provider}" model "${model.id}" does not support reasoning effort "${effort}"`,
+    'UNSUPPORTED_REASONING_EFFORT',
+  )
+}
+
+/**
+ * Selectable reasoning efforts for one model, or nothing at all.
+ *
+ * A model that carries no reasoning metadata — every hand-declared one, and
+ * every catalog model pi-ai marks as non-reasoning — is reported by pi-ai as
+ * supporting the single level `off`. Passing that through would offer a control
+ * that cannot do what it says: `off` is translated to *omitting* the reasoning
+ * option, which for such a model is byte-for-byte the same request as naming no
+ * effort — so a provider whose own default is to think would keep thinking with
+ * `off` selected. Omitting `reasoning` entirely is the seam's way of saying the
+ * capability is unavailable, which leaves the surface offering only the
+ * provider's default.
+ * @param model - the resolved model descriptor.
+ * @param defaultLevel - the profile's configured effort, already validated.
+ * @returns the `reasoning` field, or an empty object when none can be offered.
+ */
+function reasoningInfo(
+  model: Model<Api>,
+  defaultLevel: ModelThinkingLevel | undefined,
+): Pick<LlmResolvedModelInfo, 'reasoning'> | Record<string, never> {
+  if (!model.reasoning) return {}
+  const levels = getSupportedThinkingLevels(model)
+  return {
+    reasoning: {
+      efforts: levels.map(level => ({
+        id: ReasoningEffortId(level),
+        name: `${level.charAt(0).toUpperCase()}${level.slice(1)}`,
+      })),
+      ...defaultLevel === undefined ? {} : { defaultEffort: ReasoningEffortId(defaultLevel) },
+    },
+  }
+}
+
+/**
+ * Override one final provider payload with the exact Codex effort advertised
+ * by app-server. pi-ai may have used a fixed internal carrier level to reach
+ * this hook; that implementation detail must never leak onto the Codex wire.
+ */
+function withCodexReasoningEffort<T>(payload: T, effort: string): T {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return payload
+  const record = payload as Record<string, unknown>
+  const current = typeof record.reasoning === 'object' && record.reasoning !== null && !Array.isArray(record.reasoning)
+    ? record.reasoning as Record<string, unknown>
+    : {}
+  return {
+    ...record,
+    reasoning: {
+      ...current,
+      effort,
+    },
+  } as unknown as T
+}
+
+/** Merge deployment headers while removing case-insensitive attribution collisions. */
+function requestHeaders(
+  provider: string,
+  headers: Readonly<Record<string, string>> | undefined,
+): Record<string, string> {
+  const attribution = attributionHeaders()
+  const reserved = new Set(Object.keys(attribution).map(name => name.toLowerCase()))
+  const merged = {
+    ...Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => !reserved.has(name.toLowerCase()))),
+    ...attribution,
+  }
+  const hasResponsesAuth = Object.entries(merged).some(([name, value]) =>
+    (name.toLowerCase() === 'authorization' || name.toLowerCase() === 'cf-aig-authorization')
+    && value.trim().length > 0,
+  )
+  if (provider === CHATGPT_WEB_PROVIDER && !hasResponsesAuth) {
+    merged.Authorization = CHATGPT_WEB_LOCAL_AUTHORIZATION
+  }
+  return merged
+}
+
+/**
+ * pi-ai-backed multi-provider adapter. Each operation reads the current
+ * profiles, so a configuration change reaches the next request without a
+ * restart; model descriptors come from the collection those profiles built.
+ */
+export class PiAiAdapter extends LlmAdapter {
+  private snapshot: PiAiSnapshot | undefined
+
+  constructor(private readonly config: PiAiAdapterOptions) {
+    super()
+  }
+
+  /**
+   * The snapshot for the current profiles. Resolution memoizes its result, so
+   * an unchanged configuration is recognized by identity; a changed one gets a
+   * brand-new collection, leaving any snapshot an operation already captured
+   * untouched for as long as that operation holds it.
+   */
+  private current(): PiAiSnapshot {
+    const profiles = this.config.profiles()
+    if (this.snapshot?.profiles === profiles) return this.snapshot
+    const models: MutableModels = createModels(this.config.auth)
+    for (const profile of profiles.values()) models.setProvider(profile.piProvider)
+    this.snapshot = { profiles, models }
+    return this.snapshot
+  }
+
+  /** The profile for one route within one snapshot, or the not-owned failure. */
+  private profileOf(snapshot: PiAiSnapshot, provider: string): ResolvedPiAiProviderProfile {
+    const profile = snapshot.profiles.get(provider)
+    if (profile === undefined) {
+      throw new LlmError(`pi-ai adapter does not own provider "${provider}"`, 'NO_ADAPTER')
+    }
+    return profile
+  }
+
+  /** The configured descriptor for one exact route/model pair within one snapshot. */
+  private modelOf(snapshot: PiAiSnapshot, provider: string, model: string): Model<Api> {
+    this.profileOf(snapshot, provider)
+    const resolved = snapshot.models.getModel(provider, model)
+    if (resolved === undefined) {
+      throw new LlmError(`pi-ai provider "${provider}" has no configured model "${model}"`, 'UNKNOWN_MODEL')
+    }
+    return resolved
+  }
+
+  /**
+   * Capture a snapshot that contains the requested model. Existing configured
+   * models stay zero-I/O; only a miss asks the plugin for a forced live refresh.
+   */
+  private async snapshotForModel(provider: string, model: string): Promise<PiAiSnapshot> {
+    let snapshot = this.current()
+    this.profileOf(snapshot, provider)
+    if (snapshot.models.getModel(provider, model) !== undefined) return snapshot
+    await this.config.refreshModels?.(provider, true)
+    snapshot = this.current()
+    this.profileOf(snapshot, provider)
+    return snapshot
+  }
+
+  override providerInfo(provider: string): LlmProviderInfo {
+    // The configured name, not the route key: `displayName` exists so a
+    // deployment can label a route, and a label only the configuration surface
+    // reads would leave every selector showing the raw key.
+    return { id: provider, name: this.current().profiles.get(provider)?.displayName ?? provider }
+  }
+
+  override providerRetryPolicy(provider: string): ResolvedRetryPolicy | undefined {
+    return this.current().profiles.get(provider)?.retryPolicy
+  }
+
+  override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
+    const advertised = await this.config.refreshModels?.(provider)
+    const snapshot = this.current()
+    this.profileOf(snapshot, provider)
+    const available = snapshot.models.getModels(provider)
+    const ordered = advertised === undefined
+      ? available
+      : advertised.flatMap((id) => {
+        const model = available.find(candidate => candidate.id === id)
+        return model === undefined ? [] : [model]
+      })
+    return ordered.map(model => ({
+      provider,
+      id: model.id,
+      name: model.name,
+      inputModalities: [...model.input],
+    }))
+  }
+
+  override async resolveModel(
+    provider: string,
+    model: string,
+    _signal?: AbortSignal,
+  ): Promise<LlmResolvedModelInfo> {
+    if (provider === 'nvidia') await this.config.refreshModels?.(provider)
+    const selected = this.config.preferredModel?.(provider, model, false) ?? model
+    const snapshot = await this.snapshotForModel(provider, selected)
+    return this.modelInfo(snapshot, provider, selected)
+  }
+
+  private modelInfo(
+    snapshot: PiAiSnapshot,
+    provider: string,
+    model: string,
+    liveReasoning = this.config.reasoningForModel?.(provider, model),
+  ): LlmResolvedModelInfo {
+    const profile = this.profileOf(snapshot, provider)
+    const resolvedModel = this.modelOf(snapshot, provider, model)
+    const defaultLevel = describableReasoningLevel(resolvedModel, profile.reasoning)
+    // Only a cap the deployment configured is a request default; the
+    // catalog's `maxTokens` sizes the model and stops there.
+    const configuredMaxTokens = profile.configuredMaxTokens.get(model)
+    return {
+      provider,
+      id: model,
+      name: resolvedModel.name,
+      inputModalities: [...resolvedModel.input],
+      context: { contextWindow: resolvedModel.contextWindow },
+      ...configuredMaxTokens === undefined ? {} : { defaultMaxTokens: configuredMaxTokens },
+      ...liveReasoning === undefined
+        ? reasoningInfo(resolvedModel, defaultLevel)
+        : {
+          reasoning: {
+            efforts: liveReasoning.efforts.map(effort => ({ ...effort })),
+            ...liveReasoning.defaultEffort === undefined ? {} : { defaultEffort: liveReasoning.defaultEffort },
+          },
+        },
+    }
+  }
+
+  override async prepareCall(provider: string, model: string, _signal?: AbortSignal): Promise<PreparedAdapterCall> {
+    if (provider === 'nvidia') await this.config.refreshModels?.(provider)
+    const selected = this.config.preferredModel?.(provider, model, false) ?? model
+    const snapshot = await this.snapshotForModel(provider, selected)
+    const liveReasoning = this.config.reasoningForModel?.(provider, selected)
+    return {
+      model: this.modelInfo(snapshot, provider, selected, liveReasoning),
+      stream: options => this.streamWithSnapshot({ ...options, model: selected }, snapshot, liveReasoning),
+    }
+  }
+
+  stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    const liveReasoning = this.config.reasoningForModel?.(options.provider, options.model)
+    return this.streamWithSnapshot(options, this.current(), liveReasoning)
+  }
+
+  private async * streamWithSnapshot(
+    options: GenerateOptions,
+    snapshot: PiAiSnapshot,
+    liveReasoning: LlmModelReasoningInfo | undefined,
+    recoveredSchema = false,
+    recoveredModel = false,
+  ): AsyncIterable<StreamChunk> {
+    if (options.stop !== undefined) {
+      throw new LlmError('llm-pi-ai does not support GenerateOptions.stop', 'UNSUPPORTED_OPTION')
+    }
+    // A live NVIDIA catalog may retire a model between two turns. Redirect
+    // before any provider I/O, never after producing content or tool calls.
+    if (!recoveredModel) {
+      const needsImage = options.messages.some(message => contentHasImage(message.content))
+      const selected = this.config.preferredModel?.(options.provider, options.model, needsImage)
+      if (selected !== undefined && selected !== options.model) {
+        yield* this.streamWithSnapshot(
+          { ...options, model: selected },
+          this.current(),
+          this.config.reasoningForModel?.(options.provider, selected),
+          recoveredSchema,
+          true,
+        )
+        return
+      }
+    }
+    // One capture per stream call, taken before any await: the profile, the
+    // model descriptor, and the collection all come from the same immutable
+    // snapshot, and the credential freezes with them. A configuration change
+    // mid-request builds a separate snapshot, so this request finishes under
+    // the one it started with and the next call picks up the new one.
+    const profile = this.profileOf(snapshot, options.provider)
+    const model = this.modelOf(snapshot, options.provider, options.model)
+    const requestedReasoning = options.reasoningEffort ?? profile.reasoning
+    let reasoning: ModelThinkingLevel | undefined
+    let codexWireReasoningEffort: string | undefined
+
+    if (liveReasoning !== undefined && requestedReasoning !== undefined) {
+      const requested = String(requestedReasoning)
+      if (!liveReasoning.efforts.some(effort => effort.id === requested)) {
+        throw new LlmError(
+          `pi-ai provider "${model.provider}" model "${model.id}" does not support reasoning effort "${requested}"`,
+          'UNSUPPORTED_REASONING_EFFORT',
+        )
+      }
+
+      // pi-ai 0.82 has a closed internal effort vocabulary. Use any supported
+      // non-off level as a carrier when Codex advertises a newer name, then
+      // replace the final payload with the exact app-server value below.
+      const supported = getSupportedThinkingLevels(model)
+      reasoning = supported.find(level => level === requested)
+        ?? supported.find(level => level !== 'off')
+        ?? (supported.includes('off') ? 'off' : undefined)
+      if (reasoning === undefined) {
+        throw new LlmError(
+          `pi-ai provider "${model.provider}" model "${model.id}" has no reasoning carrier for "${requested}"`,
+          'UNSUPPORTED_REASONING_EFFORT',
+        )
+      }
+      if (options.provider === CODEX_PROVIDER) codexWireReasoningEffort = requested
+    } else {
+      reasoning = resolveReasoningLevel(model, requestedReasoning)
+    }
+    const apiKey = await this.config.resolveApiKey(options.provider, profile)
+    // One credential-shape repair: pi-ai's ChatGPT Codex backend authenticates
+    // only with its OAuth access JWT (`Failed to extract accountId from
+    // token` otherwise), so a resolved platform key serves the same model id
+    // over the standard OpenAI Responses protocol instead of dying inside wire
+    // code. An explicitly configured route endpoint stays honored.
+    const platformKeyFallback = apiKey !== undefined
+      && !isChatGptAccessJwt(apiKey)
+      && model.api === 'openai-codex-responses'
+    // The other half of the same repair: a credential that has the JWT shape
+    // but no ChatGPT account claim passes the fallback check above and still
+    // dies inside pi-ai's wire before any request (`Failed to extract
+    // accountId from token`). Failing here says what the route needs instead.
+    if (!platformKeyFallback && apiKey !== undefined
+      && model.api === 'openai-codex-responses'
+      && !isChatGptAccountJwt(apiKey)) {
+      throw new LlmError(
+        `pi-ai: provider "${options.provider}" needs a ChatGPT Codex sign-in — the Codex backend derives`
+        + ' the account from the token\'s chatgpt_account_id claim and this credential has none.'
+        + ' Sign in on the OpenAI Codex card (Models page); a platform sk-… key serves these models'
+        + ' through the OpenAI Responses protocol only when it is stored as that card\'s API key',
+        'AUTH',
+      )
+    }
+    const providerWireModel = options.provider === 'deepseek' && model.id === 'deepseek-v4.1-flash'
+      ? { ...model, id: 'deepseek-flash' }
+      : model
+    const wireModel = platformKeyFallback
+      ? codexPlatformFallbackModel(model, profile.baseURL)
+      : providerWireModel
+
+    const consumer = new AbortController()
+    const upstream = options.signal === undefined
+      ? consumer.signal
+      : AbortSignal.any([options.signal, consumer.signal])
+    const streamIdleTimeoutMs = profile.streamIdleTimeoutMs
+    using watchdog = idleWatchdog(upstream, streamIdleTimeoutMs, 'LLM_STREAM_IDLE_TIMEOUT')
+    let emittedChunk = false
+
+    try {
+      const desiredMaxOutput = options.maxTokens ?? model.maxTokens
+      const fitted = fitGenerateOptionsToContext(options, model.contextWindow, desiredMaxOutput)
+      if (fitted.estimatedTokens > fitted.inputBudgetTokens) {
+        throw new LlmError(
+          `pi-ai request for "${model.id}" still needs ~${fitted.estimatedTokens} input tokens after context fitting; `
+          + `the safe input budget is ${fitted.inputBudgetTokens} tokens`,
+          CONTEXT_WINDOW_EXCEEDED_CODE,
+        )
+      }
+      const requiresFunctionSchemaProjection = requiresObjectRootFunctionSchemas(options.provider, model.api)
+      const requiresMondayMembrane = requiresMondayCodexMembrane(options.provider, model.api)
+      const projectedOptions = requiresFunctionSchemaProjection
+        ? normalizeCodexToolSchemas(scopeCodexToolsForPaint(fitted.options))
+        : fitted.options
+      const requestOptions = requiresMondayMembrane
+        ? applyMondayCodexMembrane(projectedOptions)
+        : projectedOptions
+      const containsImage = requestOptions.messages.some(message => contentHasImage(message.content))
+      const containsFile = requestOptions.messages.some(message => contentHasFile(message.content))
+      if (containsImage && !model.input.includes('image')) {
+        throw new LlmError(`pi-ai model "${model.id}" does not support image input`, 'UNSUPPORTED_CONTENT')
+      }
+      const attachments = containsImage || containsFile ? this.config.resolveAttachments?.() : undefined
+      if ((containsImage || containsFile) && attachments === undefined) {
+        throw new LlmError('pi-ai attachment input requires the durable attachment service', 'UNSUPPORTED_CONTENT')
+      }
+      const onReplayDegrade = (reason: string): void => {
+        this.config.onReplayDegrade?.({ provider: options.provider, model: options.model, reason })
+      }
+      const context = attachments === undefined
+        ? toPiContext(requestOptions, undefined, onReplayDegrade)
+        : await toPiContext({ ...requestOptions, signal: watchdog.signal }, attachments, onReplayDegrade, profile.maxRequestImageBytes, {
+          maxPixels: profile.requestImagePixelBudget,
+          maxBytes: profile.requestImageMaxBytes,
+        }, profile.maxInlineFileBytes)
+      // Defense before pi-ai performs any provider-side validation or tool
+      // transformation. onPayload below remains the final wire defense.
+      const providerContext = requiresFunctionSchemaProjection
+        ? normalizeOpenAiFunctionToolPayload(context, requiresMondayMembrane) as typeof context
+        : context
+      const needsPayloadProjection = requiresFunctionSchemaProjection || codexWireReasoningEffort !== undefined
+      const streamOptions: SimpleStreamOptions = {
+        ...profileOptions(profile, reasoning, apiKey),
+        ...needsPayloadProjection
+          ? {
+            onPayload: (payload) => {
+              const projected = requiresFunctionSchemaProjection
+                ? normalizeOpenAiFunctionToolPayload(payload, requiresMondayMembrane)
+                : payload
+              return codexWireReasoningEffort === undefined
+                ? projected
+                : withCodexReasoningEffort(projected, codexWireReasoningEffort)
+            },
+          }
+          : {},
+        ...options.temperature === undefined ? {} : { temperature: options.temperature },
+        ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
+        ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
+        signal: watchdog.signal,
+        // Profile headers are deployment-owned; attribution names are
+        // Harness-owned and therefore win collisions.
+        headers: requestHeaders(profile.provider, profile.headers),
+      }
+      const events = platformKeyFallback
+        // The collection dispatches the codex route to the Codex wire no
+        // matter what a model object says, so the fallback calls the platform
+        // Responses implementation directly.
+        ? openAIResponsesApi().streamSimple(wireModel, providerContext, streamOptions)
+        : snapshot.models.streamSimple(wireModel, providerContext, streamOptions)
+      const iterator = toStreamChunks(
+        requiresFunctionSchemaProjection ? surfaceRejectedCodexSchemaEvent(events) : events,
+        model.contextWindow,
+        desiredMaxOutput,
+        options.provider === 'openrouter',
+        isNonCodexRecoveryModel(options.provider, options.model),
+      )[Symbol.asyncIterator]()
+      let exhausted = false
+      let pendingUsage: StreamChunk | undefined
+      try {
+        while (true) {
+          const result = await watchdog.next(iterator)
+          const timeout = timeoutOf(watchdog.signal, 'LLM_STREAM_IDLE_TIMEOUT')
+          if (timeout !== undefined) throw timeout
+          if (result.done) {
+            exhausted = true
+            if (pendingUsage !== undefined) yield pendingUsage
+            return
+          }
+          // pi-ai sends usage immediately before terminal finish. Hold only
+          // this metadata while inspecting a 410 so a recovered turn cannot
+          // emit duplicate token usage or a stale error finish.
+          if (result.value.type === 'usage') {
+            pendingUsage = result.value
+            continue
+          }
+          if (!emittedChunk && !recoveredModel
+            && result.value.type === 'finish'
+            && result.value.reason.kind === 'error'
+            && result.value.reason.failure.code === 'MODEL_UNAVAILABLE') {
+            const needsImage = options.messages.some(message => contentHasImage(message.content))
+            const replacement = await this.config.onModelUnavailable?.(
+              options.provider, options.model, needsImage,
+            )
+            if (replacement !== undefined && replacement !== options.model) {
+              yield* this.streamWithSnapshot(
+                { ...options, model: replacement },
+                this.current(),
+                this.config.reasoningForModel?.(options.provider, replacement),
+                recoveredSchema,
+                true,
+              )
+              return
+            }
+          }
+          if (pendingUsage !== undefined) {
+            emittedChunk = true
+            yield pendingUsage
+            pendingUsage = undefined
+          }
+          emittedChunk = true
+          yield result.value
+        }
+      } finally {
+        if (!exhausted) {
+          consumer.abort('pi-ai stream consumer stopped')
+          try {
+            await iterator.return(undefined)
+          } catch (_abortedSdkTeardown) {
+            // The stable signal already owns SDK termination; return-time abort cannot add an outcome.
+          }
+        }
+      }
+    } catch (error: unknown) {
+      if (timeoutOf(watchdog.signal, 'LLM_STREAM_IDLE_TIMEOUT') !== undefined) {
+        throw new LlmError(`pi-ai stream idle timeout after ${streamIdleTimeoutMs}ms`, 'TIMEOUT', { cause: error })
+      }
+      if (options.signal?.aborted) {
+        throw new LlmError('pi-ai request aborted by caller', 'ABORTED', { cause: error })
+      }
+      const detail = errorChain(error)
+      // Some SDKs throw transport errors instead of emitting terminal error
+      // events. Treat a bare NVIDIA 410 the same way: one safe replacement
+      // attempt before any streamed content, never an unbounded retry.
+      if (!emittedChunk && !recoveredModel && /\b410\b/u.test(detail)) {
+        const needsImage = options.messages.some(message => contentHasImage(message.content))
+        const replacement = await this.config.onModelUnavailable?.(
+          options.provider, options.model, needsImage,
+        )
+        if (replacement !== undefined && replacement !== options.model) {
+          yield* this.streamWithSnapshot(
+            { ...options, model: replacement },
+            this.current(),
+            this.config.reasoningForModel?.(options.provider, replacement),
+            recoveredSchema,
+            true,
+          )
+          return
+        }
+      }
+      // Codex can reject one broken *tool definition* before generating any
+      // response, even after normalization (e.g. a deferred MCP catalog). That
+      // is not a failed social campaign action. Quarantine only its exact
+      // function name and make at most one fresh model attempt. Once streaming
+      // has begun, never silently replay a potentially side-effecting turn.
+      if (!emittedChunk && !recoveredSchema
+        && requiresObjectRootFunctionSchemas(options.provider, model.api)) {
+        const recovered = recoverRejectedCodexFunctionSchema(options, detail)
+        if (recovered !== undefined) {
+          yield* this.streamWithSnapshot(recovered, snapshot, liveReasoning, true)
+          return
+        }
+      }
+      // pi-ai transports several OpenAI-compatible providers (including the
+      // Phoenix Local loopback). Normalize their provider-specific context
+      // overflow wording so compaction-basic can repair the durable surface
+      // and retry instead of exposing a raw HTTP 400 to the user.
+      if (isContextWindowExceededError(detail)) {
+        throw new LlmError(detail, CONTEXT_WINDOW_EXCEEDED_CODE, { cause: error })
+      }
+      // Defensive twin of the pre-flight above: a credential that reaches
+      // pi-ai's own resolution and still lacks the account claim dies there
+      // with an opaque wire error; translate it once, at the seam.
+      if (detail.includes('Failed to extract accountId from token')) {
+        throw new LlmError(
+          `pi-ai: provider "${options.provider}" needs a ChatGPT Codex sign-in — its backend could not`
+          + ' find a ChatGPT account in the credential that reached it. Sign in on the OpenAI Codex'
+          + ' card (Models page) and retry',
+          'AUTH',
+          { cause: error },
+        )
+      }
+      throw error
+    } finally {
+      consumer.abort('pi-ai stream consumer stopped')
+    }
+  }
+}

@@ -1,0 +1,701 @@
+/* Sidebar column: compact premium shell with a calm, borderless navigation rhythm. */
+
+.root {
+  --dsh-sidebar-inline-padding: 10px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 6px var(--dsh-sidebar-inline-padding);
+  box-sizing: border-box;
+  background: var(--dsw-specific-sidebar-fill);
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+.root.collapsed {
+  padding: 18px 10px 6px;
+}
+
+.root.quietBars {
+  --dsh-scrollbar-thumb: transparent;
+  --dsh-scrollbar-thumb-hover: transparent;
+}
+
+.wide {
+  animation: wide-in 80ms ease-out;
+}
+
+@keyframes wide-in {
+  from { opacity: 0; }
+}
+
+.railIn .iconButton,
+.railIn .newSession,
+.railIn .regionArea {
+  animation: rail-in 80ms ease-out;
+}
+
+.railIn .footArea {
+  animation: rail-fade-in 80ms ease-out;
+}
+
+@keyframes rail-in {
+  from { opacity: .55; }
+}
+
+@keyframes rail-fade-in {
+  from { opacity: 0; }
+}
+
+.logoRow {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  height: 56px;
+  padding: 8px 0 8px 4px;
+  margin-bottom: 4px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.collapsed .logoRow {
+  height: 36px;
+  padding: 0;
+  margin-bottom: 12px;
+  justify-content: flex-start;
+}
+
+.brand {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.brandIdentity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  min-width: 0;
+}
+
+.brandMark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dsw-alias-label-primary);
+}
+
+.brandMark img {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 7px rgba(54, 46, 40, 0.10));
+}
+
+.brandName {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 30px;
+  padding-left: 8px;
+  border-left: none;
+  color: var(--dsw-alias-label-primary);
+  font-family: 'Avenir Next', Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.18em;
+  white-space: nowrap;
+}
+
+.brandName > [role='img'] {
+  height: 30px !important;
+  color: var(--dsw-alias-label-primary) !important;
+  font-family: 'Avenir Next', Inter, ui-sans-serif, system-ui, sans-serif !important;
+  font-size: inherit !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.16em !important;
+}
+
+.fallbackBrandName {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 146px;
+  height: 22px;
+  overflow: hidden;
+  color: inherit;
+  font-size: 0;
+  line-height: 0;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.fallbackBrandName::before,
+.fallbackBrandName::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+.fallbackBrandName::before {
+  background: currentColor;
+  -webkit-mask-image: url('/phoenix-wordmark-mask.svg');
+  mask-image: url('/phoenix-wordmark-mask.svg');
+}
+
+.fallbackBrandName::after {
+  background: #e46a2a;
+  -webkit-mask-image: url('/phoenix-wordmark-accent.svg');
+  mask-image: url('/phoenix-wordmark-accent.svg');
+}
+
+.iconButton {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--dsw-alias-label-secondary);
+  transition: background-color 140ms var(--ds-ease-in-out), color 140ms var(--ds-ease-in-out);
+}
+
+.iconButton:hover,
+.iconButton:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.iconButton:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+}
+
+.collapsed .iconButton {
+  width: 36px;
+  height: 36px;
+}
+
+.collapsed .toggle .panelIcon {
+  display: none;
+}
+
+.collapsed .toggle:hover .panelIcon,
+.collapsed .toggle:focus-visible .panelIcon {
+  display: inline;
+}
+
+.collapsed .toggle:hover .railMark,
+.collapsed .toggle:focus-visible .railMark {
+  display: none;
+}
+
+.railMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.collapsed .iconButton {
+  color: var(--dsw-alias-label-primary);
+}
+
+.buildRevision {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 4px;
+  color: var(--dsw-alias-label-primary-inverted);
+  background: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: 8px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0;
+}
+
+.newSession {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  margin: 0 0 6px;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: background-color 140ms var(--ds-ease-in-out);
+}
+
+.newSession:hover,
+.newSession:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.newSession:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+}
+
+.collapsed .newSession {
+  align-self: flex-start;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  margin: 0 0 12px;
+  gap: 0;
+  border-color: transparent;
+  background: transparent;
+}
+
+.collapsed .newSession:hover,
+.collapsed .newSession:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.newSessionLabel {
+  max-width: 200px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.collapsed .newSessionLabel {
+  max-width: 0;
+}
+
+.regionArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-left: -4px;
+  margin-right: calc(-1 * var(--dsh-sidebar-inline-padding));
+  padding-left: 4px;
+  overflow: hidden;
+}
+
+.collapsed .regionArea {
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 0;
+}
+
+.footArea {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  padding-top: 4px;
+}
+
+.settingsArea,
+.footerActions {
+  flex: none;
+  min-width: 0;
+  width: 100%;
+}
+
+.footerActions {
+  display: flex;
+}
+
+.collapsed .footArea {
+  align-items: center;
+}
+
+.collapsed .settingsArea,
+.collapsed .footerActions {
+  display: flex;
+  justify-content: center;
+  width: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wide,
+  .fading > *,
+  .railIn .iconButton,
+  .railIn .newSession,
+  .railIn .footArea,
+  .railIn .regionArea,
+  .iconButton,
+  .newSession {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* A quieter navigation surface, retaining all existing workspace controls. */
+.root:not(.collapsed) {
+  padding-inline: 12px;
+}
+.root:not(.collapsed) .logoRow {
+  margin-bottom: 10px;
+}
+.root:not(.collapsed) .newSession {
+  min-height: 42px;
+  margin-bottom: 14px;
+  padding-inline: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 13px;
+  background: var(--dsw-specific-input-major);
+  font-weight: 500;
+}
+.root:not(.collapsed) .newSession:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* Primary navigation and spacing match the approved clean assistant layout. */
+.root:not(.collapsed) { padding-inline: 14px; }
+.root:not(.collapsed) .logoRow { height: 66px; margin-bottom: 10px; }
+.root:not(.collapsed) .newSession { min-height: 46px; margin-bottom: 16px; border-radius: 15px; }
+.primaryNavigation {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 22px;
+}
+.navLink {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+.navLink svg { flex: none; color: var(--dsw-alias-label-secondary); }
+.navLink:hover, .navLink:focus-visible { background: var(--dsw-alias-interactive-bg-hover); }
+.navLink:first-child { background: var(--dsw-alias-interactive-bg-hover); font-weight: 500; }
+.navLink:focus-visible { outline: 2px solid var(--dsw-specific-phoenix-accent); outline-offset: 0; }
+@media (max-height: 780px) {
+  .primaryNavigation { gap: 0; margin-bottom: 10px; }
+  .navLink { height: 34px; }
+}
+@media (prefers-reduced-motion: reduce) { .navLink { transition: none; } }
+
+/* Warm Phoenix sidebar — approved cream/orange design, 320px open / 72px closed column.
+   These rules deliberately style the existing actions instead of replacing them. */
+.root {
+  --phoenix-side-ember: #e76020;
+  --phoenix-side-ember-hover: #d75118;
+  --phoenix-side-peach: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 76%, #ffd6b8 24%);
+  --phoenix-side-outline: color-mix(in srgb, var(--dsw-alias-border-l2) 66%, #e8b58e 34%);
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 93%, #fff8ef 7%);
+  border-right: 1px solid var(--phoenix-side-outline);
+  border-radius: 0 22px 22px 0;
+  box-shadow: 6px 0 28px rgba(102, 71, 46, 0.035);
+}
+.root:not(.collapsed) {
+  padding-inline: 17px;
+  padding-block: 6px 9px;
+}
+.root:not(.collapsed) .logoRow {
+  height: 54px;
+  padding-inline: 0;
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+.root:not(.collapsed) .brandIdentity { gap: 11px; }
+.root:not(.collapsed) .brandMark img {
+  width: 42px;
+  height: 42px;
+  filter: sepia(1) saturate(2.8) hue-rotate(337deg) drop-shadow(0 3px 6px rgba(225, 109, 45, .13));
+}
+.root:not(.collapsed) .brandName {
+  padding-left: 0;
+  height: auto;
+  max-width: 190px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  font-family: 'Avenir Next', Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.root:not(.collapsed) .fallbackBrandName { width: 145px; }
+.root:not(.collapsed) .toggle {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--phoenix-side-outline);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 90%, #fff 10%);
+}
+.root:not(.collapsed) .toggle:hover { border-color: var(--phoenix-side-ember); }
+.root:not(.collapsed) .newSession {
+  justify-content: center;
+  height: 44px;
+  min-height: 44px;
+  margin-bottom: 10px;
+  padding: 0 14px;
+  gap: 11px;
+  border: 1px solid color-mix(in srgb, var(--phoenix-side-ember) 92%, #c33b12 8%);
+  border-radius: 13px;
+  background: var(--phoenix-side-ember);
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+  box-shadow: 0 6px 14px rgba(211, 98, 32, .11);
+}
+.root:not(.collapsed) .newSession svg { color: #fff; width: 19px; height: 19px; }
+.root:not(.collapsed) .newSession:hover,
+.root:not(.collapsed) .newSession:focus-visible {
+  background: var(--phoenix-side-ember-hover);
+  border-color: var(--phoenix-side-ember-hover);
+}
+.root:not(.collapsed) .primaryNavigation {
+  gap: 1px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--phoenix-side-outline);
+}
+.root:not(.collapsed) .navLink {
+  height: 38px;
+  gap: 12px;
+  padding-inline: 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 450;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.root:not(.collapsed) .navLink svg { width: 19px; height: 19px; }
+.root:not(.collapsed) .navLink:first-child {
+  color: var(--phoenix-side-ember);
+  background: var(--phoenix-side-peach);
+  font-weight: 600;
+}
+.root:not(.collapsed) .navLink:first-child svg { color: var(--phoenix-side-ember); }
+.root:not(.collapsed) .navLink:not(:first-child):hover,
+.root:not(.collapsed) .navLink:not(:first-child):focus-visible {
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 82%, #ffd5b6 18%);
+}
+.root:not(.collapsed) .regionArea {
+  margin-inline: -6px;
+  padding-inline: 6px;
+}
+.root:not(.collapsed) .footArea {
+  gap: 3px;
+  padding-top: 5px;
+  border-top: 1px solid var(--phoenix-side-outline);
+}
+.root:not(.collapsed) .footerActions:not(:empty) {
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  min-height: 0;
+}
+.root:not(.collapsed) .settingsArea { min-height: 40px; }
+.root:not(.collapsed) .settingsArea :global(button) {
+  border-radius: 11px;
+}
+.root:not(.collapsed) .settingsArea :global(button):hover {
+  background: var(--phoenix-side-peach);
+}
+@media (max-height: 860px) {
+  .root:not(.collapsed) { padding-block: 5px 6px; }
+  .root:not(.collapsed) .logoRow { height: 46px; margin-bottom: 5px; }
+  .root:not(.collapsed) .brandMark img { width: 35px; height: 35px; }
+  .root:not(.collapsed) .newSession { height: 40px; min-height: 40px; margin-bottom: 6px; }
+  .root:not(.collapsed) .primaryNavigation { gap: 0; margin-bottom: 5px; padding-bottom: 5px; }
+  .root:not(.collapsed) .navLink { height: 33px; }
+  .root:not(.collapsed) .footArea { gap: 1px; padding-top: 3px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .root:not(.collapsed) .navLink { transition: none; }
+}
+
+/* Compact Phoenix icon rail — shares the compact header's 72px footprint.
+   Center the 46px controls in a 60px card rather than the old 104px host rail.
+   Works at 750px browser-content height as well as full desktop height. */
+.root.collapsed {
+  --dsh-sidebar-inline-padding: 0px;
+  box-sizing: border-box;
+  width: calc(100% - 10px);
+  height: calc(100% - 24px);
+  margin: 12px 5px;
+  padding: 8px 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 60%, #e6cbb3 40%);
+  border-radius: 24px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 5px 18px rgba(91, 66, 42, .045);
+}
+.collapsed .logoRow {
+  display: flex;
+  justify-content: center;
+  height: 48px;
+  min-height: 48px;
+  margin: 0 0 7px;
+  padding: 0;
+}
+.collapsed .toggle,
+.collapsed .iconButton {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+}
+.collapsed .railMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.collapsed .railMark img,
+.collapsed .railMark > img {
+  display: block;
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  /* Sepia retains feather highlights: do not flatten the emblem into an
+     orange silhouette with brightness(0). */
+  filter: sepia(1) saturate(1.45) hue-rotate(8deg) brightness(1.12)
+    contrast(1.06) drop-shadow(0 2px 2px rgba(143, 102, 26, .25));
+}
+.root:not(.collapsed) .brandMark img {
+  filter: sepia(1) saturate(1.45) hue-rotate(8deg) brightness(1.12)
+    contrast(1.06) drop-shadow(0 2px 3px rgba(143, 102, 26, .18));
+}
+.collapsed .newSession {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  align-self: center;
+  width: 46px;
+  height: 46px;
+  margin: 0 0 10px;
+  padding: 0;
+  border: 1px solid #db531c;
+  border-radius: 14px;
+  background: #ed5a20;
+  color: #fff;
+  box-shadow: 0 3px 9px rgba(211, 98, 32, .12);
+}
+.collapsed .newSession svg {
+  width: 18px;
+  height: 18px;
+  color: #fff;
+}
+.collapsed .newSession:hover,
+.collapsed .newSession:focus-visible {
+  border-color: #cd4817;
+  background: #d94e19;
+  color: #fff;
+}
+.collapsed .primaryNavigation {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  align-self: center;
+  gap: 3px;
+  width: 46px;
+  margin: 0 0 8px;
+  padding: 0 0 9px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 65%, #f0dfd2 35%);
+}
+.collapsed .navLink {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 46px;
+  height: 46px;
+  min-height: 46px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+.collapsed .navLink svg {
+  width: 18px;
+  height: 18px;
+  color: inherit;
+}
+.collapsed .navLink:first-child {
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 76%, #ffe5d3 24%);
+  color: #dd5a20;
+}
+.collapsed .navLink:hover,
+.collapsed .navLink:focus-visible {
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 72%, #ffd9bb 28%);
+  color: #dd5a20;
+}
+.collapsed .navLink:focus-visible,
+.collapsed .newSession:focus-visible,
+.collapsed .toggle:focus-visible {
+  outline: 2px solid #dc672c;
+  outline-offset: 2px;
+}
+.collapsed .regionArea {
+  flex: 1 1 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
+.collapsed .regionArea :global(button svg),
+.collapsed .settingsArea :global(button svg) {
+  width: 18px;
+  height: 18px;
+}
+.collapsed .footArea {
+  padding-top: 7px;
+  border-top: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 65%, #f0dfd2 35%);
+}
+@media (max-height: 750px) {
+  .root.collapsed { padding-block: 5px 7px; }
+  .collapsed .logoRow { height: 43px; min-height: 43px; margin-bottom: 4px; }
+  .collapsed .toggle,
+  .collapsed .iconButton { height: 43px; }
+  .collapsed .newSession { height: 43px; margin-bottom: 6px; }
+  .collapsed .primaryNavigation { gap: 1px; margin-bottom: 5px; padding-bottom: 5px; }
+  .collapsed .navLink { height: 42px; min-height: 42px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .collapsed .navLink { transition: none; }
+}

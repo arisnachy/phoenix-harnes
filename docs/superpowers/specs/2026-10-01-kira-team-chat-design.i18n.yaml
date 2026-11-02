@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/superpowers/specs/2026-10-01-kira-team-chat-design.md
+2026-10-01-kira-team-chat-design.md: 44aecd043b7cecd61756873180f4d61bcdce7422
+2026-10-01-kira-team-chat-design.zh.md: 110486cf5a2cdc7647ff2ec59a554c1f36adddb4

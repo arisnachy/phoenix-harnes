@@ -1,0 +1,77 @@
+{
+  "name": "@phoenix-ai/dsh-acp-demo",
+  "description": "ACP automation server app: agent spine + JSONL persistence + ACP transport, with a JSON-RPC stdio bin",
+  "version": "0.1.1-rc.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
+    "directory": "packages/examples/acp-demo"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "bin": {
+    "dsh-acp-demo": "bin/dsh-acp-demo.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./bin": {
+      "types": "./lib/types/bin.d.ts",
+      "default": "./lib/bin.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/bin.js",
+    "bin/dsh-acp-demo.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@phoenix-ai/cordis-plugin-include": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/dsh-acp": "workspace:^",
+    "@phoenix-ai/dsh-agent-spine-demo": "workspace:^",
+    "@phoenix-ai/dsh-app-boot": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-session-checkpoint-policy": "workspace:^",
+    "@phoenix-ai/dsh-session-persistence-jsonl": "workspace:^",
+    "@phoenix-ai/dsh-session-query": "workspace:^",
+    "@phoenix-ai/dsh-session-query-sqlite": "workspace:^",
+    "@phoenix-ai/dsh-tools": "workspace:^",
+    "@phoenix-ai/dsh-agent-instructions": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/schemastery": "workspace:^"
+  },
+  "devDependencies": {
+    "@phoenix-ai/cordis-plugin-include": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/dsh-acp": "workspace:^",
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-agent-spine-demo": "workspace:^",
+    "@phoenix-ai/dsh-app-boot": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-session-checkpoint-policy": "workspace:^",
+    "@phoenix-ai/dsh-session-persistence-jsonl": "workspace:^",
+    "@phoenix-ai/dsh-session-query": "workspace:^",
+    "@phoenix-ai/dsh-session-query-sqlite": "workspace:^",
+    "@phoenix-ai/dsh-system-prompt": "workspace:^",
+    "@phoenix-ai/dsh-tools": "workspace:^",
+    "@phoenix-ai/dsh-agent-instructions": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/schemastery": "workspace:^"
+  }
+}

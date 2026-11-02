@@ -1,0 +1,343 @@
+# Agent Teams
+
+English | [中文](agent-team.zh.md)
+
+Types shared by the stable implicit-root Team domain, model tools, and host adapters. The [Agent Teams Agent Note](../../.agents/notes/implemented/feature/2026-08-05-agent-teams.md) owns identity, mailbox, task, and shared-checkout decisions; this page records the literal durable forms from [`packages/subagent/agent-team/src/types.ts`](../../packages/subagent/agent-team/src/types.ts).
+
+## Identity and roster
+
+`TeamId` is the root `SessionId` under a distinct [brand](core.md#branded-ids). `TeamTaskId` is Team-local and monotonically allocated as `task-<n>`; `TeamMessageId` is globally random. A teammate's Session id remains its persistent identity, while `name` is an immutable model/UI label.
+
+```ts type-equiv
+/** Whole durable value written on every teammate lifecycle change. */
+interface TeamMemberSnapshot {
+  readonly id: SessionId
+  readonly name: string
+  readonly description: string
+  readonly provider: string
+  readonly context: 'fresh' | 'fork'
+  readonly phase: TeamMemberPhase
+  readonly error?: string
+}
+```
+
+Every member starts in `provisioning` and reaches exactly one terminal roster phase, `active` or `failed`. Runtime `running`/`idle`/`inactive` status is derived separately and never rewrites this record.
+
+## Durable mailbox
+
+The Lead Session first stores the complete queued message. A target receipt is acknowledged only after its pending inbox item or recorded user message is durable, leaving queued-minus-delivered as the recovery mailbox.
+
+```ts type-equiv
+/** One peer message retained until its target Session records it. */
+interface TeamMessageSnapshot {
+  readonly id: TeamMessageId
+  readonly senderId: SessionId
+  readonly senderName: string
+  readonly targetId: SessionId
+  /** Human-stable Team name captured at send time for transcript presentation. */
+  readonly targetName?: string
+  /** Optional for backward replay and direct API callers; model-facing Team tools always persist one semantic purpose. */
+  readonly purpose?: TeamMessagePurpose
+  readonly delivery: 'quiet' | 'wakeup'
+  readonly content: ContentBlock[]
+}
+```
+
+The target Session keeps message identity and sender attribution on both the pending inbox item and the eventual user message. Folding that source across inbox and history is the target-side de-duplication key; the model-visible framing repeats the id and sender.
+
+```ts type-equiv
+/** Source retained by the target Session for durable mailbox de-duplication. */
+interface TeamMessageSource {
+  readonly kind: 'team-message'
+  readonly teamId: TeamId
+  readonly messageId: TeamMessageId
+  readonly senderId: SessionId
+  readonly senderName: string
+  /** Semantic purpose survives delivery so Phoenix Auto can route Kira without another classifier call. */
+  readonly purpose?: TeamMessagePurpose
+}
+```
+
+## Shared task DAG
+
+Every task event stores a complete snapshot. `revision` is the compare-and-set value and increments by one per mutation. `blockedBy` edges must name non-deleted tasks and keep the graph acyclic. `writeScopes` are normalized advisory path prefixes rather than locks.
+
+```ts type-equiv
+/** Whole durable task snapshot; every mutation increments {@link revision}. */
+interface TeamTaskSnapshot {
+  readonly id: TeamTaskId
+  readonly revision: number
+  readonly subject: string
+  readonly description: string
+  readonly status: TeamTaskStatus
+  readonly ownerId?: SessionId
+  readonly blockedBy: TeamTaskId[]
+  readonly writeScopes: string[]
+}
+```
+
+`pending` is unstarted or released, `in_progress` carries an owner, `completed` satisfies blockers, and `deleted` is a retained tombstone. Views add owner name, readiness, and write-scope overlap warnings without changing the durable snapshot.
+
+## Replay
+
+`foldTeam()` replays one root Session into the roster, task board, and queued-minus-delivered mailbox that every Team operation reads. It selects records by `TeamId`, so events inherited by an ordinary fork retain the ancestor id and never enter the new root's state. Session event `seq` and `time` remain the ordering and timing record; Team snapshots do not duplicate them. Roster and task reads reach callers as views that add owner name, readiness, and write-scope warnings, while pending mail stays internal to delivery and recovery. The package [README](../../packages/subagent/agent-team/README.md) owns operation, authorization, recovery, and limit behavior.
+
+<!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
+
+<a id="cordis-surface"></a>
+
+## Cordis API
+
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxagentteams--teamservice"></a>
+
+### `ctx.agentTeams` — `TeamService`
+
+Agent Teams service backed by the exact live Lead Session log.
+
+```ts cordis-catalog
+/** Read actual team outputs without starting agents.
+ * @param request - root identity.
+ * @returns durable transcript.
+ */
+@Remote('chatMessages') async chatMessages(request: TeamChatReadRequest): Promise<TeamChatReadResult>
+
+/** Read a bounded transcript for the exact live caller.
+ * @param actor - actual agent.
+ * @param limit - protocol message bound.
+ * @returns bounded rows.
+ */
+async readChatFor(actor: Agent, limit: number): Promise<TeamChatReadResult>
+
+/** Answer an accepted directed human question while retaining the caller's mission.
+ * @param actor - Exact live addressed child.
+ * @param request - Durable human request identity and bounded answer.
+ * @returns Stable visible answer identity.
+ */
+async answerChat(actor: Agent, request: { readonly messageId: string; readonly text: string }): Promise<{ messageId: string }>
+
+/** Publish the Lead's own concise reply to a real delivered specialist handoff.
+ * @param actor - exact live Lead.
+ * @param request - durable peer message and bounded reply.
+ * @returns visible reply identity.
+ */
+async replyToPeer(actor: Agent, request: { readonly messageId: string; readonly text: string }): Promise<{ messageId: string }>
+
+/** Set/remove a human reaction.
+ * @param request - message and Unicode emoji.
+ */
+@Remote('chatReact') async chatReact(request: TeamChatReactRequest): Promise<void>
+
+/** Reply from the main composer to a direct child.
+ * @param request - target and reply context.
+ * @returns accepted identity.
+ */
+@Remote('chatReply') async chatReply(request: TeamChatReplyRequest): Promise<{ messageId: string; queued: boolean }>
+
+/** Set/remove a real agent reaction.
+ * @param actor - exact live actor.
+ * @param request - target mutation.
+ */
+async reactToChat(actor: Agent, request: TeamChatReactRequest): Promise<void>
+
+/**
+ * Resolve one exact live Agent's Team role.
+ * @param agent - exact live Agent used as the authority credential.
+ * @returns its root, Team identity, role, and model-facing name.
+ */
+membership(agent: Agent): TeamMembership
+
+/**
+ * List the runtime-enriched roster visible to one Team member.
+ * @param agent - exact live Team member.
+ * @returns Lead and teammate rows in creation order.
+ */
+listMembers(agent: Agent): TeamMemberView[]
+
+/**
+ * Create one named, continuable direct child of the Team Lead.
+ * @param caller - exact live Lead Agent.
+ * @param request - immutable name, description, prompt, context mode, provider, and cancellation.
+ * @returns the active roster row.
+ */
+async spawnTeammate(caller: Agent, request: SpawnTeammateRequest): Promise<SpawnTeammateResult>
+
+/**
+ * Read the authoritative root-owned mission checkpoint without waking workers.
+ * @param caller - any live teammate or Lead in the mission.
+ * @returns durable state, or undefined before delegation.
+ */
+missionSnapshot(caller: Agent): UniversalMissionSnapshot | undefined
+
+/**
+ * Queue one durable peer message, then attempt immediate delivery.
+ * @param caller - exact live sending Team member.
+ * @param request - target name, content, scheduling mode, and pre-queue cancellation.
+ * @returns durable message identity and immediate-delivery observation.
+ */
+async sendMessage(caller: Agent, request: SendTeamMessageRequest): Promise<SendTeamMessageResult>
+
+/**
+ * Attach one lightweight semantic reaction to another member's durable message.
+ * A reaction is journal state, not a generated assistant turn, so acknowledgement
+ * does not consume an extra prose response.
+ * @param caller - exact live Team member reacting.
+ * @param request - target message, semantic reaction, and cancellation signal.
+ * @returns the committed reaction receipt.
+ */
+async reactToMessage( caller: Agent, request: ReactToTeamMessageRequest, ): Promise<ReactToTeamMessageResult>
+
+/**
+ * Create one unowned pending task in the Team Lead log.
+ * @param caller - exact live Team member creating the task.
+ * @param request - task text, blockers, and advisory write scopes.
+ * @returns the revision-one task view.
+ */
+async createTask(caller: Agent, request: CreateTeamTaskRequest): Promise<TeamTaskView>
+
+/**
+ * Return one task, including a deleted tombstone.
+ * @param caller - exact live Team member reading the task.
+ * @param id - Team-local task identity.
+ * @returns the latest task value and derived readiness diagnostics.
+ */
+getTask(caller: Agent, id: TeamTaskId): TeamTaskView
+
+/**
+ * List current non-deleted tasks in numeric creation order.
+ * @param caller - exact live Team member reading the board.
+ * @returns detached current task views.
+ */
+listTasks(caller: Agent): TeamTaskView[]
+
+/**
+ * Compare-and-set one authorized task transition.
+ * @param caller - exact live Team member authorizing the mutation.
+ * @param request - task identity, expected revision, action, and action fields.
+ * @returns the committed next task revision.
+ */
+async updateTask(caller: Agent, request: UpdateTeamTaskRequest): Promise<TeamTaskView>
+
+/**
+ * Wait for the next Team-domain or member-status change.
+ * @param caller - exact live Team member waiting for activity.
+ * @param timeoutMs - bounded wait duration from five seconds through one hour.
+ * @param signal - caller cancellation for the wait only.
+ * @returns one observed change or a timeout result.
+ */
+async waitForChange(caller: Agent, timeoutMs: number, signal: AbortSignal): Promise<TeamWaitResult>
+
+/**
+ * Interrupt one live teammate turn without clearing its pending inbox.
+ * @param caller - exact live Lead Agent.
+ * @param targetName - durable teammate name.
+ * @returns the target status sampled before cancellation.
+ */
+interrupt(caller: Agent, targetName: string): { previousStatus: 'running' | 'idle' | 'inactive' }
+
+/**
+ * Resolve a caller without throwing, used by scoped-tool installation and observers.
+ * @param agent - candidate exact live Agent.
+ * @returns Team membership, or undefined for non-Team subagents and stale identities.
+ */
+tryMembership(agent: Agent): TeamMembership | undefined
+```
+
+Types: [Agent](core.md)
+
+Source: [`packages/subagent/agent-team/src/index.ts`](../../packages/subagent/agent-team/src/index.ts)
+<!-- END GENERATED cordis-surface -->
+
+## Main conversation
+
+Model-hidden public transcript records retain canonical identity, source ownership and per-target admission receipts. Their versioned events and reaction/participant projections share the existing Session stream. A reply request identity is reused across browser and root recovery; repeated message snapshots are updates to one conversation row.
+
+```ts type-equiv
+/** Durable, model-hidden conversation records shared by the team and ordinary chat. */
+interface TeamChatReaction {
+  readonly id: string
+  readonly messageId: string
+  readonly reactorId: string
+  readonly reactorName: string
+  readonly reactorKind: 'user' | 'kira' | 'agent'
+  readonly emoji: string
+  readonly createdAt: number
+}
+```
+
+```ts type-equiv
+/** A public root transcript row; later durable snapshots keep the same identity. */
+interface TeamChatMessage {
+  readonly id: string
+  readonly senderId: string
+  readonly senderName: string
+  readonly senderKind: 'user' | 'kira' | 'agent'
+  readonly avatar?: string | undefined
+  readonly role?: string | undefined
+  readonly missionId?: string | undefined
+  readonly text: string
+  readonly time: number
+  readonly sourceSeq: number
+  readonly targetId?: string | undefined
+  readonly targetName?: string | undefined
+  readonly replyTo?: string | undefined
+  readonly replyQuote?: string | undefined
+  readonly mentions: readonly string[]
+  readonly supervised?: boolean | undefined
+  readonly deliveries?: readonly {
+    readonly targetId: string
+    readonly accepted: boolean
+    readonly error?: string | undefined
+  }[] | undefined
+  readonly reactions: readonly TeamChatReaction[]
+}
+```
+
+```ts type-equiv
+/** A stable mission-owned identity retained after the child completes. */
+interface TeamChatParticipant {
+  readonly id: string
+  readonly name: string
+  readonly role: string
+  readonly status: string
+  readonly avatar?: string | undefined
+  readonly task?: string | undefined
+  /** Actual provider/model from the child assistant message, not the lead's selector. */
+  readonly modelProvider?: string | undefined
+  readonly model?: string | undefined
+  readonly missionId?: string | undefined
+}
+```
+
+```ts type-equiv
+/** Detached public transcript and real participant identities; reading never wakes agents. */
+interface TeamChatReadResult { readonly messages: TeamChatMessage[]
+  readonly participants: TeamChatParticipant[] }
+```
+
+```ts type-equiv
+/** A live root identity and optional bounded message count (1–200). */
+interface TeamChatReadRequest { readonly sessionId: string
+  readonly limit?: number }
+```
+
+```ts type-equiv
+/** A per-actor Unicode emoji set/remove on an existing public message. */
+interface TeamChatReactRequest extends TeamChatReadRequest {
+  readonly messageId: string
+  readonly emoji: string
+  readonly active: boolean
+}
+```
+
+```ts type-equiv
+/** A retry-stable human request to existing continuable direct children. */
+interface TeamChatReplyRequest extends TeamChatReadRequest {
+  readonly requestId: string
+  readonly targetId: string
+  readonly targetIds?: readonly string[]
+  readonly text: string
+  readonly replyTo?: string | undefined
+}
+```

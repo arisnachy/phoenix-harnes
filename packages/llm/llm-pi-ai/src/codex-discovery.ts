@@ -1,0 +1,590 @@
+/**
+ * Live model discovery for the ChatGPT-authenticated Codex route.
+ *
+ * Codex owns account-scoped model availability. Its app-server `model/list`
+ * request is therefore the authority for the Models settings picker; the
+ * bundled pi-ai catalog is intentionally not used as a fallback here.
+ *
+ * @module dsh-llm-pi-ai/codex-discovery
+ */
+
+import { spawn, spawnSync } from 'node:child_process'
+import type { ChildProcessWithoutNullStreams } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join, resolve, sep } from 'node:path'
+import { createInterface } from 'node:readline'
+import type { Interface as ReadlineInterface } from 'node:readline'
+import { LlmError } from '@phoenix-ai/dsh-llm'
+import type { LlmDiscoveredModel } from '@phoenix-ai/dsh-llm'
+
+// Cold Codex catalog refreshes can spend tens of seconds in the upstream models manager.
+// Stay bounded, but do not abort the app-server before its own refresh path can settle.
+const RPC_TIMEOUT_MS = 45_000
+// Windows can need more than 750 ms to finish Codex's async models_cache.json store after EOF.
+// Wait up to the normal subprocess disposal grace; natural exits return immediately.
+const CODEX_METADATA_EXIT_GRACE_MS = 3_000
+/** Failed metadata probes cool down globally so Settings cannot spawn a process storm. */
+const DISCOVERY_FAILURE_COOLDOWN_MS = 30_000
+const PAGE_LIMIT = 100
+const MAX_PAGES = 50
+
+interface JsonRpcErrorShape {
+  code?: unknown
+  message?: unknown
+}
+
+interface JsonRpcResponseShape {
+  id?: unknown
+  result?: unknown
+  error?: JsonRpcErrorShape | null
+}
+
+interface CodexReasoningEffortShape {
+  reasoningEffort?: unknown
+  description?: unknown
+}
+
+interface CodexModelShape {
+  id?: unknown
+  model?: unknown
+  displayName?: unknown
+  hidden?: unknown
+  supportedReasoningEfforts?: unknown
+  defaultReasoningEffort?: unknown
+  inputModalities?: unknown
+}
+
+interface CodexModelListShape {
+  data?: unknown
+  nextCursor?: unknown
+}
+
+/** Extra discovery metadata Codex exposes beyond the provider-neutral minimum. */
+export interface CodexDiscoveredModel extends LlmDiscoveredModel {
+  /** Request modalities advertised by Codex model/list for this exact account/model route. */
+  inputModalities?: Array<'text' | 'image'>
+  reasoning?: {
+    efforts: Array<{ id: string; name: string; description?: string }>
+    defaultEffort?: string
+  }
+}
+
+/** Injectable transport seam used by regression tests. */
+export interface CodexModelListTransport {
+  list(signal?: AbortSignal): Promise<readonly CodexDiscoveredModel[]>
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+/** Human-readable labels for Codex's current and forward-compatible effort ids. */
+function effortName(id: string): string {
+  const known: Readonly<Record<string, string>> = {
+    off: 'Off',
+    minimal: 'Minimal',
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+    xhigh: 'Extra High',
+    max: 'Max',
+    ultra: 'Ultra',
+  }
+  return known[id] ?? id
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, letter => letter.toUpperCase())
+}
+
+/** Preserve only the request modalities PHOENIX/pi-ai can currently dispatch. */
+function inputModalitiesOf(entry: CodexModelShape): CodexDiscoveredModel['inputModalities'] | undefined {
+  if (!Array.isArray(entry.inputModalities)) return undefined
+  const modalities = entry.inputModalities.filter(
+    (value): value is 'text' | 'image' => value === 'text' || value === 'image',
+  )
+  return modalities.length === 0 ? undefined : [...new Set(modalities)]
+}
+
+/** Preserve the account-scoped reasoning capabilities Codex advertises for one model. */
+function reasoningOf(entry: CodexModelShape): CodexDiscoveredModel['reasoning'] | undefined {
+  if (!Array.isArray(entry.supportedReasoningEfforts)) return undefined
+  const efforts = entry.supportedReasoningEfforts.flatMap((raw) => {
+    const option = raw as CodexReasoningEffortShape | null
+    const id = text(option?.reasoningEffort)
+    if (id === undefined) return []
+    const description = text(option?.description)
+    return [{
+      id,
+      name: effortName(id),
+      ...description === undefined ? {} : { description },
+    }]
+  })
+  if (efforts.length === 0) return undefined
+  const advertised = new Set(efforts.map(effort => effort.id))
+  const defaultEffort = text(entry.defaultReasoningEffort)
+  return {
+    efforts,
+    ...defaultEffort !== undefined && advertised.has(defaultEffort) ? { defaultEffort } : {},
+  }
+}
+
+/**
+ * Encode one newline-delimited Codex app-server frame.
+ * Codex uses JSON-RPC semantics but deliberately omits the `jsonrpc` member on
+ * its stdio wire, so accepting that member here would let a mock validate a
+ * frame the real CLI does not promise to accept.
+ *
+ * @param frame - Request or notification fields accepted by the Codex wire.
+ * @returns One JSONL frame terminated by a newline.
+ */
+export function encodeCodexWireFrame(frame: Readonly<Record<string, unknown>>): string {
+  if ('jsonrpc' in frame) {
+    throw new LlmError('Codex app-server wire frames must omit the jsonrpc member', 'DISCOVERY_FAILED')
+  }
+  return `${JSON.stringify(frame)}\n`
+}
+
+/**
+ * Map one app-server `model/list` result into PHOENIX discovery rows.
+ * The `model` field is the value Codex actually sends to turns; `id` is only a
+ * compatibility fallback for older app-server builds.
+ *
+ * @param result - Raw `model/list` result returned by the Codex app-server.
+ * @returns Visible PHOENIX discovery rows and the optional pagination cursor.
+ */
+export function readCodexModelPage(result: unknown): {
+  models: CodexDiscoveredModel[]
+  nextCursor?: string
+} {
+  const page = result as CodexModelListShape | null
+  if (!Array.isArray(page?.data)) {
+    throw new LlmError('Codex model/list returned no data array', 'DISCOVERY_FAILED')
+  }
+  const models: CodexDiscoveredModel[] = []
+  for (const raw of page.data) {
+    const entry = raw as CodexModelShape | null
+    if (entry?.hidden === true) continue
+    const id = text(entry?.model) ?? text(entry?.id)
+    if (id === undefined) continue
+    const name = text(entry?.displayName)
+    const inputModalities = entry === null ? undefined : inputModalitiesOf(entry)
+    const reasoning = entry === null ? undefined : reasoningOf(entry)
+    models.push({
+      id,
+      ...name === undefined ? {} : { name },
+      ...inputModalities === undefined ? {} : { inputModalities },
+      ...reasoning === undefined ? {} : { reasoning },
+    })
+  }
+  const nextCursor = text(page.nextCursor)
+  return { models, ...nextCursor === undefined ? {} : { nextCursor } }
+}
+
+/**
+ * Build the ambient environment Codex needs for install, config, and network discovery.
+ * @returns Sanitized child-process environment for Codex metadata probes.
+ */
+export function codexEnvironment(): NodeJS.ProcessEnv {
+  const names = [
+    'PATH', 'Path', 'PATHEXT', 'HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA',
+    'CODEX_HOME', 'XDG_CONFIG_HOME', 'SystemRoot', 'ComSpec', 'TEMP', 'TMP',
+    'LANG', 'LC_ALL', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY',
+    'http_proxy', 'https_proxy', 'no_proxy', 'SSL_CERT_FILE', 'SSL_CERT_DIR',
+  ] as const
+  const env: NodeJS.ProcessEnv = {}
+  for (const name of names) {
+    const value = process.env[name]
+    if (value !== undefined) env[name] = value
+  }
+  const configuredHome = process.env.CODEX_HOME?.trim()
+  const home = configuredHome && configuredHome.length > 0
+    ? resolve(configuredHome)
+    : join(homedir(), '.codex')
+  const explicitPhoenix = process.env.PHOENIX_CODEX_SQLITE_HOME?.trim()
+  const explicitCodex = process.env.CODEX_SQLITE_HOME?.trim()
+  const sqliteHome = explicitPhoenix && explicitPhoenix.length > 0
+    ? resolve(explicitPhoenix, 'discovery')
+    : explicitCodex && explicitCodex.length > 0
+      ? resolve(explicitCodex, 'phoenix-runtime', 'discovery')
+      : join(home, 'phoenix-runtime', 'sqlite', 'discovery')
+  mkdirSync(sqliteHome, { recursive: true })
+  env.CODEX_HOME = home
+  env.CODEX_SQLITE_HOME = sqliteHome
+  return env
+}
+
+/**
+ * Own the writable-side error event for one Codex metadata subprocess.
+ *
+ * Node can emit EPIPE/ERR_STREAM_DESTROYED on child.stdin when Codex exits
+ * between a JSONL request and the corresponding write/end. The request write
+ * callback remains authoritative for active RPC failure; this listener prevents
+ * the duplicate stream event from becoming an uncaught Host-fatal exception.
+ *
+ * @param child - Spawned Codex app-server child with piped stdio.
+ * @returns The same child after its diagnostic and stream guards are installed.
+ */
+export function finishProcessSetup(child: ChildProcessWithoutNullStreams): ChildProcessWithoutNullStreams {
+  // Codex diagnostics are not part of model discovery, but stderr must still be
+  // drained or a chatty app-server could fill its pipe and block stdout.
+  child.stderr.resume()
+  // Spawn failures are observed through stdout closure/timeout below; owning an
+  // error listener prevents Node from treating ENOENT/EACCES as an uncaught event.
+  child.on('error', () => {})
+  // A failed/finished Codex process may close stdin while Phoenix is writing or
+  // disposing it. writeFrame receives the active write error via its callback;
+  // teardown owns end-of-stream, so the EventEmitter error is intentionally
+  // contained here instead of escaping as an uncaught EPIPE.
+  child.stdin.on('error', () => {})
+  return child
+}
+
+/**
+ * Build the fixed capability-reduced argv for metadata-only Codex app-server probes.
+ * @returns Command-line arguments for a metadata-only app-server process.
+ */
+export function codexDiscoveryArgs(): string[] {
+  return [
+    '-c',
+    'features.plugins=false',
+    '-c',
+    'skills.bundled.enabled=false',
+    'app-server',
+    '--listen',
+    'stdio://',
+  ]
+}
+
+/** Inspect the single PHOENIX-managed Codex CLI activation marker. */
+function managedCodexRuntime(homeOverride?: string): { bin: string; signature: string } | undefined {
+  const configured = homeOverride ?? process.env.DSH_HOME?.trim()
+  const dshHome = configured && configured.length > 0 ? resolve(configured) : join(homedir(), '.dsh')
+  const runtimeRoot = join(dshHome, 'codex-cli')
+  const markerPath = join(runtimeRoot, 'active.json')
+  if (!existsSync(markerPath)) return undefined
+  try {
+    const marker = JSON.parse(readFileSync(markerPath, 'utf8')) as {
+      schema?: unknown
+      version?: unknown
+      bin?: unknown
+      activatedAt?: unknown
+    }
+    if (marker.schema !== 1 || typeof marker.version !== 'string'
+      || !/^\d+\.\d+\.\d+$/u.test(marker.version) || typeof marker.bin !== 'string') return undefined
+    const candidate = resolve(runtimeRoot, marker.bin)
+    const boundary = runtimeRoot.endsWith(sep) ? runtimeRoot : `${runtimeRoot}${sep}`
+    if (candidate !== runtimeRoot && !candidate.startsWith(boundary)) return undefined
+    return existsSync(candidate) ? {
+      bin: candidate,
+      signature: JSON.stringify([marker.version, marker.bin, marker.activatedAt ?? null]),
+    } : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Stable runtime identity used to invalidate model caches after managed CLI activation. */
+export function codexRuntimeSignature(homeOverride?: string): string {
+  return managedCodexRuntime(homeOverride)?.signature ?? 'system-path'
+}
+
+/** Start the same official Codex installation for model discovery and native auth. */
+export function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
+  const common = {
+    cwd: process.cwd(),
+    env: codexEnvironment(),
+    windowsHide: true,
+    signal,
+  }
+  const managed = managedCodexRuntime()
+  if (managed !== undefined) {
+    return finishProcessSetup(spawn(
+      process.execPath,
+      [managed.bin, ...codexDiscoveryArgs()],
+      common,
+    ))
+  }
+  if (process.platform === 'win32') {
+    const shell = process.env.ComSpec ?? 'cmd.exe'
+    // Fixed command text only: no user-controlled value crosses cmd.exe. This
+    // also handles npm's `codex.cmd` shim, which cannot be execFile'd directly.
+    return finishProcessSetup(spawn(
+      shell,
+      ['/d', '/s', '/c', `codex ${codexDiscoveryArgs().join(' ')}`],
+      common,
+    ))
+  }
+  return finishProcessSetup(spawn(
+    'codex',
+    codexDiscoveryArgs(),
+    common,
+  ))
+}
+
+function writeFrame(
+  child: ChildProcessWithoutNullStreams,
+  frame: Readonly<Record<string, unknown>>,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    child.stdin.write(encodeCodexWireFrame(frame), (error) => {
+      if (error === null || error === undefined) resolve()
+      else reject(error)
+    })
+  })
+}
+
+async function nextLine(
+  iterator: AsyncIterator<string>,
+  signal: AbortSignal | undefined,
+): Promise<IteratorResult<string>> {
+  if (signal?.aborted) throw new LlmError('Codex model discovery aborted by caller', 'ABORTED')
+  return await new Promise<IteratorResult<string>>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new LlmError('Codex app-server timed out while listing models', 'DISCOVERY_FAILED'))
+    }, RPC_TIMEOUT_MS)
+    const aborted = (): void => {
+      reject(new LlmError('Codex model discovery aborted by caller', 'ABORTED'))
+    }
+    signal?.addEventListener('abort', aborted, { once: true })
+    void iterator.next().then(resolve, reject).finally(() => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', aborted)
+    })
+  })
+}
+
+async function readResponse(
+  iterator: AsyncIterator<string>,
+  expectedId: number,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  for (;;) {
+    const line = await nextLine(iterator, signal)
+    if (line.done) {
+      throw new LlmError('Codex app-server closed before model discovery completed', 'DISCOVERY_FAILED')
+    }
+    const source = line.value.trim()
+    if (source.length === 0) continue
+    let message: JsonRpcResponseShape
+    try {
+      message = JSON.parse(source) as JsonRpcResponseShape
+    } catch (error: unknown) {
+      throw new LlmError('Codex app-server returned invalid JSON', 'DISCOVERY_FAILED', { cause: error })
+    }
+    // Notifications have no id and may arrive between responses.
+    if (message.id === undefined) continue
+    if (message.id !== expectedId) {
+      throw new LlmError(
+        `Codex app-server response id mismatch: expected ${expectedId}, received ${String(message.id)}`,
+        'DISCOVERY_FAILED',
+      )
+    }
+    if (message.error !== undefined && message.error !== null) {
+      const detail = text(message.error.message) ?? `RPC error ${String(message.error.code ?? 'unknown')}`
+      throw new LlmError(`Codex model/list failed: ${detail}`, 'DISCOVERY_FAILED')
+    }
+    return message.result
+  }
+}
+
+/**
+ * Tear down one Codex metadata/auth app-server process without leaking its
+ * Windows grandchild or leaving stdin EPIPE errors unowned.
+ * @param child - spawned Codex app-server process.
+ * @param lines - readline interface consuming app-server stdout.
+ */
+async function waitForNaturalCodexExit(
+  child: ChildProcessWithoutNullStreams,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return true
+  return await new Promise<boolean>((resolvePromise) => {
+    let settled = false
+    const finish = (value: boolean): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      child.off('exit', onExit)
+      resolvePromise(value)
+    }
+    const onExit = (): void => { finish(true) }
+    const timer = setTimeout(() => { finish(false) }, timeoutMs)
+    timer.unref()
+    child.once('exit', onExit)
+  })
+}
+
+/** Shut down the owned Codex sidecar, escalating from stdin EOF to process-tree termination.
+ * @param child Sidecar process to stop.
+ * @param lines Readline interface associated with its stdout, closed during cleanup.
+ */
+export async function terminateCodexProcess(
+  child: ChildProcessWithoutNullStreams,
+  lines: ReadlineInterface,
+): Promise<void> {
+  // EOF is Codex app-server's normal shutdown signal. Give it a short window
+  // to finish its own background model-cache write before escalating to a
+  // process-tree kill; force-killing immediately after model/list can cancel
+  // the Tokio cache task and emit "failed to write models cache: background task failed".
+  if (!child.stdin.destroyed && !child.stdin.writableEnded) {
+    try {
+      child.stdin.end()
+    } catch {
+      // The child won the race and closed its pipe synchronously.
+    }
+  }
+  if (await waitForNaturalCodexExit(child, CODEX_METADATA_EXIT_GRACE_MS)) {
+    lines.close()
+    return
+  }
+  lines.close()
+  if (child.exitCode !== null || child.signalCode !== null) return
+  if (process.platform === 'win32' && child.pid !== undefined) {
+    // Discovery is launched through cmd.exe on Windows. Killing only that shell
+    // can orphan the Codex app-server grandchild, which then keeps SQLite state
+    // and model-refresh workers alive. Terminate the complete process tree only
+    // after the graceful EOF window has expired.
+    spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
+      windowsHide: true,
+      stdio: 'ignore',
+    })
+    return
+  }
+  child.kill()
+}
+
+/**
+ * Ask the locally authenticated Codex installation for the account-visible
+ * model catalog. The handshake follows app-server protocol ordering exactly:
+ * initialize response, initialized notification, then model/list requests.
+ *
+ * @param signal - Optional cancellation signal from the Settings discovery request.
+ * @returns The visible, account-scoped models reported by the local Codex app-server.
+ */
+export async function listCodexModels(signal?: AbortSignal): Promise<readonly LlmDiscoveredModel[]> {
+  let child: ChildProcessWithoutNullStreams
+  try {
+    child = codexProcess(signal)
+  } catch (error: unknown) {
+    throw new LlmError('Could not start the Codex CLI for model discovery', 'DISCOVERY_FAILED', { cause: error })
+  }
+  const lines = createInterface({ input: child.stdout, crlfDelay: Number.POSITIVE_INFINITY })
+  const iterator = lines[Symbol.asyncIterator]()
+  const models = new Map<string, CodexDiscoveredModel>()
+  let requestId = 1
+  try {
+    await writeFrame(child, {
+      id: requestId,
+      method: 'initialize',
+      params: {
+        clientInfo: { name: 'phoenix-harness', version: '0.1.1' },
+        capabilities: { experimentalApi: true },
+      },
+    })
+    await readResponse(iterator, requestId, signal)
+    await writeFrame(child, { method: 'initialized' })
+
+    let cursor: string | undefined
+    for (let pageNumber = 0; pageNumber < MAX_PAGES; pageNumber += 1) {
+      requestId += 1
+      await writeFrame(child, {
+        id: requestId,
+        method: 'model/list',
+        params: {
+          cursor: cursor ?? null,
+          limit: PAGE_LIMIT,
+          includeHidden: false,
+        },
+      })
+      const page = readCodexModelPage(await readResponse(iterator, requestId, signal))
+      for (const model of page.models) models.set(model.id, model)
+      cursor = page.nextCursor
+      if (cursor === undefined) return [...models.values()]
+    }
+    throw new LlmError(
+      `Codex model/list exceeded ${MAX_PAGES} pages; refusing a partial catalog`,
+      'DISCOVERY_FAILED',
+    )
+  } catch (error: unknown) {
+    if (signal?.aborted) {
+      throw new LlmError('Codex model discovery aborted by caller', 'ABORTED', { cause: error })
+    }
+    if (error instanceof LlmError) throw error
+    throw new LlmError('Codex model discovery failed', 'DISCOVERY_FAILED', { cause: error })
+  } finally {
+    await terminateCodexProcess(child, lines)
+  }
+}
+
+let sharedDiscovery: Promise<readonly LlmDiscoveredModel[]> | undefined
+let sharedDiscoveryRuntime: string | undefined
+let lastDiscoveryFailure: { readonly at: number; readonly error: unknown; readonly runtime: string } | undefined
+
+function waitForSharedDiscovery(
+  pending: Promise<readonly LlmDiscoveredModel[]>,
+  signal?: AbortSignal,
+): Promise<readonly LlmDiscoveredModel[]> {
+  if (signal === undefined) return pending
+  if (signal.aborted) {
+    return Promise.reject(new LlmError('Codex model discovery aborted by caller', 'ABORTED'))
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = (): void => {
+      reject(new LlmError('Codex model discovery aborted by caller', 'ABORTED'))
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    void pending.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', onAbort)
+    })
+  })
+}
+
+/**
+ * Production metadata transport. Concurrent callers share one app-server and
+ * a failed probe opens a short process-wide cooldown. Success is not cached
+ * here: CodexLiveCatalog owns its longer freshness policy, while an explicit
+ * later discovery can still fetch new account-visible models.
+ */
+async function listSharedCodexModels(signal?: AbortSignal): Promise<readonly LlmDiscoveredModel[]> {
+  const now = Date.now()
+  const runtime = codexRuntimeSignature()
+  // A replaced managed CLI is a genuinely different discovery transport:
+  // neither the old failure cooldown nor its in-flight app-server may block it.
+  if (lastDiscoveryFailure !== undefined && lastDiscoveryFailure.runtime !== runtime) {
+    lastDiscoveryFailure = undefined
+  }
+  if (lastDiscoveryFailure !== undefined
+    && now - lastDiscoveryFailure.at < DISCOVERY_FAILURE_COOLDOWN_MS) {
+    const error = lastDiscoveryFailure.error
+    throw error instanceof Error
+      ? error
+      : new LlmError('Codex model discovery is temporarily unavailable', 'DISCOVERY_FAILED')
+  }
+
+  if (sharedDiscovery === undefined || sharedDiscoveryRuntime !== runtime) {
+    const job = listCodexModels().then(
+      (models) => {
+        if (codexRuntimeSignature() === runtime) lastDiscoveryFailure = undefined
+        return models
+      },
+      (error: unknown) => {
+        if (codexRuntimeSignature() === runtime) {
+          lastDiscoveryFailure = { at: Date.now(), error, runtime }
+        }
+        throw error
+      },
+    )
+    const tracked = job.finally(() => {
+      if (sharedDiscovery === tracked) {
+        sharedDiscovery = undefined
+        sharedDiscoveryRuntime = undefined
+      }
+    })
+    sharedDiscovery = tracked
+    sharedDiscoveryRuntime = runtime
+  }
+  return await waitForSharedDiscovery(sharedDiscovery, signal)
+}
+
+/** Production transport exposed separately so discovery.ts can inject a fake in tests. */
+export const codexModelListTransport: CodexModelListTransport = { list: listSharedCodexModels }

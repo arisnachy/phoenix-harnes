@@ -1,0 +1,119 @@
+/** Public data and projection types for the local user-profile service. */
+
+/** Per-field permission to include profile data in model context. */
+export interface UserProfileConsent {
+  preferredName: boolean
+  profession: boolean
+  professionalTitle: boolean
+  dateOfBirth: boolean
+  gender: boolean
+  pronouns: boolean
+  tone: boolean
+  family: boolean
+  moments: boolean
+}
+
+/** One optional family entry supplied explicitly by the user. */
+export interface UserProfileFamilyMember {
+  relationship: string
+  name?: string
+}
+
+/** A user-owned recurring date; year-specific dates also recur each year. */
+export interface PersonalMoment {
+  date: string
+  label: string
+  solemn?: boolean
+}
+
+/** Data persisted by the profile namespace. Age is intentionally absent. */
+export type AssistantGender = 'masculine' | 'feminine' | 'neutral'
+
+/** Provenance for a persisted assistant presentation; absence keeps inference open. */
+export type AssistantGenderSource = 'inferred' | 'manual'
+/** Persisted user preference for natural or suppressed direct address. */
+export type UserAddressMode = 'automatic' | 'name' | 'title' | 'none'
+
+/** Data persisted by the profile namespace. Age is intentionally absent. */
+export interface UserProfileSettings {
+  assistantName: string
+  assistantGender: AssistantGender
+  assistantGenderSource?: AssistantGenderSource
+  /** Provider route order shown by model selectors; absent means directory order. */
+  modelProviderOrder?: string[]
+  preferredName?: string
+  profession?: string
+  professionalTitle?: string
+  addressingMode?: UserAddressMode
+  dateOfBirth?: string
+  gender?: string
+  pronouns?: string
+  tone?: string
+  family?: UserProfileFamilyMember[]
+  countryCode?: string
+  momentsTimeZone?: string
+  specialDates?: PersonalMoment[]
+  consent: UserProfileConsent
+}
+
+/** Partial write; null clears one optional field. */
+export interface UserProfileUpdate {
+  assistantName?: string | null
+  assistantGender?: AssistantGender | null
+  assistantGenderSource?: AssistantGenderSource | null
+  modelProviderOrder?: string[] | null
+  preferredName?: string | null
+  profession?: string | null
+  professionalTitle?: string | null
+  addressingMode?: UserAddressMode | null
+  dateOfBirth?: string | null
+  gender?: string | null
+  pronouns?: string | null
+  tone?: string | null
+  family?: UserProfileFamilyMember[] | null
+  countryCode?: string | null
+  momentsTimeZone?: string | null
+  specialDates?: PersonalMoment[] | null
+  consent?: Partial<UserProfileConsent>
+}
+
+/** Presence-only projection safe for diagnostics and settings directories. */
+export interface UserProfileRedacted {
+  hasPreferredName: boolean
+  hasProfession: boolean
+  hasProfessionalTitle: boolean
+  hasDateOfBirth: boolean
+  hasGender: boolean
+  hasPronouns: boolean
+  hasTone: boolean
+  familyCount: number
+  specialDateCount: number
+  hasCountryCode: boolean
+  consent: UserProfileConsent
+}
+
+/** Only explicitly consented values, suitable for model context. */
+export interface UserProfileConsented {
+  preferredName?: string
+  profession?: string
+  professionalTitle?: string
+  addressingMode?: UserAddressMode
+  age?: number
+  gender?: string
+  pronouns?: string
+  tone?: string
+  family?: UserProfileFamilyMember[]
+}
+
+/** Complete local view returned by the service API. */
+export interface UserProfileView {
+  profile: UserProfileSettings
+  redacted: UserProfileRedacted
+  consented: UserProfileConsented
+}
+
+/** Stable identity facts used by the system prompt, not user-consented profile data. */
+export interface AssistantIdentity {
+  name: string
+  gender: AssistantGender
+}

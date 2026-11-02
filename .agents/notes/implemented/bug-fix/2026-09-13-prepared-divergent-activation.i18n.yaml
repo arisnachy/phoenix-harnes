@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-13-prepared-divergent-activation.md
+2026-09-13-prepared-divergent-activation.md: 6f456c47e7ca59294030ea6029b259faed4599e8
+2026-09-13-prepared-divergent-activation.zh.md: 227d5225165cd515eee2168eeff07ce8ecd999ec

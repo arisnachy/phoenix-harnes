@@ -1,0 +1,233 @@
+.root {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: min(184px, 100%);
+  min-width: 0;
+  height: 38px;
+  margin-left: auto;
+  overflow: visible;
+  padding: 0;
+  box-sizing: border-box;
+  color: var(--dsw-alias-label-primary);
+}
+
+.window {
+  --quota-accent: var(--dsw-alias-label-secondary);
+  flex: 0 1 auto;
+  display: grid;
+  grid-template-columns: auto minmax(32px, auto);
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.primary,
+.secondary {
+  --quota-accent: var(--dsw-alias-label-secondary);
+}
+
+.window + .window {
+  padding-left: 10px;
+  border-left: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
+}
+
+.meter {
+  display: block;
+  flex: none;
+  min-width: 0;
+  color: var(--dsw-alias-label-primary);
+}
+
+.value {
+  display: block;
+  min-width: 0;
+  text-align: right;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+
+.label {
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+  line-height: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reset {
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 9px;
+  line-height: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* Collapsed rail: quiet, text-only account telemetry. It sits directly in
+   the navigation rail — no card, capsule, separator chrome, or progress bars. */
+.railRoot {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 36px;
+  padding: 4px 0 8px;
+  box-sizing: border-box;
+  color: var(--dsw-alias-label-primary);
+}
+
+.railWindow {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+
+.railLabel {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 9px;
+  line-height: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.railValue {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 10px;
+  line-height: 13px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.railReset {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 7px;
+  line-height: 9px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .root {
+    gap: 6px;
+  }
+
+  .window + .window {
+    padding-left: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .meter {
+    transition: color 180ms ease-out;
+  }
+}
+
+/* Two real Codex quota windows share the Settings row in wide mode.
+   Compact rings free height for chats; full reset details remain in tooltips. */
+.root {
+  flex: 0 1 auto;
+  width: 100%;
+  max-width: 148px;
+  height: 34px;
+  min-height: 0;
+  margin-left: auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+}
+.window {
+  flex: 0 1 auto;
+  display: grid;
+  grid-template-columns: 26px minmax(12px, auto);
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+.window + .window {
+  padding-left: 5px;
+  border-left: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
+}
+.meter {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: conic-gradient(#e98732 var(--quota-progress), color-mix(in srgb, var(--dsw-alias-border-l2) 74%, #f6d8bf 26%) 0);
+}
+.meter::before {
+  position: absolute;
+  inset: 3px;
+  content: '';
+  border-radius: 50%;
+  background: var(--dsw-specific-sidebar-fill);
+}
+.value {
+  position: relative;
+  z-index: 1;
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 650;
+  color: var(--dsw-alias-label-primary);
+}
+.copy { min-width: 0; gap: 1px; }
+.label { font-size: 10px; line-height: 12px; }
+.reset {
+  display: block;
+  font-size: 8px;
+  line-height: 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-tertiary);
+}
+@media (prefers-reduced-motion: reduce) {
+  .meter { transition: none; }
+}

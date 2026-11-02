@@ -1,0 +1,235 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { describe, expect, it } from 'vitest'
+import { codexAccountTelemetry, codexRefreshTokenExpired, mergeCodexRateLimitsUpdate } from '../src/account.ts'
+
+const accountSource = readFileSync(
+  fileURLToPath(new URL('../src/account.ts', import.meta.url)),
+  'utf8',
+)
+
+describe('native Codex managed-account boundary', () => {
+  it('uses the official Codex account RPCs for login and account telemetry', () => {
+    expect(accountSource).toContain('account/login/start')
+    expect(accountSource).toContain("type: 'chatgpt'")
+    expect(accountSource).toContain('account/read')
+    expect(accountSource).toContain('account/rateLimits/read')
+    expect(accountSource).toContain('account/usage/read')
+  })
+
+  it('recognizes an expired official refresh credential but not offline or temporary failures', () => {
+    expect(codexRefreshTokenExpired(new Error(
+      'Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again.',
+    ))).toBe(true)
+    expect(codexRefreshTokenExpired(new Error('RefreshTokenExpired'))).toBe(true)
+    expect(codexRefreshTokenExpired(new Error('Network connection refused'))).toBe(false)
+    expect(codexRefreshTokenExpired(new Error('HTTP 429: rate limit exceeded'))).toBe(false)
+    expect(codexRefreshTokenExpired(new Error('access token expired but renewal still possible'))).toBe(false)
+    expect(accountSource).toContain("connection.request('account/read', { refreshToken }, signal)")
+    expect(accountSource).toContain('await readAccount(connection, session.signal, true)')
+    expect(accountSource).toContain('if (!codexRefreshTokenExpired(error)) throw error')
+    expect(accountSource).toContain("connection.request('account/logout', {}, session.signal)")
+    expect(accountSource).toContain('await ctx.credentials.deleteRecord(CODEX_ACCOUNT_KEY)')
+  })
+
+  it('isolates native account probes and coalesces repeated inspection work', () => {
+    expect(accountSource).toContain('codexAccountEnvironment(config.env)')
+    expect(accountSource).toContain('const ACCOUNT_INSPECTION_TTL_MS = 10_000')
+    expect(accountSource).toContain('const ACCOUNT_FAILURE_COOLDOWN_MS = 15_000')
+    expect(accountSource).toContain('inFlightSnapshot')
+  })
+
+  it('treats quota and token-usage RPCs as optional telemetry instead of Host-fatal dependencies', () => {
+    expect(accountSource).toContain('readOptionalCodexTelemetry')
+    expect(accountSource).toContain("readOptionalCodexTelemetry(connection, 'account/rateLimits/read'")
+    expect(accountSource).toContain("readOptionalCodexTelemetry(connection, 'account/usage/read'")
+    expect(accountSource).toContain('ACCOUNT_RATE_LIMIT_TIMEOUT_MS')
+    expect(accountSource).toContain('ACCOUNT_USAGE_TIMEOUT_MS')
+    expect(accountSource).toContain('AbortSignal.timeout(timeoutMs)')
+    expect(accountSource).toContain('continuing with partial telemetry')
+    expect(accountSource).toContain('inspection unavailable; keeping Host alive')
+  })
+
+  it('owns background refresh rejection when stale telemetry is served immediately', () => {
+    expect(accountSource).toContain('void tracked.catch(() => {})')
+    expect(accountSource).toContain('unhandled-rejection / Host-fatal process error')
+  })
+
+  it('keeps slow app-server teardown from becoming a Host-fatal account probe failure', () => {
+    expect(accountSource).toContain('ACCOUNT_CLOSE_MIN_TIMEOUT_MS')
+    expect(accountSource).toContain('const ACCOUNT_NATURAL_EXIT_GRACE_MS = 3_000')
+    expect(accountSource).toContain('if (!naturalExit) this.child.terminate()')
+    expect(accountSource).toContain('ACCOUNT_CLOSE_EXTRA_TIMEOUT_MS')
+    expect(accountSource).toContain('continuing without failing the Host')
+    expect(accountSource).not.toContain("if (!exited) throw new Error('subagent-codex account: app-server process tree did not terminate')")
+  })
+
+  it('uses Codex Apps RPCs only as an optional connector catalog', () => {
+    expect(accountSource).toContain('app/list')
+    expect(accountSource).toContain('app/installed')
+    expect(accountSource).toContain('experimentalApi')
+    expect(accountSource).toContain('readOptionalCodexApps')
+  })
+
+  it('does not parse, copy, or persist ChatGPT OAuth token internals', () => {
+    expect(accountSource).not.toContain('chatgpt_account_id')
+    expect(accountSource).not.toContain('access_token')
+    expect(accountSource).not.toContain('refresh_token')
+    expect(accountSource).not.toContain('accountId from token')
+    expect(accountSource).toContain("kind: 'api-key'")
+  })
+
+  it('projects only the reviewed public account and connector fields', () => {
+    const telemetry = codexAccountTelemetry({
+      account: {
+        type: 'chatgpt',
+        email: 'person@example.test',
+        planType: 'pro',
+        accessToken: 'must-not-cross',
+        arbitrarySecret: 'must-not-cross',
+      },
+      requiresOpenaiAuth: true,
+      rateLimits: {
+        rateLimits: {
+          primary: { usedPercent: 37, windowDurationMins: 300, resetsAt: 1_800_000_000 },
+          credits: { hasCredits: true, unlimited: false, balance: '12.50', secret: 'drop-me' },
+        },
+      },
+      usage: {
+        summary: { lifetimeTokens: 123_456, peakDailyTokens: 42_000, privateField: 'drop-me' },
+      },
+      apps: {
+        data: [{
+          id: 'github',
+          name: 'GitHub',
+          description: 'Work with repositories and pull requests.',
+          logoUrl: 'https://cdn.example.test/github-light.svg',
+          logoUrlDark: 'https://cdn.example.test/github-dark.svg',
+          installUrl: 'https://example.test/install/github',
+          isAccessible: true,
+          isEnabled: true,
+          branding: { category: 'Developer tools', privateField: 'drop-me' },
+          oauthToken: 'must-not-cross',
+        }],
+      },
+      installedApps: {
+        apps: [{
+          id: 'github',
+          runtimeName: 'GitHub',
+          enabled: true,
+          callable: true,
+          privateRuntimeToken: 'must-not-cross',
+        }],
+      },
+    })
+    expect(telemetry).toEqual({
+      kind: 'account',
+      provider: 'Codex',
+      accountType: 'chatgpt',
+      email: 'person@example.test',
+      plan: 'pro',
+      primaryLimit: { usedPercent: 37, windowDurationMins: 300, resetsAt: 1_800_000_000 },
+      credits: { hasCredits: true, unlimited: false, balance: '12.50' },
+      usage: { lifetimeTokens: 123_456, peakDailyTokens: 42_000 },
+      connectors: [{
+        id: 'github',
+        name: 'GitHub',
+        description: 'Work with repositories and pull requests.',
+        iconUrl: 'https://cdn.example.test/github-light.svg',
+        iconUrlDark: 'https://cdn.example.test/github-dark.svg',
+        category: 'Developer tools',
+        installUrl: 'https://example.test/install/github',
+        accessible: true,
+        enabled: true,
+        installed: true,
+        callable: true,
+      }],
+    })
+    expect(JSON.stringify(telemetry)).not.toContain('must-not-cross')
+    expect(JSON.stringify(telemetry)).not.toContain('drop-me')
+  })
+
+  it('still projects account and quota when optional token-usage telemetry is absent', () => {
+    const telemetry = codexAccountTelemetry({
+      account: {
+        type: 'chatgpt',
+        email: 'person@example.test',
+        planType: 'plus',
+      },
+      requiresOpenaiAuth: true,
+      rateLimits: {
+        rateLimitsByLimitId: {
+          codex: {
+            primary: { usedPercent: 25, windowDurationMins: 300, resetsAt: 1_800_000_000 },
+          },
+        },
+      },
+    })
+
+    expect(telemetry).toMatchObject({
+      kind: 'account',
+      provider: 'Codex',
+      email: 'person@example.test',
+      primaryLimit: { usedPercent: 25, windowDurationMins: 300, resetsAt: 1_800_000_000 },
+    })
+    expect(telemetry).not.toHaveProperty('usage')
+  })
+
+  it('merges sparse live Codex quota updates without clearing unchanged windows', () => {
+    const merged = mergeCodexRateLimitsUpdate({
+      account: { type: 'chatgpt', planType: 'plus' },
+      requiresOpenaiAuth: true,
+      rateLimits: {
+        rateLimitsByLimitId: {
+          codex: {
+            primary: { usedPercent: 10, windowDurationMins: 300 },
+            secondary: { usedPercent: 20, windowDurationMins: 10080 },
+          },
+        },
+      },
+    }, {
+      primary: { usedPercent: 37, windowDurationMins: 300 },
+      secondary: null,
+    })
+
+    const telemetry = codexAccountTelemetry(merged)
+    expect(telemetry?.primaryLimit?.usedPercent).toBe(37)
+    expect(telemetry?.secondaryLimit?.usedPercent).toBe(20)
+  })
+
+  it('keeps an event-driven observer for official account/rateLimits/updated notifications', () => {
+    expect(accountSource).toContain('observeCodexRateLimitsUpdate')
+    expect(accountSource).toContain('withObservedCodexRateLimits')
+  })
+
+  it('prefers the modern Codex rateLimitsByLimitId bucket over an empty legacy snapshot', () => {
+    const telemetry = codexAccountTelemetry({
+      account: {
+        type: 'chatgpt',
+        email: 'person@example.test',
+        planType: 'plus',
+      },
+      requiresOpenaiAuth: true,
+      rateLimits: {
+        rateLimits: {
+          limitId: null,
+          primary: null,
+          secondary: null,
+        },
+        rateLimitsByLimitId: {
+          codex: {
+            limitId: 'codex',
+            primary: { usedPercent: 31, windowDurationMins: 10080, resetsAt: 1_800_000_000 },
+            secondary: null,
+          },
+        },
+      },
+    })
+
+    expect(telemetry).toMatchObject({
+      kind: 'account',
+      provider: 'Codex',
+      primaryLimit: { usedPercent: 31, windowDurationMins: 10080, resetsAt: 1_800_000_000 },
+    })
+  })
+})

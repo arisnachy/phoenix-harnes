@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-06-agentmail-ensure-403-fallback.md
+2026-10-06-agentmail-ensure-403-fallback.md: 6e4bb5ef95bded52c02bd3c5d9fc1e2d27b2c50c
+2026-10-06-agentmail-ensure-403-fallback.zh.md: fd091dc4e60f674d1ec79b33c3daa412f703ab72

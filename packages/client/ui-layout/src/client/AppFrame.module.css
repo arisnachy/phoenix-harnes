@@ -1,0 +1,220 @@
+.frame {
+  position: relative;
+  display: grid;
+  grid-template-rows: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--dsw-alias-bg-base);
+  transition: grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+.frame[data-dragging],
+.frame[data-sidebar-switching],
+.frame[data-viewport-resizing] {
+  /* No frame-by-frame layout of rich chat/visualizer during sidebar toggle. */
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame {
+    transition: none;
+  }
+}
+
+.sidebarCol {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--dsw-specific-sidebar-fill);
+  border-right: 1px solid var(--dsw-alias-border-l1);
+}
+
+.centerCol {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Keep the chat on the same viewport axis as the collapsed sidebar.
+     Do not gate this through :has(): slot wrappers can make that selector
+     miss KIRA even while the floating card is visible. */
+  --dsh-chat-floating-overlay-axis-shift: var(--dsh-overlay-stable-chat-axis-offset, 0px);
+  --dsh-cordis-rail-width: clamp(320px, 22vw, 380px);
+}
+
+/* Floating shell entries remain a true overlay and never participate in the
+   conversation/workspace flex calculation. Feature entries opt back into
+   pointer events themselves. */
+.centerCol > [data-shell-overlay] {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* KIRA is a fixed overlay. It occupies only its visible card rectangle and
+   never reserves a full-height strip from the conversation. */
+/* Defensive compatibility for a stale/third-party KIRA registration that
+   still lands in shell.workspace: float it instead of creating a 360px rail.
+   Cordis remains the only true structural workspace owner. */
+.centerCol:has(> [data-shell-workspace] [data-kira-teams]):not(:has(> [data-shell-workspace] [data-cordis-workspace])) {
+  flex-direction: column;
+}
+
+.centerCol:has(> [data-shell-workspace] [data-kira-teams]):not(:has(> [data-shell-workspace] [data-cordis-workspace])) > [data-shell-workspace] {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: block;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* Dedicated structural rail for true in-flow Cordis visual work.
+   Floating agent chrome belongs to shell.overlay and never participates in
+   this flex calculation. */
+.centerCol > [data-shell-workspace] {
+  display: none;
+  min-width: 0;
+  min-height: 0;
+}
+
+.centerCol:has(> [data-shell-workspace] [data-cordis-workspace]),
+.centerCol:has(> [data-shell-workspace] [data-surface-recovery='workspace']) {
+  flex-direction: row;
+}
+
+.centerCol:has(> [data-shell-workspace] [data-cordis-workspace]) > [data-shell-workspace],
+.centerCol:has(> [data-shell-workspace] [data-surface-recovery='workspace']) > [data-shell-workspace] {
+  order: 2;
+  flex: 0 0 min(var(--dsh-cordis-rail-width), 38%);
+  width: min(var(--dsh-cordis-rail-width), 38%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.centerCol > [data-shell-workspace] > [data-cordis-workspace] {
+  order: 1;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Cordis may deliberately use the otherwise-empty left gutter. The workspace
+   stays a real flex item, so neither side can ever paint over the chat. */
+.centerCol:has(> [data-shell-workspace] [data-cordis-workspace][data-cordis-dock='left']) > [data-shell-workspace] {
+  order: -1;
+}
+
+@media (max-width: 1240px) {
+  .centerCol:has(> [data-shell-workspace] [data-cordis-workspace]),
+  .centerCol:has(> [data-shell-workspace] [data-surface-recovery='workspace']) {
+    flex-direction: column;
+  }
+
+  .centerCol:has(> [data-shell-workspace] [data-cordis-workspace]) > [data-shell-workspace],
+  .centerCol:has(> [data-shell-workspace] [data-surface-recovery='workspace']) > [data-shell-workspace],
+  .centerCol:has(> [data-shell-workspace] [data-cordis-workspace][data-cordis-dock='left']) > [data-shell-workspace] {
+    order: 2;
+    flex: 0 0 min(42vh, 360px);
+    width: 100%;
+    height: min(42vh, 360px);
+  }
+}
+
+.surfaceRecovery {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 96px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  color: inherit;
+  background: var(--dsw-alias-bg-base);
+  text-align: center;
+}
+
+.surfaceRecovery button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  color: inherit;
+  background: var(--dsw-alias-button-floating-fill);
+  cursor: pointer;
+}
+
+.surfaceRecovery button:hover {
+  background: var(--dsw-alias-button-floating-hover);
+}
+
+.detailsCol {
+  min-width: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--dsw-alias-border-l2);
+}
+
+.frame[data-details-collapsed] .detailsCol {
+  border-left: none;
+}
+
+.handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  margin-left: -4px;
+  cursor: col-resize;
+  z-index: 2;
+  touch-action: none;
+  transition: left var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+.frame[data-dragging] .handle {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .handle {
+    transition: none;
+  }
+}
+
+.handle[data-side='details']::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 32px;
+  border-radius: 10px;
+  box-sizing: border-box;
+  background: var(--dsw-alias-button-floating-fill);
+  border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
+  opacity: 0;
+  transition:
+    opacity var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+    background var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+.detailsCol:hover ~ .handle[data-side='details']::after,
+.handle[data-side='details']:hover::after,
+.handle[data-side='details'][data-dragging='true']::after {
+  opacity: 1;
+}
+
+.handle[data-side='details']:hover::after,
+.handle[data-side='details'][data-dragging='true']::after {
+  background: var(--dsw-alias-button-floating-hover);
+  border-color: var(--dsw-alias-border-l3);
+}

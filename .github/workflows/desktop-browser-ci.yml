@@ -1,0 +1,38 @@
+name: PHOENIX Desktop Browser
+
+on:
+  push:
+    branches:
+      - main
+      - stable
+      - 'work/embedded-browser-*'
+    paths:
+      - 'apps/desktop-windows/**'
+      - '.github/workflows/desktop-browser-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/desktop-windows/**'
+      - '.github/workflows/desktop-browser-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  desktop-browser:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore desktop shell
+        run: dotnet restore apps/desktop-windows/Phoenix.Desktop.csproj
+
+      - name: Build desktop shell
+        run: dotnet build apps/desktop-windows/Phoenix.Desktop.csproj --configuration Release --no-restore
+
+      - name: Run embedded browser contract checks
+        run: dotnet run --project apps/desktop-windows/Phoenix.Desktop.Tests/Phoenix.Desktop.Tests.csproj --configuration Release

@@ -1,0 +1,29 @@
+- id: cli-mock-llm
+  name: './cli-mock-llm.ts'
+
+- id: base
+  name: '@phoenix-ai/cordis-plugin-include'
+  config:
+    path: ../../cordis.yml
+    patches:
+      - id: llm-deepseek
+        name: '@phoenix-ai/dsh-llm-deepseek'
+        disabled: true
+      - id: agent-spine
+        name: '@phoenix-ai/dsh-agent-spine-demo'
+        config:
+          agents:
+            - id: main
+              provider: cli-mock
+              model: cli-mock
+              cwd: !!js process.cwd()
+          workspaceContext: false
+          dshHome: './.dsh-home'
+          skills:
+            filesystem:
+              agentsHome: './.agents-home'
+          persona: 'Keyless headless-agent smoke.'
+      - id: persistence
+        name: '@phoenix-ai/dsh-session-persistence-jsonl'
+        config:
+          root: './.sessions'

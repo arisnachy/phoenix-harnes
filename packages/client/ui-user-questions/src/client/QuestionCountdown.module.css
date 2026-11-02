@@ -1,0 +1,47 @@
+.root {
+  display: grid;
+  gap: 5px;
+  min-width: 190px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.status {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status strong {
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 600;
+}
+
+.timer {
+  color: var(--dsw-alias-state-business-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.track {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-overlay);
+}
+
+.progress {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  border-radius: inherit;
+  background: var(--dsw-alias-state-business-primary);
+  transition: transform 250ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress { transition: none; }
+}

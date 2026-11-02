@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-23-codex-quota-persistent-countdown.md
+2026-09-23-codex-quota-persistent-countdown.md: c95409c9f1ab5371ac8634f586add841302933d8
+2026-09-23-codex-quota-persistent-countdown.zh.md: 909ee830c8ef288cab1fb222b78e8b8beb0658ff

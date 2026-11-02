@@ -1,0 +1,286 @@
+import { createUserMessage } from '@phoenix-ai/dsh-llm'
+import type { ApprovalService } from '@phoenix-ai/dsh-user-approval'
+import {
+  defineTool,
+  type JsonValue,
+  type ToolDefinition,
+} from '@phoenix-ai/dsh-tools'
+
+const CURATED_CONNECTOR_LABELS = {
+  devpost: 'Devpost Hackathons', canva: 'Canva', supabase: 'Supabase',
+  heygen: 'HeyGen', figma: 'Figma', notion: 'Notion', linear: 'Linear',
+  cloudflare: 'Cloudflare', slack: 'Slack', 'brave-search': 'Brave Search',
+  filesystem: 'Filesystem', memory: 'Memory', fetch: 'Fetch',
+  'microsoft-personal': 'Microsoft Personal (legacy)', 'outlook-mail': 'Outlook Mail',
+  'outlook-calendar': 'Outlook Calendar', 'microsoft-contacts': 'Microsoft Contacts',
+  onedrive: 'OneDrive', 'microsoft-teams': 'Microsoft Teams', sharepoint: 'SharePoint',
+} as const
+
+/** Host-owned install seam for registry-listed and Phoenix-curated Streamable HTTP MCPs. */
+export interface McpRegistryInstallerService {
+  installMcpRegistryServer(request: { name: string; version?: string }): Promise<{
+    status: 'installed' | 'already-installed'
+    connector: {
+      entryId: string
+      serverName: string
+      url: string
+    }
+  }>
+  installCuratedMcpConnector?(request: { connectorId: 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch' | 'microsoft-personal' | 'outlook-mail' | 'outlook-calendar' | 'microsoft-contacts' | 'onedrive' | 'microsoft-teams' | 'sharepoint' }): Promise<{
+    status: 'installed' | 'already-installed'
+    connector: {
+      entryId: string
+      serverName: string
+      url: string
+    }
+  }>
+}
+
+
+/** Secret-free lifecycle state returned by the Host-owned official X MCP bundle. */
+export interface XMcpHostSnapshot {
+  readonly clientIdConfigured: boolean
+  readonly clientSecretConfigured: boolean
+  readonly api: {
+    readonly configured: boolean
+    readonly status?: 'starting' | 'ready' | 'disconnected' | 'failed' | 'auth-required'
+    readonly reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
+  }
+  readonly phoenixApi: {
+    readonly configured: boolean
+    readonly status?: 'starting' | 'ready' | 'disconnected' | 'failed' | 'auth-required'
+    readonly reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
+  }
+  readonly docs: {
+    readonly configured: boolean
+    readonly status?: 'starting' | 'ready' | 'disconnected' | 'failed' | 'auth-required'
+    readonly reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
+  }
+}
+
+/**
+ * Project the secret-free Host lifecycle snapshot into the tool runtime's JSON
+ * contract. Every field in XMcpHostSnapshot is already recursively JSON-safe;
+ * this cast records that structural fact without cloning or adding branches.
+ * @param state - Secret-free X MCP lifecycle state.
+ * @returns The same snapshot under the generic tool JSON contract.
+ */
+function xMcpSnapshotJson(state: XMcpHostSnapshot): JsonValue {
+  return state as unknown as JsonValue
+}
+
+/** Host operations for the exact official X API and Docs MCP pair. */
+export interface XMcpHostService {
+  xMcpState(): Promise<XMcpHostSnapshot>
+  enableXMcp(options?: { identity?: 'user' | 'phoenix'; username?: string }): Promise<{
+    api: { status: 'installed' | 'already-installed'; connector: { serverName: string; url: string } }
+    docs: { status: 'installed' | 'already-installed'; connector: { serverName: string; url: string } }
+  }>
+}
+
+/**
+ * Create the user-approved MCP installer used after connector_discover.
+ * Discovery metadata never becomes executable input: the tool passes only the
+ * selected registry identity and the Host re-resolves the endpoint.
+ * @param approval - Canonical PHOENIX approval service.
+ * @param installer - Host-owned managed MCP installer.
+ * @returns Model-facing connector installation tool.
+ */
+export function createConnectorInstallTool(
+  approval: Pick<ApprovalService, 'request'>,
+  installer: McpRegistryInstallerService,
+): ToolDefinition {
+  return defineTool({
+    name: 'connector_install',
+    description: 'Install a missing MCP after connector_discover found its exact Official MCP Registry identity, or activate one Phoenix-curated MCP by connectorId. Curated ids include Microsoft Outlook Mail, Calendar, Contacts, OneDrive, Teams, SharePoint, Microsoft Personal legacy, devpost, canva, supabase, heygen, figma, notion, linear, cloudflare, slack, brave-search, filesystem, memory, and fetch. For a requested Microsoft service install exactly that service; then use its microsoft_setup, microsoft_login_start, microsoft_login_complete and microsoft_profile tools for actual Graph authorization. Tools/installation alone do not mean authenticated. This always asks the user for one-shot approval. PHOENIX resolves every endpoint/package Host-side and never executes an arbitrary URL, GitHub repository, or command from this tool. Binance REAL is intentionally excluded and must use binance_trading_activate.',
+    parameters: {
+      name: { type: 'string', description: 'Exact Official MCP Registry name. Use either name or connectorId, never both.' },
+      version: { type: 'string' },
+      connectorId: { type: 'string', enum: ['devpost', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack', 'brave-search', 'filesystem', 'memory', 'fetch', 'microsoft-personal', 'outlook-mail', 'outlook-calendar', 'microsoft-contacts', 'onedrive', 'microsoft-teams', 'sharepoint'], description: 'Phoenix-curated MCP identity. Binance REAL is intentionally not installable through this generic route.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          status: { type: 'string', enum: ['installed', 'already-installed', 'denied'], required: true },
+          serverName: { type: 'string' },
+          message: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args, exec) {
+      const name = args.name?.trim() || undefined
+      const connectorId = args.connectorId
+      if ((name === undefined) === (connectorId === undefined)) {
+        throw new Error('connector_install requires exactly one of name or connectorId')
+      }
+      if (name !== undefined && name.length < 2) {
+        throw new Error('connector_install requires an exact registry server name')
+      }
+      if (exec.agent === undefined) throw new Error('connector_install requires an active agent session')
+      const label = connectorId === undefined ? name : CURATED_CONNECTOR_LABELS[connectorId]
+      const outcome = await approval.request({
+        agent: exec.agent,
+        toolName: 'connector_install',
+        callId: exec.callId,
+        reason: connectorId !== undefined
+          ? `Activate the Phoenix-curated ${connectorId === 'devpost' ? 'official ' : ''}${label} MCP`
+          : `Install registry-listed MCP ${name}${args.version === undefined ? '' : ` @ ${args.version}`} into PHOENIX`,
+        risk: 'medium',
+        reversible: true,
+        signal: exec.signal,
+      })
+      if (outcome !== 'allowed-once') {
+        return {
+          status: 'denied' as const,
+          message: `MCP installation was not approved (${outcome}).`,
+        }
+      }
+      let receipt: Awaited<ReturnType<McpRegistryInstallerService['installMcpRegistryServer']>>
+      if (connectorId !== undefined) {
+        if (installer.installCuratedMcpConnector === undefined) {
+          throw new Error(`curated ${connectorId === 'devpost' ? 'Devpost ' : `${label} `}MCP installation is unavailable in this Phoenix runtime`)
+        }
+        receipt = await installer.installCuratedMcpConnector({ connectorId })
+      } else {
+        if (name === undefined) throw new Error('connector_install requires an exact registry server name')
+        receipt = await installer.installMcpRegistryServer({
+          name,
+          ...(args.version === undefined ? {} : { version: args.version }),
+        })
+      }
+      return {
+        status: receipt.status,
+        serverName: receipt.connector.serverName,
+        message: receipt.status === 'installed'
+          ? connectorId !== undefined && (connectorId.startsWith('outlook-') || ['microsoft-personal','microsoft-contacts','onedrive','microsoft-teams','sharepoint'].includes(connectorId))
+            ? `Installed ${label}. Next: use this MCP server's microsoft_status; if unconfigured, ask once for Entra public client ID and run microsoft_setup. Use microsoft_login_start to show the official device-code URL and code, then microsoft_login_complete after the user consents, and verify microsoft_profile. Do not claim a live Microsoft account from MCP tool availability alone.`
+            : `Installed ${label}. Use connector_list to check whether it is ready or needs authorization.`
+          : connectorId !== undefined && (connectorId.startsWith('outlook-') || ['microsoft-personal','microsoft-contacts','onedrive','microsoft-teams','sharepoint'].includes(connectorId))
+            ? `${label} is already installed. Use microsoft_status and a real Microsoft profile/Graph read to verify the service's current authorization.`
+            : `${label} is already installed. Use connector_list to check its current authorization state.`,
+      }
+    },
+    presentCall(args) {
+      const label = args.connectorId === undefined ? args.name : CURATED_CONNECTOR_LABELS[args.connectorId]
+      return {
+        card: 'generic',
+        title: `Install MCP: ${label}`,
+        kind: 'edit',
+        rawInput: label ?? 'connector_install',
+      }
+    },
+  })
+}
+
+/**
+ * Create the explicit activation tool for X's official MCP bundle. Activation
+ * installs only the pinned X endpoints/bridge and never posts or mutates X data.
+ * @param approval - Canonical PHOENIX approval service.
+ * @param host - Optional Host-owned X MCP lifecycle service.
+ * @returns Model-facing X MCP activation tool.
+ */
+export function createXMcpActivateTool(
+  approval: Pick<ApprovalService, 'request'>,
+  host?: Partial<XMcpHostService>,
+): ToolDefinition {
+  return defineTool({
+    name: 'x_mcp_activate',
+    description: 'Activate the official X MCP integration for either the user account or a separate Phoenix-owned X account. The user identity uses x-api; the Phoenix identity uses x-api-phoenix and xurl -u/--username so both OAuth users can coexist without mixing tokens. If the Phoenix identity does not exist yet and no username is known, begin the official X signup onboarding through Computer Use and stop for required human verification before activation.',
+    parameters: {
+      requestedByUser: { type: 'boolean', required: true, description: 'Must be true only when the user explicitly requested X/Twitter MCP access.' },
+      identity: { type: 'string', enum: ['user', 'phoenix'], description: 'Which X identity Phoenix should connect. Defaults to user.' },
+      username: { type: 'string', description: 'Required for the Phoenix-owned identity; optional for the user identity.' },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args, exec) {
+      if (!args.requestedByUser) {
+        return {
+          status: 'denied',
+          message: 'X MCP activation requires an explicit user request.',
+        }
+      }
+      if (exec.agent === undefined) throw new Error('X MCP activation requires an active agent session')
+      const identity = args.identity === 'phoenix' ? 'phoenix' : 'user'
+      const username = args.username?.trim() || undefined
+      if (host?.enableXMcp === undefined || host.xMcpState === undefined) {
+        throw new Error('Official X MCP host integration is unavailable in this Phoenix runtime')
+      }
+      const currentState = await host.xMcpState()
+      if (identity === 'phoenix' && username === undefined && currentState.phoenixApi.configured) {
+        return {
+          status: 'enabled',
+          identity,
+          credentialsReady: currentState.clientIdConfigured && currentState.clientSecretConfigured,
+          state: xMcpSnapshotJson(currentState),
+          message: 'Phoenix-owned X identity is already configured as x-api-phoenix.',
+        }
+      }
+      const outcome = await approval.request({
+        agent: exec.agent,
+        toolName: 'x_mcp_activate',
+        callId: exec.callId,
+        reason: identity === 'phoenix' && username === undefined
+          ? 'Start one-time setup for a Phoenix-owned X account using the official X signup flow. Phoenix will use Computer Use and stop for any required human verification.'
+          : `Enable the official X MCP for the ${identity === 'phoenix' ? 'Phoenix-owned' : 'user'} identity. This installs connector access only and performs no X account action.`,
+        risk: 'medium',
+        reversible: true,
+        signal: exec.signal,
+      })
+      if (outcome !== 'allowed-once') {
+        return {
+          status: 'denied',
+          approvalOutcome: outcome,
+          message: 'Official X MCP activation was not approved.',
+        }
+      }
+      if (identity === 'phoenix' && username === undefined) {
+        exec.deferContext(createUserMessage({
+          content: [{
+            type: 'text',
+            text: 'Continue the approved Phoenix-owned X account onboarding now. Use the computer tool with browser_open to https://x.com/signup in the Phoenix embedded browser. Advance through the official signup flow using only information the user has already authorized. Stop and ask for human intervention when X requires email/SMS verification, CAPTCHA, MFA, acceptance of materially changed terms, or any other verification that must be completed by a person. After signup succeeds, inspect the resulting profile to determine the new X username. If X exposes its automated-account transparency/label setup, stop for the human owner to complete or confirm that linkage before autonomous social actions. Then call x_mcp_activate again with requestedByUser=true, identity="phoenix", and that username. Do not post, follow, DM, or perform any other X account action during setup.',
+          }],
+          source: { kind: 'plugin', plugin: 'x-mcp' },
+        }))
+        return {
+          status: 'setup-required',
+          identity,
+          signupUrl: 'https://x.com/signup',
+          requiresHumanVerification: true,
+          state: xMcpSnapshotJson(currentState),
+          message: 'Phoenix-owned X account setup is ready. Phoenix will continue in the official X signup flow and stop only when X requires human verification.',
+        }
+      }
+      const receipt = await host.enableXMcp({
+        identity,
+        ...(username === undefined ? {} : { username }),
+      })
+      const state = await host.xMcpState()
+      const credentialsReady = state.clientIdConfigured && state.clientSecretConfigured
+      return {
+        status: 'enabled',
+        identity,
+        api: receipt.api.status,
+        docs: receipt.docs.status,
+        credentialsReady,
+        state: xMcpSnapshotJson(state),
+        message: credentialsReady
+          ? `Official X MCP is installed for the ${identity} identity. Complete the X browser authorization if xurl requests it; Phoenix can keep the user and Phoenix-owned accounts authorized separately.`
+          : 'Official X MCP is installed. X Docs can work without credentials; X API needs X_CLIENT_ID and X_CLIENT_SECRET stored with the human-only /secret command before xurl can authorize.',
+      }
+    },
+    presentCall() {
+      return {
+        card: 'generic',
+        title: 'Enable official X MCP',
+        kind: 'edit',
+        rawInput: 'X',
+      }
+    },
+  })
+}

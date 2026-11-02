@@ -1,0 +1,37 @@
+name: Phoenix research benchmark (offline evidence gate)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/phoenix-research-benchmark.*'
+      - 'scripts/phoenix-research-live.*'
+      - 'reports/research-quality/**'
+      - '.github/workflows/phoenix-research-quality.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate auditable research scoring
+        run: node --test scripts/phoenix-research-benchmark.test.mjs scripts/phoenix-research-live.test.mjs
+      - name: Score known-good synthetic research receipts
+        run: |
+          node scripts/phoenix-research-benchmark.mjs \
+            --cases reports/research-quality/cases.synthetic.json \
+            --run reports/research-quality/fixtures/reference-run.synthetic.json \
+            --output /tmp/phoenix-research-score.json
+      - name: Export regression scorecard
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-research-scorecard-synthetic
+          path: /tmp/phoenix-research-score.json
+          retention-days: 7

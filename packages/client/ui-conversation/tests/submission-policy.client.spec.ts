@@ -1,0 +1,66 @@
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from 'vitest'
+import { stubSettingsScope } from '@phoenix-ai/dsh-client-test-runtime'
+import {
+  ComposerSubmissionPolicy, DEFAULT_BUSY_ENTER_BEHAVIOR,
+} from '../src/client/input/submission-policy.ts'
+import type { ConversationSettings } from '../src/submission-settings.ts'
+
+describe('ComposerSubmissionPolicy', () => {
+  it('defaults to Steer while running; Queue remains the explicit alternate preference', () => {
+    const policy = new ComposerSubmissionPolicy()
+    expect(policy.busyEnter.getSnapshot()).toBe(DEFAULT_BUSY_ENTER_BEHAVIOR)
+    expect(policy.resolve(false, 'enter', true)).toBe('queue')
+    expect(policy.resolve(false, 'accelerated', true)).toBe('queue')
+    expect(policy.resolve(true, 'enter', true)).toBe('steer')
+    expect(policy.resolve(true, 'accelerated', true)).toBe('queue')
+    expect(policy.resolve(true, 'enter', false)).toBe('queue')
+    expect(policy.resolve(true, 'accelerated', false)).toBe('queue')
+
+    const changed = vi.fn()
+    policy.busyEnter.subscribe(changed)
+    policy.setBusyEnter('queue')
+    expect(changed).toHaveBeenCalledTimes(1)
+    expect(policy.resolve(true, 'enter', true)).toBe('queue')
+    expect(policy.resolve(true, 'accelerated', true)).toBe('steer')
+    expect(policy.resolve(false, 'enter', true)).toBe('queue')
+    expect(policy.resolve(false, 'accelerated', true)).toBe('queue')
+  })
+
+  it('writes an explicit change through the scope after publishing it locally', () => {
+    const host = stubSettingsScope<ConversationSettings>()
+    const observed: string[] = []
+    let liveBehavior = (): string => 'unconstructed'
+    const scope: typeof host.scope = {
+      ...host.scope,
+      set: (field, value) => {
+        observed.push(`${field}=${String(value)}:${liveBehavior()}`)
+        return host.scope.set(field, value)
+      },
+    }
+    const policy = new ComposerSubmissionPolicy(scope)
+    liveBehavior = () => policy.busyEnter.getSnapshot()
+    policy.setBusyEnter('queue')
+    expect(observed).toEqual(['busyEnter=queue:queue'])
+    expect(host.set).toHaveBeenCalledWith('busyEnter', 'queue')
+    expect(host.set).toHaveBeenCalledOnce()
+  })
+
+  it('adopts a Host preference without writing it back and leaves an identical write untouched', () => {
+    const host = stubSettingsScope<ConversationSettings>()
+    const policy = new ComposerSubmissionPolicy(host.scope)
+    host.publish({ status: 'ready', value: { busyEnter: 'queue' }, revision: 1, writable: true })
+    expect(policy.busyEnter.getSnapshot()).toBe('queue')
+    policy.setBusyEnter('queue')
+    expect(host.set).not.toHaveBeenCalled()
+    host.publish({ value: { busyEnter: 'queue' }, revision: 2 })
+    expect(policy.busyEnter.getSnapshot()).toBe('queue')
+  })
+
+  it('adopts a section already standing at construction', () => {
+    const host = stubSettingsScope<ConversationSettings>()
+    host.publish({ status: 'ready', value: { busyEnter: 'queue' }, revision: 1, writable: true })
+    const policy = new ComposerSubmissionPolicy(host.scope)
+    expect(policy.busyEnter.getSnapshot()).toBe('queue')
+  })
+})

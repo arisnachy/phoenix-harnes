@@ -1,0 +1,120 @@
+{
+  "name": "@phoenix-ai/dsh-client-ui-conversation",
+  "description": "Conversation domain: skeleton, ordered chat flow, composer with the Host-backed busy-Enter preference, and details host",
+  "version": "0.1.1-rc.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
+    "directory": "packages/client/ui-conversation"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@phoenix-ai/dsh-client-connection",
+        "@phoenix-ai/dsh-client-locale",
+        "@phoenix-ai/dsh-client-runtime",
+        "@phoenix-ai/dsh-client-ui-settings",
+        "@phoenix-ai/dsh-api-remotes",
+        "@phoenix-ai/dsh-client-ui-layout"
+      ],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "bundle": "tsdown",
+    "watch": "tsdown --watch"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "clsx": "^2.0.0",
+    "@phoenix-ai/schemastery": "workspace:^"
+  },
+  "peerDependencies": {
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-api-remotes": "workspace:^",
+    "@phoenix-ai/dsh-attachment": "workspace:^",
+    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-client-connection": "workspace:^",
+    "@phoenix-ai/dsh-client-locale": "workspace:^",
+    "@phoenix-ai/dsh-client-runtime": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-settings": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-input-trigger": "workspace:^",
+    "@phoenix-ai/dsh-commands": "workspace:^",
+    "@phoenix-ai/dsh-compaction": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm-retry": "workspace:^",
+    "@phoenix-ai/dsh-session-stats": "workspace:^",
+    "@phoenix-ai/dsh-token-meter": "workspace:^",
+    "@phoenix-ai/dsh-tools": "workspace:^",
+    "@phoenix-ai/dsh-settings": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-layout": "workspace:^",
+    "@phoenix-ai/dsh-goal": "workspace:^",
+    "@phoenix-ai/dsh-permission-presets": "workspace:^",
+    "@phoenix-ai/dsh-plan-mode": "workspace:^",
+    "@phoenix-ai/dsh-tool-todo": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-user-approval": "workspace:^"
+  },
+  "devDependencies": {
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-api-remotes": "workspace:^",
+    "@phoenix-ai/dsh-attachment": "workspace:^",
+    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-client-connection": "workspace:^",
+    "@phoenix-ai/dsh-client-locale": "workspace:^",
+    "@phoenix-ai/dsh-client-runtime": "workspace:^",
+    "@phoenix-ai/dsh-client-test-runtime": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-layout": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-primitives": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-settings": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-input-trigger": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-slots": "workspace:^",
+    "@phoenix-ai/dsh-commands": "workspace:^",
+    "@phoenix-ai/dsh-compaction": "workspace:^",
+    "@phoenix-ai/dsh-goal": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm-retry": "workspace:^",
+    "@phoenix-ai/dsh-permission-presets": "workspace:^",
+    "@phoenix-ai/dsh-plan-mode": "workspace:^",
+    "@phoenix-ai/dsh-session-projection": "workspace:^",
+    "@phoenix-ai/dsh-session-stats": "workspace:^",
+    "@phoenix-ai/dsh-token-meter": "workspace:^",
+    "@phoenix-ai/dsh-tool-todo": "workspace:^",
+    "@phoenix-ai/dsh-tools": "workspace:^",
+    "@types/react": "~18.3.1",
+    "react": "^18.2.0",
+    "@phoenix-ai/dsh-settings": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-user-approval": "workspace:^"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/client.js",
+    "lib/types/**/*.d.ts"
+  ]
+}

@@ -1,0 +1,4 @@
+PHOENIX AUTO-UPDATE SMOKE TEST
+Date: 2026-09-14 America/Santo_Domingo
+Purpose: harmless repository change to exercise stable auto-update detection, staging, build, restart, activation, and relaunch.
+Expected behavior: a running PHOENIX on the previous stable commit should detect this new stable commit and update without manual Git or PowerShell intervention.

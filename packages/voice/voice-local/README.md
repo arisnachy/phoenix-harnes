@@ -1,0 +1,52 @@
+# @phoenix-ai/dsh-voice-local
+
+English | [中文](README.zh.md)
+
+Local process providers for [`@phoenix-ai/dsh-voice`](../voice/). The plugin starts no Python process during boot unless `kokoroPrewarm` is explicitly enabled. On Windows the detached supervisor installer, `install-kokoro.ps1`, provisions a per-user Kokoro ONNX model in `%LOCALAPPDATA%\\Phoenix\\voice\\kokoro`, outside Git worktrees. Model weights are downloaded once and a ready marker is written only after Spanish female/male synthesis passes. Installation errors leave the system voice available and are retried at most once every six hours. Set `PHOENIX_KOKORO_AUTO_INSTALL=0` to disable the installer, or run `powershell -NoProfile -ExecutionPolicy Bypass -File .\\install-kokoro.ps1 -Force` to retry manually.
+
+## Config
+
+```yaml
+- id: voice-local
+  name: '@phoenix-ai/dsh-voice-local'
+  config:
+    kokoroCommand: null
+    kokoroArgs: []
+    kokoroPrewarm: false
+    sttCommand: null
+    sttArgs: []
+    systemTts: true
+```
+
+When `kokoroCommand` is present, the `kokoro` provider receives normalized UTF-8 text on stdin and has priority over the system provider. Otherwise the plugin detects the installed Windows Kokoro daemon; its model remains resident between utterances. The client sends the actual text/UI language for each utterance; the Host defaults to es-DO for older clients. The Kokoro v1.0 engine refuses unsupported languages instead of pronouncing them using English rules, and rejects excessive output duration that can indicate repeated or invented speech. Windows system TTS selects an installed voice matching the language, or returns control to the browser speech fallback. The active assistant profile selects `ef_dora` (feminine) or `em_alex` (masculine) in Spanish, and `af_heart` or `am_michael` in English. Codex Realtime remains the first choice, Kokoro is second, and native system TTS is third. `sttCommand` receives audio bytes on stdin and must print one transcript to stdout. The system provider uses PowerShell `System.Speech` on Windows, `say` on macOS, and `espeak-ng` on Linux.
+
+Before Spanish phonemization, the bundled daemon normalizes decomposed Unicode accents to NFC, removes Markdown and visual symbols, and drops inverted `¡`/`¿` markers. Sentence punctuation such as commas, periods, question marks, exclamation marks, and ellipses remains so Kokoro can produce pauses and sentence intonation without reading formatting characters aloud.
+
+The resident NDJSON protocol explicitly reconfigures stdin, stdout, and stderr to UTF-8 before reading requests, so Spanish accents and punctuation survive Windows pipe locale settings.
+
+Commands run with `shell: false`, explicit arguments, hidden Windows windows, bounded stdin/stdout pipes, and abort handling. No secret is put in command arguments or logs by this package.
+
+## Extension points
+
+Inject a `VoiceCommandRunner` in tests or a host wrapper. Deployments can supply a Kokoro command backed by the official local pipeline; the provider package intentionally does not choose model weights, download policy, or a shell script.
+
+## Model Experience
+
+### Local voice provider
+
+#### What the model sees
+
+This package is host-only. It contributes no model-visible tools or context and never determines mission completion; `VoiceCommandRunner` remains a host extension point.
+
+#### Token effect
+
+The local providers add zero model tokens; they receive text or audio through host pipes after the model-facing work is complete.
+
+#### KV Cache effect
+
+There is no cache effect because command execution and audio playback stay outside prompt assembly.
+
+## Known Limitations and Deferred Work
+
+- Explicit custom command availability is configuration-based. Bundled Kokoro requires an installed virtualenv, ONNX model, voice pack and successful setup marker. It runs locally only on Windows for now.
+- STT format conversion, microphone capture, and audio playback policy belong to the client or deployment adapter.

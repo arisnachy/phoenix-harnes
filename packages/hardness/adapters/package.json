@@ -1,0 +1,63 @@
+{
+  "name": "@phoenix-ai/dsh-hardness-adapters",
+  "description": "Adapters that project PHOENIX tools and skills into the HARDNESS Tool Atlas",
+  "version": "0.1.1-rc.2",
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
+    "directory": "packages/hardness/adapters"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
+    "./invariant": { "types": "./lib/types/invariant.d.ts", "default": "./lib/invariant.js" },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": ["lib/index.js", "lib/invariant.js", "lib/types/**/*.d.ts"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-authorization": "workspace:^",
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-client-connection": "workspace:^",
+    "@phoenix-ai/dsh-code-runtime": "workspace:^",
+    "@phoenix-ai/dsh-hardness": "workspace:^",
+    "@phoenix-ai/dsh-host-apiproxy": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-mcp-connector-registry": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-skill": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-subagent": "workspace:^",
+    "@phoenix-ai/dsh-tools": "workspace:^",
+    "@phoenix-ai/dsh-user-approval": "workspace:^",
+    "@phoenix-ai/dsh-credentials": "workspace:^",
+    "@phoenix-ai/dsh-session-persistence": "workspace:^",
+    "@phoenix-ai/dsh-subprocess": "workspace:^"
+  },
+  "devDependencies": {
+    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-authorization": "workspace:^",
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-client-connection": "workspace:^",
+    "@phoenix-ai/dsh-code-runtime": "workspace:^",
+    "@phoenix-ai/dsh-hardness": "workspace:^",
+    "@phoenix-ai/dsh-host-apiproxy": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-mcp-connector-registry": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-skill": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-subagent": "workspace:^",
+    "@phoenix-ai/dsh-tools": "workspace:^",
+    "@phoenix-ai/dsh-user-approval": "workspace:^",
+    "@phoenix-ai/dsh-credentials": "workspace:^",
+    "@phoenix-ai/dsh-session-persistence": "workspace:^",
+    "@phoenix-ai/dsh-subprocess": "workspace:^"
+  }
+}

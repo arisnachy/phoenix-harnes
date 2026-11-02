@@ -1,0 +1,386 @@
+I N F O R M E T É C N I C O · E S TA D O D O C U M E N TA D O
+
+PHOENIX
+Uso, arquitectura y controles operativos de un harness de agentes de IA
+local-first y agnóstico de proveedor.
+
+Tesis. PHOENIX convierte un runtime extensible en una superficie operable y auditable: compone capacidades
+como plugins, conserva la continuidad de sesión localmente y mantiene separadas las credenciales, los
+proveedores y las políticas de ejecución.
+
+Audiencia
+
+Formato
+
+Fecha
+
+técnica
+
+brief de 5 páginas
+
+28 agosto 2026
+
+Documento descriptivo del checkout inspeccionado. No es una promesa de roadmap ni una sustitución de la documentación normativa
+del proyecto.
+
+01 / 05
+
+01 · USO REAL
+
+Una sesión, varias
+capacidades coordinadas
+
+PHOENIX coloca la configuración y la seguridad cerca del usuario, sin
+ocultar los límites de cada proveedor.
+
+01
+
+02
+
+03
+
+Elegir proveedor
+
+Componer sesión
+
+Ejecutar y conservar
+
+OpenRouter se configura desde
+Settings → Models; ChatGPT/Codex usa
+
+Un perfil apila bundles y parches para
+decidir qué agentes, herramientas y
+
+La sesión registra eventos durables para
+que el historial local pueda proyectarse,
+
+su plano nativo de cuenta.
+
+políticas entran al runtime.
+
+reanudarse y auditarse.
+
+F LU J O D E U S O
+
+Configurar
+
+Seleccionar
+
+Conversar
+
+proveedor, modelo y credencial local
+
+perfil y composición de capacidades
+
+agente, herramientas y contexto
+
+→
+
+→
+
+Persistir
+
+→
+
+eventos y continuidad de sesión
+
+Separación de identidades
+
+Local-first con proveedor intercambiable
+
+La autenticación de API de OpenAI no se mezcla con la
+suscripción de ChatGPT. El puente nativo de Codex
+gestiona el inicio de sesión y la renovación OAuth;
+
+El proveedor, endpoint, catálogo y modelo activo se
+administran desde la UI. La continuidad de sesión
+permanece local por defecto y no se anuncia
+
+PHOENIX no pide la contraseña de ChatGPT ni persiste
+esos tokens.
+
+almacenamiento cloud sin una restauración
+comprobable.
+
+“Model-visible means logged”: lo que llega a una petición de
+modelo debe poder reconstruirse desde el registro de sesión.
+
+Fuentes: `README.md` (Configure OpenRouter; Connect ChatGPT / Codex), `docs/architecture.md` (Session log; Profiles and bundles).
+
+02 / 05
+
+02 · ARQUITECTURA
+
+Composición antes que núcleo
+privilegiado
+
+Los plugins aportan servicios, eventos y efectos reversibles a un
+contexto compartido.
+
+Composición del runtime
+
+Perfil · bundles ordenados
+Patch del perfil · configuración
+Patch del home · overlays explícitos
+Runtime PHOENIX · plugins, servicios y herramientas
+
+Fallback textual: las capas se aplican sobre una lista vacía en el orden del perfil, el parche del perfil, el parche del home y cualquier overlay `--patch`.
+
+PA Q U E T E S N Ú C L E O
+
+S E A M S D E C A PA C I D A D
+
+ÁREA
+
+RESPONSABILIDAD
+
+Session
+
+Registro append-only y almacenamiento en memoria.
+
+System
+prompt
+
+Ensamblado de secciones y esquemas de herramientas.
+
+Tools
+
+Registro acotado y pipeline de ejecución guardado.
+
+Agent / loop
+
+Interfaz de agente y driver por defecto.
+
+LLM
+
+Vocabulario de mensajes, streams y seam de
+adaptadores.
+
+Definición · proveedor · consumidor
+Una capacidad completa declara su interfaz, implementa el
+proveedor y expone un consumidor, con frecuencia una
+herramienta orientada al modelo.
+
+Eventos como extensión
+Los eventos de sesión conservan hechos; los eventos de agente y
+de capacidad permiten observar o interceptar trabajo vivo sin
+importar el loop.
+
+HARDNESS
+Indexa capacidades y enruta modalidades; no reemplaza los
+registros de herramientas o skills ni se convierte en autoridad de
+ejecución.
+
+Fuentes: `docs/architecture.md` (Cordis; Profiles and bundles; Core packages; Events; Capability seams).
+
+03 / 05
+
+03 · CONFIANZA TÉCNICA
+
+Controles explícitos, límites
+visibles
+CONTROL
+
+QUÉ PROTEGE
+
+Credenciales separadas
+
+Evita mezclar API keys con OAuth
+de ChatGPT/Codex.
+
+Sesión local durable
+
+Runner Windows
+
+Actualización estable
+
+Historial, replay y continuidad sin
+subirlo por defecto.
+
+Tokens restringidos y ACL para
+comandos nativos.
+
+Fast-forward limpio, checkpoint y
+rollback ante fallo.
+
+Full access
+
+Permite operar fuera de la cerca de
+archivos.
+
+Seguridad del proyecto
+
+Canal privado para vulnerabilidades
+con contexto reproducible.
+
+La confianza se describe con la protección disponible y con el límite que
+todavía aplica.
+
+EVIDENCIA
+DOCUMENTADA
+
+LÍMITE DECLARADO
+
+Plano
+
+No convierte la credencial en permiso
+universal.
+
+Registro
+
+Backup cloud futuro requiere opt-in, cifrado y
+restauración real.
+
+Gate en
+
+No promete aislamiento de red, invisibilidad
+de procesos ni protección ante todo hardlink.
+
+Canal
+
+Worktrees sucios y ramas de desarrollo no se
+sobrescriben.
+
+documentado
+
+nativo de Codex.
+
+documentado
+
+local.
+
+condicionado
+
+kernel Windows.
+
+documentado
+
+`origin/main`.
+
+límite
+
+Política `never`.
+
+documentado
+
+GitHub
+
+private reporting.
+
+`danger-full-access` no es un sandbox ni
+añade una segunda aprobación.
+No incluir claves, grants OAuth, sesiones ni
+datos personales.
+
+Principio operativo
+
+Qué no se promete
+
+Una capacidad no se considera disponible solo por
+
+No hay respaldo cloud anunciado hasta que existan
+
+aparecer en un índice: las rutas `have` y `route` requieren
+evidencia de verificación actual.
+
+recibos remotos y una prueba de restauración para la
+misma revisión.
+
+Fuentes: `docs/phoenix-windows.md` (Native safety boundary; Continuity), `SECURITY.md`, `docs/architecture.md` (HARDNESS).
+
+04 / 05
+
+0 4 · O P E R A C I Ó N Y E S TA D O
+
+De checkout a runtime
+verificable
+
+La operación combina instalación reproducible, checks de proyecto y una
+postura de desarrollo activo.
+
+I N S TA L A C I Ó N W I N D O W S
+
+IDE
+
+Bootstrap dedicado
+
+VS Code y Cursor
+
+El instalador crea un checkout gestionado, instala dependencias,
+construye la revisión exacta y crea el acceso directo PHOENIX
+HARDNESS.
+
+El paquete VSIX inicia el runtime local y abre la Web UI sin leer
+credenciales de modelos.
+pnpm run package:vscode
+
+irm .../install-phoenix.ps1 | iex
+
+C H E C K S R E L E VA N T E S
+
+TypeScript:
+
+pnpm run typecheck
+
+Build completo:
+
+pnpm run build
+
+Documentación:
+
+pnpm run doc-sync
+
+Website:
+
+pnpm run website:build
+
+Pruebas unitarias:
+Higiene:
+
+pnpm run test
+
+pnpm run hygiene
+
+Gate Windows:
+
+pnpm run check:ci:windows-complete
+
+Soporte: Issues y Discussions del repositorio.
+
+Lectura de estado
+ESTADO
+
+INTERPRETACIÓN
+
+PRÓXIMO CRITERIO
+
+en desarrollo activo
+
+PHOENIX evoluciona por capas aisladas y
+verificables.
+
+Conservar gates verdes en la revisión exacta.
+
+condicionado
+
+La seguridad Windows depende del kernel y del
+runner nativo.
+
+Ejecutar el gate autoritativo en Windows real.
+
+no anunciado
+
+Backup cloud y release firmado no son promesas
+actuales.
+
+Exigir recibo, restauración y certificado externo antes de
+promocionar.
+
+Conclusión: PHOENIX es más útil cuando el usuario trata la selección de modelos, la composición de capacidades y los checks de confianza como parte de la misma
+operación.
+
+Fuentes: `README.md`, `docs/development.md`, `docs/phoenix-windows.md`, `SECURITY.md`, `AGENTS.md`, `package.json`. Repositorio: https://github.com/arisnachy/phoenix-harnes
+
+05 / 05
+
+

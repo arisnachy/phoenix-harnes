@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-31-stable-divergence-recovery.md
+2026-08-31-stable-divergence-recovery.md: 9c4136ad8203202f8dcb2a36f344c4807fd1fd5b
+2026-08-31-stable-divergence-recovery.zh.md: 5b5bd2642d61660de530bec6f608b877d7243821

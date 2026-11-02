@@ -1,0 +1,62 @@
+/** Durable, secret-free audit records for governed HARDNESS missions. */
+
+import type { CallId } from '@phoenix-ai/dsh-llm'
+import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
+import type { CapabilityId } from '@phoenix-ai/dsh-hardness'
+import type { HardnessProtocolStep } from '@phoenix-ai/dsh-hardness'
+
+/** Terminal state recorded for one HARDNESS protocol step. */
+export type HardnessMissionAuditOutcome = 'completed' | 'blocked'
+
+/** One replayable, model-safe audit row for a governed mission. */
+export interface HardnessMissionAuditEntry {
+  readonly callId: CallId
+  readonly step: HardnessProtocolStep
+  readonly outcome: HardnessMissionAuditOutcome
+  readonly capabilityKind: string
+  readonly capabilityId?: CapabilityId
+  readonly descriptorVersion?: string
+  /** Stable reason code; provider error text and arguments are deliberately excluded. */
+  readonly reasonCode?: string
+  readonly artifactId?: string
+  readonly evidenceId?: string
+  readonly durationMs?: number
+}
+
+declare module '@phoenix-ai/dsh-session/types' {
+  interface SessionEventMap {
+    /** One terminal state in the governed HARDNESS mission protocol. */
+    'hardness/mission': HardnessMissionAuditEntry
+  }
+}
+
+/** Sink used by a mission to append its protocol trace to the calling session. */
+export interface HardnessMissionAuditWriter {
+  record(entry: HardnessMissionAuditEntry): void
+}
+
+/** Create a session-backed HARDNESS audit writer.
+ * @param session - live session that owns the mission log.
+ * @returns writer that appends secret-free mission rows to the session.
+ */
+export function createHardnessMissionAudit(session: Session): HardnessMissionAuditWriter {
+  return {
+    record(entry) {
+      session.append('hardness/mission', entry)
+    },
+  }
+}
+
+/** Replay all audit rows belonging to one model tool call in log order.
+ * @param events - session events to scan.
+ * @param callId - model tool call whose audit rows are requested.
+ * @returns matching audit rows in append order.
+ */
+export function replayHardnessMissionAudit(
+  events: readonly SessionEvent[],
+  callId: CallId,
+): readonly HardnessMissionAuditEntry[] {
+  return events
+    .filter((event): event is SessionEvent<'hardness/mission'> => event.type === 'hardness/mission' && event.data.callId === callId)
+    .map(event => event.data)
+}

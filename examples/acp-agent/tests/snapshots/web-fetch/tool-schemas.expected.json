@@ -1,0 +1,1024 @@
+{
+  "initial": [
+    {
+      "name": "bash",
+      "description": "Execute a bash command (`bash -c`) and return its stdout/stderr. Each call runs in a fresh shell: no state (cwd, variables, functions) persists between calls — pass `workdir` instead of using `cd`. Non-zero exits are reported as `[exit code: N]`. Current harness environment facts are exposed through managed `$DSH_*` variables; inspect them when needed. Commands may run under a file sandbox; a blocked file operation is reported as `[sandbox: file access denied under <mode> mode]` — a policy denial, not a bug in the command; do not retry another way. Long output is truncated to its tail; the full output is saved to a file whose path is reported when available. Set `run_in_background: true` for long-running commands: the call returns a job id immediately; read its output with `job_output` and stop it with `job_kill`. Attempting a command the sandbox may deny is safe and expected: run it and read the marker rather than assuming the denial. When a command is denied and a wider mode would let it succeed, escalate immediately in the same turn — the one sanctioned exception to a denial: retry the exact same command once with `sandbox_permissions` (the narrowest wider mode that suffices) plus a one-sentence `justification`. Do not detour through chat to ask permission first — the approval prompt raised by that retry is how the user consents. If the session states approval prompts are disabled, there is no exception: a denial is final — do not set `sandbox_permissions`. Never escalate speculatively: ground the request in a real denial — normally the one this command just hit; escalating up front is fine only when this session already denied the same access. A rejected escalation is final for that command — stop and explain, never work around it — but it does not forbid attempting or escalating other commands later.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "The bash command to execute."
+          },
+          "description": {
+            "type": "string",
+            "description": "Clear, concise description of what this command does in active voice, 5-10 words (shown in the UI). Examples: \"ls\" → \"List files in current directory\"; \"git status\" → \"Show working tree status\"; \"npm install\" → \"Install package dependencies\"."
+          },
+          "timeoutMs": {
+            "type": "number",
+            "description": "Timeout in milliseconds. The executor applies its configured default and cap, and kills the command on expiry."
+          },
+          "workdir": {
+            "type": "string",
+            "description": "Working directory for this command. Defaults to the session workspace; a relative path is resolved against it."
+          },
+          "run_in_background": {
+            "type": "boolean",
+            "description": "Run in the background and return a job id immediately (collect with job_output, stop with job_kill). No timeout applies."
+          },
+          "sandbox_permissions": {
+            "type": "string",
+            "description": "The wider sandbox mode this command needs. Only valid as a one-shot retry of a command the sandbox just denied; requires justification and user approval.",
+            "enum": [
+              "workspace-write",
+              "danger-full-access"
+            ]
+          },
+          "justification": {
+            "type": "string",
+            "description": "Required with sandbox_permissions: one sentence for the user explaining why this exact command needs the wider access."
+          }
+        },
+        "required": [
+          "command",
+          "description"
+        ]
+      }
+    },
+    {
+      "name": "create_goal",
+      "description": "Create one persisted same-session completion goal when the current direct human request is a long-running objective that should continue across autonomous goal rounds. You may infer that intent without requiring the user to say \"create a goal\". Do not use this for trivial single-turn work. Execution rejects non-human and subagent authority.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "objective": {
+            "type": "string",
+            "description": "The concrete completion objective inferred from the direct human request."
+          },
+          "max_goal_rounds": {
+            "type": "number",
+            "description": "Optional positive safe-integer limit on automatic continuation rounds."
+          }
+        },
+        "required": [
+          "objective"
+        ]
+      }
+    },
+    {
+      "name": "edit",
+      "description": "Edit an existing UTF-8 text file by replacing literal text.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Path to edit, resolved by the filesystem backend."
+          },
+          "old_string": {
+            "type": "string",
+            "description": "Literal text to replace. Must match exactly."
+          },
+          "new_string": {
+            "type": "string",
+            "description": "Literal replacement text. Use an empty string to delete the match."
+          },
+          "replace_all": {
+            "type": "boolean",
+            "description": "Replace all matches. Defaults to false; when false, old_string must appear exactly once."
+          },
+          "sandbox_permissions": {
+            "type": "string",
+            "description": "The wider sandbox mode this file operation needs. Only valid as a one-shot retry of an operation the sandbox just denied; requires justification and user approval.",
+            "enum": [
+              "workspace-write",
+              "danger-full-access"
+            ]
+          },
+          "justification": {
+            "type": "string",
+            "description": "Required with sandbox_permissions: one sentence for the user explaining why this exact file operation needs the wider access."
+          }
+        },
+        "required": [
+          "file_path",
+          "old_string",
+          "new_string"
+        ]
+      }
+    },
+    {
+      "name": "fs_status",
+      "description": "Check up to 64 exact filesystem paths in one cheap call. Returns existence, type, and size when known; never reads file contents and never recursively searches.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "paths": {
+            "type": "array",
+            "description": "Exact file or directory paths. Relative paths resolve against the session workspace.",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "paths"
+        ]
+      }
+    },
+    {
+      "name": "get_goal",
+      "description": "Read the current same-session goal, including its exact id/revision, objective, phase, completed continuation rounds, round limit, blocker reason when present, and whether another continuation is armed. Call this before updating a goal.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "interrupt_agent",
+      "description": "Request cancellation of a background agent's current turn by its agent id. The target may be your direct child or a deeper agent created under you. Only the current turn stops: messages already queued for the agent stay parked until a later send_message, agents it started keep running, and the agent itself stays available for follow-ups. This call returns as soon as the stop request is accepted, so the target may keep running briefly; interrupting an agent that already finished is an accepted no-op.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "The agent id of the running agent to interrupt."
+          }
+        },
+        "required": [
+          "agent_id"
+        ]
+      }
+    },
+    {
+      "name": "job_kill",
+      "description": "Request cancellation of a running background job by job id. Returns immediately; the job settles as killed once its work actually stops.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "description": "Job id returned by the tool that started the background work."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Optional short reason, recorded in the log and forwarded to the job."
+          }
+        },
+        "required": [
+          "job_id"
+        ]
+      }
+    },
+    {
+      "name": "job_list",
+      "description": "List your background jobs (running and finished) with their ids, kinds, and statuses.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "job_output",
+      "description": "Read a background job. Stream jobs return only output since the previous read; final-output jobs return their result after settlement. Every response ends with `[status: ...]`. Reads are non-blocking unless `wait: true`, which waits up to the configured cap.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "description": "Job id returned by the tool that started the background work."
+          },
+          "wait": {
+            "type": "boolean",
+            "description": "Block until the job reaches a terminal status or the timeout expires. A timed-out wait returns [status: running] and leaves the job alive."
+          },
+          "timeout_ms": {
+            "type": "number",
+            "description": "Max wait in milliseconds (only meaningful with wait: true). Defaults to the configured wait timeout; capped by the configured maximum."
+          }
+        },
+        "required": [
+          "job_id"
+        ]
+      }
+    },
+    {
+      "name": "list_agents",
+      "description": "List your continuable background subagents by durable id and label. Use it to recall which ones you started, not to poll for completion — you are told when one finishes. Status comes from the live registry: running means the agent is working right now, idle means it is loaded but between turns (it may be waiting on agents it started), and ready means it exists only in storage — resumable, not terminal, and not a result waiting to be collected; a `send_message` starts a new turn on the same conversation, and a direct child remains a `send_message` candidate in every status. The snapshot is not a delivery promise — `send_message` performs the authoritative check and may still fail. Children that could not be read are reported as diagnostics instead of being silently dropped. Scope `descendants` walks the whole tree below you in stable pre-order, annotating each entry with its durable direct-parent session id and depth. You may use `send_message` only for depth-1 entries; deeper entries are candidates for `interrupt_agent` only.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "description": "children (default) lists direct children only; descendants walks the complete tree below you.",
+            "enum": [
+              "children",
+              "descendants"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "organization_forge",
+      "description": "Build one organization, business, or system as a durable Organization Forge. Research comparable solutions first, audit every reused asset before and after modification, keep Phoenix IT, Security, and R&D roles active, prefer deterministic automation, and require functional, tested, secure, observable, maintainable, documented evidence plus an independent judge before delivery. Forge is a modular capability over the mission system, not a replacement for it. Start with research; a failed work item or judge result remains active and nextAction points to the next recovery step. The final handoff question is not a completion substitute.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "start, get, research, source, audit, blueprint, deliverable, work, strategy, revalidate, atlas, block, advance, criterion, judge, or management",
+            "enum": [
+              "start",
+              "get",
+              "research",
+              "source",
+              "audit",
+              "blueprint",
+              "deliverable",
+              "work",
+              "strategy",
+              "revalidate",
+              "atlas",
+              "block",
+              "advance",
+              "criterion",
+              "judge",
+              "management"
+            ]
+          },
+          "forge_id": {
+            "type": "string",
+            "description": "Existing Forge build id for non-start actions."
+          },
+          "objective": {
+            "type": "string",
+            "description": "Business, organization, or system objective for start."
+          },
+          "criteria": {
+            "type": "array",
+            "description": "Required delivery criteria for start.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "research_kind": {
+            "type": "string",
+            "description": "Comparable solution kind.",
+            "enum": [
+              "product",
+              "repository",
+              "tool",
+              "component",
+              "pattern"
+            ]
+          },
+          "research_title": {
+            "type": "string",
+            "description": "Comparable solution title."
+          },
+          "research_summary": {
+            "type": "string",
+            "description": "Secret-free comparable solution summary."
+          },
+          "research_relevance": {
+            "type": "string",
+            "description": "Why the comparable solution matters."
+          },
+          "research_evidence": {
+            "type": "array",
+            "description": "Research evidence references.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "type": "string",
+            "description": "Public source title."
+          },
+          "locator": {
+            "type": "string",
+            "description": "Public https, atlas, or local source reference without credentials."
+          },
+          "license": {
+            "type": "string",
+            "description": "Detected license identifier or policy result."
+          },
+          "stage": {
+            "type": "string",
+            "description": "Audit stage.",
+            "enum": [
+              "pre-reuse",
+              "post-modification"
+            ]
+          },
+          "source_id": {
+            "type": "string",
+            "description": "Source id being audited."
+          },
+          "dependencies": {
+            "type": "string",
+            "description": "Dependency audit result.",
+            "enum": [
+              "pending",
+              "passed",
+              "needs_changes",
+              "blocked"
+            ]
+          },
+          "secrets": {
+            "type": "string",
+            "description": "Secret scan result.",
+            "enum": [
+              "pending",
+              "passed",
+              "needs_changes",
+              "blocked"
+            ]
+          },
+          "vulnerabilities": {
+            "type": "string",
+            "description": "Vulnerability audit result.",
+            "enum": [
+              "pending",
+              "passed",
+              "needs_changes",
+              "blocked"
+            ]
+          },
+          "findings": {
+            "type": "array",
+            "description": "Bounded audit or judge findings.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "components": {
+            "type": "array",
+            "description": "Blueprint components.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "infrastructure": {
+            "type": "array",
+            "description": "Blueprint infrastructure.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "automations": {
+            "type": "array",
+            "description": "Blueprint automations.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "workflows": {
+            "type": "array",
+            "description": "Blueprint workflows.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "metrics": {
+            "type": "array",
+            "description": "Blueprint metrics.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cost_controls": {
+            "type": "array",
+            "description": "Blueprint cost controls.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "quality_targets": {
+            "type": "array",
+            "description": "Blueprint quality targets.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "deliverable_id": {
+            "type": "string",
+            "description": "Existing deliverable id when updating evidence status."
+          },
+          "deliverable_name": {
+            "type": "string",
+            "description": "Concrete output name."
+          },
+          "deliverable_kind": {
+            "type": "string",
+            "description": "Concrete output kind.",
+            "enum": [
+              "software",
+              "web",
+              "infrastructure",
+              "automation",
+              "workflow",
+              "agent",
+              "documentation",
+              "other"
+            ]
+          },
+          "artifact_ref": {
+            "type": "string",
+            "description": "Durable artifact reference."
+          },
+          "deliverable_status": {
+            "type": "string",
+            "description": "Deliverable evidence state.",
+            "enum": [
+              "pending",
+              "implemented",
+              "tested",
+              "verified"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "description": "Phoenix team role for work.",
+            "enum": [
+              "it",
+              "security",
+              "rd"
+            ]
+          },
+          "work_title": {
+            "type": "string",
+            "description": "Durable work item title."
+          },
+          "work_status": {
+            "type": "string",
+            "description": "Recoverable work status.",
+            "enum": [
+              "active",
+              "completed",
+              "failed"
+            ]
+          },
+          "strategy_id": {
+            "type": "string",
+            "description": "Strategy referenced by a work item."
+          },
+          "failure_fingerprint": {
+            "type": "string",
+            "description": "Stable failure fingerprint used to prevent repeated approaches."
+          },
+          "strategy_name": {
+            "type": "string",
+            "description": "Alternative strategy name."
+          },
+          "strategy_status": {
+            "type": "string",
+            "description": "Alternative strategy status.",
+            "enum": [
+              "proposed",
+              "active",
+              "completed",
+              "failed"
+            ]
+          },
+          "strategy_summary": {
+            "type": "string",
+            "description": "Alternative strategy summary."
+          },
+          "revalidation_evidence": {
+            "type": "array",
+            "description": "Current source revalidation evidence.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "atlas_name": {
+            "type": "string",
+            "description": "Reusable Atlas entry name."
+          },
+          "atlas_summary": {
+            "type": "string",
+            "description": "Secret-free reusable Atlas summary."
+          },
+          "reusable_pattern": {
+            "type": "string",
+            "description": "Secret-free reusable pattern."
+          },
+          "dependency": {
+            "type": "string",
+            "description": "External dependency that blocks progress."
+          },
+          "blocker_reason": {
+            "type": "string",
+            "description": "Why the dependency blocks progress."
+          },
+          "resume_condition": {
+            "type": "string",
+            "description": "Condition that allows the next attempt."
+          },
+          "phase": {
+            "type": "string",
+            "description": "Next Forge lifecycle phase.",
+            "enum": [
+              "researching",
+              "auditing",
+              "designing",
+              "building",
+              "verifying"
+            ]
+          },
+          "criterion_id": {
+            "type": "string",
+            "description": "Criterion id returned by start or get."
+          },
+          "criterion_status": {
+            "type": "string",
+            "description": "Evidence state.",
+            "enum": [
+              "pending",
+              "implemented",
+              "tested",
+              "verified"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "description": "Evidence references; required for verified.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "verdict": {
+            "type": "string",
+            "description": "Optional manual verdict when judging is disabled.",
+            "enum": [
+              "pass",
+              "needs_changes",
+              "blocked"
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "description": "Judge summary."
+          },
+          "required_changes": {
+            "type": "array",
+            "description": "Required changes before approval.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "management_mode": {
+            "type": "string",
+            "description": "Post-build management choice.",
+            "enum": [
+              "handoff",
+              "assisted",
+              "autonomous"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "ralph",
+      "description": "Run a foreground fresh-agent Ralph loop toward one immutable objective. Use only when the direct human explicitly asks for Ralph or fresh-agent iteration. Each round opens a new child with no parent conversation or prior child session; the shared workspace is long-term memory, and only a bounded structured report crosses rounds. The call returns when a worker reports completion or a concrete blocker, or at the round limit. Ordinary long-running same-session work belongs to goal tools.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "objective": {
+            "type": "string",
+            "description": "The immutable completion objective for every fresh Ralph round."
+          },
+          "maxRounds": {
+            "type": "number",
+            "description": "Optional positive safe-integer round cap, bounded by the deployment ceiling."
+          }
+        },
+        "required": [
+          "objective"
+        ]
+      }
+    },
+    {
+      "name": "read",
+      "description": "Read a UTF-8 text file and return line-numbered content.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Path to read, resolved by the filesystem backend."
+          },
+          "offset": {
+            "type": "number",
+            "description": "1-based first line to return. Defaults to 1."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum number of lines to return. Defaults to 2000."
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      }
+    },
+    {
+      "name": "send_message",
+      "description": "Send a message to a background subagent by its subagent id, continuing the same conversation. It becomes the subagent's next turn: if it is still working, the message waits until its current turn finishes, so it cannot redirect work already underway. This call returns no answer from the subagent — only confirmation that the message was delivered — so use it to give it more work. A failure means the message was NOT delivered.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "subagent_id": {
+            "type": "string",
+            "description": "The subagent id returned when the background subagent was started."
+          },
+          "message": {
+            "type": "string",
+            "description": "The message to deliver to the subagent."
+          }
+        },
+        "required": [
+          "subagent_id",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "skill",
+      "description": "Load the full instructions for an available skill. Call this with the exact skill name from the session skill catalog before acting on a task that names or clearly matches that skill.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The exact skill name from the available skills list."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "specialist_lab",
+      "description": "Maintain one persistent, evidence-based specialist laboratory. Start it only for an explicit expertise request, then register traceable sources, falsifiable hypotheses, reproducible experiments, and judge results. A specialist is ready only after a passing evaluation; failed evaluations create an improving checkpoint and are bounded by max_iterations. When the base profile requires judging, evaluate invokes a fresh read-only independent judge automatically.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "start, source, hypothesis, experiment, or evaluate",
+            "enum": [
+              "start",
+              "source",
+              "hypothesis",
+              "experiment",
+              "evaluate"
+            ]
+          },
+          "specialist_id": {
+            "type": "string",
+            "description": "Existing specialist laboratory id for non-start actions."
+          },
+          "topic": {
+            "type": "string",
+            "description": "Research topic for start."
+          },
+          "objective": {
+            "type": "string",
+            "description": "Concrete expertise objective for start."
+          },
+          "success_criteria": {
+            "type": "array",
+            "description": "Evidence-based readiness criteria for start.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "max_iterations": {
+            "type": "number",
+            "description": "Positive bounded improvement-loop cap."
+          },
+          "title": {
+            "type": "string",
+            "description": "Source title."
+          },
+          "locator": {
+            "type": "string",
+            "description": "Source URL or stable locator."
+          },
+          "hypothesis": {
+            "type": "string",
+            "description": "Falsifiable hypothesis."
+          },
+          "experiment_name": {
+            "type": "string",
+            "description": "Reproducible experiment name."
+          },
+          "dataset": {
+            "type": "string",
+            "description": "Dataset used by the experiment."
+          },
+          "score": {
+            "type": "number",
+            "description": "Judge score from 0 to 1."
+          },
+          "passed": {
+            "type": "boolean",
+            "description": "Whether all success criteria passed when no independent judge is configured."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Judge summary."
+          },
+          "required_changes": {
+            "type": "array",
+            "description": "Changes required before the next evaluation.",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "subagent",
+      "description": "Orquestar una tarea independiente con un subagente en contexto limpio para descargar investigación, implementación o verificación acotada. No consume el contexto de esta conversación; el subagente devuelve el resultado final. Incluye una instrucción autónoma con alcance, límites y evidencia. No recibe esta conversación, así que escribe todo lo necesario en español. This tool runs in the background by default, immediately returns a durable subagent id, and keeps the child conversation available for later turns. When that run settles, the runtime sends the parent a notice containing its outcome and any final assistant message; `send_message` starts a later turn in the same child conversation. Set `run_in_background: false` only when your next action depends on receiving the result. Presupuesto Phoenix de subagentes: usa 1 como norma. Abre un segundo solo si la tarea se volvió realmente difícil y hay dos líneas de trabajo independientes, marcando hard_parallelism=true. Abre un tercero solo en un caso extremo donde tres frentes independientes sean necesarios, marcando extreme_parallelism=true. Nunca intentes un cuarto. Para tareas simples trabaja directamente; no dupliques investigación. Mantén la memoria cognitiva, el contexto, la identidad y la síntesis final en el agente principal.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "A short (3-5 word) description of the delegated task, for display."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Describe en español la tarea autónoma del subagente, con archivos relevantes, límites y evidencia esperada. Devuelve solo el resultado verificable."
+          },
+          "hard_parallelism": {
+            "type": "boolean",
+            "description": "Second active slot only. Set true ONLY when one subagent is insufficient and the task has two genuinely independent difficult workstreams."
+          },
+          "extreme_parallelism": {
+            "type": "boolean",
+            "description": "Third active slot only. Set true ONLY in an extreme case that truly requires three independent workstreams. It never permits a fourth child."
+          },
+          "run_in_background": {
+            "type": "boolean",
+            "description": "Whether to run in the background and return a durable subagent id immediately. Defaults to true. Set false to wait for the result when your next action depends on it."
+          }
+        },
+        "required": [
+          "description",
+          "prompt"
+        ]
+      }
+    },
+    {
+      "name": "subagent_fork",
+      "description": "Orquestar una tarea con un subagente que hereda esta conversación: recibe los turnos completados hasta ahora, pero no el turno actual en curso. Úsalo cuando la tarea dependa del contexto existente y pueda ejecutarse de forma independiente. Recibes su resultado, no sus pensamientos internos. This call waits for the subagent and returns its result. Presupuesto Phoenix de subagentes: usa 1 como norma. Abre un segundo solo si la tarea se volvió realmente difícil y hay dos líneas de trabajo independientes, marcando hard_parallelism=true. Abre un tercero solo en un caso extremo donde tres frentes independientes sean necesarios, marcando extreme_parallelism=true. Nunca intentes un cuarto. Para tareas simples trabaja directamente; no dupliques investigación. Mantén la memoria cognitiva, el contexto, la identidad y la síntesis final en el agente principal.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "A short (3-5 word) description of the delegated task, for display."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Describe la tarea concreta para el subagente. Ya conoce los turnos completados; indica solo lo nuevo que debe investigar, construir o verificar y responde en español."
+          },
+          "hard_parallelism": {
+            "type": "boolean",
+            "description": "Second active slot only. Set true ONLY when one subagent is insufficient and the task has two genuinely independent difficult workstreams."
+          },
+          "extreme_parallelism": {
+            "type": "boolean",
+            "description": "Third active slot only. Set true ONLY in an extreme case that truly requires three independent workstreams. It never permits a fourth child."
+          }
+        },
+        "required": [
+          "description",
+          "prompt"
+        ]
+      }
+    },
+    {
+      "name": "todo_write",
+      "description": "Record and update a structured task list for the current work. Send the ENTIRE list every call — it REPLACES the previous list (there are no partial updates, no per-item edits). Use it to plan multi-step work and show progress: add one todo per concrete step before you start. Mark every todo being actively worked on `in_progress` — several at once when work genuinely runs in parallel (e.g. concurrent subagents or background commands), one for sequential work; while work remains, at least one task should be `in_progress`. Mark a todo `completed` the moment it is done (do not batch completions), and allow no `in_progress` item only once all work is complete. Skip the list for trivial single-step tasks. Statuses: `pending` (not started), `in_progress` (being worked on now), `completed` (finished).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "todos": {
+            "type": "array",
+            "description": "The COMPLETE task list, replacing any previous list.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "content": {
+                  "type": "string",
+                  "description": "What the task is — a short imperative line."
+                },
+                "status": {
+                  "type": "string",
+                  "description": "pending (not started) | in_progress (now) | completed (done).",
+                  "enum": [
+                    "pending",
+                    "in_progress",
+                    "completed"
+                  ]
+                }
+              },
+              "required": [
+                "content",
+                "status"
+              ]
+            }
+          }
+        },
+        "required": [
+          "todos"
+        ]
+      }
+    },
+    {
+      "name": "update_goal",
+      "description": "Update the exact current goal revision. edit, pause, and resume require a direct top-level human request. During an automatic continuation of the current goal, complete and blocked are also allowed. blocked is rejected before the configured minimum round count; the model remains responsible for judging that the same condition persisted across those rounds and must explain it in blocked_reason.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "goal_id": {
+            "type": "string",
+            "description": "Exact id returned by get_goal."
+          },
+          "revision": {
+            "type": "number",
+            "description": "Exact positive revision returned by get_goal."
+          },
+          "action": {
+            "type": "string",
+            "description": "edit | pause | resume | complete | blocked",
+            "enum": [
+              "edit",
+              "pause",
+              "resume",
+              "complete",
+              "blocked"
+            ]
+          },
+          "objective": {
+            "type": "string",
+            "description": "Replacement objective; valid only with action edit."
+          },
+          "max_goal_rounds": {
+            "type": "number",
+            "description": "Replacement cap; valid only with action edit."
+          },
+          "blocked_reason": {
+            "type": "string",
+            "description": "Concrete blocking condition; required only with action blocked."
+          }
+        },
+        "required": [
+          "goal_id",
+          "revision",
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "web_fetch",
+      "description": "Fetch the content of a specific HTTP(S) URL and return it decoded to text.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The HTTP(S) URL to fetch."
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "workflow",
+      "description": "Ejecuta un script JavaScript para orquestar subagentes de forma controlada. Úsalo cuando existan piezas independientes reales —auditoría por archivos, migración, investigación con varios ángulos o verificación adversarial— y la coordinación como script aporte valor.\n\nLa identidad de la orquestación viaja en `meta` como JSON: exige `name` y `description`, y admite `whenToUse` y `phases`. `script` es únicamente JavaScript plano (no TypeScript ni `export const meta`); usa `await` de nivel superior y termina con `return <value>`. El valor debe ser serializable como JSON.\n\nFunciones disponibles en el script:\n- `agent(prompt, opts?): Promise<any>` — ejecuta un subagente hasta completar. Sin `opts.schema` devuelve el texto final del hijo; con `opts.schema` (un esquema JSON raíz de objeto que solo usa type/properties/required/additionalProperties/items/enum/const/oneOf, sin pattern/format ni límites numéricos) devuelve el objeto validado. Devuelve `null` si falla el hijo (filtra con `.filter(Boolean)`). Otras opciones: `label` (etiqueta), `phase` (grupo de progreso) y sobrescrituras independientes de `provider`/`model`; cualquier otra opción (`effort`/`isolation`/`agentType`) se rechaza explícitamente.\n- `pipeline(items, ...stages): Promise<any[]>` — procesa cada elemento en todas las etapas de forma independiente y SIN barrera entre etapas (preferible para trabajos de varias etapas). Cada etapa recibe `(prev, item, index)`. si una etapa lanza un error, ese ELEMENTO pasa a `null` y se omiten sus etapas restantes.\n- `parallel(thunks): Promise<any[]>` — ejecuta funciones sin argumentos en paralelo y espera a TODAS (una barrera; úsala solo cuando una etapa necesite realmente todos los resultados previos). Si una función falla, devuelve `null`.\n- `phase(title)` — inicia una fase de progreso; `log(message)` — narra el progreso; `args` — recibe literalmente los argumentos de la llamada.\n\nLas funciones mal usadas (argumentos inválidos, opciones desconocidas, esquemas no compatibles o límites superados) lanzan errores que SIEMPRE detienen el script; nunca se convierten en `null` por elemento.\n\nLímites: se aplican topes de concurrencia y de agentes totales; no hay acceso a sistema de archivos, red, temporizadores ni APIs de Node.js. Los agentes hacen el trabajo y el script solo coordina. La ejecución es en primer plano y esta llamada termina cuando concluye el script.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "script": {
+            "type": "string",
+            "description": "The plain-JS workflow script body (top-level await allowed; NO `export const meta` statement; end with `return <json-value>`)."
+          },
+          "meta": {
+            "type": "object",
+            "description": "The workflow identity block (plain JSON — never code).",
+            "additionalProperties": true,
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Short kebab-case workflow name."
+              },
+              "description": {
+                "type": "string",
+                "description": "One-line description of what the workflow does."
+              },
+              "whenToUse": {
+                "type": "string",
+                "description": "Optional guidance on when this workflow applies."
+              },
+              "phases": {
+                "type": "array",
+                "description": "Optional phase declarations matched by phase() calls.",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "description": "The phase title phase() calls match by exact string."
+                    },
+                    "detail": {
+                      "type": "string",
+                      "description": "Optional one-line description of the phase."
+                    },
+                    "provider": {
+                      "type": "string",
+                      "description": "Optional provider override this phase is expected to use."
+                    },
+                    "model": {
+                      "type": "string",
+                      "description": "Optional model override this phase is expected to use."
+                    }
+                  },
+                  "required": [
+                    "title"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "name",
+              "description"
+            ]
+          },
+          "args": {
+            "type": "object",
+            "description": "Optional JSON input exposed to the script as the `args` global (wrap a bare list as a field, e.g. {\"files\": [...]}).",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "script",
+          "meta"
+        ]
+      }
+    },
+    {
+      "name": "write",
+      "description": "Create or fully replace a UTF-8 text file.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Path to write, resolved by the filesystem backend."
+          },
+          "content": {
+            "type": "string",
+            "description": "Full UTF-8 text content to write."
+          },
+          "sandbox_permissions": {
+            "type": "string",
+            "description": "The wider sandbox mode this file operation needs. Only valid as a one-shot retry of an operation the sandbox just denied; requires justification and user approval.",
+            "enum": [
+              "workspace-write",
+              "danger-full-access"
+            ]
+          },
+          "justification": {
+            "type": "string",
+            "description": "Required with sandbox_permissions: one sentence for the user explaining why this exact file operation needs the wider access."
+          }
+        },
+        "required": [
+          "file_path",
+          "content"
+        ]
+      }
+    }
+  ],
+  "changes": []
+}

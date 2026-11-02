@@ -1,0 +1,15 @@
+- id: credentials
+  name: '@phoenix-ai/dsh-credentials-local'
+  config:
+    path: !!js process.env.PHOENIX_GOOGLE_REAL_CREDENTIALS_PATH
+    watch: false
+
+- id: authorization
+  name: '@phoenix-ai/dsh-authorization'
+
+- id: authorization-google
+  name: '@phoenix-ai/dsh-authorization/google'
+  config:
+    clientId: test-client.apps.googleusercontent.com
+    scopes:
+      - https://www.googleapis.com/auth/drive

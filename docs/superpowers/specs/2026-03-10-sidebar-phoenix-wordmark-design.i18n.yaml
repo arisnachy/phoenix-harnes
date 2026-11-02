@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/superpowers/specs/2026-03-10-sidebar-phoenix-wordmark-design.md
+2026-03-10-sidebar-phoenix-wordmark-design.md: 71479e87a8e5be3866cb53c31ff3fd2ea236d043
+2026-03-10-sidebar-phoenix-wordmark-design.zh.md: 29f5635746206d09ea824b6a453f5ff7668b8d3b

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "title": "Lumen Circuit",
+  "genre": "logic puzzle",
+  "gameType": "puzzle",
+  "level": {
+    "layers": [
+      {
+        "id": "neon-grid",
+        "scrollFactor": 0
+      }
+    ],
+    "puzzles": [
+      {
+        "id": "circuit-path",
+        "objective": "connect source to reactor",
+        "dimensions": [
+          5,
+          5
+        ]
+      }
+    ]
+  },
+  "controls": {
+    "interact": "pointer, Enter, Space and arrow keys"
+  },
+  "audio": {
+    "cues": [
+      "rotate",
+      "connected",
+      "win"
+    ],
+    "music": "procedural soft tones from WebAudio on user gesture"
+  },
+  "sources": [
+    {
+      "path": "examples/game-studio/lumen-circuit.html",
+      "license": "original"
+    }
+  ]
+}

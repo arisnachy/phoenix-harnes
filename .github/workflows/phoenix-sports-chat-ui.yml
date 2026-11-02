@@ -1,0 +1,69 @@
+name: Phoenix chat sports visual regression
+on:
+  pull_request:
+    paths:
+      - 'packages/client/ui-conversation/src/client/chat/ToolActivityFlow.tsx'
+      - 'packages/client/ui-conversation/src/client/chat/ChatView.tsx'
+      - 'packages/client/ui-conversation/src/client/chat/sports-tool-cards.ts'
+      - 'packages/client/ui-conversation/src/client/chat/GenerativeUi.tsx'
+      - 'packages/client/ui-conversation/src/client/chat/AssistantMarkdown.tsx'
+      - 'packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts'
+      - 'packages/client/ui-conversation/tests/sports-fenced-ui.client.spec.tsx'
+      - 'packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx'
+      - 'packages/core/tool-sports/src/index.ts'
+      - '.github/workflows/phoenix-sports-chat-ui.yml'
+      - 'scripts/phoenix-web-freshness*'
+      - 'scripts/phoenix-verify-sports-dist.mjs'
+      - 'package.json'
+  push:
+    branches: [fix/kira-sports-auto-chat-visual-20261024, fix/phoenix-web-stale-ui-sports-20261024]
+    paths:
+      - 'packages/client/ui-conversation/**'
+      - 'packages/core/tool-sports/src/index.ts'
+      - '.github/workflows/phoenix-sports-chat-ui.yml'
+      - 'scripts/phoenix-web-freshness*'
+      - 'package.json'
+permissions:
+  contents: read
+jobs:
+  visual-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Render sports cards from durable tool results
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts packages/client/ui-conversation/tests/sports-fenced-ui.client.spec.tsx packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx packages/client/ui-conversation/tests/generative-ui.client.spec.tsx
+      - name: Build server contracts and generated client typings
+        run: pnpm run build:lib:host
+      - name: Client strict typecheck and library build
+        run: pnpm run build:lib:client
+      - name: Build served Phoenix Vite frontend
+        run: pnpm run build:web
+      - name: Assert live frontend includes native sports renderer
+        run: node scripts/phoenix-verify-sports-dist.mjs
+
+  stale-frontend-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate source checkout freshness and failed rebuild protection
+        run: |
+          node --check scripts/phoenix-web-freshness.mjs
+          node --test scripts/phoenix-web-freshness.test.mjs
+      - name: Parse Windows desktop launcher without running it
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile('scripts/phoenix-desktop-launch.ps1', [ref]$tokens, [ref]$errors)
+          if ($errors.Count -ne 0) { $errors | Format-List; exit 1 }

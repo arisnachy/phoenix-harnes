@@ -1,0 +1,275 @@
+.connectorSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.connectorHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.connectorTitle {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.connectorHint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.connectorGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.connectorCard {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 16px;
+  background: var(--dsw-alias-bg-module-platform);
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.connectorCard:hover {
+  transform: translateY(-1px);
+  border-color: var(--dsw-alias-border-l3);
+  box-shadow: 0 8px 22px rgb(0 0 0 / 8%);
+}
+
+.registryCard {
+  min-height: 182px;
+}
+
+.connectorTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.connectorIcon,
+.connectorFallback {
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+}
+
+.connectorIcon {
+  object-fit: contain;
+  padding: 5px;
+}
+
+.connectorFallback {
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.connectorIdentity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.connectorName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 19px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.connectorCategory {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.connectorBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.connectorBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-base);
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.connectorDescription {
+  margin: 0;
+  min-height: 36px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.connectorFooter {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.connectorStatus {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-base);
+  border: 1px solid var(--dsw-alias-border-l2);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.connectorStatusReady {
+  color: var(--dsw-alias-state-success-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 9%, var(--dsw-alias-bg-base));
+}
+
+.connectorStatusInfo {
+  color: #0b5cff;
+  background: color-mix(in srgb, #2563eb 9%, var(--dsw-alias-bg-base));
+}
+
+.connectorStatusWarn {
+  color: var(--dsw-alias-state-warn-label);
+  background: color-mix(in srgb, var(--dsw-alias-state-warn-label) 9%, var(--dsw-alias-bg-base));
+}
+
+.connectorStatusError {
+  color: #c62828;
+  background: color-mix(in srgb, #dc2626 9%, var(--dsw-alias-bg-base));
+}
+
+.connectorStatusDisabled {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.connectorLink {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 13px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+  line-height: 16px;
+  text-decoration: none;
+}
+
+.connectorLink:hover {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.connectorLink:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
+
+
+.connectorActions {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.connectorPrimaryButton,
+.connectorSecondaryButton {
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.connectorPrimaryButton {
+  border: 1px solid #0b5cff;
+  background: #0b5cff;
+  color: white;
+  box-shadow: 0 2px 8px rgb(11 92 255 / 18%);
+}
+
+.connectorPrimaryButton:hover:not(:disabled) {
+  background: #004fe0;
+}
+
+.connectorSecondaryButton {
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+}
+
+.connectorSecondaryButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.connectorPrimaryButton:disabled,
+.connectorSecondaryButton:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.connectorPrimaryButton:focus-visible,
+.connectorSecondaryButton:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #2563eb 32%, transparent);
+}
+
+@media (max-width: 560px) {
+  .connectorGrid {
+    grid-template-columns: 1fr;
+  }
+}

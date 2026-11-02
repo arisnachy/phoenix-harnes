@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Canvas2D · Scatterplot de 100.000 puntos</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08111f;
+      --panel: #101d31;
+      --panel-2: #142640;
+      --ink: #f4f7fb;
+      --muted: #9eb0c8;
+      --line: #29415e;
+      --accent: #65d9c7;
+      --accent-2: #70a8ff;
+      --focus: #ffd166;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: radial-gradient(circle at 80% 0%, #173052 0, var(--bg) 42rem);
+      color: var(--ink);
+      font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 36px 0 48px; }
+    header { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+    .eyebrow { margin: 0 0 6px; color: var(--accent); font-size: .75rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(1.75rem, 4vw, 3.2rem); line-height: 1.05; letter-spacing: -.04em; }
+    .lede { max-width: 680px; margin: 12px 0 0; color: var(--muted); }
+    .badge { padding: 8px 12px; border: 1px solid #3f627e; border-radius: 999px; color: var(--accent-2); white-space: nowrap; font-size: .85rem; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; align-items: start; }
+    .panel { background: color-mix(in srgb, var(--panel) 94%, transparent); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 18px 48px #0005; }
+    .chart-panel { position: relative; padding: 14px; }
+    .canvas-wrap { position: relative; overflow: hidden; border: 1px solid #2f4c68; border-radius: 12px; background: #0a1524; }
+    canvas { display: block; width: 100%; height: min(62vw, 620px); min-height: 360px; cursor: crosshair; outline: none; touch-action: none; }
+    canvas:focus-visible { box-shadow: inset 0 0 0 3px var(--focus); }
+    #tooltip { position: absolute; z-index: 2; pointer-events: none; max-width: 220px; padding: 8px 10px; border: 1px solid #80c8c0; border-radius: 8px; background: #07121fe8; color: var(--ink); font-size: .82rem; opacity: 0; transform: translate(10px, 10px); transition: opacity .12s ease; }
+    #tooltip.visible { opacity: 1; }
+    .preview-fallback { position: absolute; inset: 18px; display: grid; place-content: center; gap: 8px; border: 1px dashed #3f627e; border-radius: 10px; background: #0c1a2b; color: var(--muted); text-align: center; }
+    .preview-fallback strong { color: var(--accent); font-size: 1.1rem; }
+    .preview-fallback[hidden] { display: none; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+    button { border: 1px solid #3f627e; border-radius: 9px; padding: 9px 12px; background: var(--panel-2); color: var(--ink); font: inherit; cursor: pointer; }
+    button:hover { border-color: var(--accent); background: #1a3451; }
+    button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+    .metric { padding: 10px 12px; border-radius: 10px; background: #0c192a; color: var(--muted); font-size: .82rem; }
+    .metric strong { display: block; margin-top: 2px; color: var(--ink); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+    .side { padding: 18px; }
+    .side h2 { margin: 0 0 12px; font-size: 1rem; }
+    .side section + section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+    .legend { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: .9rem; }
+    .legend li { display: flex; align-items: center; gap: 9px; }
+    .swatch { width: 11px; height: 11px; border-radius: 50%; }
+    .status { margin: 0; color: var(--accent); font-size: .9rem; }
+    .summary { margin: 16px 0 0; padding: 14px 16px; border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0; background: #0c1c2d; color: var(--muted); }
+    .summary strong { color: var(--ink); }
+    kbd { padding: 2px 5px; border: 1px solid #49627e; border-radius: 4px; background: #081321; color: var(--ink); font-size: .78em; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    @media (max-width: 760px) {
+      main { width: min(100% - 20px, 620px); padding-top: 22px; }
+      header { display: block; }
+      .badge { display: inline-block; margin-top: 14px; }
+      .layout { grid-template-columns: 1fr; }
+      canvas { height: 72vw; min-height: 300px; }
+      .metrics { grid-template-columns: 1fr 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">Prueba en vivo · Canvas2D</p>
+        <h1>Scatterplot de 100.000 puntos</h1>
+        <p class="lede">Una superficie raster de alta densidad con transformación retenida, hit-testing local y una capa HTML accesible para explorar los datos.</p>
+      </div>
+      <span class="badge">100.000 puntos · datos deterministas</span>
+    </header>
+
+    <div class="layout">
+      <section class="panel chart-panel" aria-labelledby="chart-title">
+        <h2 id="chart-title" class="sr-only">Scatterplot Canvas2D interactivo</h2>
+        <div class="canvas-wrap" id="canvas-wrap">
+          <div id="render-fallback" class="preview-fallback">
+            <strong>Vista Canvas2D preparada</strong>
+            <span>Activa la interacción segura del visor para iniciar el render.</span>
+          </div>
+          <canvas id="scatterplot" role="img" tabindex="0" aria-label="Scatterplot Canvas2D interactivo de 100.000 puntos" aria-describedby="chart-summary"></canvas>
+          <div id="tooltip" role="status" aria-hidden="true"></div>
+        </div>
+        <div class="toolbar" aria-label="Controles del scatterplot">
+          <button id="reset" type="button">Reiniciar vista</button>
+          <button id="zoom-in" type="button">Acercar</button>
+          <button id="zoom-out" type="button">Alejar</button>
+        </div>
+        <div class="metrics" aria-label="Métricas de renderizado">
+          <div class="metric">Puntos<strong data-testid="point-count">100000</strong></div>
+          <div class="metric">Zoom<strong data-testid="zoom">1.00×</strong></div>
+          <div class="metric">Desplazamiento<strong data-testid="view-offset">0, 0</strong></div>
+        </div>
+        <p id="chart-summary" class="summary"><strong>Resumen accesible:</strong> se muestran 100.000 observaciones sintéticas distribuidas entre cuatro grupos. Pasa el puntero sobre el lienzo para identificar el punto más cercano o enfócalo y usa las flechas del teclado. Arrastra para desplazar la vista y usa la rueda o los botones para cambiar el zoom.</p>
+        <p id="live-status" class="status" aria-live="polite">Listo. Enfoca el lienzo y usa las flechas para seleccionar un punto.</p>
+      </section>
+
+      <aside class="panel side" aria-label="Guía y estado">
+        <section>
+          <h2>Grupos</h2>
+          <ul class="legend">
+            <li><span class="swatch" style="background:#65d9c7"></span>Alpha</li>
+            <li><span class="swatch" style="background:#70a8ff"></span>Beta</li>
+            <li><span class="swatch" style="background:#ff9f68"></span>Gamma</li>
+            <li><span class="swatch" style="background:#d99cff"></span>Delta</li>
+          </ul>
+        </section>
+        <section>
+          <h2>Teclado</h2>
+          <p class="status">Mueve la selección con <kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd>. Pulsa <kbd>Home</kbd> o <kbd>End</kbd> para saltar.</p>
+        </section>
+        <section>
+          <h2>Punto seleccionado</h2>
+          <p id="selection" class="status">Ninguno todavía.</p>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    const POINT_COUNT = 100000
+    const GROUPS = ['Alpha', 'Beta', 'Gamma', 'Delta']
+    function createPoints(seed = 42) {
+      let state = (seed >>> 0) || 0x9e3779b9
+      const next = () => {
+        state = (Math.imul(1664525, state) + 1013904223) >>> 0
+        return state / 0x100000000
+      }
+      const points = new Array(POINT_COUNT)
+      for (let index = 0; index < POINT_COUNT; index += 1) {
+        const group = GROUPS[Math.floor(next() * GROUPS.length)] ?? GROUPS[0]
+        points[index] = { index, x: next(), y: next(), group }
+      }
+      return points
+    }
+
+    const canvas = document.querySelector('#scatterplot')
+    const wrapper = document.querySelector('#canvas-wrap')
+    const renderFallback = document.querySelector('#render-fallback')
+    renderFallback.hidden = true
+    const context = canvas.getContext('2d', { alpha: false })
+    const tooltip = document.querySelector('#tooltip')
+    const liveStatus = document.querySelector('#live-status')
+    const selection = document.querySelector('#selection')
+    const zoomMetric = document.querySelector('[data-testid="zoom"]')
+    const offsetMetric = document.querySelector('[data-testid="view-offset"]')
+    const colors = ['#65d9c7', '#70a8ff', '#ff9f68', '#d99cff']
+    const points = createPoints(42)
+    const grid = new Map()
+    const GRID_SIZE = 64
+    const padding = 44
+    const view = { scale: 1, offsetX: 0, offsetY: 0 }
+    let width = 0
+    let height = 0
+    let plotWidth = 0
+    let plotHeight = 0
+    let selectedIndex = -1
+    let hoveredPoint = null
+    let drag = null
+    let frames = 0
+    let lastFpsTime = performance.now()
+    let fps = 0
+
+    for (const point of points) {
+      const key = `${Math.floor(point.x * GRID_SIZE)},${Math.floor(point.y * GRID_SIZE)}`
+      const cell = grid.get(key)
+      if (cell) cell.push(point)
+      else grid.set(key, [point])
+    }
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect()
+      const ratio = globalThis.devicePixelRatio || 1
+      width = Math.max(1, rect.width)
+      height = Math.max(1, rect.height)
+      canvas.width = Math.round(width * ratio)
+      canvas.height = Math.round(height * ratio)
+      plotWidth = Math.max(1, width - padding * 2)
+      plotHeight = Math.max(1, height - padding * 2)
+      context.setTransform(ratio, 0, 0, ratio, 0, 0)
+      draw()
+    }
+
+    function worldToScreen(point) {
+      return {
+        x: padding + point.x * plotWidth * view.scale + view.offsetX,
+        y: height - padding - point.y * plotHeight * view.scale + view.offsetY,
+      }
+    }
+
+    function screenToWorld(x, y) {
+      return {
+        x: (x - padding - view.offsetX) / (plotWidth * view.scale),
+        y: (height - padding + view.offsetY - y) / (plotHeight * view.scale),
+      }
+    }
+
+    function draw() {
+      if (!context || width === 0) return
+      context.clearRect(0, 0, width, height)
+      context.fillStyle = '#0a1524'
+      context.fillRect(0, 0, width, height)
+      context.save()
+      context.beginPath()
+      context.rect(padding, padding, plotWidth, plotHeight)
+      context.clip()
+      context.strokeStyle = '#1c344e'
+      context.lineWidth = 1
+      for (let step = 0; step <= 10; step += 1) {
+        const x = padding + (plotWidth * step) / 10
+        const y = height - padding - (plotHeight * step) / 10
+        context.beginPath(); context.moveTo(x, padding); context.lineTo(x, height - padding); context.stroke()
+        context.beginPath(); context.moveTo(padding, y); context.lineTo(width - padding, y); context.stroke()
+      }
+      context.globalAlpha = 0.72
+      for (const point of points) {
+        const position = worldToScreen(point)
+        if (position.x < padding - 3 || position.x > width - padding + 3 || position.y < padding - 3 || position.y > height - padding + 3) continue
+        context.fillStyle = colors[GROUPS.indexOf(point.group)] ?? colors[0]
+        context.fillRect(position.x, position.y, 1.5, 1.5)
+      }
+      context.globalAlpha = 1
+      const highlighted = selectedIndex >= 0 ? points[selectedIndex] : hoveredPoint
+      if (highlighted) {
+        const position = worldToScreen(highlighted)
+        context.beginPath(); context.arc(position.x + .75, position.y + .75, 5, 0, Math.PI * 2)
+        context.strokeStyle = '#fff4ad'; context.lineWidth = 2; context.stroke()
+      }
+      context.restore()
+      context.strokeStyle = '#50718f'; context.lineWidth = 1
+      context.strokeRect(padding, padding, plotWidth, plotHeight)
+      context.fillStyle = '#9eb0c8'; context.font = '12px system-ui'
+      context.fillText('x', width - padding + 10, height - padding + 4)
+      context.fillText('y', padding - 20, padding - 10)
+      frames += 1
+      const now = performance.now()
+      if (now - lastFpsTime > 500) { fps = Math.round((frames * 1000) / (now - lastFpsTime)); frames = 0; lastFpsTime = now }
+      canvas.dataset.fps = String(fps)
+      zoomMetric.textContent = `${view.scale.toFixed(2)}×`
+      offsetMetric.textContent = `${Math.round(view.offsetX)}, ${Math.round(view.offsetY)}`
+    }
+
+    function pointAt(screenX, screenY) {
+      const world = screenToWorld(screenX, screenY)
+      if (world.x < 0 || world.x > 1 || world.y < 0 || world.y > 1) return null
+      const cx = Math.floor(world.x * GRID_SIZE)
+      const cy = Math.floor(world.y * GRID_SIZE)
+      let best = null
+      let bestDistance = Infinity
+      for (let dx = -1; dx <= 1; dx += 1) for (let dy = -1; dy <= 1; dy += 1) {
+        const cell = grid.get(`${cx + dx},${cy + dy}`) ?? []
+        for (const candidate of cell) {
+          const position = worldToScreen(candidate)
+          const distance = Math.hypot(position.x - screenX, position.y - screenY)
+          if (distance < bestDistance) { best = candidate; bestDistance = distance }
+        }
+      }
+      return bestDistance <= 16 ? best : null
+    }
+
+    function describePoint(point, source = 'Punto') {
+      if (!point) return 'Sin punto seleccionado.'
+      return `${source} ${point.index + 1} de ${POINT_COUNT}, grupo ${point.group}, coordenadas ${point.x.toFixed(3)}, ${point.y.toFixed(3)}.`
+    }
+
+    function announce(point, source = 'Punto') {
+      if (!point) return
+      const text = describePoint(point, source)
+      liveStatus.textContent = text
+      selection.textContent = text
+      const position = worldToScreen(point)
+      tooltip.textContent = text
+      tooltip.style.left = `${Math.max(6, Math.min(width - 230, position.x))}px`
+      tooltip.style.top = `${Math.max(6, Math.min(height - 52, position.y))}px`
+      tooltip.classList.add('visible')
+      tooltip.setAttribute('aria-hidden', 'false')
+    }
+
+    function hideTooltip() {
+      tooltip.classList.remove('visible')
+      tooltip.setAttribute('aria-hidden', 'true')
+    }
+
+    function zoomAt(factor, x = width / 2, y = height / 2) {
+      const before = screenToWorld(x, y)
+      const nextScale = Math.max(.55, Math.min(8, view.scale * factor))
+      view.scale = nextScale
+      view.offsetX = x - padding - before.x * plotWidth * view.scale
+      view.offsetY = y - height + padding + before.y * plotHeight * view.scale
+      draw()
+    }
+
+    function resetView() {
+      view.scale = 1; view.offsetX = 0; view.offsetY = 0; selectedIndex = -1; hoveredPoint = null
+      liveStatus.textContent = 'Vista reiniciada. Enfoca el lienzo y usa las flechas para seleccionar un punto.'
+      selection.textContent = 'Ninguno todavía.'
+      hideTooltip(); draw()
+    }
+
+    function pointerPosition(event) {
+      const rect = canvas.getBoundingClientRect()
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top }
+    }
+
+    canvas.addEventListener('pointerdown', event => {
+      const position = pointerPosition(event)
+      drag = { pointerId: event.pointerId, x: position.x, y: position.y, offsetX: view.offsetX, offsetY: view.offsetY }
+      canvas.setPointerCapture(event.pointerId)
+      canvas.style.cursor = 'grabbing'
+      hideTooltip()
+    })
+    canvas.addEventListener('pointermove', event => {
+      const position = pointerPosition(event)
+      if (drag?.pointerId === event.pointerId) {
+        view.offsetX = drag.offsetX + position.x - drag.x
+        view.offsetY = drag.offsetY + position.y - drag.y
+        draw(); return
+      }
+      hoveredPoint = pointAt(position.x, position.y)
+      if (hoveredPoint) { announce(hoveredPoint, 'Punto bajo el puntero'); draw() }
+      else hideTooltip()
+    })
+    canvas.addEventListener('pointerup', event => {
+      if (drag?.pointerId === event.pointerId) { drag = null; canvas.style.cursor = 'crosshair'; canvas.releasePointerCapture(event.pointerId) }
+    })
+    canvas.addEventListener('pointercancel', () => { drag = null; canvas.style.cursor = 'crosshair' })
+    canvas.addEventListener('pointerleave', () => { if (!drag) { hoveredPoint = null; hideTooltip() } })
+    canvas.addEventListener('wheel', event => { event.preventDefault(); const position = pointerPosition(event); zoomAt(event.deltaY < 0 ? 1.18 : 1 / 1.18, position.x, position.y) }, { passive: false })
+    canvas.addEventListener('keydown', event => {
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') selectedIndex = Math.min(POINT_COUNT - 1, selectedIndex < 0 ? 0 : selectedIndex + 1)
+      else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') selectedIndex = Math.max(0, selectedIndex < 0 ? 0 : selectedIndex - 1)
+      else if (event.key === 'Home') selectedIndex = 0
+      else if (event.key === 'End') selectedIndex = POINT_COUNT - 1
+      else return
+      event.preventDefault(); const point = points[selectedIndex]; announce(point); draw()
+    })
+    document.querySelector('#reset').addEventListener('click', resetView)
+    document.querySelector('#zoom-in').addEventListener('click', () => zoomAt(1.25))
+    document.querySelector('#zoom-out').addEventListener('click', () => zoomAt(0.8))
+    new ResizeObserver(resizeCanvas).observe(canvas)
+    window.addEventListener('resize', resizeCanvas)
+    resizeCanvas()
+  </script>
+</body>
+</html>

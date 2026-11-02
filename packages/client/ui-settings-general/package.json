@@ -1,0 +1,87 @@
+{
+  "name": "@phoenix-ai/dsh-client-ui-settings-general",
+  "description": "Settings ownerless-copy and product onboarding plugin: the General section, shell trigger/header chrome content, settings dictionaries, and the versioned welcome notice",
+  "version": "0.1.1-rc.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
+    "directory": "packages/client/ui-settings-general"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@phoenix-ai/dsh-client-runtime",
+        "@phoenix-ai/dsh-client-ui-settings",
+        "@phoenix-ai/dsh-client-locale",
+        "@phoenix-ai/dsh-client-connection",
+        "@phoenix-ai/dsh-api-remotes",
+        "@phoenix-ai/dsh-client-ui-sidebar"
+      ],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "bundle": "tsdown",
+    "watch": "tsdown --watch"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@phoenix-ai/schemastery": "workspace:^",
+    "clsx": "^2.0.0"
+  },
+  "peerDependencies": {
+    "@phoenix-ai/dsh-api-remotes": "workspace:^",
+    "@phoenix-ai/dsh-client-connection": "workspace:^",
+    "@phoenix-ai/dsh-client-locale": "workspace:^",
+    "@phoenix-ai/dsh-client-runtime": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-settings": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-sidebar": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-settings": "workspace:^"
+  },
+  "devDependencies": {
+    "@phoenix-ai/dsh-api-remotes": "workspace:^",
+    "@phoenix-ai/dsh-client-connection": "workspace:^",
+    "@phoenix-ai/dsh-client-locale": "workspace:^",
+    "@phoenix-ai/dsh-client-runtime": "workspace:^",
+    "@phoenix-ai/dsh-client-test-runtime": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-primitives": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-settings": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-sidebar": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-slots": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
+    "@types/react": "~18.3.1",
+    "react": "^18.2.0",
+    "@phoenix-ai/dsh-settings": "workspace:^"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/client.js",
+    "lib/types/**/*.d.ts"
+  ]
+}

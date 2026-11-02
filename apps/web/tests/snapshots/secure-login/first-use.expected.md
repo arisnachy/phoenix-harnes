@@ -1,0 +1,23 @@
+- region "Acceso seguro de Kira":
+  - strong: Acceso seguro
+  - text: Solo tú y la bóveda local gestionan estas credenciales. Privado
+  - button "Contraer acceso seguro": −
+  - button "Cerrar acceso seguro": ×
+  - paragraph: Kira comprobará primero los accesos existentes. Si necesitas registrar uno nuevo, los datos se envían directamente a la bóveda local, nunca al modelo.
+  - text: 🔒 https://example.org
+  - group "Seleccionar identidad de acceso":
+    - button "Cuenta personal" [pressed]
+    - button "Cuenta de Kira"
+  - paragraph: Aún no hay un acceso personal guardado para este sitio.
+  - text: Usuario real
+  - textbox "Usuario real"
+  - text: Contraseña real
+  - textbox "Contraseña real"
+  - text: Código de organización
+  - textbox "Código de organización"
+  - checkbox "Recordar y permitir inicio automático en futuras visitas"
+  - text: Recordar y permitir inicio automático en futuras visitas
+  - button "Guardar y continuar" [disabled]
+  - button "Guardar y no volver a preguntar" [disabled]
+  - button "Ahora no"
+  - paragraph: La contraseña no se incorpora a la conversación ni a sus eventos. Puede requerirse MFA, passkey o CAPTCHA.

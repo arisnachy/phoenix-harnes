@@ -1,0 +1,92 @@
+/**
+ * Durable projection state for dynamic runtime context.
+ * @module @phoenix-ai/dsh-agent-loop/runtime-context
+ */
+
+import { createUserMessage } from '@phoenix-ai/dsh-llm'
+import type { ContextSnapshotSection } from '@phoenix-ai/dsh-llm'
+import type { Session, SurfaceIntent, UserMessage } from '@phoenix-ai/dsh-session'
+import { isReplacementSurfaceEvent } from '@phoenix-ai/dsh-session'
+import type { Context } from '@phoenix-ai/cordis'
+
+const SOURCE = '@phoenix-ai/dsh-system-prompt'
+const CLEARED = 'Current runtime context: none. Earlier runtime-context snapshots no longer apply.'
+
+function isOwned(message: UserMessage): boolean {
+  return message.source.kind === 'plugin' && message.source.plugin === SOURCE
+}
+
+function textOf(message: UserMessage): string | undefined {
+  const [block] = message.content
+  return message.content.length === 1 && block?.type === 'text' ? block.text : undefined
+}
+
+/** Tracks the last retained runtime-context snapshot without owning its commit. */
+export class RuntimeContextProjection {
+  /** `undefined` means no snapshot ever existed; `null` means none is retained. */
+  private retained: { seq: number; text: string | undefined } | null | undefined
+
+  /**
+   * Restore projection state once, then follow authoritative session events.
+   * @param ctx - agent-scoped event context.
+   * @param session - session receiving projected messages.
+   */
+  constructor(ctx: Context, session: Session) {
+    const surface = new Set(session.surface.nodes)
+    for (let index = session.events.length - 1; index >= 0; index -= 1) {
+      const event = session.events[index]
+      if (event?.type !== 'user/message' || !isOwned(event.data)) continue
+      this.retained ??= null
+      if (surface.has(event.seq)) {
+        this.retained = { seq: event.seq, text: textOf(event.data) }
+        break
+      }
+    }
+
+    ctx.on('session/event', (subject, event) => {
+      if (subject !== session) return
+      if (event.type === 'user/message' && isOwned(event.data)) {
+        this.retained = { seq: event.seq, text: textOf(event.data) }
+      } else if (this.retained
+        && isReplacementSurfaceEvent(event)
+        && event.sourceEventSeqs?.includes(this.retained.seq) === true) {
+        this.retained = null
+      }
+    })
+  }
+
+  /**
+   * Keep runtime context durable without replaying stale snapshots to the model.
+   * The previous owned snapshot remains in the append-only session log, while the
+   * model-facing surface replaces it atomically with the new snapshot.
+   * @param message - pre-step message about to be committed.
+   * @returns append for ordinary messages/first snapshot, replace for a newer snapshot.
+   */
+  surfaceIntent(message: UserMessage): SurfaceIntent {
+    if (!isOwned(message) || this.retained == null) return { surfaceOp: 'append' }
+    const seq = this.retained.seq
+    return {
+      surfaceOp: { op: 'replace', start: seq, end: seq },
+      sourceEventSeqs: [seq],
+    }
+  }
+
+  /**
+   * Create an uncommitted snapshot only when the retained value differs.
+   * @param current - fully rendered dynamic context.
+   * @param sections - named contributions that formed the current snapshot.
+   * @returns a candidate user message, or `undefined` when no update is needed.
+   */
+  project(current: string, sections: readonly ContextSnapshotSection[]): UserMessage | undefined {
+    if (this.retained === undefined && current.length === 0) return
+    const snapshot = current.length === 0 ? CLEARED : current
+    if (this.retained?.text === snapshot) return
+    return createUserMessage({
+      content: [{ type: 'text', text: snapshot }],
+      // The cleared marker has no contributions left to attribute.
+      source: sections.length === 0
+        ? { kind: 'plugin', plugin: SOURCE }
+        : { kind: 'plugin', plugin: SOURCE, form: 'snapshot', sections },
+    })
+  }
+}

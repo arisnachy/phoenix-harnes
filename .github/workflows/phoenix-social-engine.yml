@@ -1,0 +1,44 @@
+name: Phoenix Social Engine
+
+on:
+  push:
+    branches: [main, stable]
+    paths:
+      - 'scripts/phoenix-social*.mjs'
+      - 'scripts/phoenix-social*.test.mjs'
+      - 'packages/host/plugin-inventory/src/mcp-managed.ts'
+      - 'packages/client/ui-settings-models/src/client/connector-catalog.ts'
+      - '.github/workflows/phoenix-social-engine.yml'
+  pull_request:
+    paths:
+      - 'scripts/phoenix-social*.mjs'
+      - 'scripts/phoenix-social*.test.mjs'
+      - '.github/workflows/phoenix-social-engine.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  social-engine-smoke:
+    name: Social MCP smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Set up Node 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Confirm Node runtime
+        run: node --version
+      - name: Validate social scripts
+        run: |
+          node --check scripts/phoenix-social.mjs
+          node --check scripts/phoenix-social-mcp.mjs
+      - name: Check social engine and onboarding RPC
+        run: node --test scripts/phoenix-social.test.mjs scripts/phoenix-social-mcp.test.mjs

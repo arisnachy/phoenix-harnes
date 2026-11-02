@@ -1,0 +1,12 @@
+# Replay counterpart to cordis.yml for the shipped Ralph-loop snapshot.
+- id: base
+  name: '@phoenix-ai/cordis-plugin-include'
+  config:
+    path: ./cordis.yml
+    patches:
+      - id: llm-deepseek
+        name: '@phoenix-ai/dsh-llm-deepseek'
+        disabled: true
+      - insert:
+          - id: llm-replay
+            name: '@phoenix-ai/dsh-llm-replay'

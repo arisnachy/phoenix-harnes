@@ -1,0 +1,20 @@
+.root{display:flex;flex-direction:column;gap:12px;width:100%;min-width:0;padding:16px;border:1px solid var(--phoenix-ui-border,#e2d7ce);border-radius:16px;background:var(--phoenix-ui-surface,#fffdfb);color:var(--phoenix-ui-text,#24272e)}
+.header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.header h3{margin:3px 0 0;font-size:18px;line-height:1.25}
+.header p{margin:5px 0 0;color:var(--phoenix-ui-secondary,#6b7280);font-size:13px}
+.eyebrow{font-size:10px;font-weight:800;letter-spacing:1.5px;color:var(--phoenix-ui-accent,#d9612b)}
+.export,.ask{border:1px solid var(--phoenix-ui-border,#dfd8d3);border-radius:9px;padding:9px 11px;background:var(--phoenix-ui-surface,#fff);color:inherit;cursor:pointer;font-weight:600;font-size:12px}
+.export:hover,.ask:hover{border-color:var(--phoenix-ui-accent,#e66c36)}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(170px,210px);gap:14px;min-width:0}
+.canvas{min-width:0;overflow:auto;border:1px solid var(--phoenix-ui-border,#e9e1d8);border-radius:12px;background:#fffdfa}
+.svg{display:block;width:100%;min-width:480px;height:auto;aspect-ratio:1000/620}
+.node{cursor:pointer;outline:none}
+.node:focus-visible{filter:drop-shadow(0 0 5px #e97839)}
+.details{display:flex;flex-direction:column;align-items:stretch;gap:10px;min-width:0;font-size:13px}
+.list{display:flex;flex-wrap:wrap;gap:6px;max-height:170px;overflow:auto}
+.list button{border:1px solid var(--phoenix-ui-border,#ded8d0);border-radius:7px;background:transparent;color:inherit;padding:7px 9px;cursor:pointer;text-align:left;font-size:12px}
+.list button[aria-pressed=true]{border-color:var(--phoenix-ui-accent,#e97839);background:var(--phoenix-ui-muted,#f6eee7)}
+.selected{padding:10px 12px;border:1px solid var(--phoenix-ui-border,#ded8d0);border-radius:9px}
+.selected p{margin:6px 0 0;color:var(--phoenix-ui-secondary,#64748b);line-height:1.5;overflow-wrap:anywhere}
+.note{font-size:12px;color:var(--phoenix-ui-secondary,#64748b);margin:0;line-height:1.5}
+@media(max-width:700px){.layout{grid-template-columns:minmax(0,1fr)}.details{gap:7px}.header{flex-wrap:wrap}}

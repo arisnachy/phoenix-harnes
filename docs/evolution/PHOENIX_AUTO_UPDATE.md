@@ -1,0 +1,89 @@
+# PHOENIX Stable Auto-Update
+
+English | [中文](PHOENIX_AUTO_UPDATE.zh.md)
+
+PHOENIX source installations use a reviewed stable channel instead of blindly pulling every GitHub branch.
+
+Codex plugin and OpenClaw skill updates use the separate staged intake described in [PHOENIX Codex and OpenClaw Update Intake](PHOENIX_UPSTREAM_INTAKE.md); they never modify PHOENIX source files.
+
+## Release path
+
+```text
+upstream / labs / feature branches
+            |
+            v
+phoenix/evolution-inbox
+            |
+      KIRA + CI gates
+            |
+            v
+          main
+            |
+       CI succeeds
+            |
+            v
+ phoenix/update-channel
+            |
+            v
+     PHOENIX installs
+```
+
+`main` is the integration source of truth. After CI, the promoted `stable` branch is the release pointer consumed by installations. `.github/workflows/phoenix-stable-update-channel.yml` publishes channel identity and audit metadata to `.phoenix/channel/stable.json` on the isolated `phoenix/update-channel` branch; the updater fetches the current exact SHA from `origin/stable`, so a later promotion is detected even when the metadata branch has not changed.
+
+The update channel contains metadata only. Experimental source is never copied into it and clients never install from `phoenix/evolution-inbox`, Codex branches, Claude branches, DeepSeek upstream branches, or a laboratory branch.
+
+## Client behavior
+
+Source checkouts run `scripts/phoenix-auto-update.mjs`.
+
+Default policy is `PHOENIX_UPDATE_MODE=auto`:
+
+1. verify that `origin` is the official PHOENIX repository;
+2. fetch the promoted `stable` branch (or `PHOENIX_UPDATE_STABLE_BRANCH`);
+3. fetch the stable-channel manifest;
+4. verify the fetched stable commit exists locally;
+5. refuse downgrade; permit unrelated release history only for a managed `main` or `stable` checkout;
+6. prepare and validate candidates in detached staging even when the worktree contains local changes, but require a clean live worktree before activation;
+7. create a detached temporary Git worktree at the candidate commit;
+8. run a frozen dependency install, full build, and CLI smoke test there;
+9. record the current commit at `refs/phoenix/recovery/last-good`;
+10. advance a clean live `main` or `stable` checkout with `git merge --ff-only`, or replace unrelated history in a managed release checkout with `git reset --hard` after the same preflight and recovery checks;
+11. install, rebuild, and smoke-test the live tree;
+12. if the live step fails, reset to the recovery commit and rebuild the last known-good version.
+
+The updater does not read, copy, reset, delete, or migrate `$DSH_HOME`, credential stores, sessions, user projects, memories, or other user data.
+
+## While PHOENIX is open
+
+The CLI starts a low-frequency update watcher. The default poll is ten minutes. When a new stable SHA appears, the running harness prints an update notice but does not replace its own files while a session is active. A locally modified checkout still gets an isolated staging preflight; the watcher records `available` with `phase: worktree`, leaves the host running, and waits for a clean live checkout before activation. In `auto` mode installation is deferred until that PHOENIX process exits, then the candidate is re-fetched and revalidated before installation.
+
+The next Windows launch also performs an update check before boot. Ordinary network/channel failures leave the last-known-good PHOENIX available. Only the exceptional condition where both a live update and its rollback fail uses fatal updater exit code `12`.
+
+## Policy controls
+
+- `PHOENIX_UPDATE_MODE=auto` — default; notify and install stable updates safely.
+- `PHOENIX_UPDATE_MODE=notify` — announce availability but do not mutate the checkout.
+- `PHOENIX_UPDATE_MODE=off` — disable stable-channel checks.
+- `PHOENIX_UPDATE_POLL_MS=<milliseconds>` — watcher interval, clamped to at least one minute.
+
+Development branches are never mutated automatically. They still fetch and report the promoted stable target, so the UI can show that an update exists without rewriting local work. A clean checkout marked with `.phoenix-managed-install` may replace unrelated legacy release history, retaining the previous SHA at `refs/phoenix/recovery/pre-stable-realign` before activation. Set `PHOENIX_UPDATE_STABLE_BRANCH=main` only for installations whose release pointer is still named `main`.
+
+## Recovery and audit
+
+The last pre-update source commit is retained at:
+
+```text
+refs/phoenix/recovery/last-good
+```
+
+The latest updater outcome is written inside the repository Git metadata:
+
+```text
+.git/phoenix-update-state.json
+```
+
+This state records source/target SHAs and outcome, not credentials or user content.
+
+## Trust boundary
+
+This mechanism distributes only commits that have already crossed the PHOENIX stable boundary. It is deliberately not a peer-to-peer self-modification system. A local PHOENIX may invent tools, specialists, strategies, experiments, or candidate source changes inside its laboratory/evolution boundary, but executable evolution must still become reviewed source and pass the repository gates before it reaches `main` and therefore before it can reach other PHOENIX installations.

@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/superpowers/specs/2026-09-12-cognitive-runtime-foundation-design.md
+2026-09-12-cognitive-runtime-foundation-design.md: c170c5d1a1b1c553fe8829f2dfb20d2b58f61a92
+2026-09-12-cognitive-runtime-foundation-design.zh.md: 358abc05f6b1ea8bce81a0e4408dde5c33826e0d

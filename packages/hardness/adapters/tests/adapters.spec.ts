@@ -1,0 +1,208 @@
+import { describe, expect, it, vi } from 'vitest'
+import { Context } from '@phoenix-ai/cordis'
+import SystemPrompt, { renderPrompt } from '@phoenix-ai/dsh-system-prompt'
+import ToolRuntimePlugin from '@phoenix-ai/dsh-tools'
+import SkillRegistryPlugin from '@phoenix-ai/dsh-skill'
+import HardnessRegistry from '../../hardness/src/index.ts'
+import { apply, indexSkills, indexTools } from '../src/index.ts'
+import type { HardnessService } from '../../hardness/src/types.ts'
+import type { ToolRuntime } from '@phoenix-ai/dsh-tools'
+import type { SkillRegistry, SkillSummary } from '@phoenix-ai/dsh-skill'
+
+describe('HARDNESS source adapters', () => {
+  it('mounts the host RPC and protocol only for the host adapter', async () => {
+    const context = new Context()
+    await context.plugin(SystemPrompt)
+    await context.plugin(ToolRuntimePlugin)
+    await context.plugin(SkillRegistryPlugin)
+    await context.plugin(HardnessRegistry)
+    const hardness = context.get('hardness') as HardnessService
+    const handle = vi.fn(() => async () => {})
+    context.provide('connection', { rpc: { handle } } as never)
+    context.provide('agents', { get: () => undefined } as never)
+    context.provide('approval', { request: vi.fn() } as never)
+
+    const dispose = await apply(context, { judgeProvider: 'spawn', modelTools: false })
+    expect(handle).toHaveBeenCalledWith('/hardness', expect.any(Function), { authority: 'loopback' })
+    expect(context.tools.get('hardness_run')).toBeUndefined()
+    expect(context.tools.get('hardness_workflow')).toBeUndefined()
+    expect(context.tools.get('phoenix_visualize')).toBeUndefined()
+    expect(context.tools.get('phoenix_3d')).toBeUndefined()
+    expect(context.tools.get('phoenix_game')).toBeUndefined()
+    expect(hardness.get('tool:hardness_run' as never)).toBeUndefined()
+    expect(hardness.get('tool:hardness_workflow' as never)).toBeUndefined()
+    const assembly = await context.systemPrompt.assemble()
+    expect(renderPrompt(assembly)).toContain('<phoenix_hardness_protocol>')
+    expect(renderPrompt(assembly)).toContain('<phoenix_cognitive_workflows>')
+
+    dispose()
+    expect(context.tools.get('hardness_run')).toBeUndefined()
+    expect(context.tools.get('hardness_workflow')).toBeUndefined()
+    await context.fiber.dispose()
+  })
+
+  it('does not mount the host RPC for the model-facing preset adapter', async () => {
+    const context = new Context()
+    await context.plugin(SystemPrompt)
+    await context.plugin(ToolRuntimePlugin)
+    await context.plugin(SkillRegistryPlugin)
+    await context.plugin(HardnessRegistry)
+    const handle = vi.fn(() => async () => {})
+    context.provide('connection', { rpc: { handle } } as never)
+    context.provide('agents', { get: () => undefined } as never)
+    context.provide('approval', { request: vi.fn() } as never)
+
+    const dispose = await apply(context, { judgeProvider: 'spawn', modelTools: true })
+    expect(context.tools.get('hardness_workflow')).toBeDefined()
+    expect(context.tools.get('phoenix_visualize')).toBeDefined()
+    expect(context.tools.get('phoenix_3d')).toBeDefined()
+    expect(context.tools.get('phoenix_game')).toBeDefined()
+    expect(context.tools.get('hardness_run')).toBeDefined()
+    expect(handle).not.toHaveBeenCalled()
+
+    const observed = await context.systemPrompt.assemble({
+      agent: { id: 'kira-session', options: { provider: 'test', model: 'model-a' } },
+    } as never)
+    const humanos = observed.contexts.find(item => item.name === 'hardness:humanos-self-model')?.text
+    expect(humanos).toContain('<phoenix_humanos_self_model>')
+    expect(humanos).toContain('"identity":"kira"')
+    expect(humanos).toContain('"scope":"current-agent-and-global-registry"')
+    expect(humanos).not.toContain('model-a')
+    expect(humanos).not.toContain('kira-session')
+
+    dispose()
+    expect(context.tools.get('hardness_workflow')).toBeUndefined()
+    const afterDispose = await context.systemPrompt.assemble({
+      agent: { id: 'kira-session', options: { provider: 'test', model: 'model-b' } },
+    } as never)
+    expect(afterDispose.contexts.some(item => item.name === 'hardness:humanos-self-model')).toBe(false)
+    await context.fiber.dispose()
+  })
+
+  it('mounts without a connection and waits for the optional RPC host', async () => {
+    const context = new Context()
+    await context.plugin(SystemPrompt)
+    await context.plugin(ToolRuntimePlugin)
+    await context.plugin(SkillRegistryPlugin)
+    await context.plugin(HardnessRegistry)
+    context.provide('agents', { get: () => undefined } as never)
+    context.provide('approval', { request: vi.fn() } as never)
+
+    const handle = vi.fn(() => async () => {})
+    const dispose = await apply(context, { judgeProvider: 'spawn', modelTools: false })
+    expect(context.tools.get('hardness_run')).toBeUndefined()
+    expect(context.tools.get('hardness_workflow')).toBeUndefined()
+    expect(context.tools.get('phoenix_visualize')).toBeUndefined()
+    expect(context.tools.get('phoenix_3d')).toBeUndefined()
+    expect(context.tools.get('phoenix_game')).toBeUndefined()
+    expect(handle).not.toHaveBeenCalled()
+
+    context.provide('connection', { rpc: { handle } } as never)
+    expect(handle).toHaveBeenCalledWith('/hardness', expect.any(Function), { authority: 'loopback' })
+
+    dispose()
+    await context.fiber.dispose()
+  })
+
+  it('exposes the read-only connector inventory when authorization is mounted', async () => {
+    const context = new Context()
+    await context.plugin(SystemPrompt)
+    await context.plugin(ToolRuntimePlugin)
+    await context.plugin(SkillRegistryPlugin)
+    await context.plugin(HardnessRegistry)
+    context.provide('agents', { get: () => undefined } as never)
+    context.provide('approval', { request: vi.fn() } as never)
+    context.provide('authorization', {
+      list: () => [{
+        key: 'authorization-google/account',
+        label: 'Google Workspace',
+        methods: [{ id: 'oauth', label: 'Sign in with Google' }],
+        inFlight: false,
+      }],
+      inspect: async () => undefined,
+    } as never)
+
+    const dispose = await apply(context, { judgeProvider: 'spawn' })
+    expect(context.tools.get('connector_list')).toBeDefined()
+    // The connector inventory is a scoped model tool. Its host-side
+    // capability index is intentionally not mutated by a preset mount.
+    expect((context.get('hardness') as HardnessService).get('tool:connector_list' as never)).toBeUndefined()
+
+    dispose()
+    expect(context.tools.get('connector_list')).toBeUndefined()
+    await context.fiber.dispose()
+  })
+
+  it('exposes the read-only connector inventory when only MCP state is mounted', async () => {
+    const context = new Context()
+    await context.plugin(SystemPrompt)
+    await context.plugin(ToolRuntimePlugin)
+    await context.plugin(SkillRegistryPlugin)
+    await context.plugin(HardnessRegistry)
+    context.provide('agents', { get: () => undefined } as never)
+    context.provide('approval', { request: vi.fn() } as never)
+    context.provide('mcpConnectors', { list: () => [] } as never)
+    const dispose = await apply(context, { judgeProvider: 'spawn' })
+    expect(context.tools.get('connector_list')).toBeDefined()
+    dispose()
+    await context.fiber.dispose()
+  })
+
+  it('keeps dynamic tool projections synchronized and excludes internal tools', async () => {
+    const context = new Context()
+    await context.plugin(HardnessRegistry)
+    const hardness = context.get('hardness') as HardnessService
+    let schemas = [{ name: 'mcp__calendar__list', description: 'List calendar events.' }]
+    let change: (() => void) | undefined
+    const events = {
+      on: vi.fn((_event: 'tools/change', listener: () => void) => {
+        change = listener
+        return () => { change = undefined }
+      }),
+    }
+    const tools = { schemas: () => schemas } as unknown as ToolRuntime
+
+    const dispose = indexTools(tools, hardness, { events, exclude: ['hardness_run', 'hardness_workflow'] })
+    expect(hardness.get('tool:mcp__calendar__list' as never)?.description).toBe('List calendar events.')
+
+    schemas = [
+      { name: 'mcp__calendar__create', description: 'Create a calendar event.' },
+      { name: 'hardness_run', description: 'internal' },
+      { name: 'hardness_workflow', description: 'internal' },
+    ]
+    change?.()
+    expect(hardness.get('tool:mcp__calendar__list' as never)).toBeUndefined()
+    expect(hardness.get('tool:mcp__calendar__create' as never)?.description).toBe('Create a calendar event.')
+    expect(hardness.get('tool:hardness_run' as never)).toBeUndefined()
+    expect(hardness.get('tool:hardness_workflow' as never)).toBeUndefined()
+
+    dispose()
+    expect(hardness.list()).toEqual([])
+    await context.fiber.dispose()
+  })
+
+  it('projects tools and skills and disposes owned descriptors', async () => {
+    const context = new Context()
+    await context.plugin(HardnessRegistry)
+    const hardness = context.get('hardness') as HardnessService | undefined
+    if (hardness === undefined) throw new Error('hardness service missing')
+
+    const tools = { schemas: () => [{ name: 'read_calendar', description: 'Reads calendar events.', parameters: { type: 'object' } }] } as unknown as ToolRuntime
+    const skills = { list: async () => [{
+      name: 'calendar-planning', description: 'Plans calendar events.', invocation: { modelInvocable: true, userInvocable: true }, source: 'runtime', provider: 'fixture',
+    } as SkillSummary] } as unknown as SkillRegistry
+
+    const disposeTools = indexTools(tools, hardness)
+    const disposeSkills = await indexSkills(skills, hardness)
+    expect(hardness.get('tool:read_calendar' as never)?.status).toBe('experimental')
+    expect(hardness.get('tool:read_calendar' as never)?.modalities).toEqual(['native'])
+    expect(hardness.get('skill:calendar-planning' as never)?.status).toBe('experimental')
+    expect(hardness.get('skill:calendar-planning' as never)?.modalities).toEqual(['native'])
+    expect(hardness.route({ kind: 'tool' }, { modalities: ['native'] }).kind).toBe('missing')
+
+    disposeTools()
+    disposeSkills()
+    expect(hardness.list()).toEqual([])
+    await context.fiber.dispose()
+  })
+})

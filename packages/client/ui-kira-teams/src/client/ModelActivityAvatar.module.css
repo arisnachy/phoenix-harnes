@@ -1,0 +1,160 @@
+/* Phoenix Kira / team — stable, crisp portraits without distracting movement. */
+.avatar {
+  --avatar-accent: #6881a5;
+  --avatar-surface: var(--dsh-color-surface, #fff);
+  position: relative;
+  isolation: isolate;
+  flex: none;
+  display: inline-block;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--avatar-surface);
+}
+
+.card { width: 50px; height: 50px; }
+
+.portraitImage {
+  position: absolute;
+  z-index: 1;
+  inset: 3px;
+  width: calc(100% - 6px);
+  height: calc(100% - 6px);
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: 50% 44%;
+  image-rendering: auto;
+  filter: none;
+  transform: none;
+  background: #f4e9df;
+  user-select: none;
+  pointer-events: none;
+}
+
+.ring {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border: 1.5px solid color-mix(in srgb, var(--avatar-accent) 78%, var(--avatar-surface));
+  border-radius: 50%;
+  box-shadow: 0 2px 9px rgb(52 37 19 / 11%), inset 0 0 0 2px var(--avatar-surface), 0 0 0 2px color-mix(in srgb, var(--avatar-accent) 12%, transparent);
+  pointer-events: none;
+}
+
+.badge {
+  position: absolute;
+  z-index: 3;
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--avatar-surface);
+  border-radius: 50%;
+  background: #87929b;
+  box-shadow: 0 1px 3px rgb(52 37 19 / 14%);
+  pointer-events: none;
+}
+
+/* The compact roster mark is physically outside the portrait; conversation
+   headers instead render the full named badge beside the agent name. */
+.engineBadge {
+  position: absolute;
+  z-index: 4;
+  top: 50%;
+  right: -27px;
+  transform: translateY(-50%);
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid color-mix(in srgb, var(--engine-accent) 34%, var(--avatar-surface));
+  border-radius: 7px;
+  background: var(--avatar-surface);
+  box-shadow: 0 1px 4px rgb(50 37 25 / 11%);
+  color: var(--engine-accent);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  pointer-events: auto;
+  --engine-accent: #ac7136;
+  --engine-tint: #fff0df;
+}
+
+.headerEngineBadge {
+  position: static;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  min-width: 0;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  transform: none;
+  background: color-mix(in srgb, var(--engine-tint) 75%, var(--avatar-surface));
+  box-shadow: 0 1px 3px rgb(50 37 25 / 7%);
+}
+
+.headerEngineBadge svg { flex: none; }
+
+.engineName {
+  color: var(--engine-accent);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+
+/* Legacy text remains selectable for diagnostics; the actual icon is vector. */
+.engineMarkText {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.engineBadge[data-engine-family='luna'] { --engine-accent: #6079a5; --engine-tint: #e9eef8; }
+.engineBadge[data-engine-family='astra'] { --engine-accent: #9272b9; --engine-tint: #f0eafa; }
+.engineBadge[data-engine-family='other'] { --engine-accent: #9a6d56; --engine-tint: #f5ede6; }
+
+@media (prefers-color-scheme: dark) {
+  .engineBadge { box-shadow: 0 1px 4px rgb(0 0 0 / 25%); }
+}
+
+/* Keep Kira unmistakable, but without the extra animated halo or K badge. */
+.avatar[data-avatar='kira'] { --avatar-accent: #c9954d; }
+.avatar[data-avatar='aurora'],
+.avatar[data-avatar='vega'] { --avatar-accent: #ca8ca6; }
+.avatar[data-avatar='atlas'],
+.avatar[data-avatar='helix'] { --avatar-accent: #6997c2; }
+.avatar[data-avatar='nova'],
+.avatar[data-avatar='quasar'] { --avatar-accent: #8e8ac1; }
+.avatar[data-avatar='prisma'],
+.avatar[data-avatar='lyra'] { --avatar-accent: #d28aac; }
+.avatar[data-avatar='orion'],
+.avatar[data-avatar='zenith'] { --avatar-accent: #7a8fb7; }
+.avatar[data-avatar='solaria'],
+.avatar[data-avatar='vortice'] { --avatar-accent: #d3a169; }
+.avatar[data-avatar='cobalto'],
+.avatar[data-avatar='eclipse'] { --avatar-accent: #869bb3; }
+.avatar[data-avatar='nexo'],
+.avatar[data-avatar='astra'] { --avatar-accent: #c9a277; }
+.avatar[data-avatar='senda'],
+.avatar[data-avatar='argo'] { --avatar-accent: #86af9e; }
+.avatar[data-avatar='orbita'],
+.avatar[data-avatar='lumen'] { --avatar-accent: #8aaabf; }
+
+/* Only the small dot changes when Phoenix reports actual work state. */
+.avatar[data-state='running'] .badge { background: #4391da; }
+.avatar[data-state='pending'] .badge { background: #d4983c; }
+.avatar[data-state='ready'] .badge { background: #37b67a; }
+.avatar[data-state='done'] .badge { background: #8c9d99; }
+
+@media (max-width: 620px) {
+  .card { width: 44px; height: 44px; }
+}

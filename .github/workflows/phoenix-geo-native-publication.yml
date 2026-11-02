@@ -1,0 +1,39 @@
+name: PHOENIX Native Geographic Map Publication
+on:
+  pull_request:
+    paths:
+      - 'packages/hardness/adapters/src/geo-map-tool.ts'
+      - 'packages/hardness/adapters/tests/geo-map-tool.spec.ts'
+      - 'packages/hardness/adapters/src/index.ts'
+      - 'packages/client/ui-conversation/src/client/chat/AssistantMarkdown.tsx'
+      - 'packages/client/ui-conversation/tests/geo-native-publication.client.spec.tsx'
+      - '.github/workflows/phoenix-geo-native-publication.yml'
+  push:
+    branches: [main, stable]
+    paths:
+      - 'packages/hardness/adapters/src/geo-map-tool.ts'
+      - 'packages/hardness/adapters/tests/geo-map-tool.spec.ts'
+      - 'packages/hardness/adapters/src/index.ts'
+      - 'packages/client/ui-conversation/src/client/chat/AssistantMarkdown.tsx'
+      - 'packages/client/ui-conversation/tests/geo-native-publication.client.spec.tsx'
+      - '.github/workflows/phoenix-geo-native-publication.yml'
+permissions:
+  contents: read
+jobs:
+  native-map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Publisher rejects invalid geography and emits native receipt
+        run: pnpm exec vitest run packages/hardness/adapters/tests/geo-map-tool.spec.ts
+      - name: Inline geographic map and recovery button render
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/geo-native-publication.client.spec.tsx packages/client/ui-conversation/tests/geo-map.client.spec.ts packages/client/ui-conversation/tests/geo-visual-quality.client.spec.tsx
+      - name: Verify host and client TypeScript contracts
+        run: pnpm run build:lib:host && pnpm run build:lib:client

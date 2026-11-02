@@ -1,0 +1,405 @@
+/** Staged browser form over the Host's user-profile settings namespace. */
+
+import { createSnapshotStore, type SettingsScope, type SnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
+import type { AssistantGender, AssistantGenderMode, UserAddressMode, UserProfileConsent, UserProfileFamilyMember, PersonalMoment, UserProfileRowState, UserProfileSettings } from './types.ts'
+
+/** Settings namespace join key; it intentionally does not import the Host package. */
+export const USER_PROFILE_SETTINGS_NAMESPACE = 'user-profile'
+
+const FIELDS = ['assistantName', 'preferredName', 'profession', 'professionalTitle', 'dateOfBirth', 'gender', 'pronouns', 'tone', 'countryCode', 'momentsTimeZone'] as const
+type TextField = typeof FIELDS[number]
+type ConsentField = keyof UserProfileConsent
+
+/** Actions injected into the row component. */
+export interface UserProfileRowActions {
+  edit: (field: TextField | 'family' | 'specialDates', text: string) => void
+  setAssistantGender: (value: AssistantGender) => void
+  setAssistantGenderAutomatic: () => void
+  setAddressingMode: (mode: UserAddressMode) => void
+  setConsent: (field: ConsentField, value: boolean) => void
+  save: () => void
+  discard: () => void
+  clear: () => void
+}
+
+/** Injected face for the row's store and actions. */
+export interface UserProfileRowFace extends UserProfileRowActions {
+  hooks: { userProfile: SnapshotStore<UserProfileRowState> }
+}
+
+interface Draft {
+  assistantName: string
+  assistantGender: AssistantGender
+  assistantGenderSource: AssistantGenderMode
+  preferredName: string
+  profession: string
+  professionalTitle: string
+  addressingMode: UserAddressMode
+  dateOfBirth: string
+  gender: string
+  pronouns: string
+  tone: string
+  family: string
+  countryCode: string
+  momentsTimeZone: string
+  specialDates: string
+  consent: UserProfileConsent
+}
+
+const EMPTY_CONSENT: UserProfileConsent = {
+  preferredName: false,
+  profession: false,
+  professionalTitle: false,
+  dateOfBirth: false,
+  gender: false,
+  pronouns: false,
+  tone: false,
+  family: false,
+  moments: false,
+}
+
+function emptyDraft(): Draft {
+  return {
+    assistantName: 'KIRA', assistantGender: 'feminine', assistantGenderSource: 'auto',
+    preferredName: '', profession: '', professionalTitle: '', addressingMode: 'automatic',
+    dateOfBirth: '', gender: '', pronouns: '', tone: '', family: '', countryCode: '', momentsTimeZone: '', specialDates: '',
+    consent: { ...EMPTY_CONSENT },
+  }
+}
+
+function textValue(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function toDraft(value: UserProfileSettings | undefined): Draft {
+  if (value === undefined) return emptyDraft()
+  return {
+    assistantName: textValue(value.assistantName) || 'KIRA',
+    assistantGender: value.assistantGender ?? 'feminine',
+    assistantGenderSource: value.assistantGenderSource ?? 'auto',
+    preferredName: textValue(value.preferredName),
+    profession: textValue(value.profession),
+    professionalTitle: textValue(value.professionalTitle),
+    addressingMode: value.addressingMode ?? 'automatic',
+    dateOfBirth: textValue(value.dateOfBirth),
+    gender: textValue(value.gender),
+    pronouns: textValue(value.pronouns),
+    tone: textValue(value.tone),
+    family: value.family?.map(member => member.name === undefined ? member.relationship : `${member.relationship} | ${member.name}`).join('\n') ?? '',
+    countryCode: textValue(value.countryCode),
+    momentsTimeZone: textValue(value.momentsTimeZone),
+    specialDates: value.specialDates?.map(row => `${row.date} | ${row.label}${row.solemn ? ' | solemn' : ''}`).join('\n') ?? '',
+    consent: { ...EMPTY_CONSENT, ...value.consent },
+  }
+}
+
+function parseFamily(text: string): UserProfileFamilyMember[] | undefined {
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+  if (lines.length === 0) return undefined
+  const members: UserProfileFamilyMember[] = []
+  for (const line of lines) {
+    const [relationship, ...nameParts] = line.split('|')
+    const relation = relationship?.trim() ?? ''
+    const name = nameParts.join('|').trim()
+    if (relation === '') return undefined
+    members.push(name === '' ? { relationship: relation } : { relationship: relation, name })
+  }
+  return members
+}
+
+/** User-friendly lines, with conservative dates and explicit solemn opt-in. */
+function parseSpecialDates(text: string): PersonalMoment[] | undefined {
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+  if (lines.length === 0) return []
+  if (lines.length > 100) return undefined
+  const result: PersonalMoment[] = []
+  for (const line of lines) {
+    const parts = line.split('|').map(part => part.trim())
+    const date = parts[0] ?? ''
+    const label = parts[1] ?? ''
+    const third = parts[2]
+    const annual = /^\d{2}-\d{2}$/.test(date) ? `2024-${date}` : date
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(annual) ? new Date(annual + 'T00:00:00Z') : new Date(NaN)
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== annual
+      || !label || label.length > 120 || (third !== undefined && third !== 'solemn') || parts.length > 3) return undefined
+    result.push({ date, label, ...(third === 'solemn' ? { solemn: true } : {}) })
+  }
+  return result
+}
+
+function fieldState(text: string, invalid = false) {
+  return { text, invalid }
+}
+
+/** Form controller that keeps drafts local until the explicit Save action. */
+export class UserProfileForm {
+  /** Reactive row state projected from the local draft and settings snapshot. */
+  readonly store: SnapshotStore<UserProfileRowState>
+  private draft = emptyDraft()
+  private source: UserProfileSettings | undefined
+  private saving = false
+  private failed = false
+  private saved = false
+  private disposed = false
+  private readonly unsubscribe: () => void
+
+  /** @param scope - settings scope bound to the private profile namespace. */
+  constructor(private readonly scope: SettingsScope<UserProfileSettings>) {
+    this.store = createSnapshotStore(this.project())
+    this.unsubscribe = scope.subscribe(() => {
+      if (this.disposed) return
+      // Compare the draft with the previous Host snapshot before accepting the
+      // incoming one. Otherwise first hydration makes persisted values look
+      // like conflicting local edits and leaves the visible form empty.
+      const hadLocalEdits = this.isDirty()
+      const snapshot = scope.getSnapshot()
+      this.source = snapshot.value
+      if (!hadLocalEdits) this.draft = toDraft(this.source)
+      this.publish()
+    })
+    const snapshot = scope.getSnapshot()
+    this.source = snapshot.value
+    this.draft = toDraft(this.source)
+    this.publish()
+  }
+
+  /** Return the row's injected face and actions.
+   * @returns callbacks and reactive state used by the settings row.
+   */
+  inject(): UserProfileRowFace {
+    return {
+      hooks: { userProfile: this.store },
+      edit: (field, text) => { this.edit(field, text) },
+      setAssistantGender: (value) => { this.setAssistantGender(value) },
+      setAssistantGenderAutomatic: () => { this.setAssistantGenderAutomatic() },
+      setAddressingMode: (mode) => { this.setAddressingMode(mode) },
+      setConsent: (field, value) => { this.setConsent(field, value) },
+      save: () => { void this.save() },
+      discard: () => { this.discard() },
+      clear: () => { void this.clear() },
+    }
+  }
+
+  /** Dispose the form and remove its settings subscription.
+   * @returns nothing after the scope listener is removed.
+   */
+  dispose(): void {
+    this.disposed = true
+    this.unsubscribe()
+  }
+
+  private edit(field: TextField | 'family' | 'specialDates', text: string): void {
+    this.draft[field] = text
+    this.failed = false
+    this.saved = false
+    this.publish()
+  }
+
+  private setAssistantGender(value: AssistantGender): void {
+    this.draft.assistantGender = value
+    this.draft.assistantGenderSource = 'manual'
+    this.failed = false
+    this.saved = false
+    this.publish()
+  }
+
+  private setAssistantGenderAutomatic(): void {
+    this.draft.assistantGenderSource = 'auto'
+    this.failed = false
+    this.saved = false
+    this.publish()
+  }
+
+  private setAddressingMode(mode: UserAddressMode): void {
+    this.draft.addressingMode = mode
+    this.failed = false
+    this.saved = false
+    this.publish()
+  }
+
+  private setConsent(field: ConsentField, value: boolean): void {
+    if (field === 'moments' && value) {
+      if (this.draft.countryCode.trim() === '') {
+        const region = typeof navigator === 'undefined' ? undefined : new Intl.Locale(navigator.language).region
+        if (region !== undefined && /^[A-Z]{2}$/.test(region)) this.draft.countryCode = region
+      }
+      if (this.draft.momentsTimeZone.trim() === '') {
+        this.draft.momentsTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      }
+    }
+    this.draft.consent = { ...this.draft.consent, [field]: value }
+    this.failed = false
+    this.saved = false
+    this.publish()
+  }
+
+  private discard(): void {
+    this.draft = toDraft(this.source)
+    this.failed = false
+    this.saved = false
+    this.publish()
+  }
+
+  private async clear(): Promise<void> {
+    const snapshot = this.scope.getSnapshot()
+    if (!snapshot.writable || snapshot.status !== 'ready' || this.saving) return
+    this.saving = true
+    this.failed = false
+    this.saved = false
+    this.publish()
+    let ok = true
+    for (const field of [...FIELDS, 'assistantGender' as const, 'assistantGenderSource' as const, 'addressingMode' as const, 'family' as const, 'specialDates' as const, 'consent' as const]) {
+      try {
+        await this.scope.unset(field)
+      } catch {
+        ok = false
+      }
+    }
+    const next = this.scope.getSnapshot().value
+    if (next !== undefined) {
+      this.source = next
+      this.draft = toDraft(next)
+    }
+    this.failed = !ok
+    this.saving = false
+    this.publish()
+  }
+
+  private async save(): Promise<void> {
+    const snapshot = this.scope.getSnapshot()
+    if (!snapshot.writable || snapshot.status !== 'ready' || this.saving || this.invalid()) return
+    this.saving = true
+    this.failed = false
+    this.saved = false
+    this.publish()
+    let ok = true
+    const values: Record<string, unknown> = {
+      assistantName: this.draft.assistantName.trim(),
+      preferredName: this.draft.preferredName.trim(),
+      profession: this.draft.profession.trim(),
+      professionalTitle: this.draft.professionalTitle.trim(),
+      addressingMode: this.draft.addressingMode,
+      dateOfBirth: this.draft.dateOfBirth.trim(),
+      gender: this.draft.gender.trim(),
+      pronouns: this.draft.pronouns.trim(),
+      tone: this.draft.tone.trim(),
+      assistantGender: this.draft.assistantGender,
+      assistantGenderSource: this.draft.assistantGenderSource,
+      family: parseFamily(this.draft.family),
+      specialDates: parseSpecialDates(this.draft.specialDates),
+      consent: this.draft.consent,
+    }
+    try {
+      if (values.assistantGenderSource === 'auto') {
+        await this.scope.unset('assistantGenderSource')
+        await this.scope.unset('assistantGender')
+      } else {
+        await this.scope.set('assistantGenderSource', values.assistantGenderSource)
+        await this.scope.set('assistantGender', values.assistantGender)
+      }
+    } catch {
+      ok = false
+    }
+    try {
+      if (values.addressingMode === 'automatic') await this.scope.unset('addressingMode')
+      else await this.scope.set('addressingMode', values.addressingMode)
+    } catch {
+      ok = false
+    }
+    for (const field of FIELDS) {
+      try {
+        const value = values[field]
+        if (value === '') await this.scope.unset(field)
+        else await this.scope.set(field, value)
+      } catch {
+        ok = false
+      }
+    }
+    try {
+      const family = values.family
+      if (family === undefined) await this.scope.unset('family')
+      else await this.scope.set('family', family)
+      const specialDates = values.specialDates as PersonalMoment[] | undefined
+      if (specialDates === undefined || specialDates.length === 0) await this.scope.unset('specialDates')
+      else await this.scope.set('specialDates', specialDates)
+      await this.scope.set('consent', values.consent)
+    } catch {
+      ok = false
+    }
+    const next = this.scope.getSnapshot().value
+    if (next !== undefined) {
+      this.source = next
+      if (ok && !this.invalidAgainst(next)) this.draft = toDraft(next)
+    }
+    this.failed = !ok || this.isDirty()
+    this.saved = !this.failed
+    this.saving = false
+    this.publish()
+  }
+
+  private invalid(): boolean {
+    return this.draft.countryCode.trim() !== '' && !/^[A-Z]{2}$/.test(this.draft.countryCode.trim().toUpperCase())
+      || (this.draft.momentsTimeZone.trim() !== '' && !isValidZone(this.draft.momentsTimeZone.trim()))
+      || parseSpecialDates(this.draft.specialDates) === undefined
+      || this.draft.dateOfBirth !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(this.draft.dateOfBirth.trim())
+      || (this.draft.family.trim() !== '' && parseFamily(this.draft.family) === undefined)
+  }
+
+  private invalidAgainst(value: UserProfileSettings): boolean {
+    return this.draft.specialDates.trim() !== (value.specialDates?.map(row => `${row.date} | ${row.label}${row.solemn ? ' | solemn' : ''}`).join('\n') ?? '')
+      || this.draft.assistantName.trim() !== textValue(value.assistantName)
+      || this.draft.assistantGender !== value.assistantGender
+      || this.draft.assistantGenderSource !== (value.assistantGenderSource ?? 'auto')
+      || this.draft.addressingMode !== (value.addressingMode ?? 'automatic')
+      || this.draft.dateOfBirth.trim() !== textValue(value.dateOfBirth)
+      || this.draft.family.trim() !== (value.family?.map(member => member.name === undefined ? member.relationship : `${member.relationship} | ${member.name}`).join('\n') ?? '')
+  }
+
+  private isDirty(): boolean {
+    if (this.source === undefined) return false
+    const next = toDraft(this.source)
+    return FIELDS.some(field => this.draft[field].trim() !== next[field].trim())
+      || this.draft.family.trim() !== next.family.trim()
+      || this.draft.specialDates.trim() !== next.specialDates.trim()
+      || this.draft.addressingMode !== next.addressingMode
+      || this.draft.assistantGender !== next.assistantGender
+      || this.draft.assistantGenderSource !== next.assistantGenderSource
+      || (Object.keys(EMPTY_CONSENT) as ConsentField[]).some(field => this.draft.consent[field] !== next.consent[field])
+  }
+
+  private project(): UserProfileRowState {
+    return {
+      available: this.scope.getSnapshot().status === 'ready',
+      writable: this.scope.getSnapshot().writable,
+      dirty: this.isDirty(),
+      invalid: this.invalid(),
+      saving: this.saving,
+      failed: this.failed,
+      saved: this.saved,
+      assistantName: fieldState(this.draft.assistantName),
+      assistantGender: this.draft.assistantGender,
+      assistantGenderSource: this.draft.assistantGenderSource,
+      preferredName: fieldState(this.draft.preferredName),
+      profession: fieldState(this.draft.profession),
+      professionalTitle: fieldState(this.draft.professionalTitle),
+      addressingMode: this.draft.addressingMode,
+      dateOfBirth: fieldState(this.draft.dateOfBirth, this.draft.dateOfBirth !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(this.draft.dateOfBirth.trim())),
+      gender: fieldState(this.draft.gender),
+      pronouns: fieldState(this.draft.pronouns),
+      tone: fieldState(this.draft.tone),
+      countryCode: fieldState(this.draft.countryCode),
+      momentsTimeZone: fieldState(this.draft.momentsTimeZone),
+      specialDates: fieldState(this.draft.specialDates, parseSpecialDates(this.draft.specialDates) === undefined),
+      family: fieldState(this.draft.family, this.draft.family.trim() !== '' && parseFamily(this.draft.family) === undefined),
+      consent: { ...this.draft.consent },
+    }
+  }
+
+  private publish(): void {
+    if (!this.disposed) this.store.set(this.project())
+  }
+}
+
+function isValidZone(value: string): boolean {
+  try { new Intl.DateTimeFormat('en-US', { timeZone: value }); return true } catch { return false }
+}

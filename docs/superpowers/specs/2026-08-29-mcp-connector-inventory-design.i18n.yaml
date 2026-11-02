@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/superpowers/specs/2026-08-29-mcp-connector-inventory-design.md
+2026-08-29-mcp-connector-inventory-design.md: 031c5a4c30b599a6d4d24ef30892369fea0b2dbb
+2026-08-29-mcp-connector-inventory-design.zh.md: 9eca5232784b6ee3bca188e04a99abb0defbad04

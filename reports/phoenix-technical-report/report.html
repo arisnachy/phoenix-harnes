@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="PHOENIX">
+<meta name="description" content="Informe técnico sobre el uso, la arquitectura y los controles operativos de PHOENIX.">
+<title>PHOENIX — Uso, arquitectura y controles operativos</title>
+<style>
+  @page { size: A4; margin: 0; }
+  :root { --ink:#17324d; --muted:#5c6f80; --line:#d9e3ea; --paper:#f7fafc; --white:#fff; --blue:#155b75; --blue2:#0e7891; --amber:#d58a2a; --amber-soft:#fff3df; --green:#2e7d68; --red:#b75a55; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; color:var(--ink); background:#dfe7ec; font-family: "Segoe UI", Inter, Arial, sans-serif; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { width:210mm; height:297mm; padding:18mm 18mm 14mm; background:var(--paper); position:relative; overflow:hidden; page-break-after:always; }
+  .page:last-child { page-break-after:auto; }
+  .topline { height:4px; width:100%; background:linear-gradient(90deg,var(--blue),var(--blue2),var(--amber)); margin-bottom:12mm; }
+  .eyebrow { letter-spacing:.14em; text-transform:uppercase; font-size:9px; font-weight:700; color:var(--blue2); }
+  h1 { font-size:39px; line-height:1.03; letter-spacing:-.04em; margin:7mm 0 4mm; color:var(--ink); }
+  h2 { font-size:25px; letter-spacing:-.025em; line-height:1.08; margin:3mm 0 4mm; }
+  h3 { font-size:14px; margin:0 0 2mm; color:var(--ink); }
+  p { font-size:11px; line-height:1.48; margin:0 0 3mm; }
+  .lede { font-size:16px; line-height:1.35; max-width:145mm; color:var(--blue); }
+  .small { font-size:9px; line-height:1.4; color:var(--muted); }
+  .source-note { position:absolute; left:18mm; right:18mm; bottom:8mm; font-size:7.5px; line-height:1.25; color:#6e7f8c; border-top:1px solid var(--line); padding-top:2mm; }
+  .footer { position:absolute; right:18mm; bottom:8mm; font-size:8px; color:var(--muted); }
+  .cover { background:linear-gradient(135deg,#ffffff 0%,#f5fafb 60%,#eef4f6 100%); }
+  .cover .topline { margin-bottom:24mm; }
+  .cover-mark { width:35mm; height:35mm; border:2px solid var(--blue2); border-radius:50%; display:grid; place-items:center; position:relative; margin-bottom:12mm; }
+  .cover-mark:before { content:""; width:18mm; height:18mm; border-radius:50%; background:var(--amber); opacity:.9; }
+  .cover-mark:after { content:""; position:absolute; width:39mm; height:12mm; border:1px solid var(--blue2); border-radius:50%; transform:rotate(-28deg); }
+  .cover-meta { display:flex; gap:7mm; margin-top:18mm; }
+  .meta-box { border-left:3px solid var(--amber); padding-left:3mm; min-width:34mm; }
+  .meta-box b { display:block; font-size:10px; }
+  .meta-box span { font-size:9px; color:var(--muted); }
+  .callout { background:var(--white); border:1px solid var(--line); border-left:4px solid var(--amber); padding:5mm; border-radius:2mm; box-shadow:0 2px 9px rgba(23,50,77,.05); }
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:4mm; }
+  .grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:4mm; }
+  .card { background:var(--white); border:1px solid var(--line); padding:4mm; border-radius:2mm; min-height:30mm; }
+  .card .num { color:var(--amber); font-size:19px; font-weight:800; margin-bottom:2mm; }
+  .card p { font-size:10px; color:var(--muted); }
+  .section-head { display:flex; justify-content:space-between; align-items:flex-end; gap:8mm; margin-bottom:6mm; }
+  .section-head p { max-width:80mm; text-align:right; color:var(--muted); font-size:9px; }
+  .flow { display:flex; align-items:stretch; gap:2mm; margin:6mm 0 3mm; }
+  .flow-step { flex:1; background:var(--white); border:1px solid var(--line); padding:3mm 2.5mm; min-height:22mm; position:relative; }
+  .flow-step:not(:last-child):after { content:"→"; position:absolute; right:-4.3mm; top:8mm; color:var(--amber); font-size:17px; font-weight:700; z-index:2; }
+  .flow-step b { display:block; font-size:9.5px; }
+  .flow-step span { display:block; color:var(--muted); font-size:8px; line-height:1.25; margin-top:1mm; }
+  .label { display:inline-block; font-size:8px; text-transform:uppercase; letter-spacing:.12em; font-weight:700; color:var(--blue2); margin-bottom:2mm; }
+  svg { display:block; width:100%; }
+  .diagram { background:var(--white); border:1px solid var(--line); border-radius:2mm; padding:3mm; margin:3mm 0 4mm; }
+  .diagram-title { font-size:9px; font-weight:700; color:var(--blue); margin:0 0 2mm; }
+  .stack { display:grid; gap:2mm; margin-top:4mm; }
+  .stack div { padding:3mm 4mm; border-radius:1.5mm; color:#fff; font-size:10px; font-weight:700; }
+  .stack .s1 { background:#174f68; width:74%; }
+  .stack .s2 { background:#287c92; width:83%; }
+  .stack .s3 { background:#63a6ad; width:92%; }
+  .stack .s4 { background:#d58a2a; width:100%; color:#2c3d49; }
+  table { width:100%; border-collapse:collapse; background:var(--white); font-size:9px; }
+  th { text-align:left; color:#fff; background:var(--blue); padding:2.6mm; font-size:8px; letter-spacing:.05em; text-transform:uppercase; }
+  td { border:1px solid var(--line); padding:2.6mm; vertical-align:top; line-height:1.35; }
+  td:first-child { font-weight:700; color:var(--blue); width:24%; }
+  .status { display:inline-block; padding:1mm 2mm; font-size:8px; border-radius:10px; font-weight:700; }
+  .status.green { color:#206651; background:#e6f3ee; }
+  .status.amber { color:#8a5a12; background:var(--amber-soft); }
+  .status.red { color:#8b403d; background:#f8e7e5; }
+  .quote { font-size:20px; line-height:1.22; color:var(--blue); border-left:4px solid var(--amber); padding-left:5mm; margin:8mm 0; max-width:150mm; }
+  .code { font-family:Consolas, "SFMono-Regular", monospace; font-size:9px; color:var(--blue); background:#eef4f6; padding:1.5mm 2mm; border-radius:1mm; }
+  .two-col { columns:2; column-gap:8mm; }
+  .two-col li { break-inside:avoid; margin-bottom:2mm; font-size:10px; line-height:1.35; }
+  ul { margin:2mm 0 0 4mm; padding-left:4mm; }
+</style>
+</head>
+<body>
+<section class="page cover">
+  <div class="topline"></div>
+  <div class="eyebrow">Informe técnico · estado documentado</div>
+  <div class="cover-mark" aria-label="Marca gráfica abstracta de PHOENIX"></div>
+  <h1>PHOENIX</h1>
+  <p class="lede">Uso, arquitectura y controles operativos de un harness de agentes de IA local-first y agnóstico de proveedor.</p>
+  <div class="callout" style="margin-top:18mm;max-width:158mm">
+    <p><b>Tesis.</b> PHOENIX convierte un runtime extensible en una superficie operable y auditable: compone capacidades como plugins, conserva la continuidad de sesión localmente y mantiene separadas las credenciales, los proveedores y las políticas de ejecución.</p>
+  </div>
+  <div class="cover-meta">
+    <div class="meta-box"><b>Audiencia</b><span>técnica</span></div>
+    <div class="meta-box"><b>Formato</b><span>brief de 5 páginas</span></div>
+    <div class="meta-box"><b>Fecha</b><span>28 agosto 2026</span></div>
+  </div>
+  <p class="small" style="position:absolute;bottom:20mm;max-width:145mm">Documento descriptivo del checkout inspeccionado. No es una promesa de roadmap ni una sustitución de la documentación normativa del proyecto.</p>
+  <div class="footer">01 / 05</div>
+</section>
+
+<section class="page">
+  <div class="topline"></div>
+  <div class="section-head"><div><div class="eyebrow">01 · Uso real</div><h2>Una sesión, varias capacidades coordinadas</h2></div><p>PHOENIX coloca la configuración y la seguridad cerca del usuario, sin ocultar los límites de cada proveedor.</p></div>
+  <div class="grid-3">
+    <div class="card"><div class="num">01</div><h3>Elegir proveedor</h3><p>OpenRouter se configura desde Settings → Models; ChatGPT/Codex usa su plano nativo de cuenta.</p></div>
+    <div class="card"><div class="num">02</div><h3>Componer sesión</h3><p>Un perfil apila bundles y parches para decidir qué agentes, herramientas y políticas entran al runtime.</p></div>
+    <div class="card"><div class="num">03</div><h3>Ejecutar y conservar</h3><p>La sesión registra eventos durables para que el historial local pueda proyectarse, reanudarse y auditarse.</p></div>
+  </div>
+  <div class="label" style="margin-top:9mm">Flujo de uso</div>
+  <svg viewBox="0 0 760 112" role="img" aria-labelledby="use-flow-title use-flow-desc" style="margin:6mm 0 3mm">
+    <title id="use-flow-title">Flujo de uso de PHOENIX</title>
+    <desc id="use-flow-desc">Configurar proveedor, seleccionar capacidades, conversar con el agente y persistir la continuidad de sesión.</desc>
+    <rect x="5" y="8" width="174" height="80" rx="7" fill="#fff" stroke="#d9e3ea"/><text x="20" y="34" fill="#17324d" font-size="15" font-weight="700">Configurar</text><text x="20" y="57" fill="#5c6f80" font-size="11">proveedor, modelo</text><text x="20" y="73" fill="#5c6f80" font-size="11">y credencial local</text>
+    <path d="M185 48h22" stroke="#d58a2a" stroke-width="3"/><path d="m201 40 9 8-9 8" fill="none" stroke="#d58a2a" stroke-width="3"/>
+    <rect x="215" y="8" width="174" height="80" rx="7" fill="#fff" stroke="#d9e3ea"/><text x="230" y="34" fill="#17324d" font-size="15" font-weight="700">Seleccionar</text><text x="230" y="57" fill="#5c6f80" font-size="11">perfil y composición</text><text x="230" y="73" fill="#5c6f80" font-size="11">de capacidades</text>
+    <path d="M395 48h22" stroke="#d58a2a" stroke-width="3"/><path d="m411 40 9 8-9 8" fill="none" stroke="#d58a2a" stroke-width="3"/>
+    <rect x="425" y="8" width="154" height="80" rx="7" fill="#fff" stroke="#d9e3ea"/><text x="440" y="34" fill="#17324d" font-size="15" font-weight="700">Conversar</text><text x="440" y="57" fill="#5c6f80" font-size="11">agente, herramientas</text><text x="440" y="73" fill="#5c6f80" font-size="11">y contexto</text>
+    <path d="M585 48h22" stroke="#d58a2a" stroke-width="3"/><path d="m601 40 9 8-9 8" fill="none" stroke="#d58a2a" stroke-width="3"/>
+    <rect x="615" y="8" width="140" height="80" rx="7" fill="#fff" stroke="#d9e3ea"/><text x="630" y="34" fill="#17324d" font-size="15" font-weight="700">Persistir</text><text x="630" y="57" fill="#5c6f80" font-size="11">eventos y</text><text x="630" y="73" fill="#5c6f80" font-size="11">continuidad</text>
+  </svg>
+  <div class="grid-2" style="margin-top:7mm">
+    <div class="callout"><h3>Separación de identidades</h3><p>La autenticación de API de OpenAI no se mezcla con la suscripción de ChatGPT. El puente nativo de Codex gestiona el inicio de sesión y la renovación OAuth; PHOENIX no pide la contraseña de ChatGPT ni persiste esos tokens.</p></div>
+    <div class="callout"><h3>Local-first con proveedor intercambiable</h3><p>El proveedor, endpoint, catálogo y modelo activo se administran desde la UI. La continuidad de sesión permanece local por defecto y no se anuncia almacenamiento cloud sin una restauración comprobable.</p></div>
+  </div>
+  <div class="quote">“Model-visible means logged”: lo que llega a una petición de modelo debe poder reconstruirse desde el registro de sesión.</div>
+  <div class="source-note">Fuentes: `README.md` (Configure OpenRouter; Connect ChatGPT / Codex), `docs/architecture.md` (Session log; Profiles and bundles).</div><div class="footer">02 / 05</div>
+</section>
+
+<section class="page">
+  <div class="topline"></div>
+  <div class="section-head"><div><div class="eyebrow">02 · Arquitectura</div><h2>Composición antes que núcleo privilegiado</h2></div><p>Los plugins aportan servicios, eventos y efectos reversibles a un contexto compartido.</p></div>
+  <div class="diagram">
+    <div class="diagram-title">Composición del runtime</div>
+    <svg viewBox="0 0 760 190" role="img" aria-labelledby="composition-title composition-desc">
+      <title id="composition-title">Composición del runtime PHOENIX</title>
+      <desc id="composition-desc">El perfil apila bundles, parches y overlays hasta formar el runtime de plugins, servicios y herramientas.</desc>
+      <rect x="20" y="12" width="560" height="32" rx="8" fill="#174f68"/><text x="38" y="33" fill="#fff" font-size="15" font-weight="700">Perfil · bundles ordenados</text>
+      <rect x="20" y="52" width="630" height="32" rx="8" fill="#287c92"/><text x="38" y="73" fill="#fff" font-size="15" font-weight="700">Patch del perfil · configuración</text>
+      <rect x="20" y="92" width="700" height="32" rx="8" fill="#63a6ad"/><text x="38" y="113" fill="#fff" font-size="15" font-weight="700">Patch del home · overlays explícitos</text>
+      <rect x="20" y="132" width="720" height="42" rx="8" fill="#d58a2a"/><text x="38" y="158" fill="#2c3d49" font-size="15" font-weight="700">Runtime PHOENIX · plugins, servicios y herramientas</text>
+    </svg>
+    <p class="small" style="margin-top:3mm">Fallback textual: las capas se aplican sobre una lista vacía en el orden del perfil, el parche del perfil, el parche del home y cualquier overlay `--patch`.</p>
+  </div>
+  <div class="grid-2">
+    <div>
+      <div class="label">Paquetes núcleo</div>
+      <table aria-label="Paquetes núcleo de PHOENIX"><thead><tr><th>Área</th><th>Responsabilidad</th></tr></thead><tbody>
+        <tr><td>Session</td><td>Registro append-only y almacenamiento en memoria.</td></tr>
+        <tr><td>System prompt</td><td>Ensamblado de secciones y esquemas de herramientas.</td></tr>
+        <tr><td>Tools</td><td>Registro acotado y pipeline de ejecución guardado.</td></tr>
+        <tr><td>Agent / loop</td><td>Interfaz de agente y driver por defecto.</td></tr>
+        <tr><td>LLM</td><td>Vocabulario de mensajes, streams y seam de adaptadores.</td></tr>
+      </tbody></table>
+    </div>
+    <div>
+      <div class="label">Seams de capacidad</div>
+      <div class="card" style="margin-bottom:3mm"><h3>Definición · proveedor · consumidor</h3><p>Una capacidad completa declara su interfaz, implementa el proveedor y expone un consumidor, con frecuencia una herramienta orientada al modelo.</p></div>
+      <div class="card"><h3>Eventos como extensión</h3><p>Los eventos de sesión conservan hechos; los eventos de agente y de capacidad permiten observar o interceptar trabajo vivo sin importar el loop.</p></div>
+      <div class="card" style="margin-top:3mm"><h3>HARDNESS</h3><p>Indexa capacidades y enruta modalidades; no reemplaza los registros de herramientas o skills ni se convierte en autoridad de ejecución.</p></div>
+    </div>
+  </div>
+  <div class="source-note">Fuentes: `docs/architecture.md` (Cordis; Profiles and bundles; Core packages; Events; Capability seams).</div><div class="footer">03 / 05</div>
+</section>
+
+<section class="page">
+  <div class="topline"></div>
+  <div class="section-head"><div><div class="eyebrow">03 · Confianza técnica</div><h2>Controles explícitos, límites visibles</h2></div><p>La confianza se describe con la protección disponible y con el límite que todavía aplica.</p></div>
+  <table aria-label="Matriz de controles técnicos"><thead><tr><th>Control</th><th>Qué protege</th><th>Evidencia documentada</th><th>Límite declarado</th></tr></thead><tbody>
+    <tr><td>Credenciales separadas</td><td>Evita mezclar API keys con OAuth de ChatGPT/Codex.</td><td><span class="status green">documentado</span> Plano nativo de Codex.</td><td>No convierte la credencial en permiso universal.</td></tr>
+    <tr><td>Sesión local durable</td><td>Historial, replay y continuidad sin subirlo por defecto.</td><td><span class="status green">documentado</span> Registro local.</td><td>Backup cloud futuro requiere opt-in, cifrado y restauración real.</td></tr>
+    <tr><td>Runner Windows</td><td>Tokens restringidos y ACL para comandos nativos.</td><td><span class="status amber">condicionado</span> Gate en kernel Windows.</td><td>No promete aislamiento de red, invisibilidad de procesos ni protección ante todo hard-link.</td></tr>
+    <tr><td>Actualización estable</td><td>Fast-forward limpio, checkpoint y rollback ante fallo.</td><td><span class="status green">documentado</span> Canal `origin/main`.</td><td>Worktrees sucios y ramas de desarrollo no se sobrescriben.</td></tr>
+    <tr><td>Full access</td><td>Permite operar fuera de la cerca de archivos.</td><td><span class="status red">límite</span> Política `never`.</td><td>`danger-full-access` no es un sandbox ni añade una segunda aprobación.</td></tr>
+    <tr><td>Seguridad del proyecto</td><td>Canal privado para vulnerabilidades con contexto reproducible.</td><td><span class="status green">documentado</span> GitHub private reporting.</td><td>No incluir claves, grants OAuth, sesiones ni datos personales.</td></tr>
+  </tbody></table>
+  <div class="grid-2" style="margin-top:7mm">
+    <div class="callout"><h3>Principio operativo</h3><p>Una capacidad no se considera disponible solo por aparecer en un índice: las rutas `have` y `route` requieren evidencia de verificación actual.</p></div>
+    <div class="callout"><h3>Qué no se promete</h3><p>No hay respaldo cloud anunciado hasta que existan recibos remotos y una prueba de restauración para la misma revisión.</p></div>
+  </div>
+  <div class="source-note">Fuentes: `docs/phoenix-windows.md` (Native safety boundary; Continuity), `SECURITY.md`, `docs/architecture.md` (HARDNESS).</div><div class="footer">04 / 05</div>
+</section>
+
+<section class="page">
+  <div class="topline"></div>
+  <div class="section-head"><div><div class="eyebrow">04 · Operación y estado</div><h2>De checkout a runtime verificable</h2></div><p>La operación combina instalación reproducible, checks de proyecto y una postura de desarrollo activo.</p></div>
+  <div class="grid-2">
+    <div class="card"><div class="label">Instalación Windows</div><h3>Bootstrap dedicado</h3><p>El instalador crea un checkout gestionado, instala dependencias, construye la revisión exacta y crea el acceso directo <b>PHOENIX HARDNESS</b>.</p><p class="code">irm .../install-phoenix.ps1 | iex</p></div>
+    <div class="card"><div class="label">IDE</div><h3>VS Code y Cursor</h3><p>El paquete VSIX inicia el runtime local y abre la Web UI sin leer credenciales de modelos.</p><p class="code">pnpm run package:vscode</p></div>
+  </div>
+  <div class="label" style="margin-top:7mm">Checks relevantes</div>
+  <div class="two-col">
+    <ul>
+      <li><b>TypeScript:</b> <span class="code">pnpm run typecheck</span></li>
+      <li><b>Build completo:</b> <span class="code">pnpm run build</span></li>
+      <li><b>Documentación:</b> <span class="code">pnpm run doc-sync</span></li>
+      <li><b>Website:</b> <span class="code">pnpm run website:build</span></li>
+    </ul>
+    <ul>
+      <li><b>Pruebas unitarias:</b> <span class="code">pnpm run test</span></li>
+      <li><b>Higiene:</b> <span class="code">pnpm run hygiene</span></li>
+      <li><b>Gate Windows:</b> <span class="code">pnpm run check:ci:windows-complete</span></li>
+      <li><b>Soporte:</b> Issues y Discussions del repositorio.</li>
+    </ul>
+  </div>
+  <div class="diagram" style="margin-top:6mm"><div class="diagram-title">Lectura de estado</div><table aria-label="Estado y criterio de confianza"><thead><tr><th>Estado</th><th>Interpretación</th><th>Próximo criterio</th></tr></thead><tbody>
+    <tr><td><span class="status green">en desarrollo activo</span></td><td>PHOENIX evoluciona por capas aisladas y verificables.</td><td>Conservar gates verdes en la revisión exacta.</td></tr>
+    <tr><td><span class="status amber">condicionado</span></td><td>La seguridad Windows depende del kernel y del runner nativo.</td><td>Ejecutar el gate autoritativo en Windows real.</td></tr>
+    <tr><td><span class="status red">no anunciado</span></td><td>Backup cloud y release firmado no son promesas actuales.</td><td>Exigir recibo, restauración y certificado externo antes de promocionar.</td></tr>
+  </tbody></table></div>
+  <p class="small" style="margin-top:5mm">Conclusión: PHOENIX es más útil cuando el usuario trata la selección de modelos, la composición de capacidades y los checks de confianza como parte de la misma operación.</p>
+  <div class="source-note">Fuentes: `README.md`, `docs/development.md`, `docs/phoenix-windows.md`, `SECURITY.md`, `AGENTS.md`, `package.json`. Repositorio: https://github.com/arisnachy/phoenix-harnes</div><div class="footer">05 / 05</div>
+</section>
+</body>
+</html>

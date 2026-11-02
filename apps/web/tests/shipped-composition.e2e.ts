@@ -1,0 +1,253 @@
+// Boots the shipped Web composition over the built dist this lane already uses
+// and asserts what that composition produces: the model-visible tool catalog
+// and file-reference guidance plus its retry, sandbox, and approval defaults.
+// No browser and no model call — these are composition facts, and the browser
+// scenarios in this lane cover the surface itself.
+import { readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
+import { afterEach, expect, it } from 'vitest'
+import { CallId } from '@phoenix-ai/dsh-llm'
+import { canonicalPath, writableRoots } from '@phoenix-ai/dsh-sandbox'
+import { SessionId } from '@phoenix-ai/dsh-session'
+import { settingsNamespace } from '@phoenix-ai/dsh-settings'
+// Empty type imports carry the tools/sandboxPolicy/approval Context merges.
+import type {} from '@phoenix-ai/dsh-tools'
+import type {} from '@phoenix-ai/dsh-sandbox-policy'
+import type {} from '@phoenix-ai/dsh-user-approval'
+import type {} from '@phoenix-ai/dsh-permission-presets'
+import type {} from '@phoenix-ai/dsh-agent-presets'
+import type {} from '@phoenix-ai/dsh-commands'
+import type {} from '@phoenix-ai/dsh-system-prompt'
+import { launchWebScaffold, type WebScaffold } from './scaffold.ts'
+
+const FILE_REFERENCE_PROMPT = fileURLToPath(new URL(
+  './snapshots/web-runtime-context/file-reference-prompt.expected.md', import.meta.url,
+))
+
+/**
+ * The catalog the shipped Web composition puts in front of the model, minus the
+ * ripgrep-dependent pair below. The absences are deliberate, not incidental
+ * gaps: the `cordis_*` toolset executes model-written JavaScript that no
+ * sandbox row confines, `web_fetch` chooses its own request target, and
+ * `mcp_*` servers spawn outside `ctx.shell`. The composition Agent Note owns the
+ * rationale and its sources.
+ */
+const EXPECTED_TOOLS = [
+  'ask_user_question',
+  ...(process.platform === 'win32' ? [] : ['bash']),
+  'create_goal',
+  'edit',
+  'exit_plan_mode',
+  'get_goal',
+  'hardness_run',
+  'interrupt_agent',
+  'job_kill',
+  'job_list',
+  'job_output',
+  'list_agents',
+  ...(process.platform === 'win32' ? ['pwsh'] : []),
+  'ralph',
+  'read',
+  'read_image',
+  'send_message',
+  'skill',
+  'subagent',
+  'subagent_fork',
+  'todo_write',
+  'update_goal',
+  'web_search',
+  'workflow',
+  'write',
+]
+
+/**
+ * `glob` and `grep` come from `dsh-tool-fs-search`, which spawns the PACKAGED
+ * ripgrep binary (`@vscode/ripgrep`) through the subprocess seam, so the pair
+ * is always present on every host — asserted as fixed members, not a host
+ * dependency.
+ */
+const RIPGREP_TOOLS = ['glob', 'grep']
+
+let scaffold: WebScaffold | undefined
+
+afterEach(async () => {
+  await scaffold?.close()
+  scaffold = undefined
+})
+
+it('assembles the shipped Web catalog, file-reference guidance, retry policy, and confined access default', async () => {
+  scaffold = await launchWebScaffold({ deepSeekMissingCredential: true })
+  const ctx = scaffold.ctx
+  expect(ctx.llm.providerRetryPolicy('deepseek-official')).toMatchInlineSnapshot(`
+    {
+      "initialDelayMs": 500,
+      "jitterRatio": 0.1,
+      "maxDelayMs": 10000,
+      "maxRetries": 2,
+      "mode": "normal",
+      "retryableCodes": [
+        "EMPTY_RESPONSE",
+        "RATE_LIMIT",
+        "SERVER",
+        "TIMEOUT",
+        "TRANSPORT",
+      ],
+    }
+  `)
+  await ctx.settings.update(settingsNamespace('llm-deepseek'), {
+    retryPolicy: { mode: 'always', maxRetries: 5 },
+  })
+  expect(ctx.llm.providerRetryPolicy('deepseek-official')).toMatchInlineSnapshot(`
+    {
+      "initialDelayMs": 500,
+      "jitterRatio": 0.1,
+      "maxDelayMs": 10000,
+      "mode": "always",
+    }
+  `)
+  await ctx.settings.update(settingsNamespace('llm-pi-ai'), {
+    providers: {
+      openai: {},
+      anthropic: { retryPolicy: { mode: 'always' } },
+    },
+  })
+  expect(ctx.llm.providerRetryPolicy('openai')).toMatchInlineSnapshot(`
+    {
+      "initialDelayMs": 500,
+      "jitterRatio": 0.1,
+      "maxDelayMs": 10000,
+      "maxRetries": 2,
+      "mode": "normal",
+      "retryableCodes": [
+        "EMPTY_RESPONSE",
+        "RATE_LIMIT",
+        "SERVER",
+        "TIMEOUT",
+        "TRANSPORT",
+      ],
+    }
+  `)
+  expect(ctx.llm.providerRetryPolicy('anthropic')).toMatchInlineSnapshot(`
+    {
+      "initialDelayMs": 500,
+      "jitterRatio": 0.1,
+      "maxDelayMs": 10000,
+      "mode": "always",
+    }
+  `)
+  // The catalog belongs to an AGENT, not to the process: every model-facing row
+  // now lives in a preset mounted under one session's scope, except for the
+  // host-level HARDNESS auditor, which must remain available to inspect and
+  // govern any session. The session still supplies the coding catalog below.
+  expect(ctx.tools.schemas().map(schema => schema.name)).toEqual(['hardness_run'])
+  const handle = await ctx.agents.create({
+    sessionId: SessionId('shipped-composition'),
+    setup: agentCtx => ctx.agentPresets.mount(agentCtx).then(() => undefined),
+  })
+  try {
+    const names = ctx.tools.schemas(handle.agent).map(schema => schema.name).sort()
+    expect(names.filter(name => !RIPGREP_TOOLS.includes(name))).toEqual(EXPECTED_TOOLS)
+    // The packaged ripgrep binary ships with the dependency, so the pair is a
+    // fixed roster member on every host.
+    expect(names.filter(name => RIPGREP_TOOLS.includes(name))).toEqual(RIPGREP_TOOLS)
+    const fileReferenceSection = (await ctx.systemPrompt.assemble({ scope: handle.agent })).sections
+      .find(section => section.name === 'ui:deliverable-file-references')
+    expect(fileReferenceSection?.text).toBe(readFileSync(FILE_REFERENCE_PROMPT, 'utf8').trimEnd())
+  } finally {
+    await handle.dispose()
+  }
+  // `workspace-write` is not "the workspace and nothing else": the shared roots
+  // helper always admits the temp directories too. Pinning it against an
+  // explicit mode keeps the claim independent of this surface's default, and
+  // keeps a future sandbox-confinement test from being run inside /tmp — where an
+  // "escape" write succeeds by design and reads as a sandbox failure.
+  expect(writableRoots(scaffold.ctx.sandboxPolicy.resolve({ mode: 'workspace-write' }))).toEqual(
+    expect.arrayContaining([canonicalPath('/tmp'), canonicalPath(tmpdir())]),
+  )
+  expect(scaffold.ctx.sandboxPolicy.defaultMode).toBe('workspace-write')
+  expect(scaffold.ctx.approval.config.policy).toBe('ask')
+  expect(scaffold.ctx.permissionPresets.defaultPreset).toBe('workspace-write')
+  expect(scaffold.ctx.permissionPresets.resolve('danger-full-access')).toMatchObject({
+    sandbox: 'danger-full-access',
+    approval: 'never',
+  })
+
+  const commandHandle = await scaffold.ctx.agents.create({
+    sessionId: SessionId('shipped-command-catalog'),
+    meta: { cwd: scaffold.workspaceCwd },
+    agentOptions: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+  })
+  try {
+    expect(scaffold.ctx.commands.list(commandHandle.agent)).toContainEqual({
+      name: 'feedback',
+      description: 'record feedback about this session',
+      input: { hint: '<text>' },
+    })
+  } finally {
+    await commandHandle.dispose()
+  }
+}, 120_000)
+
+it('lets a preset producer reach the background-job registry', async () => {
+  scaffold = await launchWebScaffold()
+  const ctx = scaffold.ctx
+  const shellTool = process.platform === 'win32' ? 'pwsh' : 'bash'
+  const jobId = `${shellTool}-1`
+  const handle = await ctx.agents.create({
+    sessionId: SessionId('shipped-background-job'),
+    meta: { cwd: scaffold.workspaceCwd },
+    setup: agentCtx => ctx.agentPresets.mount(agentCtx).then(() => undefined),
+  })
+  try {
+    const signal = new AbortController().signal
+    // The platform shell tool is a preset row and `jobs` is a host registry;
+    // the producer resolves it with `ctx.get`, so a registry hidden behind a
+    // preset realm fails here — with every task control still listed above.
+    const started = await ctx.tools.execute({
+      signal,
+      callId: CallId('shipped-shell-background'),
+      name: shellTool,
+      arguments: {
+        command: process.platform === 'win32' ? 'Write-Output SHIPPED_BACKGROUND_OK' : 'printf SHIPPED_BACKGROUND_OK',
+        description: 'run a shipped background probe',
+        run_in_background: true,
+      },
+      agent: handle.agent,
+    })
+    expect({ isError: started.isError, content: started.content }).toEqual({
+      isError: false,
+      content: [{ type: 'text', text: `started background job ${jobId}` }],
+    })
+
+    // The controller reads what the producer started: same registry, one
+    // owner. A per-preset registry would list nothing here even on success.
+    const listed = await ctx.tools.execute({
+      signal,
+      callId: CallId('shipped-task-list'),
+      name: 'job_list',
+      arguments: {},
+      agent: handle.agent,
+    })
+    expect(listed.isError).toBe(false)
+    expect(listed.content).toEqual([
+      { type: 'text', text: expect.stringContaining(`${jobId} [${shellTool}]`) as unknown as string },
+    ])
+
+    // The full round trip: the output a host-plane producer wrote is collected
+    // through a preset-plane control, which is the linkage the realm severed.
+    const collected = await ctx.tools.execute({
+      signal,
+      callId: CallId('shipped-task-output'),
+      name: 'job_output',
+      arguments: { job_id: jobId, wait: true },
+      agent: handle.agent,
+    })
+    expect(collected.isError).toBe(false)
+    expect(collected.content).toEqual([
+      { type: 'text', text: expect.stringContaining('SHIPPED_BACKGROUND_OK') as unknown as string },
+    ])
+  } finally {
+    await handle.dispose()
+  }
+}, 120_000)

@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-17-command-image-attachment-envelope.md
+2026-08-17-command-image-attachment-envelope.md: eb4bc65421126cd056c00cb0673c3fcfe446a0c3
+2026-08-17-command-image-attachment-envelope.zh.md: 87221bd5a02aa7c64ae43ccf925f49a13f24c17c

@@ -1,0 +1,4 @@
+# Phoenix repository ownership policy
+# All paths are owned by the repository owner. When branch protection/rulesets
+# require Code Owner review, no change can be merged without @arisnachy approval.
+* @arisnachy

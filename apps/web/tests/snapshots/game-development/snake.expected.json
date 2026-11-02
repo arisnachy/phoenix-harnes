@@ -1,0 +1,116 @@
+[
+  {
+    "type": "user/message",
+    "data": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Crea un Snake pequeño y jugable para navegador."
+        }
+      ],
+      "source": {
+        "kind": "user"
+      },
+      "role": "user",
+      "id": "<identity>"
+    }
+  },
+  {
+    "type": "assistant/message",
+    "data": {
+      "turn": 1,
+      "step": 1,
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool-call",
+            "id": "<identity>",
+            "name": "skill",
+            "arguments": "{\"name\":\"game-development\"}"
+          }
+        ],
+        "source": {
+          "kind": "model",
+          "provider": "game-skill-snake",
+          "model": "game-skill-snake"
+        },
+        "id": "<identity>"
+      },
+      "usage": {
+        "inputTokens": 10,
+        "outputTokens": 5
+      }
+    }
+  },
+  {
+    "type": "tool/call",
+    "data": {
+      "turn": 1,
+      "step": 1,
+      "callId": "<identity>",
+      "name": "skill",
+      "arguments": "{\"name\":\"game-development\"}"
+    }
+  },
+  {
+    "type": "tool/result",
+    "data": {
+      "turn": 1,
+      "step": 1,
+      "message": {
+        "source": {
+          "kind": "tool",
+          "callId": "<identity>"
+        },
+        "content": [
+          {
+            "type": "tool-result",
+            "toolCallId": "<identity>",
+            "content": [
+              {
+                "type": "text",
+                "text": "<skill_content name=\"game-development\">\n<skill_resources>\nBase directory for this skill: {{repository}}/apps/cli/config/agent-presets/standard/skills/game-development\nResolve relative paths mentioned by this skill against the base directory before using them. Load referenced resources only as needed.\n</skill_resources>\n\n<skill_instructions>\n<phoenix_operational_preflight>\nSkill: game-development\nModo: instruction-only\nEntradas obligatorias: ninguna declarada\nHerramientas:\nNo se detectó una herramienta específica; usa la skill como guía y no afirmes ejecución.\nNo inventes herramientas, no adivines entradas y no presentes una acción condicionada como ejecutada.\n</phoenix_operational_preflight>\n\n# Crear y entregar videojuegos\n\nEl resultado es un juego ejecutable adecuado al género, plataforma y alcance pedido. Las referencias del usuario orientan calidad o estilo; un ejemplo no impone su diseño a todos los juegos.\n\n## Decidir antes de construir\n\nInspecciona el proyecto y conserva su motor. Registra un breve `GAME_PLAN.md`: género y bucle jugable; plataforma y formato de entrega; motor y versión; dirección artística; controles de teclado/mando/táctil; contenido y criterios de aceptación; presupuesto de rendimiento; herramientas disponibles; prueba técnica, visual y de juego; instrucciones de ejecución.\n\nPara «tipo Game Boy/NES/SNES/Sega/PlayStation» ofrece estética moderna por defecto. Solo crea ROM o imagen de disco cuando se solicite hardware/emulador real. No declares una web como ROM. Si un requisito esencial falta, pregunta por él mientras avanzas en lo independiente.\n\n| Pedido | Ruta inicial si no existe motor |\n|---|---|\n| Arcade/puzzle pequeño de navegador | HTML/CSS + Canvas y JavaScript; Phaser si la complejidad justifica esa dependencia |\n| Plataforma, RPG, aventura 2D | Godot 4; tiles/sprites y animaciones cuando corresponda |\n| PS1 moderno, low-poly, 3D o mundo abierto original | Godot 4 3D + Blender; una sección jugable completa antes de ampliar contenido |\n| Web 3D | Three.js/Babylon.js o exportación web de Godot según límites y controles |\n| Unity/Unreal existentes o pedidos explícitamente | Motor solicitado, comandos/editor y documentación de la versión instalada |\n| Hardware retro real | SDK nativo de la plataforma; compilación y emulación independientes |\n\n## Preparar herramientas\n\nLee el recurso correspondiente antes de ejecutar comandos: [navegador](references/browser-games.md), [Godot/Blender](references/godot-games.md), [ROM y PlayStation real](references/native-retro.md).\n\nEjecuta `node <base-de-esta-habilidad>/scripts/game-tools.mjs doctor --target web` o el target necesario: `godot`, `blender`, `gameboy`, `nes`, `snes`, `genesis`, `sms`, `ps1`. Salida JSON: 0 listo para los requisitos comprobados, 1 no listo, 2 comando inválido/error. Un compilador detectado no demuestra que el SDK completo, emulador o exportación estén listos.\n\n`plan --target godot|blender` muestra una instalación sin ejecutarla. `install --target godot|blender` instala solo ese motor gratuito mediante winget/Homebrew/Flatpak, dentro de la autorización del trabajo. Requiere un gestor disponible y su fuente configurada; mantiene su verificación de paquetes. Repite doctor y prueba el motor. Las rutas configuradas `PHOENIX_GODOT_BIN` y `PHOENIX_BLENDER_BIN` prevalecen sobre autodetección. No instales todos los motores ni arranques editores al iniciar Phoenix.\n\nMCP es opcional: usa conectores ya configurados o herramientas de archivos, shell, navegador, visión y comandos locales. Descubre una capacidad necesaria con `connector_list`/`connector_discover`; valida su origen y la autorización antes de instalarla. La ausencia de MCP no bloquea un juego ejecutable.\n\n## Construcción y revisión\n\nKira coordina trabajo real y verifica resultados; delega piezas independientes con criterios y límites claros, y reutiliza evidencia y assets válidos. El modelo/imagen/conector disponible determina la capacidad real. Mantén el layout de Phoenix.\n\nLa dirección artística determina la producción: en arcade/tablero abstracto, geometría, CSS y Canvas deliberados y pulidos pueden ser finales. Para actores/entornos representacionales, carga [producción de arte](references/production-art.md); usa raster/modelos/animación adecuados, visión y procedencia. No conviertas colisiones o placeholders en personajes finales.\n\nImplementa el bucle, estados, controles, pausa/reinicio, progreso/guardado, sonido y accesibilidad que correspondan al género. Divide una petición grande en entregables completos, conserva el objetivo completo y continúa hasta cumplirlo; no llames «GTA completo/AAA» a una escena o una sección jugable.\n\nCierra con tres pruebas separadas: build/importación/tests; captura actual inspeccionada; partida ejecutada que pruebe los criterios, controles, transiciones y fallos. Comprueba consola/logs, rendimiento material y guardado tras recarga/reinicio. Prueba desktop y móvil si ambos son targets. Corrige y repite solo lo invalidado.\n\nEntrega fuentes, versión y comandos reproducibles, ejecutable/ROM/web solicitado, controles y evidencia verificable. Un screenshot no prueba gameplay; un build no prueba acabado; una puntuación interna no prueba calidad. Informa exactamente lo no probado o bloqueado.\n</skill_instructions>\n</skill_content>"
+              }
+            ],
+            "isError": false
+          }
+        ],
+        "role": "user",
+        "id": "<identity>"
+      }
+    }
+  },
+  {
+    "type": "assistant/message",
+    "data": {
+      "turn": 1,
+      "step": 2,
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "GAME_SKILL_LOADED_SNAKE"
+          }
+        ],
+        "source": {
+          "kind": "model",
+          "provider": "game-skill-snake",
+          "model": "game-skill-snake"
+        },
+        "id": "<identity>"
+      },
+      "usage": {
+        "inputTokens": 10,
+        "outputTokens": 23
+      }
+    }
+  },
+  {
+    "type": "turn/end",
+    "reason": {
+      "kind": "completed"
+    }
+  }
+]

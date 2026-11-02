@@ -1,0 +1,148 @@
+import { describe, expect, it } from 'vitest'
+import { assertServiceable, Config, resolveProfiles, resolvePiAiRetryPolicy } from '../src/config.ts'
+import { isNonCodexRecoveryModel, RECOVERABLE_PI_AI_ERROR_CODE } from '../src/provider-recovery.ts'
+
+/** Validate one hand-declared route, with the caller's fields layered onto it. */
+const routeWith = (profile: Record<string, unknown>): (() => unknown) =>
+  () => Config({
+    providers: {
+      'acme-gateway': {
+        api: 'openai-completions',
+        baseURL: 'https://acme.test',
+        models: [{ id: 'm' }],
+        ...profile,
+      },
+    },
+  })
+
+/** Validate that route with the caller's fields on its single model entry. */
+const configWith = (model: Record<string, unknown>): (() => unknown) =>
+  routeWith({ models: [{ id: 'm', ...model }] })
+
+describe('bounded recovery for generic non-Codex pi-ai failures', () => {
+  it('enables the generic failure retry code only on eligible provider routes by default', () => {
+    for (const route of ['openrouter', 'deepseek', 'qwen', 'anthropic', 'acme-gateway']) {
+      const policy = resolvePiAiRetryPolicy(route)
+      expect(policy.mode).toBe('normal')
+      if (policy.mode !== 'normal') continue
+      expect(policy.maxRetries).toBe(2)
+      expect(policy.retryableCodes).toContain(RECOVERABLE_PI_AI_ERROR_CODE)
+      expect(policy.retryableCodes).not.toContain('INVALID_REQUEST')
+    }
+    for (const route of ['openai', 'openai-codex', 'chatgpt-web']) {
+      const policy = resolvePiAiRetryPolicy(route)
+      expect(policy.mode).toBe('normal')
+      if (policy.mode !== 'normal') continue
+      expect(policy.retryableCodes).not.toContain(RECOVERABLE_PI_AI_ERROR_CODE)
+    }
+  })
+
+  it('retains explicit retry policy including a deliberate opt-out', () => {
+    const policy = resolvePiAiRetryPolicy('openrouter', {
+      mode: 'normal', maxRetries: 0, retryableCodes: ['TRANSPORT'],
+    })
+    expect(policy).toMatchObject({ mode: 'normal', maxRetries: 0, retryableCodes: ['TRANSPORT'] })
+  })
+
+  it('blocks Codex models even when the route is OpenRouter', () => {
+    expect(isNonCodexRecoveryModel('openrouter', 'openai/gpt-5.5-codex')).toBe(false)
+    expect(isNonCodexRecoveryModel('openrouter', 'openai/gpt-5.5')).toBe(false)
+    expect(isNonCodexRecoveryModel('openrouter', 'qwen/qwen3')).toBe(true)
+    expect(isNonCodexRecoveryModel('openrouter', 'deepseek/deepseek-v4')).toBe(true)
+  })
+})
+
+describe('reasoning schema boundary', () => {
+  it('rejects a level pi-ai does not know at the write that produced it', () => {
+    expect(configWith({ reasoningEfforts: { ultra: 'x' } })).toThrow(/"off"/)
+    expect(configWith({ reasoningEfforts: { high: 42 } })).toThrow()
+  })
+
+  it('keeps false distinguishable from an absent declaration', () => {
+    type Materialized = { providers: Record<string, { models?: { reasoningEfforts?: unknown }[] }> }
+    const withFalse = configWith({ reasoningEfforts: false })() as Materialized
+    expect(withFalse.providers['acme-gateway']?.models?.[0]?.reasoningEfforts).toBe(false)
+    const absent = configWith({})() as Materialized
+    expect(absent.providers['acme-gateway']?.models?.[0]?.reasoningEfforts).toBeUndefined()
+  })
+
+  it('rejects a thinking format outside the offered set', () => {
+    expect(configWith({ compat: { thinkingFormat: 'quantum' } })).toThrow(/expected/)
+  })
+})
+
+describe('modality schema boundary', () => {
+  it('rejects a modality pi-ai does not know, at either level', () => {
+    expect(configWith({ input: ['audio'] })).toThrow(/expected/)
+    expect(routeWith({ defaultInput: ['text', 'audio'] })).toThrow(/expected/)
+  })
+
+  it('refuses a route whose models could accept nothing', () => {
+    // The pair the settings seam runs: the schema accepts the empty list as
+    // well-typed, and the namespace validator is what refuses it. Asserting
+    // only the schema would report this route as writable.
+    expect(routeWith({ defaultInput: [] })).not.toThrow()
+    expect(() => { assertServiceable(routeWith({ defaultInput: [] })() as Config) })
+      .toThrow(/defaultInput must name at least one modality/)
+  })
+
+  type Materialized = {
+    providers: Record<string, { defaultInput?: unknown; models?: { input?: unknown }[] }>
+  }
+
+  it('materializes an absent entry list as empty and an absent route list as text', () => {
+    // The empty-list inheritance rule exists because of exactly this: an entry
+    // that declares nothing reaches resolution as `[]`, not as `undefined`.
+    const absent = configWith({})() as Materialized
+    expect(absent.providers['acme-gateway']?.models?.[0]?.input).toEqual([])
+    expect(absent.providers['acme-gateway']?.defaultInput).toEqual(['text'])
+  })
+})
+
+describe('request image policy bounds', () => {
+  it.each([
+    ['requestImagePixelBudget', 0, /requestImagePixelBudget must be a positive safe integer/],
+    ['requestImagePixelBudget', Number.MAX_SAFE_INTEGER + 1, /requestImagePixelBudget must be a positive safe integer/],
+    ['requestImageMaxBytes', 0, /requestImageMaxBytes must be a positive safe integer/],
+    ['requestImageMaxBytes', 1.5, /requestImageMaxBytes must be a positive safe integer/],
+  ] as const)('rejects %s=%s at service resolution', (field, value, message) => {
+    const programmatic = {
+      providers: {
+        'acme-gateway': {
+          api: 'openai-completions',
+          baseURL: 'https://acme.test',
+          models: [{ id: 'm' }],
+          [field]: value,
+        },
+      },
+    } as unknown as Config
+    expect(() => {
+      assertServiceable(programmatic)
+    }).toThrow(message)
+  })
+})
+
+describe('ChatGPT Web route defaults', () => {
+  it('materializes the dormant local bridge profile from one explicit route', () => {
+    const profile = resolveProfiles({ 'chatgpt-web': {} }).get('chatgpt-web')
+
+    expect(profile).toMatchObject({
+      displayName: 'ChatGPT Web',
+      api: 'openai-responses',
+      baseURL: 'http://127.0.0.1:17841/v1',
+    })
+    expect(profile?.piProvider.getModels().map(model => model.id)).toEqual([
+      'gpt-5.6-sol',
+      'gpt-5.6-luna',
+    ])
+  })
+
+  it('restores the bridge defaults when the loader materializes an omitted list as empty', () => {
+    const profile = resolveProfiles({ 'chatgpt-web': { models: [] } }).get('chatgpt-web')
+
+    expect(profile?.piProvider.getModels().map(model => model.id)).toEqual([
+      'gpt-5.6-sol',
+      'gpt-5.6-luna',
+    ])
+  })
+})

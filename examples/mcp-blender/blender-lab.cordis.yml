@@ -1,0 +1,28 @@
+# Official Blender Lab MCP integration for PHOENIX.
+#
+# Security: the Blender Lab MCP server can execute model-generated Python inside
+# Blender. Keep this integration opt-in, use backed-up/test scenes, and avoid
+# running Blender with access to sensitive data. See https://www.blender.org/lab/mcp-server/.
+#
+# This intentionally pins Blender Lab's official source tag. Do not replace it
+# with `uvx blender-mcp`: that resolves an unrelated third-party PyPI project.
+- insert:
+    - id: mcp-blender-lab
+      name: '@phoenix-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        serverName: blender
+        command: !!js process.env.PHOENIX_BLENDER_MCP_COMMAND ?? 'uvx'
+        args: !!js process.env.PHOENIX_BLENDER_MCP_ARGS ? JSON.parse(process.env.PHOENIX_BLENDER_MCP_ARGS) : ['--from', 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp', 'blender-mcp']
+        env:
+          BLENDER_MCP_HOST: !!js process.env.PHOENIX_BLENDER_MCP_HOST ?? 'localhost'
+          BLENDER_MCP_PORT: !!js process.env.PHOENIX_BLENDER_MCP_PORT ?? '9876'
+        cwd: ''
+        toolCallTimeoutMs: 120000
+        startupTimeoutMs: 120000
+        failOnStartupError: false
+        reconnect:
+          enabled: true
+          initialDelayMs: 1000
+          maxDelayMs: 30000
+          maxAttempts: 60
