@@ -36,10 +36,20 @@ test('bounded provider failures are visible and never fabricate external opinion
 })
 test('indexed stories are limited and do not reveal private picks',async()=>{
  const rss='<rss><channel>'+Array.from({length:8},(_,i)=>
-  item('scoresandodds.com','Article '+i)).join('')+'</channel></rss>'
+  item('scoresandodds.com','Warriors Clippers analysis '+i)).join('')+'</channel></rss>'
  const fetcher=async()=>new Response(rss,{headers:{'content-type':'application/rss+xml'}})
  const result=await discoverEditorialResearch('NBA Warriors Clippers',['scoresandodds'],fetcher,now)
  assert.equal(result.status,'observed')
  assert.equal(result.hits.length,5)
  assert.ok(result.hits.every(x=>x.discoveryUrl.startsWith('https://news.google.com/')))
+})
+
+test('excludes generic indexed posts unrelated to the requested matchup',async()=>{
+  const rss='<rss><channel>'+item('covers.com','Other league news')+
+    item('covers.com','Cavaliers Thunder matchup preview')+'</channel></rss>'
+  const fetcher=async()=>new Response(rss,{headers:{'content-type':'application/rss+xml'}})
+  const report=await discoverEditorialResearch('Cleveland Cavaliers Oklahoma City Thunder',
+    ['covers'],fetcher,now)
+  assert.equal(report.hits.length,1)
+  assert.match(report.hits[0].headline,/Cavaliers Thunder/)
 })
