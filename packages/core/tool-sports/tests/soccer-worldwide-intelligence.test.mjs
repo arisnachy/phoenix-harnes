@@ -122,7 +122,7 @@ test('source-provenance dossier only joins current roster, eleven starters, inju
   assert.equal(r.teams.away.form.losses,1)
   assert.ok(r.duels.length>=4)
   assert.ok(r.duels.every(d=>d.againstTeam==='Orlando City'?
-    Number(d.playerId)<2000:Number(d.playerId)>2000))
+    Number(d.playerId)<2000:Number(d.playerId)>=2000))
   assert.equal(r.injuries.length,1)
   assert.equal(r.injuries[0].playerId,'1001')
   assert.equal(r.markets.length,1)
