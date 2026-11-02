@@ -10,22 +10,16 @@ const packageJson = join(packageRoot, 'package.json')
 const statusPath = join(dshHome, 'toolchains', 'clawhub-status.json')
 const PACKAGE_ID = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(?:@[a-zA-Z0-9][a-zA-Z0-9._+-]*)?$/u
 const SEARCH = /^[\p{L}\p{N} ._\/-]{1,80}$/u
-export type ClawHubFamily = 'skill' | 'code-plugin' | 'bundle-plugin'
-export interface ClawHubListing {
-  name: string
-  family: ClawHubFamily
-  description: string
-  version: string
-}
-export interface ClawHubState {
-  cli: 'managed' | 'global' | 'missing'
-  openclaw: 'available' | 'missing'
-  skillsDirectory: string
-  pluginExecution: 'openclaw-runtime' | 'not-configured'
-}
-export interface ClawHubQuery { query: string; family: ClawHubFamily; limit?: number }
-export interface ClawHubInstallRequest { name: string; family: ClawHubFamily }
-export interface ClawHubInstallReceipt { name: string; family: ClawHubFamily; status: 'installed-skill' | 'installed-in-openclaw'; detail: string }
+// A single contract must serve the implementation and @Remote return types.
+// Re-exporting preserves imports from this module without duplicating shapes.
+import type {
+  ClawHubListing, ClawHubQuery, ClawHubInstallRequest,
+  ClawHubInstallReceipt, ClawHubState,
+} from './types.ts'
+export type {
+  ClawHubFamily, ClawHubListing, ClawHubQuery, ClawHubInstallRequest,
+  ClawHubInstallReceipt, ClawHubState,
+} from './types.ts'
 
 function managedCli(): string | undefined {
   try {
