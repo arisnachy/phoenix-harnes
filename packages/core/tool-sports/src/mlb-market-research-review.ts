@@ -37,7 +37,7 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     reliefUsageObserved:[...d.bullpen.home,...d.bullpen.away].some(p=>p.reliefUsage72h.length>0),
     rosterMatchupsReviewed:d.matchups.length>0,
     venueKnown:!!d.venue.name&&d.venue.name!=='Estadio no verificado',
-    weatherObserved:!!d.weather,
+    weatherObserved:!!d.weather, // Forecast available, not a measured game-time observation
     realOffersVerified:d.odds.length>0,
     specificExpertPicksVerified:false,
     bookmakerRulesVerified:false,
@@ -50,7 +50,7 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     ...(gates.startersVerified?['Identidad de ambos abridores probables verificada']:[]),
     ...(gates.rosterMatchupsReviewed?['Cruces de bateadores y pitchers rivales identificados por MLB ID']:[]),
     ...(opponentBvP?['Muestras BvP con al menos 10 turnos: '+opponentBvP]:[]),
-    ...(gates.weatherObserved?['Meteorología horaria observada (orientación del viento sin verificar)']:[]),
+    ...(gates.weatherObserved?['Pronóstico meteorológico horario disponible (orientación del viento sin verificar)']:[]),
   ]
   const opposingFacts=[
     ...(!gates.lineupsConfirmed?['Cambios de la alineación pueden invalidar cualquier ventaja individual']:[]),
