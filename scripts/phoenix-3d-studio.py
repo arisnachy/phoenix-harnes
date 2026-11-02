@@ -26,6 +26,8 @@ def parse_args():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--resolution", type=int, default=1280)
     parser.add_argument("--samples", type=int, default=64)
+    parser.add_argument("--asset-glb", action="append", type=Path, default=[],
+                        help="Optional locally supplied detailed model (repeatable)")
     return parser.parse_args(argv)
 
 
@@ -219,6 +221,15 @@ def run():
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete(use_global=False)
     objects = [make_node(node) for node in scene["nodes"]]
+    # High-detail source models may include meshes, armatures and existing animation.
+    # Import only explicitly supplied local GLB files; never fetch arbitrary URLs.
+    for asset_path in args.asset_glb:
+        asset = asset_path.resolve()
+        if asset.suffix.lower() != ".glb" or not asset.is_file() or asset.stat().st_size > 500_000_000:
+            raise ValueError("Only local GLB models of at most 500 MB are permitted")
+        before = set(bpy.data.objects)
+        bpy.ops.import_scene.gltf(filepath=str(asset))
+        objects.extend(obj for obj in bpy.data.objects if obj not in before and obj.type == "MESH")
     lights_and_camera(objects)
     animate(scene, objects)
     ctx = bpy.context.scene
@@ -232,7 +243,7 @@ def run():
     ctx.world.color = color(scene.get("background", "#f5f5f5"))[:3]
     bpy.ops.wm.save_as_mainfile(filepath=str(target / "scene.blend"))
     bpy.ops.wm.gltf_export(filepath=str(target / "scene.glb"), export_format="GLB",
-                           export_animations=bool(scene.get("animations")))
+                           export_animations=bool(scene.get("animations") or args.asset_glb))
     bpy.ops.render.render(write_still=True)
     print("PHOENIX_3D_STUDIO_OUTPUT=" + str(target))
 
