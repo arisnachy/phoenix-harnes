@@ -1,0 +1,4 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): Git blob hashes of the confirmed-consistent texts.
+# Update both languages and their hashes together after subsequent edits.
+2026-11-02-eclipse-evidence-based-coordinator.md: 165d68432a8eacae871f5cfb64c4645f3b1f147f
+2026-11-02-eclipse-evidence-based-coordinator.zh.md: 4899a46bc756496316596ccca9de12d4fa9f8f12
