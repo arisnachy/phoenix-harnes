@@ -56,3 +56,23 @@ test('IDs and arbitrary leagues cannot become untrusted network requests',async(
   await assert.rejects(()=>investigateEventDeep('hockey','unknown','123',fetcher,now))
   assert.equal(calls,0)
 })
+
+test('does not falsely attribute stale league injury to a team after athlete transfers',async()=>{
+  const mock=async url=>{
+    const u=String(url)
+    let response={}
+    if(u===root+'summary?event=123')response=fixture
+    if(u===root+'injuries')response={injuries:[{team:{id:'1'},injuries:[
+      {athlete:{id:'555',displayName:'Former Jet'},status:'Day-to-day'},
+      {athlete:{id:'999',displayName:'Athlete X'},status:'Out'},
+      {athlete:{id:'101',displayName:'Athlete X'},status:'Day-to-day'}]}]}
+    if(u===root+'teams/1/roster')response={athletes:[{id:'101',displayName:'Athlete X'}]}
+    if(u===root+'teams/2/roster')response={athletes:[{id:'102',displayName:'Athlete Y'}]}
+    return new Response(JSON.stringify(response),{status:200})
+  }
+  const report=await investigateEventDeep('hockey','nhl','123',mock,now)
+  assert.equal(report.injuries.length,1)
+  assert.equal(report.injuries[0].athlete,'Athlete X')
+  assert.equal(report.injuries[0].status,'Day-to-day')
+  assert.ok(report.limitations.some(x=>x.includes('plantilla actual')))
+})
