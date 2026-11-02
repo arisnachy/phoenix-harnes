@@ -381,6 +381,26 @@ describe('ESPN universal adaptive panels',()=>{
     expect(container.textContent).not.toContain('ESPN Core')
     expect(container.querySelector('[data-generative-ui="sports_espn_dashboard"]')).toBeTruthy()
   })
+  it('displays both team win probabilities in the collapsed smart card',()=>{
+    const block=parseGenerativeUiBlock({component:'sports_espn_dashboard',version:1,props:{
+      view:'event',title:'Thunder vs Cavaliers',subtitle:'NBA',
+      source:'PHOENIX',checkedAt:'2026-11-02T01:00:00Z',
+      note:'Estimación exploratoria; no calibrada',
+      sections:[
+        {heading:'Estimación orientativa',kind:'metrics',items:[
+          {label:'Cavaliers',value:'56.1%',detail:'No calibrada'},
+          {label:'Thunder',value:'43.9%',detail:'No calibrada'}]},
+        {heading:'Forma reciente',kind:'metrics',items:[{label:'CLE',value:'4V 2D'}]},
+        {heading:'Cuotas y mercados',kind:'metrics',items:[{label:'local',value:'1.95'}]},
+      ],
+    }})
+    if(!block)throw Error('Expected valid sports dashboard')
+    const {container}=render(<GenerativeUi block={block}/>)
+    expect(screen.getByText('Prob. ganar · Cavaliers')).toBeTruthy()
+    expect(screen.getByText('Prob. ganar · Thunder')).toBeTruthy()
+    expect(container.textContent).toContain('56.1%')
+    expect(container.textContent).toContain('43.9%')
+  })
   it('rejects hostile photos, scripts, excessive sections and undeclared data',()=>{
     const base=template.props
     expect(parseGenerativeUiBlock({ ...template,props:{ ...base,
