@@ -26,6 +26,12 @@ function fake({started=false,missingAway=false,empty=false}={}){
     else if(u.pathname==='/v1/roster/MTL/current'){
       if(missingAway)return new Response('unavailable',{status:503})
       body=mkRoster('MTL',20000)
+    }else if(u.pathname.includes('/v1/club-schedule-season/')){
+      body={games:[{id:2026020101,startTimeUTC:'2026-11-01T23:00:00Z',
+        gameState:'OFF',homeTeam:{abbrev:'TOR',score:4},
+        awayTeam:{abbrev:'MTL',score:2}},
+        {id:2026020201,startTimeUTC:game.startTimeUTC,gameState:'FUT',
+          homeTeam:{abbrev:'TOR'},awayTeam:{abbrev:'MTL'}}]}
     }else if(u.pathname==='/v1/standings/'+date)
       body={standings:[{teamAbbrev:{default:'TOR'},wins:11,losses:4,otLosses:2},
         {teamAbbrev:{default:'MTL'},wins:9,losses:6,otLosses:1}]}
@@ -70,6 +76,11 @@ test('roster forwards/defense/goalies stay distinct; no starting goalie asserted
   assert.equal(d.markets.length,1)
   assert.equal(d.markets[0].approved,false)
   assert.equal(d.standings.home,'11 V · 4 D · 2 OT')
+  assert.equal(d.form.home.wins,1)
+  assert.equal(d.form.away.losses,1)
+  assert.equal(d.form.home.homeGames,1)
+  assert.equal(d.form.home.last10.length,1)
+  assert.ok(d.form.home.restHours>80)
   assert.equal(d.opportunity.eligibleForTicket,false)
   assert.equal(d.opportunity.calibratedProbability,false)
   assert.equal(d.uiBlock.component,'sports_espn_dashboard')
