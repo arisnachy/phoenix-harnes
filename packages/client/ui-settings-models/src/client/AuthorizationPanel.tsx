@@ -176,6 +176,7 @@ export interface McpRegistryClient {
   openClawGatewayCredential?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>
   configureOpenClawGatewayCredential?(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>
   setOpenClawPluginTool?(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>
+  setOpenClawPluginEnabled?(request: { pluginId: string; enabled: boolean }): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>
   clawHubCatalog?(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubCatalogRequest): Promise<ClawHubCatalogSnapshot>
   clawHubState?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>
   prepareClawHubCli?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>

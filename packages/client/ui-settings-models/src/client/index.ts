@@ -176,6 +176,7 @@ type PluginInventoryMcpRegistryRemote = {
   openClawGatewayCredential(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>>
   configureOpenClawGatewayCredential(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>>
   setOpenClawPluginTool(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>>
+  setOpenClawPluginEnabled(request: { pluginId: string; enabled: boolean }): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>>
   clawHubState(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>>
   prepareClawHubCli(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>>
   clawHubInstallSkill(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallReceipt>>
@@ -327,6 +328,9 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
     ),
     setOpenClawPluginTool: async request => unwrapPluginInventory(
       'setOpenClawPluginTool', await remote().setOpenClawPluginTool(request),
+    ),
+    setOpenClawPluginEnabled: async request => unwrapPluginInventory(
+      'setOpenClawPluginEnabled', await remote().setOpenClawPluginEnabled(request),
     ),
     clawHubState: async () => unwrapPluginInventory('clawHubState', await remote().clawHubState()),
     prepareClawHubCli: async () => unwrapPluginInventory('prepareClawHubCli', await remote().prepareClawHubCli()),

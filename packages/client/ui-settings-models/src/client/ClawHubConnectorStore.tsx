@@ -37,6 +37,7 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
   const [installedPlugins, setInstalledPlugins] = useState<readonly string[]>([])
   const [routing, setRouting] = useState<OpenClawRoutingSnapshot | null>(null)
   const [routingBusy, setRoutingBusy] = useState<string | null>(null)
+  const [pluginBusy, setPluginBusy] = useState<string | null>(null)
   const [routingError, setRoutingError] = useState(false)
   const [routingRefresh, setRoutingRefresh] = useState(0)
   const [authorizationUrl, setAuthorizationUrl] = useState<string | null>(null)
@@ -49,6 +50,7 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
   const prepareCli = registry?.prepareClawHubCli
   const inspectTools = registry?.openClawPluginTools
   const setRoutingPermission = registry?.setOpenClawPluginTool
+  const setPluginEnabled = registry?.setOpenClawPluginEnabled
   const readGatewayCredential = registry?.openClawGatewayCredential
   const saveGatewayCredential = registry?.configureOpenClawGatewayCredential
 
@@ -91,6 +93,16 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
       value => { setRouting(value) },
       () => { setRoutingError(true) },
     ).finally(() => { setRoutingBusy(null) })
+  }
+
+  const togglePlugin = (pluginId: string, enabled: boolean): void => {
+    if (setPluginEnabled === undefined || pluginBusy !== null) return
+    setPluginBusy(pluginId)
+    setRoutingError(false)
+    void setPluginEnabled({ pluginId, enabled }).then(
+      value => { setRouting(value); setRoutingRefresh(n => n + 1) },
+      () => { setRoutingError(true) },
+    ).finally(() => { setPluginBusy(null) })
   }
 
   useEffect(() => {
@@ -300,6 +312,24 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
         {routing !== null && !routing.inspectionAvailable ? <p>{t('storeRoutingUnavailable')}</p> : null}
         {routing !== null && !routing.gatewayCredentialConfigured
           ? <p className={css.safetyNote}>{t('storeRoutingMissingToken')}</p> : null}
+        {routing !== null && routing.plugins.length > 0 ? (
+          <div className={css.presetGrid}>
+            {routing.plugins.map(plugin => (
+              <article key={plugin.id} className={css.presetCard}>
+                <strong className={css.presetName}>{plugin.id}</strong>
+                <small>{plugin.loaded ? t('storePluginLoaded')
+                  : plugin.enabled ? t('storePluginNeedsRuntime')
+                    : plugin.status === 'error' ? t('storePluginFailed') : t('storePluginDisabled')}</small>
+                <button className={css.compactButton} type="button"
+                  disabled={pluginBusy !== null || setPluginEnabled === undefined}
+                  onClick={() => { togglePlugin(plugin.id, !plugin.enabled) }}>
+                  {pluginBusy === plugin.id ? t('storeInstalling')
+                    : plugin.enabled ? t('storePluginDisable') : t('storePluginEnable')}
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : null}
         {routing !== null && routing.tools.length === 0 ? <p>{t('storeRoutingEmpty')}</p> : null}
         {routing !== null && routing.tools.length > 0 ? (
           <div className={css.presetGrid}>
