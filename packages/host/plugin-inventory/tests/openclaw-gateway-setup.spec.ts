@@ -18,6 +18,8 @@ describe('OpenClaw local Gateway pairing', () => {
       browserUrl: 'https://evil.example/#bootstrap=stolen' })).toThrow('trusted local')
     expect(() => parseOpenClawDashboard({ ...valid, port: 18888 })).toThrow('trusted local')
     expect(() => parseOpenClawDashboard({ ...valid,
+      browserUrl: valid.url + '#bootstrap=one-time-private-link' })).toThrow('expired')
+    expect(() => parseOpenClawDashboard({ ...valid,
       url: 'http://127.0.0.1:18789/' })).toThrow('not available')
   })
 })
