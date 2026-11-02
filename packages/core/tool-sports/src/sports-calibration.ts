@@ -19,7 +19,6 @@ export type CalibrationAudit={
  model:'historical-temperature-v1';source:'ESPN historical final scoreboards'
  warning:string;missing:string[]
 }
-const teamGames=new Map<string,FinishedGame[]>()
 const score=(p:readonly number[],outcome:number)=>p.reduce((sum,x,i)=>sum+(x-(i===outcome?1:0))**2,0)
 const loss=(p:readonly number[],outcome:number)=>-Math.log(Math.max(1e-8,p[outcome]??1e-8))
 const mean=(rows:number[])=>rows.reduce((a,b)=>a+b,0)/rows.length
