@@ -38,7 +38,8 @@ export type MlbForm={games:number;wins:number;losses:number;runsFor:number;runsA
 export type MlbAthlete={id:number;name:string;teamId:number;role:'batter'|'pitcher';batSide:string;
   pitchHand:string;lineupOrder:number|null;lineupConfirmed:boolean;position:string;
   season:Record<string,string>;lastFive:Record<string,string>;
-  reliefUsage72h:Array<{date:string;innings:string;pitches:string}>;
+  reliefUsage72h:Array<{date:string;opponentId:number|null;innings:string;pitches:string;
+    earnedRuns:string;strikeouts:string;walks:string}>;
   recentStarts:Array<{date:string;opponentId:number|null;innings:string;pitches:string;
     earnedRuns:string;strikeouts:string;walks:string}>;
   evidence:'observed'|'partial'|'missing'}
@@ -260,9 +261,12 @@ function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
   add('Bullpen: disponibilidad por confirmar',(['away','home'] as const).flatMap(side=>
     result.bullpen[side].map(p=>({label:result.fixture[side].name+' · '+p.name,
       value:pitcherSummary(p.season),detail:p.reliefUsage72h.length?
-        'Últimos 3 días calendario (sin hora): '+p.reliefUsage72h.map(g=>g.date.slice(5)+' '+g.pitches+' pitcheos').join('; ')+
+        'Últimos 3 días calendario a fecha de consulta (sin hora): '+
+          p.reliefUsage72h.map(g=>g.date.slice(5)+' vs '+(g.opponentId??'?')+
+            ' · '+g.innings+' IP · '+g.pitches+' pitcheos · '+g.earnedRuns+
+            ' ER · '+g.strikeouts+' K · '+g.walks+' BB').join('; ')+
           ' · disponibilidad NO confirmada':
-        'Sin apariciones verificables últimos 3 días calendario; disponibilidad NO confirmada'}))))
+        'Sin relevos verificables últimos 3 días calendario; disponibilidad NO confirmada'}))))
   add('Bajas registradas por MLB',result.injuries.map(p=>({
     label:p.team+' · '+p.name,value:'En roster de lesionados según MLB',
     detail:'Confirmar fecha, disponibilidad y posible activación antes del partido'})))
@@ -439,7 +443,7 @@ export async function researchMlbCase(
         '/stats?stats=gameLog&group=pitching&season='+season,fetcher,sources,now):null
     // MLB game logs provide calendar dates, not first-pitch timestamps.
     // Use three previous calendar dates rather than pretending to know exact 72-hour usage.
-    const cutoffDate=lastDate(date,3)
+    const cutoffDate=lastDate(iso(now).slice(0,10),3)
     const logs=arr(gameLog?.stats?.[0]?.splits).flatMap(raw=>{
       const e=obj(raw),time=Date.parse(word(e.date)),st=obj(e.stat)
       // Game logs contain calendar dates, not start times: same-day entries
@@ -454,7 +458,9 @@ export async function researchMlbCase(
         walks:word(st.baseOnBalls,20)||'—',started:numeric(st.gamesStarted)===1}]
     }).sort((a,b)=>b.time-a.time)
     const recentAppearances=logs.filter(g=>!g.started&&g.date.slice(0,10)>=cutoffDate)
-      .slice(0,5).map(g=>({date:g.date,innings:g.innings,pitches:g.pitches}))
+      .slice(0,5).map(g=>({date:g.date,opponentId:g.opponentId,
+        innings:g.innings,pitches:g.pitches,earnedRuns:g.earnedRuns,
+        strikeouts:g.strikeouts,walks:g.walks}))
     const recentStarts=logs.filter(g=>g.started).slice(0,5).map(g=>({
       date:g.date,opponentId:g.opponentId,innings:g.innings,pitches:g.pitches,
       earnedRuns:g.earnedRuns,strikeouts:g.strikeouts,walks:g.walks}))
