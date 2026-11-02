@@ -58,7 +58,9 @@ export type MlbCase={
   seasonRecord:Record<'home'|'away',{wins:number;losses:number}|null>;
   rosters:Record<'home'|'away',MlbAthlete[]>;starters:Record<'home'|'away',MlbAthlete|null>;
   bullpen:Record<'home'|'away',MlbAthlete[]>;lineupStatus:Record<'home'|'away','confirmed'|'unconfirmed'>;
-  matchups:MlbMatchup[];venue:{name:string;latitude:number|null;longitude:number|null;roof:'unknown'};
+  matchups:MlbMatchup[];venue:{name:string;latitude:number|null;longitude:number|null;
+    roof:'unknown';roofType:'Open'|'Indoor'|'Retractable'|'unknown';
+    turfType:string|null;dimensionsFt:{leftLine:number|null;center:number|null;rightLine:number|null}};
   weather:MlbWeather|null;injuries:Array<{team:string;name:string;status:'listed-in-injured-roster'}>;
   news:Array<{headline:string;published:string;source:string}>;
   externalHeadlines:Array<{headline:string;published:string|null;source:string;status:'headline-only'}>;
@@ -281,7 +283,11 @@ function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
   add('Parque y clima',[{label:result.venue.name,
     value:result.weather?'Viento '+trimNum(result.weather.windSpeedKmh)+' km/h · '+
       'temperatura '+trimNum(result.weather.temperatureC)+' °C':'Meteorología no confirmada',
-    detail:'Dirección relativa al campo, orientación y techo pendientes; no atribuir efecto de viento'}])
+    detail:'Techo estructural '+result.venue.roofType+
+      ' · césped '+(result.venue.turfType??'sin verificar')+
+      ' · distancias LF/CF/RF '+[result.venue.dimensionsFt.leftLine,
+        result.venue.dimensionsFt.center,result.venue.dimensionsFt.rightLine]
+        .map(trimNum).join('/')+' ft. Estado del techo el día del juego y orientación del viento SIN confirmar'}])
   add('Mercados de casas',result.odds.slice(0,12).map(q=>({
     label:q.bookmaker+' · '+q.market+' '+q.selection,
     value:q.price.toFixed(2)+(q.point===null||q.point===undefined?'':' · línea '+q.point),
@@ -332,7 +338,7 @@ export async function researchMlbCase(
     measured<unknown>('https://statsapi.mlb.com/api/v1/game/'+gamePk+'/boxscore',fetcher,sources,now),
     measured<unknown>('https://statsapi.mlb.com/api/v1/game/'+gamePk+'/feed/live',fetcher,sources,now),
     fixture.venue.id?measured<unknown>('https://statsapi.mlb.com/api/v1/venues?venueIds='+
-      fixture.venue.id,fetcher,sources,now):Promise.resolve(null),
+      fixture.venue.id+'&hydrate=location,fieldInfo',fetcher,sources,now):Promise.resolve(null),
     measured<unknown>('https://statsapi.mlb.com/api/v1/teams/'+fixture.home.id+
       '/roster?rosterType=active',fetcher,sources,now),
     measured<unknown>('https://statsapi.mlb.com/api/v1/teams/'+fixture.away.id+
@@ -351,8 +357,16 @@ export async function researchMlbCase(
   const coordinates=obj(location.defaultCoordinates)
   const lat=numeric(coordinates.latitude),lon=numeric(coordinates.longitude)
   const safeGeo=lat!==null&&lon!==null&&Math.abs(lat)<=90&&Math.abs(lon)<=180
+  const field=obj(venue.fieldInfo)
+  const roofRaw=word(field.roofType)
+  const roofType=roofRaw==='Open'||roofRaw==='Indoor'||roofRaw==='Retractable'?
+    roofRaw:'unknown' as const
+  const feet=(v:unknown)=>{const n=numeric(v);return n!==null&&n>=100&&n<=700?n:null}
   const site={name:word(venue.name)||fixture.venue.name,
-    latitude:safeGeo?lat:null,longitude:safeGeo?lon:null,roof:'unknown' as const}
+    latitude:safeGeo?lat:null,longitude:safeGeo?lon:null,roof:'unknown' as const,
+    roofType,turfType:word(field.turfType)||null,
+    dimensionsFt:{leftLine:feet(field.leftLine),center:feet(field.center),
+      rightLine:feet(field.rightLine)}}
   let weather:MlbWeather|null=null
   if(site.latitude!==null&&site.longitude!==null){
     const url='https://api.open-meteo.com/v1/forecast?latitude='+site.latitude+
@@ -542,7 +556,8 @@ export async function researchMlbCase(
     ...(!starters.home?['Abridor local no verificado']:[]),
     ...(!starters.away?['Abridor visitante no verificado']:[]),
     ...(!weather?['Clima horario no disponible']:[]),
-    'Orientación del terreno, techo abierto/cerrado y efecto del viento no verificados',
+    'Orientación del terreno, estado operativo del techo y efecto del viento no verificados',
+    ...(site.roofType==='unknown'?['Tipo de techo del estadio no publicado por MLB']:[]),
     'Fatiga y disponibilidad definitivas de relevistas requieren confirmación; los game logs por fecha (3 días calendario) no aportan hora exacta ni garantizan disponibilidad',
     'Lesiones, estrellas, noticias y opiniones de expertos sin verificación específica',
     'Enfrentamientos BvP no publicados, splits de mano y repertorio siguen pendientes por jugador',
