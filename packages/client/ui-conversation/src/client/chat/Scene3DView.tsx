@@ -3,6 +3,7 @@ import css from './Scene3DView.module.css'
 import { exportSceneGLB, exportSceneGLTF, importSceneGLTF } from './scene3d-formats.ts'
 import { torusTriangles } from './scene3d-primitives.ts'
 import { poseScene3D } from './scene3d-animation.ts'
+import { drawWebGLScene } from './scene3d-webgl.ts'
 
 export interface Scene3DMaterial {
   readonly preset?: string
@@ -278,6 +279,7 @@ function sceneBounds(scene:Scene3D): {center:Vec3; radius:number} {
 
 function paint(canvas:HTMLCanvasElement,scene:Scene3D,faces:readonly Face[],
   bounds:{center:Vec3;radius:number},yaw:number,pitch:number,zoom:number,pan:[number,number]):void{
+  if(drawWebGLScene(canvas,faces,bounds,scene.background,yaw,pitch,zoom,pan))return
   const ctx=canvas.getContext('2d')
   if(ctx===null)return
   const rect=canvas.getBoundingClientRect()
@@ -362,7 +364,7 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
     if(scene===undefined||bounds===undefined)return
     const element=canvas.current
     if(element===null)return
-    if(element.getContext('2d')===null) {
+    if(element.getContext('webgl2')===null && element.getContext('2d')===null) {
       setProblem('Este navegador no permite dibujar el modelo 3D.')
       return
     }
