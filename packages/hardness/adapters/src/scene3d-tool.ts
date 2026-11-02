@@ -25,12 +25,24 @@ interface SceneNode {
     readonly clearcoat?: number
   }
 }
+interface AnimationTrack {
+  readonly node: string
+  readonly property: 'position' | 'rotation' | 'size'
+  readonly keys: readonly { readonly time: number; readonly value: readonly [number, number, number] }[]
+}
+interface SceneAnimation {
+  readonly name: string
+  readonly duration: number
+  readonly loop: boolean
+  readonly tracks: readonly AnimationTrack[]
+}
 export interface Scene {
   readonly version: 1
   readonly units: 'meters'
   readonly name: string
   readonly background: string
   readonly nodes: readonly SceneNode[]
+  readonly animations?: readonly SceneAnimation[]
   readonly environment?: 'studio' | 'sunset' | 'daylight'
   readonly camera?: 'perspective' | 'isometric' | 'front' | 'top'
 }
@@ -39,6 +51,64 @@ const validVector = (value: unknown, min: number, max: number): value is number[
   Array.isArray(value) && value.length === 3 && value.every(
     entry => typeof entry === 'number' && Number.isFinite(entry) && entry >= min && entry <= max,
   )
+function normalizeAnimations(raw: unknown, nodes: readonly SceneNode[]): SceneAnimation[] | undefined {
+  if (raw === undefined) return undefined
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > 8) {
+    throw new ToolArgsError(['La escena admite entre 1 y 8 animaciones.'])
+  }
+  const names = nodes.map(node => node.name)
+  const clips: SceneAnimation[] = []
+  let totalKeys = 0
+  for (const [index, item] of raw.entries()) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      throw new ToolArgsError(['Animación inválida.'])
+    }
+    const clip = item as Record<string, unknown>
+    const duration = clip.duration
+    if (typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0 || duration > 120
+      || !Array.isArray(clip.tracks) || clip.tracks.length < 1 || clip.tracks.length > 64) {
+      throw new ToolArgsError([`Animación ${index + 1}: duración o pistas inválidas.`])
+    }
+    const tracks: AnimationTrack[] = []
+    for (const itemTrack of clip.tracks) {
+      if (typeof itemTrack !== 'object' || itemTrack === null || Array.isArray(itemTrack)) {
+        throw new ToolArgsError(['Pista 3D inválida.'])
+      }
+      const track = itemTrack as Record<string, unknown>
+      const node = track.node
+      const property = track.property
+      if (typeof node !== 'string' || names.filter(name => name === node).length !== 1
+        || !['position','rotation','size'].includes(String(property))
+        || !Array.isArray(track.keys) || track.keys.length < 2 || track.keys.length > 32) {
+        throw new ToolArgsError(['La pista requiere un nodo con nombre único y entre 2 y 32 claves.'])
+      }
+      let previousTime = -1
+      const keys: Array<{time:number;value:[number,number,number]}> = []
+      for (const rawKey of track.keys) {
+        if (typeof rawKey !== 'object' || rawKey === null || Array.isArray(rawKey)) {
+          throw new ToolArgsError(['Fotograma clave 3D inválido.'])
+        }
+        const key = rawKey as Record<string, unknown>
+        const time = key.time
+        const min = property === 'size' ? 0.001 : property === 'rotation' ? -360 : -300
+        const max = property === 'rotation' ? 360 : 300
+        if (typeof time !== 'number' || !Number.isFinite(time) || time < 0
+          || time > duration || time <= previousTime || !validVector(key.value, min, max)) {
+          throw new ToolArgsError(['Tiempos o valores de fotogramas 3D inválidos.'])
+        }
+        previousTime = time
+        keys.push({ time, value: [key.value[0]!, key.value[1]!, key.value[2]!] })
+      }
+      totalKeys += keys.length
+      if (totalKeys > 3000) throw new ToolArgsError(['Máximo 3000 fotogramas clave por escena.'])
+      tracks.push({ node, property: property as AnimationTrack['property'], keys })
+    }
+    clips.push({ name: typeof clip.name === 'string' && clip.name.trim() !== ''
+      ? clip.name.slice(0,80) : `Animación ${index + 1}`,
+      duration, loop: clip.loop !== false, tracks })
+  }
+  return clips
+}
 function normalizeScene(raw: unknown, fallbackName: string): Scene {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     throw new ToolArgsError(['La escena 3D debe contener nodes: una lista de objetos geométricos.'])
@@ -122,6 +192,7 @@ function normalizeScene(raw: unknown, fallbackName: string): Scene {
     name: typeof data.name === 'string' && data.name.trim() !== '' ? data.name.slice(0, 140) : fallbackName,
     background: typeof data.background === 'string' && hex.test(data.background) ? data.background : '#f7f2eb',
     nodes,
+    ...(data.animations === undefined ? {} : { animations:normalizeAnimations(data.animations,nodes) }),
     ...(data.environment==='studio'||data.environment==='sunset'||data.environment==='daylight'?{environment:data.environment}:{}),
     ...(data.camera==='perspective'||data.camera==='isometric'||data.camera==='front'||data.camera==='top'?{camera:data.camera}:{}),
   }
@@ -182,7 +253,7 @@ function trivialOrganicScene(scene: Scene): boolean {
 export function createPhoenix3DTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_3d',
-    description: 'Create a REAL INTERACTIVE THREE-DIMENSIONAL SCENE and show it inside Phoenix chat. For requests such as modelo 3D, casa 3D, diseño 3D, rotar, orbit, zoom, manipulable, modelo para una app, use THIS tool, not image_generation or phoenix_visualize. Output is 3D geometry (not PNG): the user can drag to rotate, use the wheel or +/- to zoom, reset the camera, and download a portable versioned JSON model reusable in Phoenix apps. For a quick fictional tropical villa concept use demo:true and no scene. For complex scenes NEVER use a single-subject preset: provide scene with multiple semantic objects, their objectId per node, and requiredObjects listing every required subject and environmental prop. Use torus for bicycle wheels, pipes, rings and circular architecture; use mesh for unconstrained complex geometry. Use the pelican demonstration preset ONLY for a pelican without any companions. Never replace composed scenes with a preset. For other animals create a detailed triangular mesh or several recognizable named anatomical parts. For original designs provide scene:{environment:"sunset"|"studio"|"daylight",camera:"isometric"|"front"|"top"|"perspective",nodes:[{type:"box"|"sphere"|"cylinder"|"cone"|"mesh"|"torus",name?,objectId?,position:[x,y,z],size:[x,y,z],vertices?:[x0,y0,z0,x1,y1,z1,x2,y2,z2,...],rotation?:[degreesX,degreesY,degreesZ],color:"#rrggbb",material?:{preset?:"glass"|"wood"|"concrete"|"metal"|"water"|"foliage",baseColor?:"#rrggbb",metallic?:number,roughness?:number,opacity?:number,transmission?:number,clearcoat?:number,emissive?:"#rrggbb"}}],name?,background?}. Coordinates and sizes are meters; y is vertical. Approximate reference photos as clearly labeled 3D concepts: do NOT claim exact photo-to-CAD reconstruction, survey measurements, exact photorealistic reconstruction; the viewer provides GLB/glTF import-export with glTF PBR material parameters and editable geometry, not CAD/BIM. Up to 150 nodes and 60,000 mesh vertices total. Do not replace any multi-object scene with a preset. Validate position, surroundings, relationships and essential objects. No external scripts, URLs, image substitution or fake interactive buttons. A self-contained scene finishes the requested presentation; continueAfterDisplay only for additional explicitly requested work.',
+    description: 'Create a REAL INTERACTIVE THREE-DIMENSIONAL SCENE and show it inside Phoenix chat. For requests such as modelo 3D, casa 3D, diseño 3D, rotar, orbit, zoom, manipulable, modelo para una app, use THIS tool, not image_generation or phoenix_visualize. Output is 3D geometry (not PNG): the user can drag to rotate, use the wheel or +/- to zoom, reset the camera, and download a portable versioned JSON model reusable in Phoenix apps. For a quick fictional tropical villa concept use demo:true and no scene. For complex scenes NEVER use a single-subject preset: provide scene with multiple semantic objects, their objectId per node, and requiredObjects listing every required subject and environmental prop. Use torus for bicycle wheels, pipes, rings and circular architecture; use mesh for unconstrained complex geometry. Optional scene.animations:[{name,duration,loop,tracks:[{node:uniqueNodeName,property:position|rotation|size,keys:[{time,value:[x,y,z]},...]}]}] creates real keyframe motion. For compound scenes, include environment objects and name individual moving parts uniquely. Use the pelican demonstration preset ONLY for a pelican without any companions. Never replace composed scenes with a preset. For other animals create a detailed triangular mesh or several recognizable named anatomical parts. For original designs provide scene:{environment:"sunset"|"studio"|"daylight",camera:"isometric"|"front"|"top"|"perspective",nodes:[{type:"box"|"sphere"|"cylinder"|"cone"|"mesh"|"torus",name?,objectId?,position:[x,y,z],size:[x,y,z],vertices?:[x0,y0,z0,x1,y1,z1,x2,y2,z2,...],rotation?:[degreesX,degreesY,degreesZ],color:"#rrggbb",material?:{preset?:"glass"|"wood"|"concrete"|"metal"|"water"|"foliage",baseColor?:"#rrggbb",metallic?:number,roughness?:number,opacity?:number,transmission?:number,clearcoat?:number,emissive?:"#rrggbb"}}],name?,background?}. Coordinates and sizes are meters; y is vertical. Approximate reference photos as clearly labeled 3D concepts: do NOT claim exact photo-to-CAD reconstruction, survey measurements, exact photorealistic reconstruction; the viewer provides GLB/glTF import-export with glTF PBR material parameters and editable geometry, not CAD/BIM. Up to 150 nodes and 60,000 mesh vertices total. Do not replace any multi-object scene with a preset. Validate position, surroundings, relationships and essential objects. No external scripts, URLs, image substitution or fake interactive buttons. A self-contained scene finishes the requested presentation; continueAfterDisplay only for additional explicitly requested work.',
     parameters: {
       title: { type: 'string', required: true, description: 'Human-readable title of the real 3D model.' },
       demo: { type: 'boolean', description: 'True generates a complete tropical villa concept scene in 3D without another model call.' },
