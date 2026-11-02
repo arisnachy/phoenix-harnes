@@ -43,3 +43,49 @@ El instalador valida la CLI ejecutándola, consulta `npm view clawhub version`, 
 El diagnóstico persiste en el directorio de usuario `DSH_HOME/toolchains/clawhub-status.json`: estado, versión, última comprobación y motivo controlado de fallo, sin credenciales ni salida npm. Los fallos de red o npm no bloquean el arranque de PHOENIX. La tienda sigue siendo navegable mediante su API pública si la CLI no está disponible, pero las instalaciones quedan deshabilitadas hasta recuperar el ejecutable.
 
 Los plugins nativos no se activan sin revisión ni permisos. ClawHub CLI ≠ OpenClaw Gateway; este último requiere Node y configuración independientes.
+
+## Plugins nativos: autorización y ejecución desde Kira
+
+PHOENIX mantiene a Kira como agente central; **no** crea otro agente de OpenClaw. En
+**Settings → Conectores → Tienda ClawHub**, la sección «Herramientas OpenClaw → Kira»
+inspecciona los plugins que el runtime local declara cargados, muestra sus herramientas
+registradas y permite autorizar o revocar cada herramienta individualmente.
+
+La autorización se almacena en
+`DSH_HOME/toolchains/openclaw-routing.json` como identidades `pluginId + toolName`
+(sin secretos). Al instalar un plugin no se autoriza su ejecución desde Kira.
+Una vez aprobada, Kira utiliza las herramientas
+`openclaw_plugin_catalog` y `openclaw_plugin_invoke`. El ejecutor:
+
+- vuelve a validar el par exacto contra la política local y la inspección del plugin;
+- solo envía llamadas al Gateway de bucle invertido `127.0.0.1:18789`;
+- no permite al modelo modificar el destino, el token, los comandos ni los permisos;
+- bloquea explícitamente ejecución de shell, escritura de archivos, sesión, Gateway,
+  nodos y automatización sensible;
+- registra una constancia acotada del resultado, sin token ni argumentos.
+
+El token de operador del Gateway se guarda en la bóveda de PHOENIX desde
+**Conectores → ClawHub → Conectar Gateway OpenClaw** y se resuelve en cada llamada.
+La conexión se utiliza sin reiniciar el registro de herramientas de Kira. También se
+admiten las variables de entorno anteriores. El secreto **no** debe enviarse por chat.
+El panel de administración del Gateway local está en `http://127.0.0.1:18789/`
+cuando se ejecuta con su configuración predeterminada.
+
+**OAuth y permisos del proveedor.** Cada plugin administra sus credenciales y
+permisos con el procedimiento oficial de su proveedor en OpenClaw; no existe
+un OAuth genérico para todos los servicios. PHOENIX no asume que un plugin
+está autorizado simplemente por cargarlo. Un error HTTP 401/403/404 del
+Gateway se informa como conexión/permisos/herramienta no disponible, sin copiar
+los mensajes privados de error. Los canales, proveedores de modelos y plugins
+sin herramientas de agente no se convierten artificialmente en funciones
+invocables de Kira; requieren un adaptador específico para su superficie.
+
+La CLI de OpenClaw precisa un Node compatible, independiente de la CLI ClawHub.
+La inspección de CLI es evidencia de sus registros, no prueba por sí sola de que el
+Gateway haya cargado el mismo módulo. La llamada efectiva al Gateway es la
+comprobación final; si el plugin se retira o deshabilita, no se invoca.
+
+Documentación oficial:
+- https://docs.openclaw.ai/gateway/tools-invoke-http-api
+- https://docs.openclaw.ai/cli/plugins/inspect-and-diagnose
+- https://docs.openclaw.ai/concepts/oauth
