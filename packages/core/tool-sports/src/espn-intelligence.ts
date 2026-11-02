@@ -262,7 +262,7 @@ function eventLeaders(data:unknown):Item[]{
     })
   })).filter((x):x is Item=>x!==null).slice(0,18)
 }
-function searchResults(data:unknown,sport:string,league:string):Item[]{
+function searchResults(data:unknown):Item[]{
   const d=row(data),groups=array(d.results)
   const hits=groups.flatMap(g=>array(row(g).items).map(hit=>({
     hit,category:txt(row(g).type??row(g).name,40).toLowerCase(),
@@ -275,12 +275,8 @@ function searchResults(data:unknown,sport:string,league:string):Item[]{
     const player=/athlete|player|jugador/u.test(kind),team=/team|equipo|club/u.test(kind)
     if(!result)return null
     if(!entityId||!player&&!team)return result
-    const view=player?'player':'team'
     return {...result,value:result.value??('ID ESPN: '+entityId),
-      action:{label:player?'Ficha y estadísticas':'Perfil del equipo',
-        prompt:'Kira, consulta sports_chat_espn_explore con sport='+sport+', league='+league+
-          ', view='+view+', '+(player?'athleteId':'teamId')+'='+entityId+
-          '. Usa exclusivamente hechos verificados por ESPN.'}}
+      detail:(result.detail??'')+' · '+(player?'Atleta':'Equipo')+' · ESPN '+entityId}
   }).filter((x):x is Item=>x!==null)
 }
 /** Explores one ESPN entity with bounded optional evidence and a reusable adaptive UI.
@@ -485,7 +481,7 @@ export async function exploreEspn(
     })))
   }else if(view==='search'){
     subtitle='Resultados para '+txt(input.query,80)
-    put(section('Entidades encontradas','list',searchResults(data.get('Buscador ESPN'),sport,league),20))
+    put(section('Entidades encontradas','list',searchResults(data.get('Buscador ESPN')),20))
   }
   const limitations=[
     'Solo se muestran campos que el proveedor devolvió; un HTTP 200 vacío no valida una estadística.',
