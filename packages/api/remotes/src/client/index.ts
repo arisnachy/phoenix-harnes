@@ -24,6 +24,10 @@ export type {
   TokenTelemetrySnapshot,
   TokenTelemetryRecord,
   PluginInventorySnapshot,
+  OpenClawProbeState,
+  OpenClawRuntimeSnapshot,
+  ClawHubCatalogRequest, ClawHubCatalogItem, ClawHubCatalogSnapshot,
+  ClawHubFamily, ClawHubState, ClawHubInstallRequest, ClawHubInstallReceipt,
 } from '@phoenix-ai/dsh-host-plugin-inventory/types'
 export type {} from '@phoenix-ai/dsh-commands/remote'
 export type {} from '@phoenix-ai/dsh-file-reference/remote'

@@ -49,6 +49,33 @@ describe('connectors settings section', () => {
     expect(document.querySelector('[data-connector-id="binance"]')).toBeNull()
   })
 
+  it('shows OpenClaw companion diagnostics in its existing connector card without claiming tool access', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const openClawRuntimeState = vi.fn(async () => ({
+      installed: true, gateway: 'responded' as const, browser: 'unavailable' as const,
+      plugins: 'responded' as const, channels: 'unavailable' as const,
+      nativePluginsRoutedToPhoenix: false as const,
+    }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      openClawRuntimeState,
+      search: vi.fn(), install: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="openclaw"]')
+    expect(card).toBeTruthy()
+    await waitFor(() => expect(card?.textContent).toContain(connectorEn.ocDetected))
+    expect(card?.textContent).toContain(connectorEn.ocNote)
+    expect(card?.textContent).toContain(connectorEn.ocBrowser)
+    expect(card?.textContent).toContain(connectorEn.ocUnavailable)
+    expect(document.querySelectorAll('[data-connector-id="openclaw"]')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: connectorEn.connected }))
+    expect(document.querySelector('[data-connector-id="openclaw"]')).toBeNull()
+    expect(openClawRuntimeState).toHaveBeenCalledOnce()
+  })
+
   it('starts the registered Binance Agentic OAuth authorization instead of merely reinstalling MCP',async()=>{
     const fetcher=vi.fn(async(input: RequestInfo | URL)=>{
       const path=String(input)

@@ -212,7 +212,8 @@ export async function discoverModels(
   // entries carry context windows and output caps no listing endpoint reports.
   // OpenRouter is the exception: its fast-moving public directory is newer
   // than any dependency snapshot and users may still add any returned ID.
-  if (request.provider !== undefined && request.provider !== 'openrouter') {
+  if (request.provider !== undefined && request.provider !== 'openrouter'
+    && !(request.provider === 'nvidia' && baseURL !== undefined)) {
     const installed = catalogModels(request.provider)
     if (installed.size > 0) {
       return [...installed.values()].map(model => ({

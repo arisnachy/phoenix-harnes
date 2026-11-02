@@ -103,6 +103,19 @@ describe('catalog-route model discovery', () => {
     expect(server.paths).toEqual([])
   })
 
+  it('reads a custom NVIDIA NIM server instead of mixing in the public Build catalog', async () => {
+    const server = await listingServer({
+      body: JSON.stringify({ data: [{ id: 'private/custom-llm' }] }),
+    })
+    const ctx = await harness()
+    const models = await ctx.llm.discoverModels('llm-pi-ai', {
+      provider: 'nvidia', baseURL: `${server.url}/v1`, apiKey: 'private-nim-key',
+    })
+    expect(models.map(model => model.id)).toEqual(['private/custom-llm'])
+    expect(server.paths).toEqual(['/v1/models'])
+    expect(server.headers[0]?.authorization).toBe('Bearer private-nim-key')
+  })
+
   it('needs no endpoint for a route the catalog describes', async () => {
     const ctx = await harness()
     await expect(ctx.llm.discoverModels('llm-pi-ai', { provider: 'deepseek' })).resolves.not.toHaveLength(0)

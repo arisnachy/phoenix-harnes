@@ -1,3 +1,57 @@
+
+/** ClawHub entries are catalog metadata, never proof a third-party package is executable. */
+export type ClawHubFamily = 'skill' | 'code-plugin' | 'bundle-plugin'
+export interface ClawHubListing {
+  readonly name: string
+  readonly family: ClawHubFamily
+  readonly description: string
+  readonly version: string
+}
+export interface ClawHubQuery {
+  readonly query: string
+  readonly family: ClawHubFamily
+  readonly limit?: number
+}
+export interface ClawHubInstallRequest {
+  readonly name: string
+  readonly family: ClawHubFamily
+}
+export interface ClawHubInstallReceipt {
+  readonly name: string
+  readonly family: ClawHubFamily
+  readonly status: 'installed-skill' | 'installed-in-openclaw'
+  readonly detail: string
+}
+export interface ClawHubState {
+  readonly cli: 'managed' | 'global' | 'missing'
+  readonly openclaw: 'available' | 'missing'
+  readonly skillsDirectory: string
+  readonly pluginExecution: 'openclaw-runtime' | 'not-configured'
+}
+
+
+/** Search results from the public ClawHub registry; not installed/active tools. */
+export interface ClawHubCatalogRequest {
+  readonly family: ClawHubFamily
+  readonly query?: string
+  readonly officialOnly?: boolean
+  readonly limit?: number
+}
+export interface ClawHubCatalogItem {
+  readonly name: string
+  readonly displayName: string
+  readonly description: string
+  readonly version: string
+  readonly family: ClawHubFamily
+  readonly official: boolean
+  readonly installed: boolean
+}
+export interface ClawHubCatalogSnapshot {
+  readonly source: 'clawhub'
+  readonly family: ClawHubFamily
+  readonly items: readonly ClawHubCatalogItem[]
+}
+
 /** Secret-free The Odds API v4 credential state projected to trusted clients. */
 export interface OddsApiConnectorState {
   readonly configured: boolean
@@ -426,6 +480,18 @@ export interface OpenClawConnectorEntry {
 /** Current OpenClaw connector readiness projected to Settings. */
 export interface OpenClawConnectorSnapshot {
   readonly connectors: readonly OpenClawConnectorEntry[]
+}
+
+
+/** CLI readiness is not proof of live runtime state or granted capabilities. */
+export type OpenClawProbeState = 'not-installed' | 'responded' | 'unavailable'
+export interface OpenClawRuntimeSnapshot {
+  readonly installed: boolean
+  readonly gateway: OpenClawProbeState
+  readonly browser: OpenClawProbeState
+  readonly plugins: OpenClawProbeState
+  readonly channels: OpenClawProbeState
+  readonly nativePluginsRoutedToPhoenix: false
 }
 
 /** Public X connector identity accepted by the Host remote boundary. */

@@ -39,6 +39,22 @@ export const extendedEspnRoutes={
   venues:{root:'core',path:'/venues'},
   transactions:{root:'core',path:'/transactions'},
   league_events:{root:'core',path:'/events'},
+  seasons:{root:'core',path:'/seasons'},
+  season_detail:{root:'core',path:'/seasons/{season}'},
+  season_type:{root:'core',path:'/seasons/{season}/types/{seasonType}'},
+  calendar:{root:'core',path:'/calendar'},
+  teams:{root:'core',path:'/teams'},
+  active_athletes:{root:'core',path:'/athletes'},
+  athlete_profile:{root:'core',path:'/athletes/{athleteId}'},
+  game_player_statistics:{root:'core',path:'/events/{eventId}/competitions/{competitionId}/competitors/{teamId}/roster/{athleteId}/statistics/0'},
+  season_athlete:{root:'core',path:'/seasons/{season}/athletes/{athleteId}'},
+  positions:{root:'core',path:'/positions'},
+  franchises:{root:'core',path:'/franchises'},
+  free_agents:{root:'core',path:'/seasons/{season}/freeagents'},
+  season_draft:{root:'core',path:'/seasons/{season}/draft'},
+  season_groups:{root:'core',path:'/seasons/{season}/types/{seasonType}/groups'},
+  season_group_events:{root:'core',path:'/seasons/{season}/types/{seasonType}/weeks/{week}/events'},
+
 } as const
 /** Supported, explicitly enumerated modes for safe ESPN route generation. */
 export type ExtendedEspnMode=keyof typeof extendedEspnRoutes

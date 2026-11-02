@@ -52,6 +52,9 @@ function retryAfterMsFromMessage(message: string): number | undefined {
 
 function classifyPiAiError(message: string): string {
   if (/\b(?:401|403)\b/.test(message)) return 'AUTH'
+  // A removed endpoint or retired model will not recover through retries.
+  // NVIDIA also reports 410 when an account lacks hosted inference access.
+  if (/\b410\b/.test(message)) return 'MODEL_UNAVAILABLE'
   // pi-ai's ChatGPT Codex backend derives the account from an OAuth JWT's
   // claims; any other credential shape dies here before wire I/O.
   if (/failed to extract account\s*id from token/i.test(message)) return 'AUTH'
@@ -161,10 +164,24 @@ export function mapStopReason(
         ? RECOVERABLE_PI_AI_ERROR_CODE
         : classified
       const providerRetryAfterMs = code === 'RATE_LIMIT' ? retryAfterMsFromMessage(text) : undefined
+      const nvidiaGone = code === 'MODEL_UNAVAILABLE' && /^nvidia(?:-nim)?$/i.test(message.provider)
+      const retiredTrial = nvidiaGone && message.model === 'minimaxai/minimax-m3'
+      const detail = retiredTrial
+        ? 'NVIDIA dejó de ofrecer el endpoint gratuito de MiniMax-M3 (HTTP 410). '
+          + 'Selecciona minimaxai/minimax-m3.1-flash en Modelos; '
+          + 'NVIDIA indica que su endpoint gratuito está disponible. '
+          + 'El M3 original puede seguir accesible mediante proveedores asociados. '
+          + `Error original: ${text}`
+        : nvidiaGone
+          ? `NVIDIA NIM returned HTTP 410 for model "${message.model}".`
+            + ' The model may be retired or this account may lack Public API Endpoints access.'
+            + ' Select a confirmed working model or check NVIDIA access.'
+            + ` Original error: ${text}`
+          : text
       return {
         kind: 'error',
         failure: {
-          message: text,
+          message: detail,
           code,
           ...providerRetryAfterMs === undefined ? {} : { providerRetryAfterMs },
         },

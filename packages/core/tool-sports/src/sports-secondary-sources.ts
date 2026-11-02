@@ -48,7 +48,7 @@ export type SecondarySportsSourceId=typeof secondarySportsSources[number]['id']
 export const secondaryMarketWorkflow = [
   '1. Obtén partido, liga, fecha/hora y eventId/competitionId reales desde ESPN Scoreboard; no traduzcas el ID ESPN al de otra web.',
   '2. Usa sports_chat_odds y sports_chat_espn_core para intentar cuotas de ESPN con casa, mercado, línea y timestamp propios.',
-  '3. Si faltan precios o se necesita contrastar, elige un sitio de este catálogo. Solo consulta páginas mediante navegación permitida; no hay scraper/API oficial instalada de estos cuatro portales.',
+  '3. Para contraste editorial usa sports_chat_editorial_discovery: descubre titulares de estos cuatro medios mediante RSS indexado, sin visitar ni extraer sus páginas directamente. Para verificar un artículo completo usa navegación autorizada; el índice no habilita scraping, cuotas ni picks premium.',
   '4. Verifica ambos participantes, competición, fecha, zona horaria, condición de prepartido y período del mercado en CADA portal; nombres similares no prueban identidad.',
   '5. Registra URL exacta, nombre de casa, mercado (moneyline/1X2/spread/total), selección, precio, punto/línea y fecha de consulta. Distingue cuándo se VISITÓ la página de cuándo la CASA actualizó el precio.',
   '6. Si falta fecha de actualización de la casa, etiqueta la cifra «observación para investigación; vigencia no verificada». Si la página refleja línea inicial o histórico, etiqueta «histórico».',
@@ -58,6 +58,8 @@ export const secondaryMarketPolicy = {
   registryStatus:'reference_only',
   retrievalStatus:'not_attempted',
   automaticAdapters:false,
+  editorialIndexAdapter:'sports_chat_editorial_discovery (RSS de terceros, solo titulares)',
+  directPortalExtraction:false,
   sportsbookExecution:false,
   requireAuthorizedAccess:true,
   noBypass:'Nunca eludir CAPTCHA, login, paywalls, robots, geobloqueos o limitaciones del proveedor.',

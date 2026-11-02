@@ -31,6 +31,8 @@ import { fetchPublicEspnOddsDetailed } from './espn-odds.ts'
 import { espnEndpointGuide,espnWorkflow } from './espn-endpoint-guide.ts'
 import { fetchEspnHistoricalOdds } from './espn-odds-history.ts'
 import { secondaryMarketSourceCatalog } from './sports-secondary-sources.ts'
+import {discoverEditorialResearch,type EditorialSource,editorialDomains} from './sports-editorial-discovery.ts'
+import {auditSportsCalibration,availableSportCalibration,calibratedSportsForecast} from './sports-calibration.ts'
 import {sportsEnvWithVaultKey} from './sports-credential-env.ts'
 
 export const name = 'tool-sports'
@@ -45,12 +47,15 @@ const GUIDANCE = [
   'JUANCITO SPORT: utiliza como fuente PRIMARIA su reglamento oficial https://www.juancitosport.com.do/reglas/ y términos https://www.juancitosport.com.do/banca/terminos/. Las reglas verificadas incluyen 3/5/9 innings, run line, ponches, hits, medio tiempo, props, 90 minutos fútbol y overtime diferenciado. Una apuesta solo es válida al mostrar el sistema «Apuesta Confirmada» (8.4); el mínimo publicado es RD$100 (7.10). Su condición 6.6 PROHÍBE usar robots o scripts para realizar apuestas: Kira NO debe automatizar clicks ni apuestas en esa web. Puede investigar fuentes, calcular y entregar el ticket; el usuario realiza la confirmación legalmente en la banca. El sitio juancitosports.com es informativo independiente: NO atribuirle reglamentos oficiales. ',
   'APUESTAS REALES NO FICTICIAS: si el usuario pide un ticket para apostar dinero real, NO respondas por defecto «simulado», «apuesta ficticia» o «no puedo investigar apuestas». Investiga eventos y mercados verificables, contrasta las reglas EXACTAS de la casa con sports_chat_bet_rules, obtiene precios reales por fuente con sports_chat_odds, sports_chat_odds_keyless y sports_chat_market_intelligence; si no hay ofertas auténticas no inventes cuotas. Un boleto cotizado NO equivale a una apuesta aceptada. Solo tras confirmación independiente del comprobante de la casa se puede declarar colocada; sin ella di «ticket cotizado, pendiente de aceptación». No ejecutes apuestas ni transferencias sin autorización explícita y una integración oficial operativa. Las reglas oficiales varían para extra innings, suspensiones, jugadores inactivos, pitcher listado, push, overtime y mercados por período. Prioriza mercados no limitados a ganador: spread/run line, -1.5/+1.5, totales 3/5/9 entradas, props de ponches/hits, handicaps, puntos, tiros, córners y más. Los precios solo son reales si se observan con casa, mercado exacto, línea, momento y correspondencia de evento. La calculadora del ticket se actualiza con el importe sin transferir fondos. Tras la fecha consulta sports_chat_ticket_track con IDs y recibo si lo hay para grados provisionales según marcador y jamás declares cobro/void confirmado sin liquidación oficial.',
   'FUENTES ESPN EXTENDIDAS: además de los 11 modos Core, sports_chat_espn_extended_catalog muestra rutas validadas para equipos, temporadas, jugadores, lesions, jugadas y estadísticas. Usa sports_chat_espn_extended SOLO con IDs reales de ESPN (competitionId no se deduce siempre de eventId). La presencia del endpoint en el catálogo no garantiza datos ni derechos de redistribución; informe unavailable/empty sin inventar.',
+  'INTENCIÓN DEPORTIVA NATURAL: interpreta preguntas como quién gana, quién es favorito, pronostica, investiga el primero, dame los mejores cinco o compara el partido sin exigir que el usuario mencione sports_chat_* ni redacte una orden técnica. Orquesta sports_chat_daily_scan, sports_chat_games, sports_chat_matchup_factors, sports_chat_predict y sports_chat_odds conforme a la evidencia. Usa como pantalla principal una ficha compacta que muestre equipos, forma, estadísticas, cuotas y pronósticos observados; los nombres de los motores o portales que producen predicciones de referencia no deben dominar la tarjeta, aunque sus fuentes y fechas sigan trazables en el informe. No rellenar vacíos con cifras ficticias ni mostrar como ganador un borrador incompleto.',
   'PREDICCIÓN EXPLORATORIA PHOENIX: cuando el usuario pida predecir un juego, tras sports_chat_games usa sports_chat_predict con sport, league, eventId y fecha verificadas. La salida de recent-form-poisson-v1 / recent-margin-logistic-v1 NO ha sido calibrada fuera de muestra; no afirmar edge, EV o apuesta ganadora. Corrobora lesiones, lineups y fuentes secundarias sin copiar pronósticos externos. Si status=insufficient abstenerse de dar porcentajes.',
   'MATCHUP FACTORS UNIVERSAL: si el usuario pide favorito bien investigado, ventaja o desventaja, cruces, rendimiento en estadio, H2H, abridores MLB o carreras en 3/5/9 innings, llama sports_chat_matchup_factors con ID real y fecha ESPN. Combina forma reciente, descansos, enfrentamientos, sede, MLB tramos de entradas, abridores probables y últimas salidas, partes médicos, noticias y cuotas reconciliadas. Una media histórica de carreras no es predicción calibrada: no declares ganador cierto, porcentaje propio, ventaja de EV, o impacto causal del clima sin modelo validado. Si clima, bullpen, rotación, alineación, xG o condiciones del estadio carecen de fuentes, marca PENDIENTE y explica qué dato falta. Usa el panel adaptativo dentro del chat, no menús. ',
   'ESPN ODDS PRIORITARIAS: usa sports_chat_odds (por defecto solo ESPN Scoreboard/Core/Summary) y nunca sustituyas una cuota ESPN por otra fuente sin pedir sourcePolicy=all y no usar eventId/fecha. Cuando la consulta sea de partido individual, primero obtén eventId y fecha del scoreboard con sports_chat_games. ESPN ODDS POR PARTIDO: sports_chat_odds admite eventId real de sports_chat_games y fecha local AAAA-MM-DD para consultar un encuentro concreto, verificando primero scoreboard, luego ESPN Core (lista de casas y referencias $ref seguras) y finalmente summary/pickcenter. Devuelve endpointSource, casa, mercado, línea y fecha de actualización, además de diagnósticos. Si eventId no corresponde a la fecha, no publiques cuotas de otro partido. Si researchObservations contiene precios sin vigencia comprobada, muéstralos SOLO como referencias no cotizables. Para history/movement, odds_records, ATS, futures, probabilities y predictor usa sports_chat_espn_core; esos datos no se deben transformar en cuotas apostables. ',
+  'ANÁLISIS EXTERNO AUTOMÁTICO: para un encuentro verificado usa sports_chat_editorial_discovery para obtener titulares públicos de los cuatro portales mediante un índice RSS, no extrayendo directamente sus sitios ni picks de pago. Son indicios periodísticos NO confirmación de predicción, lesiones, cuota ni disponibilidad. No atribuir los titulares a una consulta directa de las webs y no mostrar como precio vigente. La tarjeta puede evitar marcas en el título, pero conserva atribución y fecha en el expediente.',
+  'CALIBRACIÓN RESPONSABLE: sports_chat_calibration_audit valida probabilidades con resultados de fechas anteriores y un bloque cronológico independiente (Brier, log-loss y ECE contra baseline). Solo si status=validated, sports_chat_predict puede mostrar un ajuste disponible en memoria para esa liga; si insufficient/underperforming mantiene proyección exploratoria sin prometer edge o tickets ganadores. La validación histórica no demuestra ganancias frente al mercado.',
   'PORTALES EXTERNOS DE CONTRASTE: cuando el usuario pida investigar o comparar ScoresAndOdds, Covers, VegasInsider u OddsPortal, o ESPN no entregue actualización verificable, llama sports_chat_market_source_catalog. Es un directorio de conocimiento, NO una API conectada: jamás afirmes que obtuviste sus cuotas si no navegaste de verdad usando una herramienta autorizada y condiciones del portal. Prioriza ESPN Scoreboard/Core/Summary como ancla de partido, y usa fuentes secundarias solo con coincidencia de liga, los DOS equipos, fecha/hora/zona, mercado, período y casa. Registra por separado cuándo viste la página (pageObservedAt) y cuándo la casa actualizó el precio (quoteUpdatedAt); si no existe esta última fecha, la observación es SOLO investigación sin vigencia comprobada. No confundir apertura, histórico, consensus/crowd ni favorito de mercado con análisis independiente. Las páginas no habilitan automáticamente scrapers ni actualizan sports_chat_odds; consulta la casa para confirmar vigencia. Respetar acceso autorizado, términos, límites y bloqueos, sin eludir CAPTCHA ni geobloqueos. ',
   'ESPN INTELLIGENCE: cuando el usuario pida un equipo específico, un jugador, su historia, splits, gamelog, tabla, líderes, noticias o búsqueda, consulta sports_chat_espn_explore con la vista apropiada y un ID real comprobado. Esa herramienta devuelve una superficie adaptable de estadísticas, noticias, plantillas, fotos y fuentes; Phoenix dibuja sports_espn_dashboard automáticamente. Para carteleras utiliza sports_chat_games y para cuotas comercializables sports_chat_odds; evita convertir probabilidades ESPN o referencias Core en cuotas actuales. Las plantillas se construyen dinámicamente a partir de secciones verificadas, sin nuevas pantallas.',
-  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_sources_repair, sports_chat_market_source_catalog, sports_chat_deep_research, sports_chat_matchup_factors, sports_chat_predict, sports_chat_bet_rules, sports_chat_ticket_track, sports_chat_market_intelligence, sports_chat_espn_core, sports_chat_espn_core_catalog, sports_chat_espn_extended, sports_chat_espn_extended_catalog, sports_chat_espn_historical_odds, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
+  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_sources_repair, sports_chat_market_source_catalog, sports_chat_deep_research, sports_chat_matchup_factors, sports_chat_predict, sports_chat_calibration_audit, sports_chat_editorial_discovery, sports_chat_bet_rules, sports_chat_ticket_track, sports_chat_market_intelligence, sports_chat_espn_core, sports_chat_espn_core_catalog, sports_chat_espn_extended, sports_chat_espn_extended_catalog, sports_chat_espn_historical_odds, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
   'Para encontrar oportunidades en varios deportes de una misma fecha, empieza por sports_chat_daily_scan con límite de 12 eventos; después investiga solo los cruces con suficiente evidencia, sin confundir preselección con favoritos ni probabilidades. ',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'INVESTIGACIÓN NBA: antes de defender cualquier favorito o selección NBA, consulta sports_chat_nba_research (y sports_chat_odds cuando existan cuotas). Contrasta forma en marcadores finales, márgenes, descanso y muestra; revisa además informe oficial de lesiones, rotaciones, estadísticas avanzadas, rival, localía y movimiento de precios desde fuentes autorizadas. Lo no consultado debe permanecer explícitamente SIN VERIFICAR. No transformes la forma descriptiva en porcentajes de victoria ni cites atletas que no tengan plantilla actual confirmada. Un ticket automático se considera SOLO una preselección, nunca una investigación completa.',
@@ -131,6 +136,47 @@ export function apply(ctx: Context): void {
         instruction:'Se ha solicitado la reparación en segundo plano; no se han verificado cuotas ni operaciones. Consulta sports_chat_sources_health para ver progreso, logs y los proveedores listos. Si falta el instalador en el runtime o checkout, informa el bloqueo concreto.'})
     },
     presentCall:()=>({card:'generic',title:'Reparar fuentes deportivas automáticamente',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_editorial_discovery',
+    description:'Descubre TITULARES públicos recientes indexados de Covers, VegasInsider, ScoresAndOdds y OddsPortal mediante RSS sindicalizado. No extrae sus páginas, picks de pago, cuotas ni cifras no verificadas.',
+    parameters:{
+      query:{type:'string',required:true,description:'Equipos o cruce real, mínimo tres caracteres.'},
+      source:{type:'string',description:'cubre covers | vegasinsider | scoresandodds | oddsportal; omitir para todos.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      if(args.source&&!Object.hasOwn(editorialDomains,args.source))
+        throw Error('Fuente editorial no admitida')
+      return JSON.stringify(await discoverEditorialResearch(args.query,
+        args.source?[args.source as EditorialSource]:undefined,fetch))
+    },
+    presentCall:()=>({card:'generic',title:'Descubrir análisis deportivos externos',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_calibration_audit',
+    description:'Audita por deporte y liga la calibración REAL cronológica con datos ESPN finalizados: entrenamiento sin fuga, bloque holdout posterior, Brier/log-loss/ECE y baseline. No dice que existan ganancias. 28 a 90 fechas.',
+    parameters:{
+      sport:{type:'string',required:true,description:'Deporte ESPN: basketball, soccer, baseball, football, hockey.'},
+      league:{type:'string',required:true,description:'Liga ESPN registrada: nba, nhl, nfl, eng.1, etc.'},
+      days:{type:'integer',description:'Ventana histórica 28..90 días, por defecto 56.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>false,
+    async execute(args){
+      if(!Object.hasOwn(sportsCatalog,args.sport)||
+        !sportsCatalog[args.sport]?.includes(args.league))
+        throw Error('Liga no registrada en catálogo')
+      if((await sportsEnv(ctx)).PHOENIX_SPORTS_ESPN_DISABLED==='1')
+        return JSON.stringify({status:'unavailable',reason:'ESPN deshabilitado'})
+      const result=await auditSportsCalibration(args.sport,args.league,args.days??56,
+        <T>(url:string)=>getFeed<T>(url),Date.now())
+      return JSON.stringify({...result,instruction:result.calibrated?
+        'Ajuste disponible durante seis horas solo en este proceso; resultado validado cronológicamente, NO rentabilidad probada.':
+        'No publicar probabilidades calibradas; muestra o comparación fuera de muestra insuficiente.'})
+    },
+    presentCall:()=>({card:'generic',title:'Auditar pronósticos históricos',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_market_source_catalog',
@@ -408,6 +454,7 @@ export function apply(ctx: Context): void {
       eventId:{type:'string',required:true,description:'Identificador real obtenido de sports_chat_games.'},
       date:{type:'string',required:true,description:'Fecha AAAA-MM-DD del encuentro en Santo Domingo.'},
       lookbackDays:{type:'integer',description:'3..28 días de resultados previos, por defecto 28.'},
+      includeExternalResearch:{type:'boolean',description:'Descubrir titulares públicos relacionados al juego en cuatro medios indexados; activado por defecto.'},
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
@@ -422,10 +469,38 @@ export function apply(ctx: Context): void {
         home:{name:report.home.name,lastGames:report.home.lastGames},
         away:{name:report.away.name,lastGames:report.away.lastGames},
       },now)
+      const audit=availableSportCalibration(args.sport,args.league,report.date,now)
+      const calibrated=audit?calibratedSportsForecast(forecast,audit):null
+      const externalResearch=args.includeExternalResearch===false?null:
+        await discoverEditorialResearch(report.away.name+' '+report.home.name,
+          undefined,fetch,now)
+      const displayedHome=calibrated?.probabilityHome??forecast.probabilityHome
+      const displayedAway=calibrated?.probabilityAway??forecast.probabilityAway
+      const displayedDraw=calibrated?.probabilityDraw??forecast.probabilityDraw
+      const forecastItems=forecast.status==='exploratory'?[
+        {label:report.home.name,value:displayedHome===null?'—':
+          (displayedHome*100).toFixed(1)+'%',
+          detail:forecast.projectedHome===null?'':
+            'Marcador orientativo '+forecast.projectedHome+(calibrated?' · validación histórica':' · no calibrado')},
+        {label:report.away.name,value:displayedAway===null?'—':
+          (displayedAway*100).toFixed(1)+'%',
+          detail:forecast.projectedAway===null?'':
+            'Marcador orientativo '+forecast.projectedAway+(calibrated?' · validación histórica':' · no calibrado')},
+        ...(displayedDraw===null?[]:[
+          {label:'Empate',value:(displayedDraw*100).toFixed(1)+'%',
+            detail:calibrated?'Ajuste con validación histórica':'Proyección orientativa · no calibrada'}]),
+      ]:[{label:'Proyección',value:'Sin evidencia suficiente',
+        detail:forecast.warnings[0]??'No se verificó una estimación'}]
+      const uiBlock={...report.uiBlock,props:{...report.uiBlock.props,sections:[
+        {heading:'Estimación orientativa',kind:'metrics' as const,items:forecastItems},
+        ...report.uiBlock.props.sections,
+      ].slice(0,8),note:(calibrated?'Ajuste validado históricamente; no demuestra rentabilidad. ':
+        'Estimación exploratoria sin calibración aprobada. ')+report.uiBlock.props.note}}
       return JSON.stringify({
         eventId:report.eventId,date:report.date,league:report.league,
         matchup:report.away.name+' vs '+report.home.name,
-        forecast,source:report.source,checkedAt:report.checkedAt,
+        forecast,calibrated,calibrationAudit:audit,externalResearch,
+        source:report.source,checkedAt:report.checkedAt,
         facts:{homeForm:report.home.form,awayForm:report.away.form,
           descriptiveAdvantages:report.descriptiveAdvantages,
           headToHead:report.headToHead.slice(0,3),
@@ -433,8 +508,8 @@ export function apply(ctx: Context): void {
           latestNews:report.rosterNewsInjuries?.headlines.slice(0,6)??[],
           marketComparisons:report.marketComparisons.slice(0,4)},
         coverage:report.coverage,missingEvidence:report.limitations.slice(0,14),
-        instruction:'Esta estimación es SOLO exploratoria, no entrenada/calibrada ni promesa de victoria. No publicar EV, ventaja apostable ni ticket ganador basándose en ella. Para segunda opinión consulta sports_chat_market_source_catalog, sports_chat_community_opinions y expertos de Covers/ESPN SOLO mediante navegación permitida. Usa sports_chat_odds para precios vigentes y reporta sus timestamps. La UI nativa del dossier se proporciona por separado.',
-        uiBlock:report.uiBlock,
+        instruction:'La estimación es exploratoria salvo que calibrated contenga una validación temporal aprobada. En ningún caso implica ventaja rentable ni promesa de victoria. No publicar EV, ventaja apostable ni ticket ganador sin precios vigentes y evaluación independiente. Para segunda opinión consulta sports_chat_market_source_catalog, sports_chat_community_opinions y expertos de Covers/ESPN SOLO mediante navegación permitida. Usa sports_chat_odds para precios vigentes y reporta sus timestamps. La UI nativa del dossier se proporciona por separado.',
+        uiBlock,
       })
     },
     presentCall:()=>({card:'generic',title:'Investigar y estimar partido con PHOENIX',kind:'read' as const}),

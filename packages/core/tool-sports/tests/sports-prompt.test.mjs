@@ -26,3 +26,12 @@ test('short followups keep relevant sports context, unrelated new tasks replace 
   assert.equal(sportsPromptNeeded(undefined, [human('Deportes'), human('dale')]), true)
   assert.equal(sportsPromptNeeded('Arregla el updater de Windows', [human('NBA')]), false)
 })
+
+test('understands natural questions about results even without literal sports keywords',()=>{
+  assert.equal(sportsPromptNeeded('¿Quién va a ganar esta noche?',[]),true)
+  assert.equal(sportsPromptNeeded('¿Qué equipo es el favorito?',[]),true)
+  assert.equal(sportsPromptNeeded('Predice quién gana',[]),true)
+  assert.equal(sportsPromptNeeded('Investiga el primero a fondo',[human('Escanea la NBA')]),true)
+  assert.equal(sportsPromptNeeded('Muéstrame las estadísticas',[human('Predice quién gana')]),true)
+  assert.equal(sportsPromptNeeded('Explícame la API de pagos',[human('NBA')]),false)
+})

@@ -41,6 +41,24 @@ try {
   Pop-Location
 }
 
+# Optional ClawHub CLI dependency. An offline registry must not block startup.
+$clawHubBootstrap = Join-Path $root 'scripts/phoenix-clawhub-bootstrap.mjs'
+if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $clawHubBootstrap)) {
+  try { & node $clawHubBootstrap --ensure } catch { Write-Warning 'ClawHub CLI install deferred.' }
+}
+
+# Companion CLI is best-effort: never change the PHOENIX runtime if Node is incompatible
+# or a third-party package registry cannot be reached. No Gateway service starts here.
+$openClawBootstrap = Join-Path $root 'scripts/phoenix-openclaw-bootstrap.mjs'
+if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $openClawBootstrap)) {
+  try {
+    & node $openClawBootstrap --ensure
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'OpenClaw CLI setup deferred.' }
+  } catch {
+    Write-Warning 'OpenClaw CLI setup deferred.'
+  }
+}
+
 # Optional sports sources install after a successful stable update; do not block
 # PHOENIX because GitHub/OddsPortal/Python may be unavailable temporarily.
 $sportsAuto = Join-Path $root 'scripts\phoenix-sports-source-auto.mjs'
