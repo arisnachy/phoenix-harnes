@@ -45,7 +45,7 @@ export const inject = ['tools','systemPrompt']
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
-  'INVESTIGACIÓN MLB POR PARTIDO: usa sports_chat_mlb_investigate para obtener primero la cartelera por fecha y luego el expediente mediante gamePk de MLB Stats API (no confundir con eventId ESPN). Investiga las estadísticas de cada jugador y la matriz bateador×abridor/bullpen, localía, parque, meteorología, últimas salidas y precios cotejados. El expediente marca como PENDIENTES los enfrentamientos BvP, fatiga, lesiones, alineaciones y expertos que no estén confirmados; no interpretes una fila de roster como un bateador titular ni inventes simulaciones probabilísticas. La conclusión se fundamenta en evidencia favorable Y contradictoria y en escenarios por entradas; no vendas el expediente como una apuesta aprobada. ',
+  'INVESTIGACIÓN MLB POR PARTIDO: usa sports_chat_mlb_investigate para obtener primero la cartelera por fecha y luego el expediente mediante gamePk de MLB Stats API (no confundir con eventId ESPN). Investiga las estadísticas de cada jugador y la matriz bateador×abridor/bullpen, localía, parque, meteorología, últimas salidas y precios cotejados. El expediente marca como PENDIENTES los enfrentamientos BvP, fatiga, lesiones, alineaciones y expertos que no estén confirmados; no interpretes una fila de roster como un bateador titular ni inventes simulaciones probabilísticas. La conclusión se fundamenta en evidencia favorable Y contradictoria y en escenarios por entradas; si matchupNextOffset no es null hay cruces adicionales consultables. No vendas el expediente como una apuesta aprobada. ',
   'ESCÁNER GLOBAL DE CUOTAS: si el usuario pregunta por acceso real a las cuotas deportivas o pide revisar TODOS los deportes, no te limites a NBA, NFL y NHL. sports_chat_odds_scan presenta los 11 deportes realmente admitidos por OddsHarvester; examina sus 3 páginas consecutivas offset=0,4,8, limit=4, incluso si una falla, y devuelve estado INDIVIDUAL por deporte, cuota, casa, liga, hora, motivo del fallo y fuentes pendientes. Incluye fútbol/soccer, tenis ATP/WTA, béisbol/MLB, baloncesto NBA/WNBA, fútbol americano NFL, hockey NHL, handball, voleibol, ambos rugby y cricket. WNBA es una liga de basketball, NO un deporte distinto. Una consulta de baloncesto sin liga verificada jamás justifica etiquetar su cuota como NBA o WNBA. Las ligas sin evidencia suficiente se muestran sin liga verificada, no se fuerzan. Para mercados de ligas específicas consulta además sports_chat_odds con basketball_wnba, basketball_nba, baseball_mlb, americanfootball_nfl, icehockey_nhl y soccer; para tenis usa odds_keyless, o tennis_atp/tennis_wta solo cuando el nombre de la liga sea explícito. El inventario no garantiza mercados presentes. Cuando el error de OddsHarvester contenga category, exitCode y stderr informa esos campos y no trunques la causa interna. ',
   'THE ODDS API v4 · CONECTOR: la clave del proveedor api.the-odds-api.com se configura de forma segura en Ajustes > Conectores > The Odds API y el Host la verifica mediante el catálogo gratuito /v4/sports. No pedir claves en el chat ni confundir con TheOddsAPI (api.theoddsapi.com, credencial distinta). El motor sports_chat_odds con sourcePolicy=all y sin eventId/fecha puede usar la clave guardada para obtener precios con casa, hora de actualización y cuota remanente. La clave se resuelve del vault en CADA operación, incluida la creación de tickets cotizados; cambiarla no requiere reiniciar Kira. El proveedor limita créditos según el plan; NO prometer cuotas ilimitadas ni históricos gratuitos. El endpoint de verificación de la clave es de coste cero, no consulta cuotas apostables. ',
   'ODDS REALES Y HISTORIALES: sports_chat_odds ahora consulta varias fuentes independientes y devuelve estado observado/vacío/error/no configurado por proveedor. No declares sin cuotas hasta evaluar sources y buscar fecha y mercados reales por liga. OddsHarvester v0.20.0 permite transmitir filas NDJSON para recuperar partidos cotizados incluso si otras páginas del scraping fallan; distingue precios recuperados de scraping completamente exitoso. sports_chat_historical_odds acepta fecha y clave de deporte para leer archivos públicos locales y los snapshots de cotizaciones realmente vistos por PHOENIX. Los históricos NO son precios actuales, y el archivo local solo cubre desde que se capturaron observaciones: no inventar historial ausente. The Odds API v4 y TheOddsAPI requieren sus respectivas claves; la disponibilidad histórica completa suele ser de planes pagados. No prometas que las cotizaciones son de Juancito si el bookmaker indicado es otro. ',
@@ -1171,6 +1171,8 @@ export function apply(ctx: Context): void {
       date:{type:'string',required:true,description:'Fecha local AAAA-MM-DD del partido MLB.'},
       gamePk:{type:'integer',description:'GamePk numérico auténtico de MLB Stats API; omitir para ver la cartelera.'},
       includeOdds:{type:'boolean',description:'Si hay gamePk, cotejar cuotas verificadas de la misma jornada. Por defecto true.'},
+      matchupOffset:{type:'integer',description:'Página de cruces bateador×pitcher; índice 0 por defecto.'},
+      matchupLimit:{type:'integer',description:'Máximo de cruces a devolver por llamada, entre 1 y 80; defecto 40.'},
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
@@ -1203,7 +1205,16 @@ export function apply(ctx: Context): void {
         return JSON.stringify({...report,uiBlock,
           instruction:'Escoge uno o varios gamePk auténticos de esta cartelera y llama sports_chat_mlb_investigate con el gamePk correspondiente. Nunca atribuyas un ID MLB a ESPN ni un partido comenzado a pregame.'})
       }
-      return JSON.stringify({...report,oddsSources,uiBlock:report.uiBlock,
+      const offset=Math.max(0,Math.min(1000,Math.floor(args.matchupOffset??0)))
+      const limit=Math.max(1,Math.min(80,Math.floor(args.matchupLimit??40)))
+      const visible=report.matchups.slice(offset,offset+limit)
+      const sourceAudit={verified:report.sources.filter(s=>s.status==='verified').length,
+        empty:report.sources.filter(s=>s.status==='empty').length,
+        errors:report.sources.filter(s=>s.status==='error').slice(0,20)}
+      return JSON.stringify({...report,sources:undefined,matchups:visible,
+        matchupTotal:report.matchups.length,matchupOffset:offset,
+        matchupNextOffset:offset+visible.length<report.matchups.length?offset+visible.length:null,
+        sourceAudit,oddsSources,uiBlock:report.uiBlock,
         instruction:'PHOENIX dibuja la investigación MLB. Presenta el expediente como hechos parciales, no pronóstico calibrado. Analiza las contradicciones y la información pendiente. No afirmar BvP confirmado, roster titular, fatiga, lesiones o efecto del viento sin fuentes explícitas. Comparar precios solo si coinciden ambos equipos/fecha/casa/línea.'})
     },
     presentCall:()=>({card:'generic',title:'Investigar cartelera y expedientes de béisbol MLB',kind:'read' as const}),
