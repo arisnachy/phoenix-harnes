@@ -46,6 +46,52 @@ describe('phoenix_3d actual geometry tool',()=>{
       await expect(tool.execute({title:'Invalido',scene:invalid},execution())).rejects.toThrow()
     }
   })
+  it('generates an anatomical pelican instead of silently rendering a box', async () => {
+    const tool = createPhoenix3DTool()
+    const result = await tool.execute({ title: 'Pelícano en 3D', preset: 'pelican' }, execution()) as {
+      scene: { nodes: Array<{ type: string; name: string; vertices?: number[] }> }
+    }
+    const nodes = result.scene.nodes
+    expect(nodes.length).toBeGreaterThanOrEqual(20)
+    expect(nodes.some(node => node.type === 'box')).toBe(false)
+    expect(nodes.some(node => node.type === 'mesh' && (node.vertices?.length ?? 0) > 100)).toBe(true)
+    const names = nodes.map(node => node.name.toLowerCase()).join(' ')
+    for (const feature of ['pico', 'bolsa', 'cuello', 'cabeza', 'ala', 'ojo', 'pie']) {
+      expect(names).toContain(feature)
+    }
+    for (const node of nodes.filter(node => node.type === 'mesh')) {
+      expect((node.vertices?.length ?? 0) % 9).toBe(0)
+      expect(node.vertices?.every(Number.isFinite)).toBe(true)
+    }
+  })
+  it('repairs the reported pelican-as-box failure without accepting generic organic cubes', async () => {
+    const tool = createPhoenix3DTool()
+    const cube = { nodes: [{ type: 'box', position: [0, 0, 0], size: [1, 1, 1], color: '#ffffff' }] }
+    const result = await tool.execute({ title: 'Pelicano 3D', scene: cube }, execution()) as {
+      scene: { nodes: Array<{ type: string; name: string }> }
+    }
+    expect(result.scene.nodes.length).toBeGreaterThan(20)
+    expect(result.scene.nodes.some(node => node.name.includes('Pico largo'))).toBe(true)
+    await expect(tool.execute({ title: 'Animal 3D', subject: 'animal', scene: cube }, execution()))
+      .rejects.toThrow(/Modelo orgánico insuficiente/u)
+  })
+  it('passes real triangle meshes from generator to the existing 3D viewer contract', async () => {
+    const tool = createPhoenix3DTool()
+    const triangle = { nodes: [{ type: 'mesh', name: 'Ala',
+      position: [0, 1, 0], size: [1, 1, 1], color: '#ffffff',
+      vertices: [0, 0, 0, 1, 0, 0, 0, 1, 0] }] }
+    const result = await tool.execute({ title: 'Ala en malla', scene: triangle }, execution()) as {
+      scene: { nodes: Array<{ type: string; vertices?: number[] }> }
+    }
+    expect(result.scene.nodes[0]?.type).toBe('mesh')
+    expect(result.scene.nodes[0]?.vertices).toEqual(triangle.nodes[0]?.vertices)
+    for (const vertices of [[0, 0, 0, 0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 1, 0, 0, NaN, 1, 0], [0, 1, 0]]) {
+      await expect(tool.execute({
+        title: 'Malla inválida', scene: { nodes: [{ ...triangle.nodes[0], vertices }] },
+      }, execution())).rejects.toThrow()
+    }
+  })
   it('keeps subsequent app-building work only on explicit request',async()=>{
     const done=vi.fn()
     await createPhoenix3DTool().execute({

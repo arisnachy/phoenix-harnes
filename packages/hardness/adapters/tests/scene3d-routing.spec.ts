@@ -17,5 +17,6 @@ describe('Phoenix intelligent 3D design router',()=>{
   it('teaches Kira to use 3D only when useful, not a static PNG nor fake CAD',()=>{
     expect(PHOENIX_3D_ROUTING_PROTOCOL).toContain('Never add 3D to ordinary apps')
     expect(createPhoenix3DTool().description).toContain('GLB/glTF')
+    expect(PHOENIX_3D_ROUTING_PROTOCOL).toContain('preset:pelican')
   })
 })
