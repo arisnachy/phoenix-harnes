@@ -3,6 +3,7 @@ import { afterEach, beforeEach, test } from 'node:test'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { runInNewContext } from 'node:vm'
 import {
   acknowledgeGuardianIncident, guardianBlockedTarget, guardianIncidentPath,
   pendingGuardianIncidents, recordGuardianIncident,
@@ -145,4 +146,59 @@ test('supervisor retains the last healthy runtime through cleanup', () => {
   assert.match(source, /lastKnownGoodRuntimeRoot = hostRuntimeRoot/u)
   assert.match(source, /recordGuardianIncident\(\{/u)
   assert.match(source, /writeActiveRuntime\(lastGoodSha, runtimeRoot\)/u)
+})
+
+
+test('executes zero-backup cleanup on the Windows Guardian gate without deleting the last healthy runtime', () => {
+  const source = readFileSync(new URL('./phoenix-windows-supervisor.mjs', import.meta.url), 'utf8')
+  const start = source.indexOf('function cleanupObsoleteRuntimes(')
+  const end = source.indexOf('\nfunction reclaimInactiveBackupForCapacity(', start)
+  assert.ok(start >= 0 && end > start, 'supervisor cleanup routine must exist')
+
+  const directories = ['/runtime/last-good', '/runtime/stale', '/runtime/current']
+  const removed = []
+  runInNewContext(source.slice(start, end) + '\ncleanupObsoleteRuntimes()', {
+    root: '/checkout',
+    runtimeRoot: '/runtime/current',
+    lastKnownGoodRuntimeRoot: '/runtime/last-good',
+    runtimePathKey: path => path,
+    readActiveRuntimeRecord: () => ({ path: '/runtime/current' }),
+    process: { env: {} },
+    registeredWorktreePaths: () => new Set(),
+    runtimeDirectoriesForCleanup: () => directories,
+    runtimeProtectedByOwningCheckout: () => false,
+    managedDirectoryMtimeMs: () => 1,
+    MAX_INACTIVE_RUNTIME_BACKUPS: 0,
+    removeManagedWorktree: path => {
+      removed.push(path)
+      directories.splice(directories.indexOf(path), 1)
+      return true
+    },
+    persistentStage: () => '/stage/current',
+    stageDirectoriesForCleanup: () => [],
+    spawnSync: () => ({ status: 0 }),
+    cleanupDetachedLegacyStorage: () => {},
+    console: { error: () => {} },
+  })
+  assert.deepEqual(removed, ['/runtime/stale'])
+  assert.ok(directories.includes('/runtime/last-good'))
+  assert.ok(directories.includes('/runtime/current'))
+})
+
+test('fails closed at the runtime storage hard cap instead of deleting protected runtimes', () => {
+  const source = readFileSync(new URL('./phoenix-windows-supervisor.mjs', import.meta.url), 'utf8')
+  const start = source.indexOf('function assertRuntimeStorageCapacity(')
+  const end = source.indexOf('\nfunction runChecked(', start)
+  assert.ok(start >= 0 && end > start, 'supervisor capacity guard must exist')
+
+  let reclamationAttempts = 0
+  const assertCapacity = runInNewContext(source.slice(start, end) + '\nassertRuntimeStorageCapacity', {
+    existsSync: () => false,
+    runtimeDirectoriesForCleanup: () => ['/runtime/last-good', '/runtime/current'],
+    MAX_RUNTIME_DIRECTORIES: 2,
+    cleanupObsoleteRuntimes: () => {},
+    reclaimInactiveBackupForCapacity: () => { reclamationAttempts += 1 },
+  })
+  assert.throws(() => assertCapacity('/runtime/candidate'), /runtime storage safety limit reached/u)
+  assert.equal(reclamationAttempts, 1)
 })
