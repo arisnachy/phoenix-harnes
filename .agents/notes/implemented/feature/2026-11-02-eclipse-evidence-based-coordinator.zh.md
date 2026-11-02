@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-Eclipse 自动模式中只有 Luna Max 担任 Kira 的执行协调者。FÉNIX 是确定性的证据门控和仅供主代理使用的 `fenix_consult` 工具，绝不会在后台把主代理切换到 Terra。只有真实团队消息报告实质性矛盾、验证失败、缺失要求或集成风险，并且 Kira 提供该消息 ID 和一个具体问题时，才会使用已配置的 Codex Terra 路由。获准的咨询尝试启动临时 Terra 队友并向 Luna 汇报一次聚焦评审；每轮最多尝试一次，持久化的 `team/fenix-consult` 事件可避免提供者故障或会话恢复后的重复调用。咨询输出令牌上限为 2,048。没有账户可用的 Terra 配置就不进行咨询。额外的专家调用需要令牌，但门控本身不调用模型。
+Eclipse 自动模式中只有 Luna Max 担任 Kira 的执行协调者。FÉNIX 是确定性的证据门控和仅供主代理使用的 `fenix_consult` 工具，绝不会在后台把主代理切换到 Terra。只有真实团队消息报告实质性矛盾、验证失败、缺失要求或集成风险，并且 Kira 提供该消息 ID 和一个具体问题时，才会使用已配置的 Codex Terra 路由。获准的咨询尝试启动临时 Terra 队友并向 Luna 汇报一次聚焦评审；每轮最多尝试一次，持久化的 `agent/fenix-consult` 事件可避免提供者故障或会话恢复后的重复调用。咨询输出令牌上限为 2,048。没有账户可用的 Terra 配置就不进行咨询。额外的专家调用需要令牌，但门控本身不调用模型。
 
 Eclipse 自动模式下 Kira 的 Luna 路由始终使用 Max，包括 Sol 规划结束后的执行交接；Luna 队友也保持 Max，不再根据任务启发式降至 Medium 或 High。旧版 Codex Sol 到 Luna 的交接也恢复为 Max。Terra 仅在证据证明需要时作为独立的临时顾问参与，绝不替代 Kira 的主协调路由。Hybrid 和 Manual 继续尊重用户明确指定的模型及推理档位。Eclipse 设置允许选择首选 Terra 模型及账户支持的档位，而不会自动退出 Automatic。所有路由保持在已选择的 Codex 提供者内，主协调者身份始终是 Kira。
 
