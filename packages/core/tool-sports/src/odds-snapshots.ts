@@ -89,7 +89,8 @@ export async function loadOddsSnapshots(
         historical:true,source:'PHOENIX · observación histórica',quotes })
     }catch(error){errors.push((error instanceof Error?error.message:'Lectura fallida').slice(0,100))}
   }
+  const first=snapshots[0],last=snapshots.at(-1)
   return{ snapshots,rows:snapshots.reduce((n,s)=>n+s.quotes.length,0),
-    coverage:snapshots[0]&&snapshots.at(-1)?snapshots[snapshots.length-1].observedAt+' — '+snapshots[0].observedAt:
+    coverage:first&&last?last.observedAt+' — '+first.observedAt:
       'No hay ofertas verificables guardadas para esa fecha',errors }
 }
