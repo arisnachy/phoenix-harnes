@@ -348,6 +348,9 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
   let pendingAnchorKey: string | undefined
   let sportsCards: GenerativeUiBlock[] = []
   let tradingVisible = false
+  // The current human turn owns the display domain. Incidental Binance reads
+  // from a Code subcall must never insert the full trading dashboard.
+  let tradingRequested = false
 
   const flush = (avoidAnchorKey?: string): void => {
     const first = pending[0]
@@ -379,13 +382,13 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
         sportsCards = sportsCards.slice(-12)
         // A settled Binance result owns its native dashboard immediately.
         // Do not depend on the assistant generating JSON or a special fence.
-        const trading = tradingDashboardFromToolResult(result)
+        const trading = tradingRequested ? tradingDashboardFromToolResult(result) : undefined
         if (trading !== undefined && !tradingVisible) {
           flush()
           flow.push({ kind: 'trading', key: 'trading:' + node.key, snapshot: trading })
           tradingVisible = true
         }
-        if (!tradingVisible) {
+        if (tradingRequested && !tradingVisible) {
           const selection = tradingMarketFromToolResult(result)
           if (selection !== undefined) {
             flush()
@@ -432,7 +435,8 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
     if (node.kind === 'user' || node.kind === 'steering') {
       sportsCards = []
       tradingVisible = false
-      if (userRequestsTrading(node)) {
+      tradingRequested = userRequestsTrading(node)
+      if (tradingRequested) {
         flow.push({ kind: 'trading', key: 'trading:user:' + node.key })
         tradingVisible = true
       }
