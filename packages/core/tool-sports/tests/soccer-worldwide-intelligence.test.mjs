@@ -91,7 +91,7 @@ test('date-scoped schedule handles multiple competitions without mixed event IDs
   const slate=await soccerDailySlate(date,['usa.1','esp.1'],api.fetcher,now,{})
   assert.equal(slate.games.length,2)
   assert.equal(slate.leagues.length,2)
-  assert.equal(slate.games[0].league,'usa.1')
+  assert.deepEqual(slate.games.map(x=>x.league),['esp.1','usa.1'])
   assert.equal(slate.games[0].home.id,'101')
   assert.equal(slate.worldwideComplete,false)
   assert.equal(slate.sources.filter(s=>s.status==='observed').length,2)
