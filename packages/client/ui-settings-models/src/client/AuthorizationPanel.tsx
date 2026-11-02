@@ -4,7 +4,7 @@ import { TheOddsApiConnectorSetup,type TheOddsApiClient,type TheOddsApiSnapshot 
 import { BinanceConnectorSetup } from './BinanceConnectorSetup.tsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { ChatGptWebSnapshot, IApiClient, OpenClawRuntimeSnapshot } from '@phoenix-ai/dsh-api-remotes/client'
+import type { ChatGptWebSnapshot, IApiClient, OpenClawRuntimeSnapshot, ClawHubCatalogItem, ClawHubCatalogSnapshot } from '@phoenix-ai/dsh-api-remotes/client'
 import type { en } from './locales.ts'
 import type { ConnectorKey } from './connectors-locales.ts'
 import { CONNECTOR_CATALOG } from './connector-catalog.ts'
@@ -171,6 +171,7 @@ export interface McpRegistryClient {
   /** Reuse already-authenticated OpenClaw connector routes when present. */
   openClawState?(): Promise<OpenClawConnectorSnapshot>
   openClawRuntimeState?(): Promise<OpenClawRuntimeSnapshot>
+  clawHubCatalog?(request: { family: 'code-plugin'; officialOnly: true; limit: number }): Promise<ClawHubCatalogSnapshot>
   /** Read Jev setup/runtime state without exposing its secret. Optional for older hosts. */
   jevState?(): Promise<JevMcpSnapshot>
   /** Store a Jev key in Phoenix credentials and activate the pinned MCP endpoint. Optional for older hosts. */
@@ -554,7 +555,7 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, openClawRuntime, onRefreshOpenClaw, telegram, oddsApi, oddsApiSnapshot, onOddsApiStatus, connected, reauthorizeCodex, t, authorizationProgress,
+function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, openClawRuntime, onRefreshOpenClaw, clawHubFeatured, telegram, oddsApi, oddsApiSnapshot, onOddsApiStatus, connected, reauthorizeCodex, t, authorizationProgress,
   onAuthorize, onDisconnect, onConfigure, onInstallCurated, onFindOfficial, onFindRegistry, onReconnect, onRepair, onRemove, onChanged,
   pending, installingCurated, reconnecting,
   repairing, removing }: {
@@ -566,6 +567,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   openClaw?: OpenClawConnectorView | undefined
   openClawRuntime?: OpenClawRuntimeSnapshot | undefined
   onRefreshOpenClaw?: (() => void) | undefined
+  clawHubFeatured?: readonly ClawHubCatalogItem[] | null | undefined
   telegram?: TelegramBotClient | undefined
   oddsApi?: TheOddsApiClient | undefined
   oddsApiSnapshot?: TheOddsApiSnapshot | undefined
@@ -723,8 +725,21 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               ))}
             </p>
           )}
+          <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
+            <strong>{t('ocClawHubFeatured')}</strong>
+            {clawHubFeatured === undefined ? <p>{t('ocWaiting')}</p>
+              : clawHubFeatured === null ? <p>{t('ocClawHubUnavailable')}</p>
+                : clawHubFeatured.length === 0 ? <p>{t('ocClawHubNone')}</p>
+                  : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {clawHubFeatured.map(item => (
+                        <span key={item.name} className={connectorStyles['connectorCategory']}
+                          title={item.description}>{item.displayName}</span>
+                      ))}
+                    </div>}
+            <p>{t('ocClawHubMore')}</p>
+          </div>
           {onRefreshOpenClaw === undefined ? null : (
-            <button type="button" onClick={onRefreshOpenClaw}>{t('ocRefresh')}</button>
+            <button className={hubStyles['compactButton']} type="button" onClick={onRefreshOpenClaw}>{t('ocRefresh')}</button>
           )}
         </div>
       ) : null}
@@ -1257,6 +1272,7 @@ export function ConnectorsSettingsSection({ api,
   const [mcpHub, setMcpHub] = useState<McpConnectorHubSnapshot>({ runtime: [], managed: [] })
   const [openClaw, setOpenClaw] = useState<OpenClawConnectorSnapshot>({ connectors: [] })
   const [openClawRuntime, setOpenClawRuntime] = useState<OpenClawRuntimeSnapshot | undefined>()
+  const [clawHubFeatured, setClawHubFeatured] = useState<readonly ClawHubCatalogItem[] | null | undefined>()
   const [runtimeRefresh, setRuntimeRefresh] = useState(0)
   const [jevState, setJevState] = useState<JevMcpSnapshot | undefined>()
   const [jevSetupOpen, setJevSetupOpen] = useState(false)
@@ -1424,6 +1440,17 @@ export function ConnectorsSettingsSection({ api,
     void probe().then(
       value => { if (!stale) setOpenClawRuntime(value) },
       () => { if (!stale) setOpenClawRuntime(undefined) },
+    )
+    return () => { stale = true }
+  }, [mcpRegistry, runtimeRefresh])
+
+  useEffect(() => {
+    const browse = mcpRegistry?.clawHubCatalog?.bind(mcpRegistry)
+    if (browse === undefined) return
+    let stale = false
+    void browse({ family: 'code-plugin', officialOnly: true, limit: 4 }).then(
+      snapshot => { if (!stale) setClawHubFeatured(snapshot.items) },
+      () => { if (!stale) setClawHubFeatured(null) },
     )
     return () => { stale = true }
   }, [mcpRegistry, runtimeRefresh])
@@ -2145,6 +2172,7 @@ export function ConnectorsSettingsSection({ api,
                   managed={row.managed}
                   openClaw={row.openClaw}
                   openClawRuntime={row.definition.id === 'openclaw' ? openClawRuntime : undefined}
+                  clawHubFeatured={row.definition.id === 'openclaw' ? clawHubFeatured : undefined}
                   onRefreshOpenClaw={row.definition.id === 'openclaw' ? () => { setRuntimeRefresh(n => n + 1) } : undefined}
                   telegram={telegram}
                   oddsApi={oddsApi}

@@ -1,5 +1,9 @@
 /** Copy for the dedicated Settings → Connectors surface. */
 export const connectorEn = {
+  ocClawHubFeatured: 'Official ClawHub extensions available',
+  ocClawHubNone: 'No official extension listings were returned.',
+  ocClawHubUnavailable: 'ClawHub catalog is temporarily unavailable (independent of Gateway status).',
+  ocClawHubMore: 'Browse or install from Settings → Plugins → Plugin list → ClawHub.',
   ocDetected: 'CLI detected · native plugins need a separate runtime',
   ocMissing: 'OpenClaw not installed',
   ocGateway: 'Gateway', ocBrowser: 'Browser', ocPlugins: 'Plugins', ocChannels: 'Channels',
@@ -109,6 +113,10 @@ export type ConnectorKey = keyof typeof connectorEn
 
 /** Spanish copy for the dedicated Settings → Connectors surface. */
 export const connectorEs: { [Key in ConnectorKey]: string } = {
+  ocClawHubFeatured: 'Extensiones oficiales disponibles en ClawHub',
+  ocClawHubNone: 'El catálogo no devolvió extensiones oficiales.',
+  ocClawHubUnavailable: 'El catálogo ClawHub no está disponible por ahora (independiente del Gateway).',
+  ocClawHubMore: 'Explora e instala desde Settings → Plugins → Lista de plugins → ClawHub.',
   ocDetected: 'CLI detectada · plugins nativos requieren runtime propio',
   ocMissing: 'OpenClaw no está instalado',
   ocGateway: 'Gateway', ocBrowser: 'Navegador', ocPlugins: 'Plugins', ocChannels: 'Canales',
@@ -215,6 +223,10 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
 
 /** Simplified Chinese copy for the dedicated Settings → Connectors surface. */
 export const connectorZh: { [Key in ConnectorKey]: string } = {
+  ocClawHubFeatured: 'ClawHub 官方扩展',
+  ocClawHubNone: '目录没有返回官方扩展。',
+  ocClawHubUnavailable: 'ClawHub 目录暂不可用（与 Gateway 状态无关）。',
+  ocClawHubMore: '在 设置 → 插件 → 插件列表 → ClawHub 中浏览和安装。',
   ocDetected: '检测到 CLI · 原生插件仍需独立运行时',
   ocMissing: '未安装 OpenClaw',
   ocGateway: 'Gateway', ocBrowser: '浏览器', ocPlugins: '插件', ocChannels: '渠道',
