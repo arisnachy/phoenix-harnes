@@ -45,7 +45,12 @@ const side=(x:unknown):Side=>{
   const person=Object.keys(team).length?team:athlete
   const innings=list(c.linescores).map(z=>num(obj(z).value??obj(z).displayValue))
   const rawLogo=str(person.logo??obj(list(person.logos)[0]).href,320)
-  const logo=/^https:\/\/a\.espncdn\.com\/[a-z0-9_./%-]+(?:\?[a-z0-9=&_.%-]+)?$/iu.test(rawLogo)?rawLogo:''
+  let logo=''
+  try{
+    const url=new URL(rawLogo)
+    if(url.protocol==='https:'&&url.hostname==='a.espncdn.com'&&
+      !url.username&&!url.password&&url.port==='')logo=url.toString()
+  }catch{ /* no usable team logo */ }
   return {id:id(person.id??c.id),name:str(person.displayName??person.name,120),
     homeAway:str(c.homeAway,10),score:num(c.score),logo,
     lines:innings.length&&innings.every(n=>n!==null)?innings as number[]:null}
