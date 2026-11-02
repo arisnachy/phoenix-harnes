@@ -399,3 +399,25 @@ test('news published after checkedAt is not treated as known pregame evidence',a
   assert.equal(d.news.length,0)
   assert.ok(d.missingEvidence.some(x=>x.includes('Noticias específicas')))
 })
+
+
+test('cross-book prices compare only identical market, selection and run line',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const quote=(bookmaker,selection,point,price)=>({eventId:'book-4',bookmaker,
+    market:'totals',selection,point,price,home:'Home Giants',away:'Away Bears',
+    timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z',
+    sportKey:'baseball_mlb'})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[
+    quote('Book A','Over',8,1.91),quote('Book B','Over',8,1.96),
+    quote('Book B','Over',8.5,2.08),quote('Book A','Under',8,1.84),
+  ])
+  const review=reviewMlbResearch(d)
+  assert.equal(review.crossBookComparisons.length,3)
+  const over8=review.crossBookComparisons.find(x=>x.market==='totals'&&
+    x.selection==='Over'&&x.line===8)
+  assert.deepEqual(over8.quotes.map(x=>[x.bookmaker,x.price]),
+    [['Book A',1.91],['Book B',1.96]])
+  assert.ok(!over8.quotes.some(x=>x.price===2.08||x.price===1.84))
+  assert.equal(review.probabilitiesEstimated,false)
+  assert.equal(review.eligibleForTicket,false)
+})
