@@ -555,13 +555,10 @@ export function installOrdinaryCompletionJudgeBridge(
         if (kinds.includes('technical')) state.technicalVerifiedGeneration = state.generation
         if (kinds.includes('visual')) state.visualVerifiedGeneration = state.generation
         if (kinds.includes('play')) state.playVerifiedGeneration = state.generation
-        // Fresh deterministic evidence warrants another model review only when
-        // the prior judge identified a specific fixable gap in this generation.
-        // A PASS must not be re-audited because another test was run.
-        if (state.judgedGeneration === state.generation && state.reviewNeedsFollowup) {
-          state.judgedGeneration = 0
-          state.reviewNeedsFollowup = false
-        }
+        // Verification of an unchanged artifact is not a new candidate.
+        // Only a substantive mutation increments generation and permits a
+        // new paid review. Otherwise repeatedly running pytest after a
+        // needs_changes verdict can spend another judge pass with no fix.
         state.verifications.push(kinds.join('+') + ':' + operationName(exec.name) + ':' + argumentText(exec.arguments).slice(0, 260))
         state.verifications = state.verifications.slice(-12)
       }
