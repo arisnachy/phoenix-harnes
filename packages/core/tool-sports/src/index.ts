@@ -45,12 +45,15 @@ import {investigateSoccer} from './soccer-worldwide-dossier.ts'
 import {basketballSlate,type BasketballLeague} from './basketball-research-core.ts'
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
 
+import {nhlSlate,investigateNhl} from './nhl-evidence-research.ts'
+
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 /** Resolves credentials fresh per tool invocation and never changes process.env. */
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'NHL HOCKEY INTELLIGENCE: consulta sports_chat_hockey_slate y usa el gameId NHL oficial en sports_chat_nhl_investigate. Investiga goalies, skaters, roster, estadisticas, tabla, 5v5, lineas, power play/penalty kill, lesiones y cuotas. Roster no confirma portero titular ni linea real; un matchup de candidato NO equivale a asignacion defensiva. El empate 3-way tras 60 min NO es moneyline incluyendo OT/shootout. Nunca inventes xG, GSAx, declaraciones de morning skate, datos de otras ligas, cuotas ni probabilidad calibrada. ',
   'INVESTIGACIÓN MLB POR PARTIDO: usa sports_chat_mlb_investigate para obtener primero la cartelera por fecha y luego el expediente mediante gamePk de MLB Stats API (no confundir con eventId ESPN). Investiga las estadísticas de cada jugador y la matriz bateador×abridor/bullpen, localía, parque, meteorología, últimas salidas y precios cotejados. El expediente marca como PENDIENTES los enfrentamientos BvP, fatiga, lesiones, alineaciones y expertos que no estén confirmados; no interpretes una fila de roster como un bateador titular ni inventes simulaciones probabilísticas. La conclusión se fundamenta en evidencia favorable Y contradictoria y en escenarios por entradas; si matchupNextOffset no es null hay cruces adicionales consultables. No vendas el expediente como una apuesta aprobada. ',
   'SOCCER INTELLIGENCE MUNDIAL: primero sports_chat_soccer_leagues para descubrir competiciones verificadas; sports_chat_soccer_daily para consultar lotes de hasta 12 ligas por fecha, o sports_chat_soccer_world_scan con offset/nextOffset para el resto del catálogo; sports_chat_soccer_investigate para expediente de un evento real por ID de ESPN. Para estadísticas individuales de los jugadores usa sports_chat_soccer_players cuando la liga lo soporte. Solo evidencia disponible de plantillas, forma, lesiones, táctica, mercado y prensa con atribución. No confundas roster con once confirmado, 1X2 con clasificar, ni cuota observada con apuesta aprobada. Si falta xG, árbitro, lineup o cuota, reconocerlo; jamás inventar probabilidades o ticket ganador. ',
   'NBA/WNBA RESEARCH INTELLIGENCE: sports_chat_basketball_intelligence_slate para cartelera; sports_chat_nba_intelligence o sports_chat_wnba_intelligence para dossier por eventId real. NBA son 48 min, WNBA 40 min. Solo cinco titulares con ID explícito son confirmados. Investiga jugadores y enfrentamientos, lesiones y precios por casa, nunca inventes odds, datos de WNBA offseason ni probabilidades. Los expedientes no equivalen a selecciones aprobadas. ',
@@ -1449,5 +1452,60 @@ export function apply(ctx: Context): void {
   }
   registerBasketballIntelligence('nba')
   registerBasketballIntelligence('wnba')
+
+  ctx.tools.register(defineTool({
+    name:'sports_chat_hockey_slate',
+    description:'Cartelera NHL oficial por fecha, equipo, NHL gameId, hora y estatus; calendario sin resultados ficticios.',
+    parameters:{
+      date:{type:'string',required:true,description:'Fecha calendario AAAA-MM-DD de NHL.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const now=Date.now(),result=await nhlSlate(args.date,fetch,now)
+      const uiBlock={component:'sports_espn_dashboard',version:1,props:{
+        view:'event',title:'PHOENIX NHL · '+args.date,
+        subtitle:result.games.length+' encuentros verificados con NHL',
+        source:'NHL Web API',checkedAt:new Date(now).toISOString(),
+        sections:[{heading:'Cartelera NHL',kind:'list',
+          items:result.games.map(g=>({label:g.away.name+' vs '+g.home.name,
+            value:g.date+' · '+g.state,
+            detail:'gameId NHL '+g.id+' · '+g.venue})).slice(0,30)}],
+        note:'Una cartelera no certifica porteros, líneas, lesiones, cuotas ni favoritos. Usa el gameId en sports_chat_nhl_investigate.'}}
+      return JSON.stringify({...result,uiBlock,
+        instruction:'Elige NHL gameId oficial y consulta sports_chat_nhl_investigate. No confundas gameId NHL con eventId ESPN.'})
+    },
+    presentCall:()=>({card:'generic',title:'Consultar cartelera NHL',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_nhl_investigate',
+    description:'Investigar NHL por NHL gameId de cartelera: rosters, candidatos a portero, skaters, stats individuales, tabla, duelos posibles, períodos, cuotas y argumentos contra. No inventa starting goalie ni probabilidades.',
+    parameters:{
+      date:{type:'string',required:true,description:'Fecha del partido AAAA-MM-DD.'},
+      gameId:{type:'string',required:true,description:'NHL gameId oficial obtenido de sports_chat_hockey_slate.'},
+      maxSkaters:{type:'integer',description:'Número de forwards por equipo a investigar en detalle, entre 1 y 15; defecto 8.'},
+      includeOdds:{type:'boolean',description:'Consultar cuotas NHL observadas si proveedor disponible; por defecto sí.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const now=Date.now(),env=await sportsEnv(ctx)
+      let quotes:Awaited<ReturnType<typeof marketOddsDetailed>>['quotes']=[]
+      let oddsSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
+      if(args.includeOdds!==false){
+        try{
+          const r=await marketOddsDetailed('icehockey_nhl','h2h,spreads,totals',env,fetch,now)
+          quotes=r.quotes;oddsSources=r.sources
+        }catch{/* Source absent is not a synthetic quote. */}
+      }
+      const d=await investigateNhl(args.date,args.gameId,fetch,now,quotes,args.maxSkaters??8)
+      return JSON.stringify({...d,sources:undefined,
+        sourceAudit:{verified:d.sources.filter(s=>s.status==='verified').length,
+          failures:d.sources.filter(s=>s.status==='error').slice(0,20)},
+        oddsSources,
+        instruction:'Kira: no afirmar portero confirmado, lineup fijo, duelo real, xG/GSAx ni valor esperado sin fuente. Examina porteros y skaters versus el rival, PP/PK, descanso y lesiones pendientes. Distingue mercados 60 minutos, OT y shootout; abstenerse si falta evidencia.'})
+    },
+    presentCall:()=>({card:'generic',title:'Investigar NHL · porteros y mercados',kind:'read' as const}),
+  }))
 
 }
