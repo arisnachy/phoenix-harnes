@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {soccerLeagueCatalog,soccerDailySlate,soccerFixture} from '../src/soccer-worldwide-scout.ts'
+import {soccerLeagueCatalog,soccerDailySlate,soccerFixture,soccerWorldPage} from '../src/soccer-worldwide-scout.ts'
 import {investigateSoccer} from '../src/soccer-worldwide-dossier.ts'
 
 const now=Date.parse('2026-11-02T15:00:00Z')
@@ -154,4 +154,18 @@ test('roster presence does not imply an official starting XI',async()=>{
   assert.equal(r.lineupConfirmed.home,false)
   assert.equal(r.teams.home.roster.filter(x=>x.confirmedStarter).length,0)
   assert.ok(r.missingEvidence.includes('Once local no confirmado'))
+})
+
+test('global daily scanner paginates discovered soccer competitions without claiming exhaustiveness',async()=>{
+  const api=mock()
+  const first=await soccerWorldPage(date,0,2,api.fetcher,now,{})
+  assert.equal(first.scannedCount,2)
+  assert.equal(first.games.length,2)
+  assert.equal(first.nextOffset,2)
+  assert.equal(first.worldwideComplete,false)
+  const second=await soccerWorldPage(date,2,2,api.fetcher,now,{})
+  assert.equal(second.offset,2)
+  assert.ok(second.games.every(g=>g.eventId&&g.league))
+  await assert.rejects(()=>soccerWorldPage(date,-1,24,api.fetcher,now),/Offset/)
+  await assert.rejects(()=>soccerWorldPage(date,0,25,api.fetcher,now),/Límite/)
 })
