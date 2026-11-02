@@ -378,7 +378,7 @@ const AUTO_SOL_STRATEGY_POLICY =
   'Stop after one concise, actionable strategy adjustment; then Kira returns to Luna Max execution. Do not rewrite the entire plan.'
 
 const AUTO_LUNA_COORDINATION_POLICY =
-  'You are still Kira, coordinating and executing on Luna Max through the configured execution route. ' +
+  'You are still Kira, coordinating through Eclipse. Luna handles ordinary tool work; Terra handles only fresh Team decisions when Auto permits it. ' +
   'The single Kira identity owns the plan across model switches; never address Kira as another speaker. ' +
   'If a user-visible **Plan:** was written earlier in THIS turn, ' +
   'treat that text as the already-approved execution brief; do not rewrite, replan, recite or re-announce it. ' +
@@ -555,6 +555,46 @@ function isTinyTeamFormatQuestion(signal: PhoenixAutoTeamSignal): boolean {
     && signal.text.length <= 260
     && /(?:formato|viñetas|vinetas|una frase|dos frases|breve o|bullets|one sentence|two bullets)/iu.test(signal.text)
     && !/(?:c[oó]digo|error|seguridad|riesgo|arquitectura|paciente|clinica|cl[ií]nica|implementaci[oó]n|fallo|bug)/iu.test(signal.text)
+}
+
+/**
+ * Replace one already-required Luna coordinator step with Terra only when new
+ * Team evidence needs integration or a substantive decision. This does not
+ * create a model turn, promote a routine tool result, or override Sol rescue.
+ * An explicit catalog-backed Terra choice is required in automatic mode.
+ * @param profile - Saved Eclipse model preferences.
+ * @param fallback - Luna's serving route for the current step.
+ * @param signal - New genuine Team result, review, decision, or question.
+ * @param lastMessageId - Team evidence handled by Terra in this turn.
+ * @param used - Number of Terra coordination requests already issued this turn.
+ * @param sameStep - Repeated dispatch of the same request, which stays stable.
+ * @returns Terra for a fresh coordination decision; otherwise unchanged Luna.
+ */
+export function selectEclipseAutomaticCoordinatorRoute(
+  profile: EclipseRoutingSettings | undefined,
+  fallback: ModelSelection,
+  signal: PhoenixAutoTeamSignal | undefined,
+  lastMessageId: string | undefined,
+  used: number,
+  sameStep = false,
+): ModelSelection {
+  const route = profile?.coordinator
+  if (profile?.mode !== 'automatic' || fallback.model !== PHOENIX_CODEX_AUTO_WORKER_MODEL
+    || fallback.provider !== 'openai-codex'
+    || route?.provider !== 'openai-codex'
+    || !/^gpt-\d+(?:\.\d+)?-terra(?:$|-)/iu.test(route.model)
+    || signal === undefined
+    || !['result', 'review', 'decision', 'question'].includes(signal.purpose)
+    || (signal.purpose === 'question' && isTinyTeamFormatQuestion(signal))
+    || (!sameStep && (used >= 2 || lastMessageId === signal.messageId))) return fallback
+  return {
+    provider: route.provider,
+    model: route.model,
+    // Respect the account's advertised efforts. An omitted tier uses the
+    // provider default rather than assuming Terra supports Low/Medium.
+    ...route.reasoningEffort === undefined
+      ? {} : { reasoningEffort: ReasoningEffortId(route.reasoningEffort) },
+  }
 }
 
 /** Read the newest real Team message admitted into this turn without another classifier call. */
@@ -941,6 +981,9 @@ interface PhoenixAutoRouterState {
   lastContinuationStep: number
   forcePlannerNext: boolean
   lastTeamEscalationMessageId: string | undefined
+  lastTerraCoordinationMessageId: string | undefined
+  lastTerraCoordinationStep: number
+  terraCoordinationCount: number
 }
 
 function resetPhoenixAutoTurnState(state: PhoenixAutoRouterState, turn: number): void {
@@ -953,6 +996,9 @@ function resetPhoenixAutoTurnState(state: PhoenixAutoRouterState, turn: number):
   state.lastContinuationStep = 0
   state.forcePlannerNext = false
   state.lastTeamEscalationMessageId = undefined
+  state.lastTerraCoordinationMessageId = undefined
+  state.lastTerraCoordinationStep = 0
+  state.terraCoordinationCount = 0
 }
 
 /** Each new tool receipt or provider retry can add evidence to the current phase. */
@@ -1215,6 +1261,9 @@ export function installModelSelection(
     lastContinuationStep: 0,
     forcePlannerNext: false,
     lastTeamEscalationMessageId: undefined,
+    lastTerraCoordinationMessageId: undefined,
+    lastTerraCoordinationStep: 0,
+    terraCoordinationCount: 0,
   }
   // A rehydrated Phoenix session can temporarily display an empty selector.
   // Reuse only its own durable Auto or Kira coordinator preference, never
@@ -1352,16 +1401,27 @@ export function installModelSelection(
           phoenixAutoState,
           eclipseProfile?.escalationSensitivity,
         )
-        // Kira handles conversation and small one-shot tasks directly on Luna
-        // Max, even when Eclipse's coordinator role points to Sol. A real Team
-        // signal or strategy rescue still follows the operational route.
-        const quick = phoenixAutoTeamSignalForTurn(_payload.agent, _payload.turn) === undefined
+        // Routine operations stay on Luna. One fresh, substantive Team decision
+        // can use Terra in the SAME request slot without an added handoff turn.
+        // Sol planning/rescue and a user's explicit non-Auto selection are intact.
+        const teamSignal = phoenixAutoTeamSignalForTurn(_payload.agent, _payload.turn)
+        const quick = teamSignal === undefined
           && automatic.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
           && isPhoenixAutoQuickTurn(directText)
         const role = automatic.model === PHOENIX_CODEX_AUTO_PLANNER_MODEL ? 'planner' : 'coordinator'
-        // Keep Luna as the direct fast-path model; retain its proportional
-        // low/medium effort instead of silently upgrading every quick turn.
-        const routed = quick
+        const terra = selectEclipseAutomaticCoordinatorRoute(
+          eclipseProfile, automatic, teamSignal, phoenixAutoState.lastTerraCoordinationMessageId,
+          phoenixAutoState.terraCoordinationCount,
+          phoenixAutoState.lastTerraCoordinationStep === _payload.step
+            && phoenixAutoState.lastTerraCoordinationMessageId === teamSignal?.messageId,
+        )
+        if (terra !== automatic && teamSignal !== undefined
+          && phoenixAutoState.lastTerraCoordinationStep !== _payload.step) {
+          phoenixAutoState.lastTerraCoordinationMessageId = teamSignal.messageId
+          phoenixAutoState.lastTerraCoordinationStep = _payload.step
+          phoenixAutoState.terraCoordinationCount += 1
+        }
+        const routed = terra !== automatic ? terra : quick
           ? automatic
           : resolveEclipseRoleRoute(
             eclipseProfile,
