@@ -21,7 +21,7 @@ const roster=(side,fullLineup=false)=>({roster:[
 function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
   unrelatedGame=false,unknownLineupId=false,pitcherLogs=false,bvpHydration=false,
   futureGameResult=false,futurePitcherLog=false,wrongVenue=false,
-  olderReliefLog=false}={}){
+  olderReliefLog=false,futureNews=false}={}){
   const calls=[]
   const fetcher=async(input)=>{
     const url=String(input)
@@ -89,7 +89,7 @@ function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
         {team:{id:102},wins:40,losses:45}]}]}
     }else if(u.pathname.endsWith('/news')){
       data={articles:[{headline:'Home Giants prepare to face Away Bears',
-        published:'2026-07-01T10:00:00Z'}]}
+        published:futureNews?'2026-07-01T13:00:00Z':'2026-07-01T10:00:00Z'}]}
     }else throw new Error('Unexpected request '+url)
     return new Response(JSON.stringify(data),{status:200,headers:{'content-type':'application/json'}})
   }
@@ -376,4 +376,26 @@ test('market comparisons preserve bookmaker, selection, line, price and timestam
   assert.equal(review.reviewedMarkets.length,3)
   assert.equal(review.probabilitiesEstimated,false)
   assert.equal(review.eligibleForTicket,false)
+})
+
+
+test('MLB dossier rejects otherwise matching odds from another sport',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const quote=sportKey=>({eventId:'book-4',bookmaker:'Verified House',
+    market:'totals',selection:'Over',point:8,price:1.91,
+    home:'Home Giants',away:'Away Bears',timeIso:fixture.gameDate,
+    updatedAt:'2026-07-01T11:55:00Z',sportKey})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[
+    quote('basketball_nba'),quote('baseball_mlb'),
+  ])
+  assert.equal(d.odds.length,1)
+  assert.equal(d.odds[0].sportKey,'baseball_mlb')
+  assert.equal(reviewMlbResearch(d).reviewedMarkets.length,1)
+})
+
+test('news published after checkedAt is not treated as known pregame evidence',async()=>{
+  const mock=fakeNetwork({futureNews:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(d.news.length,0)
+  assert.ok(d.missingEvidence.some(x=>x.includes('Noticias específicas')))
 })
