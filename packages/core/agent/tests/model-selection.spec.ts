@@ -412,7 +412,7 @@ describe('installModelSelection()', () => {
       events.push({ type: 'step/start', data: { turn: 1, step: 3 } })
       const resumedAssembly = await ctx.systemPrompt.assemble()
       expect(resumedAssembly.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text)
-        .toContain('still Kira, coordinating and executing on Luna Max through the configured execution route')
+        .toContain('still Kira, coordinating through Eclipse')
       expect(resumedAssembly.tools.map(tool => tool.name)).toContain('read')
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 4, signal },
