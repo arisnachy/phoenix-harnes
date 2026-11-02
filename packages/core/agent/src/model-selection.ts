@@ -315,15 +315,20 @@ export function adaptiveCodexReasoningEffort(text: string): ReasoningEffortId {
   return ReasoningEffortId('high')
 }
 
-/** Keep the visible strategy pass cheap; substantive execution gets the adaptive tier. */
-
 /** Scope the extra quality brief to deliverable-oriented software tasks only. */
+// oxlint-disable-next-line @stylistic/max-len -- Bilingual quality gate stays auditable without extra classifier calls.
 const FENIX_CODING_ARTIFACT = /\b(?:python|typescript|javascript|c[oó]digo|code|m[oó]dulo|module|script|algoritmo|algorithm|resolver|resolvedor|depsolve|funci[oó]n|function|paquete|package)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Bilingual quality gate stays auditable without extra classifier calls.
 const FENIX_CODING_VERIFY = /\b(?:pytest|unittest|tests?|pruebas?|benchmark|rendimiento|performance|readme|documentaci[oó]n|trade[-\s]?offs|restricciones|constraints)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Bilingual quality gate stays auditable without extra classifier calls.
 const FENIX_PERFORMANCE_RISK = /\b(?:rendimiento|performance|benchmark|escalabilidad|scalability|tiempo\s+l[ií]mite|time\s+limit|pocos\s+segundos|few\s+seconds|backtracking|exponencial|exponential|patol[oó]gic|pathological)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Bilingual quality gate stays auditable without extra classifier calls.
 const FENIX_CONSTRAINT_RISK = /\b(?:versiones?|versions?|semver|dependencias?|dependencies|grafo|graph|restricciones|constraints|minimiz|minimum|m[ií]nim|optimal|[oó]ptim|desempate|tie[-\s]?break)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Bilingual quality gate stays auditable without extra classifier calls.
 const FENIX_README_REQUEST = /\b(?:readme|documentaci[oó]n|documentation|suposiciones|assumptions|trade[-\s]?offs)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Bilingual quality gate stays auditable without extra classifier calls.
 const FENIX_TEST_REQUEST = /\b(?:pytest|unittest|tests?|pruebas?|mutaciones|mutations)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Bilingual quality gate stays auditable without extra classifier calls.
 const FENIX_REPORT_REQUEST = /\b(?:reporte\s+final|informe\s+final|final\s+report|limitations?|limitaciones|iteraciones|iterations|herramientas\s+usadas)\b/iu
 
 /** Deterministic, proportional quality obligations: no model-based classifier. */
@@ -351,13 +356,14 @@ export function fenixCodingQualityBrief(request: string): string | undefined {
   return obligations.join(' ')
 }
 
-/** The small bounded-implementation shortcut must not skip Sol's hard algorithmic trade-off plan. */
+/** The bounded-implementation shortcut cannot skip a hard algorithmic Sol plan. */
 function fenixNeedsAlgorithmPlan(request: string): boolean {
   return FENIX_CODING_ARTIFACT.test(request)
     && FENIX_PERFORMANCE_RISK.test(request)
     && FENIX_CONSTRAINT_RISK.test(request)
 }
 
+/** Keep routine Sol planning cheap; reserve High for measurable hard optimization trade-offs. */
 function adaptiveCodexPlanningEffort(text: string): ReasoningEffortId {
   if (fenixNeedsAlgorithmPlan(text)) return ReasoningEffortId('high')
   if (AUTO_EXCEPTIONAL_TASK.test(text)) return ReasoningEffortId('max')
@@ -1333,6 +1339,7 @@ export function installModelSelection(
       && currentTurnNumber !== undefined
       && phoenixAutoHasFreshStrategyEvidence(scopedAgent, currentTurnNumber, phoenixAutoState)
       && (needsTeamRescue || (autoStep > 1 && (phoenixAutoState.forcePlannerNext || needsStallRescue)))
+    const fenixAcceptance = fenixCodingQualityBrief(currentRequest)
     const autoPolicy = strategyRescueStep ? AUTO_SOL_STRATEGY_POLICY
       : autoStep === 1
         && phoenixAutoTaskRequest(currentRequest)
@@ -1346,8 +1353,7 @@ export function installModelSelection(
       ...autoPolicy === undefined ? {} : {
         sections: [...assembled.sections, {
           name: 'phoenix:auto-visible-handoff',
-          text: autoPolicy + (currentRequest.length === 0 ? '' :
-            `\n${fenixCodingQualityBrief(currentRequest) ?? ''}`),
+          text: autoPolicy + (fenixAcceptance === undefined ? '' : `\n${fenixAcceptance}`),
         }],
       },
       // The initial coordinator plan cannot execute tools. The coordinator
