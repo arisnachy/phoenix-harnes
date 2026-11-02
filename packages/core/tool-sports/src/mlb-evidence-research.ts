@@ -181,7 +181,7 @@ function weatherAt(v:unknown,kickoff:string):MlbWeather|null{
   const hourly=obj(obj(v).hourly),times=arr(hourly.time).map(x=>word(x,50))
   if(!times.length)return null
   const target=Date.parse(kickoff)
-  const indices=times.map((s,i)=>({i,delta:Math.abs(Date.parse(s)-target)}))
+  const indices=times.map((s,i)=>({i,delta:Math.abs(Date.parse(s.endsWith('Z')?s:s+'Z')-target)}))
     .filter(x=>Number.isFinite(x.delta)).sort((a,b)=>a.delta-b.delta)
   const nearest=indices[0]
   if(!nearest||nearest.delta>3_600_000)return null
@@ -285,7 +285,7 @@ export async function researchMlbCase(
   const teams=['home','away'] as const
   const [box,venueRaw,homeRoster,awayRoster,homeSchedule,awaySchedule]=await Promise.all([
     measured<unknown>('https://statsapi.mlb.com/api/v1/game/'+gamePk+'/boxscore',fetcher,sources,now),
-    fixture.venue.id?measured<unknown>('https://statsapi.mlb.com/api/v1/venues/'+
+    fixture.venue.id?measured<unknown>('https://statsapi.mlb.com/api/v1/venues?venueIds='+
       fixture.venue.id,fetcher,sources,now):Promise.resolve(null),
     measured<unknown>('https://statsapi.mlb.com/api/v1/teams/'+fixture.home.id+
       '/roster?rosterType=active',fetcher,sources,now),
@@ -407,7 +407,9 @@ export async function researchMlbCase(
     'Lesiones, estrellas, noticias y opiniones de expertos sin verificación específica',
     'Historial bateador vs pitcher, splits de mano y repertorio pendientes',
   ]
-  if(!profiles.length)missingEvidence.push('Rosters activos no disponibles')
+  if(!rawRosters.home.length||!rawRosters.away.length)
+    missingEvidence.push('Rosters activos incompletos o no disponibles')
+  if(!profiles.length)missingEvidence.push('Estadísticas individuales no disponibles')
   if(!news.length)missingEvidence.push('Noticias específicas de ambos equipos no verificadas')
   if(!quotes.length)missingEvidence.push('Cuotas reales no suministradas al expediente')
   const odds=verifiedOdds(fixture,quotes,now)
