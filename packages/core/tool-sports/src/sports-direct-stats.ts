@@ -27,7 +27,7 @@ export type DirectTeam={
   coverage:Array<{endpoint:string;status:'available'|'empty'|'unavailable'}>
 }
 export type DirectDossier={
-  source:'ESPN public Site/Common v3/Core';checkedAt:string;sport:string;league:string
+  source:'ESPN public Site/Common v3';checkedAt:string;sport:string;league:string
   teams:DirectTeam[];requests:number;errors:number
   limitations:string[]
 }
@@ -69,6 +69,34 @@ const extract=(raw:unknown,max=10):DirectMetric[]=>{
     }
   }
   return found
+}
+/** A gamelog is a sequence of event-level observations, not generic
+ * season totals. Preserve the event/date and the provider's stat labels.
+ * @param raw - ESPN Common v3 athlete gamelog response.
+ * @returns Up to eight actual event stat rows with source labels.
+ */
+function gameLog(raw:unknown):DirectMetric[]{
+  const root=obj(raw),events=obj(root.events)
+  const results:DirectMetric[]=[]
+  const queue:Array<{v:unknown;depth:number}>=[{v:raw,depth:0}]
+  let examined=0
+  while(queue.length&&examined++<70&&results.length<8){
+    const next=queue.shift()!,node=obj(next.v),labels=arr(node.labels)
+    for(const event of arr(node.events).slice(0,12)){
+      const e=obj(event),values=arr(e.stats),eventId=id(e.eventId)
+      if(!eventId||!values.length||labels.length!==values.length)continue
+      const game=obj(events[eventId])
+      const title=word(game.shortName??game.name??e.displayName??eventId,90)
+      const facts=labels.slice(0,6).map((label,i)=>
+        word(label,18)+': '+word(values[i],18)).join(' · ')
+      if(title&&facts)results.push({name:title,value:facts.slice(0,175)})
+      if(results.length>=8)break
+    }
+    if(next.depth>=4)continue
+    for(const field of ['seasonTypes','categories','tables'])
+      for(const child of arr(node[field]).slice(0,15))queue.push({v:child,depth:next.depth+1})
+  }
+  return results.length?results:extract(raw,8)
 }
 function rosterRows(raw:unknown):Array<{id:string;name:string;position:string;jersey:string;headshot:string|null}>{
   const listed=arr(obj(raw).athletes).flatMap(group=>{
@@ -160,7 +188,7 @@ export async function collectDirectEspnStats(
         if(athlete.stats.length)athlete.verifiedSources.push('stats')
       })
       add(uri+'gamelog','athlete_gamelog',value=>{
-        athlete.lastGames=extract(value,7)
+        athlete.lastGames=gameLog(value)
         if(athlete.lastGames.length)athlete.verifiedSources.push('gamelog')
       })
       // Game-by-game splits are relevant to pitchers and star QBs. Also
@@ -189,7 +217,7 @@ export async function collectDirectEspnStats(
     const count=person.verifiedSources.length
     person.status=count===0?'unavailable':count>=2?'verified':'partial'
   }
-  return {source:'ESPN public Site/Common v3/Core',checkedAt:new Date(now).toISOString(),
+  return {source:'ESPN public Site/Common v3',checkedAt:new Date(now).toISOString(),
     sport,league,teams:result,requests,errors,
     limitations:[
       'La API ESPN es pública pero no oficial y no garantiza cobertura por liga o temporada.',
