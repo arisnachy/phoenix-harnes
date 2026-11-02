@@ -1,5 +1,7 @@
 /** Copy for the dedicated Settings → Connectors surface. */
 export const connectorEn = {
+  storeRuntimeReady: "OpenClaw runtime detected",
+  storeMyPlugins: "Installed OpenClaw plugins",
   storePluginLoaded: "Loaded in OpenClaw",
   storePluginNeedsRuntime: "Enabled, waiting for runtime",
   storePluginFailed: "OpenClaw reported a loading error",
@@ -36,7 +38,7 @@ export const connectorEn = {
   storeRoutingOAuth: "Sign in to each provider using OpenClaw's authorization flow. Providers that do not support browser login may still require their own setup.",
   storeRoutingDocs: "OpenClaw provider authorization",
   storeNativeInstall: "Install plugin",
-  storeNativeInstalled: "Plugin installed in OpenClaw, disabled until configured and authorized.",
+  storeNativeInstalled: "OpenClaw accepted the installation. Inspect plugin status and permissions below.",
   storeNativeInstalledStatus: "Installed · setup required",
   storeNativeInstallError: "Plugin installation failed. Check the OpenClaw runtime, permissions and package compatibility.",
   storeRuntimeNotReady: "Install/configure the OpenClaw runtime first; ClawHub CLI alone cannot execute plugins.",
@@ -51,7 +53,7 @@ export const connectorEn = {
   storeCliInstalling: "Preparing ClawHub CLI…",
   storeCliFailed: "CLI installation failed",
   storeCliIncompatible: "ClawHub needs Node 22.13+ or 24+",
-  storeCliRepair: "Install / update CLI",
+  storeCliRepair: "Prepare ClawHub + OpenClaw",
   storeCliRepairing: "Preparing CLI…",
   storeCliVersion: "CLI version",
   storeCliLatest: "Latest verified version",
@@ -194,6 +196,8 @@ export type ConnectorKey = keyof typeof connectorEn
 
 /** Spanish copy for the dedicated Settings → Connectors surface. */
 export const connectorEs: { [Key in ConnectorKey]: string } = {
+  storeRuntimeReady: "Runtime de OpenClaw detectado",
+  storeMyPlugins: "Mis plugins de OpenClaw",
   storePluginLoaded: "Cargado en OpenClaw",
   storePluginNeedsRuntime: "Habilitado, pendiente del runtime",
   storePluginFailed: "Error de carga en OpenClaw",
@@ -230,7 +234,7 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
   storeRoutingOAuth: "Inicia sesión en cada proveedor mediante OpenClaw. Algunos servicios sin acceso web requieren una configuración propia.",
   storeRoutingDocs: "Autorización de proveedores OpenClaw",
   storeNativeInstall: "Instalar plugin",
-  storeNativeInstalled: "Plugin instalado en OpenClaw, desactivado hasta configurarlo y autorizarlo.",
+  storeNativeInstalled: "OpenClaw aceptó la instalación. Comprueba el estado del plugin y sus permisos abajo.",
   storeNativeInstalledStatus: "Instalado · falta configurar",
   storeNativeInstallError: "Falló la instalación. Comprueba OpenClaw, los permisos y la compatibilidad del paquete.",
   storeRuntimeNotReady: "Primero configura el runtime OpenClaw: la CLI de ClawHub por sí sola no ejecuta plugins.",
@@ -245,7 +249,7 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
   storeCliInstalling: "Preparando la CLI de ClawHub…",
   storeCliFailed: "Falló la instalación de la CLI",
   storeCliIncompatible: "ClawHub requiere Node 22.13+ o 24+",
-  storeCliRepair: "Instalar / actualizar CLI",
+  storeCliRepair: "Preparar ClawHub y OpenClaw",
   storeCliRepairing: "Preparando CLI…",
   storeCliVersion: "Versión instalada",
   storeCliLatest: "Última versión comprobada",
@@ -385,6 +389,8 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
 
 /** Simplified Chinese copy for the dedicated Settings → Connectors surface. */
 export const connectorZh: { [Key in ConnectorKey]: string } = {
+  storeRuntimeReady: "已检测到 OpenClaw 运行时",
+  storeMyPlugins: "已安装的 OpenClaw 插件",
   storePluginLoaded: "已在 OpenClaw 加载",
   storePluginNeedsRuntime: "已启用，等待运行时",
   storePluginFailed: "OpenClaw 报告加载失败",
@@ -421,7 +427,7 @@ export const connectorZh: { [Key in ConnectorKey]: string } = {
   storeRoutingOAuth: "在 OpenClaw 中登录各服务。某些服务可能仍需要单独配置。",
   storeRoutingDocs: "OpenClaw 提供方认证",
   storeNativeInstall: "安装插件",
-  storeNativeInstalled: "插件已安装到 OpenClaw，但配置和授权前保持禁用。",
+  storeNativeInstalled: "OpenClaw 已接受安装，请查看下方插件状态与权限。",
   storeNativeInstalledStatus: "已安装 · 待配置",
   storeNativeInstallError: "安装失败：请检查 OpenClaw、权限和兼容性。",
   storeRuntimeNotReady: "请先安装并配置 OpenClaw 运行时；仅有 ClawHub CLI 无法执行插件。",
@@ -436,7 +442,7 @@ export const connectorZh: { [Key in ConnectorKey]: string } = {
   storeCliInstalling: "正在准备 ClawHub CLI…",
   storeCliFailed: "CLI 安装失败",
   storeCliIncompatible: "ClawHub 需要 Node 22.13+ 或 24+",
-  storeCliRepair: "安装 / 更新 CLI",
+  storeCliRepair: "准备 ClawHub 与 OpenClaw",
   storeCliRepairing: "正在准备 CLI…",
   storeCliVersion: "当前 CLI 版本",
   storeCliLatest: "已检查最新版本",
