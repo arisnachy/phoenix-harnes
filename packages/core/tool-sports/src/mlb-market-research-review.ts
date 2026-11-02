@@ -10,11 +10,16 @@ export type MlbReviewMarket={
   favorableEvidence:string[];contradictoryEvidence:string[];
   missingEvidence:string[];researchQuestions:string[];
 }
+export type MlbMarketComparison={
+  bookmaker:string;market:string;
+  offers:Array<{selection:string;line:number|null;price:number;updatedAt:string}>;
+  note:string;
+}
 export type MlbResearchReview={
   version:1;eventId:string;sport:'baseball';league:'mlb';
   eligibility:'research-only'|'insufficient';
   evidenceGates:Record<string,boolean>;
-  reviewedMarkets:MlbReviewMarket[];conclusion:string;
+  reviewedMarkets:MlbReviewMarket[];marketComparisons:MlbMarketComparison[];conclusion:string;
   decision:'investigate'|'abstain';
   probabilitiesEstimated:false;eligibleForTicket:false;
   missingEvidence:string[];
@@ -24,14 +29,20 @@ const readyStat=(p:MlbAthlete|null,field:string)=>p?.season[field]!==undefined
 /** Every market is checked against the verified evidence in the SAME dossier. */
 export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
   const h=d.starters.home,a=d.starters.away
-  const homeHitters=d.rosters.home.filter(p=>p.role==='batter')
-  const awayHitters=d.rosters.away.filter(p=>p.role==='batter')
+  const nineVerified=(side:'home'|'away')=>{
+    const hitters=d.rosters[side].filter(p=>p.role==='batter')
+    return new Set(hitters.map(p=>p.id)).size>=9&&
+      hitters.every(p=>p.teamId===d.fixture[side].id)
+  }
   const gates={
-    scheduledFuture:Date.parse(d.fixture.date)>Date.parse(d.checkedAt),
+    scheduledFuture:Number.isFinite(Date.parse(d.fixture.date))&&
+      Number.isFinite(Date.parse(d.checkedAt))&&
+      Date.parse(d.fixture.date)>Date.parse(d.checkedAt)&&
+      ['Preview','Pre-Game','Scheduled'].includes(d.fixture.status),
     startersVerified:!!h&&!!a,
     teamRecordsVerified:!!d.seasonRecord.home&&!!d.seasonRecord.away,
     recentTeamFormVerified:!!d.teamForm.home?.games&&!!d.teamForm.away?.games,
-    bothRostersVerified:homeHitters.length>=9&&awayHitters.length>=9,
+    bothRostersVerified:nineVerified('home')&&nineVerified('away'),
     lineupsConfirmed:d.lineupStatus.home==='confirmed'&&d.lineupStatus.away==='confirmed',
     starterStatsVerified:readyStat(h,'era')&&readyStat(a,'era'),
     reliefUsageObserved:[...d.bullpen.home,...d.bullpen.away].some(p=>p.reliefUsage72h.length>0),
@@ -39,7 +50,7 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     venueKnown:!!d.venue.name&&d.venue.name!=='Estadio no verificado',
     roofConstructionKnown:d.venue.roofType!=='unknown',
     gameRoofPositionVerified:false,
-    weatherObserved:!!d.weather, // Forecast available, not a measured game-time observation
+    weatherForecastAvailable:!!d.weather, // A forecast is not a game-time measurement
     realOffersVerified:d.odds.length>0,
     specificExpertPicksVerified:false,
     bookmakerRulesVerified:false,
@@ -52,9 +63,10 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     ...(gates.startersVerified?['Identidad de ambos abridores probables verificada']:[]),
     ...(gates.rosterMatchupsReviewed?['Cruces de bateadores y pitchers rivales identificados por MLB ID']:[]),
     ...(opponentBvP?['Muestras BvP con al menos 10 turnos: '+opponentBvP]:[]),
-    ...(gates.weatherObserved?['Pronóstico meteorológico horario disponible (orientación del viento sin verificar)']:[]),
+    ...(gates.weatherForecastAvailable?['Pronóstico meteorológico horario disponible (orientación del viento sin verificar)']:[]),
   ]
   const opposingFacts=[
+    ...(!gates.scheduledFuture?['El partido ya no es elegible para investigación prepartido']:[]),
     ...(!gates.lineupsConfirmed?['Cambios de la alineación pueden invalidar cualquier ventaja individual']:[]),
     ...(!gates.reliefUsageObserved?['Sin evidencia suficiente del uso reciente del bullpen']:[]),
     ...(!gates.specificExpertPicksVerified?['No se ha verificado un pick específico atribuible de ESPN/Covers']:[]),
@@ -77,10 +89,11 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
       ...(fullGame?['¿Qué cambia si el bullpen entra antes o si el local no batea la novena?']:[]),
     ]
     const missing=[
+      ...(!gates.scheduledFuture?['Partido no programado en el futuro o estado prepartido inválido']:[]),
       ...(!gates.lineupsConfirmed?['Alineación confirmada de ambos clubes']:[]),
       ...(!gates.starterStatsVerified?['Estadísticas comprobadas de ambos abridores']:[]),
       ...(!gates.venueKnown?['Identidad y características del estadio verificadas']:[]),
-      ...(!gates.weatherObserved?['Meteorología horaria para el encuentro']:[]),
+      ...(!gates.weatherForecastAvailable?['Pronóstico meteorológico horario para el encuentro']:[]),
     ...(!gates.roofConstructionKnown?['Tipo de techo del estadio sin verificación']:[]),
     ...(!gates.gameRoofPositionVerified?['Estado del techo al inicio del encuentro sin verificar']:[]),
       ...(!gates.reliefUsageObserved?['Uso reciente del bullpen y disponibilidad de relevistas']:[]),
@@ -93,14 +106,26 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
       favorableEvidence:coreEvidence,
       contradictoryEvidence:opposingFacts,missingEvidence:missing,researchQuestions}
   })
+  const comparisonGroups=new Map<string,MlbMarketComparison>()
+  for(const q of d.odds.slice(0,40)){
+    const key=JSON.stringify([q.bookmaker,q.market])
+    const group=comparisonGroups.get(key)??{
+      bookmaker:q.bookmaker,market:q.market,offers:[],
+      note:'Comparar selección, línea, período y reglas exactas. Cuotas de resultados distintos no son intercambiables.',
+    }
+    group.offers.push({selection:q.selection,line:q.point??null,
+      price:q.price,updatedAt:q.updatedAt})
+    comparisonGroups.set(key,group)
+  }
+  const marketComparisons=[...comparisonGroups.values()]
   const basic=Object.entries(gates).filter(([key])=>
     ['scheduledFuture','startersVerified','teamRecordsVerified','recentTeamFormVerified',
       'bothRostersVerified','rosterMatchupsReviewed'].includes(key))
   const insufficient=basic.some(([,value])=>!value)
   return{version:1,eventId:String(d.fixture.gamePk),sport:'baseball',league:'mlb',
     eligibility:insufficient?'insufficient':'research-only',evidenceGates:gates,
-    reviewedMarkets,conclusion:insufficient?
-      'Hay datos esenciales incompletos: no considerar ninguna selección para un ticket.':
+    reviewedMarkets,marketComparisons,conclusion:insufficient?
+      'El juego no es prepartido elegible o faltan datos esenciales: no considerar ninguna selección para un ticket.':
       !gates.realOffersVerified?'No hay cuotas reales vigentes para comparar mercados; abstenerse.':
       'Expediente apto para discusión crítica de mercados, pero no demuestra ventaja apostable.',
     decision:insufficient||!gates.realOffersVerified?'abstain':'investigate',

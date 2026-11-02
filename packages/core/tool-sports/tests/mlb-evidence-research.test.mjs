@@ -330,3 +330,50 @@ test('official park fieldInfo distinguishes roof construction from actual roof p
   assert.ok(mock.calls.some(url=>url.includes('/venues?')&&
     url.includes('hydrate=location,fieldInfo')))
 })
+
+
+test('market review abstains when fixture status is no longer pregame',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const q={eventId:'book-4',bookmaker:'Verified House',market:'totals',
+    selection:'Over',point:8,price:1.91,home:'Home Giants',away:'Away Bears',
+    timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z'}
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[q])
+  assert.equal(reviewMlbResearch(d).decision,'investigate')
+  d.fixture.status='Final'
+  const review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.scheduledFuture,false)
+  assert.equal(review.decision,'abstain')
+  assert.equal(review.eligibility,'insufficient')
+  assert.equal(review.reviewedMarkets[0].status,'blocked')
+  assert.equal(review.eligibleForTicket,false)
+})
+
+test('nine roster entries with a duplicated ID cannot pass nine-player verification',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  const hitters=d.rosters.home.filter(p=>p.role==='batter')
+  d.rosters.home=d.rosters.home.filter(p=>p.id!==hitters[8].id)
+  d.rosters.home.push({...hitters[0]})
+  assert.equal(d.rosters.home.filter(p=>p.role==='batter').length,9)
+  assert.equal(reviewMlbResearch(d).evidenceGates.bothRostersVerified,false)
+})
+
+test('market comparisons preserve bookmaker, selection, line, price and timestamp',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const quote=(bookmaker,selection,point,price)=>({eventId:'book-4',bookmaker,
+    market:'totals',selection,point,price,home:'Home Giants',away:'Away Bears',
+    timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z'})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[
+    quote('Book A','Over',8,1.91),quote('Book A','Over',8.5,2.02),
+    quote('Book B','Under',8,1.85),
+  ])
+  const review=reviewMlbResearch(d)
+  assert.equal(review.marketComparisons.length,2)
+  assert.deepEqual(review.marketComparisons[0].offers.map(x=>[x.selection,x.line,x.price]),
+    [['Over',8,1.91],['Over',8.5,2.02]])
+  assert.equal(review.marketComparisons[1].bookmaker,'Book B')
+  assert.equal(review.marketComparisons[1].offers[0].updatedAt,'2026-07-01T11:55:00Z')
+  assert.equal(review.reviewedMarkets.length,3)
+  assert.equal(review.probabilitiesEstimated,false)
+  assert.equal(review.eligibleForTicket,false)
+})
