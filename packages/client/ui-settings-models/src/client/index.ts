@@ -172,6 +172,8 @@ type PluginInventoryMcpRegistryRemote = {
     }
   }>>
   openClawRuntimeState(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRuntimeSnapshot>>
+  clawHubState(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>>
+  clawHubInstallSkill(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallReceipt>>
   clawHubCatalog(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubCatalogRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubCatalogSnapshot>>
   openClawConnectorState(): Promise<PluginInventoryRemoteResult<{
     connectors: Array<{
@@ -308,6 +310,8 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
       await remote().openClawRuntimeState(),
     ),
     clawHubCatalog: async request => unwrapPluginInventory('clawHubCatalog', await remote().clawHubCatalog(request)),
+    clawHubState: async () => unwrapPluginInventory('clawHubState', await remote().clawHubState()),
+    clawHubInstallSkill: async request => unwrapPluginInventory('clawHubInstallSkill', await remote().clawHubInstallSkill(request)),
   }
 }
 
