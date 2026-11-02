@@ -281,8 +281,11 @@ export function createPhoenix3DTool(): ToolDefinition {
     execute(args, exec) {
       const title = args.title.trim()
       if (title.length === 0 || title.length > 140) throw new ToolArgsError(['Se requiere un título de 1 a 140 caracteres.'])
-      const qualityLevel: Scene3DLevel = args.qualityMode ?? requestedScene3DLevel(
+      const inferredLevel = requestedScene3DLevel(
         title + ' ' + (typeof args.subject === 'string' ? args.subject : ''))
+      const qualityLevel: Scene3DLevel = inferredLevel !== 'preview' ? inferredLevel
+        : args.qualityMode === 'fidelity' ? 'fidelity'
+          : args.qualityMode === 'studio' ? 'studio' : 'preview'
       if (qualityLevel !== 'preview') {
         throw new ToolArgsError([qualityLevel === 'studio'
           ? 'Calidad Studio requiere la ruta real de Blender Lab MCP o el renderizador offline de Blender; phoenix_3d solo hace previsualizaciones.'
