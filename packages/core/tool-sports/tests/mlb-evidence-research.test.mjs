@@ -31,11 +31,12 @@ function fakeNetwork({missingRoster=false,oldGame=false}={}){
           away:{team:{id:teamId===101?200:201},score:2}}}]}]}
     }else if(u.pathname.endsWith('/boxscore')){
       data={teams:{home:{battingOrder:[]},away:{battingOrder:[]}}}
-    }else if(u.pathname.includes('/venues/')){
+    }else if(u.pathname.endsWith('/venues')){
       data={venues:[{name:'Test Ballpark',location:{defaultCoordinates:{latitude:40.1,longitude:-74.2}}}]}
     }else if(u.pathname.includes('/roster')){
-      if(missingRoster)return new Response('unavailable',{status:503})
-      data=roster(u.pathname.includes('/101/')?'home':'away')
+      if(u.searchParams.get('rosterType')==='injured'){data={roster:[]}}
+      else if(missingRoster)return new Response('unavailable',{status:503})
+      else data=roster(u.pathname.includes('/101/')?'home':'away')
     }else if(u.pathname==='/api/v1/people'){
       data={people:[...u.searchParams.get('personIds').split(',')].map(k=>({
         id:Number(k),batSide:{code:'R'},pitchHand:{code:'L'}}))}
@@ -87,6 +88,7 @@ test('dossier uses current roster IDs and crosses every known batter only with o
   assert.equal(r.opportunity.state,'abstain')
   assert.equal(r.opportunity.priced,false)
   assert.equal(r.news.length,1)
+  assert.equal(r.injuries.length,0)
   assert.equal(r.weather?.windSpeedKmh,17)
   assert.equal(r.weather?.windRelativeToField,'unknown')
   assert.equal(r.uiBlock.component,'sports_espn_dashboard')
