@@ -353,6 +353,34 @@ describe('ESPN universal adaptive panels',()=>{
     fireEvent.click(screen.getByText('Ver estadísticas y contenido'))
     expect(screen.queryByText(/\bESPN\b/iu)).toBeNull()
   })
+  it('previews participants, observed team performance, market prices and source-neutral projection without expanding',()=>{
+    const dashboard={component:'sports_espn_dashboard',version:1,props:{
+      view:'event',title:'Clippers vs Warriors',subtitle:'NBA · Encuentro',
+      source:'ESPN Core',checkedAt:'2026-11-01T23:43:00Z',
+      note:'Cifras observadas · estimaciones no calibradas',
+      sections:[
+        {heading:'Estadísticas de temporada',kind:'metrics',items:[{label:'Warriors · Rebotes',value:'45.2'}]},
+        {heading:'Rendimiento de los equipos',kind:'metrics',items:[{label:'GS · Récord',value:'5-2'}]},
+        {heading:'Cuotas y mercados',kind:'metrics',items:[{label:'Local · h2h',value:'1.95',detail:'Vigencia sin confirmar'}]},
+        {heading:'Proyección de referencia',kind:'metrics',items:[{label:'Local',value:'55.0%',detail:'No es cuota'}]},
+        {heading:'Encuentro y participantes',kind:'list',items:[
+          {label:'Warriors',value:'home',image:'https://a.espncdn.com/warriors.png'},
+          {label:'Clippers',value:'away',image:'https://a.espncdn.com/clippers.png'},
+        ]},
+      ],
+    }}
+    const block=parseGenerativeUiBlock(dashboard)
+    if(!block)throw Error('Sports dossier rejected')
+    const {container}=render(<GenerativeUi block={block}/>)
+    expect(container.textContent).toContain('Warriors')
+    expect(container.textContent).toContain('Clippers')
+    expect(container.textContent).toContain('45.2')
+    expect(container.textContent).toContain('1.95')
+    expect(container.textContent).toContain('55.0%')
+    expect(container.textContent).toContain('Local')
+    expect(container.textContent).not.toContain('ESPN Core')
+    expect(container.querySelector('[data-generative-ui="sports_espn_dashboard"]')).toBeTruthy()
+  })
   it('rejects hostile photos, scripts, excessive sections and undeclared data',()=>{
     const base=template.props
     expect(parseGenerativeUiBlock({ ...template,props:{ ...base,

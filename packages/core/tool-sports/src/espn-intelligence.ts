@@ -1,5 +1,7 @@
 /** Bounded, source-attributed ESPN explorer. No raw payloads, arbitrary URLs or guessed statistics. */
 import { getFeed, hasSportsPermission, sportsCatalog, discoverEspnLeagues } from './sports.ts'
+import { queryEspnCore } from './espn-core-intelligence.ts'
+import { sportsEventInsights } from './sports-event-intelligence.ts'
 
 type Row = Record<string, unknown>
 type View = 'team'|'player'|'event'|'standings'|'news'|'leaders'|'search'
@@ -368,22 +370,74 @@ export async function exploreEspn(
     put(section('Noticias del deportista','articles',stories(playerOverview.news??playerOverview)))
   }else if(view==='event'){
     const overview=data.get('Resumen del evento'),match=summaryFacts(overview)
-    title=txt(row(row(overview).header).shortName)||title
-    put(section('Encuentro y marcador','list',match.items))
-    put(section('Líderes del boxscore','list',eventLeaders(overview)))
+    const header=row(row(overview).header)
+    const competition=row(array(header.competitions)[0])
+    const opponents=array(competition.competitors)
+    const home=row(opponents.find(x=>row(x).homeAway==='home'))
+    const away=row(opponents.find(x=>row(x).homeAway==='away'))
+    const teamName=(side:Row)=>label(row(side.team))
+    const homeName=teamName(home),awayName=teamName(away)
+    title=homeName&&awayName?awayName+' vs '+homeName:txt(header.shortName)||title
+    subtitle=league.toUpperCase()+' · Encuentro'
+    // Never equate competitionId and eventId. ESPN publishes both IDs independently.
+    const competitionId=id(competition.id)
+    let coreQuotes:unknown[]=[],coreProjection:unknown=null
+    if(competitionId&&input.eventId){
+      const [oddsResult,projectionResult]=await Promise.allSettled([
+        queryEspnCore({mode:'odds',sport,league,eventId:input.eventId,
+          competitionId,limit:8},<T>(url:string)=>getFeed<T>(url)),
+        queryEspnCore({mode:'predictor',sport,league,eventId:input.eventId,
+          competitionId,limit:5},<T>(url:string)=>getFeed<T>(url),
+          {resolveRefs:false}),
+      ])
+      if(oddsResult.status==='fulfilled'){
+        const report=oddsResult.value
+        sources.push(source('Mercados y precios',report.state==='data'?report:null,
+          report.state==='data'?report.count:0))
+        if(report.state==='data')coreQuotes=report.items.length?report.items:
+          report.details?[report.details]:[]
+      }
+      if(projectionResult.status==='fulfilled'){
+        const report=projectionResult.value
+        sources.push(source('Proyección de referencia',report.state==='data'?report:null,
+          report.state==='data'?report.count:0))
+        if(report.state==='data')coreProjection=report.details??report.items[0]??null
+      }
+    }
+    const insights=sportsEventInsights({
+      eventId:input.eventId!,summary:overview,coreOdds:coreQuotes,
+      predictor:coreProjection,now,
+    })
+    // Fetch season statistics for the actual participants, never inferred
+    // from league averages or from an event with a similar team name.
+    const seasonInfo=row(header.season)
+    const seasonYear=Number(seasonInfo.year??row(row(overview).season).year)
+    const verifiedSeason=Number.isInteger(seasonYear)&&seasonYear>=1900&&seasonYear<=2100
+    const seasonTeams=[home,away].map(side=>({
+      name:teamName(side),teamId:id(row(side.team).id),
+    })).filter(side=>side.name&&side.teamId)
+    if(verifiedSeason&&seasonTeams.length){
+      const statReads=await Promise.allSettled(seasonTeams.map(side=>read(
+        core+'seasons/'+seasonYear+'/types/2/teams/'+side.teamId+'/statistics',
+        fetcher,1_800_000)))
+      const rows=statReads.flatMap((result,i)=>{
+        if(result.status!=='fulfilled')return []
+        const who=seasonTeams[i]
+        if(!who)return []
+        return metrics(result.value,4).map(x=>item(who.name+' · '+x.label,x.value,x.detail))
+      })
+      put(section('Estadísticas de temporada','metrics',rows,8))
+      sources.push(source('Estadísticas por equipo y temporada',rows.length?rows:null,rows.length))
+    }
+    // Useful numbers come before date/venue in the collapsed chat card.
+    for(const s of insights.sections)put(section(s.heading,s.kind,
+      s.items.map(x=>item(x.label,x.value,x.detail))))
+    put(section('Encuentro y participantes','list',match.items))
+    put(section('Líderes del partido','list',eventLeaders(overview)))
     const plays=array(row(overview).plays)
     put(section('Jugadas publicadas','list',plays.slice(-18).reverse().map(x=>{
-      const p=row(x);return item(p.text??p.description, p.clock?txt(row(p.clock).displayValue):undefined)
+      const p=row(x);return item(p.text??p.description,p.clock?txt(row(p.clock).displayValue):undefined)
     })))
-    // Core odds/probabilities frequently return only $ref pointers; they are
-    // deliberately not interpreted as current prices or pregame predictions.
-    const odds=row(data.get('Cuotas ESPN Core'))
-    const provider=label(row(odds.provider))
-    if(provider){
-      const overUnder=odds.overUnder
-      put(section('Cuotas publicadas por ESPN','metrics',[item('Proveedor',provider),
-        item('Línea total (no precio)',overUnder)]))
-    }
   }else if(view==='standings'){
     put(section('Tabla por conferencia / división','list',standings(data.get('Clasificación ESPN')),30))
   }else if(view==='news'){
