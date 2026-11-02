@@ -38,7 +38,8 @@ function fake({started=false,missingAway=false,empty=false}={}){
     else if(u.pathname.includes('/player/')&&u.pathname.endsWith('/landing'))
       body={featuredStats:{regularSeason:{subSeason:{goals:10,assists:7,
         points:17,shots:42,savePctg:0.916,goalsAgainstAvg:2.4}}},
-        last5Games:[{gameDate:'2026-11-01',goals:1,assists:1,shots:4}]}
+        last5Games:[{gameDate:'2026-11-01',goals:1,assists:1,shots:4,
+          shotsAgainst:35,saves:32,savePctg:0.914,goalsAgainst:3}]}
     else throw new Error('Unexpected NHL API '+url)
     return new Response(JSON.stringify(body),{status:200,headers:{
       'content-type':'application/json'}})
@@ -68,6 +69,7 @@ test('roster forwards/defense/goalies stay distinct; no starting goalie asserted
   assert.equal(d.goalieCandidates.home.length,2)
   assert.equal(d.goalieCandidates.away.length,2)
   assert.ok(d.goalieCandidates.home.every(g=>g.starterConfirmed===false))
+  assert.ok(d.goalieCandidates.home[0].last5[0].summary.includes('saves: 32'))
   assert.ok(d.players.home.some(p=>p.stats.goals==='10'))
   assert.equal(d.possibleMatchups.length,20)
   assert.ok(d.possibleMatchups.every(x=>Number(x.attackerId)<20000?
