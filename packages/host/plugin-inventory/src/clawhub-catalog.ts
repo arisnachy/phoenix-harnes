@@ -40,10 +40,12 @@ export function normalizeClawHubCatalog(
     const pkg = obj(raw.package)
     const latest = obj(raw.latestVersion)
     const owner = obj(raw.owner)
-    const ownerHandle = str(owner.handle) || str(raw.ownerHandle)
+    const ownerHandle = (str(owner.handle) || str(raw.ownerHandle)).replace(/^@/u, '')
     const slug = str(raw.slug) || str(skill.slug) || str(pkg.slug)
-    const id = str(raw.name) || str(raw.packageName) || str(pkg.name)
-      || (ownerHandle && slug ? `@${ownerHandle}/${slug}` : slug)
+    // Skill API entries can carry human-readable "name" with spaces. Prefer
+    // the canonical package identity or owner/slug before display strings.
+    const id = str(raw.packageName) || str(pkg.name)
+      || (ownerHandle && slug ? `@${ownerHandle}/${slug}` : slug || str(raw.name))
     if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/iu.test(id)) continue
     const canonical = id.toLowerCase()
     if (seen.has(canonical)) continue
