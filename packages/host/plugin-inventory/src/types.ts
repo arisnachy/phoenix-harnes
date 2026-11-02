@@ -535,8 +535,13 @@ export interface OpenClawRoutingSnapshot {
 export interface OpenClawGatewayCredentialState {
   readonly configured: boolean
   readonly source: 'vault' | 'environment' | 'none'
+  /** Short-lived local pairing link; only sent to the trusted Settings UI. */
+  readonly authorizationUrl?: string
 }
-export interface OpenClawGatewayCredentialRequest { readonly token: string }
+export interface OpenClawGatewayCredentialRequest {
+  readonly token?: string
+  readonly auto?: boolean
+}
 export interface OpenClawRoutingRequest {
   readonly pluginId: string
   readonly toolName: string
