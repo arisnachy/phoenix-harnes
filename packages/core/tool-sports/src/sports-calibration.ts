@@ -4,11 +4,13 @@
  * This evaluates historical accuracy only; it cannot prove betting profit.
  */
 import {estimateEvidenceForecast,type FinishedGame,type ForecastResult} from './sports-forecast.ts'
+/** Final game with scored outcomes and ESPN event/team identifiers. */
 export type HistoricalFixture={
  id:string;sport:string;league:string;date:string;homeId:string;awayId:string
  homeScore:number;awayScore:number;status:'post'
 }
 type Sample={date:string;eventId:string;p:number[];actual:number}
+/** Time-split out-of-sample scores and gate for use of adjusted probabilities. */
 export type CalibrationAudit={
  status:'validated'|'underperforming'|'insufficient'
  sport:string;league:string;checkedAt:string;events:number;samples:number
