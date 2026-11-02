@@ -675,9 +675,12 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
   return false
 }
 
-// When a checkout moves, its stageIdentity changes and the old ~/p folders
-// become invisible to ordinary per-checkout cleanup. Reclaim ONLY abandoned
-// directories with missing Git ownership and no referencing Windows process.
+// When the checkout identity changes, older updater worktrees remain in ~/p.
+// Reclaim only strict PHOENIX-generated names after 48 hours, and only when:
+//   (1) Git proves that the worktree is owned by this checkout and is clean, or
+//   (2) its linked-worktree metadata proves that the original owner is gone.
+// Another repository's existing worktrees, active/preparing markers, and
+// anything that Windows processes still reference must never be removed.
 const DETACHED_STORAGE_MIN_AGE_MS = 48 * 60 * 60 * 1000
 const DETACHED_STORAGE_SWEEP_INTERVAL_MS = 60 * 60 * 1000
 let nextDetachedStorageSweepAt = 0
@@ -700,7 +703,21 @@ function detachedWorktreeMetadata(path) {
   }
 }
 
-function detachedStorageCandidates(keep) {
+function detachedStorageCandidateKind(path, registeredWorktrees) {
+  const key = runtimePathKey(path)
+  if (registeredWorktrees.has(key)) {
+    // Previous identities can still be registered against this very Git
+    // checkout. They were previously excluded from ALL legacy cleanup.
+    // Never remove modified trees or an active/preparing lease.
+    if (!sameRepository(path) || !gitClean(path)
+      || runtimeProtectedByOwningCheckout(path)
+      || stageProtectedByOwningCheckout(path)) return undefined
+    return 'owned'
+  }
+  return detachedWorktreeMetadata(path) ? 'orphan' : undefined
+}
+
+function detachedStorageCandidates(keep, registeredWorktrees) {
   const base = runtimeBaseDirectory()
   const ownedRuntimePrefix = ('phoenix-runtime-' + stageIdentity() + '-').toLowerCase()
   return readdirSync(base, { withFileTypes: true })
@@ -710,9 +727,10 @@ function detachedStorageCandidates(keep) {
     .map(entry => join(base, entry.name))
     .filter(candidate => !keep.has(runtimePathKey(candidate))
       && runtimePathKey(candidate) !== runtimePathKey(persistentStage())
-      && managedDirectoryAgeMs(candidate) >= DETACHED_STORAGE_MIN_AGE_MS
-      && detachedWorktreeMetadata(candidate))
-    .sort((a, b) => managedDirectoryMtimeMs(a) - managedDirectoryMtimeMs(b))
+      && managedDirectoryAgeMs(candidate) >= DETACHED_STORAGE_MIN_AGE_MS)
+    .map(path => ({ path, kind: detachedStorageCandidateKind(path, registeredWorktrees) }))
+    .filter(candidate => candidate.kind !== undefined)
+    .sort((a, b) => managedDirectoryMtimeMs(a.path) - managedDirectoryMtimeMs(b.path))
     .slice(0, 32)
 }
 
@@ -741,21 +759,28 @@ function windowsProcessReferences(paths) {
 function cleanupDetachedLegacyStorage(keep, reportBusy = false) {
   if (!reportBusy && Date.now() < nextDetachedStorageSweepAt) return
   nextDetachedStorageSweepAt = Date.now() + DETACHED_STORAGE_SWEEP_INTERVAL_MS
-  const candidates = detachedStorageCandidates(keep)
+  const registered = registeredWorktreePaths()
+  if (registered === undefined) return // Git ownership cannot be verified.
+  const candidates = detachedStorageCandidates(keep, registered)
   if (candidates.length === 0) return
   // Fail closed when the Windows process census is unavailable.
-  const busyPaths = windowsProcessReferences(candidates)
+  const busyPaths = windowsProcessReferences(candidates.map(candidate => candidate.path))
   if (busyPaths === undefined) {
     if (reportBusy) console.error('[PHOENIX STORAGE] legacy cleanup skipped: process inspection unavailable.')
     return
   }
-  for (const candidate of candidates) {
-    if (busyPaths.has(runtimePathKey(candidate))) continue
-    // A different updater may have recreated Git metadata during the census.
-    if (keep.has(runtimePathKey(candidate)) || !detachedWorktreeMetadata(candidate)) continue
-    if (removeOrphanedManagedDirectory(candidate, reportBusy)) {
-      console.error('[PHOENIX STORAGE] reclaimed detached legacy directory: ' + candidate)
-    }
+  for (const { path: candidate, kind } of candidates) {
+    const key = runtimePathKey(candidate)
+    if (busyPaths.has(key) || keep.has(key)
+      || managedDirectoryAgeMs(candidate) < DETACHED_STORAGE_MIN_AGE_MS) continue
+    // Revalidate after the process census. A supervisor may have activated an
+    // old runtime or a separate updater may have changed its Git ownership.
+    const refreshed = registeredWorktreePaths()
+    if (refreshed === undefined || detachedStorageCandidateKind(candidate, refreshed) !== kind) continue
+    const removed = kind === 'owned'
+      ? removeManagedWorktree(candidate, refreshed, reportBusy)
+      : removeOrphanedManagedDirectory(candidate, reportBusy)
+    if (removed) console.error('[PHOENIX STORAGE] reclaimed retired updater directory: ' + candidate)
   }
 }
 
