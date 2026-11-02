@@ -8,13 +8,27 @@ import { createHash } from 'node:crypto'
 
 /** Provider-observed odds with a verifiable observation timestamp. */
 export type ObservedOdds={
-  eventId:stringbookmaker:stringmarket:stringselection:stringpoint?:number|null
-  price:numberhome:stringaway:stringtime:stringtimeIso?:string
-  updatedAt:stringsource?:stringsportKey?:string
+  eventId:string
+  bookmaker:string
+  market:string
+  selection:string
+  point?:number|null
+  price:number
+  home:string
+  away:string
+  time:string
+  timeIso?:string
+  updatedAt:string
+  source?:string
+  sportKey?:string
 }
-/** Archived odds snapshot never a live price feed. */
+/** Archived odds snapshot; never a live price feed. */
 export type OddsSnapshot={
-  sportKey:stringobservedAt:stringhistorical:truequotes:ObservedOdds[]source:string
+  sportKey:string
+  observedAt:string
+  historical:true
+  quotes:ObservedOdds[]
+  source:string
 }
 const sportValid=(s:string)=>/^[a-z0-9_]{3,80}$/u.test(s)
 const dayValid=(d:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(d)&&
