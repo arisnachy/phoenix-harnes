@@ -257,13 +257,13 @@ export function defaultExecutionHandoff(selection: ModelSelection | undefined): 
   return {
     // The selected Codex route remains the user's coordinator choice. The
     // handoff only moves execution to the current Luna worker when a caller
-    // still uses the legacy adaptive entry point; it does not spend Max by
-    // default. Exceptional tasks can request Max through Eclipse explicitly.
+    // still uses the legacy adaptive entry point. Substantive Luna execution
+    // retains the owner's Max quality tier after Sol's planning handoff.
     afterStep: 1,
     selection: {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('max'),
     },
   }
 }
@@ -1429,12 +1429,19 @@ export function installModelSelection(
             automatic,
             eclipseProfile?.mode === 'hybrid' ? automatic.reasoningEffort : undefined,
           )
+        // Luna is Max whenever Eclipse Automatic owns Kira's execution
+        // route. Terra only replaces Luna for evidence-gated Team decisions;
+        // the exact model/effort chosen in Hybrid or Manual is not overridden.
+        const automaticLuna = (eclipseProfile?.mode === undefined || eclipseProfile.mode === 'automatic')
+          && routed.provider === 'openai-codex' && routed.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
+          ? { ...routed, reasoningEffort: ReasoningEffortId('max') } : routed
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
         return {
           ...withoutInheritedEffort,
-          provider: routed.provider,
-          model: routed.model,
-          ...routed.reasoningEffort === undefined ? {} : { reasoningEffort: routed.reasoningEffort },
+          provider: automaticLuna.provider,
+          model: automaticLuna.model,
+          ...automaticLuna.reasoningEffort === undefined
+            ? {} : { reasoningEffort: automaticLuna.reasoningEffort },
         }
       }
       const resolvedHandoff = typeof handoff === 'function' ? handoff(selected) : handoff

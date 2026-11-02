@@ -31,21 +31,18 @@ describe('Eclipse teammate overrides', () => {
     expect(resolveEclipseTeammateProfile({ mode: 'automatic', subagent: { provider: 'mock', model: 'new' } },
       'orion', fallback)).toEqual(fallback)
   })
-  it('budgets ordinary automatic Luna delegates at Medium and complex work at High', () => {
+  it('keeps every automatic Luna specialist at Max regardless of task heuristics', () => {
     const auto = { mode: 'automatic' as const }
-    expect(resolveEclipseTeammateProfile(auto, 'orion', fallback, 'high')).toEqual({
-      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'medium',
-    })
-    for (const effort of ['xhigh', 'max']) {
-      expect(resolveEclipseTeammateProfile(auto, 'atlas', fallback, effort)).toEqual({
-        provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'high',
-      })
+    for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
+      expect(resolveEclipseTeammateProfile(auto, 'atlas', fallback, effort)).toEqual(fallback)
     }
-    // A deliberately selected Max specialist is never silently downgraded.
-    expect(resolveEclipseTeammateProfile(auto, 'orion', fallback)).toEqual(fallback)
+    const lowPreset = { ...fallback, reasoningEffort: 'low' }
+    expect(resolveEclipseTeammateProfile(auto, 'orion', lowPreset, 'low')).toEqual(fallback)
     expect(resolveEclipseTeammateProfile({
-      mode: 'automatic', subagent: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
-    }, 'orion', fallback, 'high')?.reasoningEffort).toBe('max')
+      mode: 'automatic', subagent: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'medium' },
+    }, 'orion', fallback, 'low')).toEqual(fallback)
+    const otherModel = { provider: 'openai-codex', model: 'gpt-6.1-terra', reasoningEffort: 'low' }
+    expect(resolveEclipseTeammateProfile(auto, 'other', otherModel, 'high')).toEqual(otherModel)
   })
 
   it('applies one configured subagent route to every teammate identity', () => {
