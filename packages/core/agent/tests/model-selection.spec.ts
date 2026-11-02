@@ -54,7 +54,7 @@ describe('FÉNIX coding acceptance quality', () => {
       { type: 'user/message', data: { source: { kind: 'user' },
         content: [{ type: 'text', text: depsolve }] } },
     ]
-    const agent = { options: {}, session: { events } } as unknown as Agent
+    const agent = { options: {}, session: { events, append: (type: string, data: unknown) => { events.push({ type, data }) } } } as unknown as Agent
     ctx.agent = agent
     const selection: ModelSelectionRef = {
       current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
