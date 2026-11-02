@@ -173,6 +173,8 @@ type PluginInventoryMcpRegistryRemote = {
   }>>
   openClawRuntimeState(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRuntimeSnapshot>>
   openClawPluginTools(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>>
+  openClawGatewayCredential(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>>
+  configureOpenClawGatewayCredential(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>>
   setOpenClawPluginTool(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>>
   clawHubState(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>>
   prepareClawHubCli(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>>
@@ -316,6 +318,12 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
     clawHubCatalog: async request => unwrapPluginInventory('clawHubCatalog', await remote().clawHubCatalog(request)),
     openClawPluginTools: async () => unwrapPluginInventory(
       'openClawPluginTools', await remote().openClawPluginTools(),
+    ),
+    openClawGatewayCredential: async () => unwrapPluginInventory(
+      'openClawGatewayCredential', await remote().openClawGatewayCredential(),
+    ),
+    configureOpenClawGatewayCredential: async request => unwrapPluginInventory(
+      'configureOpenClawGatewayCredential', await remote().configureOpenClawGatewayCredential(request),
     ),
     setOpenClawPluginTool: async request => unwrapPluginInventory(
       'setOpenClawPluginTool', await remote().setOpenClawPluginTool(request),

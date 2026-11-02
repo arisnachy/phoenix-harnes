@@ -150,8 +150,18 @@ export async function invokeApprovedOpenClawPlugin(
 }
 export function registerOpenClawPluginTools(ctx: Context): void {
   if (process.env.PHOENIX_OPENCLAW_PLUGIN_ROUTING === '0') return
-  const token = process.env.PHOENIX_OPENCLAW_GATEWAY_TOKEN ?? process.env.OPENCLAW_GATEWAY_TOKEN
-  if (token === undefined || token.trim().length < 16) return
+  // Keep the tool registered so a freshly authorized Gateway is usable
+  // immediately. Resolve secrets from PHOENIX's vault on every invocation.
+  const resolveToken = async (): Promise<string | undefined> => {
+    try {
+      const service = (ctx.get as (name: string) => unknown)('credentials') as {
+        resolve: (ref: string) => Promise<{ value: string } | undefined>
+      } | undefined
+      const stored = await service?.resolve('PHOENIX_OPENCLAW_GATEWAY_TOKEN')
+      if (stored?.value) return stored.value
+    } catch { /* use the explicitly configured environment credential */ }
+    return process.env.PHOENIX_OPENCLAW_GATEWAY_TOKEN ?? process.env.OPENCLAW_GATEWAY_TOKEN
+  }
   const port = Number(process.env.PHOENIX_OPENCLAW_GATEWAY_PORT ?? '18789')
   if (!Number.isInteger(port) || port < 1024 || port > 65535) return
 
@@ -184,7 +194,9 @@ export function registerOpenClawPluginTools(ctx: Context): void {
       } },
       render: (_args, value) => [{ type: 'text' as const, text: value.result_json }],
     },
-    execute(args, execution) {
+    async execute(args, execution) {
+      const token = await resolveToken()
+      if (token === undefined) throw new Error('Configure the private OpenClaw Gateway credential in PHOENIX Connectors')
       return invokeApprovedOpenClawPlugin(
         { pluginId: args.plugin_id, toolName: args.tool_name }, args.arguments_json,
         { token, port, signal: execution.signal },
