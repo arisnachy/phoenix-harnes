@@ -328,5 +328,5 @@ test('official park fieldInfo distinguishes roof construction from actual roof p
   assert.deepEqual(d.venue.dimensionsFt,{leftLine:330,center:400,rightLine:335})
   assert.equal(d.weather.windRelativeToField,'unknown')
   assert.ok(mock.calls.some(url=>url.includes('/venues?')&&
-    url.includes('hydrate=location%2CfieldInfo')))
+    url.includes('hydrate=location,fieldInfo')))
 })
