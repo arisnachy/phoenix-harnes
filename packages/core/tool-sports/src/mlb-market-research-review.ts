@@ -38,6 +38,7 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     rosterMatchupsReviewed:d.matchups.length>0,
     venueKnown:!!d.venue.name&&d.venue.name!=='Estadio no verificado',
     weatherObserved:!!d.weather,
+    realOffersVerified:d.odds.length>0,
     specificExpertPicksVerified:false,
     bookmakerRulesVerified:false,
     probabilitiesValidated:false,
@@ -76,12 +77,15 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     const missing=[
       ...(!gates.lineupsConfirmed?['Alineación confirmada de ambos clubes']:[]),
       ...(!gates.starterStatsVerified?['Estadísticas comprobadas de ambos abridores']:[]),
+      ...(!gates.venueKnown?['Identidad y características del estadio verificadas']:[]),
+      ...(!gates.weatherObserved?['Meteorología horaria para el encuentro']:[]),
+      ...(!gates.reliefUsageObserved?['Uso reciente del bullpen y disponibilidad de relevistas']:[]),
       ...(!gates.bookmakerRulesVerified?['Reglas verificadas para este mercado y período']:[]),
       ...(!gates.probabilitiesValidated?['Evaluación probabilística validada para respaldar EV']:[]),
       ...(strikeouts?['Identidad del pitcher del prop y proyección contrastada de ponches']:[]),
     ]
     return{bookmaker:q.bookmaker,market:q.market,selection:q.selection,line,
-      price:q.price,updatedAt:q.updatedAt,status:'needs-review' as const,
+      price:q.price,updatedAt:q.updatedAt,status:missing.length?'blocked' as const:'needs-review' as const,
       favorableEvidence:coreEvidence,
       contradictoryEvidence:opposingFacts,missingEvidence:missing,researchQuestions}
   })
@@ -93,8 +97,10 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     eligibility:insufficient?'insufficient':'research-only',evidenceGates:gates,
     reviewedMarkets,conclusion:insufficient?
       'Hay datos esenciales incompletos: no considerar ninguna selección para un ticket.':
+      !gates.realOffersVerified?'No hay cuotas reales vigentes para comparar mercados; abstenerse.':
       'Expediente apto para discusión crítica de mercados, pero no demuestra ventaja apostable.',
-    decision:insufficient?'abstain':'investigate',
+    decision:insufficient||!gates.realOffersVerified?'abstain':'investigate',
     probabilitiesEstimated:false,eligibleForTicket:false,
-    missingEvidence:[...new Set([...d.missingEvidence,...opposingFacts])]}
+    missingEvidence:[...new Set([...d.missingEvidence,...opposingFacts,
+      ...(!gates.realOffersVerified?['Ofertas reales vigentes de casas para el encuentro']:[])])]}
 }
