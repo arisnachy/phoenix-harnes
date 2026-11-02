@@ -56,7 +56,21 @@ export function resolveEclipseTeammateProfile(
   fallback: TeamModelProfile | undefined,
   adaptiveEffort?: string,
 ): TeamModelProfile | undefined {
-  if (settings?.mode === undefined || settings.mode === 'automatic') return fallback
+  if (settings === undefined) return fallback
+  // Automatic Eclipse spends Medium on ordinary delegated work and High on
+  // complex/critical work. An explicitly named Max teammate retains Max.
+  if (settings.mode === 'automatic') {
+    const route = settings.subagent
+    if (route !== undefined && (route.provider !== 'openai-codex' || route.model === PHOENIX_CODEX_AUTO_MODEL))
+      return fallback
+    const chosen = route ?? fallback
+    if (chosen === undefined || adaptiveEffort === undefined) return chosen
+    const effort = adaptiveEffort === 'max' || adaptiveEffort === 'xhigh' ? 'high' : 'medium'
+    return {
+      ...chosen,
+      reasoningEffort: route?.reasoningEffort ?? effort,
+    }
+  }
   const route = settings.subagent
   if (route === undefined) {
     return settings.mode === 'hybrid' && fallback?.provider === 'openai-codex' && adaptiveEffort !== undefined
@@ -480,8 +494,8 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           : undefined
         const namedProfile = args.model_profile === undefined
           ? undefined : config.modelProfiles[args.model_profile]
-        // Every ordinary Eclipse specialist defaults to Luna Max, even when
-        // Kira temporarily uses Sol for an initial plan or focused review.
+        // Automatic Eclipse budgets ordinary specialists proportionally.
+        // Explicit named Max profiles remain available for difficult work.
         // A consciously named provider profile remains an explicit override.
         const fallbackProfile = namedProfile
           ?? (eclipseEnabled && activeProvider === 'openai-codex'
