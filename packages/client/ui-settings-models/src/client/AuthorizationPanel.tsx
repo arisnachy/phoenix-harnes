@@ -1260,6 +1260,7 @@ export function ConnectorsSettingsSection({ api,
   const [refresh, setRefresh] = useState(0)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<ConnectorFilter>('all')
+  const [surface, setSurface] = useState<'native' | 'clawhub'>('native')
   const catalogSearch = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (launchContext === 'discover') {
@@ -1962,6 +1963,21 @@ export function ConnectorsSettingsSection({ api,
     <div className={styles['section']}>
       <h2 className={styles['title']}>{connectorT('title')}</h2>
       <p className={styles['intro']}>{connectorT('intro')}</p>
+      <div className={hubStyles['filters']} role="tablist" aria-label="Catálogos de conectores">
+        <button type="button" role="tab" aria-selected={surface === 'native'}
+          aria-controls="phoenix-native-connectors"
+          className={surface === 'native' ? hubStyles['filterActive'] : undefined}
+          onClick={() => { setSurface('native') }}>Conectores de PHOENIX</button>
+        <button type="button" role="tab" aria-selected={surface === 'clawhub'}
+          aria-controls="phoenix-openclaw-hub"
+          className={surface === 'clawhub' ? hubStyles['filterActive'] : undefined}
+          onClick={() => { setSurface('clawhub') }}>OpenClaw · ClawHub</button>
+      </div>
+      <div id="phoenix-openclaw-hub" role="tabpanel" hidden={surface !== 'clawhub'}>
+        {surface === 'clawhub' ? <ClawHubConnectorStore registry={mcpRegistry} t={connectorT}
+          connectedIds={catalogRows.filter(row => row.connected).map(row => row.definition.id)} /> : null}
+      </div>
+      {surface === 'native' ? (<div id="phoenix-native-connectors" role="tabpanel">
       {authorizationHasVisibleCard || preparingKey === undefined ? null
         : <p role="status" className={styles['advancedHint']}>Contactando al servicio de autorización de PHOENIX…</p>}
       {authorizationHasVisibleCard || failure === undefined ? null
@@ -2147,8 +2163,6 @@ export function ConnectorsSettingsSection({ api,
 
       {catalogFailure === undefined ? null : <p className={styles['error']}>{catalogFailure}</p>}
 
-      <ClawHubConnectorStore registry={mcpRegistry} t={connectorT}
-        connectedIds={catalogRows.filter(row => row.connected).map(row => row.definition.id)} />
       <section className={hubStyles['block']} aria-label={connectorT('catalog')}>
         <div className={hubStyles['heading']}>
           <h3>{connectorT('catalog')}</h3>
@@ -2395,6 +2409,7 @@ export function ConnectorsSettingsSection({ api,
           )}
         </section>
       )}
+      </div>) : null}
     </div>
   )
 }

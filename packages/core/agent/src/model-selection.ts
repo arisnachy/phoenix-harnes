@@ -257,13 +257,13 @@ export function defaultExecutionHandoff(selection: ModelSelection | undefined): 
   return {
     // The selected Codex route remains the user's coordinator choice. The
     // handoff only moves execution to the current Luna worker when a caller
-    // still uses the legacy adaptive entry point; it does not spend Max by
-    // default. Exceptional tasks can request Max through Eclipse explicitly.
+    // still uses the legacy adaptive entry point. Substantive Luna execution
+    // retains the owner's Max quality tier after Sol's planning handoff.
     afterStep: 1,
     selection: {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('max'),
     },
   }
 }
@@ -378,7 +378,8 @@ const AUTO_SOL_STRATEGY_POLICY =
   'Stop after one concise, actionable strategy adjustment; then Kira returns to Luna Max execution. Do not rewrite the entire plan.'
 
 const AUTO_LUNA_COORDINATION_POLICY =
-  'You are still Kira, coordinating and executing on Luna Max through the configured execution route. ' +
+  'You are still Kira, coordinating through Eclipse. Luna Max owns execution and team coordination. ' +
+  'FÉNIX offers a consultation through fenix_consult only when real Team evidence identifies a material contradiction, missing requirement or failed verification; Terra never takes over Kira. ' +
   'The single Kira identity owns the plan across model switches; never address Kira as another speaker. ' +
   'If a user-visible **Plan:** was written earlier in THIS turn, ' +
   'treat that text as the already-approved execution brief; do not rewrite, replan, recite or re-announce it. ' +
@@ -1352,15 +1353,14 @@ export function installModelSelection(
           phoenixAutoState,
           eclipseProfile?.escalationSensitivity,
         )
-        // Kira handles conversation and small one-shot tasks directly on Luna
-        // Max, even when Eclipse's coordinator role points to Sol. A real Team
-        // signal or strategy rescue still follows the operational route.
-        const quick = phoenixAutoTeamSignalForTurn(_payload.agent, _payload.turn) === undefined
+        // FÉNIX no longer silently replaces Luna with Terra. A real
+        // independent consultant is requested through the evidence-gated
+        // fenix_consult Team tool; this request always keeps the Kira Lead.
+        const teamSignal = phoenixAutoTeamSignalForTurn(_payload.agent, _payload.turn)
+        const quick = teamSignal === undefined
           && automatic.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
           && isPhoenixAutoQuickTurn(directText)
         const role = automatic.model === PHOENIX_CODEX_AUTO_PLANNER_MODEL ? 'planner' : 'coordinator'
-        // Keep Luna as the direct fast-path model; retain its proportional
-        // low/medium effort instead of silently upgrading every quick turn.
         const routed = quick
           ? automatic
           : resolveEclipseRoleRoute(
@@ -1369,12 +1369,19 @@ export function installModelSelection(
             automatic,
             eclipseProfile?.mode === 'hybrid' ? automatic.reasoningEffort : undefined,
           )
+        // Luna is Max whenever Eclipse Automatic owns Kira's execution
+        // route. Terra consults separately after evidence; the selected Lead
+        // the exact model/effort chosen in Hybrid or Manual is not overridden.
+        const automaticLuna = (eclipseProfile?.mode === undefined || eclipseProfile.mode === 'automatic')
+          && routed.provider === 'openai-codex' && routed.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
+          ? { ...routed, reasoningEffort: ReasoningEffortId('max') } : routed
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
         return {
           ...withoutInheritedEffort,
-          provider: routed.provider,
-          model: routed.model,
-          ...routed.reasoningEffort === undefined ? {} : { reasoningEffort: routed.reasoningEffort },
+          provider: automaticLuna.provider,
+          model: automaticLuna.model,
+          ...automaticLuna.reasoningEffort === undefined
+            ? {} : { reasoningEffort: automaticLuna.reasoningEffort },
         }
       }
       const resolvedHandoff = typeof handoff === 'function' ? handoff(selected) : handoff

@@ -15,6 +15,15 @@ describe('Eclipse role routing', () => {
     planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
     coordinator: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'high' },
   }
+  it('keeps Luna Max as the automatic Lead even when Terra consultation is preferred', () => {
+    const automatic: EclipseRoutingSettings = {
+      mode: 'automatic',
+      coordinator: { provider: 'openai-codex', model: 'gpt-6.1-terra', reasoningEffort: 'low' },
+    }
+    expect(resolveEclipseRoleRoute(automatic, 'coordinator', fallback)).toEqual(fallback)
+    expect(resolveEclipseRoleRoute(automatic, 'planner', fallback)).toEqual(fallback)
+  })
+
   it('preserves shipped routes in automatic mode or without settings', () => {
     expect(resolveEclipseRoleRoute(undefined, 'coordinator', fallback)).toEqual(fallback)
     expect(resolveEclipseRoleRoute({ ...profile, mode: 'automatic' }, 'planner', fallback)).toMatchObject({
