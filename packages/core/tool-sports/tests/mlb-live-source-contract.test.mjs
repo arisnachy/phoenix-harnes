@@ -34,6 +34,18 @@ test('real MLB Stats API: schedule IDs -> boxscore -> venue -> player statistics
   const stats=await official('/people/'+playerId+
     '/stats?stats=season&group=hitting&season=2025')
   assert.ok(Array.isArray(stats?.stats),'Season stats contract missing')
+  // Validate the real pitcher game-log shape consumed by the dossier, rather
+  // than only the generic player/season endpoints.
+  const pitcherId=home.pitchers?.find(n=>Number.isSafeInteger(n)&&n>0)
+  assert.ok(pitcherId,'Completed boxscore has no official pitcher ID')
+  const pitcher=await official('/people/'+pitcherId)
+  assert.ok(pitcher?.people?.some(p=>p.id===pitcherId))
+  const gameLog=await official('/people/'+pitcherId+
+    '/stats?stats=gameLog&group=pitching&season=2025')
+  assert.ok(Array.isArray(gameLog?.stats),'Pitcher gameLog contract missing')
+  assert.ok(gameLog.stats.some(group=>Array.isArray(group.splits)&&
+    group.splits.some(split=>typeof split.date==='string'&&split.stat)),
+    'Historical pitcher gameLog has no dated evidence')
   const standings=await official('/standings?leagueId=103,104&season=2025&date=2025-07-01')
   assert.ok(Array.isArray(standings?.records)&&standings.records.length>0)
 })
