@@ -15,7 +15,7 @@ import { defineTool } from '@phoenix-ai/dsh-tools'
 const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
 const policyPath = join(home, 'toolchains', 'openclaw-routing.json')
 const auditPath = join(home, 'toolchains', 'openclaw-routing-audit.jsonl')
-const IDENT = /^[a-zA-Z0-9][a-zA-Z0-9._@/:-]{0,100}$/
+const IDENT = /^[a-zA-Z0-9@][a-zA-Z0-9._@/:-]{0,100}$/
 const DENIED = new Set([
   'exec', 'spawn', 'shell', 'fs_write', 'fs_delete', 'fs_move', 'apply_patch',
   'sessions_spawn', 'sessions_send', 'cron', 'gateway', 'nodes',
@@ -202,7 +202,7 @@ export function registerOpenClawPluginTools(ctx: Context): void {
         { token, port, signal: execution.signal },
       )
     },
-    presentCall: args => ({ card: 'generic', kind: 'write',
+    presentCall: args => ({ card: 'generic', kind: 'execute',
       title: `OpenClaw plugin: ${args.tool_name}`, rawInput: args.arguments_json }),
   }))
 }

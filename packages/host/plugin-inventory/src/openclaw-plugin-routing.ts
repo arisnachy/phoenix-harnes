@@ -25,7 +25,7 @@ export interface OpenClawRoutingRequest {
   readonly approved: boolean
 }
 
-const ID = /^[a-zA-Z0-9][a-zA-Z0-9._@/:-]{0,100}$/
+const ID = /^[a-zA-Z0-9@][a-zA-Z0-9._@/:-]{0,100}$/
 const FORBIDDEN = new Set([
   'exec', 'spawn', 'shell', 'fs_write', 'fs_delete', 'fs_move', 'apply_patch',
   'sessions_spawn', 'sessions_send', 'cron', 'gateway', 'nodes',
@@ -137,7 +137,7 @@ export async function readOpenClawRouting(): Promise<OpenClawRoutingSnapshot> {
   try { list = await run(['plugins', 'list', '--json']) }
   catch { return { gatewayCredentialConfigured, tools: [], inspectionAvailable: false } }
   const plugins = entries(list).map(obj).filter(p => ID.test(str(p.id))
-    && p.enabled === true && p.status !== 'disabled' && p.status !== 'error').slice(0, 24)
+    && p.enabled === true && p.status !== 'disabled' && p.status !== 'error').slice(0, 10)
   const tools: OpenClawRoutedTool[] = []
   for (const plugin of plugins) {
     const pluginId = str(plugin.id)
