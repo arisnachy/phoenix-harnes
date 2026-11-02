@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'packages/core/tool-sports/src/mlb-evidence-research.ts'
+      - 'packages/core/tool-sports/src/mlb-market-research-review.ts'
       - 'packages/core/tool-sports/tests/mlb-evidence-research.test.mjs'
       - 'packages/core/tool-sports/src/index.ts'
       - '.github/workflows/phoenix-mlb-evidence-research.yml'
