@@ -30,7 +30,7 @@ export type BasketballCase={
     status:string;source:string}>;
   context:{h2h:{games:number;homeWins:number;awayWins:number};
     restHours:{home:number|null;away:number|null};
-    backToBack:{home:boolean|null;away:boolean|null}};
+    shortRestUnder48h:{home:boolean|null;away:boolean|null}};
   referee:string|null;venue:string;news:Array<{headline:string;published:string;
     source:string}>;editorial:Array<{headline:string;publisher:string;date:string|null;
     verifiedPick:false}>;
@@ -157,12 +157,12 @@ function panel(d:Omit<BasketballCase,'uiBlock'>):BasketballCase['uiBlock']{
   add('Descanso y enfrentamientos',[
     {label:'Descanso local',value:d.context.restHours.home===null?'No verificado':
       d.context.restHours.home.toFixed(1)+' horas',
-      detail:'Back-to-back: '+(d.context.backToBack.home===null?'sin datos':
-        d.context.backToBack.home?'sí':'no')},
+      detail:'Intervalo inferior a 48h: '+(d.context.shortRestUnder48h.home===null?'sin datos':
+        d.context.shortRestUnder48h.home?'sí':'no')},
     {label:'Descanso visitante',value:d.context.restHours.away===null?'No verificado':
       d.context.restHours.away.toFixed(1)+' horas',
-      detail:'Back-to-back: '+(d.context.backToBack.away===null?'sin datos':
-        d.context.backToBack.away?'sí':'no')},
+      detail:'Intervalo inferior a 48h: '+(d.context.shortRestUnder48h.away===null?'sin datos':
+        d.context.shortRestUnder48h.away?'sí':'no')},
     {label:'Enfrentamientos recientes',value:d.context.h2h.games+' juegos',
       detail:d.context.h2h.homeWins+' victorias locales y '+
         d.context.h2h.awayWins+' visitantes en la muestra observada'},
@@ -268,7 +268,7 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
   const headToHead=teams.home.lastGames.filter(g=>
     teamKey(g.opponent)===teamKey(teams.away.name))
   const context={restHours,
-    backToBack:{home:restHours.home===null?null:restHours.home<48,
+    shortRestUnder48h:{home:restHours.home===null?null:restHours.home<48,
       away:restHours.away===null?null:restHours.away<48},
     h2h:{games:headToHead.length,homeWins:headToHead.filter(g=>g.pts>g.allowed).length,
       awayWins:headToHead.filter(g=>g.pts<g.allowed).length}}
@@ -305,16 +305,23 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
   const count=teams.home.roster.length+teams.away.roster.length
   const starters=[...teams.home.roster,...teams.away.roster].filter(p=>p.confirmedStarter).length
   const formGames=teams.home.lastGames.length+teams.away.lastGames.length
+  const hasAdvanced=(stats:Array<{name:string;value:string}>)=>{
+    const names=stats.map(x=>x.name.toLowerCase())
+    return names.some(x=>/offensive.*rating|offrtg/u.test(x))&&
+      names.some(x=>/defensive.*rating|defrtg/u.test(x))&&
+      names.some(x=>/pace|possessions/u.test(x))
+  }
+  const advancedMetrics=hasAdvanced(teams.home.teamStats)&&hasAdvanced(teams.away.teamStats)
   const coverageLevel:BasketballCase['coverage']['level']=
     count>=20&&starters===10&&formGames>=6&&markets.length>0&&
-      teams.home.teamStats.length>2&&teams.away.teamStats.length>2?'A':
+      advancedMetrics?'A':
     count>=14&&formGames>=4?'B':count>0||formGames>0?'C':'D'
   const coverage={level:coverageLevel,notes:[
     'Calidad de cobertura, no precisión de predicción',
     'La fuente de lesiones ESPN puede estar desactualizada frente al reporte oficial',
     'Estadísticas por 100 posesiones solo cuando proveedor las entrega con definición'],
     players:count,starters,formGames,quotes:markets.length,
-    advancedMetrics:teams.home.teamStats.length>2&&teams.away.teamStats.length>2}
+    advancedMetrics}
   const scenarios=[
     'Q1: comparar titulares, ritmo real por '+regulationMinutes(league)+' minutos y ataques contra coberturas rivales.',
     'Q2: estudiar creación y rebote cuando descansan estrellas; no asumir minutos sin rotación verificada.',
