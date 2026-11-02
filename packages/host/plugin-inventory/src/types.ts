@@ -27,6 +27,13 @@ export interface ClawHubState {
   readonly openclaw: 'available' | 'missing'
   readonly skillsDirectory: string
   readonly pluginExecution: 'openclaw-runtime' | 'not-configured'
+  /** Actual verified local CLI readiness, not just a package.json on disk. */
+  readonly cliStatus: 'ready' | 'installing' | 'missing' | 'install-failed' | 'incompatible-node'
+  readonly cliVersion?: string
+  readonly latestCliVersion?: string
+  readonly lastCheckedAt?: number
+  /** Safe enum; raw npm output and credential material are never exposed. */
+  readonly failureReason?: 'npm-cli-not-found' | 'registry-unreachable' | 'npm-install-or-cli-health-check-failed'
 }
 
 

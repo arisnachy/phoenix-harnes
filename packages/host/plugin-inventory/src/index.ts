@@ -24,7 +24,7 @@ import { readBusinessLibrarySnapshot } from './business-library.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
 import { readOpenClawRuntimeSnapshot } from './openclaw-runtime.ts'
 import { readClawHubCatalog } from './clawhub-catalog.ts'
-import { clawHubInstall, clawHubState } from './clawhub-marketplace.ts'
+import { clawHubInstall, clawHubState, prepareClawHubCli } from './clawhub-marketplace.ts'
 import { TokenTelemetryCollector } from './telemetry.ts'
 import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
 import { theOddsApiConnectorState, configureTheOddsApiConnector, disconnectTheOddsApiConnector } from './odds-api-connector.ts'
@@ -282,6 +282,11 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('clawHubState')
   async clawHubState(): Promise<ClawHubState> {
     return clawHubState()
+  }
+  /** Repair/update the ClawHub CLI in the user's PHOENIX toolchain on explicit click. */
+  @Remote('prepareClawHubCli')
+  async prepareClawHubCli(): Promise<ClawHubState> {
+    return prepareClawHubCli()
   }
 
   /** Only an explicitly clicked skill installation; plugins are never auto-executed. */
