@@ -9,6 +9,8 @@ import type { ClawHubCatalogRequest, ClawHubCatalogSnapshot, ClawHubCatalogItem 
 
 const BASE = 'https://clawhub.ai'
 const MAX = 20
+const catalogCache = new Map<string, { expires: number; value: ClawHubCatalogSnapshot }>()
+const CACHE_MS = 60_000
 const NAME = /^[\p{L}\p{N} ._/@-]{0,80}$/u
 
 function obj(v: unknown): Record<string, unknown> {
@@ -83,6 +85,8 @@ export async function readClawHubCatalog(request: ClawHubCatalogRequest): Promis
     if (request.officialOnly) params.set('isOfficial', 'true')
   }
   const url = BASE + pathname + '?' + params.toString()
+  const cached = catalogCache.get(url)
+  if (cached !== undefined && cached.expires > Date.now()) return cached.value
   let response: Response
   try {
     response = await fetch(url, { method: 'GET', headers: { accept: 'application/json' },
@@ -90,9 +94,17 @@ export async function readClawHubCatalog(request: ClawHubCatalogRequest): Promis
   } catch {
     throw new Error('ClawHub catalog network unavailable')
   }
+  if (response.status === 429) throw new Error('ClawHub catalog is rate-limited; retry later')
   if (!response.ok) throw new Error(`ClawHub catalog temporarily unavailable (HTTP ${response.status})`)
   const body: unknown = await response.json().catch(() => undefined)
   if (body === undefined) throw new Error('ClawHub catalog returned non-JSON data')
-  return { source: 'clawhub', family: request.family,
-    items: normalizeClawHubCatalog(body, request).slice(0, limit) }
+  const value: ClawHubCatalogSnapshot = {
+    source: 'clawhub', family: request.family,
+    items: normalizeClawHubCatalog(body, request).slice(0, limit),
+  }
+  // The public registry rate-limits anonymous readers: avoid re-querying the
+  // same browse page during chat/Settings remounts.
+  if (catalogCache.size > 60) catalogCache.clear()
+  catalogCache.set(url, { expires: Date.now() + CACHE_MS, value })
+  return value
 }
