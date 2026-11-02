@@ -6,13 +6,15 @@ import { homedir } from 'node:os'
 import { join,resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 
+/** Provider-observed odds with a verifiable observation timestamp. */
 export type ObservedOdds={
-  eventId:string;bookmaker:string;market:string;selection:string;point?:number|null
-  price:number;home:string;away:string;time:string;timeIso?:string
-  updatedAt:string;source?:string;sportKey?:string
+  eventId:stringbookmaker:stringmarket:stringselection:stringpoint?:number|null
+  price:numberhome:stringaway:stringtime:stringtimeIso?:string
+  updatedAt:stringsource?:stringsportKey?:string
 }
+/** Archived odds snapshot never a live price feed. */
 export type OddsSnapshot={
-  sportKey:string;observedAt:string;historical:true;quotes:ObservedOdds[];source:string
+  sportKey:stringobservedAt:stringhistorical:truequotes:ObservedOdds[]source:string
 }
 const sportValid=(s:string)=>/^[a-z0-9_]{3,80}$/u.test(s)
 const dayValid=(d:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(d)&&
@@ -20,7 +22,7 @@ const dayValid=(d:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(d)&&
   new Date(d+'T00:00:00Z').toISOString().slice(0,10)===d
 const home=(env:NodeJS.ProcessEnv)=>
   resolve(env.PHOENIX_SPORTS_SOURCE_HOME?.trim()||join(homedir(),'.phoenix','sports-sources'))
-const useful=(q:ObservedOdds)=>q&&typeof q.eventId==='string'&&q.eventId.length>0&&
+const useful=(q:ObservedOdds|null|undefined)=>!!q&&typeof q.eventId==='string'&&q.eventId.length>0&&
   typeof q.bookmaker==='string'&&q.bookmaker.length>0&&
   typeof q.market==='string'&&typeof q.selection==='string'&&
   Number.isFinite(q.price)&&q.price>1&&q.price<1000&&
@@ -88,6 +90,6 @@ export async function loadOddsSnapshots(
     }catch(error){errors.push((error instanceof Error?error.message:'Lectura fallida').slice(0,100))}
   }
   return{ snapshots,rows:snapshots.reduce((n,s)=>n+s.quotes.length,0),
-    coverage:snapshots.length?snapshots.at(-1)!.observedAt+' — '+snapshots[0]!.observedAt:
+    coverage:snapshots[0]&&snapshots.at(-1)?snapshots[snapshots.length-1].observedAt+' — '+snapshots[0].observedAt:
       'No hay ofertas verificables guardadas para esa fecha',errors }
 }
