@@ -125,3 +125,13 @@ La selección para ticket de 5/6 patas no debe forzarse. Múltiples legs del mis
 - IIHF rulebook oficial: https://www.iihf.com/en/statichub/4719/rules-and-regulations
 - API oficial NHL Stats: https://api.nhle.com/stats/rest/en/team
 - PHOENIX sports.ts autoriza actualmente \`api-web.nhle.com\` y \`icehockey_nhl\`, con adaptador de odds ya existente.
+
+
+## 9. Primera implementación funcional del especialista NHL en este PR
+
+- \`nhl-evidence-research.ts\` ya consulta la cartelera NHL oficial por fecha, solo acepta un \`gameId\` que aparezca en ella y que continúe en estado FUT/PRE con hora futura; identifica equipos, rosters de forwards, defensa y goalies; llama al perfil oficial por ID de skater/goalie en un presupuesto de solicitudes acotado; extrae las métricas y últimos cinco juegos que realmente aparecen, tabla NHL y los últimos diez resultados de cada club con descanso/localía cuando el calendario responde. Cruza tiradores potenciales con todos los porteros candidatos del equipo contrario **SIN afirmar starter confirmado**. Etiqueta evidencia ausente y se abstiene de recomendar picks.
+- \`nhl-market-settlement.ts\` diferencia explícitamente **regulation 3-way** del ganador que incluye OT/SO, evalúa puck line y totales con período declarado, deja pendientes resultados no oficiales y obliga a verificar el ruleset de cada casa. No implementa todos los props skater/goalie.
+- \`index.ts\` registra \`sports_chat_hockey_slate\` y \`sports_chat_nhl_investigate\`. Las cuotas observadas son de \`icehockey_nhl\` y se concilian por fecha, equipos y timestamp; ningún mercado se convierte en aprobado de manera automática.
+- \`tests/nhl-evidence-research.test.mjs\` cubre IDs correctos, roster/goalies con no-confirmación, forma por temporada sin mirar juegos futuros, cuotas válidas y caducadas, fallos de fuente, juego empezado, empate 60 minutos/OT/SO, totales, líneas y push; workflow propio ejecuta pruebas Node24 y TypeScript host.
+
+**Lo que este PR NO entrega todavía**: cobertura completa de AHL/KHL/IIHF/PWHL; porteros titulares confirmados en tiempo real; validación de líneas ofensivas y defensivas mediante shifts; análisis real de PP/PK y 5v5 xG/GSAx con fuentes autorizadas; injury report oficial y contraste de picks completos; props SOG/saves/hits/blocks plenamente cotejados por libro; optimizador de tickets mixtos y auditoría cronológica. **No confundir un expediente real básico con el cierre de H0–H11**. Se fusionará solo tras verificaciones pertinentes y podrán iniciarse las pruebas en PHOENIX; las etapas profundas requerirán iteraciones adicionales.
