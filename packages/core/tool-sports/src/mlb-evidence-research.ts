@@ -256,9 +256,9 @@ function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
   add('Bullpen: disponibilidad por confirmar',(['away','home'] as const).flatMap(side=>
     result.bullpen[side].map(p=>({label:result.fixture[side].name+' · '+p.name,
       value:pitcherSummary(p.season),detail:p.reliefUsage72h.length?
-        'Últimas 72h: '+p.reliefUsage72h.map(g=>g.date.slice(5)+' '+g.pitches+' pitcheos').join('; ')+
+        'Últimos 3 días calendario (sin hora): '+p.reliefUsage72h.map(g=>g.date.slice(5)+' '+g.pitches+' pitcheos').join('; ')+
           ' · disponibilidad NO confirmada':
-        'Sin apariciones verificables últimas 72h; disponibilidad NO confirmada'}))))
+        'Sin apariciones verificables últimos 3 días calendario; disponibilidad NO confirmada'}))))
   add('Bajas registradas por MLB',result.injuries.map(p=>({
     label:p.team+' · '+p.name,value:'En roster de lesionados según MLB',
     detail:'Confirmar fecha, disponibilidad y posible activación antes del partido'})))
@@ -427,7 +427,9 @@ export async function researchMlbCase(
     const gameLog=p.role==='pitcher'?await measured<RawStats>(
       'https://statsapi.mlb.com/api/v1/people/'+p.id+
         '/stats?stats=gameLog&group=pitching&season='+season,fetcher,sources,now):null
-    const cutoff=Date.parse(fixture.date)-3*86_400_000
+    // MLB game logs provide calendar dates, not first-pitch timestamps.
+    // Use three previous calendar dates rather than pretending to know exact 72-hour usage.
+    const cutoffDate=lastDate(date,3)
     const logs=arr(gameLog?.stats?.[0]?.splits).flatMap(raw=>{
       const e=obj(raw),time=Date.parse(word(e.date)),st=obj(e.stat)
       if(!Number.isFinite(time)||time>=Date.parse(fixture.date))return []
@@ -438,7 +440,7 @@ export async function researchMlbCase(
         strikeouts:word(st.strikeOuts,20)||'—',
         walks:word(st.baseOnBalls,20)||'—',started:numeric(st.gamesStarted)===1}]
     }).sort((a,b)=>b.time-a.time)
-    const recentAppearances=logs.filter(g=>g.time>=cutoff)
+    const recentAppearances=logs.filter(g=>g.date.slice(0,10)>=cutoffDate)
       .slice(0,5).map(g=>({date:g.date,innings:g.innings,pitches:g.pitches}))
     const recentStarts=logs.filter(g=>g.started).slice(0,5).map(g=>({
       date:g.date,opponentId:g.opponentId,innings:g.innings,pitches:g.pitches,
@@ -513,7 +515,7 @@ export async function researchMlbCase(
     ...(!starters.away?['Abridor visitante no verificado']:[]),
     ...(!weather?['Clima horario no disponible']:[]),
     'Orientación del terreno, techo abierto/cerrado y efecto del viento no verificados',
-    'Fatiga y disponibilidad definitivas de relevistas requieren confirmación; las últimas 72h son contexto, no permiso de jugar',
+    'Fatiga y disponibilidad definitivas de relevistas requieren confirmación; los game logs por fecha (3 días calendario) no aportan hora exacta ni garantizan disponibilidad',
     'Lesiones, estrellas, noticias y opiniones de expertos sin verificación específica',
     'Enfrentamientos BvP no publicados, splits de mano y repertorio siguen pendientes por jugador',
   ]
@@ -538,7 +540,7 @@ export async function researchMlbCase(
       'la evidencia disponible no prueba cuántas entradas completarán.',
     'Entradas seis y siete: bullpen local con '+bullpen.home.length+' pitchers activos identificados; '+
       'bullpen visitante con '+bullpen.away.length+
-      '. Uso individual 72h documentado cuando existe, disponibilidad final sin confirmar.',
+      '. Uso individual por fecha en últimos 3 días documentado cuando existe, disponibilidad final sin confirmar.',
     'Entradas ocho y nueve: estudiar cerradores, emergentes, defensa y ventaja local; '+
       'si el local ya gana, puede no batear la baja de la novena.',
     'Escenario alternativo: '+(weather?'viento '+trimNum(weather.windSpeedKmh)+
