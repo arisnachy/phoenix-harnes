@@ -76,6 +76,41 @@ export function resolveEclipseTeammateProfile(
     : route
 }
 
+/**
+ * A real peer's new contradictory or failed integration evidence can justify
+ * an independent FÉNIX consultation; ordinary progress never does.
+ * @param events - Durable event stream from one Kira session.
+ * @param evidenceId - Exact Team message id supplied by Luna.
+ * @returns The verified bounded evidence text, or undefined if ineligible.
+ */
+export function fenixConsultableEvidence(
+  events: readonly { readonly type: string; readonly data: unknown }[],
+  evidenceId: string,
+): string | undefined {
+  const turnStart = events.findLastIndex(event => event.type === 'turn/start')
+  if (turnStart < 0) return undefined
+  const relevant = events.slice(turnStart + 1)
+  const peer = relevant.findLast(event => {
+    if (event.type !== 'user/message') return false
+    const source = (event.data as { source?: { kind?: string; messageId?: string } }).source
+    return source?.kind === 'team-message' && source.messageId === evidenceId
+  })
+  if (peer === undefined) return undefined
+  const data = peer.data as {
+    readonly source?: { readonly purpose?: string }
+    readonly content?: readonly { readonly type?: string; readonly text?: string }[]
+  }
+  if (!['result', 'review', 'decision', 'blocker', 'question'].includes(data.source?.purpose ?? '')) return undefined
+  const evidence = (data.content ?? []).filter(item => item.type === 'text')
+    .map(item => item.text ?? '').join(' ').trim()
+  if (evidence.length < 20) return undefined
+  // Explicitly successful outcomes are not negative evidence. Require an
+  // auditable risk signal; never call a model just to classify a message.
+  if (/(?:sin\s+(?:errores|fallos|problemas)|no\s+(?:hay|hubo)\s+(?:errores|fallos)|no\s+(?:errors|issues)|all\s+tests?\s+pass)/iu.test(evidence)) return undefined
+  if (!/(?:contradic|incompatib|discrepan|conflict|inconsisten|mismatch|fall[aoó]|failed|failure|error|bug|blocked|bloquead|incomplet|missing|faltan?|omisi[oó]n|riesgo|risk|regresi[oó]n|regression|no\s+cumple|does\s+not\s+meet)/iu.test(evidence)) return undefined
+  return evidence.slice(0, 900)
+}
+
 /** Compact latest visible Kira plan for one specialist; never send the full chat history.
  * @param events - Durable session events in their original order.
  * @returns The current turn's confirmed plan, or undefined when there is none.
@@ -88,7 +123,17 @@ export function eclipseTeamPlanSummary(events: readonly { readonly type: string;
     return data.message?.content?.map(part => part.text ?? '').filter(Boolean).join(' ') ?? ''
   })
   const plan = texts.findLast(text => /^(?:#{1,3}\s*)?(?:\*\*)?plan(?:\s+de\s+trabajo)?\s*:/iu.test(text.trim()))
-  return plan === undefined ? undefined : plan.slice(0, 1800)
+  if (plan === undefined || plan.length <= 1800) return plan
+  // Do not discard acceptance criteria and restrictions at the end of Sol's
+  // visible plan. The original plan remains durable in Session events.
+  return `${plan.slice(0, 950)}\n[...extracto FÉNIX; consultar el plan original para más detalles...]\n${plan.slice(-740)}`
+}
+
+declare module '@phoenix-ai/dsh-session/types' {
+  interface SessionEventMap {
+    /** One real bounded FÉNIX consultation per turn, durable across restarts. */
+    'team/fenix-consult': { readonly turn: number; readonly evidenceId: string; readonly teammateName: string }
+  }
 }
 
 /** Tool routing configuration. */
