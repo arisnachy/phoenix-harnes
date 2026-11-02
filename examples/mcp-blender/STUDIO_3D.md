@@ -30,6 +30,18 @@ Outputs:
 - `3d-output/render.png`: Cycles render, not a raster illustration
   standing in for a 3D model.
 
+You may add one or more existing detailed GLB assets with `--asset-glb`:
+
+```bash
+blender --background --python scripts/phoenix-3d-studio.py -- \
+  --input scene.scene3d.json --output ./3d-output \
+  --asset-glb ./assets/character-rigged.glb
+```
+
+GLB assets are **local files** (no remote fetch). Imported detailed meshes,
+materials and existing armatures can supplement the generated environment,
+but their fidelity still depends on the original source quality.
+
 The input is PHOENIX's exported `.scene3d.json`. The script limits the
 number of objects, mesh coordinate values, and output resolution; it loads
 no external scripts or remote URLs.
