@@ -3,7 +3,7 @@ import { defineTool, ToolArgsError, type JsonValue, type ToolDefinition } from '
 /** Versioned, portable, data-only 3D scene: no scripts, URLs, or external resources. */
 export const PHOENIX_SCENE3D_MIME = 'application/vnd.phoenix.scene3d+json'
 
-type Primitive = 'box' | 'sphere' | 'cylinder' | 'cone'
+type Primitive = 'box' | 'sphere' | 'cylinder' | 'cone' | 'mesh'
 interface SceneNode {
   readonly type: Primitive
   readonly name?: string
@@ -11,6 +11,7 @@ interface SceneNode {
   readonly size: readonly [number, number, number]
   readonly rotation?: readonly [number, number, number]
   readonly color: string
+  readonly vertices?: readonly number[]
   readonly material?: {
     readonly preset?: string
     readonly baseColor?: string
@@ -44,18 +45,41 @@ function normalizeScene(raw: unknown, fallbackName: string): Scene {
   if (!Array.isArray(data.nodes) || data.nodes.length === 0 || data.nodes.length > 150) {
     throw new ToolArgsError(['La escena 3D requiere entre 1 y 150 objetos.'])
   }
+  let meshValues = 0
   const nodes = data.nodes.map((item: unknown, index: number): SceneNode => {
     if (typeof item !== 'object' || item === null || Array.isArray(item)) {
       throw new ToolArgsError([`Objeto 3D ${index + 1}: geometría inválida.`])
     }
     const node = item as Record<string, unknown>
-    if (!['box', 'sphere', 'cylinder', 'cone'].includes(String(node.type))) {
-      throw new ToolArgsError([`Objeto 3D ${index + 1}: usa box, sphere, cylinder o cone.`])
+    if (!['box', 'sphere', 'cylinder', 'cone', 'mesh'].includes(String(node.type))) {
+      throw new ToolArgsError([`Objeto 3D ${index + 1}: usa box, sphere, cylinder, cone o mesh.`])
     }
     if (!validVector(node.position, -300, 300) || !validVector(node.size, 0.001, 300)
       || (node.rotation !== undefined && !validVector(node.rotation, -360, 360))
       || typeof node.color !== 'string' || !hex.test(node.color)) {
       throw new ToolArgsError([`Objeto 3D ${index + 1}: position/size/rotation o color inválidos.`])
+    }
+    if (node.type === 'mesh') {
+      const vertices = node.vertices
+      if (!Array.isArray(vertices) || vertices.length < 9 || vertices.length % 9 !== 0
+        || vertices.length > 180_000 || !vertices.every(value =>
+          typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 10_000)) {
+        throw new ToolArgsError([`Objeto 3D ${index + 1}: mesh requiere triángulos xyz finitos.`])
+      }
+      meshValues += vertices.length
+      if (meshValues > 180_000) throw new ToolArgsError(['La escena supera 60 000 vértices.'])
+      let hasArea = false
+      for (let i = 0; i < vertices.length; i += 9) {
+        const ax = vertices[i + 3]! - vertices[i]!, ay = vertices[i + 4]! - vertices[i + 1]!
+        const az = vertices[i + 5]! - vertices[i + 2]!
+        const bx = vertices[i + 6]! - vertices[i]!, by = vertices[i + 7]! - vertices[i + 1]!
+        const bz = vertices[i + 8]! - vertices[i + 2]!
+        const cx = ay * bz - az * by, cy = az * bx - ax * bz, cz = ax * by - ay * bx
+        if (cx * cx + cy * cy + cz * cz > 1e-16) { hasArea = true; break }
+      }
+      if (!hasArea) throw new ToolArgsError([`Objeto 3D ${index + 1}: malla sin superficie visible.`])
+    } else if (node.vertices !== undefined) {
+      throw new ToolArgsError([`Objeto 3D ${index + 1}: vertices solo se admite para mesh.`])
     }
     const inputMaterial = node.material
     let material:SceneNode['material']
@@ -83,6 +107,7 @@ function normalizeScene(raw: unknown, fallbackName: string): Scene {
       position: [node.position[0]!, node.position[1]!, node.position[2]!],
       size: [node.size[0]!, node.size[1]!, node.size[2]!],
       color: node.color,
+      ...(node.type === 'mesh' ? { vertices: node.vertices as number[] } : {}),
       ...(material===undefined?{}:{material}),
       ...(typeof node.name === 'string' && node.name.length <= 100 ? { name: node.name } : {}),
       ...(node.rotation === undefined ? {} : { rotation: [node.rotation[0]!, node.rotation[1]!, node.rotation[2]!] }),
