@@ -47,7 +47,8 @@ function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
         away:{battingOrder:fullLineup?[2203,2204,...Array.from({length:7},(_,i)=>2301+i)]:[]}}}
     }else if(u.pathname.endsWith('/venues')){
       data={venues:[{id:wrongVenue?999:205,name:wrongVenue?'Other Park':'Test Ballpark',
-        location:{defaultCoordinates:{latitude:40.1,longitude:-74.2}}}]}
+        location:{defaultCoordinates:{latitude:40.1,longitude:-74.2}},
+        fieldInfo:{roofType:'Retractable',turfType:'Grass',leftLine:330,center:400,rightLine:335}}]}
     }else if(u.pathname.includes('/roster')){
       if(u.searchParams.get('rosterType')==='injured'){data={roster:[]}}
       else if(missingRoster)return new Response('unavailable',{status:503})
@@ -281,6 +282,8 @@ test('a venue mismatch cannot attach foreign park weather to the MLB fixture',as
   assert.equal(d.venue.latitude,null)
   assert.equal(d.venue.longitude,null)
   assert.equal(d.weather,null)
+  assert.equal(d.venue.roofType,'unknown')
+  assert.equal(d.venue.dimensionsFt.center,null)
   assert.ok(d.missingEvidence.includes('Clima horario no disponible'))
   assert.ok(!mock.calls.some(url=>url.includes('api.open-meteo.com')))
 })
@@ -313,4 +316,17 @@ test('relief workload is dated to the research snapshot and retains pitcher deta
   assert.equal(relief[1].walks,'1')
   assert.ok(d.uiBlock.props.sections.some(x=>x.heading.includes('Bullpen')&&
     x.items.some(y=>y.detail.includes('17 pitcheos')&&y.detail.includes('2 K'))))
+})
+
+
+test('official park fieldInfo distinguishes roof construction from actual roof position',async()=>{
+  const mock=fakeNetwork()
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(d.venue.roofType,'Retractable')
+  assert.equal(d.venue.roof,'unknown')
+  assert.equal(d.venue.turfType,'Grass')
+  assert.deepEqual(d.venue.dimensionsFt,{leftLine:330,center:400,rightLine:335})
+  assert.equal(d.weather.windRelativeToField,'unknown')
+  assert.ok(mock.calls.some(url=>url.includes('/venues?')&&
+    url.includes('hydrate=location%2CfieldInfo')))
 })
