@@ -69,11 +69,12 @@ jobs:
         shell: bash
         run: |
           forbidden='DSH Local Build|Into the Unknown|Deep diving'
-          if rg -n "$forbidden" packages/client packages/bundle apps; then
+          # Search tracked files with Git; no external ripgrep dependency.
+          if git grep -n -E "$forbidden" -- packages/client packages/bundle apps; then
             echo 'Upstream candidate reintroduced a retired product identity.' >&2
             exit 1
           fi
-          rg -n 'PHOENIX' packages/client/web packages/client/ui-brand-official >/dev/null
+          git grep -n -F 'PHOENIX' -- packages/client/web packages/client/ui-brand-official >/dev/null
 
       - name: Install and run the static acceptance gate
         if: steps.candidate.outputs.exists == 'false'
