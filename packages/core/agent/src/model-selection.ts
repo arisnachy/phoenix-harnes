@@ -1013,7 +1013,7 @@ function recordPhoenixAutoStrategyReview(
   if (signal?.purpose === 'blocker') state.lastTeamEscalationMessageId = signal.messageId
 }
 
-/** Quality favors early diagnosis; economy skips stalled-tool rescue, but never Team blockers. */
+/** Quality favors early diagnosis; every mode escapes a demonstrated failure loop. */
 function phoenixAutoNeedsStallStrategy(
   agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
   turn: number,
@@ -1291,7 +1291,7 @@ export function installModelSelection(
       : autoStep === 1
         && phoenixAutoTaskRequest(currentRequest)
         && !isPhoenixAutoQuickTurn(currentRequest)
-         && !isPhoenixAutoBoundedImplementation(currentRequest)
+        && !isPhoenixAutoBoundedImplementation(currentRequest)
         && !isStandaloneVisualPreviewRequest(currentRequest)
         && !isBriefTeamDemonstration(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
         : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_COORDINATION_POLICY : undefined
