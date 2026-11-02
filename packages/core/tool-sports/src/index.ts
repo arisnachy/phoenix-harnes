@@ -24,6 +24,7 @@ import { estimateEvidenceForecast } from './sports-forecast.ts'
 import { extendedEspnRoutes,readExtendedEspn,type ExtendedEspnMode } from './espn-extra-intelligence.ts'
 import { exploreEspn, type EspnExplorerInput } from './espn-intelligence.ts'
 import {collectDirectEspnStats} from './sports-direct-stats.ts'
+import {probeExtendedEspnCatalog} from './sports-espn-route-probe.ts'
 import { compareBettingMarkets,supportedMarketFamilies } from './sports-market-intelligence.ts'
 import { describeBettingMarkets } from './sports-bet-markets.ts'
 import { checkSportsTicket, type SportsBetLeg } from './sports-bet-settlement.ts'
@@ -58,6 +59,7 @@ const GUIDANCE = [
   'EFICIENCIA DEL ANÁLISIS: no vuelvas a consultar el mismo partido varias veces para repetir idénticos resultados. Mantén un expediente por eventId/competitionId y estado observedAt; una auditoría histórica por liga y petición, reutiliza sus métricas. Si no quedan eventos futuros el día solicitado, elige la próxima fecha solo como alternativa explícita, sin presentar partidos pasados como pronóstico vigente. No llames herramientas Binance, PAPER ni trading cuando el usuario pide deportes, salvo petición explícita independiente. Si alguna fuente devuelve $ref incompleto o HTTP 400, informa el fallo una vez y sigue con otras fuentes, sin bucles.',
   'CALIBRACIÓN RESPONSABLE: sports_chat_calibration_audit valida probabilidades con resultados de fechas anteriores y un bloque cronológico independiente (Brier, log-loss y ECE contra baseline). Solo si status=validated, sports_chat_predict puede mostrar un ajuste disponible en memoria para esa liga; si insufficient/underperforming mantiene proyección exploratoria sin prometer edge o tickets ganadores. La validación histórica no demuestra ganancias frente al mercado.',
   'PORTALES EXTERNOS DE CONTRASTE: cuando el usuario pida investigar o comparar ScoresAndOdds, Covers, VegasInsider u OddsPortal, o ESPN no entregue actualización verificable, llama sports_chat_market_source_catalog. Es un directorio de conocimiento, NO una API conectada: jamás afirmes que obtuviste sus cuotas si no navegaste de verdad usando una herramienta autorizada y condiciones del portal. Prioriza ESPN Scoreboard/Core/Summary como ancla de partido, y usa fuentes secundarias solo con coincidencia de liga, los DOS equipos, fecha/hora/zona, mercado, período y casa. Registra por separado cuándo viste la página (pageObservedAt) y cuándo la casa actualizó el precio (quoteUpdatedAt); si no existe esta última fecha, la observación es SOLO investigación sin vigencia comprobada. No confundir apertura, histórico, consensus/crowd ni favorito de mercado con análisis independiente. Las páginas no habilitan automáticamente scrapers ni actualizan sports_chat_odds; consulta la casa para confirmar vigencia. Respetar acceso autorizado, términos, límites y bloqueos, sin eludir CAPTCHA ni geobloqueos. ',
+  'COMPROBACIÓN DE COBERTURA ESPN: sports_chat_espn_route_audit ejecuta de verdad todos los modos del registro extendido, usando los IDs genuinos del scoreboard/roster; distingue data, ref_only, empty, error y skipped. No lo llames automáticamente en cada análisis (consume decenas de peticiones); úsalo solo para auditoría explícita o reparación de cobertura. Con stats individuales consulta el dossier integrado: no trates un HTTP 200 o un botón con prompt como evidencia de datos existentes.',
   'DATOS DEPORTIVOS SIN PROMPTS ADICIONALES: no basta un botón que pide a Kira volver a consultar las estadísticas del atleta. Los paneles de equipo y partido recuperan automáticamente datos ESPN Site y Common v3: temporada, gamelog y splits de jugadores que estén identificados por roster oficial ESPN, además de forma, descanso, lesiones cotejadas, condiciones del estadio y cuotas de mercados completos. Los campos no publicados se señalan no disponibles. No afirmes que una posición de lanzador, portero o quarterback demuestra que iniciará el encuentro; confirma alineación por fuente específica. Para un ticket utiliza la vista de investigación y las herramientas de cuotas reales, siempre respetando selección exacta, casa y momento.',
   'ESPN INTELLIGENCE: cuando el usuario pida un equipo específico, un jugador, su historia, splits, gamelog, tabla, líderes, noticias o búsqueda, consulta sports_chat_espn_explore con la vista apropiada y un ID real comprobado. Esa herramienta devuelve una superficie adaptable de estadísticas, noticias, plantillas, fotos y fuentes; Phoenix dibuja sports_espn_dashboard automáticamente. Para carteleras utiliza sports_chat_games y para cuotas comercializables sports_chat_odds; evita convertir probabilidades ESPN o referencias Core en cuotas actuales. Las plantillas se construyen dinámicamente a partir de secciones verificadas, sin nuevas pantallas.',
   'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_sources_repair, sports_chat_market_source_catalog, sports_chat_deep_research, sports_chat_matchup_factors, sports_chat_predict, sports_chat_calibration_audit, sports_chat_editorial_discovery, sports_chat_bet_rules, sports_chat_ticket_track, sports_chat_market_intelligence, sports_chat_espn_core, sports_chat_espn_core_catalog, sports_chat_espn_extended, sports_chat_espn_extended_catalog, sports_chat_espn_historical_odds, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
@@ -587,6 +589,33 @@ export function apply(ctx: Context): void {
         uiBlock:report.uiBlock,instruction:'Phoenix muestra uiBlock automáticamente en el chat. No repitas su JSON; explica la comparación y distingue estadísticas ausentes.' })
     },
     presentCall:()=>({ card:'generic',title:'Analizar abridores y bullpen MLB',kind:'read' as const }),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_espn_route_audit',
+    description:'Prueba realmente todas las rutas ESPN EXTENDIDAS registradas (50+ modos) usando IDs oficiales ya confirmados. Devuelve para CADA ruta data/ref_only/empty/error/skipped y nunca simula disponibilidad. Consulta costosa: solo en auditorías explícitas, no por partido rutinario.',
+    parameters:{
+      sport:{type:'string',required:true,description:'Disciplina ESPN verificable.'},
+      league:{type:'string',required:true,description:'Liga ESPN del evento.'},
+      eventId:{type:'string',description:'ID real ESPN, recomendado.'},
+      competitionId:{type:'string',description:'ID de competición real; no asumir igual a eventId.'},
+      teamId:{type:'string',description:'ID real de un equipo de ese partido.'},
+      athleteId:{type:'string',description:'ID real de un atleta incluido en la plantilla.'},
+      season:{type:'integer',description:'Temporada ESPN 1900-2100.'},
+      seasonType:{type:'integer',description:'Regular 2 por defecto.'},
+      week:{type:'integer',description:'Semana verificable para ligas semanales.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>false,
+    async execute(args){
+      if((await sportsEnv(ctx)).PHOENIX_SPORTS_ESPN_DISABLED==='1')
+        return JSON.stringify({status:'unavailable',reason:'ESPN deshabilitado'})
+      return JSON.stringify(await probeExtendedEspnCatalog({
+        sport:args.sport,league:args.league,eventId:args.eventId,
+        competitionId:args.competitionId,teamId:args.teamId,athleteId:args.athleteId,
+        season:args.season,seasonType:args.seasonType,week:args.week,
+      },<T>(url:string)=>getFeed<T>(url)))
+    },
+    presentCall:()=>({card:'generic',title:'Auditar rutas y estadísticas ESPN disponibles',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_espn_extended_catalog',
