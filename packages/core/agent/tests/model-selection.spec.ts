@@ -13,12 +13,75 @@ import {
   isConversationalFastPathText,
   isPhoenixAutoQuickTurn,
   isBriefTeamDemonstration,
+  fenixCodingQualityBrief,
+  isPhoenixAutoBoundedImplementation,
   jevSelectedModelId,
   PHOENIX_CODEX_AUTO_MODEL,
   type Agent,
   type ModelSelectionRef,
 } from '../src/index.ts'
 import { ReasoningEffortId, createUserMessage, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
+
+describe('FÉNIX coding acceptance quality', () => {
+  const depsolve = [
+    'Construye en Python 3.11 un módulo depsolve con semver y dependencias.',
+    'Elige versiones compatibles y minimiza el número de paquetes.',
+    'Rendimiento: 60 paquetes por 10 versiones, incluidos casos sin solución en pocos segundos.',
+    'Entregables: depsolve.py, test_depsolve.py con pytest, README.md con supuestos y trade-offs.',
+    'Cierra con un reporte final, limitaciones e iteraciones.',
+  ].join(' ')
+  it('requires an actual Sol plan for a performance-constrained algorithm', () => {
+    expect(isPhoenixAutoBoundedImplementation(depsolve)).toBe(false)
+    const brief = fenixCodingQualityBrief(depsolve)
+    expect(brief).toContain('conflicting objectives')
+    expect(brief).toContain('unsatisfiable cases')
+    expect(brief).toContain('README')
+    expect(brief).toContain('mutations')
+    expect(brief).toContain('iterations/tool activity')
+  })
+
+  it('does not add acceptance overhead to chat and unrelated tasks', () => {
+    expect(fenixCodingQualityBrief('Hola, ¿cómo estás?')).toBeUndefined()
+    expect(fenixCodingQualityBrief('Explica cómo funciona un algoritmo, sin escribir archivos.')).toBeUndefined()
+    expect(fenixCodingQualityBrief('Crea una imagen de un pelícano en bicicleta.')).toBeUndefined()
+  })
+
+  it('injects a targeted brief into both Sol and Luna without adding a model call', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'text', text: depsolve }] } },
+    ]
+    const agent = { options: {}, session: { events, append: (type: string, data: unknown) => { events.push({ type, data }) } } } as unknown as Agent
+    ctx.agent = agent
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection)
+    try {
+      const first = await ctx.systemPrompt.assemble()
+      expect(first.sections.find(section => section.name === 'phoenix:auto-visible-handoff')?.text)
+        .toContain('unsatisfiable cases')
+      events.push({ type: 'step/start', data: { turn: 1, step: 1 } })
+      const second = await ctx.systemPrompt.assemble()
+      expect(second.sections.find(section => section.name === 'phoenix:auto-visible-handoff')?.text)
+        .toContain('README')
+      await expect(agentEvents(ctx, agent).waterfall(
+        'agent/request', { turn: 1, step: 1, signal: new AbortController().signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }),
+      )).resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('high') })
+      await expect(agentEvents(ctx, agent).waterfall(
+        'agent/request', { turn: 1, step: 2, signal: new AbortController().signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }),
+      )).resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+})
 
 describe('installModelSelection()', () => {
   it('never spends another automatic turn recovering an explicitly closed Team mission', async () => {
