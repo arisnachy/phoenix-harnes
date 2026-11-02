@@ -71,7 +71,7 @@ export async function soccerDailySlate(date:string,leagues:string[],
   const chosen=[...new Set(leagues)]
   if(!chosen.length||chosen.length>12||chosen.some(l=>!soccerSlug(l)))
     throw Error('Selecciona entre una y doce ligas válidas')
-  let available=[...sportsCatalog.soccer]
+  let available=[...(sportsCatalog.soccer??[])]
   if(chosen.some(l=>!available.includes(l)))
     available=(await soccerLeagueCatalog(fetcher,now,env)).leagues
   if(chosen.some(l=>!available.includes(l)))throw Error('Liga no identificada por ESPN')
