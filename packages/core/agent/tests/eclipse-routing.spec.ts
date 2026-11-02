@@ -4,7 +4,6 @@ import {
   adaptiveCodexReasoningEffort,
   isPhoenixAutoBoundedImplementation,
   resolveEclipseRoleRoute,
-  selectEclipseAutomaticCoordinatorRoute,
   type EclipseRoutingSettings,
 } from '../src/model-selection.ts'
 
@@ -16,50 +15,13 @@ describe('Eclipse role routing', () => {
     planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
     coordinator: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'high' },
   }
-  it('switches Luna to Terra only for new, substantive Team evidence in automatic mode', () => {
+  it('keeps Luna Max as the automatic Lead even when Terra consultation is preferred', () => {
     const automatic: EclipseRoutingSettings = {
       mode: 'automatic',
       coordinator: { provider: 'openai-codex', model: 'gpt-6.1-terra', reasoningEffort: 'low' },
     }
-    const luna = { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('high') }
-    const teamResult = { messageId: 'result-1', purpose: 'result', text: 'Se completaron las pruebas de UI.' }
-    const terra = selectEclipseAutomaticCoordinatorRoute(automatic, luna, teamResult, undefined, 0)
-    expect(terra).toEqual({
-      provider: 'openai-codex', model: 'gpt-6.1-terra', reasoningEffort: ReasoningEffortId('low'),
-    })
-    expect(selectEclipseAutomaticCoordinatorRoute(automatic, luna, undefined, undefined, 0)).toBe(luna)
-    expect(selectEclipseAutomaticCoordinatorRoute(automatic, luna, teamResult, 'result-1', 1)).toBe(luna)
-    expect(selectEclipseAutomaticCoordinatorRoute(automatic, luna, teamResult, 'result-1', 1, true))
-      .toEqual(terra)
-    expect(selectEclipseAutomaticCoordinatorRoute(automatic, luna, {
-      messageId: 'result-2', purpose: 'result', text: 'Otro resultado.',
-    }, 'result-1', 2)).toBe(luna)
-  })
-
-  it('keeps Sol rescues, trivial Team questions and unrelated providers out of Terra', () => {
-    const config: EclipseRoutingSettings = {
-      mode: 'automatic', coordinator: { provider: 'openai-codex', model: 'gpt-6.1-terra' },
-    }
-    const question = { messageId: 'q-1', purpose: 'question', text: '¿Una frase o dos viñetas?' }
-    expect(selectEclipseAutomaticCoordinatorRoute(config, fallback, question, undefined, 0)).toBe(fallback)
-    expect(selectEclipseAutomaticCoordinatorRoute(config, fallback, {
-      messageId: 'block-1', purpose: 'blocker', text: 'Fallo crítico.',
-    }, undefined, 0)).toBe(fallback)
-    const sol = { provider: 'openai-codex', model: 'gpt-6.1-sol' }
-    expect(selectEclipseAutomaticCoordinatorRoute(config, sol, {
-      messageId: 'result-1', purpose: 'result', text: 'Resultado de ejecución.',
-    }, undefined, 0)).toBe(sol)
-    expect(selectEclipseAutomaticCoordinatorRoute({
-      ...config, mode: 'hybrid',
-    }, fallback, { messageId: 'result-1', purpose: 'result', text: 'Resultado.' },
-    undefined, 0)).toBe(fallback)
-    expect(selectEclipseAutomaticCoordinatorRoute({
-      ...config, coordinator: { provider: 'other', model: 'gpt-6.1-terra' },
-    }, fallback, { messageId: 'result-1', purpose: 'result', text: 'Resultado.' },
-    undefined, 0)).toBe(fallback)
-    expect(selectEclipseAutomaticCoordinatorRoute(config, fallback, {
-      messageId: 'review-1', purpose: 'review', text: 'Hay dos resultados inconsistentes.',
-    }, undefined, 0)).toEqual({ provider: 'openai-codex', model: 'gpt-6.1-terra' })
+    expect(resolveEclipseRoleRoute(automatic, 'coordinator', fallback)).toEqual(fallback)
+    expect(resolveEclipseRoleRoute(automatic, 'planner', fallback)).toEqual(fallback)
   })
 
   it('preserves shipped routes in automatic mode or without settings', () => {
