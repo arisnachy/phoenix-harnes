@@ -55,6 +55,10 @@ export async function investigateEventDeep(
   const rosterResults=await Promise.allSettled(teams.map(t=>
     getFeed<unknown>(root+'teams/'+t.id+'/roster',fetcher)))
   let rosterCount=0
+  // Match the athlete ID (when supplied) AND the CURRENT roster under the
+  // verified ESPN team ID. A league injury feed can retain old team membership.
+  const verifiedAthletes=new Map<string,Set<string>>()
+  const verifiedNames=new Map<string,Set<string>>()
   teams.forEach((team,i)=>{
     const rr=rosterResults[i]
     if(rr?.status!=='fulfilled')return
@@ -64,8 +68,10 @@ export async function investigateEventDeep(
       return nested.length?nested:[g]
     })
     const names=athletes.map(a=>str(get(a,'displayName')??get(a,'name'),90))
-      .filter(Boolean).slice(0,12)
-    team.rosterSample=names
+      .filter(Boolean)
+    verifiedAthletes.set(team.id,new Set(athletes.map(a=>digits(get(a,'id')??get(get(a,'athlete'),'id'))).filter(Boolean)))
+    verifiedNames.set(team.id,new Set(names.map(nameKey)))
+    team.rosterSample=names.slice(0,12)
     rosterCount+=names.length
   })
   const news=newsResult.status==='fulfilled'?arr(get(newsResult.value,'articles')):[]
@@ -85,8 +91,13 @@ export async function investigateEventDeep(
     const items=arr(g.injuries).length?arr(g.injuries):arr(g.items)
     return items.flatMap(item=>{
       const v=obj(item),a=obj(v.athlete),athlete=str(a.displayName??v.displayName,90)
+      const athleteId=digits(a.id??v.athleteId)
+      const ids=verifiedAthletes.get(id),names=verifiedNames.get(id)
+      // An athlete with a conflicting ID is NEVER accepted on a name match.
+      const belongs=athleteId?ids?.has(athleteId)===true:
+        athlete.length>0&&names?.has(nameKey(athlete))===true
       const status=str(v.status??v.type??v.description,110)
-      return athlete&&status?[{team:matched.name,athlete,status,source:'ESPN Injuries' as const}]:[]
+      return athlete&&status&&belongs?[{team:matched.name,athlete,status,source:'ESPN Injuries' as const}]:[]
     })
   }).slice(0,16)
   const boxscore=obj(summary.boxscore)
@@ -144,6 +155,7 @@ export async function investigateEventDeep(
       'Un informe médico de liga vacío no demuestra que los jugadores estén sanos.',
       'Plantilla disponible no confirma titulares, minutos, portero titular ni alineación final.',
       'Noticias de equipo son contexto; deben cotejarse antes de atribuir una baja o impacto.',
+      'Lesiones sin coincidencia con la plantilla actual del equipo se descartan; no se atribuyen por noticia ni solo por ID de equipo.',
       'Las estadísticas del boxscore son históricas; no predicen el próximo partido.',
       'Sin modelos calibrados ni precios de mercado verificables no hay probabilidad ni valor esperado comprobado.',
     ]}

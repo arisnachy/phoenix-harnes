@@ -410,6 +410,24 @@ describe('chat tool activity grouping', () => {
     expect(screen.getAllByText('Ver fundamento')).toHaveLength(count)
     expect(screen.getByRole('button',{name:'Tools'}).getAttribute('aria-expanded')).toBe('false')
   })
+  it('keeps only the final investigated matchup card after exploring two candidates',()=>{
+    const card=(title:string)=>({component:'sports_espn_dashboard',version:1,props:{
+      view:'event',title,subtitle:'NHL · Investigación',source:'ESPN',
+      checkedAt:'2026-11-02T16:01:00Z',note:'Datos verificados',
+      sections:[{heading:'Forma reciente',kind:'metrics',items:[{label:'Local',value:'5V · 5D'}]}],
+    }})
+    const first={...settledTool('research-1'),seq:2,time:2000,
+      call:{name:'sports_chat_matchup_factors',argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({uiBlock:card('Candidato NBA')})}]}
+    const second={...settledTool('research-2'),seq:4,time:4000,
+      call:{name:'sports_chat_predict',argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({uiBlock:card('Final NHL')})}]}
+    renderChat([user(1,'Investiga y dame una sola ficha deportiva final'),
+      first,assistantWithReasoning(3),second,assistantWithReasoning(5)])
+    const panel=screen.getByRole('region',{name:'Panel deportivo de Kira'})
+    expect(panel.textContent).toContain('Final NHL')
+    expect(panel.textContent).not.toContain('Candidato NBA')
+  })
   it('does not replace a requested research ticket with automatic NO BET when bookmaker prices are missing',()=>{
     const tool={...settledTool('odds-1'),seq:3,time:3000,
       call:{name:'sports_chat_odds',argsRaw:'{"sportKey":"baseball_mlb"}'},

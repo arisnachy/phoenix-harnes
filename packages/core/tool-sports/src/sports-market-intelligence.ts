@@ -38,6 +38,10 @@ export function compareBettingMarkets(
   for(const rows of groups.values()){
     const initial=rows[0]
     if(!initial)continue
+    const stamps=rows.map(r=>Date.parse(r.updatedAt))
+    // A pair is not a simultaneous quoted market if its two prices were
+    // captured far apart. Reject rather than fabricate a coherent no-vig pair.
+    if(Math.max(...stamps)-Math.min(...stamps)>10*60_000){rejected+=rows.length;continue}
     const labels=new Set(rows.map(r=>r.selection.toLowerCase()))
     const market=initial.market.toLowerCase()
     // Most 2-way and totals require both sides; soccer 3-way requires DRAW.
