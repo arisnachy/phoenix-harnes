@@ -85,8 +85,8 @@ function pipeline(canvas: HTMLCanvasElement): Pipeline | undefined {
   return item
 }
 function surfaceNormal(a:Vector,b:Vector,c:Vector):Vector{
-  const u=[b[0]-a[0],b[1]-a[1],b[2]-a[2]]
-  const v=[c[0]-a[0],c[1]-a[1],c[2]-a[2]]
+  const u:Vector=[b[0]-a[0],b[1]-a[1],b[2]-a[2]]
+  const v:Vector=[c[0]-a[0],c[1]-a[1],c[2]-a[2]]
   const x=u[1]*v[2]-u[2]*v[1],y=u[2]*v[0]-u[0]*v[2],z=u[0]*v[1]-u[1]*v[0]
   const m=Math.hypot(x,y,z)||1
   return [x/m,y/m,z/m]
