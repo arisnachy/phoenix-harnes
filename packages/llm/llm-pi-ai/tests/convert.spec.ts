@@ -837,7 +837,7 @@ describe('mapStopReason / mapUsage', () => {
       kind: 'error',
       failure: {
         code: 'MODEL_UNAVAILABLE',
-        message: expect.stringContaining('minimaxai/minimax-m3.1-flash'),
+        message: expect.stringContaining('meta/llama-3.3-70b-instruct'),
       },
     })
     const chunks = await collect(toStreamChunks(
