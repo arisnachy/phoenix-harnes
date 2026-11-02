@@ -1,5 +1,5 @@
 /** Evidence-first soccer dossier. No fabricated scores, probabilities, players or lineups. */
-import {getFeed,hasSportsPermission,type MarketOutcome} from './sports.ts'
+import {hasSportsPermission,type MarketOutcome} from './sports.ts'
 import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
 import {array,clean,digits,normalize,row,soccerDailySlate,soccerDate,soccerSlug,
   sourceRead,type SoccerFixture,type SoccerSource} from './soccer-worldwide-scout.ts'
