@@ -257,3 +257,17 @@ El catálogo del repositorio en main incluye soccer: eng.1, esp.1, mex.1, usa.1,
 - football-data.org docs: https://www.football-data.org/documentation/api
 - StatsBomb Open Data (solo subconjunto histórico, atribución requerida): https://github.com/statsbomb/open-data
 - Open-Meteo forecast/previous runs: https://open-meteo.com/en/docs/historical-forecast-api
+
+
+## 13. Avance operativo publicado en PR #1316
+
+**Implementación efectiva (no afirmar cobertura mundial exhaustiva ni modelo predictivo calibrado):**
+- \`src/soccer-worldwide-scout.ts\`: consulta el catálogo ESPN Core de hasta 500 ligas identificadas, verifica slugs, descubre cartelera de 1–12 competiciones por lote y fecha con IDs ESPN reales y estados de cada fuente. Informa errores en lugar de inventar partidos.
+- \`src/soccer-worldwide-dossier.ts\`: verifica que el encuentro esté en el calendario y sea futuro, identifica ambos clubes y rosters por ID, comprueba once SOLO cuando la fuente identifica once titulares válidos, recupera resultados recientes, localía y registros, lesiones solo de jugadores del roster actual, datos de equipo disponibles, clima con coordenadas verificadas, árbitro si existe, noticias ESPN y descubrimiento de titulares Covers/VegasInsider claramente diferenciado de opiniones verificadas. Genera matriz de roles ofensivos vs defensivos y portero como hipótesis pendiente de táctica real.
+- \`src/index.ts\`: expone tres herramientas Kira \`sports_chat_soccer_leagues\`, \`sports_chat_soccer_daily\` y \`sports_chat_soccer_investigate\`. Consulta solo las cuotas realmente obtenidas para cinco ligas reconocidas por sus claves de proveedor; revisa casa/evento/equipos/hora antes de mostrar, nunca inventa EV o porcentajes.
+- \`src/soccer-90min-settlement.ts\`: liquidación **aritmética y solo para resultados oficiales 90 minutos + añadido**, 1X2, doble oportunidad, empate no acción, ambos marcan, total asiático y hándicap asiático; las reglas de casa sobre abandonos, anulación, período, suplentes, etc. siempre deben comprobarse adicionalmente.
+- Pruebas aisladas de cartelera y listas, 11 jugadores y titularidad, lesión de equipo correcto, datos ausentes, cuotas vigentes, partido ya iniciado, empates y cuartos asiáticos. Workflow propio \`PHOENIX Soccer worldwide intelligence\` ejecuta las pruebas y el build TS.
+
+**Pendiente para «Soccer mundial completo»:** proveedores por país fuera de ESPN, catálogo verdaderamente mundial y clasificación por cobertura real A–D validada en numerosas ligas, análisis histórico de xG/xGA y minutos de todos los atletas con fuentes autorizadas, once y formaciones tácticas oficiales en cada liga, clima/estadio y árbitros de competiciones sin cobertura, mercado de tarjetas/córners/props con price mapping exacto, recuperación de contenido íntegro de pronósticos externos (no solo titulares), auditoría retrospectiva con snapshots prepartido y verificación con partidos reales MLS/LaLiga/Asia/África/femenino. Las herramientas actuales **NO colocan apuestas ni generan tickets de éxito garantizado**.
+
+**Criterio de integración:** PR solo pasa a main/stable si los tests específicos y controles de integración pertinentes pasan. El plan está listo como especificación y el especialista tiene una primera versión operativa; no marcar S0–S9 como finalizados sin evidencia.
