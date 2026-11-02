@@ -9,13 +9,16 @@ const fixture={gamePk:812345,gameDate:'2026-07-02T22:00:00Z',
   status:{abstractGameState:'Preview'},venue:{id:205,name:'Test Ballpark'},
   teams:{home:{team:{id:101,name:'Home Giants'},probablePitcher:{id:1101,fullName:'Home Ace'}},
     away:{team:{id:102,name:'Away Bears'},probablePitcher:{id:2201,fullName:'Away Ace'}}}}
-const roster=(side)=>({roster:[
+const roster=(side,fullLineup=false)=>({roster:[
   {person:{id:side==='home'?1101:2201,fullName:side==='home'?'Home Ace':'Away Ace'},position:{type:'Pitcher',abbreviation:'P'}},
   {person:{id:side==='home'?1102:2202,fullName:side==='home'?'Home Reliever':'Away Reliever'},position:{type:'Pitcher',abbreviation:'P'}},
   {person:{id:side==='home'?1103:2203,fullName:side==='home'?'Home Star':'Away Star'},position:{type:'Outfielder',abbreviation:'OF'}},
   {person:{id:side==='home'?1104:2204,fullName:side==='home'?'Home Backup':'Away Backup'},position:{type:'Infielder',abbreviation:'IF'}},
+  ...(fullLineup?Array.from({length:7},(_,i)=>({person:{id:(side==='home'?1301:2301)+i,
+    fullName:(side==='home'?'Home':'Away')+' Batter '+(i+3)},
+    position:{type:'Infielder',abbreviation:'IF'}})):[]),
 ]})
-function fakeNetwork({missingRoster=false,oldGame=false}={}){
+function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false}={}){
   const calls=[]
   const fetcher=async(input)=>{
     const url=String(input)
@@ -31,13 +34,14 @@ function fakeNetwork({missingRoster=false,oldGame=false}={}){
           home:{team:{id:teamId},score:6},
           away:{team:{id:teamId===101?200:201},score:2}}}]}]}
     }else if(u.pathname.endsWith('/boxscore')){
-      data={teams:{home:{battingOrder:[]},away:{battingOrder:[]}}}
+      data={teams:{home:{battingOrder:fullLineup?[1103,1104,...Array.from({length:7},(_,i)=>1301+i)]:[]},
+        away:{battingOrder:fullLineup?[2203,2204,...Array.from({length:7},(_,i)=>2301+i)]:[]}}}
     }else if(u.pathname.endsWith('/venues')){
       data={venues:[{name:'Test Ballpark',location:{defaultCoordinates:{latitude:40.1,longitude:-74.2}}}]}
     }else if(u.pathname.includes('/roster')){
       if(u.searchParams.get('rosterType')==='injured'){data={roster:[]}}
       else if(missingRoster)return new Response('unavailable',{status:503})
-      else data=roster(u.pathname.includes('/101/')?'home':'away')
+      else data=roster(u.pathname.includes('/101/')?'home':'away',fullLineup)
     }else if(u.pathname==='/api/v1/people'){
       data={people:[...u.searchParams.get('personIds').split(',')].map(k=>({
         id:Number(k),batSide:{code:'R'},pitchHand:{code:'L'}}))}
@@ -50,6 +54,9 @@ function fakeNetwork({missingRoster=false,oldGame=false}={}){
       data={hourly:{time:['2026-07-02T22:00'],temperature_2m:[29],
         wind_speed_10m:[17],wind_direction_10m:[180],
         relative_humidity_2m:[65],precipitation_probability:[20]}}
+    }else if(u.pathname.endsWith('/standings')){
+      data={records:[{teamRecords:[{team:{id:101},wins:45,losses:40},
+        {team:{id:102},wins:40,losses:45}]}]}
     }else if(u.pathname.endsWith('/news')){
       data={articles:[{headline:'Home Giants prepare to face Away Bears',
         published:'2026-07-01T10:00:00Z'}]}
@@ -141,4 +148,23 @@ test('research review explains totals integer-line pushes and blocks ticket with
   assert.ok(review.reviewedMarkets[0].contradictoryEvidence.some(t=>t.includes('reglas')))
   assert.equal(review.evidenceGates.lineupsConfirmed,false)
   assert.equal(review.evidenceGates.bothRostersVerified,false)
+})
+
+test('nine verified batters per team cross every opposing starter and available bullpen pitcher',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const r=await researchMlbCase(date,812345,mock.fetcher,at,{},[])
+  assert.equal(r.lineupStatus.home,'confirmed')
+  assert.equal(r.lineupStatus.away,'confirmed')
+  const hb=r.rosters.home.filter(x=>x.lineupConfirmed)
+  const ab=r.rosters.away.filter(x=>x.lineupConfirmed)
+  assert.equal(hb.length,9)
+  assert.equal(ab.length,9)
+  assert.equal(r.matchups.length,36)
+  assert.equal(new Set(r.matchups.map(x=>x.batterId+':'+x.pitcherId)).size,36)
+  assert.ok(r.matchups.every(x=>x.pitcherId<2000 ? x.batterId>2000 : x.batterId<2000))
+  const report=reviewMlbResearch(r)
+  assert.equal(report.evidenceGates.bothRostersVerified,true)
+  assert.equal(report.evidenceGates.lineupsConfirmed,true)
+  assert.equal(report.eligibility,'research-only')
+  assert.equal(report.eligibleForTicket,false)
 })
