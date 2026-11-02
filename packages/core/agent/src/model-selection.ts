@@ -876,6 +876,7 @@ export function isPhoenixAutoBoundedImplementation(text: string): boolean {
   const consequential = /\b(?:main|stable|merge|fusionar|push|deploy|despliegue|desplegar|producci[oó]n|production|credenciales?|secrets?|seguridad|security|pagos?|payments?|clinical|cl[ií]nico|m[eé]dico|pacientes?|oauth|infraestructura|architecture|arquitectura|migraci[oó]n|database|base\s+de\s+datos|servidores?)\b/iu
   // A bounded library/module differs from an entire application, platform or
   // service. Large-creation heuristics alone must not penalize one testable module.
+  // oxlint-disable-next-line @stylistic/max-len -- System-level builds are intentionally excluded from the bounded lane.
   const systemScope = /\b(?:sistemas?|aplicaciones?|applications?|apps?|plataformas?|platforms?|sitios?|webs?|motores?|hosp(?:ital|itales)|saas|software)\b/iu
   return artifact.test(request) && verification.test(request)
     && criteria.test(request) && !consequential.test(request) && !systemScope.test(request)
