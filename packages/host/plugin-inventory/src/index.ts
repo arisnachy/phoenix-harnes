@@ -430,7 +430,10 @@ export class PluginInventoryGateway extends TypertRemoteService {
   /** Owner-approved single-tool routing, stored outside the model's reach. */
   @Remote('setOpenClawPluginTool')
   async setOpenClawPluginTool(request: OpenClawRoutingRequest): Promise<OpenClawRoutingSnapshot> {
-    return setOpenClawRoutingPermission(request)
+    const [snapshot, credential] = await Promise.all([
+      setOpenClawRoutingPermission(request), this.openClawGatewayCredential(),
+    ])
+    return { ...snapshot, gatewayCredentialConfigured: credential.configured }
   }
 
   @Remote('searchMcpRegistry')
