@@ -216,6 +216,7 @@ function verifiedOdds(fixture:MlbFixture,quotes:MarketOutcome[],now:number):Mark
   const target=Date.parse(fixture.date)
   return quotes.filter(q=>{
     const qdate=Date.parse(q.timeIso??q.time),observed=Date.parse(q.updatedAt)
+    if(q.sportKey!==undefined&&q.sportKey!=='baseball_mlb')return false
     if(!Number.isFinite(qdate)||!Number.isFinite(observed)||observed>now||
       now-observed>3_600_000||Math.abs(qdate-target)>3_600_000)return false
     return normalize(q.home)===h&&normalize(q.away)===a&&
@@ -541,12 +542,16 @@ export async function researchMlbCase(
     .filter(name=>name.length>=5)
   const news=arr(obj(newsFeed).articles).flatMap(raw=>{
     const a=obj(raw),headline=word(a.headline,200),description=word(a.description,320)
-    if(!headline||!clubNames.some(name=>normalize(headline+' '+description).includes(name)))return []
-    return[{headline,published:word(a.published,60),source:'ESPN MLB News · titular público, no lesión confirmada'}]
+    const published=word(a.published,60),publishedAt=Date.parse(published)
+    // A later article must not enter a dossier as evidence known at checkedAt.
+    if(!headline||!Number.isFinite(publishedAt)||publishedAt>now||
+      !clubNames.some(name=>normalize(headline+' '+description).includes(name)))return []
+    return[{headline,published,source:'ESPN MLB News · titular público, no lesión confirmada'}]
   }).slice(0,12)
   const editorial=await discoverEditorialResearch(
     fixture.home.name+' '+fixture.away.name,['covers','vegasinsider'],fetcher,now)
-  const externalHeadlines=editorial.hits.map(x=>({
+  const externalHeadlines=editorial.hits.filter(x=>!x.publishedAt||
+    (Number.isFinite(Date.parse(x.publishedAt))&&Date.parse(x.publishedAt)<=now)).map(x=>({
     headline:x.headline,published:x.publishedAt,source:x.publisher,
     status:'headline-only' as const,
   }))
