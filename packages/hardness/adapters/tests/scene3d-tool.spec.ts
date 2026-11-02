@@ -118,7 +118,7 @@ describe('phoenix_3d actual geometry tool',()=>{
       .rejects.toThrow(/nodes/u)
     await expect(tool.execute({ title, scene: { nodes: [{
       type: 'box', name: 'Bicicleta', position: [0,0,0], size: [1,1,1], color: '#ffffff',
-    }] } }, execution())).resolves.toMatchObject({scene:{nodes:[{name:'Bicicleta'}]}})
+    }] } }, execution())).rejects.toThrow(/Escena compuesta insuficiente/u)
   })
   it('validates general-purpose animation tracks with named parts and bounded keyframes',async()=>{
     const tool=createPhoenix3DTool()
