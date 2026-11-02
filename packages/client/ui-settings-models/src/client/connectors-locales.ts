@@ -2,7 +2,7 @@
 export const connectorEn = {
   storeRuntimeReady: "OpenClaw runtime detected",
   storeMyPlugins: "Installed OpenClaw plugins",
-  storePluginLoaded: "Loaded in OpenClaw",
+  storePluginLoaded: "Recorded as loaded (check live Gateway)",
   storePluginNeedsRuntime: "Enabled, waiting for runtime",
   storePluginFailed: "OpenClaw reported a loading error",
   storePluginDisabled: "Installed, disabled",
@@ -198,7 +198,7 @@ export type ConnectorKey = keyof typeof connectorEn
 export const connectorEs: { [Key in ConnectorKey]: string } = {
   storeRuntimeReady: "Runtime de OpenClaw detectado",
   storeMyPlugins: "Mis plugins de OpenClaw",
-  storePluginLoaded: "Cargado en OpenClaw",
+  storePluginLoaded: "Registrado como cargado (verificar Gateway)",
   storePluginNeedsRuntime: "Habilitado, pendiente del runtime",
   storePluginFailed: "Error de carga en OpenClaw",
   storePluginDisabled: "Instalado, deshabilitado",
@@ -391,7 +391,7 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
 export const connectorZh: { [Key in ConnectorKey]: string } = {
   storeRuntimeReady: "已检测到 OpenClaw 运行时",
   storeMyPlugins: "已安装的 OpenClaw 插件",
-  storePluginLoaded: "已在 OpenClaw 加载",
+  storePluginLoaded: "记录为已加载（需核对实时 Gateway）",
   storePluginNeedsRuntime: "已启用，等待运行时",
   storePluginFailed: "OpenClaw 报告加载失败",
   storePluginDisabled: "已安装，未启用",
