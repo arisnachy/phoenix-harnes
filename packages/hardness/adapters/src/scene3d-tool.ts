@@ -289,6 +289,9 @@ export function createPhoenix3DTool(): ToolDefinition {
         ? pelicanScene()
         : args.demo === true && supplied === undefined
           ? tropicalVillaScene() : supplied ?? normalizeScene(undefined, title)
+      if (pelican && !alone && (scene.nodes.length < 2 || scene.nodes.every(node => node.type === 'box'))) {
+        throw new ToolArgsError(['Escena compuesta insuficiente: incluye el pelícano, sus acompañantes y el entorno solicitados.'])
+      }
       const required = args.requiredObjects
       if (required !== undefined) {
         if (!Array.isArray(required) || required.length < 1 || required.length > 12
