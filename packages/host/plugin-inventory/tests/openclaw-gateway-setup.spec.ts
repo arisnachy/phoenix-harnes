@@ -19,7 +19,12 @@ describe('OpenClaw local Gateway pairing', () => {
     expect(() => parseOpenClawDashboard({ ...valid, port: 18888 })).toThrow('trusted local')
     expect(() => parseOpenClawDashboard({ ...valid,
       browserUrl: valid.url + '#bootstrap=one-time-private-link' })).toThrow('expired')
-    expect(() => parseOpenClawDashboard({ ...valid,
-      url: 'http://127.0.0.1:18789/' })).toThrow('not available')
+    expect(parseOpenClawDashboard({ ...valid,
+      url: 'http://127.0.0.1:18789/' }).token).toBeUndefined()
+    expect(parseOpenClawDashboard({
+      url: 'https://localhost:18789/',
+      browserUrl: 'https://localhost:18789/#bootstrap=one-time-private-link',
+      port: 18789,
+    }).authorizationUrl).toContain('https://localhost:18789/')
   })
 })
