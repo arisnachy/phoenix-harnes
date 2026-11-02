@@ -37,7 +37,7 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
   const [routingBusy, setRoutingBusy] = useState<string | null>(null)
   const [routingError, setRoutingError] = useState(false)
   const [routingRefresh, setRoutingRefresh] = useState(0)
-  const [gatewayToken, setGatewayToken] = useState('')
+  const [authorizationUrl, setAuthorizationUrl] = useState<string | null>(null)
   const [gatewayCredential, setGatewayCredential] = useState<OpenClawGatewayCredentialState | null>(null)
   const [gatewaySaving, setGatewaySaving] = useState(false)
   const browse = registry?.clawHubCatalog
@@ -101,17 +101,17 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
   }, [readGatewayCredential, routingRefresh])
 
   const saveToken = (): void => {
-    if (gatewaySaving || gatewayToken.length < 16 || saveGatewayCredential === undefined) return
+    if (gatewaySaving || saveGatewayCredential === undefined) return
     setGatewaySaving(true)
     setNotice('')
-    void saveGatewayCredential({ token: gatewayToken }).then(
+    void saveGatewayCredential({ auto: true }).then(
       value => {
-        setGatewayToken('')
         setGatewayCredential(value)
+        setAuthorizationUrl(value.authorizationUrl ?? null)
         setNotice(t('storeGatewayTokenSaved'))
         setRoutingRefresh(n => n + 1)
       },
-      () => { setNotice(t('storeGatewayTokenError')) },
+      () => { setAuthorizationUrl(null); setNotice(t('storeGatewayTokenError')) },
     ).finally(() => { setGatewaySaving(false) })
   }
 
@@ -251,22 +251,21 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
             <h3>{t('storeGatewayTokenTitle')}</h3>
             <p>{t('storeGatewayTokenHint')}</p>
           </div>
-          <a href="http://127.0.0.1:18789/" target="_blank" rel="noreferrer">
-            {t('storeGatewayOpenUi')}
-          </a>
+          {authorizationUrl ? (
+            <a href={authorizationUrl} target="_blank" rel="noreferrer">
+              {t('storeGatewayOpenUi')}
+            </a>
+          ) : null}
         </div>
         <p className={css.safetyNote}>{gatewayCredential?.configured
           ? t('storeGatewayTokenReady') : t('storeGatewayTokenMissing')}</p>
-        <form className={css.toolbar} onSubmit={event => { event.preventDefault(); saveToken() }}>
-          <input className={css.search} type="password" autoComplete="new-password"
-            aria-label={t('storeGatewayTokenPlaceholder')}
-            placeholder={t('storeGatewayTokenPlaceholder')}
-            value={gatewayToken} onChange={event => { setGatewayToken(event.currentTarget.value) }}/>
-          <button type="submit" className={css.compactButton}
-            disabled={gatewaySaving || gatewayToken.length < 16 || saveGatewayCredential === undefined}>
+        <div className={css.toolbar}>
+          <button className={css.compactButton} type="button"
+            disabled={gatewaySaving || saveGatewayCredential === undefined}
+            onClick={saveToken}>
             {gatewaySaving ? t('storeGatewayTokenSaving') : t('storeGatewayTokenSave')}
           </button>
-        </form>
+        </div>
         <p className={css.safetyNote}>{t('storeGatewaySecurity')}</p>
       </div>
       <div className={css.block} aria-label={t('storeRoutingTitle')}>

@@ -15,6 +15,7 @@ import { defineTool } from '@phoenix-ai/dsh-tools'
 const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
 const policyPath = join(home, 'toolchains', 'openclaw-routing.json')
 const auditPath = join(home, 'toolchains', 'openclaw-routing-audit.jsonl')
+const localGatewayPath = join(home, 'toolchains', 'openclaw-gateway-local.json')
 const IDENT = /^[a-zA-Z0-9@][a-zA-Z0-9._@/:-]{0,100}$/
 const DENIED = new Set([
   'exec', 'spawn', 'shell', 'fs_write', 'fs_delete', 'fs_move', 'apply_patch',
@@ -148,6 +149,17 @@ export async function invokeApprovedOpenClawPlugin(
     result_json: JSON.stringify((raw as { result?: unknown }).result ?? null).slice(0, 24_000),
   }
 }
+/** Resolve the authenticated local Gateway port at invocation time, not at Host startup. */
+function openClawGatewayPort(): number {
+  const override = process.env.PHOENIX_OPENCLAW_GATEWAY_PORT
+  if (override !== undefined) return Number(override)
+  try {
+    const value = obj(JSON.parse(readFileSync(localGatewayPath, 'utf8')) as unknown).port
+    if (typeof value === 'number' && Number.isInteger(value)
+      && value >= 1024 && value <= 65535) return value
+  } catch { /* Use the conventional localhost port. */ }
+  return 18789
+}
 export function registerOpenClawPluginTools(ctx: Context): void {
   if (process.env.PHOENIX_OPENCLAW_PLUGIN_ROUTING === '0') return
   // Keep the tool registered so a freshly authorized Gateway is usable
@@ -162,9 +174,6 @@ export function registerOpenClawPluginTools(ctx: Context): void {
     } catch { /* use the explicitly configured environment credential */ }
     return process.env.PHOENIX_OPENCLAW_GATEWAY_TOKEN ?? process.env.OPENCLAW_GATEWAY_TOKEN
   }
-  const port = Number(process.env.PHOENIX_OPENCLAW_GATEWAY_PORT ?? '18789')
-  if (!Number.isInteger(port) || port < 1024 || port > 65535) return
-
   ctx.tools.register(defineTool({
     name: 'openclaw_plugin_catalog',
     description: 'List the exact external OpenClaw plugin tools approved by the owner in PHOENIX Settings. The tools are provided by a separate OpenClaw Gateway; this does not grant access to other plugins.',
@@ -199,7 +208,7 @@ export function registerOpenClawPluginTools(ctx: Context): void {
       if (token === undefined) throw new Error('Configure the private OpenClaw Gateway credential in PHOENIX Connectors')
       return invokeApprovedOpenClawPlugin(
         { pluginId: args.plugin_id, toolName: args.tool_name }, args.arguments_json,
-        { token, port, signal: execution.signal },
+        { token, port: openClawGatewayPort(), signal: execution.signal },
       )
     },
     presentCall: args => ({ card: 'generic', kind: 'execute',
