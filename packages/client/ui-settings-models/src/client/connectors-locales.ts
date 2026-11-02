@@ -1,5 +1,8 @@
 /** Copy for the dedicated Settings → Connectors surface. */
 export const connectorEn = {
+  storeInstalledStatus: "Installed locally",
+  storeShowMore: "Show more ClawHub results",
+  storeInstallIsNotActivation: "A downloaded skill or plugin is not automatically active for Kira. Verify and authorize its capabilities below.",
   storeGatewayTokenTitle: "Connect OpenClaw automatically",
   storeGatewayTokenHint: "PHOENIX prepares your local OpenClaw Gateway and keeps its operator credential private. No token copying.",
   storeGatewayTokenPlaceholder: "Private Gateway token",
@@ -185,6 +188,9 @@ export type ConnectorKey = keyof typeof connectorEn
 
 /** Spanish copy for the dedicated Settings → Connectors surface. */
 export const connectorEs: { [Key in ConnectorKey]: string } = {
+  storeInstalledStatus: "Instalado localmente",
+  storeShowMore: "Mostrar más resultados",
+  storeInstallIsNotActivation: "Instalar una Skill o plugin no significa que Kira pueda usarlo. Verifica su estado y autoriza sus capacidades abajo.",
   storeGatewayTokenTitle: "Conexión automática con OpenClaw",
   storeGatewayTokenHint: "PHOENIX prepara el Gateway local y guarda internamente la credencial de operador. No tienes que buscar ni copiar tokens.",
   storeGatewayTokenPlaceholder: "Token privado del Gateway",
@@ -367,6 +373,9 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
 
 /** Simplified Chinese copy for the dedicated Settings → Connectors surface. */
 export const connectorZh: { [Key in ConnectorKey]: string } = {
+  storeInstalledStatus: "已在本地安装",
+  storeShowMore: "显示更多 ClawHub 结果",
+  storeInstallIsNotActivation: "安装技能或插件并不代表 Kira 可以使用。请验证状态并授权相应能力。",
   storeGatewayTokenTitle: "自动连接 OpenClaw",
   storeGatewayTokenHint: "PHOENIX 自动准备本地 Gateway，并安全保存操作员凭证，无需手动复制令牌。",
   storeGatewayTokenPlaceholder: "私有 Gateway 令牌",

@@ -11,18 +11,20 @@ export interface ClawHubConnectorStoreProps {
   connectedIds: readonly string[]
 }
 const families: readonly ClawHubFamily[] = ['code-plugin', 'bundle-plugin', 'skill']
-function duplicate(item: ClawHubCatalogItem, connectedIds: readonly string[]): boolean {
-  if (item.installed) return true
+function duplicate(item: ClawHubCatalogItem, _connectedIds: readonly string[]): boolean {
+  // Never duplicate a PHOENIX-native connector, regardless of login status.
+  // Installed ClawHub resources are retained instead of silently disappearing.
   const slug = item.name.split('/').at(-1)?.toLowerCase() ?? ''
-  return CONNECTOR_CATALOG.some(def => connectedIds.includes(def.id)
-    && [def.id, def.providerFamily, def.name, ...(def.aliases ?? [])]
+  return CONNECTOR_CATALOG.some(def =>
+    [def.id, def.providerFamily, def.name, ...(def.aliases ?? [])]
       .some(alias => alias?.toLowerCase() === slug))
 }
 
 /** Live ClawHub store in the existing Connectors page, not a second settings area. */
 export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConnectorStoreProps): ReactNode {
   const [family, setFamily] = useState<ClawHubFamily>('code-plugin')
-  const [official, setOfficial] = useState(true)
+  const [official, setOfficial] = useState(false)
+  const [limit, setLimit] = useState(24)
   const [draft, setDraft] = useState('')
   const [query, setQuery] = useState('')
   const [reload, setReload] = useState(0)
@@ -61,12 +63,12 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
     let active = true
     setItems(null)
     setError(false)
-    void browse({ family, query, officialOnly: official, limit: 16 }).then(
+    void browse({ family, query, officialOnly: official, limit }).then(
       value => { if (active) setItems(value.items) },
       () => { if (active) setError(true) },
     )
     return () => { active = false }
-  }, [browse, family, query, official, reload])
+  }, [browse, family, query, official, limit, reload])
 
   useEffect(() => {
     if (inspectTools === undefined) return
@@ -116,6 +118,7 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
   }
 
   const fresh = (items ?? []).filter(item => !duplicate(item, connectedIds))
+    .sort((left, right) => Number(right.installed) - Number(left.installed))
   const hidden = (items?.length ?? 0) - fresh.length
   const familyLabel = (value: ClawHubFamily): string => value === 'skill'
     ? t('storeSkills') : value === 'code-plugin' ? t('storePlugins') : t('storeBundles')
@@ -138,6 +141,8 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
       () => {
         setInstalledPlugins(current => current.includes(item.name) ? current : [...current, item.name])
         setNotice(t('storeNativeInstalled'))
+        setRoutingRefresh(n => n + 1)
+        setReload(n => n + 1)
       },
       () => { setNotice(t('storeNativeInstallError')) },
     ).finally(() => { setBusy(null) })
@@ -205,12 +210,15 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
               <strong className={css.presetName}>{item.displayName}</strong>
               <small>{item.name} · {item.version}</small>
               <p>{item.description}</p>
-              <div className={css.chips}><span>{item.official ? t('storeOfficial') : t('storeCommunity')}</span></div>
+              <div className={css.chips}>
+                <span>{item.official ? t('storeOfficial') : t('storeCommunity')}</span>
+                {item.installed ? <span>{t('storeInstalledStatus')}</span> : null}
+              </div>
               {item.family === 'skill' ? (
                 <button className={css.compactButton} type="button"
-                  disabled={busy !== null || installSkill === undefined || runtime?.cli === 'missing'}
+                  disabled={busy !== null || item.installed || installSkill === undefined || runtime?.cliStatus !== 'ready'}
                   onClick={() => { install(item) }}>
-                  {busy === item.name ? t('storeInstalling') : t('storeInstall')}
+                  {item.installed ? t('storeInstalledStatus') : busy === item.name ? t('storeInstalling') : t('storeInstall')}
                 </button>
               ) : (
                 <div className={css.toolbar}>
@@ -244,7 +252,14 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
           ))}
         </div>
       ) : null}
+      {items !== null && items.length >= limit && limit < 60 ? (
+        <button type="button" className={css.compactButton}
+          onClick={() => { setLimit(current => Math.min(current + 24, 60)) }}>
+          {t('storeShowMore')}
+        </button>
+      ) : null}
       {notice ? <p role="status">{notice}</p> : null}
+      <p className={css.safetyNote}>{t('storeInstallIsNotActivation')}</p>
       <div className={css.block} aria-label={t('storeGatewayTokenTitle')}>
         <div className={css.heading}>
           <div>
