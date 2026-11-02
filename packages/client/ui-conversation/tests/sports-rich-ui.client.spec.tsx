@@ -401,6 +401,35 @@ describe('ESPN universal adaptive panels',()=>{
     expect(container.textContent).toContain('56.1%')
     expect(container.textContent).toContain('43.9%')
   })
+  it('shows both verified team logos and complete market odds with attributed implied probabilities',()=>{
+    const block=parseGenerativeUiBlock({component:'sports_espn_dashboard',version:1,props:{
+      view:'event',title:'Vegas Golden Knights vs Boston Bruins',subtitle:'NHL',
+      source:'ESPN · sportsbook',checkedAt:'2026-11-02T16:00:00Z',
+      note:'Probabilidades implícitas de mercado: no son predicción propia',
+      sections:[
+        {heading:'Forma reciente y descanso',kind:'metrics',items:[
+          {label:'Boston Bruins',value:'7V 3D',image:'https://a.espncdn.com/i/teamlogos/nhl/500/bos.png'},
+          {label:'Vegas Golden Knights',value:'5V 5D',image:'https://a.espncdn.com/i/teamlogos/nhl/500/vgk.png'}]},
+        {heading:'Probabilidades implícitas del mercado',kind:'metrics',items:[
+          {label:'Boston Bruins',value:'47.7%',detail:'Mercado; no modelo'},
+          {label:'Vegas Golden Knights',value:'52.3%',detail:'Mercado; no modelo'}]},
+        {heading:'Cuotas completas · sin promesa de acierto',kind:'list',items:[
+          {label:'h2h · BetOnline',value:'Boston Bruins 2.03 | Vegas Golden Knights 1.85',
+           detail:'Ambas cuotas de la misma casa'}]},
+      ],
+    }})
+    if(!block)throw Error('Missing valid preview')
+    const {container}=render(<GenerativeUi block={block}/>)
+    const cards=container.querySelector('[data-generative-ui="sports_espn_dashboard"]')
+    const imgs=cards?.querySelectorAll('img')??[]
+    expect(imgs).toHaveLength(2)
+    expect(container.textContent).toContain('Implícita mercado · Boston Bruins')
+    expect(container.textContent).toContain('Implícita mercado · Vegas Golden Knights')
+    expect(container.textContent).toContain('47.7%')
+    expect(container.textContent).toContain('52.3%')
+    expect(container.textContent).toContain('2.03')
+    expect(container.textContent).toContain('1.85')
+  })
   it('rejects hostile photos, scripts, excessive sections and undeclared data',()=>{
     const base=template.props
     expect(parseGenerativeUiBlock({ ...template,props:{ ...base,

@@ -352,7 +352,9 @@ function sportsVisualIdentity(card: GenerativeUiBlock): string | null {
     return 'game:' + (card.props.eventId ?? card.props.title).toLowerCase()
   }
   if (card.component === 'sports_espn_dashboard' && card.props.view === 'event') {
-    return 'analysis:' + card.props.title.toLowerCase()
+    // Matchup investigations are drafts until the final candidate is chosen:
+    // update the same analysis surface instead of stacking exploratory cards.
+    return 'analysis:active'
   }
   if (card.component === 'sports_schedule_card') {
     return 'slate:' + card.props.date + ':' + (card.props.providerLeague ?? card.props.league ?? '')
