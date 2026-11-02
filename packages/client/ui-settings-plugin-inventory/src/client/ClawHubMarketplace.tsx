@@ -3,7 +3,6 @@ import type {
   ClawHubCatalogItem, ClawHubCatalogRequest, ClawHubCatalogSnapshot, ClawHubFamily,
   ClawHubInstallReceipt, ClawHubInstallRequest, ClawHubState,
 } from '@phoenix-ai/dsh-api-remotes/client'
-import type { PluginInventoryLocaleKey } from './locales.ts'
 import type { PluginInventorySettingsTabProps } from './PluginInventorySettingsTab.tsx'
 import css from './PluginInventorySettingsTab.module.css'
 
