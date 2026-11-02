@@ -4,6 +4,7 @@
  * The analyst (Kira) uses this structured dossier to reason about markets.
  */
 import { getFeed,hasSportsPermission,type MarketOutcome } from './sports.ts'
+import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
 
 type Obj=Record<string,unknown>
 const obj=(v:unknown):Obj=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Obj:{}
@@ -57,6 +58,7 @@ export type MlbCase={
   matchups:MlbMatchup[];venue:{name:string;latitude:number|null;longitude:number|null;roof:'unknown'};
   weather:MlbWeather|null;injuries:Array<{team:string;name:string;status:'listed-in-injured-roster'}>;
   news:Array<{headline:string;published:string;source:string}>;
+  externalHeadlines:Array<{headline:string;published:string|null;source:string;status:'headline-only'}>;
   odds:MarketOutcome[];scenarioAnalysis:string[];missingEvidence:string[];
   opportunity:MlbOpportunity;
   uiBlock:{component:'sports_espn_dashboard';version:1;props:{
@@ -254,6 +256,9 @@ function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
     detail:'Confirmar fecha, disponibilidad y posible activación antes del partido'})))
   add('Noticias relacionadas',result.news.map(p=>({
     label:p.headline,value:p.source,detail:p.published||'Fecha no publicada'})))
+  add('Contraste editorial externo',result.externalHeadlines.map(p=>({
+    label:p.headline,value:p.source+' · titular indexado',
+    detail:p.published??'Sin fecha confirmada; NO es un pick validado'})))
   add('Matriz roster contra abridores y bullpen',result.matchups.slice(0,30).map(m=>({
     label:m.batter+' vs '+m.pitcher,value:m.pitcherRole==='probable-starter'?'Abridor probable':'Bullpen posible',
     detail:[...m.observations.slice(0,3),...m.missing.slice(0,1)].join(' · ')})))
@@ -472,6 +477,12 @@ export async function researchMlbCase(
     if(!headline||!clubNames.some(name=>normalize(headline+' '+description).includes(name)))return []
     return[{headline,published:word(a.published,60),source:'ESPN MLB News · titular público, no lesión confirmada'}]
   }).slice(0,12)
+  const editorial=await discoverEditorialResearch(
+    fixture.home.name+' '+fixture.away.name,['covers','vegasinsider'],fetcher,now)
+  const externalHeadlines=editorial.hits.map(x=>({
+    headline:x.headline,published:x.publishedAt,source:x.publisher,
+    status:'headline-only' as const,
+  }))
   const missingEvidence=[
     ...(lineupStatus.home==='unconfirmed'?['Alineación local todavía no confirmada']:[]),
     ...(lineupStatus.away==='unconfirmed'?['Alineación visitante todavía no confirmada']:[]),
@@ -488,6 +499,8 @@ export async function researchMlbCase(
     missingEvidence.push('Rosters activos incompletos o no disponibles')
   if(!profiles.length)missingEvidence.push('Estadísticas individuales no disponibles')
   if(!news.length)missingEvidence.push('Noticias específicas de ambos equipos no verificadas')
+  if(!externalHeadlines.length)missingEvidence.push('Sin titulares externos verificables sobre el encuentro')
+  missingEvidence.push('Un titular de Covers/VegasInsider no verifica un pick ni su argumento completo')
   if(injuryFeeds.some(x=>x.data===null))missingEvidence.push('Parte de roster lesionado MLB incompleto')
   if(!quotes.length)missingEvidence.push('Cuotas reales no suministradas al expediente')
   const odds=verifiedOdds(fixture,quotes,now)
@@ -522,7 +535,7 @@ export async function researchMlbCase(
     missingEvidence,marketResearchReady:odds.length>0,priced:false}
   const dossier:Omit<MlbCase,'uiBlock'>={fixture,checkedAt:iso(now),season,sources,
     teamForm,seasonRecord,rosters:rosterMap,starters,bullpen,lineupStatus,matchups,
-    venue:site,weather,injuries,news,odds,scenarioAnalysis:scenarios,missingEvidence,opportunity}
+    venue:site,weather,injuries,news,externalHeadlines,odds,scenarioAnalysis:scenarios,missingEvidence,opportunity}
   return{...dossier,uiBlock:makePanel(dossier)}
 }
 /** Date-scoped, no implicit future fixtures: return a verifiable board or exact-game dossier. */
