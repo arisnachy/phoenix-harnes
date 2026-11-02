@@ -5,6 +5,7 @@ on:
     branches: [main, stable]
     paths:
       - 'packages/hardness/adapters/src/scene3d-tool.ts'
+      - 'packages/hardness/adapters/src/scene3d-pelican.ts'
       - 'packages/hardness/adapters/src/index.ts'
       - 'packages/hardness/adapters/tests/scene3d-tool.spec.ts'
       - 'packages/hardness/adapters/tests/adapters.spec.ts'
