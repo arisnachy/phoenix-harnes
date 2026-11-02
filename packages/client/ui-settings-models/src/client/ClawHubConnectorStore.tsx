@@ -1,0 +1,124 @@
+import { useEffect, useState, type ReactNode } from 'react'
+import type { ClawHubCatalogItem, ClawHubFamily, ClawHubState } from '@phoenix-ai/dsh-api-remotes/client'
+import type { ConnectorKey } from './connectors-locales.ts'
+import type { McpRegistryClient } from './AuthorizationPanel.tsx'
+import { CONNECTOR_CATALOG } from './connector-catalog.ts'
+import css from './ConnectorsSection.module.css'
+
+export interface ClawHubConnectorStoreProps {
+  registry?: McpRegistryClient
+  t: (key: ConnectorKey) => string
+  connectedIds: readonly string[]
+}
+const families: readonly ClawHubFamily[] = ['code-plugin', 'bundle-plugin', 'skill']
+function duplicate(item: ClawHubCatalogItem, connectedIds: readonly string[]): boolean {
+  if (item.installed) return true
+  const slug = item.name.split('/').at(-1)?.toLowerCase() ?? ''
+  return CONNECTOR_CATALOG.some(def => connectedIds.includes(def.id)
+    && [def.id, def.providerFamily, def.name, ...(def.aliases ?? [])]
+      .some(alias => alias?.toLowerCase() === slug))
+}
+
+/** Live ClawHub store in the existing Connectors page, not a second settings area. */
+export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConnectorStoreProps): ReactNode {
+  const [family, setFamily] = useState<ClawHubFamily>('code-plugin')
+  const [official, setOfficial] = useState(true)
+  const [draft, setDraft] = useState('')
+  const [query, setQuery] = useState('')
+  const [reload, setReload] = useState(0)
+  const [items, setItems] = useState<readonly ClawHubCatalogItem[] | null>(null)
+  const [runtime, setRuntime] = useState<ClawHubState | null>(null)
+  const [error, setError] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [notice, setNotice] = useState('')
+  const browse = registry?.clawHubCatalog
+  const readState = registry?.clawHubState
+  const installSkill = registry?.clawHubInstallSkill
+
+  useEffect(() => {
+    if (readState === undefined) return
+    let active = true
+    void readState().then(value => { if (active) setRuntime(value) }, () => { if (active) setRuntime(null) })
+    return () => { active = false }
+  }, [readState, reload])
+  useEffect(() => {
+    if (browse === undefined) return
+    let active = true
+    setItems(null)
+    setError(false)
+    void browse({ family, query, officialOnly: official, limit: 16 }).then(
+      value => { if (active) setItems(value.items) },
+      () => { if (active) setError(true) },
+    )
+    return () => { active = false }
+  }, [browse, family, query, official, reload])
+
+  const fresh = (items ?? []).filter(item => !duplicate(item, connectedIds))
+  const hidden = (items?.length ?? 0) - fresh.length
+  const familyLabel = (value: ClawHubFamily): string => value === 'skill'
+    ? t('storeSkills') : value === 'code-plugin' ? t('storePlugins') : t('storeBundles')
+  const install = (item: ClawHubCatalogItem): void => {
+    if (item.family !== 'skill' || installSkill === undefined || busy !== null || runtime?.cli === 'missing') return
+    setBusy(item.name)
+    setNotice('')
+    void installSkill({ name: item.name, family: 'skill' }).then(
+      () => { setNotice(t('storeInstalled')); setReload(n => n + 1) },
+      () => { setNotice(t('storeInstallFailed')) },
+    ).finally(() => { setBusy(null) })
+  }
+
+  return (
+    <section className={css.block} data-clawhub-store="true" aria-label={t('storeTitle')}>
+      <div className={css.heading}>
+        <div><h3>{t('storeTitle')}</h3><p>{t('storeDescription')}</p></div>
+        <a href="https://clawhub.ai" target="_blank" rel="noreferrer">{t('storeWebsite')}</a>
+      </div>
+      <div className={css.toolbar}>
+        <div className={css.filters}>
+          {families.map(value => (
+            <button type="button" key={value} aria-pressed={family === value}
+              className={family === value ? css.filterActive : undefined}
+              onClick={() => { setFamily(value); setQuery(''); setDraft('') }}>{familyLabel(value)}</button>
+          ))}
+        </div>
+        <label className={css.safetyNote}>
+          <input type="checkbox" checked={official} onChange={e => { setOfficial(e.currentTarget.checked) }}/>
+          {' '}{t('storeOfficial')}
+        </label>
+      </div>
+      <form className={css.toolbar} onSubmit={event => { event.preventDefault(); setQuery(draft.trim()) }}>
+        <input className={css.search} type="search" maxLength={80} aria-label={t('storeSearch')}
+          placeholder={t('storeSearch')} value={draft} onChange={e => { setDraft(e.currentTarget.value) }} />
+        <button className={css.compactButton} type="submit">{t('storeSearchAction')}</button>
+        <button className={css.compactButton} type="button" onClick={() => { setReload(n => n + 1) }}>
+          {t('storeReload')}
+        </button>
+      </form>
+      {error || browse === undefined ? <p role="alert">{t('storeUnavailable')}</p> : null}
+      {!error && browse !== undefined && items === null ? <p>{t('storeLoading')}</p> : null}
+      {hidden > 0 ? <p className={css.safetyNote}>{hidden} {t('storeHidden')}</p> : null}
+      {items !== null && fresh.length === 0 ? <p>{t('storeEmpty')}</p> : null}
+      {items !== null && fresh.length > 0 ? (
+        <div className={css.presetGrid}>
+          {fresh.map(item => (
+            <article key={item.family + item.name} className={css.presetCard}>
+              <strong className={css.presetName}>{item.displayName}</strong>
+              <small>{item.name} · {item.version}</small>
+              <p>{item.description}</p>
+              <div className={css.chips}><span>{item.official ? t('storeOfficial') : t('storeCommunity')}</span></div>
+              {item.family === 'skill' ? (
+                <button className={css.compactButton} type="button"
+                  disabled={busy !== null || installSkill === undefined || runtime?.cli === 'missing'}
+                  onClick={() => { install(item) }}>
+                  {busy === item.name ? t('storeInstalling') : t('storeInstall')}
+                </button>
+              ) : <small>{t('storeRequiresRuntime')}</small>}
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {notice ? <p role="status">{notice}</p> : null}
+      <p className={css.safetyNote}>{t('storeSafety')}</p>
+    </section>
+  )
+}
