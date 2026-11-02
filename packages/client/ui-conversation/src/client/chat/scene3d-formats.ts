@@ -1,4 +1,5 @@
 import type { Scene3D, Scene3DNode } from './Scene3DView.tsx'
+import { torusTriangles } from './scene3d-primitives.ts'
 
 /** Self-contained glTF 2.0 import/export. No CDN, executable scripts or external URI requests. */
 const MAX_BYTES=12_000_000
@@ -26,6 +27,7 @@ const subtract=(a:V3,b:V3):V3=>vector(a[0]-b[0],a[1]-b[1],a[2]-b[2])
 const cross=(a:V3,b:V3):V3=>vector(a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0])
 function primitiveTriangles(node:Node):number[]{
   if(node.type==='mesh')return Array.from(node.vertices??[])
+  if(node.type==='torus')return torusTriangles()
   const coords:number[]=[]
   const tri=(a:V3,b:V3,c:V3)=>coords.push(...a,...b,...c)
   const quad=(a:V3,b:V3,c:V3,d:V3)=>{tri(a,b,c);tri(a,c,d)}
