@@ -128,7 +128,7 @@ test('source-provenance dossier only joins current roster, eleven starters, inju
   assert.equal(r.markets.length,1)
   assert.equal(r.markets[0].approved,false)
   assert.ok(r.markets[0].questions.some(q=>q.includes('línea')))
-  assert.equal(r.coverage.level,'A')
+  assert.equal(r.coverage.level,'B') // No verified xG metric in this fixture
   assert.equal(r.referee,'Test Referee')
   assert.equal(r.weather.windKmh,12)
   assert.equal(r.opportunity.eligibleForTicket,false)
