@@ -25,7 +25,10 @@ export interface Scene3DQualityResult {
 const normalize = (text: string): string =>
   text.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
 
-/** Categorize models for specialized Blender/asset workflows, independently of language accents. */
+/** Categorize models for specialized asset workflows, independently of language accents.
+ * @param prompt - User's request describing the subject.
+ * @returns Modeling category for specialized production.
+ */
 export function classifyScene3DDomain(prompt: string): Scene3DDomain {
   const text = normalize(prompt)
   if (/\b(?:robot(?:s)?|androide(?:s)?|mecha|humanoid robot|droid)\b/u.test(text)) return 'robot'
@@ -36,7 +39,10 @@ export function classifyScene3DDomain(prompt: string): Scene3DDomain {
   return 'object'
 }
 
-/** Detect explicit studio/fidelity intent; never silently treat a high-quality request as preview. */
+/** Detect explicit production/fidelity intent without silently downgrading quality.
+ * @param prompt - User's quality and accuracy request.
+ * @returns The requested output tier.
+ */
 export function requestedScene3DLevel(prompt: string): Scene3DLevel {
   const text = normalize(prompt)
   if (/\b(?:exactitud|exacto|exacta|identic\w*|fidelidad|fidelity|precis\w*|1\s*:\s*1|medidas exactas|reconstruccion)\b/u.test(text)) return 'fidelity'
@@ -45,8 +51,12 @@ export function requestedScene3DLevel(prompt: string): Scene3DLevel {
 }
 
 /**
- * Native preview validation; high-quality and exact fidelity need independent
- * Blender, references and visual QA, not a pass obtained from polygon counts.
+ * Audit native preview structure; polygon counts cannot certify professional fidelity.
+ * @param scene - Geometric objects and optional animation information.
+ * @param prompt - Subject and visual intent.
+ * @param requiredObjects - Semantic object identifiers that must exist.
+ * @param level - Requested output quality tier.
+ * @returns Structural warnings and explicit production blockers.
  */
 export function auditScene3DQuality(
   scene: Scene3DQualityScene, prompt: string, requiredObjects: readonly string[] = [],
