@@ -60,7 +60,7 @@ describe('phoenix_3d actual geometry tool',()=>{
       expect(names).toContain(feature)
     }
     for (const node of nodes.filter(node => node.type === 'mesh')) {
-      expect(node.vertices?.length % 9).toBe(0)
+      expect((node.vertices?.length ?? 0) % 9).toBe(0)
       expect(node.vertices?.every(Number.isFinite)).toBe(true)
     }
   })

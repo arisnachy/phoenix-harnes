@@ -117,5 +117,6 @@ test('search discovers an ESPN player by name without inventing a numeric ID',as
   assert.equal(urls.length,1)
   assert.ok(urls[0].includes('Confirmed%20Athlete'))
   assert.equal(r.sections[0].items[0].label,'Confirmed Athlete')
-  assert.ok(r.sections[0].items[0].action?.prompt.includes('athleteId=3945274'))
+  assert.equal(r.sections[0].items[0].action,undefined)
+  assert.ok(r.sections[0].items[0].detail?.includes('3945274'))
 })
