@@ -24,6 +24,8 @@ export type {
   TokenTelemetrySnapshot,
   TokenTelemetryRecord,
   PluginInventorySnapshot,
+  PluginBulkActivationReceipt,
+  PluginEnableRequest,
   OpenClawProbeState,
   OpenClawRuntimeSnapshot,
   ClawHubCatalogRequest, ClawHubCatalogItem, ClawHubCatalogSnapshot,
