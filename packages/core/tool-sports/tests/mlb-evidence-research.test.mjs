@@ -20,7 +20,8 @@ const roster=(side,fullLineup=false)=>({roster:[
 ]})
 function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
   unrelatedGame=false,unknownLineupId=false,pitcherLogs=false,bvpHydration=false,
-  futureGameResult=false,futurePitcherLog=false,wrongVenue=false}={}){
+  futureGameResult=false,futurePitcherLog=false,wrongVenue=false,
+  olderReliefLog=false}={}){
   const calls=[]
   const fetcher=async(input)=>{
     const url=String(input)
@@ -69,6 +70,9 @@ function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
               numberOfPitches:130,earnedRuns:0,strikeOuts:20}}]:[]),
           {date:'2026-06-29',opponent:{id:777},stat:{gamesStarted:starter?1:0,
             inningsPitched:'5.2',numberOfPitches:88,earnedRuns:2,strikeOuts:7,baseOnBalls:2}},
+          ...(olderReliefLog?[{date:'2026-06-28',opponent:{id:780},
+            stat:{gamesStarted:starter?1:0,inningsPitched:'1.0',
+              numberOfPitches:17,earnedRuns:0,strikeOuts:2,baseOnBalls:1}}]:[]),
           {date:'2026-06-15',opponent:{id:778},stat:{gamesStarted:starter?1:0,
             inningsPitched:'6.0',numberOfPitches:92,earnedRuns:1,strikeOuts:8,baseOnBalls:1}},
         ]}]}
@@ -292,4 +296,21 @@ test('market research rejects nonfinite lines and quotes without a named market'
   ])
   assert.equal(d.odds.length,1)
   assert.equal(d.odds[0].point,8)
+})
+
+
+test('relief workload is dated to the research snapshot and retains pitcher detail',async()=>{
+  const mock=fakeNetwork({pitcherLogs:true,olderReliefLog:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  const relief=d.bullpen.home[0].reliefUsage72h
+  assert.equal(relief.length,2)
+  assert.equal(relief[0].date,'2026-06-29')
+  assert.equal(relief[1].date,'2026-06-28')
+  assert.equal(relief[1].opponentId,780)
+  assert.equal(relief[1].innings,'1.0')
+  assert.equal(relief[1].pitches,'17')
+  assert.equal(relief[1].strikeouts,'2')
+  assert.equal(relief[1].walks,'1')
+  assert.ok(d.uiBlock.props.sections.some(x=>x.heading.includes('Bullpen')&&
+    x.items.some(y=>y.detail.includes('17 pitcheos')&&y.detail.includes('2 K'))))
 })
