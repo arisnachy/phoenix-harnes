@@ -137,6 +137,22 @@ export interface PluginInventorySnapshot {
   readonly entries: readonly PluginInventoryEntry[]
 }
 
+/** Exact existing Loader entry request from trusted Settings. */
+export interface PluginEnableRequest {
+  readonly entryId: PluginEntryId
+  readonly enabled: boolean
+}
+
+/** Results of activating configured plugins and the pinned curated MCP pack. */
+export interface PluginBulkActivationReceipt {
+  readonly activated: readonly PluginEntryId[]
+  readonly skipped: readonly PluginEntryId[]
+  readonly failed: readonly PluginEntryId[]
+  readonly curatedInstalled: number
+  readonly curatedExisting: number
+  readonly curatedFailed: readonly CuratedMcpConnectorId[]
+}
+
 /** Secret-free Business Engine product projection. No local paths or order identifiers. */
 export interface BusinessLibraryProduct {
   readonly id: string

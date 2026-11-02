@@ -67,6 +67,8 @@ describe('PluginInventoryGateway', () => {
     const exposed = remoteMethods(inventory)
     expect(exposed).toEqual(expect.arrayContaining([
       { method: 'list', invocation: { kind: 'direct' } },
+      { method: 'setPluginEnabled', invocation: { kind: 'direct' } },
+      { method: 'activateAvailablePlugins', invocation: { kind: 'direct' } },
       { method: 'updateState', invocation: { kind: 'direct' } },
       { method: 'restartForUpdate', invocation: { kind: 'direct' } },
       { method: 'refreshForUpdate', invocation: { kind: 'direct' } },
@@ -122,6 +124,43 @@ describe('PluginInventoryGateway', () => {
 
     await ctx.loader.remove(pendingId)
     expect(inventory.list().entries.some(entry => entry.entryId === pendingId)).toBe(false)
+  })
+
+  it('switches existing entries and refuses disabling the Host control plane', async () => {
+    const { ctx, inventory } = await harness()
+    const id = await ctx.loader.create({ name: 'cordis:active', disabled: true })
+    await expect(inventory.setPluginEnabled({ entryId: id as never, enabled: true }))
+      .resolves.toMatchObject({ entryId: id, enabled: true, fiberPhase: 'active' })
+    await expect(inventory.setPluginEnabled({ entryId: id as never, enabled: false }))
+      .resolves.toMatchObject({ entryId: id, enabled: false })
+    await expect(inventory.setPluginEnabled({ entryId: '' as never, enabled: true })).rejects.toThrow()
+    const control = await ctx.loader.create({
+      name: '@phoenix-ai/dsh-host-plugin-inventory',
+      disabled: true,
+    })
+    await expect(inventory.setPluginEnabled({ entryId: control as never, enabled: false }))
+      .rejects.toThrow('control-plane')
+  })
+
+  it('reports partial activation and uses the existing pinned MCP pack installer', async () => {
+    const { ctx, inventory } = await harness()
+    const good = await ctx.loader.create({ name: 'cordis:active', disabled: true })
+    const missing = await ctx.loader.create({ name: 'cordis:missing-plugin', disabled: true })
+    const managed = (inventory as unknown as {
+      managedMcp: { ensureCoreMcpPack(options: { installMissing: boolean }): Promise<unknown> }
+    }).managedMcp
+    const install = vi.spyOn(managed, 'ensureCoreMcpPack').mockResolvedValue({
+      installed: ['fetch'],
+      alreadyInstalled: ['memory'],
+      failed: [{ connectorId: 'figma', message: 'authorization needed' }],
+    })
+    const receipt = await inventory.activateAvailablePlugins()
+    expect(receipt.activated).toContain(good)
+    expect(receipt.failed).toContain(missing)
+    expect(receipt.curatedInstalled).toBe(1)
+    expect(receipt.curatedExisting).toBe(1)
+    expect(receipt.curatedFailed).toContain('figma')
+    expect(install).toHaveBeenCalledWith({ installMissing: true })
   })
 
   it('projects MCP lifecycle and managed installs without credentials', async () => {
