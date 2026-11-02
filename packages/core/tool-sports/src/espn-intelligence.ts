@@ -305,10 +305,9 @@ export async function exploreEspn(
     add('Partido a partido',web+'athletes/'+input.athleteId+'/gamelog'+qs,1_800_000)
     add('Estadísticas situacionales',web+'athletes/'+input.athleteId+'/splits'+qs,3_600_000)
   }else if(view==='event'){
+    // Fetch the actual competition ID from the event summary BEFORE Core
+    // requests; never infer that competitionId equals eventId.
     add('Resumen del evento',site+'summary?event='+input.eventId,30_000)
-    add('Probabilidades ESPN Core',core+'events/'+input.eventId+'/competitions/'+input.eventId+'/probabilities',60_000)
-    add('Cuotas ESPN Core',core+'events/'+input.eventId+'/competitions/'+input.eventId+'/odds',60_000)
-    add('Jugadas ESPN Core',core+'events/'+input.eventId+'/competitions/'+input.eventId+'/plays?limit=40',30_000)
   }else if(view==='standings'){
     add('Clasificación ESPN','https://site.api.espn.com/apis/v2/sports/'+sport+'/'+league+'/standings'+qs,900_000)
   }else if(view==='news'){
@@ -403,6 +402,10 @@ export async function exploreEspn(
           report.state==='data'?report.count:0))
         if(report.state==='data')coreProjection=report.details??report.items[0]??null
       }
+      // The probabilities endpoint is optional and returns HTTP 400 on some
+      // leagues. Do not repeatedly retry it or block the valid predictor.
+      sources.push(source('Probabilidades publicadas no verificadas',
+        {availability:'optional',competitionId,notQueried:true},0))
     }
     const insights=sportsEventInsights({
       eventId:input.eventId!,summary:overview,coreOdds:coreQuotes,

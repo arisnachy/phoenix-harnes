@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import {
   adaptiveCodexReasoningEffort,
+  isPhoenixAutoBoundedImplementation,
   resolveEclipseRoleRoute,
   type EclipseRoutingSettings,
 } from '../src/model-selection.ts'
@@ -14,6 +15,15 @@ describe('Eclipse role routing', () => {
     planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
     coordinator: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'high' },
   }
+  it('keeps Luna Max as the automatic Lead even when Terra consultation is preferred', () => {
+    const automatic: EclipseRoutingSettings = {
+      mode: 'automatic',
+      coordinator: { provider: 'openai-codex', model: 'gpt-6.1-terra', reasoningEffort: 'low' },
+    }
+    expect(resolveEclipseRoleRoute(automatic, 'coordinator', fallback)).toEqual(fallback)
+    expect(resolveEclipseRoleRoute(automatic, 'planner', fallback)).toEqual(fallback)
+  })
+
   it('preserves shipped routes in automatic mode or without settings', () => {
     expect(resolveEclipseRoleRoute(undefined, 'coordinator', fallback)).toEqual(fallback)
     expect(resolveEclipseRoleRoute({ ...profile, mode: 'automatic' }, 'planner', fallback)).toMatchObject({
@@ -76,5 +86,18 @@ describe('Eclipse role routing', () => {
     expect(adaptiveCodexReasoningEffort('Fix the broken navigation button')).toEqual(ReasoningEffortId('high'))
     expect(adaptiveCodexReasoningEffort('Implement a complex multi-step architecture migration')).toEqual(ReasoningEffortId('xhigh'))
     expect(adaptiveCodexReasoningEffort('Handle this critical security incident immediately')).toEqual(ReasoningEffortId('max'))
+  })
+
+  it('executes a self-contained tested module with Luna without a separate Sol planning turn', () => {
+    const request = [
+      'Construye un módulo en Python 3.11 llamado ratelimiter, sin dependencias externas.',
+      'Incluye dos algoritmos con interfaz allow y retry_after, Token Bucket y Sliding Window Log.',
+      'Debe ser thread-safe, con reloj inyectable y expiración de claves inactivas.',
+      'Entrega código, pruebas pytest de concurrencia y expiración, README.md con ejemplos y requisitos.',
+    ].join(' ')
+    expect(isPhoenixAutoBoundedImplementation(request)).toBe(true)
+    expect(isPhoenixAutoBoundedImplementation('Arregla router.ts y ejecuta los tests.')).toBe(false)
+    expect(isPhoenixAutoBoundedImplementation(request + ' Luego haz merge a main y stable.')).toBe(false)
+    expect(isPhoenixAutoBoundedImplementation(request + ' Es una migración crítica de producción.')).toBe(false)
   })
 })

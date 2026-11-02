@@ -45,6 +45,21 @@ describe('ordinary completion judge', () => {
     }
   })
 
+  it('does not pay for semantic review solely because a routine fix names destination branches', () => {
+    for (const request of [
+      'Corrige el pequeño error en src/ui.ts y déjalo listo para main y stable.',
+      'Fix this local helper function before updating main/stable.',
+    ]) {
+      expect(ordinaryCompletionReviewBudget({
+        request, configuredMaxPasses: 2, mutationCount: 2, failureCount: 0,
+      })).toEqual({ mode: 'fast', maxPasses: 0 })
+    }
+    expect(ordinaryCompletionReviewBudget({
+      request: 'Merge the release branch into main and stable.',
+      configuredMaxPasses: 2, mutationCount: 2, failureCount: 0,
+    })).toEqual({ mode: 'standard', maxPasses: 1 })
+  })
+
   it('escalates semantic review only for material scope, risk, or failed attempts', () => {
     expect(ordinaryCompletionReviewBudget({
       request: 'Refactor the Phoenix router across the project without changing behavior.',

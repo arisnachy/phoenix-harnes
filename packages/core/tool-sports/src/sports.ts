@@ -285,18 +285,23 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
           }),
         ),
       )
+      const reportedPre=e.status?.type?.state==='pre'
+      const kickoffAt=Date.parse(e.date??'')
+      const scheduleConflict=reportedPre&&Number.isFinite(kickoffAt)&&
+        kickoffAt+5*60_000<Date.now()
       rows.push({ component:'sports_game_card',version:1,props:{
         title:title(e.name,95),subtitle:(leagueInfo?.league??title(league,45))+' · '+sportLabel,
         league:leagueInfo?.league??title(league,45),
         ...(leagueInfo?.country?{country:leagueInfo.country}:{}),
-        status:title(e.status?.type?.description,55),when:localTime(e.date),
+        status:scheduleConflict?'Estado por confirmar':title(e.status?.type?.description,55),when:localTime(e.date),
         venue:title(comp?.venue?.fullName),home:side(home),away:side(away),
         source:'ESPN Site API · '+new Date().toISOString(),
         sport,providerLeague:league,eventDate:day,
         phase:e.status?.type?.state==='in'?'in':e.status?.type?.state==='post'?'post':'pre',
         ...(e.id !== undefined && String(e.id).trim() !== '' ? { eventId: String(e.id) } : {}),
         periods, highlights,
-        ...(sport==='basketball'&&league==='nba'?{ note:'Jugadores destacados omitidos hasta verificar su pertenencia a las plantillas vigentes.' }:{}),
+        ...(scheduleConflict?{note:'ESPN sigue indicando programado después del inicio previsto. Estado no verificado: no usar como partido futuro ni ofrecer cuotas prepartido. '+(sport==='basketball'&&league==='nba'?'Jugadores destacados omitidos hasta verificar su pertenencia a las plantillas vigentes.':'')}:
+          sport==='basketball'&&league==='nba'?{note:'Jugadores destacados omitidos hasta verificar su pertenencia a las plantillas vigentes.'}:{}),
         ...(comp?.broadcasts?.length?{ broadcast:comp.broadcasts.flatMap(x=>x.names??[]).slice(0,3).join(', ') }:{}),
         askPrompt:'Kira, amplía el análisis verificado del evento '+title(e.id,50)+' de '+league+'. Incluye métricas específicas de '+sport+' con sus fuentes.',
       } })

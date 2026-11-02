@@ -8,7 +8,6 @@ import type { ChatGptWebSnapshot, IApiClient, OpenClawRuntimeSnapshot, ClawHubCa
 import type { en } from './locales.ts'
 import type { ConnectorKey } from './connectors-locales.ts'
 import { CONNECTOR_CATALOG } from './connector-catalog.ts'
-import { ClawHubConnectorStore } from './ClawHubConnectorStore.tsx'
 import type { ConnectorDefinition } from './connector-catalog.ts'
 import { AuthorizationAttemptProgress, useAuthorizationAttempt } from './authorization-attempt.tsx'
 import connectorStyles from './CodexConnectors.module.css'
@@ -172,6 +171,11 @@ export interface McpRegistryClient {
   /** Reuse already-authenticated OpenClaw connector routes when present. */
   openClawState?(): Promise<OpenClawConnectorSnapshot>
   openClawRuntimeState?(): Promise<OpenClawRuntimeSnapshot>
+  openClawPluginTools?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>
+  openClawGatewayCredential?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>
+  configureOpenClawGatewayCredential?(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>
+  setOpenClawPluginTool?(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>
+  setOpenClawPluginEnabled?(request: { pluginId: string; enabled: boolean }): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>
   clawHubCatalog?(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubCatalogRequest): Promise<ClawHubCatalogSnapshot>
   clawHubState?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>
   prepareClawHubCli?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>
@@ -1278,7 +1282,6 @@ export function ConnectorsSettingsSection({ api,
   const [mcpHub, setMcpHub] = useState<McpConnectorHubSnapshot>({ runtime: [], managed: [] })
   const [openClaw, setOpenClaw] = useState<OpenClawConnectorSnapshot>({ connectors: [] })
   const [openClawRuntime, setOpenClawRuntime] = useState<OpenClawRuntimeSnapshot | undefined>()
-  const [clawHubFeatured, setClawHubFeatured] = useState<readonly ClawHubCatalogItem[] | null | undefined>()
   const [runtimeRefresh, setRuntimeRefresh] = useState(0)
   const [jevState, setJevState] = useState<JevMcpSnapshot | undefined>()
   const [jevSetupOpen, setJevSetupOpen] = useState(false)
@@ -1446,17 +1449,6 @@ export function ConnectorsSettingsSection({ api,
     void probe().then(
       value => { if (!stale) setOpenClawRuntime(value) },
       () => { if (!stale) setOpenClawRuntime(undefined) },
-    )
-    return () => { stale = true }
-  }, [mcpRegistry, runtimeRefresh])
-
-  useEffect(() => {
-    const browse = mcpRegistry?.clawHubCatalog?.bind(mcpRegistry)
-    if (browse === undefined) return
-    let stale = false
-    void browse({ family: 'code-plugin', officialOnly: true, limit: 4 }).then(
-      snapshot => { if (!stale) setClawHubFeatured(snapshot.items) },
-      () => { if (!stale) setClawHubFeatured(null) },
     )
     return () => { stale = true }
   }, [mcpRegistry, runtimeRefresh])
@@ -2143,8 +2135,6 @@ export function ConnectorsSettingsSection({ api,
 
       {catalogFailure === undefined ? null : <p className={styles['error']}>{catalogFailure}</p>}
 
-      <ClawHubConnectorStore registry={mcpRegistry} t={connectorT}
-        connectedIds={catalogRows.filter(row => row.connected).map(row => row.definition.id)} />
       <section className={hubStyles['block']} aria-label={connectorT('catalog')}>
         <div className={hubStyles['heading']}>
           <h3>{connectorT('catalog')}</h3>
@@ -2180,7 +2170,6 @@ export function ConnectorsSettingsSection({ api,
                   managed={row.managed}
                   openClaw={row.openClaw}
                   openClawRuntime={row.definition.id === 'openclaw' ? openClawRuntime : undefined}
-                  clawHubFeatured={row.definition.id === 'openclaw' ? clawHubFeatured : undefined}
                   onRefreshOpenClaw={row.definition.id === 'openclaw' ? () => { setRuntimeRefresh(n => n + 1) } : undefined}
                   telegram={telegram}
                   oddsApi={oddsApi}

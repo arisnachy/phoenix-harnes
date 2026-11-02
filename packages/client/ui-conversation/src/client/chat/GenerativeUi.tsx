@@ -704,14 +704,30 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
       }
       const matchSection=p.view==='event'?
         p.sections.find(section=>/Encuentro|participantes|marcador/iu.test(section.heading)):undefined
-      const participants=matchSection?.items.filter(item=>item.image).slice(0,2)??[]
       const insightSections=p.view==='event'?p.sections
         .filter(section=>section!==matchSection):[]
-      // One signal from each available group: form, stats, markets and outlook.
-      // Avoid a wall of dates or four records from the same source.
-      const insightItems=insightSections.flatMap(section=>section.items.slice(0,1)
-        .map(item=>({...item,label:section.heading+' · '+item.label}))).slice(0,4)
-      const preview=p.view==='event'?[...participants,...insightItems].slice(0,6):
+      // Some investigation tools give the validated home/away logos on the
+      // form rows, not in a separate "participants" section.
+      const participants=(matchSection?.items.filter(item=>item.image)??[])
+        .concat(p.view==='event'?p.sections.flatMap(s=>s.items.filter(item=>item.image)):[])
+        .filter((item,index,all)=>all.findIndex(x=>x.label===item.label)===index).slice(0,2)
+      const winSection=insightSections.find(section=>
+        /estimaci[oó]n|proyecci[oó]n|probabilidad|victoria/iu.test(section.heading)
+        && section.items.some(item=>/%/u.test(item.value??'')))
+      const marketProbability=winSection&&/mercado/iu.test(winSection.heading)
+      const winItems=winSection?.items.filter(item=>/%/u.test(item.value??''))
+        .slice(0,3).map(item=>({...item,label:
+          (marketProbability?'Implícita mercado · ':'Prob. ganar · ')+item.label}))??[]
+      // Never hide the opposite side of a valid odds pair in the expanded
+      // section while promoting just one single price to the top-level card.
+      const oddsSection=insightSections.find(section=>/Cuotas completas|Cuotas y mercados/iu.test(section.heading))
+      const oddsItems=oddsSection?.items.slice(0,1).map(item=>({...item,
+        label:'Cuotas · '+item.label}))??[]
+      const formSection=insightSections.find(section=>/Forma reciente|Estadísticas verificadas/iu.test(section.heading))
+      const formItems=formSection?.items.filter(item=>!participants.some(p=>p.label===item.label))
+        .slice(0,1).map(item=>({...item,label:'Forma · '+item.label}))??[]
+      const preview=p.view==='event'?
+        [...participants,...winItems,...oddsItems,...formItems].slice(0,7):
         p.sections.flatMap(section=>section.items).slice(0,2)
       return <section className={css.sportsCard+' '+css.sportsCompactPanel}
         data-generative-ui="sports_espn_dashboard" aria-label={sportsDisplayText(p.title)}>

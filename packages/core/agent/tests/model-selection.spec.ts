@@ -53,7 +53,7 @@ describe('installModelSelection()', () => {
     }
   })
 
-  it('answers tiny real team presentation choices on Luna low while keeping technical decisions on Max', async () => {
+  it('keeps Luna Max for both simple and technical Team questions in automatic mode', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -73,7 +73,7 @@ describe('installModelSelection()', () => {
       await ctx.systemPrompt.assemble()
       await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step: 1, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({
-        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('low'),
+        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
       })
       events.push(
         { type: 'turn/start', data: { turn: 2 } },
@@ -84,7 +84,7 @@ describe('installModelSelection()', () => {
       )
       await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 2, step: 1, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({
-        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('high'),
+        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
       })
     } finally {
       dispose()
@@ -128,7 +128,7 @@ describe('installModelSelection()', () => {
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 2, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }),
-      )).resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('high') })
+      )).resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
     } finally {
       dispose()
       await ctx.fiber.dispose()
@@ -178,7 +178,7 @@ describe('installModelSelection()', () => {
       expect(assembly.tools.map(tool => tool.name)).toContain('browser_fill')
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 7, step: 4, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
-        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('high') })
+        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
     } finally {
       dispose()
       await ctx.fiber.dispose()
@@ -221,7 +221,7 @@ describe('installModelSelection()', () => {
       await ctx.systemPrompt.assemble()
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 7, step: 4, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
-        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('high') })
+        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
       expect(selection.current).toBeUndefined()
     } finally {
       dispose()
@@ -412,12 +412,12 @@ describe('installModelSelection()', () => {
       events.push({ type: 'step/start', data: { turn: 1, step: 3 } })
       const resumedAssembly = await ctx.systemPrompt.assemble()
       expect(resumedAssembly.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text)
-        .toContain('still Kira, coordinating and executing on Luna Max through the configured execution route')
+        .toContain('still Kira, coordinating through Eclipse')
       expect(resumedAssembly.tools.map(tool => tool.name)).toContain('read')
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 4, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }),
-      )).resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('high') })
+      )).resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
     } finally {
       dispose()
       await ctx.fiber.dispose()
@@ -495,14 +495,14 @@ describe('installModelSelection()', () => {
       const operational = await ctx.systemPrompt.assemble()
       expect(operational.tools.map(tool => tool.name)).toContain('spawn_teammate')
       const operationalIdentity = operational.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text
-      expect(operationalIdentity).toContain('configured execution route')
+      expect(operationalIdentity).toContain('coordinating through Eclipse')
       expect(operationalIdentity).toContain('still Kira')
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 2, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }),
       )).resolves.toMatchObject({
         provider: 'openai-codex', model: 'gpt-6-luna',
-        reasoningEffort: ReasoningEffortId('high'),
+        reasoningEffort: ReasoningEffortId('max'),
       })
       expect(selection.current?.model).toBe('gpt-6-luna')
     } finally {
@@ -710,7 +710,7 @@ describe('installModelSelection()', () => {
       await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step: 1, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({
         provider: 'openai-codex', model: 'gpt-6-luna',
-        reasoningEffort: ReasoningEffortId('medium'),
+        reasoningEffort: ReasoningEffortId('max'),
       })
 
       events.push({ type: 'turn/start', data: { turn: 2 } },
@@ -722,6 +722,23 @@ describe('installModelSelection()', () => {
       await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 2, step: 1, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({
         provider: 'openai-codex', model: 'gpt-6.1-sol',
+      })
+
+      const boundedTask = [
+        'Construye un módulo Python 3.11 llamado ratelimiter sin dependencias externas.',
+        'Dos algoritmos Token Bucket y Sliding Window Log con interfaz allow y retry_after.',
+        'Debe ser thread-safe, con reloj inyectable y expiración de claves inactivas.',
+        'Entrega pruebas pytest de concurrencia y README.md con ejemplos y requisitos verificables.',
+      ].join(' ')
+      events.push({ type: 'turn/start', data: { turn: 3 } },
+        { type: 'user/message', data: { source: { kind: 'user' },
+          content: [{ type: 'text', text: boundedTask }] } })
+      const bounded = await ctx.systemPrompt.assemble()
+      expect(bounded.tools.some(tool => tool.name === 'read')).toBe(true)
+      expect(bounded.sections.some(section => section.name === 'phoenix:auto-visible-handoff')).toBe(false)
+      await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 3, step: 1, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({
+        provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
       })
     } finally {
       dispose()
@@ -763,7 +780,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('routes a tiny real Team demo to Luna low, preserving Luna Max for substantive workers', async () => {
+  it('keeps Luna Max for small Team demonstrations in automatic mode', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -789,10 +806,10 @@ describe('installModelSelection()', () => {
         && item.text.includes('Kira planning with Sol'))).toBe(false)
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 1, step: 1, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
-        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('low') })
+        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 1, step: 2, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
-        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('low') })
+        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
     } finally {
       dispose()
       await ctx.fiber.dispose()
@@ -878,7 +895,7 @@ describe('installModelSelection()', () => {
       expect(JSON.stringify(steered[0])).not.toContain('Phoenix Auto team admission')
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 1, step: 2, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
-        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('high') })
+        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
     } finally {
       dispose()
       await ctx.fiber.dispose()
@@ -923,7 +940,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()
@@ -1006,7 +1023,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     events.push(
@@ -1037,7 +1054,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()
@@ -1102,7 +1119,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()
@@ -1344,7 +1361,7 @@ describe('installModelSelection()', () => {
       } })
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 1, step: 1, signal }, () => Promise.resolve(seed))).resolves.toMatchObject({
-        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('low'),
+        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
       })
       events.pop()
     }
@@ -1722,7 +1739,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('low'),
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()
@@ -1782,7 +1799,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()
@@ -1873,7 +1890,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('routes trivial GPT-6 Codex conversation to Luna/low without spending Max reasoning', async () => {
+  it('routes a trivial greeting through the explicitly selected Sol conversational fast lane', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -1916,7 +1933,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('routes a contextual conversational opener to Luna/low while preserving its context-aware classification', async () => {
+  it('preserves explicit Sol selection during contextual conversational fast lane', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -1959,7 +1976,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('restores the selector route after a conversational fast turn', async () => {
+  it('restores an explicit Sol selector after its conversational fast turn', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selected = {
@@ -2120,7 +2137,7 @@ describe('installModelSelection()', () => {
     const request = (step: number): Promise<LlmCallConfig> => agentEvents(ctx, agent).waterfall(
       'agent/request', { turn: 1, step, signal }, () => Promise.resolve(selected),
     )
-    const worker = { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('high') }
+    const worker = { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') }
     try {
       await ctx.systemPrompt.assemble()
       await expect(request(1)).resolves.toEqual(selected)
@@ -2153,7 +2170,7 @@ describe('installModelSelection()', () => {
   it.each(['gpt-5.6-sol', 'gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-luna', 'custom-codex-model'])('hands selected Codex %s to the active Luna worker at Max', (model) => {
     expect(defaultExecutionHandoff({ provider: 'openai-codex', model })).toEqual({
       afterStep: 1,
-      selection: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('high') },
+      selection: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') },
     })
     expect(defaultExecutionHandoff({ provider: 'other', model })).toBeUndefined()
   })
@@ -2203,7 +2220,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()
@@ -2251,7 +2268,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()

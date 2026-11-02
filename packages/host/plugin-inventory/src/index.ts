@@ -23,6 +23,8 @@ import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import { readBusinessLibrarySnapshot } from './business-library.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
 import { readOpenClawRuntimeSnapshot } from './openclaw-runtime.ts'
+import { readOpenClawRouting, setOpenClawRoutingPermission, setOpenClawPluginEnabled } from './openclaw-plugin-routing.ts'
+import { prepareLocalOpenClawGateway } from './openclaw-gateway-setup.ts'
 import { readClawHubCatalog } from './clawhub-catalog.ts'
 import { clawHubInstall, clawHubState, prepareClawHubCli } from './clawhub-marketplace.ts'
 import { TokenTelemetryCollector } from './telemetry.ts'
@@ -58,6 +60,8 @@ import type {
   McpRegistrySearchSnapshot,
   OpenClawConnectorSnapshot,
   OpenClawRuntimeSnapshot,
+  OpenClawRoutingSnapshot, OpenClawRoutingRequest, OpenClawPluginActivationRequest,
+  OpenClawGatewayCredentialState, OpenClawGatewayCredentialRequest,
   ClawHubCatalogRequest, ClawHubCatalogSnapshot, ClawHubInstallRequest, ClawHubInstallReceipt, ClawHubState,
   PhoenixLocalEndpointReceipt,
   PhoenixLocalModeRequest,
@@ -380,6 +384,77 @@ export class PluginInventoryGateway extends TypertRemoteService {
       throw new Error('Select a native plugin package for this operation')
     }
     return clawHubInstall(request)
+  }
+
+  /** Inspect the actual OpenClaw plugin runtime; no tool execution or account data. */
+  /** Gateway operator token is stored only in the trusted credential vault. */
+  @Remote('openClawGatewayCredential')
+  async openClawGatewayCredential(): Promise<OpenClawGatewayCredentialState> {
+    const service = (this.ctx.get as (key: string) => unknown)('credentials') as {
+      resolve(ref: CredentialRef): Promise<{ value: string } | undefined>
+    } | undefined
+    let configuredInVault = false
+    try {
+      configuredInVault = Boolean((await service?.resolve(credentialRef('PHOENIX_OPENCLAW_GATEWAY_TOKEN')))?.value)
+    } catch { /* vault may be temporarily unavailable */ }
+    return configuredInVault ? { configured: true, source: 'vault' }
+      : Boolean(process.env.PHOENIX_OPENCLAW_GATEWAY_TOKEN ?? process.env.OPENCLAW_GATEWAY_TOKEN)
+        ? { configured: true, source: 'environment' }
+        : { configured: false, source: 'none' }
+  }
+
+  /** Explicit owner-supplied operator token; it never crosses the model prompt. */
+  @Remote('configureOpenClawGatewayCredential')
+  async configureOpenClawGatewayCredential(
+    request: OpenClawGatewayCredentialRequest,
+  ): Promise<OpenClawGatewayCredentialState> {
+    const service = (this.ctx.get as (key: string) => unknown)('credentials') as {
+      set(ref: CredentialRef, value: string): Promise<void>
+    } | undefined
+    if (service === undefined) throw new Error('PHOENIX credential vault is unavailable')
+    if (request.auto === true) {
+      const handoff = await prepareLocalOpenClawGateway()
+      if (handoff.token !== undefined) {
+        await service.set(credentialRef('PHOENIX_OPENCLAW_GATEWAY_TOKEN'), handoff.token)
+        return { configured: true, source: 'vault', authorizationUrl: handoff.authorizationUrl }
+      }
+      // Browser pairing can succeed even when OpenClaw intentionally hides
+      // a SecretRef-managed shared operator token from external clients.
+      const existing = await this.openClawGatewayCredential()
+      return { ...existing, authorizationUrl: handoff.authorizationUrl }
+    }
+    if (typeof request.token !== 'string' || request.token.length < 16
+      || request.token.length > 2048 || /[\u0000-\u0020\u007f]/u.test(request.token)) {
+      throw new Error('Invalid OpenClaw Gateway credential')
+    }
+    await service.set(credentialRef('PHOENIX_OPENCLAW_GATEWAY_TOKEN'), request.token)
+    return { configured: true, source: 'vault' }
+  }
+
+  @Remote('openClawPluginTools')
+  async openClawPluginTools(): Promise<OpenClawRoutingSnapshot> {
+    const [snapshot, credential] = await Promise.all([
+      readOpenClawRouting(), this.openClawGatewayCredential(),
+    ])
+    return { ...snapshot, gatewayCredentialConfigured: credential.configured }
+  }
+
+  /** Owner-approved single-tool routing, stored outside the model's reach. */
+  @Remote('setOpenClawPluginTool')
+  async setOpenClawPluginTool(request: OpenClawRoutingRequest): Promise<OpenClawRoutingSnapshot> {
+    const [snapshot, credential] = await Promise.all([
+      setOpenClawRoutingPermission(request), this.openClawGatewayCredential(),
+    ])
+    return { ...snapshot, gatewayCredentialConfigured: credential.configured }
+  }
+
+  /** Explicit activation or deactivation of an installed OpenClaw-native plugin. */
+  @Remote('setOpenClawPluginEnabled')
+  async setOpenClawPluginEnabled(request: OpenClawPluginActivationRequest): Promise<OpenClawRoutingSnapshot> {
+    const [snapshot, credential] = await Promise.all([
+      setOpenClawPluginEnabled(request), this.openClawGatewayCredential(),
+    ])
+    return { ...snapshot, gatewayCredentialConfigured: credential.configured }
   }
 
   @Remote('searchMcpRegistry')

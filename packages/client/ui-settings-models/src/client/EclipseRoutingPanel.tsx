@@ -165,8 +165,9 @@ export function EclipseRoutingPanel(props: {
   const pick = (role: Role, key: string): void => {
     const next = routeFromKey(key)
     update({
+      // Automatic mode treats this as a preference for evidence-triggered routing,
+      // not as permission to make the chosen model the permanent coordinator.
       [role]: next,
-      ...next !== undefined && (draft.mode ?? 'automatic') === 'automatic' ? { mode: 'hybrid' as const } : {},
     })
   }
   const updateEffort = (role: Role, effort: string): void => {
@@ -175,7 +176,6 @@ export function EclipseRoutingPanel(props: {
     const { reasoningEffort: _removed, ...bare } = route
     update({
       [role]: effort === '' ? bare : { ...bare, reasoningEffort: effort },
-      ...effort !== '' && (draft.mode ?? 'automatic') === 'automatic' ? { mode: 'hybrid' as const } : {},
     })
   }
   const selectedModel = (route: Route | undefined): EclipseCatalogChoice | undefined =>

@@ -22,6 +22,7 @@ import type {
   PhoenixLocalModelSnapshot,
 } from './PhoenixLocalPanel.tsx'
 import { ConnectorsSettingsSection } from './AuthorizationPanel.tsx'
+import { ClawHubConnectorStore } from './ClawHubConnectorStore.tsx'
 import type { ChatGptWebBridgeClient } from './chatgpt-web-toggle.ts'
 import type {
   ConnectorsSettingsSectionProps,
@@ -172,6 +173,11 @@ type PluginInventoryMcpRegistryRemote = {
     }
   }>>
   openClawRuntimeState(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRuntimeSnapshot>>
+  openClawPluginTools(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>>
+  openClawGatewayCredential(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>>
+  configureOpenClawGatewayCredential(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>>
+  setOpenClawPluginTool(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>>
+  setOpenClawPluginEnabled(request: { pluginId: string; enabled: boolean }): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>>
   clawHubState(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>>
   prepareClawHubCli(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>>
   clawHubInstallSkill(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallReceipt>>
@@ -312,6 +318,21 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
       await remote().openClawRuntimeState(),
     ),
     clawHubCatalog: async request => unwrapPluginInventory('clawHubCatalog', await remote().clawHubCatalog(request)),
+    openClawPluginTools: async () => unwrapPluginInventory(
+      'openClawPluginTools', await remote().openClawPluginTools(),
+    ),
+    openClawGatewayCredential: async () => unwrapPluginInventory(
+      'openClawGatewayCredential', await remote().openClawGatewayCredential(),
+    ),
+    configureOpenClawGatewayCredential: async request => unwrapPluginInventory(
+      'configureOpenClawGatewayCredential', await remote().configureOpenClawGatewayCredential(request),
+    ),
+    setOpenClawPluginTool: async request => unwrapPluginInventory(
+      'setOpenClawPluginTool', await remote().setOpenClawPluginTool(request),
+    ),
+    setOpenClawPluginEnabled: async request => unwrapPluginInventory(
+      'setOpenClawPluginEnabled', await remote().setOpenClawPluginEnabled(request),
+    ),
     clawHubState: async () => unwrapPluginInventory('clawHubState', await remote().clawHubState()),
     prepareClawHubCli: async () => unwrapPluginInventory('prepareClawHubCli', await remote().prepareClawHubCli()),
     clawHubInstallSkill: async request => unwrapPluginInventory('clawHubInstallSkill', await remote().clawHubInstallSkill(request)),
@@ -559,6 +580,13 @@ export function apply(ctx: ClientContext): void {
     label: () => connectorT('nav'),
     inject: connectorsInjected,
   }, ConnectorsSettingsSection))
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'clawhub',
+    order: 13,
+    label: () => 'OpenClaw · ClawHub',
+    inject: () => ({ registry: mcpRegistry, t: connectorT, connectedIds: [] }),
+  }, ClawHubConnectorStore))
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',
     id: 'welcome-notice',

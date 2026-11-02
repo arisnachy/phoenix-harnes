@@ -257,13 +257,13 @@ export function defaultExecutionHandoff(selection: ModelSelection | undefined): 
   return {
     // The selected Codex route remains the user's coordinator choice. The
     // handoff only moves execution to the current Luna worker when a caller
-    // still uses the legacy adaptive entry point; it does not spend Max by
-    // default. Exceptional tasks can request Max through Eclipse explicitly.
+    // still uses the legacy adaptive entry point. Substantive Luna execution
+    // retains the owner's Max quality tier after Sol's planning handoff.
     afterStep: 1,
     selection: {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('max'),
     },
   }
 }
@@ -378,12 +378,13 @@ const AUTO_SOL_STRATEGY_POLICY =
   'Stop after one concise, actionable strategy adjustment; then Kira returns to Luna Max execution. Do not rewrite the entire plan.'
 
 const AUTO_LUNA_COORDINATION_POLICY =
-  'You are still Kira, coordinating and executing on Luna Max through the configured execution route. ' +
+  'You are still Kira, coordinating through Eclipse. Luna Max owns execution and team coordination. ' +
+  'FÉNIX offers a consultation through fenix_consult only when real Team evidence identifies a material contradiction, missing requirement or failed verification; Terra never takes over Kira. ' +
   'The single Kira identity owns the plan across model switches; never address Kira as another speaker. ' +
   'If a user-visible **Plan:** was written earlier in THIS turn, ' +
   'treat that text as the already-approved execution brief; do not rewrite, replan, recite or re-announce it. ' +
   'Start the first permitted real action promptly, supervise the critical path and choose a genuine teammate ' +
-  'for actionable multi-step missions, delegate at least one real bounded scope with spawn_teammate; otherwise delegate only when materially helpful. Address teammates naturally by name, accept their real evidence, ' +
+  'for actionable multi-step missions, delegate a bounded scope with spawn_teammate only if a genuinely independent workstream improves quality or time; otherwise work directly with no team. Address teammates naturally by name, accept their real evidence, ' +
   'and speak to the user in concise, warm Spanish when that is their language. ' +
   'Never simulate coworker messages or claim a tool ran before its real result. ' +
   'If you genuinely need a new strategy, state "Necesito revisar la estrategia" and end that step: ' +
@@ -856,6 +857,32 @@ const AUTO_LARGE_CREATION = /^(?:(?:kira|f[eé]nix)[,\s]+)?(?:haz|hacer|dise[nñ
 // oxlint-disable-next-line @stylistic/max-len -- Bound natural-language construction intent, avoiding a second classification model call.
 const AUTO_LARGE_INTENT = /^[¡!¿?\s]*(?:(?:kira|f[eé]nix)[,\s]+)?(?:quiero|necesito|puedes|podr[ií]as|can\s+you|i\s+(?:want|need))\b.{0,80}\b(?:hacer|hagas|crear|crees|construir|construyas|desarrollar|desarrolles|dise[nñ]ar|dise[nñ]es|implementar|implementes|build|create|develop|design|make)\b.{0,100}\b(?:juego|videojuego|sistema|aplicaci[oó]n|app|plataforma|sitio|web|motor|m[oó]dulo|informe|investigaci[oó]n|libro|c[oó]mic|novela|curso|software|hospital|saas)\b/iu
 
+/**
+ * Recognize a bounded, testable coding deliverable even when its acceptance
+ * criteria make the request long. Length alone is not architectural complexity.
+ * This fast lane requires an artifact, a verification method and written
+ * acceptance criteria; external deployments and risky changes still use Sol.
+ * It is deliberately conservative and runs without a classifier model call.
+ */
+export function isPhoenixAutoBoundedImplementation(text: string): boolean {
+  const request = text.trim()
+  if (request.length < 180 || request.length > 6000 || AUTO_EXCEPTIONAL_TASK.test(request)
+    || AUTO_COMPLEX_TASK.test(request)) return false
+  // oxlint-disable-next-line @stylistic/max-len -- Match exact coding-artifact vocabulary without an extra LLM request.
+  const artifact = /\b(?:m[oó]dulos?|modules?|scripts?|archivos?|files?|funciones?|functions?|clases?|classes?|algoritmos?|algorithms?|componentes?|components?|librer[ií]as?|libraries?)\b/iu
+  const verification = /\b(?:pytest|vitest|unittest|tests?|pruebas?|probar|testear|verificar)\b/iu
+  // oxlint-disable-next-line @stylistic/max-len -- A concrete acceptance criterion must be present before taking the fast lane.
+  const criteria = /\b(?:readme(?:\.md)?|documentaci[oó]n|examples?|ejemplos?|interfaz|interface|firma|signature|thread[- ]safe|concurrencia|expiraci[oó]n|requisitos?|requirements?)\b/iu
+  // oxlint-disable-next-line @stylistic/max-len -- Cross-system writes and consequential workflows are always deliberate.
+  const consequential = /\b(?:main|stable|merge|fusionar|push|deploy|despliegue|desplegar|producci[oó]n|production|credenciales?|secrets?|seguridad|security|pagos?|payments?|clinical|cl[ií]nico|m[eé]dico|pacientes?|oauth|infraestructura|architecture|arquitectura|migraci[oó]n|database|base\s+de\s+datos|servidores?)\b/iu
+  // A bounded library/module differs from an entire application, platform or
+  // service. Large-creation heuristics alone must not penalize one testable module.
+  // oxlint-disable-next-line @stylistic/max-len -- System-level builds are intentionally excluded from the bounded lane.
+  const systemScope = /\b(?:sistemas?|aplicaciones?|applications?|apps?|plataformas?|platforms?|sitios?|webs?|motores?|hosp(?:ital|itales)|saas|software)\b/iu
+  return artifact.test(request) && verification.test(request)
+    && criteria.test(request) && !consequential.test(request) && !systemScope.test(request)
+}
+
 export function isPhoenixAutoQuickTurn(text: string): boolean {
   const candidate = text.trim()
   if (candidate.length === 0 || candidate.length > 180 || candidate.includes('\n')) return false
@@ -987,14 +1014,15 @@ function recordPhoenixAutoStrategyReview(
   if (signal?.purpose === 'blocker') state.lastTeamEscalationMessageId = signal.messageId
 }
 
-/** Quality favors early diagnosis; economy skips stalled-tool rescue, but never Team blockers. */
+/** Quality favors early diagnosis; every mode escapes a demonstrated failure loop. */
 function phoenixAutoNeedsStallStrategy(
   agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
   turn: number,
   directText: string,
   sensitivity: EclipseRoutingSettings['escalationSensitivity'],
 ): boolean {
-  if (sensitivity === 'economy') return false
+  // Even economy mode must escape a demonstrated failure loop. It saves
+  // tokens on speculative reviews, not on the one diagnosis needed to recover.
   // A fresh successful result is progress: never pay for a Sol review of an
   // older failure that the executor may already have recovered from.
   const latest = turnEvents(agent, turn).findLast(event =>
@@ -1087,6 +1115,15 @@ function phoenixAutoRoute(
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
         reasoningEffort: ReasoningEffortId('medium'),
+      }
+    }
+    if (isPhoenixAutoBoundedImplementation(directText)) {
+      // One executable component + testable acceptance criteria needs Luna,
+      // not an extra planner-only turn and a compulsory teammate.
+      return {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        reasoningEffort: adaptiveCodexReasoningEffort(directText),
       }
     }
     if (phoenixAutoTaskRequest(directText)) {
@@ -1255,6 +1292,7 @@ export function installModelSelection(
       : autoStep === 1
         && phoenixAutoTaskRequest(currentRequest)
         && !isPhoenixAutoQuickTurn(currentRequest)
+        && !isPhoenixAutoBoundedImplementation(currentRequest)
         && !isStandaloneVisualPreviewRequest(currentRequest)
         && !isBriefTeamDemonstration(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
         : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_COORDINATION_POLICY : undefined
@@ -1315,15 +1353,14 @@ export function installModelSelection(
           phoenixAutoState,
           eclipseProfile?.escalationSensitivity,
         )
-        // Kira handles conversation and small one-shot tasks directly on Luna
-        // Max, even when Eclipse's coordinator role points to Sol. A real Team
-        // signal or strategy rescue still follows the operational route.
-        const quick = phoenixAutoTeamSignalForTurn(_payload.agent, _payload.turn) === undefined
+        // FÉNIX no longer silently replaces Luna with Terra. A real
+        // independent consultant is requested through the evidence-gated
+        // fenix_consult Team tool; this request always keeps the Kira Lead.
+        const teamSignal = phoenixAutoTeamSignalForTurn(_payload.agent, _payload.turn)
+        const quick = teamSignal === undefined
           && automatic.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
           && isPhoenixAutoQuickTurn(directText)
         const role = automatic.model === PHOENIX_CODEX_AUTO_PLANNER_MODEL ? 'planner' : 'coordinator'
-        // Keep Luna as the direct fast-path model; retain its proportional
-        // low/medium effort instead of silently upgrading every quick turn.
         const routed = quick
           ? automatic
           : resolveEclipseRoleRoute(
@@ -1332,12 +1369,19 @@ export function installModelSelection(
             automatic,
             eclipseProfile?.mode === 'hybrid' ? automatic.reasoningEffort : undefined,
           )
+        // Luna is Max whenever Eclipse Automatic owns Kira's execution
+        // route. Terra consults separately after evidence; the selected Lead
+        // the exact model/effort chosen in Hybrid or Manual is not overridden.
+        const automaticLuna = (eclipseProfile?.mode === undefined || eclipseProfile.mode === 'automatic')
+          && routed.provider === 'openai-codex' && routed.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
+          ? { ...routed, reasoningEffort: ReasoningEffortId('max') } : routed
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
         return {
           ...withoutInheritedEffort,
-          provider: routed.provider,
-          model: routed.model,
-          ...routed.reasoningEffort === undefined ? {} : { reasoningEffort: routed.reasoningEffort },
+          provider: automaticLuna.provider,
+          model: automaticLuna.model,
+          ...automaticLuna.reasoningEffort === undefined
+            ? {} : { reasoningEffort: automaticLuna.reasoningEffort },
         }
       }
       const resolvedHandoff = typeof handoff === 'function' ? handoff(selected) : handoff

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { ClawHubCatalogItem, ClawHubFamily, ClawHubState } from '@phoenix-ai/dsh-api-remotes/client'
+import type { ClawHubCatalogItem, ClawHubFamily, ClawHubState, OpenClawRoutingSnapshot, OpenClawRoutedTool, OpenClawGatewayCredentialState } from '@phoenix-ai/dsh-api-remotes/client'
 import type { ConnectorKey } from './connectors-locales.ts'
 import type { McpRegistryClient } from './AuthorizationPanel.tsx'
 import { CONNECTOR_CATALOG } from './connector-catalog.ts'
@@ -11,18 +11,20 @@ export interface ClawHubConnectorStoreProps {
   connectedIds: readonly string[]
 }
 const families: readonly ClawHubFamily[] = ['code-plugin', 'bundle-plugin', 'skill']
-function duplicate(item: ClawHubCatalogItem, connectedIds: readonly string[]): boolean {
-  if (item.installed) return true
+function duplicate(item: ClawHubCatalogItem, _connectedIds: readonly string[]): boolean {
+  // Never duplicate a PHOENIX-native connector, regardless of login status.
+  // Installed ClawHub resources are retained instead of silently disappearing.
   const slug = item.name.split('/').at(-1)?.toLowerCase() ?? ''
-  return CONNECTOR_CATALOG.some(def => connectedIds.includes(def.id)
-    && [def.id, def.providerFamily, def.name, ...(def.aliases ?? [])]
+  return CONNECTOR_CATALOG.some(def =>
+    [def.id, def.providerFamily, def.name, ...(def.aliases ?? [])]
       .some(alias => alias?.toLowerCase() === slug))
 }
 
 /** Live ClawHub store in the existing Connectors page, not a second settings area. */
 export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConnectorStoreProps): ReactNode {
   const [family, setFamily] = useState<ClawHubFamily>('code-plugin')
-  const [official, setOfficial] = useState(true)
+  const [official, setOfficial] = useState(false)
+  const [limit, setLimit] = useState(24)
   const [draft, setDraft] = useState('')
   const [query, setQuery] = useState('')
   const [reload, setReload] = useState(0)
@@ -33,11 +35,24 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
   const [notice, setNotice] = useState('')
   const [preparing, setPreparing] = useState(false)
   const [installedPlugins, setInstalledPlugins] = useState<readonly string[]>([])
+  const [routing, setRouting] = useState<OpenClawRoutingSnapshot | null>(null)
+  const [routingBusy, setRoutingBusy] = useState<string | null>(null)
+  const [pluginBusy, setPluginBusy] = useState<string | null>(null)
+  const [routingError, setRoutingError] = useState(false)
+  const [routingRefresh, setRoutingRefresh] = useState(0)
+  const [authorizationUrl, setAuthorizationUrl] = useState<string | null>(null)
+  const [gatewayCredential, setGatewayCredential] = useState<OpenClawGatewayCredentialState | null>(null)
+  const [gatewaySaving, setGatewaySaving] = useState(false)
   const browse = registry?.clawHubCatalog
   const readState = registry?.clawHubState
   const installSkill = registry?.clawHubInstallSkill
   const installPackage = registry?.clawHubInstallPackage
   const prepareCli = registry?.prepareClawHubCli
+  const inspectTools = registry?.openClawPluginTools
+  const setRoutingPermission = registry?.setOpenClawPluginTool
+  const setPluginEnabled = registry?.setOpenClawPluginEnabled
+  const readGatewayCredential = registry?.openClawGatewayCredential
+  const saveGatewayCredential = registry?.configureOpenClawGatewayCredential
 
   useEffect(() => {
     if (readState === undefined) return
@@ -50,14 +65,72 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
     let active = true
     setItems(null)
     setError(false)
-    void browse({ family, query, officialOnly: official, limit: 16 }).then(
+    void browse({ family, query, officialOnly: official, limit }).then(
       value => { if (active) setItems(value.items) },
       () => { if (active) setError(true) },
     )
     return () => { active = false }
-  }, [browse, family, query, official, reload])
+  }, [browse, family, query, official, limit, reload])
+
+  useEffect(() => {
+    if (inspectTools === undefined) return
+    let active = true
+    setRoutingError(false)
+    void inspectTools().then(
+      snapshot => { if (active) setRouting(snapshot) },
+      () => { if (active) setRoutingError(true) },
+    )
+    return () => { active = false }
+  }, [inspectTools, routingRefresh, reload])
+
+  const approveTool = (tool: OpenClawRoutedTool): void => {
+    if (setRoutingPermission === undefined || routingBusy !== null) return
+    const key = tool.pluginId + ':' + tool.name
+    setRoutingBusy(key)
+    setRoutingError(false)
+    void setRoutingPermission({ pluginId: tool.pluginId, toolName: tool.name,
+      approved: !tool.approved }).then(
+      value => { setRouting(value) },
+      () => { setRoutingError(true) },
+    ).finally(() => { setRoutingBusy(null) })
+  }
+
+  const togglePlugin = (pluginId: string, enabled: boolean): void => {
+    if (setPluginEnabled === undefined || pluginBusy !== null) return
+    setPluginBusy(pluginId)
+    setRoutingError(false)
+    void setPluginEnabled({ pluginId, enabled }).then(
+      value => { setRouting(value); setRoutingRefresh(n => n + 1) },
+      () => { setRoutingError(true) },
+    ).finally(() => { setPluginBusy(null) })
+  }
+
+  useEffect(() => {
+    if (readGatewayCredential === undefined) return
+    let active = true
+    void readGatewayCredential().then(value => {
+      if (active) setGatewayCredential(value)
+    }, () => { if (active) setGatewayCredential(null) })
+    return () => { active = false }
+  }, [readGatewayCredential, routingRefresh])
+
+  const saveToken = (): void => {
+    if (gatewaySaving || saveGatewayCredential === undefined) return
+    setGatewaySaving(true)
+    setNotice('')
+    void saveGatewayCredential({ auto: true }).then(
+      value => {
+        setGatewayCredential(value)
+        setAuthorizationUrl(value.authorizationUrl ?? null)
+        setNotice(t(value.configured ? 'storeGatewayTokenSaved' : 'storeGatewayBrowserOnly'))
+        setRoutingRefresh(n => n + 1)
+      },
+      () => { setAuthorizationUrl(null); setNotice(t('storeGatewayTokenError')) },
+    ).finally(() => { setGatewaySaving(false) })
+  }
 
   const fresh = (items ?? []).filter(item => !duplicate(item, connectedIds))
+    .sort((left, right) => Number(right.installed) - Number(left.installed))
   const hidden = (items?.length ?? 0) - fresh.length
   const familyLabel = (value: ClawHubFamily): string => value === 'skill'
     ? t('storeSkills') : value === 'code-plugin' ? t('storePlugins') : t('storeBundles')
@@ -80,6 +153,8 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
       () => {
         setInstalledPlugins(current => current.includes(item.name) ? current : [...current, item.name])
         setNotice(t('storeNativeInstalled'))
+        setRoutingRefresh(n => n + 1)
+        setReload(n => n + 1)
       },
       () => { setNotice(t('storeNativeInstallError')) },
     ).finally(() => { setBusy(null) })
@@ -108,6 +183,8 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
       </div>
       <div className={css.toolbar}>
         <strong>{cliLabel}</strong>
+        <span className={css.safetyNote}>{runtime?.openclaw === 'available'
+          ? t('storeRuntimeReady') : t('storeRuntimeNotReady')}</span>
         {runtime?.cliVersion ? <span className={css.safetyNote}>{t('storeCliVersion')}: {runtime.cliVersion}</span> : null}
         {runtime?.latestCliVersion ? <span className={css.safetyNote}>{t('storeCliLatest')}: {runtime.latestCliVersion}</span> : null}
         {runtime?.failureReason ? <span className={css.safetyNote}>{t('storeCliReason')}: {runtime.failureReason}</span> : null}
@@ -147,12 +224,15 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
               <strong className={css.presetName}>{item.displayName}</strong>
               <small>{item.name} · {item.version}</small>
               <p>{item.description}</p>
-              <div className={css.chips}><span>{item.official ? t('storeOfficial') : t('storeCommunity')}</span></div>
+              <div className={css.chips}>
+                <span>{item.official ? t('storeOfficial') : t('storeCommunity')}</span>
+                {item.installed ? <span>{t('storeInstalledStatus')}</span> : null}
+              </div>
               {item.family === 'skill' ? (
                 <button className={css.compactButton} type="button"
-                  disabled={busy !== null || installSkill === undefined || runtime?.cli === 'missing'}
+                  disabled={busy !== null || item.installed || installSkill === undefined || runtime?.cliStatus !== 'ready'}
                   onClick={() => { install(item) }}>
-                  {busy === item.name ? t('storeInstalling') : t('storeInstall')}
+                  {item.installed ? t('storeInstalledStatus') : busy === item.name ? t('storeInstalling') : t('storeInstall')}
                 </button>
               ) : (
                 <div className={css.toolbar}>
@@ -169,13 +249,7 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
                   <details>
                     <summary>{t('storeAuthGuide')}</summary>
                     <p className={css.safetyNote}>{t('storeAuthExplanation')}</p>
-                    <code>{'openclaw plugins list --json'}</code>
-                    <p className={css.safetyNote}>{t('storeAuthConfigStep')}</p>
-                    <code>{'openclaw configure --section plugins'}</code>
                     <p className={css.safetyNote}>{t('storeAuthEnableStep')}</p>
-                    <code>{'openclaw plugins enable <id>'}</code>
-                    <p className={css.safetyNote}>{t('storeAuthVerifyStep')}</p>
-                    <code>{'openclaw plugins inspect <id> --runtime --json'}</code>
                     <p><a href="https://docs.openclaw.ai/plugins" target="_blank" rel="noreferrer">
                       {t('storeAuthDocs')}
                     </a></p>
@@ -186,7 +260,101 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
           ))}
         </div>
       ) : null}
+      {items !== null && items.length >= limit && limit < 60 ? (
+        <button type="button" className={css.compactButton}
+          onClick={() => { setLimit(current => Math.min(current + 24, 60)) }}>
+          {t('storeShowMore')}
+        </button>
+      ) : null}
       {notice ? <p role="status">{notice}</p> : null}
+      <p className={css.safetyNote}>{t('storeInstallIsNotActivation')}</p>
+      <div className={css.block} aria-label={t('storeGatewayTokenTitle')}>
+        <div className={css.heading}>
+          <div>
+            <h3>{t('storeGatewayTokenTitle')}</h3>
+            <p>{t('storeGatewayTokenHint')}</p>
+          </div>
+          {authorizationUrl ? (
+            <a href={authorizationUrl} target="_blank" rel="noreferrer">
+              {t('storeGatewayOpenUi')}
+            </a>
+          ) : null}
+        </div>
+        <p className={css.safetyNote}>{gatewayCredential?.configured
+          ? t('storeGatewayTokenReady') : t('storeGatewayTokenMissing')}</p>
+        <div className={css.toolbar}>
+          <button className={css.compactButton} type="button"
+            disabled={gatewaySaving || saveGatewayCredential === undefined}
+            onClick={saveToken}>
+            {gatewaySaving ? t('storeGatewayTokenSaving') : t('storeGatewayTokenSave')}
+          </button>
+        </div>
+        <p className={css.safetyNote}>{t('storeGatewaySecurity')}</p>
+      </div>
+      <div className={css.block} aria-label={t('storeRoutingTitle')}>
+        <div className={css.heading}>
+          <div>
+            <h3>{t('storeRoutingTitle')}</h3>
+            <p>{t('storeRoutingIntro')}</p>
+          </div>
+          <button className={css.compactButton} type="button"
+            disabled={inspectTools === undefined}
+            onClick={() => { setRouting(null); setRoutingRefresh(n => n + 1) }}>
+            {t('storeRoutingRefresh')}
+          </button>
+        </div>
+        {routingError ? <p role="alert">{t('storeRoutingUnavailable')}</p> : null}
+        {routing === null && !routingError ? <p>{t('storeRoutingLoading')}</p> : null}
+        {routing !== null && !routing.inspectionAvailable ? <p>{t('storeRoutingUnavailable')}</p> : null}
+        {routing !== null && !routing.gatewayCredentialConfigured
+          ? <p className={css.safetyNote}>{t('storeRoutingMissingToken')}</p> : null}
+        {routing !== null && routing.plugins.length > 0 ? (
+          <>
+          <h4>{t('storeMyPlugins')}</h4>
+          <div className={css.presetGrid}>
+            {routing.plugins.map(plugin => (
+              <article key={plugin.id} className={css.presetCard}>
+                <strong className={css.presetName}>{plugin.id}</strong>
+                <small>{plugin.loaded ? t('storePluginLoaded')
+                  : plugin.enabled ? t('storePluginNeedsRuntime')
+                    : plugin.status === 'error' ? t('storePluginFailed') : t('storePluginDisabled')}</small>
+                <button className={css.compactButton} type="button"
+                  disabled={pluginBusy !== null || setPluginEnabled === undefined}
+                  onClick={() => { togglePlugin(plugin.id, !plugin.enabled) }}>
+                  {pluginBusy === plugin.id ? t('storeInstalling')
+                    : plugin.enabled ? t('storePluginDisable') : t('storePluginEnable')}
+                </button>
+              </article>
+            ))}
+          </div>
+          </>
+        ) : null}
+        {routing !== null && routing.tools.length === 0 ? <p>{t('storeRoutingEmpty')}</p> : null}
+        {routing !== null && routing.tools.length > 0 ? (
+          <div className={css.presetGrid}>
+            {routing.tools.map(tool => (
+              <article className={css.presetCard} key={tool.pluginId + ':' + tool.name}>
+                <strong className={css.presetName}>{tool.name}</strong>
+                <small>{tool.pluginId}</small>
+                <p className={css.safetyNote}>{tool.approved
+                  ? t('storeRoutingApproved') : t('storeRoutingDenied')}</p>
+                <button className={css.compactButton} type="button"
+                  disabled={!tool.imported || routingBusy !== null
+                    || setRoutingPermission === undefined}
+                  onClick={() => { approveTool(tool) }}>
+                  {tool.approved ? t('storeRoutingRevoke') : t('storeRoutingAllow')}
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : null}
+        <p className={css.safetyNote}>{t('storeRoutingPolicy')}</p>
+        <p className={css.safetyNote}>{t('storeRoutingOAuth')} {' '}
+          <a href="https://docs.openclaw.ai/concepts/oauth" target="_blank" rel="noreferrer">
+            {t('storeRoutingDocs')}
+          </a>
+        </p>
+      </div>
       <p className={css.safetyNote}>{t('storeSafety')}</p>
     </section>
   )

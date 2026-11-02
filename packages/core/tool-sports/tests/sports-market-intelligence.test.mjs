@@ -65,3 +65,23 @@ test('does not remove vig from a partial soccer three-way or two same-side total
   assert.equal(duplicateTotals.markets.length,1)
   assert.equal(duplicateTotals.markets[0].totalBookOverround,null)
 })
+
+test('never derive no-vig percentages from separated quotes or mixed providers',()=>{
+  const old={...base,market:'h2h',selection:'Home',point:null,price:2.03,
+    updatedAt:'2026-10-29T13:01:00Z'}
+  const recent={...base,market:'h2h',selection:'Away',point:null,price:1.85,
+    updatedAt:'2026-10-29T13:55:00Z'}
+  const stalePair=compareBettingMarkets([old,recent],now)
+  assert.equal(stalePair.markets.length,0)
+  const mixedBookmaker=compareBettingMarkets([
+    {...old,updatedAt:'2026-10-29T13:54:00Z'},
+    {...recent,bookmaker:'Different Sportsbook'},
+  ],now)
+  assert.equal(mixedBookmaker.markets.length,0)
+  const coherent=compareBettingMarkets([
+    {...old,updatedAt:'2026-10-29T13:54:00Z'},recent
+  ],now)
+  assert.equal(coherent.markets.length,1)
+  assert.equal(coherent.markets[0].selections.length,2)
+  assert.ok(coherent.markets[0].selections.every(q=>q.noVigShare!==null))
+})

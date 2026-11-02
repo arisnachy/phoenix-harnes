@@ -131,6 +131,7 @@ describe('dsh-tool-team', () => {
     const leadAssembly = await assembly(ctx, lead)
     expect(leadAssembly.tools.map(schema => schema.name).filter(name => TOOL_NAMES.includes(name)).sort())
       .toEqual(TOOL_NAMES)
+    expect(leadAssembly.tools.some(schema => schema.name === 'fenix_consult')).toBe(true)
     const leadPrompt = renderPrompt(leadAssembly)
     expect(leadPrompt).toContain('real shared work, not role-play')
     expect(leadPrompt).toContain('Fénix Eclipse has exactly two model roles')
@@ -144,6 +145,13 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('Use a preferred name or professional title already authorized')
     expect(leadPrompt).toContain('A normal peer result, question or wait stays on the coordinator route')
 
+    const deniedFenix = await execute(ctx, lead, 'fenix_consult', {
+      evidence_id: 'no-real-evidence',
+      question: '¿Qué corrección de arquitectura falta verificar?',
+    })
+    expect(deniedFenix.isError).toBe(true)
+    expect(text(deniedFenix)).toContain('requires Eclipse Automatic')
+
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
       name: 'tool-worker',
       description: 'exercise scoped tools',
@@ -155,6 +163,7 @@ describe('dsh-tool-team', () => {
     const childAssembly = await assembly(ctx, child)
     expect(childAssembly.tools.map(schema => schema.name).filter(name => TOOL_NAMES.includes(name)).sort())
       .toEqual(TOOL_NAMES)
+    expect(childAssembly.tools.some(schema => schema.name === 'fenix_consult')).toBe(false)
     const childPrompt = renderPrompt(childAssembly)
     expect(childPrompt).toContain('Your Team role is teammate; your Team name is tool-worker')
     expect(childPrompt).toContain('Natural, concise, collegial')

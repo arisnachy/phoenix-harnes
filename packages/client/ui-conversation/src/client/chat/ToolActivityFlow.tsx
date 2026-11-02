@@ -342,12 +342,36 @@ function userRequestsTrading(node: OrderedChatNode): boolean {
       && typeof block.text === 'string' ? block.text : '').join(' '))
 }
 
+/** Stable visual identity within one conversation; updating an event replaces
+ * its earlier snapshot rather than appending many near-identical cards.
+ * @param card - A previously validated first-party visual.
+ * @returns A match-key for event and scoreboard panels, or null otherwise.
+ */
+function sportsVisualIdentity(card: GenerativeUiBlock): string | null {
+  if (card.component === 'sports_game_card') {
+    return 'game:' + (card.props.eventId ?? card.props.title).toLowerCase()
+  }
+  if (card.component === 'sports_espn_dashboard' && card.props.view === 'event') {
+    // Matchup investigations are drafts until the final candidate is chosen:
+    // update the same analysis surface instead of stacking exploratory cards.
+    return 'analysis:active'
+  }
+  if (card.component === 'sports_schedule_card') {
+    return 'slate:' + card.props.date + ':' + (card.props.providerLeague ?? card.props.league ?? '')
+  }
+  return null
+}
+
 function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
   const flow: FlowItem[] = []
   let pending: ActivityItem[] = []
   let pendingAnchorKey: string | undefined
   let sportsCards: GenerativeUiBlock[] = []
   let tradingVisible = false
+  const sportsLocations = new Map<string, { flowIndex: number; blockIndex: number }>()
+  // The current human turn owns the display domain. Incidental Binance reads
+  // from a Code subcall must never insert the full trading dashboard.
+  let tradingRequested = false
 
   const flush = (avoidAnchorKey?: string): void => {
     const first = pending[0]
@@ -379,13 +403,13 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
         sportsCards = sportsCards.slice(-12)
         // A settled Binance result owns its native dashboard immediately.
         // Do not depend on the assistant generating JSON or a special fence.
-        const trading = tradingDashboardFromToolResult(result)
+        const trading = tradingRequested ? tradingDashboardFromToolResult(result) : undefined
         if (trading !== undefined && !tradingVisible) {
           flush()
           flow.push({ kind: 'trading', key: 'trading:' + node.key, snapshot: trading })
           tradingVisible = true
         }
-        if (!tradingVisible) {
+        if (tradingRequested && !tradingVisible) {
           const selection = tradingMarketFromToolResult(result)
           if (selection !== undefined) {
             flush()
@@ -414,7 +438,29 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
         if (assistant.status === 'settled' && sportsCards.length > 0) {
           const remaining = unrenderedSportsCards(sportsCards,
             assistant.blocks.filter(b => b.kind === 'text').map(b => b.text))
-          if (remaining.length > 0) flow.push({ kind: 'sports', key: 'sports:' + node.key, blocks: remaining })
+          const fresh: GenerativeUiBlock[] = []
+          for (const card of remaining) {
+            const identity = sportsVisualIdentity(card)
+            const prior = identity ? sportsLocations.get(identity) : undefined
+            if (prior) {
+              const old = flow[prior.flowIndex]
+              if (old?.kind === 'sports') {
+                const blocks = [...old.blocks]
+                blocks[prior.blockIndex] = card
+                flow[prior.flowIndex] = { ...old, blocks }
+                continue
+              }
+            }
+            fresh.push(card)
+          }
+          if (fresh.length > 0) {
+            const flowIndex = flow.length
+            flow.push({ kind: 'sports', key: 'sports:' + node.key, blocks: fresh })
+            fresh.forEach((card,blockIndex)=>{
+              const key = sportsVisualIdentity(card)
+              if (key) sportsLocations.set(key,{flowIndex,blockIndex})
+            })
+          }
           sportsCards = []
         }
         flush(node.key)
@@ -432,7 +478,8 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
     if (node.kind === 'user' || node.kind === 'steering') {
       sportsCards = []
       tradingVisible = false
-      if (userRequestsTrading(node)) {
+      tradingRequested = userRequestsTrading(node)
+      if (tradingRequested) {
         flow.push({ kind: 'trading', key: 'trading:user:' + node.key })
         tradingVisible = true
       }

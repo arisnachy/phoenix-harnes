@@ -208,6 +208,33 @@ function expectBefore(first: HTMLElement, second: HTMLElement): void {
 afterEach(cleanup)
 beforeEach(() => { localStorage.clear() })
 
+describe('trading and sports isolation', () => {
+  const dashboard={
+    mode:'paper',phase:'running',enabled:true,
+    settings:{symbols:['BTCUSDT'],interval:'15m',pollMs:60_000},
+    account:{equityUsdt:13,cashUsdt:13,totalPnlUsdt:0,totalReturnPct:0,
+      maxDrawdownPct:0,tradeCount:0,positions:[]},
+    signals:[],recentTrades:[],lastDecision:'hold',rationale:'No entry',
+  }
+  const nestedBinance=():ToolResultNode=>({
+    ...settledTool('sports-code'),
+    seq:3,time:3000,
+    call:{name:'Code',argsRaw:'{}'},
+    subCalls:[{...settledTool('binance-paper'),call:{name:'binance_paper_dashboard',argsRaw:'{}'},
+      content:[{type:'text',text:JSON.stringify({uiBlock:{
+        component:'trading_dashboard',version:1,props:dashboard}})}]}],
+  })
+  it('does not insert Binance PAPER card from incidental sports research',()=>{
+    renderChat([user(1,'Investiga cuotas de la NBA y predice el ganador'),nestedBinance()])
+    expect(screen.queryByRole('region',{name:'Visor de trading Binance PAPER'})).toBeNull()
+    expect(screen.queryByText('PHOENIX / TRADING INTELLIGENCE')).toBeNull()
+  })
+  it('retains the dashboard for a specifically requested Binance PAPER session',()=>{
+    renderChat([user(1,'Muestra el panel de trading Binance PAPER'),nestedBinance()])
+    expect(screen.getByRole('region',{name:'Visor de trading Binance PAPER'})).toBeTruthy()
+  })
+})
+
 describe('chat tool activity grouping', () => {
   it('renders the browser workspace for nested Chrome activity while Tools stays collapsed', () => {
     renderChat([user(1, 'Investiga y completa el formulario en Chrome'), nestedChromeTool()])
@@ -382,6 +409,25 @@ describe('chat tool activity grouping', () => {
     expect(sports.querySelectorAll('img').length).toBeGreaterThanOrEqual(count)
     expect(screen.getAllByText('Ver fundamento')).toHaveLength(count)
     expect(screen.getByRole('button',{name:'Tools'}).getAttribute('aria-expanded')).toBe('false')
+  })
+  it('keeps only the final investigated matchup card after exploring two candidates',()=>{
+    const card=(title:string)=>({component:'sports_espn_dashboard',version:1,props:{
+      view:'event',title,subtitle:'NHL · Investigación',source:'ESPN',
+      checkedAt:'2026-11-02T16:01:00Z',note:'Datos verificados',
+      sections:[{heading:'Forma reciente',kind:'metrics',items:[{label:'Local',value:'5V · 5D'}]}],
+    }})
+    const first={...settledTool('research-1'),seq:2,time:2000,
+      call:{name:'sports_chat_matchup_factors',argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({uiBlock:card('Candidato NBA')})}]}
+    const second={...settledTool('research-2'),seq:4,time:4000,
+      call:{name:'sports_chat_predict',argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({uiBlock:card('Final NHL')})}]}
+    renderChat([user(1,'Investiga y dame una sola ficha deportiva final'),
+      first,assistantWithReasoning(3),second,assistantWithReasoning(5)])
+    const panels=screen.getAllByRole('region',{name:'Panel deportivo de Kira'})
+    expect(panels).toHaveLength(1)
+    expect(panels[0].textContent).toContain('Final NHL')
+    expect(panels[0].textContent).not.toContain('Candidato NBA')
   })
   it('does not replace a requested research ticket with automatic NO BET when bookmaker prices are missing',()=>{
     const tool={...settledTool('odds-1'),seq:3,time:3000,
