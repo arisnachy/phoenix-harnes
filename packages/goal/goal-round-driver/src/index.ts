@@ -12,7 +12,7 @@ import { createUserMessage, isHarnessError, QUOTA_EXCEEDED_CODE } from '@phoenix
 import type { ContentBlock, MessageId, MessageSource } from '@phoenix-ai/dsh-llm'
 import type { Session, SessionEvent, TurnEndCancelCause, UserMessage } from '@phoenix-ai/dsh-session'
 import { renderGoalRoundPrompt } from './prompt.ts'
-import { goalBlockedByClosedUniversalMission, unfinishedStructuredWorkRecoveryObjective, unfinishedToolFailureRecoveryObjective } from './mission-fence.ts'
+import { goalBlockedByClosedUniversalMission } from './mission-fence.ts'
 import { recordGoalSupervisor, replayGoalSupervisor, type GoalSupervisorState } from './supervisor.ts'
 import { measureGoalVerificationProgress, measureGoalWorkProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
 
@@ -304,22 +304,9 @@ export function apply(ctx: Context): void {
     }
 
     const goal = currentGoal(state)
-    if (goal === undefined) {
-      // Structured unfinished tasks are durable but some providers end a turn
-      // without calling create_goal. Start continuation based on state, not
-      // wording. The normal
-      // goal/changed event will schedule the first recovery round.
-      const objective = unfinishedStructuredWorkRecoveryObjective(agent.session.events)
-        ?? unfinishedToolFailureRecoveryObjective(agent.session.events)
-      if (objective !== undefined) {
-        try {
-          ctx.goals.create(agent, { objective })
-        } catch (error: unknown) {
-          ctx.logger.warn(`goal-round-driver: could not recover unfinished delegated work for agent "${agent.id}": ${renderThrown(error)}`)
-        }
-      }
-      return
-    }
+    // A normal task, failed tool or unfinished turn is not permission to
+    // create a persistent Goal. The user must explicitly opt in via create_goal.
+    if (goal === undefined) return
     if (goal.phase !== 'active' || goal.activation !== 'armed') return
     const work = measureGoalWorkProgress(agent.session.events, goal.id)
     if (work.stagnantRounds >= MAX_NO_PROGRESS_ROUNDS) {
