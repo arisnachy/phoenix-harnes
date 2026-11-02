@@ -23,7 +23,7 @@ import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import { readBusinessLibrarySnapshot } from './business-library.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
 import { readOpenClawRuntimeSnapshot } from './openclaw-runtime.ts'
-import { readOpenClawRouting, setOpenClawRoutingPermission } from './openclaw-plugin-routing.ts'
+import { readOpenClawRouting, setOpenClawRoutingPermission, setOpenClawPluginEnabled } from './openclaw-plugin-routing.ts'
 import { prepareLocalOpenClawGateway } from './openclaw-gateway-setup.ts'
 import { readClawHubCatalog } from './clawhub-catalog.ts'
 import { clawHubInstall, clawHubState, prepareClawHubCli } from './clawhub-marketplace.ts'
@@ -60,7 +60,7 @@ import type {
   McpRegistrySearchSnapshot,
   OpenClawConnectorSnapshot,
   OpenClawRuntimeSnapshot,
-  OpenClawRoutingSnapshot, OpenClawRoutingRequest,
+  OpenClawRoutingSnapshot, OpenClawRoutingRequest, OpenClawPluginActivationRequest,
   OpenClawGatewayCredentialState, OpenClawGatewayCredentialRequest,
   ClawHubCatalogRequest, ClawHubCatalogSnapshot, ClawHubInstallRequest, ClawHubInstallReceipt, ClawHubState,
   PhoenixLocalEndpointReceipt,
@@ -438,6 +438,15 @@ export class PluginInventoryGateway extends TypertRemoteService {
   async setOpenClawPluginTool(request: OpenClawRoutingRequest): Promise<OpenClawRoutingSnapshot> {
     const [snapshot, credential] = await Promise.all([
       setOpenClawRoutingPermission(request), this.openClawGatewayCredential(),
+    ])
+    return { ...snapshot, gatewayCredentialConfigured: credential.configured }
+  }
+
+  /** Explicit activation or deactivation of an installed OpenClaw-native plugin. */
+  @Remote('setOpenClawPluginEnabled')
+  async setOpenClawPluginEnabled(request: OpenClawPluginActivationRequest): Promise<OpenClawRoutingSnapshot> {
+    const [snapshot, credential] = await Promise.all([
+      setOpenClawPluginEnabled(request), this.openClawGatewayCredential(),
     ])
     return { ...snapshot, gatewayCredentialConfigured: credential.configured }
   }
