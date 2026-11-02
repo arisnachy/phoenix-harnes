@@ -19,7 +19,7 @@ export type HockeyFixture={id:string;date:string;state:string;season:string;
   home:{id:string;abbrev:string;name:string};away:{id:string;abbrev:string;name:string};
   venue:string}
 export type HockeyPlayer={id:string;team:string;name:string;role:'forward'|'defense'|'goalie';
-  stats:Record<string,string>;last5:Array<{date:string;goals:string;assists:string;shots:string}>;
+  stats:Record<string,string>;last5:Array<{date:string;summary:string}>;
   starterConfirmed:false}
 export type HockeyEvidenceSource={url:string;status:'verified'|'missing'|'error';checkedAt:string;
   error?:string}
@@ -167,7 +167,7 @@ function dashboard(d:Omit<HockeyDossier,'uiBlock'>):HockeyDossier['uiBlock']{
     ...d.goalieCandidates.home,...d.goalieCandidates.away].map(p=>({
       label:p.team+' · '+p.name,value:'Candidato en roster (no confirmado)',
       detail:Object.entries(p.stats).map(([k,v])=>k+': '+v).slice(0,6).join(' · ')||
-        'Estadísticas no disponibles'})))
+        'Estadísticas no disponibles'+(p.last5.length?' · reciente: '+p.last5[0]?.summary:'')})))
   add('Tabla NHL',[{label:d.fixture.home.name,value:d.standings.home},
     {label:d.fixture.away.name,value:d.standings.away}])
   add('Últimos partidos y descanso',(['home','away'] as const).map(side=>{
@@ -230,9 +230,13 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
       const p=selected[next++]!
       const data=await source<unknown>(base+'player/'+p.id+'/landing',fetcher,sources,now)
       p.stats=observedStats(data)
-      p.last5=arr(o(data).last5Games).slice(0,5).map(v=>({
-        date:txt(o(v).gameDate,20),goals:txt(o(v).goals,8),
-        assists:txt(o(v).assists,8),shots:txt(o(v).shots,8)}))
+      p.last5=arr(o(data).last5Games).slice(0,5).map(v=>{
+        const r=o(v),goalie=p.role==='goalie'
+        const fields=goalie?['shotsAgainst','saves','savePctg','goalsAgainst','decision']:
+          ['goals','assists','shots','timeOnIce']
+        return{date:txt(r.gameDate,20),summary:fields.map(key=>key+': '+txt(r[key],15))
+          .filter(text=>!text.endsWith(': ')).join(' · ')}
+      })
     }
   }))
   const goalies={home:players.home.filter(p=>p.role==='goalie'),
