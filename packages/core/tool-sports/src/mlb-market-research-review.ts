@@ -15,11 +15,17 @@ export type MlbMarketComparison={
   offers:Array<{selection:string;line:number|null;price:number;updatedAt:string}>;
   note:string;
 }
+export type MlbCrossBookComparison={
+  market:string;selection:string;line:number|null;
+  quotes:Array<{bookmaker:string;price:number;updatedAt:string}>;
+  note:string;
+}
 export type MlbResearchReview={
   version:1;eventId:string;sport:'baseball';league:'mlb';
   eligibility:'research-only'|'insufficient';
   evidenceGates:Record<string,boolean>;
-  reviewedMarkets:MlbReviewMarket[];marketComparisons:MlbMarketComparison[];conclusion:string;
+  reviewedMarkets:MlbReviewMarket[];marketComparisons:MlbMarketComparison[];
+  crossBookComparisons:MlbCrossBookComparison[];conclusion:string;
   decision:'investigate'|'abstain';
   probabilitiesEstimated:false;eligibleForTicket:false;
   missingEvidence:string[];
@@ -118,13 +124,26 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     comparisonGroups.set(key,group)
   }
   const marketComparisons=[...comparisonGroups.values()]
+  // Cross-book prices are comparable only for the exact same market,
+  // selection and line. Never collapse Over/Under or different run lines.
+  const crossBookGroups=new Map<string,MlbCrossBookComparison>()
+  for(const q of d.odds.slice(0,40)){
+    const line=q.point??null
+    const key=JSON.stringify([q.market.trim().toLowerCase(),
+      q.selection.trim().toLowerCase(),line])
+    const group=crossBookGroups.get(key)??{market:q.market,selection:q.selection,
+      line,quotes:[],note:'Precios observados para el mismo mercado, selección y línea; verificar período y reglas de cada casa.'}
+    group.quotes.push({bookmaker:q.bookmaker,price:q.price,updatedAt:q.updatedAt})
+    crossBookGroups.set(key,group)
+  }
+  const crossBookComparisons=[...crossBookGroups.values()]
   const basic=Object.entries(gates).filter(([key])=>
     ['scheduledFuture','startersVerified','teamRecordsVerified','recentTeamFormVerified',
       'bothRostersVerified','rosterMatchupsReviewed'].includes(key))
   const insufficient=basic.some(([,value])=>!value)
   return{version:1,eventId:String(d.fixture.gamePk),sport:'baseball',league:'mlb',
     eligibility:insufficient?'insufficient':'research-only',evidenceGates:gates,
-    reviewedMarkets,marketComparisons,conclusion:insufficient?
+    reviewedMarkets,marketComparisons,crossBookComparisons,conclusion:insufficient?
       'El juego no es prepartido elegible o faltan datos esenciales: no considerar ninguna selección para un ticket.':
       !gates.realOffersVerified?'No hay cuotas reales vigentes para comparar mercados; abstenerse.':
       'Expediente apto para discusión crítica de mercados, pero no demuestra ventaja apostable.',
