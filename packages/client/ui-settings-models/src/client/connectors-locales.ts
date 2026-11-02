@@ -1,5 +1,16 @@
 /** Copy for the dedicated Settings → Connectors surface. */
 export const connectorEn = {
+  storeNativeInstall: "Install plugin",
+  storeNativeInstalled: "Plugin installed in OpenClaw, disabled until configured and authorized.",
+  storeNativeInstalledStatus: "Installed · setup required",
+  storeNativeInstallError: "Plugin installation failed. Check the OpenClaw runtime, permissions and package compatibility.",
+  storeRuntimeNotReady: "Install/configure the OpenClaw runtime first; ClawHub CLI alone cannot execute plugins.",
+  storeAuthGuide: "How to configure / authorize",
+  storeAuthExplanation: "Authorization is specific to each provider. Credentials and OAuth are configured in OpenClaw, not through ClawHub login. The installed plugin ID may differ from the package name.",
+  storeAuthConfigStep: "Configure the plugin and its service credentials:",
+  storeAuthEnableStep: "Once configured, review capabilities and enable the actual plugin ID:",
+  storeAuthVerifyStep: "Verify plugin registration (and test the relevant capability):",
+  storeAuthDocs: "Official OpenClaw plugin instructions",
   storeCliReady: "ClawHub CLI operational",
   storeCliMissing: "ClawHub CLI missing",
   storeCliInstalling: "Preparing ClawHub CLI…",
@@ -148,6 +159,17 @@ export type ConnectorKey = keyof typeof connectorEn
 
 /** Spanish copy for the dedicated Settings → Connectors surface. */
 export const connectorEs: { [Key in ConnectorKey]: string } = {
+  storeNativeInstall: "Instalar plugin",
+  storeNativeInstalled: "Plugin instalado en OpenClaw, desactivado hasta configurarlo y autorizarlo.",
+  storeNativeInstalledStatus: "Instalado · falta configurar",
+  storeNativeInstallError: "Falló la instalación. Comprueba OpenClaw, los permisos y la compatibilidad del paquete.",
+  storeRuntimeNotReady: "Primero configura el runtime OpenClaw: la CLI de ClawHub por sí sola no ejecuta plugins.",
+  storeAuthGuide: "Cómo configurar y autorizar",
+  storeAuthExplanation: "Cada servicio tiene su propia autorización. Las credenciales y el OAuth se configuran en OpenClaw, no con el login de ClawHub. El ID del plugin puede ser distinto al nombre del paquete.",
+  storeAuthConfigStep: "Configura el plugin y sus credenciales:",
+  storeAuthEnableStep: "Después de configurar, revisa permisos y habilita el ID real:",
+  storeAuthVerifyStep: "Verifica el registro del plugin y prueba la función:",
+  storeAuthDocs: "Instrucciones oficiales de OpenClaw",
   storeCliReady: "CLI de ClawHub operativa",
   storeCliMissing: "Falta la CLI de ClawHub",
   storeCliInstalling: "Preparando la CLI de ClawHub…",
@@ -293,6 +315,17 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
 
 /** Simplified Chinese copy for the dedicated Settings → Connectors surface. */
 export const connectorZh: { [Key in ConnectorKey]: string } = {
+  storeNativeInstall: "安装插件",
+  storeNativeInstalled: "插件已安装到 OpenClaw，但配置和授权前保持禁用。",
+  storeNativeInstalledStatus: "已安装 · 待配置",
+  storeNativeInstallError: "安装失败：请检查 OpenClaw、权限和兼容性。",
+  storeRuntimeNotReady: "请先安装并配置 OpenClaw 运行时；仅有 ClawHub CLI 无法执行插件。",
+  storeAuthGuide: "如何配置及授权",
+  storeAuthExplanation: "授权由具体服务提供。在 OpenClaw 中配置凭证和 OAuth，而非使用 ClawHub 登录。插件 ID 可能与包名不同。",
+  storeAuthConfigStep: "配置插件及凭证：",
+  storeAuthEnableStep: "配置完成后，确认权限并启用实际的插件 ID：",
+  storeAuthVerifyStep: "验证插件注册并测试能力：",
+  storeAuthDocs: "OpenClaw 官方插件说明",
   storeCliReady: "ClawHub CLI 已就绪",
   storeCliMissing: "未找到 ClawHub CLI",
   storeCliInstalling: "正在准备 ClawHub CLI…",

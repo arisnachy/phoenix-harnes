@@ -373,6 +373,15 @@ export class PluginInventoryGateway extends TypertRemoteService {
     return clawHubInstall(request)
   }
 
+  /** Explicitly install an OpenClaw-native ClawHub plugin disabled, pending configuration. */
+  @Remote('clawHubInstallPackage')
+  async clawHubInstallPackage(request: ClawHubInstallRequest): Promise<ClawHubInstallReceipt> {
+    if (request.family !== 'code-plugin' && request.family !== 'bundle-plugin') {
+      throw new Error('Select a native plugin package for this operation')
+    }
+    return clawHubInstall(request)
+  }
+
   @Remote('searchMcpRegistry')
   async searchMcpRegistry(request: McpRegistrySearchRequest): Promise<McpRegistrySearchSnapshot> {
     return searchOfficialMcpRegistry(request)

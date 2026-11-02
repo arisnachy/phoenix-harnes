@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 
 /** Optional, locally managed ClawHub registry CLI. Never load marketplace code in PHOENIX's Host process. */
 const dshHome = process.env.DSH_HOME || join(homedir(), '.dsh')
@@ -158,6 +158,23 @@ export async function clawHubExplore(request: ClawHubQuery): Promise<readonly Cl
   }).filter(item => PACKAGE_ID.test(item.name))
 }
 
+/** Prefer the optional isolated PHOENIX OpenClaw CLI over a PATH executable. */
+function managedOpenClawCli(): string | undefined {
+  const file = join(dshHome, 'toolchains', 'openclaw', 'node_modules', 'openclaw', 'package.json')
+  try {
+    const data: unknown = JSON.parse(readFileSync(file, 'utf8'))
+    if (data === null || typeof data !== 'object') return undefined
+    const bin = (data as { bin?: string | { openclaw?: string } }).bin
+    const rel = typeof bin === 'string' ? bin : bin?.openclaw
+    if (typeof rel !== 'string' || rel.startsWith('/') || rel.includes('\\')) return undefined
+    const root = dirname(file)
+    const entry = resolve(root, rel)
+    const fromRoot = relative(root, entry)
+    return fromRoot !== '' && fromRoot !== '..' && !fromRoot.startsWith('../')
+      && !fromRoot.startsWith('..\\') && existsSync(entry) ? entry : undefined
+  } catch { return undefined }
+}
+
 /** Install only a recognized package locator into the user skill root or an existing OpenClaw runtime. */
 export async function clawHubInstall(request: ClawHubInstallRequest): Promise<ClawHubInstallReceipt> {
   if (!PACKAGE_ID.test(request.name) || request.name.length > 128) throw new Error('Invalid ClawHub package identifier')
@@ -167,11 +184,19 @@ export async function clawHubInstall(request: ClawHubInstallRequest): Promise<Cl
     if (response.status !== 0) throw new Error('Skill installation failed; no verified installation receipt')
     return { name: request.name, family: request.family, status: 'installed-skill', detail: 'Installed to PHOENIX skills. Review its instructions before invoking.' }
   }
-  if (!(await available(process.platform === 'win32' ? 'openclaw.cmd' : 'openclaw'))) {
-    throw new Error('OpenClaw runtime is required for native plugins. ClawHub CLI alone cannot execute plugins.')
+  const managedEntry = managedOpenClawCli()
+  const command = managedEntry !== undefined ? process.execPath
+    : process.platform === 'win32' ? 'openclaw.cmd' : 'openclaw'
+  const prefix = managedEntry === undefined ? [] : [managedEntry]
+  const ready = await run(command, [...prefix, '--version'], 8_000)
+    .then(result => result.status === 0, () => false)
+  if (!ready) {
+    throw new Error('OpenClaw runtime is not executable; ClawHub CLI alone cannot install native plugins.')
   }
-  const response = await run(process.platform === 'win32' ? 'openclaw.cmd' : 'openclaw',
-    ['plugins', 'install', 'clawhub:' + request.name, '--no-enable'], 120_000)
+  // Installing native code is always a direct user action. Keep it disabled
+  // until required configuration, capability consent and policy are reviewed.
+  const response = await run(command,
+    [...prefix, 'plugins', 'install', 'clawhub:' + request.name, '--no-enable'], 120_000)
   if (response.status !== 0) throw new Error('OpenClaw plugin installation failed; inspect the runtime before retrying')
   return {
     name: request.name, family: request.family, status: 'installed-in-openclaw',
