@@ -2,7 +2,7 @@
  * No fabricated scores, probabilities, athlete participation or betting recommendations.
  */
 import {type MarketOutcome} from './sports.ts'
-import {collectDirectEspnStats,type DirectAthlete,type DirectTeam} from './sports-direct-stats.ts'
+import {collectDirectEspnStats,type DirectTeam} from './sports-direct-stats.ts'
 import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
 import {basketballSlate,basketballRead,record,values,label,id,teamKey,regulationMinutes,
   type BasketballFixture,type BasketballLeague,type BasketballSource} from './basketball-research-core.ts'
