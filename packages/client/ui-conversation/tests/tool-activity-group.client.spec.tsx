@@ -208,6 +208,33 @@ function expectBefore(first: HTMLElement, second: HTMLElement): void {
 afterEach(cleanup)
 beforeEach(() => { localStorage.clear() })
 
+describe('trading and sports isolation', () => {
+  const dashboard={
+    mode:'paper',phase:'running',enabled:true,
+    settings:{symbols:['BTCUSDT'],interval:'15m',pollMs:60_000},
+    account:{equityUsdt:13,cashUsdt:13,totalPnlUsdt:0,totalReturnPct:0,
+      maxDrawdownPct:0,tradeCount:0,positions:[]},
+    signals:[],recentTrades:[],lastDecision:'hold',rationale:'No entry',
+  }
+  const nestedBinance=():ToolResultNode=>({
+    ...settledTool('sports-code'),
+    seq:3,time:3000,
+    call:{name:'Code',argsRaw:'{}'},
+    subCalls:[{...settledTool('binance-paper'),call:{name:'binance_paper_dashboard',argsRaw:'{}'},
+      content:[{type:'text',text:JSON.stringify({uiBlock:{
+        component:'trading_dashboard',version:1,props:dashboard}})}]}],
+  })
+  it('does not insert Binance PAPER card from incidental sports research',()=>{
+    renderChat([user(1,'Investiga cuotas de la NBA y predice el ganador'),nestedBinance()])
+    expect(screen.queryByRole('region',{name:'Visor de trading Binance PAPER'})).toBeNull()
+    expect(screen.queryByText('PHOENIX / TRADING INTELLIGENCE')).toBeNull()
+  })
+  it('retains the dashboard for a specifically requested Binance PAPER session',()=>{
+    renderChat([user(1,'Muestra el panel de trading Binance PAPER'),nestedBinance()])
+    expect(screen.getByRole('region',{name:'Visor de trading Binance PAPER'})).toBeTruthy()
+  })
+})
+
 describe('chat tool activity grouping', () => {
   it('renders the browser workspace for nested Chrome activity while Tools stays collapsed', () => {
     renderChat([user(1, 'Investiga y completa el formulario en Chrome'), nestedChromeTool()])

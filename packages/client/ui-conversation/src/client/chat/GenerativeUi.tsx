@@ -707,11 +707,20 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
       const participants=matchSection?.items.filter(item=>item.image).slice(0,2)??[]
       const insightSections=p.view==='event'?p.sections
         .filter(section=>section!==matchSection):[]
-      // One signal from each available group: form, stats, markets and outlook.
-      // Avoid a wall of dates or four records from the same source.
-      const insightItems=insightSections.flatMap(section=>section.items.slice(0,1)
-        .map(item=>({...item,label:section.heading+' · '+item.label}))).slice(0,4)
-      const preview=p.view==='event'?[...participants,...insightItems].slice(0,6):
+      // Always show BOTH victory probabilities. Previously the collapsed card
+      // rendered only the first row of each section and hid the away team's %.
+      const winSection=insightSections.find(section=>
+        /estimaci[oó]n|proyecci[oó]n|probabilidad|victoria/iu.test(section.heading)
+        && section.items.some(item=>/%/u.test(item.value??'')))
+      const winItems=winSection?.items.filter(item=>/%/u.test(item.value??''))
+        .slice(0,3).map(item=>({...item,label:'Prob. ganar · '+item.label}))??[]
+      const otherItems=insightSections.filter(section=>section!==winSection)
+        .flatMap(section=>section.items.slice(0,1)
+          .map(item=>({...item,label:section.heading+' · '+item.label})))
+      // Keep the same compact footprint, prioritizing both teams, odds and one
+      // form/stat metric. Disclose model quality in the full expandable panel.
+      const preview=p.view==='event'?
+        [...participants,...winItems,...otherItems].slice(0,7):
         p.sections.flatMap(section=>section.items).slice(0,2)
       return <section className={css.sportsCard+' '+css.sportsCompactPanel}
         data-generative-ui="sports_espn_dashboard" aria-label={sportsDisplayText(p.title)}>
