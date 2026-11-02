@@ -331,7 +331,10 @@ const FENIX_TEST_REQUEST = /\b(?:pytest|unittest|tests?|pruebas?|mutaciones|muta
 // oxlint-disable-next-line @stylistic/max-len -- Bilingual quality gate stays auditable without extra classifier calls.
 const FENIX_REPORT_REQUEST = /\b(?:reporte\s+final|informe\s+final|final\s+report|limitations?|limitaciones|iteraciones|iterations|herramientas\s+usadas)\b/iu
 
-/** Deterministic, proportional quality obligations: no model-based classifier. */
+/** Deterministic, proportional quality obligations: no model-based classifier.
+ * @param request - Original user task, not model-authored summaries.
+ * @returns Narrow verification obligations only for coding deliverables.
+ */
 export function fenixCodingQualityBrief(request: string): string | undefined {
   if (!phoenixAutoTaskRequest(request)
     || !FENIX_CODING_ARTIFACT.test(request) || !FENIX_CODING_VERIFY.test(request)) return undefined
