@@ -880,7 +880,8 @@ function cleanupFailedPreparedRuntime(target) {
   if (!existsSync(candidate)
     || key === runtimePathKey(runtimeRoot)
     || key === runtimePathKey(root)
-    || key === runtimePathKey(lastKnownGoodRuntimeRoot)
+    || (typeof lastKnownGoodRuntimeRoot === 'string'
+      && key === runtimePathKey(lastKnownGoodRuntimeRoot))
     || (active?.path !== undefined && key === runtimePathKey(active.path))
     || runtimeProtectedByOwningCheckout(candidate)) return
   if (removeManagedWorktree(candidate, registeredWorktreePaths(), true)) {
