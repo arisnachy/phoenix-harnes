@@ -7,10 +7,9 @@ import {
 import type { InjectFace, PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import type { PluginInventoryLocaleKey } from './locales.ts'
 import css from './PluginInventorySettingsTab.module.css'
-import { ClawHubMarketplace, type ClawHubMarketplaceInjected } from './ClawHubMarketplace.tsx'
 
 /** Registration-side Remote face used by the section. */
-export interface PluginInventorySettingsTabInjected extends Partial<ClawHubMarketplaceInjected> {
+export interface PluginInventorySettingsTabInjected {
   /** Read a current Host inventory snapshot. */
   list: () => Promise<PluginInventorySnapshot>
 }
@@ -62,7 +61,7 @@ function matches(entry: PluginInventoryEntry, normalizedQuery: string): boolean 
 }
 
 /** Render the read-only current Loader inventory. */
-export function PluginInventorySettingsTab({ list, t, browseClawHub, readClawHubState, installClawHubSkill }: PluginInventorySettingsTabProps): ReactNode {
+export function PluginInventorySettingsTab({ list, t }: PluginInventorySettingsTabProps): ReactNode {
   const catalogId = useId()
   const [request, setRequest] = useState(0)
   const [query, setQuery] = useState('')
@@ -106,9 +105,6 @@ export function PluginInventorySettingsTab({ list, t, browseClawHub, readClawHub
           <button type="button" onClick={retry}>{t('retry')}</button>
         </div>
       ) : null}
-      {browseClawHub === undefined || readClawHubState === undefined || installClawHubSkill === undefined
-        ? null : <ClawHubMarketplace browseClawHub={browseClawHub}
-            readClawHubState={readClawHubState} installClawHubSkill={installClawHubSkill} t={t} />}
       {state.status === 'ready' ? (
         <div className={css.catalog}>
           <label className={css.search}>

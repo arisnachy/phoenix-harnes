@@ -1,5 +1,18 @@
 /** Copy for the dedicated Settings → Connectors surface. */
 export const connectorEn = {
+  storeCliReady: "ClawHub CLI operational",
+  storeCliMissing: "ClawHub CLI missing",
+  storeCliInstalling: "Preparing ClawHub CLI…",
+  storeCliFailed: "CLI installation failed",
+  storeCliIncompatible: "ClawHub needs Node 22.13+ or 24+",
+  storeCliRepair: "Install / update CLI",
+  storeCliRepairing: "Preparing CLI…",
+  storeCliVersion: "CLI version",
+  storeCliLatest: "Latest verified version",
+  storeCliReason: "Installation issue",
+  storeCliRepairError: "Could not prepare CLI. Check npm, internet, and update logs.",
+  storeCliRepairSuccess: "ClawHub CLI preparation completed.",
+  storeCliStatusUnknown: "Checking local CLI…",
   storeTitle: "ClawHub store",
   storeDescription: "Browse official/community extensions without duplicating working PHOENIX connectors.",
   storeWebsite: "Official catalog",
@@ -135,6 +148,19 @@ export type ConnectorKey = keyof typeof connectorEn
 
 /** Spanish copy for the dedicated Settings → Connectors surface. */
 export const connectorEs: { [Key in ConnectorKey]: string } = {
+  storeCliReady: "CLI de ClawHub operativa",
+  storeCliMissing: "Falta la CLI de ClawHub",
+  storeCliInstalling: "Preparando la CLI de ClawHub…",
+  storeCliFailed: "Falló la instalación de la CLI",
+  storeCliIncompatible: "ClawHub requiere Node 22.13+ o 24+",
+  storeCliRepair: "Instalar / actualizar CLI",
+  storeCliRepairing: "Preparando CLI…",
+  storeCliVersion: "Versión instalada",
+  storeCliLatest: "Última versión comprobada",
+  storeCliReason: "Problema de instalación",
+  storeCliRepairError: "No se pudo preparar la CLI. Revisa npm, Internet y los registros de actualización.",
+  storeCliRepairSuccess: "Preparación de ClawHub finalizada.",
+  storeCliStatusUnknown: "Comprobando CLI local…",
   storeTitle: "Tienda ClawHub",
   storeDescription: "Extensiones oficiales y de la comunidad, sin repetir conectores operativos de PHOENIX.",
   storeWebsite: "Catálogo oficial",
@@ -267,6 +293,19 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
 
 /** Simplified Chinese copy for the dedicated Settings → Connectors surface. */
 export const connectorZh: { [Key in ConnectorKey]: string } = {
+  storeCliReady: "ClawHub CLI 已就绪",
+  storeCliMissing: "未找到 ClawHub CLI",
+  storeCliInstalling: "正在准备 ClawHub CLI…",
+  storeCliFailed: "CLI 安装失败",
+  storeCliIncompatible: "ClawHub 需要 Node 22.13+ 或 24+",
+  storeCliRepair: "安装 / 更新 CLI",
+  storeCliRepairing: "正在准备 CLI…",
+  storeCliVersion: "当前 CLI 版本",
+  storeCliLatest: "已检查最新版本",
+  storeCliReason: "安装问题",
+  storeCliRepairError: "无法准备 CLI，请检查 npm、网络和更新日志。",
+  storeCliRepairSuccess: "ClawHub CLI 准备完成。",
+  storeCliStatusUnknown: "正在检查本地 CLI…",
   storeTitle: "ClawHub 商店",
   storeDescription: "浏览官方和社区扩展，不重复已有可用连接器。",
   storeWebsite: "官方目录",
