@@ -31,6 +31,23 @@ describe('Eclipse teammate overrides', () => {
     expect(resolveEclipseTeammateProfile({ mode: 'automatic', subagent: { provider: 'mock', model: 'new' } },
       'orion', fallback)).toEqual(fallback)
   })
+  it('budgets ordinary automatic Luna delegates at Medium and complex work at High', () => {
+    const auto = { mode: 'automatic' as const }
+    expect(resolveEclipseTeammateProfile(auto, 'orion', fallback, 'high')).toEqual({
+      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'medium',
+    })
+    for (const effort of ['xhigh', 'max']) {
+      expect(resolveEclipseTeammateProfile(auto, 'atlas', fallback, effort)).toEqual({
+        provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'high',
+      })
+    }
+    // A deliberately selected Max specialist is never silently downgraded.
+    expect(resolveEclipseTeammateProfile(auto, 'orion', fallback)).toEqual(fallback)
+    expect(resolveEclipseTeammateProfile({
+      mode: 'automatic', subagent: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+    }, 'orion', fallback, 'high')?.reasoningEffort).toBe('max')
+  })
+
   it('applies one configured subagent route to every teammate identity', () => {
     const config = {
       mode: 'hybrid' as const,
