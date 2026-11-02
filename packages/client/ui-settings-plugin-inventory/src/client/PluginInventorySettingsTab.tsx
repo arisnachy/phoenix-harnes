@@ -72,6 +72,9 @@ export function PluginInventorySettingsTab({ list, setPluginEnabled, activateAva
   const [expanded, setExpanded] = useState<PluginInventoryEntry['entryId'] | null>(null)
   const [state, setState] = useState<ViewState>({ status: 'loading' })
   const [busy, setBusy] = useState<string | null>(null)
+  // The select is controlled: keep the user's choice visible while its Host
+  // update is pending instead of instantly snapping back to the old snapshot.
+  const [pendingSelection, setPendingSelection] = useState<Record<string, boolean>>({})
   const [notice, setNotice] = useState('')
 
   useEffect(() => {
@@ -102,14 +105,41 @@ export function PluginInventorySettingsTab({ list, setPluginEnabled, activateAva
     setRequest(value => value + 1)
   }
 
+  const refreshSnapshot = (): void => {
+    void list().then(
+      snapshot => { setState({ status: 'ready', snapshot }) },
+      () => { setNotice(t('error')) },
+    )
+  }
+
   const changePlugin = (entry: PluginInventoryEntry, enabled: boolean): void => {
     if (setPluginEnabled === undefined || busy !== null) return
     setBusy(entry.entryId)
+    setPendingSelection(previous => ({ ...previous, [entry.entryId]: enabled }))
     setNotice('')
     void setPluginEnabled({ entryId: entry.entryId, enabled }).then(
-      () => { setNotice(t('pluginChanged')); retry() },
-      () => { setNotice(t('pluginChangeFailed')); retry() },
-    ).finally(() => { setBusy(null) })
+      updated => {
+        setState(current => current.status !== 'ready' ? current : {
+          status: 'ready',
+          snapshot: {
+            entries: current.snapshot.entries.map(item => item.entryId === updated.entryId ? updated : item),
+          },
+        })
+        setNotice(updated.enabled === enabled ? t('pluginChanged') : t('pluginChangeFailed'))
+        refreshSnapshot()
+      },
+      error => {
+        const detail = error instanceof Error ? error.message.slice(0, 180) : ''
+        setNotice(`${t('pluginChangeFailed')} (${entry.entryId})${detail ? ': ' + detail : ''}`)
+      },
+    ).finally(() => {
+      setPendingSelection(previous => {
+        const next = { ...previous }
+        delete next[entry.entryId]
+        return next
+      })
+      setBusy(null)
+    })
   }
 
   const activateAll = (): void => {
@@ -118,10 +148,15 @@ export function PluginInventorySettingsTab({ list, setPluginEnabled, activateAva
     setNotice('')
     void activateAvailablePlugins().then(
       result => {
-        setNotice(`${t('bulkComplete')}: ${result.activated.length} ${t('bulkActivated')}, ${result.curatedInstalled} ${t('bulkInstalled')}, ${result.skipped.length + result.failed.length + result.curatedFailed.length} ${t('bulkNeedsAttention')}.`)
-        retry()
+        const needsAttention = result.skipped.length + result.failed.length + result.curatedFailed.length
+        const examples = [...result.failed, ...result.skipped, ...result.curatedFailed].slice(0, 4).join(', ')
+        setNotice(`${t('bulkComplete')}: ${result.activated.length} ${t('bulkActivated')}, ${result.curatedInstalled} ${t('bulkInstalled')}, ${needsAttention} ${t('bulkNeedsAttention')}${examples ? ' (' + examples + ')' : ''}.`)
+        refreshSnapshot()
       },
-      () => { setNotice(t('bulkFailed')); retry() },
+      error => {
+        const detail = error instanceof Error ? error.message.slice(0, 180) : ''
+        setNotice(`${t('bulkFailed')}${detail ? ' ' + detail : ''}`)
+      },
     ).finally(() => { setBusy(null) })
   }
 
@@ -211,7 +246,7 @@ export function PluginInventorySettingsTab({ list, setPluginEnabled, activateAva
                     {setPluginEnabled === undefined ? null : (
                       <select className={css.pluginSelector}
                         aria-label={`${t('pluginControl')}: ${title} (${entry.entryId})`}
-                        value={entry.enabled ? 'on' : 'off'}
+                        value={(pendingSelection[entry.entryId] ?? entry.enabled) ? 'on' : 'off'}
                         disabled={busy !== null || (entry.enabled && entry.moduleName.includes('plugin-inventory'))}
                         onChange={event => { changePlugin(entry, event.currentTarget.value === 'on') }}>
                         <option value="on">{t('enabledTag')}</option>
