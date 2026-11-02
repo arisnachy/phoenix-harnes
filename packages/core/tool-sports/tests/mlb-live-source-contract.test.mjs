@@ -46,6 +46,10 @@ test('real MLB Stats API: schedule IDs -> boxscore -> venue -> player statistics
   assert.ok(gameLog.stats.some(group=>Array.isArray(group.splits)&&
     group.splits.some(split=>typeof split.date==='string'&&split.stat)),
     'Historical pitcher gameLog has no dated evidence')
+  const dodgerVenue=await official('/venues/22?hydrate=location,fieldInfo')
+  assert.ok(dodgerVenue?.venues?.some(v=>v.id===22&&
+    ['Open','Indoor','Retractable'].includes(v.fieldInfo?.roofType)),
+    'Hydrated MLB fieldInfo must expose the official roof construction type')
   const standings=await official('/standings?leagueId=103,104&season=2025&date=2025-07-01')
   assert.ok(Array.isArray(standings?.records)&&standings.records.length>0)
 })
