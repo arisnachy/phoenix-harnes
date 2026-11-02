@@ -39,6 +39,8 @@ export type MlbAthlete={id:number;name:string;teamId:number;role:'batter'|'pitch
   pitchHand:string;lineupOrder:number|null;lineupConfirmed:boolean;position:string;
   season:Record<string,string>;lastFive:Record<string,string>;
   reliefUsage72h:Array<{date:string;innings:string;pitches:string}>;
+  recentStarts:Array<{date:string;opponentId:number|null;innings:string;pitches:string;
+    earnedRuns:string;strikeouts:string;walks:string}>;
   evidence:'observed'|'partial'|'missing'}
 export type MlbMatchup={batterId:number;batter:string;pitcherId:number;pitcher:string;
   pitcherRole:'probable-starter'|'active-bullpen';batterSide:string;pitcherHand:string;
@@ -239,7 +241,11 @@ function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
   add('Abridores y últimas actuaciones',(['away','home'] as const).map(side=>{
     const p=result.starters[side]
     return{label:result.fixture[side].name,value:p?p.name:'Abridor no verificado',
-      detail:p?pitcherSummary(p.season)+' · últimos 5: '+pitcherSummary(p.lastFive):
+      detail:p?pitcherSummary(p.season)+' · últimos 5: '+pitcherSummary(p.lastFive)+
+        (p.recentStarts.length?' · salidas fechadas: '+p.recentStarts.map(g=>
+          g.date+' vs '+(g.opponentId??'rival sin ID')+' IP '+g.innings+
+          ' P '+g.pitches+' ER '+g.earnedRuns+' K '+g.strikeouts).join('; '):
+          ' · sin aperturas individuales verificadas'):
         'No asumir pitcher por roster'}
   }))
   add('Rosters y alineaciones',(['away','home'] as const).flatMap(side=>
@@ -422,13 +428,21 @@ export async function researchMlbCase(
       'https://statsapi.mlb.com/api/v1/people/'+p.id+
         '/stats?stats=gameLog&group=pitching&season='+season,fetcher,sources,now):null
     const cutoff=Date.parse(fixture.date)-3*86_400_000
-    const recentAppearances=arr(gameLog?.stats?.[0]?.splits)
-      .flatMap(raw=>{
-        const e=obj(raw),time=Date.parse(word(e.date)),st=obj(e.stat)
-        if(!Number.isFinite(time)||time>=Date.parse(fixture.date)||time<cutoff)return []
-        return[{date:word(e.date,20),innings:word(st.inningsPitched,20)||'—',
-          pitches:word(st.numberOfPitches,20)||'—'}]
-      }).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5)
+    const logs=arr(gameLog?.stats?.[0]?.splits).flatMap(raw=>{
+      const e=obj(raw),time=Date.parse(word(e.date)),st=obj(e.stat)
+      if(!Number.isFinite(time)||time>=Date.parse(fixture.date))return []
+      return[{date:word(e.date,20),time,opponentId:id(obj(e.opponent).id),
+        innings:word(st.inningsPitched,20)||'—',
+        pitches:word(st.numberOfPitches,20)||'—',
+        earnedRuns:word(st.earnedRuns,20)||'—',
+        strikeouts:word(st.strikeOuts,20)||'—',
+        walks:word(st.baseOnBalls,20)||'—',started:numeric(st.gamesStarted)===1}]
+    }).sort((a,b)=>b.time-a.time)
+    const recentAppearances=logs.filter(g=>g.time>=cutoff)
+      .slice(0,5).map(g=>({date:g.date,innings:g.innings,pitches:g.pitches}))
+    const recentStarts=logs.filter(g=>g.started).slice(0,5).map(g=>({
+      date:g.date,opponentId:g.opponentId,innings:g.innings,pitches:g.pitches,
+      earnedRuns:g.earnedRuns,strikeouts:g.strikeouts,walks:g.walks}))
     const first=(r:RawStats|null|undefined)=>obj(r?.stats?.[0]?.splits?.[0]?.stat)
     const seasonStats=fields(first(seasonResponse),p.role==='pitcher'?pitchingFields:battingFields)
     const lastFive=fields(first(recentResponse),p.role==='pitcher'?pitchingFields:battingFields)
@@ -436,7 +450,7 @@ export async function researchMlbCase(
       batSide:personInfo.get(p.id)?.bat??'no verificado',
       pitchHand:personInfo.get(p.id)?.pitch??'no verificado',
       lineupOrder:p.lineupOrder,lineupConfirmed:p.lineupConfirmed,
-      season:seasonStats,lastFive,reliefUsage72h:recentAppearances,
+      season:seasonStats,lastFive,reliefUsage72h:recentAppearances,recentStarts,
       evidence:Object.keys(seasonStats).length&&Object.keys(lastFive).length?'observed':
         Object.keys(seasonStats).length||Object.keys(lastFive).length?'partial':'missing'}
   })
