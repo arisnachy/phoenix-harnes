@@ -73,12 +73,19 @@ function state(success: boolean): OpenClawProbeState {
   return success ? 'responded' : 'unavailable'
 }
 
+/** Node used by the PHOENIX Host, not necessarily an isolated OpenClaw Gateway. */
+function hostNodeSupported(): boolean {
+  const [major = 0, minor = 0] = process.versions.node.split('.').map(Number)
+  return (major === 24 && minor >= 16) || (major === 26 && minor >= 1) || major > 26
+}
+
 /** CLI response readiness only, never proof of active Gateway tools. */
 export async function readOpenClawRuntimeSnapshot(): Promise<OpenClawRuntimeSnapshot> {
   const installed = await probe(['--version'], 4000)
   if (!installed) {
     return {
       installed: false,
+      hostNodeSupported: hostNodeSupported(),
       gateway: 'not-installed',
       browser: 'not-installed',
       plugins: 'not-installed',
@@ -90,10 +97,12 @@ export async function readOpenClawRuntimeSnapshot(): Promise<OpenClawRuntimeSnap
     probe(['gateway', 'status', '--json']),
     probe(['browser', '--json', 'status']),
     probe(['plugins', 'list', '--json']),
-    probe(['channels', 'status', '--json']),
+    // Local inventory can be read even when Gateway is not running.
+    probe(['channels', 'list', '--all', '--json']),
   ])
   return {
     installed: true,
+    hostNodeSupported: hostNodeSupported(),
     gateway: state(gateway),
     browser: state(browser),
     plugins: state(plugins),

@@ -486,6 +486,8 @@ export interface OpenClawConnectorSnapshot {
 /** CLI readiness is not proof of live runtime state or granted capabilities. */
 export type OpenClawProbeState = 'not-installed' | 'responded' | 'unavailable'
 export interface OpenClawRuntimeSnapshot {
+  /** Runtime compatibility of PHOENIX's Host Node, not the Gateway Node. */
+  readonly hostNodeSupported: boolean
   readonly installed: boolean
   readonly gateway: OpenClawProbeState
   readonly browser: OpenClawProbeState
