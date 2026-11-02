@@ -43,7 +43,7 @@ test('Asian handicap -0.25 home is half-loss on draw',()=>{
   assert.equal(r.status,'half_loss')
   assert.equal(r.pushFraction,0.5)
 })
-test('Asian handicap +0.75 away is half-win when away loses by one',()=>{
+test('Asian handicap +0.75 away is half-loss when away loses by one',()=>{
   const r=settleSoccer90(2,1,{kind:'asian_handicap',selection:'away',line:0.75})
   assert.equal(r.status,'half_loss')
   assert.equal(r.lossFraction,0.5)
