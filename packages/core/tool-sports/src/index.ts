@@ -481,11 +481,11 @@ export function apply(ctx: Context): void {
         {label:report.home.name,value:displayedHome===null?'—':
           (displayedHome*100).toFixed(1)+'%',
           detail:forecast.projectedHome===null?'':
-            'Marcador orientativo '+forecast.projectedHome++(calibrated?' · validación histórica':' · no calibrado')},
+            'Marcador orientativo '+forecast.projectedHome+(calibrated?' · validación histórica':' · no calibrado')},
         {label:report.away.name,value:displayedAway===null?'—':
           (displayedAway*100).toFixed(1)+'%',
           detail:forecast.projectedAway===null?'':
-            'Marcador orientativo '+forecast.projectedAway++(calibrated?' · validación histórica':' · no calibrado')},
+            'Marcador orientativo '+forecast.projectedAway+(calibrated?' · validación histórica':' · no calibrado')},
         ...(displayedDraw===null?[]:[
           {label:'Empate',value:(displayedDraw*100).toFixed(1)+'%',
             detail:calibrated?'Ajuste con validación histórica':'Proyección orientativa · no calibrada'}]),
@@ -508,7 +508,7 @@ export function apply(ctx: Context): void {
           latestNews:report.rosterNewsInjuries?.headlines.slice(0,6)??[],
           marketComparisons:report.marketComparisons.slice(0,4)},
         coverage:report.coverage,missingEvidence:report.limitations.slice(0,14),
-        instruction:'Esta estimación es SOLO exploratoria, no entrenada/calibrada ni promesa de victoria. No publicar EV, ventaja apostable ni ticket ganador basándose en ella. Para segunda opinión consulta sports_chat_market_source_catalog, sports_chat_community_opinions y expertos de Covers/ESPN SOLO mediante navegación permitida. Usa sports_chat_odds para precios vigentes y reporta sus timestamps. La UI nativa del dossier se proporciona por separado.',
+        instruction:'La estimación es exploratoria salvo que calibrated contenga una validación temporal aprobada. En ningún caso implica ventaja rentable ni promesa de victoria. No publicar EV, ventaja apostable ni ticket ganador sin precios vigentes y evaluación independiente. Para segunda opinión consulta sports_chat_market_source_catalog, sports_chat_community_opinions y expertos de Covers/ESPN SOLO mediante navegación permitida. Usa sports_chat_odds para precios vigentes y reporta sus timestamps. La UI nativa del dossier se proporciona por separado.',
         uiBlock,
       })
     },
