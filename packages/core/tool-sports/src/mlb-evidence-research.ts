@@ -359,8 +359,8 @@ export async function researchMlbCase(
   const safeGeo=lat!==null&&lon!==null&&Math.abs(lat)<=90&&Math.abs(lon)<=180
   const field=obj(venue.fieldInfo)
   const roofRaw=word(field.roofType)
-  const roofType=roofRaw==='Open'||roofRaw==='Indoor'||roofRaw==='Retractable'?
-    roofRaw:'unknown' as const
+  const roofType:MlbCase['venue']['roofType']=roofRaw==='Open'?'Open':
+    roofRaw==='Indoor'?'Indoor':roofRaw==='Retractable'?'Retractable':'unknown'
   const feet=(v:unknown)=>{const n=numeric(v);return n!==null&&n>=100&&n<=700?n:null}
   const site={name:word(venue.name)||fixture.venue.name,
     latitude:safeGeo?lat:null,longitude:safeGeo?lon:null,roof:'unknown' as const,
