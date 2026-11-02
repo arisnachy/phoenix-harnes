@@ -330,6 +330,12 @@ export async function auditUniversalMatchup(
     ...context.teams.slice(0,2).map(t=>stat('Plantilla '+t.name,
       t.rosterSample.length+' nombres recuperados','No confirma alineación titular')),
   ])
+  const moneyline=markets.find(m=>['h2h','moneyline','match_winner'].includes(m.market.toLowerCase())
+    && m.selections.length>1&&m.selections.every(s=>s.noVigShare!==null))
+  if(moneyline)put('Probabilidades implícitas del mercado','metrics',
+    moneyline.selections.map(s=>stat(s.name,(100*(s.noVigShare??0)).toFixed(1)+'%',
+      'Mercado '+moneyline.bookmaker+' · NO es un pronóstico propio · hace '+
+      moneyline.freshnessMinutes.toFixed(0)+' min')))
   if(markets.length)put('Cuotas completas · sin promesa de acierto','list',
     markets.filter(m=>m.selections.length>=2&&
       m.selections.every(s=>s.noVigShare!==null)).map(m=>stat(
