@@ -28,6 +28,7 @@ import { prepareLocalOpenClawGateway } from './openclaw-gateway-setup.ts'
 import { readClawHubCatalog } from './clawhub-catalog.ts'
 import { clawHubInstall, clawHubState, prepareClawHubCli } from './clawhub-marketplace.ts'
 import { TokenTelemetryCollector } from './telemetry.ts'
+import { PluginEnablementStore } from './plugin-enablement.ts'
 import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
 import { theOddsApiConnectorState, configureTheOddsApiConnector, disconnectTheOddsApiConnector } from './odds-api-connector.ts'
 import {
@@ -156,6 +157,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
   private readonly openClawConnectors: OpenClawConnectorBridge
   private readonly telegram: TelegramInbox
   private readonly telemetry: TokenTelemetryCollector
+  private readonly pluginPreferences = new PluginEnablementStore()
 
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
@@ -165,6 +167,10 @@ export class PluginInventoryGateway extends TypertRemoteService {
     this.openClawConnectors = new OpenClawConnectorBridge()
     // One receiver owned by this Host service, shared by all Settings RPCs.
     this.telemetry = new TokenTelemetryCollector()
+    void ctx.effect(() => {
+      this.schedulePluginRestore()
+      return () => undefined
+    }, 'durable plugin enablement restoration')
     ctx.effect(() => async () => { await this.telemetry.dispose() }, 'token telemetry counters and listener cleanup')
     this.telegram = new TelegramInbox(ctx)
     this.telegram.start()
@@ -231,6 +237,25 @@ export class PluginInventoryGateway extends TypertRemoteService {
     }, 'phoenix-local loopback proxy')
   }
 
+  /** Reapply only exact, still-installed Loader identities after a staged restart. */
+  private schedulePluginRestore(): void {
+    void this.pluginPreferences.list().then(async choices => {
+      for (const choice of choices) {
+        try {
+          const entry = this.ctx.loader.resolve(choice.entryId)
+          if (entry.options.group || entry.options.name !== choice.moduleName
+            || !choice.enabled && PROTECTED_PLUGIN_MODULES.has(entry.options.name)
+            || entry.disabled === !choice.enabled) continue
+          await this.ctx.loader.update(entry.id, { disabled: !choice.enabled })
+        } catch {
+          this.ctx.logger.warn('a saved plugin enablement choice could not be restored')
+        }
+      }
+    }).catch(() => {
+      this.ctx.logger.warn('plugin enablement preferences could not be read')
+    })
+  }
+
   /**
    * Read the Loader directly on every call. Cordis's internal plugin/status
    * events already maintain Entry.fiber and Fiber.state, so a second cache
@@ -270,6 +295,14 @@ export class PluginInventoryGateway extends TypertRemoteService {
     }
     await this.ctx.loader.update(entry.id, { disabled: !request.enabled })
     const updated = this.ctx.loader.resolve(entry.id)
+    if (updated.disabled === request.enabled) {
+      throw new Error('Loader did not apply the requested plugin state')
+    }
+    await this.pluginPreferences.save({
+      entryId: updated.id,
+      moduleName: updated.options.name,
+      enabled: !updated.disabled,
+    })
     return {
       entryId: pluginEntryId(updated.id),
       moduleName: updated.options.name,
@@ -299,7 +332,10 @@ export class PluginInventoryGateway extends TypertRemoteService {
       try {
         await this.ctx.loader.update(entry.id, { disabled: false })
         if (this.ctx.loader.resolve(entry.id).disabled) skipped.push(id)
-        else activated.push(id)
+        else {
+          await this.pluginPreferences.save({ entryId: entry.id, moduleName: entry.options.name, enabled: true })
+          activated.push(id)
+        }
       } catch {
         failed.push(id)
       }

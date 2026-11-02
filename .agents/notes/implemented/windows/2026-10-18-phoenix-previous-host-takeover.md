@@ -1,3 +1,0 @@
-# Previous Windows Phoenix Host takeover
-
-Prior startup could not retire an existing Host supervised from a detached `phoenix-runtime-*` directory or from the same official checkout, because the older handoff implementation required a different older official Git checkout. The update now recognizes the durable root and runtime namespace derived from the checkout Git common-dir hash. It preserves owner, command-line, TCP listener, supervisor and PID creation-time checks. A recognized associated installed Phoenix.exe shell is closed before retiring its Host. Other applications retain their ports.
