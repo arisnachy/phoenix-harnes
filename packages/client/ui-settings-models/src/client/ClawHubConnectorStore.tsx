@@ -6,7 +6,7 @@ import { CONNECTOR_CATALOG } from './connector-catalog.ts'
 import css from './ConnectorsSection.module.css'
 
 export interface ClawHubConnectorStoreProps {
-  registry?: McpRegistryClient
+  registry?: McpRegistryClient | undefined
   t: (key: ConnectorKey) => string
   connectedIds: readonly string[]
 }
