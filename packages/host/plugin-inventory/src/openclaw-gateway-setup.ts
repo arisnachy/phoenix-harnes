@@ -48,7 +48,9 @@ export function parseOpenClawDashboard(value: unknown): OpenClawLocalHandoff {
     || /[\u0000-\u0020\u007f]/u.test(token)) {
     throw new Error('OpenClaw Gateway credential is not available for local linking')
   }
-  if (browser.hash.length < 12 || typeof data.browserBootstrapExpiresAtMs === 'number'
+  // Never turn an older token-bearing dashboard link into a browser URL.
+  if (browser.toString().includes(token) || browser.hash.length < 12
+    || typeof data.browserBootstrapExpiresAtMs === 'number'
     && data.browserBootstrapExpiresAtMs <= Date.now()) {
     throw new Error('OpenClaw browser authorization has expired')
   }
