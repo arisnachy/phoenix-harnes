@@ -28,6 +28,9 @@ export type BasketballCase={
     quintetConfirmed:boolean;sourceCoverage:DirectTeam['coverage']}>;
   matchups:BasketballDuel[];injuries:Array<{teamId:string;name:string;playerId:string;
     status:string;source:string}>;
+  context:{h2h:{games:number;homeWins:number;awayWins:number};
+    restHours:{home:number|null;away:number|null};
+    backToBack:{home:boolean|null;away:boolean|null}};
   referee:string|null;venue:string;news:Array<{headline:string;published:string;
     source:string}>;editorial:Array<{headline:string;publisher:string;date:string|null;
     verifiedPick:false}>;
@@ -149,7 +152,25 @@ function panel(d:Omit<BasketballCase,'uiBlock'>):BasketballCase['uiBlock']{
   add('Quintetos y roster verificado',(['home','away'] as const).flatMap(s=>
     d.teams[s].roster.map(p=>({label:d.teams[s].name+' · '+p.name,
       value:p.confirmedStarter?'Titular oficial verificado':'Roster (no titular confirmado)',
-      detail:p.position+' · '+p.stats.slice(0,4).map(f=>f.name+': '+f.value).join(' · ')}))))
+      detail:p.position+' · '+p.stats.slice(0,3).map(f=>f.name+': '+f.value).join(' · ')+
+        ' · recientes: '+p.lastGames.slice(0,2).map(f=>f.name+': '+f.value).join(' · ')}))))
+  add('Descanso y enfrentamientos',[
+    {label:'Descanso local',value:d.context.restHours.home===null?'No verificado':
+      d.context.restHours.home.toFixed(1)+' horas',
+      detail:'Back-to-back: '+(d.context.backToBack.home===null?'sin datos':
+        d.context.backToBack.home?'sí':'no')},
+    {label:'Descanso visitante',value:d.context.restHours.away===null?'No verificado':
+      d.context.restHours.away.toFixed(1)+' horas',
+      detail:'Back-to-back: '+(d.context.backToBack.away===null?'sin datos':
+        d.context.backToBack.away?'sí':'no')},
+    {label:'Enfrentamientos recientes',value:d.context.h2h.games+' juegos',
+      detail:d.context.h2h.homeWins+' victorias locales y '+
+        d.context.h2h.awayWins+' visitantes en la muestra observada'},
+  ])
+  add('Estadísticas de equipo',(['home','away'] as const).flatMap(side=>
+    d.teams[side].teamStats.slice(0,10).map(x=>({
+      label:d.teams[side].name+' · '+x.name,value:x.value,
+      detail:'Estadística publicada por ESPN; verificar temporada, escala y posesiones'}))))
   add('Enfrentamientos de titulares',d.matchups.map(m=>({label:m.attacker,
     value:m.opponents.length+' posibles defensores '+m.note,
     detail:m.opponents.slice(0,5).map(x=>x.name).join(', ')})))
@@ -238,6 +259,19 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
     fixture.away.name,['covers','vegasinsider'],fetcher,now)
   const headings=editorial.hits.map(x=>({headline:x.headline,publisher:x.publisher,
     date:x.publishedAt,verifiedPick:false as const}))
+  const rest=(side:'home'|'away')=>{
+    const games=teams[side].lastGames
+    const mostRecent=games[0]
+    return mostRecent?Math.max(0,(Date.parse(fixture.start)-Date.parse(mostRecent.date))/3_600_000):null
+  }
+  const restHours={home:rest('home'),away:rest('away')}
+  const headToHead=teams.home.lastGames.filter(g=>
+    teamKey(g.opponent)===teamKey(teams.away.name))
+  const context={restHours,
+    backToBack:{home:restHours.home===null?null:restHours.home<48,
+      away:restHours.away===null?null:restHours.away<48},
+    h2h:{games:headToHead.length,homeWins:headToHead.filter(g=>g.pts>g.allowed).length,
+      awayWins:headToHead.filter(g=>g.pts<g.allowed).length}}
   const matchups=[...matchup(teams.home.roster,teams.away.roster),
     ...matchup(teams.away.roster,teams.home.roster)]
   const summaryInfo=record(record(summary).gameInfo)
@@ -263,6 +297,9 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
       'V y '+teams.away.losses+'D en '+teams.away.lastGames.length+' partidos']:[]),
     ...(teams.home.quintetConfirmed&&teams.away.quintetConfirmed?
       ['Quintetos de ambos equipos confirmados con IDs verificados']:[]),
+    ...(context.restHours.home!==null&&context.restHours.away!==null?
+      ['Descanso observado: local '+context.restHours.home.toFixed(1)+' h, visitante '+
+        context.restHours.away.toFixed(1)+' h']:[]),
   ]
   const markets=verifyOdds(fixture,quotes,now,facts,missing)
   const count=teams.home.roster.length+teams.away.roster.length
@@ -293,7 +330,7 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
     ],missingEvidence:missing}
   const result:Omit<BasketballCase,'uiBlock'>={fixture,checkedAt:new Date(now).toISOString(),
     league,regulationMinutes:regulationMinutes(league) as 40|48,
-    teams,matchups,injuries,referee,venue:fixture.venue,news,editorial:headings,
+    teams,context,matchups,injuries,referee,venue:fixture.venue,news,editorial:headings,
     scenarios,markets,missingEvidence:missing,sources,coverage,opportunity}
   return{...result,uiBlock:panel(result)}
 }
