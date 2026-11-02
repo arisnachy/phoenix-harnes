@@ -175,7 +175,7 @@ const day=(timestamp:number)=>new Date(timestamp).toISOString().slice(0,10).repl
 /** Collect bounded, official historical scoreboard snapshots by calendar day.
  * @param sport - One supported ESPN discipline.
  * @param league - One supported ESPN league (validated by the caller).
- * @param lookbackDays - 28..90 daily requests, with concurrency <=4.
+ * @param lookbackDays - 28..180 daily requests, with concurrency <=4.
  * @param getJSON - Injected read-only ESPN JSON provider.
  * @param now - Fixed audit cutoff for reproducibility.
  * @returns Dataset coverage and a strictly chronological audit.
@@ -184,7 +184,7 @@ export async function auditSportsCalibration(
  sport:string,league:string,lookbackDays:number,getJSON:<T>(url:string)=>Promise<T>,
  now=Date.now()){
  if(!/^[a-z][a-z-]{1,35}$/u.test(sport)||!/^[a-z0-9][a-z0-9._-]{0,45}$/u.test(league)
- ||!Number.isInteger(lookbackDays)||lookbackDays<28||lookbackDays>90)
+ ||!Number.isInteger(lookbackDays)||lookbackDays<28||lookbackDays>180)
    throw Error('Liga o período de evaluación no permitido')
  const fixtures:HistoricalFixture[]=[],errors:string[]=[]
  const offsets=Array.from({length:lookbackDays},(_,i)=>i+1)
