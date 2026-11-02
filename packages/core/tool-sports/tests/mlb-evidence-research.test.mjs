@@ -1,6 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {discoverMlbDay,researchMlbCase,mlbResearch} from '../src/mlb-evidence-research.ts'
+import {reviewMlbResearch} from '../src/mlb-market-research-review.ts'
 
 const at=Date.parse('2026-07-01T12:00:00Z')
 const date='2026-07-02'
@@ -122,4 +123,22 @@ test('missing roster or invalid game cannot produce invented athletes or selecti
 test('started games are excluded from pregame investigation',async()=>{
   const mock=fakeNetwork({oldGame:true})
   await assert.rejects(()=>researchMlbCase(date,812345,mock.fetcher,at),/futuro/)
+})
+
+test('research review explains totals integer-line pushes and blocks ticket without proof',async()=>{
+  const mock=fakeNetwork()
+  const q={eventId:'book-4',bookmaker:'Verified House',market:'totals',
+    selection:'Over',point:8,price:1.91,
+    home:'Home Giants',away:'Away Bears',time:fixture.gameDate,
+    timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z'}
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[q])
+  const review=reviewMlbResearch(d)
+  assert.equal(review.eligibility,'insufficient') // only two hitters per team in fixture
+  assert.equal(review.probabilitiesEstimated,false)
+  assert.equal(review.eligibleForTicket,false)
+  assert.equal(review.reviewedMarkets.length,1)
+  assert.ok(review.reviewedMarkets[0].researchQuestions.some(t=>t.includes('exactamente 8')))
+  assert.ok(review.reviewedMarkets[0].contradictoryEvidence.some(t=>t.includes('reglas')))
+  assert.equal(review.evidenceGates.lineupsConfirmed,false)
+  assert.equal(review.evidenceGates.bothRostersVerified,false)
 })
