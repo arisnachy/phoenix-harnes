@@ -519,5 +519,24 @@ export interface OpenClawRuntimeSnapshot {
   readonly nativePluginsRoutedToPhoenix: false
 }
 
+/** OpenClaw tools can only be routed after the owner approves the exact registered identity. */
+export interface OpenClawRoutedTool {
+  readonly pluginId: string
+  readonly name: string
+  readonly enabled: boolean
+  readonly imported: boolean
+  readonly approved: boolean
+}
+export interface OpenClawRoutingSnapshot {
+  readonly gatewayCredentialConfigured: boolean
+  readonly tools: readonly OpenClawRoutedTool[]
+  readonly inspectionAvailable: boolean
+}
+export interface OpenClawRoutingRequest {
+  readonly pluginId: string
+  readonly toolName: string
+  readonly approved: boolean
+}
+
 /** Public X connector identity accepted by the Host remote boundary. */
 export type XMcpIdentity = 'user' | 'phoenix'

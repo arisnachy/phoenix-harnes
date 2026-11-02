@@ -172,6 +172,8 @@ export interface McpRegistryClient {
   /** Reuse already-authenticated OpenClaw connector routes when present. */
   openClawState?(): Promise<OpenClawConnectorSnapshot>
   openClawRuntimeState?(): Promise<OpenClawRuntimeSnapshot>
+  openClawPluginTools?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>
+  setOpenClawPluginTool?(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>
   clawHubCatalog?(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubCatalogRequest): Promise<ClawHubCatalogSnapshot>
   clawHubState?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>
   prepareClawHubCli?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>
