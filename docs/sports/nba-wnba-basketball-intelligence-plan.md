@@ -195,3 +195,16 @@ Una matriz profesional no se reduce a cotejar PPG vs puntos concedidos:
 - WNBA rules: https://www.wnba.com/wnba-rule-book
 - Basketball-Reference glossary: https://www.basketball-reference.com/about/glossary.html
 - Comprobar disponibilidad real, cambios contractuales, formato de temporada y acceso del proveedor por cada año: documentación NO equivale a cobertura verificada de hoy.
+
+
+## K. Entrega operativa inicial en PR #1317
+
+El PR, además de este plan, ahora contiene implementación real:
+- \`basketball-research-core.ts\`: localiza carteleras NBA y WNBA por fecha e ID ESPN; duración reglamentaria 48 NBA vs 40 WNBA; utilitario de settlement básico para total, spread y moneyline por período explícito. No confundir con reglamento completo de la casa.
+- \`basketball-evidence-dossier.ts\`: expediente prepartido verificado por evento; resultados históricos, localía, visitantes, intervalo de descanso y H2H observado; estadísticas por atleta a través del \`collectDirectEspnStats\` ya presente, rosters por ID, **cinco titulares confirmados solamente cuando la fuente identifica cinco personas explícitas**, matchups potenciales por posición, estado de lesiones atribuido a roster, noticias públicas, descubrimiento editorial de terceros con atribución, escenarios de cuartos y revisión crítica de cuotas exactas de la misma casa si están disponibles. Sin porcentajes fabricados, sin acreditación de picks solo por titulares.
+- \`index.ts\`: herramientas \`sports_chat_basketball_intelligence_slate\`, \`sports_chat_nba_intelligence\` y \`sports_chat_wnba_intelligence\`. Las consultas se mantienen separadas por liga, partido y fuente, con opciones de paginación de duelos y control de consultas de jugadores.
+- \`tests/basketball-evidence-research.test.mjs\` y workflow \`PHOENIX NBA WNBA evidence research\`: comprueban NBA/WNBA, separación de cuotas, roster y quinteto, lesión cruzada, partida de offseason, comienzo de partido, rechazo de eventId ajeno, total/spread entero con push y duración de juego; host TypeScript se comprueba como build compuesto.
+
+**Todavía no implementado o no validado en esta entrega:** captura autorizada de todos los Four Factors/shot charts/posesiones on-off por atleta con definiciones robustas y estaciones reales; reportes médicos oficiales de NBA/WNBA con timestamps que contradigan ESPN; movimientos en tiempo real de minutos, 5-on-5 lineups y defensores de cada posesión; props por jugador de casa verificados por \`playerId\`; filtros de estadística avanzada por fecha/categoría; snapshots de históricos para backtest sin fuga; integración y optimización entre deportes; pruebas end-to-end con fuentes reales NBA y WNBA. La implementación **NO** debe calificarse como 30 etapas completadas cuando tales fuentes sigan pendientes; ella realiza investigación básica y detallada con abstención y muestra explícita de faltantes.
+
+**Gates para declarar completamente listo:** CI propio y verificaciones pertinentes, pruebas reales de al menos un encuentro de cada liga en temporada, precisión de IDs y lesiones, auditoría pregame/postgame, reglas por sportsbook y comparación contra líneas reales, promoción main/stable con SHA confirmado. No confundir el paso de tests aislados con validación predictiva.
