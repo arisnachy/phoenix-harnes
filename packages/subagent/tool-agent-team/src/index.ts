@@ -132,7 +132,7 @@ export function eclipseTeamPlanSummary(events: readonly { readonly type: string;
 declare module '@phoenix-ai/dsh-session/types' {
   interface SessionEventMap {
     /** One real bounded FÉNIX consultation per turn, durable across restarts. */
-    'team/fenix-consult': { readonly turn: number; readonly evidenceId: string; readonly teammateName: string }
+    'agent/fenix-consult': { readonly turn: number; readonly evidenceId: string; readonly teammateName: string }
   }
 }
 
@@ -495,7 +495,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           const turnEvent = lead.session.events.findLast(event => event.type === 'turn/start')
           const turn = (turnEvent?.data as { turn?: number } | undefined)?.turn
           if (turn === undefined) throw new Error('FÉNIX requires an active turn.')
-          if (fenixBusy || lead.session.events.some(event => event.type === 'team/fenix-consult'
+          if (fenixBusy || lead.session.events.some(event => event.type === 'agent/fenix-consult'
             && event.data.turn === turn)) {
             throw new TeamError('FÉNIX has already consulted on this turn; reuse the existing result.', 'TEAM_MEMBER_LIMIT')
           }
@@ -510,7 +510,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           // Record the ATTEMPT before the provider handoff so a connection
           // failure cannot trigger wasteful repeat consultations on one turn.
           try {
-            lead.session.append('team/fenix-consult', { turn, evidenceId: args.evidence_id, teammateName })
+            lead.session.append('agent/fenix-consult', { turn, evidenceId: args.evidence_id, teammateName })
             const prompt = [
               'Actúa como consultora temporal FÉNIX para Kira, quien seguirá ejecutando con Luna Max.',
               'No planifiques de nuevo ni intentes modificar archivos, repositorios, conexiones o decisiones.',
