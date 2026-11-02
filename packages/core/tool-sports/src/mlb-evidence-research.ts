@@ -52,7 +52,8 @@ export type MlbCase={
   rosters:Record<'home'|'away',MlbAthlete[]>;starters:Record<'home'|'away',MlbAthlete|null>;
   bullpen:Record<'home'|'away',MlbAthlete[]>;lineupStatus:Record<'home'|'away','confirmed'|'unconfirmed'>;
   matchups:MlbMatchup[];venue:{name:string;latitude:number|null;longitude:number|null;roof:'unknown'};
-  weather:MlbWeather|null;news:Array<{headline:string;published:string;source:string}>;
+  weather:MlbWeather|null;injuries:Array<{team:string;name:string;status:'listed-in-injured-roster'}>;
+  news:Array<{headline:string;published:string;source:string}>;
   odds:MarketOutcome[];scenarioAnalysis:string[];missingEvidence:string[];
   opportunity:MlbOpportunity;
   uiBlock:{component:'sports_espn_dashboard';version:1;props:{
@@ -230,6 +231,11 @@ function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
   add('Bullpen: disponibilidad por confirmar',(['away','home'] as const).flatMap(side=>
     result.bullpen[side].map(p=>({label:result.fixture[side].name+' · '+p.name,
       value:pitcherSummary(p.season),detail:'Roster activo; fatiga y aparición requieren verificación'}))))
+  add('Bajas registradas por MLB',result.injuries.map(p=>({
+    label:p.team+' · '+p.name,value:'En roster de lesionados según MLB',
+    detail:'Confirmar fecha, disponibilidad y posible activación antes del partido'})))
+  add('Noticias relacionadas',result.news.map(p=>({
+    label:p.headline,value:p.source,detail:p.published||'Fecha no publicada'})))
   add('Matriz roster contra abridores y bullpen',result.matchups.slice(0,30).map(m=>({
     label:m.batter+' vs '+m.pitcher,value:m.pitcherRole==='probable-starter'?'Abridor probable':'Bullpen posible',
     detail:[...m.observations.slice(0,2),...m.missing.slice(0,1)].join(' · ')})))
@@ -317,6 +323,12 @@ export async function researchMlbCase(
     fixture.home.id,Date.parse(fixture.date)):null,
     away:awaySchedule?form(arr(obj(awaySchedule).dates).flatMap(x=>arr(obj(x).games)),
       fixture.away.id,Date.parse(fixture.date)):null}
+  const injuryFeeds=await Promise.all(teams.map(async side=>({side,
+    data:await measured<unknown>('https://statsapi.mlb.com/api/v1/teams/'+
+      fixture[side].id+'/roster?rosterType=injured',fetcher,sources,now)})))
+  const injuries=injuryFeeds.flatMap(({side,data})=>gameRoster(data,fixture[side].id)
+    .map(p=>({team:fixture[side].name,name:p.name,
+      status:'listed-in-injured-roster' as const})))
   const lineupOrders={home:boxOrder(box,'home'),away:boxOrder(box,'away')}
   const lineupStatus={home:lineupOrders.home.length===9?'confirmed' as const:'unconfirmed' as const,
     away:lineupOrders.away.length===9?'confirmed' as const:'unconfirmed' as const}
@@ -411,15 +423,27 @@ export async function researchMlbCase(
     missingEvidence.push('Rosters activos incompletos o no disponibles')
   if(!profiles.length)missingEvidence.push('Estadísticas individuales no disponibles')
   if(!news.length)missingEvidence.push('Noticias específicas de ambos equipos no verificadas')
+  if(injuryFeeds.some(x=>x.data===null))missingEvidence.push('Parte de roster lesionado MLB incompleto')
   if(!quotes.length)missingEvidence.push('Cuotas reales no suministradas al expediente')
   const odds=verifiedOdds(fixture,quotes,now)
   if(quotes.length&&!odds.length)missingEvidence.push('Ninguna cuota coincide con ambos equipos, fecha y vigencia')
+  const startersText=(side:'home'|'away')=>{const p=starters[side]
+    return p?p.name+' ('+pitcherSummary(p.season)+')':'abridor sin confirmar'}
   const scenarios=[
-    'Cruzar los tres primeros turnos de cada bateador con el abridor confirmado; no pronosticar resultado sin repertorio y splits verificados.',
-    'Comprobar entradas y lanzamientos recientes de ambos abridores; estudiar si su salida temprana cambia el mercado F5.',
-    'Contrastar la alineación completa frente a los relevistas realmente disponibles y el bullpen usado en las últimas 72 horas.',
-    'Estudiar entradas finales, opciones de cerrador y suplentes. Considerar ausencia de baja de novena con local ganador.',
-    'Revisar cambios de alineación, abridor, clima, techo y cuotas antes del primer lanzamiento.',
+    'Primeras tres entradas: '+fixture.away.name+' enfrenta a '+startersText('home')+
+      '; '+fixture.home.name+' enfrenta a '+startersText('away')+
+      '. Verificar top del lineup, splits y propensión a K antes de inferir carreras.',
+    'Entradas cuatro y cinco: comprobar últimas cinco salidas de ambos abridores y riesgo de sustitución; '+
+      'la evidencia disponible no prueba cuántas entradas completarán.',
+    'Entradas seis y siete: bullpen local con '+bullpen.home.length+' pitchers activos identificados; '+
+      'bullpen visitante con '+bullpen.away.length+
+      '. Apariciones y fatiga deben verificarse por separado.',
+    'Entradas ocho y nueve: estudiar cerradores, emergentes, defensa y ventaja local; '+
+      'si el local ya gana, puede no batear la baja de la novena.',
+    'Escenario alternativo: '+(weather?'viento '+trimNum(weather.windSpeedKmh)+
+      ' km/h y temperatura '+trimNum(weather.temperatureC)+' °C; ':
+      'meteorología pendiente; ')+
+      'orientación del viento/techo y noticias pueden invalidar la lectura inicial.',
   ]
   const matchup=fixture.away.name+' vs '+fixture.home.name
   const opportunity:MlbOpportunity={eventId:String(gamePk),sport:'baseball',league:'mlb',
@@ -429,7 +453,7 @@ export async function researchMlbCase(
     missingEvidence,marketResearchReady:odds.length>0,priced:false}
   const dossier:Omit<MlbCase,'uiBlock'>={fixture,checkedAt:iso(now),season,sources,
     teamForm,rosters:rosterMap,starters,bullpen,lineupStatus,matchups,
-    venue:site,weather,news,odds,scenarioAnalysis:scenarios,missingEvidence,opportunity}
+    venue:site,weather,injuries,news,odds,scenarioAnalysis:scenarios,missingEvidence,opportunity}
   return{...dossier,uiBlock:makePanel(dossier)}
 }
 /** Date-scoped, no implicit future fixtures: return a verifiable board or exact-game dossier. */
