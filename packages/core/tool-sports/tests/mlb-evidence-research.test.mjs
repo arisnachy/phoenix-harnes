@@ -19,7 +19,7 @@ const roster=(side,fullLineup=false)=>({roster:[
     position:{type:'Infielder',abbreviation:'IF'}})):[]),
 ]})
 function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
-  unrelatedGame=false,unknownLineupId=false,pitcherLogs=false}={}){
+  unrelatedGame=false,unknownLineupId=false,pitcherLogs=false,bvpHydration=false}={}){
   const calls=[]
   const fetcher=async(input)=>{
     const url=String(input)
@@ -47,8 +47,13 @@ function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
       else if(missingRoster)return new Response('unavailable',{status:503})
       else data=roster(u.pathname.includes('/101/')?'home':'away',fullLineup)
     }else if(u.pathname==='/api/v1/people'){
+      const hydration=u.searchParams.get('hydrate')??''
+      const pitcher=Number(hydration.match(/opposingPlayerId=(\\d+)/)?.[1])
       data={people:[...u.searchParams.get('personIds').split(',')].map(k=>({
-        id:Number(k),batSide:{code:'R'},pitchHand:{code:'L'}}))}
+        id:Number(k),batSide:{code:'R'},pitchHand:{code:'L'},
+        stats:bvpHydration&&Number(k)===1103&&pitcher===2201?
+          [{splits:[{stat:{atBats:12,hits:5,strikeOuts:3,homeRuns:1}}]}]:[],
+      }))}
     }else if(u.pathname.includes('/people/')&&u.pathname.endsWith('/stats')){
       const pitching=u.searchParams.get('group')==='pitching'
       if(pitcherLogs&&u.searchParams.get('stats')==='gameLog'){
@@ -230,4 +235,16 @@ test('dated game logs distinguish the last starts from three calendar days of re
   assert.equal(d.bullpen.home[0].reliefUsage72h[0].date,'2026-06-29')
   assert.ok(d.uiBlock.props.sections.some(x=>x.heading.includes('Abridores')&&
     x.items.some(y=>y.detail.includes('salidas fechadas'))))
+})
+
+
+test('BvP evidence is tied to the explicit opposing pitcher MLB ID',async()=>{
+  const mock=fakeNetwork({bvpHydration:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  const pair=d.matchups.find(m=>m.batterId===1103&&m.pitcherId===2201)
+  assert.equal(pair.bvp.atBats,'12')
+  assert.equal(pair.bvp.hits,'5')
+  assert.equal(d.matchups.find(m=>m.batterId===1103&&m.pitcherId===2202).bvp,null)
+  assert.ok(mock.calls.some(url=>decodeURIComponent(url).includes('opposingPlayerId=2201')))
+  assert.ok(!mock.calls.some(url=>url.includes('stats=vsPlayer&group=hitting')))
 })
