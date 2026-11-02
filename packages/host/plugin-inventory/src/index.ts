@@ -23,6 +23,7 @@ import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import { readBusinessLibrarySnapshot } from './business-library.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
 import { readOpenClawRuntimeSnapshot } from './openclaw-runtime.ts'
+import { readOpenClawRouting, setOpenClawRoutingPermission } from './openclaw-plugin-routing.ts'
 import { readClawHubCatalog } from './clawhub-catalog.ts'
 import { clawHubInstall, clawHubState, prepareClawHubCli } from './clawhub-marketplace.ts'
 import { TokenTelemetryCollector } from './telemetry.ts'
@@ -58,6 +59,7 @@ import type {
   McpRegistrySearchSnapshot,
   OpenClawConnectorSnapshot,
   OpenClawRuntimeSnapshot,
+  OpenClawRoutingSnapshot, OpenClawRoutingRequest,
   ClawHubCatalogRequest, ClawHubCatalogSnapshot, ClawHubInstallRequest, ClawHubInstallReceipt, ClawHubState,
   PhoenixLocalEndpointReceipt,
   PhoenixLocalModeRequest,
@@ -380,6 +382,18 @@ export class PluginInventoryGateway extends TypertRemoteService {
       throw new Error('Select a native plugin package for this operation')
     }
     return clawHubInstall(request)
+  }
+
+  /** Inspect the actual OpenClaw plugin runtime; no tool execution or account data. */
+  @Remote('openClawPluginTools')
+  async openClawPluginTools(): Promise<OpenClawRoutingSnapshot> {
+    return readOpenClawRouting()
+  }
+
+  /** Owner-approved single-tool routing, stored outside the model's reach. */
+  @Remote('setOpenClawPluginTool')
+  async setOpenClawPluginTool(request: OpenClawRoutingRequest): Promise<OpenClawRoutingSnapshot> {
+    return setOpenClawRoutingPermission(request)
   }
 
   @Remote('searchMcpRegistry')
