@@ -135,7 +135,10 @@ export function drawWebGLScene(canvas:HTMLCanvasElement,faces:readonly Face[],
   gl.bindBuffer(gl.ARRAY_BUFFER,p.buffer)
   gl.bufferData(gl.ARRAY_BUFFER,data,gl.DYNAMIC_DRAW)
   const stride=10*4
-  for(const [slot,size,offset] of [[p.position,3,0],[p.normal,3,12],[p.color,4,24]]){
+  const attributes: ReadonlyArray<readonly [number,number,number]> = [
+    [p.position,3,0],[p.normal,3,12],[p.color,4,24],
+  ]
+  for(const [slot,size,offset] of attributes){
     if(slot<0)continue
     gl.enableVertexAttribArray(slot)
     gl.vertexAttribPointer(slot,size,gl.FLOAT,false,stride,offset)
