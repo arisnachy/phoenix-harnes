@@ -24,6 +24,7 @@ import { estimateEvidenceForecast } from './sports-forecast.ts'
 import { extendedEspnRoutes,readExtendedEspn,type ExtendedEspnMode } from './espn-extra-intelligence.ts'
 import { exploreEspn, type EspnExplorerInput } from './espn-intelligence.ts'
 import {collectDirectEspnStats} from './sports-direct-stats.ts'
+import {sportsMarketAlternatives} from './sports-market-alternatives.ts'
 import {probeExtendedEspnCatalog} from './sports-espn-route-probe.ts'
 import { compareBettingMarkets,supportedMarketFamilies } from './sports-market-intelligence.ts'
 import { describeBettingMarkets } from './sports-bet-markets.ts'
@@ -500,6 +501,17 @@ export function apply(ctx: Context): void {
       const displayedHome=calibrated?.probabilityHome??forecast.probabilityHome
       const displayedAway=calibrated?.probabilityAway??forecast.probabilityAway
       const displayedDraw=calibrated?.probabilityDraw??forecast.probabilityDraw
+      const alternatives=sportsMarketAlternatives(args.sport,report.marketComparisons,
+        forecast.projectedHome,forecast.projectedAway)
+      const marketOptions=alternatives.alternatives.slice(0,6).map(m=>({
+        label:(m.family==='run-line'?'Run line':
+          m.family==='total'?'Total':m.family==='spread'?'Hándicap':'Ganador')+
+          ' · '+m.bookmaker,
+        value:m.quotes.map(q=>q.selection+' '+q.decimalPrice.toFixed(2)+
+          (q.point===null?'':' ('+q.point+')')).join(' | ').slice(0,180),
+        detail:'Cuotas observadas · hace '+m.freshnessMinutes.toFixed(0)+
+          ' min. NO ventaja calibrada.',
+      }))
       const forecastItems=forecast.status==='exploratory'?[
         {label:report.home.name,value:displayedHome===null?'—':
           (displayedHome*100).toFixed(1)+'%',
@@ -515,6 +527,8 @@ export function apply(ctx: Context): void {
       ]:[{label:'Proyección',value:'Sin evidencia suficiente',
         detail:forecast.warnings[0]??'No se verificó una estimación'}]
       const appended=[
+        ...(marketOptions.length?[{heading:'Opciones reales de mercado',
+          kind:'list' as const,items:marketOptions}]:[]),
         ...(teamMetrics.length?[{heading:'Estadísticas de equipo · ESPN',
           kind:'metrics' as const,items:teamMetrics.slice(0,12)}]:[]),
         ...(athleteMetrics.length?[{heading:'Estadísticas individuales · ESPN',
@@ -537,6 +551,7 @@ export function apply(ctx: Context): void {
           away:{id:report.away.id,name:report.away.name}},
         forecast,calibrated,calibrationAudit:audit,externalResearch,
         directPlayerEvidence:playerData,
+        marketAlternatives:alternatives,
         source:report.source,checkedAt:report.checkedAt,
         facts:{homeForm:report.home.form,awayForm:report.away.form,
           descriptiveAdvantages:report.descriptiveAdvantages,
@@ -545,7 +560,7 @@ export function apply(ctx: Context): void {
           latestNews:report.rosterNewsInjuries?.headlines.slice(0,6)??[],
           marketComparisons:report.marketComparisons.slice(0,4)},
         coverage:report.coverage,missingEvidence:report.limitations.slice(0,14),
-        instruction:'La estimación es exploratoria salvo que calibrated contenga una validación temporal aprobada. En ningún caso implica ventaja rentable ni promesa de victoria. No publicar EV, ventaja apostable ni ticket ganador sin precios vigentes y evaluación independiente. Para segunda opinión consulta sports_chat_market_source_catalog, sports_chat_community_opinions y expertos de Covers/ESPN SOLO mediante navegación permitida. Usa sports_chat_odds para precios vigentes y reporta sus timestamps. La UI nativa del dossier se proporciona por separado.',
+        instruction:'AL ARMAR TICKET: evalúa todas las marketAlternatives realmente observadas (ganador, RL -1.5/+1.5, spreads, totales); no reduzcas automáticamente a Moneyline. Propuestas de jugador requieren líneas específicas confirmadas por proveedor, no basta ESPN player stats. sports_chat_ticket valida de nuevo los precios/mercados/puntos y casa antes de entregar ticket cotizado. Nunca inventes EV ni declares una pata ganadora sin validación de ese mercado. La estimación es exploratoria salvo que calibrated contenga una validación temporal aprobada. En ningún caso implica ventaja rentable ni promesa de victoria. No publicar EV, ventaja apostable ni ticket ganador sin precios vigentes y evaluación independiente. Para segunda opinión consulta sports_chat_market_source_catalog, sports_chat_community_opinions y expertos de Covers/ESPN SOLO mediante navegación permitida. Usa sports_chat_odds para precios vigentes y reporta sus timestamps. La UI nativa del dossier se proporciona por separado.',
         uiBlock,
       })
     },
