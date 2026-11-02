@@ -723,6 +723,23 @@ describe('installModelSelection()', () => {
         () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({
         provider: 'openai-codex', model: 'gpt-6.1-sol',
       })
+
+      const boundedTask = [
+        'Construye un módulo Python 3.11 llamado ratelimiter sin dependencias externas.',
+        'Dos algoritmos Token Bucket y Sliding Window Log con interfaz allow y retry_after.',
+        'Debe ser thread-safe, con reloj inyectable y expiración de claves inactivas.',
+        'Entrega pruebas pytest de concurrencia y README.md con ejemplos y requisitos verificables.',
+      ].join(' ')
+      events.push({ type: 'turn/start', data: { turn: 3 } },
+        { type: 'user/message', data: { source: { kind: 'user' },
+          content: [{ type: 'text', text: boundedTask }] } })
+      const bounded = await ctx.systemPrompt.assemble()
+      expect(bounded.tools.some(tool => tool.name === 'read')).toBe(true)
+      expect(bounded.sections.some(section => section.name === 'phoenix:auto-visible-handoff')).toBe(false)
+      await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 3, step: 1, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({
+        provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('high'),
+      })
     } finally {
       dispose()
       await ctx.fiber.dispose()
