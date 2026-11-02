@@ -18,7 +18,8 @@ const roster=(side,fullLineup=false)=>({roster:[
     fullName:(side==='home'?'Home':'Away')+' Batter '+(i+3)},
     position:{type:'Infielder',abbreviation:'IF'}})):[]),
 ]})
-function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false}={}){
+function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
+  unrelatedGame=false,unknownLineupId=false}={}){
   const calls=[]
   const fetcher=async(input)=>{
     const url=String(input)
@@ -32,9 +33,12 @@ function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false}={}){
       data={dates:[{games:[{gamePk:709999,gameDate:'2026-06-29T22:00:00Z',
         status:{abstractGameState:'Final'},teams:{
           home:{team:{id:teamId},score:6},
-          away:{team:{id:teamId===101?200:201},score:2}}}]}]}
+          away:{team:{id:teamId===101?200:201},score:2}}},
+        ...(unrelatedGame?[{gamePk:710000,gameDate:'2026-06-28T22:00:00Z',
+          status:{abstractGameState:'Final'},teams:{home:{team:{id:777},score:8},
+            away:{team:{id:778},score:1}}}]:[])]}]}
     }else if(u.pathname.endsWith('/boxscore')){
-      data={teams:{home:{battingOrder:fullLineup?[1103,1104,...Array.from({length:7},(_,i)=>1301+i)]:[]},
+      data={teams:{home:{battingOrder:fullLineup?[unknownLineupId?999999:1103,1104,...Array.from({length:7},(_,i)=>1301+i)]:[]},
         away:{battingOrder:fullLineup?[2203,2204,...Array.from({length:7},(_,i)=>2301+i)]:[]}}}
     }else if(u.pathname.endsWith('/venues')){
       data={venues:[{name:'Test Ballpark',location:{defaultCoordinates:{latitude:40.1,longitude:-74.2}}}]}
@@ -167,4 +171,24 @@ test('nine verified batters per team cross every opposing starter and available 
   assert.equal(report.evidenceGates.lineupsConfirmed,true)
   assert.equal(report.eligibility,'research-only')
   assert.equal(report.eligibleForTicket,false)
+})
+
+
+test('unrelated games in a schedule response never contaminate team form',async()=>{
+  const mock=fakeNetwork({unrelatedGame:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(d.teamForm.home.games,1)
+  assert.equal(d.teamForm.away.games,1)
+  assert.equal(d.teamForm.home.runsFor,6)
+  assert.equal(d.teamForm.away.runsFor,6)
+})
+
+test('nine boxscore slots with an unknown athlete do not confirm a lineup',async()=>{
+  const mock=fakeNetwork({fullLineup:true,unknownLineupId:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(d.lineupStatus.home,'unconfirmed')
+  assert.equal(d.lineupStatus.away,'confirmed')
+  assert.equal(d.rosters.home.filter(p=>p.lineupConfirmed).length,0)
+  assert.ok(d.missingEvidence.some(x=>x.includes('Alineación local')))
+  assert.equal(reviewMlbResearch(d).evidenceGates.lineupsConfirmed,false)
 })
