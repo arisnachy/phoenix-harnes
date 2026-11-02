@@ -29,7 +29,7 @@ const norm=(x:string)=>x.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
 const mean=(vals:number[]):number|null=>vals.length?
   Number((vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2)):null
 const round=(x:number)=>Number(x.toFixed(2))
-type Side={id:string;name:string;homeAway:string;score:number|null;lines:number[]|null}
+type Side={id:string;name:string;homeAway:string;score:number|null;lines:number[]|null;logo:string}
 type Game={id:string;date:string;state:string;venueId:string;venueName:string;
   latitude:number|null;longitude:number|null;roof:string;home:Side;away:Side}
 type RecordGame={id:string;date:string;opponent:string;scored:number;allowed:number;
@@ -37,15 +37,17 @@ type RecordGame={id:string;date:string;opponent:string;scored:number;allowed:num
 export type UniversalMatchupInput={
   sport:string;league:string;eventId:string;date:string;lookbackDays?:number;includeOdds?:boolean
 }
-type Fact={label:string;value?:string;detail?:string}
+type Fact={label:string;value?:string;detail?:string;image?:string}
 type Section={heading:string;kind:'metrics'|'list'|'articles';items:Fact[]}
 type Coverage={source:string;status:'verified'|'unavailable';records:number}
 const side=(x:unknown):Side=>{
   const c=obj(x),team=obj(c.team),athlete=obj(c.athlete)
   const person=Object.keys(team).length?team:athlete
   const innings=list(c.linescores).map(z=>num(obj(z).value??obj(z).displayValue))
+  const rawLogo=str(person.logo??obj(list(person.logos)[0]).href,320)
+  const logo=/^https:\/\/a\.espncdn\.com\/[a-z0-9_./%-]+(?:\?[a-z0-9=&_.%-]+)?$/iu.test(rawLogo)?rawLogo:''
   return {id:id(person.id??c.id),name:str(person.displayName??person.name,120),
-    homeAway:str(c.homeAway,10),score:num(c.score),
+    homeAway:str(c.homeAway,10),score:num(c.score),logo,
     lines:innings.length&&innings.every(n=>n!==null)?innings as number[]:null}
 }
 function game(x:unknown):Game|null{
@@ -253,7 +255,7 @@ export async function auditUniversalMatchup(
   const matchingOdds=odds.filter(q=>
     norm(q.home)===norm(current.home.name)&&norm(q.away)===norm(current.away.name)&&
     Number.isFinite(Date.parse(q.timeIso??q.time))&&
-    Math.abs(Date.parse(q.timeIso??q.time)-kickoff)<4*3_600_000)
+    Math.abs(Date.parse(q.timeIso??q.time)-kickoff)<=15*60_000)
   const markets=compareBettingMarkets(matchingOdds,now).markets.slice(0,7)
   const availability:Coverage[]=[
     {source:'ESPN: cartelera y equipos',status:'verified',records:1},
@@ -275,12 +277,14 @@ export async function auditUniversalMatchup(
     if(items.length&&sections.length<8)sections.push({heading,kind,items:items.slice(0,14)})
   }
   put('Forma reciente y descanso','metrics',[
-    stat(current.home.name,homeForm.games?homeForm.wins+'V · '+homeForm.losses+'D · '+homeForm.draws+'E':'Sin muestra',
-      'Puntos/carreras por juego: '+String(homeForm.scoredPerGame??'N/D')+
+    {...stat(current.home.name,homeForm.games?homeForm.wins+'V · '+homeForm.losses+'D · '+homeForm.draws+'E':'Sin muestra',
+      'Local · Puntos/carreras por juego: '+String(homeForm.scoredPerGame??'N/D')+
       ' · recibidos: '+String(homeForm.allowedPerGame??'N/D')),
-    stat(current.away.name,awayForm.games?awayForm.wins+'V · '+awayForm.losses+'D · '+awayForm.draws+'E':'Sin muestra',
-      'Puntos/carreras por juego: '+String(awayForm.scoredPerGame??'N/D')+
+      ...(current.home.logo?{image:current.home.logo}:{})},
+    {...stat(current.away.name,awayForm.games?awayForm.wins+'V · '+awayForm.losses+'D · '+awayForm.draws+'E':'Sin muestra',
+      'Visitante · Puntos/carreras por juego: '+String(awayForm.scoredPerGame??'N/D')+
       ' · recibidos: '+String(awayForm.allowedPerGame??'N/D')),
+      ...(current.away.logo?{image:current.away.logo}:{})},
     stat('Descanso local (horas)',home[0]?round((kickoff-Date.parse(home[0].date))/3_600_000):null),
     stat('Descanso visitante (horas)',away[0]?round((kickoff-Date.parse(away[0].date))/3_600_000):null),
     ...descriptiveAdvantages.map(a=>stat('Ventaja descriptiva · '+a.factor,
@@ -321,11 +325,14 @@ export async function auditUniversalMatchup(
     ...context.teams.slice(0,2).map(t=>stat('Plantilla '+t.name,
       t.rosterSample.length+' nombres recuperados','No confirma alineación titular')),
   ])
-  if(markets.length)put('Mercados observados · sin promesa de acierto','list',
-    markets.flatMap(m=>m.selections.slice(0,3).map(s=>stat(
-      m.market+' · '+s.name,s.price.toFixed(2)+' · '+m.bookmaker,
-      s.noVigShare===null?'Sin probabilidad depurada comparable':
-        'Cuota sin margen del mercado '+(100*s.noVigShare).toFixed(1)+'% · NO modelo propio'))))
+  if(markets.length)put('Cuotas completas · sin promesa de acierto','list',
+    markets.filter(m=>m.selections.length>=2&&
+      m.selections.every(s=>s.noVigShare!==null)).map(m=>stat(
+      m.market+' · '+m.bookmaker,
+      m.selections.map(s=>s.name+' '+s.price.toFixed(2)).join(' | '),
+      'Sin margen de la misma casa: '+
+        m.selections.map(s=>s.name+' '+(100*(s.noVigShare??0)).toFixed(1)+'%').join(' / ')+
+        ' · hace '+m.freshnessMinutes.toFixed(0)+' min · NO modelo propio')))
   const missing=[
     ...(home.length<5||away.length<5?['Muestra inferior a 5 partidos por equipo']:[]),
     ...(h2h.length===0?['Sin enfrentamientos directos comprobados en la ventana']:[]),
