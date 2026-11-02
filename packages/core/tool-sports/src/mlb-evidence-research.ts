@@ -124,7 +124,9 @@ async function boundedMap<T,R>(items:T[],concurrency:number,fn:(item:T)=>Promise
 function form(games:unknown[],teamId:number,cutoff:number):MlbForm{
   const valid=games.flatMap(entry=>{
     const g=obj(entry),status=obj(g.status),t=obj(g.teams),h=obj(t.home),a=obj(t.away)
-    const isHome=id(obj(h.team).id)===teamId
+    const homeId=id(obj(h.team).id),awayId=id(obj(a.team).id)
+    if(homeId!==teamId&&awayId!==teamId)return []
+    const isHome=homeId===teamId
     const own=isHome?h:a,opponent=isHome?a:h
     const opponentId=id(obj(opponent.team).id)
     const d=Date.parse(word(g.gameDate))
@@ -368,10 +370,17 @@ export async function researchMlbCase(
       boxOrder(liveBox,'home'),
     away:boxOrder(box,'away').length===9?boxOrder(box,'away'):
       boxOrder(liveBox,'away')}
-  const lineupStatus={home:lineupOrders.home.length===9?'confirmed' as const:'unconfirmed' as const,
-    away:lineupOrders.away.length===9?'confirmed' as const:'unconfirmed' as const}
   const rawRosters={home:gameRoster(homeRoster,fixture.home.id),
     away:gameRoster(awayRoster,fixture.away.id)}
+  // Nine unique official batting IDs must also belong to the observed active roster.
+  // A partial boxscore or stale/foreign ID is not a confirmed starting lineup.
+  const lineupConfirmed=(side:'home'|'away')=>{
+    const order=lineupOrders[side],active=new Set(rawRosters[side]
+      .filter(p=>p.role==='batter').map(p=>p.id))
+    return order.length===9&&new Set(order).size===9&&order.every(pid=>active.has(pid))
+  }
+  const lineupStatus={home:lineupConfirmed('home')?'confirmed' as const:'unconfirmed' as const,
+    away:lineupConfirmed('away')?'confirmed' as const:'unconfirmed' as const}
   type Person={id:number;name:string;teamId:number;role:'batter'|'pitcher';position:string;
     lineupOrder:number|null;lineupConfirmed:boolean}
   const people:Person[]=teams.flatMap(side=>{
