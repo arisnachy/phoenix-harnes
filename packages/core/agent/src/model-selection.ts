@@ -316,7 +316,50 @@ export function adaptiveCodexReasoningEffort(text: string): ReasoningEffortId {
 }
 
 /** Keep the visible strategy pass cheap; substantive execution gets the adaptive tier. */
+
+/** Scope the extra quality brief to deliverable-oriented software tasks only. */
+const FENIX_CODING_ARTIFACT = /\b(?:python|typescript|javascript|c[oó]digo|code|m[oó]dulo|module|script|algoritmo|algorithm|resolver|resolvedor|depsolve|funci[oó]n|function|paquete|package)\b/iu
+const FENIX_CODING_VERIFY = /\b(?:pytest|unittest|tests?|pruebas?|benchmark|rendimiento|performance|readme|documentaci[oó]n|trade[-\s]?offs|restricciones|constraints)\b/iu
+const FENIX_PERFORMANCE_RISK = /\b(?:rendimiento|performance|benchmark|escalabilidad|scalability|tiempo\s+l[ií]mite|time\s+limit|pocos\s+segundos|few\s+seconds|backtracking|exponencial|exponential|patol[oó]gic|pathological)\b/iu
+const FENIX_CONSTRAINT_RISK = /\b(?:versiones?|versions?|semver|dependencias?|dependencies|grafo|graph|restricciones|constraints|minimiz|minimum|m[ií]nim|optimal|[oó]ptim|desempate|tie[-\s]?break)\b/iu
+const FENIX_README_REQUEST = /\b(?:readme|documentaci[oó]n|documentation|suposiciones|assumptions|trade[-\s]?offs)\b/iu
+const FENIX_TEST_REQUEST = /\b(?:pytest|unittest|tests?|pruebas?|mutaciones|mutations)\b/iu
+const FENIX_REPORT_REQUEST = /\b(?:reporte\s+final|informe\s+final|final\s+report|limitations?|limitaciones|iteraciones|iterations|herramientas\s+usadas)\b/iu
+
+/** Deterministic, proportional quality obligations: no model-based classifier. */
+export function fenixCodingQualityBrief(request: string): string | undefined {
+  if (!phoenixAutoTaskRequest(request)
+    || !FENIX_CODING_ARTIFACT.test(request) || !FENIX_CODING_VERIFY.test(request)) return undefined
+  const obligations = [
+    'FÉNIX acceptance brief: map each explicit requirement and deliverable to evidence before declaring completion.',
+  ]
+  if (FENIX_CONSTRAINT_RISK.test(request)) {
+    obligations.push('State the precedence of conflicting objectives, edge-case semantics and deterministic tie-breaks; verify against counterexamples.')
+  }
+  if (FENIX_PERFORMANCE_RISK.test(request)) {
+    obligations.push('Benchmark adversarial, independent-choice and unsatisfiable cases at requested scale; an easy chain or passing unit tests do not prove performance. Report measured limits, not guesses.')
+  }
+  if (FENIX_TEST_REQUEST.test(request)) {
+    obligations.push('Run real tests plus adversarial boundary checks that would fail on plausible mutations; report actual counts.')
+  }
+  if (FENIX_README_REQUEST.test(request)) {
+    obligations.push('Inspect and update the requested README: examples, assumptions, edge rules, objective priority and limitations; never leave a prior task README unchanged.')
+  }
+  if (FENIX_REPORT_REQUEST.test(request)) {
+    obligations.push('Finish with the requested factual report: tests, performance, iterations/tool activity, limitations and any unverified criteria.')
+  }
+  return obligations.join(' ')
+}
+
+/** The small bounded-implementation shortcut must not skip Sol's hard algorithmic trade-off plan. */
+function fenixNeedsAlgorithmPlan(request: string): boolean {
+  return FENIX_CODING_ARTIFACT.test(request)
+    && FENIX_PERFORMANCE_RISK.test(request)
+    && FENIX_CONSTRAINT_RISK.test(request)
+}
+
 function adaptiveCodexPlanningEffort(text: string): ReasoningEffortId {
+  if (fenixNeedsAlgorithmPlan(text)) return ReasoningEffortId('high')
   if (AUTO_EXCEPTIONAL_TASK.test(text)) return ReasoningEffortId('max')
   if (AUTO_COMPLEX_TASK.test(text) || AUTO_DEEP_REPLY.test(text))
     return ReasoningEffortId('medium')
@@ -364,6 +407,7 @@ const AUTO_VISIBLE_PLAN_POLICY =
   'actions in the user\'s language, the expected deliverable and how it will be verified. ' +
   'Be proportionate: a tiny team demonstration deserves a tiny plan, not a technical audit. ' +
   'Show decisions, not private chain-of-thought, model names, ceremonial talk or fabricated completion. ' +
+  'For programming benchmarks, name the objective precedence, adversarial runtime cases, required files, verification method and honest final report in this one visible plan, not a vague promise. ' +
   'Do not execute tools or assign coworkers in this first planning step; stop after displaying the plan. ' +
   'On the next step Kira switches to the execution coordinator on Luna Max, uses this exact plan and coordinates the real specialists without asking for routine approval. ' +
   'If the user only wants a greeting, explanation, answer or standalone preview, respond normally with no planning stage.'
@@ -387,6 +431,7 @@ const AUTO_LUNA_COORDINATION_POLICY =
   'for actionable multi-step missions, delegate a bounded scope with spawn_teammate only if a genuinely independent workstream improves quality or time; otherwise work directly with no team. Address teammates naturally by name, accept their real evidence, ' +
   'and speak to the user in concise, warm Spanish when that is their language. ' +
   'Never simulate coworker messages or claim a tool ran before its real result. ' +
+  'For implementation work, check all user deliverables and actual test/performance receipts before claiming success; a trivial passing benchmark is not evidence for pathological inputs. ' +
   'If you genuinely need a new strategy, state "Necesito revisar la estrategia" and end that step: ' +
   'the router asks the selected planning model for a focused review only when new evidence warrants it, then returns immediately to Luna Max execution. ' +
   'Respect the hard limit of three simultaneous specialists; reuse existing agents and rotate assignments instead of creating more. Report meaningful changes and final verified output; skip filler and repetitive stage narration.'
@@ -867,7 +912,7 @@ const AUTO_LARGE_INTENT = /^[¡!¿?\s]*(?:(?:kira|f[eé]nix)[,\s]+)?(?:quiero|ne
 export function isPhoenixAutoBoundedImplementation(text: string): boolean {
   const request = text.trim()
   if (request.length < 180 || request.length > 6000 || AUTO_EXCEPTIONAL_TASK.test(request)
-    || AUTO_COMPLEX_TASK.test(request)) return false
+    || AUTO_COMPLEX_TASK.test(request) || fenixNeedsAlgorithmPlan(request)) return false
   // oxlint-disable-next-line @stylistic/max-len -- Match exact coding-artifact vocabulary without an extra LLM request.
   const artifact = /\b(?:m[oó]dulos?|modules?|scripts?|archivos?|files?|funciones?|functions?|clases?|classes?|algoritmos?|algorithms?|componentes?|components?|librer[ií]as?|libraries?)\b/iu
   const verification = /\b(?:pytest|vitest|unittest|tests?|pruebas?|probar|testear|verificar)\b/iu
@@ -1301,7 +1346,8 @@ export function installModelSelection(
       ...autoPolicy === undefined ? {} : {
         sections: [...assembled.sections, {
           name: 'phoenix:auto-visible-handoff',
-          text: autoPolicy,
+          text: autoPolicy + (currentRequest.length === 0 ? '' :
+            `\n${fenixCodingQualityBrief(currentRequest) ?? ''}`),
         }],
       },
       // The initial coordinator plan cannot execute tools. The coordinator
@@ -1536,8 +1582,15 @@ export function installModelSelection(
     // stops on another promise, make the next step a strategy rescue.
     if (phoenixAutoState.continuationCount >= 2 && continuationLimit > BRIEF_TEAM_CONTINUATION_LIMIT)
       phoenixAutoState.forcePlannerNext = true
+    const solMissedPlan = plannerStoppedBeforeActing && !hasVisibleSolPlan(latest.text)
     agent.steer(createUserMessage({
-      content: [{ type: 'text', text: AUTO_EXECUTION_CONTINUATION }],
+      content: [{ type: 'text', text: solMissedPlan
+        ? AUTO_EXECUTION_CONTINUATION
+          + ' Sol stopped without a concrete visible Plan. In this Luna Max execution step,'
+          + ' recover the original acceptance criteria and explicit deliverables,'
+          + ' resolve conflicting objectives, perform adversarial verification and report'
+          + ' any missing evidence. Do not pay for a redundant planning turn.'
+        : AUTO_EXECUTION_CONTINUATION }],
       source: {
         kind: 'plugin',
         plugin: 'model-selection',
