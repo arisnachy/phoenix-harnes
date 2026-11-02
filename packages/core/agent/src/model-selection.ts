@@ -866,8 +866,7 @@ const AUTO_LARGE_INTENT = /^[¡!¿?\s]*(?:(?:kira|f[eé]nix)[,\s]+)?(?:quiero|ne
 export function isPhoenixAutoBoundedImplementation(text: string): boolean {
   const request = text.trim()
   if (request.length < 180 || request.length > 6000 || AUTO_EXCEPTIONAL_TASK.test(request)
-    || AUTO_COMPLEX_TASK.test(request) || AUTO_LARGE_CREATION.test(request)
-    || AUTO_LARGE_INTENT.test(request)) return false
+    || AUTO_COMPLEX_TASK.test(request)) return false
   // oxlint-disable-next-line @stylistic/max-len -- Match exact coding-artifact vocabulary without an extra LLM request.
   const artifact = /\b(?:m[oó]dulos?|modules?|scripts?|archivos?|files?|funciones?|functions?|clases?|classes?|algoritmos?|algorithms?|componentes?|components?|librer[ií]as?|libraries?)\b/iu
   const verification = /\b(?:pytest|vitest|unittest|tests?|pruebas?|probar|testear|verificar)\b/iu
@@ -875,8 +874,11 @@ export function isPhoenixAutoBoundedImplementation(text: string): boolean {
   const criteria = /\b(?:readme(?:\.md)?|documentaci[oó]n|examples?|ejemplos?|interfaz|interface|firma|signature|thread[- ]safe|concurrencia|expiraci[oó]n|requisitos?|requirements?)\b/iu
   // oxlint-disable-next-line @stylistic/max-len -- Cross-system writes and consequential workflows are always deliberate.
   const consequential = /\b(?:main|stable|merge|fusionar|push|deploy|despliegue|desplegar|producci[oó]n|production|credenciales?|secrets?|seguridad|security|pagos?|payments?|clinical|cl[ií]nico|m[eé]dico|pacientes?|oauth|infraestructura|architecture|arquitectura|migraci[oó]n|database|base\s+de\s+datos|servidores?)\b/iu
+  // A bounded library/module differs from an entire application, platform or
+  // service. Large-creation heuristics alone must not penalize one testable module.
+  const systemScope = /\b(?:sistemas?|aplicaciones?|applications?|apps?|plataformas?|platforms?|sitios?|webs?|motores?|hosp(?:ital|itales)|saas|software)\b/iu
   return artifact.test(request) && verification.test(request)
-    && criteria.test(request) && !consequential.test(request)
+    && criteria.test(request) && !consequential.test(request) && !systemScope.test(request)
 }
 
 export function isPhoenixAutoQuickTurn(text: string): boolean {
