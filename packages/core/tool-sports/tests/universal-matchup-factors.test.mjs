@@ -117,3 +117,23 @@ test('generic non-MLB sport skips MLB pitcher and inning assumptions',async()=>{
   assert.equal(report.mlb.probableStarters.length,0)
   assert.equal(report.headToHead.length,4)
 })
+
+test('matchup dossier contains two verified ESPN club crests, not player images',async()=>{
+  const original=factory().fetcher
+  const fetcher=async url=>{
+    const u=String(url)
+    if(u===root+'scoreboard?dates=20261029'){
+      const g=structuredClone(fixture)
+      g.competitions[0].competitors[0].team.logo='https://a.espncdn.com/i/teamlogos/mlb/500/home.png'
+      g.competitions[0].competitors[1].team.logo='https://a.espncdn.com/i/teamlogos/mlb/500/away.png'
+      return new Response(JSON.stringify({events:[g]}),{status:200})
+    }
+    return original(url)
+  }
+  const result=await auditUniversalMatchup(input,fetcher,now,{})
+  const form=result.uiBlock.props.sections.find(s=>s.heading==='Forma reciente y descanso')
+  assert.equal(form.items[0].image,'https://a.espncdn.com/i/teamlogos/mlb/500/home.png')
+  assert.equal(form.items[1].image,'https://a.espncdn.com/i/teamlogos/mlb/500/away.png')
+  assert.equal(form.items[0].label,'Home')
+  assert.equal(form.items[1].label,'Away')
+})
