@@ -37,6 +37,8 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     reliefUsageObserved:[...d.bullpen.home,...d.bullpen.away].some(p=>p.reliefUsage72h.length>0),
     rosterMatchupsReviewed:d.matchups.length>0,
     venueKnown:!!d.venue.name&&d.venue.name!=='Estadio no verificado',
+    roofConstructionKnown:d.venue.roofType!=='unknown',
+    gameRoofPositionVerified:false,
     weatherObserved:!!d.weather, // Forecast available, not a measured game-time observation
     realOffersVerified:d.odds.length>0,
     specificExpertPicksVerified:false,
@@ -79,6 +81,8 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
       ...(!gates.starterStatsVerified?['Estadísticas comprobadas de ambos abridores']:[]),
       ...(!gates.venueKnown?['Identidad y características del estadio verificadas']:[]),
       ...(!gates.weatherObserved?['Meteorología horaria para el encuentro']:[]),
+    ...(!gates.roofConstructionKnown?['Tipo de techo del estadio sin verificación']:[]),
+    ...(!gates.gameRoofPositionVerified?['Estado del techo al inicio del encuentro sin verificar']:[]),
       ...(!gates.reliefUsageObserved?['Uso reciente del bullpen y disponibilidad de relevistas']:[]),
       ...(!gates.bookmakerRulesVerified?['Reglas verificadas para este mercado y período']:[]),
       ...(!gates.probabilitiesValidated?['Evaluación probabilística validada para respaldar EV']:[]),
