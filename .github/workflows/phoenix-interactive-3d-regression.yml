@@ -6,8 +6,14 @@ on:
     paths:
       - 'packages/hardness/adapters/src/scene3d-tool.ts'
       - 'packages/hardness/adapters/src/scene3d-pelican.ts'
+      - 'packages/hardness/adapters/src/scene3d-quality.ts'
+      - 'packages/client/ui-conversation/src/client/chat/scene3d-primitives.ts'
+      - 'packages/client/ui-conversation/src/client/chat/scene3d-animation.ts'
+      - 'packages/client/ui-conversation/src/client/chat/scene3d-webgl.ts'
       - 'packages/hardness/adapters/src/index.ts'
       - 'packages/hardness/adapters/tests/scene3d-tool.spec.ts'
+      - 'packages/hardness/adapters/tests/scene3d-quality.spec.ts'
+      - 'scripts/phoenix-3d-studio.py'
       - 'packages/hardness/adapters/tests/adapters.spec.ts'
       - 'packages/client/ui-conversation/src/client/chat/Scene3DView.tsx'
       - 'packages/client/ui-conversation/src/client/chat/scene3d-formats.ts'
@@ -45,9 +51,12 @@ jobs:
         run: |
           pnpm exec vitest run \
             packages/hardness/adapters/tests/scene3d-tool.spec.ts \
+            packages/hardness/adapters/tests/scene3d-quality.spec.ts \
             packages/hardness/adapters/tests/scene3d-routing.spec.ts \
             packages/hardness/adapters/tests/adapters.spec.ts \
             packages/client/ui-conversation/tests/scene3d-view.client.spec.tsx \
             packages/client/ui-conversation/tests/scene3d-formats.client.spec.ts \
             packages/client/ui-conversation/tests/hardness-artifact-renderer.client.spec.tsx \
             packages/client/ui-conversation/tests/universal-artifact-surface.client.spec.tsx
+      - name: Check Blender Studio pipeline Python syntax
+        run: python -m py_compile scripts/phoenix-3d-studio.py

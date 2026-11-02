@@ -92,6 +92,53 @@ describe('phoenix_3d actual geometry tool',()=>{
       }, execution())).rejects.toThrow()
     }
   })
+  it('preserves every object when an animal interacts with a bicycle and environment',async()=>{
+    const tool=createPhoenix3DTool()
+    const nodes=[
+      {type:'sphere',name:'Pelícano cuerpo',objectId:'pelican',position:[0,2,0],size:[1,1,1],color:'#eeeeee'},
+      {type:'torus',name:'Bicicleta rueda delantera',objectId:'bicycle',position:[1,.5,0],size:[1,.1,1],rotation:[90,0,0],color:'#111111'},
+      {type:'torus',name:'Bicicleta rueda trasera',objectId:'bicycle',position:[-1,.5,0],size:[1,.1,1],rotation:[90,0,0],color:'#111111'},
+      {type:'box',name:'Sendero',objectId:'park',position:[0,-.2,0],size:[7,.2,4],color:'#999999'},
+    ]
+    const result=await tool.execute({title:'Pelícano en bicicleta en un parque',
+      scene:{nodes},requiredObjects:['pelican','bicycle','park']},execution()) as {
+        scene:{nodes:Array<{type:string;objectId?:string}>}
+      }
+    expect(result.scene.nodes).toHaveLength(nodes.length)
+    expect(result.scene.nodes.filter(node=>node.type==='torus')).toHaveLength(2)
+    expect(result.scene.nodes.some(node=>node.objectId==='park')).toBe(true)
+    await expect(tool.execute({title:'Bicicleta con entorno',
+      scene:{nodes},requiredObjects:['pelican','bicycle','forest']},execution()))
+      .rejects.toThrow(/Faltan objetos esenciales/)
+  })
+  it('never replaces a missing bicycle with the standalone pelican preset', async () => {
+    const tool = createPhoenix3DTool()
+    const title = 'Pelícano en bicicleta en un parque'
+    await expect(tool.execute({ title, preset: 'pelican' }, execution()))
+      .rejects.toThrow(/nodes/u)
+    await expect(tool.execute({ title, scene: { nodes: [{
+      type: 'box', name: 'Bicicleta', position: [0,0,0], size: [1,1,1], color: '#ffffff',
+    }] } }, execution())).rejects.toThrow(/Escena compuesta insuficiente/u)
+  })
+  it('validates general-purpose animation tracks with named parts and bounded keyframes',async()=>{
+    const tool=createPhoenix3DTool()
+    const scene={nodes:[{type:'torus',name:'Rueda delantera',position:[0,1,0],size:[1,.1,1],
+      color:'#111111'}],animations:[{name:'Pedaleo',duration:2,loop:true,tracks:[{
+      node:'Rueda delantera',property:'rotation',keys:[
+        {time:0,value:[90,0,0]},{time:1,value:[90,0,180]},{time:2,value:[90,0,360]},
+      ],
+    }]}]}
+    const result=await tool.execute({title:'Bicicleta animada',scene},execution()) as {
+      scene:{animations:Array<{tracks:unknown[]}>}
+    }
+    expect(result.scene.animations).toHaveLength(1)
+    expect(result.scene.animations[0]?.tracks).toHaveLength(1)
+    await expect(tool.execute({title:'Animación inválida',scene:{
+      ...scene,animations:[{...scene.animations[0],tracks:[
+        {...scene.animations[0]!.tracks[0],node:'Objeto inexistente'},
+      ]}],
+    }},execution())).rejects.toThrow(/nombre único/)
+  })
   it('keeps subsequent app-building work only on explicit request',async()=>{
     const done=vi.fn()
     await createPhoenix3DTool().execute({

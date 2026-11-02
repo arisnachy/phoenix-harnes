@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import css from './Scene3DView.module.css'
 import { exportSceneGLB, exportSceneGLTF, importSceneGLTF } from './scene3d-formats.ts'
+import { torusTriangles } from './scene3d-primitives.ts'
+import { poseScene3D } from './scene3d-animation.ts'
+import { drawWebGLScene } from './scene3d-webgl.ts'
 
 export interface Scene3DMaterial {
   readonly preset?: string
@@ -19,8 +22,9 @@ export interface Scene3DMaterial {
 }
 /** Primitive objects and imported triangular meshes share one portable scene. */
 export interface Scene3DNode {
-  readonly type: 'box' | 'sphere' | 'cylinder' | 'cone' | 'mesh'
+  readonly type: 'box' | 'sphere' | 'cylinder' | 'cone' | 'mesh' | 'torus'
   readonly name?: string
+  readonly objectId?: string
   readonly position: readonly [number,number,number]
   readonly size: readonly [number,number,number]
   readonly rotation?: readonly [number,number,number]
@@ -29,12 +33,23 @@ export interface Scene3DNode {
   readonly material?: Scene3DMaterial
   readonly hidden?: boolean
 }
+export interface Scene3DAnimation {
+  readonly name: string
+  readonly duration: number
+  readonly loop: boolean
+  readonly tracks: readonly {
+    readonly node: string
+    readonly property: 'position' | 'rotation' | 'size'
+    readonly keys: readonly {readonly time: number; readonly value: readonly [number,number,number]}[]
+  }[]
+}
 export interface Scene3D {
   readonly version: 1
   readonly units: 'meters'
   readonly name: string
   readonly background: string
   readonly nodes: readonly Scene3DNode[]
+  readonly animations?: readonly Scene3DAnimation[]
   readonly environment?: 'studio' | 'sunset' | 'daylight'
   readonly camera?: 'perspective' | 'isometric' | 'front' | 'top'
 }
@@ -50,6 +65,42 @@ function vec(value: unknown, lo: number, hi: number): value is [number, number, 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
+function parseAnimations(value: unknown, nodes: readonly Scene3DNode[]): Scene3DAnimation[] | undefined {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 8) return undefined
+  const names = nodes.map(node => node.name)
+  let total = 0
+  const clips: Scene3DAnimation[] = []
+  for (const item of value) {
+    if (!record(item) || typeof item.duration !== 'number' || !Number.isFinite(item.duration)
+      || item.duration <= 0 || item.duration > 120
+      || !Array.isArray(item.tracks) || item.tracks.length < 1 || item.tracks.length > 64) return undefined
+    const tracks: Scene3DAnimation['tracks'][number][] = []
+    for (const raw of item.tracks) {
+      if (!record(raw) || typeof raw.node !== 'string'
+        || names.filter(name=>name===raw.node).length!==1
+        || !['position','rotation','size'].includes(String(raw.property))
+        || !Array.isArray(raw.keys) || raw.keys.length < 2 || raw.keys.length > 32) return undefined
+      const property=raw.property as 'position'|'rotation'|'size'
+      let previous=-1
+      const keys: Array<{time:number;value:[number,number,number]}>=[]
+      for(const key of raw.keys){
+        if(!record(key)||typeof key.time!=='number'||!Number.isFinite(key.time)
+          ||key.time<0||key.time>item.duration||key.time<=previous
+          ||!vec(key.value,property==='size'?.001:property==='rotation'?-360:-300,
+            property==='rotation'?360:300))return undefined
+        previous=key.time
+        keys.push({time:key.time,value:key.value})
+        total++
+        if(total>3000)return undefined
+      }
+      tracks.push({node:raw.node,property,keys})
+    }
+    clips.push({name:typeof item.name==='string'?item.name.slice(0,80):'Animación',
+      duration:item.duration,loop:item.loop!==false,tracks})
+  }
+  return clips
+}
+
 /** Share the safe, portable schema with Phoenix apps without model or tool coupling. */
 export function parseScene3D(value: unknown): Scene3D | undefined {
   if (!record(value) || value.version !== 1 || value.units !== 'meters'
@@ -57,7 +108,7 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
   const nodes: Scene3DNode[] = []
   let vertexCount=0
   for (const item of value.nodes as unknown[]) {
-    if (!record(item) || !['box','sphere','cylinder','cone','mesh'].includes(String(item.type))
+    if (!record(item) || !['box','sphere','cylinder','cone','mesh','torus'].includes(String(item.type))
       || !vec(item.position,-300,300) || !vec(item.size,.001,300)
       || (item.rotation !== undefined && !vec(item.rotation,-360,360))
       || typeof item.color !== 'string' || !colorPattern.test(item.color)) return undefined
@@ -95,17 +146,21 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
       size: item.size,
       color: item.color,
       ...(typeof item.name === 'string' ? { name: item.name.slice(0,100) } : {}),
+      ...(typeof item.objectId === 'string' && /^[a-z0-9_-]{1,64}$/iu.test(item.objectId) ? { objectId: item.objectId } : {}),
       ...(item.rotation === undefined ? {} : { rotation: item.rotation as [number, number, number] }),
       ...(item.type==='mesh'?{vertices:vertices as number[]}:{}),
       ...(material===undefined?{}:{material}),
       ...(item.hidden===true?{hidden:true}:{}),
     })
   }
+  const animations=value.animations===undefined?undefined:parseAnimations(value.animations,nodes)
+  if(value.animations!==undefined&&animations===undefined)return undefined
   return {
     version: 1, units:'meters',
     name: typeof value.name === 'string' ? value.name.slice(0,140) : 'Escena 3D',
     background: typeof value.background === 'string' && colorPattern.test(value.background) ? value.background : '#f7f2eb',
     nodes,
+    ...(animations===undefined?{}:{animations}),
     ...(value.environment==='studio'||value.environment==='sunset'||value.environment==='daylight'?{environment:value.environment}:{}),
     ...(value.camera==='perspective'||value.camera==='isometric'||value.camera==='front'||value.camera==='top'?{camera:value.camera}:{}),
   }
@@ -113,18 +168,27 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
 
 const deg = Math.PI / 180
 function transform(vertex: Vec3, node: Scene3DNode): Vec3 {
-  let [x,y,z] = vertex
+  let [x,y,z]: Vec3 = [vertex[0]*node.size[0],vertex[1]*node.size[1],vertex[2]*node.size[2]]
   const [rx,ry,rz] = node.rotation ?? [0,0,0] as const
   const ax = rx * deg, ay = ry * deg, az = rz * deg
   ;[y,z] = [y*Math.cos(ax)-z*Math.sin(ax),y*Math.sin(ax)+z*Math.cos(ax)]
   ;[x,z] = [x*Math.cos(ay)+z*Math.sin(ay),-x*Math.sin(ay)+z*Math.cos(ay)]
   ;[x,y] = [x*Math.cos(az)-y*Math.sin(az),x*Math.sin(az)+y*Math.cos(az)]
-  return [x*node.size[0]+node.position[0], y*node.size[1]+node.position[1], z*node.size[2]+node.position[2]]
+  return [x+node.position[0], y+node.position[1], z+node.position[2]]
 }
 function mesh(node: Scene3DNode): Face[] {
   if(node.hidden===true)return []
   const faces: Vec3[][] = []
-  if(node.type==='mesh'&&node.vertices!==undefined){
+  if(node.type==='torus'){
+    const vertices = torusTriangles()
+    for(let i=0;i<vertices.length;i+=9){
+      faces.push([
+        [vertices[i]!,vertices[i+1]!,vertices[i+2]!],
+        [vertices[i+3]!,vertices[i+4]!,vertices[i+5]!],
+        [vertices[i+6]!,vertices[i+7]!,vertices[i+8]!],
+      ])
+    }
+  } else if(node.type==='mesh'&&node.vertices!==undefined){
     for(let i=0;i<node.vertices.length;i+=9){
       faces.push([
         [node.vertices[i]!,node.vertices[i+1]!,node.vertices[i+2]!],
@@ -194,9 +258,10 @@ function sceneBounds(scene:Scene3D): {center:Vec3; radius:number} {
   const mins:Vec3=[Infinity,Infinity,Infinity], maxs:Vec3=[-Infinity,-Infinity,-Infinity]
   for(const node of scene.nodes){
     if(node.hidden===true)continue
-    if(node.type==='mesh'&&node.vertices!==undefined){
-      for(let i=0;i<node.vertices.length;i+=3){
-        const p=transform([node.vertices[i]!,node.vertices[i+1]!,node.vertices[i+2]!],node)
+    if(node.type==='mesh'||node.type==='torus'){
+      const vertices = node.type==='torus'?torusTriangles():node.vertices??[]
+      for(let i=0;i<vertices.length;i+=3){
+        const p=transform([vertices[i]!,vertices[i+1]!,vertices[i+2]!],node)
         for(let axis=0;axis<3;axis++){mins[axis]=Math.min(mins[axis]!,p[axis]!);maxs[axis]=Math.max(maxs[axis]!,p[axis]!)}
       }
     }else{
@@ -214,6 +279,7 @@ function sceneBounds(scene:Scene3D): {center:Vec3; radius:number} {
 
 function paint(canvas:HTMLCanvasElement,scene:Scene3D,faces:readonly Face[],
   bounds:{center:Vec3;radius:number},yaw:number,pitch:number,zoom:number,pan:[number,number]):void{
+  if(drawWebGLScene(canvas,faces,bounds,scene.background,yaw,pitch,zoom,pan))return
   const ctx=canvas.getContext('2d')
   if(ctx===null)return
   const rect=canvas.getBoundingClientRect()
@@ -282,6 +348,9 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
   const drag=useRef<{x:number;y:number;button:number}|null>(null)
   const angle=useRef({yaw:-.65,pitch:.38,zoom:1,pan:[0,0] as [number,number]})
   const [autoRotate,setAutoRotate]=useState(false)
+  const [playingAnimation,setPlayingAnimation]=useState(false)
+  const [selectedAnimation,setSelectedAnimation]=useState(0)
+  const animationTime=useRef(0)
   const redraw=useRef<()=>void>(()=>{})
   const [problem,setProblem]=useState('')
   const [selected,setSelected]=useState(0)
@@ -289,28 +358,47 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
   const picker=useRef<HTMLInputElement>(null)
   const selectedNode=scene?.nodes[selected]
   const meshes=useMemo(()=>scene?.nodes.flatMap(mesh)??[],[scene])
+  const clip=scene?.animations?.[selectedAnimation]
   const bounds=useMemo(()=>scene===undefined?undefined:sceneBounds(scene),[scene])
   useEffect(()=>{
     if(scene===undefined||bounds===undefined)return
     const element=canvas.current
     if(element===null)return
-    if(element.getContext('2d')===null) {
+    if(element.getContext('webgl2')===null && element.getContext('2d')===null) {
       setProblem('Este navegador no permite dibujar el modelo 3D.')
       return
     }
-    const draw=()=>paint(element,scene,meshes,bounds,angle.current.yaw,
-      angle.current.pitch,angle.current.zoom,angle.current.pan)
+    const draw=()=>{
+      const posed=clip===undefined?scene:poseScene3D(scene,clip,animationTime.current)
+      const faces=clip===undefined?meshes:posed.nodes.flatMap(mesh)
+      paint(element,posed,faces,bounds,angle.current.yaw,
+        angle.current.pitch,angle.current.zoom,angle.current.pan)
+    }
     redraw.current=draw
     draw()
     const observer=typeof ResizeObserver==='undefined'?undefined:new ResizeObserver(draw)
     observer?.observe(element)
-    let frame=0
-    if(autoRotate){
-      const tick=()=>{angle.current.yaw+=.004;draw();frame=requestAnimationFrame(tick)}
+    let frame=0,last=0
+    if(autoRotate || (playingAnimation && clip!==undefined)){
+      const tick=(now:number)=>{
+        if(now-last>=40){
+          const delta=last===0?0:Math.min(.1,(now-last)/1000)
+          if(autoRotate)angle.current.yaw+=.004
+          if(playingAnimation && clip!==undefined){
+            animationTime.current+=delta
+            if(animationTime.current>clip.duration){
+              animationTime.current=clip.loop?animationTime.current%clip.duration:clip.duration
+            }
+          }
+          draw()
+          last=now
+        }
+        frame=requestAnimationFrame(tick)
+      }
       frame=requestAnimationFrame(tick)
     }
     return ()=>{observer?.disconnect();cancelAnimationFrame(frame);redraw.current=()=>{}}
-  },[scene,meshes,bounds,autoRotate,expanded])
+  },[scene,meshes,bounds,autoRotate,playingAnimation,clip,expanded])
   if(scene===undefined)return <p role="alert" className={css.error}>La escena 3D no contiene geometría válida.</p>
   const update=(fn:()=>void)=>{fn();redraw.current()}
   const edit=(fn:(node:Scene3DNode)=>Scene3DNode):void=>{
@@ -368,6 +456,13 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
           onChange={event=>setScene(current=>current===undefined?current:{...current,environment:event.target.value as 'studio'|'sunset'|'daylight'})}>
           <option value="studio">Estudio</option><option value="sunset">Atardecer</option><option value="daylight">Día</option>
         </select></label>
+        {scene.animations!==undefined && <label className={css.cameraControl}>Clip
+          <select aria-label="Animación 3D" value={selectedAnimation}
+            onChange={event=>{setSelectedAnimation(Number(event.target.value));animationTime.current=0}}>
+            {scene.animations.map((animation,index)=><option key={index} value={index}>{animation.name}</option>)}
+          </select></label>}
+        {clip!==undefined && <button type="button" aria-pressed={playingAnimation}
+          onClick={()=>setPlayingAnimation(value=>!value)}>{playingAnimation?'Pausar animación':'Reproducir animación'}</button>}
         <button type="button" aria-pressed={editOpen} onClick={()=>setEditOpen(value=>!value)}>Editar</button>
       </div>
     </div>

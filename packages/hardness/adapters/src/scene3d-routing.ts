@@ -1,3 +1,16 @@
+import { requestedScene3DLevel } from './scene3d-quality.ts'
+
+/** Select an actual production pipeline; the native viewer is not a sculpting engine.
+ * @param request - User's full 3D request.
+ * @returns Native interactive preview or a specialized Blender/reference workflow.
+ */
+export function choosePhoenix3DPipeline(request: string):
+  'preview' | 'blender-studio' | 'reference-reconstruction' {
+  const level = requestedScene3DLevel(request)
+  return level === 'fidelity' ? 'reference-reconstruction'
+    : level === 'studio' ? 'blender-studio' : 'preview'
+}
+
 /** Deterministic media choice for Phoenix apps: 3D only adds value for spatial interaction. */
 export type DesignMedium='scene3d'|'image'|'chart'|'app'|'undetermined'
 /** Classify the requested artifact medium using explicit spatial and UI intent.
@@ -31,7 +44,15 @@ export const PHOENIX_3D_ROUTING_PROTOCOL =
   'for normal forms, dashboards and web UI use phoenix_canvas or UI tools. Never add 3D to ordinary apps merely because it looks impressive. '+
   'For architecture/product/room/vehicle apps, propose or create a 3D viewer when interaction conveys spatial value. '+
   'For organic 3D use triangular mesh geometry or identifiable anatomical parts, not a single cube. '+
-  'For pelicans use phoenix_3d preset:pelican with visible beak, pouch, wings and head. '+
+  'For complex scenes never substitute a single-subject preset: build every subject and companion object. '+
+  'Set objectId on each node and requiredObjects on the tool call so missing items are rejected. '+
+  'Use torus for wheels and rings, mesh for organic forms, and keyframe animations for named parts. '+
+  'Use phoenix_3d preset:pelican only for an isolated bird without any companion object. '+
   'Use scene material presets, camera and environment. GLB/glTF import and export controls exist in the 3D viewer; '+
+  'For studio-grade animated characters, robots, vehicles and architecture, route to the connected official Blender Lab MCP tools when available. '+
+  'Use Blender for real mesh sculpting/retopology/rigging, Cycles lighting and output validation; do not say those operations happened without tool evidence. '+
+  'For portable scene assets, the offline Blender CLI pipeline scripts/phoenix-3d-studio.py can produce .blend, .glb and render.png on a Blender-equipped host. '+
+  'For exact reconstruction require reference geometry/plans/measurements and measurable tolerances: one 2D image is insufficient. '+
+  'If neither Blender nor the asset pipeline is available, explicitly describe native 3D as a preview, never claim professional accuracy. '+
   'GLB is real geometry with core PBR metadata, but do not promise photo-to-CAD or photorealistic PBR from the lightweight preview. '+
   'Confirm quality through working artifact and real model, avoid repeated rendering or review loops.'

@@ -3,7 +3,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import { scoutDailySports } from './daily-sports-scout.ts'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
-import { sportsCatalog, discoverEspnLeagues, chatGames, compactSportsSchedule, marketOdds, marketOddsDetailed, pricedTicket, getFeed, type MarketSelection } from './sports.ts'
+import { sportsCatalog, discoverEspnLeagues, hasSportsPermission, chatGames, compactSportsSchedule, marketOdds, marketOddsDetailed, pricedTicket, getFeed, type MarketSelection } from './sports.ts'
 import { getMlbPitcherReport } from './mlb.ts'
 import { researchTicket, autoResearchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { sportsPromptNeeded } from './sports-prompt.ts'
@@ -37,8 +37,13 @@ import { secondaryMarketSourceCatalog } from './sports-secondary-sources.ts'
 import {discoverEditorialResearch,type EditorialSource,editorialDomains} from './sports-editorial-discovery.ts'
 import {auditSportsCalibration,availableSportCalibration,calibratedSportsForecast} from './sports-calibration.ts'
 import {sportsEnvWithVaultKey} from './sports-credential-env.ts'
+
 import {mlbResearch} from './mlb-evidence-research.ts'
 import {reviewMlbResearch} from './mlb-market-research-review.ts'
+import {soccerLeagueCatalog,soccerDailySlate,soccerWorldPage} from './soccer-worldwide-scout.ts'
+import {investigateSoccer} from './soccer-worldwide-dossier.ts'
+import {basketballSlate,type BasketballLeague} from './basketball-research-core.ts'
+import {researchBasketballCase} from './basketball-evidence-dossier.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
@@ -47,6 +52,8 @@ const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
   'INVESTIGACIÓN MLB POR PARTIDO: usa sports_chat_mlb_investigate para obtener primero la cartelera por fecha y luego el expediente mediante gamePk de MLB Stats API (no confundir con eventId ESPN). Investiga las estadísticas de cada jugador y la matriz bateador×abridor/bullpen, localía, parque, meteorología, últimas salidas y precios cotejados. El expediente marca como PENDIENTES los enfrentamientos BvP, fatiga, lesiones, alineaciones y expertos que no estén confirmados; no interpretes una fila de roster como un bateador titular ni inventes simulaciones probabilísticas. La conclusión se fundamenta en evidencia favorable Y contradictoria y en escenarios por entradas; si matchupNextOffset no es null hay cruces adicionales consultables. No vendas el expediente como una apuesta aprobada. ',
+  'SOCCER INTELLIGENCE MUNDIAL: primero sports_chat_soccer_leagues para descubrir competiciones verificadas; sports_chat_soccer_daily para consultar lotes de hasta 12 ligas por fecha, o sports_chat_soccer_world_scan con offset/nextOffset para el resto del catálogo; sports_chat_soccer_investigate para expediente de un evento real por ID de ESPN. Para estadísticas individuales de los jugadores usa sports_chat_soccer_players cuando la liga lo soporte. Solo evidencia disponible de plantillas, forma, lesiones, táctica, mercado y prensa con atribución. No confundas roster con once confirmado, 1X2 con clasificar, ni cuota observada con apuesta aprobada. Si falta xG, árbitro, lineup o cuota, reconocerlo; jamás inventar probabilidades o ticket ganador. ',
+  'NBA/WNBA RESEARCH INTELLIGENCE: sports_chat_basketball_intelligence_slate para cartelera; sports_chat_nba_intelligence o sports_chat_wnba_intelligence para dossier por eventId real. NBA son 48 min, WNBA 40 min. Solo cinco titulares con ID explícito son confirmados. Investiga jugadores y enfrentamientos, lesiones y precios por casa, nunca inventes odds, datos de WNBA offseason ni probabilidades. Los expedientes no equivalen a selecciones aprobadas. ',
   'ESCÁNER GLOBAL DE CUOTAS: si el usuario pregunta por acceso real a las cuotas deportivas o pide revisar TODOS los deportes, no te limites a NBA, NFL y NHL. sports_chat_odds_scan presenta los 11 deportes realmente admitidos por OddsHarvester; examina sus 3 páginas consecutivas offset=0,4,8, limit=4, incluso si una falla, y devuelve estado INDIVIDUAL por deporte, cuota, casa, liga, hora, motivo del fallo y fuentes pendientes. Incluye fútbol/soccer, tenis ATP/WTA, béisbol/MLB, baloncesto NBA/WNBA, fútbol americano NFL, hockey NHL, handball, voleibol, ambos rugby y cricket. WNBA es una liga de basketball, NO un deporte distinto. Una consulta de baloncesto sin liga verificada jamás justifica etiquetar su cuota como NBA o WNBA. Las ligas sin evidencia suficiente se muestran sin liga verificada, no se fuerzan. Para mercados de ligas específicas consulta además sports_chat_odds con basketball_wnba, basketball_nba, baseball_mlb, americanfootball_nfl, icehockey_nhl y soccer; para tenis usa odds_keyless, o tennis_atp/tennis_wta solo cuando el nombre de la liga sea explícito. El inventario no garantiza mercados presentes. Cuando el error de OddsHarvester contenga category, exitCode y stderr informa esos campos y no trunques la causa interna. ',
   'THE ODDS API v4 · CONECTOR: la clave del proveedor api.the-odds-api.com se configura de forma segura en Ajustes > Conectores > The Odds API y el Host la verifica mediante el catálogo gratuito /v4/sports. No pedir claves en el chat ni confundir con TheOddsAPI (api.theoddsapi.com, credencial distinta). El motor sports_chat_odds con sourcePolicy=all y sin eventId/fecha puede usar la clave guardada para obtener precios con casa, hora de actualización y cuota remanente. La clave se resuelve del vault en CADA operación, incluida la creación de tickets cotizados; cambiarla no requiere reiniciar Kira. El proveedor limita créditos según el plan; NO prometer cuotas ilimitadas ni históricos gratuitos. El endpoint de verificación de la clave es de coste cero, no consulta cuotas apostables. ',
   'ODDS REALES Y HISTORIALES: sports_chat_odds ahora consulta varias fuentes independientes y devuelve estado observado/vacío/error/no configurado por proveedor. No declares sin cuotas hasta evaluar sources y buscar fecha y mercados reales por liga. OddsHarvester v0.20.0 permite transmitir filas NDJSON para recuperar partidos cotizados incluso si otras páginas del scraping fallan; distingue precios recuperados de scraping completamente exitoso. sports_chat_historical_odds acepta fecha y clave de deporte para leer archivos públicos locales y los snapshots de cotizaciones realmente vistos por PHOENIX. Los históricos NO son precios actuales, y el archivo local solo cubre desde que se capturaron observaciones: no inventar historial ausente. The Odds API v4 y TheOddsAPI requieren sus respectivas claves; la disponibilidad histórica completa suele ser de planes pagados. No prometas que las cotizaciones son de Juancito si el bookmaker indicado es otro. ',
@@ -1221,5 +1228,226 @@ export function apply(ctx: Context): void {
     },
     presentCall:()=>({card:'generic',title:'Investigar cartelera y expedientes de béisbol MLB',kind:'read' as const}),
   }))
+
+
+  ctx.tools.register(defineTool({
+    name:'sports_chat_soccer_leagues',
+    description:'Descubre competiciones mundiales de fútbol reconocidas por el catálogo público ESPN. La presencia no garantiza estadísticas, xG, cuotas ni partidos en cada fecha. Paginación de hasta 500 ligas.',
+    parameters:{
+      offset:{type:'integer',description:'Posición inicial en el catálogo, desde 0.'},
+      limit:{type:'integer',description:'Cantidad de ligas que se muestra, entre 1 y 60.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const report=await soccerLeagueCatalog(fetch,Date.now(),await sportsEnv(ctx))
+      const offset=Math.max(0,Math.min(499,Math.floor(args.offset??0)))
+      const limit=Math.max(1,Math.min(60,Math.floor(args.limit??25)))
+      return JSON.stringify({source:report.source,checkedAt:report.observedAt,
+        totalCatalogEntries:report.leagues.length,leagues:report.leagues.slice(offset,offset+limit),
+        offset,nextOffset:offset+limit<report.leagues.length?offset+limit:null,
+        worldwideComplete:false,note:report.note,
+        instruction:'Liga detectada no garantiza cobertura. Escanea múltiples páginas y verifica la cartelera antes de investigar.'})
+    },
+    presentCall:()=>({card:'generic',title:'Descubrir competiciones de fútbol',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_soccer_world_scan',
+    description:'Escanea por páginas de hasta 24 ligas del catálogo mundial ESPN para una fecha. Entrega partidos verificados y nextOffset; no afirma cobertura de todo el planeta ni inventa ligas.',
+    parameters:{
+      date:{type:'string',required:true,description:'Fecha AAAA-MM-DD de cartelera.'},
+      offset:{type:'integer',description:'Posición del catálogo desde 0; usar nextOffset de la página anterior.'},
+      limit:{type:'integer',description:'Número de ligas por página, entre 1 y 24; defecto 24.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const now=Date.now()
+      const p=await soccerWorldPage(args.date,args.offset??0,args.limit??24,
+        fetch,now,await sportsEnv(ctx))
+      return JSON.stringify({...p,sourceStatus:{
+        observed:p.sources.filter(x=>x.status==='observed').length,
+        missing:p.sources.filter(x=>x.status==='empty').length,
+        failed:p.sources.filter(x=>x.status==='error').map(x=>({url:x.url,error:x.error})).slice(0,12)},
+        sources:undefined,
+        instruction:'Solo una página del catálogo. Continúa con nextOffset hasta null si se requiere búsqueda global; cualquier proveedor fuera de ESPN no fue consultado. Abre después uno de los eventos en sports_chat_soccer_investigate.'})
+    },
+    presentCall:()=>({card:'generic',title:'Escanear fútbol mundial por lotes',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_soccer_daily',
+    description:'Cartelera de soccer verificada por fecha para 1-12 ligas ESPNs concretas, con IDs, estados, sede y zonas horarias. No escanea miles de ligas sin filtro.',
+    parameters:{
+      date:{type:'string',required:true,description:'Fecha AAAA-MM-DD en el calendario de la liga.'},
+      leagues:{type:'array',required:true,description:'1-12 códigos verificados de sports_chat_soccer_leagues, como eng.1, esp.1 o usa.1.',
+        items:{type:'string'}},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const r=await soccerDailySlate(args.date,args.leagues,fetch,Date.now(),await sportsEnv(ctx))
+      const uiBlock={component:'sports_espn_dashboard',version:1,props:{
+        view:'event',title:'PHOENIX · Cartelera de fútbol mundial · '+args.date,
+        subtitle:r.leagues.length+' ligas consultadas · '+r.games.length+' eventos verificables',
+        source:'ESPN público',checkedAt:new Date().toISOString(),
+        sections:[{heading:'Partidos por liga y hora',kind:'list',items:r.games.slice(0,30).map(g=>({
+          label:g.away.name+' vs '+g.home.name,value:g.league+' · '+g.scheduledAt,
+          detail:'ESPN eventId '+g.eventId+' · '+g.status+' · '+g.venue}))}],
+        note:'Solo competiciones consultadas; no es cobertura global exhaustiva. Los eventos deben verificarse antes de emitir picks.'}}
+      return JSON.stringify({...r,uiBlock,instruction:'La lista no es un pronóstico. Selecciona un eventId concreto y llama sports_chat_soccer_investigate con su misma league y date.'})
+    },
+    presentCall:()=>({card:'generic',title:'Consultar cartelera mundial de fútbol',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_soccer_players',
+    description:'Investiga jugadores por ID de roster de un partido real de fútbol: estadísticas de temporada, gamelog, splits y datos faltantes. Disponible cuando ESPN Common v3 ofrece datos en esa liga. No confirma titulares ni genera probabilidades.',
+    parameters:{
+      date:{type:'string',required:true,description:'Fecha AAAA-MM-DD de un encuentro futuro.'},
+      league:{type:'string',required:true,description:'Liga ESPN identificada por sports_chat_soccer_daily.'},
+      eventId:{type:'string',required:true,description:'ID ESPN real del evento investigado.'},
+      maxPlayers:{type:'integer',description:'Jugadores máximos por club para esta investigación, entre 1 y 20; por defecto 11.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const env=await sportsEnv(ctx)
+      if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado')
+      const slate=await soccerDailySlate(args.date,[args.league],fetch,Date.now(),env)
+      const event=slate.games.find(g=>g.eventId===args.eventId)
+      if(!event)throw Error('El encuentro no consta en la cartelera verificada')
+      if(Date.parse(event.scheduledAt)<=Date.now()||
+        event.state==='in'||event.state==='post')
+        throw Error('Esta investigación se ha definido para un partido prepartido')
+      if(!sportsCatalog.soccer?.includes(args.league))
+        return JSON.stringify({eventId:event.eventId,league:args.league,
+          status:'unsupported-for-player-detail',athletes:[],
+          missingEvidence:['Esta liga se descubrió en ESPN Core, pero el adaptador de estadísticas individuales Common v3 no confirma cobertura. No inventar datos.']})
+      const maxPlayers=Math.max(1,Math.min(20,Math.floor(args.maxPlayers??11)))
+      const report=await collectDirectEspnStats('soccer',args.league,
+        [{id:event.home.id,name:event.home.name},{id:event.away.id,name:event.away.name}],
+        fetch,Date.now(),maxPlayers)
+      return JSON.stringify({eventId:event.eventId,league:args.league,
+        teams:report.teams.map(t=>({id:t.id,name:t.name,totalRoster:t.athleteCount,
+          researched:t.selectedCount,athletes:t.athletes.map(p=>({
+            id:p.id,name:p.name,position:p.position,stats:p.stats,
+            lastGames:p.lastGames,splits:p.splits,status:p.status,
+            verifiedSources:p.verifiedSources})),coverage:t.coverage})),
+        requests:report.requests,errors:report.errors,source:report.source,
+        checkedAt:report.checkedAt,limitations:report.limitations,
+        instruction:'Los atletas están enlazados al roster real, pero no se garantiza titularidad. No usar stats vacías como cero; identifica muestras y fecha. Compara con delanteros, laterales, centrales y guardameta del rival en su expediente.'})
+    },
+    presentCall:()=>({card:'generic',title:'Investigar estadísticas individuales de fútbol',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_soccer_investigate',
+    description:'Expediente profundo de fútbol por evento real: equipos, forma local/visita, roster y once confirmado, duelos ofensivos-defensivos, lesiones, noticias, estadio, árbitro, clima, escenarios y cotejo de cuotas verificadas. Sin probabilidades inventadas.',
+    parameters:{
+      date:{type:'string',required:true,description:'Fecha de la cartelera AAAA-MM-DD.'},
+      league:{type:'string',required:true,description:'Código de liga ESPN confirmado, p. ej. usa.1, esp.1.'},
+      eventId:{type:'string',required:true,description:'ID verificado del partido, obtenido de sports_chat_soccer_daily.'},
+      includeOdds:{type:'boolean',description:'Intentar consultar cuotas actuales de la liga, cuando hay proveedor. Predeterminado sí.'},
+      duelOffset:{type:'integer',description:'Índice de paginación de duelos individuales, inicial 0.'},
+      duelLimit:{type:'integer',description:'Cantidad de duelos por respuesta, de 1 a 30.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const now=Date.now(),env=await sportsEnv(ctx)
+      const oddsKeys:Record<string,string>={
+        'eng.1':'soccer_epl','esp.1':'soccer_spain_la_liga',
+        'mex.1':'soccer_mexico_ligamx','usa.1':'soccer_usa_mls',
+        'uefa.champions':'soccer_uefa_champs_league',
+      }
+      const key=oddsKeys[args.league]
+      let quotes:Awaited<ReturnType<typeof marketOddsDetailed>>['quotes']=[]
+      let oddsSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
+      if(key&&args.includeOdds!==false){
+        try{
+          const report=await marketOddsDetailed(key,'h2h,totals,spreads',env,fetch,now)
+          quotes=report.quotes;oddsSources=report.sources
+        }catch{/* No cross-provider prices may be invented. */}
+      }
+      const dossier=await investigateSoccer(args.date,args.league,args.eventId,fetch,now,env,quotes)
+      const offset=Math.max(0,Math.min(1000,Math.floor(args.duelOffset??0)))
+      const limit=Math.max(1,Math.min(30,Math.floor(args.duelLimit??20)))
+      const shown=dossier.duels.slice(offset,offset+limit)
+      return JSON.stringify({...dossier,sourceReport:undefined,duels:shown,
+        duelTotal:dossier.duels.length,
+        duelNextOffset:offset+shown.length<dossier.duels.length?offset+shown.length:null,
+        oddsSources,sourceStatus:{
+          observed:dossier.sourceReport.filter(x=>x.status==='observed').length,
+          failures:dossier.sourceReport.filter(x=>x.status==='error')},
+        instruction:'Kira debe expresar hipótesis y contradicciones con fuentes. El roster no confirma XI, titular indexado no confirma pick, y 1X2 de 90 minutos no incluye necesariamente prórroga. No presentar probabilidad, EV o recomendación aprobada sin validación.'})
+    },
+    presentCall:()=>({card:'generic',title:'Investigar partido de fútbol y mercados',kind:'read' as const}),
+  }))
+
+
+  ctx.tools.register(defineTool({
+    name:'sports_chat_basketball_intelligence_slate',
+    description:'Cartelera verificable NBA o WNBA por fecha, con IDs, sedes, estatus y ausencia de juegos en offseason; sin favoritos preseleccionados.',
+    parameters:{
+      league:{type:'string',required:true,description:'nba o wnba.'},
+      date:{type:'string',required:true,description:'Fecha AAAA-MM-DD del calendario.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      if(args.league!=='nba'&&args.league!=='wnba')throw Error('Liga NBA/WNBA inválida')
+      const report=await basketballSlate(args.league,args.date,fetch,Date.now(),await sportsEnv(ctx))
+      const uiBlock={component:'sports_espn_dashboard',version:1,props:{
+        view:'event',title:'PHOENIX · '+args.league.toUpperCase()+' · '+args.date,
+        subtitle:report.games.length+' partidos identificados',source:'ESPN público',
+        checkedAt:new Date().toISOString(),
+        sections:[{heading:'Encuentros verificados',kind:'list',items:report.games.slice(0,25).map(g=>({
+          label:g.away.name+' vs '+g.home.name,value:g.start+' · '+g.status,
+          detail:'eventId '+g.eventId+' · '+g.venue}))}],
+        note:report.offseason?'ESPN no publicó juegos para la fecha; no se crean enfrentamientos.':
+          'La cartelera no constituye una recomendación de apuesta. Usa el eventId para abrir el expediente.'}}
+      return JSON.stringify({...report,uiBlock,instruction:'Para profundizar llama sports_chat_nba_intelligence o sports_chat_wnba_intelligence con eventId exacto.'})
+    },
+    presentCall:()=>({card:'generic',title:'Consultar cartelera de NBA y WNBA',kind:'read' as const}),
+  }))
+  const registerBasketballIntelligence=(league:BasketballLeague)=>{
+    ctx.tools.register(defineTool({
+      name:league==='nba'?'sports_chat_nba_intelligence':'sports_chat_wnba_intelligence',
+      description:'Expediente NBA/WNBA basado en partido real: forma, roster, cinco titulares, estadísticas individuales, matchups defensivos, lesiones, noticias, escenarios Q1-Q4, mercados de casas y contradicciones.',
+      parameters:{
+        date:{type:'string',required:true,description:'Fecha AAAA-MM-DD de juego futuro.'},
+        eventId:{type:'string',required:true,description:'ID ESPN del encuentro en la liga seleccionada.'},
+        maxPlayers:{type:'integer',description:'Atletas investigados por club, de 1 a 20; defecto 15.'},
+        matchupOffset:{type:'integer',description:'Página de duelos, desde índice 0.'},
+        includeOdds:{type:'boolean',description:'Consultar cuotas reales actuales de la liga, por defecto sí.'},
+      },
+      output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+      isConcurrencySafe:()=>true,
+      async execute(args){
+        const now=Date.now(),env=await sportsEnv(ctx)
+        let quotes:Awaited<ReturnType<typeof marketOddsDetailed>>['quotes']=[]
+        let oddsSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
+        if(args.includeOdds!==false){
+          try{
+            const odds=await marketOddsDetailed(
+              league==='nba'?'basketball_nba':'basketball_wnba','h2h,spreads,totals',env,fetch,now)
+            quotes=odds.quotes;oddsSources=odds.sources
+          }catch{/* Un proveedor sin respuesta NO autoriza inventar cuotas. */}
+        }
+        const dossier=await researchBasketballCase(league,args.date,args.eventId,fetch,now,env,
+          quotes,args.maxPlayers??15)
+        const offset=Math.max(0,Math.min(300,Math.floor(args.matchupOffset??0)))
+        return JSON.stringify({...dossier,sources:undefined,
+          matchups:dossier.matchups.slice(offset,offset+15),
+          matchupTotal:dossier.matchups.length,
+          matchupNextOffset:offset+15<dossier.matchups.length?offset+15:null,
+          sourceStatus:{ok:dossier.sources.filter(x=>x.status==='verified').length,
+            failed:dossier.sources.filter(x=>x.status==='error')},
+          oddsSources,
+          instruction:'Kira revisa argumentos a favor y en contra y datos faltantes por mercado. No asumir lineup por roster ni lesión confirmada por silencio. La duración NBA 48 y WNBA 40 cambia ritmo; no inventar EV ni pronóstico de ganador.'})
+      },
+      presentCall:()=>({card:'generic',title:'Investigar '+league.toUpperCase()+' en profundidad',kind:'read' as const}),
+    }))
+  }
+  registerBasketballIntelligence('nba')
+  registerBasketballIntelligence('wnba')
 
 }

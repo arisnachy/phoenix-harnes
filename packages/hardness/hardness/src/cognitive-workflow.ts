@@ -8,6 +8,7 @@ export const COGNITIVE_FLOW_IDS = [
   'recovery-checkpointing',
   'brainstorming',
   'research-evidence',
+  'solution-space-audit',
   'causal-reasoning',
   'systematic-debugging',
   'counterfactual-simulation',
@@ -45,6 +46,7 @@ export type CognitiveExecutionMode = 'fast' | 'standard' | 'deep'
 /** Observable completion evidence requested from downstream orchestration. */
 export type CognitiveQualityGate =
   | 'objective-locked'
+  | 'solution-space-covered'
   | 'root-cause-evidence'
   | 'design-approved'
   | 'failing-proof-observed'
@@ -187,6 +189,14 @@ export const COGNITIVE_FLOW_CATALOG: readonly CognitiveFlowDescriptor[] = Object
   descriptor('recovery-checkpointing', 'Recovery checkpointing', 'Preserve resumable mission state across interruption, restart, quota, or process failure.', ['persistent missions', 'long-running work'], ['one-shot trivial work'], ['context-recovery'], ['quality-escalation'], ['recovery checkpoint'], ['durable checkpoint reference'], 'medium', 'required-when-triggered'),
   descriptor('brainstorming', 'Brainstorming', 'Generate materially different solution candidates before committing to one design.', ['new builds', 'architecture work', 'high novelty'], ['root-cause debugging before diagnosis'], ['intent-framing'], ['counterfactual-simulation', 'architecture-design'], ['candidate approaches and trade-offs'], ['at least two materially distinct candidates for non-trivial design'], 'medium', 'required-when-triggered'),
   descriptor('research-evidence', 'Research and evidence', 'Gather, contrast, and synthesize external evidence with uncertainty made explicit.', ['research missions', 'claims requiring current external evidence'], ['tasks fully determined by local inputs'], ['intent-framing'], ['adversarial-critique', 'metacognitive-review'], ['source-backed findings'], ['traceable evidence for material claims'], 'medium', 'required-when-triggered'),
+  descriptor('solution-space-audit', 'Solution-space audit',
+    'Distinguish hard constraints from assumptions, explore alternatives, challenge optimality and impossibility claims, and compare the outcome to the objective.',
+    ['non-trivial work across programming, research, planning, data, documents, and operations'],
+    ['trivial one-step work without competing alternatives'],
+    ['intent-framing'], ['counterfactual-simulation', 'verification-gate'],
+    ['constraint-assumption ledger and compared candidate solutions'],
+    ['reproducible checks, counterexample search, independent evidence, or explicit uncertainty when proof is unavailable'],
+    'medium', 'required-when-triggered'),
   descriptor('causal-reasoning', 'Causal reasoning', 'Trace cause, effect, dependencies, and data flow instead of matching symptoms.', ['debugging', 'recovery', 'high-risk causal decisions'], ['pure formatting or transcription'], ['intent-framing'], ['systematic-debugging', 'counterfactual-simulation'], ['causal hypothesis or dependency map'], ['observations supporting the causal link'], 'medium', 'recommended'),
   descriptor('systematic-debugging', 'Systematic debugging', 'Reproduce, isolate root cause, test one hypothesis, and only then implement a fix.', ['bugs', 'test failures', 'unexpected behavior', 'failed execution'], ['feature ideation without a failure'], ['causal-reasoning'], ['proof-driven-development', 'failure-immunization'], ['root cause and minimal hypothesis test'], ['reproduction plus root-cause evidence'], 'medium', 'required-when-triggered'),
   descriptor('counterfactual-simulation', 'Counterfactual simulation', 'Compare likely consequences of alternative designs or actions before committing.', ['high novelty', 'high complexity', 'high-risk irreversible choices'], ['obvious low-risk one-step tasks'], ['intent-framing'], ['brainstorming', 'security-risk-review'], ['scenario comparison'], ['explicit assumptions and predicted consequences'], 'medium', 'recommended'),
@@ -268,6 +278,7 @@ function selectedReason(id: CognitiveFlowId, profile: CognitiveMissionProfile): 
 
 const QUALITY_GATE_ORDER: readonly CognitiveQualityGate[] = [
   'objective-locked',
+  'solution-space-covered',
   'root-cause-evidence',
   'design-approved',
   'failing-proof-observed',
@@ -284,6 +295,7 @@ function qualityGates(selected: ReadonlySet<CognitiveFlowId>): readonly Cognitiv
     'fresh-verification',
     'outcome-compared',
   ])
+  if (selected.has('solution-space-audit')) gates.add('solution-space-covered')
   if (selected.has('systematic-debugging')) gates.add('root-cause-evidence')
   if (selected.has('architecture-design')) gates.add('design-approved')
   if (selected.has('proof-driven-development')) gates.add('failing-proof-observed')
@@ -304,6 +316,7 @@ export function selectCognitiveWorkflow(profile: CognitiveMissionProfile): Cogni
   addFlow(selected, 'intent-framing')
   addFlow(selected, 'verification-gate')
   addFlow(selected, 'outcome-evaluation')
+  if (mode !== 'fast') addFlow(selected, 'solution-space-audit')
 
   if (profile.persistent) {
     addFlow(selected, 'context-recovery')
@@ -432,6 +445,7 @@ export function renderCognitiveWorkflowGuide(locale: 'en' | 'es' = 'en'): string
       'Para trabajo complejo o de alto riesgo separa implementación, crítica y juicio independiente.',
       'Adapta el flujo cuando nueva evidencia invalide la estrategia actual; un fallo fortalece el proceso, no cierra la misión.',
       'Una obligación futura concreta vuelve la misión persistente y activa autonomous-follow-up; programar o ejecutar el seguimiento sigue perteneciendo al scheduler autorizado.',
+      'Para toda tarea no trivial, separa restricciones explícitas de supuestos, compara alternativas viables y busca contraejemplos antes de afirmar que algo es imposible, óptimo o completo. Verifica con herramientas adecuadas al dominio y declara los límites de la prueba.',
       'Verifica con evidencia fresca antes de DONE y compara el resultado con el objetivo original.',
       'No expongas cadena de pensamiento privada; registra decisiones, evidencia, artefactos y justificación útil para auditoría.',
       'La selección de flujo no concede permisos ni autoridad de ejecución: conserva el protocolo HARDNESS de aprobación y verificación.',
@@ -451,6 +465,7 @@ export function renderCognitiveWorkflowGuide(locale: 'en' | 'es' = 'en'): string
     'For high-complexity or high-risk work separate implementation, adversarial critique, and independent judgment.',
     'Adapt the workflow when new evidence invalidates the current strategy; failure strengthens the process instead of ending the mission.',
     'A concrete future obligation makes the mission persistent and activates autonomous-follow-up; scheduling or executing that follow-up remains owned by the authorized scheduler.',
+    'For non-trivial tasks, separate explicit constraints from assumptions, compare viable alternatives, and seek counterexamples before claiming impossibility, optimality or completion. Verify using appropriate domain tools and disclose proof limits.',
     'Require fresh verification evidence before DONE and compare the outcome with the original objective.',
     'Do not expose private chain-of-thought; record decisions, evidence, artifacts, and audit-useful rationale instead.',
     'Workflow selection grants no permission or execution authority; preserve HARDNESS approval and verification gates.',
