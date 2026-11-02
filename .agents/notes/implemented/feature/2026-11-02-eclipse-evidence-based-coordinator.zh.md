@@ -2,7 +2,7 @@
 
 Status: implemented
 
-中文 | [English](2026-11-02-eclipse-evidence-based-coordinator.md)
+[English](2026-11-02-eclipse-evidence-based-coordinator.md) | 中文
 
 ## Problem
 
