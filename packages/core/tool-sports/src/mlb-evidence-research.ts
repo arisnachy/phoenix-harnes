@@ -299,8 +299,9 @@ export async function researchMlbCase(
     throw Error('Este expediente prepartido requiere un juego MLB futuro')
   const season=Number(fixture.date.slice(0,4))
   const teams=['home','away'] as const
-  const [box,venueRaw,homeRoster,awayRoster,homeSchedule,awaySchedule]=await Promise.all([
+  const [box,live,venueRaw,homeRoster,awayRoster,homeSchedule,awaySchedule]=await Promise.all([
     measured<unknown>('https://statsapi.mlb.com/api/v1/game/'+gamePk+'/boxscore',fetcher,sources,now),
+    measured<unknown>('https://statsapi.mlb.com/api/v1/game/'+gamePk+'/feed/live',fetcher,sources,now),
     fixture.venue.id?measured<unknown>('https://statsapi.mlb.com/api/v1/venues?venueIds='+
       fixture.venue.id,fetcher,sources,now):Promise.resolve(null),
     measured<unknown>('https://statsapi.mlb.com/api/v1/teams/'+fixture.home.id+
@@ -339,7 +340,11 @@ export async function researchMlbCase(
   const injuries=injuryFeeds.flatMap(({side,data})=>gameRoster(data,fixture[side].id)
     .map(p=>({team:fixture[side].name,name:p.name,
       status:'listed-in-injured-roster' as const})))
-  const lineupOrders={home:boxOrder(box,'home'),away:boxOrder(box,'away')}
+  const liveBox=obj(obj(live).liveData).boxscore
+  const lineupOrders={home:boxOrder(box,'home').length===9?boxOrder(box,'home'):
+      boxOrder(liveBox,'home'),
+    away:boxOrder(box,'away').length===9?boxOrder(box,'away'):
+      boxOrder(liveBox,'away')}
   const lineupStatus={home:lineupOrders.home.length===9?'confirmed' as const:'unconfirmed' as const,
     away:lineupOrders.away.length===9?'confirmed' as const:'unconfirmed' as const}
   const rawRosters={home:gameRoster(homeRoster,fixture.home.id),
@@ -487,9 +492,13 @@ export async function researchMlbCase(
       'orientación del viento/techo y noticias pueden invalidar la lectura inicial.',
   ]
   const matchup=fixture.away.name+' vs '+fixture.home.name
+  const basicReady=Boolean(starters.home&&starters.away&&rawRosters.home.length&&
+    rawRosters.away.length&&teamForm.home&&teamForm.away)
   const opportunity:MlbOpportunity={eventId:String(gamePk),sport:'baseball',league:'mlb',
     source:'MLB Stats API',matchup,
-    state:'abstain',reason:'Investigación descriptiva pendiente de verificación de datos críticos; no hay probabilidad calibrada ni ventaja apostable demostrada.',
+    state:basicReady?'investigate':'abstain',
+    reason:basicReady?'Expediente inicial verificable para que Kira contraste mercados y contradicciones; NO constituye pronóstico calibrado ni apuesta aprobada.':
+      'Investigación incompleta: faltan abridores, rosters o resultados previos; abstenerse de proponer una apuesta.',
     evidenceCount:profiles.filter(p=>p.evidence==='observed').length,
     missingEvidence,marketResearchReady:odds.length>0,priced:false}
   const dossier:Omit<MlbCase,'uiBlock'>={fixture,checkedAt:iso(now),season,sources,
