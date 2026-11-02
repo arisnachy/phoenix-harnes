@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { ClawHubCatalogItem, ClawHubFamily, ClawHubState, OpenClawRoutingSnapshot, OpenClawRoutedTool } from '@phoenix-ai/dsh-api-remotes/client'
+import type { ClawHubCatalogItem, ClawHubFamily, ClawHubState, OpenClawRoutingSnapshot, OpenClawRoutedTool, OpenClawGatewayCredentialState } from '@phoenix-ai/dsh-api-remotes/client'
 import type { ConnectorKey } from './connectors-locales.ts'
 import type { McpRegistryClient } from './AuthorizationPanel.tsx'
 import { CONNECTOR_CATALOG } from './connector-catalog.ts'
@@ -37,6 +37,9 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
   const [routingBusy, setRoutingBusy] = useState<string | null>(null)
   const [routingError, setRoutingError] = useState(false)
   const [routingRefresh, setRoutingRefresh] = useState(0)
+  const [gatewayToken, setGatewayToken] = useState('')
+  const [gatewayCredential, setGatewayCredential] = useState<OpenClawGatewayCredentialState | null>(null)
+  const [gatewaySaving, setGatewaySaving] = useState(false)
   const browse = registry?.clawHubCatalog
   const readState = registry?.clawHubState
   const installSkill = registry?.clawHubInstallSkill
@@ -44,6 +47,8 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
   const prepareCli = registry?.prepareClawHubCli
   const inspectTools = registry?.openClawPluginTools
   const setRoutingPermission = registry?.setOpenClawPluginTool
+  const readGatewayCredential = registry?.openClawGatewayCredential
+  const saveGatewayCredential = registry?.configureOpenClawGatewayCredential
 
   useEffect(() => {
     if (readState === undefined) return
@@ -84,6 +89,30 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
       value => { setRouting(value) },
       () => { setRoutingError(true) },
     ).finally(() => { setRoutingBusy(null) })
+  }
+
+  useEffect(() => {
+    if (readGatewayCredential === undefined) return
+    let active = true
+    void readGatewayCredential().then(value => {
+      if (active) setGatewayCredential(value)
+    }, () => { if (active) setGatewayCredential(null) })
+    return () => { active = false }
+  }, [readGatewayCredential, routingRefresh])
+
+  const saveToken = (): void => {
+    if (gatewaySaving || gatewayToken.length < 16 || saveGatewayCredential === undefined) return
+    setGatewaySaving(true)
+    setNotice('')
+    void saveGatewayCredential({ token: gatewayToken }).then(
+      value => {
+        setGatewayToken('')
+        setGatewayCredential(value)
+        setNotice(t('storeGatewayTokenSaved'))
+        setRoutingRefresh(n => n + 1)
+      },
+      () => { setNotice(t('storeGatewayTokenError')) },
+    ).finally(() => { setGatewaySaving(false) })
   }
 
   const fresh = (items ?? []).filter(item => !duplicate(item, connectedIds))
@@ -216,6 +245,30 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
         </div>
       ) : null}
       {notice ? <p role="status">{notice}</p> : null}
+      <div className={css.block} aria-label={t('storeGatewayTokenTitle')}>
+        <div className={css.heading}>
+          <div>
+            <h3>{t('storeGatewayTokenTitle')}</h3>
+            <p>{t('storeGatewayTokenHint')}</p>
+          </div>
+          <a href="http://127.0.0.1:18789/" target="_blank" rel="noreferrer">
+            {t('storeGatewayOpenUi')}
+          </a>
+        </div>
+        <p className={css.safetyNote}>{gatewayCredential?.configured
+          ? t('storeGatewayTokenReady') : t('storeGatewayTokenMissing')}</p>
+        <form className={css.toolbar} onSubmit={event => { event.preventDefault(); saveToken() }}>
+          <input className={css.search} type="password" autoComplete="new-password"
+            aria-label={t('storeGatewayTokenPlaceholder')}
+            placeholder={t('storeGatewayTokenPlaceholder')}
+            value={gatewayToken} onChange={event => { setGatewayToken(event.currentTarget.value) }}/>
+          <button type="submit" className={css.compactButton}
+            disabled={gatewaySaving || gatewayToken.length < 16 || saveGatewayCredential === undefined}>
+            {gatewaySaving ? t('storeGatewayTokenSaving') : t('storeGatewayTokenSave')}
+          </button>
+        </form>
+        <p className={css.safetyNote}>{t('storeGatewaySecurity')}</p>
+      </div>
       <div className={css.block} aria-label={t('storeRoutingTitle')}>
         <div className={css.heading}>
           <div>

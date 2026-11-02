@@ -1,5 +1,16 @@
 /** Copy for the dedicated Settings → Connectors surface. */
 export const connectorEn = {
+  storeGatewayTokenTitle: "Connect the OpenClaw Gateway",
+  storeGatewayTokenHint: "Paste the owner token into PHOENIX's private credential vault. It will not appear in prompts or plugin responses.",
+  storeGatewayTokenPlaceholder: "Private Gateway token",
+  storeGatewayTokenSave: "Save Gateway token",
+  storeGatewayTokenSaving: "Saving securely…",
+  storeGatewayTokenSaved: "Gateway token saved in the PHOENIX vault.",
+  storeGatewayTokenError: "Could not store the token. Check the credential vault.",
+  storeGatewayTokenReady: "Gateway credential configured",
+  storeGatewayTokenMissing: "Gateway credential not configured",
+  storeGatewayOpenUi: "Open local OpenClaw Control UI",
+  storeGatewaySecurity: "This token has full Gateway operator privileges. Only connect your own trusted local instance.",
   storeRoutingTitle: "OpenClaw → Kira tools",
   storeRoutingIntro: "Tools discovered in OpenClaw's registered runtime. Grant access to Kira individually. Installing a plugin is not authorization.",
   storeRoutingUnavailable: "Runtime tool inspection unavailable. Confirm the OpenClaw CLI, Gateway and enabled plugin.",
@@ -174,6 +185,17 @@ export type ConnectorKey = keyof typeof connectorEn
 
 /** Spanish copy for the dedicated Settings → Connectors surface. */
 export const connectorEs: { [Key in ConnectorKey]: string } = {
+  storeGatewayTokenTitle: "Conectar Gateway OpenClaw",
+  storeGatewayTokenHint: "Introduce el token de propietario en la bóveda privada de PHOENIX. No aparecerá en las conversaciones ni en las respuestas de plugins.",
+  storeGatewayTokenPlaceholder: "Token privado del Gateway",
+  storeGatewayTokenSave: "Guardar token del Gateway",
+  storeGatewayTokenSaving: "Guardando…",
+  storeGatewayTokenSaved: "Token guardado en la bóveda de PHOENIX.",
+  storeGatewayTokenError: "No se pudo guardar el token. Comprueba la bóveda de credenciales.",
+  storeGatewayTokenReady: "Credencial del Gateway configurada",
+  storeGatewayTokenMissing: "Gateway sin credencial configurada",
+  storeGatewayOpenUi: "Abrir panel local de OpenClaw",
+  storeGatewaySecurity: "Este token concede privilegios completos de operador. Conecta únicamente tu propia instancia local confiable.",
   storeRoutingTitle: "Herramientas OpenClaw → Kira",
   storeRoutingIntro: "Herramientas registradas realmente en OpenClaw. Autoriza a Kira una por una; instalar no equivale a autorizar.",
   storeRoutingUnavailable: "No se pudo inspeccionar el runtime. Comprueba la CLI OpenClaw, el Gateway y el plugin habilitado.",
@@ -345,6 +367,17 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
 
 /** Simplified Chinese copy for the dedicated Settings → Connectors surface. */
 export const connectorZh: { [Key in ConnectorKey]: string } = {
+  storeGatewayTokenTitle: "连接 OpenClaw Gateway",
+  storeGatewayTokenHint: "将操作员令牌保存在 PHOENIX 私密凭证库中，不会出现在模型提示或插件响应中。",
+  storeGatewayTokenPlaceholder: "私有 Gateway 令牌",
+  storeGatewayTokenSave: "保存 Gateway 令牌",
+  storeGatewayTokenSaving: "正在安全保存…",
+  storeGatewayTokenSaved: "令牌已保存到 PHOENIX 凭证库。",
+  storeGatewayTokenError: "无法保存令牌，请检查凭证库。",
+  storeGatewayTokenReady: "Gateway 凭证已配置",
+  storeGatewayTokenMissing: "未配置 Gateway 凭证",
+  storeGatewayOpenUi: "打开本地 OpenClaw 管理界面",
+  storeGatewaySecurity: "此令牌拥有 Gateway 的完整操作员权限，只能连接信任的本地实例。",
   storeRoutingTitle: "OpenClaw → Kira 工具",
   storeRoutingIntro: "发现已实际注册的插件工具；需要分别授权 Kira，安装并不代表授权。",
   storeRoutingUnavailable: "运行时工具检查失败，请检查 CLI、Gateway 与插件状态。",
