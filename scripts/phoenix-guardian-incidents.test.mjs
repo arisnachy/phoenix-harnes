@@ -112,6 +112,18 @@ test('redacts quoted JSON credentials and Basic authorization before durable sto
   assert.match(text, /REDACTED/)
 })
 
+test('redacts alternative password and private-key labels in persisted incident reports', () => {
+  recordGuardianIncident({
+    status: 'activation-failed', failedTarget: broken,
+    diagnosis: 'passwd=ultra-private-987; passphrase=passphrase-value-987; private_key=private-key-value-987',
+  })
+  const diagnosis = pendingGuardianIncidents()[0].diagnosis
+  assert.doesNotMatch(diagnosis, /ultra-private-987|passphrase-value-987|private-key-value-987/)
+  assert.match(diagnosis, /passwd=\[REDACTED\]/)
+  assert.match(diagnosis, /passphrase=\[REDACTED\]/)
+  assert.match(diagnosis, /private_key=\[REDACTED\]/)
+})
+
 test('refuses updates and preserves forensic bytes when incident ledger is corrupt', () => {
   const path = guardianIncidentPath()
   mkdirSync(dirname(path), { recursive: true })
