@@ -88,7 +88,19 @@ async function available(binary: string): Promise<boolean> {
 export async function clawHubState(): Promise<ClawHubState> {
   const managed = managedCli() !== undefined
   const global = !managed && await available(process.platform === 'win32' ? 'clawhub.cmd' : 'clawhub')
-  const openclaw = await available(process.platform === 'win32' ? 'openclaw.cmd' : 'openclaw')
+  const openclawManifest = join(dshHome, 'toolchains', 'openclaw', 'node_modules', 'openclaw', 'package.json')
+  let managedOpenClaw: string | undefined
+  try {
+    const pkg = JSON.parse(readFileSync(openclawManifest, 'utf8')) as { bin?: string | { openclaw?: string } }
+    const file = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin?.openclaw
+    if (typeof file === 'string' && !file.includes('..') && !file.startsWith('/')) {
+      const entry = join(dshHome, 'toolchains', 'openclaw', 'node_modules', 'openclaw', file)
+      if (existsSync(entry)) managedOpenClaw = entry
+    }
+  } catch { /* no managed CLI */ }
+  const openclaw = managedOpenClaw !== undefined
+    ? (await run(process.execPath, [managedOpenClaw, '--version'], 5_000).then(x => x.status === 0, () => false))
+    : await available(process.platform === 'win32' ? 'openclaw.cmd' : 'openclaw')
   return {
     cli: managed ? 'managed' : global ? 'global' : 'missing',
     openclaw: openclaw ? 'available' : 'missing',
