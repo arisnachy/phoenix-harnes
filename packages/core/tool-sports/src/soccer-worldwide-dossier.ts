@@ -298,9 +298,10 @@ export async function investigateSoccer(date:string,league:string,eventId:string
     ...(!hc||!ac?['Rotaciones y cambios de esquema pendientes']:[]),
     'La ausencia de información avanzada limita las comparaciones de ataque y defensa']
   const markets=compareQuotes(fixture,quotes,now,positive,missing)
+  const advancedVerified=teamStatistics.some(x=>/^(?:.* · )?(?:xg|xga|expected goals|expectedgoals|expected goals against)$/iu.test(x.label))
   const level:SoccerDossier['coverage']['level']=
     homePlayers.length>=11&&awayPlayers.length>=11&&hc&&ac&&homeGames.length>0&&
-      awayGames.length>0&&markets.length>0?'A':
+      awayGames.length>0&&markets.length>0&&advancedVerified?'A':
     homePlayers.length>=11&&awayPlayers.length>=11&&homeGames.length>0&&awayGames.length>0?'B':
     homePlayers.length||awayPlayers.length||homeGames.length||awayGames.length?'C':'D'
   const coverage={level,players:homePlayers.length+awayPlayers.length,lineups:hc&&ac,
