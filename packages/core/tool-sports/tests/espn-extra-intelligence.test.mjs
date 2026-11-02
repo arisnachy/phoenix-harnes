@@ -46,3 +46,19 @@ test('truncates large responses while preserving source and provenance',async()=
   assert.ok(sample.snapshot.length<=6)
   assert.ok(sample.snapshot[0].name.length<=350)
 })
+
+test('resolves trusted same-league ESPN references without requesting unrelated hosts',async()=>{
+  const root='https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/'
+  let calls=0
+  const result=await readExtendedEspn({...base,mode:'team_athletes'},async url=>{
+    calls++
+    return calls===1?{count:2,items:[
+      {$ref:root+'athletes/100'},{ $ref:'https://evil.example/steal'}]}:
+      {id:'100',displayName:'Verified athlete',status:'active'}
+  })
+  assert.equal(calls,2)
+  assert.equal(result.resolvedRefs,1)
+  assert.equal(result.refCount,2)
+  assert.equal(result.snapshot[0].displayName,'Verified athlete')
+  assert.equal(result.snapshot[1].unresolved,true)
+})
