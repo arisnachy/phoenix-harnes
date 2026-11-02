@@ -1,5 +1,6 @@
 import { defineTool, ToolArgsError, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import { pelicanScene } from './scene3d-pelican.ts'
+import { auditScene3DQuality, requestedScene3DLevel, type Scene3DLevel } from './scene3d-quality.ts'
 
 /** Versioned, portable, data-only 3D scene: no scripts, URLs, or external resources. */
 export const PHOENIX_SCENE3D_MIME = 'application/vnd.phoenix.scene3d+json'
@@ -253,11 +254,12 @@ function trivialOrganicScene(scene: Scene): boolean {
 export function createPhoenix3DTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_3d',
-    description: 'Create a REAL INTERACTIVE THREE-DIMENSIONAL SCENE and show it inside Phoenix chat. For requests such as modelo 3D, casa 3D, diseño 3D, rotar, orbit, zoom, manipulable, modelo para una app, use THIS tool, not image_generation or phoenix_visualize. Output is 3D geometry (not PNG): the user can drag to rotate, use the wheel or +/- to zoom, reset the camera, and download a portable versioned JSON model reusable in Phoenix apps. For a quick fictional tropical villa concept use demo:true and no scene. For complex scenes NEVER use a single-subject preset: provide scene with multiple semantic objects, their objectId per node, and requiredObjects listing every required subject and environmental prop. Use torus for bicycle wheels, pipes, rings and circular architecture; use mesh for unconstrained complex geometry. Optional scene.animations:[{name,duration,loop,tracks:[{node:uniqueNodeName,property:position|rotation|size,keys:[{time,value:[x,y,z]},...]}]}] creates real keyframe motion. For compound scenes, include environment objects and name individual moving parts uniquely. Use the pelican demonstration preset ONLY for a pelican without any companions. Never replace composed scenes with a preset. For other animals create a detailed triangular mesh or several recognizable named anatomical parts. For original designs provide scene:{environment:"sunset"|"studio"|"daylight",camera:"isometric"|"front"|"top"|"perspective",nodes:[{type:"box"|"sphere"|"cylinder"|"cone"|"mesh"|"torus",name?,objectId?,position:[x,y,z],size:[x,y,z],vertices?:[x0,y0,z0,x1,y1,z1,x2,y2,z2,...],rotation?:[degreesX,degreesY,degreesZ],color:"#rrggbb",material?:{preset?:"glass"|"wood"|"concrete"|"metal"|"water"|"foliage",baseColor?:"#rrggbb",metallic?:number,roughness?:number,opacity?:number,transmission?:number,clearcoat?:number,emissive?:"#rrggbb"}}],name?,background?}. Coordinates and sizes are meters; y is vertical. Approximate reference photos as clearly labeled 3D concepts: do NOT claim exact photo-to-CAD reconstruction, survey measurements, exact photorealistic reconstruction; the viewer provides GLB/glTF import-export with glTF PBR material parameters and editable geometry, not CAD/BIM. Up to 150 nodes and 60,000 mesh vertices total. Do not replace any multi-object scene with a preset. Validate position, surroundings, relationships and essential objects. No external scripts, URLs, image substitution or fake interactive buttons. A self-contained scene finishes the requested presentation; continueAfterDisplay only for additional explicitly requested work.',
+    description: 'Create a REAL INTERACTIVE THREE-DIMENSIONAL SCENE and show it inside Phoenix chat. For requests such as modelo 3D, casa 3D, diseño 3D, rotar, orbit, zoom, manipulable, modelo para una app, use THIS tool, not image_generation or phoenix_visualize. Output is 3D geometry (not PNG): the user can drag to rotate, use the wheel or +/- to zoom, reset the camera, and download a portable versioned JSON model reusable in Phoenix apps. For a quick fictional tropical villa concept use demo:true and no scene. For studio-level, professional sculpting, rigging, reference reconstruction or photographic fidelity, do NOT pretend this preview tool can do that. Prefer the official opt-in Blender Lab MCP tools (mcp__blender__*) when actually connected, or the offline Blender pipeline scripts/phoenix-3d-studio.py with detailed mesh source. User must provide real assets/references to reproduce an exact source; never invent exactness. For complex scenes NEVER use a single-subject preset: provide scene with multiple semantic objects, their objectId per node, and requiredObjects listing every required subject and environmental prop. Use torus for bicycle wheels, pipes, rings and circular architecture; use mesh for unconstrained complex geometry. Optional scene.animations:[{name,duration,loop,tracks:[{node:uniqueNodeName,property:position|rotation|size,keys:[{time,value:[x,y,z]},...]}]}] creates real keyframe motion. For compound scenes, include environment objects and name individual moving parts uniquely. Use the pelican demonstration preset ONLY for a pelican without any companions. Never replace composed scenes with a preset. For other animals create a detailed triangular mesh or several recognizable named anatomical parts. For original designs provide scene:{environment:"sunset"|"studio"|"daylight",camera:"isometric"|"front"|"top"|"perspective",nodes:[{type:"box"|"sphere"|"cylinder"|"cone"|"mesh"|"torus",name?,objectId?,position:[x,y,z],size:[x,y,z],vertices?:[x0,y0,z0,x1,y1,z1,x2,y2,z2,...],rotation?:[degreesX,degreesY,degreesZ],color:"#rrggbb",material?:{preset?:"glass"|"wood"|"concrete"|"metal"|"water"|"foliage",baseColor?:"#rrggbb",metallic?:number,roughness?:number,opacity?:number,transmission?:number,clearcoat?:number,emissive?:"#rrggbb"}}],name?,background?}. Coordinates and sizes are meters; y is vertical. Approximate reference photos as clearly labeled 3D concepts: do NOT claim exact photo-to-CAD reconstruction, survey measurements, exact photorealistic reconstruction; the viewer provides GLB/glTF import-export with glTF PBR material parameters and editable geometry, not CAD/BIM. Up to 150 nodes and 60,000 mesh vertices total. Do not replace any multi-object scene with a preset. Validate position, surroundings, relationships and essential objects. No external scripts, URLs, image substitution or fake interactive buttons. A self-contained scene finishes the requested presentation; continueAfterDisplay only for additional explicitly requested work.',
     parameters: {
       title: { type: 'string', required: true, description: 'Human-readable title of the real 3D model.' },
       demo: { type: 'boolean', description: 'True generates a complete tropical villa concept scene in 3D without another model call.' },
       preset: { type: 'string', description: 'Legacy single-subject demonstration: pelican. Do NOT use when scene includes secondary objects.' },
+      qualityMode: { type: 'string', enum: ['preview','studio','fidelity'], description: 'Native tool implements preview only; studio/fidelity require a separate Blender and reference verification workflow.' },
       requiredObjects: { type: 'array', items: {type:'string'}, description: 'Optional list of objectId identifiers, each of which MUST appear in at least one node; use to guard main subject plus context props.' },
       subject: { type: 'string', description: 'Subject requested by the user, for geometric fidelity checks.' },
       scene: { type: 'object', additionalProperties: true,
@@ -268,8 +270,9 @@ export function createPhoenix3DTool(): ToolDefinition {
     output: {
       schema: { type:'object', additionalProperties:false, properties: {
         artifactId:{type:'string',required:true},title:{type:'string',required:true},scene:{type:'json',required:true},
+        qualityReport:{type:'json',required:true},
       } },
-      render: (_args, result) => [{ type:'text', text:`Modelo 3D interactivo listo: ${result.title}. Arrastra para girarlo y usa la rueda para acercarlo.` }],
+      render: (_args, result) => [{ type:'text', text:`Previsualización 3D interactiva: ${result.title}. No se ha certificado calidad de producción ni exactitud de referencia. Arrastra para girar o ampliar.` }],
       presentationMeta: (_args, result) => ({ artifact: {
         id: result.artifactId, mime:PHOENIX_SCENE3D_MIME, title:result.title,
         data: result.scene, executable:false,
@@ -278,6 +281,13 @@ export function createPhoenix3DTool(): ToolDefinition {
     execute(args, exec) {
       const title = args.title.trim()
       if (title.length === 0 || title.length > 140) throw new ToolArgsError(['Se requiere un título de 1 a 140 caracteres.'])
+      const qualityLevel: Scene3DLevel = args.qualityMode ?? requestedScene3DLevel(
+        title + ' ' + (typeof args.subject === 'string' ? args.subject : ''))
+      if (qualityLevel !== 'preview') {
+        throw new ToolArgsError([qualityLevel === 'studio'
+          ? 'Calidad Studio requiere la ruta real de Blender Lab MCP o el renderizador offline de Blender; phoenix_3d solo hace previsualizaciones.'
+          : 'Fidelidad exacta requiere referencias geométricas/planos/medidas y validación de tolerancias; phoenix_3d no puede certificarla.'])
+      }
       const pelican = args.preset === 'pelican'
         || requestedPelican(title + ' ' + (typeof args.subject === 'string' ? args.subject : ''))
       const supplied = args.scene === undefined ? undefined : normalizeScene(args.scene, title)
@@ -307,8 +317,11 @@ export function createPhoenix3DTool(): ToolDefinition {
       if (!pelican && organic && trivialOrganicScene(scene)) {
         throw new ToolArgsError(['Modelo orgánico insuficiente: usa una malla o varias partes anatómicas, nunca solo una caja.'])
       }
+      const qualityReport = auditScene3DQuality(scene, subject,
+        Array.isArray(required) ? required : [], qualityLevel)
       if (args.continueAfterDisplay !== true) exec.concludeTurn()
-      return Promise.resolve({ artifactId:`phoenix-3d:${String(exec.callId)}`, title, scene: scene as unknown as JsonValue })
+      return Promise.resolve({ artifactId:`phoenix-3d:${String(exec.callId)}`, title,
+        scene: scene as unknown as JsonValue, qualityReport: qualityReport as unknown as JsonValue })
     },
     presentCall(args) {
       return { card: 'generic', title: `3D · ${args.title}`, kind:'read', rawInput:'Geometría 3D interactiva en Phoenix' }
