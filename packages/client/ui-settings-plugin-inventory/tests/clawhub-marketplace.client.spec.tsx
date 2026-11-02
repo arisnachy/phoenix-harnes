@@ -4,6 +4,11 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { ClawHubMarketplace } from '../src/client/ClawHubMarketplace.tsx'
 import { es } from '../src/client/locales.ts'
 
+// The shared locale contract includes global keys (e.g. "skip") that this
+// component's dictionary does not define. Keep the test adapter type-safe.
+const dictionary: Readonly<Record<string, string>> = es
+const t = (key: string): string => dictionary[key] ?? key
+
 afterEach(cleanup)
 
 it('shows real ClawHub Skills from the existing plugin area without silently installing them', async () => {
@@ -23,7 +28,7 @@ it('shows real ClawHub Skills from the existing plugin area without silently ins
   }))
   render(<ClawHubMarketplace browseClawHub={browseClawHub}
     readClawHubState={readClawHubState} installClawHubSkill={installClawHubSkill}
-    t={key => es[key]} />)
+    t={t} />)
   expect(await screen.findByText('Skill Example')).toBeTruthy()
   expect(installClawHubSkill).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: es.clawInstall }))
@@ -42,7 +47,7 @@ it('shows official code plugins without offering to run native code inside Kira'
   render(<ClawHubMarketplace browseClawHub={browseClawHub}
     readClawHubState={async () => ({ cli: 'managed', openclaw: 'available',
       skillsDirectory: 'skills', pluginExecution: 'openclaw-runtime' })}
-    installClawHubSkill={vi.fn()} t={key => es[key]} />)
+    installClawHubSkill={vi.fn()} t={t} />)
   fireEvent.click(screen.getByRole('button', { name: es.clawCodePlugins }))
   expect(await screen.findByText('Example Plugin')).toBeTruthy()
   expect(screen.getByText(es.clawPluginUnavailable)).toBeTruthy()

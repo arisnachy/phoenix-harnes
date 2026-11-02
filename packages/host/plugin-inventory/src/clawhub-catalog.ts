@@ -76,16 +76,13 @@ export async function readClawHubCatalog(request: ClawHubCatalogRequest): Promis
   const limit = Math.max(1, Math.min(MAX, Math.trunc(request.limit ?? 12)))
   const params = new URLSearchParams()
   params.set('limit', String(limit))
-  let pathname: string
-  if (request.family === 'skill') {
-    if (query) { pathname = '/api/v1/search'; params.set('q', query) }
-    else { pathname = '/api/v1/skills'; params.set('sort', 'downloads') }
-  } else {
-    pathname = query ? '/api/v1/packages/search' : '/api/v1/packages'
-    params.set('family', request.family)
-    if (query) params.set('q', query)
-    if (request.officialOnly) params.set('isOfficial', 'true')
-  }
+  // Unified package catalog: one canonical identity across Skills and plugins.
+  // /packages/search requires q; /packages is the browse endpoint without q.
+  const pathname = query ? '/api/v1/packages/search' : '/api/v1/packages'
+  params.set('family', request.family)
+  if (query) params.set('q', query)
+  else params.set('sort', request.family === 'skill' ? 'downloads' : 'recommended')
+  if (request.officialOnly) params.set('isOfficial', 'true')
   const url = BASE + pathname + '?' + params.toString()
   const cached = catalogCache.get(url)
   if (cached !== undefined && cached.expires > Date.now()) return cached.value
