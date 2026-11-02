@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import type { ClawHubCatalogRequest, ClawHubCatalogSnapshot, ClawHubCatalogItem } from './types.ts'
 
 const BASE = 'https://clawhub.ai'
-const MAX = 20
+const MAX = 60
 const catalogCache = new Map<string, { expires: number; value: ClawHubCatalogSnapshot }>()
 const CACHE_MS = 60_000
 const NAME = /^[\p{L}\p{N} ._/@-]{0,80}$/u

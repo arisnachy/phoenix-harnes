@@ -182,7 +182,12 @@ export async function clawHubInstall(request: ClawHubInstallRequest): Promise<Cl
   if (request.family === 'skill') {
     const response = await clawHub(['--workdir', dshHome, '--dir', 'skills', '--no-input', 'install', request.name])
     if (response.status !== 0) throw new Error('Skill installation failed; no verified installation receipt')
-    return { name: request.name, family: request.family, status: 'installed-skill', detail: 'Installed to PHOENIX skills. Review its instructions before invoking.' }
+    const slug = request.name.split('/').at(-1)?.split('@')[0] ?? ''
+    if (!PACKAGE_ID.test(slug) || !existsSync(join(dshHome, 'skills', slug, 'SKILL.md'))) {
+      throw new Error('ClawHub reported success, but PHOENIX could not verify the installed SKILL.md')
+    }
+    return { name: request.name, family: request.family, status: 'installed-skill',
+      detail: 'Verified SKILL.md in PHOENIX skills. Kira still needs to discover the skill.' }
   }
   const managedEntry = managedOpenClawCli()
   const command = managedEntry !== undefined ? process.execPath
@@ -200,7 +205,7 @@ export async function clawHubInstall(request: ClawHubInstallRequest): Promise<Cl
   if (response.status !== 0) throw new Error('OpenClaw plugin installation failed; inspect the runtime before retrying')
   return {
     name: request.name, family: request.family, status: 'installed-in-openclaw',
-    detail: 'Installed disabled in OpenClaw. Activation and PHOENIX tool routing still require a compatible runtime bridge.',
+    detail: 'OpenClaw accepted installation. Inspect runtime activation and authorize Kira tools separately.',
   }
 }
 
@@ -232,6 +237,19 @@ export function prepareClawHubCli(): Promise<ClawHubState> {
         else reject(new Error('ClawHub installer returned an error'))
       })
     })
+    // The registry CLI alone cannot execute OpenClaw plugins.
+    // Prepare the optional isolated companion on the same explicit owner click.
+    const companion = join(dirname(script), 'phoenix-openclaw-bootstrap.mjs')
+    if (existsSync(companion)) {
+      await new Promise<void>(resolvePromise => {
+        const child = spawn(process.execPath, [companion, '--ensure', '--quiet'], {
+          windowsHide: true, stdio: 'ignore', shell: false,
+        })
+        const timeout = setTimeout(() => { child.kill(); resolvePromise() }, 155_000)
+        child.once('error', () => { clearTimeout(timeout); resolvePromise() })
+        child.once('close', () => { clearTimeout(timeout); resolvePromise() })
+      })
+    }
     return clawHubState()
   })().finally(() => { prepareInFlight = undefined })
   return prepareInFlight
