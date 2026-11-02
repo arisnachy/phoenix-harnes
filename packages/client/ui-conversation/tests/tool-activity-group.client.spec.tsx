@@ -424,10 +424,9 @@ describe('chat tool activity grouping', () => {
       content:[{type:'text' as const,text:JSON.stringify({uiBlock:card('Final NHL')})}]}
     renderChat([user(1,'Investiga y dame una sola ficha deportiva final'),
       first,assistantWithReasoning(3),second,assistantWithReasoning(5)])
-    const panels=screen.getAllByRole('region',{name:'Panel deportivo de Kira'})
-    expect(panels).toHaveLength(1)
-    expect(panels[0].textContent).toContain('Final NHL')
-    expect(panels[0].textContent).not.toContain('Candidato NBA')
+    const panel=screen.getByRole('region',{name:'Panel deportivo de Kira'})
+    expect(panel.textContent).toContain('Final NHL')
+    expect(panel.textContent).not.toContain('Candidato NBA')
   })
   it('does not replace a requested research ticket with automatic NO BET when bookmaker prices are missing',()=>{
     const tool={...settledTool('odds-1'),seq:3,time:3000,
