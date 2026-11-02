@@ -17,7 +17,7 @@ export interface Scene3DQualityResult {
   readonly domain: Scene3DDomain
   readonly requestedLevel: Scene3DLevel
   readonly deliveredLevel: 'preview'
-  readonly verified: boolean
+  readonly structuralChecksPassed: boolean
   readonly blockers: readonly string[]
   readonly warnings: readonly string[]
 }
@@ -76,5 +76,5 @@ export function auditScene3DQuality(
       : 'La reconstrucción exacta requiere geometría fuente, planos/medidas y verificación de tolerancias.')
   }
   return { domain, requestedLevel: level, deliveredLevel: 'preview',
-    verified: blockers.length === 0 && warnings.length === 0, blockers, warnings }
+    structuralChecksPassed: blockers.length === 0 && warnings.length === 0, blockers, warnings }
 }
