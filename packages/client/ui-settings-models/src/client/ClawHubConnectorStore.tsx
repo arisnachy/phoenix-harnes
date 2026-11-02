@@ -31,9 +31,11 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
   const [error, setError] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
+  const [preparing, setPreparing] = useState(false)
   const browse = registry?.clawHubCatalog
   const readState = registry?.clawHubState
   const installSkill = registry?.clawHubInstallSkill
+  const prepareCli = registry?.prepareClawHubCli
 
   useEffect(() => {
     if (readState === undefined) return
@@ -58,7 +60,7 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
   const familyLabel = (value: ClawHubFamily): string => value === 'skill'
     ? t('storeSkills') : value === 'code-plugin' ? t('storePlugins') : t('storeBundles')
   const install = (item: ClawHubCatalogItem): void => {
-    if (item.family !== 'skill' || installSkill === undefined || busy !== null || runtime?.cli === 'missing') return
+    if (item.family !== 'skill' || installSkill === undefined || busy !== null || runtime?.cliStatus !== 'ready') return
     setBusy(item.name)
     setNotice('')
     void installSkill({ name: item.name, family: 'skill' }).then(
@@ -67,11 +69,35 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
     ).finally(() => { setBusy(null) })
   }
 
+  const prepare = (): void => {
+    if (preparing || prepareCli === undefined) return
+    setPreparing(true)
+    setNotice('')
+    void prepareCli().then(
+      value => { setRuntime(value); setNotice(t('storeCliRepairSuccess')); setReload(n => n + 1) },
+      () => { setNotice(t('storeCliRepairError')); setReload(n => n + 1) },
+    ).finally(() => { setPreparing(false) })
+  }
+  const cliStatus = runtime?.cliStatus
+  const cliLabel = cliStatus === 'ready' ? t('storeCliReady')
+    : cliStatus === 'installing' ? t('storeCliInstalling')
+      : cliStatus === 'install-failed' ? t('storeCliFailed')
+        : cliStatus === 'incompatible-node' ? t('storeCliIncompatible')
+          : cliStatus === 'missing' ? t('storeCliMissing') : t('storeCliStatusUnknown')
   return (
     <section className={css.block} data-clawhub-store="true" aria-label={t('storeTitle')}>
       <div className={css.heading}>
         <div><h3>{t('storeTitle')}</h3><p>{t('storeDescription')}</p></div>
         <a href="https://clawhub.ai" target="_blank" rel="noreferrer">{t('storeWebsite')}</a>
+      </div>
+      <div className={css.toolbar}>
+        <strong>{cliLabel}</strong>
+        {runtime?.cliVersion ? <span className={css.safetyNote}>{t('storeCliVersion')}: {runtime.cliVersion}</span> : null}
+        {runtime?.latestCliVersion ? <span className={css.safetyNote}>{t('storeCliLatest')}: {runtime.latestCliVersion}</span> : null}
+        {runtime?.failureReason ? <span className={css.safetyNote}>{t('storeCliReason')}: {runtime.failureReason}</span> : null}
+        <button className={css.compactButton} type="button"
+          disabled={preparing || prepareCli === undefined}
+          onClick={prepare}>{preparing ? t('storeCliRepairing') : t('storeCliRepair')}</button>
       </div>
       <div className={css.toolbar}>
         <div className={css.filters}>
