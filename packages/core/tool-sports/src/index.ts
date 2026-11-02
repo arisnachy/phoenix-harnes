@@ -38,6 +38,7 @@ import {discoverEditorialResearch,type EditorialSource,editorialDomains} from '.
 import {auditSportsCalibration,availableSportCalibration,calibratedSportsForecast} from './sports-calibration.ts'
 import {sportsEnvWithVaultKey} from './sports-credential-env.ts'
 import {mlbResearch} from './mlb-evidence-research.ts'
+import {reviewMlbResearch} from './mlb-market-research-review.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
@@ -1211,7 +1212,8 @@ export function apply(ctx: Context): void {
       const sourceAudit={verified:report.sources.filter(s=>s.status==='verified').length,
         empty:report.sources.filter(s=>s.status==='empty').length,
         errors:report.sources.filter(s=>s.status==='error').slice(0,20)}
-      return JSON.stringify({...report,sources:undefined,matchups:visible,
+      const marketReview=reviewMlbResearch(report)
+      return JSON.stringify({...report,marketReview,sources:undefined,matchups:visible,
         matchupTotal:report.matchups.length,matchupOffset:offset,
         matchupNextOffset:offset+visible.length<report.matchups.length?offset+visible.length:null,
         sourceAudit,oddsSources,uiBlock:report.uiBlock,
