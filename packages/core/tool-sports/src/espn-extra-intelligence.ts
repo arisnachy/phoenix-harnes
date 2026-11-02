@@ -139,7 +139,8 @@ async function resolveExtendedRefs(snapshot:unknown,endpoint:string,
     snapshot as Record<string,unknown>:{}
   const candidates=Array.isArray(root.items)?root.items:Array.isArray(snapshot)?snapshot:null
   if(!candidates)return {data:snapshot,resolvedRefs:0,refCount:0}
-  const parent=new URL(endpoint),base=parent.pathname.split('/').slice(0,7).join('/')+'/'
+  const parent=new URL(endpoint)
+  const base=parent.pathname.match(/^(.+?\/sports\/[^/]+\/(?:leagues\/)?[^/]+)(?:\/|$)/u)?.[1]+'/'
   let resolvedRefs=0,refCount=0
   const allowed=(raw:unknown):string|null=>{
     if(typeof raw!=='string'||raw.length>600)return null
