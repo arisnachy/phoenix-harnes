@@ -122,7 +122,7 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
       value => {
         setGatewayCredential(value)
         setAuthorizationUrl(value.authorizationUrl ?? null)
-        setNotice(t('storeGatewayTokenSaved'))
+        setNotice(t(value.configured ? 'storeGatewayTokenSaved' : 'storeGatewayBrowserOnly'))
         setRoutingRefresh(n => n + 1)
       },
       () => { setAuthorizationUrl(null); setNotice(t('storeGatewayTokenError')) },
@@ -183,6 +183,8 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
       </div>
       <div className={css.toolbar}>
         <strong>{cliLabel}</strong>
+        <span className={css.safetyNote}>{runtime?.openclaw === 'available'
+          ? t('storeRuntimeReady') : t('storeRuntimeNotReady')}</span>
         {runtime?.cliVersion ? <span className={css.safetyNote}>{t('storeCliVersion')}: {runtime.cliVersion}</span> : null}
         {runtime?.latestCliVersion ? <span className={css.safetyNote}>{t('storeCliLatest')}: {runtime.latestCliVersion}</span> : null}
         {runtime?.failureReason ? <span className={css.safetyNote}>{t('storeCliReason')}: {runtime.failureReason}</span> : null}
@@ -247,13 +249,7 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
                   <details>
                     <summary>{t('storeAuthGuide')}</summary>
                     <p className={css.safetyNote}>{t('storeAuthExplanation')}</p>
-                    <code>{'openclaw plugins list --json'}</code>
-                    <p className={css.safetyNote}>{t('storeAuthConfigStep')}</p>
-                    <code>{'openclaw configure --section plugins'}</code>
                     <p className={css.safetyNote}>{t('storeAuthEnableStep')}</p>
-                    <code>{'openclaw plugins enable <id>'}</code>
-                    <p className={css.safetyNote}>{t('storeAuthVerifyStep')}</p>
-                    <code>{'openclaw plugins inspect <id> --runtime --json'}</code>
                     <p><a href="https://docs.openclaw.ai/plugins" target="_blank" rel="noreferrer">
                       {t('storeAuthDocs')}
                     </a></p>
@@ -313,6 +309,8 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
         {routing !== null && !routing.gatewayCredentialConfigured
           ? <p className={css.safetyNote}>{t('storeRoutingMissingToken')}</p> : null}
         {routing !== null && routing.plugins.length > 0 ? (
+          <>
+          <h4>{t('storeMyPlugins')}</h4>
           <div className={css.presetGrid}>
             {routing.plugins.map(plugin => (
               <article key={plugin.id} className={css.presetCard}>
@@ -329,6 +327,7 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
               </article>
             ))}
           </div>
+          </>
         ) : null}
         {routing !== null && routing.tools.length === 0 ? <p>{t('storeRoutingEmpty')}</p> : null}
         {routing !== null && routing.tools.length > 0 ? (

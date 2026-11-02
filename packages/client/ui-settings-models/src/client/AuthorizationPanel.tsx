@@ -8,7 +8,6 @@ import type { ChatGptWebSnapshot, IApiClient, OpenClawRuntimeSnapshot, ClawHubCa
 import type { en } from './locales.ts'
 import type { ConnectorKey } from './connectors-locales.ts'
 import { CONNECTOR_CATALOG } from './connector-catalog.ts'
-import { ClawHubConnectorStore } from './ClawHubConnectorStore.tsx'
 import type { ConnectorDefinition } from './connector-catalog.ts'
 import { AuthorizationAttemptProgress, useAuthorizationAttempt } from './authorization-attempt.tsx'
 import connectorStyles from './CodexConnectors.module.css'
@@ -1261,7 +1260,6 @@ export function ConnectorsSettingsSection({ api,
   const [refresh, setRefresh] = useState(0)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<ConnectorFilter>('all')
-  const [surface, setSurface] = useState<'native' | 'clawhub'>('native')
   const catalogSearch = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (launchContext === 'discover') {
@@ -1284,7 +1282,6 @@ export function ConnectorsSettingsSection({ api,
   const [mcpHub, setMcpHub] = useState<McpConnectorHubSnapshot>({ runtime: [], managed: [] })
   const [openClaw, setOpenClaw] = useState<OpenClawConnectorSnapshot>({ connectors: [] })
   const [openClawRuntime, setOpenClawRuntime] = useState<OpenClawRuntimeSnapshot | undefined>()
-  const [clawHubFeatured, setClawHubFeatured] = useState<readonly ClawHubCatalogItem[] | null | undefined>()
   const [runtimeRefresh, setRuntimeRefresh] = useState(0)
   const [jevState, setJevState] = useState<JevMcpSnapshot | undefined>()
   const [jevSetupOpen, setJevSetupOpen] = useState(false)
@@ -1452,17 +1449,6 @@ export function ConnectorsSettingsSection({ api,
     void probe().then(
       value => { if (!stale) setOpenClawRuntime(value) },
       () => { if (!stale) setOpenClawRuntime(undefined) },
-    )
-    return () => { stale = true }
-  }, [mcpRegistry, runtimeRefresh])
-
-  useEffect(() => {
-    const browse = mcpRegistry?.clawHubCatalog?.bind(mcpRegistry)
-    if (browse === undefined) return
-    let stale = false
-    void browse({ family: 'code-plugin', officialOnly: true, limit: 4 }).then(
-      snapshot => { if (!stale) setClawHubFeatured(snapshot.items) },
-      () => { if (!stale) setClawHubFeatured(null) },
     )
     return () => { stale = true }
   }, [mcpRegistry, runtimeRefresh])
@@ -1964,21 +1950,6 @@ export function ConnectorsSettingsSection({ api,
     <div className={styles['section']}>
       <h2 className={styles['title']}>{connectorT('title')}</h2>
       <p className={styles['intro']}>{connectorT('intro')}</p>
-      <div className={hubStyles['filters']} role="tablist" aria-label="Catálogos de conectores">
-        <button type="button" role="tab" aria-selected={surface === 'native'}
-          aria-controls="phoenix-native-connectors"
-          className={surface === 'native' ? hubStyles['filterActive'] : undefined}
-          onClick={() => { setSurface('native') }}>Conectores de PHOENIX</button>
-        <button type="button" role="tab" aria-selected={surface === 'clawhub'}
-          aria-controls="phoenix-openclaw-hub"
-          className={surface === 'clawhub' ? hubStyles['filterActive'] : undefined}
-          onClick={() => { setSurface('clawhub') }}>OpenClaw · ClawHub</button>
-      </div>
-      <div id="phoenix-openclaw-hub" role="tabpanel" hidden={surface !== 'clawhub'}>
-        {surface === 'clawhub' ? <ClawHubConnectorStore registry={mcpRegistry} t={connectorT}
-          connectedIds={catalogRows.filter(row => row.connected).map(row => row.definition.id)} /> : null}
-      </div>
-      {surface === 'native' ? (<div id="phoenix-native-connectors" role="tabpanel">
       {authorizationHasVisibleCard || preparingKey === undefined ? null
         : <p role="status" className={styles['advancedHint']}>Contactando al servicio de autorización de PHOENIX…</p>}
       {authorizationHasVisibleCard || failure === undefined ? null
@@ -2199,7 +2170,6 @@ export function ConnectorsSettingsSection({ api,
                   managed={row.managed}
                   openClaw={row.openClaw}
                   openClawRuntime={row.definition.id === 'openclaw' ? openClawRuntime : undefined}
-                  clawHubFeatured={row.definition.id === 'openclaw' ? clawHubFeatured : undefined}
                   onRefreshOpenClaw={row.definition.id === 'openclaw' ? () => { setRuntimeRefresh(n => n + 1) } : undefined}
                   telegram={telegram}
                   oddsApi={oddsApi}
@@ -2410,7 +2380,6 @@ export function ConnectorsSettingsSection({ api,
           )}
         </section>
       )}
-      </div>) : null}
     </div>
   )
 }

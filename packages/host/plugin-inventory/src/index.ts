@@ -450,8 +450,14 @@ export class PluginInventoryGateway extends TypertRemoteService {
     if (service === undefined) throw new Error('PHOENIX credential vault is unavailable')
     if (request.auto === true) {
       const handoff = await prepareLocalOpenClawGateway()
-      await service.set(credentialRef('PHOENIX_OPENCLAW_GATEWAY_TOKEN'), handoff.token)
-      return { configured: true, source: 'vault', authorizationUrl: handoff.authorizationUrl }
+      if (handoff.token !== undefined) {
+        await service.set(credentialRef('PHOENIX_OPENCLAW_GATEWAY_TOKEN'), handoff.token)
+        return { configured: true, source: 'vault', authorizationUrl: handoff.authorizationUrl }
+      }
+      // Browser pairing can succeed even when OpenClaw intentionally hides
+      // a SecretRef-managed shared operator token from external clients.
+      const existing = await this.openClawGatewayCredential()
+      return { ...existing, authorizationUrl: handoff.authorizationUrl }
     }
     if (typeof request.token !== 'string' || request.token.length < 16
       || request.token.length > 2048 || /[\u0000-\u0020\u007f]/u.test(request.token)) {

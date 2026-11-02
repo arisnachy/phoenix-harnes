@@ -15,11 +15,12 @@ function object(value: unknown): Record<string, unknown> {
     ? value as Record<string, unknown> : {}
 }
 function local(url: URL): boolean {
-  return url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+  return (url.protocol === 'http:' || url.protocol === 'https:')
+    && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
 }
 export interface OpenClawLocalHandoff {
   readonly port: number
-  readonly token: string
+  readonly token?: string
   readonly authorizationUrl: string
 }
 /** Reject external servers, expired handoffs and URLs exposing operator secrets. */
@@ -44,17 +45,19 @@ export function parseOpenClawDashboard(value: unknown): OpenClawLocalHandoff {
   }
   const token = operator.searchParams.get('token')
     ?? new URLSearchParams(operator.hash.slice(1)).get('token')
-  if (typeof token !== 'string' || token.length < 16 || token.length > 2048
-    || /[\u0000-\u0020\u007f]/u.test(token)) {
-    throw new Error('OpenClaw Gateway credential is not available for local linking')
+  // OpenClaw SecretRef credentials are intentionally absent from the dashboard URL.
+  // The owner can pair the browser without leaking a shared operator credential.
+  if (token !== null && (token.length < 16 || token.length > 2048
+    || /[\u0000-\u0020\u007f]/u.test(token))) {
+    throw new Error('OpenClaw returned an invalid shared Gateway credential')
   }
   // Never turn an older token-bearing dashboard link into a browser URL.
-  if (browser.toString().includes(token) || browser.hash.length < 12
+  if ((token !== null && browser.toString().includes(token)) || browser.hash.length < 12
     || typeof data.browserBootstrapExpiresAtMs === 'number'
     && data.browserBootstrapExpiresAtMs <= Date.now()) {
     throw new Error('OpenClaw browser authorization has expired')
   }
-  return { port, token, authorizationUrl: browser.toString() }
+  return { port, ...(token === null ? {} : { token }), authorizationUrl: browser.toString() }
 }
 function cli(): { binary: string; prefix: string[] } {
   const packageFile = join(home, 'toolchains', 'openclaw', 'node_modules', 'openclaw', 'package.json')
