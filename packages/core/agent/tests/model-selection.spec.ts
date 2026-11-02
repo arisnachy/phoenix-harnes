@@ -1890,7 +1890,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('keeps Luna Max for a simple Codex conversation in automatic mode', async () => {
+  it('routes a trivial greeting through the explicitly selected Sol conversational fast lane', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -1926,14 +1926,14 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('max'),
+      reasoningEffort: ReasoningEffortId('low'),
     })
 
     dispose()
     await ctx.fiber.dispose()
   })
 
-  it('preserves Luna Max for contextual conversation in automatic mode', async () => {
+  it('preserves explicit Sol selection during contextual conversational fast lane', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -1969,14 +1969,14 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('max'),
+      reasoningEffort: ReasoningEffortId('low'),
     })
 
     dispose()
     await ctx.fiber.dispose()
   })
 
-  it('restores the selector route after a conversational fast turn', async () => {
+  it('restores an explicit Sol selector after its conversational fast turn', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selected = {
@@ -2009,7 +2009,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('max'),
+      reasoningEffort: ReasoningEffortId('low'),
     })
     expect(selection.current).toEqual(selected)
 
