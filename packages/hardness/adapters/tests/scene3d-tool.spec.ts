@@ -111,6 +111,15 @@ describe('phoenix_3d actual geometry tool',()=>{
       scene:{nodes},requiredObjects:['pelican','bicycle','forest']},execution()))
       .rejects.toThrow(/Faltan objetos esenciales/)
   })
+  it('never replaces a missing bicycle with the standalone pelican preset', async () => {
+    const tool = createPhoenix3DTool()
+    const title = 'Pelícano en bicicleta en un parque'
+    await expect(tool.execute({ title, preset: 'pelican' }, execution()))
+      .rejects.toThrow(/nodes/u)
+    await expect(tool.execute({ title, scene: { nodes: [{
+      type: 'box', name: 'Bicicleta', position: [0,0,0], size: [1,1,1], color: '#ffffff',
+    }] } }, execution())).resolves.toMatchObject({scene:{nodes:[{name:'Bicicleta'}]}})
+  })
   it('validates general-purpose animation tracks with named parts and bounded keyframes',async()=>{
     const tool=createPhoenix3DTool()
     const scene={nodes:[{type:'torus',name:'Rueda delantera',position:[0,1,0],size:[1,.1,1],
