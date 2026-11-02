@@ -454,6 +454,7 @@ export function apply(ctx: Context): void {
       eventId:{type:'string',required:true,description:'Identificador real obtenido de sports_chat_games.'},
       date:{type:'string',required:true,description:'Fecha AAAA-MM-DD del encuentro en Santo Domingo.'},
       lookbackDays:{type:'integer',description:'3..28 días de resultados previos, por defecto 28.'},
+      includeExternalResearch:{type:'boolean',description:'Descubrir titulares públicos relacionados al juego en cuatro medios indexados; activado por defecto.'},
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
@@ -470,6 +471,9 @@ export function apply(ctx: Context): void {
       },now)
       const audit=availableSportCalibration(args.sport,args.league,report.date,now)
       const calibrated=audit?calibratedSportsForecast(forecast,audit):null
+      const externalResearch=args.includeExternalResearch===false?null:
+        await discoverEditorialResearch(report.away.name+' '+report.home.name,
+          undefined,fetch,now)
       const displayedHome=calibrated?.probabilityHome??forecast.probabilityHome
       const displayedAway=calibrated?.probabilityAway??forecast.probabilityAway
       const displayedDraw=calibrated?.probabilityDraw??forecast.probabilityDraw
@@ -477,14 +481,14 @@ export function apply(ctx: Context): void {
         {label:report.home.name,value:displayedHome===null?'—':
           (displayedHome*100).toFixed(1)+'%',
           detail:forecast.projectedHome===null?'':
-            'Marcador orientativo '+forecast.projectedHome+' · no calibrado'},
+            'Marcador orientativo '+forecast.projectedHome++(calibrated?' · validación histórica':' · no calibrado')},
         {label:report.away.name,value:displayedAway===null?'—':
           (displayedAway*100).toFixed(1)+'%',
           detail:forecast.projectedAway===null?'':
-            'Marcador orientativo '+forecast.projectedAway+' · no calibrado'},
+            'Marcador orientativo '+forecast.projectedAway++(calibrated?' · validación histórica':' · no calibrado')},
         ...(displayedDraw===null?[]:[
           {label:'Empate',value:(displayedDraw*100).toFixed(1)+'%',
-            detail:'Proyección orientativa · no calibrada'}]),
+            detail:calibrated?'Ajuste con validación histórica':'Proyección orientativa · no calibrada'}]),
       ]:[{label:'Proyección',value:'Sin evidencia suficiente',
         detail:forecast.warnings[0]??'No se verificó una estimación'}]
       const uiBlock={...report.uiBlock,props:{...report.uiBlock.props,sections:[
@@ -495,7 +499,8 @@ export function apply(ctx: Context): void {
       return JSON.stringify({
         eventId:report.eventId,date:report.date,league:report.league,
         matchup:report.away.name+' vs '+report.home.name,
-        forecast,calibrated,calibrationAudit:audit,source:report.source,checkedAt:report.checkedAt,
+        forecast,calibrated,calibrationAudit:audit,externalResearch,
+        source:report.source,checkedAt:report.checkedAt,
         facts:{homeForm:report.home.form,awayForm:report.away.form,
           descriptiveAdvantages:report.descriptiveAdvantages,
           headToHead:report.headToHead.slice(0,3),
