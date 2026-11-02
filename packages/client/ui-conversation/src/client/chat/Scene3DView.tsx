@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import css from './Scene3DView.module.css'
 import { exportSceneGLB, exportSceneGLTF, importSceneGLTF } from './scene3d-formats.ts'
 import { torusTriangles } from './scene3d-primitives.ts'
+import { poseScene3D } from './scene3d-animation.ts'
 
 export interface Scene3DMaterial {
   readonly preset?: string
@@ -31,12 +32,23 @@ export interface Scene3DNode {
   readonly material?: Scene3DMaterial
   readonly hidden?: boolean
 }
+export interface Scene3DAnimation {
+  readonly name: string
+  readonly duration: number
+  readonly loop: boolean
+  readonly tracks: readonly {
+    readonly node: string
+    readonly property: 'position' | 'rotation' | 'size'
+    readonly keys: readonly {readonly time: number; readonly value: readonly [number,number,number]}[]
+  }[]
+}
 export interface Scene3D {
   readonly version: 1
   readonly units: 'meters'
   readonly name: string
   readonly background: string
   readonly nodes: readonly Scene3DNode[]
+  readonly animations?: readonly Scene3DAnimation[]
   readonly environment?: 'studio' | 'sunset' | 'daylight'
   readonly camera?: 'perspective' | 'isometric' | 'front' | 'top'
 }
@@ -52,6 +64,42 @@ function vec(value: unknown, lo: number, hi: number): value is [number, number, 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
+function parseAnimations(value: unknown, nodes: readonly Scene3DNode[]): Scene3DAnimation[] | undefined {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 8) return undefined
+  const names = nodes.map(node => node.name)
+  let total = 0
+  const clips: Scene3DAnimation[] = []
+  for (const item of value) {
+    if (!record(item) || typeof item.duration !== 'number' || !Number.isFinite(item.duration)
+      || item.duration <= 0 || item.duration > 120
+      || !Array.isArray(item.tracks) || item.tracks.length < 1 || item.tracks.length > 64) return undefined
+    const tracks: Scene3DAnimation['tracks'][number][] = []
+    for (const raw of item.tracks) {
+      if (!record(raw) || typeof raw.node !== 'string'
+        || names.filter(name=>name===raw.node).length!==1
+        || !['position','rotation','size'].includes(String(raw.property))
+        || !Array.isArray(raw.keys) || raw.keys.length < 2 || raw.keys.length > 32) return undefined
+      const property=raw.property as 'position'|'rotation'|'size'
+      let previous=-1
+      const keys: Array<{time:number;value:[number,number,number]}>=[]
+      for(const key of raw.keys){
+        if(!record(key)||typeof key.time!=='number'||!Number.isFinite(key.time)
+          ||key.time<0||key.time>item.duration||key.time<=previous
+          ||!vec(key.value,property==='size'?.001:property==='rotation'?-360:-300,
+            property==='rotation'?360:300))return undefined
+        previous=key.time
+        keys.push({time:key.time,value:key.value})
+        total++
+        if(total>3000)return undefined
+      }
+      tracks.push({node:raw.node,property,keys})
+    }
+    clips.push({name:typeof item.name==='string'?item.name.slice(0,80):'Animación',
+      duration:item.duration,loop:item.loop!==false,tracks})
+  }
+  return clips
+}
+
 /** Share the safe, portable schema with Phoenix apps without model or tool coupling. */
 export function parseScene3D(value: unknown): Scene3D | undefined {
   if (!record(value) || value.version !== 1 || value.units !== 'meters'
@@ -104,11 +152,14 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
       ...(item.hidden===true?{hidden:true}:{}),
     })
   }
+  const animations=value.animations===undefined?undefined:parseAnimations(value.animations,nodes)
+  if(value.animations!==undefined&&animations===undefined)return undefined
   return {
     version: 1, units:'meters',
     name: typeof value.name === 'string' ? value.name.slice(0,140) : 'Escena 3D',
     background: typeof value.background === 'string' && colorPattern.test(value.background) ? value.background : '#f7f2eb',
     nodes,
+    ...(animations===undefined?{}:{animations}),
     ...(value.environment==='studio'||value.environment==='sunset'||value.environment==='daylight'?{environment:value.environment}:{}),
     ...(value.camera==='perspective'||value.camera==='isometric'||value.camera==='front'||value.camera==='top'?{camera:value.camera}:{}),
   }
@@ -295,6 +346,9 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
   const drag=useRef<{x:number;y:number;button:number}|null>(null)
   const angle=useRef({yaw:-.65,pitch:.38,zoom:1,pan:[0,0] as [number,number]})
   const [autoRotate,setAutoRotate]=useState(false)
+  const [playingAnimation,setPlayingAnimation]=useState(false)
+  const [selectedAnimation,setSelectedAnimation]=useState(0)
+  const animationTime=useRef(0)
   const redraw=useRef<()=>void>(()=>{})
   const [problem,setProblem]=useState('')
   const [selected,setSelected]=useState(0)
@@ -302,6 +356,7 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
   const picker=useRef<HTMLInputElement>(null)
   const selectedNode=scene?.nodes[selected]
   const meshes=useMemo(()=>scene?.nodes.flatMap(mesh)??[],[scene])
+  const clip=scene?.animations?.[selectedAnimation]
   const bounds=useMemo(()=>scene===undefined?undefined:sceneBounds(scene),[scene])
   useEffect(()=>{
     if(scene===undefined||bounds===undefined)return
@@ -311,19 +366,37 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
       setProblem('Este navegador no permite dibujar el modelo 3D.')
       return
     }
-    const draw=()=>paint(element,scene,meshes,bounds,angle.current.yaw,
-      angle.current.pitch,angle.current.zoom,angle.current.pan)
+    const draw=()=>{
+      const posed=clip===undefined?scene:poseScene3D(scene,clip,animationTime.current)
+      const faces=clip===undefined?meshes:posed.nodes.flatMap(mesh)
+      paint(element,posed,faces,bounds,angle.current.yaw,
+        angle.current.pitch,angle.current.zoom,angle.current.pan)
+    }
     redraw.current=draw
     draw()
     const observer=typeof ResizeObserver==='undefined'?undefined:new ResizeObserver(draw)
     observer?.observe(element)
-    let frame=0
-    if(autoRotate){
-      const tick=()=>{angle.current.yaw+=.004;draw();frame=requestAnimationFrame(tick)}
+    let frame=0,last=0
+    if(autoRotate || (playingAnimation && clip!==undefined)){
+      const tick=(now:number)=>{
+        if(now-last>=40){
+          const delta=last===0?0:Math.min(.1,(now-last)/1000)
+          if(autoRotate)angle.current.yaw+=.004
+          if(playingAnimation && clip!==undefined){
+            animationTime.current+=delta
+            if(animationTime.current>clip.duration){
+              animationTime.current=clip.loop?animationTime.current%clip.duration:clip.duration
+            }
+          }
+          draw()
+          last=now
+        }
+        frame=requestAnimationFrame(tick)
+      }
       frame=requestAnimationFrame(tick)
     }
     return ()=>{observer?.disconnect();cancelAnimationFrame(frame);redraw.current=()=>{}}
-  },[scene,meshes,bounds,autoRotate,expanded])
+  },[scene,meshes,bounds,autoRotate,playingAnimation,clip,expanded])
   if(scene===undefined)return <p role="alert" className={css.error}>La escena 3D no contiene geometría válida.</p>
   const update=(fn:()=>void)=>{fn();redraw.current()}
   const edit=(fn:(node:Scene3DNode)=>Scene3DNode):void=>{
@@ -381,6 +454,13 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
           onChange={event=>setScene(current=>current===undefined?current:{...current,environment:event.target.value as 'studio'|'sunset'|'daylight'})}>
           <option value="studio">Estudio</option><option value="sunset">Atardecer</option><option value="daylight">Día</option>
         </select></label>
+        {scene.animations!==undefined && <label className={css.cameraControl}>Clip
+          <select aria-label="Animación 3D" value={selectedAnimation}
+            onChange={event=>{setSelectedAnimation(Number(event.target.value));animationTime.current=0}}>
+            {scene.animations.map((animation,index)=><option key={index} value={index}>{animation.name}</option>)}
+          </select></label>}
+        {clip!==undefined && <button type="button" aria-pressed={playingAnimation}
+          onClick={()=>setPlayingAnimation(value=>!value)}>{playingAnimation?'Pausar animación':'Reproducir animación'}</button>}
         <button type="button" aria-pressed={editOpen} onClick={()=>setEditOpen(value=>!value)}>Editar</button>
       </div>
     </div>
