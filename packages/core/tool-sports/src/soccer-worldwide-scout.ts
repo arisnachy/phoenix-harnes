@@ -95,3 +95,28 @@ export async function soccerDailySlate(date:string,leagues:string[],
     .sort((a,b)=>a.scheduledAt.localeCompare(b.scheduledAt)||a.league.localeCompare(b.league)),
     sources,worldwideComplete:false}
 }
+
+/**
+ * A single bounded page of a worldwide daily scan. Only provider-discovered
+ * competitions are included; a page is never represented as exhaustive.
+ */
+export async function soccerWorldPage(date:string,offset=0,limit=24,
+  fetcher:typeof fetch=fetch,now=Date.now(),env:NodeJS.ProcessEnv=process.env)
+  :Promise<{date:string;catalogTotal:number;scannedCount:number;offset:number;
+    nextOffset:number|null;games:SoccerFixture[];sources:SoccerSource[];
+    worldwideComplete:false;note:string}>{
+  if(!soccerDate(date))throw Error('Fecha de fútbol inválida')
+  if(!Number.isSafeInteger(offset)||offset<0||offset>500)throw Error('Offset inválido')
+  if(!Number.isSafeInteger(limit)||limit<1||limit>24)throw Error('Límite por página inválido')
+  const catalog=await soccerLeagueCatalog(fetcher,now,env)
+  const subset=catalog.leagues.slice(offset,offset+limit)
+  const parts:Array<Awaited<ReturnType<typeof soccerDailySlate>>>=[]
+  // Keep total effective concurrency bounded to three provider requests.
+  for(let i=0;i<subset.length;i+=12)
+    parts.push(await soccerDailySlate(date,subset.slice(i,i+12),fetcher,now,env))
+  const games=parts.flatMap(p=>p.games)
+  return{date,catalogTotal:catalog.leagues.length,scannedCount:subset.length,
+    offset,nextOffset:offset+subset.length<catalog.leagues.length?offset+subset.length:null,
+    games,sources:parts.flatMap(p=>p.sources),worldwideComplete:false,
+    note:'Un lote de las ligas descubiertas por ESPN. Hasta finalizar las páginas, otras ligas siguen sin investigar; incluso todo el catálogo no cubre todas las ligas del planeta.'}
+}
