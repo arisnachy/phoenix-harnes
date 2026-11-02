@@ -590,7 +590,10 @@ export function selectEclipseAutomaticCoordinatorRoute(
   return {
     provider: route.provider,
     model: route.model,
-    reasoningEffort: ReasoningEffortId(route.reasoningEffort ?? (signal.purpose === 'review' ? 'medium' : 'low')),
+    // Respect the account's advertised efforts. An omitted tier uses the
+    // provider default rather than assuming Terra supports Low/Medium.
+    ...route.reasoningEffort === undefined
+      ? {} : { reasoningEffort: ReasoningEffortId(route.reasoningEffort) },
   }
 }
 
