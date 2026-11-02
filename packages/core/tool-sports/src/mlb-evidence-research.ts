@@ -216,7 +216,11 @@ function verifiedOdds(fixture:MlbFixture,quotes:MarketOutcome[],now:number):Mark
     if(!Number.isFinite(qdate)||!Number.isFinite(observed)||observed>now||
       now-observed>3_600_000||Math.abs(qdate-target)>3_600_000)return false
     return normalize(q.home)===h&&normalize(q.away)===a&&
-      q.bookmaker.trim().length>0&&q.price>1&&Number.isFinite(q.price)
+      typeof q.bookmaker==='string'&&q.bookmaker.trim().length>0&&
+      typeof q.market==='string'&&q.market.trim().length>0&&
+      typeof q.selection==='string'&&q.selection.trim().length>0&&
+      (q.point==null||(typeof q.point==='number'&&Number.isFinite(q.point)))&&
+      typeof q.price==='number'&&q.price>1&&Number.isFinite(q.price)
   }).slice(0,40)
 }
 function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
@@ -336,7 +340,10 @@ export async function researchMlbCase(
       fixture.away.id+'&startDate='+lastDate(date,55)+'&endDate='+lastDate(date,1),
       fetcher,sources,now),
   ])
-  const venue=obj(arr(obj(venueRaw).venues)[0]),location=obj(venue.location)
+  // A venue response must match the scheduled park ID; never borrow weather
+  // coordinates from an unrelated stadium returned by an upstream API.
+  const venue=obj(arr(obj(venueRaw).venues).map(obj)
+    .find(v=>id(v.id)===fixture.venue.id)),location=obj(venue.location)
   const coordinates=obj(location.defaultCoordinates)
   const lat=numeric(coordinates.latitude),lon=numeric(coordinates.longitude)
   const safeGeo=lat!==null&&lon!==null&&Math.abs(lat)<=90&&Math.abs(lon)<=180
@@ -351,8 +358,11 @@ export async function researchMlbCase(
     const meteo=await measured<unknown>(url,fetcher,sources,now)
     weather=weatherAt(meteo,fixture.date)
   }
+  // Query standings as of the last fully elapsed UTC day. A future fixture
+  // must not import standings from games that have not happened at checkedAt.
+  const asOfDay=iso(Math.min(now,Date.parse(fixture.date))).slice(0,10)
   const standings=await measured<unknown>('https://statsapi.mlb.com/api/v1/standings?leagueId=103,104'+
-    '&season='+season+'&date='+lastDate(date,1),fetcher,sources,now)
+    '&season='+season+'&date='+lastDate(asOfDay,1),fetcher,sources,now)
   const standingsRows=arr(obj(standings).records)
     .flatMap(group=>arr(obj(group).teamRecords))
   const record=(teamId:number)=>{
@@ -362,9 +372,9 @@ export async function researchMlbCase(
   }
   const seasonRecord={home:record(fixture.home.id),away:record(fixture.away.id)}
   const teamForm={home:homeSchedule?form(arr(obj(homeSchedule).dates).flatMap(x=>arr(obj(x).games)),
-    fixture.home.id,Date.parse(fixture.date)):null,
+    fixture.home.id,Math.min(now,Date.parse(fixture.date))):null,
     away:awaySchedule?form(arr(obj(awaySchedule).dates).flatMap(x=>arr(obj(x).games)),
-      fixture.away.id,Date.parse(fixture.date)):null}
+      fixture.away.id,Math.min(now,Date.parse(fixture.date))):null}
   const injuryFeeds=await Promise.all(teams.map(async side=>({side,
     data:await measured<unknown>('https://statsapi.mlb.com/api/v1/teams/'+
       fixture[side].id+'/roster?rosterType=injured',fetcher,sources,now)})))
@@ -432,7 +442,10 @@ export async function researchMlbCase(
     const cutoffDate=lastDate(date,3)
     const logs=arr(gameLog?.stats?.[0]?.splits).flatMap(raw=>{
       const e=obj(raw),time=Date.parse(word(e.date)),st=obj(e.stat)
-      if(!Number.isFinite(time)||time>=Date.parse(fixture.date))return []
+      // Game logs contain calendar dates, not start times: same-day entries
+      // are not safely attributable to a completed game as of this snapshot.
+      if(!/^\d{4}-\d{2}-\d{2}$/u.test(word(e.date))||!Number.isFinite(time)||
+        word(e.date)>=iso(now).slice(0,10)||time>=Date.parse(fixture.date))return []
       return[{date:word(e.date,20),time,opponentId:id(obj(e.opponent).id),
         innings:word(st.inningsPitched,20)||'—',
         pitches:word(st.numberOfPitches,20)||'—',
@@ -440,7 +453,7 @@ export async function researchMlbCase(
         strikeouts:word(st.strikeOuts,20)||'—',
         walks:word(st.baseOnBalls,20)||'—',started:numeric(st.gamesStarted)===1}]
     }).sort((a,b)=>b.time-a.time)
-    const recentAppearances=logs.filter(g=>g.date.slice(0,10)>=cutoffDate)
+    const recentAppearances=logs.filter(g=>!g.started&&g.date.slice(0,10)>=cutoffDate)
       .slice(0,5).map(g=>({date:g.date,innings:g.innings,pitches:g.pitches}))
     const recentStarts=logs.filter(g=>g.started).slice(0,5).map(g=>({
       date:g.date,opponentId:g.opponentId,innings:g.innings,pitches:g.pitches,
