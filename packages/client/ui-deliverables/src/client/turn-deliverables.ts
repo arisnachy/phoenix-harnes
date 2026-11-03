@@ -171,7 +171,54 @@ export function producedFileMentions(
       if (path === undefined) return undefined
       return { open: () => { openFile(path) }, label: label(path), title: path }
     },
+    resolveArtifact(destination) {
+      const candidate = artifactDestinationPath(destination)
+      if (candidate === undefined) return undefined
+      // Registered paths are authoritative. A sandbox pseudo-URL may refer
+      // to a worker path while the same uniquely named file lives on Host.
+      const normalized = candidate.replace(/\\/gu, '/')
+      const exact = paths.find(path => path.replace(/\\/gu, '/') === normalized)
+      const path = exact ?? (
+        destination.startsWith('sandbox:/mnt/data/') || candidate === basename(candidate)
+          ? onlyPathWithBasename(paths, basename(candidate))
+          : undefined
+      )
+      if (path === undefined) return undefined
+      return { open: () => { openFile(path) }, label: label(path), title: path }
+    },
   }
+}
+
+/**
+ * Decode a local artifact URL only for lookup against successfully produced
+ * paths. No raw file:, sandbox:, or relative URL is ever sent to the browser
+ * or Host; the registered tool result supplies the eventual opener path.
+ */
+function artifactDestinationPath(destination: string): string | undefined {
+  let candidate: string
+  if (destination.startsWith('sandbox:/mnt/data/')) {
+    candidate = destination.slice('sandbox:'.length)
+  } else if (destination.startsWith('file:///')) {
+    try {
+      const url = new URL(destination)
+      if (url.host !== '' || url.search !== '' || url.hash !== '') return undefined
+      candidate = url.pathname.replace(/^\/([A-Za-z]:\/)/u, '$1')
+    } catch {
+      return undefined
+    }
+  } else if (/^[A-Za-z][A-Za-z0-9+.-]*:/u.test(destination) || destination.startsWith('//')) {
+    return undefined
+  } else {
+    candidate = destination
+  }
+  try {
+    candidate = decodeURIComponent(candidate)
+  } catch {
+    return undefined
+  }
+  if (candidate === '' || candidate !== candidate.trim() || /[\u0000-\u001f?#]/u.test(candidate)) return undefined
+  if (candidate.split(/[\\/]/u).some(segment => segment === '..' || segment === '.')) return undefined
+  return candidate
 }
 
 /**
