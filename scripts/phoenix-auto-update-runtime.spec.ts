@@ -67,7 +67,7 @@ describe('real Windows disk headroom guard', () => {
     expect(audit).toContain("name: 'pnpm-store'")
     expect(audit).toContain("name: 'git-objects'")
     expect(audit).toContain('diskFreeDeltaBytes')
-    expect(audit).toContain("args.includes('--snapshot')")
+    expect(audit).toContain("args.indexOf('--snapshot')")
     expect(audit).not.toContain('rmSync(')
   })
 })
@@ -296,11 +296,11 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   })
 
   it('limits offline watcher fetch latency while preserving manual refresh and live Host', () => {
-    expect(updater).toContain('const WATCH_FETCH_TIMEOUT_MS = 9_000')
+    expect(updater).toContain('const WATCH_FETCH_TIMEOUT_MS = 25_000')
     expect(updater).toContain('timeout: options.timeoutMs')
     expect(updater).toContain('fetchTimeoutMs: WATCH_FETCH_TIMEOUT_MS')
     expect(updater).toContain('const MAX_NETWORK_BACKOFF_MS = 15 * 60 * 1000')
-    expect(updater).toContain('const NETWORK_WARNING_INTERVAL_MS = 15 * 60 * 1000')
+    expect(updater).toContain('const NETWORK_WARNING_INTERVAL_MS = 30 * 60 * 1000')
     expect(updater).toContain('now - lastNetworkWarningAt >= NETWORK_WARNING_INTERVAL_MS')
     expect(updater).toContain('await waitForPollOrParentExit(root, parentPid, retryMs)')
     expect(updater).toContain('status: \'checking\',')
@@ -856,5 +856,22 @@ describe('cross-checkout PHOENIX disk growth prevention', () => {
     expect(supervisor).toContain('const DETACHED_STORAGE_MIN_AGE_MS = 24 * 60 * 60 * 1000')
     expect(supervisor.indexOf('cleanupObsoleteRuntimes([runtimeRoot]'))
       .toBeLessThan(supervisor.indexOf('const globalCount = globalRuntimeDirectoriesForCleanup().length'))
+  })
+})
+
+describe('PHOENIX transient stable channel retry', () => {
+  it('keeps verified and in-flight update states intact while offline', () => {
+    const start = updater.indexOf('function isProtectedUpdateStateDuringNetworkRetry(')
+    const end = updater.indexOf('\n}', start)
+    expect(start).toBeGreaterThan(-1)
+    const { isProtectedUpdateStateDuringNetworkRetry } = runInNewContext(
+      updater.slice(start, end + 2) + '\n({ isProtectedUpdateStateDuringNetworkRetry })',
+    ) as { isProtectedUpdateStateDuringNetworkRetry: (state?: { status?: string; phase?: string }) => boolean }
+    for (const status of ['preparing', 'ready', 'restarting', 'applying']) {
+      expect(isProtectedUpdateStateDuringNetworkRetry({ status })).toBe(true)
+    }
+    expect(isProtectedUpdateStateDuringNetworkRetry({ status: 'error', phase: 'health-check' })).toBe(true)
+    expect(isProtectedUpdateStateDuringNetworkRetry({ status: 'checking' })).toBe(false)
+    expect(isProtectedUpdateStateDuringNetworkRetry({ status: 'error', phase: 'prepare' })).toBe(false)
   })
 })
