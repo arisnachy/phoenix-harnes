@@ -150,7 +150,10 @@ type PluginInventoryMcpRegistryRemote = {
       source?: { kind: 'registry'; name: string; version?: string } | { kind: 'curated'; connectorId: string }
     }
   }>>
-  installCuratedMcpConnector(request: Parameters<NonNullable<McpRegistryClient['installCurated']>>[0]): Promise<PluginInventoryRemoteResult<{
+  // A transport-facing string avoids coupling this adapter to a previously
+  // generated Host union when a new curated MCP (e.g. Blender) is introduced.
+  // The Settings UI narrows to known ids; the Host validates its pinned spec.
+  installCuratedMcpConnector(request: { connectorId: string }): Promise<PluginInventoryRemoteResult<{
     status: 'installed' | 'already-installed'
     connector: {
       entryId: string
