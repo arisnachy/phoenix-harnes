@@ -232,7 +232,7 @@ function panel(d:Omit<NflDossier,'uiBlock'>):NflDossier['uiBlock']{
   add('Información faltante',d.missingEvidence.map(x=>({label:x,value:'Pendiente'})))
   return{component:'sports_espn_dashboard',version:1,props:{
     view:'event',title:'PHOENIX NFL · '+d.event.away.name+' vs '+d.event.home.name,
-    subtitle:'32 etapas de investigación · expediente de cobertura '+d.coverage.level,
+    subtitle:'Protocolo de 32 etapas · cobertura observada '+d.coverage.level,
     source:'ESPN público · fuentes secundarias atribuidas',checkedAt:d.checkedAt,
     sections,note:'Los rosters no confirman QB titular ni 11 titulares por unidad. '+
       'Los datos, cuotas y picks ausentes no se inventan; este informe no es una predicción calibrada.'}}
@@ -351,8 +351,15 @@ export async function investigateNfl(date:string,eventId:string,fetcher:typeof f
   const starters=teams.home.offenseConfirmed+teams.home.defenseConfirmed+
     teams.away.offenseConfirmed+teams.away.defenseConfirmed
   const formGames=teams.home.recent.length+teams.away.recent.length
+  const advancedObserved=(side:'home'|'away')=>
+    teams[side].teamStats.some(stat=>/epa|expected points added/iu.test(stat.name))&&
+    teams[side].teamStats.some(stat=>/third.down|success rate/iu.test(stat.name))
+  const qbConfirmed=(side:'home'|'away')=>teams[side].roster.some(p=>
+    p.role==='quarterback'&&p.confirmedOffense)
   const level:NflDossier['coverage']['level']=
-    starters===44&&verifiedPlayers>=44&&formGames>=6&&markets.length>0?'A':
+    starters===44&&verifiedPlayers>=44&&formGames>=6&&markets.length>0&&
+      qbConfirmed('home')&&qbConfirmed('away')&&
+      advancedObserved('home')&&advancedObserved('away')?'A':
     verifiedPlayers>=30&&formGames>=4?'B':verifiedPlayers>0||formGames>0?'C':'D'
   const coverage={level,confirmedOffense:teams.home.offenseConfirmed+teams.away.offenseConfirmed,
     confirmedDefense:teams.home.defenseConfirmed+teams.away.defenseConfirmed,
