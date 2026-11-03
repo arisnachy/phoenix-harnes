@@ -140,7 +140,9 @@ if ($PurgeOldWorkspaces) {
             (Test-Path -LiteralPath (Join-Path $candidate.FullName ".phoenix-keep")) -or
             (Get-Item -LiteralPath $candidate.FullName).LastWriteTime -ge (Get-Date).AddDays(-$OlderThanDays)) { continue }
         try {
-            Remove-Item -LiteralPath $candidate.FullName -Recurse -Force -ErrorAction Stop
+            & $node.Source -e "require('node:fs').rmSync(process.argv[1], { recursive: true, force: true, maxRetries: 4, retryDelay: 300 })" $candidate.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Node removal failed: $LASTEXITCODE" }
+            if (Test-Path -LiteralPath $candidate.FullName) { throw 'Workspace remained after cleanup' }
             $removed += 1
             Write-Host ("[PHOENIX STORAGE] Removed retired non-Git workspace: " + $candidate.Name)
         } catch {
