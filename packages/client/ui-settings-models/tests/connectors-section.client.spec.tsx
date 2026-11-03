@@ -861,6 +861,7 @@ describe('connectors settings section', () => {
     expect(card).toBeTruthy()
     await waitFor(()=>expect(blenderState).toHaveBeenCalled())
     await waitFor(()=>expect(card?.textContent).toContain('complemento: sin conexión'))
+    expect(card?.textContent).toContain('Servidor MCP sin conexión')
     expect(card?.textContent).toContain('Start MCP Server')
     expect(card?.textContent).toContain('uvx: detectado')
     const reconnectButton=Array.from(card?.querySelectorAll('button')??[])
