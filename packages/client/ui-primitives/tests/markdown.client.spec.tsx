@@ -308,6 +308,14 @@ describe('MarkdownText', () => {
     expect(result.container.querySelector('code')?.textContent).toBe('RD$10,500')
     expect(result.container.textContent).toContain('RD$25,628.40')
   })
+  it('renders emphasized price amounts and formulas without merging words', () => {
+    const source = '**Costo base:** RD$23,730 antes de contingencia; total **RD$25,628.40**. Fórmula: $x^2$.'
+    const result = render(<MarkdownText text={source} />)
+    expect(result.container.querySelector('p')?.textContent)
+      .toContain('RD$23,730 antes de contingencia; total RD$25,628.40.')
+    expect(result.container.querySelectorAll('.katex')).toHaveLength(1)
+    expect(result.container.querySelector('.katex annotation')?.textContent).toBe('x^2')
+  })
   it('renders inline and display TeX through KaTeX without enabling trusted commands', () => {
     const source = [
       'Einstein wrote $E = mc^2$.',
