@@ -115,7 +115,7 @@ test('NFL roster identity and starter status never inferred from positions or bo
   assert.equal(d.opportunity.eligibleForTicket,false)
 })
 test('missing rosters trigger abstention and never fabricate injuries or starters',async()=>{
-  const d=await investigateNfl(date,'401999001',mock({noRoster:true}).fetcher,now,{},[],3)
+  const d=await investigateNfl(date,'401999001',mock({noRoster:true}).fetcher,now+601_000,{},[],3)
   assert.equal(d.teams.home.offenseConfirmed,0)
   assert.equal(d.teams.away.offenseConfirmed,0)
   assert.equal(d.injuries.length,0)
