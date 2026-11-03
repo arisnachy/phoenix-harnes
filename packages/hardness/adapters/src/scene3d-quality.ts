@@ -1,3 +1,5 @@
+import { explicitlyLowPoly3D, isHumanoidCharacterRequest } from './scene3d-character-quality.ts'
+
 /** Cross-category 3D intent and fidelity gates. No model can self-certify visual quality. */
 export type Scene3DDomain = 'character' | 'vehicle' | 'architecture' | 'environment' | 'robot' | 'object'
 export type Scene3DLevel = 'preview' | 'studio' | 'fidelity'
@@ -32,7 +34,7 @@ const normalize = (text: string): string =>
 export function classifyScene3DDomain(prompt: string): Scene3DDomain {
   const text = normalize(prompt)
   if (/\b(?:robot(?:s)?|androide(?:s)?|mecha|humanoid robot|droid)\b/u.test(text)) return 'robot'
-  if (/\b(?:avatar|personaj\w*|character|anime|humano|humana|rostro|persona|v(?:-)?tuber|criatura|animal\w*|pelicano|caballo|delfin)\b/u.test(text)) return 'character'
+  if (isHumanoidCharacterRequest(text) || /\b(?:persona|criatura|animal\w*|pelicano|caballo|delfin)\b/u.test(text)) return 'character'
   if (/\b(?:vehicul\w*|automovil|auto(?:s)?|coche|carro|biciclet\w*|moto(?:s)?|avion|barco|drone|dron)\b/u.test(text)) return 'vehicle'
   if (/\b(?:casa|vivienda|edificio|arquitect\w*|apartamento|hospital|consultorio|habitacion|interior|fachada|plano|floorplan)\b/u.test(text)) return 'architecture'
   if (/\b(?:parque|paisaje|jardin|bosque|ciudad|escena|ambiente|mundo|environment|landscape|terrain)\b/u.test(text)) return 'environment'
@@ -47,6 +49,8 @@ export function requestedScene3DLevel(prompt: string): Scene3DLevel {
   const text = normalize(prompt)
   if (/\b(?:exactitud|exacto|exacta|identic\w*|fidelidad|fidelity|precis\w*|1\s*:\s*1|medidas exactas|reconstruccion)\b/u.test(text)) return 'fidelity'
   if (/\b(?:profesional|alta calidad|high quality|fotorreal\w*|hiperreal\w*|realista|studio|blender|rigging|riggeado|esculp\w*|animacion profesional|production ready|perfect[oa]s?|calidad premium|calidad maxima|cinematic\w*|cinematograf\w*|ultra detallad\w*)\b/u.test(text)) return 'studio'
+  // Recognizable and humanoid characters should not silently fall through to a 24-primitive preview.
+  if (isHumanoidCharacterRequest(text) && !explicitlyLowPoly3D(text)) return 'studio'
   return 'preview'
 }
 
