@@ -439,7 +439,7 @@ describe('ESPN universal adaptive panels',()=>{
     expect(parseGenerativeUiBlock({ ...template,props:{ ...base,
       sections:[{ heading:'X',kind:'list',items:[{ label:'A',html:'<img onerror=evil />' }] }] } })).toBeNull()
     expect(parseGenerativeUiBlock({ ...template,props:{ ...base,
-      sections:Array.from({ length:9 },()=>base.sections[0]) } })).toBeNull()
+      sections:Array.from({ length:25 },()=>base.sections[0]) } })).toBeNull()
   })
 })
 
@@ -513,6 +513,9 @@ describe('Deep sports dashboard section limits',()=>{
   })
   it('rejects excessive sections and total items while keeping validation strict',()=>{
     expect(parseGenerativeUiBlock(make(25))).toBeNull()
+    const detailed=make(12)
+    detailed.props.sections[0]!.items[0]!.value='Detailed evidence: '+('historical statistics · '.repeat(17))
+    expect(parseGenerativeUiBlock(detailed)).not.toBeNull()
     expect(parseGenerativeUiBlock(make(24,20))).toBeNull()
     const unsafe=make(12)
     unsafe.props.sections[0]?.items.push({label:'Fuente segura',value:'Dato auténtico'})
