@@ -35,3 +35,16 @@ test('PHOENIX clinic page renders a real clinical workbench with valid inline Ja
  assert.ok(script.includes(`<select id="'+id+'">`))
  assert.doesNotThrow(()=>new Script(script,{filename:'health-ui-inline.js'}))
 })
+
+test('walk-in clinical workspace includes encrypted file flow and longitudinal preview',()=>{
+ const html=renderHealthPage('clinical-workspace-test')
+ assert.match(html,/Mi consulta/)
+ assert.match(html,/workspaceCreate/)
+ assert.match(html,/workspaceUpload/)
+ assert.match(html,/workspaceViewFile/)
+ assert.match(html,/Línea de tiempo longitudinal/)
+ assert.match(html,/Última consulta firmada/)
+ const script=/<script nonce="clinical-workspace-test">([\s\S]+?)<\/script>/u.exec(html)?.[1]
+ assert.ok(script)
+ assert.doesNotThrow(()=>new Script(script,{filename:'health-workspace-ui.js'}))
+})

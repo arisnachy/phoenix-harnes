@@ -22,6 +22,19 @@ textarea{min-height:140px}.primary,.secondary{padding:10px 15px;border-radius:10
 table{width:100%;border-collapse:collapse;font-size:12px}td,th{border-bottom:1px solid #eef1f4;padding:10px;text-align:left;vertical-align:top}th{color:#51687b}
 .tag{font-size:11px;border-radius:12px;background:#eef4f8;padding:4px 8px;color:#3e5971}
 #flash{display:none;position:fixed;bottom:16px;right:16px;max-width:90vw;background:#1d557e;color:#fff;border-radius:10px;padding:14px;z-index:20}
+
+.ws-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}
+.ws-heading h2{margin:0 0 3px}.ws-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ws-summary{font-size:15px;font-weight:700;cursor:pointer;color:#155b9d}
+.ws-meta{font-size:12px;color:#657b91;margin-bottom:12px}
+.ws-alert{padding:12px;background:#f1f7ff;border-left:3px solid #3785cb;border-radius:8px;margin:12px 0}
+.ws-note{background:#f8fafc;padding:12px;border-radius:10px;margin:11px 0}
+.ws-list{margin-top:12px}.ws-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #e9eff6}
+.ws-timeline{padding:12px 12px 12px 16px;margin:10px 0;border-left:3px solid #b7d6ec;background:#f8fbff;border-radius:8px}
+.ws-timeline>div{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ws-timeline p{white-space:pre-wrap;overflow-wrap:anywhere}
+.ws-preview-image{max-width:100%;max-height:620px;object-fit:contain;border:1px solid #dae4ef;border-radius:10px;margin-top:16px}
+@media(max-width:700px){.ws-grid{grid-template-columns:1fr}.ws-heading,.ws-item{align-items:flex-start;flex-direction:column}}
 @media(max-width:700px){main{grid-template-columns:1fr}aside{display:flex;overflow:auto;gap:5px}aside button{white-space:nowrap;width:auto}header{padding:12px}section{padding:11px}.grid{grid-template-columns:1fr}}
 </style></head><body>
 <header><div><h1>♡ PHOENIX Health</h1><div class="muted">Sistema clínico local · Expediente cifrado · Kira Clinical Flow</div></div><div id="account"></div></header>
@@ -29,8 +42,8 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{border-bottom:1px
 <script nonce="__NONCE__">
 "use strict";
 const root=document.getElementById("app"),account=document.getElementById("account"),flash=document.getElementById("flash");
-let actor=null,csrf="",tab="patients",data={},current=null;
-const modules=[["patients","Pacientes"],["encounters","Consultas"],["appointments","Agenda"],["orders","Laboratorio e imágenes"],["prescriptions","Recetas"],["inventory","Farmacia"],["invoices","Administración"],["followups","Seguimiento"],["staff","Personal"],["assignments","Equipo asistencial"],["backups","Respaldos"],["audit","Auditoría"]];
+let actor=null,csrf="",tab="workspace",data={},current=null,selectedPatientId="",previewUrl=null;
+const modules=[["workspace","Mi consulta"],["patients","Pacientes"],["encounters","Consultas"],["appointments","Agenda"],["orders","Laboratorio e imágenes"],["prescriptions","Recetas"],["inventory","Farmacia"],["invoices","Administración"],["followups","Seguimiento"],["staff","Personal"],["assignments","Equipo asistencial"],["backups","Respaldos"],["audit","Auditoría"]];
 const safe=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=id=>document.getElementById(id)?.value??"";
 const box=(title,content)=>'<article class="card"><h2>'+safe(title)+'</h2>'+content+'</article>';
@@ -62,7 +75,7 @@ async function splash(){
 async function load(){
  account.innerHTML='<span class="tag">'+safe(actor.username)+" · "+safe(actor.role)+'</span> '+button("logout","Salir","secondary");
  const menu={admin:["patients","appointments","inventory","invoices","followups","assignments","staff","backups","audit"],
- clinician:["patients","encounters","appointments","orders","prescriptions","followups"],
+ clinician:["workspace","patients","encounters","appointments","orders","prescriptions","followups"],
  psychologist:["patients","encounters","appointments","followups"],
  nurse:["patients","encounters","appointments","orders","followups"],
  reception:["patients","appointments","followups","assignments"],lab:["orders"],radiology:["orders"],
@@ -71,10 +84,14 @@ async function load(){
  if(!resources.some(x=>x[0]===tab))tab=resources[0]?.[0]||"patients";
  root.innerHTML='<main><aside>'+resources.map(x=>'<button data-tab="'+x[0]+'" class="'+(x[0]===tab?'active':'')+'">'+x[1]+'</button>').join('')+
  '</aside><section><div id="view"><div class="card">Cargando…</div></div></section></main>';
- const ids=tab==="assignments"?["assignments","patients"]:tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters","inventory"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patient-options"]:tab==="followups"?["followups","patients"]:["patients",tab];
+ const ids=tab==="workspace"?["patients","encounters","orders","prescriptions","followups","appointments"]:tab==="assignments"?["assignments","patients"]:tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters","inventory"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patient-options"]:tab==="followups"?["followups","patients"]:["patients",tab];
  if((actor.role==="clinician"||actor.role==="admin")&&!ids.includes("followups"))
   ids.push("followups");
  for(const id of new Set(ids)){try{data[id]=(await api(id)).items}catch{data[id]=[]}}
+ if(tab==="workspace"){
+  if(!data.patients.some(x=>x.id===selectedPatientId))selectedPatientId=data.patients[0]?.id||"";
+  data.attachments=selectedPatientId?(await api("attachments/"+selectedPatientId)).items:[];
+ }
  render()
 }
 function actionFor(o){
@@ -99,7 +116,73 @@ function actionFor(o){
  }
  return actions.map(a=>'<button class="secondary" data-act="'+a[0]+'" data-id="'+safe(tab==="assignments"?o.patientId+"|"+o.staffId:o.id)+'">'+a[1]+'</button>').join("");
 }
+
+function renderWorkspace(){
+ const patients=data.patients||[],patient=patients.find(x=>x.id===selectedPatientId),id=patient?.id||"";
+ const visits=(data.encounters||[]).filter(x=>x.patientId===id).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+ const previous=visits.find(x=>x.status==="signed"),draft=visits.find(x=>x.status!=="signed"&&x.practitioner===actor.username);
+ const orders=(data.orders||[]).filter(x=>x.patientId===id),prescriptions=(data.prescriptions||[]).filter(x=>x.patientId===id);
+ const followups=(data.followups||[]).filter(x=>x.patientId===id),attachments=data.attachments||[];
+ const timeline=[
+  ...visits.map(x=>({date:x.createdAt,title:"Consulta · "+x.complaint,detail:x.status==="signed"?"Plan indicado: "+(x.plan||"No documentado"):"Borrador pendiente de firma",status:x.status})),
+  ...orders.map(x=>({date:x.createdAt,title:"Estudio · "+x.description,detail:x.result||"Resultado pendiente",status:x.status})),
+  ...prescriptions.map(x=>({date:x.createdAt,title:"Receta · "+x.medication,detail:x.directions||"Sin indicaciones documentadas",status:x.status})),
+  ...followups.map(x=>({date:x.createdAt,title:"Seguimiento · "+x.description,detail:"Próxima fecha: "+(x.dueAt||"No registrada"),status:x.status})),
+  ...attachments.map(x=>({date:x.createdAt,title:"Archivo recibido · "+x.name,detail:x.note||"Aportado por el paciente",status:"Pendiente de revisión"}))
+ ].sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+ const lookup=patients.length?'<label for="ws-patient">Paciente activo</label><select id="ws-patient">'+
+  patients.map(x=>'<option value="'+safe(x.id)+'" '+(x.id===id?"selected":"")+'>'+safe(x.name)+' · '+safe(x.dateOfBirth||"Fecha desconocida")+'</option>').join("")+'</select>':
+  '<p class="muted">No hay pacientes asignados. Puedes registrar al primero aquí.</p>';
+ const registration='<details class="card"><summary class="ws-summary">+ Paciente nuevo sin cuenta ni página web</summary>'+
+  '<div class="ws-grid"><div>'+field("ws-name","Nombre completo")+'</div><div>'+field("ws-dob","Nacimiento","date")+'</div>'+
+  '<div>'+field("ws-phone","Teléfono (opcional)","tel",false)+'</div><div>'+field("ws-email","Correo (opcional)","email",false)+'</div></div>'+
+  field("ws-complaint-new","Motivo de la consulta","text",true,"Consulta presencial")+
+  '<p class="muted">Verifica identidad y posibles duplicados antes del registro. No requiere contraseña ni correo.</p>'+
+  button("workspaceCreate","Registrar y abrir consulta")+'</details>';
+ let panel="";
+ if(patient){
+  panel+=box("Expediente · "+safe(patient.name),
+   '<div class="ws-meta">Nacimiento: '+safe(patient.dateOfBirth)+' · Teléfono: '+safe(patient.phone||"No indicado")+'</div>'+
+   '<div class="ws-alert"><strong>Alergias:</strong> '+safe(patient.allergyReview?.details||patient.allergyReview?.status||"Sin revisión documentada")+'</div>'+
+   '<p><strong>Medicamentos:</strong> '+safe(patient.medicalHistory?.currentMedications||"Pendientes de conciliación")+'</p>'+
+   '<p><strong>Problemas:</strong> '+safe(patient.medicalHistory?.problems||"No documentados")+'</p>'+
+   '<button class="secondary" data-act="openMedicalHistory" data-id="'+safe(id)+'">Revisar antecedentes</button> '+
+   '<button class="secondary" data-act="allergyReview" data-id="'+safe(id)+'">Verificar alergias</button>');
+  panel+=box("Atender en consulta",
+   '<div class="ws-grid"><div>'+field("ws-specialty","Especialidad","text",true,"Medicina familiar")+
+   '</div><div>'+field("ws-complaint","Motivo actual")+'</div></div>'+
+   button("workspaceVisit","Abrir consulta")+
+   (draft?'<div class="ws-alert"><strong>Consulta en curso:</strong> '+safe(draft.complaint)+
+    '<p><button class="secondary" data-act="document" data-id="'+safe(draft.id)+'">Continuar SOAP</button> '+
+    '<button class="secondary" data-act="interview" data-id="'+safe(draft.id)+'">Entrevista Kira</button></p></div>':"")+
+   '<div class="ws-note"><strong>Última consulta firmada:</strong> '+(previous?
+    safe(previous.complaint)+'<p><strong>Plan anterior:</strong> '+safe(previous.plan||"No documentado")+'</p>':
+    'Aún no se registra una consulta firmada.')+'</div>'+
+   '<div class="ws-note"><strong>Qué sigue:</strong> '+(followups.some(x=>x.status==="pending")?
+    followups.filter(x=>x.status==="pending").map(x=>'<p>'+safe(x.description)+' · '+safe(x.dueAt||"Sin fecha")+'</p>').join(""):
+    "No existen tareas de seguimiento registradas")+'</div>');
+  panel+=box("Analíticas, imágenes y documentos aportados",
+   '<p class="muted">Selecciona una foto o PDF del equipo del médico. Se archiva cifrado; no se envía por correo y no se interpreta automáticamente.</p>'+
+   '<label for="ws-file">Archivo · PDF, JPG, PNG o WebP (máximo 5 MB)</label>'+
+   '<input type="file" id="ws-file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp">'+
+   field("ws-note","Descripción o fecha del estudio (opcional)","text",false)+
+   button("workspaceUpload","Archivar documento")+
+   '<div class="ws-list">'+(attachments.length?attachments.map(x=>
+    '<div class="ws-item"><div><strong>'+safe(x.name)+'</strong><div class="muted">'+safe(x.note||"Aportado en consulta")+
+    ' · Pendiente de revisión</div></div><button class="secondary" data-act="workspaceViewFile" data-id="'+safe(x.id)+'">Ver</button></div>'
+   ).join(""):'<p class="muted">Aún no hay archivos adjuntos.</p>')+'</div><div id="ws-preview" aria-live="polite"></div>');
+  panel+=box("Línea de tiempo longitudinal",
+   timeline.length?timeline.slice(0,80).map(x=>
+    '<div class="ws-timeline"><div><strong>'+safe(x.title)+'</strong><span class="tag">'+safe(x.status||"Registrado")+'</span></div>'+
+    '<p>'+safe(x.detail)+'</p><small>'+safe(x.date?new Date(x.date).toLocaleDateString("es-DO"):"Sin fecha")+'</small></div>'
+   ).join(""):'<p class="muted">Aquí aparecerán consultas, indicaciones, resultados y documentos previos.</p>');
+ }
+ document.getElementById("view").innerHTML=
+  '<div class="ws-heading"><div><h2>Mi consulta</h2><p class="muted">El paciente está contigo · Consulta y expediente sin salir de esta pantalla</p></div>'+
+  '<span class="tag">Local · Cifrado</span></div><div class="card">'+lookup+'</div>'+registration+panel;
+}
 function render(){
+ if(tab==="workspace")return renderWorkspace();
  const d=tab==="backups"?(data.backups||[]).map(fileName=>({fileName})):data[tab]||[],patients=tab==="invoices"&&actor.role==="billing"?(data["patient-options"]||[]):data.patients||data["patient-options"]||[];
  const p=pick("patientId","Paciente",patients,x=>x.name+(x.dateOfBirth?" · "+x.dateOfBirth:""));
  let form="";
@@ -153,10 +236,61 @@ function render(){
  box("Registros",genericRows(d,cols))+(tab==="prescriptions"?'<p class="notice warning">Las recetas no se envían por correo desde esta versión. La firma clínica exige revisión profesional.</p>':'');
 }
 async function execute(action,id){
+
+ if(action==="workspaceCreate"){
+  const name=val("ws-name").trim(),dateOfBirth=val("ws-dob"),complaint=val("ws-complaint-new").trim();
+  if(!name||!dateOfBirth||!complaint)throw Error("Completa nombre, nacimiento y motivo");
+  if(!confirm("¿Confirmaste identidad y verificaste que no existe otra ficha?"))return;
+  const created=await api("patients","POST",{name,dateOfBirth,phone:val("ws-phone"),email:val("ws-email")});
+  selectedPatientId=created.record.id;
+  try{
+   await api("encounters","POST",{patientId:selectedPatientId,specialty:"Medicina general",complaint,mode:"mixed"});
+   notice("Paciente y consulta guardados.");
+  }catch(error){notice("Paciente creado, pero no se abrió la consulta: "+error.message)}
+  return load();
+ }
+ if(action==="workspaceVisit"){
+  if(!selectedPatientId)throw Error("Selecciona un paciente");
+  const specialty=val("ws-specialty").trim(),complaint=val("ws-complaint").trim();
+  if(!specialty||!complaint)throw Error("Indica especialidad y motivo");
+  await api("encounters","POST",{patientId:selectedPatientId,specialty,complaint,mode:"mixed"});
+  notice("Consulta creada.");return load();
+ }
+ if(action==="workspaceUpload"){
+  if(!selectedPatientId)throw Error("Selecciona un paciente");
+  const file=document.getElementById("ws-file")?.files?.[0];
+  if(!file)throw Error("Selecciona una foto o PDF");
+  if(!file.size||file.size>5*1024*1024)throw Error("El archivo debe tener como máximo 5 MB");
+  if(!["image/png","image/jpeg","image/webp","application/pdf"].includes(file.type))
+   throw Error("Solo JPG, PNG, WebP o PDF");
+  const bytes=new Uint8Array(await file.arrayBuffer()),parts=[];
+  for(let i=0;i<bytes.length;i+=8192)parts.push(String.fromCharCode(...bytes.subarray(i,i+8192)));
+  const base64=btoa(parts.join(""));
+  await api("attachments","POST",{patientId:selectedPatientId,name:file.name,mime:file.type,
+    base64,note:val("ws-note")});
+  notice("Archivo cifrado y archivado, pendiente de revisión médica.");return load();
+ }
+ if(action==="workspaceViewFile"){
+  if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null}
+  const r=await fetch("/health/api/attachment/"+encodeURIComponent(id),{
+   credentials:"same-origin",cache:"no-store",headers:{"x-phoenix-health":"1"}});
+  if(!r.ok)throw Error("No autorizado para abrir el documento");
+  const blob=await r.blob(),place=document.getElementById("ws-preview");
+  previewUrl=URL.createObjectURL(blob);
+  if(blob.type.startsWith("image/")){
+   const img=document.createElement("img");img.src=previewUrl;img.alt="Imagen clínica aportada";
+   img.className="ws-preview-image";place.replaceChildren(img);
+  }else{
+   const link=document.createElement("a");link.href=previewUrl;link.download="documento-clinico.pdf";
+   link.textContent="Descargar PDF para revisión";place.replaceChildren(link);
+  }
+  return;
+ }
+
  if(action==="openCriticalFollowups"){tab="followups";return load()}
  if(action==="logout"){await api("logout","POST",{});actor=null;csrf="";data={};tab="patients";return splash()}
  if(action==="setup"){await api("setup","POST",{username:val("user"),password:val("pass"),organization:val("org")});notice("Clínica configurada. Inicia sesión.");return splash()}
- if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;data={};tab="patients";return load()}
+ if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;data={};tab="workspace";return load()}
  if(action==="openAskCopilot"){
   // The chat's genuine ASK provider belongs to PHOENIX, not the clinical HTTP session.
   // Never transfer an encounter ID, a patient name or the protected encounter contents.
@@ -360,6 +494,13 @@ async function execute(action,id){
  if(action==="finishFollowup"){patch.status="done"}
  await api(tab+"/"+id,"PATCH",patch);notice("Registro actualizado; cambio auditado.");return load()
 }
+document.addEventListener("change",async e=>{
+ if(e.target.id==="ws-patient"){
+  selectedPatientId=e.target.value;
+  if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null}
+  try{await load()}catch(error){notice(error.message)}
+ }
+});
 document.addEventListener("click",async e=>{
  const tabButton=e.target.closest("[data-tab]");if(tabButton){tab=tabButton.dataset.tab;try{await load()}catch(err){notice(err.message)}return}
  const action=e.target.closest("[data-act]");if(action){

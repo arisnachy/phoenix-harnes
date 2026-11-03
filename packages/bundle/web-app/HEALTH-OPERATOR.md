@@ -95,3 +95,9 @@ node --experimental-strip-types --test packages/core/tool-health/tests/*.test.mj
 ```
 
 Verificar en GitHub las puertas de construcción, typecheck, Windows y tests del HEAD del PR #1192. No declarar el PR listo para `main` o `stable` si hay verificaciones pendientes o fallidas.
+
+## Consulta presencial y recepción local de documentos
+
+La vista **Mi consulta** reúne registro presencial sin cuenta web, continuidad de consultas, indicaciones previas y cronología por paciente asignado. El profesional puede cargar fotografías JPEG, PNG, WebP y documentos PDF desde su equipo (hasta 5 MiB por archivo y 100 por paciente) sin correo ni nube externa. Los originales quedan cifrados dentro de SQLite y se incluyen en sus respaldos consistentes. La visualización y descarga requieren autenticación clínica y relación asistencial.
+
+Todo documento aportado queda **pendiente de revisión médica**; no se interpreta ni notifica automáticamente. El portal de cargas externas, enlaces seguros temporales y análisis asistido sujeto a permisos y consentimiento son capacidades futuras. No introducir datos reales hasta completar las validaciones clínicas, regulatorias y de seguridad.
