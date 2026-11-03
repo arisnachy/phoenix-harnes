@@ -2,6 +2,7 @@ name: PHOENIX Sports Cards Visible Regression
 on:
   pull_request:
     paths:
+      - 'packages/client/ui-conversation/src/client/chat/ToolActivityFlow.tsx'
       - 'packages/client/ui-conversation/src/client/chat/sports-tool-cards.ts'
       - 'packages/client/ui-conversation/src/client/chat/GenerativeUi.tsx'
       - 'packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts'
