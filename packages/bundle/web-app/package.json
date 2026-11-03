@@ -118,7 +118,8 @@
     "@phoenix-ai/schemastery": "workspace:^",
     "commander": "^15.0.0",
     "open": "^11.0.0",
-    "@phoenix-ai/dsh-mcp-client": "workspace:^"
+    "@phoenix-ai/dsh-mcp-client": "workspace:^",
+    "@phoenix-ai/dsh-home-paths": "workspace:^"
   },
   "peerDependencies": {
     "@phoenix-ai/cordis-plugin-loader": "workspace:^",

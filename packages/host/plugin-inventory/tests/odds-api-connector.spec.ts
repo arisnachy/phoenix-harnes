@@ -8,10 +8,10 @@ import {
 } from '../src/odds-api-connector.ts'
 
 const key = '0123456789abcdef0123456789abcdef'
-const response = (status = 200, body: unknown = []) => ({
+const response = (status = 200, body: unknown = [], headersOverride?: { get(name: string): string | null }) => ({
   status,
   ok: status >= 200 && status < 300,
-  headers: {
+  headers: headersOverride ?? {
     get: (name: string) => name === 'x-requests-remaining'
       ? '487'
       : name === 'x-requests-used'
@@ -156,14 +156,11 @@ describe('The Odds API secure connector', () => {
   })
 
   it('safely rejects malicious quota headers and accepts only nonnegative safe integers', async () => {
-    const request = vi.fn(async () => ({
-      ...response(),
-      headers: {
-        get: (name: string) => name === 'x-requests-remaining'
-          ? '999999999999999999999999'
-          : name === 'x-requests-used' ? 'not-a-number' : name === 'x-requests-last' ? '0' : null,
-      },
-    } as unknown as Response))
+    const request = vi.fn(async () => response(200, [], {
+      get: (name: string) => name === 'x-requests-remaining'
+        ? '999999999999999999999999'
+        : name === 'x-requests-used' ? 'not-a-number' : name === 'x-requests-last' ? '0' : null,
+    }))
     const state = await verifyTheOddsApiKey(key, request)
     expect(state).toEqual({ status: 'ready', verified: true, lastRequestCost: 0 })
   })

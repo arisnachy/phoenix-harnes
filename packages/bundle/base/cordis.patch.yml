@@ -85,6 +85,10 @@
     - id: tool-sports
       name: '@phoenix-ai/dsh-tool-sports'
 
+    # Clinical workflow planning only; no PHI persistence or real email sends.
+    - id: tool-health
+      name: '@phoenix-ai/dsh-tool-health'
+
     - id: llm-retry
       name: '@phoenix-ai/dsh-llm-retry'
 

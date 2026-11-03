@@ -13,6 +13,7 @@ import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contra
 import { createWorkspaceViewStore } from './stores.ts'
 import { WorkspaceBrowser } from './WorkspaceBrowser.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
+import { HealthClinicTrigger } from './HealthClinicTrigger.tsx'
 import {
   CordisVisualWorkspace,
   CordisVisualWorkspaceController,
@@ -73,6 +74,12 @@ export function apply(ctx: ClientContext): void {
     { name: 'shell.workspace', id: 'cordis-visual-workspace' },
     () => createElement(CordisVisualWorkspace, { controller: visualWorkspace, layout: ctx.layout }),
   ))
+
+  // Optional Health Engine desk: no patient data is persisted or sent from this sandbox.
+  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+    name: 'sidebar.footer.action', id: 'phoenix-health-demo',
+    order: 55,
+  }, HealthClinicTrigger))
 
   const searchSessions: WorkspaceBrowserInjected['searchSessions'] = async (query, signal) => {
     const result = await ctx.sessions.search(query, signal)
