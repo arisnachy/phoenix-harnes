@@ -9,6 +9,9 @@ import { win32 } from 'node:path'
 
 import type { BlenderLocalState } from './types.ts'
 
+/** Probe dependencies for a local Blender Lab instance, injectable for tests.
+ * A read-only probe never starts Blender or executes Python code.
+ */
 export interface BlenderLocalProbeOptions {
   readonly platform?: NodeJS.Platform
   readonly env?: NodeJS.ProcessEnv
