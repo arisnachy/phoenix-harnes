@@ -11,7 +11,7 @@
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import {
-  existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync,
+  existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, statfsSync, unlinkSync, writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { createServer } from 'node:net'
@@ -102,6 +102,14 @@ const configuredRuntimeDirectoryLimit = Number.parseInt(
 const MAX_RUNTIME_DIRECTORIES = Number.isFinite(configuredRuntimeDirectoryLimit)
   ? Math.max(2, Math.min(6, configuredRuntimeDirectoryLimit))
   : Math.max(2, MAX_INACTIVE_RUNTIME_BACKUPS + 2)
+// A folder-count limit cannot prevent 5+ GiB of additional growth when
+// each isolated runtime embeds hundreds of packages. Reserve real volume
+// headroom BEFORE any new full-copy installation; fail closed on Windows.
+const configuredMinimumFreeGiB = Number.parseInt(process.env.PHOENIX_UPDATE_MIN_FREE_GIB ?? '', 10)
+const MIN_RUNTIME_DISK_FREE_GIB = Number.isFinite(configuredMinimumFreeGiB)
+  ? Math.max(2, Math.min(64, configuredMinimumFreeGiB))
+  : 8
+
 // A checkout identity can change after migration. Without a global ceiling,
 // each identity could retain its own active/backup pool under the same ~/p.
 const GLOBAL_RUNTIME_DIRECTORY_LIMIT = Math.max(6, MAX_RUNTIME_DIRECTORIES)
@@ -1013,6 +1021,39 @@ function cleanupFailedPreparedRuntime(target) {
   }
 }
 
+/**
+ * A hard disk-space budget, separate from the number of worktrees. Some
+ * worktrees are giant because they contain pnpm dependencies. Never allocate
+ * another runtime when the disk is already close to exhaustion.
+ */
+function assertRuntimeDiskHeadroom() {
+  const reserveBytes = MIN_RUNTIME_DISK_FREE_GIB * 1024 ** 3
+  let freeBytes
+  try {
+    const volume = statfsSync(runtimeBaseDirectory())
+    freeBytes = volume.bavail * volume.bsize
+  } catch (error) {
+    if (process.platform !== 'win32') return
+    throw new Error(
+      'PHOENIX cannot verify Windows disk free space before creating a runtime. '
+      + 'The existing Host stays online; inspect .dsh, p and pnpm with '
+      + 'node scripts/phoenix-storage-audit.mjs --diagnose. '
+      + (error instanceof Error ? error.message : String(error)),
+    )
+  }
+  if (!Number.isFinite(freeBytes) || freeBytes < reserveBytes) {
+    const available = Number.isFinite(freeBytes)
+      ? (freeBytes / (1024 ** 3)).toFixed(2) + ' GiB'
+      : 'unknown'
+    throw new Error(
+      'PHOENIX disk headroom safety: only ' + available
+      + ' free; need at least ' + String(MIN_RUNTIME_DISK_FREE_GIB)
+      + ' GiB before allocating another runtime. No files were removed. '
+      + 'Run node scripts/phoenix-storage-audit.mjs --diagnose to locate the growth.',
+    )
+  }
+}
+
 function assertRuntimeStorageCapacity(nextRuntime) {
   if (existsSync(nextRuntime)) return
 
@@ -1027,6 +1068,9 @@ function assertRuntimeStorageCapacity(nextRuntime) {
   if (runtimeDirectoriesForCleanup().length >= MAX_RUNTIME_DIRECTORIES) {
     reclaimInactiveBackupForCapacity(nextRuntime)
   }
+  // Cleanup may free space. Measure only AFTER it has been attempted.
+  // The count cap remains independent and is checked below.
+  assertRuntimeDiskHeadroom()
   const runtimeCount = runtimeDirectoriesForCleanup().length
   const globalCount = globalRuntimeDirectoriesForCleanup().length
   if (globalCount >= GLOBAL_RUNTIME_DIRECTORY_LIMIT) {

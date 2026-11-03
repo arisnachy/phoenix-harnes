@@ -20,7 +20,7 @@
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import {
-  existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync,
+  existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, statfsSync, unlinkSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
@@ -73,6 +73,12 @@ const configuredRuntimeDirectoryLimit = Number.parseInt(
 const MAX_RUNTIME_DIRECTORIES = Number.isFinite(configuredRuntimeDirectoryLimit)
   ? Math.max(2, Math.min(6, configuredRuntimeDirectoryLimit))
   : Math.max(2, MAX_INACTIVE_RUNTIME_BACKUPS + 2)
+
+// Count caps cannot protect a volume against 2-5 GiB runtime builds.
+const configuredMinFreeGiB = Number.parseInt(process.env.PHOENIX_UPDATE_MIN_FREE_GIB ?? '', 10)
+const MIN_RUNTIME_DISK_FREE_GIB = Number.isFinite(configuredMinFreeGiB)
+  ? Math.max(2, Math.min(64, configuredMinFreeGiB))
+  : 8
 
 function normalizeMode(value) {
   const normalized = String(value).trim().toLowerCase()
@@ -635,6 +641,34 @@ function cleanupUpdaterRuntimeStorage(root, { ensureCapacity = false } = {}) {
   return { removed, remaining: updaterRuntimeDirectories(root).length }
 }
 
+/**
+ * Prevent new runtime allocation when the real drive free space is low.
+ * Disk failures are not a reason to consume another multi-GiB worktree.
+ */
+function updaterRuntimeDiskHasHeadroom() {
+  let free
+  try {
+    const volume = statfsSync(stageBaseDirectory())
+    free = volume.bavail * volume.bsize
+  } catch {
+    // Fail closed only on Windows, where unbounded short-path runtime
+    // duplication was observed; retain cross-platform historical behavior.
+    if (process.platform === 'win32') {
+      console.error('[PHOENIX UPDATE] disk-space inspection failed; no new runtime allocated. '
+        + 'Run node scripts/phoenix-storage-audit.mjs --diagnose')
+      return false
+    }
+    return true
+  }
+  if (Number.isFinite(free) && free >= MIN_RUNTIME_DISK_FREE_GIB * 1024 ** 3) return true
+  console.error('[PHOENIX UPDATE] runtime allocation paused: only '
+    + (Number.isFinite(free) ? (free / (1024 ** 3)).toFixed(2) + ' GiB' : 'unknown')
+    + ' free, below the ' + String(MIN_RUNTIME_DISK_FREE_GIB)
+    + ' GiB safety reserve. Keep existing Host running; inspect .dsh, p, and pnpm '
+    + 'using node scripts/phoenix-storage-audit.mjs --diagnose')
+  return false
+}
+
 function updaterRuntimeStorageHasCapacity(root, target) {
   const targetRuntime = join(
     stageBaseDirectory(),
@@ -643,6 +677,7 @@ function updaterRuntimeStorageHasCapacity(root, target) {
   if (existsSync(targetRuntime)) return true
 
   const { remaining } = cleanupUpdaterRuntimeStorage(root, { ensureCapacity: true })
+  if (!updaterRuntimeDiskHasHeadroom()) return false
   if (remaining < MAX_RUNTIME_DIRECTORIES) return true
 
   const now = Date.now()
@@ -1412,7 +1447,7 @@ async function watch(root, parentPid) {
                 status: 'paused',
                 phase: 'storage',
                 ...updateFacts(inspection),
-                detail: 'Runtime storage is at its safety limit. PHOENIX kept the current Host online and will retry cleanup automatically.',
+                detail: 'Runtime storage is at its directory or free-disk safety limit. PHOENIX kept the current Host online. Inspect .dsh, p and pnpm with scripts/phoenix-storage-audit.mjs --diagnose; a later storage check will retry.'
               })
               break
             }
