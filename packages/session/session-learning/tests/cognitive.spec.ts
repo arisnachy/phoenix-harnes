@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -66,6 +66,18 @@ describe('CognitiveMemoryLedger', () => {
     expect(restored.search({ query: 'sandbox', projectId: 'other' })).toEqual([])
     expect(restored.timeline({ projectId: 'phoenix', from: 150, to: 250 })[0]?.eventSeq).toBe(2)
     expect((await readFile(restored.path, 'utf8')).trim().split('\n')).toHaveLength(2)
+  })
+
+  it('fails closed after hydration errors and preserves the canonical ledger path', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-cognitive-hydration-'))
+    roots.push(root)
+    const path = join(root, 'cognitive.jsonl')
+    await mkdir(path)
+    const value = new CognitiveMemoryLedger(path)
+
+    await expect(value.load()).rejects.toThrow()
+    await expect(value.remember(input())).rejects.toThrow('refusing to append')
+    expect((await stat(path)).isDirectory()).toBe(true)
   })
 
   it('preserves contradictions as history and supersedes only the active value', async () => {

@@ -84,9 +84,13 @@ export class LearningMemoryService extends Service {
   protected async [Service.init](): Promise<void> {
     for (const session of this.ctx.sessions.list()) this.setCurrentSession(session)
 
-    const loading = Promise.all([this.ledger.load(), this.cognitive.load()])
-      .then(() => undefined)
-      .catch((error: unknown) => {
+    let loadingFailed = false
+    const loading = Promise.allSettled([this.ledger.load(), this.cognitive.load()])
+      .then((results) => {
+        const failed = results.find(result => result.status === 'rejected')
+        if (failed === undefined) return
+        const error: unknown = failed.reason
+        loadingFailed = true
         this.ctx.logger.warn(`learning-memory: startup load degraded but Phoenix will remain available: ${String(error)}`)
       })
     this.operationTail = loading
@@ -102,6 +106,7 @@ export class LearningMemoryService extends Service {
     // scheduled after loading instead of blocking Service.init. This keeps the
     // web/client bootstrap responsive even with a very large memory archive.
     void loading.then(() => {
+      if (loadingFailed) return
       for (const session of this.ctx.sessions.list()) this.observeSession(session)
     })
   }
@@ -491,9 +496,12 @@ function assistantDecisionObservationFor(session: Session, event: SessionEvent):
 
 function isExplicitAssistantDecision(text: string): boolean {
   const normalized = text.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase()
-  if (/\b(?:no tengo (?:un |una )?(?:favorito|pronostico|seleccion)|no puedo elegir|sin (?:favorito|seleccion))\b/u.test(normalized)) return false
-  return /\b(?:mi|nuestro|nuestra|el|la)\s+(?:favorito|pronostico|pick|seleccion|eleccion)\s*(?:es\b|sera\b|para\b|del\b|:)/u.test(normalized)
-    || /\b(?:elijo|elegimos|escogi|escogimos|selecciono|seleccionamos|me inclino por|nos quedamos con|voy con|vamos con)\b/u.test(normalized)
+  if (/\b(?:no tengo (?:un |una )?(?:favorito|pronostico|seleccion)|no puedo elegir|sin (?:favorito|seleccion))\b/u
+    .test(normalized)) return false
+  return /\b(?:mi|nuestro|nuestra|el|la)\s+(?:favorito|pronostico|pick|seleccion|eleccion)\s*(?:es\b|sera\b|para\b|del\b|:)/u
+    .test(normalized)
+    || /\b(?:elijo|elegimos|escogi|escogimos|selecciono|seleccionamos|me inclino por|nos quedamos con|voy con|vamos con)\b/u
+      .test(normalized)
 }
 
 function explicitCognitiveInput(input: MemoryRecordInput, projectId: string | undefined): CognitiveMemoryInput {

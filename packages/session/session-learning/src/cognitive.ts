@@ -204,6 +204,7 @@ export class CognitiveMemoryLedger {
   private readonly records = new Map<MemoryId, CognitiveMemoryRecord>()
   private readonly sourceIndex = new Map<string, MemoryId>()
   private writeChain: Promise<void> = Promise.resolve()
+  private hydrationError: unknown
 
   /** @param path - JSONL path owned by this ledger. */
   constructor(path: string) {
@@ -216,22 +217,31 @@ export class CognitiveMemoryLedger {
     await this.writeChain
     this.records.clear()
     this.sourceIndex.clear()
+    this.hydrationError = undefined
     let text: string
     try {
       text = await readFile(this.path, 'utf8')
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+      this.hydrationError = error
       throw error
     }
-    for (const [index, line] of text.split('\n').entries()) {
-      if (line.trim() === '') continue
-      let raw: unknown
-      try {
-        raw = JSON.parse(line)
-      } catch (error) {
-        throw new Error(`cognitive memory row ${index + 1} is not valid JSON`, { cause: error })
+    try {
+      for (const [index, line] of text.split('\n').entries()) {
+        if (line.trim() === '') continue
+        let raw: unknown
+        try {
+          raw = JSON.parse(line)
+        } catch (error) {
+          throw new Error(`cognitive memory row ${index + 1} is not valid JSON`, { cause: error })
+        }
+        this.applyRow(validateRow(raw, index + 1))
       }
-      this.applyRow(validateRow(raw, index + 1))
+    } catch (error) {
+      this.records.clear()
+      this.sourceIndex.clear()
+      this.hydrationError = error
+      throw error
     }
   }
 
@@ -242,6 +252,7 @@ export class CognitiveMemoryLedger {
    * @returns The active or explicitly forgotten record for that source.
    */
   async remember(input: CognitiveMemoryInput): Promise<CognitiveMemoryRecord> {
+    this.assertWritable()
     validateInput(input)
     const sourceKey = sourceKeyOf(input)
     const existingId = this.sourceIndex.get(sourceKey)
@@ -408,6 +419,7 @@ export class CognitiveMemoryLedger {
    * @returns a promise that settles after the tombstone is durable.
    */
   async forget(id: MemoryId): Promise<void> {
+    this.assertWritable()
     const record = this.records.get(id)
     if (record === undefined || record.status === 'forgotten') return
     const row: CognitiveLedgerRow = { op: 'forget', id, forgottenAt: Date.now() }
@@ -433,13 +445,25 @@ export class CognitiveMemoryLedger {
   }
 
   private async appendRows(rows: readonly CognitiveLedgerRow[]): Promise<void> {
+    this.assertWritable()
     const text = rows.map(row => JSON.stringify(row)).join('\n') + '\n'
     const task = this.writeChain.then(async () => {
+      this.assertWritable()
       await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
       await appendFile(this.path, text, { encoding: 'utf8', mode: 0o600 })
     })
     this.writeChain = task.then(() => undefined, () => undefined)
     await task
+  }
+
+  private assertWritable(): void {
+    if (this.hydrationError === undefined) return
+    const detail = this.hydrationError instanceof Error
+      ? this.hydrationError.message
+      : String(this.hydrationError)
+    throw new Error(`cognitive memory ledger hydration failed; refusing to append: ${detail}`, {
+      cause: this.hydrationError,
+    })
   }
 
   private applyRow(row: CognitiveLedgerRow): void {

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -14,6 +14,39 @@ afterEach(async () => {
 })
 
 describe('LearningMemoryService', () => {
+  it('keeps failed cognitive hydration read-only while current events remain available', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-hydration-'))
+    roots.push(root)
+    const path = join(root, 'memory.jsonl')
+    const cognitivePath = join(root, 'memory.cognitive.jsonl')
+    await mkdir(cognitivePath)
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const session = ctx.sessions.create(SessionId('failed-cognitive-hydration'), { meta: {} })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'Historical event must not be replayed after hydration failure.' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    await ctx.plugin(LearningMemoryService, { path })
+    await ctx.learningMemory.ready()
+
+    expect(ctx.learningMemory.allCognitiveRecords()).toEqual([])
+    expect((await stat(cognitivePath)).isDirectory()).toBe(true)
+    await expect(ctx.learningMemory.rememberCognitive({
+      sessionId: String(session.id),
+      eventSeq: 2,
+      kind: 'event',
+      layers: ['episodic'],
+      content: 'Current event must remain available to the host.',
+      summary: 'Current event',
+      sourceEventType: 'user/message',
+      occurredAt: Date.now(),
+      confidence: 0.7,
+      importance: 0.5,
+    })).rejects.toThrow('refusing to append')
+    expect((await stat(cognitivePath)).isDirectory()).toBe(true)
+  })
+
   it('learns from user interactions, successes, and failures in the durable session stream', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-service-'))
     roots.push(root)

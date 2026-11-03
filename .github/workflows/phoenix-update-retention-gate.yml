@@ -37,6 +37,8 @@ jobs:
           scripts/phoenix-auto-update-runtime.spec.ts
           scripts/phoenix-windows-storage-repair.spec.ts
           scripts/phoenix-windows-supervisor.spec.ts
+          packages/session/session-learning/tests/cognitive.spec.ts
+          packages/session/session-learning/tests/service.spec.ts
       - name: Verify platform-independent storage regression
         run: node --test scripts/phoenix-storage-audit.spec.mjs scripts/phoenix-windows-storage-repair.node-test.mjs
 
