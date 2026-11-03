@@ -434,6 +434,27 @@ describe('producedFileMentions resolver', () => {
     expect(resolver.resolve('notes.md')).toBeUndefined()
     expect(basename('a\\b\\c.txt')).toBe('c.txt')
   })
+  it('turns only registered local artifact destinations into Host openers', () => {
+    const opened: string[] = []
+    const resolver = producedFileMentions(
+      ['/mnt/data/plan de entrega.docx', 'out/report.pdf', 'a/duplicate.docx', 'b/duplicate.docx'],
+      (path) => { opened.push(path) },
+      label,
+    )
+    const sandbox = resolver.resolveArtifact?.('sandbox:/mnt/data/plan%20de%20entrega.docx')
+    expect(sandbox?.title).toBe('/mnt/data/plan de entrega.docx')
+    sandbox?.open()
+    const relative = resolver.resolveArtifact?.('out/report.pdf')
+    relative?.open()
+    expect(opened).toEqual(['/mnt/data/plan de entrega.docx', 'out/report.pdf'])
+    expect(resolver.resolveArtifact?.('sandbox:/mnt/data/duplicate.docx')).toBeUndefined()
+    expect(resolver.resolveArtifact?.('sandbox:/mnt/data/unknown.docx')).toBeUndefined()
+    expect(resolver.resolveArtifact?.('sandbox:/mnt/data/../secret.txt')).toBeUndefined()
+    expect(resolver.resolveArtifact?.('javascript:alert(1)')).toBeUndefined()
+    expect(resolver.resolveArtifact?.('file://server/share/plan.docx')).toBeUndefined()
+    expect(resolver.resolveArtifact?.('https://example.com/report.pdf')).toBeUndefined()
+    expect(resolver.resolveArtifact?.('out/%ZZ.pdf')).toBeUndefined()
+  })
 })
 
 describe('workspaceFileMentions resolver', () => {
