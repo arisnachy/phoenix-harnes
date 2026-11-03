@@ -500,12 +500,12 @@ test('patient-provided image attachments remain encrypted, scoped and durable',t
 test('clinic patient context is scoped, longitudinal and keeps unverified results distinct',t=>{
   const {db,admin}=fixture(t)
   const pass='another-secure-password-2026'
-  db.createStaff(admin.actor,{username:'d1',password:pass,role:'clinician'})
-  db.createStaff(admin.actor,{username:'d2',password:pass,role:'clinician'})
-  const doctor=db.login('d1',pass).actor,outsider=db.login('d2',pass).actor
+  db.createStaff(admin.actor,{username:'clinicianone',password:pass,role:'clinician'})
+  db.createStaff(admin.actor,{username:'cliniciantwo',password:pass,role:'clinician'})
+  const doctor=db.login('clinicianone',pass).actor,outsider=db.login('cliniciantwo',pass).actor
   const patient=db.create(doctor,'patients',{name:'Patient context example',dateOfBirth:'1989-05-06'})
   const other=db.create(admin.actor,'patients',{name:'Unrelated patient',dateOfBirth:'1980-02-04'})
-  db.assignPatient(admin.actor,other.id,'d2','separate care')
+  db.assignPatient(admin.actor,other.id,'cliniciantwo','separate care')
   let encounter=db.create(doctor,'encounters',{patientId:patient.id,specialty:'General',
     complaint:'Follow-up',mode:'manual'})
   encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{
@@ -528,7 +528,7 @@ test('clinic patient context is scoped, longitudinal and keeps unverified result
     value:Infinity,unit:'mg/dL',source:'patient-provided',effectiveAt:'2026-11-03T10:00:00Z'}),/Valor numérico/)
   const verified=db.update(doctor,'observations',obs.id,obs.version,{action:'verify'})
   assert.equal(verified.status,'verified')
-  assert.equal(verified.verifiedBy,'d1')
+  assert.equal(verified.verifiedBy,'clinicianone')
   assert.throws(()=>db.update(doctor,'observations',obs.id,obs.version,{action:'verify'}),/Conflicto/)
   assert.equal(db.patientContext(doctor,patient.id).observations[0].status,'verified')
 })
