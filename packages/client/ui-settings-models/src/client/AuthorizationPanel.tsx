@@ -105,10 +105,10 @@ export interface JevMcpSnapshot {
   reasonCode?: McpConnectorRuntimeView['reasonCode']
 }
 
-type CuratedMcpConnectorId = 'meta-publishing' | 'x' | 'x-docs' | 'social-engine' | 'microsoft-personal' | 'outlook-mail' | 'outlook-calendar' | 'microsoft-contacts' | 'onedrive' | 'microsoft-teams' | 'sharepoint' | 'github' | 'meta-devtools' | 'meta-whatsapp-business' | 'microsoft-learn' | 'microsoft-workiq' | 'microsoft-azure' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
+type CuratedMcpConnectorId = 'blender' | 'meta-publishing' | 'x' | 'x-docs' | 'social-engine' | 'microsoft-personal' | 'outlook-mail' | 'outlook-calendar' | 'microsoft-contacts' | 'onedrive' | 'microsoft-teams' | 'sharepoint' | 'github' | 'meta-devtools' | 'meta-whatsapp-business' | 'microsoft-learn' | 'microsoft-workiq' | 'microsoft-azure' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
 
 const CURATED_MCP_CONNECTOR_IDS = new Set<string>([
-  'meta-publishing', 'x', 'x-docs', 'social-engine', 'microsoft-personal', 'outlook-mail', 'outlook-calendar', 'microsoft-contacts', 'onedrive', 'microsoft-teams', 'sharepoint', 'github', 'meta-devtools', 'meta-whatsapp-business', 'microsoft-learn', 'microsoft-workiq', 'microsoft-azure', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
+  'blender', 'meta-publishing', 'x', 'x-docs', 'social-engine', 'microsoft-personal', 'outlook-mail', 'outlook-calendar', 'microsoft-contacts', 'onedrive', 'microsoft-teams', 'sharepoint', 'github', 'meta-devtools', 'meta-whatsapp-business', 'microsoft-learn', 'microsoft-workiq', 'microsoft-azure', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
   'slack', 'brave-search', 'filesystem', 'memory', 'fetch',
 ])
 
@@ -629,6 +629,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
             : managed !== undefined
               ? { text: t('runtimeMissingStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
               : undefined
+  // A registered MCP process is not proof that Blender is running with its add-on.
+  // Only a ready namespace with advertised tools warrants a callable label.
   const companionStatus = definition.id === 'openclaw'
     ? {
         text: openClawRuntime === undefined ? t('ocWaiting')
