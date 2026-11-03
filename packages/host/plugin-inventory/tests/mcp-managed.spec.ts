@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ManagedMcpController,
   MANAGED_MCP_INJECT,
+  BLENDER_LAB_MCP_SOURCE,
   managedMcpPatchPath,
   type ManagedMcpLoader,
   type ManagedMcpRegistrySearch,
@@ -301,7 +302,7 @@ describe('ManagedMcpController', () => {
     const restored = await controller.ensureCoreMcpPack()
     expect(restored.failed).toEqual([])
     expect(restored.installed).toEqual(expect.arrayContaining([
-      'microsoft-learn', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack',
+      'blender', 'microsoft-learn', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack',
       'brave-search', 'filesystem', 'memory', 'fetch',
     ]))
     expect(restored.installed).not.toContain('devpost')
@@ -354,6 +355,14 @@ describe('ManagedMcpController', () => {
       serverName: 'filesystem',
       args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
     })
+    expect(configs.get('blender')).toMatchObject({
+      transport: 'stdio',
+      serverName: 'blender',
+      command: 'uvx',
+      args: ['--from', BLENDER_LAB_MCP_SOURCE, 'blender-mcp'],
+      env: { BLENDER_MCP_HOST: 'localhost', BLENDER_MCP_PORT: '9876' },
+      failOnStartupError: false,
+    })
     expect(configs.get('fetch')).toMatchObject({
       transport: 'stdio',
       serverName: 'fetch',
@@ -385,6 +394,33 @@ describe('ManagedMcpController', () => {
     expect(second.installed).toEqual([])
     expect(second.alreadyInstalled).toEqual(expect.arrayContaining([...restored.installed]))
     expect(created).toHaveLength(restored.installed.length)
+  })
+
+  it('keeps Blender opt-in on boot and persists its pinned official bridge when enabled', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    const boot = await controller.ensureCoreMcpPack({ installMissing: false })
+    expect(boot.installed).toEqual([])
+    expect(live.create).not.toHaveBeenCalled()
+
+    const installed = await controller.installCuratedMcp('blender')
+    expect(installed).toMatchObject({
+      status: 'installed',
+      connector: {
+        serverName: 'blender', url: 'stdio://blender',
+        source: { kind: 'curated', connectorId: 'blender' },
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({
+        command: 'uvx',
+        args: ['--from', BLENDER_LAB_MCP_SOURCE, 'blender-mcp'],
+      }),
+    }))
+    const saved = JSON.parse(readFileSync(patchPath, 'utf8')) as { insert: unknown[] }[]
+    expect(saved[0]?.insert).toHaveLength(1)
+    expect(await controller.installCuratedMcp('blender')).toMatchObject({ status: 'already-installed' })
   })
 
   it('migrates a legacy installed OAuth MCP to wait for authorization services', async () => {
