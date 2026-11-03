@@ -1,0 +1,64 @@
+name: PHOENIX Blender official MCP compatibility
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/mcp/mcp-client/src/transport.ts'
+      - 'packages/mcp/mcp-client/tests/blender-launch.spec.ts'
+      - 'packages/host/plugin-inventory/src/mcp-managed.ts'
+      - 'packages/host/plugin-inventory/tests/mcp-managed.spec.ts'
+      - 'examples/mcp-blender/**'
+      - 'scripts/phoenix-blender-mcp-handshake.mjs'
+      - '.github/workflows/phoenix-blender-official-compat.yml'
+  push:
+    branches: [main, stable]
+    paths:
+      - 'packages/mcp/mcp-client/src/transport.ts'
+      - 'packages/mcp/mcp-client/tests/blender-launch.spec.ts'
+      - 'packages/host/plugin-inventory/src/mcp-managed.ts'
+      - 'packages/host/plugin-inventory/tests/mcp-managed.spec.ts'
+      - 'examples/mcp-blender/**'
+      - 'scripts/phoenix-blender-mcp-handshake.mjs'
+      - '.github/workflows/phoenix-blender-official-compat.yml'
+permissions:
+  contents: read
+jobs:
+  compatibility:
+    name: Managed overlays and Blender v1.0.2 migration (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Verify official migration and legacy rows
+        run: pnpm exec vitest run packages/mcp/mcp-client/tests/blender-launch.spec.ts packages/host/plugin-inventory/tests/mcp-managed.spec.ts
+      - name: Compile Host contracts
+        run: pnpm exec tsc -b tsconfig.host.json
+      - name: Validate read-only MCP handshake script
+        run: node --check scripts/phoenix-blender-mcp-handshake.mjs
+  upstream-stdio-smoke:
+    name: Actual Blender Foundation stdio initialize/tools-list
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: astral-sh/setup-uv@v6
+      - name: Initialize official v1.0.2 MCP and discover tools (no Python calls)
+        run: node scripts/phoenix-blender-mcp-handshake.mjs
