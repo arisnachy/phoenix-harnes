@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { Context } from '@phoenix-ai/cordis'
 import { scrubbedParentEnv, SubprocessRuntime } from '@phoenix-ai/dsh-subprocess'
@@ -73,6 +77,63 @@ describe('SubprocessRuntime seam', () => {
     await ctx.plugin(StubSubprocessRuntime)
     class SecondService extends StubSubprocessRuntime {}
     await expect(ctx.plugin(SecondService)).rejects.toThrow(/service "subprocess" has been registered/)
+  })
+
+  it('does not pass broken Git inline configuration tuples into child processes', () => {
+    const names = ['GIT_CONFIG_COUNT','GIT_CONFIG_KEY_0','GIT_CONFIG_VALUE_0',
+      'GIT_CONFIG_KEY_1','GIT_CONFIG_VALUE_1','GIT_CONFIG_PARAMETERS',
+      'GIT_CONFIG_GLOBAL'] as const
+    const originals = names.map(name => process.env[name])
+    try {
+      process.env.GIT_CONFIG_COUNT = '2'
+      process.env.GIT_CONFIG_KEY_0 = 'user.name'
+      process.env.GIT_CONFIG_VALUE_0 = 'fixture'
+      process.env.GIT_CONFIG_KEY_1 = 'user.email'
+      process.env.GIT_CONFIG_VALUE_1 = 'fixture@example.test'
+      process.env.GIT_CONFIG_PARAMETERS = "'user.name=fixture'"
+      process.env.GIT_CONFIG_GLOBAL = 'test-git-config-path'
+      const environment = scrubbedParentEnv()
+      for (const key of names.slice(0,-1)) expect(environment[key]).toBeUndefined()
+      expect(environment.GIT_CONFIG_GLOBAL).toBe('test-git-config-path')
+    } finally {
+      names.forEach((name,index) => {
+        const original = originals[index]
+        if (original === undefined) delete process.env[name]
+        else process.env[name] = original
+      })
+    }
+  })
+
+  it('runs real git init without the original fatal GIT_CONFIG_KEY_0 error', () => {
+    if (spawnSync('git', ['--version'], { encoding:'utf8' }).status !== 0) return
+    const original = {
+      count:process.env.GIT_CONFIG_COUNT,
+      key:process.env.GIT_CONFIG_KEY_0,
+      value:process.env.GIT_CONFIG_VALUE_0,
+    }
+    const cwd = mkdtempSync(join(tmpdir(), 'phoenix-git-config-'))
+    try {
+      process.env.GIT_CONFIG_COUNT = '1'
+      delete process.env.GIT_CONFIG_KEY_0
+      process.env.GIT_CONFIG_VALUE_0 = 'fixture'
+      const broken = spawnSync('git', ['init', '--bare'], {
+        cwd, encoding:'utf8', env: { ...process.env },
+      })
+      expect(broken.status).not.toBe(0)
+      expect(broken.stderr).toMatch(/GIT_CONFIG_KEY_0|unable to parse command-line config/iu)
+      const repaired = spawnSync('git', ['init', '--bare'], {
+        cwd, encoding:'utf8', env: scrubbedParentEnv(),
+      })
+      expect(repaired.status).toBe(0)
+    } finally {
+      if (original.count === undefined) delete process.env.GIT_CONFIG_COUNT
+      else process.env.GIT_CONFIG_COUNT = original.count
+      if (original.key === undefined) delete process.env.GIT_CONFIG_KEY_0
+      else process.env.GIT_CONFIG_KEY_0 = original.key
+      if (original.value === undefined) delete process.env.GIT_CONFIG_VALUE_0
+      else process.env.GIT_CONFIG_VALUE_0 = original.value
+      rmSync(cwd, {recursive:true,force:true})
+    }
   })
 
   it('scrubbedParentEnv drops credentials, harness state, and implicit loader injection while keeping ordinary runtime state', () => {

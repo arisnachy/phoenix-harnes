@@ -14,7 +14,7 @@ import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import { scrubbedParentEnv } from '@phoenix-ai/dsh-subprocess'
+import { scrubbedParentEnv, TRANSIENT_GIT_CONFIG_ENV_PATTERN } from '@phoenix-ai/dsh-subprocess'
 import type { Config } from './index.ts'
 
 /**
@@ -415,6 +415,29 @@ function credentialRequired(ref: string): Error & { status: number } {
  * @param options - Optional OAuth provider or already-resolved Bearer token.
  * @returns A fresh MCP client transport ready for one connection generation.
  */
+/** Drop inherited or explicitly fragmented Git config tuples for pinned Blender MCP.
+ * Git refuses even git init when GIT_CONFIG_COUNT survives without its KEY_0.
+ * This is a copy; credentials and Git's normal config files remain untouched.
+ * @param config - MCP server name and its executable/source arguments.
+ * @param environment - Child environment merged from parent and explicit spec.
+ * @returns A safe environment for the curated Blender Lab child only.
+ */
+export function sanitizeBlenderLabGitEnvironment(
+  config: { readonly serverName: string; readonly command: string; readonly args: readonly string[] },
+  environment: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const result = { ...environment }
+  if (config.serverName !== 'blender'
+    || !/^(?:uvx|uvx\.exe)$/iu.test(win32.basename(config.command))
+    || config.args.length !== 3 || config.args[0] !== '--from'
+    || config.args[1] !== 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp'
+    || config.args[2] !== 'blender-mcp') return result
+  for (const key of Object.keys(result)) {
+    if (TRANSIENT_GIT_CONFIG_ENV_PATTERN.test(key)) delete result[key]
+  }
+  return result
+}
+
 /** Resolve only the pinned official Blender Lab uvx child on Windows.
  * Desktop hosts can retain a stale PATH even though uv/uvx is installed in the
  * user's standard installation directory. No shell, install, or arbitrary MCP
@@ -472,8 +495,9 @@ export function normalizeBlenderLabMcpLaunch(
 export function createTransport(config: Config, options: TransportOptions = {}): Transport {
   switch (config.transport) {
     case 'stdio': {
-      const environment = hydrateFetchMcpNodeEnvironment(config,
-        buildChildEnv({ ...config.env, ...options.stdioCredentialEnv }))
+      const environment = sanitizeBlenderLabGitEnvironment(config,
+        hydrateFetchMcpNodeEnvironment(config,
+          buildChildEnv({ ...config.env, ...options.stdioCredentialEnv })))
       const normalized = normalizeMicrosoftPersonalMcpLaunch(
         config.serverName, config.command, repairPhoenixStdioProxyArgs(config.args))
       const launch = normalizeBlenderLabMcpLaunch(config.serverName,

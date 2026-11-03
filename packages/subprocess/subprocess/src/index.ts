@@ -52,6 +52,18 @@ export const SENSITIVE_ENV_PATTERN = /KEY|PASSWORD|SECRET|TOKEN/i
 export const INJECTION_ENV_PATTERN = /^(?:LD_PRELOAD|LD_AUDIT|NODE_OPTIONS|DYLD_.*)$/i
 
 /**
+ * Git's per-process configuration is a positional tuple:
+ * GIT_CONFIG_COUNT=N requires each GIT_CONFIG_KEY_i and GIT_CONFIG_VALUE_i.
+ * The general credential scrub removes KEY_i but previously forwarded COUNT
+ * and VALUE_i. git init then aborted with "missing config key GIT_CONFIG_KEY_0"
+ * before uvx/Blender MCP could start. Never forward partial inherited tuples.
+ *
+ * Explicit child env may still configure Git intentionally after this scrub.
+ */
+export const TRANSIENT_GIT_CONFIG_ENV_PATTERN =
+  /^(?:GIT_CONFIG_(?:COUNT|KEY_\d+|VALUE_\d+|PARAMETERS))$/i
+
+/**
  * The ambient parent environment minus credential-shaped names, all `DSH_*`
  * names, and implicit loader injection controls — the canonical base every
  * harness child starts from. `PATH`, `HOME`, locale, and proxy variables
@@ -72,6 +84,7 @@ export function scrubbedParentEnv(): Record<string, string> {
     if (value !== undefined
       && !SENSITIVE_ENV_PATTERN.test(key)
       && !INJECTION_ENV_PATTERN.test(key)
+      && !TRANSIENT_GIT_CONFIG_ENV_PATTERN.test(key)
       && !key.toUpperCase().startsWith(DSH_ENV_PREFIX)) {
       env[key] = value
     }
