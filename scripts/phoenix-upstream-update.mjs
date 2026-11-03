@@ -32,6 +32,7 @@ const MIN_POLL_MS = 30 * 1000
 const DEFAULT_AUTO_APPLY_GAP_MS = 6 * 60 * 60 * 1000
 const MIN_AUTO_APPLY_GAP_MS = 60 * 60 * 1000
 const LEASE_RECOVERY_MS = 5 * 60 * 1000
+const ABANDONED_STAGING_AGE_MS = 24 * 60 * 60 * 1000
 function automaticApplyGapMs() {
   const value = Number(process.env.PHOENIX_UPSTREAM_APPLY_GAP_MS)
   return Number.isFinite(value) && value > 0
@@ -164,6 +165,35 @@ function stagingBase(home) {
 
 function transactionJournalPath(home) {
   return join(home, 'phoenix-upstream-transaction.json')
+}
+/** Only stale PHOENIX transaction IDs; never sweep arbitrary files on C:. */
+export function pruneAbandonedUpstreamStaging(home, now = Date.now()) {
+  const base = stagingBase(home)
+  if (!existsSync(base)) return { removed: 0 }
+  const journal = readJson(transactionJournalPath(home))
+  const protectedId = journal !== undefined
+    && typeof journal.id === 'string'
+    && !['completed', 'rolled-back'].includes(journal.status)
+    ? journal.id : undefined
+  let removed = 0
+  for (const entry of readdirSync(base, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.isSymbolicLink()
+      || !/^[a-z0-9]+-[a-f0-9]{8}$/iu.test(entry.name)
+      || entry.name === protectedId) continue
+    const directory = join(base, entry.name)
+    let age
+    try { age = now - statSync(directory).mtimeMs }
+    catch { continue }
+    if (age < ABANDONED_STAGING_AGE_MS) continue
+    try {
+      rmSync(directory, { recursive: true, force: true, maxRetries: 2, retryDelay: 250 })
+      removed++
+    } catch { /* Windows locked staging: later sweep can retry. */ }
+  }
+  if (removed > 0) {
+    console.error('[PHOENIX UPSTREAM UPDATE] removed ' + String(removed) + ' abandoned staging directory(s).')
+  }
+  return { removed }
 }
 
 function transactionBackupBase(home) {
@@ -512,6 +542,7 @@ async function cycleLocked(home, mode, options = {}) {
   // Storage maintenance is independent from network/update policy. Turning
   // upstream intake off must not preserve already-terminal backup snapshots.
   pruneObsoleteTransactionBackups(home)
+  pruneAbandonedUpstreamStaging(home)
   if (mode === 'off') {
     saveState(home, { mode, status: 'off', providers: {} })
     return 0

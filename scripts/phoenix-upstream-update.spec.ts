@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -9,6 +9,7 @@ import {
   containsUnsafeGeneratedLiteral,
   normalizeMode,
   parseRemoteHead,
+  pruneAbandonedUpstreamStaging,
   pruneObsoleteTransactionBackups,
   shouldDeferAutomaticUpstreamApply,
 } from './phoenix-upstream-update.mjs'
@@ -153,5 +154,33 @@ describe('PHOENIX automatic upstream intake throttling', () => {
     const again = acquireUpstreamUpdateLease(home)
     expect(typeof again).toBe('function')
     again?.()
+  })
+})
+
+describe('PHOENIX stale upstream staging janitor', () => {
+  it('removes only aged transaction staging; preserves active recovery and user folders', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-upstream-staging-'))
+    const stageRoot = join(home, 'staging')
+    temporaryPaths.push(home)
+    const saved = process.env.PHOENIX_UPSTREAM_UPDATE_TEMP
+    try {
+      process.env.PHOENIX_UPSTREAM_UPDATE_TEMP = stageRoot
+      const old = join(stageRoot, 'abc12345-deadbeef')
+      const active = join(stageRoot, 'abc12346-cafebabe')
+      const user = join(stageRoot, 'user-project')
+      for (const dir of [old, active, user]) {
+        mkdirSync(dir, { recursive: true })
+        utimesSync(dir, new Date('2026-10-29T00:00:00Z'), new Date('2026-10-29T00:00:00Z'))
+      }
+      writeFileSync(join(home, 'phoenix-upstream-transaction.json'),
+        JSON.stringify({ id: 'abc12346-cafebabe', status: 'recovery-required' }))
+      expect(pruneAbandonedUpstreamStaging(home, Date.parse('2026-11-03T12:00:00Z'))).toEqual({ removed: 1 })
+      expect(existsSync(old)).toBe(false)
+      expect(existsSync(active)).toBe(true)
+      expect(existsSync(user)).toBe(true)
+    } finally {
+      if (saved === undefined) delete process.env.PHOENIX_UPSTREAM_UPDATE_TEMP
+      else process.env.PHOENIX_UPSTREAM_UPDATE_TEMP = saved
+    }
   })
 })
