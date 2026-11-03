@@ -45,8 +45,14 @@ const FETCH_RETRY_MS = 750
 const MAX_NETWORK_BACKOFF_MS = 15 * 60 * 1000
 // The background watcher must not monopolize the launcher's Git/network stack
 // while github.com is unreachable. Normal staging/build commands are unaffected.
-const WATCH_FETCH_TIMEOUT_MS = 9_000
-const NETWORK_WARNING_INTERVAL_MS = 15 * 60 * 1000
+const WATCH_FETCH_TIMEOUT_MS = 25_000
+const NETWORK_WARNING_INTERVAL_MS = 30 * 60 * 1000
+// GitHub timeouts are not a failed build or an invalidated prepared runtime.
+function isProtectedUpdateStateDuringNetworkRetry(state) {
+  return ['preparing', 'ready', 'restarting', 'applying'].includes(state?.status)
+    || (state?.status === 'error'
+      && ['health-check', 'supervisor-timeout'].includes(state.phase))
+}
 // A locked Windows orphan can survive indefinitely. Do not re-run the same
 // expensive cleanup and print the same capacity warning on every network poll.
 const STORAGE_RETRY_MS = 5 * 60 * 1000
@@ -1303,9 +1309,7 @@ async function watch(root, parentPid) {
   const retained = durableUpdateState(root)
   // The watcher may restart while the supervisor is relaunching the Host.
   // Never erase its in-flight status or a real failed health checkpoint.
-  if (retained?.status !== 'restarting' && retained?.status !== 'applying'
-    && !(retained?.status === 'error'
-      && (retained.phase === 'health-check' || retained.phase === 'supervisor-timeout'))) {
+  if (!isProtectedUpdateStateDuringNetworkRetry(retained)) {
     writeState(root, {
       status: 'checking',
       phase: 'channel',
@@ -1354,9 +1358,7 @@ async function watch(root, parentPid) {
         lastNetworkWarningAt = now
       }
       const currentState = durableUpdateState(root)
-      if (currentState?.status !== 'restarting' && currentState?.status !== 'applying'
-        && !(currentState?.status === 'error'
-          && ['health-check', 'supervisor-timeout'].includes(currentState.phase))) {
+      if (!isProtectedUpdateStateDuringNetworkRetry(currentState)) {
         writeState(root, {
           status: 'checking',
           phase: 'retry',
