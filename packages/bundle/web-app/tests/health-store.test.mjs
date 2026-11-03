@@ -496,3 +496,58 @@ test('patient-provided image attachments remain encrypted, scoped and durable',t
   const restored=f.db.login('clinicalone',password).actor
   assert.equal(f.db.readAttachment(restored,attachment.id).bytes.toString('base64'),encoded)
 })
+
+test('clinic patient context is scoped, longitudinal and keeps unverified results distinct',t=>{
+  const {db,admin}=fixture(t)
+  const pass='another-secure-password-2026'
+  db.createStaff(admin.actor,{username:'clinicianone',password:pass,role:'clinician'})
+  db.createStaff(admin.actor,{username:'cliniciantwo',password:pass,role:'clinician'})
+  const doctor=db.login('clinicianone',pass).actor,outsider=db.login('cliniciantwo',pass).actor
+  const patient=db.create(doctor,'patients',{name:'Patient context example',dateOfBirth:'1989-05-06'})
+  const other=db.create(admin.actor,'patients',{name:'Unrelated patient',dateOfBirth:'1980-02-04'})
+  db.assignPatient(admin.actor,other.id,'cliniciantwo','separate care')
+  let encounter=db.create(doctor,'encounters',{patientId:patient.id,specialty:'General',
+    complaint:'Follow-up',mode:'manual'})
+  encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{
+    action:'document',history:'Longitudinal synthetic history',plan:'Return in four weeks'})
+  encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{action:'review'})
+  encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{action:'sign'})
+  const obs=db.create(doctor,'observations',{patientId:patient.id,encounterId:encounter.id,
+    display:'Glucose',value:102,unit:'mg/dL',effectiveAt:'2026-11-03T10:00:00Z',source:'patient-provided'})
+  const snapshot=db.patientContext(doctor,patient.id)
+  assert.equal(snapshot.patient.id,patient.id)
+  assert.equal(snapshot.encounters.length,1)
+  assert.equal(snapshot.encounters[0].plan,'Return in four weeks')
+  assert.equal(snapshot.observations.length,1)
+  assert.equal(snapshot.observations[0].status,'unverified')
+  assert(snapshot.timeline.some(x=>x.kind==='observation'))
+  assert.throws(()=>db.patientContext(outsider,patient.id),/no asignado/)
+  assert.throws(()=>db.create(doctor,'observations',{patientId:other.id,display:'test',value:100,
+    unit:'mg/dL',source:'patient-provided',effectiveAt:'2026-11-03T10:00:00Z'}),/no asignado/)
+  assert.throws(()=>db.create(doctor,'observations',{patientId:patient.id,display:'Glucose',
+    value:Infinity,unit:'mg/dL',source:'patient-provided',effectiveAt:'2026-11-03T10:00:00Z'}),/Valor numérico/)
+  const verified=db.update(doctor,'observations',obs.id,obs.version,{action:'verify'})
+  assert.equal(verified.status,'verified')
+  assert.equal(verified.verifiedBy,'clinicianone')
+  assert.throws(()=>db.update(doctor,'observations',obs.id,obs.version,{action:'verify'}),/Conflicto/)
+  assert.equal(db.patientContext(doctor,patient.id).observations[0].status,'verified')
+})
+
+test('document review preserves original bytes, requires physician and checks version',t=>{
+  const {db,admin}=fixture(t),pass='another-secure-password-2026'
+  db.createStaff(admin.actor,{username:'doctor1',password:pass,role:'clinician'})
+  db.createStaff(admin.actor,{username:'doctor2',password:pass,role:'clinician'})
+  const doctor=db.login('doctor1',pass).actor,outsider=db.login('doctor2',pass).actor
+  const patient=db.create(doctor,'patients',{name:'Synthetic scans',dateOfBirth:'1973-12-11'})
+  const encoded=Buffer.from('89504e470d0a1a0a0000000d4948445200000001','hex').toString('base64')
+  const added=db.addAttachment(doctor,{patientId:patient.id,name:'scan.png',mime:'image/png',base64:encoded})
+  assert.equal(db.listAttachments(doctor,patient.id)[0].reviewStatus,'pending')
+  assert.throws(()=>db.reviewAttachment(outsider,added.id,1),/no asignado/)
+  assert.throws(()=>db.reviewAttachment(admin.actor,added.id,1),/Solo el médico/)
+  const reviewed=db.reviewAttachment(doctor,added.id,1)
+  assert.equal(reviewed.reviewStatus,'reviewed')
+  assert.equal(reviewed.version,2)
+  assert.equal(db.readAttachment(doctor,added.id).bytes.toString('base64'),encoded)
+  assert.throws(()=>db.reviewAttachment(doctor,added.id,1),/Conflicto/)
+  assert(db.audits(admin.actor).some(x=>x.action==='attachment.reviewed'))
+})

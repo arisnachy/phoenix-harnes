@@ -48,3 +48,15 @@ test('walk-in clinical workspace includes encrypted file flow and longitudinal p
  assert.ok(script)
  assert.doesNotThrow(()=>new Script(script,{filename:'health-workspace-ui.js'}))
 })
+
+test('unified clinician context, reviewed attachments and manually verified results render safely',()=>{
+ const html=renderHealthPage('clinical-continuity-test')
+ assert.match(html,/patient-context\//)
+ assert.match(html,/workspaceAddObservation/)
+ assert.match(html,/workspaceVerifyObservation/)
+ assert.match(html,/workspaceReviewFile/)
+ assert.match(html,/Tendencias verificadas/)
+ const script=/<script nonce="clinical-continuity-test">([\s\S]+?)<\/script>/u.exec(html)?.[1]
+ assert.ok(script)
+ assert.doesNotThrow(()=>new Script(script,{filename:'clinical-continuity-inline.js'}))
+})

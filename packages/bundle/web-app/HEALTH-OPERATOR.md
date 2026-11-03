@@ -101,3 +101,18 @@ Verificar en GitHub las puertas de construcción, typecheck, Windows y tests del
 La vista **Mi consulta** reúne registro presencial sin cuenta web, continuidad de consultas, indicaciones previas y cronología por paciente asignado. El profesional puede cargar fotografías JPEG, PNG, WebP y documentos PDF desde su equipo (hasta 5 MiB por archivo y 100 por paciente) sin correo ni nube externa. Los originales quedan cifrados dentro de SQLite y se incluyen en sus respaldos consistentes. La visualización y descarga requieren autenticación clínica y relación asistencial.
 
 Todo documento aportado queda **pendiente de revisión médica**; no se interpreta ni notifica automáticamente. El portal de cargas externas, enlaces seguros temporales y análisis asistido sujeto a permisos y consentimiento son capacidades futuras. No introducir datos reales hasta completar las validaciones clínicas, regulatorias y de seguridad.
+
+## Continuidad clínica longitudinal (piloto)
+
+**Mi consulta** muestra el contexto por paciente autorizado: antecedentes, consultas
+firmadas, plan anterior, órdenes y resultados pendientes, medicamentos, seguimiento,
+cifras numéricas y archivos clínicos. La proyección es local a la clínica y no envía
+PHI a Kira/chat general. Las cifras transcritas deben conservar procedencia y documento
+de origen; empiezan **sin verificar** y solo el médico puede verificarlas. Las fotos y
+los PDF pueden marcarse como **revisados**, lo cual no valida sus conclusiones.
+Los valores solo se comparan cuando coinciden nombre de variable y unidad, sin
+inferir normalidad o realizar conversión de unidades. El portal de pacientes y la
+interpretación automatizada de documentos siguen pendientes.
+
+El servicio `ctx.healthia` y `/health` siguen siendo repositorios distintos: no
+crear una segunda copia de paciente ni sincronizar nombres como identidades.

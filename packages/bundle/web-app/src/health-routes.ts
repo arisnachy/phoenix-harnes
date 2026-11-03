@@ -174,6 +174,14 @@ export function registerHealthRoutes(ctx:Context):void {
           reply(res,201,{ backup:receipt });return
         }
       }
+
+      if(operation==='patient-context'&&method==='GET'&&id!==undefined){
+        reply(res,200,{context:store.patientContext(actor,id)});return
+      }
+      if(operation==='attachment-review'&&method==='PATCH'&&id!==undefined){
+        const value=await readBody(req)
+        reply(res,200,{attachment:store.reviewAttachment(actor,id,Number(value.version))});return
+      }
       if(operation==='attachments'&&method==='POST'&&id===undefined){
         reply(res,201,{attachment:store.addAttachment(actor,await readBody(req,7_300_000))});return
       }
