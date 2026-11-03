@@ -1,7 +1,7 @@
 # Safe, opt-in PHOENIX Windows runtime storage recovery.
 # Inspect by default; -Apply only prunes idle, disposable managed runtimes.
 [CmdletBinding()]
-param([switch]$Apply)
+param([switch]$Apply, [switch]$PurgeOldWorkspaces, [ValidateRange(1, 365)][int]$OlderThanDays = 7)
 
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
@@ -68,6 +68,30 @@ Write-Host ('[PHOENIX STORAGE] Previous-identity directories found: ' + $legacyB
 $legacyBefore | Select-Object Name, LastWriteTime | Format-Table -AutoSize
 Write-Host '[PHOENIX STORAGE] Only abandoned directories older than 48h and unused by other processes are eligible.'
 
+# One-off project/evidence directories are not updater worktrees. The normal
+# automatic janitor must never erase user-created work or previous research.
+# Explicit -PurgeOldWorkspaces is an additional destructive action, not default.
+$projectPattern = '^(?:phoenix-|kokoro-)'
+$projectProtected = '(?i)(?:^phoenix-(?:runtime|stage|vault|.*backup)|^kokoro-.*backup)'
+function Get-RetiredWorkspaces {
+    if (-not (Test-Path -LiteralPath $storageRoot -PathType Container)) { return @() }
+    $cutoff = (Get-Date).AddDays(-$OlderThanDays)
+    return @(Get-ChildItem -LiteralPath $storageRoot -Directory -ErrorAction Stop | Where-Object {
+        $_.Name -match $projectPattern -and
+        $_.Name -notmatch $projectProtected -and
+        $_.LastWriteTime -lt $cutoff -and
+        -not (Test-Path -LiteralPath (Join-Path $_.FullName ".git")) -and
+        -not (Test-Path -LiteralPath (Join-Path $_.FullName ".phoenix-keep"))
+    })
+}
+$retiredProjectsBefore = @(Get-RetiredWorkspaces)
+Write-Host ("[PHOENIX STORAGE] Non-Git, non-protected old workspaces (older than $OlderThanDays days): " + $retiredProjectsBefore.Count)
+$retiredProjectsBefore | Select-Object Name, LastWriteTime | Format-Table -AutoSize
+if ($PurgeOldWorkspaces -and -not $Apply) {
+    Write-Host '[PHOENIX STORAGE] -PurgeOldWorkspaces requires -Apply. Inspection only.'
+}
+
+
 if (-not $Apply) {
     Write-Host '[PHOENIX STORAGE] Inspection only. Close Phoenix, then rerun with -Apply to reclaim idle runtimes.'
     return
@@ -106,10 +130,33 @@ try {
     [Environment]::SetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', $priorBackups, 'Process')
 }
 
+if ($PurgeOldWorkspaces) {
+    $removed = 0
+    foreach ($candidate in @(Get-RetiredWorkspaces)) {
+        # Re-evaluate at removal time to avoid deleting a directory newly
+        # converted to a Git project, retained by its owner, or recently used.
+        if (-not (Test-Path -LiteralPath $candidate.FullName -PathType Container) -or
+            (Test-Path -LiteralPath (Join-Path $candidate.FullName ".git")) -or
+            (Test-Path -LiteralPath (Join-Path $candidate.FullName ".phoenix-keep")) -or
+            (Get-Item -LiteralPath $candidate.FullName).LastWriteTime -ge (Get-Date).AddDays(-$OlderThanDays)) { continue }
+        try {
+            Remove-Item -LiteralPath $candidate.FullName -Recurse -Force -ErrorAction Stop
+            $removed += 1
+            Write-Host ("[PHOENIX STORAGE] Removed retired non-Git workspace: " + $candidate.Name)
+        } catch {
+            Write-Warning ("[PHOENIX STORAGE] Could not remove " + $candidate.Name + ": " + $_.Exception.Message)
+        }
+    }
+    Write-Host ("[PHOENIX STORAGE] Retired workspaces actually removed: " + $removed)
+}
 $after = @(Get-ManagedRuntimeDirectories)
 $legacyAfter = @(Get-LegacyStorageDirectories)
 Write-Host ('[PHOENIX STORAGE] Remaining managed runtimes: ' + $after.Count)
 Write-Host ('[PHOENIX STORAGE] Remaining previous-identity directories (including protected checkouts): ' + $legacyAfter.Count)
+if ($legacyAfter.Count -gt 0) {
+    Write-Warning '[PHOENIX STORAGE] Some legacy paths remain. They may be active, registered to another checkout or Windows-locked; cleanup did not succeed for all of them.'
+}
+Write-Host ('[PHOENIX STORAGE] Remaining old non-Git workspaces: ' + @(Get-RetiredWorkspaces).Count)
 # Mirror the supervisor's configurable cap instead of hardcoding 3/3.
 $backupCount = 1
 $backupOverride = 0
