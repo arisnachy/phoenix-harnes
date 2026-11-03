@@ -12,7 +12,7 @@
  * @param input - Text of an actual user-authored message (not tool content).
  * @returns Game Studio's skill name or undefined for unrelated/ambiguous text.
  */
-export function naturalCreationSkill(input: string): 'game-development' | undefined {
+export function naturalCreationSkill(input: string): 'game-development' | 'blender-studio' | undefined {
   const normalized = input.normalize('NFD').replace(/[\u0300-\u036f]/gu, '')
     .toLowerCase().replace(/\s+/gu, ' ').trim().replace(/^[¿¡]+\s*/u, '')
   if (normalized.length === 0) return undefined
@@ -30,5 +30,16 @@ export function naturalCreationSkill(input: string): 'game-development' | undefi
   const short = new RegExp('^(?:(?:un|una|a|an)\\s+)?' + game + '\\s+(?:tipo|estilo|de|sobre|similar|like|about|with|para|for)\\b', 'u')
   const shortRequest = request.length < 150 && !/[?？]/u.test(request) && short.test(request)
   if (command.test(request) || desired.test(request) || shortRequest) return 'game-development'
+
+  // Blender Studio is a *skill* only: loading guidance never installs or
+  // executes the high-privilege Blender MCP. The user must activate that
+  // connector separately. Don't confuse a static image or a low-poly sketch
+  // with an explicitly detailed, reusable 3D model.
+  const spatial = /\b(?:3d|tridimensional|glb|gltf|blender|three-dimensional)\b/u.test(request)
+  const model = /\b(?:modelo|model|personaje|character|avatar|figura|figure|malla|mesh|escena|scene|escultura|sculpture)\b/u.test(request)
+  const creation = /\b(?:haz(?:me)?|crea(?:me)?|crear|genera(?:me)?|construye|modela|dise[nñ]a|quiero|necesito|dame|make|create|build|generate|design|model)\b/u.test(request)
+  const quality = /\b(?:detallad\w*|realist\w*|profesional|studio|gir\w*|rot\w*|zoom|acerc\w*|manipul\w*|rig\w*|export\w*|editable|glb|gltf|character|personaje|avatar)\b/u.test(request)
+  const explicitPrototype = /\b(?:low[ -]?poly|primitiv\w*|blockout|boceto\s+simple|vista\s+previa\s+basica)\b/u.test(request)
+  if (spatial && model && creation && quality && !explicitPrototype) return 'blender-studio'
   return undefined
 }
