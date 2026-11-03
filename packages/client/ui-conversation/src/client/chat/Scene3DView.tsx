@@ -166,6 +166,31 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
   }
 }
 
+/** Estimate a character's actual forward axis using facial landmarks, not world coordinates.
+ * Unknown or unlabeled models retain the existing safe world-facing camera.
+ */
+export function sceneCharacterFacingYaw(scene: Scene3D): number | undefined {
+  const normalized=(name:string):string =>
+    name.normalize('NFKD').replace(/[\u0300-\u036f]/gu,'').toLowerCase()
+  const heads=scene.nodes.filter(node =>
+    /\b(?:head|cabeza|rostro|face|cara)\b/u.test(normalized(node.name??'')))
+  if(heads.length!==1)return undefined
+  const head=heads[0]!
+  const landmarks=scene.nodes.filter(node =>
+    /\b(?:ojos?|eyes?|nariz|nose|bigotes?|mustache|moustache|boca|mouth)\b/u
+      .test(normalized(node.name??'')))
+  if(landmarks.length===0)return undefined
+  const relevant=landmarks.filter(node =>
+    Math.abs(node.position[1]-head.position[1])<head.size[1]*1.6
+    && Math.hypot(node.position[0]-head.position[0],node.position[2]-head.position[2])
+       <Math.max(head.size[0],head.size[2])*2.5)
+  if(relevant.length===0)return undefined
+  const dx=relevant.reduce((sum,node)=>sum+node.position[0]-head.position[0],0)/relevant.length
+  const dz=relevant.reduce((sum,node)=>sum+node.position[2]-head.position[2],0)/relevant.length
+  if(Math.hypot(dx,dz)<Math.min(head.size[0],head.size[2])*.08)return undefined
+  return Math.atan2(dx,dz)
+}
+
 const deg = Math.PI / 180
 function transform(vertex: Vec3, node: Scene3DNode): Vec3 {
   let [x,y,z]: Vec3 = [vertex[0]*node.size[0],vertex[1]*node.size[1],vertex[2]*node.size[2]]
@@ -355,9 +380,14 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
   useEffect(()=>{
     const next=parseScene3D(spec)
     setScene(next)
-    if(next?.camera==='front'){angle.current.yaw=0;angle.current.pitch=0}
+    const facing=next===undefined?undefined:sceneCharacterFacingYaw(next)
+    if(next?.camera==='front'){angle.current.yaw=facing??0;angle.current.pitch=0}
     if(next?.camera==='top'){angle.current.yaw=0;angle.current.pitch=1.48}
-    if(next?.camera==='isometric'){angle.current.yaw=-.785;angle.current.pitch=.615}
+    if(next?.camera==='isometric'){angle.current.yaw=(facing??-.235)-.55;angle.current.pitch=.615}
+    if(next!==undefined && next.camera!=='front' && next.camera!=='top'
+      && next.camera!=='isometric' && facing!==undefined){
+      angle.current.yaw=facing-.24;angle.current.pitch=.2
+    }
   },[spec])
   const canvas=useRef<HTMLCanvasElement>(null)
   const drag=useRef<{x:number;y:number;button:number}|null>(null)
@@ -371,6 +401,7 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
   const [selected,setSelected]=useState(0)
   const [editOpen,setEditOpen]=useState(false)
   const picker=useRef<HTMLInputElement>(null)
+  const facingYaw=useMemo(()=>scene===undefined?undefined:sceneCharacterFacingYaw(scene),[scene])
   const selectedNode=scene?.nodes[selected]
   const meshes=useMemo(()=>scene?.nodes.flatMap(mesh)??[],[scene])
   const clip=scene?.animations?.[selectedAnimation]
@@ -461,12 +492,12 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
           aria-label="Acercar modelo 3D">+</button>
         <button type="button" onClick={()=>update(()=>{angle.current.zoom=Math.max(.2,angle.current.zoom/1.25)})}
           aria-label="Alejar modelo 3D">−</button>
-        <button type="button" onClick={()=>update(()=>{angle.current={yaw:-.65,pitch:.38,zoom:1,pan:[0,0]}})}>Restablecer</button>
+        <button type="button" onClick={()=>update(()=>{angle.current={yaw:facingYaw===undefined?-.65:facingYaw-.24,pitch:facingYaw===undefined?.38:.2,zoom:1,pan:[0,0]}})}>Restablecer</button>
         <button type="button" aria-pressed={autoRotate} onClick={()=>setAutoRotate(value=>!value)}>
           {autoRotate?'Pausar':'Girar'}</button>
-        <button type="button" onClick={()=>update(()=>{angle.current.yaw=0;angle.current.pitch=0;angle.current.pan=[0,0]})}>Frente</button>
+        <button type="button" onClick={()=>update(()=>{angle.current.yaw=facingYaw??0;angle.current.pitch=0;angle.current.pan=[0,0]})}>Frente</button>
         <button type="button" onClick={()=>update(()=>{angle.current.yaw=0;angle.current.pitch=1.48;angle.current.pan=[0,0]})}>Planta</button>
-        <button type="button" onClick={()=>update(()=>{angle.current.yaw=-.785;angle.current.pitch=.615})}>Isométrica</button>
+        <button type="button" onClick={()=>update(()=>{angle.current.yaw=(facingYaw??-.235)-.55;angle.current.pitch=.615})}>Isométrica</button>
         <label className={css.cameraControl}>Luz <select aria-label="Iluminación del modelo 3D" value={scene.environment??'studio'}
           onChange={event=>setScene(current=>current===undefined?current:{...current,environment:event.target.value as 'studio'|'sunset'|'daylight'})}>
           <option value="studio">Estudio</option><option value="sunset">Atardecer</option><option value="daylight">Día</option>
