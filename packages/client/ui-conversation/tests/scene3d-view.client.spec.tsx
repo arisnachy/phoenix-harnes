@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Scene3DView, parseScene3D } from '../src/client/chat/Scene3DView.tsx'
+import { poseScene3D } from '../src/client/chat/scene3d-animation.ts'
 import { normalizeHardnessArtifact } from '../src/client/artifact.ts'
 import { HardnessArtifactBody } from '../src/client/chat/HardnessArtifactBody.tsx'
 import { UniversalArtifactSurface } from '../src/client/chat/UniversalArtifactSurface.tsx'
@@ -79,6 +80,25 @@ describe('Phoenix real interactive 3D artifacts',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Duplicar'}))
     expect(document.querySelector('[data-scene-node-count="3"]')).toBeTruthy()
     expect(ctx.fill).toHaveBeenCalled()
+  })
+  it('interpolates arbitrary object keyframes, preserving background and other scene pieces',()=>{
+    const animated=parseScene3D({
+      version:1,units:'meters',name:'Pelícano en bicicleta',background:'#f9f3eb',
+      nodes:[{type:'torus',name:'Rueda',objectId:'bike',position:[1,1,0],size:[1,.1,1],color:'#222222'},
+        {type:'sphere',name:'Pelícano',objectId:'bird',position:[0,2,0],size:[1,1,1],color:'#ffffff'}],
+      animations:[{name:'Pedalear',duration:2,loop:true,tracks:[{node:'Rueda',property:'rotation',
+        keys:[{time:0,value:[90,0,0]},{time:2,value:[90,0,360]}]}]}],
+    })
+    expect(animated).toBeDefined()
+    const mid=poseScene3D(animated!,animated!.animations![0]!,1)
+    expect(mid.nodes[0]?.rotation).toEqual([90,0,180])
+    expect(mid.nodes[1]?.position).toEqual([0,2,0])
+    expect(mid.nodes[0]?.objectId).toBe('bike')
+    expect(poseScene3D(animated!,animated!.animations![0]!,2).nodes[0]?.rotation).toEqual([90,0,0])
+    expect(parseScene3D({...animated,animations:[{
+      name:'Mal',duration:2,loop:true,tracks:[{node:'No existe',
+        property:'rotation',keys:[{time:0,value:[0,0,0]},{time:2,value:[1,1,1]}]}],
+    }]})).toBeUndefined()
   })
   it('shows an actionable validation error rather than pretending invalid geometry is a scene',()=>{
     render(<Scene3DView spec={{version:1,units:'meters',nodes:[]}} />)
