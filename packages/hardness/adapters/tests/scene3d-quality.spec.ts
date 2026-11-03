@@ -26,6 +26,7 @@ describe('general-purpose 3D production admission', () => {
   it('routes real production and exact reconstruction away from native preview', () => {
     expect(requestedScene3DLevel('Modelo 3D simple para girar')).toBe('preview')
     expect(requestedScene3DLevel('Personaje anime 3D profesional con rigging')).toBe('studio')
+    expect(requestedScene3DLevel('Crea cualquier cosa perfecta en 3D')).toBe('studio')
     expect(requestedScene3DLevel('Casa con exactitud 1:1 y planos')).toBe('fidelity')
     expect(choosePhoenix3DPipeline('Personaje animado fotorrealista')).toBe('blender-studio')
     expect(choosePhoenix3DPipeline('Reconstrucción exacta de vehículo')).toBe('reference-reconstruction')
