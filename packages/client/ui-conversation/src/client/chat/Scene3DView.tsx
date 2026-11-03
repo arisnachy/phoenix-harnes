@@ -177,7 +177,7 @@ function transform(vertex: Vec3, node: Scene3DNode): Vec3 {
   return [x+node.position[0], y+node.position[1], z+node.position[2]]
 }
 function sphereNormal(point: Vec3, node: Scene3DNode): Vec3 {
-  let [x,y,z] = [point[0]/node.size[0],point[1]/node.size[1],point[2]/node.size[2]]
+  let [x,y,z]:Vec3 = [point[0]/node.size[0],point[1]/node.size[1],point[2]/node.size[2]]
   const [rx,ry,rz] = node.rotation ?? [0,0,0] as const
   const ax=rx*deg,ay=ry*deg,az=rz*deg
   ;[y,z]=[y*Math.cos(ax)-z*Math.sin(ax),y*Math.sin(ax)+z*Math.cos(ax)]
