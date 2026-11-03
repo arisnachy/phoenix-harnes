@@ -302,9 +302,10 @@ describe('ManagedMcpController', () => {
     const restored = await controller.ensureCoreMcpPack()
     expect(restored.failed).toEqual([])
     expect(restored.installed).toEqual(expect.arrayContaining([
-      'blender', 'microsoft-learn', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack',
+      'microsoft-learn', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack',
       'brave-search', 'filesystem', 'memory', 'fetch',
     ]))
+    expect(restored.installed).not.toContain('blender')
     expect(restored.installed).not.toContain('devpost')
     expect(restored.installed).not.toContain('microsoft-workiq')
     expect(restored.installed).not.toContain('microsoft-azure')
@@ -354,14 +355,6 @@ describe('ManagedMcpController', () => {
       transport: 'stdio',
       serverName: 'filesystem',
       args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
-    })
-    expect(configs.get('blender')).toMatchObject({
-      transport: 'stdio',
-      serverName: 'blender',
-      command: 'uvx',
-      args: ['--from', BLENDER_LAB_MCP_SOURCE, 'blender-mcp'],
-      env: { BLENDER_MCP_HOST: 'localhost', BLENDER_MCP_PORT: '9876' },
-      failOnStartupError: false,
     })
     expect(configs.get('fetch')).toMatchObject({
       transport: 'stdio',
