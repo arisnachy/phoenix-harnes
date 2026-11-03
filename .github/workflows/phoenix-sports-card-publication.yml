@@ -30,5 +30,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify Kira displays actual cards beyond Tools for every sport
         run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx
-      - name: Strict client TypeScript
-        run: pnpm exec tsc -b tsconfig.client.json --pretty false
+      - name: Generate host remotes, schemas and client contracts
+        run: pnpm run build:lib:host
+      - name: Strict client TypeScript and library build
+        run: pnpm run build:lib:client
