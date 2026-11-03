@@ -677,7 +677,7 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
 
 // When the checkout identity changes, older updater worktrees remain in ~/p.
 // Reclaim only strict PHOENIX-generated names after 48 hours, and only when:
-//   (1) Git proves that the worktree is owned by this checkout and is clean, or
+//   (1) Git proves that the worktree is owned by this checkout and unleased, or
 //   (2) its linked-worktree metadata proves that the original owner is gone.
 // Another repository's existing worktrees, active/preparing markers, and
 // anything that Windows processes still reference must never be removed.
@@ -708,8 +708,9 @@ function detachedStorageCandidateKind(path, registeredWorktrees) {
   if (registeredWorktrees.has(key)) {
     // Previous identities can still be registered against this very Git
     // checkout. They were previously excluded from ALL legacy cleanup.
-    // Never remove modified trees or an active/preparing lease.
-    if (!sameRepository(path) || !gitClean(path)
+    // Only strict updater-generated paths from the same Git owner are eligible.
+    // Generated build files may make a retired worktree dirty; check live leases instead.
+    if (!sameRepository(path)
       || runtimeProtectedByOwningCheckout(path)
       || stageProtectedByOwningCheckout(path)) return undefined
     return 'owned'
