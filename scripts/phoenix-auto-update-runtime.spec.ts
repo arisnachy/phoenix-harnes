@@ -12,6 +12,66 @@ const desktop = readFileSync(resolve('apps/desktop-windows/Program.cs'), 'utf8')
 const build = readFileSync(resolve('scripts/build.ts'), 'utf8')
 const stableWorkflow = readFileSync(resolve('.github/workflows/phoenix-stable-update-channel.yml'), 'utf8')
 
+describe('real Windows disk headroom guard', () => {
+  it('blocks a multi-GiB supervisor runtime when there is only 5 GiB free', () => {
+    const start = supervisor.indexOf('function assertRuntimeDiskHeadroom() {')
+    const end = supervisor.indexOf('\nfunction assertRuntimeStorageCapacity(nextRuntime) {', start)
+    expect(start).toBeGreaterThan(0)
+    expect(end).toBeGreaterThan(start)
+    let gib = 5
+    const guard = runInNewContext(
+      supervisor.slice(start, end) + '\n({ assertRuntimeDiskHeadroom })',
+      {
+        statfsSync: () => ({ bavail: gib, bsize: 1024 ** 3 }),
+        runtimeBaseDirectory: () => 'C:/Users/test/p',
+        MIN_RUNTIME_DISK_FREE_GIB: 8,
+        process: { platform: 'win32' },
+        console: { error: () => {} },
+      },
+    ) as { assertRuntimeDiskHeadroom: () => void }
+    expect(() => guard.assertRuntimeDiskHeadroom()).toThrow(/only 5\.00 GiB free/u)
+    gib = 12
+    expect(() => guard.assertRuntimeDiskHeadroom()).not.toThrow()
+    expect(supervisor).toContain('assertRuntimeDiskHeadroom()')
+    expect(supervisor).toContain('function assertRuntimeStorageCapacity(nextRuntime)')
+  })
+
+  it('stops the supervised watcher before a fresh runtime allocation', () => {
+    const start = updater.indexOf('function updaterRuntimeDiskHasHeadroom(root) {')
+    const end = updater.indexOf('\nfunction updaterRuntimeStorageHasCapacity(root, target) {', start)
+    expect(start).toBeGreaterThan(0)
+    expect(end).toBeGreaterThan(start)
+    let free = 3
+    const error = vi.fn()
+    const guard = runInNewContext(
+      updater.slice(start, end) + '\n({ updaterRuntimeDiskHasHeadroom })',
+      {
+        statfsSync: () => ({ bavail: free, bsize: 1024 ** 3 }),
+        stageBaseDirectory: () => 'C:/Users/test/p',
+        MIN_RUNTIME_DISK_FREE_GIB: 8,
+        process: { platform: 'win32' }, console: { error },
+      },
+    ) as { updaterRuntimeDiskHasHeadroom: (root: string) => boolean }
+    expect(guard.updaterRuntimeDiskHasHeadroom('checkout')).toBe(false)
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('below the 8 GiB safety reserve'))
+    free = 20
+    expect(guard.updaterRuntimeDiskHasHeadroom('checkout')).toBe(true)
+    expect(updater).toContain('if (!updaterRuntimeDiskHasHeadroom(root)) return false')
+    expect(updater).toContain("phase: 'storage'")
+  })
+
+  it('the storage diagnostic measures both p and .dsh instead of assuming p explains disk loss', () => {
+    const audit = readFileSync(resolve('scripts/phoenix-storage-audit.mjs'), 'utf8')
+    expect(audit).toContain("name: 'persistent-.dsh'")
+    expect(audit).toContain("name: 'managed-p'")
+    expect(audit).toContain("name: 'pnpm-store'")
+    expect(audit).toContain("name: 'git-objects'")
+    expect(audit).toContain('diskFreeDeltaBytes')
+    expect(audit).toContain("args.includes('--snapshot')")
+    expect(audit).not.toContain('rmSync(')
+  })
+})
+
 describe('failed isolated runtime storage reclamation', () => {
   it('reclaims only a failed unactivated candidate after a build error', () => {
     const start = supervisor.indexOf('function cleanupFailedPreparedRuntime(target) {')
