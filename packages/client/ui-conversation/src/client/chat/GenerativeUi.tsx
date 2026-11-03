@@ -330,8 +330,8 @@ const sportsEspnDashboard=(v:Record<string,unknown>):v is SportsEspnDashboard=>{
     ['view','title','subtitle','source','checkedAt','image','sections','note']))return false
   const p=v.props
   return ['team','player','event','standings','news','leaders','search'].includes(String(p.view))
-    && isText(p.title) && isText(p.subtitle,220) && isText(p.source,320)
-    && isText(p.checkedAt,50) && trustedPortrait(p.image) && isText(p.note,400)
+    && isText(p.title,300) && isText(p.subtitle,500) && isText(p.source,320)
+    && isText(p.checkedAt,50) && trustedPortrait(p.image) && isText(p.note,1200)
     // Detailed investigations can contain many evidence sections. Previously
     // 9+ sections caused the ENTIRE verified card to vanish without notice.
     // Keep a hard total-item budget and validate every child to stay safe.
@@ -339,10 +339,10 @@ const sportsEspnDashboard=(v:Record<string,unknown>):v is SportsEspnDashboard=>{
     && p.sections.reduce((total,s)=>total+(isRecord(s)&&Array.isArray(s.items)?
       s.items.length:0),0)<=450
     && p.sections.every(s=>isRecord(s) && hasOnlyKeys(s,['heading','kind','items'])
-      && isText(s.heading) && ['metrics','list','articles'].includes(String(s.kind))
+      && isText(s.heading,300) && ['metrics','list','articles'].includes(String(s.kind))
       && Array.isArray(s.items) && s.items.length>=1 && s.items.length<=30
       && s.items.every(x=>isRecord(x)&&hasOnlyKeys(x,['label','value','detail','image','href','action'])
-        && isText(x.label) && optionalText(x.value) && optionalText(x.detail,240)
+        && isText(x.label,400) && optionalText(x.value,1000) && optionalText(x.detail,1000)
         && trustedPortrait(x.image) && espnArticleLink(x.href)
         && (x.action===undefined||(isRecord(x.action)&&hasOnlyKeys(x.action,['label','prompt'])
           && isText(x.action.label,80)&&isText(x.action.prompt,400)))))
