@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { JsonBlock, MarkdownText, MessageText } from '@phoenix-ai/dsh-client-ui-primitives'
 import { cjkFriendlyStrong } from '../src/markdown/cjkFriendlyStrong.ts'
 import { mathCompatibility } from '../src/markdown/mathCompatibility.ts'
+import { protectCurrencyInMarkdown } from '../src/markdown/parse.ts'
 
 afterEach(cleanup)
 
@@ -292,6 +293,21 @@ describe('MarkdownText', () => {
     expect(screen.getByText('**unfinished')).toBeTruthy()
   })
 
+  it('keeps peso currency, spacing and decimals intact', () => {
+    const source = 'La combinación cuesta RD$23,730 antes de contingencia; con un 8% sube a RD$25,628.40.'
+    const result = render(<MarkdownText text={source} />)
+    expect(result.container.querySelectorAll('.katex')).toHaveLength(0)
+    expect(result.container.querySelector('p')?.textContent).toBe(source)
+    expect(protectCurrencyInMarkdown(source)).toContain('RD\\$23,730')
+  })
+
+  it('preserves genuine math and inline-code currency unchanged', () => {
+    const source = '$x^2+1$; `RD$10,500`; RD$25,628.40.'
+    const result = render(<MarkdownText text={source} />)
+    expect(result.container.querySelectorAll('.katex')).toHaveLength(1)
+    expect(result.container.querySelector('code')?.textContent).toBe('RD$10,500')
+    expect(result.container.textContent).toContain('RD$25,628.40')
+  })
   it('renders inline and display TeX through KaTeX without enabling trusted commands', () => {
     const source = [
       'Einstein wrote $E = mc^2$.',
