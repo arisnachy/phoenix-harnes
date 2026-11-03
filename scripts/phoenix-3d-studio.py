@@ -236,6 +236,8 @@ def run():
         before = set(bpy.data.objects)
         bpy.ops.import_scene.gltf(filepath=str(asset))
         objects.extend(obj for obj in bpy.data.objects if obj not in before and obj.type == "MESH")
+    if not objects:
+        raise ValueError("No renderable mesh geometry was found in the scene or GLB assets")
     lights_and_camera(objects)
     animate(scene, objects)
     ctx = bpy.context.scene
