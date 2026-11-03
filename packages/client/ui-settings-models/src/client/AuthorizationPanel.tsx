@@ -617,7 +617,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, blenderSt
   const mcpStatus = mcpRuntime?.status === 'ready'
     ? mcpRuntime.toolNames.length > 0
       ? definition.id === 'blender'
-        ? { text: 'MCP cargado · verifica Blender y complemento', className: connectorStyles['connectorStatusWarn'] ?? '' }
+        ? blenderState?.addonBridgeListening === true
+          ? { text: 'MCP y puente local detectados · prueba una herramienta con Kira', className: connectorStyles['connectorStatusReady'] ?? '' }
+          : { text: 'MCP cargado · complemento sin verificar', className: connectorStyles['connectorStatusWarn'] ?? '' }
         : needsIndependentVerification
         ? { text: 'MCP iniciado · verifica OAuth con Kira', className: connectorStyles['connectorStatusWarn'] ?? '' }
         : { text: t('callableStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
