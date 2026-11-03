@@ -614,7 +614,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   const liveStatus = live === undefined ? undefined : connectorStatus(live, t)
   const mcpStatus = mcpRuntime?.status === 'ready'
     ? mcpRuntime.toolNames.length > 0
-      ? needsIndependentVerification
+      ? definition.id === 'blender'
+        ? { text: 'MCP cargado · verifica Blender y complemento', className: connectorStyles['connectorStatusWarn'] ?? '' }
+        : needsIndependentVerification
         ? { text: 'MCP iniciado · verifica OAuth con Kira', className: connectorStyles['connectorStatusWarn'] ?? '' }
         : { text: t('callableStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
       : { text: t('registryNoToolsStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
