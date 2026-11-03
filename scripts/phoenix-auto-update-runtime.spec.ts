@@ -425,6 +425,97 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(storageRepair).toContain('.phoenix-keep')
     expect(storageRepair).toContain('Retired workspaces actually removed:')
   })
+
+  it('retires old official-checkout worktrees only with verified ownership and no recent heartbeat', () => {
+    const start = supervisor.indexOf('function retiredPhoenixCheckoutOwner(path) {')
+    const end = supervisor.indexOf('\n/**\n * Retire old, official updater worktrees', start)
+    expect(start).toBeGreaterThan(0)
+    expect(end).toBeGreaterThan(start)
+    const owner = resolve('legacy-phoenix')
+    const common = join(owner, '.git')
+    const current = join(resolve('current-phoenix'), '.git')
+    const candidate = join(resolve('p'), 'phoenix-runtime-32354d723e-6906da8e0db8')
+    const now = Date.now()
+    let old = true
+    let heartbeat = now - 9 * 24 * 60 * 60_000
+    let remote = 'https://github.com/arisnachy/phoenix-harnes.git'
+    let registered = true
+    const { retiredPhoenixCheckoutOwner } = runInNewContext(
+      supervisor.slice(start, end) + '\n({ retiredPhoenixCheckoutOwner })',
+      {
+        process: { platform: 'win32' },
+        officialPhoenixRemote: () => true,
+        managedDirectoryAgeMs: () => old ? 9 * 24 * 60 * 60_000 : 1_000,
+        RETIRED_CHECKOUT_MIN_AGE_MS: 7 * 24 * 60 * 60_000,
+        absoluteGitPath: (_cwd: string, value: string) => value,
+        gitValue: (cwd: string, args: string[]) => {
+          if (args[0] === 'rev-parse') return cwd === candidate ? common : current
+          if (args[0] === 'remote') return remote
+          if (args[0] === 'worktree') return registered ? 'worktree ' + candidate + '\nHEAD abc' : 'worktree ' + owner
+          return undefined
+        },
+        root: resolve('current-phoenix'),
+        runtimePathKey: (path: string) => path.toLowerCase(),
+        existsSync: (path: string) => path !== join(common, 'nonexistent'),
+        join, dirname: (path: string) => resolve(path, '..'),
+        readFileSync: () => JSON.stringify({ schema: 1, at: new Date(heartbeat).toISOString() }),
+        SUPERVISOR_HEARTBEAT_FILE: 'phoenix-update-supervisor-heartbeat.json',
+        Date, 
+      },
+    ) as { retiredPhoenixCheckoutOwner: (path: string) => string | undefined }
+    expect(retiredPhoenixCheckoutOwner(candidate)).toBe(owner)
+    heartbeat = now
+    expect(retiredPhoenixCheckoutOwner(candidate)).toBeUndefined()
+    heartbeat = now - 9 * 24 * 60 * 60_000
+    old = false
+    expect(retiredPhoenixCheckoutOwner(candidate)).toBeUndefined()
+    old = true
+    remote = 'https://github.com/not-our/repository'
+    expect(retiredPhoenixCheckoutOwner(candidate)).toBeUndefined()
+    remote = 'https://github.com/arisnachy/phoenix-harnes.git'
+    registered = false
+    expect(retiredPhoenixCheckoutOwner(candidate)).toBeUndefined()
+  })
+
+  it('skips old runtimes when their owning checkout is running or process verification fails', () => {
+    const start = supervisor.indexOf('function cleanupDetachedLegacyStorage(keep, reportBusy = false) {')
+    const end = supervisor.indexOf('\nfunction cleanupObsoleteRuntimes(', start)
+    const owner = 'old-phoenix-root'
+    const candidate = 'old-phoenix-runtime'
+    const retired = vi.fn(() => true)
+    let busy: Set<string> | undefined = new Set([owner])
+    const { cleanupDetachedLegacyStorage } = runInNewContext(
+      supervisor.slice(start, end) + '\n({ cleanupDetachedLegacyStorage })',
+      {
+        nextDetachedStorageSweepAt: 0,
+        DETACHED_STORAGE_SWEEP_INTERVAL_MS: 0,
+        registeredWorktreePaths: () => new Set(),
+        detachedStorageCandidates: () => [{ path: candidate, kind: 'retired' }],
+        runtimePathKey: (path: string) => path,
+        retiredPhoenixCheckoutOwner: () => owner,
+        windowsProcessReferences: (paths: string[]) => {
+          expect(paths).toContain(candidate)
+          expect(paths).toContain(owner)
+          return busy
+        },
+        managedDirectoryAgeMs: () => 8 * 24 * 60 * 60_000,
+        DETACHED_STORAGE_MIN_AGE_MS: 24 * 60 * 60_000,
+        detachedStorageCandidateKind: () => 'retired',
+        removeRetiredPhoenixWorktree: retired,
+        console: { error: () => {} },
+        Date,
+      },
+    ) as { cleanupDetachedLegacyStorage: (keep: Set<string>, reportBusy?: boolean) => void }
+    cleanupDetachedLegacyStorage(new Set(), true)
+    expect(retired).not.toHaveBeenCalled()
+    busy = undefined
+    cleanupDetachedLegacyStorage(new Set(), true)
+    expect(retired).not.toHaveBeenCalled()
+    busy = new Set()
+    cleanupDetachedLegacyStorage(new Set(), true)
+    expect(retired).toHaveBeenCalledExactlyOnceWith(candidate, owner)
+  })
+
   it('caps runtime copies while keeping age-based staging cleanup', () => {
     expect(supervisor).toContain('DEFAULT_UPDATE_STORAGE_RETENTION_MS = 6 * 60 * 60 * 1000')
     expect(supervisor).toContain('PHOENIX_UPDATE_STORAGE_RETENTION_MS')
