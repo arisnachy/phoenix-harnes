@@ -645,3 +645,14 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   })
 
 })
+
+describe('cross-checkout PHOENIX disk growth prevention', () => {
+  it('caps all strict generated runtimes across checkout identities without deleting them blindly', () => {
+    expect(supervisor).toContain('GLOBAL_RUNTIME_DIRECTORY_LIMIT')
+    expect(supervisor).toContain('function globalRuntimeDirectoriesForCleanup()')
+    expect(supervisor).toContain('global PHOENIX runtime storage limit reached')
+    expect(supervisor).toContain('const DETACHED_STORAGE_MIN_AGE_MS = 24 * 60 * 60 * 1000')
+    expect(supervisor.indexOf('cleanupObsoleteRuntimes([runtimeRoot]'))
+      .toBeLessThan(supervisor.indexOf('const globalCount = globalRuntimeDirectoriesForCleanup().length'))
+  })
+})
