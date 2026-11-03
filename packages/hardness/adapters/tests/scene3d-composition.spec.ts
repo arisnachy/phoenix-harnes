@@ -57,7 +57,7 @@ describe('universal scene graph regardless of category',()=>{
       compositionContract:requirements,
     },execution())).rejects.toThrow(/animación verificable/u)
     await expect(tool.execute({
-      title:'Vehículo incompleto 3D',scene:{nodes:nodes.filter(node=>node.name!=='Rueda'),animations},
+      title:'Vehículo incompleto 3D',scene:{nodes:nodes.filter(node=>node.name!=='Rueda')},
       compositionContract:requirements,
     },execution())).rejects.toThrow(/necesita 2 piezas/u)
   })
