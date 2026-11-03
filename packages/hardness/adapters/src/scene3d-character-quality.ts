@@ -60,11 +60,12 @@ export function auditCharacterGeometry(scene: CharacterScene, prompt: string): C
   const meshTriangles = scene.nodes.reduce((sum,node) =>
     sum + (node.type === 'mesh' ? Math.floor((node.vertices?.length ?? 0) / 9) : 0), 0)
   const errors: string[] = []
-  if (!isCharacter || isExplicitDraft) return { isCharacter, isExplicitDraft, meshTriangles, errors }
+  if (!isCharacter) return { isCharacter, isExplicitDraft, meshTriangles, errors }
   // A character made of spheres and blocks is a concept, regardless of piece count.
-  if (meshTriangles < 200) {
+  if (!isExplicitDraft && meshTriangles < 200) {
     errors.push('Personaje 3D sin malla suficientemente detallada: las primitivas son solo un boceto. Usar Studio/Blender y geometría de personaje, no presentarlo como modelo terminado.')
   }
+  // Even an explicitly requested blockout must not display features floating far from the head.
   const heads = scene.nodes.filter(node => match(node, head))
   const facial = scene.nodes.filter(node => match(node, face))
   if (heads.length === 1) {

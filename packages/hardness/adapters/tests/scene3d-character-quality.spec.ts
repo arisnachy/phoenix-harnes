@@ -53,10 +53,24 @@ describe('character fidelity and broken-face regression',()=>{
       title:'Figura tridimensional',scene:brokenCharacter,
     },execution())).rejects.toThrow(/Personaje 3D sin malla/u)
   })
-  it('allows an explicitly requested low-poly concept but never claims it is production quality',async()=>{
+  it('rejects detached facial features even when requested as a low-poly draft',async()=>{
     const tool=createPhoenix3DTool()
-    const result=await tool.execute({
+    await expect(tool.execute({
       title:'Personaje low-poly de prueba',scene:brokenCharacter,
+    },execution())).rejects.toThrow(/Detalle facial separado/u)
+  })
+  it('allows a coherent low-poly concept but never calls it production quality',async()=>{
+    const tool=createPhoenix3DTool()
+    const connected={
+      nodes:brokenCharacter.nodes.map(node=>({
+        ...node,
+        position:node.name==='Ojo izquierdo'?[.24,2.15,.36]
+          :node.name==='Nariz'?[.10,1.9,.43]
+            :node.name==='Bigote'?[.0,1.74,.42]:[...node.position],
+      })),
+    }
+    const result=await tool.execute({
+      title:'Personaje low-poly de prueba',scene:connected,
     },execution()) as {qualityReport:{
       deliveredLevel:string;character:{isExplicitDraft:boolean;meshTriangles:number}
     }}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import css from './Scene3DView.module.css'
 import { exportSceneGLB, exportSceneGLTF, importSceneGLTF } from './scene3d-formats.ts'
-import { torusTriangles } from './scene3d-primitives.ts'
+import { sphereTriangles, torusTriangles } from './scene3d-primitives.ts'
 import { poseScene3D } from './scene3d-animation.ts'
 import { drawWebGLScene } from './scene3d-webgl.ts'
 
@@ -54,7 +54,7 @@ export interface Scene3D {
   readonly camera?: 'perspective' | 'isometric' | 'front' | 'top'
 }
 type Vec3 = [number,number,number]
-type Face = { readonly vertices: readonly Vec3[]; readonly color: string; readonly alpha: number; readonly material?: Scene3DMaterial }
+type Face = { readonly vertices: readonly Vec3[]; readonly color: string; readonly alpha: number; readonly material?: Scene3DMaterial; readonly smoothNormals?: readonly Vec3[] }
 type Projected = { readonly points: readonly [number, number][]; readonly depth: number; readonly color: string; readonly alpha: number; readonly light: number }
 
 const colorPattern = /^#[0-9a-f]{6}$/iu
@@ -166,6 +166,31 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
   }
 }
 
+/** Estimate a character's actual forward axis using facial landmarks, not world coordinates.
+ * Unknown or unlabeled models retain the existing safe world-facing camera.
+ */
+export function sceneCharacterFacingYaw(scene: Scene3D): number | undefined {
+  const normalized=(name:string):string =>
+    name.normalize('NFKD').replace(/[\u0300-\u036f]/gu,'').toLowerCase()
+  const heads=scene.nodes.filter(node =>
+    /\b(?:head|cabeza|rostro|face|cara)\b/u.test(normalized(node.name??'')))
+  if(heads.length!==1)return undefined
+  const head=heads[0]!
+  const landmarks=scene.nodes.filter(node =>
+    /\b(?:ojos?|eyes?|nariz|nose|bigotes?|mustache|moustache|boca|mouth)\b/u
+      .test(normalized(node.name??'')))
+  if(landmarks.length===0)return undefined
+  const relevant=landmarks.filter(node =>
+    Math.abs(node.position[1]-head.position[1])<head.size[1]*1.6
+    && Math.hypot(node.position[0]-head.position[0],node.position[2]-head.position[2])
+       <Math.max(head.size[0],head.size[2])*2.5)
+  if(relevant.length===0)return undefined
+  const dx=relevant.reduce((sum,node)=>sum+node.position[0]-head.position[0],0)/relevant.length
+  const dz=relevant.reduce((sum,node)=>sum+node.position[2]-head.position[2],0)/relevant.length
+  if(Math.hypot(dx,dz)<Math.min(head.size[0],head.size[2])*.08)return undefined
+  return Math.atan2(dx,dz)
+}
+
 const deg = Math.PI / 180
 function transform(vertex: Vec3, node: Scene3DNode): Vec3 {
   let [x,y,z]: Vec3 = [vertex[0]*node.size[0],vertex[1]*node.size[1],vertex[2]*node.size[2]]
@@ -176,10 +201,35 @@ function transform(vertex: Vec3, node: Scene3DNode): Vec3 {
   ;[x,y] = [x*Math.cos(az)-y*Math.sin(az),x*Math.sin(az)+y*Math.cos(az)]
   return [x+node.position[0], y+node.position[1], z+node.position[2]]
 }
+function sphereNormal(point: Vec3, node: Scene3DNode): Vec3 {
+  let [x,y,z]:Vec3 = [point[0]/node.size[0],point[1]/node.size[1],point[2]/node.size[2]]
+  const [rx,ry,rz] = node.rotation ?? [0,0,0] as const
+  const ax=rx*deg,ay=ry*deg,az=rz*deg
+  ;[y,z]=[y*Math.cos(ax)-z*Math.sin(ax),y*Math.sin(ax)+z*Math.cos(ax)]
+  ;[x,z]=[x*Math.cos(ay)+z*Math.sin(ay),-x*Math.sin(ay)+z*Math.cos(ay)]
+  ;[x,y]=[x*Math.cos(az)-y*Math.sin(az),x*Math.sin(az)+y*Math.cos(az)]
+  const length=Math.hypot(x,y,z)||1
+  return [x/length,y/length,z/length]
+}
+function torusNormal(point: Vec3,node:Scene3DNode):Vec3 {
+  const radius=Math.hypot(point[0],point[2])||1
+  return sphereNormal([
+    point[0]-.41*point[0]/radius,point[1],point[2]-.41*point[2]/radius,
+  ],node)
+}
 function mesh(node: Scene3DNode): Face[] {
   if(node.hidden===true)return []
   const faces: Vec3[][] = []
-  if(node.type==='torus'){
+  if(node.type==='sphere'){
+    const vertices = sphereTriangles()
+    for(let i=0;i<vertices.length;i+=9){
+      faces.push([
+        [vertices[i]!,vertices[i+1]!,vertices[i+2]!],
+        [vertices[i+3]!,vertices[i+4]!,vertices[i+5]!],
+        [vertices[i+6]!,vertices[i+7]!,vertices[i+8]!],
+      ])
+    }
+  } else if(node.type==='torus'){
     const vertices = torusTriangles()
     for(let i=0;i<vertices.length;i+=9){
       faces.push([
@@ -205,34 +255,25 @@ function mesh(node: Scene3DNode): Face[] {
       quad(v[ids[0]!]!,v[ids[1]!]!,v[ids[2]!]!,v[ids[3]!]!)
     }
   } else {
-    const slices=12, rings=node.type==='sphere'?8:1
-    for(let j=0;j<rings;j++){
-      for(let i=0;i<slices;i++){
-        const a=2*Math.PI*i/slices,b=2*Math.PI*(i+1)/slices
-        let lo:Vec3,hi:Vec3,lo2:Vec3,hi2:Vec3
-        if(node.type==='sphere'){
-          const lat1=-Math.PI/2+j*Math.PI/rings,lat2=-Math.PI/2+(j+1)*Math.PI/rings
-          const sphere=(lat:number,lon:number):Vec3=>[Math.cos(lat)*Math.cos(lon)*.5,Math.sin(lat)*.5,Math.cos(lat)*Math.sin(lon)*.5]
-          lo=sphere(lat1,a);hi=sphere(lat2,a);lo2=sphere(lat1,b);hi2=sphere(lat2,b)
-        } else {
-          const bottom=.5
-          const top=node.type==='cone'?0:.5
-          lo=[Math.cos(a)*bottom,-.5,Math.sin(a)*bottom]
-          lo2=[Math.cos(b)*bottom,-.5,Math.sin(b)*bottom]
-          hi=[Math.cos(a)*top,.5,Math.sin(a)*top]
-          hi2=[Math.cos(b)*top,.5,Math.sin(b)*top]
-        }
-        quad(lo,lo2,hi2,hi)
-        if(node.type!=='sphere'){
-          faces.push([[0,.5,0],hi,hi2])
-          faces.push([[0,-.5,0],lo2,lo])
-        }
-      }
+    const slices=32
+    for(let i=0;i<slices;i++){
+      const a=2*Math.PI*i/slices,b=2*Math.PI*(i+1)/slices
+      const bottom=.5,top=node.type==='cone'?0:.5
+      const lo:Vec3=[Math.cos(a)*bottom,-.5,Math.sin(a)*bottom]
+      const lo2:Vec3=[Math.cos(b)*bottom,-.5,Math.sin(b)*bottom]
+      const hi:Vec3=[Math.cos(a)*top,.5,Math.sin(a)*top]
+      const hi2:Vec3=[Math.cos(b)*top,.5,Math.sin(b)*top]
+      if(node.type==='cone')faces.push([lo,lo2,hi])
+      else quad(lo,lo2,hi2,hi)
+      if(node.type!=='cone')faces.push([[0,.5,0],hi,hi2])
+      faces.push([[0,-.5,0],lo2,lo])
     }
   }
   }
   return faces.map(vertices => ({
     vertices: vertices.map(point => transform(point,node)), color:node.material?.baseColor??node.color,
+    ...(node.type==='sphere'?{smoothNormals:vertices.map(point=>sphereNormal(point,node))}
+      :node.type==='torus'?{smoothNormals:vertices.map(point=>torusNormal(point,node))}:{}),
     alpha: node.material?.opacity??(/cristal|acristalad|glass|window/iu.test(node.name ?? '') ? .77 : 1),
     ...(node.material===undefined?{}:{material:node.material}),
   }))
@@ -327,9 +368,8 @@ function paint(canvas:HTMLCanvasElement,scene:Scene3D,faces:readonly Face[],
     ctx.globalAlpha=face.alpha
     ctx.fillStyle=shade(face.color,face.light)
     ctx.fill()
-    ctx.strokeStyle='rgba(58,49,38,.19)'
-    ctx.lineWidth=.55
-    ctx.stroke()
+    // Polygon outlines amplify low-resolution faceting and are not part of the material.
+    // Keep the fallback clean; the actual shape is shaded by its surface normals.
   }
   ctx.globalAlpha=1
 }
@@ -340,9 +380,14 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
   useEffect(()=>{
     const next=parseScene3D(spec)
     setScene(next)
-    if(next?.camera==='front'){angle.current.yaw=0;angle.current.pitch=0}
+    const facing=next===undefined?undefined:sceneCharacterFacingYaw(next)
+    if(next?.camera==='front'){angle.current.yaw=facing??0;angle.current.pitch=0}
     if(next?.camera==='top'){angle.current.yaw=0;angle.current.pitch=1.48}
-    if(next?.camera==='isometric'){angle.current.yaw=-.785;angle.current.pitch=.615}
+    if(next?.camera==='isometric'){angle.current.yaw=(facing??-.235)-.55;angle.current.pitch=.615}
+    if(next!==undefined && next.camera!=='front' && next.camera!=='top'
+      && next.camera!=='isometric' && facing!==undefined){
+      angle.current.yaw=facing-.24;angle.current.pitch=.2
+    }
   },[spec])
   const canvas=useRef<HTMLCanvasElement>(null)
   const drag=useRef<{x:number;y:number;button:number}|null>(null)
@@ -356,6 +401,7 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
   const [selected,setSelected]=useState(0)
   const [editOpen,setEditOpen]=useState(false)
   const picker=useRef<HTMLInputElement>(null)
+  const facingYaw=useMemo(()=>scene===undefined?undefined:sceneCharacterFacingYaw(scene),[scene])
   const selectedNode=scene?.nodes[selected]
   const meshes=useMemo(()=>scene?.nodes.flatMap(mesh)??[],[scene])
   const clip=scene?.animations?.[selectedAnimation]
@@ -446,12 +492,12 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
           aria-label="Acercar modelo 3D">+</button>
         <button type="button" onClick={()=>update(()=>{angle.current.zoom=Math.max(.2,angle.current.zoom/1.25)})}
           aria-label="Alejar modelo 3D">−</button>
-        <button type="button" onClick={()=>update(()=>{angle.current={yaw:-.65,pitch:.38,zoom:1,pan:[0,0]}})}>Restablecer</button>
+        <button type="button" onClick={()=>update(()=>{angle.current={yaw:facingYaw===undefined?-.65:facingYaw-.24,pitch:facingYaw===undefined?.38:.2,zoom:1,pan:[0,0]}})}>Restablecer</button>
         <button type="button" aria-pressed={autoRotate} onClick={()=>setAutoRotate(value=>!value)}>
           {autoRotate?'Pausar':'Girar'}</button>
-        <button type="button" onClick={()=>update(()=>{angle.current.yaw=0;angle.current.pitch=0;angle.current.pan=[0,0]})}>Frente</button>
+        <button type="button" onClick={()=>update(()=>{angle.current.yaw=facingYaw??0;angle.current.pitch=0;angle.current.pan=[0,0]})}>Frente</button>
         <button type="button" onClick={()=>update(()=>{angle.current.yaw=0;angle.current.pitch=1.48;angle.current.pan=[0,0]})}>Planta</button>
-        <button type="button" onClick={()=>update(()=>{angle.current.yaw=-.785;angle.current.pitch=.615})}>Isométrica</button>
+        <button type="button" onClick={()=>update(()=>{angle.current.yaw=(facingYaw??-.235)-.55;angle.current.pitch=.615})}>Isométrica</button>
         <label className={css.cameraControl}>Luz <select aria-label="Iluminación del modelo 3D" value={scene.environment??'studio'}
           onChange={event=>setScene(current=>current===undefined?current:{...current,environment:event.target.value as 'studio'|'sunset'|'daylight'})}>
           <option value="studio">Estudio</option><option value="sunset">Atardecer</option><option value="daylight">Día</option>

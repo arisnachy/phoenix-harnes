@@ -1,5 +1,5 @@
 import type { Scene3D, Scene3DNode } from './Scene3DView.tsx'
-import { torusTriangles } from './scene3d-primitives.ts'
+import { sphereTriangles, torusTriangles } from './scene3d-primitives.ts'
 
 /** Self-contained glTF 2.0 import/export. No CDN, executable scripts or external URI requests. */
 const MAX_BYTES=12_000_000
@@ -27,6 +27,7 @@ const subtract=(a:V3,b:V3):V3=>vector(a[0]-b[0],a[1]-b[1],a[2]-b[2])
 const cross=(a:V3,b:V3):V3=>vector(a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0])
 function primitiveTriangles(node:Node):number[]{
   if(node.type==='mesh')return Array.from(node.vertices??[])
+  if(node.type==='sphere')return sphereTriangles()
   if(node.type==='torus')return torusTriangles()
   const coords:number[]=[]
   const tri=(a:V3,b:V3,c:V3)=>coords.push(...a,...b,...c)
@@ -37,32 +38,40 @@ function primitiveTriangles(node:Node):number[]{
     for(const ids of [[4,5,6,7],[1,0,3,2],[0,4,7,3],[5,1,2,6],[3,7,6,2],[0,1,5,4]])
       quad(p[ids[0]!]!,p[ids[1]!]!,p[ids[2]!]!,p[ids[3]!]!)
   }else{
-    const slices=16,rings=node.type==='sphere'?10:1
-    for(let j=0;j<rings;j++)for(let i=0;i<slices;i++){
+    const slices=32
+    for(let i=0;i<slices;i++){
       const a=2*Math.PI*i/slices,b=2*Math.PI*(i+1)/slices
-      if(node.type==='sphere'){
-        const v=(lat:number,lon:number):V3=>[.5*Math.cos(lat)*Math.cos(lon),.5*Math.sin(lat),.5*Math.cos(lat)*Math.sin(lon)]
-        const p=-Math.PI/2+j*Math.PI/rings,q=-Math.PI/2+(j+1)*Math.PI/rings
-        quad(v(p,a),v(p,b),v(q,b),v(q,a))
-      }else{
-        const v=(angle:number,y:number,radius:number):V3=>[Math.cos(angle)*radius,y,Math.sin(angle)*radius]
-        const top=node.type==='cone'?0:.5
-        quad(v(a,-.5,.5),v(b,-.5,.5),v(b,.5,top),v(a,.5,top))
-        tri([0,-.5,0],v(b,-.5,.5),v(a,-.5,.5))
-        if(node.type!=='cone')tri([0,.5,0],v(a,.5,top),v(b,.5,top))
-      }
+      const v=(angle:number,y:number,radius:number):V3=>[
+        Math.cos(angle)*radius,y,Math.sin(angle)*radius,
+      ]
+      const top=node.type==='cone'?0:.5
+      if(node.type==='cone')tri(v(a,-.5,.5),v(b,-.5,.5),[0,.5,0])
+      else quad(v(a,-.5,.5),v(b,-.5,.5),v(b,.5,top),v(a,.5,top))
+      tri([0,-.5,0],v(b,-.5,.5),v(a,-.5,.5))
+      if(node.type!=='cone')tri([0,.5,0],v(a,.5,top),v(b,.5,top))
     }
   }
   return coords
 }
-function normals(coords:readonly number[]):number[]{
+function normals(coords:readonly number[],node:Node):number[]{
   const result:number[]=[]
   for(let i=0;i<coords.length;i+=9){
     const a=vector(coords[i]!,coords[i+1]!,coords[i+2]!)
     const b=vector(coords[i+3]!,coords[i+4]!,coords[i+5]!)
     const c=vector(coords[i+6]!,coords[i+7]!,coords[i+8]!)
-    const n=unit(cross(subtract(b,a),subtract(c,a)))
-    for(let j=0;j<3;j++)result.push(...n)
+    const flat=unit(cross(subtract(b,a),subtract(c,a)))
+    for(const point of [a,b,c]) {
+      if(node.type==='sphere'){
+        result.push(...unit(point))
+      } else if(node.type==='torus'){
+        const distance=Math.hypot(point[0],point[2])||1
+        result.push(...unit([
+          point[0]-.41*point[0]/distance,point[1],point[2]-.41*point[2]/distance,
+        ]))
+      } else {
+        result.push(...flat)
+      }
+    }
   }
   return result
 }
@@ -137,7 +146,7 @@ function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
     if(vertices.length%9!==0||vertices.length===0||!vertices.every(Number.isFinite))throw Error('Geometría 3D inválida.')
     verticesCount+=vertices.length/3
     if(verticesCount>MAX_TRIANGLES*3)throw Error('Límite de triángulos 3D excedido.')
-    const pos=attr(vertices,3,'VEC3'),norm=attr(normals(vertices),3,'VEC3')
+    const pos=attr(vertices,3,'VEC3'),norm=attr(normals(vertices,node),3,'VEC3')
     const material=materials.push(objectMaterial(node,texture))-1
     const mesh=meshes.push({primitives:[{attributes:{POSITION:pos,NORMAL:norm},material,mode:4}]})-1
     const tr:R={mesh,name:node.name??node.type,
