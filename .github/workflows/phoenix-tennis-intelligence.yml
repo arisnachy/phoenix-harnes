@@ -1,0 +1,29 @@
+name: PHOENIX ATP WTA Tennis Intelligence
+on:
+  pull_request:
+    paths:
+      - 'packages/core/tool-sports/src/tennis-evidence-research.ts'
+      - 'packages/core/tool-sports/src/tennis-market-settlement.ts'
+      - 'packages/core/tool-sports/tests/tennis-evidence-research.test.mjs'
+      - 'packages/core/tool-sports/src/index.ts'
+      - '.github/workflows/phoenix-tennis-intelligence.yml'
+  workflow_dispatch:
+jobs:
+  tennis-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify ATP/WTA slate, match identity, serve metrics and market settlement
+        run: node --experimental-strip-types --test packages/core/tool-sports/tests/tennis-evidence-research.test.mjs
+      - name: Verify strict host TypeScript
+        run: pnpm exec tsc -b tsconfig.host.json --pretty false
