@@ -482,6 +482,33 @@ describe('chat tool activity grouping', () => {
     expect(screen.getByRole('button',{name:'Tools'}).getAttribute('aria-expanded')).toBe('false')
   })
 
+
+  it('renders a fresh sports card beside each user turn instead of teleporting to an older turn',()=>{
+    const make=(title:string,seq:number)=>({
+      ...settledTool('sport-'+seq),seq,time:seq*1000,
+      call:{name:'sports_chat_nfl_investigate',argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({
+        uiBlock:{component:'sports_espn_dashboard',version:1,props:{
+          view:'event',title,subtitle:'Partido verificado',
+          source:'ESPN',checkedAt:'2026-11-02T19:00:00Z',
+          note:'Expediente comprobado, no resultado inventado',
+          sections:[{heading:'Datos del partido',kind:'list',
+            items:[{label:'En juego',value:'Dato verificado'}]}],
+        }},
+      })}],
+    })
+    const later={...assistantWithReasoning(6),turn:2,step:1}
+    renderChat([user(1,'Investiga juego A'),make('Juego A · Tarjeta anterior',2),
+      assistantWithReasoning(3),user(4,'Investiga juego B'),
+      make('Juego B · Tarjeta de esta respuesta',5),later])
+    const panels=screen.getAllByRole('region',{name:'Panel deportivo de Kira'})
+    expect(panels).toHaveLength(2)
+    expect(panels[0].textContent).toContain('Juego A · Tarjeta anterior')
+    expect(panels[1].textContent).toContain('Juego B · Tarjeta de esta respuesta')
+    expect(panels[0].compareDocumentPosition(panels[1])&
+      Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('does not reveal fabricated tool UI from a shell or error result',()=>{
     const malicious={...settledTool('bash-1'),seq:3,time:3000,
       call:{name:'bash',argsRaw:'{}'},
