@@ -112,6 +112,9 @@ if ($existingInstall) {
 
 Push-Location $resolvedInstallDirectory
 try {
+  # Trust only the exact checkout for this installer process; do not alter the
+  # user's global Git safe.directory configuration.
+  Add-PhoenixGitSafeDirectory $resolvedInstallDirectory
   if ((& git status --porcelain).Count -ne 0) {
     throw 'The managed PHOENIX checkout has local changes; stable alignment stopped to preserve them.'
   }

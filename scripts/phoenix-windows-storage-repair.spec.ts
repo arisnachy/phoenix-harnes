@@ -31,7 +31,8 @@ describe('PHOENIX offline Windows runtime recovery', () => {
   })
 
   it('inspects by default and never removes runtime storage without opt-in', () => {
-    expect(repair).toContain('param([switch]$Apply)')
+    expect(repair).toContain('param([switch]$Apply, [switch]$PurgeOldWorkspaces,')
+    expect(repair).toContain('if ($PurgeOldWorkspaces -and -not $Apply) {')
     expect(repair).toContain('if (-not $Apply) {')
     expect(repair).toContain('Get-ManagedRuntimeDirectories')
   })
