@@ -1,0 +1,56 @@
+name: PHOENIX update retention gate
+
+on:
+  pull_request:
+    branches: [main, stable]
+  push:
+    branches: [main, stable]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phoenix-update-retention-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  updater-retention:
+    name: updater retention / runtime and storage tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Verify updater retention and storage regressions
+        run: >-
+          pnpm exec vitest run
+          scripts/phoenix-upstream-update.spec.ts
+          scripts/phoenix-auto-update-runtime.spec.ts
+          scripts/phoenix-windows-storage-repair.spec.ts
+          scripts/phoenix-windows-supervisor.spec.ts
+      - name: Verify platform-independent storage regression
+        run: node --test scripts/phoenix-storage-audit.spec.mjs scripts/phoenix-windows-storage-repair.node-test.mjs
+
+  windows-storage:
+    name: Windows storage parser regression
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Verify storage repair structure and PowerShell parser
+        shell: pwsh
+        run: node --test scripts/phoenix-storage-audit.spec.mjs scripts/phoenix-windows-storage-repair.node-test.mjs
