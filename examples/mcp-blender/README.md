@@ -111,3 +111,21 @@ launch alone demonstrates that Kira can execute Blender tools.
 If the connector still shows **connection-failed**, inspect the actual
 Host stderr for `ModuleNotFoundError`, Git errors or a failed MCP handshake;
 use **Reconnect** in PHOENIX once the update is installed.
+
+You can independently verify the actual server and tool discovery without
+executing model code or editing a scene:
+
+```powershell
+node scripts/phoenix-blender-mcp-handshake.mjs
+```
+
+A successful result reports a nonzero count of tools, proving the server
+started, initialized MCP and replied to `tools/list`. It does **not** prove
+the Blender add-on is running. If it fails, the output includes a bounded
+stderr excerpt rather than masking the error with `connection-failed`.
+
+If you already have the official source cloned locally, Blender's official
+[Setup guide](https://projects.blender.org/lab/blender_mcp/wiki/Setup)
+documents the alternate Windows command
+`uv --directory C:\\blender_mcp\\mcp run blender-mcp`. This is a manual
+local-source alternative, not a different PyPI project or a silent install.
