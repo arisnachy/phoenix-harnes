@@ -1,5 +1,5 @@
 import { describe,it,expect } from 'vitest'
-import { sportsCardsFromToolResult,unrenderedSportsCards } from '../src/client/chat/sports-tool-cards.ts'
+import { sportsCardsFromToolResult,unrenderedSportsCards,isFirstPartySportsTool } from '../src/client/chat/sports-tool-cards.ts'
 import { parseGenerativeUiBlock } from '../src/client/chat/GenerativeUi.tsx'
 
 const sportsGame={
@@ -174,5 +174,43 @@ describe('native sports chat presentation fallback',()=>{
     if(game===null||table===null)throw Error('Fixture schemas invalid')
     expect(unrenderedSportsCards([game,game,table],[answer])).toEqual([table])
     expect(unrenderedSportsCards([game,game],['Respuesta textual solamente.'])).toEqual([game])
+  })
+})
+
+
+describe('PHOENIX multi-sport tool auto publication regression',()=>{
+  const specialist=['sports_chat_mlb_investigate','sports_chat_soccer_daily',
+    'sports_chat_soccer_investigate','sports_chat_basketball_intelligence_slate',
+    'sports_chat_nba_intelligence','sports_chat_wnba_intelligence',
+    'sports_chat_hockey_slate','sports_chat_nhl_investigate',
+    'sports_chat_nfl_slate','sports_chat_nfl_investigate',
+    'sports_chat_tennis_slate','sports_chat_tennis_investigate',
+    'sports_chat_ncaa_slate','sports_chat_ncaa_investigate',
+    'sports_chat_espn_explore','sports_chat_games']
+  const dossier={component:'sports_espn_dashboard',version:1,props:{
+    view:'event',title:'PHOENIX · En vivo',subtitle:'Partido verificado por ESPN',
+    source:'ESPN Site API',checkedAt:'2026-11-02T17:15:00Z',
+    note:'Datos atribuidos. Sin cuotas inventadas.',
+    sections:Array.from({length:12},(_,i)=>({heading:'Área verificada '+i,
+      kind:'list',items:[{label:'Indicador '+i,value:'Dato '+i}]}))
+  }}
+  it.each(specialist)('recovers a native sports card directly from %s, not assistant prose',name=>{
+    expect(isFirstPartySportsTool(name)).toBe(true)
+    expect(sportsCardsFromToolResult(tool(name,{uiBlock:dossier}))).toEqual([dossier])
+  })
+  it('accepts only the designated first-party MCP namespace for sport cards',()=>{
+    expect(sportsCardsFromToolResult(tool(
+      'mcp__tool_sports__sports_chat_nhl_investigate',{uiBlock:dossier}))).toEqual([dossier])
+    expect(sportsCardsFromToolResult(tool(
+      'mcp__untrusted__sports_chat_nhl_investigate',{uiBlock:dossier}))).toEqual([])
+    expect(isFirstPartySportsTool('mcp__untrusted__sports_chat_nhl_investigate')).toBe(false)
+    expect(isFirstPartySportsTool('bash')).toBe(false)
+    expect(isFirstPartySportsTool('sports_chat_something$danger')).toBe(false)
+  })
+  it('rejects unsafe fields and unapproved components even from a sports tool',()=>{
+    expect(sportsCardsFromToolResult(tool('sports_chat_nfl_investigate',{
+      uiBlock:{...dossier,props:{...dossier.props,onClick:'alert(1)'}}}))).toEqual([])
+    expect(sportsCardsFromToolResult(tool('sports_chat_nfl_investigate',{
+      uiBlock:{component:'iframe',version:1,props:{url:'https://evil.invalid'}}}))).toEqual([])
   })
 })

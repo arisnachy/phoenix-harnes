@@ -15,13 +15,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function unknownArray(value: unknown): readonly unknown[] {
   return Array.isArray(value) ? (value as unknown[]) : []
 }
-const ALLOWED_NAMES = new Set([
-  'sports_chat_games','sports_chat_espn_explore','sports_chat_odds','sports_chat_ticket','sports_chat_ticket_research',
-  'sports_chat_ticket_research_auto',
-  'sports_chat_mlb_pitchers','sports_chat_matchup_factors','sports_chat_predict',
-  'sports_chat_ticket_evidence_auto','sports_chat_ticket_evidence_priced_auto',
-  'sports_chat_odds_keyless',
-])
+/**
+ * The tool-sports registry grows by discipline (MLB/Soccer/NBA/WNBA/NHL/NFL/
+ * ATP/WTA/NCAA/...). A static list silently discarded newly added specialists.
+ *
+ * Only the PHOENIX first-party sports naming contract may publish cards:
+ * direct sports_chat_* calls, or the explicit tool_sports MCP namespace.
+ * The payload is still untrusted and must pass parseGenerativeUiBlock's full
+ * field, URL and component validation before any element is rendered.
+ */
+export function isFirstPartySportsTool(name: unknown): boolean {
+  if(typeof name!=='string')return false
+  const direct=name.startsWith('mcp__tool_sports__')
+    ?name.slice('mcp__tool_sports__'.length)
+    :name.startsWith('mcp__tool-sports__')
+      ?name.slice('mcp__tool-sports__'.length)
+      :name.startsWith('mcp__')?'':name
+  return /^sports_chat_[a-z][a-z0-9_]{0,80}$/u.test(direct)
+}
 const ALLOWED_COMPONENTS = new Set([
   'sports_game_card','sports_schedule_card','sports_ticket_card','sports_odds_card','sports_espn_dashboard','comparison','smart_card',
 ])
@@ -58,9 +69,8 @@ export function sportsCardsFromToolResult(root: unknown): GenerativeUiBlock[] {
     if(tool.kind!=='tool-result')continue
     // MCP bridges can prefix the canonical tool name. Accept only known
     // namespaces and the same strict first-party allowlist, never arbitrary JSON.
-    const called=isRecord(tool.call)&&typeof tool.call.name==='string'?tool.call.name:''
-    const canonical=called.startsWith('mcp__') ? called.split('__').at(-1)??'' : called
-    if(!ALLOWED_NAMES.has(canonical))continue
+    const called=isRecord(tool.call)?tool.call.name:null
+    if(!isFirstPartySportsTool(called))continue
     if(tool.isError)continue
     const data=unknownArray(tool.content)
     const text=data.flatMap(block=>
