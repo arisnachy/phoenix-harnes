@@ -755,8 +755,8 @@ function retiredPhoenixCheckoutOwner(path) {
       const last = Date.parse(heartbeat?.at ?? '')
       // A recent valid heartbeat is enough to protect the entire other
       // checkout, even when its command line does not reveal the cwd.
-      if (heartbeat?.schema === 1 && Number.isFinite(last)
-        && Date.now() - last < RETIRED_CHECKOUT_MIN_AGE_MS) return undefined
+      if (heartbeat?.schema !== 1 || !Number.isFinite(last)
+        || Date.now() - last < RETIRED_CHECKOUT_MIN_AGE_MS) return undefined
     }
   } catch {
     return undefined // An unreadable heartbeat is not proof of inactivity.
