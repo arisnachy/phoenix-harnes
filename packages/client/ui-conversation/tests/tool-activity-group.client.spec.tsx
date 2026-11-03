@@ -503,9 +503,11 @@ describe('chat tool activity grouping', () => {
       make('Juego B · Tarjeta de esta respuesta',5),later])
     const panels=screen.getAllByRole('region',{name:'Panel deportivo de Kira'})
     expect(panels).toHaveLength(2)
-    expect(panels[0].textContent).toContain('Juego A · Tarjeta anterior')
-    expect(panels[1].textContent).toContain('Juego B · Tarjeta de esta respuesta')
-    expect(panels[0].compareDocumentPosition(panels[1])&
+    const first=panels[0],second=panels[1]
+    if(first===undefined||second===undefined)throw Error('Both sports cards must be visible')
+    expect(first.textContent).toContain('Juego A · Tarjeta anterior')
+    expect(second.textContent).toContain('Juego B · Tarjeta de esta respuesta')
+    expect(first.compareDocumentPosition(second)&
       Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
