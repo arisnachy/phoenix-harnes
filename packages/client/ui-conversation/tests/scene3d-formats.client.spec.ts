@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { exportSceneGLB, exportSceneGLTF, importSceneGLTF } from '../src/client/chat/scene3d-formats.ts'
 import { parseScene3D } from '../src/client/chat/Scene3DView.tsx'
+import { sphereTriangles } from '../src/client/chat/scene3d-primitives.ts'
 
 const model={
   version:1,units:'meters',name:'Showroom interior',background:'#f7f2eb',
@@ -30,6 +31,32 @@ describe('Phoenix 3D standard GLB/glTF models',()=>{
     expect(json.cameras).toHaveLength(1)
     expect(json.extensionsUsed).toContain('KHR_lights_punctual')
     expect(json.extensions.KHR_lights_punctual.lights[0].type).toBe('directional')
+  })
+  it('uses detailed outward-facing sphere surfaces for organic scenes and exports smooth normals',()=>{
+    const triangles=sphereTriangles()
+    expect(triangles.length).toBe(32*(2*20-2)*9)
+    for(let i=0;i<triangles.length;i+=9){
+      const a=[triangles[i]!,triangles[i+1]!,triangles[i+2]!]
+      const b=[triangles[i+3]!,triangles[i+4]!,triangles[i+5]!]
+      const c=[triangles[i+6]!,triangles[i+7]!,triangles[i+8]!]
+      const u=[b[0]!-a[0]!,b[1]!-a[1]!,b[2]!-a[2]!]
+      const v=[c[0]!-a[0]!,c[1]!-a[1]!,c[2]!-a[2]!]
+      const normal=[
+        u[1]!*v[2]!-u[2]!*v[1]!,
+        u[2]!*v[0]!-u[0]!*v[2]!,
+        u[0]!*v[1]!-u[1]!*v[0]!,
+      ]
+      const centroid=[(a[0]!+b[0]!+c[0]!)/3,
+        (a[1]!+b[1]!+c[1]!)/3,(a[2]!+b[2]!+c[2]!)/3]
+      expect(Math.hypot(...normal)).toBeGreaterThan(1e-7)
+      expect(normal.reduce((sum,n,j)=>sum+n*centroid[j]!,0)).toBeGreaterThan(0)
+    }
+    const gltf=JSON.parse(exportSceneGLTF(scene))
+    const spherePosition=gltf.accessors[2]
+    const sphereNormal=gltf.accessors[3]
+    expect(spherePosition.count).toBe(32*(2*20-2)*3)
+    expect(sphereNormal.count).toBe(spherePosition.count)
+    expect(sphereNormal.type).toBe('VEC3')
   })
   it('round trips imported glTF and GLB into actual edit-ready geometry with materials',()=>{
     const gltf=exportSceneGLTF(scene),glb=exportSceneGLB(scene)
