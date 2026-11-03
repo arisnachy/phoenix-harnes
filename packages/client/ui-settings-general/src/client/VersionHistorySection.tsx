@@ -81,9 +81,9 @@ export function VersionHistorySection({ t, readUpdateState }: VersionHistorySect
     setNotesLoading(release.sha)
     try {
       const description = await fetchPhoenixReleaseNotes(release.prNumber)
-      setNotes(previous => ({ ...previous, [release.sha]: description ?? t('version.noNotes') }))
+      setNotes(previous => ({ ...previous, [release.sha]: description ?? release.notes ?? t('version.noNotes') }))
     } catch {
-      setNotes(previous => ({ ...previous, [release.sha]: t('version.notesUnavailable') }))
+      setNotes(previous => ({ ...previous, [release.sha]: release.notes ?? t('version.notesUnavailable') }))
     } finally {
       setNotesLoading(undefined)
     }
@@ -181,7 +181,7 @@ export function VersionHistorySection({ t, readUpdateState }: VersionHistorySect
               {selected === release.sha ? (
                 <div className={css.notes} role="region" aria-label={t('version.changes')}>
                   {notesLoading === release.sha ? t('version.loading')
-                    : notes[release.sha] ?? release.summary}
+                    : notes[release.sha] ?? release.notes ?? release.summary}
                 </div>
               ) : null}
             </article>
