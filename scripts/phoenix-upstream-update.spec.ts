@@ -3,12 +3,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  acquireUpstreamUpdateLease,
   buildActivationPlan,
   classifyUpdate,
   containsUnsafeGeneratedLiteral,
   normalizeMode,
   parseRemoteHead,
   pruneObsoleteTransactionBackups,
+  shouldDeferAutomaticUpstreamApply,
 } from './phoenix-upstream-update.mjs'
 
 const temporaryPaths: string[] = []
@@ -129,4 +131,27 @@ describe('PHOENIX upstream update intake', () => {
     }])).toThrow('unsafe managed skill path')
   })
 
+})
+
+describe('PHOENIX automatic upstream intake throttling', () => {
+  it('limits successful auto updates across Host restarts, not manual installs', () => {
+    const now = Date.parse('2026-11-03T12:00:00.000Z')
+    const previous = { lastSuccessfulApplyAt: new Date(now - 10 * 60_000).toISOString() }
+    expect(shouldDeferAutomaticUpstreamApply(previous, now, 6 * 60 * 60_000)).toBe(true)
+    expect(shouldDeferAutomaticUpstreamApply(previous, now + 7 * 60 * 60_000, 6 * 60 * 60_000)).toBe(false)
+    expect(shouldDeferAutomaticUpstreamApply({}, now, 6 * 60 * 60_000)).toBe(false)
+    expect(shouldDeferAutomaticUpstreamApply({ lastSuccessfulApplyAt: 'invalid' }, now, 6 * 60 * 60_000)).toBe(false)
+  })
+
+  it('prevents two updating Hosts from claiming the same home', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-upstream-lock-'))
+    temporaryPaths.push(home)
+    const unlock = acquireUpstreamUpdateLease(home)
+    expect(typeof unlock).toBe('function')
+    expect(acquireUpstreamUpdateLease(home)).toBeUndefined()
+    unlock?.()
+    const again = acquireUpstreamUpdateLease(home)
+    expect(typeof again).toBe('function')
+    again?.()
+  })
 })

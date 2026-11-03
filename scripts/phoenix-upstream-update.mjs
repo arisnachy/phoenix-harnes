@@ -16,6 +16,7 @@ import {
   readdirSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -26,6 +27,23 @@ const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const STATE_SCHEMA = 1
 const DEFAULT_POLL_MS = 10 * 60 * 1000
 const MIN_POLL_MS = 30 * 1000
+// OpenClaw main can move many times per hour. Avoid full skill replication on
+// every poll/restarted Host; explicit --apply remains immediate.
+const DEFAULT_AUTO_APPLY_GAP_MS = 6 * 60 * 60 * 1000
+const MIN_AUTO_APPLY_GAP_MS = 60 * 60 * 1000
+const LEASE_RECOVERY_MS = 5 * 60 * 1000
+function automaticApplyGapMs() {
+  const value = Number(process.env.PHOENIX_UPSTREAM_APPLY_GAP_MS)
+  return Number.isFinite(value) && value > 0
+    ? Math.max(MIN_AUTO_APPLY_GAP_MS, Math.floor(value))
+    : DEFAULT_AUTO_APPLY_GAP_MS
+}
+/** Only successful prior activations impose a cooldown, including across restarts. */
+export function shouldDeferAutomaticUpstreamApply(previous, now, gapMs) {
+  const appliedAt = typeof previous?.lastSuccessfulApplyAt === 'string'
+    ? Date.parse(previous.lastSuccessfulApplyAt) : NaN
+  return Number.isFinite(appliedAt) && now >= appliedAt && now - appliedAt < gapMs
+}
 
 const PROVIDERS = {
   codex: {
@@ -316,6 +334,10 @@ function stage(home, inspection, id) {
     }
     return { stageHome, changed }
   } catch (error) {
+    // Before activation no journal references this staging tree. A failed
+    // clone/verification must not leave another multi-GB checkout behind.
+    try { rmSync(stageHome, { recursive: true, force: true, maxRetries: 3, retryDelay: 250 }) }
+    catch { /* Windows file handles may require a later idle sweep. */ }
     throw new Error(`staging failed; live bridges were left untouched: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
@@ -462,7 +484,13 @@ async function activate(home, stageHome, changed, id) {
 }
 
 function saveState(home, state) {
-  writeJson(updateStatePath(home), { schema: STATE_SCHEMA, ...state, checkedAt: new Date().toISOString() })
+  const old = readJson(updateStatePath(home))
+  // Preserve the last *successful* activation during status/current polls.
+  const applied = typeof old?.lastSuccessfulApplyAt === 'string'
+    ? { lastSuccessfulApplyAt: old.lastSuccessfulApplyAt } : {}
+  writeJson(updateStatePath(home), {
+    schema: STATE_SCHEMA, ...applied, ...state, checkedAt: new Date().toISOString(),
+  })
 }
 
 function outputInspection(inspection, quiet) {
@@ -479,7 +507,7 @@ function outputInspection(inspection, quiet) {
   }
 }
 
-async function cycle(home, mode, options = {}) {
+async function cycleLocked(home, mode, options = {}) {
   const quiet = options.quiet === true
   // Storage maintenance is independent from network/update policy. Turning
   // upstream intake off must not preserve already-terminal backup snapshots.
@@ -491,6 +519,10 @@ async function cycle(home, mode, options = {}) {
   try {
     await recoverTransaction(home)
     pruneObsoleteTransactionBackups(home)
+    if (mode === 'auto' && options.automatic === true
+      && shouldDeferAutomaticUpstreamApply(
+        readJson(updateStatePath(home)), Date.now(), automaticApplyGapMs(),
+      )) return 0
     const inspection = inspect(home)
     outputInspection(inspection, quiet)
     if (inspection.status !== 'available') {
@@ -502,7 +534,10 @@ async function cycle(home, mode, options = {}) {
     const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`
     const candidate = stage(home, inspection, id)
     await activate(home, candidate.stageHome, candidate.changed, id)
-    saveState(home, { mode, status: 'applied', transactionId: id, providers: inspection.providers })
+    saveState(home, {
+      mode, status: 'applied', transactionId: id, providers: inspection.providers,
+      lastSuccessfulApplyAt: new Date().toISOString(),
+    })
     if (!quiet) process.stdout.write(`PASS Codex/OpenClaw upstream update activated transaction ${id}.\n`)
     return 0
   } catch (error) {
@@ -511,6 +546,51 @@ async function cycle(home, mode, options = {}) {
     if (!quiet) process.stderr.write(`BLOCKED upstream update: ${message}\n`)
     return 1
   }
+}
+
+/** One update transaction per DSH_HOME, even when multiple old Hosts linger. */
+export function acquireUpstreamUpdateLease(home) {
+  mkdirSync(home, { recursive: true })
+  const lock = join(home, '.phoenix-upstream-update.lock')
+  const ownerFile = join(lock, 'owner.json')
+  const token = randomUUID()
+  function claim() {
+    mkdirSync(lock, { mode: 0o700 })
+    writeJson(ownerFile, { pid: process.pid, token, at: Date.now() })
+    return () => {
+      try {
+        const owner = readJson(ownerFile)
+        if (owner?.token === token && owner.pid === process.pid) {
+          rmSync(lock, { recursive: true, force: true })
+        }
+      } catch { /* Never delete a lease that cannot be authenticated. */ }
+    }
+  }
+  try { return claim() } catch (error) {
+    if (error?.code !== 'EEXIST') throw error
+    // A lock can be reclaimed only after its owner died and a grace period.
+    // A live owner is NEVER force-killed or interrupted by a second updater.
+    let old
+    let elapsed = 0
+    try {
+      old = readJson(ownerFile)
+      elapsed = Date.now() - statSync(lock).mtimeMs
+    } catch { return undefined }
+    if (elapsed < LEASE_RECOVERY_MS) return undefined
+    if (Number.isInteger(old?.pid) && old.pid > 0) {
+      try { process.kill(old.pid, 0); return undefined }
+      catch (error) { if (error?.code === 'EPERM') return undefined }
+    }
+    try { rmSync(lock, { recursive: true, force: true }) }
+    catch { return undefined }
+    try { return claim() } catch { return undefined }
+  }
+}
+async function cycle(home, mode, options = {}) {
+  const release = acquireUpstreamUpdateLease(home)
+  if (release === undefined) return 0
+  try { return await cycleLocked(home, mode, options) }
+  finally { release() }
 }
 
 async function localDoctor(home, mode) {
@@ -559,7 +639,7 @@ async function waitForPollOrParentExit(parentPid, waitMs) {
 
 async function watch(home, mode, parentPid) {
   while (parentAlive(parentPid)) {
-    await cycle(home, mode, { apply: mode === 'auto', quiet: true })
+    await cycle(home, mode, { apply: mode === 'auto', automatic: true, quiet: true })
     await waitForPollOrParentExit(parentPid, pollInterval())
   }
 }
