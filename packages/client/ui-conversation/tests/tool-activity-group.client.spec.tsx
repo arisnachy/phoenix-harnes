@@ -454,6 +454,61 @@ describe('chat tool activity grouping', () => {
     expect(sports.textContent).toContain('Puebla vs Atlas')
     expect(sports.textContent).not.toContain('NO BET')
   })
+
+  it.each(['sports_chat_mlb_investigate','sports_chat_soccer_investigate',
+    'sports_chat_nba_intelligence','sports_chat_wnba_intelligence',
+    'sports_chat_nhl_investigate','sports_chat_nfl_investigate',
+    'sports_chat_tennis_investigate','sports_chat_ncaa_investigate'])
+  ('keeps %s rich UI visible outside collapsed Tools when Kira says the card is live',name=>{
+    const uiBlock={component:'sports_espn_dashboard',version:1,props:{
+      view:'event',title:'EN VIVO · Encuentro comprobado',
+      subtitle:'ESPN · ficha de investigación',source:'ESPN Site',
+      checkedAt:'2026-11-02T19:00:00Z',
+      note:'Evidencias observadas; cuotas y resultados se verifican por separado.',
+      sections:Array.from({length:10},(_,i)=>({
+        heading:'Área de investigación '+(i+1),kind:'list',
+        items:[{label:'Dato de la fuente '+i,value:'Verificado '+i}]})),
+    }}
+    const toolNode={...settledTool('sports-card-'+name),seq:3,time:3000,
+      call:{name,argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({uiBlock})}]}
+    const assistant={...assistantWithReasoning(4),
+      blocks:[{kind:'text' as const,
+        text:'Te dejé la tarjeta en vivo en el chat; ESPN la irá actualizando.'}]}
+    renderChat([user(1,'Kira, muéstrame la tarjeta deportiva en vivo'),toolNode,assistant])
+    const panel=screen.getByRole('region',{name:'Panel deportivo de Kira'})
+    expect(panel.querySelector('[data-generative-ui="sports_espn_dashboard"]')).toBeTruthy()
+    expect(panel.textContent).toContain('EN VIVO · Encuentro comprobado')
+    expect(screen.getByRole('button',{name:'Tools'}).getAttribute('aria-expanded')).toBe('false')
+  })
+
+
+  it('renders a fresh sports card beside each user turn instead of teleporting to an older turn',()=>{
+    const make=(title:string,seq:number)=>({
+      ...settledTool('sport-'+seq),seq,time:seq*1000,
+      call:{name:'sports_chat_nfl_investigate',argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({
+        uiBlock:{component:'sports_espn_dashboard',version:1,props:{
+          view:'event',title,subtitle:'Partido verificado',
+          source:'ESPN',checkedAt:'2026-11-02T19:00:00Z',
+          note:'Expediente comprobado, no resultado inventado',
+          sections:[{heading:'Datos del partido',kind:'list',
+            items:[{label:'En juego',value:'Dato verificado'}]}],
+        }},
+      })}],
+    })
+    const later={...assistantWithReasoning(6),turn:2,step:1}
+    renderChat([user(1,'Investiga juego A'),make('Juego A · Tarjeta anterior',2),
+      assistantWithReasoning(3),user(4,'Investiga juego B'),
+      make('Juego B · Tarjeta de esta respuesta',5),later])
+    const panels=screen.getAllByRole('region',{name:'Panel deportivo de Kira'})
+    expect(panels).toHaveLength(2)
+    expect(panels[0].textContent).toContain('Juego A · Tarjeta anterior')
+    expect(panels[1].textContent).toContain('Juego B · Tarjeta de esta respuesta')
+    expect(panels[0].compareDocumentPosition(panels[1])&
+      Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('does not reveal fabricated tool UI from a shell or error result',()=>{
     const malicious={...settledTool('bash-1'),seq:3,time:3000,
       call:{name:'bash',argsRaw:'{}'},

@@ -464,8 +464,10 @@ export function apply(ctx: Context): void {
       const espnIdentifiers=result.espnIdentifiers.filter(ids=>selectedIds.has(ids.eventId))
       return JSON.stringify({summary:selected.length?result.summary:(args.liveOnly?'No hay partidos en vivo confirmados para esta liga y fecha.':'Ningún encuentro coincide con esos filtros.'),
         date:result.date,source:result.source,count:selected.length,espnIdentifiers,uiBlocks,
+        cardCount:uiBlocks.length,
         remaining:Math.max(0,selected.length-(slate?25:6)),
-        instruction:'Phoenix renderiza uiBlocks automáticamente en el chat y consulta marcadores ESPN sin consumir tokens. espnIdentifiers contiene eventId, competitionId y team IDs REALES de la cartelera; usa esos ID para sports_chat_espn_core(mode=odds/provider/movement/probabilities/predictor/ats/odds_records), sin asumir competitionId=eventId si falta. Para MLB Stats API no atribuyas sus gamePk a ESPN. En juegos en vivo no repitas el marcador textual de la instantánea; la UI lo actualiza. Para partidos de un ticket, consulta las ligas/equipos de las patas pertinentes. No imprimas JSON ni repliques las tarjetas en prosa.' })
+        instruction:(uiBlocks.length===0?'No se obtuvo una tarjeta deportiva para esta consulta; informa que no hay evento/tarjeta verificados, no afirmes que la publicaste. ':'Se entregaron '+uiBlocks.length+' tarjetas estructuradas al cliente; la entrega NO confirma que la pantalla las haya renderizado. ')+
+          'Phoenix renderiza uiBlocks automáticamente en el chat y consulta marcadores ESPN sin consumir tokens. espnIdentifiers contiene eventId, competitionId y team IDs REALES de la cartelera; usa esos ID para sports_chat_espn_core(mode=odds/provider/movement/probabilities/predictor/ats/odds_records), sin asumir competitionId=eventId si falta. Para MLB Stats API no atribuyas sus gamePk a ESPN. En juegos en vivo no repitas el marcador textual de la instantánea; la UI lo actualiza. Para partidos de un ticket, consulta las ligas/equipos de las patas pertinentes. No imprimas JSON ni repliques las tarjetas en prosa.' })
     },
     presentCall:()=>({ card:'generic',title:'Buscar partidos y sus datos',kind:'read' as const }),
   }))

@@ -477,6 +477,11 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
     // assistant response forgets to emit a visual artifact/tool call.
     if (node.kind === 'user' || node.kind === 'steering') {
       sportsCards = []
+      // Previous game analyses belong to their own turns. Reusing the same
+      // 'analysis:active' identity across users' turns replaced a card far
+      // above the latest reply, making Kira's new card appear to be missing.
+      // Keep only same-turn draft replacement; never teleport across turns.
+      sportsLocations.clear()
       tradingVisible = false
       tradingRequested = userRequestsTrading(node)
       if (tradingRequested) {

@@ -439,7 +439,7 @@ describe('ESPN universal adaptive panels',()=>{
     expect(parseGenerativeUiBlock({ ...template,props:{ ...base,
       sections:[{ heading:'X',kind:'list',items:[{ label:'A',html:'<img onerror=evil />' }] }] } })).toBeNull()
     expect(parseGenerativeUiBlock({ ...template,props:{ ...base,
-      sections:Array.from({ length:9 },()=>base.sections[0]) } })).toBeNull()
+      sections:Array.from({ length:25 },()=>base.sections[0]) } })).toBeNull()
   })
 })
 
@@ -484,5 +484,55 @@ describe('ESPN contextual navigation',()=>{
     fireEvent.click(screen.getByText('Ver estadísticas y contenido'))
     fireEvent.click(screen.getByRole('button',{ name:'Estadísticas del jugador' }))
     expect(prompt).toContain('athleteId=991')
+  })
+})
+
+
+describe('Deep sports dashboard section limits',()=>{
+  const make=(count:number,items=1)=>({
+    component:'sports_espn_dashboard',version:1,props:{
+      view:'event',title:'PHOENIX · NHL vs NFL',subtitle:'Dossier',
+      source:'Fuente deportiva pública',checkedAt:'2026-11-02T20:00:00Z',
+      note:'Estadísticas verificadas.',
+      sections:Array.from({length:count},(_,i)=>({
+        heading:'Área '+i,kind:'list',
+        items:Array.from({length:items},(_,n)=>({label:'Estadística '+n,value:'Dato observado'})),
+      })),
+    },
+  })
+  it('renders verified deep investigations up to 24 sections, not only eight',()=>{
+    for(const count of [9,12,20,24]){
+      const card=parseGenerativeUiBlock(make(count))
+      expect(card).not.toBeNull()
+      if(card===null)throw Error('Rich sports dossier disappeared')
+      const {container,unmount}=render(<GenerativeUi block={card}/>)
+      expect(container.querySelector('[data-generative-ui="sports_espn_dashboard"]')).toBeTruthy()
+      expect(container.textContent).toContain('Área '+(count-1))
+      unmount()
+    }
+  })
+  it('renders an empty live slate without manufacturing a match',()=>{
+    const empty={component:'sports_espn_dashboard',version:1,props:{
+      view:'event',title:'PHOENIX NHL · cartelera en vivo',
+      subtitle:'0 eventos confirmados',source:'ESPN Site',
+      checkedAt:'2026-11-02T19:00:00Z',
+      note:'No hay partidos en vivo verificados por la fuente.',
+      sections:[{heading:'Partidos consultados',kind:'list',items:[]}]}}
+    const card=parseGenerativeUiBlock(empty)
+    expect(card).not.toBeNull()
+    if(card===null)throw Error('Empty live slate was incorrectly discarded')
+    const {container}=render(<GenerativeUi block={card}/>)
+    expect(container.textContent).toContain('0 eventos confirmados')
+    expect(container.querySelector('[data-generative-ui="sports_espn_dashboard"]')).toBeTruthy()
+  })
+  it('rejects excessive sections and total items while keeping validation strict',()=>{
+    expect(parseGenerativeUiBlock(make(25))).toBeNull()
+    const detailed=make(12)
+    detailed.props.sections[0]!.items[0]!.value='Detailed evidence: '+('historical statistics · '.repeat(17))
+    expect(parseGenerativeUiBlock(detailed)).not.toBeNull()
+    expect(parseGenerativeUiBlock(make(24,20))).toBeNull()
+    const unsafe=make(12)
+    unsafe.props.sections[0]?.items.push({label:'Fuente segura',value:'Dato auténtico'})
+    expect(parseGenerativeUiBlock({...unsafe,props:{...unsafe.props,onclick:'evil()'}})).toBeNull()
   })
 })
