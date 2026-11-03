@@ -145,8 +145,8 @@ class StreamingRenderer {
  * forwards localized copy-button labels to fence CodeBlocks — pass a
  * reference-stable object (memoized per locale revision), because a new
  * identity discards the streaming render cache mid-message. `fileMentions`
- * links inline-code tokens its resolver recognizes as real files; this is
- * the single streaming gate — it applies to settled renders only, because a
+ * links inline-code tokens and artifact Markdown links only through a
+ * tool-confirmed resolver. These controls apply to settled renders only, because a
  * streaming message's vocabulary is not final and frozen cached elements
  * must not bake in handlers that could go stale.
  * @returns A GFM document with TeX math rendered through KaTeX; raw HTML,
