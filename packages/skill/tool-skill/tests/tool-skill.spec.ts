@@ -1263,6 +1263,30 @@ describe('user-explicit invocation injection', () => {
     expect(second.messages.filter(message => message.source.kind === 'skill-invocation')).toHaveLength(0)
   })
 
+  it('automatically activates the Blender Studio skill once per genuine 3D-model request', async () => {
+    const home = await tempDir('natural-blender')
+    const ctx = await setup(home)
+    ctx.skills.register({
+      name: 'blender-studio',
+      description: 'Detailed interactive Blender models',
+      source: 'runtime',
+      content: 'Check the live Blender MCP tools and preserve the real GLB geometry.',
+    })
+    const agent = agentForCwd(home)
+    const request = gesture('Crea un modelo 3D de Mario que pueda girar y acercar')
+    const first = await proposeStep(ctx, agent, [request])
+    const second = await proposeStep(ctx, agent, [request])
+    if (first.kind !== 'enter' || second.kind !== 'enter') throw new Error('expected enter')
+    const selected = first.messages.filter(message =>
+      message.source.kind === 'skill-invocation' && message.source.name === 'blender-studio')
+    expect(selected).toHaveLength(1)
+    expect(JSON.stringify(selected[0]?.content)).toContain('preserve the real GLB geometry')
+    expect(second.messages.filter(message => message.source.kind === 'skill-invocation')).toHaveLength(0)
+    const visualOnly = await proposeStep(ctx, agent, [gesture('Crea una imagen de Mario en 2D')])
+    if (visualOnly.kind !== 'enter') throw new Error('expected enter')
+    expect(visualOnly.messages.some(message => message.source.kind === 'skill-invocation')).toBe(false)
+  })
+
   it('does not activate Game Studio for game discussion, quoted tool text or missing skills', async () => {
     const home = await tempDir('natural-game-exclusions')
     const ctx = await setup(home)
