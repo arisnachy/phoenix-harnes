@@ -454,6 +454,34 @@ describe('chat tool activity grouping', () => {
     expect(sports.textContent).toContain('Puebla vs Atlas')
     expect(sports.textContent).not.toContain('NO BET')
   })
+
+  it.each(['sports_chat_mlb_investigate','sports_chat_soccer_investigate',
+    'sports_chat_nba_intelligence','sports_chat_wnba_intelligence',
+    'sports_chat_nhl_investigate','sports_chat_nfl_investigate',
+    'sports_chat_tennis_investigate','sports_chat_ncaa_investigate'])
+  ('keeps %s rich UI visible outside collapsed Tools when Kira says the card is live',name=>{
+    const uiBlock={component:'sports_espn_dashboard',version:1,props:{
+      view:'event',title:'EN VIVO · Encuentro comprobado',
+      subtitle:'ESPN · ficha de investigación',source:'ESPN Site',
+      checkedAt:'2026-11-02T19:00:00Z',
+      note:'Evidencias observadas; cuotas y resultados se verifican por separado.',
+      sections:Array.from({length:10},(_,i)=>({
+        heading:'Área de investigación '+(i+1),kind:'list',
+        items:[{label:'Dato de la fuente '+i,value:'Verificado '+i}]})),
+    }}
+    const toolNode={...settledTool('sports-card-'+name),seq:3,time:3000,
+      call:{name,argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({uiBlock})}]}
+    const assistant={...assistantWithReasoning(4),
+      blocks:[{kind:'text' as const,
+        text:'Te dejé la tarjeta en vivo en el chat; ESPN la irá actualizando.'}]}
+    renderChat([user(1,'Kira, muéstrame la tarjeta deportiva en vivo'),toolNode,assistant])
+    const panel=screen.getByRole('region',{name:'Panel deportivo de Kira'})
+    expect(panel.querySelector('[data-generative-ui="sports_espn_dashboard"]')).toBeTruthy()
+    expect(panel.textContent).toContain('EN VIVO · Encuentro comprobado')
+    expect(screen.getByRole('button',{name:'Tools'}).getAttribute('aria-expanded')).toBe('false')
+  })
+
   it('does not reveal fabricated tool UI from a shell or error result',()=>{
     const malicious={...settledTool('bash-1'),seq:3,time:3000,
       call:{name:'bash',argsRaw:'{}'},
