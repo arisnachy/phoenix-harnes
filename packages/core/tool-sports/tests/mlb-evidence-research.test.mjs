@@ -451,3 +451,18 @@ test('a confirmed lineup flag cannot substitute for nine distinct verified start
   hitter.teamId=999
   assert.equal(reviewMlbResearch(d).evidenceGates.lineupsConfirmed,false)
 })
+
+test('market gate rejects a missing batter versus bullpen matchup even with nine confirmed hitters',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(reviewMlbResearch(d).evidenceGates.rosterMatchupsReviewed,true)
+  const hitter=d.rosters.home.find(p=>p.role==='batter'&&p.lineupConfirmed)
+  const reliever=d.bullpen.away[0]
+  d.matchups=d.matchups.filter(m=>!(m.batterId===hitter.id&&m.pitcherId===reliever.id))
+  const review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.lineupsConfirmed,true)
+  assert.equal(review.evidenceGates.rosterMatchupsReviewed,false)
+  assert.equal(review.eligibility,'insufficient')
+  assert.equal(review.decision,'abstain')
+  assert.equal(review.eligibleForTicket,false)
+})
