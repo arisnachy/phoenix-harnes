@@ -2,7 +2,7 @@
  * No remotely loaded scripts, shader strings from the model, or unsafe textures.
  */
 type Vector = readonly [number,number,number]
-interface Face { readonly vertices: readonly Vector[]; readonly color: string; readonly alpha: number }
+interface Face { readonly vertices: readonly Vector[]; readonly color: string; readonly alpha: number; readonly smoothNormals?: readonly Vector[] }
 interface Bounds { readonly center: Vector; readonly radius: number }
 interface Pipeline {
   readonly gl: WebGL2RenderingContext
@@ -31,6 +31,7 @@ uniform vec2 uPan;
 uniform mat4 uProjection;
 uniform vec3 uLight;
 out vec4 vColor;
+out vec3 vNormal;
 void main(){
   vec3 p=aPosition-uCenter;
   float cy=cos(uRotation.x),sy=sin(uRotation.x);
@@ -40,15 +41,20 @@ void main(){
   float y2=cp*p.y-sp*z1;
   float z2=sp*p.y+cp*z1;
   gl_Position=uProjection*vec4(x1+uPan.x,y2+uPan.y,z2-uDistance,1.0);
-  float diffuse=max(dot(normalize(aNormal),normalize(uLight)),0.0);
-  float shade=0.44+diffuse*0.56;
-  vColor=vec4(aColor.rgb*shade,aColor.a);
+  vNormal=aNormal;
+  vColor=aColor;
 }`
 const fragmentShader = `#version 300 es
 precision highp float;
 in vec4 vColor;
+in vec3 vNormal;
+uniform vec3 uLight;
 out vec4 fragColor;
-void main(){fragColor=vColor;}`
+void main(){
+  float diffuse=max(dot(normalize(vNormal),normalize(uLight)),0.0);
+  float shade=0.48+diffuse*0.52;
+  fragColor=vec4(vColor.rgb*shade,vColor.a);
+}`
 
 function pipeline(canvas: HTMLCanvasElement): Pipeline | undefined {
   const previous=pipelines.get(canvas)
@@ -101,8 +107,11 @@ function geometry(faces:readonly Face[]):Float32Array{
     for(let index=1;index+1<face.vertices.length;index++){
       const b=face.vertices[index]!,c=face.vertices[index+1]!
       const normal=surfaceNormal(a,b,c)
-      for(const vertex of [a,b,c])numbers.push(
-        ...vertex,...normal,rgb[0]!,rgb[1]!,rgb[2]!,face.alpha)
+      const smooth=face.smoothNormals
+      const normals = smooth?.length===face.vertices.length
+        ? [smooth[0]!,smooth[index]!,smooth[index+1]!] : [normal,normal,normal]
+      for(const [i,vertex] of [a,b,c].entries())numbers.push(
+        ...vertex,...normals[i]!,rgb[0]!,rgb[1]!,rgb[2]!,face.alpha)
     }
   }
   return new Float32Array(numbers)
