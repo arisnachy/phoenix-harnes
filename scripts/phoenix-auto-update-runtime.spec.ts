@@ -478,6 +478,55 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(retiredPhoenixCheckoutOwner(candidate)).toBeUndefined()
   })
 
+  it('removes dormant linked worktrees through their original Git, never a broad recursive delete', () => {
+    const start = supervisor.indexOf('function removeRetiredPhoenixWorktree(path, owner) {')
+    const end = supervisor.indexOf('\nfunction detachedStorageCandidateKind(', start)
+    expect(start).toBeGreaterThan(0)
+    expect(end).toBeGreaterThan(start)
+    const oldCheckout = 'C:/old-phoenix'
+    const candidate = 'C:/p/phoenix-runtime-32354d723e-6906da8e0db8'
+    const writes: string[] = []
+    let allowed = false
+    let removed = false
+    let gitStatus = 0
+    const gitRemove = vi.fn(() => {
+      if (gitStatus === 0) removed = true
+      return { status: gitStatus }
+    })
+    const { removeRetiredPhoenixWorktree } = runInNewContext(
+      supervisor.slice(start, end) + '\n({ removeRetiredPhoenixWorktree })',
+      {
+        retiredPhoenixCheckoutOwner: () => allowed ? oldCheckout : undefined,
+        gitValue: () => 'a'.repeat(40),
+        spawnSync: gitRemove,
+        existsSync: (path: string) => path !== candidate || !removed,
+        runtimePathKey: (path: string) => path.toLowerCase(),
+        join,
+        ACTIVE_RUNTIME_FILE: 'phoenix-active-runtime.json',
+        PREPARED_FILE: 'phoenix-update-prepared.json',
+        readFileSync: (path: string) => JSON.stringify(path.endsWith('phoenix-active-runtime.json')
+          ? { schema: 1, path: candidate }
+          : { schema: 1, target: 'a'.repeat(40) }),
+        unlinkSync: (path: string) => { writes.push(path) },
+      },
+    ) as { removeRetiredPhoenixWorktree: (candidate: string, owner: string) => boolean }
+
+    expect(removeRetiredPhoenixWorktree(candidate, oldCheckout)).toBe(false)
+    expect(gitRemove).not.toHaveBeenCalled()
+    allowed = true
+    gitStatus = 1
+    expect(removeRetiredPhoenixWorktree(candidate, oldCheckout)).toBe(false)
+    expect(writes).toHaveLength(0)
+    gitStatus = 0
+    expect(removeRetiredPhoenixWorktree(candidate, oldCheckout)).toBe(true)
+    expect(gitRemove).toHaveBeenCalledWith(
+      'git', ['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', candidate],
+      expect.objectContaining({ cwd: oldCheckout }),
+    )
+    expect(writes).toContain(join(oldCheckout, '.git', 'phoenix-active-runtime.json'))
+    expect(writes).not.toContain(join(oldCheckout, '.git', 'phoenix-update-prepared.json'))
+  })
+
   it('skips old runtimes when their owning checkout is running or process verification fails', () => {
     const start = supervisor.indexOf('function cleanupDetachedLegacyStorage(keep, reportBusy = false) {')
     const end = supervisor.indexOf('\nfunction cleanupObsoleteRuntimes(', start)
