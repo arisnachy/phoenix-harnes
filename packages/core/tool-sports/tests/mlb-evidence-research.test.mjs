@@ -21,7 +21,7 @@ const roster=(side,fullLineup=false)=>({roster:[
 function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
   unrelatedGame=false,unknownLineupId=false,pitcherLogs=false,bvpHydration=false,
   futureGameResult=false,futurePitcherLog=false,wrongVenue=false,
-  olderReliefLog=false,futureNews=false}={}){
+  olderReliefLog=false,futureNews=false,sameDayFinal=false,duplicateGame=false}={}){
   const calls=[]
   const fetcher=async(input)=>{
     const url=String(input)
@@ -36,6 +36,12 @@ function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
         status:{abstractGameState:'Final'},teams:{
           home:{team:{id:teamId},score:6},
           away:{team:{id:teamId===101?200:201},score:2}}},
+        ...(duplicateGame?[{gamePk:709999,gameDate:'2026-06-29T22:00:00Z',
+          status:{abstractGameState:'Final'},teams:{home:{team:{id:teamId},score:6},
+            away:{team:{id:teamId===101?200:201},score:2}}}]:[]),
+        ...(sameDayFinal?[{gamePk:710002,gameDate:'2026-07-01T08:00:00Z',
+          status:{abstractGameState:'Final'},teams:{home:{team:{id:teamId},score:21},
+            away:{team:{id:779},score:0}}}]:[]),
         ...(futureGameResult?[{gamePk:710001,gameDate:'2026-07-01T23:00:00Z',
           status:{abstractGameState:'Final'},teams:{home:{team:{id:teamId},score:20},
             away:{team:{id:779},score:0}}}]:[]),
@@ -273,6 +279,17 @@ test('research snapshot excludes future results and same-day undated pitching lo
   assert.equal(d.bullpen.home[0].reliefUsage72h.length,1)
   assert.ok(mock.calls.some(url=>url.includes('/standings?')&&
     url.includes('date=2026-06-30')))
+})
+
+test('as-of form excludes hindsight finals from the same day and repeated gamePk',async()=>{
+  const mock=fakeNetwork({sameDayFinal:true,duplicateGame:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(d.teamForm.home.games,1)
+  assert.equal(d.teamForm.home.wins,1)
+  assert.equal(d.teamForm.home.runsFor,6)
+  assert.equal(d.teamForm.away.games,1)
+  assert.ok(d.teamForm.home.lastResults.every(g=>g.date<'2026-07-01'))
+  assert.ok(!d.teamForm.home.lastResults.some(g=>g.scored===21))
 })
 
 test('a venue mismatch cannot attach foreign park weather to the MLB fixture',async()=>{
