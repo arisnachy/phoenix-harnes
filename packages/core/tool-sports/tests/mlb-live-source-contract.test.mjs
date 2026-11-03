@@ -24,9 +24,11 @@ test('real MLB Stats API: schedule IDs -> boxscore -> venue -> player statistics
   assert.ok(Array.isArray(home?.batters)&&home.batters.length>=9,
     'Completed game has no observable batting roster')
   assert.ok(Object.keys(home?.players??{}).length>=9)
-  const venue=await official('/venues?venueIds='+fixture.venue.id)
+  // Exercise the exact hydrated endpoint used by researchMlbCase, not a
+  // different unhydrated venue-list route.
+  const venue=await official('/venues/'+fixture.venue.id+'?hydrate=location,fieldInfo')
   assert.ok(venue?.venues?.some(v=>v.id===fixture.venue.id&&v.name),
-    'Venue identity does not match game fixture')
+    'Hydrated venue identity does not match game fixture')
   const playerId=home.batters.find(n=>Number.isSafeInteger(n)&&n>0)
   assert.ok(playerId,'No genuine batter ID in boxscore')
   const player=await official('/people/'+playerId)
