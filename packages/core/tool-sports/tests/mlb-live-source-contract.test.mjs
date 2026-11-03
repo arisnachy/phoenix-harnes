@@ -36,12 +36,25 @@ test('real MLB Stats API: schedule IDs -> boxscore -> venue -> player statistics
   const stats=await official('/people/'+playerId+
     '/stats?stats=season&group=hitting&season=2025')
   assert.ok(Array.isArray(stats?.stats),'Season stats contract missing')
+  const lastFive=await official('/people/'+playerId+
+    '/stats?stats=lastXGames&group=hitting&limit=5&season=2025')
+  assert.ok(Array.isArray(lastFive?.stats),'Last-five stats contract missing')
   // Validate the real pitcher game-log shape consumed by the dossier, rather
   // than only the generic player/season endpoints.
   const pitcherId=home.pitchers?.find(n=>Number.isSafeInteger(n)&&n>0)
   assert.ok(pitcherId,'Completed boxscore has no official pitcher ID')
   const pitcher=await official('/people/'+pitcherId)
   assert.ok(pitcher?.people?.some(p=>p.id===pitcherId))
+  const opponentPitcher=box?.teams?.away?.pitchers?.find(n=>
+    Number.isSafeInteger(n)&&n>0)
+  assert.ok(opponentPitcher,'Opponent pitcher ID missing for BvP source contract')
+  const hydrate='stats(group=[hitting],type=[vsPlayer],opposingPlayerId='+
+    opponentPitcher+',season=2025,sportId=1)'
+  const bvp=await official('/people?personIds='+playerId+
+    '&hydrate='+encodeURIComponent(hydrate))
+  assert.ok(bvp?.people?.some(p=>p.id===playerId),
+    'BvP hydration did not preserve the requested MLB batter ID')
+  // BvP splits may legitimately be empty: that is missing evidence, not zero hits.
   const gameLog=await official('/people/'+pitcherId+
     '/stats?stats=gameLog&group=pitching&season=2025')
   assert.ok(Array.isArray(gameLog?.stats),'Pitcher gameLog contract missing')
