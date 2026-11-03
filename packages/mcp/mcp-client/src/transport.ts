@@ -464,6 +464,11 @@ export function normalizeBlenderLabMcpLaunch(
   return resolved === undefined ? original : { command: resolved, args: [...args] }
 }
 
+/** Create the configured client transport with safe, generation-scoped credentials.
+ * @param config - Validated stdio or Streamable HTTP connector configuration.
+ * @param options - OAuth and credential resolvers for this connection generation.
+ * @returns Fresh MCP transport instance without persisting credentials.
+ */
 export function createTransport(config: Config, options: TransportOptions = {}): Transport {
   switch (config.transport) {
     case 'stdio': {
