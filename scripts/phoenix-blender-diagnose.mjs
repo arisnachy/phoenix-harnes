@@ -49,6 +49,29 @@ function installedBlenderCandidates() {
   return [...paths]
 }
 
+function installedUvxCandidates() {
+  const paths = new Set()
+  const onPath = executableOnPath('uvx')
+  if (onPath && existsSync(onPath)) paths.add(resolve(onPath))
+  if (process.platform !== 'win32') return [...paths]
+  const user = process.env.USERPROFILE
+  const local = process.env.LOCALAPPDATA
+  const install = process.env.UV_INSTALL_DIR
+  for (const candidate of [
+    user && join(user, '.local', 'bin', 'uvx.exe'),
+    user && join(user, '.cargo', 'bin', 'uvx.exe'),
+    user && join(user, 'scoop', 'shims', 'uvx.exe'),
+    local && join(local, 'Microsoft', 'WinGet', 'Links', 'uvx.exe'),
+    local && join(local, 'Programs', 'uv', 'uvx.exe'),
+    install && join(install, 'uvx.exe'),
+  ]) {
+    if (!candidate) continue
+    try { if (statSync(candidate).isFile()) paths.add(resolve(candidate)) }
+    catch { /* Deleted or partial uv installation; do not claim it is ready. */ }
+  }
+  return [...paths]
+}
+
 function bridgePortReachable() {
   return new Promise(resolveReachability => {
     const socket = connect({ host: '127.0.0.1', port: 9876 })
@@ -67,20 +90,25 @@ function bridgePortReachable() {
 }
 
 const blenderPaths = installedBlenderCandidates()
-const uvx = executableOnPath('uvx')
+const uvxPaths = installedUvxCandidates()
 const bridgePortOpen = await bridgePortReachable()
 const findings = []
 if (blenderPaths.length === 0) findings.push('Blender executable not detected in the known Windows locations or PATH.')
-if (!uvx) findings.push('uvx is not available on the current PHOENIX process PATH.')
+if (uvxPaths.length === 0) findings.push('uvx is not installed in known Windows locations or on the current PHOENIX process PATH.')
 if (!bridgePortOpen) findings.push('Blender Lab add-on TCP bridge is not responding on 127.0.0.1:9876.')
 findings.push('A TCP listener alone does not confirm MCP tools or a working Blender add-on.')
 const result = {
   blenderDetected: blenderPaths.length > 0,
   blenderExecutables: blenderPaths,
-  uvxDetected: Boolean(uvx),
-  uvxPath: uvx ?? null,
+  uvxDetected: uvxPaths.length > 0,
+  uvxPath: uvxPaths[0] ?? null,
   blenderLabPortOpen: bridgePortOpen,
   note: 'Verify mcp__blender__ tools separately in the live PHOENIX MCP connector state.',
+  actions: [
+    'Open Blender 5.1+ and enable the official Blender Lab MCP add-on. Start its server or enable Auto-start in add-on preferences.',
+    'In PHOENIX Settings > Connectors > Blender Lab, choose Install, Reconnect, or Repair as appropriate.',
+    'After activation, verify the mcp__blender__ tool namespace and perform one non-destructive test call.',
+  ],
   findings,
 }
 process.stdout.write(JSON.stringify(result, null, 2) + '\n')

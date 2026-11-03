@@ -67,3 +67,19 @@ dsh --profile web --patch examples/mcp-blender/blender-lab.cordis.yml
 Blender Lab explicitly warns that this MCP integration can execute LLM-generated Python inside Blender without guards. Treat Blender as a high-impact execution surface: work on backed-up/test scenes, keep sensitive data out of the Blender host, and prefer an isolated workstation or VM for untrusted tasks.
 
 Official project page: https://www.blender.org/lab/mcp-server/
+
+## Recover Blender after a PHOENIX update (Windows)
+
+1. Open **Settings → Connectors → Blender Lab · 3D real**. The connector now checks three *separate* local prerequisites: Blender, `uvx` and the add-on bridge on `localhost:9876`.
+2. If Blender is detected but the add-on bridge is not listening, open Blender → Preferences → Extensions → Blender Lab MCP, enable the add-on, then select **Start MCP Server** (or the add-on's optional **Auto-start** setting).
+3. If `uvx` is detected but the connector fails after a PHOENIX restart, use **Reconnect** or **Repair** in PHOENIX Settings. On Windows PHOENIX now checks verified paths such as `%USERPROFILE%\.local\bin\uvx.exe` even when the desktop process inherited a stale PATH.
+4. If the connector was never installed in the persistent managed registry, choose **Install** on the Blender card. This is deliberately an explicit opt-in: Blender Lab executes model-generated Python code.
+5. Confirm that the connector advertises `mcp__blender__*` tools and run one non-destructive scene-inspection action with Kira. An open TCP socket, an installed Blender executable or a ready MCP subprocess **alone** is not proof of a working Blender tool.
+
+For local read-only diagnostics from the PHOENIX repository:
+
+```sh
+node scripts/phoenix-blender-diagnose.mjs
+```
+
+This check never installs a package, launches Blender or executes Python. The installed connector remains in PHOENIX's managed MCP overlay across supported updates; the Blender add-on must be running independently.

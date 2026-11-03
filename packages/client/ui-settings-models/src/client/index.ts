@@ -124,6 +124,9 @@ type PluginInventoryChatGptWebRemote = {
 type PluginInventoryMcpRegistryRemote = {
   searchMcpRegistry(request: { query: string; limit?: number }): Promise<PluginInventoryRemoteResult<McpRegistrySearchSnapshot>>
   mcpConnectorHubState(): Promise<PluginInventoryRemoteResult<McpConnectorHubSnapshot>>
+  blenderLocalState(): Promise<PluginInventoryRemoteResult<{
+    blenderDetected: boolean; uvxDetected: boolean; addonBridgeListening: boolean
+  }>>
   xMcpState(): Promise<PluginInventoryRemoteResult<{
     clientIdConfigured: boolean
     clientSecretConfigured: boolean
@@ -283,6 +286,10 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
     state: async () => unwrapPluginInventory(
       'mcpConnectorHubState',
       await remote().mcpConnectorHubState(),
+    ),
+    blenderState: async () => unwrapPluginInventory(
+      'blenderLocalState',
+      await remote().blenderLocalState(),
     ),
     xState: async () => unwrapPluginInventory('xMcpState', await remote().xMcpState()),
     configureX: async request => unwrapPluginInventory(
