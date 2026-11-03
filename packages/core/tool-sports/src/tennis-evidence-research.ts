@@ -215,7 +215,7 @@ function dashboard(d:Omit<TennisDossier,'uiBlock'>):TennisDossier['uiBlock']{
   add('Cuotas encontradas',d.markets.map(q=>({
     label:q.bookmaker+' · '+q.market+' '+q.selection,
     value:q.price.toFixed(2)+(q.point===null?'':' · línea '+q.point),
-    detail:q.concerns[0]})))
+    detail:q.concerns[0]??'Requiere revisión'})))
   add('Datos pendientes',d.missingEvidence.map(s=>({label:s,value:'Por verificar'})))
   return{component:'sports_espn_dashboard',version:1,props:{
     view:'event',title:'PHOENIX Tennis · '+d.match.tour.toUpperCase()+' · '+
