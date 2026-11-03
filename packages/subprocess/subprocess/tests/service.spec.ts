@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { Context } from '@phoenix-ai/cordis'
 import { scrubbedParentEnv, SubprocessRuntime } from '@phoenix-ai/dsh-subprocess'
@@ -97,6 +101,38 @@ describe('SubprocessRuntime seam', () => {
         if (original === undefined) delete process.env[name]
         else process.env[name] = original
       })
+    }
+  })
+
+  it('runs real git init without the original fatal GIT_CONFIG_KEY_0 error', () => {
+    if (spawnSync('git', ['--version'], { encoding:'utf8' }).status !== 0) return
+    const original = {
+      count:process.env.GIT_CONFIG_COUNT,
+      key:process.env.GIT_CONFIG_KEY_0,
+      value:process.env.GIT_CONFIG_VALUE_0,
+    }
+    const cwd = mkdtempSync(join(tmpdir(), 'phoenix-git-config-'))
+    try {
+      process.env.GIT_CONFIG_COUNT = '1'
+      delete process.env.GIT_CONFIG_KEY_0
+      process.env.GIT_CONFIG_VALUE_0 = 'fixture'
+      const broken = spawnSync('git', ['init', '--bare'], {
+        cwd, encoding:'utf8', env: { ...process.env },
+      })
+      expect(broken.status).not.toBe(0)
+      expect(broken.stderr).toMatch(/GIT_CONFIG_KEY_0|unable to parse command-line config/iu)
+      const repaired = spawnSync('git', ['init', '--bare'], {
+        cwd, encoding:'utf8', env: scrubbedParentEnv(),
+      })
+      expect(repaired.status).toBe(0)
+    } finally {
+      if (original.count === undefined) delete process.env.GIT_CONFIG_COUNT
+      else process.env.GIT_CONFIG_COUNT = original.count
+      if (original.key === undefined) delete process.env.GIT_CONFIG_KEY_0
+      else process.env.GIT_CONFIG_KEY_0 = original.key
+      if (original.value === undefined) delete process.env.GIT_CONFIG_VALUE_0
+      else process.env.GIT_CONFIG_VALUE_0 = original.value
+      rmSync(cwd, {recursive:true,force:true})
     }
   })
 
