@@ -50,6 +50,17 @@ async function waitForTool(ctx: Context, name: string): Promise<void> {
 }
 
 describe('official Blender Lab MCP overlay', () => {
+  it('ships a visible default Blender Studio skill without disabling the skill registry', () => {
+    const standard = readFileSync(resolve(root, 'apps/cli/config/agent-presets/standard/agent.cordis.yml'), 'utf8')
+    const skill = readFileSync(resolve(root, 'apps/cli/config/agent-presets/standard/skills/blender-studio/SKILL.md'), 'utf8')
+    expect(standard).toContain("id: skill-filesystem")
+    expect(standard).toContain("id: tool-skill")
+    expect(standard).toContain("skill `blender-studio`")
+    expect(skill).toContain('name: blender-studio')
+    expect(skill).toContain('mcp__blender__')
+    expect(skill).not.toContain('disable-model-invocation: true')
+  })
+
   it('pins Blender Foundation source instead of the unrelated PyPI package', () => {
     const source = readFileSync(overlay, 'utf8')
     const row = insertedRow(loadOverlayPatches('blender-mcp-config-test', overlay))
