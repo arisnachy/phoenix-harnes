@@ -47,12 +47,15 @@ import {researchBasketballCase} from './basketball-evidence-dossier.ts'
 
 import {nflSlate,investigateNfl} from './nfl-evidence-research.ts'
 
+import {tennisSlate,investigateTennis,type TennisTour} from './tennis-evidence-research.ts'
+
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 /** Resolves credentials fresh per tool invocation and never changes process.env. */
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'TENNIS INTELLIGENCE ATP/WTA: investiga con sports_chat_tennis_slate(tour=atp|wta,date) y sports_chat_tennis_investigate(tour,date,matchId) tras cotejar matchId y participantes exactos, superficie y formato oficial. Valorar primer y segundo servicio vs devolución, break points, fatigue, H2H por superficie, indoor/outdoor y cambios de calendario solo cuando se dispone de fuentes; jamás declarar ranking, H2H, best-of-5, lesiones, cuota o resultado sintético. ATP/WTA son circuitos diferentes; distinguir singles/doubles, retiro, walkover y match-tiebreak en mercados. Si no hay datos suficientes, abstenerse. ',
   'NFL AMERICAN FOOTBALL INTELLIGENCE: consulta sports_chat_nfl_slate para fecha/eventId real y sports_chat_nfl_investigate para investigar quarterback, roster completo de ambos clubes, ofensiva, defensiva, OL vs pass rush, WR/TE vs CB/LB, RB vs front seven, descanso, lesiones, clima, cuartos y cotizaciones auténticas. Los 11 titulares ofensivos y los 11 defensivos de CADA club se confirman por IDs explícitos y unidad; no infieras titularidad del roster o profundidad. NFL no es fútbol soccer ni NCAA. No inventes QB titular, rutas, snaps, EPA, probabilidades, prices ni props; confirma evento/casa/mercado/período y abstente si falta evidencia. ',
   'INVESTIGACIÓN MLB POR PARTIDO: usa sports_chat_mlb_investigate para obtener primero la cartelera por fecha y luego el expediente mediante gamePk de MLB Stats API (no confundir con eventId ESPN). Investiga las estadísticas de cada jugador y la matriz bateador×abridor/bullpen, localía, parque, meteorología, últimas salidas y precios cotejados. El expediente marca como PENDIENTES los enfrentamientos BvP, fatiga, lesiones, alineaciones y expertos que no estén confirmados; no interpretes una fila de roster como un bateador titular ni inventes simulaciones probabilísticas. La conclusión se fundamenta en evidencia favorable Y contradictoria y en escenarios por entradas; si matchupNextOffset no es null hay cruces adicionales consultables. No vendas el expediente como una apuesta aprobada. ',
   'SOCCER INTELLIGENCE MUNDIAL: primero sports_chat_soccer_leagues para descubrir competiciones verificadas; sports_chat_soccer_daily para consultar lotes de hasta 12 ligas por fecha, o sports_chat_soccer_world_scan con offset/nextOffset para el resto del catálogo; sports_chat_soccer_investigate para expediente de un evento real por ID de ESPN. Para estadísticas individuales de los jugadores usa sports_chat_soccer_players cuando la liga lo soporte. Solo evidencia disponible de plantillas, forma, lesiones, táctica, mercado y prensa con atribución. No confundas roster con once confirmado, 1X2 con clasificar, ni cuota observada con apuesta aprobada. Si falta xG, árbitro, lineup o cuota, reconocerlo; jamás inventar probabilidades o ticket ganador. ',
@@ -1514,6 +1517,66 @@ export function apply(ctx: Context): void {
         instruction:'Comparar QB/OL, WR vs secondary y RB vs front seven. Identidad completa por roster NO confirma 11 ofensivos + 11 defensivos. Comprobar inactivos, health, viento y período OT. Ningún precio sin bookmaker/evento real, ni ticket aprobado automáticamente.'})
     },
     presentCall:()=>({card:'generic',title:'Investigar NFL · QB, defensas y props',kind:'read' as const}),
+  }))
+
+  ctx.tools.register(defineTool({
+    name:'sports_chat_tennis_slate',
+    description:'Cartelera ATP o WTA con matchId, eventId, dos jugadores por ID, torneo, hora y estado; omite partidos sin identificador o horario individual verificable.',
+    parameters:{
+      tour:{type:'string',required:true,description:'Circuito ATP o WTA, minúsculas atp/ wta.'},
+      date:{type:'string',required:true,description:'Fecha YYYY-MM-DD de la cartelera.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      if(args.tour!=='atp'&&args.tour!=='wta')throw Error('Circuito ATP/WTA inválido')
+      const now=Date.now()
+      const r=await tennisSlate(args.tour,args.date,fetch,now,await sportsEnv(ctx))
+      const uiBlock={component:'sports_espn_dashboard',version:1,props:{
+        view:'event',title:'PHOENIX · '+args.tour.toUpperCase()+' · '+args.date,
+        subtitle:r.matches.length+' partidos por ID ESPN',source:'ESPN Tennis',
+        checkedAt:new Date(now).toISOString(),
+        sections:[{heading:'Encuentros y rondas',kind:'list',items:r.matches.slice(0,30).map(m=>({
+          label:m.players[0].name+' vs '+m.players[1].name,
+          value:m.start+' · '+m.state,
+          detail:m.tournament+' · '+m.round+' · matchId '+m.matchId}))}],
+        note:'El horario del partido, no el inicio de un torneo, es la fuente de pregame. Rankings, servicio y cuotas requieren consulta independiente.'}}
+      return JSON.stringify({...r,uiBlock,
+        instruction:'Para investigar un encuentro escoge matchId exacto y ejecuta sports_chat_tennis_investigate(tour,date,matchId). No generar apuestas sin precio real.'})
+    },
+    presentCall:()=>({card:'generic',title:'Consultar cartelera ATP/WTA',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_tennis_investigate',
+    description:'Expediente de tenis ATP/WTA por matchId con perfiles, ranking si se observa, servicio y devolución, últimos partidos verificables, superficie, formato y cuotas con reglas de retiro.',
+    parameters:{
+      tour:{type:'string',required:true,description:'atp o wta explícito.'},
+      date:{type:'string',required:true,description:'Fecha AAAA-MM-DD.'},
+      matchId:{type:'string',required:true,description:'matchId real devuelto por la cartelera del mismo tour y día.'},
+      includeOdds:{type:'boolean',description:'Consultar cuotas reales ATP/WTA, defecto sí.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      if(args.tour!=='atp'&&args.tour!=='wta')throw Error('Circuito ATP/WTA inválido')
+      const tour:TennisTour=args.tour
+      const now=Date.now(),env=await sportsEnv(ctx)
+      let quotes:Awaited<ReturnType<typeof marketOddsDetailed>>['quotes']=[]
+      let oddsSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
+      if(args.includeOdds!==false){
+        try{
+          const odds=await marketOddsDetailed('tennis_'+tour,'h2h,totals',env,fetch,now)
+          quotes=odds.quotes;oddsSources=odds.sources
+        }catch{/* No synthetic odds on errors. */}
+      }
+      const dossier=await investigateTennis(tour,args.date,args.matchId,fetch,now,env,quotes)
+      return JSON.stringify({...dossier,sources:undefined,
+        sourceStatus:{ok:dossier.sources.filter(x=>x.status==='observed').length,
+          missing:dossier.sources.filter(x=>x.status!=='observed').slice(0,20)},
+        oddsSources,
+        instruction:'Kira debe comparar primer y segundo saque contra devolución rival, superficie, sets, descanso y evidencia contradictoria. Perfil sin statistics no es 0; ranking ausente no es sin ranking. La oferta debe coincidir ambos atletas, circuito, fecha, bookmaker y ruleset para retiro/walkover/super-tiebreak. No declarar ticket ganador ni P(win) inventada.'})
+    },
+    presentCall:()=>({card:'generic',title:'Investigar '+tour.toUpperCase()+' · servicio y devolución',kind:'read' as const}),
   }))
 
 }
