@@ -1576,7 +1576,7 @@ export function apply(ctx: Context): void {
         oddsSources,
         instruction:'Kira debe comparar primer y segundo saque contra devolución rival, superficie, sets, descanso y evidencia contradictoria. Perfil sin statistics no es 0; ranking ausente no es sin ranking. La oferta debe coincidir ambos atletas, circuito, fecha, bookmaker y ruleset para retiro/walkover/super-tiebreak. No declarar ticket ganador ni P(win) inventada.'})
     },
-    presentCall:()=>({card:'generic',title:'Investigar '+tour.toUpperCase()+' · servicio y devolución',kind:'read' as const}),
+    presentCall:()=>({card:'generic',title:'Investigar ATP/WTA · servicio y devolución',kind:'read' as const}),
   }))
 
 }
