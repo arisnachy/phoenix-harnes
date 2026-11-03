@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import css from './Scene3DView.module.css'
 import { exportSceneGLB, exportSceneGLTF, importSceneGLTF } from './scene3d-formats.ts'
-import { torusTriangles } from './scene3d-primitives.ts'
+import { sphereTriangles, torusTriangles } from './scene3d-primitives.ts'
 import { poseScene3D } from './scene3d-animation.ts'
 import { drawWebGLScene } from './scene3d-webgl.ts'
 
@@ -54,7 +54,7 @@ export interface Scene3D {
   readonly camera?: 'perspective' | 'isometric' | 'front' | 'top'
 }
 type Vec3 = [number,number,number]
-type Face = { readonly vertices: readonly Vec3[]; readonly color: string; readonly alpha: number; readonly material?: Scene3DMaterial }
+type Face = { readonly vertices: readonly Vec3[]; readonly color: string; readonly alpha: number; readonly material?: Scene3DMaterial; readonly smoothNormals?: readonly Vec3[] }
 type Projected = { readonly points: readonly [number, number][]; readonly depth: number; readonly color: string; readonly alpha: number; readonly light: number }
 
 const colorPattern = /^#[0-9a-f]{6}$/iu
@@ -176,10 +176,29 @@ function transform(vertex: Vec3, node: Scene3DNode): Vec3 {
   ;[x,y] = [x*Math.cos(az)-y*Math.sin(az),x*Math.sin(az)+y*Math.cos(az)]
   return [x+node.position[0], y+node.position[1], z+node.position[2]]
 }
+function sphereNormal(point: Vec3, node: Scene3DNode): Vec3 {
+  let [x,y,z] = [point[0]/node.size[0],point[1]/node.size[1],point[2]/node.size[2]]
+  const [rx,ry,rz] = node.rotation ?? [0,0,0] as const
+  const ax=rx*deg,ay=ry*deg,az=rz*deg
+  ;[y,z]=[y*Math.cos(ax)-z*Math.sin(ax),y*Math.sin(ax)+z*Math.cos(ax)]
+  ;[x,z]=[x*Math.cos(ay)+z*Math.sin(ay),-x*Math.sin(ay)+z*Math.cos(ay)]
+  ;[x,y]=[x*Math.cos(az)-y*Math.sin(az),x*Math.sin(az)+y*Math.cos(az)]
+  const length=Math.hypot(x,y,z)||1
+  return [x/length,y/length,z/length]
+}
 function mesh(node: Scene3DNode): Face[] {
   if(node.hidden===true)return []
   const faces: Vec3[][] = []
-  if(node.type==='torus'){
+  if(node.type==='sphere'){
+    const vertices = sphereTriangles()
+    for(let i=0;i<vertices.length;i+=9){
+      faces.push([
+        [vertices[i]!,vertices[i+1]!,vertices[i+2]!],
+        [vertices[i+3]!,vertices[i+4]!,vertices[i+5]!],
+        [vertices[i+6]!,vertices[i+7]!,vertices[i+8]!],
+      ])
+    }
+  } else if(node.type==='torus'){
     const vertices = torusTriangles()
     for(let i=0;i<vertices.length;i+=9){
       faces.push([
@@ -205,34 +224,24 @@ function mesh(node: Scene3DNode): Face[] {
       quad(v[ids[0]!]!,v[ids[1]!]!,v[ids[2]!]!,v[ids[3]!]!)
     }
   } else {
-    const slices=12, rings=node.type==='sphere'?8:1
-    for(let j=0;j<rings;j++){
-      for(let i=0;i<slices;i++){
-        const a=2*Math.PI*i/slices,b=2*Math.PI*(i+1)/slices
-        let lo:Vec3,hi:Vec3,lo2:Vec3,hi2:Vec3
-        if(node.type==='sphere'){
-          const lat1=-Math.PI/2+j*Math.PI/rings,lat2=-Math.PI/2+(j+1)*Math.PI/rings
-          const sphere=(lat:number,lon:number):Vec3=>[Math.cos(lat)*Math.cos(lon)*.5,Math.sin(lat)*.5,Math.cos(lat)*Math.sin(lon)*.5]
-          lo=sphere(lat1,a);hi=sphere(lat2,a);lo2=sphere(lat1,b);hi2=sphere(lat2,b)
-        } else {
-          const bottom=.5
-          const top=node.type==='cone'?0:.5
-          lo=[Math.cos(a)*bottom,-.5,Math.sin(a)*bottom]
-          lo2=[Math.cos(b)*bottom,-.5,Math.sin(b)*bottom]
-          hi=[Math.cos(a)*top,.5,Math.sin(a)*top]
-          hi2=[Math.cos(b)*top,.5,Math.sin(b)*top]
-        }
-        quad(lo,lo2,hi2,hi)
-        if(node.type!=='sphere'){
-          faces.push([[0,.5,0],hi,hi2])
-          faces.push([[0,-.5,0],lo2,lo])
-        }
-      }
+    const slices=32
+    for(let i=0;i<slices;i++){
+      const a=2*Math.PI*i/slices,b=2*Math.PI*(i+1)/slices
+      const bottom=.5,top=node.type==='cone'?0:.5
+      const lo:Vec3=[Math.cos(a)*bottom,-.5,Math.sin(a)*bottom]
+      const lo2:Vec3=[Math.cos(b)*bottom,-.5,Math.sin(b)*bottom]
+      const hi:Vec3=[Math.cos(a)*top,.5,Math.sin(a)*top]
+      const hi2:Vec3=[Math.cos(b)*top,.5,Math.sin(b)*top]
+      if(node.type==='cone')faces.push([lo,lo2,hi])
+      else quad(lo,lo2,hi2,hi)
+      if(node.type!=='cone')faces.push([[0,.5,0],hi,hi2])
+      faces.push([[0,-.5,0],lo2,lo])
     }
   }
   }
   return faces.map(vertices => ({
     vertices: vertices.map(point => transform(point,node)), color:node.material?.baseColor??node.color,
+    ...(node.type==='sphere'?{smoothNormals:vertices.map(point=>sphereNormal(point,node))}:{}),
     alpha: node.material?.opacity??(/cristal|acristalad|glass|window/iu.test(node.name ?? '') ? .77 : 1),
     ...(node.material===undefined?{}:{material:node.material}),
   }))
@@ -327,9 +336,8 @@ function paint(canvas:HTMLCanvasElement,scene:Scene3D,faces:readonly Face[],
     ctx.globalAlpha=face.alpha
     ctx.fillStyle=shade(face.color,face.light)
     ctx.fill()
-    ctx.strokeStyle='rgba(58,49,38,.19)'
-    ctx.lineWidth=.55
-    ctx.stroke()
+    // Polygon outlines amplify low-resolution faceting and are not part of the material.
+    // Keep the fallback clean; the actual shape is shaded by its surface normals.
   }
   ctx.globalAlpha=1
 }
