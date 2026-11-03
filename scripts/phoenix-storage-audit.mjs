@@ -172,7 +172,8 @@ export function diagnosePhoenixDiskGrowth(options = {}) {
 
 /** Compare two snapshots without conflating logical file sizes and disk free. */
 export function comparePhoenixDiskGrowth(before, after) {
-  if (before?.schema !== 1 || after?.schema !== 1) return undefined
+  if (before?.schema !== 1 || after?.schema !== 1
+    || !Array.isArray(before.roots) || !Array.isArray(after.roots)) return undefined
   const old = new Map(before.roots.map(root => [root.name, root]))
   return {
     diskFreeDeltaBytes: Number.isFinite(after.freeBytes) && Number.isFinite(before.freeBytes)
