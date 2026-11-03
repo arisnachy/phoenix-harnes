@@ -44,6 +44,9 @@ export const PHOENIX_3D_ROUTING_PROTOCOL =
   'for normal forms, dashboards and web UI use phoenix_canvas or UI tools. Never add 3D to ordinary apps merely because it looks impressive. '+
   'For architecture/product/room/vehicle apps, propose or create a 3D viewer when interaction conveys spatial value. '+
   'For organic 3D use triangular mesh geometry or identifiable anatomical parts, not a single cube. '+
+  'For every imagined 3D subject, no matter the category, decompose the prompt into all essential objects, parts, materials and relationships. '+
+  'Use compositionContract to require named objectIds, minimum parts, actual mesh faces, animation and spatial relations. '+
+  'Validate those relations before presenting a scene; do not call an assembled preview professional or exact. '+
   'For complex scenes never substitute a single-subject preset: build every subject and companion object. '+
   'Set objectId on each node and requiredObjects on the tool call so missing items are rejected. '+
   'Use torus for wheels and rings, mesh for organic forms, and keyframe animations for named parts. '+
