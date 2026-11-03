@@ -384,7 +384,7 @@ export class HealthClinicStore {
     const followups=scoped('followups')
     const appointments=scoped('appointments')
     const attachments=this.listAttachments(actor,id)
-    const ordered=[...encounters.map(item=>({...item,kind:'encounter'})),
+    const ordered:RecordData[]=[...encounters.map(item=>({...item,kind:'encounter'})),
       ...orders.map(item=>({...item,kind:'order'})),
       ...prescriptions.map(item=>({...item,kind:'prescription'})),
       ...observations.map(item=>({...item,kind:'observation'})),
@@ -714,7 +714,7 @@ export class HealthClinicStore {
       if(row.version!==expectedVersion)fail('Conflicto de edición: recarga el documento')
       const current=this.openAttachment(row)
       if(current.reviewStatus!=='pending')fail('El documento ya fue revisado')
-      const next={...current,reviewStatus:'reviewed',reviewedBy:actor.username,
+      const next:RecordData={...current,reviewStatus:'reviewed',reviewedBy:actor.username,
         reviewedAt:new Date().toISOString()}
       const version=row.version+1
       const sealed=this.seal(row.id,actor.org,'attachment',version,next)
