@@ -15,6 +15,22 @@ $storageRoot = if ([string]::IsNullOrWhiteSpace($env:PHOENIX_UPDATE_TEMP)) {
 } else {
     [System.IO.Path]::GetFullPath($env:PHOENIX_UPDATE_TEMP)
 }
+# This inventory never deletes files. It distinguishes generated updater
+# worktrees from project/evidence directories before any removal request.
+$auditScript = Join-Path $repo 'scripts\phoenix-storage-audit.mjs'
+$nodeForAudit = Get-Command node.exe -ErrorAction SilentlyContinue
+function Write-StorageAudit {
+    if ($null -eq $nodeForAudit -or -not (Test-Path -LiteralPath $auditScript -PathType Leaf)) { return }
+    & $nodeForAudit.Source $auditScript --root $storageRoot
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'PHOENIX directory size audit did not finish.' }
+}
+function Get-AvailableBytes {
+    try {
+        $rootDrive = [System.IO.Path]::GetPathRoot($storageRoot)
+        return ([System.IO.DriveInfo]::new($rootDrive)).AvailableFreeSpace
+    } catch { return $null }
+}
+$freeBefore = Get-AvailableBytes
 
 # Match only the managed runtimes belonging to this specific checkout.
 # The identity must agree with stageIdentity(root) in the Node supervisor.
@@ -44,6 +60,7 @@ function Get-ManagedRuntimeDirectories {
 }
 
 Write-Host ('[PHOENIX STORAGE] Examining managed runtime directory: ' + $storageRoot)
+Write-StorageAudit
 $before = @(Get-ManagedRuntimeDirectories)
 $before | Select-Object Name, LastWriteTime | Format-Table -AutoSize
 Write-Host ('[PHOENIX STORAGE] Managed runtimes found: ' + $before.Count)
@@ -93,7 +110,8 @@ if ($PurgeOldWorkspaces -and -not $Apply) {
 
 
 if (-not $Apply) {
-    Write-Host '[PHOENIX STORAGE] Inspection only. Close Phoenix, then rerun with -Apply to reclaim idle runtimes.'
+    Write-Host '[PHOENIX STORAGE] Inspection only. Close Phoenix, then rerun with -Apply to reclaim verified idle runtimes.'
+    Write-Host '[PHOENIX STORAGE] Non-updater project/evidence folders are NOT automatically deleted.'
     return
 }
 
@@ -153,6 +171,14 @@ if ($PurgeOldWorkspaces) {
 }
 $after = @(Get-ManagedRuntimeDirectories)
 $legacyAfter = @(Get-LegacyStorageDirectories)
+Write-Host '[PHOENIX STORAGE] Storage inventory after guarded cleanup:'
+Write-StorageAudit
+$freeAfter = Get-AvailableBytes
+if ($null -ne $freeBefore -and $null -ne $freeAfter) {
+    $difference = [long]$freeAfter - [long]$freeBefore
+    $sign = if ($difference -ge 0) { '+' } else { '' }
+    Write-Host ('[PHOENIX STORAGE] Drive free-space change during repair: ' + $sign + [Math]::Round($difference / 1GB, 2) + ' GiB (approximate, concurrent disk activity may affect this number).')
+}
 Write-Host ('[PHOENIX STORAGE] Remaining managed runtimes: ' + $after.Count)
 Write-Host ('[PHOENIX STORAGE] Remaining previous-identity directories (including protected checkouts): ' + $legacyAfter.Count)
 if ($legacyAfter.Count -gt 0) {
