@@ -728,14 +728,14 @@ function retiredPhoenixCheckoutOwner(path) {
   const currentCommon = absoluteGitPath(root, gitValue(root, ['rev-parse', '--git-common-dir']))
   if (common === undefined || currentCommon === undefined
     || runtimePathKey(common) === runtimePathKey(currentCommon)
-    || !existsSync(common) || !/[/\\]\\.git$/iu.test(common)) return undefined
+    || !existsSync(common) || !/[/\\]\.git$/iu.test(common)) return undefined
   const owner = dirname(common)
   // This is not a generic directory deletion rule: the other checkout must
   // still be an official PHOENIX checkout with an updater and launcher.
   if (!existsSync(join(owner, 'phoenix-windows.cmd'))
     || !existsSync(join(owner, 'scripts', 'phoenix-auto-update.mjs'))) return undefined
   const remote = gitValue(owner, ['remote', 'get-url', 'origin'])
-  const normalized = remote?.replaceAll('\\', '/').replace(/\\.git$/iu, '').toLowerCase()
+  const normalized = remote?.replaceAll('\\', '/').replace(/\.git$/iu, '').toLowerCase()
   if (normalized !== 'https://github.com/arisnachy/phoenix-harnes'
     && normalized !== 'git@github.com:arisnachy/phoenix-harnes') return undefined
 
@@ -753,7 +753,7 @@ function retiredPhoenixCheckoutOwner(path) {
     return undefined // An unreadable heartbeat is not proof of inactivity.
   }
   const known = gitValue(owner, ['worktree', 'list', '--porcelain'])
-  if (known === undefined || !known.split(/\\r?\\n/u).some(line =>
+  if (known === undefined || !known.split(/\r?\n/u).some(line =>
     line.startsWith('worktree ')
       && runtimePathKey(line.slice('worktree '.length).trim()) === runtimePathKey(path))) return undefined
   return owner
