@@ -127,18 +127,25 @@ async function boundedMap<T,R>(items:T[],concurrency:number,fn:(item:T)=>Promise
   return out
 }
 function form(games:unknown[],teamId:number,cutoff:number):MlbForm{
+  // Final is the API's status at retrieval, NOT proof a game had finished at
+  // a historical checkedAt. With no verified final timestamp, exclude the
+  // snapshot's UTC calendar day and deduplicate repeated schedule game IDs.
+  const cutoffDay=iso(cutoff).slice(0,10)
+  const seen=new Set<number>()
   const valid=games.flatMap(entry=>{
     const g=obj(entry),status=obj(g.status),t=obj(g.teams),h=obj(t.home),a=obj(t.away)
-    const homeId=id(obj(h.team).id),awayId=id(obj(a.team).id)
-    if(homeId!==teamId&&awayId!==teamId)return []
+    const gamePk=id(g.gamePk),homeId=id(obj(h.team).id),awayId=id(obj(a.team).id)
+    if(!gamePk||seen.has(gamePk)||(homeId!==teamId&&awayId!==teamId))return []
     const isHome=homeId===teamId
     const own=isHome?h:a,opponent=isHome?a:h
     const opponentId=id(obj(opponent.team).id)
-    const d=Date.parse(word(g.gameDate))
+    const gameDate=word(g.gameDate),d=Date.parse(gameDate)
     const scored=numeric(own.score),allowed=numeric(opponent.score)
     if(!opponentId||!Number.isFinite(d)||d>=cutoff||
+      gameDate.slice(0,10)>=cutoffDay||
       word(status.abstractGameState)!=='Final'||scored===null||allowed===null)return []
-    return[{date:word(g.gameDate),opponentId,scored,allowed,side:isHome?'home' as const:'away' as const}]
+    seen.add(gamePk)
+    return[{date:gameDate,opponentId,scored,allowed,side:isHome?'home' as const:'away' as const}]
   }).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,20)
   const slice=(side:'home'|'away')=>valid.filter(g=>g.side===side)
   return{games:valid.length,wins:valid.filter(g=>g.scored>g.allowed).length,
