@@ -50,6 +50,7 @@ const child = spawn(uvxExecutable(), ['--from',SOURCE,'blender-mcp'],{
   env:safeEnv(),stdio:['pipe','pipe','pipe'],shell:false,windowsHide:true,
 })
 let stderr=''
+child.stdin.on('error',error=>finish(1,'MCP stdio write failed: '+error.message))
 let buffer=''
 let settled=false
 let initialized=false
