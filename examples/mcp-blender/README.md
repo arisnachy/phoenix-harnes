@@ -40,7 +40,7 @@ mcp__blender__<tool-name>
 PHOENIX launches:
 
 ```sh
-uvx --from "git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp" blender-mcp
+uvx --from "git+https://projects.blender.org/lab/blender_mcp.git@v1.0.2#subdirectory=mcp" blender-mcp
 ```
 
 The explicit Blender Lab Git URL is intentional. Do **not** simplify it to `uvx blender-mcp`; that name also exists for a different third-party project and can pair the wrong server with Blender Lab's add-on.
@@ -83,3 +83,31 @@ node scripts/phoenix-blender-diagnose.mjs
 ```
 
 This check never installs a package, launches Blender or executes Python. The installed connector remains in PHOENIX's managed MCP overlay across supported updates; the Blender add-on must be running independently.
+
+## 2026 Blender Lab SDK-compatibility repair
+
+PHOENIX now pins Blender Lab MCP **v1.0.2**, which fixes its Python MCP SDK
+dependency (`mcp<2`). The previous official `v1.0.0` can fail while
+importing `mcp.server.fastmcp` when the unbounded SDK resolves v2.
+
+**Existing connectors do not need to be deleted.** PHOENIX recognizes the
+original official v1.0.0 managed entry and transparently launches the official
+v1.0.2 executable. New managed installations and this sample overlay both
+use v1.0.2.
+
+This fixes a potential pre-handshake server crash. It does not start or enable
+Blender's extension on its own. Blender's official architecture still requires:
+- Blender 5.1 or newer and its MCP add-on installed from Blender Lab
+- The "MCP Bridge Server" actually running in the extension preferences
+- A functioning MCP stdio process that returns tools/list to PHOENIX
+
+Official general setup: https://projects.blender.org/lab/blender_mcp/wiki/Setup
+For a local checkout, the official Windows command is
+`uv --directory C:\\blender_mcp\\mcp run blender-mcp` after explicitly
+cloning the official repository. Do not substitute the unrelated PyPI
+`blender-mcp` project. Neither a socket-open check nor a successful CLI
+launch alone demonstrates that Kira can execute Blender tools.
+
+If the connector still shows **connection-failed**, inspect the actual
+Host stderr for `ModuleNotFoundError`, Git errors or a failed MCP handshake;
+use **Reconnect** in PHOENIX once the update is installed.
