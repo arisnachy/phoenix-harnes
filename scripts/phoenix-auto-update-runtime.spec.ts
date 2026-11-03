@@ -37,7 +37,7 @@ describe('real Windows disk headroom guard', () => {
   })
 
   it('stops the supervised watcher before a fresh runtime allocation', () => {
-    const start = updater.indexOf('function updaterRuntimeDiskHasHeadroom(root) {')
+    const start = updater.indexOf('function updaterRuntimeDiskHasHeadroom() {')
     const end = updater.indexOf('\nfunction updaterRuntimeStorageHasCapacity(root, target) {', start)
     expect(start).toBeGreaterThan(0)
     expect(end).toBeGreaterThan(start)
@@ -51,12 +51,12 @@ describe('real Windows disk headroom guard', () => {
         MIN_RUNTIME_DISK_FREE_GIB: 8,
         process: { platform: 'win32' }, console: { error },
       },
-    ) as { updaterRuntimeDiskHasHeadroom: (root: string) => boolean }
-    expect(guard.updaterRuntimeDiskHasHeadroom('checkout')).toBe(false)
+    ) as { updaterRuntimeDiskHasHeadroom: () => boolean }
+    expect(guard.updaterRuntimeDiskHasHeadroom()).toBe(false)
     expect(error).toHaveBeenCalledWith(expect.stringContaining('below the 8 GiB safety reserve'))
     free = 20
-    expect(guard.updaterRuntimeDiskHasHeadroom('checkout')).toBe(true)
-    expect(updater).toContain('if (!updaterRuntimeDiskHasHeadroom(root)) return false')
+    expect(guard.updaterRuntimeDiskHasHeadroom()).toBe(true)
+    expect(updater).toContain('if (!updaterRuntimeDiskHasHeadroom()) return false')
     expect(updater).toContain("phase: 'storage'")
   })
 
