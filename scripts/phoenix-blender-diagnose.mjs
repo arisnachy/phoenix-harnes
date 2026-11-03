@@ -92,10 +92,16 @@ function bridgePortReachable() {
 const blenderPaths = installedBlenderCandidates()
 const uvxPaths = installedUvxCandidates()
 const bridgePortOpen = await bridgePortReachable()
+const gitConfigCount = Number(process.env.GIT_CONFIG_COUNT ?? 0)
+const brokenInlineGitConfig = Number.isInteger(gitConfigCount) && gitConfigCount > 0
+  && (gitConfigCount > 64 || Array.from({ length: gitConfigCount }, (_, index) =>
+    process.env[`GIT_CONFIG_KEY_${index}`] === undefined
+      || process.env[`GIT_CONFIG_VALUE_${index}`] === undefined).some(Boolean))
 const findings = []
 if (blenderPaths.length === 0) findings.push('Blender executable not detected in the known Windows locations or PATH.')
 if (uvxPaths.length === 0) findings.push('uvx is not installed in known Windows locations or on the current PHOENIX process PATH.')
 if (!bridgePortOpen) findings.push('Blender Lab add-on TCP bridge is not responding on 127.0.0.1:9876.')
+if (brokenInlineGitConfig) findings.push('Parent Git inline config has missing GIT_CONFIG_KEY_n/GIT_CONFIG_VALUE_n. PHOENIX repairs this for Blender MCP by stripping transient config tuples before uvx runs. Reconnect after updating.')
 findings.push('A TCP listener alone does not confirm MCP tools or a working Blender add-on.')
 const result = {
   blenderDetected: blenderPaths.length > 0,
@@ -103,6 +109,7 @@ const result = {
   uvxDetected: uvxPaths.length > 0,
   uvxPath: uvxPaths[0] ?? null,
   blenderLabPortOpen: bridgePortOpen,
+  brokenInlineGitConfig,
   note: 'Verify mcp__blender__ tools separately in the live PHOENIX MCP connector state.',
   actions: [
     'Open Blender 5.1+ and enable the official Blender Lab MCP add-on. Start its server or enable Auto-start in add-on preferences.',
