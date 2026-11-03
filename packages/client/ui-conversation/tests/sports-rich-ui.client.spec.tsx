@@ -113,7 +113,7 @@ describe('Phoenix Sports ticket hierarchy and theme compatibility',()=>{
     let prompt=''
     const card=parseGenerativeUiBlock(ticket)
     if(!card)throw Error('Invalid quoted ticket')
-    render(<GenerativeUi block={card} onAction={(value)=>{prompt=value}}/>)
+    render(<GenerativeUi block={card} onAction={(value)=>{ prompt=value }}/>)
     fireEvent.click(screen.getByRole('button',{ name:'Verificar si ganó o perdió' }))
     expect(prompt).toContain('sports_chat_ticket_track')
     expect(prompt).toContain('Casa A')

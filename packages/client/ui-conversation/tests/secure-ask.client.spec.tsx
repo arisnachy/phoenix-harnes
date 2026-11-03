@@ -15,7 +15,7 @@ describe('Secure Ask human-only browser sidebar', () => {
     const calls: Array<{ path: string; data: Record<string, unknown> }> = []
     const onSaved = vi.fn()
     vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
-      const data = JSON.parse(String(options?.body ?? '{}')) as Record<string, unknown>
+      const data = JSON.parse(typeof options?.body === 'string' ? options.body : '{}') as Record<string, unknown>
       calls.push({ path, data })
       const body = path.endsWith('/remember')
         ? { saved: true, automatic: true, profile: 'personal', profiles: [
@@ -30,7 +30,9 @@ describe('Secure Ask human-only browser sidebar', () => {
       saved: true, automatic: false }} onSaved={onSaved} onClose={vi.fn()} />)
     expect(screen.queryByPlaceholderText('Escribe o pega la contraseña')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'No volver a preguntar en este sitio' }))
-    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1), { timeout: 3_000 })
+    await waitFor(() => {
+      expect(onSaved).toHaveBeenCalledTimes(1)
+    }, { timeout: 3_000 })
     expect(calls.map(row => row.path)).toEqual([
       '/phoenix-secure-login/remember', '/phoenix-secure-login/use', '/phoenix-secure-login/detect',
     ])
@@ -43,7 +45,7 @@ describe('Secure Ask human-only browser sidebar', () => {
   it('saves a newly entered password with explicit no-repeat authorization', async () => {
     const calls: Array<{ path: string; data: Record<string, unknown> }> = []
     vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
-      const data = JSON.parse(String(options?.body ?? '{}')) as Record<string, unknown>
+      const data = JSON.parse(typeof options?.body === 'string' ? options.body : '{}') as Record<string, unknown>
       calls.push({ path, data })
       return new Response(JSON.stringify(path.endsWith('/save')
         ? { saved: true, automatic: true, profiles: [
@@ -64,7 +66,9 @@ describe('Secure Ask human-only browser sidebar', () => {
       target: { value: 'example-only' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar y no volver a preguntar' }))
-    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce(), { timeout: 3_000 })
+    await waitFor(() => {
+      expect(onSaved).toHaveBeenCalledOnce()
+    }, { timeout: 3_000 })
     expect(calls[0]?.path).toBe('/phoenix-secure-login/save')
     expect(calls[0]?.data.automatic).toBe(true)
     expect(calls[1]?.path).toBe('/phoenix-secure-login/use')
@@ -130,17 +134,19 @@ describe('Secure Ask human-only browser sidebar', () => {
       ] }} onSaved={vi.fn()} onClose={vi.fn()} />)
     fireEvent.change(screen.getByPlaceholderText('Afiliación'), { target: { value: 'member-123' } })
     fireEvent.change(screen.getByPlaceholderText('Escribe tu PIN'), { target: { value: 'not-logged-to-chat' } })
-    expect((screen.getByRole('button', { name: 'Guardar y continuar' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: 'Guardar y continuar' })).toHaveProperty('disabled', true)
     fireEvent.change(screen.getByPlaceholderText('Empresa'), { target: { value: 'xyz' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar y continuar' }))
-    await waitFor(() => expect(calls.some(call => call.account === 'member-123'
-      && (call.extras as Record<string, string>)?.['extra:0'] === 'xyz')).toBe(true))
+    await waitFor(() => {
+      expect(calls.some(call => call.account === 'member-123'
+        && (call.extras as Record<string, string>)?.['extra:0'] === 'xyz')).toBe(true)
+    })
   })
 
   it('keeps personal and Kira identities independently selectable', async () => {
     const calls: Array<{ path: string; data: Record<string, unknown> }> = []
     vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
-      const data = JSON.parse(String(options?.body ?? '{}')) as Record<string, unknown>
+      const data = JSON.parse(typeof options?.body === 'string' ? options.body : '{}') as Record<string, unknown>
       calls.push({ path, data })
       const profiles = [
         { id: 'personal', saved: true, automatic: true, source: 'dpapi' },
@@ -161,19 +167,25 @@ describe('Secure Ask human-only browser sidebar', () => {
       ] }} onSaved={onSaved} onClose={vi.fn()} />)
     expect(screen.queryByPlaceholderText('Escribe o pega tu usuario')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Cuenta de Kira' }))
-    await waitFor(() => expect(calls.some(call => call.path.endsWith('/select')
-      && call.data.profile === 'kira')).toBe(true))
+    await waitFor(() => {
+      expect(calls.some(call => call.path.endsWith('/select')
+        && call.data.profile === 'kira')).toBe(true)
+    })
     expect(screen.queryByPlaceholderText('Escribe o pega la contraseña')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Usar acceso guardado' }))
-    await waitFor(() => expect(calls.some(call => call.path.endsWith('/use')
-      && call.data.profile === 'kira')).toBe(true))
-    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1), { timeout: 3_500 })
+    await waitFor(() => {
+      expect(calls.some(call => call.path.endsWith('/use')
+        && call.data.profile === 'kira')).toBe(true)
+    })
+    await waitFor(() => {
+      expect(onSaved).toHaveBeenCalledTimes(1)
+    }, { timeout: 3_500 })
   })
 
   it('allows adding Kira credentials without replacing an existing personal account', async () => {
     const calls: Array<{ path: string; data: Record<string, unknown> }> = []
     vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
-      const data = JSON.parse(String(options?.body ?? '{}')) as Record<string, unknown>
+      const data = JSON.parse(typeof options?.body === 'string' ? options.body : '{}') as Record<string, unknown>
       calls.push({ path, data })
       const profiles = [
         { id: 'personal', saved: true, automatic: true, source: 'dpapi' },
@@ -197,11 +209,15 @@ describe('Secure Ask human-only browser sidebar', () => {
     fireEvent.change(screen.getByPlaceholderText('Contraseña real'),
       { target: { value: 'secret-test-not-to-chat' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar y continuar' }))
-    await waitFor(() => expect(calls.some(call => call.path.endsWith('/save')
-      && call.data.profile === 'kira' && call.data.account === 'kira-service-user')).toBe(true))
+    await waitFor(() => {
+      expect(calls.some(call => call.path.endsWith('/save')
+        && call.data.profile === 'kira' && call.data.account === 'kira-service-user')).toBe(true)
+    })
     expect(calls.some(call => call.path.endsWith('/delete'))).toBe(false)
-    await waitFor(() => expect(calls.some(call => call.path.endsWith('/select')
-      && call.data.profile === 'kira')).toBe(true))
+    await waitFor(() => {
+      expect(calls.some(call => call.path.endsWith('/select')
+        && call.data.profile === 'kira')).toBe(true)
+    })
   })
 
   it('does not claim login complete if the site still requires authentication', async () => {
@@ -229,7 +245,9 @@ describe('Secure Ask human-only browser sidebar', () => {
     fireEvent.change(screen.getByPlaceholderText('Usuario real'), { target: { value: 'user' } })
     fireEvent.change(screen.getByPlaceholderText('Contraseña real'), { target: { value: 'do-not-log' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar y continuar' }))
-    await waitFor(() => expect(screen.getByText(/Acceso guardado y cifrado/)).toBeTruthy())
+    await waitFor(() => {
+      expect(screen.getByText(/Acceso guardado y cifrado/)).toBeTruthy()
+    })
     expect(screen.queryByPlaceholderText('Escribe o pega la contraseña')).toBeNull()
     expect(screen.getByRole('button', { name: 'Usar acceso guardado' })).toBeTruthy()
   })
@@ -238,7 +256,7 @@ describe('Secure Ask human-only browser sidebar', () => {
     const calls: Array<{ path: string; args: Record<string, unknown> }> = []
     const onSaved = vi.fn()
     vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
-      const args = JSON.parse(String(options?.body || '{}')) as Record<string, unknown>
+      const args = JSON.parse(typeof options?.body === 'string' ? options.body : '{}') as Record<string, unknown>
       calls.push({ path, args })
       return new Response(JSON.stringify(path.endsWith('/adopt-related')
         ? { saved: true, automatic: true, profile: 'personal', profiles: [
@@ -255,7 +273,9 @@ describe('Secure Ask human-only browser sidebar', () => {
     fireEvent.click(screen.getByRole('button', {
       name: 'Reutilizar y no volver a preguntar en este sitio',
     }))
-    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1), { timeout: 3_000 })
+    await waitFor(() => {
+      expect(onSaved).toHaveBeenCalledTimes(1)
+    }, { timeout: 3_000 })
     expect(calls[0]).toMatchObject({
       path: '/phoenix-secure-login/adopt-related',
       args: {
@@ -270,7 +290,7 @@ describe('Secure Ask human-only browser sidebar', () => {
   it('reuses related credentials manually only after explicit consent', async () => {
     const calls: Array<{ path: string; args: Record<string, unknown> }> = []
     vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
-      const args = JSON.parse(String(options?.body || '{}')) as Record<string, unknown>
+      const args = JSON.parse(typeof options?.body === 'string' ? options.body : '{}') as Record<string, unknown>
       calls.push({ path, args })
       return new Response(JSON.stringify(path.endsWith('/adopt-related')
         ? { saved: true, automatic: false, profile: 'personal', profiles: [
@@ -285,13 +305,17 @@ describe('Secure Ask human-only browser sidebar', () => {
     expect(screen.queryByPlaceholderText('Escribe o pega la contraseña')).toBeNull()
     expect(calls).toHaveLength(0)
     fireEvent.click(screen.getByRole('button', { name: 'Reutilizar en este sitio' }))
-    await waitFor(() => expect(calls.some(x => x.path.endsWith('/adopt-related'))).toBe(true))
+    await waitFor(() => {
+      expect(calls.some(x => x.path.endsWith('/adopt-related'))).toBe(true)
+    })
     expect(calls[0]?.args).toMatchObject({
       origin: 'https://www.juancitosport.com.do', sourceOrigin: 'https://deportes.juancitosport.com.do',
       profile: 'personal', consent: true, tabId: 'verified-tab',
     })
     expect(calls.some(x => x.path.endsWith('/save'))).toBe(false)
-    await waitFor(() => expect(screen.getByText(/Acceso guardado para este sitio/)).toBeTruthy())
+    await waitFor(() => {
+      expect(screen.getByText(/Acceso guardado para este sitio/)).toBeTruthy()
+    })
   })
 
   it('does not invent credential fields before the browser observes a real login form', () => {
@@ -319,9 +343,11 @@ describe('Secure Ask human-only browser sidebar', () => {
     fireEvent.change(screen.getByPlaceholderText('Usuario real'), { target: { value: 'retry-user' } })
     fireEvent.change(screen.getByPlaceholderText('Contraseña real'), { target: { value: 'retry-secret' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar y continuar' }))
-    await waitFor(() => expect(screen.getByText(/No se confirmó el guardado/)).toBeTruthy())
-    expect((screen.getByPlaceholderText('Usuario real') as HTMLInputElement).value).toBe('retry-user')
-    expect((screen.getByPlaceholderText('Contraseña real') as HTMLInputElement).value).toBe('retry-secret')
+    await waitFor(() => {
+      expect(screen.getByText(/No se confirmó el guardado/)).toBeTruthy()
+    })
+    expect(screen.getByPlaceholderText('Usuario real')).toHaveProperty('value', 'retry-user')
+    expect(screen.getByPlaceholderText('Contraseña real')).toHaveProperty('value', 'retry-secret')
   })
 
   it('keeps the compact card collapsible', () => {

@@ -677,7 +677,7 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
 
 // When the checkout identity changes, older updater worktrees remain in ~/p.
 // Reclaim only strict PHOENIX-generated names after 48 hours, and only when:
-//   (1) Git proves that the worktree is owned by this checkout and is clean, or
+//   (1) Git proves that the worktree is owned by this checkout and unleased, or
 //   (2) its linked-worktree metadata proves that the original owner is gone.
 // Another repository's existing worktrees, active/preparing markers, and
 // anything that Windows processes still reference must never be removed.
@@ -708,8 +708,9 @@ function detachedStorageCandidateKind(path, registeredWorktrees) {
   if (registeredWorktrees.has(key)) {
     // Previous identities can still be registered against this very Git
     // checkout. They were previously excluded from ALL legacy cleanup.
-    // Never remove modified trees or an active/preparing lease.
-    if (!sameRepository(path) || !gitClean(path)
+    // Only strict updater-generated paths from the same Git owner are eligible.
+    // Generated build files may make a retired worktree dirty; check live leases instead.
+    if (!sameRepository(path)
       || runtimeProtectedByOwningCheckout(path)
       || stageProtectedByOwningCheckout(path)) return undefined
     return 'owned'
@@ -2163,6 +2164,7 @@ async function stopWatcherSupervisor() {
 }
 
 let finalCode = 0
+let firstHostSpawnLogged = false
 while (true) {
   const launchConfiguration = captureBootCriticalConfiguration()
   let lastObservedFingerprint = configurationFingerprint(launchConfiguration)
@@ -2191,7 +2193,11 @@ while (true) {
     process.stderr.write(chunk)
     hostErrorTail = (hostErrorTail + String(chunk)).slice(-96 * 1024)
   })
-  startupDuration('first Host process spawned', startupStartedAt)
+  // The supervisor survives planned Host replacements. Measuring every spawn
+  // from its original startup reports hours of uptime as launch latency.
+  startupDuration(firstHostSpawnLogged ? 'replacement Host process spawned' : 'first Host process spawned',
+    firstHostSpawnLogged ? startedAt : startupStartedAt)
+  firstHostSpawnLogged = true
   activeHost = host
   host.once('error', (error) => {
     console.error(`[PHOENIX] host launch failed: ${error.message}`)

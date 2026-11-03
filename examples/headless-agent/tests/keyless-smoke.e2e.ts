@@ -30,11 +30,12 @@ describe('headless-agent keyless smoke', () => {
         if (relativePath === undefined) return
         const compressed = await readFile(join(cwd, relativePath))
         expect(compressed.subarray(0, 4).toString('hex')).toBe('28b52ffd')
-        // A .jsonl.zstd archive has one JSON object per line; inspect its header.
+        // JSONL archive: reject empty archives and validate every record, not only the header.
         const serialized = (await decompress(compressed)).toString()
-        const header = serialized.split('\n').find(line => line.trim().length > 0)
-        if (header === undefined) throw new Error('Persisted session archive is empty')
-        persistedHeader = JSON.parse(header) as Record<string, unknown>
+        const persistedRecords = serialized.split(/\r?\n/u).filter(line => line.trim().length > 0)
+          .map(line => JSON.parse(line) as Record<string, unknown>)
+        if (persistedRecords.length === 0) throw new Error('Persisted session archive is empty')
+        persistedHeader = persistedRecords[0]
       },
     })
     const lines = stdout.trimEnd().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)

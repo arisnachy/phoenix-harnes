@@ -22,6 +22,7 @@ import * as FrontendStatic from '@phoenix-ai/dsh-host-frontend-static'
 import { launchEnvironmentOf } from '@phoenix-ai/dsh-launch-environment'
 import { registerMiniBrowserRoutes } from './mini-browser.ts'
 import { registerDesktopLiveRoutes } from './desktop-live.ts'
+import { registerHealthRoutes } from './health-routes.ts'
 import { scrubbedParentEnv } from '@phoenix-ai/dsh-subprocess'
 import type {} from '@phoenix-ai/cordis-plugin-loader'
 import type {} from '@phoenix-ai/dsh-host-webserver'
@@ -265,6 +266,7 @@ export function apply(ctx: Context, config: Config): void {
   // A local Chromium session shared with Phoenix's MCP Chrome connector. Never a remote iframe.
   registerMiniBrowserRoutes(ctx)
   registerDesktopLiveRoutes(ctx)
+  registerHealthRoutes(ctx)
   if (config.surfaceContext) {
     ctx.inject(['systemPrompt'], (promptCtx) => {
       addHarnessSourceSection(promptCtx, SOURCE_ROOT)
