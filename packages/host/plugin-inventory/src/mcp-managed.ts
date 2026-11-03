@@ -292,6 +292,27 @@ function localNpxMcpConfig(
   }
 }
 
+/** Official Blender Foundation Lab MCP, pinned to the checked-in overlay source.
+ * Blender and the add-on must also be running locally; an MCP registration
+ * alone is not evidence that the Blender Python bridge is connected.
+ * Its ability to execute Blender Python code makes activation user-opt-in.
+ */
+export const BLENDER_LAB_MCP_SOURCE = 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp'
+function blenderLabMcpConfig(): ManagedStdioMcpConfig {
+  return {
+    transport: 'stdio',
+    serverName: 'blender',
+    command: 'uvx',
+    args: ['--from', BLENDER_LAB_MCP_SOURCE, 'blender-mcp'],
+    env: { BLENDER_MCP_HOST: 'localhost', BLENDER_MCP_PORT: '9876' },
+    envCredentialRefs: {},
+    cwd: '',
+    toolCallTimeoutMs: 120_000,
+    startupTimeoutMs: 120_000,
+    failOnStartupError: false,
+    reconnect: { enabled: true, initialDelayMs: 1_000, maxDelayMs: 30_000, maxAttempts: 60 },
+  }
+}
 function fetchMcpConfig(): ManagedStdioMcpConfig {
   return {
     transport: 'stdio',
@@ -336,6 +357,7 @@ function microsoftScopedMcpConfig(serverName: string, service: 'mail' | 'calenda
 }
 
 const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>> = {
+  blender: { label: 'Blender Lab (official local MCP, Python execution)', config: blenderLabMcpConfig },
   devpost: { label: 'Devpost Hackathons', config: devpostHackathonsMcpConfig },
   canva: { label: 'Canva', config: canvaMcpConfig },
   supabase: { label: 'Supabase', config: () => remoteOauthMcpConfig('supabase', SUPABASE_MCP_URL) },
@@ -447,6 +469,9 @@ const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>>
  * high-risk activation/approval boundary.
  */
 export const CORE_MCP_PACK_IDS: readonly CuratedMcpConnectorId[] = [
+  // Installed only after the user clicks Activate available integrations.
+  // Cold boot never installs missing optional MCPs (installMissing: false).
+  'blender',
   // Public Microsoft documentation is free and requires no private credentials.
   // Metered Work IQ and Azure remain optional and never auto-install.
   'microsoft-learn',
