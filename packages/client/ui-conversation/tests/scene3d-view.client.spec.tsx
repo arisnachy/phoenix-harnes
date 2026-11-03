@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Scene3DView, parseScene3D } from '../src/client/chat/Scene3DView.tsx'
+import { Scene3DView, parseScene3D, sceneCharacterFacingYaw } from '../src/client/chat/Scene3DView.tsx'
 import { poseScene3D } from '../src/client/chat/scene3d-animation.ts'
 import { normalizeHardnessArtifact } from '../src/client/artifact.ts'
 import { HardnessArtifactBody } from '../src/client/chat/HardnessArtifactBody.tsx'
@@ -99,6 +99,27 @@ describe('Phoenix real interactive 3D artifacts',()=>{
       name:'Mal',duration:2,loop:true,tracks:[{node:'No existe',
         property:'rotation',keys:[{time:0,value:[0,0,0]},{time:2,value:[1,1,1]}]}],
     }]})).toBeUndefined()
+  })
+  it('aims character front view toward face landmarks instead of an arbitrary world axis',()=>{
+    const character=parseScene3D({
+      version:1,units:'meters',name:'Personaje de prueba',background:'#eeeeee',camera:'front',
+      nodes:[
+        {type:'sphere',name:'Cabeza',position:[0,2,0],size:[1,1,1],color:'#c2a183'},
+        {type:'sphere',name:'Ojo izquierdo',position:[.48,2.08,-.15],size:[.12,.1,.1],color:'#111111'},
+        {type:'sphere',name:'Ojo derecho',position:[.48,2.08,.15],size:[.12,.1,.1],color:'#111111'},
+        {type:'box',name:'Torso',position:[0,.8,0],size:[1,1,1],color:'#d02525'},
+      ],
+    })
+    expect(character).toBeDefined()
+    expect(sceneCharacterFacingYaw(character!)).toBeCloseTo(Math.PI/2,4)
+    expect(sceneCharacterFacingYaw(parseScene3D(scene)!)).toBeUndefined()
+    const ctx={setTransform:vi.fn(),fillRect:vi.fn(),beginPath:vi.fn(),moveTo:vi.fn(),
+      lineTo:vi.fn(),stroke:vi.fn(),closePath:vi.fn(),fill:vi.fn()} as unknown as CanvasRenderingContext2D
+    vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue(ctx)
+    render(<Scene3DView spec={character}/>)
+    fireEvent.click(screen.getByRole('button',{name:'Frente'}))
+    fireEvent.click(screen.getByRole('button',{name:'Restablecer'}))
+    expect(ctx.fill).toHaveBeenCalled()
   })
   it('shows an actionable validation error rather than pretending invalid geometry is a scene',()=>{
     render(<Scene3DView spec={{version:1,units:'meters',nodes:[]}} />)
