@@ -1,0 +1,46 @@
+name: PHOENIX Blender Git config recovery
+on:
+  pull_request:
+    branches: [main, stable]
+    paths:
+      - 'packages/subprocess/subprocess/src/index.ts'
+      - 'packages/subprocess/subprocess/tests/service.spec.ts'
+      - 'packages/mcp/mcp-client/src/transport.ts'
+      - 'packages/mcp/mcp-client/tests/blender-launch.spec.ts'
+      - '.github/workflows/phoenix-blender-git-config-regression.yml'
+  push:
+    branches: [main, stable]
+    paths:
+      - 'packages/subprocess/subprocess/src/index.ts'
+      - 'packages/subprocess/subprocess/tests/service.spec.ts'
+      - 'packages/mcp/mcp-client/src/transport.ts'
+      - 'packages/mcp/mcp-client/tests/blender-launch.spec.ts'
+      - '.github/workflows/phoenix-blender-git-config-regression.yml'
+permissions:
+  contents: read
+jobs:
+  git-config-recovery:
+    name: Reproduce git init 128 and recover MCP (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Check Git availability
+        run: git --version
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Regression tests for real git init and pinned Blender MCP
+        run: pnpm exec vitest run packages/subprocess/subprocess/tests/service.spec.ts packages/mcp/mcp-client/tests/blender-launch.spec.ts
+      - name: Compile host code
+        run: pnpm exec tsc -b tsconfig.host.json
