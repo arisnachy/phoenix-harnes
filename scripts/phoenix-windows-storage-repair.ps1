@@ -83,7 +83,7 @@ function Get-LegacyStorageDirectories {
 $legacyBefore = @(Get-LegacyStorageDirectories)
 Write-Host ('[PHOENIX STORAGE] Previous-identity directories found: ' + $legacyBefore.Count)
 $legacyBefore | Select-Object Name, LastWriteTime | Format-Table -AutoSize
-Write-Host '[PHOENIX STORAGE] Only abandoned directories older than 48h and unused by other processes are eligible.'
+Write-Host '[PHOENIX STORAGE] Reclaims orphan updater worktrees after 24h and dormant official Phoenix checkout worktrees after 7 days, only when Git ownership and Windows process checks permit.'
 
 # One-off project/evidence directories are not updater worktrees. The normal
 # automatic janitor must never erase user-created work or previous research.
