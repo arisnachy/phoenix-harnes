@@ -1,0 +1,28 @@
+name: PHOENIX NCAA College Sports Intelligence
+on:
+  pull_request:
+    paths:
+      - 'packages/core/tool-sports/src/college-evidence-research.ts'
+      - 'packages/core/tool-sports/src/index.ts'
+      - 'packages/core/tool-sports/tests/college-evidence-research.test.mjs'
+      - '.github/workflows/phoenix-ncaa-intelligence.yml'
+  workflow_dispatch:
+jobs:
+  college-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify NCAA Football and College Basketball separately
+        run: node --experimental-strip-types --test packages/core/tool-sports/tests/college-evidence-research.test.mjs
+      - name: Verify host TypeScript
+        run: pnpm exec tsc -b tsconfig.host.json --pretty false
