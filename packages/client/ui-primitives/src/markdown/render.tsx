@@ -113,6 +113,8 @@ export interface MarkdownFileMentions {
    * undefined when the token names no known file — it then stays inert code.
    */
   resolve(value: string): { open: () => void; label: string; title: string } | undefined
+  /** Only tool-confirmed produced files can turn model-authored file URLs into controls. */
+  resolveArtifact?(destination: string): { open: () => void; label: string; title: string } | undefined
 }
 
 /**
@@ -281,7 +283,7 @@ function renderNode(node: Md.RootContent, key: Key, context: MarkdownRenderConte
     case 'table':
       return renderTable(node, key, context)
     case 'link':
-      return renderAnchor(node.url, renderChildren(node.children, { ...context, inLink: true }), key)
+      return renderAnchor(node.url, renderChildren(node.children, { ...context, inLink: true }), key, context)
     case 'linkReference':
       return renderLinkReference(node, key, context)
     case 'image':
@@ -469,9 +471,33 @@ function renderSafeLink(href: string, children: ReactNode[], key: Key): ReactNod
   )
 }
 
-/** Anchor over a parsed markdown destination, which hast normalized before the allowlist saw it. */
-function renderAnchor(url: string, children: ReactNode[], key: Key): ReactNode {
-  return renderSafeLink(normalizeUri(url), children, key)
+/**
+ * Ordinary links use the protocol allowlist. A local artifact destination is
+ * never a browser href: only the tool-confirmed file registry may provide an
+ * explicit Host opener. Unknown/unsafe destinations stay inert prose.
+ */
+function renderAnchor(
+  url: string,
+  children: ReactNode[],
+  key: Key,
+  context: MarkdownRenderContext,
+): ReactNode {
+  const href = sanitizeUrl(normalizeUri(url))
+  if (href !== '') return renderSafeLink(href, children, key)
+  const artifact = context.inLink === true ? undefined : context.fileMentions?.resolveArtifact?.(url)
+  if (artifact === undefined) return <Fragment key={key}>{children}</Fragment>
+  return (
+    <button
+      key={key}
+      type="button"
+      className={css.fileMention}
+      title={artifact.title}
+      aria-label={artifact.label}
+      onClick={artifact.open}
+    >
+      {children}
+    </button>
+  )
 }
 
 /**
@@ -527,7 +553,7 @@ function renderLinkReference(
     // not an anchor, so mentions inside it stay live.
     return <Fragment key={key}>{'['}{renderChildren(node.children, context)}{referenceSuffix(node)}</Fragment>
   }
-  return renderAnchor(definition.url, renderChildren(node.children, { ...context, inLink: true }), key)
+  return renderAnchor(definition.url, renderChildren(node.children, { ...context, inLink: true }), key, context)
 }
 
 function renderImageReference(
