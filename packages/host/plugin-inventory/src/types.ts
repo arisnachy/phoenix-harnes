@@ -270,6 +270,7 @@ export interface McpRegistryInstallRequest {
 
 /** Exact curated connector ids accepted by the Host-owned pinned installer. */
 export type CuratedMcpConnectorId =
+  | 'blender'
   | 'devpost'
   | 'canva'
   | 'supabase'
