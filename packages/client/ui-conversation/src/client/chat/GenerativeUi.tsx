@@ -340,7 +340,8 @@ const sportsEspnDashboard=(v:Record<string,unknown>):v is SportsEspnDashboard=>{
       s.items.length:0),0)<=450
     && p.sections.every(s=>isRecord(s) && hasOnlyKeys(s,['heading','kind','items'])
       && isText(s.heading,300) && ['metrics','list','articles'].includes(String(s.kind))
-      && Array.isArray(s.items) && s.items.length>=1 && s.items.length<=30
+      // Empty sections may legitimately mean no live games or missing evidence.
+      && Array.isArray(s.items) && s.items.length<=30
       && s.items.every(x=>isRecord(x)&&hasOnlyKeys(x,['label','value','detail','image','href','action'])
         && isText(x.label,400) && optionalText(x.value,1000) && optionalText(x.detail,1000)
         && trustedPortrait(x.image) && espnArticleLink(x.href)
