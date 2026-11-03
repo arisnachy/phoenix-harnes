@@ -103,7 +103,7 @@ child.stdout.on('data',chunk=>{
       }else if(!initialized){
         finish(1,'MCP tools arrived before initialize')
       }else{
-        finish(0,`MCP initialized; \${tools.length} Blender tools exported (add-on interaction not tested)`)
+        finish(0,`MCP initialized; ${tools.length} Blender tools exported (add-on interaction not tested)`)
       }
       return
     }
