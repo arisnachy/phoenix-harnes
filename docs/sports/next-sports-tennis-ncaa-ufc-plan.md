@@ -1,0 +1,40 @@
+# PHOENIX Next Sports Intelligence — ATP/WTA, NCAA Football, NCAA Basketball y UFC/MMA
+
+**Plan de expansión y aceptación:** 2026-11-02. Estado: por etapas; cada especialista se considera terminado solo con fuentes, herramientas funcionales, CI, pruebas reales y auditoría del deporte, no por documentar el plan. Prioridad: 1) tenis ATP/WTA; 2) NCAA Football; 3) NCAA Basketball; 4) UFC/MMA.
+
+## 1. Tenis ATP y WTA — especialista Tennis Intelligence (32 pasos)
+
+**Identidad/competición**: [1] ATP/WTA, Grand Slam, Masters/WTA 1000, 500/250, Challenger/ITF y dobles como categorías DISTINTAS (el feed puede no cubrir todas). [2] Calendario/tournamentId/matchId/competitionId, ronda y pista, horario y cambio de programación. [3] Validación de dos competidores ATP/WTA por player ID y evento; dobles no son dos jugadores individuales. [4] Estado pregame/live/final/walkover/retired y suspensión. [5] Duración y formato best-of-3 o best-of-5, tie-break, super tie-break, dobles y condiciones específicas del torneo; no inferir formato por género ni evento sin información.
+
+**Comparabilidad**: [6] ranking y puntos con fecha, Elo solo con definición y fuente. [7] forma últimos 5/10/20 y calidad de rivales. [8] forma por superficie HARD/CLAY/GRASS/INDOOR y transición de superficie. [9] récord del torneo y rendimiento contra rivales de ranking similar. [10] H2H total y desglosado por superficie, torneo y tiempo. [11] nivel físico: horas de juego, sets y descansos, viajes, superficie anterior, lesiones verificadas. [12] zurdo vs diestro, altura/speed/slices solo con evidencia. [13] indoor/outdoor, altura, viento, calor, humedad y forecast del recinto con coordenadas verificadas.
+
+**Juego por puntos**: [14] primer servicio dentro, puntos ganados con primer servicio, segundo servicio, aces, dobles faltas. [15] break points enfrentados/salvados y convertidos. [16] hold% y break% por superficie y muestras. [17] return points won, profundidad de devolución, debilidad del segundo servicio. [18] tiebreak histórico con muestras, clutch no sobreinterpretado. [19] errores no forzados, winners, rallies largos, net points y rally tolerance si proveedor. [20] enfrentamiento de patrón: serve A vs return B; viceversa. [21] forehand/backhand, slice, drop shot, top spin y movement solamente si se dispone de tracking o análisis verificable. [22] fatiga por tie-break/sets y posible recuperación.
+
+**Contexto/mercado**: [23] noticias/medios y entrenadores con autor y fecha; rumores no son lesiones confirmadas. [24] draw real y dificultad de ronda; posible retirada conocida. [25] argumentos para victoria de A y B; escenario sorpresa. [26] mercados reales: match winner, set betting, game handicap, total games, games/set, tiebreak yes/no, aces/double faults, breakpoints cuando cotizados, match retirement rules, live vs pregame. [27] price/bookmaker/player IDs/period/updatedAt/format; vigencia y autenticidad. [28] liquidación: sets, games, handicap, over/under, push, walkover, retirement, cancellation; no mezclar tie-break game count ni punto con game, ni reglas de casas distintas. [29] correlaciones entre ganador A, -sets, handicap y aces para combinadas del mismo match. [30] dictamen de Kira, evidencias a favor/en contra, faltantes y abstención cuando no haya cobertura. [31] snapshots pregame/resultado real para replay sin leakage. [32] evaluación histórica por superficie/mercado/ATP/WTA con precios observados y falsos positivos; no inventar P(win) ni ROI.
+
+**Herramientas objetivo**: \`sports_chat_tennis_slate\`, \`sports_chat_tennis_investigate\`, \`sports_chat_tennis_player\`, \`sports_chat_tennis_market_review\`, \`sports_chat_tennis_audit\`. Prioridad inmediata: las primeras dos + tests y TypeScript; rangos y estadísticas ESPN (sin licencia externa) solo hasta donde los feeds lo permitan. ATP y WTA separados en datos; no asumir iguales rankings, formatos ni mercados.
+
+**Fuentes**: ESPN Site \`tennis/{atp|wta}/scoreboard?dates=YYYYMMDD\`, event summary, athlete profiles y rankings (si el endpoint existe y se observa); estadísticas oficiales ATP/WTA/Grand Slam bajo uso autorizado; proveedores opcionales licenciados para surface splits/H2H/point-by-point; \`tennis_atp\`/\`tennis_wta\` de odds si la casa realmente ofrece el deporte, no inventar markets.
+
+## 2. NCAA Football — College Football Intelligence (24 pasos)
+
+1–4: temporada/fase, conference, calendario, ranking AP/CFP, home/away y opponents quality. 5–8: resultados 3/5/8, rest/bye, viajes, clima, estadio y superficie. 9–12: QB titular en roster verificado, OL y back-ups, WR vs CB, RB vs front seven, presión/sacks. 13–16: explosivos, 3rd down, red zone, turnovers, conversiones, EPA/success rate si proveedor. 17–20: listas activas/inactivas, lesiones, portal transfer, freshman, depthcharts sin falsos titulares; entrenador y coordinadores. 21–24: mercados college (ML/spread/total/quarter/props cuando disponibles), reglas de OT NCAA distintas de NFL, cuotas, noticias, auditoría e integración Kira. **No heredar roster, calendario ni OT de NFL**. ESPN \`football/college-football\` solo equipo/partido verificado; fuente NCAA/CFP y reportes institucionales cuando autorizados.
+
+## 3. NCAA Basketball — College Hoops Intelligence (24 pasos)
+
+1–4: NCAA D1 masculina como liga \`mens-college-basketball\`; femenina futura \`womens-college-basketball\` solo si feed y adaptador verificables, brackets, regular season, March Madness. 5–8: tempo/40, posesiones, Off/Def ratings y Four Factors, strength of schedule, localía y viajes. 9–12: titulares cinco, banco/rotaciones, jugadores freshman/transfers, faltas personales y disponibilidad. 13–16: matchups por posiciones, 3PM/3PA, rim/paint, rebotes, FT, pace del rival. 17–20: descansos, conferencias, neutral venues, equipos en torneos, lesiones, noticias y arbitraje comprobado. 21–24: ML/spread/total, 1H/2H, props si cotizados, OT y ruleset específico NCAA, probabilidades solo calibradas, auditoría. **No copiar períodos, rotaciones ni promedios NBA/WNBA**.
+
+## 4. UFC / MMA — Combat Intelligence (28 pasos)
+
+1–4: evento UFC por identificador, cartelera y hora, MMA vs boxing, peso, 3/5 rounds y campionato si regla confirmada. 5–8: identidad atleta, edad y experiencia con temporalidad, registro de victorias/derrotas, rivales y nivel, división y pesaje oficial. 9–12: striking SLpM/SApM, accuracy/defense, takedowns avg/defense, control/submissions, sumisión y knockdown según proveedor. 13–16: stance orthodox/southpaw, height/reach, distancia, southpaw-vs-orthodox, lucha vs anti-wrestling; estrategia de clinch/ground vs standup. 17–20: últimos 3/5 combates, descanso, lesiones oficiales, cambio de rival o short notice, corte de peso, viajes y camp, no inferir causa médica. 21–24: análisis asaltos/cardio/decision, finish/decision market con fuente, métodos KO/TKO/sub/decision, round totals, props si aparecen. 25–28: odds por peleador+evento+method/round/market/fecha, cancelaciones/no contest/draw y reglas de casa, evidencia contradictoria, registro pre-fight y backtest sin anticipar la pelea. **El estimador no podrá inferir resultado de pelea solo del récord W/L ni afirmar métricas inexistentes**.
+
+## 5. Patrón común PHOENIX
+
+- ID exacto de evento, participantes, competición, hora, estado y fuente antes de investigar.
+- Evidencia con fecha/autor/sample-size vs ausencia; partes recientes y contradicciones.
+- Mercados reales con book, line, price, period, bookmaker rulebook, quoteUpdatedAt; un precio es oferta, no predicción.
+- Solo perfiles y estadísticas que fuentes identificables entreguen; no asumir probable lineups o lesiones.
+- Análisis individual (servicio-devolución, OL-DL, quinteto-contrario, striker-grappler), sin probabilidades arbitrarias.
+- Pruebas con fuentes fallidas, IDs cruzados, cuotas stale, inplay, formato y settlement; CI propio y compilación.
+- Promoción separada por especialista tras checks pertinentes, con sincronización SHA de main/stable y evaluación real.
+- Tickets multideporte con abstención, sin exigir 5/6 patas ni ignorar correlación o reglas de parlays.
