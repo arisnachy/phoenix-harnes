@@ -38,8 +38,9 @@ export function naturalCreationSkill(input: string): 'game-development' | 'blend
   const spatial = /\b(?:3d|tridimensional|glb|gltf|blender|three-dimensional)\b/u.test(request)
   const model = /\b(?:modelo|model|personaje|character|avatar|figura|figure|malla|mesh|escena|scene|escultura|sculpture)\b/u.test(request)
   const creation = /\b(?:haz(?:me)?|crea(?:me)?|crear|genera(?:me)?|construye|modela|dise[nñ]a|quiero|necesito|dame|make|create|build|generate|design|model)\b/u.test(request)
-  const quality = /\b(?:detallad\w*|realist\w*|profesional|studio|gir\w*|rot\w*|zoom|acerc\w*|manipul\w*|rig\w*|export\w*|editable|glb|gltf|character|personaje|avatar)\b/u.test(request)
   const explicitPrototype = /\b(?:low[ -]?poly|primitiv\w*|blockout|boceto\s+simple|vista\s+previa\s+basica)\b/u.test(request)
-  if (spatial && model && creation && quality && !explicitPrototype) return 'blender-studio'
+  // A plain "create a 3D model" is already a concrete modeling request;
+  // richness words refine the route but must not be mandatory.
+  if (spatial && model && creation && !explicitPrototype) return 'blender-studio'
   return undefined
 }
