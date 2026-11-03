@@ -416,6 +416,26 @@ describe('ManagedMcpController', () => {
     expect(await controller.installCuratedMcp('blender')).toMatchObject({ status: 'already-installed' })
   })
 
+  it('retains existing official Blender v1.0.0 registration during the v1.0.2 migration', async()=>{
+    const patchPath=tempPatch()
+    const live=loader()
+    const controller=new ManagedMcpController(live,{patchPath,registrySearch:registry([])})
+    await controller.installCuratedMcp('blender')
+    const raw=readFileSync(patchPath,'utf8')
+    const legacy='git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp'
+    writeFileSync(patchPath,raw.replace(BLENDER_LAB_MCP_SOURCE,legacy))
+    await expect(controller.snapshot()).resolves.toMatchObject([{
+      serverName:'blender',source:{kind:'curated',connectorId:'blender'},
+    }])
+    await expect(controller.installCuratedMcp('blender')).resolves.toMatchObject({
+      status:'already-installed',connector:{serverName:'blender'},
+    })
+    const recovered=await controller.recoverInvalidOverlay()
+    expect(recovered.quarantined).toBe(0)
+    expect(recovered.backupCreated).toBe(false)
+    expect(live.create).toHaveBeenCalledTimes(1)
+  })
+
   it('migrates a legacy installed OAuth MCP to wait for authorization services', async () => {
     const patchPath = tempPatch()
     mkdirSync(dirname(patchPath), { recursive: true })
