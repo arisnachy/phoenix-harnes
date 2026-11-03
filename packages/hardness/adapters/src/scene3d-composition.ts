@@ -73,9 +73,9 @@ export function parseScene3DCompositionContract(value: unknown): Scene3DComposit
     ids.add(object.id)
     const minParts = object.minParts
     const minTriangles = object.minTriangles
-    if (minParts !== undefined && (!Number.isInteger(minParts) || (minParts as number) < 1
+    if (minParts !== undefined && ((typeof minParts !== 'number' || !Number.isInteger(minParts)) || (minParts as number) < 1
       || (minParts as number) > 150)) throw new Error('minParts debe estar entre 1 y 150.')
-    if (minTriangles !== undefined && (!Number.isInteger(minTriangles)
+    if (minTriangles !== undefined && ((typeof minTriangles !== 'number' || !Number.isInteger(minTriangles))
       || (minTriangles as number) < 0 || (minTriangles as number) > 20_000)) {
       throw new Error('minTriangles debe estar entre 0 y 20000.')
     }
@@ -109,7 +109,7 @@ export function parseScene3DCompositionContract(value: unknown): Scene3DComposit
     }
     edges.push({
       from: edge.from, to: edge.to, relation: edge.relation as Scene3DRelation,
-      ...(edge.tolerance === undefined ? {} : { tolerance: edge.tolerance }),
+      ...(edge.tolerance === undefined ? {} : { tolerance: edge.tolerance as number }),
     })
   }
   return { objects, ...(data.relations === undefined ? {} : { relations: edges }) }
