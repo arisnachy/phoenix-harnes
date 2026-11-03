@@ -2163,6 +2163,7 @@ async function stopWatcherSupervisor() {
 }
 
 let finalCode = 0
+let firstHostSpawnLogged = false
 while (true) {
   const launchConfiguration = captureBootCriticalConfiguration()
   let lastObservedFingerprint = configurationFingerprint(launchConfiguration)
@@ -2191,7 +2192,11 @@ while (true) {
     process.stderr.write(chunk)
     hostErrorTail = (hostErrorTail + String(chunk)).slice(-96 * 1024)
   })
-  startupDuration('first Host process spawned', startupStartedAt)
+  // The supervisor survives planned Host replacements. Measuring every spawn
+  // from its original startup reports hours of uptime as launch latency.
+  startupDuration(firstHostSpawnLogged ? 'replacement Host process spawned' : 'first Host process spawned',
+    firstHostSpawnLogged ? startedAt : startupStartedAt)
+  firstHostSpawnLogged = true
   activeHost = host
   host.once('error', (error) => {
     console.error(`[PHOENIX] host launch failed: ${error.message}`)
