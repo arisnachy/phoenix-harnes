@@ -828,6 +828,7 @@ function detachedStorageCandidates(keep, registeredWorktrees) {
     .map(entry => join(base, entry.name))
     .filter(candidate => !keep.has(runtimePathKey(candidate))
       && runtimePathKey(candidate) !== runtimePathKey(persistentStage())
+      && !existsSync(join(candidate, '.phoenix-keep'))
       && managedDirectoryAgeMs(candidate) >= DETACHED_STORAGE_MIN_AGE_MS)
     .map(path => ({ path, kind: detachedStorageCandidateKind(path, registeredWorktrees) }))
     .filter(candidate => candidate.kind !== undefined)
