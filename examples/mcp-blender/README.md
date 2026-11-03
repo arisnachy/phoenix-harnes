@@ -40,7 +40,7 @@ mcp__blender__<tool-name>
 PHOENIX launches:
 
 ```sh
-uvx --from "git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp" blender-mcp
+uvx --from "git+https://projects.blender.org/lab/blender_mcp.git@v1.0.2#subdirectory=mcp" blender-mcp
 ```
 
 The explicit Blender Lab Git URL is intentional. Do **not** simplify it to `uvx blender-mcp`; that name also exists for a different third-party project and can pair the wrong server with Blender Lab's add-on.
@@ -71,7 +71,7 @@ Official project page: https://www.blender.org/lab/mcp-server/
 ## Recover Blender after a PHOENIX update (Windows)
 
 1. Open **Settings → Connectors → Blender Lab · 3D real**. The connector now checks three *separate* local prerequisites: Blender, `uvx` and the add-on bridge on `localhost:9876`.
-2. If Blender is detected but the add-on bridge is not listening, open Blender → Preferences → Extensions → Blender Lab MCP, enable the add-on, then select **Start MCP Server** (or the add-on's optional **Auto-start** setting).
+2. If Blender is detected but the add-on bridge is not listening, enable **Edit → Preferences → System → Network → Allow Online Access** first. Then go to **Edit → Preferences → Add-ons → MCP**, enable it and select **Start MCP Bridge Server** (or enable its optional **Auto Start** setting). Official issue #45 documents a silent bridge bind failure when online access is disabled.
 3. If `uvx` is detected but the connector fails after a PHOENIX restart, use **Reconnect** or **Repair** in PHOENIX Settings. On Windows PHOENIX now checks verified paths such as `%USERPROFILE%\.local\bin\uvx.exe` even when the desktop process inherited a stale PATH.
 4. If the connector was never installed in the persistent managed registry, choose **Install** on the Blender card. This is deliberately an explicit opt-in: Blender Lab executes model-generated Python code.
 5. Confirm that the connector advertises `mcp__blender__*` tools and run one non-destructive scene-inspection action with Kira. An open TCP socket, an installed Blender executable or a ready MCP subprocess **alone** is not proof of a working Blender tool.
@@ -83,3 +83,49 @@ node scripts/phoenix-blender-diagnose.mjs
 ```
 
 This check never installs a package, launches Blender or executes Python. The installed connector remains in PHOENIX's managed MCP overlay across supported updates; the Blender add-on must be running independently.
+
+## 2026 Blender Lab SDK-compatibility repair
+
+PHOENIX now pins Blender Lab MCP **v1.0.2**, which fixes its Python MCP SDK
+dependency (`mcp<2`). The previous official `v1.0.0` can fail while
+importing `mcp.server.fastmcp` when the unbounded SDK resolves v2.
+
+**Existing connectors do not need to be deleted.** PHOENIX recognizes the
+original official v1.0.0 managed entry and transparently launches the official
+v1.0.2 executable. New managed installations and this sample overlay both
+use v1.0.2.
+
+This fixes a potential pre-handshake server crash. It does not start or enable
+Blender's extension on its own. Blender's official architecture still requires:
+- Blender 5.1 or newer and its MCP add-on installed from Blender Lab
+- The "MCP Bridge Server" actually running in the extension preferences
+- A functioning MCP stdio process that returns tools/list to PHOENIX
+
+Official general setup: https://projects.blender.org/lab/blender_mcp/wiki/Setup
+For a local checkout, the official Windows command is
+`uv --directory C:\\blender_mcp\\mcp run blender-mcp` after explicitly
+cloning the official repository. Do not substitute the unrelated PyPI
+`blender-mcp` project. Neither a socket-open check nor a successful CLI
+launch alone demonstrates that Kira can execute Blender tools.
+
+If the connector still shows **connection-failed**, inspect the actual
+Host stderr for `ModuleNotFoundError`, Git errors or a failed MCP handshake;
+use **Reconnect** in PHOENIX once the update is installed.
+
+You can independently verify the actual server and tool discovery without
+executing model code or editing a scene:
+
+```powershell
+node scripts/phoenix-blender-mcp-handshake.mjs
+```
+
+A successful result reports a nonzero count of tools, proving the server
+started, initialized MCP and replied to `tools/list`. It does **not** prove
+the Blender add-on is running. If it fails, the output includes a bounded
+stderr excerpt rather than masking the error with `connection-failed`.
+
+If you already have the official source cloned locally, Blender's official
+[Setup guide](https://projects.blender.org/lab/blender_mcp/wiki/Setup)
+documents the alternate Windows command
+`uv --directory C:\\blender_mcp\\mcp run blender-mcp`. This is a manual
+local-source alternative, not a different PyPI project or a silent install.

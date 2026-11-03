@@ -415,6 +415,16 @@ function credentialRequired(ref: string): Error & { status: number } {
  * @param options - Optional OAuth provider or already-resolved Bearer token.
  * @returns A fresh MCP client transport ready for one connection generation.
  */
+/** Allowlist of Blender Foundation Lab MCP Git packages. Never resolve PyPI blender-mcp. */
+const BLENDER_MCP_LEGACY_SOURCE = 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp'
+const BLENDER_MCP_COMPAT_SOURCE = 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.2#subdirectory=mcp'
+
+function officialBlenderMcpArgs(args: readonly string[]): boolean {
+  return args.length === 3 && args[0] === '--from'
+    && (args[1] === BLENDER_MCP_LEGACY_SOURCE || args[1] === BLENDER_MCP_COMPAT_SOURCE)
+    && args[2] === 'blender-mcp'
+}
+
 /** Drop inherited or explicitly fragmented Git config tuples for pinned Blender MCP.
  * Git refuses even git init when GIT_CONFIG_COUNT survives without its KEY_0.
  * This is a copy; credentials and Git's normal config files remain untouched.
@@ -429,9 +439,7 @@ export function sanitizeBlenderLabGitEnvironment(
   const result = { ...environment }
   if (config.serverName !== 'blender'
     || !/^(?:uvx|uvx\.exe)$/iu.test(win32.basename(config.command))
-    || config.args.length !== 3 || config.args[0] !== '--from'
-    || config.args[1] !== 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp'
-    || config.args[2] !== 'blender-mcp') return result
+    || !officialBlenderMcpArgs(config.args)) return result
   for (const key of Object.keys(result)) {
     if (TRANSIENT_GIT_CONFIG_ENV_PATTERN.test(key)) delete result[key]
   }
@@ -460,12 +468,13 @@ export function normalizeBlenderLabMcpLaunch(
   } = {},
 ): { command: string; args: string[] } {
   const original = { command, args: [...args] }
-  if ((options.platform ?? process.platform) !== 'win32'
-    || serverName !== 'blender'
-    || !/^(?:uvx|uvx\.exe)$/iu.test(command)
-    || args.length !== 3 || args[0] !== '--from'
-    || args[1] !== 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp'
-    || args[2] !== 'blender-mcp') return original
+  if (serverName !== 'blender'
+    || !/^(?:uvx|uvx\.exe)$/iu.test(win32.basename(command))
+    || !officialBlenderMcpArgs(args)) return original
+  // Existing managed registrations stay valid; launch the fixed official
+  // release even when a persisted row still names v1.0.0.
+  const upgraded = { command, args: ['--from', BLENDER_MCP_COMPAT_SOURCE, 'blender-mcp'] }
+  if ((options.platform ?? process.platform) !== 'win32') return upgraded
   const get = (name: string): string | undefined =>
     Object.entries(env).find(([key]) => key.toUpperCase() === name.toUpperCase())?.[1]
   const user = get('USERPROFILE')
@@ -484,7 +493,7 @@ export function normalizeBlenderLabMcpLaunch(
   const exists = options.fileExists ?? existsSync
   const resolved = candidates.find(candidate => candidate !== undefined
     && win32.isAbsolute(candidate) && exists(candidate))
-  return resolved === undefined ? original : { command: resolved, args: [...args] }
+  return resolved === undefined ? upgraded : { command: resolved, args: upgraded.args }
 }
 
 /** Create the configured client transport with safe, generation-scoped credentials.

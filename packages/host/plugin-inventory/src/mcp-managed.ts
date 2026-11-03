@@ -297,7 +297,10 @@ function localNpxMcpConfig(
  * alone is not evidence that the Blender Python bridge is connected.
  * Its ability to execute Blender Python code makes activation user-opt-in.
  */
-export const BLENDER_LAB_MCP_SOURCE = 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp'
+/** Official release with Python MCP SDK <2 compatibility (FastMCP import). */
+export const BLENDER_LAB_MCP_SOURCE = 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.2#subdirectory=mcp'
+/** Accept only this exact legacy pinned source for backwards-compatible reads. */
+const BLENDER_LAB_LEGACY_MCP_SOURCE = 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp'
 function blenderLabMcpConfig(): ManagedStdioMcpConfig {
   return {
     transport: 'stdio',
@@ -619,9 +622,14 @@ function validHttpConfig(value: Record<string, unknown>): boolean {
 }
 
 function validCuratedStdioConfig(value: Record<string, unknown>): boolean {
-  return Object.values(CURATED_MCP_SPECS)
-    .map(spec => spec.config())
-    .some(config => config.transport === 'stdio' && exactJson(value, config))
+  const specs = Object.values(CURATED_MCP_SPECS).map(spec => spec.config())
+  // Legacy Blender installations must not be quarantined at startup just
+  // because PHOENIX updated its official pinned server version.
+  const blender = blenderLabMcpConfig()
+  const previousBlender = { ...blender,
+    args: ['--from', BLENDER_LAB_LEGACY_MCP_SOURCE, 'blender-mcp'] }
+  return specs.some(config => config.transport === 'stdio' && exactJson(value, config))
+    || exactJson(value, previousBlender)
 }
 
 function validConfig(value: unknown): value is ManagedMcpConfig {

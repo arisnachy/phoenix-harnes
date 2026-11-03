@@ -1,10 +1,26 @@
 import { describe, expect, it } from 'vitest'
 import { normalizeBlenderLabMcpLaunch, sanitizeBlenderLabGitEnvironment } from '../src/transport.ts'
 
-const source='git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp'
+const source='git+https://projects.blender.org/lab/blender_mcp.git@v1.0.2#subdirectory=mcp'
 const args=['--from',source,'blender-mcp']
+const legacyArgs=['--from','git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp','blender-mcp']
 
 describe('Blender Lab MCP Windows desktop recovery',()=>{
+  it('upgrades only pinned legacy Blender v1.0.0 to the official SDK-compatible v1.0.2',()=>{
+    expect(normalizeBlenderLabMcpLaunch('blender','uvx',legacyArgs,{},{
+      platform:'win32',fileExists:()=>false,
+    })).toEqual({command:'uvx',args})
+    expect(normalizeBlenderLabMcpLaunch('blender','uvx',legacyArgs,{},{
+      platform:'linux',
+    })).toEqual({command:'uvx',args})
+    expect(normalizeBlenderLabMcpLaunch('fetch','uvx',legacyArgs,{},{
+      platform:'win32',fileExists:()=>true,
+    })).toEqual({command:'uvx',args:legacyArgs})
+    expect(sanitizeBlenderLabGitEnvironment({
+      serverName:'blender',command:'uvx',args:legacyArgs,
+    },{GIT_CONFIG_COUNT:'1',GIT_CONFIG_VALUE_0:'fixture'}))
+      .toEqual({})
+  })
   it('resolves uvx installed under the user profile even when Phoenix PATH is stale',()=>{
     const target='C:\\Users\\user\\.local\\bin\\uvx.exe'
     const result=normalizeBlenderLabMcpLaunch('blender','uvx',args,{
