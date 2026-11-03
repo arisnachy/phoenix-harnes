@@ -21,6 +21,9 @@ test('storage repair has one complete guarded execution path', () => {
   assert.equal(occurrences(contents, 'Get-NetTCPConnection -LocalPort 3080'), 1)
   assert.equal(occurrences(contents, '$node.Source $supervisor --cleanup-storage'), 1)
   assert.equal(occurrences(contents, 'function Get-LegacyStorageDirectories {'), 1)
+  assert.equal(occurrences(contents, 'Write-StorageAudit'), 3)
+  assert.ok(contents.includes('Drive free-space change during repair'))
+  assert.ok(contents.includes('Non-updater project/evidence folders are NOT automatically deleted.'))
   assert.ok(contents.indexOf('if (-not $Apply) {') < contents.indexOf('Get-NetTCPConnection -LocalPort 3080'))
 })
 
