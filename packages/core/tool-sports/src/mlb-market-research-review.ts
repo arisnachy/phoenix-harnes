@@ -112,6 +112,7 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     const missing=[
       ...(!gates.scheduledFuture?['Partido no programado en el futuro o estado prepartido inválido']:[]),
       ...(!gates.lineupsConfirmed?['Alineación confirmada de ambos clubes']:[]),
+      ...(!gates.rosterMatchupsReviewed?['Matriz completa de nueve bateadores contra abridor y relevistas rivales']:[]),
       ...(!gates.starterStatsVerified?['Estadísticas comprobadas de ambos abridores']:[]),
       ...(!gates.venueKnown?['Identidad y características del estadio verificadas']:[]),
       ...(!gates.weatherForecastAvailable?['Pronóstico meteorológico horario para el encuentro']:[]),
