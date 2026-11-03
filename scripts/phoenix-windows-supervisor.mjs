@@ -687,12 +687,13 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
   return false
 }
 
-// When the checkout identity changes, older updater worktrees remain in ~/p.
-// Reclaim only strict PHOENIX-generated names after 24 hours, and only when:
-//   (1) Git proves that the worktree is owned by this checkout and unleased, or
-//   (2) its linked-worktree metadata proves that the original owner is gone.
-// Another repository's existing worktrees, active/preparing markers, and
-// anything that Windows processes still reference must never be removed.
+// When a checkout identity changes, old updater worktrees can stay under ~/p.
+// Reclaim strict generated names when (1) owned by this checkout and unleased,
+// (2) orphan metadata proves the original owner is gone, or (3) an independent
+// OFFICIAL PHOENIX checkout has been dormant for a full week. Case (3) must
+// also prove linked-worktree Git ownership and absence of running processes
+// or a fresh supervisor heartbeat. Preserve project/evidence folders,
+// user keep markers, and all unverifiable or active checkouts.
 const DETACHED_STORAGE_MIN_AGE_MS = 24 * 60 * 60 * 1000
 // Older PHOENIX checkouts may leave registered worktrees and durable markers
 // behind even after their supervisor has stopped. Give those installations a
@@ -724,6 +725,14 @@ function retiredPhoenixCheckoutOwner(path) {
   // previous checkout's supervisor has emitted a recent heartbeat.
   if (process.platform !== 'win32' || !officialPhoenixRemote()
     || managedDirectoryAgeMs(path) < RETIRED_CHECKOUT_MIN_AGE_MS) return undefined
+  // Require a genuine linked Git worktree, not an unrelated repository that
+  // happens to have a generated-looking folder name. A user keep marker
+  // always wins over automatic cleanup.
+  const dotGit = join(path, '.git')
+  if (existsSync(join(path, '.phoenix-keep'))) return undefined
+  try {
+    if (!statSync(dotGit).isFile()) return undefined
+  } catch { return undefined }
   const common = absoluteGitPath(path, gitValue(path, ['rev-parse', '--git-common-dir']))
   const currentCommon = absoluteGitPath(root, gitValue(root, ['rev-parse', '--git-common-dir']))
   if (common === undefined || currentCommon === undefined
