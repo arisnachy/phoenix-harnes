@@ -23,7 +23,7 @@ const brokenCharacter = {
     {type:'cylinder',name:'Brazo izquierdo',position:[-.8,.7,0],size:[.2,1,.2],color:'#c72333'},
     {type:'cylinder',name:'Pierna izquierda',position:[-.4,-.3,0],size:[.4,1,.4],color:'#224466'},
   ],
-}
+} as const
 describe('character fidelity and broken-face regression',()=>{
   it('routes Mario and any explicitly described character to Studio by default',()=>{
     expect(isHumanoidCharacterRequest('Mario Bros')).toBe(true)
