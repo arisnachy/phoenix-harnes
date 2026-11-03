@@ -51,7 +51,7 @@ function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
     }else if(u.pathname.endsWith('/boxscore')){
       data={teams:{home:{battingOrder:fullLineup?[unknownLineupId?999999:1103,1104,...Array.from({length:7},(_,i)=>1301+i)]:[]},
         away:{battingOrder:fullLineup?[2203,2204,...Array.from({length:7},(_,i)=>2301+i)]:[]}}}
-    }else if(u.pathname.endsWith('/venues')){
+    }else if(/^\/api\/v1\/venues\/\d+$/u.test(u.pathname)){
       data={venues:[{id:wrongVenue?999:205,name:wrongVenue?'Other Park':'Test Ballpark',
         location:{defaultCoordinates:{latitude:40.1,longitude:-74.2}},
         fieldInfo:{roofType:'Retractable',turfType:'Grass',leftLine:330,center:400,rightLine:335}}]}
@@ -344,7 +344,7 @@ test('official park fieldInfo distinguishes roof construction from actual roof p
   assert.equal(d.venue.turfType,'Grass')
   assert.deepEqual(d.venue.dimensionsFt,{leftLine:330,center:400,rightLine:335})
   assert.equal(d.weather.windRelativeToField,'unknown')
-  assert.ok(mock.calls.some(url=>url.includes('/venues?')&&
+  assert.ok(mock.calls.some(url=>url.includes('/venues/205?')&&
     url.includes('hydrate=location,fieldInfo')))
 })
 
