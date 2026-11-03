@@ -390,7 +390,7 @@ export class HealthClinicStore {
       ...observations.map(item=>({...item,kind:'observation'})),
       ...followups.map(item=>({...item,kind:'followup'})),
       ...attachments.map(item=>({...item,kind:'attachment'}))]
-      .sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')))
+    ordered.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')))
     const pendingOrders=orders.filter(item=>item.status!=='reviewed')
     const pendingFollowups=followups.filter(item=>item.status==='pending')
     return {patient,encounters,orders,prescriptions,observations,followups,appointments,
