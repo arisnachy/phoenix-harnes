@@ -629,7 +629,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, blenderSt
       : mcpRuntime?.status === 'auth-required'
         ? { text: t('authorizationRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
         : mcpRuntime?.status === 'failed'
-          ? { text: t('brokenStatus'), className: connectorStyles['connectorStatusError'] ?? '' }
+          ? definition.id === 'blender'
+            ? { text: 'Servidor MCP sin conexión', className: connectorStyles['connectorStatusWarn'] ?? '' }
+            : { text: t('brokenStatus'), className: connectorStyles['connectorStatusError'] ?? '' }
           : mcpRuntime?.status === 'disconnected'
             ? { text: t('disconnectedStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' }
             : managed !== undefined
@@ -743,7 +745,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, blenderSt
                       ? 'Puente local y herramientas MCP detectados; prueba una operación sencilla con Kira.'
                       : managed === undefined
                         ? 'Puente disponible. Pulsa Instalar para autorizar y registrar el MCP oficial.'
-                        : 'Puente disponible pero no hay herramientas activas. Pulsa Reconectar o Reparar.'}</p>
+                        : 'El puente local está disponible, pero el MCP todavía no publica herramientas. Actualiza PHOENIX (Blender MCP oficial v1.0.2), pulsa Reconectar y revisa el diagnóstico si persiste.'}</p>
             </>
           )}
         </div>
