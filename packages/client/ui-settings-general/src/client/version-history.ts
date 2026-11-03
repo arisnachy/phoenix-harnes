@@ -36,8 +36,9 @@ export function parsePhoenixVersionHistory(payload: unknown): readonly PhoenixVe
     const author = objectValue(commit?.author)
     const sha = row?.sha
     const message = commit?.message
+    const parents = row?.parents
     if (typeof sha !== 'string' || !SHA.test(sha) || seen.has(sha)
-      || !Array.isArray(row?.parents) || row.parents.length === 0
+      || !Array.isArray(parents) || parents.length === 0
       || typeof message !== 'string' || message.trim().length === 0) continue
     const date = committer?.date ?? author?.date
     if (typeof date !== 'string' || !Number.isFinite(Date.parse(date))) continue
