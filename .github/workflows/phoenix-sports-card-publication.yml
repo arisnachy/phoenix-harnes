@@ -1,0 +1,33 @@
+name: PHOENIX Sports Cards Visible Regression
+on:
+  pull_request:
+    paths:
+      - 'packages/client/ui-conversation/src/client/chat/sports-tool-cards.ts'
+      - 'packages/client/ui-conversation/src/client/chat/GenerativeUi.tsx'
+      - 'packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts'
+      - 'packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx'
+      - 'packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx'
+      - 'packages/core/tool-sports/src/index.ts'
+      - '.github/workflows/phoenix-sports-card-publication.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cards-visible:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify Kira displays actual cards beyond Tools for every sport
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx
+      - name: Strict client TypeScript
+        run: pnpm exec tsc -b tsconfig.client.json --pretty false
