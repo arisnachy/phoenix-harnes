@@ -70,6 +70,38 @@ describe('agent loop', () => {
     },
   )
 
+  it('adds first-pass quality in the original request without spawning extra turns', async () => {
+    const adapter = new MockAdapter([textResponse('planned')])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('first-pass-quality'), {
+      provider: 'mock',
+      model: 'mock',
+    })
+
+    send(agent, 'Plan a training schedule with capacity constraints and minimum budget costs.')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(1)
+    expect(adapter.requests[0]?.system).toContain('<first_pass_quality>')
+    expect(adapter.requests[0]?.system).toContain('counterexample')
+    expect(userTexts(agent)).toEqual(['Plan a training schedule with capacity constraints and minimum budget costs.'])
+  })
+
+  it('preserves the fast conversational path without quality preflight', async () => {
+    const adapter = new MockAdapter([textResponse('hello')])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('first-pass-greeting'), {
+      provider: 'mock',
+      model: 'mock',
+    })
+
+    send(agent, 'Hola')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(1)
+    expect(adapter.requests[0]?.system).not.toContain('<first_pass_quality>')
+  })
+
   it('seeds a valid AgentOptions.maxTokens into the first model request', async () => {
     const adapter = new MockAdapter([textResponse('bounded')])
     const ctx = await harness(adapter)

@@ -45,12 +45,15 @@ import {investigateSoccer} from './soccer-worldwide-dossier.ts'
 import {basketballSlate,type BasketballLeague} from './basketball-research-core.ts'
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
 
+import {nflSlate,investigateNfl} from './nfl-evidence-research.ts'
+
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 /** Resolves credentials fresh per tool invocation and never changes process.env. */
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'NFL AMERICAN FOOTBALL INTELLIGENCE: consulta sports_chat_nfl_slate para fecha/eventId real y sports_chat_nfl_investigate para investigar quarterback, roster completo de ambos clubes, ofensiva, defensiva, OL vs pass rush, WR/TE vs CB/LB, RB vs front seven, descanso, lesiones, clima, cuartos y cotizaciones auténticas. Los 11 titulares ofensivos y los 11 defensivos de CADA club se confirman por IDs explícitos y unidad; no infieras titularidad del roster o profundidad. NFL no es fútbol soccer ni NCAA. No inventes QB titular, rutas, snaps, EPA, probabilidades, prices ni props; confirma evento/casa/mercado/período y abstente si falta evidencia. ',
   'INVESTIGACIÓN MLB POR PARTIDO: usa sports_chat_mlb_investigate para obtener primero la cartelera por fecha y luego el expediente mediante gamePk de MLB Stats API (no confundir con eventId ESPN). Investiga las estadísticas de cada jugador y la matriz bateador×abridor/bullpen, localía, parque, meteorología, últimas salidas y precios cotejados. El expediente marca como PENDIENTES los enfrentamientos BvP, fatiga, lesiones, alineaciones y expertos que no estén confirmados; no interpretes una fila de roster como un bateador titular ni inventes simulaciones probabilísticas. La conclusión se fundamenta en evidencia favorable Y contradictoria y en escenarios por entradas; si matchupNextOffset no es null hay cruces adicionales consultables. No vendas el expediente como una apuesta aprobada. ',
   'SOCCER INTELLIGENCE MUNDIAL: primero sports_chat_soccer_leagues para descubrir competiciones verificadas; sports_chat_soccer_daily para consultar lotes de hasta 12 ligas por fecha, o sports_chat_soccer_world_scan con offset/nextOffset para el resto del catálogo; sports_chat_soccer_investigate para expediente de un evento real por ID de ESPN. Para estadísticas individuales de los jugadores usa sports_chat_soccer_players cuando la liga lo soporte. Solo evidencia disponible de plantillas, forma, lesiones, táctica, mercado y prensa con atribución. No confundas roster con once confirmado, 1X2 con clasificar, ni cuota observada con apuesta aprobada. Si falta xG, árbitro, lineup o cuota, reconocerlo; jamás inventar probabilidades o ticket ganador. ',
   'NBA/WNBA RESEARCH INTELLIGENCE: sports_chat_basketball_intelligence_slate para cartelera; sports_chat_nba_intelligence o sports_chat_wnba_intelligence para dossier por eventId real. NBA son 48 min, WNBA 40 min. Solo cinco titulares con ID explícito son confirmados. Investiga jugadores y enfrentamientos, lesiones y precios por casa, nunca inventes odds, datos de WNBA offseason ni probabilidades. Los expedientes no equivalen a selecciones aprobadas. ',
@@ -1449,5 +1452,68 @@ export function apply(ctx: Context): void {
   }
   registerBasketballIntelligence('nba')
   registerBasketballIntelligence('wnba')
+
+  ctx.tools.register(defineTool({
+    name:'sports_chat_nfl_slate',
+    description:'Consulta NFL calendario oficial por fecha con identificadores, hora, estado y equipos reales, sin inventar juegos.',
+    parameters:{
+      date:{type:'string',required:true,description:'Fecha AAAA-MM-DD de la cartelera NFL.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const now=Date.now()
+      const r=await nflSlate(args.date,fetch,now,await sportsEnv(ctx))
+      const uiBlock={component:'sports_espn_dashboard',version:1,props:{
+        view:'event',title:'PHOENIX · NFL '+args.date,
+        subtitle:r.games.length+' encuentros verificables',source:'ESPN público',
+        checkedAt:new Date(now).toISOString(),
+        sections:[{heading:'Cartelera NFL',kind:'list',
+          items:r.games.slice(0,24).map(g=>({
+            label:g.away.name+' vs '+g.home.name,value:g.scheduledAt+' · '+g.state,
+            detail:'eventId ESPN '+g.eventId+' · '+g.venue}))}],
+        note:'La cartelera no confirma quarterbacks titulares, activos/inactivos ni cuotas. Abrir expediente por eventId exacto.'}}
+      return JSON.stringify({...r,uiBlock,
+        instruction:'No inferir predicción; para investigación abre sports_chat_nfl_investigate con date y eventId exactos.'})
+    },
+    presentCall:()=>({card:'generic',title:'Consultar cartelera NFL',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_nfl_investigate',
+    description:'Expediente NFL por evento real pregame: roster completo, QB/WR/RB/TE/OL/defensa, 11 titulares por unidad si confirmados, stats individuales, descanso, clima, lesiones y cuotas auténticas con contradicciones.',
+    parameters:{
+      date:{type:'string',required:true,description:'Fecha AAAA-MM-DD de NFL, partido futuro.'},
+      eventId:{type:'string',required:true,description:'ID ESPN de la cartelera de NFL.'},
+      maxPlayers:{type:'integer',description:'Hasta 20 atletas por club con estadísticas individuales profundas, defecto 20. El roster completo se consulta aparte.'},
+      matchupOffset:{type:'integer',description:'Inicio de la página de enfrentamientos, desde cero.'},
+      includeOdds:{type:'boolean',description:'Consultar líneas reales de NFL si la casa las proporciona, defecto sí.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const now=Date.now(),env=await sportsEnv(ctx)
+      let quotes:Awaited<ReturnType<typeof marketOddsDetailed>>['quotes']=[]
+      let oddsSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
+      if(args.includeOdds!==false){
+        try{
+          const odds=await marketOddsDetailed('americanfootball_nfl','h2h,spreads,totals',
+            env,fetch,now)
+          quotes=odds.quotes;oddsSources=odds.sources
+        }catch{/* Never invent a bookmaker quote on provider failure. */}
+      }
+      const dossier=await investigateNfl(args.date,args.eventId,fetch,now,env,quotes,
+        args.maxPlayers??20)
+      const offset=Math.max(0,Math.min(250,Math.floor(args.matchupOffset??0)))
+      return JSON.stringify({...dossier,sources:undefined,
+        matchups:dossier.matchups.slice(offset,offset+20),
+        matchupCount:dossier.matchups.length,
+        matchupNextOffset:offset+20<dossier.matchups.length?offset+20:null,
+        sourcesReport:{observed:dossier.sources.filter(x=>x.status==='observed').length,
+          failed:dossier.sources.filter(x=>x.status==='error').slice(0,12)},
+        oddsSources,
+        instruction:'Comparar QB/OL, WR vs secondary y RB vs front seven. Identidad completa por roster NO confirma 11 ofensivos + 11 defensivos. Comprobar inactivos, health, viento y período OT. Ningún precio sin bookmaker/evento real, ni ticket aprobado automáticamente.'})
+    },
+    presentCall:()=>({card:'generic',title:'Investigar NFL · QB, defensas y props',kind:'read' as const}),
+  }))
 
 }

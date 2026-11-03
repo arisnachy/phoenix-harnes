@@ -27,6 +27,7 @@ import type {} from '@phoenix-ai/dsh-system-prompt'
 import type {} from '@phoenix-ai/dsh-tools'
 import type { SessionPersistence } from '@phoenix-ai/dsh-session-persistence'
 import { ReactLoopAgent } from './agent.ts'
+import { firstPassQualityGuidance } from './first-pass-quality.ts'
 import { DEFAULT_AUTO_CONTINUE_MAX_SEGMENTS, DEFAULT_AUTO_CONTINUE_PROVIDERS, DEFAULT_MAX_PARALLEL_TOOL_CALLS, DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'
 
 /** Fiber states that cannot own or serve a new lifecycle. */
@@ -403,6 +404,19 @@ export class AgentLoop extends Service implements AgentFactory {
     ctx.systemPrompt.variable('provider', context => context.agent?.options.provider)
     ctx.systemPrompt.variable('model', context => context.agent?.options.model)
     ctx.systemPrompt.variable('cwd', context => context.agent?.session.header.cwd)
+    // Use the existing first model call for substantive task preflight.
+    // Pure, bounded text classification; never adds a model turn, tool or reviewer.
+    // Register through SystemPrompt so complete-prompt overrides remain authoritative.
+    ctx.systemPrompt.section({
+      name: 'agent-loop:first-pass-quality',
+      order: 95,
+      interpolateVariables: false,
+      text: context => {
+        if (context.omitTools === true) return ''
+        const incoming = 'incomingUserText' in context ? context.incomingUserText : undefined
+        return typeof incoming === 'string' ? firstPassQualityGuidance(incoming) : ''
+      },
+    })
 
     for (const { id, sessionId, cwd, resumeSessionId, ...options } of this.config.agents) {
       const meta = cwd === undefined ? {} : { cwd }

@@ -1,0 +1,29 @@
+name: PHOENIX NFL research intelligence
+on:
+  pull_request:
+    paths:
+      - 'packages/core/tool-sports/src/nfl-evidence-research.ts'
+      - 'packages/core/tool-sports/src/nfl-market-settlement.ts'
+      - 'packages/core/tool-sports/tests/nfl-evidence-research.test.mjs'
+      - 'packages/core/tool-sports/src/index.ts'
+      - '.github/workflows/phoenix-nfl-intelligence.yml'
+  workflow_dispatch:
+jobs:
+  nfl-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify NFL full roster, 44 starters, identity, offers and settlement
+        run: node --experimental-strip-types --test packages/core/tool-sports/tests/nfl-evidence-research.test.mjs
+      - name: Verify strict host TypeScript
+        run: pnpm exec tsc -b tsconfig.host.json --pretty false
