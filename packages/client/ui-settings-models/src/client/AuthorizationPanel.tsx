@@ -740,7 +740,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, blenderSt
                 : !blenderState.uvxDetected
                   ? 'Falta uvx (uv). Instálalo, reinicia PHOENIX y pulsa Reconectar.'
                   : !blenderState.addonBridgeListening
-                    ? 'Abre Blender → Preferencias → Extensiones → Blender Lab MCP, habilita el complemento y pulsa Start MCP Server. Luego Reconectar en PHOENIX.'
+                    ? 'En Blender activa Preferencias → Sistema → Red → Allow Online Access. Después, Preferencias → Complementos → MCP → Start MCP Server (Start MCP Bridge Server). Luego Reconectar en PHOENIX.'
                     : mcpRuntime?.status === 'ready' && mcpRuntime.toolNames.length > 0
                       ? 'Puente local y herramientas MCP detectados; prueba una operación sencilla con Kira.'
                       : managed === undefined
