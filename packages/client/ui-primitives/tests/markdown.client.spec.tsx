@@ -149,6 +149,44 @@ describe('MarkdownText', () => {
     expect(container.querySelector('pre code a')).toBeNull()
   })
 
+  it('opens validated artifact Markdown links but never arbitrary local or unsafe URLs', () => {
+    const opened: string[] = []
+    const fileMentions = {
+      resolve: () => undefined,
+      resolveArtifact: (destination: string) => destination === 'sandbox:/mnt/data/plan.docx'
+        ? {
+            open: () => { opened.push('plan.docx') },
+            label: 'Abrir plan.docx',
+            title: '/mnt/data/plan.docx',
+          }
+        : undefined,
+    }
+    const markdown = [
+      '[Descargar el plan de entrega en Word](sandbox:/mnt/data/plan.docx)',
+      '[Otra referencia][doc]',
+      '[doc]: sandbox:/mnt/data/plan.docx',
+      '[No registrado](sandbox:/mnt/data/other.docx)',
+      '[Unsafe](javascript:alert(1))',
+      '[Sitio](https://example.com/plan)',
+    ].join('\n\n')
+    const settled = render(<MarkdownText text={markdown} fileMentions={fileMentions} />)
+    const buttons = screen.getAllByRole('button', { name: 'Abrir plan.docx' })
+    expect(buttons).toHaveLength(2)
+    expect(buttons[0]?.textContent).toBe('Descargar el plan de entrega en Word')
+    fireEvent.click(buttons[0]!)
+    fireEvent.click(buttons[1]!)
+    expect(opened).toEqual(['plan.docx', 'plan.docx'])
+    expect(screen.getByText('No registrado').closest('button, a')).toBeNull()
+    expect(screen.getByText('Unsafe').closest('button, a')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Sitio' }).getAttribute('href')).toBe('https://example.com/plan')
+    settled.unmount()
+
+    const streamed = render(<MarkdownText
+      text={'[Descargar](sandbox:/mnt/data/plan.docx)'} streaming fileMentions={fileMentions} />)
+    expect(streamed.container.querySelector('button')).toBeNull()
+    expect(streamed.getByText('Descargar').closest('a')).toBeNull()
+  })
+
   it('links inline code through the file-mention resolver: URL first, settled only, never inside links', () => {
     const opened: string[] = []
     const fileMentions = {
