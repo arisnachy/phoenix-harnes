@@ -345,8 +345,8 @@ export async function researchMlbCase(
   const [box,live,venueRaw,homeRoster,awayRoster,homeSchedule,awaySchedule]=await Promise.all([
     measured<unknown>('https://statsapi.mlb.com/api/v1/game/'+gamePk+'/boxscore',fetcher,sources,now),
     measured<unknown>('https://statsapi.mlb.com/api/v1/game/'+gamePk+'/feed/live',fetcher,sources,now),
-    fixture.venue.id?measured<unknown>('https://statsapi.mlb.com/api/v1/venues?venueIds='+
-      fixture.venue.id+'&hydrate=location,fieldInfo',fetcher,sources,now):Promise.resolve(null),
+    fixture.venue.id?measured<unknown>('https://statsapi.mlb.com/api/v1/venues/'+
+      fixture.venue.id+'?hydrate=location,fieldInfo',fetcher,sources,now):Promise.resolve(null),
     measured<unknown>('https://statsapi.mlb.com/api/v1/teams/'+fixture.home.id+
       '/roster?rosterType=active',fetcher,sources,now),
     measured<unknown>('https://statsapi.mlb.com/api/v1/teams/'+fixture.away.id+
