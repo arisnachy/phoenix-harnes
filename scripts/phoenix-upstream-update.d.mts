@@ -15,3 +15,22 @@ export declare function buildActivationPlan(
   }>,
 ): Array<{ kind: string; from: string; to: string; state: string }>
 export declare function pruneObsoleteTransactionBackups(home: string): { removed: number }
+
+// Public typings must mirror exports in phoenix-upstream-update.mjs. Keep these
+// synchronized when adding an updater helper used by TypeScript tests.
+export declare function shouldDeferAutomaticUpstreamApply(
+  previous: { lastSuccessfulApplyAt?: string } | null | undefined,
+  now: number,
+  gapMs: number,
+): boolean
+
+/** Remove only abandoned, namespaced upstream staging directories. */
+export declare function pruneAbandonedUpstreamStaging(
+  home: string,
+  now?: number,
+): { removed: number }
+
+/** A second updater cannot claim the same DSH_HOME while this lease is held. */
+export declare function acquireUpstreamUpdateLease(
+  home: string,
+): (() => void) | undefined
