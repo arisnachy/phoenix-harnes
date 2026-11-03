@@ -71,7 +71,7 @@ Official project page: https://www.blender.org/lab/mcp-server/
 ## Recover Blender after a PHOENIX update (Windows)
 
 1. Open **Settings → Connectors → Blender Lab · 3D real**. The connector now checks three *separate* local prerequisites: Blender, `uvx` and the add-on bridge on `localhost:9876`.
-2. If Blender is detected but the add-on bridge is not listening, open Blender → Preferences → Extensions → Blender Lab MCP, enable the add-on, then select **Start MCP Server** (or the add-on's optional **Auto-start** setting).
+2. If Blender is detected but the add-on bridge is not listening, enable **Edit → Preferences → System → Network → Allow Online Access** first. Then go to **Edit → Preferences → Add-ons → MCP**, enable it and select **Start MCP Bridge Server** (or enable its optional **Auto Start** setting). Official issue #45 documents a silent bridge bind failure when online access is disabled.
 3. If `uvx` is detected but the connector fails after a PHOENIX restart, use **Reconnect** or **Repair** in PHOENIX Settings. On Windows PHOENIX now checks verified paths such as `%USERPROFILE%\.local\bin\uvx.exe` even when the desktop process inherited a stale PATH.
 4. If the connector was never installed in the persistent managed registry, choose **Install** on the Blender card. This is deliberately an explicit opt-in: Blender Lab executes model-generated Python code.
 5. Confirm that the connector advertises `mcp__blender__*` tools and run one non-destructive scene-inspection action with Kira. An open TCP socket, an installed Blender executable or a ready MCP subprocess **alone** is not proof of a working Blender tool.
