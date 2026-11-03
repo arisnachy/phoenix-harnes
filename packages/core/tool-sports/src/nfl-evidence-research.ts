@@ -120,6 +120,27 @@ function recentResults(raw:unknown,teamId:string,kickoff:number):Result[]{
       pts,allowed:against,homeAway:me.homeAway as 'home'|'away'}]
   }).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8)
 }
+function verifiedRoster(raw:unknown,teamId:string):NflPlayer[]{
+  const listed=arr(obj(raw).athletes).flatMap(group=>{
+    const r=obj(group),items=arr(r.items)
+    return items.length?items:[group]
+  })
+  const found=new Map<string,NflPlayer>()
+  for(const entry of listed){
+    const e=obj(entry),p=obj(e.athlete)
+    const person=Object.keys(p).length?p:e
+    const playerId=id(person.id??e.id)
+    const name=str(person.displayName??person.fullName??person.name,110)
+    const position=str(obj(person.position).abbreviation??
+      obj(person.position).displayName??person.position,36)
+    const club=id(obj(e.team).id??e.teamId)
+    if(!playerId||!name||(club&&club!==teamId))continue
+    found.set(playerId,{id:playerId,name,teamId,position,role:positionRole(position),
+      confirmedOffense:false,confirmedDefense:false,statistics:[],lastGames:[],
+      status:'unavailable'})
+  }
+  return[...found.values()].slice(0,70)
+}
 function confirmStarters(summary:unknown,teamId:string,athletes:NflPlayer[]){
   // Only explicitly labeled offense / defense flags with matched player IDs.
   // A depthchart, position, stats or last game's starter NEVER suffice.
@@ -231,22 +252,30 @@ export async function investigateNfl(date:string,eventId:string,fetcher:typeof f
   const date0=Date.parse(date+'T12:00:00Z')
   const past=(d:number)=>new Date(date0-d*86_400_000).toISOString().slice(0,10)
     .replaceAll('-','')
-  const [summary,history,injuryData,newsData,people]=await Promise.all([
+  const [summary,history,injuryData,newsData,rosterHome,rosterAway,people]=await Promise.all([
     read<unknown>(root+'summary?event='+eventId,fetcher,sources,now),
     read<unknown>(root+'scoreboard?dates='+past(85)+'-'+past(1)+'&limit=250',
       fetcher,sources,now),
     read<unknown>(root+'injuries',fetcher,sources,now),
     read<unknown>(root+'news?limit=30',fetcher,sources,now),
+    read<unknown>(root+'teams/'+event.home.id+'/roster',fetcher,sources,now),
+    read<unknown>(root+'teams/'+event.away.id+'/roster',fetcher,sources,now),
     collectDirectEspnStats('football','nfl',
       [{id:event.home.id,name:event.home.name},{id:event.away.id,name:event.away.name}],
       fetcher,now,maxPlayers),
   ])
   const make=(side:'home'|'away'):NflSide=>{
     const meta=event[side],e=people.teams.find(x=>x.id===meta.id)
-    const roster:NflPlayer[]=(e?.athletes??[]).map(p=>({
+    const full=verifiedRoster(side==='home'?rosterHome:rosterAway,meta.id)
+    const observations=new Map((e?.athletes??[]).map(p=>[p.id,p]))
+    const roster:NflPlayer[]=(full.length?full:(e?.athletes??[]).map(p=>({
       id:p.id,name:p.name,teamId:meta.id,position:p.position,role:positionRole(p.position),
-      confirmedOffense:false,confirmedDefense:false,statistics:p.stats,lastGames:p.lastGames,
-      status:p.status}))
+      confirmedOffense:false,confirmedDefense:false,statistics:[],lastGames:[],
+      status:'unavailable' as const}))).map(p=>{
+        const evidence=observations.get(p.id)
+        return{...p,statistics:evidence?.stats??[],lastGames:evidence?.lastGames??[],
+          status:evidence?.status??'unavailable'}
+      })
     confirmStarters(summary,meta.id,roster)
     const recent=recentResults(history,meta.id,Date.parse(event.scheduledAt))
     const last=recent[0]
