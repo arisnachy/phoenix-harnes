@@ -411,6 +411,20 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(storageRepair).toContain('Associated Handles')
   })
 
+  it('reclaims retired dirty worktrees and documents explicit cleanup of old projects', () => {
+    const start = supervisor.indexOf('function detachedStorageCandidateKind(')
+    const end = supervisor.indexOf('\nfunction detachedStorageCandidates(', start)
+    const inspect = supervisor.slice(start, end)
+    expect(start).toBeGreaterThan(0)
+    expect(inspect).toContain('sameRepository(path)')
+    expect(inspect).not.toContain('gitClean(path)')
+    expect(inspect).toContain('runtimeProtectedByOwningCheckout(path)')
+    expect(inspect).toContain('stageProtectedByOwningCheckout(path)')
+    expect(storageRepair).toContain('PurgeOldWorkspaces')
+    expect(storageRepair).toContain('OlderThanDays')
+    expect(storageRepair).toContain('.phoenix-keep')
+    expect(storageRepair).toContain('Retired workspaces actually removed:')
+  })
   it('caps runtime copies while keeping age-based staging cleanup', () => {
     expect(supervisor).toContain('DEFAULT_UPDATE_STORAGE_RETENTION_MS = 6 * 60 * 60 * 1000')
     expect(supervisor).toContain('PHOENIX_UPDATE_STORAGE_RETENTION_MS')
