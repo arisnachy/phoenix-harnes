@@ -67,7 +67,7 @@ describe('real Windows disk headroom guard', () => {
     expect(audit).toContain("name: 'pnpm-store'")
     expect(audit).toContain("name: 'git-objects'")
     expect(audit).toContain('diskFreeDeltaBytes')
-    expect(audit).toContain("args.includes('--snapshot')")
+    expect(audit).toContain("args.indexOf('--snapshot')")
     expect(audit).not.toContain('rmSync(')
   })
 })
@@ -521,7 +521,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
         join, dirname: (path: string) => resolve(path, '..'),
         readFileSync: () => JSON.stringify({ schema: 1, at: new Date(heartbeat).toISOString() }),
         SUPERVISOR_HEARTBEAT_FILE: 'phoenix-update-supervisor-heartbeat.json',
-        Date, 
+        Date,
       },
     ) as { retiredPhoenixCheckoutOwner: (path: string) => string | undefined }
     expect(retiredPhoenixCheckoutOwner(candidate)).toBe(owner)
