@@ -32,3 +32,28 @@ describe('natural requests for playable game creation', () => {
     expect(naturalCreationSkill(request)).toBeUndefined()
   })
 })
+
+describe('natural requests for a real Blender Studio 3D model', () => {
+  it.each([
+    'Crea un modelo 3D de Mario que pueda girar y acercar',
+    'Haz un modelo 3D de Mario',
+    'Necesito un personaje 3D editable con rig',
+    'Make a detailed 3D character with reusable mesh',
+    'Dame una figura tridimensional de un personaje para Blender',
+  ])('loads Blender Studio instructions for %s', request => {
+    expect(naturalCreationSkill(request)).toBe('blender-studio')
+  })
+
+  it.each([
+    'Cómo se crea un modelo 3D',
+    'crea una imagen de Mario',
+    'crea un personaje 3D low-poly',
+    'no quiero que crees un modelo 3D',
+  ])('does not invoke Blender Studio for %s', request => {
+    expect(naturalCreationSkill(request)).toBeUndefined()
+  })
+
+  it('preserves Game Studio priority for games even when they are 3D', () => {
+    expect(naturalCreationSkill('haz un juego 3D de carreras')).toBe('game-development')
+  })
+})
