@@ -57,7 +57,15 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     }),
     starterStatsVerified:readyStat(h,'era')&&readyStat(a,'era'),
     reliefUsageObserved:[...d.bullpen.home,...d.bullpen.away].some(p=>p.reliefUsage72h.length>0),
-    rosterMatchupsReviewed:d.matchups.length>0,
+    rosterMatchupsReviewed:(['home','away'] as const).every(side=>{
+      const opposing=side==='home'?'away':'home'
+      const batters=d.rosters[side].filter(p=>p.role==='batter'&&p.lineupConfirmed)
+      const pitchers=[d.starters[opposing],...d.bullpen[opposing]].filter(
+        (p):p is MlbAthlete=>p!==null)
+      return batters.length===9&&pitchers.length>0&&
+        batters.every(b=>pitchers.every(p=>d.matchups.some(m=>
+          m.batterId===b.id&&m.pitcherId===p.id)))
+    }),
     venueKnown:!!d.venue.name&&d.venue.name!=='Estadio no verificado',
     roofConstructionKnown:d.venue.roofType!=='unknown',
     gameRoofPositionVerified:false,
