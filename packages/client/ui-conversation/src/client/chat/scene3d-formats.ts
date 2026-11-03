@@ -38,20 +38,17 @@ function primitiveTriangles(node:Node):number[]{
     for(const ids of [[4,5,6,7],[1,0,3,2],[0,4,7,3],[5,1,2,6],[3,7,6,2],[0,1,5,4]])
       quad(p[ids[0]!]!,p[ids[1]!]!,p[ids[2]!]!,p[ids[3]!]!)
   }else{
-    const slices=32,rings=1
-    for(let j=0;j<rings;j++)for(let i=0;i<slices;i++){
+    const slices=32
+    for(let i=0;i<slices;i++){
       const a=2*Math.PI*i/slices,b=2*Math.PI*(i+1)/slices
-      if(node.type==='sphere'){
-        const v=(lat:number,lon:number):V3=>[.5*Math.cos(lat)*Math.cos(lon),.5*Math.sin(lat),.5*Math.cos(lat)*Math.sin(lon)]
-        const p=-Math.PI/2+j*Math.PI/rings,q=-Math.PI/2+(j+1)*Math.PI/rings
-        quad(v(p,a),v(p,b),v(q,b),v(q,a))
-      }else{
-        const v=(angle:number,y:number,radius:number):V3=>[Math.cos(angle)*radius,y,Math.sin(angle)*radius]
-        const top=node.type==='cone'?0:.5
-        quad(v(a,-.5,.5),v(b,-.5,.5),v(b,.5,top),v(a,.5,top))
-        tri([0,-.5,0],v(b,-.5,.5),v(a,-.5,.5))
-        if(node.type!=='cone')tri([0,.5,0],v(a,.5,top),v(b,.5,top))
-      }
+      const v=(angle:number,y:number,radius:number):V3=>[
+        Math.cos(angle)*radius,y,Math.sin(angle)*radius,
+      ]
+      const top=node.type==='cone'?0:.5
+      if(node.type==='cone')tri(v(a,-.5,.5),v(b,-.5,.5),[0,.5,0])
+      else quad(v(a,-.5,.5),v(b,-.5,.5),v(b,.5,top),v(a,.5,top))
+      tri([0,-.5,0],v(b,-.5,.5),v(a,-.5,.5))
+      if(node.type!=='cone')tri([0,.5,0],v(a,.5,top),v(b,.5,top))
     }
   }
   return coords
