@@ -118,6 +118,18 @@
     - id: secret-vault
       name: '@phoenix-ai/dsh-secret-vault'
 
+    # HealthIA longitudinal clinical foundation (experimental; owner-local encrypted store).
+    # Independent of chat memory and of the pilot clinic's SQLite record.
+    - id: healthia-local
+      name: '@phoenix-ai/dsh-healthia-local'
+      config:
+        path: !!js dshHomePath('health', 'healthia.enc.json')
+        keyRef: PHOENIX_HEALTHIA_DATA_KEY
+
+    # Clinical tools are mounted on demand rather than inflating every chat.
+    - id: tool-healthia
+      name: '@phoenix-ai/dsh-tool-healthia'
+
     # Interactive provider sign-in (for example ChatGPT/Codex OAuth) is a
     # separate capability from API-key storage. The authorization service owns
     # the human conversation while each provider owns its protocol and writes
