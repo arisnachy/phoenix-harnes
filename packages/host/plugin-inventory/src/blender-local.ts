@@ -7,11 +7,7 @@ import { existsSync } from 'node:fs'
 import { connect } from 'node:net'
 import { win32 } from 'node:path'
 
-export interface BlenderLocalState {
-  readonly blenderDetected: boolean
-  readonly uvxDetected: boolean
-  readonly addonBridgeListening: boolean
-}
+import type { BlenderLocalState } from './types.ts'
 
 export interface BlenderLocalProbeOptions {
   readonly platform?: NodeJS.Platform
