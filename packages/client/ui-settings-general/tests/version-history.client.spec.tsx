@@ -50,7 +50,7 @@ describe('published PHOENIX versions', () => {
       ...release,
       sha: 'f'.repeat(40),
       commit: {
-        message: 'Merge pull request #1256 from arisnachy/feature/the-odds-api-key-connector-20261030\\n\\nfeat(connectors): Secure The Odds API v4 key setup',
+        message: 'Merge pull request #1256 from arisnachy/feature/the-odds-api-key-connector-20261030\n\nfeat(connectors): Secure The Odds API v4 key setup',
         committer: { date: '2026-10-31T16:10:11Z' },
       },
     }
@@ -65,14 +65,14 @@ describe('published PHOENIX versions', () => {
     const squash = {
       sha: 'e'.repeat(40), parents: [{ sha: 'a'.repeat(40) }],
       commit: {
-        message: 'fix(connectors): curated remote type on stable (#1337)\\n\\nVerified setup and persistence.',
+        message: 'fix(connectors): curated remote type on stable (#1337)\n\nVerified setup and persistence.',
         committer: { date: '2026-11-03T02:16:00Z' },
       },
     }
     const direct = {
       sha: 'd'.repeat(40), parents: [{ sha: 'b'.repeat(40) }],
       commit: {
-        message: 'feat(assurance): operational verification\\n\\nDocumented exact acceptance criteria.',
+        message: 'feat(assurance): operational verification\n\nDocumented exact acceptance criteria.',
         committer: { date: '2026-11-03T02:46:00Z' },
       },
     }
@@ -159,7 +159,7 @@ describe('published PHOENIX versions', () => {
       sha: '9'.repeat(40),
       parents: [{ sha: '8'.repeat(40) }],
       commit: {
-        message: 'feat(assurance): operational verification\\n\\nIncludes reproducible run instructions.',
+        message: 'feat(assurance): operational verification\n\nIncludes reproducible run instructions.',
         committer: { date: '2026-11-03T02:46:00Z' },
       },
     }
@@ -179,7 +179,7 @@ describe('published PHOENIX versions', () => {
   it('falls back to the stable commit body when GitHub PR details are unavailable', async () => {
     const source = {
       ...release,
-      commit: { ...release.commit, message: 'fix(chat): safe format (#1333)\\n\\nCurrency delimiters cannot swallow prose.' },
+      commit: { ...release.commit, message: 'fix(chat): safe format (#1333)\n\nCurrency delimiters cannot swallow prose.' },
     }
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => [source] })
