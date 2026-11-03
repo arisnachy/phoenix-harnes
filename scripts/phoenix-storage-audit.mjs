@@ -5,7 +5,7 @@
  */
 import { lstatSync, readdirSync, readFileSync, renameSync, statfsSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
@@ -113,8 +113,8 @@ export function phoenixDiskLocations(options = {}) {
   const project = resolve(options.projectRoot ?? process.cwd())
   const expand = value => value?.startsWith('~/') || value?.startsWith('~\\')
     ? join(home, value.slice(2)) : value
-  const dsh = resolve(expand(options.dshHome ?? process.env.DSH_HOME?.trim() || join(home, '.dsh')))
-  const runtime = resolve(expand(options.runtimeRoot ?? process.env.PHOENIX_UPDATE_TEMP?.trim() || join(home, 'p')))
+  const dsh = resolve(expand(options.dshHome ?? (process.env.DSH_HOME?.trim() || join(home, '.dsh'))))
+  const runtime = resolve(expand(options.runtimeRoot ?? (process.env.PHOENIX_UPDATE_TEMP?.trim() || join(home, 'p'))))
   let gitDir
   try {
     const result = spawnSync('git', ['rev-parse', '--git-common-dir'], {
@@ -160,7 +160,7 @@ export function diagnosePhoenixDiskGrowth(options = {}) {
   }))
   let freeBytes
   try {
-    const stats = statfsSync(options.runtimeRoot ?? process.env.PHOENIX_UPDATE_TEMP || join(options.home ?? homedir(), 'p'))
+    const stats = statfsSync(options.runtimeRoot ?? (process.env.PHOENIX_UPDATE_TEMP || join(options.home ?? homedir(), 'p')))
     freeBytes = stats.bavail * stats.bsize
   } catch { /* Windows volumes/network drives may not expose statfs. */ }
   return {
