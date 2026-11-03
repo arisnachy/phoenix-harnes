@@ -11,7 +11,7 @@ import { mkdirSync, chmodSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 type Role = 'admin'|'clinician'|'psychologist'|'nurse'|'reception'|'lab'|'radiology'|'pharmacy'|'billing'
-type Kind = 'patients'|'encounters'|'appointments'|'orders'|'prescriptions'|'inventory'|'invoices'|'followups'
+type Kind = 'patients'|'encounters'|'appointments'|'orders'|'prescriptions'|'inventory'|'invoices'|'followups'|'observations'
 type Actor = { username:string; role:Role; org:string }
 /** Authenticated clinical principal with organization and professional role. */
 export type ClinicActor = Readonly<Actor>
@@ -20,7 +20,7 @@ type Row = { id:string; org:string; kind:Kind|'attachment'; version:number; iv:s
 type AttachmentRow = Omit<Row,'kind'|'updated_at'> & { patient_id:string; encounter_id:string|null; uploaded_by:string }
 type Staff = { username:string; org:string; role:Role; salt:string; digest:string }
 type Session = { actor:Actor; expires:number; csrf:string }
-const TYPES = new Set<Kind>(['patients','encounters','appointments','orders','prescriptions','inventory','invoices','followups'])
+const TYPES = new Set<Kind>(['patients','encounters','appointments','orders','prescriptions','inventory','invoices','followups','observations'])
 const ROLES = new Set<Role>(['admin','clinician','psychologist','nurse','reception','lab','radiology','pharmacy','billing'])
 const READ:Record<Kind,readonly Role[]> = {
   patients:['admin','clinician','psychologist','nurse','reception'],
@@ -31,6 +31,7 @@ const READ:Record<Kind,readonly Role[]> = {
   inventory:['admin','pharmacy'],
   invoices:['admin','billing'],
   followups:['admin','clinician','psychologist','nurse','reception'],
+  observations:['clinician'],
 }
 const WRITE:Record<Kind,readonly Role[]> = {
   patients:['admin','clinician','reception'],
@@ -41,6 +42,7 @@ const WRITE:Record<Kind,readonly Role[]> = {
   inventory:['admin','pharmacy'],
   invoices:['admin','billing'],
   followups:['admin','clinician','psychologist','nurse','reception'],
+  observations:['clinician'],
 }
 const MAX=200_000
 function fail(message:string):never { throw new Error(message) }
@@ -359,6 +361,44 @@ export class HealthClinicStore {
         item.modality===(actor.role==='lab'?'laboratory':'imaging'))
       .filter(item=>kind!=='encounters'||this.mayReadEncounter(actor,item))
   }
+
+  /**
+   * Clinician-scoped longitudinal projection from the single encrypted clinical
+   * repository. This endpoint never exports PHI to the model or other HealthIA stores.
+   */
+  patientContext(actor:Actor,patientId:string):RecordData {
+    if(actor.role!=='clinician'&&actor.role!=='psychologist')
+      fail('Solo profesionales asistenciales pueden consultar la continuidad clínica')
+    const id=str(patientId,'Paciente',80)
+    const selected=this.find(actor,'patients',id)
+    const patient={id:selected.row.id,version:selected.row.version,
+      createdAt:selected.row.created_at,updatedAt:selected.row.updated_at,...selected.data}
+    const encounters=this.list(actor,'encounters').filter(item=>item.patientId===id)
+    const allowedEncounterIds=new Set(encounters.map(item=>String(item.id)))
+    const scoped=(kind:Kind):RecordData[]=>this.list(actor,kind)
+      .filter(item=>item.patientId===id)
+      .filter(item=>typeof item.encounterId!=='string'||allowedEncounterIds.has(item.encounterId))
+    const orders=actor.role==='clinician'?scoped('orders'):[]
+    const prescriptions=actor.role==='clinician'?scoped('prescriptions'):[]
+    const observations=actor.role==='clinician'?scoped('observations'):[]
+    const followups=scoped('followups')
+    const appointments=scoped('appointments')
+    const attachments=this.listAttachments(actor,id)
+    const ordered=[...encounters.map(item=>({...item,kind:'encounter'})),
+      ...orders.map(item=>({...item,kind:'order'})),
+      ...prescriptions.map(item=>({...item,kind:'prescription'})),
+      ...observations.map(item=>({...item,kind:'observation'})),
+      ...followups.map(item=>({...item,kind:'followup'})),
+      ...attachments.map(item=>({...item,kind:'attachment'}))]
+      .sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')))
+    const pendingOrders=orders.filter(item=>item.status!=='reviewed')
+    const pendingFollowups=followups.filter(item=>item.status==='pending')
+    return {patient,encounters,orders,prescriptions,observations,followups,appointments,
+      attachments,timeline:ordered.slice(0,400),
+      pending:{orders:pendingOrders.length,followups:pendingFollowups.length,
+        attachments:attachments.filter(item=>item.reviewStatus==='pending').length}}
+  }
+
   /** Build an authorized deterministic Kira questionnaire without a model call or PHI export. */
   /**
    * Perform interviewGuide within the isolated clinical workflow.
@@ -499,6 +539,43 @@ export class HealthClinicStore {
         history:'',exam:'',assessment:'',plan:'',interviewAnswers:{},status:'draft',
         reviewedVersion:null,signedBy:null,signedAt:null })
     }
+
+    if(kind==='observations'){
+      if(actor.role!=='clinician')fail('La observación requiere médico responsable')
+      const patientId=str(x.patientId,'Paciente',80)
+      this.find(actor,'patients',patientId)
+      const encounterId=typeof x.encounterId==='string'&&x.encounterId.trim()
+        ?str(x.encounterId,'Consulta',80):null
+      if(encounterId){
+        const encounter=this.find(actor,'encounters',encounterId).data
+        if(encounter.patientId!==patientId||encounter.practitioner!==actor.username)
+          fail('Consulta ajena o no vinculada al paciente')
+      }
+      if(typeof x.value!=='number'||!Number.isFinite(x.value)||Math.abs(x.value)>1e12)
+        fail('Valor numérico inválido')
+      const source=str(x.source,'Procedencia',32)
+      if(!['clinician-measured','patient-provided','document-transcribed'].includes(source))
+        fail('Procedencia clínica no permitida')
+      const sourceAttachmentId=source==='document-transcribed'
+        ?str(x.sourceAttachmentId,'Documento de origen',80):null
+      if(sourceAttachmentId){
+        const attachment=this.attachmentRow(actor,sourceAttachmentId)
+        if(attachment.patient_id!==patientId)fail('El documento no corresponde al paciente')
+      }
+      const unit=str(x.unit,'Unidad',35),display=str(x.display,'Prueba o variable',160)
+      const code=typeof x.code==='string'&&x.code.trim()?str(x.code,'Código',70):''
+      const low=x.referenceLow===null||x.referenceLow===undefined?null:x.referenceLow
+      const high=x.referenceHigh===null||x.referenceHigh===undefined?null:x.referenceHigh
+      if(low!==null&&(typeof low!=='number'||!Number.isFinite(low)))
+        fail('Límite inferior inválido')
+      if(high!==null&&(typeof high!=='number'||!Number.isFinite(high)))
+        fail('Límite superior inválido')
+      if(typeof low==='number'&&typeof high==='number'&&low>high)
+        fail('Intervalo de referencia inválido')
+      return this.insert(actor,kind,{patientId,encounterId,display,code,value:x.value,unit,
+        effectiveAt:date(x.effectiveAt),source,sourceAttachmentId,referenceLow:low,
+        referenceHigh:high,status:'unverified',recordedBy:actor.username})
+    }
     if(kind==='appointments') {
       const patientId=str(x.patientId,'Paciente',80),startsAt=date(x.startsAt),practitioner=str(x.practitioner,'Profesional',80)
       this.find(actor,'patients',patientId)
@@ -614,7 +691,7 @@ export class HealthClinicStore {
         if(!encounter||!this.mayReadEncounter(actor,this.open(encounter)))return []
       }
       const {base64:_content,...details}=this.openAttachment(row)
-      return [{...details,id:row.id,createdAt:row.created_at}]
+      return [{...details,id:row.id,version:row.version,createdAt:row.created_at}]
     })
   }
   /** Read attachment bytes only for an authenticated assigned clinician. */
@@ -623,6 +700,33 @@ export class HealthClinicStore {
     const mime=str(attachment.mime,'Tipo de archivo',80)
     const encoded=str(attachment.base64,'Contenido',7_200_000)
     return {mime,bytes:Buffer.from(encoded,'base64')}
+  }
+
+
+  /** Physician attests reading the original, not that its medical claims are correct. */
+  reviewAttachment(actor:Actor,id:string,expectedVersion:number):RecordData {
+    if(actor.role!=='clinician')fail('Solo el médico puede revisar documentos aportados')
+    if(!Number.isSafeInteger(expectedVersion)||expectedVersion<1)
+      fail('Versión inválida')
+    this.db.exec('BEGIN IMMEDIATE')
+    try{
+      const row=this.attachmentRow(actor,id)
+      if(row.version!==expectedVersion)fail('Conflicto de edición: recarga el documento')
+      const current=this.openAttachment(row)
+      if(current.reviewStatus!=='pending')fail('El documento ya fue revisado')
+      const next={...current,reviewStatus:'reviewed',reviewedBy:actor.username,
+        reviewedAt:new Date().toISOString()}
+      const version=row.version+1
+      const sealed=this.seal(row.id,actor.org,'attachment',version,next)
+      const changed=this.db.prepare(
+        'UPDATE health_attachments SET version=?,iv=?,tag=?,payload=? WHERE id=? AND org=? AND version=?',
+      ).run(version,sealed.iv,sealed.tag,sealed.payload,row.id,actor.org,expectedVersion)
+      if(Number(changed.changes)!==1)fail('Conflicto de concurrencia')
+      this.audit(actor,'attachment.reviewed',row.id)
+      this.db.exec('COMMIT')
+      const {base64:_content,...metadata}=next
+      return {...metadata,id:row.id,version,createdAt:row.created_at}
+    }catch(error){this.db.exec('ROLLBACK');throw error}
   }
 
   /** Atomic pharmacy dispense: only one signed prescription, matching available stock. */
@@ -813,6 +917,15 @@ export class HealthClinicStore {
         const contactEvidence={ consent:x.consent,method,evidenceRef,recipient,
           verified,recordedBy:actor.username,recordedAt:new Date().toISOString() }
         return { ...current,emailConsent:consent,emailVerified:verified,contactEvidence }
+      })
+    }
+
+    if(kind==='observations'){
+      if(actor.role!=='clinician'||x.action!=='verify')fail('Verificación clínica no autorizada')
+      return this.modify(actor,kind,id,version,current=>{
+        if(current.status!=='unverified')fail('La observación ya fue verificada')
+        return {...current,status:'verified',verifiedBy:actor.username,
+          verifiedAt:new Date().toISOString()}
       })
     }
     if(kind==='encounters'){

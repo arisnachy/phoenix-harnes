@@ -35,6 +35,10 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{border-bottom:1px
 .ws-timeline p{white-space:pre-wrap;overflow-wrap:anywhere}
 .ws-preview-image{max-width:100%;max-height:620px;object-fit:contain;border:1px solid #dae4ef;border-radius:10px;margin-top:16px}
 @media(max-width:700px){.ws-grid{grid-template-columns:1fr}.ws-heading,.ws-item{align-items:flex-start;flex-direction:column}}
+.ws-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
+.ws-metrics>div{background:#fff;border:1px solid #e0e9f1;border-radius:12px;padding:12px}
+.ws-metrics strong{display:block;font-size:24px;color:#205079}.ws-metrics small{display:block}
+@media(max-width:700px){.ws-metrics{grid-template-columns:1fr}}
 @media(max-width:700px){main{grid-template-columns:1fr}aside{display:flex;overflow:auto;gap:5px}aside button{white-space:nowrap;width:auto}header{padding:12px}section{padding:11px}.grid{grid-template-columns:1fr}}
 </style></head><body>
 <header><div><h1>♡ PHOENIX Health</h1><div class="muted">Sistema clínico local · Expediente cifrado · Kira Clinical Flow</div></div><div id="account"></div></header>
@@ -84,13 +88,16 @@ async function load(){
  if(!resources.some(x=>x[0]===tab))tab=resources[0]?.[0]||"patients";
  root.innerHTML='<main><aside>'+resources.map(x=>'<button data-tab="'+x[0]+'" class="'+(x[0]===tab?'active':'')+'">'+x[1]+'</button>').join('')+
  '</aside><section><div id="view"><div class="card">Cargando…</div></div></section></main>';
- const ids=tab==="workspace"?["patients","encounters","orders","prescriptions","followups","appointments"]:tab==="assignments"?["assignments","patients"]:tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters","inventory"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patient-options"]:tab==="followups"?["followups","patients"]:["patients",tab];
+ const ids=tab==="workspace"?["patients"]:tab==="assignments"?["assignments","patients"]:tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters","inventory"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patient-options"]:tab==="followups"?["followups","patients"]:["patients",tab];
  if((actor.role==="clinician"||actor.role==="admin")&&!ids.includes("followups"))
   ids.push("followups");
  for(const id of new Set(ids)){try{data[id]=(await api(id)).items}catch{data[id]=[]}}
  if(tab==="workspace"){
   if(!data.patients.some(x=>x.id===selectedPatientId))selectedPatientId=data.patients[0]?.id||"";
-  data.attachments=selectedPatientId?(await api("attachments/"+selectedPatientId)).items:[];
+  const context=selectedPatientId?(await api("patient-context/"+selectedPatientId)).context:null;
+  data.patientContext=context;
+  for(const kind of ["encounters","orders","prescriptions","followups","appointments","observations","attachments"])
+    data[kind]=context?.[kind]||[];
  }
  render()
 }
@@ -118,17 +125,20 @@ function actionFor(o){
 }
 
 function renderWorkspace(){
- const patients=data.patients||[],patient=patients.find(x=>x.id===selectedPatientId),id=patient?.id||"";
+ const patients=data.patients||[],patient=data.patientContext?.patient,id=patient?.id||"";
  const visits=(data.encounters||[]).filter(x=>x.patientId===id).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
  const previous=visits.find(x=>x.status==="signed"),draft=visits.find(x=>x.status!=="signed"&&x.practitioner===actor.username);
  const orders=(data.orders||[]).filter(x=>x.patientId===id),prescriptions=(data.prescriptions||[]).filter(x=>x.patientId===id);
  const followups=(data.followups||[]).filter(x=>x.patientId===id),attachments=data.attachments||[];
+ const observations=(data.observations||[]).filter(x=>x.patientId===id);
+ const pending=data.patientContext?.pending||{orders:0,followups:0,attachments:0};
  const timeline=[
   ...visits.map(x=>({date:x.createdAt,title:"Consulta · "+x.complaint,detail:x.status==="signed"?"Plan indicado: "+(x.plan||"No documentado"):"Borrador pendiente de firma",status:x.status})),
   ...orders.map(x=>({date:x.createdAt,title:"Estudio · "+x.description,detail:x.result||"Resultado pendiente",status:x.status})),
   ...prescriptions.map(x=>({date:x.createdAt,title:"Receta · "+x.medication,detail:x.directions||"Sin indicaciones documentadas",status:x.status})),
   ...followups.map(x=>({date:x.createdAt,title:"Seguimiento · "+x.description,detail:"Próxima fecha: "+(x.dueAt||"No registrada"),status:x.status})),
-  ...attachments.map(x=>({date:x.createdAt,title:"Archivo recibido · "+x.name,detail:x.note||"Aportado por el paciente",status:"Pendiente de revisión"}))
+  ...attachments.map(x=>({date:x.createdAt,title:"Archivo recibido · "+x.name,detail:x.note||"Aportado por el paciente",status:x.reviewStatus==="reviewed"?"Revisado":"Pendiente de revisión"})),
+  ...observations.map(x=>({date:x.effectiveAt||x.createdAt,title:"Medición · "+x.display,detail:String(x.value)+" "+x.unit+" · "+x.source,status:x.status==="verified"?"Verificado":"Sin verificar"}))
  ].sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
  const lookup=patients.length?'<label for="ws-patient">Paciente activo</label><select id="ws-patient">'+
   patients.map(x=>'<option value="'+safe(x.id)+'" '+(x.id===id?"selected":"")+'>'+safe(x.name)+' · '+safe(x.dateOfBirth||"Fecha desconocida")+'</option>').join("")+'</select>':
@@ -169,8 +179,43 @@ function renderWorkspace(){
    button("workspaceUpload","Archivar documento")+
    '<div class="ws-list">'+(attachments.length?attachments.map(x=>
     '<div class="ws-item"><div><strong>'+safe(x.name)+'</strong><div class="muted">'+safe(x.note||"Aportado en consulta")+
-    ' · Pendiente de revisión</div></div><button class="secondary" data-act="workspaceViewFile" data-id="'+safe(x.id)+'">Ver</button></div>'
+    ' · '+(x.reviewStatus==="reviewed"?"Revisado por el profesional":"Pendiente de revisión")+
+    '</div></div><button class="secondary" data-act="workspaceViewFile" data-id="'+safe(x.id)+'">Ver</button>'+
+    (x.reviewStatus==="pending"?'<button class="secondary" data-act="workspaceReviewFile" data-id="'+safe(x.id)+'">Marcar revisado</button>':"")+'</div>'
    ).join(""):'<p class="muted">Aún no hay archivos adjuntos.</p>')+'</div><div id="ws-preview" aria-live="polite"></div>');
+  panel+=box("Analíticas y signos vitales",
+    '<p class="muted">Captura datos numéricos con su fuente, unidad y fecha. No aparecen como verificados hasta que el médico los confirme.</p>'+
+    '<details><summary class="ws-summary">+ Registrar resultado numérico</summary>'+
+    '<div class="ws-grid"><div>'+field("ws-observation-name","Prueba o signo vital")+'</div>'+
+    '<div>'+field("ws-observation-value","Valor numérico","number")+'</div>'+
+    '<div>'+field("ws-observation-unit","Unidad")+'</div>'+
+    '<div>'+field("ws-observation-date","Fecha de medición","datetime-local")+'</div>'+
+    '<div>'+field("ws-reference-low","Referencia inferior (opcional)","number",false)+'</div>'+
+    '<div>'+field("ws-reference-high","Referencia superior (opcional)","number",false)+'</div></div>'+
+    '<label for="ws-observation-source">Origen de los datos</label><select id="ws-observation-source">'+
+    '<option value="patient-provided">Referido por el paciente</option>'+
+    '<option value="clinician-measured">Medido por el profesional</option>'+
+    '<option value="document-transcribed">Transcrito de documento</option></select>'+
+    '<label for="ws-source-attachment">Documento de origen (si se transcribió)</label>'+
+    '<select id="ws-source-attachment"><option value="">Seleccionar informe</option>'+
+    attachments.map(x=>'<option value="'+safe(x.id)+'">'+safe(x.name)+'</option>').join("")+'</select>'+
+    '<p>'+button("workspaceAddObservation","Guardar cifra sin verificar")+'</p></details>'+
+    (observations.length?observations.slice().sort((a,b)=>String(b.effectiveAt).localeCompare(String(a.effectiveAt)))
+      .slice(0,30).map(x=>'<div class="ws-item"><div><strong>'+safe(x.display)+'</strong> · '+
+        safe(x.value)+' '+safe(x.unit)+'<div class="muted">'+safe(String(x.effectiveAt).slice(0,10))+
+        ' · '+safe(x.source)+' · '+(x.status==="verified"?"Verificado":"Pendiente de revisión")+'</div></div>'+
+        (x.status==="unverified"?
+          '<button class="secondary" data-act="workspaceVerifyObservation" data-id="'+safe(x.id)+'">Verificar</button>':"")+
+        '</div>').join(""):'<p class="muted">Aún no hay cifras registradas.</p>')+
+    (observations.some(x=>x.status==="verified")?
+      '<div class="ws-note"><strong>Tendencias verificadas, por variable y unidad</strong>'+
+      [...new Set(observations.filter(x=>x.status==="verified").map(x=>x.display+"|"+x.unit))]
+        .slice(0,12).map(key=>{
+          const series=observations.filter(x=>x.status==="verified"&&x.display+"|"+x.unit===key)
+            .sort((a,b)=>String(a.effectiveAt).localeCompare(String(b.effectiveAt)));
+          return '<p>'+safe(series[0].display)+' · '+safe(series[0].unit)+': '+
+            series.slice(-5).map(x=>safe(x.value)+' ('+safe(String(x.effectiveAt).slice(0,10))+')').join(' → ')+'</p>';
+        }).join("")+'</div>':""));
   panel+=box("Línea de tiempo longitudinal",
    timeline.length?timeline.slice(0,80).map(x=>
     '<div class="ws-timeline"><div><strong>'+safe(x.title)+'</strong><span class="tag">'+safe(x.status||"Registrado")+'</span></div>'+
@@ -179,7 +224,11 @@ function renderWorkspace(){
  }
  document.getElementById("view").innerHTML=
   '<div class="ws-heading"><div><h2>Mi consulta</h2><p class="muted">El paciente está contigo · Consulta y expediente sin salir de esta pantalla</p></div>'+
-  '<span class="tag">Local · Cifrado</span></div><div class="card">'+lookup+'</div>'+registration+panel;
+  '<span class="tag">Local · Cifrado</span></div>'+
+  (patient?'<div class="ws-metrics"><div><strong>'+pending.orders+'</strong><small>Órdenes por revisar</small></div>'+
+    '<div><strong>'+pending.followups+'</strong><small>Seguimientos pendientes</small></div>'+
+    '<div><strong>'+pending.attachments+'</strong><small>Archivos por revisar</small></div></div>':"")+
+  '<div class="card">'+lookup+'</div>'+registration+panel;
 }
 function render(){
  if(tab==="workspace")return renderWorkspace();
@@ -237,6 +286,32 @@ function render(){
 }
 async function execute(action,id){
 
+
+ if(action==="workspaceAddObservation"){
+  if(!selectedPatientId)throw Error("Seleccione paciente");
+  const display=val("ws-observation-name").trim(),unit=val("ws-observation-unit").trim(),
+    raw=val("ws-observation-value"),value=Number(raw),effectiveAt=val("ws-observation-date"),
+    source=val("ws-observation-source"),sourceAttachmentId=val("ws-source-attachment");
+  if(!display||!unit||!raw.trim()||!Number.isFinite(value)||!effectiveAt)
+    throw Error("Complete parámetro, valor, unidad y fecha");
+  if(source==="document-transcribed"&&!sourceAttachmentId)throw Error("Elija el documento de origen");
+  const lo=val("ws-reference-low"),hi=val("ws-reference-high");
+  await api("observations","POST",{patientId:selectedPatientId,display,value,unit,effectiveAt,
+    source,sourceAttachmentId,referenceLow:lo?Number(lo):null,referenceHigh:hi?Number(hi):null});
+  notice("Resultado guardado sin verificar; revise su fuente.");return load();
+ }
+ if(action==="workspaceVerifyObservation"){
+  const item=data.observations?.find(x=>x.id===id);if(!item)throw Error("Valor no encontrado");
+  if(!confirm("¿Comparaste el valor, la unidad, la fecha y el origen con su fuente?"))return;
+  await api("observations/"+id,"PATCH",{version:item.version,action:"verify"});
+  notice("Resultado verificado por el médico.");return load();
+ }
+ if(action==="workspaceReviewFile"){
+  const item=data.attachments?.find(x=>x.id===id);if(!item)throw Error("Documento no encontrado");
+  if(!confirm("¿Revisaste el archivo? Esta acción confirma su lectura, no valida las conclusiones del documento."))return;
+  await api("attachment-review/"+id,"PATCH",{version:item.version});
+  notice("Revisión del archivo registrada.");return load();
+ }
  if(action==="workspaceCreate"){
   const name=val("ws-name").trim(),dateOfBirth=val("ws-dob"),complaint=val("ws-complaint-new").trim();
   if(!name||!dateOfBirth||!complaint)throw Error("Completa nombre, nacimiento y motivo");
