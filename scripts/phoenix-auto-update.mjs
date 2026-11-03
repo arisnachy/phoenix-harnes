@@ -645,7 +645,7 @@ function cleanupUpdaterRuntimeStorage(root, { ensureCapacity = false } = {}) {
  * Prevent new runtime allocation when the real drive free space is low.
  * Disk failures are not a reason to consume another multi-GiB worktree.
  */
-function updaterRuntimeDiskHasHeadroom(root) {
+function updaterRuntimeDiskHasHeadroom() {
   let free
   try {
     const volume = statfsSync(stageBaseDirectory())
@@ -677,7 +677,7 @@ function updaterRuntimeStorageHasCapacity(root, target) {
   if (existsSync(targetRuntime)) return true
 
   const { remaining } = cleanupUpdaterRuntimeStorage(root, { ensureCapacity: true })
-  if (!updaterRuntimeDiskHasHeadroom(root)) return false
+  if (!updaterRuntimeDiskHasHeadroom()) return false
   if (remaining < MAX_RUNTIME_DIRECTORIES) return true
 
   const now = Date.now()
