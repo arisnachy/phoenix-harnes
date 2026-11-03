@@ -469,9 +469,8 @@ const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>>
  * high-risk activation/approval boundary.
  */
 export const CORE_MCP_PACK_IDS: readonly CuratedMcpConnectorId[] = [
-  // Installed only after the user clicks Activate available integrations.
-  // Cold boot never installs missing optional MCPs (installMissing: false).
-  'blender',
+  // Blender MCP executes Python inside Blender, so the owner installs it
+  // from its dedicated Settings connector card, never via bulk activation.
   // Public Microsoft documentation is free and requires no private credentials.
   // Metered Work IQ and Azure remain optional and never auto-install.
   'microsoft-learn',
