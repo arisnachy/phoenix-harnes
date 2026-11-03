@@ -837,6 +837,39 @@ describe('connectors settings section', () => {
     await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'blender' }))
   })
 
+  it('shows the actual Blender preflight and reconnects an already configured MCP', async () => {
+    const api={
+      list:vi.fn(async()=>ok({entries:[]})),
+      begin:vi.fn(),status:vi.fn(),answer:vi.fn(),cancel:vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const reconnect=vi.fn(async()=>({accepted:true}))
+    const blenderState=vi.fn(async()=>({
+      blenderDetected:true,uvxDetected:true,addonBridgeListening:false,
+    }))
+    const managed=[{
+      entryId:'blender-entry',serverName:'blender',url:'stdio://blender',
+      source:{kind:'curated' as const,connectorId:'blender'},
+    }]
+    renderHub(api,{mcpRegistry:{
+      state:vi.fn(async()=>({managed,runtime:[{
+        serverName:'blender',transport:'stdio' as const,status:'failed' as const,
+        toolNames:[],reasonCode:'connection-failed' as const,
+      }]})),
+      blenderState,reconnect,search:vi.fn(),install:vi.fn(),
+    }})
+    const card=document.querySelector('[data-connector-id="blender"]')
+    expect(card).toBeTruthy()
+    await waitFor(()=>expect(blenderState).toHaveBeenCalled())
+    await waitFor(()=>expect(card?.textContent).toContain('complemento: sin conexión'))
+    expect(card?.textContent).toContain('Start MCP Server')
+    expect(card?.textContent).toContain('uvx: detectado')
+    const reconnectButton=Array.from(card?.querySelectorAll('button')??[])
+      .find(button => /Reconnect|Reconectar/iu.test(button.textContent??''))
+    expect(reconnectButton).toBeDefined()
+    fireEvent.click(reconnectButton!)
+    await waitFor(()=>expect(reconnect).toHaveBeenCalledWith({serverName:'blender'}))
+  })
+
   it('installs the Host-curated Devpost Hackathons MCP without registry discovery', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),

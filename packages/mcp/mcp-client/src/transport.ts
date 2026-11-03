@@ -415,19 +415,73 @@ function credentialRequired(ref: string): Error & { status: number } {
  * @param options - Optional OAuth provider or already-resolved Bearer token.
  * @returns A fresh MCP client transport ready for one connection generation.
  */
+/** Resolve only the pinned official Blender Lab uvx child on Windows.
+ * Desktop hosts can retain a stale PATH even though uv/uvx is installed in the
+ * user's standard installation directory. No shell, install, or arbitrary MCP
+ * command rewriting occurs, and persisted overlay entries stay compatible.
+ * @param serverName - Registered MCP namespace.
+ * @param command - Persisted stdio command.
+ * @param args - Persisted argument list.
+ * @param env - Already scrubbed child process environment.
+ * @param options - Deterministic Windows probing seams for tests.
+ * @returns Either the verified local uvx.exe path or the unchanged launch.
+ */
+export function normalizeBlenderLabMcpLaunch(
+  serverName: string,
+  command: string,
+  args: readonly string[],
+  env: Readonly<Record<string, string>>,
+  options: {
+    readonly platform?: NodeJS.Platform
+    readonly fileExists?: (path: string) => boolean
+  } = {},
+): { command: string; args: string[] } {
+  const original = { command, args: [...args] }
+  if ((options.platform ?? process.platform) !== 'win32'
+    || serverName !== 'blender'
+    || !/^(?:uvx|uvx\.exe)$/iu.test(command)
+    || args.length !== 3 || args[0] !== '--from'
+    || args[1] !== 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp'
+    || args[2] !== 'blender-mcp') return original
+  const get = (name: string): string | undefined =>
+    Object.entries(env).find(([key]) => key.toUpperCase() === name.toUpperCase())?.[1]
+  const user = get('USERPROFILE')
+  const local = get('LOCALAPPDATA')
+  const install = get('UV_INSTALL_DIR')
+  const path = get('PATH') ?? ''
+  const candidates = [
+    ...path.split(';').filter(Boolean).map(item => win32.join(item.replace(/^"(.*)"$/u, '$1'), 'uvx.exe')),
+    install === undefined ? undefined : win32.join(install, 'uvx.exe'),
+    user === undefined ? undefined : win32.join(user, '.local', 'bin', 'uvx.exe'),
+    user === undefined ? undefined : win32.join(user, '.cargo', 'bin', 'uvx.exe'),
+    user === undefined ? undefined : win32.join(user, 'scoop', 'shims', 'uvx.exe'),
+    local === undefined ? undefined : win32.join(local, 'Microsoft', 'WinGet', 'Links', 'uvx.exe'),
+    local === undefined ? undefined : win32.join(local, 'Programs', 'uv', 'uvx.exe'),
+  ]
+  const exists = options.fileExists ?? existsSync
+  const resolved = candidates.find(candidate => candidate !== undefined
+    && win32.isAbsolute(candidate) && exists(candidate))
+  return resolved === undefined ? original : { command: resolved, args: [...args] }
+}
+
+/** Create the configured client transport with safe, generation-scoped credentials.
+ * @param config - Validated stdio or Streamable HTTP connector configuration.
+ * @param options - OAuth and credential resolvers for this connection generation.
+ * @returns Fresh MCP transport instance without persisting credentials.
+ */
 export function createTransport(config: Config, options: TransportOptions = {}): Transport {
   switch (config.transport) {
     case 'stdio': {
-      const launch = normalizeMicrosoftPersonalMcpLaunch(
-        config.serverName,
-        config.command,
-        repairPhoenixStdioProxyArgs(config.args),
-      )
+      const environment = hydrateFetchMcpNodeEnvironment(config,
+        buildChildEnv({ ...config.env, ...options.stdioCredentialEnv }))
+      const normalized = normalizeMicrosoftPersonalMcpLaunch(
+        config.serverName, config.command, repairPhoenixStdioProxyArgs(config.args))
+      const launch = normalizeBlenderLabMcpLaunch(config.serverName,
+        normalized.command, normalized.args, environment)
       return new PhoenixStdioClientTransport({
         command: launch.command,
         args: launch.args,
-        env: hydrateFetchMcpNodeEnvironment(config,
-          buildChildEnv({ ...config.env, ...options.stdioCredentialEnv })),
+        env: environment,
         cwd: config.cwd,
       })
     }

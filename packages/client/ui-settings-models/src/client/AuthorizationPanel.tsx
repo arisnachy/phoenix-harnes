@@ -129,6 +129,7 @@ export interface McpRegistryClient {
    * @returns Runtime and persistent managed connector state.
    */
   state(): Promise<McpConnectorHubSnapshot>
+  blenderState?(): Promise<{ blenderDetected: boolean; uvxDetected: boolean; addonBridgeListening: boolean }>
   /** Secret-free X user/Phoenix account and developer credential status. */
   xState?(): Promise<{
     clientIdConfigured: boolean; clientSecretConfigured: boolean;
@@ -564,7 +565,7 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, openClawRuntime, onRefreshOpenClaw, clawHubFeatured, telegram, oddsApi, oddsApiSnapshot, onOddsApiStatus, connected, reauthorizeCodex, t, authorizationProgress,
+function CatalogCard({ definition, live, account, mcpRuntime, managed, blenderState, openClaw, openClawRuntime, onRefreshOpenClaw, clawHubFeatured, telegram, oddsApi, oddsApiSnapshot, onOddsApiStatus, connected, reauthorizeCodex, t, authorizationProgress,
   onAuthorize, onDisconnect, onConfigure, onInstallCurated, onFindOfficial, onFindRegistry, onReconnect, onRepair, onRemove, onChanged,
   pending, installingCurated, reconnecting,
   repairing, removing }: {
@@ -573,6 +574,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   account?: Entry | undefined
   mcpRuntime?: McpConnectorRuntimeView | undefined
   managed?: ManagedMcpConnectorView | undefined
+  blenderState?: { blenderDetected: boolean; uvxDetected: boolean; addonBridgeListening: boolean } | undefined
   openClaw?: OpenClawConnectorView | undefined
   openClawRuntime?: OpenClawRuntimeSnapshot | undefined
   onRefreshOpenClaw?: (() => void) | undefined
@@ -615,7 +617,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   const mcpStatus = mcpRuntime?.status === 'ready'
     ? mcpRuntime.toolNames.length > 0
       ? definition.id === 'blender'
-        ? { text: 'MCP cargado · verifica Blender y complemento', className: connectorStyles['connectorStatusWarn'] ?? '' }
+        ? blenderState?.addonBridgeListening === true
+          ? { text: 'MCP y puente local detectados · prueba una herramienta con Kira', className: connectorStyles['connectorStatusReady'] ?? '' }
+          : { text: 'MCP cargado · complemento sin verificar', className: connectorStyles['connectorStatusWarn'] ?? '' }
         : needsIndependentVerification
         ? { text: 'MCP iniciado · verifica OAuth con Kira', className: connectorStyles['connectorStatusWarn'] ?? '' }
         : { text: t('callableStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
@@ -720,6 +724,30 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
         </div>
       </div>
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
+      {definition.id === 'blender' ? (
+        <div className={styles['advancedHint']} role="status">
+          {blenderState === undefined ? (
+            <p>Comprobando Blender, uvx y el complemento local…</p>
+          ) : (
+            <>
+              <p>Blender: {blenderState.blenderDetected ? 'detectado' : 'no detectado'} ·
+                uvx: {blenderState.uvxDetected ? 'detectado' : 'no detectado'} ·
+                complemento: {blenderState.addonBridgeListening ? 'escuchando en localhost:9876' : 'sin conexión'}</p>
+              <p>{!blenderState.blenderDetected
+                ? 'Instala o abre Blender 5.1+ y configura Blender Lab.'
+                : !blenderState.uvxDetected
+                  ? 'Falta uvx (uv). Instálalo, reinicia PHOENIX y pulsa Reconectar.'
+                  : !blenderState.addonBridgeListening
+                    ? 'Abre Blender → Preferencias → Extensiones → Blender Lab MCP, habilita el complemento y pulsa Start MCP Server. Luego Reconectar en PHOENIX.'
+                    : mcpRuntime?.status === 'ready' && mcpRuntime.toolNames.length > 0
+                      ? 'Puente local y herramientas MCP detectados; prueba una operación sencilla con Kira.'
+                      : managed === undefined
+                        ? 'Puente disponible. Pulsa Instalar para autorizar y registrar el MCP oficial.'
+                        : 'Puente disponible pero no hay herramientas activas. Pulsa Reconectar o Reparar.'}</p>
+            </>
+          )}
+        </div>
+      ) : null}
       {definition.id === 'openclaw' ? (
         <div className={styles['advancedHint']}>
           <p>{t('ocNote')}</p>
@@ -1284,6 +1312,7 @@ export function ConnectorsSettingsSection({ api,
   const [registryBusy, setRegistryBusy] = useState(false)
   const [registryFailure, setRegistryFailure] = useState(false)
   const [mcpHub, setMcpHub] = useState<McpConnectorHubSnapshot>({ runtime: [], managed: [] })
+  const [blenderState, setBlenderState] = useState<{ blenderDetected: boolean; uvxDetected: boolean; addonBridgeListening: boolean } | undefined>()
   const [openClaw, setOpenClaw] = useState<OpenClawConnectorSnapshot>({ connectors: [] })
   const [openClawRuntime, setOpenClawRuntime] = useState<OpenClawRuntimeSnapshot | undefined>()
   const [runtimeRefresh, setRuntimeRefresh] = useState(0)
@@ -1372,6 +1401,16 @@ export function ConnectorsSettingsSection({ api,
           setCatalogFailure(String(error))
         }
       },
+    )
+    return () => { stale = true }
+  }, [mcpRegistry, refresh])
+
+  useEffect(() => {
+    if (mcpRegistry?.blenderState === undefined) return
+    let stale = false
+    void mcpRegistry.blenderState().then(
+      value => { if (!stale) setBlenderState(value) },
+      () => { if (!stale) setBlenderState(undefined) },
     )
     return () => { stale = true }
   }, [mcpRegistry, refresh])
@@ -2172,6 +2211,7 @@ export function ConnectorsSettingsSection({ api,
                   account={row.account}
                   mcpRuntime={row.mcpRuntime}
                   managed={row.managed}
+                  blenderState={row.definition.id === 'blender' ? blenderState : undefined}
                   openClaw={row.openClaw}
                   openClawRuntime={row.definition.id === 'openclaw' ? openClawRuntime : undefined}
                   onRefreshOpenClaw={row.definition.id === 'openclaw' ? () => { setRuntimeRefresh(n => n + 1) } : undefined}

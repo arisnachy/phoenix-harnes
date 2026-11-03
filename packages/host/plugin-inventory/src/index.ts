@@ -20,6 +20,7 @@ import {
   type LocalModelRuntimeSnapshot,
 } from './local-model/index.ts'
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
+import { readBlenderLocalState } from './blender-local.ts'
 import { readBusinessLibrarySnapshot } from './business-library.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
 import { readOpenClawRuntimeSnapshot } from './openclaw-runtime.ts'
@@ -45,6 +46,7 @@ import {
   recoverManagedMcpOverlay,
 } from './mcp-managed.ts'
 import type {
+  BlenderLocalState,
   ChatGptWebSnapshot,
   BusinessLibrarySnapshot,
   CuratedMcpInstallRequest,
@@ -491,6 +493,16 @@ export class PluginInventoryGateway extends TypertRemoteService {
       setOpenClawPluginEnabled(request), this.openClawGatewayCredential(),
     ])
     return { ...snapshot, gatewayCredentialConfigured: credential.configured }
+  }
+
+  /**
+   * Read only Blender Lab's local requirements. Installation and permission to
+   * execute model-supplied Python remain explicit user actions.
+   * @returns Host-side booleans for Blender, uvx and the local add-on bridge.
+   */
+  @Remote('blenderLocalState')
+  async blenderLocalState(): Promise<BlenderLocalState> {
+    return readBlenderLocalState()
   }
 
   @Remote('searchMcpRegistry')

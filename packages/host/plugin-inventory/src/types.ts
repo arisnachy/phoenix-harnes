@@ -1,3 +1,10 @@
+/** Read-only Blender Lab host prerequisites; never evidence of executed tools. */
+export interface BlenderLocalState {
+  readonly blenderDetected: boolean
+  readonly uvxDetected: boolean
+  readonly addonBridgeListening: boolean
+}
+
 
 /** ClawHub entries are catalog metadata, never proof a third-party package is executable. */
 export type ClawHubFamily = 'skill' | 'code-plugin' | 'bundle-plugin'
