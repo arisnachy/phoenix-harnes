@@ -1,0 +1,62 @@
+name: PHOENIX assurance (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Operational profile to execute and report
+        required: true
+        default: quick
+        type: choice
+        options:
+          - quick
+          - agents
+          - types
+          - architecture
+          - security
+          - browser
+          - performance
+          - full
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phoenix-assurance-${{ github.ref }}-${{ inputs.profile }}
+  cancel-in-progress: false
+
+jobs:
+  assurance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      DSH_TELEMETRY_DISABLED: '1'
+      DSH_SNAPSHOT: replay
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Test assurance runner
+        run: pnpm run test:assurance
+      - name: Install Chromium only for browser profiles
+        if: ${{ inputs.profile == 'browser' || inputs.profile == 'performance' || inputs.profile == 'full' }}
+        run: pnpm --filter @phoenix-ai/dsh-web-frontend exec playwright install --with-deps chromium
+      - name: Execute selected real profile
+        run: pnpm exec node scripts/phoenix-assurance.mjs "${{ inputs.profile }}"
+      - name: Upload evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phoenix-assurance-${{ inputs.profile }}
+          if-no-files-found: warn
+          path: .cache/phoenix/assurance/*.json
+          retention-days: 14
