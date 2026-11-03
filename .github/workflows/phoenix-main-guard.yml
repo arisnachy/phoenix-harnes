@@ -39,6 +39,13 @@ jobs:
       - name: Install immutable workspace
         shell: pwsh
         run: pnpm install --frozen-lockfile
+      - name: Verify updater retention and cognitive hydration
+        shell: pwsh
+        run: |
+          node --test scripts/phoenix-storage-audit.spec.mjs scripts/phoenix-windows-storage-repair.node-test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm exec vitest run --pool=threads --no-file-parallelism --maxWorkers=1 --testTimeout=20000 scripts/phoenix-upstream-update.spec.ts scripts/phoenix-auto-update-runtime.spec.ts scripts/phoenix-windows-storage-repair.spec.ts scripts/phoenix-windows-supervisor.spec.ts packages/session/session-learning/tests/cognitive.spec.ts packages/session/session-learning/tests/service.spec.ts
+
       - name: Prove host and client contracts
         shell: pwsh
         run: |
