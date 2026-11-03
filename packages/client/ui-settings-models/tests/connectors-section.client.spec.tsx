@@ -810,6 +810,33 @@ describe('connectors settings section', () => {
     expect(screen.getAllByRole('button', { name: 'Find / install' }).length).toBeGreaterThan(0)
   })
 
+  it('offers Blender Lab install and does not confuse an installed MCP with callable tools', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: {
+        entryId: 'blender-entry', serverName: 'blender', url: 'stdio://blender',
+        source: { kind: 'curated' as const, connectorId: 'blender' },
+      },
+    }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      installCurated, search: vi.fn(), install: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="blender"]')
+    expect(card).toBeTruthy()
+    expect(card?.textContent).toContain('Blender Lab')
+    expect(card?.textContent).toContain('uvx')
+    const installButton = Array.from(card?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Install')
+    expect(installButton).toBeTruthy()
+    fireEvent.click(installButton!)
+    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'blender' }))
+  })
+
   it('installs the Host-curated Devpost Hackathons MCP without registry discovery', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
