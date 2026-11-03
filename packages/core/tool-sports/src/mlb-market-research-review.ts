@@ -155,7 +155,7 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
   const crossBookComparisons=[...crossBookGroups.values()]
   const basic=Object.entries(gates).filter(([key])=>
     ['scheduledFuture','startersVerified','teamRecordsVerified','recentTeamFormVerified',
-      'bothRostersVerified','rosterMatchupsReviewed'].includes(key))
+      'bothRostersVerified','lineupsConfirmed','rosterMatchupsReviewed'].includes(key))
   const insufficient=basic.some(([,value])=>!value)
   return{version:1,eventId:String(d.fixture.gamePk),sport:'baseball',league:'mlb',
     eligibility:insufficient?'insufficient':'research-only',evidenceGates:gates,
