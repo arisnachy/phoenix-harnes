@@ -513,7 +513,8 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(retired).not.toHaveBeenCalled()
     busy = new Set()
     cleanupDetachedLegacyStorage(new Set(), true)
-    expect(retired).toHaveBeenCalledExactlyOnceWith(candidate, owner)
+    expect(retired).toHaveBeenCalledTimes(1)
+    expect(retired).toHaveBeenCalledWith(candidate, owner)
   })
 
   it('caps runtime copies while keeping age-based staging cleanup', () => {
