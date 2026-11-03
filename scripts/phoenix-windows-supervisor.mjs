@@ -102,6 +102,10 @@ const configuredRuntimeDirectoryLimit = Number.parseInt(
 const MAX_RUNTIME_DIRECTORIES = Number.isFinite(configuredRuntimeDirectoryLimit)
   ? Math.max(2, Math.min(6, configuredRuntimeDirectoryLimit))
   : Math.max(2, MAX_INACTIVE_RUNTIME_BACKUPS + 2)
+// A checkout identity can change after migration. Without a global ceiling,
+// each identity could retain its own active/backup pool under the same ~/p.
+const GLOBAL_RUNTIME_DIRECTORY_LIMIT = Math.max(6, MAX_RUNTIME_DIRECTORIES)
+
 const DEFAULT_STORAGE_SWEEP_MS = 5 * 60 * 1000
 const configuredStorageSweepMs = Number.parseInt(
   process.env.PHOENIX_UPDATE_STORAGE_SWEEP_MS ?? '',
@@ -502,6 +506,14 @@ function runtimeDirectoriesForCleanup() {
     .map(entry => join(base, entry.name))
 }
 
+function globalRuntimeDirectoriesForCleanup() {
+  const base = runtimeBaseDirectory()
+  return readdirSync(base, { withFileTypes: true })
+    .filter(entry => entry.isDirectory()
+      && /^phoenix-runtime-[0-9a-f]{10}-[0-9a-f]{12}$/iu.test(entry.name))
+    .map(entry => join(base, entry.name))
+}
+
 function stageDirectoriesForCleanup() {
   const base = runtimeBaseDirectory()
   return readdirSync(base, { withFileTypes: true })
@@ -676,12 +688,12 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
 }
 
 // When the checkout identity changes, older updater worktrees remain in ~/p.
-// Reclaim only strict PHOENIX-generated names after 48 hours, and only when:
+// Reclaim only strict PHOENIX-generated names after 24 hours, and only when:
 //   (1) Git proves that the worktree is owned by this checkout and unleased, or
 //   (2) its linked-worktree metadata proves that the original owner is gone.
 // Another repository's existing worktrees, active/preparing markers, and
 // anything that Windows processes still reference must never be removed.
-const DETACHED_STORAGE_MIN_AGE_MS = 48 * 60 * 60 * 1000
+const DETACHED_STORAGE_MIN_AGE_MS = 24 * 60 * 60 * 1000
 const DETACHED_STORAGE_SWEEP_INTERVAL_MS = 60 * 60 * 1000
 let nextDetachedStorageSweepAt = 0
 
@@ -918,6 +930,13 @@ function assertRuntimeStorageCapacity(nextRuntime) {
     reclaimInactiveBackupForCapacity(nextRuntime)
   }
   const runtimeCount = runtimeDirectoriesForCleanup().length
+  const globalCount = globalRuntimeDirectoriesForCleanup().length
+  if (globalCount >= GLOBAL_RUNTIME_DIRECTORY_LIMIT) {
+    throw new Error(
+      `global PHOENIX runtime storage limit reached (${String(globalCount)}/${String(GLOBAL_RUNTIME_DIRECTORY_LIMIT)} directories across checkouts); `
+      + 'no new multi-gigabyte runtime will be allocated. The current Host remains active; run the guarded offline storage repair.',
+    )
+  }
   if (runtimeCount < MAX_RUNTIME_DIRECTORIES) return
 
   throw new Error(
