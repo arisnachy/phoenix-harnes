@@ -22,10 +22,13 @@ MAX_VALUES = 180_000
 def parse_args():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(description="PHOENIX 3D Studio offline Blender renderer")
-    parser.add_argument("--input", required=True, type=Path)
+    parser.add_argument("--input", type=Path,
+                        help="Optional portable PHOENIX JSON; use local --asset-glb for asset-only scenes")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--resolution", type=int, default=1280)
     parser.add_argument("--samples", type=int, default=64)
+    parser.add_argument("--animation-preview", action="store_true",
+                        help="Render bounded MP4 preview if the scene includes animation")
     parser.add_argument("--asset-glb", action="append", type=Path, default=[],
                         help="Optional locally supplied detailed model (repeatable)")
     return parser.parse_args(argv)
@@ -37,12 +40,12 @@ def valid_vec(value, lower=-300, upper=300):
                     and lower <= v <= upper for v in value))
 
 
-def load_scene(filename):
+def load_scene(filename, allow_empty=False):
     if filename.stat().st_size > 14_000_000:
         raise ValueError("Scene exceeds 14 MB studio input budget")
     scene = json.loads(filename.read_text(encoding="utf-8"))
     nodes = scene.get("nodes")
-    if not isinstance(nodes, list) or not 1 <= len(nodes) <= MAX_NODES:
+    if not isinstance(nodes, list) or len(nodes) > MAX_NODES or (not nodes and not allow_empty):
         raise ValueError("Scene needs between 1 and 150 nodes")
     total = 0
     for node in nodes:
@@ -215,7 +218,10 @@ def run():
     args = parse_args()
     if not 256 <= args.resolution <= 4096 or not 8 <= args.samples <= 1024:
         raise ValueError("Resolution or samples out of bounds")
-    scene = load_scene(args.input.resolve())
+    if args.input is None and not args.asset_glb:
+        raise ValueError("Provide a PHOENIX JSON scene or at least one --asset-glb")
+    scene = (load_scene(args.input.resolve(), allow_empty=bool(args.asset_glb))
+             if args.input is not None else {"nodes": [], "background": "#f5f5f5"})
     target = args.output.resolve()
     target.mkdir(parents=True, exist_ok=True)
     bpy.ops.object.select_all(action="SELECT")
@@ -245,6 +251,19 @@ def run():
     bpy.ops.wm.gltf_export(filepath=str(target / "scene.glb"), export_format="GLB",
                            export_animations=bool(scene.get("animations") or args.asset_glb))
     bpy.ops.render.render(write_still=True)
+    if args.animation_preview:
+        # Animation preview is optional: rigged GLB assets can include their own actions.
+        has_motion = bool(scene.get("animations") or args.asset_glb)
+        if not has_motion:
+            raise ValueError("No animated content supplied for --animation-preview")
+        ctx.render.resolution_x = min(args.resolution, 960)
+        ctx.render.resolution_y = min(args.resolution, 960)
+        ctx.render.image_settings.file_format = "FFMPEG"
+        ctx.render.ffmpeg.format = "MPEG4"
+        ctx.render.ffmpeg.codec = "H264"
+        ctx.render.filepath = str(target / "animation.mp4")
+        ctx.frame_end = min(ctx.frame_end, 3600)
+        bpy.ops.render.render(animation=True)
     print("PHOENIX_3D_STUDIO_OUTPUT=" + str(target))
 
 
