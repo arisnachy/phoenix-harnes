@@ -511,6 +511,20 @@ describe('Deep sports dashboard section limits',()=>{
       unmount()
     }
   })
+  it('renders an empty live slate without manufacturing a match',()=>{
+    const empty={component:'sports_espn_dashboard',version:1,props:{
+      view:'event',title:'PHOENIX NHL · cartelera en vivo',
+      subtitle:'0 eventos confirmados',source:'ESPN Site',
+      checkedAt:'2026-11-02T19:00:00Z',
+      note:'No hay partidos en vivo verificados por la fuente.',
+      sections:[{heading:'Partidos consultados',kind:'list',items:[]}]}}
+    const card=parseGenerativeUiBlock(empty)
+    expect(card).not.toBeNull()
+    if(card===null)throw Error('Empty live slate was incorrectly discarded')
+    const {container}=render(<GenerativeUi block={card}/>)
+    expect(container.textContent).toContain('0 eventos confirmados')
+    expect(container.querySelector('[data-generative-ui="sports_espn_dashboard"]')).toBeTruthy()
+  })
   it('rejects excessive sections and total items while keeping validation strict',()=>{
     expect(parseGenerativeUiBlock(make(25))).toBeNull()
     const detailed=make(12)
