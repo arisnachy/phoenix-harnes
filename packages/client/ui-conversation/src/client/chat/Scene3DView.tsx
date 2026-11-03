@@ -186,6 +186,12 @@ function sphereNormal(point: Vec3, node: Scene3DNode): Vec3 {
   const length=Math.hypot(x,y,z)||1
   return [x/length,y/length,z/length]
 }
+function torusNormal(point: Vec3,node:Scene3DNode):Vec3 {
+  const radius=Math.hypot(point[0],point[2])||1
+  return sphereNormal([
+    point[0]-.41*point[0]/radius,point[1],point[2]-.41*point[2]/radius,
+  ],node)
+}
 function mesh(node: Scene3DNode): Face[] {
   if(node.hidden===true)return []
   const faces: Vec3[][] = []
@@ -241,7 +247,8 @@ function mesh(node: Scene3DNode): Face[] {
   }
   return faces.map(vertices => ({
     vertices: vertices.map(point => transform(point,node)), color:node.material?.baseColor??node.color,
-    ...(node.type==='sphere'?{smoothNormals:vertices.map(point=>sphereNormal(point,node))}:{}),
+    ...(node.type==='sphere'?{smoothNormals:vertices.map(point=>sphereNormal(point,node))}
+      :node.type==='torus'?{smoothNormals:vertices.map(point=>torusNormal(point,node))}:{}),
     alpha: node.material?.opacity??(/cristal|acristalad|glass|window/iu.test(node.name ?? '') ? .77 : 1),
     ...(node.material===undefined?{}:{material:node.material}),
   }))
