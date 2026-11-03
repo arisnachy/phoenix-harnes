@@ -462,6 +462,7 @@ test('market gate rejects a missing batter versus bullpen matchup even with nine
   const review=reviewMlbResearch(d)
   assert.equal(review.evidenceGates.lineupsConfirmed,true)
   assert.equal(review.evidenceGates.rosterMatchupsReviewed,false)
+  assert.ok(review.reviewedMarkets.every(m=>m.missingEvidence.some(x=>x.includes('Matriz completa'))))
   assert.equal(review.eligibility,'insufficient')
   assert.equal(review.decision,'abstain')
   assert.equal(review.eligibleForTicket,false)
