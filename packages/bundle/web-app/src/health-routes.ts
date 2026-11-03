@@ -30,11 +30,11 @@ function origin(req:IncomingMessage):boolean {
     req.headers['content-type']?.split(';',1)[0]?.trim()==='application/json' &&
     req.headers['x-phoenix-health']==='1'
 }
-async function readBody(req:IncomingMessage):Promise<Record<string,unknown>>{
+async function readBody(req:IncomingMessage,maxBytes=65536):Promise<Record<string,unknown>>{
   let length=0;const parts:Uint8Array[]=[]
   for await(const part of req) {
     const chunk=Buffer.isBuffer(part)?part:Buffer.from(part)
-    length+=chunk.length;if(length>65536)throw new Error('Solicitud demasiado grande')
+    length+=chunk.length;if(length>maxBytes)throw new Error('Solicitud demasiado grande')
     parts.push(chunk)
   }
   const body:unknown=JSON.parse(Buffer.concat(parts).toString('utf8'))
@@ -122,7 +122,7 @@ export function registerHealthRoutes(ctx:Context):void {
       const content=renderHealthPage(nonce)
       res.writeHead(200,{
         'content-type':'text/html; charset=utf-8','cache-control':'no-store',
-        'content-security-policy':"default-src 'none'; script-src 'nonce-"+nonce+"'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+        'content-security-policy':"default-src 'none'; script-src 'nonce-"+nonce+"'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
         'x-frame-options':'DENY','x-content-type-options':'nosniff','referrer-policy':'no-referrer',
       })
       res.end(content);return
@@ -173,6 +173,23 @@ export function registerHealthRoutes(ctx:Context):void {
           const receipt=await store.backup(actor)
           reply(res,201,{ backup:receipt });return
         }
+      }
+      if(operation==='attachments'&&method==='POST'&&id===undefined){
+        reply(res,201,{attachment:store.addAttachment(actor,await readBody(req,7_300_000))});return
+      }
+      if(operation==='attachments'&&method==='GET'&&id!==undefined){
+        reply(res,200,{items:store.listAttachments(actor,id)});return
+      }
+      if(operation==='attachment'&&method==='GET'&&id!==undefined){
+        const file=store.readAttachment(actor,id)
+        const extensions:Record<string,string>={'image/png':'png','image/jpeg':'jpg',
+          'image/webp':'webp','application/pdf':'pdf'}
+        res.writeHead(200,{...jsonHeaders,
+          'content-type':file.mime,'content-length':String(file.bytes.length),
+          'content-disposition':'attachment; filename="healthia-'+id+'.'+extensions[file.mime]+'"',
+          'content-security-policy':"default-src 'none'; sandbox",
+        })
+        res.end(file.bytes);return
       }
       if(operation==='interview'&&method==='GET'&&id!==undefined){
         reply(res,200,{ guide:store.interviewGuide(actor,id) });return

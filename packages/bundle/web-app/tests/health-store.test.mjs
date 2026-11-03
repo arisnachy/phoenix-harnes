@@ -470,3 +470,29 @@ test('critical laboratory report atomically creates exactly one urgent encrypted
   assert.equal(closed.completedBy,'doctor1')
   assert.equal(db.list(doctor,'followups').filter(x=>x.status==='pending'&&x.priority==='urgent').length,0)
 })
+
+test('patient-provided image attachments remain encrypted, scoped and durable',t=>{
+  const f=fixture(t),password='another-secure-password-2026'
+  f.db.createStaff(f.admin.actor,{username:'clinicalone',password,role:'clinician'})
+  f.db.createStaff(f.admin.actor,{username:'clinicaltwo',password,role:'clinician'})
+  const doctor=f.db.login('clinicalone',password).actor
+  const other=f.db.login('clinicaltwo',password).actor
+  const patient=f.db.create(doctor,'patients',{name:'Paciente fotografía',dateOfBirth:'1982-04-19'})
+  const encoded=Buffer.from('89504e470d0a1a0a0000000d4948445200000001','hex').toString('base64')
+  const upload={patientId:patient.id,name:'Resultado personal.png',mime:'image/png',base64:encoded,note:'Aportado en consulta'}
+  assert.throws(()=>f.db.addAttachment(f.admin.actor,upload),/Permiso/)
+  assert.throws(()=>f.db.addAttachment(doctor,{...upload,mime:'application/pdf'}),/genuinos/)
+  const attachment=f.db.addAttachment(doctor,upload)
+  assert.equal(attachment.reviewStatus,'pending')
+  assert.equal(f.db.listAttachments(doctor,patient.id)[0].name,upload.name)
+  assert.equal(f.db.listAttachments(doctor,patient.id)[0].base64,undefined)
+  assert.equal(f.db.readAttachment(doctor,attachment.id).bytes.toString('base64'),encoded)
+  assert.throws(()=>f.db.listAttachments(other,patient.id),/no asignado/)
+  assert.throws(()=>f.db.readAttachment(other,attachment.id),/no asignado/)
+  assert(!readFileSync(join(f.root,'clinic.sqlite')).includes(Buffer.from(upload.name)))
+  f.db.close()
+  f.db=new HealthClinicStore(join(f.root,'clinic.sqlite'))
+  f.db.login('clinicaladmin',PASSWORD)
+  const restored=f.db.login('clinicalone',password).actor
+  assert.equal(f.db.readAttachment(restored,attachment.id).bytes.toString('base64'),encoded)
+})

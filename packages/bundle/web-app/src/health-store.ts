@@ -16,7 +16,8 @@ type Actor = { username:string; role:Role; org:string }
 /** Authenticated clinical principal with organization and professional role. */
 export type ClinicActor = Readonly<Actor>
 type RecordData = Record<string,unknown>
-type Row = { id:string; org:string; kind:Kind; version:number; iv:string; tag:string; payload:string; created_at:string; updated_at:string }
+type Row = { id:string; org:string; kind:Kind|'attachment'; version:number; iv:string; tag:string; payload:string; created_at:string; updated_at:string }
+type AttachmentRow = Omit<Row,'kind'|'updated_at'> & { patient_id:string; encounter_id:string|null; uploaded_by:string }
 type Staff = { username:string; org:string; role:Role; salt:string; digest:string }
 type Session = { actor:Actor; expires:number; csrf:string }
 const TYPES = new Set<Kind>(['patients','encounters','appointments','orders','prescriptions','inventory','invoices','followups'])
@@ -85,7 +86,9 @@ export class HealthClinicStore {
       'CREATE INDEX IF NOT EXISTS health_records_org_kind ON health_records(org,kind);'+
       'CREATE TABLE IF NOT EXISTS health_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, org TEXT NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL, record_id TEXT NOT NULL, happened TEXT NOT NULL, prior_hash TEXT NOT NULL, hash TEXT NOT NULL);'+
       'CREATE TABLE IF NOT EXISTS health_reminders (appointment_id TEXT PRIMARY KEY, org TEXT NOT NULL, status TEXT NOT NULL, sender TEXT NOT NULL, provider_id TEXT, started TEXT NOT NULL);'+
-      'CREATE TABLE IF NOT EXISTS health_patient_access (org TEXT NOT NULL, patient_id TEXT NOT NULL, staff_id TEXT NOT NULL, purpose TEXT NOT NULL, granted_by TEXT NOT NULL, granted_at TEXT NOT NULL, PRIMARY KEY(org,patient_id,staff_id));',
+      'CREATE TABLE IF NOT EXISTS health_patient_access (org TEXT NOT NULL, patient_id TEXT NOT NULL, staff_id TEXT NOT NULL, purpose TEXT NOT NULL, granted_by TEXT NOT NULL, granted_at TEXT NOT NULL, PRIMARY KEY(org,patient_id,staff_id));'+
+      'CREATE TABLE IF NOT EXISTS health_attachments (id TEXT PRIMARY KEY, org TEXT NOT NULL, patient_id TEXT NOT NULL, encounter_id TEXT, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, uploaded_by TEXT NOT NULL);'+
+      'CREATE INDEX IF NOT EXISTS health_attachments_patient ON health_attachments(org,patient_id,created_at);',
     )
   }
   /**
@@ -197,7 +200,7 @@ export class HealthClinicStore {
     }catch(error){this.db.exec('ROLLBACK');throw error}
   }
   private encryptionKey():Buffer {if(!this.key)fail('Expediente clínico bloqueado');return this.key}
-  private seal(id:string,org:string,kind:Kind,version:number,data:RecordData):{ iv:string;tag:string;payload:string } {
+  private seal(id:string,org:string,kind:Kind|'attachment',version:number,data:RecordData):{ iv:string;tag:string;payload:string } {
     const iv=randomBytes(12),key=this.encryptionKey(),cipher=createCipheriv('aes-256-gcm',key,iv)
     cipher.setAAD(Buffer.from([id,org,kind,String(version)].join(':')))
     const raw=Buffer.from(JSON.stringify(data),'utf8')
@@ -536,6 +539,91 @@ export class HealthClinicStore {
       description:text(x.description,'Tarea',500),status:'pending' })
   }
 
+
+
+  /** Store a patient-provided clinical file locally; never send it to chat or email. */
+  addAttachment(actor:Actor,value:unknown):RecordData {
+    if(actor.role!=='clinician'&&actor.role!=='psychologist')fail('Permiso clínico insuficiente para adjuntar')
+    const x=obj(value),patientId=str(x.patientId,'Paciente',80)
+    this.find(actor,'patients',patientId)
+    const encounterId=typeof x.encounterId==='string'&&x.encounterId.trim()
+      ? str(x.encounterId,'Consulta',80):null
+    if(encounterId){
+      const encounter=this.find(actor,'encounters',encounterId).data
+      if(encounter.patientId!==patientId||encounter.practitioner!==actor.username)
+        fail('Consulta no corresponde al paciente y profesional')
+    }
+    const name=str(x.name,'Nombre de archivo',180)
+    const note=typeof x.note==='string'&&x.note.trim()?str(x.note,'Descripción',500):''
+    const mime=str(x.mime,'Tipo de archivo',80)
+    const encoded=str(x.base64,'Contenido',7_200_000)
+    if(encoded.length%4!==0||!/^[A-Za-z0-9+/]+={0,2}$/u.test(encoded))
+      fail('Archivo codificado inválido')
+    const bytes=Buffer.from(encoded,'base64')
+    if(bytes.length===0||bytes.length>5*1024*1024||bytes.toString('base64')!==encoded)
+      fail('Archivo inválido o mayor de 5 MB')
+    const png=bytes.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex'))
+    const jpeg=bytes.length>=3&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255
+    const pdf=bytes.subarray(0,5).toString('ascii')==='%PDF-'
+    const webp=bytes.subarray(0,4).toString('ascii')==='RIFF'&&bytes.subarray(8,12).toString('ascii')==='WEBP'
+    if(!((mime==='image/png'&&png)||(mime==='image/jpeg'&&jpeg)||
+         (mime==='image/webp'&&webp)||(mime==='application/pdf'&&pdf)))
+      fail('Solo PDF, JPEG, PNG y WebP genuinos están admitidos')
+    const count=this.db.prepare('SELECT COUNT(*) AS total FROM health_attachments WHERE org=? AND patient_id=?')
+      .get(actor.org,patientId) as {total:number}
+    if(count.total>=100)fail('Límite de adjuntos del paciente alcanzado; contacte administración')
+    const id=randomUUID(),now=new Date().toISOString()
+    const sealed=this.seal(id,actor.org,'attachment',1,{
+      patientId,encounterId,name,mime,base64:encoded,note,bytes:bytes.length,
+      source:'patient-provided',reviewStatus:'pending',uploadedBy:actor.username,
+    })
+    this.db.exec('BEGIN IMMEDIATE')
+    try{
+      this.db.prepare('INSERT INTO health_attachments VALUES (?,?,?,?,?,?,?,?,?,?)')
+        .run(id,actor.org,patientId,encounterId,1,sealed.iv,sealed.tag,sealed.payload,now,actor.username)
+      this.audit(actor,'attachment.create',id)
+      this.db.exec('COMMIT')
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+    return {id,patientId,encounterId,name,mime,note,bytes:bytes.length,
+      source:'patient-provided',reviewStatus:'pending',createdAt:now,uploadedBy:actor.username}
+  }
+  private attachmentRow(actor:Actor,id:string):AttachmentRow {
+    if(actor.role!=='clinician'&&actor.role!=='psychologist')fail('Permiso clínico insuficiente para adjuntos')
+    const row=this.db.prepare('SELECT * FROM health_attachments WHERE id=? AND org=?')
+      .get(str(id,'Adjunto',80),actor.org) as AttachmentRow|undefined
+    if(!row)fail('Adjunto inexistente o fuera de institución')
+    this.find(actor,'patients',row.patient_id)
+    if(row.encounter_id)this.find(actor,'encounters',row.encounter_id)
+    return row
+  }
+  private openAttachment(row:AttachmentRow):RecordData {
+    return this.open({...row,kind:'attachment',updated_at:row.created_at})
+  }
+  /** Return metadata only, never the unencrypted binary payload. */
+  listAttachments(actor:Actor,patientId:string):readonly RecordData[]{
+    if(actor.role!=='clinician'&&actor.role!=='psychologist')fail('Permiso clínico insuficiente')
+    const id=str(patientId,'Paciente',80)
+    this.find(actor,'patients',id)
+    const rows=this.db.prepare(
+      'SELECT * FROM health_attachments WHERE org=? AND patient_id=? ORDER BY created_at DESC LIMIT 100',
+    ).all(actor.org,id) as AttachmentRow[]
+    return rows.flatMap(row=>{
+      if(row.encounter_id){
+        const encounter=this.db.prepare("SELECT * FROM health_records WHERE id=? AND org=? AND kind='encounters'")
+          .get(row.encounter_id,actor.org) as Row|undefined
+        if(!encounter||!this.mayReadEncounter(actor,this.open(encounter)))return []
+      }
+      const {base64:_content,...details}=this.openAttachment(row)
+      return [{...details,id:row.id,createdAt:row.created_at}]
+    })
+  }
+  /** Read attachment bytes only for an authenticated assigned clinician. */
+  readAttachment(actor:Actor,id:string):{mime:string;bytes:Buffer}{
+    const row=this.attachmentRow(actor,id),attachment=this.openAttachment(row)
+    const mime=str(attachment.mime,'Tipo de archivo',80)
+    const encoded=str(attachment.base64,'Contenido',7_200_000)
+    return {mime,bytes:Buffer.from(encoded,'base64')}
+  }
 
   /** Atomic pharmacy dispense: only one signed prescription, matching available stock. */
   /**
