@@ -694,6 +694,10 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
 // Another repository's existing worktrees, active/preparing markers, and
 // anything that Windows processes still reference must never be removed.
 const DETACHED_STORAGE_MIN_AGE_MS = 24 * 60 * 60 * 1000
+// Older PHOENIX checkouts may leave registered worktrees and durable markers
+// behind even after their supervisor has stopped. Give those installations a
+// full week before retiring their updater-generated directories.
+const RETIRED_CHECKOUT_MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000
 const DETACHED_STORAGE_SWEEP_INTERVAL_MS = 60 * 60 * 1000
 let nextDetachedStorageSweepAt = 0
 
@@ -715,6 +719,80 @@ function detachedWorktreeMetadata(path) {
   }
 }
 
+function retiredPhoenixCheckoutOwner(path) {
+  // Only on Windows, for the official PHOENIX repository, and NEVER when a
+  // previous checkout's supervisor has emitted a recent heartbeat.
+  if (process.platform !== 'win32' || !officialPhoenixRemote()
+    || managedDirectoryAgeMs(path) < RETIRED_CHECKOUT_MIN_AGE_MS) return undefined
+  const common = absoluteGitPath(path, gitValue(path, ['rev-parse', '--git-common-dir']))
+  const currentCommon = absoluteGitPath(root, gitValue(root, ['rev-parse', '--git-common-dir']))
+  if (common === undefined || currentCommon === undefined
+    || runtimePathKey(common) === runtimePathKey(currentCommon)
+    || !existsSync(common) || !/[/\\]\\.git$/iu.test(common)) return undefined
+  const owner = dirname(common)
+  // This is not a generic directory deletion rule: the other checkout must
+  // still be an official PHOENIX checkout with an updater and launcher.
+  if (!existsSync(join(owner, 'phoenix-windows.cmd'))
+    || !existsSync(join(owner, 'scripts', 'phoenix-auto-update.mjs'))) return undefined
+  const remote = gitValue(owner, ['remote', 'get-url', 'origin'])
+  const normalized = remote?.replaceAll('\\', '/').replace(/\\.git$/iu, '').toLowerCase()
+  if (normalized !== 'https://github.com/arisnachy/phoenix-harnes'
+    && normalized !== 'git@github.com:arisnachy/phoenix-harnes') return undefined
+
+  const heartbeatPath = join(common, SUPERVISOR_HEARTBEAT_FILE)
+  try {
+    if (existsSync(heartbeatPath)) {
+      const heartbeat = JSON.parse(readFileSync(heartbeatPath, 'utf8'))
+      const last = Date.parse(heartbeat?.at ?? '')
+      // A recent valid heartbeat is enough to protect the entire other
+      // checkout, even when its command line does not reveal the cwd.
+      if (heartbeat?.schema === 1 && Number.isFinite(last)
+        && Date.now() - last < RETIRED_CHECKOUT_MIN_AGE_MS) return undefined
+    }
+  } catch {
+    return undefined // An unreadable heartbeat is not proof of inactivity.
+  }
+  const known = gitValue(owner, ['worktree', 'list', '--porcelain'])
+  if (known === undefined || !known.split(/\\r?\\n/u).some(line =>
+    line.startsWith('worktree ')
+      && runtimePathKey(line.slice('worktree '.length).trim()) === runtimePathKey(path))) return undefined
+  return owner
+}
+
+/**
+ * Retire old, official updater worktrees through THEIR owning Git checkout.
+ * Never rmSync a registered worktree. The caller must prove the owner and
+ * candidate are not referenced by a Windows process before calling.
+ */
+function removeRetiredPhoenixWorktree(path, owner) {
+  if (retiredPhoenixCheckoutOwner(path) !== owner) return false
+  const head = gitValue(path, ['rev-parse', 'HEAD'])
+  const result = spawnSync('git', ['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', path], {
+    cwd: owner, encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  if (result.status !== 0 || existsSync(path)) return false
+  // Retire only exact, stale pointers from the dormant owner checkout.
+  // Its next boot may safely prepare a fresh staging/runtime when required.
+  const common = join(owner, '.git')
+  const marker = join(common, ACTIVE_RUNTIME_FILE)
+  try {
+    if (existsSync(marker)) {
+      const value = JSON.parse(readFileSync(marker, 'utf8'))
+      if (value?.schema === 1 && typeof value.path === 'string'
+        && runtimePathKey(value.path) === runtimePathKey(path)) unlinkSync(marker)
+    }
+  } catch { /* Best-effort stale marker repair; never remove other data. */ }
+  const prepared = join(common, PREPARED_FILE)
+  try {
+    if (existsSync(prepared) && typeof head === 'string') {
+      const value = JSON.parse(readFileSync(prepared, 'utf8'))
+      if (value?.schema === 1 && value.target === head
+        && path.toLowerCase().includes('phoenix-stage-')) unlinkSync(prepared)
+    }
+  } catch { /* A later boot can revalidate the record. */ }
+  return true
+}
+
 function detachedStorageCandidateKind(path, registeredWorktrees) {
   const key = runtimePathKey(path)
   if (registeredWorktrees.has(key)) {
@@ -727,7 +805,8 @@ function detachedStorageCandidateKind(path, registeredWorktrees) {
       || stageProtectedByOwningCheckout(path)) return undefined
     return 'owned'
   }
-  return detachedWorktreeMetadata(path) ? 'orphan' : undefined
+  if (detachedWorktreeMetadata(path)) return 'orphan'
+  return retiredPhoenixCheckoutOwner(path) === undefined ? undefined : 'retired'
 }
 
 function detachedStorageCandidates(keep, registeredWorktrees) {
@@ -777,14 +856,21 @@ function cleanupDetachedLegacyStorage(keep, reportBusy = false) {
   const candidates = detachedStorageCandidates(keep, registered)
   if (candidates.length === 0) return
   // Fail closed when the Windows process census is unavailable.
-  const busyPaths = windowsProcessReferences(candidates.map(candidate => candidate.path))
+  const retiredOwners = new Map(candidates.filter(candidate => candidate.kind === 'retired')
+    .map(candidate => [runtimePathKey(candidate.path), retiredPhoenixCheckoutOwner(candidate.path)]))
+  const inspected = [...candidates.map(candidate => candidate.path),
+    ...[...retiredOwners.values()].filter(Boolean)]
+  const busyPaths = windowsProcessReferences(inspected)
   if (busyPaths === undefined) {
     if (reportBusy) console.error('[PHOENIX STORAGE] legacy cleanup skipped: process inspection unavailable.')
     return
   }
   for (const { path: candidate, kind } of candidates) {
     const key = runtimePathKey(candidate)
+    const retiredOwner = retiredOwners.get(key)
     if (busyPaths.has(key) || keep.has(key)
+      || (kind === 'retired' && (retiredOwner === undefined
+        || busyPaths.has(runtimePathKey(retiredOwner))))
       || managedDirectoryAgeMs(candidate) < DETACHED_STORAGE_MIN_AGE_MS) continue
     // Revalidate after the process census. A supervisor may have activated an
     // old runtime or a separate updater may have changed its Git ownership.
@@ -792,7 +878,9 @@ function cleanupDetachedLegacyStorage(keep, reportBusy = false) {
     if (refreshed === undefined || detachedStorageCandidateKind(candidate, refreshed) !== kind) continue
     const removed = kind === 'owned'
       ? removeManagedWorktree(candidate, refreshed, reportBusy)
-      : removeOrphanedManagedDirectory(candidate, reportBusy)
+      : kind === 'retired'
+        ? removeRetiredPhoenixWorktree(candidate, retiredOwner)
+        : removeOrphanedManagedDirectory(candidate, reportBusy)
     if (removed) console.error('[PHOENIX STORAGE] reclaimed retired updater directory: ' + candidate)
   }
 }
