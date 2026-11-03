@@ -454,7 +454,10 @@ test('a confirmed lineup flag cannot substitute for nine distinct verified start
 
 test('market gate rejects a missing batter versus bullpen matchup even with nine confirmed hitters',async()=>{
   const mock=fakeNetwork({fullLineup:true})
-  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  const quote={eventId:'book-4',bookmaker:'Verified House',market:'totals',selection:'Over',
+    point:8,price:1.91,home:'Home Giants',away:'Away Bears',timeIso:fixture.gameDate,
+    updatedAt:'2026-07-01T11:55:00Z',sportKey:'baseball_mlb'}
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[quote])
   assert.equal(reviewMlbResearch(d).evidenceGates.rosterMatchupsReviewed,true)
   const hitter=d.rosters.home.find(p=>p.role==='batter'&&p.lineupConfirmed)
   const reliever=d.bullpen.away[0]
@@ -462,6 +465,7 @@ test('market gate rejects a missing batter versus bullpen matchup even with nine
   const review=reviewMlbResearch(d)
   assert.equal(review.evidenceGates.lineupsConfirmed,true)
   assert.equal(review.evidenceGates.rosterMatchupsReviewed,false)
+  assert.equal(review.reviewedMarkets.length,1)
   assert.ok(review.reviewedMarkets.every(m=>m.missingEvidence.some(x=>x.includes('Matriz completa'))))
   assert.equal(review.eligibility,'insufficient')
   assert.equal(review.decision,'abstain')
