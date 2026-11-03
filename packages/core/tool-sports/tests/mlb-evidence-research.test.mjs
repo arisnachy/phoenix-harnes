@@ -438,3 +438,16 @@ test('cross-book prices compare only identical market, selection and run line',a
   assert.equal(review.probabilitiesEstimated,false)
   assert.equal(review.eligibleForTicket,false)
 })
+
+test('a confirmed lineup flag cannot substitute for nine distinct verified starters',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(reviewMlbResearch(d).evidenceGates.lineupsConfirmed,true)
+  const hitter=d.rosters.home.find(p=>p.role==='batter'&&p.lineupConfirmed)
+  hitter.lineupConfirmed=false
+  assert.equal(d.lineupStatus.home,'confirmed')
+  assert.equal(reviewMlbResearch(d).evidenceGates.lineupsConfirmed,false)
+  hitter.lineupConfirmed=true
+  hitter.teamId=999
+  assert.equal(reviewMlbResearch(d).evidenceGates.lineupsConfirmed,false)
+})
