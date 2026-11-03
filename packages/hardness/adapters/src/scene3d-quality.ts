@@ -46,7 +46,7 @@ export function classifyScene3DDomain(prompt: string): Scene3DDomain {
 export function requestedScene3DLevel(prompt: string): Scene3DLevel {
   const text = normalize(prompt)
   if (/\b(?:exactitud|exacto|exacta|identic\w*|fidelidad|fidelity|precis\w*|1\s*:\s*1|medidas exactas|reconstruccion)\b/u.test(text)) return 'fidelity'
-  if (/\b(?:profesional|alta calidad|high quality|fotorreal\w*|hiperreal\w*|realista|studio|blender|rigging|riggeado|esculp\w*|animacion profesional|production ready)\b/u.test(text)) return 'studio'
+  if (/\b(?:profesional|alta calidad|high quality|fotorreal\w*|hiperreal\w*|realista|studio|blender|rigging|riggeado|esculp\w*|animacion profesional|production ready|perfect[oa]s?|calidad premium|calidad maxima|cinematic\w*|cinematograf\w*|ultra detallad\w*)\b/u.test(text)) return 'studio'
   return 'preview'
 }
 

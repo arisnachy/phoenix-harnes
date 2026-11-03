@@ -71,3 +71,51 @@ The focused GitHub Actions 3D workflow checks TypeScript scene admission,
 routing and the Python script's syntax. It does **not** run Blender's renderer:
 a real Blender installation and visual review are required before calling
 the exported scene production-ready.
+
+
+## Universal composition: any imagined subject, not fixed categories
+
+For scenes consisting of arbitrary objects, send a `compositionContract` in the
+`phoenix_3d` tool call. Every mandatory element gets an `objectId`, whether
+it is a fantasy creature, invented machine, science-fiction craft, building,
+plant, wheel, garment or decorative prop. This is a **structural gate**, not
+visual similarity verification.
+
+```json
+{
+  "objects": [
+    {"id": "creature", "minParts": 4, "animated": true},
+    {"id": "vehicle", "minParts": 3},
+    {"id": "terrain", "minParts": 1}
+  ],
+  "relations": [
+    {"from": "creature", "to": "vehicle", "relation": "on", "tolerance": 0.3},
+    {"from": "vehicle", "to": "terrain", "relation": "near"}
+  ]
+}
+```
+
+Supported relations include `above`, `below`, `on`, `inside`, `near`,
+`attached`, `left-of`, `right-of`, `in-front-of` and `behind`.
+The gate rejects missing parts, missing animation, insufficient explicitly
+requested mesh triangles, and obviously inconsistent approximate bounding-box
+relationships. Rotated geometry and real contact physics still require rendered
+visual QA. A scene that passes this structural gate is **not automatically
+photorealistic, physically plausible, or an exact reconstruction**.
+
+### Detailed asset-only Studio rendering
+
+When a high-poly character, rigged creature, vehicle or other real 3D asset
+already exists, render it directly, without inserting a decorative cube:
+
+```bash
+blender --background --python scripts/phoenix-3d-studio.py -- \
+  --asset-glb ./assets/character.glb --output ./3d-output \
+  --resolution 1280 --samples 64 --animation-preview
+```
+
+The `--animation-preview` switch is optional and creates
+`animation.mp4` if animation data is supplied; otherwise omit it for a still
+render. This does not automatically synthesize a rig, text-to-3D mesh or exact
+reconstruction. Professional generation still requires actual model-authoring
+tools, art assets and validation.
