@@ -43,6 +43,9 @@ export const PHOENIX_3D_ROUTING_PROTOCOL =
   'For a still photograph, poster, concept render or moodboard use image generation; for graphs use phoenix_visualize; '+
   'for normal forms, dashboards and web UI use phoenix_canvas or UI tools. Never add 3D to ordinary apps merely because it looks impressive. '+
   'For architecture/product/room/vehicle apps, propose or create a 3D viewer when interaction conveys spatial value. '+
+  'For original, named or recognizable human/cartoon characters, use a real Studio character asset/mesh and rig; a 24-primitive assembly is only a low-poly draft. '+
+  'Do not present a face with detached eyes, moustache or nose as a finished character; use character geometry checks and actual Studio authoring tools if available. '+
+  'Only choose the native primitive path if the user explicitly requests a low-poly prototype/blockout. '+
   'For organic 3D use triangular mesh geometry or identifiable anatomical parts, not a single cube. '+
   'For every imagined 3D subject, no matter the category, decompose the prompt into all essential objects, parts, materials and relationships. '+
   'Use compositionContract to require named objectIds, minimum parts, actual mesh faces, animation and spatial relations. '+
