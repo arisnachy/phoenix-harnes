@@ -486,3 +486,36 @@ describe('ESPN contextual navigation',()=>{
     expect(prompt).toContain('athleteId=991')
   })
 })
+
+
+describe('Deep sports dashboard section limits',()=>{
+  const make=(count:number,items=1)=>({
+    component:'sports_espn_dashboard',version:1,props:{
+      view:'event',title:'PHOENIX · NHL vs NFL',subtitle:'Dossier',
+      source:'Fuente deportiva pública',checkedAt:'2026-11-02T20:00:00Z',
+      note:'Estadísticas verificadas.',
+      sections:Array.from({length:count},(_,i)=>({
+        heading:'Área '+i,kind:'list',
+        items:Array.from({length:items},(_,n)=>({label:'Estadística '+n,value:'Dato observado'})),
+      })),
+    },
+  })
+  it('renders verified deep investigations up to 24 sections, not only eight',()=>{
+    for(const count of [9,12,20,24]){
+      const card=parseGenerativeUiBlock(make(count))
+      expect(card).not.toBeNull()
+      if(card===null)throw Error('Rich sports dossier disappeared')
+      const {container,unmount}=render(<GenerativeUi block={card}/>)
+      expect(container.querySelector('[data-generative-ui="sports_espn_dashboard"]')).toBeTruthy()
+      expect(container.textContent).toContain('Área '+(count-1))
+      unmount()
+    }
+  })
+  it('rejects excessive sections and total items while keeping validation strict',()=>{
+    expect(parseGenerativeUiBlock(make(25))).toBeNull()
+    expect(parseGenerativeUiBlock(make(24,20))).toBeNull()
+    const unsafe=make(12)
+    unsafe.props.sections[0]?.items.push({label:'Fuente segura',value:'Dato auténtico'})
+    expect(parseGenerativeUiBlock({...unsafe,props:{...unsafe.props,onclick:'evil()'}})).toBeNull()
+  })
+})
