@@ -169,7 +169,7 @@ describe('published PHOENIX versions', () => {
       readUpdateState={async () => ({ status: 'current', current: installedSha })} />)
     expect(await screen.findByText('feat(assurance): operational verification')).toBeTruthy()
     expect(screen.queryByText('PR #1337')).toBeNull()
-    expect(screen.getByRole('link', { name: 'Commit' }).getAttribute('href'))
+    expect(screen.getByRole('link', { name: 'View commit' }).getAttribute('href'))
       .toBe('https://github.com/arisnachy/phoenix-harnes/commit/' + direct.sha)
     fireEvent.click(screen.getByRole('button', { name: 'What changed' }))
     expect(await screen.findByText('Includes reproducible run instructions.')).toBeTruthy()
