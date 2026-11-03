@@ -36,12 +36,21 @@ import type { Scope } from '@phoenix-ai/dsh-scope'
 import { createScope } from '@phoenix-ai/dsh-scope'
 import type { EpochHeader, RequestContext, Session, SessionId, TurnEndReason, UserMessage } from '@phoenix-ai/dsh-session'
 import { canonicalHeader, headerEquals } from '@phoenix-ai/dsh-session'
-import { joinContextSections, renderContextSections, renderPrompt } from '@phoenix-ai/dsh-system-prompt'
+import { joinContextSections, renderCacheFriendlyPrompt, renderContextSections } from '@phoenix-ai/dsh-system-prompt'
 import type { PromptAssembly } from '@phoenix-ai/dsh-system-prompt'
 import type { Context } from '@phoenix-ai/cordis'
+import { projectRequestHistory } from './request-history.ts'
+import { tokenInputInventory } from './token-audit.ts'
+import { SystemPrefixObserver } from './cache-prefix.ts'
+import { randomUUID } from 'node:crypto'
+import type { EventEmitter } from 'node:events'
 import { RuntimeContextProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
-import { DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'
+import { DEFAULT_AUTO_CONTINUE_MAX_SEGMENTS, DEFAULT_AUTO_CONTINUE_PROVIDERS, DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'
+import { isExplicitUserStop } from './user-stop.ts'
+
+// Provider-side caching is automatic; track repeatable prefixes without retaining text.
+const systemPrefixObserver = new SystemPrefixObserver()
 
 type Phase =
   | { kind: 'idle'; lastTurn: number }
@@ -61,8 +70,36 @@ type Phase =
 
 type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }>
 
-const SILENT_TOOL_PROGRESS_REMINDER = 'Before calling more tools, send the user a brief progress update in their language. Summarize what you just did or found and what you will do next. Do not reveal hidden chain-of-thought or private reasoning.'
-const AUTOMATIC_CONTINUATION_PROMPT = 'Continue the current task from the latest tool result without waiting for a new user prompt. Keep working until the task is complete. Before more tool calls, give the user a brief progress update if you have not done so recently; do not reveal hidden chain-of-thought.'
+const SILENT_TOOL_PROGRESS_REMINDER = 'Long tool work has left the user without a visible update. If the task is still in progress, write one short user-facing sentence now, in the configured language and your natural voice, about the latest verified finding or the actual work stage and next check. Do not invent progress, expose private reasoning, repeat a generic plan, or report success before verification. Then continue the authorized work in this same turn without waiting for a reply.'
+const AUTOMATIC_CONTINUATION_PROMPT = 'Continue the current task from the latest verified tool result. Reuse fresh evidence, skip repetitive planning and narration, and finish when the outcome is verified or genuinely blocked. Do not begin work without an outstanding requirement.'
+const OUTPUT_LIMIT_CONTINUATION_SOURCE = 'agent-loop-auto-continue'
+const OUTPUT_LIMIT_CONTINUATION_PROMPT = 'The previous model output was cut off by the output-token limit. Continue the unfinished answer or task without repeating previously visible text, planning, or completed actions. Previously truncated tool calls were NOT executed; emit a complete tool call if still required. Verify the final result before claiming completion.'
+
+/**
+ * Only configured short-output provider routes continue; Codex models stay
+ * under their native long-output behavior even behind an OpenRouter route.
+ * @param provider - Actual provider route of the truncated message.
+ * @param model - Actual model that generated the truncated message.
+ * @param providers - Current allowed provider route names.
+ * @returns Whether a genuine max-token stop may be resumed.
+ */
+export function shouldAutoContinueOutputLimit(provider: string, model: string, providers: readonly string[]): boolean {
+  const route = provider.trim().toLowerCase()
+  if (route.includes('codex') || /(?:^|[\\/_-])codex(?:$|[\\/_-])/i.test(model)) return false
+  return providers.some(candidate => candidate.trim().toLowerCase() === route)
+}
+/**
+ * Decide when an ongoing silent tool chain needs one user-facing update.
+ * @param lastUpdateAt - Time of the most recent visible progress or reminder.
+ * @param now - Current monotonic-enough wall-clock reading.
+ * @param toolsRemaining - Whether the model still owes additional tool work.
+ * @returns True only after the twenty-second quiet interval.
+ */
+export function shouldRequestToolProgress(lastUpdateAt: number, now: number, toolsRemaining: boolean): boolean {
+  return toolsRemaining && now - lastUpdateAt >= 20_000
+}
+
+const USER_STEER_RESUME_PROMPT = 'A human message interrupted active work. First address and resolve the latest human request promptly. Then resume the task that was in progress from the existing conversation, goal, and tool context unless the human explicitly changed, replaced, paused, or cancelled that task. Do not ask for permission merely to resume.'
 
 type PreparedStep =
   | { kind: 'reject' }
@@ -88,31 +125,6 @@ function isTextOnlyHumanBatch(messages: readonly UserMessage[]): boolean {
     && message.content.every(block => block.type === 'text'))
 }
 
-/**
- * Keep only a tiny, tool-free conversational tail for social/meta reactions.
- * This prevents a one-line steering comment from replaying megabytes of tool
- * calls/results accumulated by the task it interrupted.
- */
-function fastConversationHistory(messages: Message[]): Message[] {
-  const selected: Message[] = []
-  let chars = 0
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (message === undefined) continue
-    const safe = message.source.kind === 'user'
-      || (message.source.kind === 'model'
-        && message.content.length > 0
-        && message.content.every(block => block.type === 'text'))
-    if (!safe || !message.content.every(block => block.type === 'text')) continue
-    const size = message.content.reduce((sum, block) => sum + (block.type === 'text' ? block.text.length : 0), 0)
-    if (selected.length > 0 && chars + size > FAST_CONVERSATION_HISTORY_MAX_CHARS) continue
-    selected.push(message)
-    chars += size
-    if (selected.length >= FAST_CONVERSATION_HISTORY_MAX_MESSAGES) break
-  }
-  return selected.reverse()
-}
-
 /** Remove adapter-derived values before plugins propose the next request config. */
 function requestProposal(header: EpochHeader): LlmCallConfig {
   if (header.adapterDefaults === undefined) return header.config
@@ -131,6 +143,10 @@ export class ReactLoopAgent implements Agent {
   private modelBoundaryActive = false
   /** True only while the current step is waiting on model-requested tool work. */
   private toolBoundaryActive = false
+  /** Last visible progress or reminder in the current execution interval. */
+  private lastProgressUpdateAt = Date.now()
+  /** One preempted human steer must carry an explicit resume contract into its replay step. */
+  private resumeInterruptedWorkAfterSteer = false
 
   /** The agent-scoped registration boundary; the lifecycle owner unwinds it after the driver exits. */
   readonly scope: Scope
@@ -149,6 +165,10 @@ export class ReactLoopAgent implements Agent {
     public readonly options: AgentOptions,
     public readonly session: Session,
     private readonly maxStepsPerTurn: () => number = () => DEFAULT_MAX_STEPS_PER_TURN,
+    private readonly autoContinuePolicy: () => { maxSegments: number; providers: readonly string[] } = () => ({
+      maxSegments: DEFAULT_AUTO_CONTINUE_MAX_SEGMENTS,
+      providers: DEFAULT_AUTO_CONTINUE_PROVIDERS,
+    }),
   ) {
     this.dispatch = agentEvents(loopCtx, this)
     this.inbox = new Inbox(session, {
@@ -178,6 +198,13 @@ export class ReactLoopAgent implements Agent {
   }
 
   send(message: UserMessage, target: InboxTarget, wakeup: boolean): void {
+    if (isExplicitUserStop(message)) {
+      // A stop request is a control action, not a new turn. Cancelling here
+      // covers both followup and steer ingress paths and clears queued work,
+      // auto-continuation and the interrupted-steer resume latch.
+      this.cancel({ kind: 'user' })
+      return
+    }
     // Waking input cannot join an aborted activity, so it starts the next turn.
     // Captured before the insertion so a reentrant cancel from a splice observer cannot reclassify it.
     const wakingAfterAbort = wakeup && this.phase.kind !== 'idle' && this.phase.abort.signal.aborted
@@ -191,17 +218,26 @@ export class ReactLoopAgent implements Agent {
   }
 
   steer(input: UserMessage): void {
-    const shouldInterruptActiveWork = this.phase.kind === 'running'
+    if (isExplicitUserStop(input)) {
+      this.cancel({ kind: 'user' })
+      return
+    }
+    // Only genuine human steering may preempt an active model/tool. Internal
+    // Team handoffs join the next safe step without creating a fake user stop.
+    const shouldInterruptActiveWork = input.source.kind === 'user'
+      && this.phase.kind === 'running'
       && (this.modelBoundaryActive || this.toolBoundaryActive)
       && !this.phase.abort.signal.aborted
     this.send(input, 'next-step', true)
     if (!shouldInterruptActiveWork || this.phase.kind !== 'running' || this.phase.abort.signal.aborted) return
 
-    // "Steer" is the interactive path, distinct from Queue. A user message
+    // "Steer" is the interactive path, distinct from Queue. A human message
     // must not sit behind a long model TTFT/stream or an unbounded
     // Blender/PowerShell/browser call. Keep the steering inbox item,
     // cooperatively abort the active model/tool boundary, and latch a fresh
-    // turn; the normal abort drain still owns cleanup and replay.
+    // turn. The replay step receives a private resume contract so handling the
+    // interruption does not silently abandon the mission that was in progress.
+    this.resumeInterruptedWorkAfterSteer = input.source.kind === 'user'
     this.phase.wakeRequested = true
     this.phase.abort.abort({ kind: 'user' })
   }
@@ -213,6 +249,7 @@ export class ReactLoopAgent implements Agent {
   cancel(cause: AgentCancelCause, options: CancelOptions = {}): void {
     if (!options.keepInbox) {
       this.inbox.clear()
+      this.resumeInterruptedWorkAfterSteer = false
       if (this.phase.kind !== 'idle') this.phase.wakeRequested = false
     }
     if (this.phase.kind !== 'idle') this.phase.abort.abort(cause)
@@ -306,15 +343,24 @@ export class ReactLoopAgent implements Agent {
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": pre-step outside running phase`)
     const signal = this.phase.abort.signal
     const claimed = this.inbox.claim(target, position.turn)
+    const resumeInterruptedWork = this.resumeInterruptedWorkAfterSteer
+      && claimed.some(message => message.source.kind === 'user')
+    if (resumeInterruptedWork) this.resumeInterruptedWorkAfterSteer = false
+    const entering = resumeInterruptedWork
+      ? [...claimed, createUserMessage({
+        content: [{ type: 'text', text: USER_STEER_RESUME_PROMPT }],
+        source: { kind: 'plugin', plugin: 'agent-loop' },
+      })]
+      : claimed
     const firstTurnBoundary = target === 'next-turn' && position.step === 1
     const userSteeringBoundary = target === 'next-step'
-    const directText = directUserText(claimed)
+    const directText = directUserText(entering)
     const conversationalBoundary = firstTurnBoundary || userSteeringBoundary
     const fastConversation = conversationalBoundary
-      && isTextOnlyHumanBatch(claimed)
+      && isTextOnlyHumanBatch(entering)
       && isConversationalFastPathText(directText)
     const contextualConversation = conversationalBoundary
-      && isTextOnlyHumanBatch(claimed)
+      && isTextOnlyHumanBatch(entering)
       && !fastConversation
       && isContextualConversationFastPathText(directText)
     const toolFreeConversation = fastConversation || contextualConversation
@@ -323,6 +369,7 @@ export class ReactLoopAgent implements Agent {
     // retaining memory/initiative context and full conversational continuity.
     const assembled = await this.loopCtx.systemPrompt.assemble({
       ...assembleContextFor(this, signal),
+      ...directText.length > 0 ? { incomingUserText: directText } : {},
       ...toolFreeConversation ? { omitTools: true } : {},
       ...fastConversation ? { omitRuntimeContext: true } : {},
     })
@@ -341,7 +388,7 @@ export class ReactLoopAgent implements Agent {
       : this.runtimeContext.project(joinContextSections(sections), sections)
     const decision = await this.dispatch.waterfall(
       'agent/pre-step', {
-        messages: claimed,
+        messages: entering,
         ...position,
         signal,
         ...fastConversation ? { fastConversation: true } : {},
@@ -349,7 +396,7 @@ export class ReactLoopAgent implements Agent {
       },
       (): Promise<PreStepDecision> => Promise.resolve<PreStepDecision>({
         kind: 'enter',
-        messages: context === undefined ? claimed : [...claimed, context],
+        messages: context === undefined ? entering : [...entering, context],
       }),
     )
     signal.throwIfAborted()
@@ -371,6 +418,7 @@ export class ReactLoopAgent implements Agent {
       this.throwError(error)
     }
     phase.turn = turn
+    if (phase.step === 0) this.lastProgressUpdateAt = Date.now()
     let turnEnds: TurnEndReason | null = null
     let target: InboxTarget = 'next-turn'
     try {
@@ -402,18 +450,61 @@ export class ReactLoopAgent implements Agent {
           return false
         }
         signal.throwIfAborted()
-        this.session.append('step/start', { turn, step })
+        this.session.append('step/start', {
+          turn, step,
+          ...(decision.fastConversation ? { historyProjection: {
+            kind: 'conversational-tail' as const,
+            maxMessages: FAST_CONVERSATION_HISTORY_MAX_MESSAGES,
+            maxChars: FAST_CONVERSATION_HISTORY_MAX_CHARS,
+          } } : {}),
+        })
         phase.step = step
         try {
           for (const message of decision.messages) {
             this.session.append('user/message', message, this.runtimeContext.surfaceIntent(message))
           }
-          // max-tokens is sticky: once any step hits the ceiling, later steps
-          // that complete normally must not downgrade the turn outcome.
-          const stepEnd = await this.step(decision.assembly, decision.fastConversation)
-          // max-tokens stays sticky: a later completed step must not
-          // downgrade the turn outcome.
-          if (turnEnds === null || turnEnds.kind !== 'max-tokens') turnEnds = stepEnd
+          const outputLimitContinuation = decision.messages.some(message =>
+            message.source.kind === 'plugin' && message.source.plugin === OUTPUT_LIMIT_CONTINUATION_SOURCE)
+          const stepEnd = await this.step(decision.assembly)
+          if (stepEnd?.kind === 'max-tokens') {
+            const { maxSegments, providers } = this.autoContinuePolicy()
+            const events = this.session.events
+            const latest = events.findLast(event =>
+              event.type === 'assistant/message' && event.data.turn === turn && event.data.step === step)
+            if (latest?.type === 'assistant/message'
+              && shouldAutoContinueOutputLimit(latest.data.message.source.provider, latest.data.message.source.model, providers)) {
+              // Read the durable history instead of process-local counters: the
+              // cap survives internal turn checkpoints and resumed sessions.
+              let previousContinuations = 0
+              for (let i = events.length - 1; i >= 0; i--) {
+                const event = events[i]
+                if (event?.type !== 'user/message') continue
+                if (event.data.source.kind === 'user') break
+                if (event.data.source.kind === 'plugin'
+                  && event.data.source.plugin === OUTPUT_LIMIT_CONTINUATION_SOURCE) previousContinuations++
+              }
+              const visible = latest.data.message.content
+                .filter(block => block.type === 'text')
+                .map(block => block.text).join('')
+              const previous = events.findLast(event =>
+                event.type === 'assistant/message' && event.data.turn === turn && event.data.step < step)
+              const previousVisible = previous?.type === 'assistant/message'
+                ? previous.data.message.content.filter(block => block.type === 'text').map(block => block.text).join('')
+                : undefined
+              // A repeated full segment indicates no progress; never pay for
+              // further copies of the same output.
+              if (previousContinuations < maxSegments && (visible === '' || visible !== previousVisible)) {
+                this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [createUserMessage({
+                  content: [{ type: 'text', text: OUTPUT_LIMIT_CONTINUATION_PROMPT }],
+                  source: { kind: 'plugin', plugin: OUTPUT_LIMIT_CONTINUATION_SOURCE },
+                })])
+              }
+            }
+          }
+          // Unrelated steering retains sticky max-tokens semantics. Only a
+          // successful output-limit continuation clears the former truncation.
+          if (turnEnds === null || turnEnds.kind !== 'max-tokens'
+            || (outputLimitContinuation && stepEnd?.kind === 'completed')) turnEnds = stepEnd
         } finally {
           this.session.append('step/end', { turn, step })
         }
@@ -455,18 +546,19 @@ export class ReactLoopAgent implements Agent {
     return true
   }
 
-  private async step(assembly: PromptAssembly, fastConversation = false): Promise<StepEndReason | null> {
+  private async step(assembly: PromptAssembly): Promise<StepEndReason | null> {
     /* v8 ignore next -- private callers establish the running phase before executing a step */
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": step outside running phase`)
     const { turn, step, abort: { signal } } = this.phase
     signal.throwIfAborted()
-    const system = renderPrompt(assembly)
+    const system = renderCacheFriendlyPrompt(assembly)
 
     while (true) {
       const derived = this.session.deriveMessages()
-      const boundaryMessages = fastConversation ? fastConversationHistory(derived) : derived
+      const boundaryMessages = projectRequestHistory(derived, this.session.events.findLast(event => event.type === 'step/start')?.data.historyProjection)
+      const auditId = randomUUID()
       const { request, preparedCall } = await this.buildRequest(
-        turn, step, assembly.tools, system, boundaryMessages, signal,
+        turn, step, assembly.tools, system, boundaryMessages, signal, auditId,
       )
       const assembler = new BlockAssembler()
       const chunkSeqs: number[] = []
@@ -538,11 +630,38 @@ export class ReactLoopAgent implements Agent {
         },
         { surfaceOp: 'append', sourceEventSeqs: chunkSeqs },
       )
+      if (assembler.usage !== undefined) {
+        (process as EventEmitter).emit('phoenix:telemetry:usage', {
+          id: auditId,
+          inputTokens: assembler.usage.inputTokens,
+          outputTokens: assembler.usage.outputTokens,
+          cacheReadTokens: assembler.usage.cacheReadTokens,
+          cacheWriteTokens: assembler.usage.cacheWriteTokens,
+          reasoningTokens: assembler.usage.reasoningTokens,
+        })
+      }
+      if (process.env.PHOENIX_TOKEN_AUDIT === '1' && assembler.usage !== undefined) {
+        const usage = assembler.usage
+        console.info('[PHOENIX TOKEN USAGE] ' + JSON.stringify({
+          turn,
+          step,
+          provider: request.provider,
+          model: request.model,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cacheReadTokens: usage.cacheReadTokens,
+          cacheWriteTokens: usage.cacheWriteTokens,
+          reasoningTokens: usage.reasoningTokens,
+        }))
+      }
       if (finish.kind === 'max-tokens') return { kind: 'max-tokens' }
 
       const toolCalls = message.content.filter(block => block.type === 'tool-call')
       if (toolCalls.length === 0) return { kind: 'completed' }
       const hasVisibleProgress = message.content.some(block => block.type === 'text' && block.text.trim().length > 0)
+      // The spoken update happened BEFORE tool execution. A long-running tool
+      // must not be treated as if Kira just spoke when it finally settles.
+      if (hasVisibleProgress) this.lastProgressUpdateAt = Date.now()
       let concluded = false
       this.toolBoundaryActive = true
       try {
@@ -553,11 +672,11 @@ export class ReactLoopAgent implements Agent {
       } finally {
         this.toolBoundaryActive = false
       }
-      // Some providers jump straight from hidden reasoning into tool calls.
-      // Nudge the next model step to narrate safe, user-visible progress instead
-      // of letting a long tool chain remain opaque. This is an internal prompt,
-      // never synthetic assistant text and never hidden chain-of-thought.
-      if (!concluded && !hasVisibleProgress) {
+      // Tool-only model steps should not cost another model turn just to narrate
+      // the next call. Keep a periodic progress reminder for long silent work.
+      const now = Date.now()
+      if (shouldRequestToolProgress(this.lastProgressUpdateAt, now, !concluded)) {
+        this.lastProgressUpdateAt = now
         this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [createUserMessage({
           content: [{ type: 'text', text: SILENT_TOOL_PROGRESS_REMINDER }],
           source: { kind: 'plugin', plugin: 'agent-loop' },
@@ -578,6 +697,7 @@ export class ReactLoopAgent implements Agent {
     system: string,
     boundaryMessages: Message[],
     signal: AbortSignal,
+    auditId: string,
   ): Promise<{ request: GenerateOptions; preparedCall?: PreparedLlmCall }> {
     const { session } = this
 
@@ -659,6 +779,29 @@ export class ReactLoopAgent implements Agent {
       sessionId: this.session.id,
       signal,
     }))
+    const auditInput = tokenInputInventory(system, tools, boundaryMessages)
+    const reusedSystemPrefixChars = systemPrefixObserver.observe(config.provider, config.model, system)
+    const telemetryEvents: EventEmitter = process
+    telemetryEvents.emit('phoenix:telemetry:input', {
+      id: auditId,
+      at: Date.now(),
+      provider: config.provider,
+      model: config.model,
+      reasoningEffort: config.reasoningEffort,
+      ...auditInput,
+      reusedSystemPrefixChars,
+    })
+    if (process.env.PHOENIX_TOKEN_AUDIT === '1') {
+      console.info('[PHOENIX TOKEN INPUT] ' + JSON.stringify({
+        turn,
+        step,
+        provider: config.provider,
+        model: config.model,
+        reasoningEffort: config.reasoningEffort,
+        ...auditInput,
+      reusedSystemPrefixChars,
+      }))
+    }
     return { request, ...preparedCall === undefined ? {} : { preparedCall } }
   }
 }

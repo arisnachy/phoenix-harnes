@@ -277,3 +277,52 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.cardHeader .cardContent {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
+.pluginSelector {
+  flex: none;
+  max-width: 125px;
+  min-height: 32px;
+  margin-right: 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 7px;
+  padding: 4px 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pluginSelector:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.bulkButton {
+  margin-left: auto;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bulkButton:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}

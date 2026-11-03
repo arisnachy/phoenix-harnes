@@ -88,6 +88,10 @@ Every MCP tool has two names: the raw MCP name (sent on the wire in `tools/call`
 | `ctx.attachments` | Optionally validate and persist image result batches before model projection |
 | `ctx.llm` | Optionally prove the exact calling route explicitly supports image input |
 
+## OAuth request deadlines
+
+Interactive OAuth discovery, registration and token HTTP requests have a 30-second request deadline and honor authorization cancellation. Waiting for the user to consent is not subject to that HTTP deadline.
+
 ## Model Experience
 
 ### Discovered MCP tools
@@ -117,6 +121,12 @@ Arguments, mapped text, and durable image references are retained until compacti
 #### KV Cache effect
 
 Append-only; newly visible content follows the reusable request prefix and does not invalidate existing KV-cache entries.
+
+##### Example model-visible MCP result
+
+```markdown
+MCP tool completed. Text content and any route-supported images appear in their original response order.
+```
 
 ## Known Limitations and Deferred Work
 

@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import {
+  independentReviewNeedsFollowup,
   isGameAssetDiscovery,
   isGameAssetProduction,
   isGameAssetProvenanceMutation,
   isSubstantiveMutation,
   needsGameAssetPipeline,
+  ordinaryCompletionReviewBudget,
   reviewOrdinaryCompletion,
   verificationKinds,
 } from '../src/ordinary-completion-judge.ts'
@@ -14,6 +16,73 @@ import {
 const parent = { id: 'parent' } as unknown as Agent
 
 describe('ordinary completion judge', () => {
+  it('skips the independent judge for bounded verified routine work', () => {
+    expect(ordinaryCompletionReviewBudget({
+      request: 'Crea una mini app web en un solo archivo HTML con reloj, clima simulado y 3 tareas con localStorage.',
+      configuredMaxPasses: 2,
+      mutationCount: 3,
+      failureCount: 0,
+    })).toEqual({ mode: 'fast', maxPasses: 0 })
+  })
+
+  it('only reopens a review when a fixable finding is followed by new evidence and budget remains', () => {
+    expect(independentReviewNeedsFollowup('pass', 1, 3)).toBe(false)
+    expect(independentReviewNeedsFollowup('blocked', 1, 3)).toBe(false)
+    expect(independentReviewNeedsFollowup('needs_changes', 1, 2)).toBe(true)
+    expect(independentReviewNeedsFollowup('needs_changes', 2, 2)).toBe(false)
+  })
+
+  it('does not finance independent review for pure previews and ordinary local work', () => {
+    const samples = [
+      'Muéstrame un formulario de demostración para verlo',
+      'Dame una escala interactiva del 1 al 10',
+      'Explícame brevemente qué hace esta función',
+    ]
+    for (const request of samples) {
+      expect(ordinaryCompletionReviewBudget({
+        request, configuredMaxPasses: 3, mutationCount: 0, failureCount: 0,
+      })).toEqual({ mode: 'fast', maxPasses: 0 })
+    }
+  })
+
+  it('does not pay for semantic review solely because a routine fix names destination branches', () => {
+    for (const request of [
+      'Corrige el pequeño error en src/ui.ts y déjalo listo para main y stable.',
+      'Fix this local helper function before updating main/stable.',
+    ]) {
+      expect(ordinaryCompletionReviewBudget({
+        request, configuredMaxPasses: 2, mutationCount: 2, failureCount: 0,
+      })).toEqual({ mode: 'fast', maxPasses: 0 })
+    }
+    expect(ordinaryCompletionReviewBudget({
+      request: 'Merge the release branch into main and stable.',
+      configuredMaxPasses: 2, mutationCount: 2, failureCount: 0,
+    })).toEqual({ mode: 'standard', maxPasses: 1 })
+  })
+
+  it('escalates semantic review only for material scope, risk, or failed attempts', () => {
+    expect(ordinaryCompletionReviewBudget({
+      request: 'Refactor the Phoenix router across the project without changing behavior.',
+      configuredMaxPasses: 2,
+      mutationCount: 4,
+      failureCount: 0,
+    })).toEqual({ mode: 'standard', maxPasses: 1 })
+
+    expect(ordinaryCompletionReviewBudget({
+      request: 'Prepare a production database migration with authentication and rollback.',
+      configuredMaxPasses: 2,
+      mutationCount: 4,
+      failureCount: 0,
+    })).toEqual({ mode: 'deep', maxPasses: 2 })
+
+    expect(ordinaryCompletionReviewBudget({
+      request: 'Fix this local helper.',
+      configuredMaxPasses: 2,
+      mutationCount: 2,
+      failureCount: 2,
+    })).toEqual({ mode: 'deep', maxPasses: 2 })
+  })
+
   it('reviews explicit error contracts and scaling with read-only tools', async () => {
     const dispose = vi.fn(async () => {})
     const start = vi.fn<SubagentRuntime['start']>(async () => ({
@@ -52,7 +121,7 @@ describe('ordinary completion judge', () => {
       requiredChanges: expect.arrayContaining([
         'assert CycleError includes the exact cycle',
         'measure bounded memory growth',
-      ]),
+      ]) as unknown,
     })
     const options = start.mock.calls[0]?.[1]
     expect(options?.toolFilter).toEqual({
@@ -60,6 +129,8 @@ describe('ordinary completion judge', () => {
     })
     const prompt = options?.prompt?.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n') ?? ''
     expect(prompt).toMatch(/passing tests are evidence, not blanket proof/i)
+    expect(prompt).toMatch(/Optimize for quality first, then latency, then token cost/)
+    expect(prompt).toMatch(/do not repeat passing checks or initiate unrelated work/)
     expect(prompt).toMatch(/superlinear time or space/i)
     expect(prompt).toMatch(/message field/i)
     expect(prompt).toMatch(/universal risk pass/i)
@@ -108,6 +179,21 @@ describe('ordinary completion judge', () => {
     expect(isGameAssetProvenanceMutation('pwsh', { command: 'Get-Content asset-sourcing.json' })).toBe(false)
     expect(isGameAssetProvenanceMutation('pwsh', { command: 'Set-Content asset-sourcing.json "{}"' })).toBe(true)
     expect(isGameAssetProvenanceMutation('write', { path: 'src/game.ts' })).toBe(false)
+  })
+
+  it.each([
+    ['pwsh', 'Copy-Item hero.png assets/sprites/hero.png'],
+    ['pwsh', 'Copy-Item "hero.png" "assets/sprites/hero.png"'],
+    ['bash', 'cp hero.png assets/sprites/hero.png'],
+    ['bash', 'pwd; cp hero.png assets/sprites/hero.png'],
+  ])('recognizes %s asset mutations from the command argument: %s', (name, command) => {
+    expect(isGameAssetProduction(name, { command })).toBe(true)
+    expect(isSubstantiveMutation(name, { command })).toBe(true)
+  })
+
+  it('does not treat quoted instructions or unrelated shell metadata as asset production', () => {
+    expect(isGameAssetProduction('pwsh', { command: 'Write-Output "Copy-Item hero.png assets/sprites/hero.png"' })).toBe(false)
+    expect(isGameAssetProduction('bash', { command: 'pwd', note: 'cp hero.png assets/sprites/hero.png' })).toBe(false)
   })
 
   it('injects the premium game quality contract into ordinary game reviews', async () => {
@@ -233,4 +319,33 @@ describe('ordinary completion judge', () => {
       signal: new AbortController().signal,
     })).resolves.toMatchObject({ verdict: 'blocked' })
   })
+  it.each(['Create a polished browser Snake', 'make a geometric Pong arcade', 'build premium Tetris', 'implement playable chess', 'create a 2048 puzzle'])('does not require asset scouting for abstract-only work: %s', (request) => {
+    expect(needsGameAssetPipeline(request)).toBe(false)
+    expect(isSubstantiveMutation('hardness_run', { need: { description: request } })).toBe(true)
+  })
+
+  it.each(['haz un gta tipo ps1', 'create a PlayStation adventure', 'make a Sonic game for Sega', 'Create Snake with external character sprites and background assets', 'Create Pong with original background art', 'Crea Snake con assets originales'])('retains required asset work: %s', (request) => {
+    expect(needsGameAssetPipeline(request)).toBe(true)
+  })
+
+  it('reviews abstract game art and sound without imposing representational production steps', async () => {
+    const start = vi.fn<SubagentRuntime['start']>(async () => ({
+      id: 'abstract-judge' as never, localAgent: undefined,
+      result: Promise.resolve({ stopReason: 'completed' as const, output: [], structured: {
+        verdict: 'needs_changes', summary: 'play evidence missing', evidence: ['capture'], known_limitations: [],
+        risk_coverage: { ambiguity: true, limitations: true, report_integrity: true }, required_changes: ['execute gameplay'],
+      } }), dispose: async () => {},
+    }))
+    await reviewOrdinaryCompletion({ subagents: { getProvider: () => ({ capabilities: { outputSchema: true, toolFilter: true } }) as never, start }, provider: 'spawn', parent, request: 'Create polished browser Snake', mutations: ['write'], verifications: ['build'], signal: new AbortController().signal })
+    const prompt = start.mock.calls[0]?.[1].prompt.flatMap(block => block.type === 'text' ? [block.text] : []).join(' ') ?? ''
+    expect(prompt).toMatch(/current mutation generation/)
+    expect(prompt).toMatch(/three independent evidence gates.*technical.*visual.*play/)
+    expect(prompt).toMatch(/polished geometry|procedural audio|compact designed arena/)
+    expect(prompt).not.toMatch(/asset-first scouting|character bible|locomotion in every|prop and vegetation variety/)
+  })
+
+  it('retains requested illustrated characters and backgrounds in an abstract puzzle game', () => {
+    expect(needsGameAssetPipeline('Make a puzzle game with animated animal characters and illustrated backgrounds')).toBe(true)
+  })
+
 })

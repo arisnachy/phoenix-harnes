@@ -40,6 +40,15 @@ export function classifyStableUpdate({ status, branch, managed, mode, stableBran
   if (status !== 'upgrade' && status !== 'diverged') return 'unchanged'
 
   const releaseBranch = isManagedReleaseBranch(branch, stableBranch)
+
+  // A supervised Host can replace a divergent active runtime without mutating
+  // the source checkout. This is especially important after the promoted stable
+  // pointer is realigned to a different main lineage: an unmanaged local
+  // main/stable checkout must not get stranded on the old isolated runtime.
+  if (mode === 'auto' && isolatedRuntime && status === 'diverged' && !managed) {
+    return 'isolate'
+  }
+
   if (!releaseBranch) {
     if (mode === 'auto' && isolatedRuntime) return 'isolate'
     return status === 'upgrade' ? 'development' : 'pause'

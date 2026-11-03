@@ -23,6 +23,7 @@ import {
   completionAuthority,
   goalToolExecution,
   requireDirectHuman,
+  requireExplicitGoalRequest,
 } from './authority.ts'
 import { renderWrapupContext } from './wrapup.ts'
 
@@ -58,10 +59,10 @@ type UpdateAction = 'edit' | 'pause' | 'resume' | 'complete' | 'blocked'
 const UPDATE_ACTIONS: UpdateAction[] = ['edit', 'pause', 'resume', 'complete', 'blocked']
 
 const CREATE_DESCRIPTION =
-  'Create one persisted same-session completion goal when the current direct human request '
-  + 'is a long-running objective that should continue across autonomous goal rounds. You may '
-  + 'infer that intent without requiring the user to say "create a goal". Do not use this for '
-  + 'trivial single-turn work. Execution rejects non-human and subagent authority.'
+  'Create a persisted same-session Goal ONLY when the direct human explicitly asks to '
+  + 'create or activate Goal/persistent-goal mode. Never infer consent from complexity, '
+  + 'unfinished steps, failed tools, retries, or ordinary implementation requests. '
+  + 'The execution boundary enforces this consent, including for the root coordinator.'
 
 const GET_DESCRIPTION =
   'Read the current same-session goal, including its exact id/revision, objective, phase, completed '
@@ -169,8 +170,9 @@ const GOAL_VALUE_SCHEMA = {
 /** Render policy guidance with its deployment-selected blocked threshold. */
 function guidance(blockedAfter: number, requireJudge: boolean): string {
   return 'Use goal tools for one long-running completion objective in the current session. '
-    + 'create_goal may infer goal intent from a direct human request in any language; do not '
-    + 'create a goal for routine single-turn work. Call get_goal before update_goal and copy its '
+    + 'create_goal requires an explicit human request to activate Goal; never infer it '
+    + 'from long-running or unfinished work. Ordinary tasks use bounded agent turns instead. '
+    + 'Call get_goal before update_goal and copy its '
     + 'exact goal_id and revision. After session resume or fork, the driver restores an active durable '
     + 'goal and continues it automatically; blocked goals wait for their external condition or an '
     + 'explicit human resume in any wording. Never require a magic or exact phrase to resume. '
@@ -343,7 +345,7 @@ export function apply(ctx: Context, config: Config): void {
     output: GOAL_OUTPUT,
     async execute(args, exec) {
       const execution = goalToolExecution(ctx, exec)
-      requireDirectHuman(ctx, execution)
+      requireExplicitGoalRequest(ctx, execution)
       const goal = ctx.goals.create(execution.agent, {
         objective: args.objective,
         ...args.max_goal_rounds === undefined ? {} : { maxGoalRounds: args.max_goal_rounds },

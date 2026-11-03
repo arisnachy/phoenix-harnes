@@ -44,6 +44,7 @@ export const messageDefinition: ConversationNodeDefinition<MessageNode> = {
   kind: 'input-message',
   target: 'chat',
   match: event => event.type === 'user/message'
+    && !(event.data.source.kind === 'plugin' && event.data.source.plugin === 'agent-teams')
     && isAppendSurfaceEvent(event)
     && !isCompactionCheckpoint(event)
     ? { id: String(event.data.id), role: 'start' }

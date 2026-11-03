@@ -13,6 +13,7 @@ export const HardnessArtifactNodeView = memo(function HardnessArtifactNodeView({
   useEffect(() => {
     if (artifact.result !== undefined) setResult(artifact.result)
   }, [artifact.result])
+
   const universal = normalizeHardnessArtifact({
     id: artifact.artifactId,
     title: artifact.title,

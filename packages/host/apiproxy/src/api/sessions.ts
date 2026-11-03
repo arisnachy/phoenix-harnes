@@ -336,8 +336,9 @@ export interface SessionsApi {
   Promise<RpcResponse<{ title: string; seq: number }>>
 
   /**
-   * Physically deletes a cold session log. Active sessions are rejected so a
-   * running agent can never append to a record after the delete request.
+   * Physically deletes a session after stopping and draining an ordinary
+   * Host-owned live Agent. Subagent-owned sessions and unknown external
+   * lifecycles remain fenced until their owner can safely dispose them.
    */
   delete?(request: RpcRequest<{ sessionId: SessionId }>):
   Promise<RpcResponse<{ deleted: true }>>

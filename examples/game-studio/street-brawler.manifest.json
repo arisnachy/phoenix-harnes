@@ -1,0 +1,207 @@
+{
+  "schemaVersion": 1,
+  "title": "Barrio de Acero — plantilla de producción",
+  "genre": "original side-scrolling beat-em-up",
+  "gameType": "beat-em-up",
+  "references": [
+    {
+      "title": "Double Dragon (1987) — mechanics and street-brawler vocabulary",
+      "url": "https://www.arcade-museum.com/Videogame/double-dragon"
+    },
+    {
+      "title": "Double Dragon arcade — stage/enemy/weapon patterns",
+      "url": "https://www.gamesdatabase.org/game/arcade/double-dragon.aspx"
+    }
+  ],
+  "player": {
+    "id": "hero",
+    "states": [
+      "idle",
+      "run",
+      "jump",
+      "punch",
+      "kick",
+      "grab",
+      "hurt",
+      "death"
+    ],
+    "animations": {
+      "idle": 4,
+      "run": 8,
+      "jump": 3,
+      "punch": 4,
+      "kick": 5,
+      "grab": 4,
+      "hurt": 3,
+      "death": 6
+    },
+    "abilities": [
+      {
+        "id": "three-hit-combo",
+        "input": "J J J",
+        "kind": "melee",
+        "damage": 24,
+        "cooldownSeconds": 0.7
+      },
+      {
+        "id": "overhead-throw",
+        "input": "L + K",
+        "kind": "grapple",
+        "damage": 20,
+        "cooldownSeconds": 1.2
+      }
+    ]
+  },
+  "enemies": [
+    {
+      "id": "street-scout",
+      "role": "rushdown",
+      "states": [
+        "idle",
+        "move",
+        "attack",
+        "hurt",
+        "death"
+      ]
+    },
+    {
+      "id": "chain-fighter",
+      "role": "spacing",
+      "states": [
+        "idle",
+        "move",
+        "attack",
+        "hurt",
+        "death"
+      ]
+    },
+    {
+      "id": "heavy-bruiser",
+      "role": "guard-break",
+      "states": [
+        "idle",
+        "move",
+        "attack",
+        "hurt",
+        "death"
+      ]
+    }
+  ],
+  "bosses": [
+    {
+      "id": "iron-warden",
+      "phases": [
+        "opening",
+        "enraged"
+      ],
+      "attacks": [
+        {
+          "id": "sweep",
+          "phase": "opening",
+          "telegraphSeconds": 0.48
+        },
+        {
+          "id": "charge",
+          "phase": "enraged",
+          "telegraphSeconds": 0.7
+        }
+      ]
+    }
+  ],
+  "combat": {
+    "depthAxis": true,
+    "knockback": true,
+    "hitboxes": {
+      "depthTolerance": 22,
+      "attackArcs": true
+    },
+    "combos": [
+      {
+        "id": "triple-punch",
+        "inputs": [
+          "punch",
+          "punch",
+          "punch"
+        ]
+      },
+      {
+        "id": "kick-chain",
+        "inputs": [
+          "punch",
+          "kick"
+        ]
+      }
+    ],
+    "grapples": [
+      {
+        "id": "throw",
+        "input": "grab+kick"
+      }
+    ]
+  },
+  "level": {
+    "scrollLength": 3200,
+    "belt": {
+      "minY": 290,
+      "maxY": 415
+    },
+    "layers": [
+      {
+        "id": "skyline",
+        "scrollFactor": 0.12
+      },
+      {
+        "id": "buildings",
+        "scrollFactor": 0.4
+      },
+      {
+        "id": "street-props",
+        "scrollFactor": 0.85
+      }
+    ],
+    "zones": [
+      {
+        "id": "neon-alley",
+        "startX": 0,
+        "endX": 1700,
+        "artStyle": "wet street, storefronts, cables and signage"
+      },
+      {
+        "id": "warehouse-district",
+        "startX": 1700,
+        "endX": 3200,
+        "artStyle": "brick factories, loading bays, fences and props"
+      }
+    ]
+  },
+  "controls": {
+    "move": "WASD / Arrow keys, 8-way belt",
+    "punch": "J",
+    "kick": "K",
+    "jump": "Space",
+    "grab": "L",
+    "pause": "P"
+  },
+  "audio": {
+    "mode": "prototype",
+    "cues": [
+      "punch",
+      "kick",
+      "hit",
+      "grab",
+      "boss",
+      "pickup"
+    ],
+    "music": "original authored licensed WAV/OGG loop REQUIRED before art.mode=production",
+    "voices": []
+  },
+  "sources": [
+    {
+      "path": "examples/game-studio/street-brawler.manifest.json",
+      "license": "original"
+    }
+  ],
+  "art": {
+    "mode": "prototype"
+  }
+}

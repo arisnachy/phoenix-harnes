@@ -95,9 +95,10 @@ async undefine(agent: Agent, pluginId: CordisDynamicPluginId): Promise<DynamicCo
 @Remote('undefineFromPanel') async undefineFromPanel(agent: Agent, pluginId: CordisDynamicPluginId): Promise<DynamicCordisUndefineReceipt>
 
 /**
- * Start or update one Package for a model tool call. An unauthorized Client
- * Package waits for approval; when configured, host-only Packages also wait
- * for approval. Plugin-wide authorization covers later versions.
+ * Start or update one Package for a model tool call. Phoenix-authored Packages
+ * marked autoApprove skip the redundant human confirmation; other Client
+ * Packages wait for approval, and host-only Packages follow requireHostApproval.
+ * Plugin-wide user authorization still covers later manual versions.
  * @param agent - Agent whose Session must own the Plugin.
  * @param pluginId - Stable Plugin identity to activate.
  * @param packageId - Immutable Package version to activate.
@@ -290,9 +291,17 @@ Process-local MCP lifecycle registry. It stores no connection settings, credenti
 
 ```ts cordis-catalog
 /**
+ * Subscribe to secret-free lifecycle/tool changes without exposing transport
+ * configuration, credentials, URLs, provider errors, or reconnect callbacks.
+ * @param listener - Synchronous observer removed by the returned disposer.
+ * @returns Idempotent disposer.
+ */
+subscribe(listener: McpConnectorListener): () => void
+
+/**
  * Register one server identity in stable insertion order.
- * @param input - secret-free server identity and transport.
- * @returns a handle that publishes state and removes the entry.
+ * @param input - Secret-free server identity and transport.
+ * @returns A handle that publishes state and removes the entry.
  */
 register(input: McpConnectorRegistrationInput): McpConnectorRegistration
 
@@ -322,15 +331,46 @@ Provider registry and non-blocking important-event announcement queue.
 
 ```ts cordis-catalog
 /**
- * Report whether the local Client can route conversation speech through neural TTS.
+ * Report whether the local Client can route conversation speech through the
+ * deterministic Kokoro -> platform fallback chain.
  * @returns Current conversational voice availability and selected provider.
  */
 @Remote('conversationStatus') async conversationStatus(): Promise<VoiceConversationStatus>
 
 /**
+ * Probe the native Codex realtime sidecar. This is separate from ordinary TTS
+ * so non-Codex providers can keep the existing browser/local voice route.
+ * @returns Enabled state, sidecar availability and authentication status.
+ */
+@Remote('conversationRealtimeStatus') async conversationRealtimeStatus(): Promise<VoiceConversationRealtimeStatus>
+
+/**
+ * Negotiate browser WebRTC directly with Codex Realtime through the locally
+ * authenticated app-server. No API key is accepted by this path.
+ * @param request Browser-owned call identity, model selection and SDP offer.
+ * @returns Accepted negotiation with answer SDP, or a classified rejection.
+ */
+@Remote('conversationRealtimeStart') async conversationRealtimeStart( request: VoiceConversationRealtimeStartRequest, ): Promise<VoiceConversationRealtimeStartReceipt>
+
+/**
+ * Hand Phoenix-authorized answer text to Codex native V3 speech. This
+ * only accepts an already-active browser-owned call; it does not create
+ * a new thread, spawn a model, or switch to another voice provider.
+ * @param request - Active browser call key and completed result or stable conversational sentence.
+ * @returns Whether the active native call accepted the authorized text.
+ */
+@Remote('conversationRealtimeSpeak') async conversationRealtimeSpeak( request: VoiceConversationRealtimeSpeakRequest, ): Promise<VoiceConversationRealtimeSpeakReceipt>
+
+/** Stop one browser-owned Codex realtime call.
+ * @param request Browser-owned call identity to stop.
+ * @returns Whether an active call was stopped; invalid or unknown identities return false.
+ */
+@Remote('conversationRealtimeStop') async conversationRealtimeStop( request: VoiceConversationRealtimeStopRequest, ): Promise<VoiceConversationRealtimeStopReceipt>
+
+/**
  * Play one stable semantic segment on the Host without blocking the browser thread.
  * @param request - Message identity, ordering, text, language, and final-segment metadata.
- * @returns Admission/playback receipt for the selected neural provider.
+ * @returns Admission/playback receipt for the selected conversation TTS provider.
  */
 @Remote('conversationSpeak') async conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceConversationSpeakReceipt>
 

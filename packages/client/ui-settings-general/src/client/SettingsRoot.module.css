@@ -69,8 +69,9 @@
   white-space: nowrap;
 }
 
-/* Full-viewport layer (figma Mask 501:29946 #000@24%): mask tokens match the
-   Modal primitive (--dsw-alias-bg-mask-1 + --dsw-mask-blur). */
+/* Full-viewport layer (figma Mask 501:29946 #000@24%). Keep the mask opaque
+   enough for focus without a full-window backdrop blur: that blur forces large
+   GPU repaints while the settings body scrolls or swaps sections on Windows. */
 .overlay {
   position: fixed;
   inset: 0;
@@ -78,13 +79,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
+  padding: 16px;
 }
 
 .mask {
   position: absolute;
   inset: 0;
   background: var(--dsw-alias-bg-mask-1);
-  backdrop-filter: var(--dsw-mask-blur);
 }
 
 /* Panel (figma Settings 501:29947): r24, white, lv3 shadow (figma effects
@@ -252,8 +254,9 @@
 /* Phoenix 2026 settings refresh: preserve the existing structure and theme
    tokens while giving the dialog a calmer, more premium visual hierarchy. */
 .panel {
-  width: min(1040px, calc(100vw - 48px));
-  height: min(780px, calc(100vh - 48px));
+  width: min(1040px, 100%);
+  height: min(760px, calc(100vh - 32px));
+  max-height: calc(100dvh - 32px);
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 28px;
   background: var(--dsw-alias-bg-layer-2);
@@ -335,4 +338,84 @@
 
 .options {
   padding: 4px 30px 30px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+@media (max-height: 720px) {
+  .panel {
+    border-radius: 20px;
+  }
+
+  .nav {
+    padding-top: 18px;
+  }
+
+  .header {
+    height: 54px;
+    padding-top: 10px;
+  }
+
+  .options {
+    padding-bottom: 18px;
+  }
+}
+
+/* Direct sidebar destinations show the feature itself, not Settings navigation. */
+.focusedPanel {
+  width: min(940px, 100%);
+}
+.focusTitle {
+  margin: 0;
+  font-size: 20px;
+  line-height: 30px;
+  font-weight: 650;
+  color: var(--dsw-alias-label-primary);
+}
+.focusedPanel .header {
+  padding-inline: 30px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+.focusedPanel .options {
+  padding-top: 20px;
+}
+
+/* Reunite Settings and actual native Codex quota in one compact footer row.
+   The rail still keeps telemetry ABOVE the gear; only the wide sidebar changes. */
+.triggerStack:not(.triggerStackRail) {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+.triggerStack:not(.triggerStackRail) .trigger {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 115px;
+  height: 42px;
+  margin: 0;
+  padding: 0 0 0 8px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+.triggerStack:not(.triggerStackRail) .trigger:hover {
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 80%, #ffddc7 20%);
+}
+.wideQuotaPanel {
+  flex: 0 1 148px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 90px;
+  max-width: 148px;
+  height: 42px;
+  padding: 0 2px 0 0;
+  box-sizing: border-box;
+}
+.wideQuotaPanel:empty { display: none; }
+@media (max-height: 850px) {
+  .triggerStack:not(.triggerStackRail) .trigger,
+  .wideQuotaPanel { height: 38px; }
 }

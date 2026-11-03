@@ -1,0 +1,485 @@
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import { BinancePaperBroker, type BinancePublicMarket, type BinanceCandle } from '../src/binance-paper.ts'
+import { BinancePaperAutomation } from '../src/binance-paper-automation.ts'
+import { mountBinancePaperDashboardRoute } from '../src/binance-paper-route.ts'
+import { BinanceSpotTestnet } from '../src/binance-spot-testnet.ts'
+import { BinanceSpotRealReadOnly } from '../src/binance-spot-real-auth.ts'
+
+const roots: string[] = []
+const disposers: Array<() => Promise<void>> = []
+
+afterEach(async () => {
+  await Promise.all(disposers.splice(0).map(dispose => dispose()))
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+})
+
+function market(): BinancePublicMarket {
+  return {
+    async price() { return 100 },
+    async prices(symbols) { return Object.fromEntries(symbols.map(s => [s, 100])) },
+    async candles(): Promise<BinanceCandle[]> {
+      const end = Date.now() - 1
+      return Array.from({ length: 80 }, (_, index) => {
+        const close = 100 + index * .5 + (index === 79 ? 3 : 0)
+        const closeTime = end - (79 - index) * 900_000
+        return {
+          openTime: closeTime - 899_999, closeTime,
+          open: close, high: close * 1.001, low: close * .999, close,
+          volume: index === 79 ? 30 : 10, quoteVolume: close * 10, trades: 100,
+        }
+      })
+    },
+  }
+}
+
+async function serverWithTrading(options: Parameters<typeof mountBinancePaperDashboardRoute>[2] = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'phoenix-trading-route-'))
+  roots.push(root)
+  const engine = new BinancePaperAutomation(
+    new BinancePaperBroker(join(root, 'paper.json'), market()),
+    join(root, 'paper.auto.json'),
+  )
+  let handle: ((req: IncomingMessage, res: ServerResponse) => Promise<void> | void) | undefined
+  const disposeRoute = mountBinancePaperDashboardRoute({
+    register(input) { handle = input.handler; return () => { handle = undefined } },
+  }, engine, options)
+  const server = createServer((req, res) => {
+    if (handle === undefined) { res.writeHead(404).end(); return }
+    void Promise.resolve(handle(req, res)).catch(() => { res.writeHead(503).end() })
+  })
+  await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
+  const address = server.address()
+  if (address === null || typeof address === 'string') throw new Error('No listening HTTP server')
+  const origin = `http://127.0.0.1:${address.port}`
+  disposers.push(async () => {
+    disposeRoute()
+    await engine.dispose()
+    await new Promise<void>(resolve => server.close(() => { resolve() }))
+  })
+  return { engine, origin }
+}
+
+describe('Binance chat viewer HTTP integration', () => {
+  it('reads only PAPER state and starts/stops real virtual fills from same-origin click', async () => {
+    const { engine, origin } = await serverWithTrading()
+    const endpoint = origin + '/phoenix-trading/paper/'
+    const first = await fetch(endpoint + 'dashboard')
+    expect(first.status).toBe(200)
+    expect(await first.json()).toMatchObject({ mode: 'paper', enabled: false })
+    const start = await fetch(endpoint + 'control', {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json', 'Sec-Fetch-Site': 'same-origin' },
+      body: JSON.stringify({ action: 'start', symbols: ['BTCUSDT'], interval: '15m', pollMinutes: 1 }),
+    })
+    expect(start.status).toBe(200)
+    // HTTP acknowledgement must contain the completed initial scan, not a
+    // 'running' state that hides a pending first execution.
+    expect(await start.json()).toMatchObject({
+      mode: 'paper', enabled: true, account: { tradeCount: 1 },
+      recentTrades: [{ symbol: 'BTCUSDT', side: 'buy' }],
+    })
+    await engine.step()
+    const current = await fetch(endpoint + 'dashboard')
+    expect(await current.json()).toMatchObject({
+      mode: 'paper', enabled: true, account: { tradeCount: 1 },
+      recentTrades: [{ symbol: 'BTCUSDT', side: 'buy' }],
+    })
+    const stop = await fetch(endpoint + 'control', {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'stop' }),
+    })
+    expect(stop.status).toBe(200)
+    expect(await stop.json()).toMatchObject({ enabled: false })
+    const liquidate = await fetch(endpoint + 'control', {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'stop-liquidate' }),
+    })
+    expect(liquidate.status).toBe(200)
+    expect(await liquidate.json()).toMatchObject({
+      enabled: false, account: { positions: [], tradeCount: 2 },
+      recentTrades: [
+        { symbol: 'BTCUSDT', side: 'buy' },
+        { symbol: 'BTCUSDT', side: 'sell', reason: 'user-stop-liquidate-paper' },
+      ],
+    })
+  })
+
+  it('serves real-source market candles without exposing an account or accepting unsafe queries', async () => {
+    const { origin } = await serverWithTrading()
+    const path = origin + '/phoenix-trading/paper/candles'
+    const result = await fetch(path + '?symbol=BTCUSDT&interval=1h')
+    expect(result.status).toBe(200)
+    const payload = await result.json()
+    expect(payload).toMatchObject({ source: 'binance-spot-public', symbol: 'BTCUSDT', interval: '1h' })
+    expect(payload.candles).toHaveLength(80)
+    expect(payload).not.toHaveProperty('account')
+    expect(payload).not.toHaveProperty('credentials')
+    expect((await fetch(path + '?symbol=BTCUSDT&interval=1m')).status).toBe(400)
+    expect((await fetch(path + '?symbol=BTCUSDT&interval=1h&mode=real')).status).toBe(400)
+    expect((await fetch(path + '?symbol=../ETHUSDT&interval=1h')).status).toBe(400)
+    expect((await fetch(path + '?symbol=BTCUSDT&interval=1h', { method: 'POST' })).status).toBe(405)
+  })
+
+  it('surfaces Binance agent allowlist rejection 3346001 separately from transport errors',async()=>{
+    const {origin}=await serverWithTrading({agentOs:{async binanceAgentOsState(){
+      return {configured:true,status:'failed' as const,reasonCode:'connection-failed' as const,toolNames:[]}
+    }}})
+    const response=await fetch(origin+'/phoenix-trading/paper/mcp-status')
+    const status=await response.json() as Record<string,unknown>
+    expect(status).toMatchObject({
+      configured:true,connected:false,status:'failed',reasonCode:'connection-failed',
+      authorizationAvailability:'provider-approval-required',knownProviderRejection:'3346001',
+      accountVerified:false,tradeScopeVerified:false,
+    })
+    expect(String(status.nextAction)).toContain('3346001')
+    expect(String(status.nextAction)).not.toContain('Reparar')
+    expect(JSON.stringify(status)).not.toContain('access_token')
+  })
+
+  it('checks real MCP lifecycle without claiming account or Trade scopes', async () => {
+    const { origin } = await serverWithTrading({
+      agentOs: { async binanceAgentOsState() {
+        return { configured: true, status: 'ready', toolNames: ['binance_spot_ticker'] }
+      } },
+    })
+    const reply = await fetch(origin + '/phoenix-trading/paper/mcp-status')
+    expect(reply.status).toBe(200)
+    expect(await reply.json()).toMatchObject({
+      configured: true, connected: true, toolCount: 1,
+      authorizationAvailability: 'oauth-unverified', knownProviderRejection: '3346001',
+      tradeScopeVerified: false, accountVerified: false,
+    })
+    const rejected = await fetch(origin + '/phoenix-trading/paper/mcp-reconnect', {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: '{}',
+    })
+    expect(rejected.status).toBe(409)
+  })
+
+  it('installs only the official Agentic OAuth MCP after same-origin owner click, without granting REAL orders', async () => {
+    let installations = 0
+    const { origin } = await serverWithTrading({
+      agentOs: {
+        async enableBinanceAgentOs() {
+          installations++
+          return { status: 'installed', connector: {
+            entryId: 'binance-agent-os', serverName: 'binance-agent-os',
+            url: 'https://agent.binance.com/mcp/agentic',
+          } }
+        },
+        async binanceAgentOsState() {
+          return { configured: true, status: 'auth-required' as const, toolNames: [] }
+        },
+      },
+    })
+    const url = origin + '/phoenix-trading/paper/mcp-activate'
+    const crossOrigin = await fetch(url, {
+      method: 'POST', headers: { Origin: 'https://untrusted.example', 'Content-Type': 'application/json' },
+      body: '{}',
+    })
+    expect(crossOrigin.status).toBe(403)
+    const rejected = await fetch(url, {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'real', trade: true }),
+    })
+    expect(rejected.status).toBe(400)
+    expect(installations).toBe(0)
+    const installed = await fetch(url, {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: '{}',
+    })
+    expect(installed.status).toBe(200)
+    expect(await installed.json()).toMatchObject({
+      installed: true, configured: true, mcpStatus: 'auth-required',
+      accountVerified: false, tradeScopeVerified: false,
+    })
+    expect(installations).toBe(1)
+    const status = await fetch(origin + '/phoenix-trading/paper/mcp-status')
+    expect(await status.json()).toMatchObject({
+      configured: true, connected: false, accountVerified: false,
+      authorizationAvailability: 'provider-approval-required', knownProviderRejection: '3346001',
+      tradeScopeVerified: false,
+    })
+    expect((await fetch(url)).status).toBe(405)
+  })
+
+  it('blocks replacing Testnet account keys when automation still owns positions or pending orders', async () => {
+    const { origin } = await serverWithTrading({
+      testnet: new BinanceSpotTestnet(),
+      credentials: {} as never,
+      testnetAuto: {snapshot() {
+        return { enabled: false, pending: {clientOrderId: 'px-pending'},
+          positions: {BTCUSDT:{quantity:0.4}} }
+      }} as never,
+    })
+    const result = await fetch(origin + '/phoenix-trading/paper/testnet-connect', {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'TESTNET_KEY_1234567890', secret: 'TESTNET_SECRET_1234567890' }),
+    })
+    expect(result.status).toBe(409)
+    const body = await result.text()
+    expect(body).toContain('testnet-automation-account-change-blocked')
+    expect(body).not.toContain('TESTNET_SECRET_1234567890')
+  })
+
+  it('reuses REAL HMAC keys mistakenly saved as Testnet only after authenticating the production account',async()=>{
+    const vaultValues=new Map<string,string>([
+      ['PHOENIX_BINANCE_TESTNET_API_KEY','REAL_HMAC_KEY_1234567890'],
+      ['PHOENIX_BINANCE_TESTNET_API_SECRET','REAL_HMAC_SECRET_1234567890'],
+    ])
+    const vault={
+      async set(ref:string,value:string){vaultValues.set(ref,value)},
+      async unset(ref:string){vaultValues.delete(ref)},
+      async resolve(ref:string){const value=vaultValues.get(ref);return value?{value,source:'file'}:undefined},
+      async describe(){return {writable:true,configured:true}},
+    }
+    let accessible=false
+    const real=new BinanceSpotRealReadOnly(()=>undefined,async(input,init)=>{
+      expect(String(input)).toContain('https://api.binance.com/api/v3/account')
+      expect(init?.method).toBe('GET')
+      expect(init?.headers).toMatchObject({'X-MBX-APIKEY':'REAL_HMAC_KEY_1234567890'})
+      return accessible
+        ? new Response(JSON.stringify({balances:[]}),{status:200})
+        : new Response(JSON.stringify({code:-2015}),{status:401})
+    })
+    const {origin}=await serverWithTrading({real,credentials:vault as never})
+    const url=origin+'/phoenix-trading/paper/real-migrate'
+    const wrongOrigin=await fetch(url,{method:'POST',
+      headers:{Origin:'https://attacker.example','Content-Type':'application/json'},body:'{}'})
+    expect(wrongOrigin.status).toBe(403)
+    const failed=await fetch(url,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:'{}'})
+    expect(await failed.json()).toMatchObject({migrated:false,connected:false,issue:'ip-or-permission'})
+    expect(vaultValues.has('PHOENIX_BINANCE_REAL_API_SECRET')).toBe(false)
+    accessible=true
+    const success=await fetch(url,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:'{}'})
+    const body=await success.text()
+    expect(JSON.parse(body)).toMatchObject({migrated:true,connected:true,tradingAuthorized:false})
+    expect(body).not.toContain('REAL_HMAC_SECRET_1234567890')
+    expect(vaultValues.get('PHOENIX_BINANCE_REAL_API_SECRET')).toBe('REAL_HMAC_SECRET_1234567890')
+    expect(vaultValues.get('PHOENIX_BINANCE_TESTNET_API_SECRET')).toBe('REAL_HMAC_SECRET_1234567890')
+    const forbidden=await fetch(url,{method:'POST',
+      headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({trade:true})})
+    expect(forbidden.status).toBe(400)
+  })
+
+  it('authenticates Binance REAL HMAC in read-only mode without using Testnet or writing orders', async () => {
+    const saved=new Map<string,string>()
+    const vault={
+      async set(ref:string,value:string){saved.set(ref,value)},
+      async unset(ref:string){saved.delete(ref)},
+      async resolve(ref:string){const value=saved.get(ref);return value?{value,source:'file'}:undefined},
+      async describe(){return {writable:true,configured:false}},
+    }
+    const requests:string[]=[]
+    const real=new BinanceSpotRealReadOnly(async()=>{
+      const apiKey=saved.get('PHOENIX_BINANCE_REAL_API_KEY')
+      const secret=saved.get('PHOENIX_BINANCE_REAL_API_SECRET')
+      return apiKey&&secret?{apiKey,secret}:undefined
+    },async(input,init)=>{
+      requests.push(String(input))
+      expect(init?.method).toBe('GET')
+      expect(String(input)).toContain('https://api.binance.com/api/v3/account')
+      expect(String(input)).not.toContain('testnet.binance.vision')
+      return new Response(JSON.stringify({canTrade:true,balances:[]}),{status:200})
+    })
+    const {origin}=await serverWithTrading({real,credentials:vault as never})
+    const url=origin+'/phoenix-trading/paper/real-connect'
+    const blocked=await fetch(url,{method:'POST',headers:{Origin:'https://evil.example','Content-Type':'application/json'},
+      body:JSON.stringify({apiKey:'REAL_HMAC_KEY_1234567890',secret:'REAL_HMAC_SECRET_1234567890'})})
+    expect(blocked.status).toBe(403)
+    const good=await fetch(url,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},
+      body:JSON.stringify({apiKey:'REAL_HMAC_KEY_1234567890',secret:'REAL_HMAC_SECRET_1234567890'})})
+    expect(good.status).toBe(200)
+    const result=await good.text()
+    expect(JSON.parse(result)).toMatchObject({
+      saved:true,configured:true,connected:true,canRead:true,tradingAuthorized:false,
+    })
+    expect(result).not.toContain('REAL_HMAC_SECRET_1234567890')
+    expect(saved.get('PHOENIX_BINANCE_REAL_API_KEY')).toBe('REAL_HMAC_KEY_1234567890')
+    expect(saved.has('PHOENIX_BINANCE_TESTNET_API_KEY')).toBe(false)
+    const check=await fetch(origin+'/phoenix-trading/paper/real-status')
+    expect(await check.json()).toMatchObject({connected:true,tradingAuthorized:false})
+    expect(requests).toHaveLength(2)
+    expect((await fetch(url)).status).toBe(405)
+  })
+
+  it('repairs a broken official Agentic MCP using the Host without granting Trade scope',async()=>{
+    let repaired=false
+    const {origin}=await serverWithTrading({agentOs:{
+      async repairBinanceAgentOs(){repaired=true;return {status:'installed',connector:{
+        entryId:'binance-agent-os',serverName:'binance-agent-os',url:'https://agent.binance.com/mcp/agentic',
+      }}},
+      async binanceAgentOsState(){return {configured:true,status:repaired?'auth-required' as const:'failed' as const,
+        reasonCode:repaired?'authorization-required' as const:'connection-failed' as const,toolNames:[]}},
+    }})
+    const url=origin+'/phoenix-trading/paper/mcp-repair'
+    const refused=await fetch(url,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},
+      body:JSON.stringify({trade:true})})
+    expect(refused.status).toBe(400)
+    const done=await fetch(url,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:'{}'})
+    expect(done.status).toBe(200)
+    expect(await done.json()).toMatchObject({repaired:true,accountVerified:false,tradeScopeVerified:false})
+    const status=await fetch(origin+'/phoenix-trading/paper/mcp-status')
+    expect(await status.json()).toMatchObject({
+      status:'auth-required',reasonCode:'authorization-required',connected:false,
+      authorizationAvailability:'provider-approval-required', knownProviderRejection:'3346001',
+    })
+  })
+
+  it('validates keys only against Spot Testnet and never echoes or logs secrets', async () => {
+    const secretValues = new Map<string, string>()
+    const credentials = {
+      async set(ref: string, value: string) { secretValues.set(ref, value) },
+      async unset(ref: string) { secretValues.delete(ref) },
+      async resolve(ref: string) {
+        const value = secretValues.get(ref)
+        return value === undefined ? undefined : { value, source: 'file' }
+      },
+      async describe() { return { configured: true, writable: true } },
+    }
+    const request: typeof fetch = async (input, init) => {
+      expect(String(input)).toContain('https://testnet.binance.vision/api/v3/account')
+      expect(init?.headers).toMatchObject({ 'X-MBX-APIKEY': 'TESTNET_KEY_1234567890' })
+      return new Response(JSON.stringify({ canTrade: true, balances: [] }), { status: 200 })
+    }
+    const testnet = new BinanceSpotTestnet(async () => {
+      const key = secretValues.get('PHOENIX_BINANCE_TESTNET_API_KEY')
+      const secret = secretValues.get('PHOENIX_BINANCE_TESTNET_API_SECRET')
+      return key && secret ? { apiKey: key, secret } : undefined
+    }, request)
+    const { origin } = await serverWithTrading({ testnet, credentials: credentials as never })
+    const url = origin + '/phoenix-trading/paper/testnet-connect'
+    const wrongOrigin = await fetch(url, {
+      method: 'POST', headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'TESTNET_KEY_1234567890', secret: 'TESTNET_SECRET_1234567890' }),
+    })
+    expect(wrongOrigin.status).toBe(403)
+    expect(secretValues.size).toBe(0)
+    const success = await fetch(url, {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'TESTNET_KEY_1234567890', secret: 'TESTNET_SECRET_1234567890' }),
+    })
+    expect(success.status).toBe(200)
+    const text = await success.text()
+    expect(text).not.toContain('TESTNET_KEY_1234567890')
+    expect(text).not.toContain('TESTNET_SECRET_1234567890')
+    expect(JSON.parse(text)).toMatchObject({ mode: 'testnet', configured: true, connected: true, canTrade: true })
+    expect(secretValues.size).toBe(2)
+    const check = await fetch(origin + '/phoenix-trading/paper/testnet-status')
+    expect(await check.json()).toMatchObject({ configured: true, connected: true, canTrade: true })
+  })
+
+  it('persists HMAC Testnet keys even if Binance is temporarily offline, and reuses them later', async () => {
+    const saved = new Map<string, string>()
+    const vault = {
+      async set(ref: string, value: string) { saved.set(ref, value) },
+      async unset(ref: string) { saved.delete(ref) },
+      async resolve(ref: string) {
+        const value = saved.get(ref)
+        return value === undefined ? undefined : { value, source: 'file' }
+      },
+      async describe() { return { configured: true, writable: true } },
+    }
+    let reachable = false
+    const testnet = new BinanceSpotTestnet(async () => {
+      const apiKey = saved.get('PHOENIX_BINANCE_TESTNET_API_KEY')
+      const secret = saved.get('PHOENIX_BINANCE_TESTNET_API_SECRET')
+      return apiKey && secret ? { apiKey, secret } : undefined
+    }, async (input, init) => {
+      expect(String(input)).toContain('https://testnet.binance.vision/api/v3/account')
+      expect(init?.headers).toEqual({ 'X-MBX-APIKEY': 'TESTNET_KEY_1234567890' })
+      return reachable
+        ? new Response(JSON.stringify({ canTrade: true, balances: [] }), { status: 200 })
+        : new Response(JSON.stringify({ code: -1003, msg: 'Rate limited' }), { status: 429 })
+    })
+    const { origin } = await serverWithTrading({ testnet, credentials: vault as never })
+    const savedReply = await fetch(origin + '/phoenix-trading/paper/testnet-connect', {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'TESTNET_KEY_1234567890', secret: 'TESTNET_SECRET_1234567890' }),
+    })
+    expect(savedReply.status).toBe(200)
+    const pending = await savedReply.json()
+    expect(pending).toMatchObject({
+      mode: 'testnet', saved: true, configured: true,
+      connected: false, issue: 'rate-limited',
+    })
+    expect(JSON.stringify(pending)).not.toContain('TESTNET_SECRET_1234567890')
+    expect(saved.size).toBe(2)
+    const disconnected = await fetch(origin + '/phoenix-trading/paper/testnet-status')
+    expect(await disconnected.json()).toMatchObject({ configured: true, connected: false })
+    reachable = true
+    const reconnect = await fetch(origin + '/phoenix-trading/paper/testnet-status')
+    expect(await reconnect.json()).toMatchObject({ configured: true, connected: true, canTrade: true })
+    expect(saved.get('PHOENIX_BINANCE_TESTNET_API_SECRET')).toBe('TESTNET_SECRET_1234567890')
+    // A later Host session can use the same saved pair for an actual Testnet
+    // request; no API secret is copied through the dashboard JSON or chat.
+    const restarted = new BinanceSpotTestnet(async () => {
+      const apiKey = saved.get('PHOENIX_BINANCE_TESTNET_API_KEY')
+      const secret = saved.get('PHOENIX_BINANCE_TESTNET_API_SECRET')
+      return apiKey && secret ? { apiKey, secret } : undefined
+    }, async (input, init) => {
+      expect(String(input)).toContain('https://testnet.binance.vision/api/v3/order')
+      expect(init?.headers).toEqual({ 'X-MBX-APIKEY': 'TESTNET_KEY_1234567890' })
+      return new Response(JSON.stringify({
+        symbol: 'BTCUSDT', side: 'BUY', orderId: 4711, status: 'NEW',
+        executedQty: '0', cummulativeQuoteQty: '0',
+      }), { status: 200 })
+    })
+    expect(await restarted.order({ symbol: 'BTCUSDT', side: 'BUY', quoteUsdt: 10 }))
+      .toMatchObject({ mode: 'testnet', orderId: 4711, status: 'NEW' })
+  })
+
+  it('rolls back both credentials if the second vault write fails', async () => {
+    const saved = new Map<string, string>([
+      ['PHOENIX_BINANCE_TESTNET_API_KEY', 'OLD_TESTNET_KEY_012345678901'],
+      ['PHOENIX_BINANCE_TESTNET_API_SECRET', 'OLD_TESTNET_SECRET_012345678901'],
+    ])
+    const vault = {
+      async set(ref: string, value: string) {
+        if (ref === 'PHOENIX_BINANCE_TESTNET_API_SECRET' && value !== 'OLD_TESTNET_SECRET_012345678901') {
+          throw new Error('simulated-vault-write-failure')
+        }
+        saved.set(ref, value)
+      },
+      async unset(ref: string) { saved.delete(ref) },
+      async resolve(ref: string) {
+        const value = saved.get(ref)
+        return value === undefined ? undefined : { value, source: 'file' }
+      },
+      async describe() { return { configured: true, writable: true } },
+    }
+    const testnet = new BinanceSpotTestnet(async () => undefined)
+    const { origin } = await serverWithTrading({ testnet, credentials: vault as never })
+    const response = await fetch(origin + '/phoenix-trading/paper/testnet-connect', {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'TESTNET_KEY_1234567890', secret: 'TESTNET_SECRET_1234567890' }),
+    })
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({ error: 'vault-write-failed' })
+    expect(saved.get('PHOENIX_BINANCE_TESTNET_API_KEY')).toBe('OLD_TESTNET_KEY_012345678901')
+    expect(saved.get('PHOENIX_BINANCE_TESTNET_API_SECRET')).toBe('OLD_TESTNET_SECRET_012345678901')
+  })
+
+  it('rejects CSRF and REAL fields before any account action', async () => {
+    const { engine, origin } = await serverWithTrading()
+    const url = origin + '/phoenix-trading/paper/control'
+    const rejected = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'start', symbols: ['BTCUSDT'] }),
+    })
+    expect(rejected.status).toBe(403)
+    const real = await fetch(url, {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'start', symbols: ['BTCUSDT'], mode: 'real' }),
+    })
+    expect(real.status).toBe(400)
+    expect((await engine.dashboard()).enabled).toBe(false)
+    const unsafe = await fetch(url, {
+      method: 'POST', headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'start', symbols: ['BTCUSDT'] }),
+    })
+    expect(unsafe.status).toBe(403)
+  })
+})

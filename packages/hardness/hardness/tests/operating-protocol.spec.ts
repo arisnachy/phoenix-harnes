@@ -45,6 +45,21 @@ const input = (patch: Partial<HardnessProtocolInput> = {}): HardnessProtocolInpu
 })
 
 describe('HARDNESS model operating protocol', () => {
+  it('does not reopen a cancelled mission for recovery, verification or auditing', () => {
+    for (const patch of [
+      { inspection: 'pending' as const },
+      { execution: 'failed' as const, approval: 'approved' as const },
+      { execution: 'completed' as const, verification: 'failed' as const, approval: 'approved' as const },
+      { execution: 'completed' as const, verification: 'passed' as const, presentation: 'ready' as const, audit: 'recorded' as const, approval: 'approved' as const },
+    ]) {
+      const view = evaluateHardnessProtocol(input({ ...patch, cancelled: true }))
+      expect(view).toMatchObject({ outcome: 'complete', terminalReason: 'cancelled' })
+      expect(view.allowedActions).toEqual([])
+      expect(view.forbiddenActions).toContain('dispatch-routed-capability')
+      expect(view.forbiddenActions).toContain('claim-success')
+    }
+  })
+
   it('requires inspection and planning before approval or execution', () => {
     expect(evaluateHardnessProtocol(input({ inspection: 'pending' }))).toMatchObject({ step: 'inspect', outcome: 'continue' })
     expect(evaluateHardnessProtocol(input({ planning: 'pending' }))).toMatchObject({ step: 'plan', outcome: 'continue' })
@@ -105,19 +120,35 @@ describe('HARDNESS model operating protocol', () => {
     expect(rendered).toContain('<phoenix_hardness_protocol>')
     expect(rendered).toContain('inspect → resolve → plan → approve → execute → verify → present → audit')
     expect(rendered).toContain('classify the mission and select or adapt the HARDNESS cognitive workflow')
-    expect(rendered).toContain('For every non-trivial mission call hardness_workflow')
+    expect(rendered).toContain('without spending a model round merely to call hardness_workflow')
     expect(rendered).toContain('Never preface a user-facing reply by saying that you are following guidance')
     expect(spanish).toContain('Nunca antepongas a una respuesta que estás siguiendo una guía')
     expect(rendered).toContain('workflow selection never grants execution authority')
     expect(rendered).toContain('Never execute an unresolved, unapproved, or unverified operation.')
     expect(rendered).toContain('final quality review against the original objective')
     expect(rendered).toContain('For HTML, websites, landing pages, and dashboards require production quality')
+    expect(rendered).toContain('present it inside the chat conversation')
+    expect(rendered).toContain('.canvas.tsx')
+    expect(spanish).toContain('preséntalo dentro de la propia conversación')
+    expect(rendered).toContain('do not reopen it for non-material noise')
+    expect(rendered).toContain('Priority exception for previews')
+    expect(rendered).toContain('Authorized simple browser navigation is FAST')
+    expect(rendered).toContain('mcp__phoenix_browser__youtube_search')
+    expect(spanish).toContain('Navegación sencilla autorizada es FAST')
+    expect(rendered).toContain('needs no auditor, teammate, exhaustive tests')
+    expect(rendered).toContain('An automatic follow-up turn cannot reopen the mission')
+    expect(spanish).toContain('Tras declarar que no queda trabajo pendiente')
+    expect(rendered).toContain('An explicit user stop, pause, or cancel')
+    expect(spanish).toContain('Excepción prioritaria para vistas previas')
+    expect(spanish).toContain('Una orden explícita del usuario de detener')
+    expect(rendered).toContain('verifier-infrastructure failures')
+    expect(rendered).toContain('incidental browser noise')
     expect(rendered).toContain('visually inspect it on desktop and mobile')
     expect(spanish).toContain('revisión final de calidad contra el objetivo original')
     expect(spanish).toContain('Para HTML, webs, landing pages y dashboards exige calidad de producción')
     expect(rendered).toContain('only pass with a passing quality gate may enter DONE')
     expect(spanish).toContain('clasifica la misión y selecciona o adapta el workflow cognitivo HARDNESS')
-    expect(spanish).toContain('usa hardness_workflow')
+    expect(spanish).toContain('Usa hardness_workflow')
     expect(spanish).toContain('nunca concede autoridad de ejecución')
     expect(rendered).not.toContain('function')
     expect(rendered).not.toContain('credential')

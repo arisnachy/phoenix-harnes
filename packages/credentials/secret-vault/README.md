@@ -2,9 +2,11 @@
 
 English | [中文](README.zh.md)
 
-The secret vault adds the human-only `/secret` command over `ctx.credentials`. Use `/secret set NAME VALUE`, `/secret status NAME`, or `/secret delete NAME` from the composer. For unattended browser work, `/secret login-set https://example.com ACCOUNT SECRET` stores one origin-bound login plus a one-time autonomous-use grant; `login-status` and `login-delete` inspect or remove that binding. The value is passed directly to the credential provider, while `command/run` omits its raw input and the acknowledgement contains only redacted status. The command is never sent to the model.
+The secret vault adds the human-only `/secret` command over `ctx.credentials`. Use `/secret set NAME VALUE`, `/secret status NAME`, or `/secret delete NAME` for provider secrets. Website credentials are entered and managed in the protected Secure Ask card below the browser; `login-set` rejects credential messages. Website records use Windows DPAPI CurrentUser encryption and explicit per-origin automatic-use consent. Command values go directly to the provider, while `command/run` omits raw input and acknowledgements contain only safe status.
 
 Consumers such as LLM adapters still resolve the named `CredentialRef` internally for a provider operation. The Windows browser broker derives login refs from the canonical page origin, verifies the live origin again immediately before DOM injection, and receives login values only inside the trusted execution path. The vault does not expose a secret-reading tool or put secret values in model context.
+
+The vault also registers host-only `credentials/web-login-status` and `credentials/web-login-resolve` listeners for the Windows browser consumer. The consumer calls these events with the canonical live origin; status returns only presence and consent metadata, while account, secret, and bounded `extra:0` through `extra:3` values remain inside the trusted host process. An existing DPAPI record without automatic consent is an explicit denial, while an absent DPAPI record remains eligible for a consumer's separately owned legacy migration path.
 
 The default local provider stores the value in its owner-only credentials document. On Windows, filesystem ACL protection remains the responsibility of the account and deployment; this package's guarantee is that the command value is not included in the model request or durable command input.
 

@@ -93,6 +93,33 @@ export function requireDirectHuman(ctx: Context, execution: GoalToolExecution): 
 }
 
 /**
+ * Persisted autonomous Goal rounds require an explicit human opt-in. An ordinary
+ * implementation request is not permission to create a background mission.
+ * The user can still ask Kira to enable Goal in Spanish or English.
+ */
+export function requireExplicitGoalRequest(ctx: Context, execution: GoalToolExecution): void {
+  requireDirectHuman(ctx, execution)
+  const requested = execution.events.some(event => {
+    if (event.type !== 'user/message' || event.data.source.kind !== 'user') return false
+    return event.data.content.some(block => {
+      if (block.type !== 'text') return false
+      const content = block.text.normalize('NFKC')
+      // oxlint-disable-next-line @stylistic/max-len -- Explicit bilingual opt-in; mentioning Goal or saying not to activate is not consent.
+      const optIn = /\b(?:crea|crear|crees|activa|activar|actives|habilita|habilitar|habilites|inicia|iniciar|uses?|usar|create|start|enable|activate|use)\s+(?:(?:un|una|el|la|the|a|an|modo|mode|nuevo|new)\s+){0,3}(?:goal|objetivo\s+persistente|meta\s+persistente|persistent\s+goal)\b/iu
+      // Ignore negative instructions such as "no actives Goal".
+      const match = optIn.exec(content)
+      if (match === null) return false
+      const preceding = content.slice(Math.max(0, match.index - 24), match.index)
+      return !/(?:\bno\b|\bnot\b|\bnever\b|\bdon't\b|\bdo\s+not\b)[\s\S]{0,24}$/iu.test(preceding)
+    })
+  })
+  if (!requested) reject(
+    'create_goal requires the user to explicitly request Goal activation; ordinary tasks must run without automatic Goal rounds.',
+    'GOAL_EXPLICIT_OPT_IN_REQUIRED',
+  )
+}
+
+/**
  * Resolve completion authority from either direct human input or the exact goal round.
  * @param ctx - Context carrying live agents and goal state.
  * @param execution - Authenticated current tool execution.

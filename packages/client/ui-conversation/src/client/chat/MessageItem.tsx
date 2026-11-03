@@ -16,6 +16,7 @@ import { CompactionItem } from './CompactionItem.tsx'
 import { ContextInjectionRow } from './ContextInjectionRow.tsx'
 import { MessageIconActions } from './MessageIconActions.tsx'
 import { formatStructuredError } from './structured-error.ts'
+import { isTeamMention, parseDirectedTeamMessage } from './team-recipient.ts'
 import css from './MessageItem.module.css'
 
 type UserImage = Extract<UserMessageNode['content'][number], { type: 'image' }>
@@ -238,10 +239,12 @@ function projectUserText(text: string, sessionLabels: readonly string[]): ReactN
     if (tokenStart > cursor) parts.push(<MessageText key={cursor} text={text.slice(cursor, tokenStart)} />)
     const referenceKind = kind === 'session'
       ? 'session'
-      : label.startsWith('@')
-        ? label.endsWith('/') ? 'folder' : 'file'
-        : undefined
-    const displayLabel = referenceKind === undefined
+      : isTeamMention(label)
+        ? 'agent'
+        : label.startsWith('@')
+          ? label.endsWith('/') ? 'folder' : 'file'
+          : undefined
+    const displayLabel = referenceKind === undefined || referenceKind === 'agent'
       ? label
       : referenceKind === 'session'
         ? label.slice(1)
@@ -253,7 +256,7 @@ function projectUserText(text: string, sessionLabels: readonly string[]): ReactN
         data-ref-chip={referenceKind ?? 'skill'}
         title={label}
       >
-        {referenceKind !== undefined && (
+        {referenceKind !== undefined && referenceKind !== 'agent' && (
           <ReferenceIcon kind={referenceKind} size={16} className={css.refIcon} />
         )}
         {displayLabel}
@@ -264,6 +267,54 @@ function projectUserText(text: string, sessionLabels: readonly string[]): ReactN
   if (parts.length === 0) return <MessageText text={text} />
   if (cursor < text.length) parts.push(<MessageText key={cursor} text={text.slice(cursor)} />)
   return <>{parts}</>
+}
+
+/** Private local portrait, projected into the user's messages without exposing it to models. */
+function UserPhotoAvatar(): ReactNode {
+  const [source, setSource] = useState<string>()
+  useEffect(() => {
+    if (typeof indexedDB === 'undefined') return
+    let active = true
+    let current: string | undefined
+    const refresh = () => {
+      const open = indexedDB.open('phoenix-user-portrait-v1', 1)
+      open.onupgradeneeded = () => {
+        if (!open.result.objectStoreNames.contains('portrait')) open.result.createObjectStore('portrait')
+      }
+      open.onsuccess = () => {
+        const database = open.result
+        const tx = database.transaction('portrait', 'readonly')
+        const store = tx.objectStore('portrait')
+        const photo = store.get('original')
+        const styled = store.get('styled')
+        const mode = store.get('mode')
+        tx.oncomplete = () => {
+          database.close()
+          if (!active) return
+          const candidate = mode.result === 'styled' && styled.result instanceof Blob
+            ? styled.result as Blob
+            : photo.result instanceof Blob ? photo.result as Blob : undefined
+          const next = candidate === undefined ? undefined : URL.createObjectURL(candidate)
+          setSource(next)
+          if (current !== undefined) URL.revokeObjectURL(current)
+          current = next
+        }
+        tx.onerror = () => { database.close() }
+      }
+    }
+    refresh()
+    window.addEventListener('phoenix-user-portrait-changed', refresh)
+    window.addEventListener('focus', refresh)
+    return () => {
+      active = false
+      window.removeEventListener('phoenix-user-portrait-changed', refresh)
+      window.removeEventListener('focus', refresh)
+      if (current !== undefined) URL.revokeObjectURL(current)
+    }
+  }, [])
+  return <span className={css.userAvatar} data-user-avatar aria-label="Tu avatar">
+    {source === undefined ? <span aria-hidden="true">●</span> : <img src={source} alt="" />}
+  </span>
 }
 
 /** Right-aligned bubble shared by user and steering rows. */
@@ -281,10 +332,13 @@ function UserStyleBubble({
   t: ChatViewSlotProps['t']
 }): ReactNode {
   const { text, images, files, rest } = contentParts(content)
+  const addressed = parseDirectedTeamMessage(text)
+  const visibleText = addressed?.body ?? text
   const truncated = (total: number): string => t('json.truncated', { total })
-  const showBubble = text !== '' || rest.length > 0
+  const showBubble = visibleText !== '' || rest.length > 0
   return (
     <div className={css.userRow} data-pending-steering={pending || undefined} data-time-hover-root>
+      <UserPhotoAvatar />
       <div className={css.userStack}>
         {renderMessageImages({ images, align: 'end' })}
         {files.map(({ attachment }) => (
@@ -296,8 +350,14 @@ function UserStyleBubble({
             </span>
           </div>
         ))}
+        {addressed !== undefined && (
+          <div className={css.recipientHeader} data-team-recipient={addressed.recipient}>
+            <span aria-hidden="true">↗</span>
+            <span>Para <strong>{addressed.recipient}</strong></span>
+          </div>
+        )}
         {showBubble && <div className={css.bubble}>
-          {projectUserText(text, referenceLabels)}
+          {projectUserText(visibleText, referenceLabels)}
           {rest.map((block, i) => <JsonBlock key={i} label={t('message.extraBlock')} payload={block} truncatedLabel={truncated} />)}
         </div>}
         {referenceLabels.length > 0 && (
@@ -342,7 +402,7 @@ export function PendingSteeringBubble({ content, renderMessageImages, t }: {
 
 /** User and admitted-steering keyed Chat renderer. */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, renderMessageImages, t,
+  node, renderMessageImages, messageActions, t,
 }: ChatNodeViewProps<'user' | 'steering'>) {
   const data = node.data
   return (
@@ -357,6 +417,7 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
           time={data.time}
           clock="start"
           className={css.actions}
+          extraActions={messageActions}
           t={t}
         />
       )}

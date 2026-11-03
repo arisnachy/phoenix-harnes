@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
+import type { AssistantMessageEvent } from '@earendil-works/pi-ai'
 import type { GenerateOptions } from '@phoenix-ai/dsh-llm'
 import {
   applyMondayCodexMembrane,
   normalizeCodexToolParameters,
   normalizeCodexToolSchemas,
+  recoverRejectedCodexFunctionSchema,
+  surfaceRejectedCodexSchemaEvent,
+  scopeCodexToolsForPaint,
   normalizeOpenAiFunctionToolPayload,
   requiresMondayCodexMembrane,
   requiresObjectRootFunctionSchemas,
@@ -123,6 +127,124 @@ describe('Codex tool-schema compatibility', () => {
     }
 
     expect(normalizeCodexToolParameters(schema)).toBe(schema)
+  })
+
+  it('keeps an unrelated Social Engine function out of a simple Paint Codex request', () => {
+    const message = (text: string) => ({
+      role: 'user' as const, id: 'test-user' as never,
+      source: { kind: 'user' as const },
+      content: [{ type: 'text' as const, text }],
+    })
+    const tools = [
+      { name: 'computer', description: 'Windows desktop', parameters: { type: 'object' } },
+      { name: 'mcp__social-engine__social_campaign_create', description: 'Create campaign',
+        parameters: { oneOf: [{ type: 'object', properties: { brand: { type: 'string' } } }] } },
+      { name: 'mcp__windows-desktop__inspect', description: 'Windows tool', parameters: { type: 'object' } },
+      { name: 'image_generation', description: 'Create image', parameters: { type: 'object' } },
+    ]
+    const request: GenerateOptions = {
+      provider: 'openai-codex', model: 'gpt-6-sol', messages: [message('entra en Paint y crea una carita')], tools,
+    }
+    const scoped = scopeCodexToolsForPaint(request)
+    expect(scoped.tools?.map(tool => tool.name)).toEqual(['computer', 'mcp__windows-desktop__inspect'])
+    expect(request.tools?.length).toBe(4)
+    expect(scopeCodexToolsForPaint({ ...request,
+      messages: [message('abre Paint y publica un anuncio en redes sociales')], }).tools).toEqual(tools)
+    expect(scopeCodexToolsForPaint({ ...request, messages: [message('abre Instagram')], }).tools).toEqual(tools)
+  })
+
+  it('recovers an invalid social campaign schema without removing other functions', () => {
+    const broken = {
+      name: 'mcp__social-engine__social_campaign_create',
+      description: 'Create campaign',
+      parameters: { oneOf: [{ type: 'object', properties: { brand: { type: 'string' } } }] },
+    }
+    const valid = { name: 'computer', description: 'Use desktop', parameters: { type: 'object' } }
+    const options: GenerateOptions = {
+      provider: 'openai-codex', model: 'gpt-6-sol', messages: [], tools: [valid, broken],
+    }
+    const diagnostic = "Codex error: Invalid schema for function 'mcp__social-engine__social_campaign_create': schema must have type 'object' and not have 'oneOf'/'anyOf'/'allOf'/'enum'/'const'/'not' at the top level."
+    const recovered = recoverRejectedCodexFunctionSchema(options, diagnostic)
+    expect(recovered?.tools).toEqual([valid])
+    expect(options.tools).toEqual([valid, broken])
+  })
+
+  it('surfaces Codex schema error events before the adapter emits a terminal finish', async () => {
+    const diagnostic = "Codex error: Invalid schema for function 'mcp__social-engine__social_campaign_create': schema must have type 'object' and not have 'oneOf'/'anyOf'/'allOf'/'enum'/'const'/'not' at the top level."
+    const start = { type: 'start' } as unknown as AssistantMessageEvent
+    const error = { type: 'error', error: { errorMessage: diagnostic } } as unknown as AssistantMessageEvent
+    const seen: AssistantMessageEvent[] = []
+    await expect(async () => {
+      for await (const event of surfaceRejectedCodexSchemaEvent((async function* () {
+        yield start
+        yield error
+      })())) seen.push(event)
+    }).rejects.toThrow("Invalid schema for function 'mcp__social-engine__social_campaign_create'")
+    expect(seen).toEqual([start])
+  })
+
+  it('keeps ordinary provider errors as error events for standard retry classification', async () => {
+    const ordinary = { type: 'error', error: { errorMessage: 'HTTP 429 rate limit' } } as unknown as AssistantMessageEvent
+    const result: AssistantMessageEvent[] = []
+    for await (const event of surfaceRejectedCodexSchemaEvent((async function* () {
+      yield ordinary
+    })())) result.push(event)
+    expect(result).toEqual([ordinary])
+  })
+
+  it('never masks unrelated provider failures or retries a function absent from the request', () => {
+    const original: GenerateOptions = {
+      provider: 'openai-codex', model: 'gpt-6-sol', messages: [], tools: [{
+        name: 'mcp__social-engine__social_campaign_create',
+        description: 'Create campaign',
+        parameters: { type: 'object', properties: {} },
+      }],
+    }
+    for (const diagnostic of [
+      'Codex error: connection lost',
+      "Invalid schema for function 'mcp__social-engine__social_campaign_create': missing required field",
+      "Invalid schema for function 'another_tool': schema must have type 'object'",
+    ]) {
+      expect(recoverRejectedCodexFunctionSchema(original, diagnostic)).toBeUndefined()
+    }
+  })
+
+  it('normalizes the exact social campaign tool across direct, Codex and tool-search projections', () => {
+    const union = {
+      oneOf: [
+        { type: 'object', properties: { brand: { type: 'string' }, title: { type: 'string' } }, required: ['brand'] },
+        { type: 'object', properties: { brand: { type: 'string' }, destination: { type: 'string' } }, required: ['brand'] },
+      ],
+    }
+    const tool = { name: 'mcp__social-engine__social_campaign_create', description: 'Create campaign', parameters: union }
+    const options: GenerateOptions = {
+      provider: 'openai-codex', model: 'gpt-6-sol', messages: [], tools: [tool],
+    }
+    const projected = normalizeCodexToolSchemas(options)
+    expect(projected.tools?.[0]?.parameters.type).toBe('object')
+    expect(projected.tools?.[0]?.parameters).not.toHaveProperty('oneOf')
+    const payload = {
+      model: 'gpt-6-sol',
+      tools: [{ type: 'function', name: tool.name, parameters: union }],
+      input: [{ type: 'tool_search_output', tools: [
+        { type: 'function', name: tool.name, input_schema: union },
+        { name: tool.name, inputSchema: union },
+        { function: { name: tool.name, parameters: union } },
+      ] }],
+    }
+    const fixed = normalizeOpenAiFunctionToolPayload(payload) as Record<string, unknown>
+    const wire = (fixed.tools as Array<{ parameters: Record<string, unknown> }>)[0]
+    expect(wire?.parameters.type).toBe('object')
+    expect(wire?.parameters).not.toHaveProperty('oneOf')
+    const tools = ((fixed.input as Array<{ tools: unknown[] }>)[0]?.tools ?? []) as Array<Record<string, unknown>>
+    for (const candidate of tools.slice(0, 2)) {
+      expect((candidate.parameters as Record<string, unknown>).type).toBe('object')
+      expect(candidate).not.toHaveProperty('input_schema')
+      expect(candidate).not.toHaveProperty('inputSchema')
+    }
+    const nested = tools[2]?.function as { parameters: Record<string, unknown> }
+    expect(nested.parameters.type).toBe('object')
+    expect(nested.parameters).not.toHaveProperty('oneOf')
   })
 
   it('repairs Responses-style function tools at the final provider payload seam', () => {

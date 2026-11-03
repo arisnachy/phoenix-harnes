@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { assessBinanceSpotSymbol, binanceKnownAssetRisk } from './binance-asset-risk.ts'
 
 const DEFAULT_INITIAL_CASH_USDT = 10_000
 const DEFAULT_FEE_RATE = 0.001
 const MAX_TRADES_RETAINED = 10_000
-const BINANCE_PUBLIC_API = 'https://api.binance.com'
+const BINANCE_PUBLIC_API = 'https://data-api.binance.vision'
 const SUPPORTED_INTERVALS = new Set([
   '1s', '1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h',
   '12h', '1d', '3d', '1w', '1M',
@@ -13,11 +14,62 @@ const SUPPORTED_INTERVALS = new Set([
 
 const PATH_LOCKS = new Map<string, Promise<void>>()
 
+/** A durable, deterministic exit policy attached to a real PAPER ledger position. */
+export interface BinancePaperExitPlan {
+  readonly strategyId: string
+  readonly entryPriceUsdt: number
+  readonly stopLossPrice: number
+  readonly tp1Price: number
+  readonly tp2Price: number
+  readonly tp1Fraction: number
+  readonly tp1Taken: boolean
+  readonly createdAt: string
+  readonly origin: 'execution' | 'legacy-adopted'
+}
+
+/**
+ * Build a transparent strategy-specific PAPER exit policy, not a provider order.
+ * @param entry - Actual virtual fill price, exclusive of transaction fees.
+ * @param strategyId - Persisted rule identifier.
+ * @param origin - Whether the policy was attached on fill or adopted for an old position.
+ * @returns Strict ordered SL, TP1, TP2 levels in quote currency.
+ */
+export function paperExitPlan(
+  entry: number, strategyId = 'manual-paper',
+  origin: BinancePaperExitPlan['origin'] = 'execution',
+): BinancePaperExitPlan {
+  if (!Number.isFinite(entry) || entry <= 0) throw new Error('Invalid PAPER entry price for exits')
+  const [stop, first, second] = strategyId.includes('mean-reversion')
+    ? [0.014, 0.012, 0.025]
+    : strategyId.includes('breakout') ? [0.018, 0.022, 0.044]
+      : strategyId.includes('trend-pullback') ? [0.018, 0.018, 0.036]
+        : [0.025, 0.025, 0.05]
+  return {
+    strategyId, entryPriceUsdt: entry, stopLossPrice: Number((entry * (1 - stop)).toPrecision(14)),
+    tp1Price: Number((entry * (1 + first)).toPrecision(14)), tp2Price: Number((entry * (1 + second)).toPrecision(14)),
+    tp1Fraction: 0.5, tp1Taken: false, createdAt: new Date().toISOString(), origin,
+  }
+}
+
+function validExitPlan(plan: unknown): plan is BinancePaperExitPlan {
+  if (!isRecord(plan) || typeof plan.strategyId !== 'string' || !plan.strategyId
+    || typeof plan.createdAt !== 'string' || !Number.isFinite(Date.parse(plan.createdAt))
+    || !['execution', 'legacy-adopted'].includes(String(plan.origin))
+    || typeof plan.tp1Taken !== 'boolean'
+    || !finitePositive(plan.entryPriceUsdt) || !finitePositive(plan.stopLossPrice)
+    || !finitePositive(plan.tp1Price) || !finitePositive(plan.tp2Price)
+    || !finitePositive(plan.tp1Fraction) || plan.tp1Fraction >= 1) return false
+  const levels = plan as unknown as BinancePaperExitPlan
+  return levels.stopLossPrice < levels.entryPriceUsdt
+    && levels.entryPriceUsdt < levels.tp1Price && levels.tp1Price < levels.tp2Price
+}
+
 /** One virtual spot position held by the Phoenix Binance paper broker. */
 export interface BinancePaperPosition {
   symbol: string
   quantity: number
   costBasisUsdt: number
+  exitPlan?: BinancePaperExitPlan
 }
 
 /** One persisted virtual Binance paper fill and its marked portfolio outcome. */
@@ -84,6 +136,8 @@ export interface BinancePaperAccount {
     marketValueUsdt: number
     costBasisUsdt: number
     unrealizedPnlUsdt: number
+    unrealizedReturnPct: number
+    exitPlan?: BinancePaperExitPlan
   }>
 }
 
@@ -92,6 +146,7 @@ export interface BinancePublicMarket {
   price(symbol: string): Promise<number>
   prices(symbols: readonly string[]): Promise<Record<string, number>>
   candles(symbol: string, interval: string, limit: number): Promise<BinanceCandle[]>
+  eligible?: (symbol: string) => Promise<boolean>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -141,6 +196,21 @@ function parsePrice(value: unknown, symbol: string): number {
 
 /** Public, credential-free Binance Spot market reader used by paper trading. */
 export class BinancePublicMarketClient implements BinancePublicMarket {
+  /**
+   * Verify live Spot trading status and conservative risk markers.
+   * @param rawSymbol - Spot symbol to verify before submitting a virtual buy.
+   * @returns True only if current metadata passes the fail-closed checks.
+   */
+  async eligible(rawSymbol: string): Promise<boolean> {
+    const symbol = normalizeSymbol(rawSymbol)
+    const url = new URL('/api/v3/exchangeInfo', BINANCE_PUBLIC_API)
+    url.searchParams.set('symbol', symbol)
+    const raw = await fetchJson(url)
+    if (!isRecord(raw) || !Array.isArray(raw.symbols)) throw new Error('Binance Spot status unavailable')
+    const row: unknown = raw.symbols.find(item => isRecord(item) && item.symbol === symbol)
+    return assessBinanceSpotSymbol(row) === undefined
+  }
+
   /**
    * Read the latest public Binance Spot price for one symbol.
    * @param rawSymbol - Spot symbol such as BTCUSDT.
@@ -236,10 +306,12 @@ function parseState(raw: string): BinancePaperState {
       || !finitePositive(position.quantity) || !finitePositive(position.costBasisUsdt)) {
       throw new Error('Binance paper ledger contains an invalid position; refusing to trade')
     }
+    if (position.exitPlan !== undefined && !validExitPlan(position.exitPlan)) {
+      throw new Error('Binance PAPER position exit policy is invalid')
+    }
     positions[key] = {
-      symbol: key,
-      quantity: position.quantity,
-      costBasisUsdt: position.costBasisUsdt,
+      symbol: key, quantity: position.quantity, costBasisUsdt: position.costBasisUsdt,
+      ...(position.exitPlan === undefined ? {} : { exitPlan: position.exitPlan as unknown as BinancePaperExitPlan }),
     }
   }
 
@@ -268,6 +340,17 @@ function parseState(raw: string): BinancePaperState {
     }
   })
 
+  // Backward-compatible adoption of open PAPER positions created before
+  // the exit-plan feature: derive the plan from their persisted actual buy
+  // receipt, never from a guessed market price or an LLM response.
+  for (const [symbol, position] of Object.entries(positions)) {
+    if (position.exitPlan !== undefined) continue
+    const entry = [...trades].reverse().find(trade => trade.symbol === symbol && trade.side === 'buy')
+    // Cost basis represents all open lots and their entry fees; reconstruct
+    // the weighted fill price rather than reusing only the latest buy price.
+    const price = position.costBasisUsdt / position.quantity / (1 + value.feeRate)
+    position.exitPlan = paperExitPlan(price, entry?.strategyId ?? 'legacy-paper', 'legacy-adopted')
+  }
   return {
     schema: 1,
     initialCashUsdt: value.initialCashUsdt,
@@ -369,11 +452,12 @@ export class BinancePaperBroker {
    * Read public candles through the broker's market seam.
    * @param symbol - Binance Spot symbol.
    * @param interval - Binance kline interval.
-   * @param limit - Requested candle count.
+   * @param limit - Requested candle count, clamped to 1–1000 for every market provider.
    * @returns Public OHLCV candles.
    */
   async candles(symbol: string, interval: string, limit = 200): Promise<BinanceCandle[]> {
-    return this.market.candles(symbol, interval, limit)
+    const size = Math.max(1, Math.min(1000, Math.floor(limit)))
+    return (await this.market.candles(symbol, interval, size)).slice(0, size)
   }
 
   /**
@@ -392,12 +476,16 @@ export class BinancePaperBroker {
       const marketValueUsdt = position.quantity * marketPriceUsdt
       return {
         symbol,
-        quantity: round(position.quantity),
+        // Keep exact virtual position size for full exits; rounding to 8 digits
+        // caused tiny phantom balances after a supposedly complete liquidation.
+        quantity: position.quantity,
         averageEntryUsdt: round(position.costBasisUsdt / position.quantity),
         marketPriceUsdt: round(marketPriceUsdt),
         marketValueUsdt: round(marketValueUsdt),
         costBasisUsdt: round(position.costBasisUsdt),
         unrealizedPnlUsdt: round(marketValueUsdt - position.costBasisUsdt),
+        unrealizedReturnPct: round(((marketValueUsdt - position.costBasisUsdt) / position.costBasisUsdt) * 100, 4),
+        ...(position.exitPlan === undefined ? {} : { exitPlan: position.exitPlan }),
       }
     })
     const marketValue = positions.reduce((sum, position) => sum + position.marketValueUsdt, 0)
@@ -450,6 +538,11 @@ export class BinancePaperBroker {
     const reason = input.reason?.trim()
     const trade = await withPathLock(this.path, async () => {
       const state = await readState(this.path) ?? freshState(DEFAULT_INITIAL_CASH_USDT, DEFAULT_FEE_RATE)
+      if (input.side === 'buy') {
+        if (binanceKnownAssetRisk(symbol)) throw new Error('Binance known high-risk asset is not eligible for PAPER buy')
+        if (this.market.eligible && !(await this.market.eligible(symbol)))
+          throw new Error('Binance public Spot market is not eligible for PAPER buy')
+      }
       const price = await this.market.price(symbol)
       let quantity: number
       if (input.side === 'buy') {
@@ -484,6 +577,13 @@ export class BinancePaperBroker {
           symbol,
           quantity: (current?.quantity ?? 0) + quantity,
           costBasisUsdt: (current?.costBasisUsdt ?? 0) + debit,
+          // Each new PAPER buy defines a fresh plan on the weighted entry;
+          // this path is intentionally not usable by the REAL MCP broker.
+          exitPlan: paperExitPlan(
+            ((current?.exitPlan?.entryPriceUsdt ?? price) * (current?.quantity ?? 0) + price * quantity)
+              / ((current?.quantity ?? 0) + quantity),
+            strategyId || current?.exitPlan?.strategyId || 'manual-paper',
+          ),
         }
       } else {
         const current = state.positions[symbol]
@@ -497,12 +597,18 @@ export class BinancePaperBroker {
         state.cashUsdt += proceeds
         state.realizedPnlUsdt += realizedPnlUsdt
         const remainingQuantity = current.quantity - quantity
-        if (remainingQuantity <= 1e-12) delete state.positions[symbol]
+        if (remainingQuantity <= 1e-12) Reflect.deleteProperty(state.positions, symbol)
         else {
           state.positions[symbol] = {
             symbol,
             quantity: remainingQuantity,
             costBasisUsdt: current.costBasisUsdt - releasedBasis,
+            ...(current.exitPlan === undefined ? {} : {
+              exitPlan: {
+                ...current.exitPlan,
+                tp1Taken: current.exitPlan.tp1Taken || (reason === 'paper-tp1'),
+              },
+            }),
           }
         }
       }

@@ -126,7 +126,9 @@ export class ApiProxyService extends Service implements ApiProxy {
     this.clientReality = new ClientRealityService(ctx)
     const api = createApiProxy(ctx, {
       defaultModelSelection: () => ctx.agentDefaultModel.currentSelection(),
+      defaultDisplayModelSelection: () => ctx.agentDefaultModel.preferredSelection(),
       saveDefaultModelSelection: selection => ctx.agentDefaultModel.saveSelection(selection),
+      saveWebModelSelection: (selected, runtime) => ctx.agentDefaultModel.saveWebSelection(selected, runtime),
       cwd: process.cwd(),
       ...config.nativeOpen === undefined ? {} : { canOpenPath: () => config.nativeOpen as boolean },
       ...(config.sessionExportCompressionLevel === undefined

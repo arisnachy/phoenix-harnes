@@ -520,6 +520,7 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
                 arguments: normalized.logged,
                 isError: result.isError,
                 content: logged,
+                ...result.meta !== undefined ? { meta: result.meta } : {},
               })
             })().finally(() => { logWork.delete(task) })
             logWork.add(task)

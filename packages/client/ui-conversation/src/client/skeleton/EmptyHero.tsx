@@ -8,10 +8,11 @@
 import { useId } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import {
-  IconChevronDownOutline14, IconFolderClose16, IconFolderOpen16, PhoenixLogo,
+  IconChevronDownOutline14, IconChevronRightOutline14, IconFolderClose16, IconFolderOpen16,
+  IconSparkle16, IconWarningOutline16, PhoenixLogo,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import { workspaceTitleOf } from '@phoenix-ai/dsh-client-runtime/client'
-import type { ConversationSlotProps } from '../contract/slots.ts'
+import type { ConversationSlotProps, ProactivityAttentionItem } from '../contract/slots.ts'
 import css from './HeroShell.module.css'
 
 /** The owner's locale seat type, passed to hero chrome as a plain prop. */
@@ -116,6 +117,109 @@ export function HeroGlow({ className }: { className?: string | undefined }) {
   )
 }
 
+/** Resolve concise fallback copy without exposing internal task mechanics. */
+export function heroAttentionDetail(item: ProactivityAttentionItem): string {
+  if (item.detail !== undefined && item.detail.trim().length > 0) return item.detail.trim()
+  if (item.kind === 'failure') return 'Phoenix no pudo completar esta tarea.'
+  if (item.kind === 'upcoming') return 'Se acerca esta tarea.'
+  return 'Hay un resultado nuevo.'
+}
+
+/** Build the draft that opens one proactive signal into a normal Phoenix conversation. */
+export function heroAttentionPrompt(item: ProactivityAttentionItem): string {
+  const detail = heroAttentionDetail(item)
+  if (item.kind === 'failure') {
+    return `Revisa este asunto proactivo de Phoenix: ${item.title}. ${detail} Encuentra la causa y ayúdame a resolverlo.`
+  }
+  if (item.kind === 'upcoming') {
+    return `Ayúdame a preparar este asunto que se aproxima: ${item.title}. ${detail}`
+  }
+  return `Explícame este resultado proactivo de Phoenix y dime qué requiere mi atención: ${item.title}. ${detail}`
+}
+
+/** Quiet, actionable attention feed rendered below the Hero composer. */
+export function HeroAttentionList({
+  attention,
+  onSelect,
+  onDismiss,
+}: {
+  attention: readonly ProactivityAttentionItem[]
+  onSelect?: (item: ProactivityAttentionItem) => void
+  onDismiss?: (item: ProactivityAttentionItem) => void
+}) {
+  if (attention.length === 0) return null
+  return (
+    <div className={css.attention} aria-label="Atención proactiva de Phoenix">
+      {attention.slice(0, 3).map(item => (
+        <div className={css.attentionEntry} key={item.id}>
+          <button
+            type="button"
+            className={css.attentionRow}
+            onClick={() => { onSelect?.(item) }}
+          >
+            <span className={css.attentionIconWrap} aria-hidden="true">
+              {item.kind === 'failure'
+                ? <IconWarningOutline16 className={css.attentionIcon} size={16} />
+                : <IconSparkle16 className={css.attentionIcon} size={16} />}
+            </span>
+            <span className={css.attentionCopy}>
+              <span className={css.attentionTitle}>{item.title}</span>
+              <span className={css.attentionDetail}>{heroAttentionDetail(item)}</span>
+            </span>
+            <IconChevronRightOutline14 className={css.attentionArrow} size={14} />
+          </button>
+          {onDismiss === undefined ? null : <button type="button" className={css.attentionDismiss} aria-label={`Descartar ${item.title}`} onClick={() => { onDismiss(item) }}>×</button>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+
+/** Zero-token entry points: selecting one only edits the existing composer draft. */
+export const HERO_MISSION_STARTERS = [
+  {
+    id: 'continue',
+    label: 'Continuar misión',
+    hint: 'Retomar lo pendiente',
+    prompt: 'Kira, recupera el estado verificado de la misión activa en este espacio. Identifica lo pendiente, revisa los bloqueos y continúa por el siguiente paso útil hasta entregar un resultado comprobable. Si no hay contexto suficiente, dilo antes de actuar.',
+  },
+  {
+    id: 'investigate',
+    label: 'Investigar',
+    hint: 'Evidencia antes de concluir',
+    prompt: 'Kira, investiga este tema con fuentes verificables, fechas, perspectivas relevantes y límites de la evidencia: [escribe aquí el tema]. Distingue hechos de hipótesis y entrega conclusiones accionables.',
+  },
+  {
+    id: 'build',
+    label: 'Construir',
+    hint: 'De idea a entrega real',
+    prompt: 'Kira, quiero construir lo siguiente: [describe aquí tu idea]. Define criterios de aceptación, usa las herramientas disponibles, verifica el resultado y explica qué quedó realmente terminado y qué falta.',
+  },
+] as const
+
+export type HeroMissionStarter = (typeof HERO_MISSION_STARTERS)[number]
+
+/** Universal mission shortcuts; no model call or submission occurs on click. */
+export function HeroMissionLaunchpad({ onSelect }: { onSelect: (mission: HeroMissionStarter) => void }) {
+  return (
+    <nav className={css.missionLaunchpad} aria-label="Empezar una misión con Kira">
+      {HERO_MISSION_STARTERS.map(mission => (
+        <button
+          key={mission.id}
+          type="button"
+          className={css.missionShortcut}
+          onClick={() => { onSelect(mission) }}
+          title={mission.hint}
+        >
+          <span className={css.missionLabel}>{mission.label}</span>
+          <IconChevronRightOutline14 className={css.missionArrow} size={13} />
+        </button>
+      ))}
+    </nav>
+  )
+}
+
 /** Hero chrome props. The workspace row rides the InputBar accessory hole, not here. */
 export interface HeroShellProps {
   /** The owner's locale seat, retained for the workspace chip contract. */
@@ -156,7 +260,7 @@ export function HeroShell({ renderSlot, preferredName, children }: HeroShellProp
             </>
           )}
         </h1>
-        <p className={css.subtitle}>¿Qué quieres construir hoy en Phoenix?</p>
+        <p className={css.subtitle}>¿En qué podemos trabajar hoy?</p>
       </div>
       {children}
     </div>

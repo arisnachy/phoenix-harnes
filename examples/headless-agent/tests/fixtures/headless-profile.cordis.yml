@@ -3,6 +3,10 @@
     provider: cli-mock
     model: cli-mock
 
+# The keyless CLI-mock scenarios do not probe a native Codex account.
+- id: subagent-codex
+  disabled: true
+
 - insert:
     - id: cli-mock-llm
       name: './snapshot-fixtures/cli-mock-llm.ts'

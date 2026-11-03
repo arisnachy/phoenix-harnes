@@ -1,6 +1,6 @@
 import type { Context } from '@phoenix-ai/cordis'
 import type {
-  AssistantBlock, AssistantMessageNode, ConversationLocation, ConversationMatch,
+  AssistantBlock, AssistantMessageNode, AssistantProvenanceView, ConversationLocation, ConversationMatch,
   ConversationNodeContext, ConversationNodeDefinition,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import {
@@ -21,6 +21,8 @@ declare module '@phoenix-ai/dsh-client-runtime/client' {
   interface ConversationStepDataMap {
     /** Streaming, settled, or interrupted Assistant material for this Step. */
     'assistant-step': AssistantChatData
+    /** Actual route prepared for this Step, without account or credential data. */
+    'assistant-request-model': AssistantProvenanceView
   }
 }
 
@@ -158,6 +160,7 @@ function finalNode(
       step: state.step,
       blocks: toAssistantBlocks(event.data.message.content),
       usage: event.data.usage,
+      provenance: event.data.message.source,
       timing: {
         stepStartTime: context.start?.event.time ?? null,
         firstTokenTime: state.firstTokenTime ?? null,
@@ -218,6 +221,10 @@ function projectAssistant(context: ConversationNodeContext<AssistantState>): Ass
   const state = context.state ?? fallbackState(context)
   if (state === undefined) return undefined
   const settled = finalNode(state, context)
+  const location = context.start?.location
+  const requested = location?.kind === 'step'
+    ? location.step.data.get('assistant-request-model') : undefined
+  const provenance = settled?.provenance ?? requested
   const blocks = settled?.blocks ?? compactBlocks(state.blocks)
   const visible = hasVisibleContent(blocks)
   const status = settled?.interrupted === true
@@ -237,8 +244,42 @@ function projectAssistant(context: ConversationNodeContext<AssistantState>): Ass
       time,
       ...state.usage === undefined ? {} : { usage: state.usage },
       ...settled === undefined ? {} : { finalNode: settled },
+      ...provenance === undefined ? {} : { provenance },
     },
   }
+}
+
+interface AssistantRequestModelState {
+  readonly provenance?: AssistantProvenanceView
+}
+
+/** Actual prepared model for one Step, including request-header changes during retry. */
+export const assistantRequestModelDefinition: ConversationNodeDefinition<AssistantRequestModelState> = {
+  kind: 'assistant-request-model',
+  match: (event, location) => {
+    if (event.type === 'step/start') return { id: `${event.data.turn}:${event.data.step}`, role: 'start' }
+    if (event.type === 'request/header' && location?.kind === 'step') {
+      return { id: `${location.turn.turn}:${location.step.step}`, role: 'update' }
+    }
+    return null
+  },
+  start: (_context, _match, reader) =>
+    reader.previous<AssistantRequestModelState>('assistant-request-model')?.state ?? {},
+  update: (context, match) => {
+    if (match.event.type !== 'request/header') return context.state
+    const config = match.event.data.header.config
+    if (context.state.provenance?.provider === config.provider && context.state.provenance.model === config.model) return context.state
+    return { provenance: { provider: config.provider, model: config.model } }
+  },
+  buildLocationData: (context, scope) => {
+    const location = context.start?.location
+    const provenance = context.state?.provenance
+    if (scope !== 'step' || location?.kind !== 'step' || provenance === undefined) return null
+    return {
+      kind: 'step', turn: location.turn.turn, step: location.step.step,
+      key: 'assistant-request-model', value: provenance,
+    }
+  },
 }
 
 /** Per-step Assistant streaming/final/interruption Definition. */
@@ -314,5 +355,6 @@ export const assistantDefinition: ConversationNodeDefinition<AssistantState> = {
  * @param ctx - owning UI Conversation context.
  */
 export function registerAssistantConversationNode(ctx: Context): void {
+  ctx.conversationEvents.register(assistantRequestModelDefinition)
   ctx.conversationEvents.register(assistantDefinition)
 }

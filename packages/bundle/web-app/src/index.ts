@@ -20,6 +20,8 @@ import z from '@phoenix-ai/schemastery'
 import { addHarnessSourceSection } from '@phoenix-ai/dsh-app-boot'
 import * as FrontendStatic from '@phoenix-ai/dsh-host-frontend-static'
 import { launchEnvironmentOf } from '@phoenix-ai/dsh-launch-environment'
+import { registerMiniBrowserRoutes } from './mini-browser.ts'
+import { registerDesktopLiveRoutes } from './desktop-live.ts'
 import { scrubbedParentEnv } from '@phoenix-ai/dsh-subprocess'
 import type {} from '@phoenix-ai/cordis-plugin-loader'
 import type {} from '@phoenix-ai/dsh-host-webserver'
@@ -146,6 +148,35 @@ function webSurfacePrompt(webUrl: string): string {
   return `You are interacting with the user through the PHOENIX Web GUI at ${webUrl}. `
     + 'When the user refers to "this page", "this GUI", or "this app" without naming another target, they mean this GUI. '
     + 'The browser provides no implicit DOM, route, or screenshot context. '
+    + 'When the user asks to open or navigate a public website, prefer the available local Chromium MCP browser tools; '
+    + 'the same CDP tab is visible as the in-chat MiniBrowser with a full-window expansion for human control. '
+    + 'Use one direct browser action for simple navigation and report only the verified outcome. '
+    + 'When the user asks to watch or analyze a YouTube tutorial or video, use Chrome MCP youtube_video_inspect with the supplied watch URL or existing tabId, including multiple actual screenshots. '
+    + 'When captions are empty, inspect the real local audioSample; if successful, use youtube_video_listen on the same tabId for additional portions needed to understand speech, with exact timecodes. '
+    + 'The local faster-whisper model is auto-provisioned via uv on first use; audio is short-lived and not sent to external speech APIs. '
+    + 'If sound capture is blocked or local transcription fails, do NOT retry the muted headless player repeatedly. Call video_media_inspect once without a path to check whether an authorized capture already exists; if VIDEO_CAPTURE_NOT_FOUND or VIDEO_CAPTURE_EXPIRED_OR_INVALID, STOP analyzing the unseen video and ask the user to click «Compartir pestaña para Kira» in the MiniBrowser, choose the actually playing Chrome tab in Chrome’s native chooser, enable «Compartir audio», and let the recording finish. The capture button is available in MiniBrowser even when YouTube fails or the tab is not a YouTube watch page. Only after a successful capture, call video_media_inspect again with no path. Do not substitute a speculative Godot/tutorial summary for a request to actually watch and hear that video. '
+    + 'For a user-owned local MP4/WebM/MOV, call video_media_inspect with its path only when PHOENIX_VIDEO_ALLOWED_DIRS explicitly authorizes that directory. FFmpeg is resolved locally or via uv/imageio-ffmpeg; never use YouTube scraping, DRM workarounds, unauthorized downloading or paid speech APIs. '
+    + 'If sound capture is blocked or local transcription fails, report the exact limitation, never assume the video was heard. '
+    + 'Inspect actual timecoded evidence and screenshots before judging Godot workflows or code. '
+    + 'If captions are unavailable or video frames cannot be captured, report exactly what evidence is missing and never pretend to have watched or listened to the whole video. '
+    + 'Do not open an unrelated OS tab when a working local browser connector is available, '
+    + 'and never bypass its configured action permissions. '
+    + 'Distinguish a verified page navigation from an in-chat screenshot: if a frame or MiniBrowser view fails, '
+    + 'explicitly report that the page may be open in Chromium but is NOT yet visible in the conversation. '
+    + 'Never claim the user can see the page inside Phoenix until the MiniBrowser display confirms it. '
+    + 'For web forms and browser interaction, prefer the headless Chromium MCP tools over Computer desktop screenshots: '
+    + 'inspect_page ONCE for control labels and readonly/disabled flags, fill_form ONCE with all authorized fields, '
+    + 'submit_form ONCE only when the user explicitly requested submission, then wait_for the actual confirmation text. '
+    + 'Always reuse the exact tabId returned by navigate across inspection, fill, submission and verification; '
+    + 'other Kira team members may be operating different Chromium tabs concurrently. '
+    + 'If semantic DOM targeting is unavailable, use screenshot once to identify the page, then mouse_action, '
+    + 'press_key or type_text on that SAME tab; take a new screenshot only when needed to verify a changed state. '
+    + 'For single controls use interact, not a new plan or a subagent. Never fill hidden, disabled, readonly, CAPTCHA '
+    + 'or file controls through workarounds. Respect browser-action permissions and do not invent a successful submission. '
+    + 'If cross-origin frames, native dialogs, OS-level windows, unexpected login, or anti-bot checks block DOM actions, '
+    + 'report the exact blocker and request the minimum human intervention; do not loop through missing desktop windows. '
+    + 'Delegate only independent substantive work; avoid unnecessary web validation subagents for simple forms. '
+
     + updateContract
     + 'Starting another server does not update this GUI. '
     + 'The apps/web Vite entry builds the shell but is not a standalone application because only dsh web injects window.__DSH_BOOT__. '
@@ -231,6 +262,9 @@ export function apply(ctx: Context, config: Config): void {
   // Release dependent rows only after bind-dependent trust has been sampled once.
   ctx.provide(WEB_RUNTIME_SERVICE, runtime)
   ctx.plugin(FrontendStatic, { distIndex: internals.resolveDistIndex() })
+  // A local Chromium session shared with Phoenix's MCP Chrome connector. Never a remote iframe.
+  registerMiniBrowserRoutes(ctx)
+  registerDesktopLiveRoutes(ctx)
   if (config.surfaceContext) {
     ctx.inject(['systemPrompt'], (promptCtx) => {
       addHarnessSourceSection(promptCtx, SOURCE_ROOT)

@@ -24,7 +24,7 @@
 
 import { createRequire } from 'node:module'
 import {
-  existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync, unlinkSync, writeFileSync,
+  existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync, writeFileSync,
 } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import type { EntryOptions } from '@phoenix-ai/cordis-plugin-loader'
@@ -167,7 +167,7 @@ export function initProfile(dir: string, bundles: readonly string[]): void {
   if (!existsSync(workspacePath)) writeFileSync(workspacePath, PROFILE_PNPM_WORKSPACE)
 }
 
-/** Ensure `link` is a symlink to `target`, replacing a wrong or dangling link; a real directory throws. */
+/** Ensure `link` is a symlink to `target`, replacing wrong, dangling, or legacy copied entries. */
 function ensureSymlink(link: string, target: string): void {
   let stat
   try {
@@ -179,12 +179,18 @@ function ensureSymlink(link: string, target: string): void {
   }
   if (stat !== undefined) {
     if (!stat.isSymbolicLink()) {
-      throw new Error(`dsh: ${link} exists and is not a symlink; remove it so dsh can manage the installation fallback`)
+      // profiles/node_modules is installation-owned. Older PHOENIX builds and
+      // interrupted profile installs could leave real copied package trees
+      // here; keeping them defeats the lightweight junction farm, can retain
+      // stale code, and was one path to multi-gigabyte ~/.dsh growth. Replace
+      // only this exact managed entry with the installation link.
+      rmSync(link, { recursive: stat.isDirectory(), force: true })
+    } else {
+      if (readlinkSync(link) === target) return
+      // unlink deletes the reparse point itself on Windows too; rmSync treats a
+      // junction as a directory and throws EISDIR unless recursive.
+      unlinkSync(link)
     }
-    if (readlinkSync(link) === target) return
-    // unlink deletes the reparse point itself on Windows too; rmSync treats a
-    // junction as a directory and throws EISDIR unless recursive.
-    unlinkSync(link)
   }
   try {
     symlinkSync(target, link, 'junction')

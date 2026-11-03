@@ -20,6 +20,8 @@ The key is `<scope>/<id>`, where `scope` is the **owning plugin's registered nam
 
 ## Surface
 
+Website browser executors query `credentials/web-login-status` for the selected identity's saved state and automatic consent, then use `credentials/web-login-resolve` for private, exact-origin login values. Both events use serial dispatch; an explicit denial prevents fallback to another identity or legacy store. Values remain inside the trusted browser executor and never enter model arguments, tool output, or session events. An absent DPAPI record permits the existing legacy reference lookup.
+
 ```ts
 import type { Context } from '@phoenix-ai/cordis'
 import { credentialKey, credentialRef, originCredentialRef } from '@phoenix-ai/dsh-credentials'

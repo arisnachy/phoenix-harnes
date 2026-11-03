@@ -18,7 +18,7 @@
  * card; the in-menu strip with Retry remains the catalog-load surface.
  */
 import {
-  useEffect, useId, useMemo, useRef, useState, useSyncExternalStore,
+  useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore,
   type KeyboardEvent, type FocusEvent,
 } from 'react'
 import clsx from 'clsx'
@@ -29,7 +29,9 @@ import {
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
-import { presentModel, providerBrandMark, providerInitial } from './presentation.ts'
+import {
+  isPhoenixAutoRouting, presentModel, providerBrandMark, providerInitial, type ModelPresentation,
+} from './presentation.ts'
 import css from './ModelSelect.module.css'
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
@@ -81,6 +83,7 @@ export function ModelSelect(
   )
   const [open, setOpen] = useState(false)
   const [pane, setPane] = useState<Pane>('root')
+  const [modelQuery, setModelQuery] = useState('')
   const [effortDraftKey, setEffortDraftKey] = useState<string | null>(null)
   // Provider accordion: manual toggles win; otherwise only the group holding
   // the current model stays expanded, falling back to the first group when
@@ -97,6 +100,11 @@ export function ModelSelect(
   const toastSeq = useRef(0)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const groupsRef = useRef<HTMLDivElement | null>(null)
+  const [menuPlacement, setMenuPlacement] = useState<{
+    direction: 'above' | 'below'
+    maxHeight: number
+  }>({ direction: 'above', maxHeight: 360 })
   const itemRefs = useRef<(HTMLElement | null)[]>([])
   const id = useId()
 
@@ -112,6 +120,23 @@ export function ModelSelect(
           : { reasoningEffort: model.reasoning.defaultEffort },
       } satisfies ModelSelection,
     }))), [state.groups])
+  const normalizedQuery = modelQuery.trim().toLocaleLowerCase()
+  const visibleGroups = useMemo(() => state.groups.map((group) => {
+    const providerMatches = group.name.toLocaleLowerCase().includes(normalizedQuery)
+      || group.id.toLocaleLowerCase().includes(normalizedQuery)
+    return {
+      ...group,
+      models: normalizedQuery === '' || providerMatches
+        ? group.models
+        : group.models.filter((model) => {
+          const displayName = isPhoenixAutoRouting(model.id, model.name)
+            ? t('trigger.auto')
+            : presentModel(model.name, model.description).displayName
+          return [model.id, model.name, displayName]
+            .some(value => value.toLocaleLowerCase().includes(normalizedQuery))
+        }),
+    }
+  }).filter(group => group.models.length > 0), [state.groups, normalizedQuery, t])
   const selectedIndex = state.current === null
     ? -1
     : choices.findIndex(c => c.selection.provider === state.current?.provider && c.selection.model === state.current.model)
@@ -163,9 +188,51 @@ export function ModelSelect(
     setEffortDraftKey(null)
   }, [open, pane])
 
+  // The model directory may be taller than the available space above the
+  // composer. Clamp it to the actual trigger/viewport geometry before paint,
+  // and flip below the trigger when there is more space there. This prevents
+  // the first model from being hidden outside the top of the browser window.
+  useLayoutEffect(() => {
+    if (!open) return
+    const measureMenu = (): void => {
+      const trigger = triggerRef.current
+      if (trigger === null) return
+      const rect = trigger.getBoundingClientRect()
+      const scrollPort = trigger.closest('[data-conversation-scroll]')?.getBoundingClientRect()
+      const viewportTop = Math.max(12, (scrollPort?.top ?? 0) + 12)
+      const viewportBottom = Math.min(window.innerHeight - 12, (scrollPort?.bottom ?? window.innerHeight) - 12)
+      const above = rect.top - viewportTop - 8
+      const below = viewportBottom - rect.bottom - 8
+      const cap = pane === 'model' ? 520 : pane === 'effort' ? 440 : 360
+      const direction = above >= Math.min(280, cap) || above >= below ? 'above' : 'below'
+      const room = direction === 'above' ? above : below
+      const maxHeight = Math.min(cap, Math.max(80, Math.floor(room)))
+      setMenuPlacement(previous => previous.direction === direction && previous.maxHeight === maxHeight
+        ? previous
+        : { direction, maxHeight })
+    }
+    measureMenu()
+    window.addEventListener('resize', measureMenu)
+    window.addEventListener('scroll', measureMenu, true)
+    return () => {
+      window.removeEventListener('resize', measureMenu)
+      window.removeEventListener('scroll', measureMenu, true)
+    }
+  }, [open, pane])
+
+  // Codex can replace the startup catalog immediately after the model pane opens.
+  // Chrome scroll anchoring may otherwise preserve a lower row and hide models
+  // prepended by that refresh. Every fresh catalog starts at its first row.
+  useLayoutEffect(() => {
+    if (!open || pane !== 'model') return
+    const groups = groupsRef.current
+    if (groups !== null) groups.scrollTop = 0
+  }, [open, pane, state.groups, modelQuery])
+
   if (!available) return null
 
   const show = (): void => {
+    setModelQuery('')
     setPane('root')
     setOpen(true)
     reload()
@@ -195,7 +262,7 @@ export function ModelSelect(
       return
     }
     if (!open) return
-    if (event.target instanceof HTMLInputElement && event.target.type === 'range') return
+    if (event.target instanceof HTMLInputElement) return
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
       moveFocus(event.key === 'ArrowDown' ? 1 : -1)
@@ -266,7 +333,9 @@ export function ModelSelect(
 
   const modelLabel = currentChoice === undefined
     ? t('trigger.fallback')
-    : presentModel(currentChoice.model.name).displayName
+    : isPhoenixAutoRouting(currentChoice.model.id, currentChoice.model.name)
+      ? t('trigger.auto')
+      : presentModel(currentChoice.model.name).displayName
   const triggerAria = currentChoice === undefined
     ? t('trigger.selectAria')
     : effortLabel === undefined
@@ -287,6 +356,7 @@ export function ModelSelect(
   }
 
   const groupExpanded = (groupId: string): boolean => {
+    if (normalizedQuery !== '') return true
     const manual = groupToggles.get(groupId)
     return manual ?? groupId === defaultExpandedGroupId()
   }
@@ -332,6 +402,12 @@ export function ModelSelect(
             pane === 'effort' && css.effortMenu,
           )}
           role="menu"
+          style={{
+            maxHeight: menuPlacement.maxHeight,
+            ...(menuPlacement.direction === 'below'
+              ? { top: 'calc(100% + 8px)', bottom: 'auto' }
+              : { bottom: 'calc(100% + 8px)', top: 'auto' }),
+          }}
           aria-label={t('menu.aria')}
           aria-busy={state.status === 'loading' || busy}
         >
@@ -354,6 +430,17 @@ export function ModelSelect(
 
           {pane === 'model' && (
             <>
+              <div className={css.modelSearch}>
+                <input
+                  type="search"
+                  className={css.modelSearchInput}
+                  aria-label={t('search.aria')}
+                  placeholder={t('search.placeholder')}
+                  autoComplete="off"
+                  value={modelQuery}
+                  onChange={(event) => { setModelQuery(event.currentTarget.value) }}
+                />
+              </div>
               {state.status === 'loading' && (
                 <div className={css.status}>{t('status.loading')}</div>
               )}
@@ -369,8 +456,11 @@ export function ModelSelect(
                   <button type="button" className={css.retry} onClick={reload}>{t('retry')}</button>
                 </div>
               ))}
-              <div className={clsx(css.groups, 'scrollable')}>
-                {state.groups.map((group) => {
+              <div ref={groupsRef} className={clsx(css.groups, 'scrollable')}>
+                {visibleGroups.length === 0 && state.status !== 'loading' && (
+                  <div className={css.empty}>{normalizedQuery === '' ? t('empty.models') : t('search.noMatches')}</div>
+                )}
+                {visibleGroups.map((group) => {
                   const headingId = `${id}-${group.id}`
                   const expanded = groupExpanded(group.id)
                   return (
@@ -395,7 +485,9 @@ export function ModelSelect(
                       </button>
                       {expanded && group.models.map((model) => {
                         const selected = state.current?.provider === group.id && state.current.model === model.id
-                        const presentation = presentModel(model.name, model.description)
+                        const presentation: ModelPresentation = isPhoenixAutoRouting(model.id, model.name)
+                          ? { displayName: t('trigger.auto'), description: t('trigger.autoDetail') }
+                          : presentModel(model.name, model.description)
                         return (
                           <button
                             ref={itemRef()}

@@ -435,6 +435,14 @@ describe('Linux primary graph', () => {
 })
 
 describe('gate process outcomes', () => {
+  it('marks child commands as nested under the aggregate worktree lock', async () => {
+    const result = await runGate(gate('nested-lock', {
+      args: ['-e', "process.exit(process.env.DSH_GATE_LOCK_DISABLED === '1' ? 0 : 1)"],
+    }))
+
+    expect(result.status).toBe('passed')
+  })
+
   it('streams selected gate output without retaining it', async () => {
     const write = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
     try {

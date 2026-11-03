@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { loadLayeredEnv } from '@phoenix-ai/dsh-app-boot'
 import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 import { parseDshArgs } from './args.ts'
-import { preparePhoenixWebRuntime } from './phoenix-runtime-freshness.ts'
+import { phoenixSupervisorSourceRoot, preparePhoenixWebRuntime } from './phoenix-runtime-freshness.ts'
 
 // Both the source tree (apps/cli/src) and the bundled bin (apps/cli/lib) sit
 // one directory under apps/cli, so the checked-in manifest resolves with the
@@ -49,11 +49,12 @@ if (
   && !directWebHasUnsafeWildcardHost
   && process.env.PHOENIX_UPDATE_SUPERVISED !== '1'
 ) {
-  const supervisor = resolve(
+  const durableSupervisor = resolve(
     fileURLToPath(new URL('../../../scripts/phoenix-windows-supervisor.mjs', import.meta.url)),
   )
-  if (existsSync(supervisor)) {
-    const runtimeSourceRoot = resolve(supervisor, '..', '..')
+  if (existsSync(durableSupervisor)) {
+    const runtimeSourceRoot = resolve(durableSupervisor, '..', '..')
+    const freshnessStartedAt = Date.now()
     try {
       preparePhoenixWebRuntime(runtimeSourceRoot)
     } catch (error) {
@@ -61,9 +62,15 @@ if (
       process.exit(1)
     }
 
+    console.error(`[PHOENIX STARTUP] source runtime/build freshness checks: ${String(Date.now() - freshnessStartedAt)}ms`)
+
+    const supervisorSourceRoot = phoenixSupervisorSourceRoot(runtimeSourceRoot)
+    const supervisor = resolve(supervisorSourceRoot, 'scripts', 'phoenix-windows-supervisor.mjs')
     const forwardedArgs = rawArgs.slice(1)
     if (forwardedArgs[0] === '--') forwardedArgs.shift()
     const result = spawnSync(process.execPath, [supervisor, ...forwardedArgs], {
+      // Supervisor code may come from a newer verified isolated runtime, but its
+      // working directory stays on the durable checkout that owns Git/control state.
       cwd: runtimeSourceRoot,
       env: process.env,
       stdio: 'inherit',
@@ -84,6 +91,28 @@ if (
 if (rawArgs[0] === 'codex-plugin') {
   const { runCodexPlugin } = await import('./codex-plugin.ts')
   process.exit(runCodexPlugin(rawArgs.slice(1)))
+}
+
+// Codex CLI itself is updated independently from the PHOENIX source tree.
+// The managed runtime lives under DSH_HOME and is activated only after an
+// official stable npm release passes a local smoke test.
+if (rawArgs[0] === 'codex-update') {
+  const script = resolve(fileURLToPath(new URL('../../../scripts/phoenix-codex-cli-update.mjs', import.meta.url)))
+  const result = spawnSync(process.execPath, [script, ...rawArgs.slice(1)], {
+    cwd: resolve(script, '..', '..'),
+    env: process.env,
+    stdio: 'inherit',
+    windowsHide: true,
+  })
+  process.exit(result.status ?? 1)
+}
+
+// Superpowers is an upstream skill methodology bridged directly into PHOENIX.
+// Keep it outside profile parsing so sync/verify can repair a fresh install
+// even when no agent profile can boot yet.
+if (rawArgs[0] === 'superpowers') {
+  const { runSuperpowers } = await import('./superpowers.ts')
+  process.exit(runSuperpowers(rawArgs.slice(1)))
 }
 
 // OpenClaw skills are a launcher capability rather than a profile plugin:
@@ -143,6 +172,24 @@ switch (invocation.mode) {
     const managedMcpPatch = dshHomePath('mcp', 'managed.patch.yml')
     if ((process.env.PHOENIX_MANAGED_MCP ?? 'on').trim().toLowerCase() !== 'off'
       && existsSync(managedMcpPatch) && !patches.includes(managedMcpPatch)) {
+      // Legacy patches (including old Notion, Canva and Supabase installs)
+      // lacked loader inject. Repair BEFORE Cordis loads them: migrating in
+      // pluginInventory's async startup effect happens after activation and
+      // cannot recover providers that already missed the authorization service.
+      // A malformed persisted row would otherwise fail the entire Loader before
+      // pluginInventory's asynchronous recovery can start. Run the SAME strict
+      // Host validator here, preserving accepted connectors and quarantining
+      // the byte-exact original with owner-only permissions.
+      const { recoverManagedMcpOverlay } = await import('@phoenix-ai/dsh-host-plugin-inventory')
+      const recovery = await recoverManagedMcpOverlay(managedMcpPatch)
+      if (recovery.backupCreated) {
+        console.warn(`[PHOENIX MCP] isolated ${recovery.quarantined} invalid connector row(s) before boot; ${recovery.recovered} valid row(s) retained (private backup saved)`)
+      }
+      const { repairManagedMcpDependenciesBeforeBoot } = await import('./managed-mcp-preboot.ts')
+      const repaired = await repairManagedMcpDependenciesBeforeBoot(managedMcpPatch)
+      if (repaired > 0) {
+        console.info(`[PHOENIX MCP] restored authorization dependencies for ${repaired} legacy connector(s) before boot`)
+      }
       patches.push(managedMcpPatch)
     }
 
@@ -153,9 +200,11 @@ switch (invocation.mode) {
       args: invocation.args,
     })
     // A failed profile boot must leave no updater child behind holding the
-    // launcher's inherited stdio open. Start update watching only once the
-    // profile tree has successfully mounted and its lifecycle is established.
-    startPhoenixUpdateWatcher()
+    // launcher's inherited stdio open. The updater belongs to the long-lived
+    // Phoenix Web host only: starting it for one-shot/headless profiles can
+    // outlive the app and keep inherited stdout/stderr pipes open after the
+    // CLI result is already complete.
+    if (invocation.profile === 'web') startPhoenixUpdateWatcher()
     break
   }
   case 'plugin': {

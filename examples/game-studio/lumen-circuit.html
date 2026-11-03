@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lumen Circuit · Phoenix Game Studio</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif}*{box-sizing:border-box}
+body{background:#080f24;color:#eaf7ff;margin:0;padding:12px}
+main{max-width:850px;margin:auto}header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+h1{margin:0;font-size:21px;letter-spacing:.12em;color:#80f2e8}p{margin:4px 0;color:#afbdde;font-size:13px}
+button{padding:9px 16px;background:#193158;color:#f1ffff;border:1px solid #5279ac;border-radius:8px;cursor:pointer}
+button:focus-visible,canvas:focus-visible{outline:3px solid #80f2e8;outline-offset:3px}
+canvas{width:100%;height:auto;display:block;background:#0b1631;border:1px solid #264d7a;border-radius:12px;touch-action:manipulation}
+#status{color:#c2e4dd;font-size:13px;margin-top:7px;min-height:20px}
+</style></head><body><main><header><div><h1>LUMEN CIRCUIT</h1><p>Rompecabezas original · conecta la energía girando los módulos</p></div>
+<div><button id="reset" type="button">Nueva partida</button> <button id="mute" type="button">Sonido: encender</button></div></header>
+<canvas id="board" width="760" height="590" tabindex="0" aria-label="Tablero: pulsa módulos para girarlos o usa flechas y Enter"></canvas>
+<div id="status" role="status">Haz clic en los módulos o usa las flechas para seleccionar y Enter para girar.</div></main>
+<script id="phoenix-game-manifest" type="application/json">
+{
+ "schemaVersion":1,"title":"Lumen Circuit","genre":"logic puzzle","gameType":"puzzle",
+ "level":{"layers":[{"id":"neon-grid","scrollFactor":0}],"puzzles":[{"id":"circuit-path","objective":"connect source to reactor","dimensions":[5,5]}]},
+ "controls":{"interact":"pointer, Enter, Space and arrow keys"},
+ "audio":{"cues":["rotate","connected","win"],"music":"procedural soft tones from WebAudio on user gesture"},
+ "sources":[{"path":"examples/game-studio/lumen-circuit.html","license":"original"}]
+}
+</script>
+<script>
+(function(){
+'use strict';
+const canvas=document.getElementById('board'),ctx=canvas.getContext('2d'),status=document.getElementById('status');
+const size=5,cell=91,x0=152,y0=62,tiles=[],path=[[0,2],[1,2],[1,1],[2,1],[2,2],[3,2],[3,3],[4,3],[4,2]];
+let seed=19,moves=0,win=false,selected={x:0,y:2},lit=new Set(),time=0,last=0,audio=null,audioOn=false,frames=0;
+const dirs=[[0,-1],[1,0],[0,1],[-1,0]],opposite=[2,3,0,1];
+function random(){seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296}
+function key(x,y){return x+','+y}
+function music(freq,duration=.12){
+ if(!audioOn||!audio)return;
+ const oscillator=audio.createOscillator(),gain=audio.createGain(),now=audio.currentTime;
+ oscillator.type='sine';oscillator.frequency.setValueAtTime(freq,now);
+ gain.gain.setValueAtTime(.065,now);gain.gain.exponentialRampToValueAtTime(.001,now+duration);
+ oscillator.connect(gain);gain.connect(audio.destination);oscillator.start();oscillator.stop(now+duration);
+}
+function unlock(){if(!audio){const Audio=window.AudioContext||window.webkitAudioContext;if(Audio)audio=new Audio()}
+ if(audio&&audio.state==='suspended')audio.resume().catch(()=>{});
+}
+function layout(){
+ for(let y=0;y<size;y++)for(let x=0;x<size;x++){const ports=[];
+  for(let j=0;j<path.length;j++){const [px,py]=path[j];
+   if(px!==x||py!==y)continue;
+   for(const other of [path[j-1],path[j+1]])if(other){for(let d=0;d<4;d++)
+    if(x+dirs[d][0]===other[0]&&y+dirs[d][1]===other[1])ports.push(d)}
+  }
+  if(x===0&&y===2)ports.push(3); // generator feeds the first tile from the left
+  if(x===4&&y===2)ports.push(1); // the final tile feeds the reactor on the right
+  if(ports.length===0){const first=Math.floor(random()*4);ports.push(first,(first+Math.floor(random()*2+1))%4)}
+  tiles.push({x,y,ports,rot:Math.floor(random()*4)});
+ }
+}
+function portsAt(tile){return tile.ports.map(d=>(d+tile.rot)%4)}
+function updatePower(){
+ lit=new Set();const queue=[[0,2]],start=tiles.find(t=>t.x===0&&t.y===2);
+ if(!start||!portsAt(start).includes(3)){win=false;return}
+ lit.add(key(0,2));
+ while(queue.length){const [x,y]=queue.shift();const tile=tiles.find(t=>t.x===x&&t.y===y);
+  for(const d of portsAt(tile)){const nx=x+dirs[d][0],ny=y+dirs[d][1],other=tiles.find(t=>t.x===nx&&t.y===ny);
+   if(other&&portsAt(other).includes(opposite[d])&&!lit.has(key(nx,ny))){lit.add(key(nx,ny));queue.push([nx,ny])}
+  }
+ }
+ win=lit.has(key(4,2))&&portsAt(tiles.find(t=>t.x===4&&t.y===2)).includes(1);
+}
+function newGame(){tiles.length=0;seed+=17;moves=0;win=false;selected={x:0,y:2};layout();updatePower();
+ if(win){tiles.find(t=>t.x===2&&t.y===2).rot=(tiles.find(t=>t.x===2&&t.y===2).rot+1)%4;updatePower()}
+ status.textContent='Conecta el generador a la izquierda con el reactor de la derecha.';canvas.focus()
+}
+function rotate(x,y){
+ if(win)return;const t=tiles.find(item=>item.x===x&&item.y===y);
+ if(!t)return;t.rot=(t.rot+1)%4;moves++;music(320+moves%7*45,.06);updatePower();
+ if(win){music(880,.35);status.textContent='¡Circuito conectado en '+moves+' movimientos! Puedes iniciar otra partida.'}
+ else status.textContent='Movimientos: '+moves+' · módulos alimentados: '+lit.size+' / '+size*size;
+}
+function rect(x,y,w,h,color){ctx.fillStyle=color;ctx.fillRect(x,y,w,h)}
+function draw(){
+ const gradient=ctx.createLinearGradient(0,0,0,590);gradient.addColorStop(0,'#0b1939');gradient.addColorStop(1,'#0a1024');rect(0,0,760,590,gradient);
+ for(let i=0;i<60;i++){rect((i*127)%760,(i*83)%590,2,2,'#c7ecff24')}
+ ctx.textAlign='center';ctx.font='16px system-ui';ctx.fillStyle='#b4d5f0';
+ ctx.fillText('GENERADOR',92,296);ctx.fillText('REACTOR',659,296);
+ for(const tile of tiles){
+  const x=x0+tile.x*cell,y=y0+tile.y*cell,active=lit.has(key(tile.x,tile.y)),selectedTile=tile.x===selected.x&&tile.y===selected.y;
+  ctx.fillStyle=selectedTile?'#24456b':'#142b48';ctx.fillRect(x+2,y+2,cell-6,cell-6);
+  ctx.strokeStyle=selectedTile?'#ebf7bd':'#345270';ctx.lineWidth=2;ctx.strokeRect(x+2,y+2,cell-6,cell-6);
+  const cx=x+cell/2,cy=y+cell/2;ctx.lineCap='round';ctx.lineWidth=active?11:9;ctx.strokeStyle=active?'#62fff0':'#537491';
+  ctx.shadowColor=active?'#50edff':'transparent';ctx.shadowBlur=active?16:0;
+  ctx.beginPath();for(const d of portsAt(tile)){ctx.moveTo(cx,cy);ctx.lineTo(cx+dirs[d][0]*36,cy+dirs[d][1]*36)}ctx.stroke();
+  ctx.shadowBlur=0;ctx.fillStyle=active?'#e2fff0':'#a6b9d3';ctx.beginPath();ctx.arc(cx,cy,8,0,Math.PI*2);ctx.fill();
+ }
+ const wave=.7+.3*Math.sin(time*4);ctx.fillStyle=win?'#92ffdc':'#ffcb66';ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=16*wave;
+ ctx.beginPath();ctx.arc(110,290,14,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle=win?'#7dffd3':'#40536c';ctx.beginPath();ctx.arc(648,290,18,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+ ctx.font='bold 18px system-ui';ctx.textAlign='left';ctx.fillStyle='#e9e5ae';ctx.fillText('MOVIMIENTOS  '+moves,22,556);
+ ctx.textAlign='right';ctx.fillStyle=win?'#7dffdf':'#a4b7d3';ctx.fillText(win?'CIRCUITO COMPLETADO':'GIRA PARA CONECTAR',735,556);ctx.textAlign='left';
+}
+function pointer(event){
+ const r=canvas.getBoundingClientRect();const px=(event.clientX-r.left)*canvas.width/r.width,py=(event.clientY-r.top)*canvas.height/r.height;
+ const x=Math.floor((px-x0)/cell),y=Math.floor((py-y0)/cell);
+ if(x>=0&&x<size&&y>=0&&y<size){unlock();selected={x,y};rotate(x,y);canvas.focus()}
+}
+canvas.addEventListener('pointerdown',pointer);
+canvas.addEventListener('keydown',event=>{
+ const code=event.code;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Enter','Space'].includes(code))event.preventDefault();
+ const dir={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[code];
+ if(dir){selected.x=Math.max(0,Math.min(size-1,selected.x+dir[0]));selected.y=Math.max(0,Math.min(size-1,selected.y+dir[1]))}
+ if(code==='Enter'||code==='Space'){unlock();rotate(selected.x,selected.y)}
+});
+document.getElementById('reset').addEventListener('click',newGame);
+document.getElementById('mute').addEventListener('click',function(){unlock();audioOn=!audioOn;this.textContent=audioOn?'Sonido: apagar':'Sonido: encender';if(audioOn)music(510)});
+function frame(ms){time+=Math.min(.05,Math.max(0,(ms-last)/1000));last=ms;frames++;draw();requestAnimationFrame(frame)}
+newGame();requestAnimationFrame(frame);
+})();
+</script></body></html>

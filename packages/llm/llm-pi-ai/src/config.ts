@@ -20,6 +20,7 @@ import { credentialRef } from '@phoenix-ai/dsh-credentials'
 import type { CredentialRef } from '@phoenix-ai/dsh-credentials'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
 import { resolveRetryPolicy, RetryPolicySchema } from '@phoenix-ai/dsh-llm'
+import { isNonCodexRecoveryModel, RECOVERABLE_PI_AI_ERROR_CODE } from './provider-recovery.ts'
 import type { ResolvedRetryPolicy, RetryPolicyConfig } from '@phoenix-ai/dsh-llm'
 import {
   CACHE_CONTROL_FORMATS,
@@ -41,6 +42,9 @@ import { buildProvider, supportedProtocols } from './provider.ts'
 
 /** Default maximum idle interval while an adapter stream read is outstanding. */
 export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 300_000
+
+/** Bound a silent Codex remote-MCP stall without shortening other providers' budgets. */
+export const DEFAULT_CODEX_STREAM_IDLE_TIMEOUT_MS = 90_000
 
 /**
  * Default request-level bound on base64-encoded image payload. Every image in
@@ -218,6 +222,25 @@ export interface PiAiProviderProfile {
   maxInlineFileBytes?: number
   /** Provider-owned model-request retry policy; omission uses normal mode with two retries. */
   retryPolicy?: RetryPolicyConfig
+}
+
+/**
+ * When no route policy was specified, only non-Codex routes gain bounded
+ * recovery for otherwise unclassified pi-ai provider errors. Explicit
+ * policies retain their exact code lists, including opt-outs.
+ * @param provider - The route key to resolve.
+ * @param configured - The optional deployment-owned policy.
+ * @returns A resolved, detached retry policy for this route.
+ */
+export function resolvePiAiRetryPolicy(provider: string, configured?: RetryPolicyConfig): ResolvedRetryPolicy {
+  const resolved = resolveRetryPolicy(configured, `llm-pi-ai: provider "${provider}" retryPolicy`)
+  if (configured !== undefined || !isNonCodexRecoveryModel(provider, '') || resolved.mode !== 'normal') {
+    return resolved
+  }
+  return Object.freeze({
+    ...resolved,
+    retryableCodes: Object.freeze([...resolved.retryableCodes, RECOVERABLE_PI_AI_ERROR_CODE]),
+  })
 }
 
 /** Validated profile with its route stamped and every adapter-owned default resolved. */
@@ -463,7 +486,10 @@ export function resolveProfiles(
     if (source.displayName !== undefined && source.displayName.length === 0) {
       throw new Error(`llm-pi-ai: provider "${provider}" has an empty displayName`)
     }
-    const streamIdleTimeoutMs = source.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
+    const streamIdleTimeoutMs = source.streamIdleTimeoutMs
+      ?? (provider === 'openai-codex'
+        ? DEFAULT_CODEX_STREAM_IDLE_TIMEOUT_MS
+        : DEFAULT_STREAM_IDLE_TIMEOUT_MS)
     if (!Number.isFinite(streamIdleTimeoutMs)
       || streamIdleTimeoutMs <= 0
       || streamIdleTimeoutMs > MAX_TIMER_DELAY_MS) {
@@ -522,7 +548,7 @@ export function resolveProfiles(
       requestImagePixelBudget,
       requestImageMaxBytes,
       maxInlineFileBytes,
-      retryPolicy: resolveRetryPolicy(retryPolicy, `llm-pi-ai: provider "${provider}" retryPolicy`),
+      retryPolicy: resolvePiAiRetryPolicy(provider, retryPolicy),
       ...rest.headers === undefined ? {} : { headers: { ...rest.headers } },
       ...rest.thinkingBudgets === undefined ? {} : { thinkingBudgets: { ...rest.thinkingBudgets } },
       configuredMaxTokens: catalog.configuredMaxTokens,

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 
@@ -10,6 +10,23 @@ const UPDATE_STATE_FILE = 'phoenix-update-state.json'
 const UPDATE_RESTART_FILE = 'phoenix-update-restart-request.json'
 const HOST_RESTART_FILE = 'phoenix-host-restart-request.json'
 const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'
+const SUPERVISOR_HEARTBEAT_FILE = 'phoenix-update-supervisor-heartbeat.json'
+const RESTART_STALL_MS = 15 * 60 * 1000
+const FRESH_SUPERVISOR_MS = 30 * 1000
+const PROGRESS_JOURNAL_FILE = 'phoenix-update-events.jsonl'
+const MAX_PROGRESS_JOURNAL_BYTES = 512 * 1024
+const MAX_DIAGNOSTIC_CHARS = 96 * 1024
+const RETAIN_PROGRESS_JOURNAL_BYTES = 32 * 1024
+const COMMAND_STEPS = new Set([
+  'git-worktree', 'git-reset', 'git-clean', 'dependencies', 'build',
+  'smoke', 'boot-preflight', 'handoff', 'host-restart', 'health-check',
+  'runtime-activation', 'rollback',
+])
+const UPDATE_STATUSES = new Set([
+  'checking', 'available', 'preparing', 'ready', 'restarting', 'applying',
+  'updated', 'current', 'rolling-back', 'rolled-back', 'error',
+  'rollback-failed', 'paused',
+])
 
 function waitForReplaceRetry() {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, REPLACE_RETRY_MS)
@@ -45,12 +62,93 @@ function writeJsonAtomic(path, value) {
   }
 }
 
+/**
+ * Append a bounded, structured update event to the shared Git control directory.
+ * The UI receives vetted step codes, results, and exit codes, never raw
+ * PowerShell stdout/stderr, environment variables, file paths, or credentials.
+ * Journal failures must not make an otherwise valid update fail.
+ *
+ * @param {string} statePath - trusted absolute path to the updater's state JSON.
+ * @param {string} step - fixed command code or known durable updater status.
+ * @param {'started'|'ok'|'failed'|'info'} result - observed command outcome.
+ * @param {string|undefined} target - exact stable commit when available.
+ * @param {number|undefined} exitCode - observed process exit code.
+ * @param {string|undefined} diagnostic - captured process output (redacted before persistence).
+ * @returns {void}
+ */
+export function recordPhoenixUpdateStep(statePath, step, result, target, exitCode, diagnostic) {
+  if (!COMMAND_STEPS.has(step) && !UPDATE_STATUSES.has(step)) return
+  if (!['started', 'ok', 'failed', 'info'].includes(result)) return
+  const entry = {
+    schema: 1, at: new Date().toISOString(), step, result,
+    ...(typeof target === 'string' && /^[a-f0-9]{40}$/iu.test(target) ? { target } : {}),
+    ...(Number.isInteger(exitCode) && exitCode >= 0 && exitCode <= 255 ? { exitCode } : {}),
+    ...(result === 'failed' && sanitizePhoenixUpdateDiagnostic(diagnostic) !== undefined
+      ? { diagnostic: sanitizePhoenixUpdateDiagnostic(diagnostic) } : {}),
+  }
+  try {
+    const path = join(dirname(statePath), PROGRESS_JOURNAL_FILE)
+    if (existsSync(path) && statSync(path).size > MAX_PROGRESS_JOURNAL_BYTES) {
+      const previous = readFileSync(path, 'utf8')
+      const suffix = previous.slice(-RETAIN_PROGRESS_JOURNAL_BYTES)
+      const newline = suffix.indexOf('\n')
+      const compact = newline < 0 ? '' : suffix.slice(newline + 1)
+      const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`
+      try {
+        writeFileSync(temporary, compact, { mode: 0o600 })
+        replaceState(temporary, path)
+      } finally { try { unlinkSync(temporary) } catch { /* replaced or cleaned */ } }
+    }
+    appendFileSync(path, JSON.stringify(entry) + '\n', { encoding: 'utf8', mode: 0o600 })
+  } catch {
+    // Informational progress is never authority for activation or rollback.
+  }
+}
+
+/**
+ * Display useful command errors without storing credentials in the Git-owned
+ * journal or sending an unfiltered PowerShell console to the browser.
+ * A typical exception stack is preserved in full; an unusually large output
+ * is explicitly marked as truncated rather than silently misrepresented.
+ *
+ * @param {unknown} raw - collected stderr/stdout/exception detail.
+ * @returns {string|undefined} safe bounded diagnostic text.
+ */
+export function sanitizePhoenixUpdateDiagnostic(raw) {
+  if (typeof raw !== 'string' || raw.trim().length === 0) return undefined
+  let safe = raw
+    .replace(/\u001b\[[0-9;]*[a-z]/giu, '')
+    .replace(/\r\n?/gu, '\n')
+    .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@/giu, 'https://[CREDENTIALS_REMOVED]@')
+    .replace(/\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/giu, '[SECRET_REMOVED]')
+    .replace(/\bBearer\s+[^\s"']+/giu, 'Bearer [SECRET_REMOVED]')
+    .replace(/(\b(?:password|passwd|token|access_token|refresh_token|api[_-]?key|client_secret|authorization|secret|_authToken)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
+    .replace(/(\b[A-Za-z0-9_]*(?:TOKEN|API_KEY|PASSWORD|SECRET|AUTH_KEY|PRIVATE_KEY|ACCESS_KEY)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
+  if (safe.length > MAX_DIAGNOSTIC_CHARS) {
+    safe = '[Earlier output truncated; last 96 KiB shown]\n' + safe.slice(-MAX_DIAGNOSTIC_CHARS)
+  }
+  return safe
+}
+
+function recordStateTransition(path, state) {
+  if (state === null || typeof state !== 'object' || Array.isArray(state)) return
+  if (!UPDATE_STATUSES.has(state.status)) return
+  if (state.status === 'checking' || state.status === 'current') return
+  const failed = state.status === 'error' || state.status === 'rollback-failed'
+  const finished = state.status === 'updated' || state.status === 'rolled-back'
+  recordPhoenixUpdateStep(path, state.status, failed ? 'failed' : finished ? 'ok' : 'info', state.target)
+}
+
 function readActiveRuntimeTarget(controlDirectory) {
+  // The supervisor creates an active-runtime marker during prewarm, before
+  // the target Host has even started. Its healthyAt attestation is written
+  // only after the actual Host passes the healthy startup checkpoint.
   const path = join(controlDirectory, ACTIVE_RUNTIME_FILE)
   if (!existsSync(path)) return undefined
   try {
     const value = JSON.parse(readFileSync(path, 'utf8'))
     if (value?.schema !== 1 || typeof value.target !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.target)) return undefined
+    if (typeof value.healthyAt !== 'string' || !Number.isFinite(Date.parse(value.healthyAt))) return undefined
     if (typeof value.path !== 'string' || value.path.trim().length === 0) return undefined
     const runtimePath = resolve(value.path)
     if (!existsSync(runtimePath)) return undefined
@@ -144,7 +242,21 @@ export function writePhoenixUpdateState(path, value) {
         detail: `Stable ${target.slice(0, 12)} is already active; duplicate activation suppressed.`,
         at: value?.at ?? new Date().toISOString(),
       })
+      recordPhoenixUpdateStep(path, 'health-check', 'ok', target)
       return
+    }
+
+    // The watcher re-checks the channel every minute. Re-announcing the same
+    // ready SHA while activation is still in progress used to overwrite the
+    // durable status and append endless "restarting / started" events.
+    // Keep the original request and timestamp until the supervisor writes an
+    // actual completion or failure; a failed target may be retried later.
+    try {
+      const existing = JSON.parse(readFileSync(path, 'utf8'))
+      if (existing?.schema === 1 && existing.target === target
+        && (existing.status === 'restarting' || existing.status === 'applying')) return
+    } catch {
+      // No usable prior state: allow the normal atomic transition below.
     }
 
     const now = new Date().toISOString()
@@ -158,7 +270,80 @@ export function writePhoenixUpdateState(path, value) {
       phase: 'restart',
       at: value?.at ?? now,
     })
+    recordPhoenixUpdateStep(path, 'restarting', 'started', target)
     return
   }
   writeJsonAtomic(path, value)
+  recordStateTransition(path, value)
+}
+
+
+/**
+ * Detect an activation for which no Host confirmed the handoff. This does
+ * not infer that a build failed: the diagnostic explains whether a live
+ * supervisor heartbeat was actually observed. Keep the pending marker for a
+ * recovering supervisor and stop the watcher from rearming the same SHA.
+ *
+ * @param {string} statePath - durable updater state in its Git control dir.
+ * @param {number} now - testable wall-clock timestamp.
+ * @returns {boolean} whether a stuck activation was recorded.
+ */
+export function diagnoseStalledPhoenixActivation(statePath, now = Date.now()) {
+  let state
+  try {
+    state = JSON.parse(readFileSync(statePath, 'utf8'))
+  } catch {
+    return false
+  }
+  if (!state || state.schema !== 1
+    || !['restarting', 'applying'].includes(state.status)
+    || typeof state.target !== 'string' || !/^[a-f0-9]{40}$/iu.test(state.target)) return false
+  const since = Date.parse(state.at ?? '')
+  if (!Number.isFinite(since) || since > now || now - since < RESTART_STALL_MS) return false
+
+  const control = dirname(statePath)
+  let supervisor
+  try {
+    supervisor = JSON.parse(readFileSync(join(control, SUPERVISOR_HEARTBEAT_FILE), 'utf8'))
+  } catch {
+    // An unobserved supervisor is different from proof that it crashed.
+  }
+  let restartRequest
+  try {
+    restartRequest = JSON.parse(readFileSync(join(control, UPDATE_RESTART_FILE), 'utf8'))
+  } catch {
+    // The supervisor may have consumed the request without booting the Host.
+  }
+  const heartbeatTime = Date.parse(supervisor?.at ?? '')
+  const supervisorVisible = supervisor?.schema === 1 && Number.isFinite(heartbeatTime)
+    && heartbeatTime <= now && now - heartbeatTime <= FRESH_SUPERVISOR_MS
+  const requestPending = restartRequest?.schema === 1 && restartRequest.target === state.target
+  const elapsedMinutes = Math.floor((now - since) / 60_000)
+  const detail = supervisorVisible
+    ? 'El supervisor sigue visible, pero el nuevo Host no confirmó el arranque.'
+    : 'No se ha observado actividad reciente del supervisor; no se pudo confirmar que recibiera la orden de reinicio.'
+  const diagnostic = [
+    'PHOENIX UPDATE — REINICIO SIN CONFIRMAR',
+    'Commit: ' + state.target,
+    'Tiempo sin confirmación: ' + String(elapsedMinutes) + ' minutos',
+    'Supervisor observado en los últimos 30 segundos: ' + (supervisorVisible ? 'sí' : 'no'),
+    'PID del supervisor: ' + (supervisorVisible && Number.isSafeInteger(supervisor.supervisorPid)
+      ? String(supervisor.supervisorPid) : 'no verificado'),
+    'PID del Host: ' + (supervisorVisible && Number.isSafeInteger(supervisor.hostPid)
+      ? String(supervisor.hostPid) : 'no verificado'),
+    'Solicitud de activación pendiente: ' + (requestPending ? 'sí' : 'no'),
+    'Estado original: ' + state.status + '; fase: ' + String(state.phase ?? 'desconocida'),
+    detail,
+    'No existe un código de salida del nuevo Host confirmado en esta operación.',
+    'No se inventará un error de PowerShell: para conocer la causa exacta se necesitan sus registros reales.',
+  ].join('\n')
+  recordPhoenixUpdateStep(statePath, 'host-restart', 'failed', state.target, undefined, diagnostic)
+  writePhoenixUpdateState(statePath, {
+    ...state,
+    status: 'error',
+    phase: 'supervisor-timeout',
+    detail,
+    at: new Date(now).toISOString(),
+  })
+  return true
 }

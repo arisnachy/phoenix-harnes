@@ -16,10 +16,11 @@
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
-import { credentialRef } from '@phoenix-ai/dsh-credentials'
+import { credentialKey, credentialRef } from '@phoenix-ai/dsh-credentials'
 import { RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
 import { McpOAuthController } from './oauth.ts'
+import { binanceAgenticCimdClientId } from './binance-agentic-cimd.ts'
 import { checkPlatformCompatibility } from './platform.ts'
 import type { SupportedPlatform } from './platform.ts'
 import type { TransportOptions } from './transport.ts'
@@ -129,6 +130,14 @@ export interface StreamableHttpConfig {
   bearerTokenRef?: string
   /** Whether to attach the host-managed OAuth provider when available. */
   oauth?: boolean
+  /** Credential reference containing a fixed OAuth client id for servers that do not support DCR. */
+  oauthClientIdRef?: string
+  /** Credential reference containing the matching fixed OAuth client secret. */
+  oauthClientSecretRef?: string
+  /** Optional deterministic loopback callback port required by a pre-registered OAuth app. */
+  oauthCallbackPort?: number
+  /** Token endpoint client authentication method for a pre-registered OAuth app. */
+  oauthTokenEndpointAuthMethod?: 'none' | 'client_secret_post' | 'client_secret_basic'
   /** Per-tool-call timeout in milliseconds. */
   toolCallTimeoutMs: number
   /** Fail plugin activation when the initial connection or tool synchronization fails. */
@@ -171,6 +180,14 @@ export const Config = z.union([
     headers: z.dict(String).default({}),
     bearerTokenRef: z.string(),
     oauth: z.boolean().default(true),
+    oauthClientIdRef: z.string(),
+    oauthClientSecretRef: z.string(),
+    oauthCallbackPort: z.number().step(1).min(1).max(65_535),
+    oauthTokenEndpointAuthMethod: z.union([
+      z.const('none'),
+      z.const('client_secret_post'),
+      z.const('client_secret_basic'),
+    ]),
     toolCallTimeoutMs: z.number().default(DEFAULT_TOOL_CALL_TIMEOUT_MS),
     failOnStartupError: z.boolean().default(false),
     startupTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(DEFAULT_STARTUP_TIMEOUT_MS),
@@ -257,9 +274,55 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       }
     }
   }
+  const oauthClientIdRef = config.transport === 'streamable-http' && config.oauthClientIdRef !== undefined
+    ? credentialRef(config.oauthClientIdRef)
+    : undefined
+  const oauthClientSecretRef = config.transport === 'streamable-http' && config.oauthClientSecretRef !== undefined
+    ? credentialRef(config.oauthClientSecretRef)
+    : undefined
+  // The official Agentic server supports CIMD rather than DCR. Supplying
+  // PHOENIX's own public client id skips unsupported dynamic registration.
+  const binanceCimdId = config.transport === 'streamable-http'
+    ? binanceAgenticCimdClientId(config) : undefined
+  const resolveFixedOAuthClientInformation = binanceCimdId !== undefined
+    ? async () => ({ client_id: binanceCimdId })
+    : oauthClientIdRef === undefined
+      ? undefined
+      : async () => {
+      if (credentials === undefined) {
+        throw Object.assign(new Error(`mcp-client(${config.serverName}): credential service unavailable`), { status: 401 })
+      }
+      const clientId = (await credentials.resolve(oauthClientIdRef))?.value
+      if (clientId === undefined) {
+        throw Object.assign(
+          new Error(`mcp-client(${config.serverName}): credential reference "${String(oauthClientIdRef)}" is not configured`),
+          { status: 401 },
+        )
+      }
+      const clientSecret = oauthClientSecretRef === undefined
+        ? undefined
+        : (await credentials.resolve(oauthClientSecretRef))?.value
+      if (oauthClientSecretRef !== undefined && clientSecret === undefined) {
+        throw Object.assign(
+          new Error(`mcp-client(${config.serverName}): credential reference "${String(oauthClientSecretRef)}" is not configured`),
+          { status: 401 },
+        )
+      }
+      return {
+        client_id: clientId,
+        ...(clientSecret === undefined ? {} : { client_secret: clientSecret }),
+      }
+    }
+
   if (config.transport === 'streamable-http' && config.oauth !== false
     && authorization !== undefined && credentials !== undefined) {
-    oauthController = new McpOAuthController(credentials, config.serverName, config.url)
+    oauthController = new McpOAuthController(credentials, config.serverName, config.url, {
+      ...(config.oauthCallbackPort === undefined ? {} : { callbackPort: config.oauthCallbackPort }),
+      ...(resolveFixedOAuthClientInformation === undefined ? {} : { resolveClientInformation: resolveFixedOAuthClientInformation }),
+      ...(config.oauthTokenEndpointAuthMethod === undefined
+        ? {}
+        : { tokenEndpointAuthMethod: config.oauthTokenEndpointAuthMethod }),
+    })
     await oauthController.ready
     transportOptions = {
       authProvider: oauthController.provider(() => {
@@ -279,6 +342,102 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
 
   const connection = startConnection(ctx, effectiveConnectionConfig(config), reconnect, registration, transportOptions)
   reconnectRef.current = () => { connection.reconnect() }
+
+  if (config.transport === 'stdio' && config.envCredentialRefs !== undefined
+    && Object.keys(config.envCredentialRefs).length > 0
+    && authorization !== undefined && credentials !== undefined) {
+    const credentialEntries = Object.entries(config.envCredentialRefs)
+    const authorizationKey = credentialKey(
+      'mcp-client',
+      config.serverName.toLowerCase().replaceAll('_', '-'),
+    )
+    ctx.effect(() => authorization.registerFlow({
+      key: authorizationKey,
+      label: `MCP ${config.serverName}`,
+      methods: [{ id: 'credentials', label: `Configure ${config.serverName}` }],
+      inspect: async () => {
+        const lifecycle = mcpConnectors?.list().find(entry => entry.serverName === config.serverName)
+        if (lifecycle?.status === 'auth-required') return undefined
+        const states = await Promise.all(
+          credentialEntries.map(([, refName]) => credentials.describe(credentialRef(refName))),
+        )
+        return states.every(state => state.configured)
+          ? { kind: 'account', provider: `MCP ${config.serverName}`, accountType: 'apiKey' }
+          : undefined
+      },
+      disconnect: async () => {
+        for (const [, refName] of credentialEntries) {
+          const ref = credentialRef(refName)
+          const state = await credentials.describe(ref)
+          if (state.configured && state.writable) await credentials.unset(ref)
+        }
+        await credentials.deleteRecord(authorizationKey)
+        connection.reconnect()
+      },
+      run: async (session) => {
+        for (const [envName, refName] of credentialEntries) {
+          const ref = credentialRef(refName)
+          const state = await credentials.describe(ref)
+          if (state.configured) continue
+          const value = (await session.prompt({
+            kind: 'secret',
+            message: `Introduce ${envName} para ${config.serverName}. PHOENIX lo guarda en el vault local y no lo expone al chat.`,
+            placeholder: envName,
+          })).trim()
+          if (value.length === 0) throw new Error(`${envName} cannot be empty`)
+          await credentials.set(ref, value)
+        }
+        await credentials.modifyRecord(authorizationKey, () => Promise.resolve({ kind: 'api-key' as const }))
+        connection.reconnect()
+      },
+    }), 'mcp-client.credential-flow')
+  }
+
+  // The GitHub remote MCP (and some custom Streamable HTTP servers) does not
+  // support OAuth Dynamic Client Registration. A configured vault-backed Bearer
+  // is the supported default for a custom host. Register a real credential
+  // prompt under the same MCP identity, without creating an OAuth controller.
+  if (config.transport === 'streamable-http' && config.bearerTokenRef !== undefined
+    && authorization !== undefined && credentials !== undefined && config.oauth === false) {
+    const bearerRef = credentialRef(config.bearerTokenRef)
+    const authorizationKey = credentialKey('mcp-client',
+      config.serverName.toLowerCase().replaceAll('_', '-'))
+    ctx.effect(() => authorization.registerFlow({
+      key: authorizationKey,
+      label: `MCP ${config.serverName}`,
+      methods: [{ id: 'credentials', label: `Configure ${config.serverName} token` }],
+      inspect: async () => {
+        const stored = await credentials.describe(bearerRef)
+        const lifecycle = mcpConnectors?.list().find(entry => entry.serverName === config.serverName)
+        if (!stored.configured || lifecycle?.status === 'auth-required'
+          || lifecycle?.status === 'failed' || lifecycle?.status === 'disconnected'
+          || (lifecycle?.status === 'ready' && lifecycle.toolNames.length === 0)) return undefined
+        return { kind: 'account', provider: `MCP ${config.serverName}`, accountType: 'apiKey' }
+      },
+      disconnect: async () => {
+        const stored = await credentials.describe(bearerRef)
+        if (stored.configured && stored.writable) await credentials.unset(bearerRef)
+        await credentials.deleteRecord(authorizationKey)
+        connection.reconnect()
+      },
+      run: async (session) => {
+        // Always allow replacement: the previous token may be revoked or lack
+        // scopes even when the credential record is still populated.
+        const token = (await session.prompt({
+          kind: 'secret',
+          message: config.serverName === 'github'
+            ? 'Introduce un token personal de GitHub (fine-grained PAT) con permisos para los repositorios necesarios. PHOENIX lo guarda exclusivamente en su vault local y lo usa solo con GitHub MCP.'
+            : `Introduce el token Bearer para ${config.serverName}. Se guardará únicamente en el vault local.`,
+          placeholder: String(bearerRef),
+        })).trim()
+        if (token.length === 0 || token.length > 8192) throw new Error('Invalid Bearer token')
+        await credentials.set(bearerRef, token)
+        await credentials.modifyRecord(authorizationKey,
+          () => Promise.resolve({ kind: 'api-key' as const }))
+        connection.reconnect()
+      },
+    }), 'mcp-client.bearer-credential-flow')
+  }
 
   if (oauthController !== undefined && authorization !== undefined && credentials !== undefined) {
     const controller = oauthController
@@ -302,6 +461,30 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         connection.reconnect()
       },
       run: async (session) => {
+        if (oauthClientIdRef !== undefined) {
+          const current = await credentials.describe(oauthClientIdRef)
+          if (!current.configured) {
+            const value = (await session.prompt({
+              kind: 'text',
+              message: `Introduce el OAuth client ID para ${config.serverName}. Registra como redirect URI ${controller.callbackServer.redirectUri}. Se guardará solo en el vault local de PHOENIX.`,
+              placeholder: String(oauthClientIdRef),
+            })).trim()
+            if (value.length === 0) throw new Error('OAuth client ID cannot be empty')
+            await credentials.set(oauthClientIdRef, value)
+          }
+        }
+        if (oauthClientSecretRef !== undefined) {
+          const current = await credentials.describe(oauthClientSecretRef)
+          if (!current.configured) {
+            const value = (await session.prompt({
+              kind: 'secret',
+              message: `Introduce el OAuth client secret para ${config.serverName}. Se guardará solo en el vault local de PHOENIX.`,
+              placeholder: String(oauthClientSecretRef),
+            })).trim()
+            if (value.length === 0) throw new Error('OAuth client secret cannot be empty')
+            await credentials.set(oauthClientSecretRef, value)
+          }
+        }
         await controller.authorize(session)
         connection.reconnect()
       },

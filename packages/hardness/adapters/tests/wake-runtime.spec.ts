@@ -75,7 +75,7 @@ describe('Phoenix wake runtime', () => {
     expect(text).toContain('Do not perform external mutations')
   })
 
-  it('falls back to another live agent when a persisted target no longer exists', async () => {
+  it('refuses to deliver a targeted wake to an unrelated live conversation', async () => {
     const followup = vi.fn()
     const fallback = { followup } as never
     const executor = createWakeExecutor({
@@ -84,8 +84,52 @@ describe('Phoenix wake runtime', () => {
       list: vi.fn(() => [fallback]),
     })
 
-    await executor.execute(execution('act'))
+    await expect(executor.execute(execution('act'))).rejects.toThrow('not live or resumable')
+    expect(followup).not.toHaveBeenCalled()
+  })
 
+  it('resumes the original persisted session, waits for completion and disposes it', async () => {
+    const followup = vi.fn()
+    const whenIdle = vi.fn(async () => {})
+    const dispose = vi.fn(async () => {})
+    const agent = { followup, whenIdle } as never
+    const resume = vi.fn(async () => ({ agent, dispose }))
+    const composeResumedAgent = vi.fn(async () => {})
+    const executor = createWakeExecutor({
+      get: vi.fn(() => undefined),
+      roots: vi.fn(() => []),
+      list: vi.fn(() => []),
+      resume,
+    }, { composeResumedAgent })
+
+    const result = await executor.execute(execution('act'))
+
+    expect(resume).toHaveBeenCalledWith({
+      resumeSessionId: 'agent-a',
+      setup: composeResumedAgent,
+    })
     expect(followup).toHaveBeenCalledTimes(1)
+    expect(whenIdle).toHaveBeenCalledTimes(1)
+    expect(dispose).toHaveBeenCalledTimes(1)
+    expect(result.summary).toContain('restored Phoenix session')
+  })
+
+  it('does not acknowledge success when a restored wake fails', async () => {
+    const dispose = vi.fn(async () => {})
+    const executor = createWakeExecutor({
+      get: vi.fn(() => undefined),
+      roots: vi.fn(() => []),
+      list: vi.fn(() => []),
+      resume: vi.fn(async () => ({
+        agent: {
+          followup: vi.fn(),
+          whenIdle: vi.fn(async () => { throw new Error('execution failed') }),
+        } as never,
+        dispose,
+      })),
+    })
+
+    await expect(executor.execute(execution('act'))).rejects.toThrow('execution failed')
+    expect(dispose).toHaveBeenCalledTimes(1)
   })
 })

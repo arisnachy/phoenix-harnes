@@ -14,7 +14,8 @@ describe('phoenix_reality_now tool', () => {
 
     expect(refreshNow).toHaveBeenCalledWith(ctx, true, { agent })
     expect(snapshot).toHaveBeenCalledWith(ctx, expect.any(Date), { agent })
-    expect(result).toBe(expected)
+    expect(result).toEqual(expected)
+    expect(result).not.toBe(expected)
   })
 
   it('uses TTL-aware refresh unless full mode is explicitly requested', async () => {

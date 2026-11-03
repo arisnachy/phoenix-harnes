@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsdown'
+import { fileURLToPath } from 'node:url'
 
 /**
  * The dsh CLI ships one entry: the `bin` referenced by package.json `bin`.
@@ -15,4 +16,9 @@ export default defineConfig({
   fixedExtension: false,
   dts: false,
   clean: false,
+  // Emitted lib/types files retain this source-relative JavaScript import.
+  // Bundle the one shared helper into the CLI instead of copying it into profiles.
+  alias: {
+    '../../../scripts/phoenix-git-safe-directory.mjs': fileURLToPath(new URL('../../scripts/phoenix-git-safe-directory.mjs', import.meta.url)),
+  },
 })

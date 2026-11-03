@@ -1,4 +1,7 @@
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -10,10 +13,39 @@ namespace Phoenix.Desktop;
 /// </summary>
 internal sealed class PhoenixDesktopWindow : Form
 {
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowTextLength(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
     private readonly Uri phoenixUri;
     private readonly SplitContainer split = new();
     private readonly WebView2 phoenixView = new();
     private readonly WebView2 browserView = new();
+    private readonly DesktopLivePane desktopLive = new();
+    private ToolStrip? browserToolbar;
+    private ToolStrip? browserDebugStrip;
+    private readonly ToolStripLabel browserDebugStatus = new("Kira · navegador sin iniciar");
+    private readonly ToolStripButton browserInspectButton = new("Inspeccionar");
+    private readonly ToolStripButton browserDevToolsButton = new("Depurar");
+    private bool browserPageReady;
+    private string? lastBrowserError;
+    private DateTimeOffset? lastBrowserInspectionAt;
+    private string lastBrowserAction = "Sin actividad del navegador";
     private readonly ToolStripTextBox address = new();
     private readonly ToolStripButton backButton = new("←");
     private readonly ToolStripButton forwardButton = new("→");
@@ -66,9 +98,15 @@ internal sealed class PhoenixDesktopWindow : Form
         split.Panel1.Controls.Add(startupOverlay);
         startupOverlay.BringToFront();
 
-        var browserToolbar = BuildBrowserToolbar();
+        browserToolbar = BuildBrowserToolbar();
+        browserDebugStrip = BuildBrowserDebugStrip();
         split.Panel2.Controls.Add(browserView);
         split.Panel2.Controls.Add(browserToolbar);
+        split.Panel2.Controls.Add(browserDebugStrip);
+        split.Panel2.Controls.Add(desktopLive);
+        desktopLive.Dock = DockStyle.Fill;
+        desktopLive.Visible = false;
+        desktopLive.CloseRequested += (_, _) => SetBrowserVisible(false);
         Controls.Add(split);
 
         // SplitContainer validates min sizes against its current Width. During construction the
@@ -429,6 +467,54 @@ internal sealed class PhoenixDesktopWindow : Form
         return toolbar;
     }
 
+    private ToolStrip BuildBrowserDebugStrip()
+    {
+        var strip = new ToolStrip
+        {
+            Dock = DockStyle.Bottom,
+            GripStyle = ToolStripGripStyle.Hidden,
+            Stretch = true,
+            BackColor = Color.FromArgb(248, 250, 252),
+            ForeColor = Color.FromArgb(51, 65, 85),
+        };
+        browserDebugStatus.ToolTipText = "Estado real del WebView, no una prueba de que Kira haya visto u oído contenido.";
+        browserInspectButton.ToolTipText = "Inspeccionar esta página y registrar evidencia de su contenido visible.";
+        browserDevToolsButton.ToolTipText = "Abrir las herramientas de desarrollo de Edge para depurar el navegador.";
+        browserInspectButton.Click += async (_, _) =>
+        {
+            try { _ = await InspectBrowserAsync(); }
+            catch (Exception ex)
+            {
+                lastBrowserError = ex.GetType().Name;
+                SetBrowserDebugStatus("Kira · inspección fallida (" + lastBrowserError + ")");
+                DesktopLog.Write("Browser inspection failed", ex);
+            }
+        };
+        browserDevToolsButton.Click += (_, _) =>
+        {
+            if (browserView.CoreWebView2 is null)
+            {
+                SetBrowserDebugStatus("Kira · abre una página antes de depurar");
+                return;
+            }
+            browserView.CoreWebView2.OpenDevToolsWindow();
+            SetBrowserDebugStatus("Kira · herramientas de desarrollo abiertas");
+        };
+        strip.Items.Add(browserDebugStatus);
+        strip.Items.Add(new ToolStripSeparator());
+        strip.Items.Add(browserInspectButton);
+        strip.Items.Add(browserDevToolsButton);
+        return strip;
+    }
+
+    private void SetBrowserDebugStatus(string message)
+    {
+        if (IsDisposed) return;
+        browserDebugStatus.Text = message;
+        lastBrowserAction = message;
+        DesktopLog.Write("Browser perception: " + message);
+    }
+
     private async Task InitializeAsync()
     {
         if (initialized) return;
@@ -593,6 +679,43 @@ internal sealed class PhoenixDesktopWindow : Form
     {
         switch (command.Type)
         {
+            case "phoenix.desktop.windows":
+                return ListNativeDesktopWindows();
+            case "phoenix.desktop.screenshot":
+                return desktopLive.CaptureTargetAsBase64() ?? CaptureNativeDesktopScreenshot();
+            case "phoenix.desktop.preview":
+                return ShowDesktopLive(command);
+            case "phoenix.desktop.live-state":
+                return desktopLive.StateForSession(command.SessionId);
+            case "phoenix.desktop.live-frame":
+                return desktopLive.FrameForSession(command.SessionId);
+            case "phoenix.audio.status":
+                return DesktopAudioCapture.Status(command.SessionId);
+            case "phoenix.audio.capture":
+                return await DesktopAudioCapture.CaptureAsync(this, command.SessionId!, command.Seconds, command.AudioSource);
+            case "phoenix.senses.status":
+                return JsonSerializer.Serialize(new
+                {
+                    desktopShell = true,
+                    browserPaneVisible = !split.Panel2Collapsed && !desktopLive.Visible,
+                    desktopLivePaneVisible = !split.Panel2Collapsed && desktopLive.Visible,
+                    desktopLive = JsonSerializer.Deserialize<JsonElement>(desktopLive.StateForSession(command.SessionId)),
+                    browser = new
+                    {
+                        initialized = browserView.CoreWebView2 is not null,
+                        visible = !split.Panel2Collapsed && !desktopLive.Visible,
+                        pageReady = browserPageReady,
+                        origin = browserView.Source is Uri uri && uri.Scheme is "http" or "https"
+                            ? uri.GetLeftPart(UriPartial.Authority) : null,
+                        title = browserView.CoreWebView2?.DocumentTitle,
+                        debugStripVisible = browserDebugStrip?.Visible == true && !split.Panel2Collapsed,
+                        lastNavigationError = lastBrowserError,
+                        lastInspectedAt = lastBrowserInspectionAt,
+                        lastAction = lastBrowserAction,
+                    },
+                    windowsAudio = JsonSerializer.Deserialize<JsonElement>(DesktopAudioCapture.Status(command.SessionId)),
+                    evidence = "A visible viewer is not proof of a frame. Verify desktop.live-frame or computer screenshots separately."
+                });
             case "phoenix.browser.inspect":
                 return await InspectBrowserAsync();
             case "phoenix.browser.fill-form":
@@ -605,6 +728,46 @@ internal sealed class PhoenixDesktopWindow : Form
                 ExecuteBrowserCommand(command);
                 return null;
         }
+    }
+
+    private static string NativeWindowTitle(IntPtr hWnd)
+    {
+        var length = GetWindowTextLength(hWnd);
+        if (length <= 0) return string.Empty;
+        var text = new StringBuilder(length + 1);
+        _ = GetWindowText(hWnd, text, text.Capacity);
+        return text.ToString().Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ').Trim();
+    }
+
+    private static string ListNativeDesktopWindows()
+    {
+        var active = GetForegroundWindow();
+        var lines = new List<string>();
+        var success = EnumWindows((hWnd, _) =>
+        {
+            if (!IsWindowVisible(hWnd)) return true;
+            var title = NativeWindowTitle(hWnd);
+            if (title.Length == 0) return true;
+            GetWindowThreadProcessId(hWnd, out var pid);
+            lines.Add($"hwnd=0x{hWnd.ToInt64():X} pid={pid} active={(hWnd == active).ToString().ToLowerInvariant()} title={title}");
+            return true;
+        }, IntPtr.Zero);
+        if (!success)
+            throw new InvalidOperationException($"EnumWindows failed with Win32 error {Marshal.GetLastWin32Error()}.");
+        return lines.Count == 0 ? "<no visible top-level windows>" : string.Join(Environment.NewLine, lines);
+    }
+
+    private static string CaptureNativeDesktopScreenshot()
+    {
+        var bounds = SystemInformation.VirtualScreen;
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+            throw new InvalidOperationException("Desktop has no capturable virtual screen.");
+        using var bitmap = new Bitmap(bounds.Width, bounds.Height);
+        using (var graphics = Graphics.FromImage(bitmap))
+            graphics.CopyFromScreen(bounds.Left, bounds.Top, 0, 0, bitmap.Size, CopyPixelOperation.SourceCopy);
+        using var stream = new MemoryStream();
+        bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
+        return Convert.ToBase64String(stream.ToArray());
     }
 
     private void ExecuteBrowserCommand(BrowserCommand command)
@@ -670,16 +833,46 @@ internal sealed class PhoenixDesktopWindow : Form
 
     private async Task<string> InspectBrowserAsync()
     {
-        await EnsureBrowserInitializedAsync();
-        var core = browserView.CoreWebView2
-            ?? throw new InvalidOperationException("Embedded browser is unavailable.");
+        // Do not initialize an empty browser and mistake that for a successful observation.
+        var core = browserView.CoreWebView2;
+        if (core is null || !browserPageReady)
+        {
+            SetBrowserDebugStatus("Kira · no hay una página cargada que inspeccionar");
+            return JsonSerializer.Serialize(new { available = false, observed = false,
+                reason = core is null ? "BROWSER_NOT_INITIALIZED" : "BROWSER_PAGE_NOT_READY" });
+        }
         var raw = await core.ExecuteScriptAsync(BrowserInspectScript);
-        return DecodeScriptJson(raw);
+        var result = DecodeScriptJson(raw);
+        using var inspection = JsonDocument.Parse(result);
+        if (inspection.RootElement.ValueKind != JsonValueKind.Object
+            || !inspection.RootElement.TryGetProperty("url", out var pageUrl)
+            || pageUrl.ValueKind != JsonValueKind.String)
+        {
+            SetBrowserDebugStatus("Kira · la página no devolvió una inspección válida");
+            return JsonSerializer.Serialize(new { available = true, observed = false,
+                reason = "BROWSER_INSPECT_INVALID_RESPONSE" });
+        }
+        lastBrowserInspectionAt = DateTimeOffset.UtcNow;
+        var mediaCount = inspection.RootElement.TryGetProperty("media", out var media)
+            && media.ValueKind == JsonValueKind.Array ? media.GetArrayLength() : 0;
+        SetBrowserDebugStatus($"Kira · inspección confirmada · {mediaCount} medios");
+        return result;
     }
 
     private async Task<string> FillBrowserFormAsync(BrowserCommand command)
     {
         var core = await RequireBrowserForOriginAsync(command.Origin);
+        var raw = await core.ExecuteScriptAsync(BuildBrowserFillScript(command));
+        var receipt = DecodeScriptJson(raw);
+        using var result = JsonDocument.Parse(receipt);
+        if (result.RootElement.TryGetProperty("filled", out var filled) && filled.TryGetInt32(out var count))
+            SetBrowserDebugStatus($"Kira · {count} campos actualizados");
+        return receipt;
+    }
+
+    /// <summary>Build a form update without interpreting markers inside field values.</summary>
+    internal static string BuildBrowserFillScript(BrowserCommand command)
+    {
         var fields = command.Fields ?? throw new InvalidOperationException("Browser form fields are missing.");
         var fieldPayload = fields.Select(field => new
         {
@@ -687,12 +880,13 @@ internal sealed class PhoenixDesktopWindow : Form
             value = field.Value,
             @checked = field.Checked,
         });
-        var script = BrowserFillScript
-            .Replace("__ORIGIN__", JsonSerializer.Serialize(command.Origin), StringComparison.Ordinal)
-            .Replace("__FIELDS__", JsonSerializer.Serialize(fieldPayload), StringComparison.Ordinal)
-            .Replace("__SUBMIT__", command.Submit ? "true" : "false", StringComparison.Ordinal);
-        var raw = await core.ExecuteScriptAsync(script);
-        return DecodeScriptJson(raw);
+        return Regex.Replace(BrowserFillScript, "__(?:ORIGIN|FIELDS|SUBMIT)__", match => match.Value switch
+        {
+            "__ORIGIN__" => JsonSerializer.Serialize(command.Origin),
+            "__FIELDS__" => JsonSerializer.Serialize(fieldPayload),
+            "__SUBMIT__" => command.Submit ? "true" : "false",
+            _ => throw new InvalidOperationException("Unknown browser form marker."),
+        });
     }
 
     private async Task<string> ClickBrowserTextAsync(BrowserCommand command)
@@ -702,7 +896,12 @@ internal sealed class PhoenixDesktopWindow : Form
             .Replace("__ORIGIN__", JsonSerializer.Serialize(command.Origin), StringComparison.Ordinal)
             .Replace("__TEXT__", JsonSerializer.Serialize(command.Text ?? string.Empty), StringComparison.Ordinal);
         var raw = await core.ExecuteScriptAsync(script);
-        return DecodeScriptJson(raw);
+        var receipt = DecodeScriptJson(raw);
+        using var result = JsonDocument.Parse(receipt);
+        if (result.RootElement.TryGetProperty("clicked", out var clicked)
+            && clicked.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            SetBrowserDebugStatus(clicked.GetBoolean() ? "Kira · clic confirmado" : "Kira · botón no encontrado");
+        return receipt;
     }
 
     private async Task<string> LoginBrowserAsync(BrowserCommand command)
@@ -710,14 +909,28 @@ internal sealed class PhoenixDesktopWindow : Form
         var core = await RequireBrowserForOriginAsync(command.Origin);
         if (string.IsNullOrEmpty(command.Account) || string.IsNullOrEmpty(command.Secret))
             throw new InvalidOperationException("Origin-bound login is incomplete.");
-        var script = BrowserLoginScript
-            .Replace("__ORIGIN__", JsonSerializer.Serialize(command.Origin), StringComparison.Ordinal)
-            .Replace("__ACCOUNT__", JsonSerializer.Serialize(command.Account), StringComparison.Ordinal)
-            .Replace("__SECRET__", JsonSerializer.Serialize(command.Secret), StringComparison.Ordinal)
-            .Replace("__SUBMIT__", command.Submit ? "true" : "false", StringComparison.Ordinal);
-        var raw = await core.ExecuteScriptAsync(script);
-        return DecodeScriptJson(raw);
+        var raw = await core.ExecuteScriptAsync(BuildBrowserLoginScript(command));
+        var receipt = DecodeScriptJson(raw);
+        using var result = JsonDocument.Parse(receipt);
+        if (result.RootElement.TryGetProperty("submitted", out var submitted)
+            && submitted.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            SetBrowserDebugStatus(submitted.GetBoolean()
+                ? "Kira · formulario de acceso enviado" : "Kira · acceso pendiente de completar");
+        // Credentials are never added to the visual activity strip or diagnostic logs.
+        return receipt;
     }
+
+    /// <summary>Substitute trusted JSON literals once so credential text cannot be interpreted as a template marker.</summary>
+    internal static string BuildBrowserLoginScript(BrowserCommand command) => Regex.Replace(
+        BrowserLoginScript, "__(?:ORIGIN|ACCOUNT|SECRET|EXTRAS|SUBMIT)__", match => match.Value switch
+        {
+            "__ORIGIN__" => JsonSerializer.Serialize(command.Origin),
+            "__ACCOUNT__" => JsonSerializer.Serialize(command.Account),
+            "__SECRET__" => JsonSerializer.Serialize(command.Secret),
+            "__EXTRAS__" => JsonSerializer.Serialize(command.Extras ?? new Dictionary<string, string>()),
+            "__SUBMIT__" => command.Submit ? "true" : "false",
+            _ => throw new InvalidOperationException("Unknown browser login marker."),
+        });
 
     private const string BrowserInspectScript = """
         (() => {
@@ -774,7 +987,17 @@ internal sealed class PhoenixDesktopWindow : Form
             title: document.title.slice(0, 500),
             text: String(document.body?.innerText || '').slice(0, 12000),
             fields,
-            buttons
+            buttons,
+            media: Array.from(document.querySelectorAll('video,audio')).slice(0, 12).map((el) => ({
+              type: el.tagName.toLowerCase(),
+              paused: !!el.paused,
+              muted: !!el.muted,
+              durationSeconds: Number.isFinite(el.duration) ? Math.round(el.duration) : null,
+              positionSeconds: Number.isFinite(el.currentTime) ? Math.round(el.currentTime) : null,
+              captions: Array.from(el.textTracks || []).slice(0, 10).map(track => ({
+                kind: track.kind, language: track.language, label: track.label
+              }))
+            }))
           });
         })()
         """;
@@ -880,6 +1103,7 @@ internal sealed class PhoenixDesktopWindow : Form
           if (location.origin !== expected) throw new Error('origin mismatch');
           const account = __ACCOUNT__;
           const secret = __SECRET__;
+          const extras = __EXTRAS__;
           const submit = __SUBMIT__;
           const visible = (el) => {
             const style = getComputedStyle(el);
@@ -895,16 +1119,31 @@ internal sealed class PhoenixDesktopWindow : Form
             let score = 0;
             if (ac === 'username') score += 100;
             if (type === 'email') score += 80;
-            if (/user|email|login|account/.test(identity)) score += 50;
+            if (/user|email|login|account|usuario|correo|tel[eé]fono|documento|c[eé]dula/.test(identity)) score += 50;
             if (type === 'text' || type === 'email' || type === 'tel' || !type) score += 10;
             return score;
           };
           const secretFields = inputs.filter((el) => (el.type || '').toLowerCase() === 'password');
-          const accountFields = inputs.filter((el) => scoreAccount(el) >= 0).sort((a, b) => scoreAccount(b) - scoreAccount(a));
-          const accountField = accountFields[0] || null;
+          if (secretFields.length > 1)
+            return JSON.stringify({ origin: location.origin, phase: 'ambiguous-login-form', submitted: false });
           const secretField = secretFields.find((el) => (el.autocomplete || '').toLowerCase() === 'current-password')
             || secretFields[0]
             || null;
+          const form = secretField?.form || null;
+          let loginRoot = form;
+          if (!loginRoot && secretField) {
+            for (let root = secretField.parentElement, depth = 0; root && depth < 8; root = root.parentElement, depth++) {
+              const buttons = Array.from(root.querySelectorAll('button,[role="button"],input[type="submit"]'))
+                .filter(visible).filter(el => !el.disabled && /^(?:ingresar|iniciar sesi[oó]n|acceder|entrar|log ?in|sign ?in)$/i.test((el.innerText || el.textContent || el.value || '').trim()));
+              if (buttons.length === 1 && root.querySelectorAll('input').length >= 2) { loginRoot = root; break; }
+            }
+          }
+          const loginInputs = loginRoot ? inputs.filter(el => loginRoot.contains(el)) : secretField ? [] : inputs;
+          const accountFields = loginInputs.filter((el) => ['text', 'email', 'tel', 'number'].includes(el.type) && scoreAccount(el) >= 0)
+            .sort((a, b) => scoreAccount(b) - scoreAccount(a));
+          if (!secretField && accountFields.length > 1)
+            return JSON.stringify({ origin: location.origin, phase: 'ambiguous-login-form', submitted: false });
+          const accountField = accountFields[0] || null;
           const setValue = (el, value) => {
             const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
             if (descriptor?.set) descriptor.set.call(el, value);
@@ -912,16 +1151,25 @@ internal sealed class PhoenixDesktopWindow : Form
             el.dispatchEvent(new Event('input', { bubbles: true }));
             el.dispatchEvent(new Event('change', { bubbles: true }));
           };
-          if (!accountField && !secretField)
+          if ((!accountField && !secretField) || (secretField && !loginRoot))
             return JSON.stringify({ origin: location.origin, phase: 'fields-not-found', submitted: false });
+
+          const submitForm = form || accountField?.form;
+          if (submitForm && new URL(submitForm.action || location.href, location.href).origin !== expected)
+            return JSON.stringify({ origin: location.origin, phase: 'cross-origin-login-refused', submitted: false });
+          const extraInputs = loginInputs.filter(el => el !== accountField && el !== secretField
+            && ['text', 'email', 'tel', 'number'].includes(el.type) && el.autocomplete !== 'one-time-code');
+          if (extraInputs.length > 4 || extraInputs.some((el, i) => el.required && !extras['extra:' + i]))
+            return JSON.stringify({ origin: location.origin, phase: 'additional-login-field-required', submitted: false });
 
           if (accountField) setValue(accountField, account);
           if (secretField) setValue(secretField, secret);
+          extraInputs.forEach((el, i) => { if (typeof extras['extra:' + i] === 'string') setValue(el, extras['extra:' + i]); });
 
           let submitted = false;
           let phase = secretField ? 'credentials-filled' : 'account-filled';
           if (submit) {
-            const form = secretField?.form || accountField?.form || null;
+            const form = submitForm;
             if (form) {
               const actionOrigin = new URL(form.action || location.href, location.href).origin;
               if (actionOrigin !== expected) throw new Error('cross-origin login submit refused');
@@ -929,6 +1177,11 @@ internal sealed class PhoenixDesktopWindow : Form
               else form.submit();
               submitted = true;
               phase = secretField ? 'credentials-submitted' : 'account-submitted';
+            }
+            else if (loginRoot) {
+              const button = Array.from(loginRoot.querySelectorAll('button,[role="button"],input[type="submit"]'))
+                .filter(visible).find(el => !el.disabled && /^(?:ingresar|iniciar sesi[oó]n|acceder|entrar|log ?in|sign ?in)$/i.test((el.innerText || el.textContent || el.value || '').trim()));
+              if (button) { button.click(); submitted = true; phase = 'credentials-submitted'; }
             }
           }
           return JSON.stringify({ origin: location.origin, phase, submitted });
@@ -980,8 +1233,23 @@ internal sealed class PhoenixDesktopWindow : Form
         var browserEnvironment = await CoreWebView2Environment.CreateAsync(null, browserProfile);
         await browserView.EnsureCoreWebView2Async(browserEnvironment);
         ConfigureWebView(browserView.CoreWebView2, isPhoenixSurface: false);
-        browserView.CoreWebView2.NavigationStarting += (_, e) => address.Text = e.Uri;
-        browserView.CoreWebView2.NavigationCompleted += (_, _) => PublishBrowserState();
+        browserView.CoreWebView2.NavigationStarting += (_, e) =>
+        {
+            address.Text = e.Uri;
+            browserPageReady = false;
+            lastBrowserError = null;
+            SetBrowserDebugStatus("Kira · navegando…");
+        };
+        browserView.CoreWebView2.NavigationCompleted += (_, e) =>
+        {
+            var current = browserView.Source;
+            browserPageReady = BrowserNavigation.IsInspectablePage(current, e.IsSuccess);
+            lastBrowserError = e.IsSuccess ? null : e.WebErrorStatus.ToString();
+            SetBrowserDebugStatus(browserPageReady
+                ? "Kira · página lista para inspección"
+                : e.IsSuccess ? "Kira · sin página web activa" : "Kira · error " + lastBrowserError);
+            PublishBrowserState();
+        };
         browserView.CoreWebView2.SourceChanged += (_, _) => PublishBrowserState();
         browserView.CoreWebView2.DocumentTitleChanged += (_, _) => PublishBrowserState();
         browserView.CoreWebView2.HistoryChanged += (_, _) => PublishBrowserState();
@@ -994,8 +1262,37 @@ internal sealed class PhoenixDesktopWindow : Form
         PublishBrowserState();
     }
 
+    private string ShowDesktopLive(BrowserCommand command)
+    {
+        // This command is accepted only from the current-user named pipe, never from WebView JS.
+        // Lock each burst of desktop actions to its initiating Phoenix conversation.
+        desktopLive.AssertSessionAccess(command.SessionId, command.Observe);
+        if (desktopLive.IsDismissed)
+            return "Desktop Live oculto por el usuario. Ctrl+F10 para volver a abrir el visor.";
+        // Never steal foreground focus from the target before guarded input.
+        var opening = split.Panel2Collapsed;
+        split.Panel2Collapsed = false;
+        if (opening) browserWidthOverride = null;
+        ApplyBrowserSplitLayout();
+        browserView.Visible = false;
+        if (browserToolbar is not null) browserToolbar.Visible = false;
+        if (browserDebugStrip is not null) browserDebugStrip.Visible = false;
+        desktopLive.Open(command.Text, command.SessionId);
+        return "Desktop Live visible; la captura se actualiza mientras Kira trabaja.";
+    }
+
+    internal void ReopenDesktopLive()
+    {
+        desktopLive.ResetDismissal();
+        _ = ShowDesktopLive(new BrowserCommand("phoenix.desktop.preview", Observe: true));
+    }
+
     private void SetBrowserVisible(bool visible)
     {
+        desktopLive.HideForBrowser();
+        browserView.Visible = true;
+        if (browserToolbar is not null) browserToolbar.Visible = true;
+        if (browserDebugStrip is not null) browserDebugStrip.Visible = true;
         var opening = visible && split.Panel2Collapsed;
         split.Panel2Collapsed = !visible;
         if (visible)
@@ -1026,17 +1323,27 @@ internal sealed class PhoenixDesktopWindow : Form
         var payload = JsonSerializer.Serialize(new
         {
             type = "phoenix.browser.state",
-            open = !split.Panel2Collapsed,
+            open = !split.Panel2Collapsed && !desktopLive.Visible,
             url = current,
             title = browserView.CoreWebView2.DocumentTitle ?? string.Empty,
             canGoBack = browserView.CanGoBack,
             canGoForward = browserView.CanGoForward,
+            pageReady = browserPageReady,
+            lastNavigationError = lastBrowserError,
+            lastInspectedAt = lastBrowserInspectionAt,
+            lastAction = lastBrowserAction,
         });
         phoenixView.CoreWebView2.PostWebMessageAsJson(payload);
     }
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Control && e.KeyCode == Keys.F10)
+        {
+            ReopenDesktopLive();
+            e.Handled = true;
+            return;
+        }
         if (e.KeyCode == Keys.F9)
         {
             SetBrowserVisible(split.Panel2Collapsed);

@@ -35,6 +35,13 @@ public static class BrowserNavigation
         return new Uri($"https://www.bing.com/search?q={query}");
     }
 
+    /// <summary>Only a successfully navigated HTTP(S) document can be inspected as real page evidence.</summary>
+    public static bool IsInspectablePage(Uri? address, bool navigationSucceeded)
+    {
+        return navigationSucceeded && address is not null && address.IsAbsoluteUri
+            && AllowedSchemes.Contains(address.Scheme);
+    }
+
     /// <summary>
     /// Canonicalize one origin that may receive an unattended credential.
     /// Remote origins require HTTPS; plaintext HTTP is accepted only for loopback.
@@ -112,7 +119,12 @@ public sealed record BrowserCommand(
     string? Secret = null,
     string? Text = null,
     bool Submit = false,
-    IReadOnlyList<BrowserFormValue>? Fields = null)
+    IReadOnlyList<BrowserFormValue>? Fields = null,
+    IReadOnlyDictionary<string, string>? Extras = null,
+    string? SessionId = null,
+    bool Observe = false,
+    int Seconds = 8,
+    string AudioSource = "output")
 {
     private static readonly HashSet<string> PublicTypes = new(StringComparer.Ordinal)
     {
@@ -132,6 +144,14 @@ public sealed record BrowserCommand(
         "phoenix.browser.fill-form",
         "phoenix.browser.click-text",
         "phoenix.browser.login",
+        "phoenix.desktop.windows",
+        "phoenix.desktop.screenshot",
+        "phoenix.desktop.preview",
+        "phoenix.desktop.live-state",
+        "phoenix.desktop.live-frame",
+        "phoenix.audio.status",
+        "phoenix.audio.capture",
+        "phoenix.senses.status",
     };
 
     public static bool TryParse(string json, out BrowserCommand command, bool allowAutomation = false)
@@ -164,9 +184,60 @@ public sealed record BrowserCommand(
                 return true;
             }
 
-            if (type == "phoenix.browser.inspect")
+            if (type is "phoenix.browser.inspect" or "phoenix.desktop.windows" or "phoenix.desktop.screenshot")
             {
                 command = new BrowserCommand(type);
+                return true;
+            }
+
+            if (type is "phoenix.desktop.live-state" or "phoenix.desktop.live-frame" or "phoenix.audio.status" or "phoenix.audio.capture" or "phoenix.senses.status")
+            {
+                if (!TryGetString(doc.RootElement, "sessionId", out var requestedSession)
+                    || requestedSession.Length > 128
+                    || requestedSession.Any(ch => !(char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_' or ':')))
+                    return false;
+                if (type == "phoenix.audio.capture")
+                {
+                    var seconds = 8;
+                    if (doc.RootElement.TryGetProperty("seconds", out var node))
+                    {
+                        if (node.ValueKind != JsonValueKind.Number || !node.TryGetInt32(out seconds)
+                            || seconds is < 3 or > 12) return false;
+                    }
+                    var source = "output";
+                    if (doc.RootElement.TryGetProperty("source", out var audioSource))
+                    {
+                        if (audioSource.ValueKind != JsonValueKind.String) return false;
+                        source = audioSource.GetString() ?? "";
+                        if (source is not "output" and not "microphone") return false;
+                    }
+                    command = new BrowserCommand(type, SessionId: requestedSession, Seconds: seconds, AudioSource: source);
+                    return true;
+                }
+                command = new BrowserCommand(type, SessionId: requestedSession, Observe: true);
+                return true;
+            }
+
+            if (type == "phoenix.desktop.preview")
+            {
+                string? target = null;
+                if (doc.RootElement.TryGetProperty("target", out var targetNode))
+                {
+                    if (targetNode.ValueKind != JsonValueKind.String) return false;
+                    target = targetNode.GetString();
+                    if (target is null || target.Length > 512 || target.Contains('\0')) return false;
+                }
+                if (!TryGetString(doc.RootElement, "sessionId", out var sessionId)
+                    || sessionId.Length > 128
+                    || sessionId.Any(ch => !(char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_' or ':')))
+                    return false;
+                var observe = false;
+                if (doc.RootElement.TryGetProperty("observe", out var observeNode))
+                {
+                    if (observeNode.ValueKind is not JsonValueKind.True and not JsonValueKind.False) return false;
+                    observe = observeNode.GetBoolean();
+                }
+                command = new BrowserCommand(type, Text: target, SessionId: sessionId, Observe: observe);
                 return true;
             }
 
@@ -197,12 +268,28 @@ public sealed record BrowserCommand(
                     || !TryGetString(doc.RootElement, "secret", out var secret)
                     || secret.Length > 16384)
                     return false;
+                Dictionary<string, string>? extras = null;
+                if (doc.RootElement.TryGetProperty("extras", out var extrasNode))
+                {
+                    if (extrasNode.ValueKind != JsonValueKind.Object) return false;
+                    extras = new Dictionary<string, string>(StringComparer.Ordinal);
+                    foreach (var extra in extrasNode.EnumerateObject())
+                    {
+                        if (extras.Count >= 4 || extra.Name.Length != 7
+                            || !extra.Name.StartsWith("extra:", StringComparison.Ordinal)
+                            || extra.Name[6] is < '0' or > '3'
+                            || extra.Value.ValueKind != JsonValueKind.String
+                            || extra.Value.GetString() is not string value || value.Length > 4096
+                            || !extras.TryAdd(extra.Name, value)) return false;
+                    }
+                }
                 command = new BrowserCommand(
                     type,
                     Origin: origin,
                     Account: account,
                     Secret: secret,
-                    Submit: submit);
+                    Submit: submit,
+                    Extras: extras);
                 return true;
             }
 

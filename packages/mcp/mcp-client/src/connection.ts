@@ -81,8 +81,15 @@ function httpStatus(error: unknown): number | undefined {
 }
 
 function failureStatus(error: unknown): { status: McpConnectorStatus; reasonCode: McpConnectorReasonCode } {
-  if (error instanceof UnauthorizedError || httpStatus(error) === 401 || httpStatus(error) === 403) {
+  const statusCode = httpStatus(error)
+  if (error instanceof UnauthorizedError || statusCode === 401 || statusCode === 403) {
     return { status: 'auth-required', reasonCode: 'authorization-required' }
+  }
+  // An existing endpoint responding 404/410 is not a transient network
+  // failure. Preserve this safe diagnostic code instead of spending the full
+  // exponential retry budget and obscuring the root cause.
+  if (statusCode === 404 || statusCode === 410) {
+    return { status: 'failed', reasonCode: 'endpoint-not-found' }
   }
   return { status: 'failed', reasonCode: 'connection-failed' }
 }
@@ -170,17 +177,20 @@ export function startConnection(
   transportOptions?: TransportOptions,
 ): ConnectionHandle {
   const label = `mcp-client(${config.serverName})`
+  const publishStatus = lifecycle?.setStatus.bind(lifecycle)
+  const publishTools = lifecycle?.setTools.bind(lifecycle)
+  let markAuthorizationRequired: (() => void) | undefined
   const opts: ToolBridgeOptions = {
     registrationFailure: 'contain',
     serverName: config.serverName,
     toolCallTimeoutMs: config.toolCallTimeoutMs,
+    onAuthorizationRequired: () => { markAuthorizationRequired?.() },
   }
-  // The initial sync uses 'throw' when failOnStartupError is configured, so
-  // a registration conflict propagates to the startup-await path. Re-syncs
-  // and reconnect syncs always contain conflicts.
-  const startupOpts: ToolBridgeOptions = config.failOnStartupError
-    ? { ...opts, registrationFailure: 'throw' }
-    : opts
+  // Every new connection generation must prove that MCP tools really
+  // registered. Containing the registration error made the supervisor announce
+  // "ready" with no callable tools, even though the registry swap failed.
+  // Notification re-syncs retain the existing compatibility policy.
+  const generationOpts: ToolBridgeOptions = { ...opts, registrationFailure: 'throw' }
 
   let disposed = false
   /** Current generation: the connecting or connected client; undefined during backoff waits and after final failure. */
@@ -196,8 +206,6 @@ export function startConnection(
   let connectedAt: number | undefined
   /** The real error from the first connection attempt, for startup-await diagnostics. */
   let firstAttemptError: unknown
-  const publishStatus = lifecycle?.setStatus.bind(lifecycle)
-  const publishTools = lifecycle?.setTools.bind(lifecycle)
   publishStatus?.('starting')
 
   /** A generation may act only while it is the current one on a live plugin. */
@@ -233,8 +241,38 @@ export function startConnection(
     // the actionable `auth-required` state with `retry-exhausted` and hide the
     // reason the connector is down. Committing a grant calls reconnect(), which
     // is the only transition that can succeed from here.
-    if (status?.status === 'auth-required') return
+    if (status?.status === 'auth-required' || status?.reasonCode === 'endpoint-not-found') {
+      // A resolved 404/410 endpoint cannot be repaired by repeated reconnects;
+      // also unregister any tools left from a previously healthy generation.
+      if (status.reasonCode === 'endpoint-not-found') {
+        syncChain = syncChain.then(() => {
+          for (const dispose of disposers.values()) dispose()
+          disposers = new Map()
+          publishTools?.([])
+        })
+        ctx.logger.warn(`${label}: configured MCP endpoint responded 404/410; verify its URL or hosted server before retrying`)
+      }
+      return
+    }
     scheduleReconnect()
+  }
+
+  markAuthorizationRequired = () => {
+    const generation = client
+    if (generation === undefined) {
+      publishStatus?.('auth-required', 'authorization-required')
+      return
+    }
+    generationDown(generation, { status: 'auth-required', reasonCode: 'authorization-required' })
+    connectedAt = undefined
+    syncChain = syncChain.then(() => {
+      for (const dispose of disposers.values()) dispose()
+      disposers = new Map()
+      publishTools?.([])
+    })
+    void generation.close().catch((error: unknown) => {
+      ctx.logger.warn(`${label}: failed to close generation after an authorization rejection: ${String(error)}`)
+    })
   }
 
   /** Wait for the transport-owned close signal without letting a broken transport wedge teardown forever. */
@@ -281,7 +319,7 @@ export function startConnection(
     reconnectTimer = setTimeout(() => {
       reconnectTimer = undefined
       publishStatus?.('starting')
-      settling = connectGeneration(false)
+      settling = connectGeneration()
     }, delayMs)
     // An armed reconnect timer must never hold the process open on its own.
     reconnectTimer.unref()
@@ -295,9 +333,8 @@ export function startConnection(
    * Every failure funnels through {@link generationDown}; success arms the
    * onclose-driven disconnect path. Never rejects.
    *
-   * @param startup - Whether this is the plugin's activation attempt.
    */
-  async function connectGeneration(startup: boolean): Promise<void> {
+  async function connectGeneration(): Promise<void> {
     const generation = new Client(
       { name: 'dsh-mcp-client', version: '0.0.1' },
       { capabilities: {} },
@@ -361,7 +398,7 @@ export function startConnection(
         generationDown(generation, { status: 'failed', reasonCode: 'connection-failed' })
         return
       }
-      await enqueueSync(generation, startup ? startupOpts : opts)
+      await enqueueSync(generation, generationOpts)
     } catch (error) {
       if (firstAttemptError === undefined) firstAttemptError = error
       // Disposal clears current ownership before it closes the generation, so
@@ -397,7 +434,7 @@ export function startConnection(
   }
 
   /** The in-flight (or last settled) connection attempt; dispose awaits it for quiescence. */
-  let settling = connectGeneration(true)
+  let settling = connectGeneration()
 
   // The ready promise settles when the first attempt finishes (regardless of
   // success). If the first attempt fails and reconnect is enabled, the
@@ -422,7 +459,7 @@ export function startConnection(
     }
     failedAttempts = 0
     publishStatus?.('starting')
-    settling = connectGeneration(false)
+    settling = connectGeneration()
   }
 
   return {

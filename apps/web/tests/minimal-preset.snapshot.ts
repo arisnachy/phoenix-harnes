@@ -121,6 +121,13 @@ describe('minimal agent preset', () => {
         "prompt": "You are a helpful software engineer assistant.",
         "tools": [
           "bash",
+          "gmail_read",
+          "gmail_search",
+          "gmail_send",
+          "google_calendar_create_event",
+          "google_calendar_list_events",
+          "google_drive_search",
+          "google_workspace_request",
           "living_act",
           "living_forget_creation",
           "living_get_connector_kit",

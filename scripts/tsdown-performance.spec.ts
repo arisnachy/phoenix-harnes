@@ -51,6 +51,22 @@ describe('Phoenix tsdown performance policy', () => {
     }
   })
 
+  it('ignores stale workspace shells whose package manifest was removed', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'phoenix-tsdown-stale-workspace-'))
+    try {
+      const optimized = optimizePhoenixTsdownInput({
+        cwd,
+        external: /^already-external$/,
+        plugins: [{ name: 'tsdown:deps' }, { name: 'keep-me' }],
+      })
+
+      expect(matchesExternal(optimized.external, 'already-external')).toBe(true)
+      expect(JSON.stringify(optimized.plugins)).toBe('[{"name":"keep-me"}]')
+    } finally {
+      await rm(cwd, { recursive: true, force: true })
+    }
+  })
+
   it('preserves the app-boot Include embedding exception', async () => {
     const cwd = await fixture({
       name: '@phoenix-ai/dsh-app-boot',

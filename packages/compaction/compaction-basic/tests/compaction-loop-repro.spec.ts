@@ -34,6 +34,33 @@ class ReproCompactionEngine extends BasicCompactionEngine {
   }
 }
 
+class PressureFailureMemoEngine extends BasicCompactionEngine {
+  summaryCalls = 0
+
+  override async summarize(): Promise<{ summary: ContentBlock[]; provider: string; model: string }> {
+    this.summaryCalls += 1
+    return {
+      summary: [{ type: 'text', text: 'summary '.repeat(230) }],
+      provider: 'mock',
+      model: 'stub',
+    }
+  }
+}
+
+class TransientPressureFailureEngine extends BasicCompactionEngine {
+  summaryCalls = 0
+
+  override async summarize(): Promise<{ summary: ContentBlock[]; provider: string; model: string }> {
+    this.summaryCalls += 1
+    if (this.summaryCalls === 1) throw new Error('temporary provider outage')
+    return {
+      summary: [],
+      provider: 'mock',
+      model: 'stub',
+    }
+  }
+}
+
 /** Each call emits one tool-call until exhausted, then a final text answer. */
 class StepwiseToolAdapter extends LlmAdapter {
   calls = 0
@@ -211,6 +238,50 @@ function overflowHistorySeed(): SessionEvent[] {
     session.append('step/end', { turn, step: 1 })
     session.append('turn/end', { turn, reason: { kind: 'completed' } })
   }
+  return [...session.events]
+}
+
+function tinyHeadPressureSeed(): SessionEvent[] {
+  const session = Session.create(SessionId('tiny-head-pressure-seed'))
+  session.append('turn/start', { turn: 1 })
+  session.append('user/message', createUserMessage({
+    content: [{ type: 'text', text: 'old' }],
+    source: { kind: 'user' },
+  }), { surfaceOp: 'append' })
+  session.append('step/start', { turn: 1, step: 1 })
+  session.append('request/header', {
+    header: { config: { provider: 'mock', model: 'mock' } },
+    reason: 'initial',
+  })
+  session.append('assistant/message', {
+    turn: 1,
+    step: 1,
+    message: createMessage({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'done' }],
+      source: { kind: 'model', provider: 'mock', model: 'mock' },
+    }),
+  }, { surfaceOp: 'append' })
+  session.append('step/end', { turn: 1, step: 1 })
+  session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+  session.append('turn/start', { turn: 2 })
+  session.append('user/message', createUserMessage({
+    content: [{ type: 'text', text: 'recent '.repeat(300) }],
+    source: { kind: 'user' },
+  }), { surfaceOp: 'append' })
+  session.append('step/start', { turn: 2, step: 1 })
+  session.append('assistant/message', {
+    turn: 2,
+    step: 1,
+    message: createMessage({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'recent response '.repeat(300) }],
+      source: { kind: 'model', provider: 'mock', model: 'mock' },
+    }),
+  }, { surfaceOp: 'append' })
+  session.append('step/end', { turn: 2, step: 1 })
+  session.append('turn/end', { turn: 2, reason: { kind: 'completed' } })
+  session.append('turn/start', { turn: 3 })
   return [...session.events]
 }
 
@@ -421,6 +492,69 @@ describe('context-overflow recovery across the real loop and compaction-basic', 
         type: 'turn/end',
         data: { reason: { kind: 'completed' } },
       })
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+})
+
+describe('automatic pressure failure memo', () => {
+  it('does not resummarize an unchanged tiny head after a non-shrinking summary', async () => {
+    const ctx = new Context()
+    await mountAgentLoopTestDependencies(ctx)
+    await mountInvariants(ctx)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(TokenMeter)
+    ctx.llm.registerAdapter(['mock'], new StepwiseToolAdapter(0))
+    const compact = new PressureFailureMemoEngine(ctx, {
+      auto: false,
+      thresholdRatio: 0.8,
+      retainTokens: 200,
+      maxTokens: 64,
+    })
+
+    try {
+      const { agent } = await ctx.agentLoop.createAgent(ctx, {
+        sessionId: SessionId('pressure-failure-memo'),
+        seed: tinyHeadPressureSeed(),
+        agentOptions: { provider: 'mock', model: 'mock' },
+      })
+
+      const signal = new AbortController().signal
+      await expect(compact.compactIfNeeded(agent, 'pressure', signal)).rejects.toThrow('summary is not smaller')
+      const summaryCallsAfterFailure = compact.summaryCalls
+      await expect(compact.compactIfNeeded(agent, 'pressure', signal)).resolves.toBeNull()
+      expect(compact.summaryCalls).toBe(summaryCallsAfterFailure)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('retries an unchanged range after a transient summarizer failure', async () => {
+    const ctx = new Context()
+    await mountAgentLoopTestDependencies(ctx)
+    await mountInvariants(ctx)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(TokenMeter)
+    ctx.llm.registerAdapter(['mock'], new StepwiseToolAdapter(0))
+    const compact = new TransientPressureFailureEngine(ctx, {
+      auto: false,
+      thresholdRatio: 0.95,
+      retainTokens: 200,
+      maxTokens: 64,
+    })
+
+    try {
+      const { agent } = await ctx.agentLoop.createAgent(ctx, {
+        sessionId: SessionId('transient-pressure-failure'),
+        seed: tinyHeadPressureSeed(),
+        agentOptions: { provider: 'mock', model: 'mock' },
+      })
+      const signal = new AbortController().signal
+      await expect(compact.compactIfNeeded(agent, 'pressure', signal)).rejects.toThrow('temporary provider outage')
+      const summaryCallsAfterFailure = compact.summaryCalls
+      await expect(compact.compactIfNeeded(agent, 'pressure', signal)).resolves.not.toBeNull()
+      expect(compact.summaryCalls).toBeGreaterThan(summaryCallsAfterFailure)
     } finally {
       await ctx.fiber.dispose()
     }

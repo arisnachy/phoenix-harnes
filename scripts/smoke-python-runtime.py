@@ -319,6 +319,8 @@ def completion_chunks(body: dict[str, object]) -> list[dict[str, object]]:
         for message in reversed(messages)
         if isinstance(message, dict) and message.get("role") == "user"
     ]
+    if user_prompts and user_prompts[0] == "hello":
+        return text_chunks("Hello!")
     minimal_prompt = next(
         (
             prompt
@@ -679,15 +681,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--scenario",
-        choices=("all", "sdk-default", "sdk-custom", "sdk-minimal", "sdk-fs-search", "sdk-mcp", "sdk-snapshot", "direct"),
+        choices=("all", "sdk-default", "sdk-custom", "sdk-minimal", "sdk-casual", "sdk-fs-search", "sdk-mcp", "sdk-snapshot", "direct"),
         default="all",
     )
     parser.add_argument("--exe", type=Path)
     parser.add_argument("--update-snapshots", action="store_true")
     args = parser.parse_args()
-    if args.scenario in {"all", "sdk-custom", "sdk-minimal", "sdk-fs-search", "sdk-snapshot", "direct"} and args.exe is None:
+    if args.scenario in {"all", "sdk-custom", "sdk-minimal", "sdk-casual", "sdk-fs-search", "sdk-snapshot", "direct"} and args.exe is None:
         parser.error("--exe is required for custom, minimal, snapshot, and direct scenarios")
-    if args.update_snapshots and args.scenario not in {"all", "sdk-minimal", "sdk-snapshot"}:
+    if args.update_snapshots and args.scenario not in {"all", "sdk-minimal", "sdk-casual", "sdk-snapshot"}:
         parser.error("--update-snapshots requires --scenario sdk-minimal, sdk-snapshot, or all")
     if args.exe is not None and not args.exe.is_file():
         parser.error(f"runtime executable does not exist: {args.exe}")
@@ -701,6 +703,9 @@ def main() -> None:
         if args.scenario in {"all", "sdk-minimal"}:
             assert args.exe is not None
             smoke_sdk_minimal(model.url, args.exe.resolve(), args.update_snapshots)
+        if args.scenario in {"all", "sdk-casual"}:
+            assert args.exe is not None
+            smoke_sdk_casual(model.url, args.exe.resolve(), args.update_snapshots)
         if args.scenario in {"all", "sdk-fs-search"}:
             assert args.exe is not None
             smoke_sdk_fs_search(model.url, args.exe.resolve())
@@ -799,6 +804,32 @@ def smoke_sdk_minimal(base_url: str, executable: Path, update_snapshots: bool) -
         files = build_minimal_snapshot_files(MockModelHandler.requests[first_request:], root)
         compare_snapshot_files(
             files, update_snapshots, MINIMAL_SNAPSHOT_DIRECTORY, MINIMAL_SNAPSHOT_FILENAMES,
+        )
+
+
+def smoke_sdk_casual(base_url: str, executable: Path, update_snapshots: bool) -> None:
+    """Pin the durable conversational projection through the real Python SDK."""
+    from deepseek_harness import DeepSeekHarness
+
+    with tempfile.TemporaryDirectory(prefix="dsh-sdk-casual-") as temporary:
+        root = Path(temporary).resolve()
+        sessions = root / "sessions"
+        with DeepSeekHarness(
+            provider="deepseek-official", model="smoke-model", cwd=str(root),
+            session_root=str(sessions), cordis=str(MINIMAL_CORDIS),
+            runtime_bin=str(executable), api_key="sk-keyless-smoke", base_url=base_url,
+            request_timeout_seconds=60,
+        ) as harness:
+            result = harness.run("hello", session_id="casual-agent-smoke")
+        assert result.final_response == "Hello!", result.final_response
+        starts = [event["data"] for event in result.events if event.get("type") == "step/start"]
+        assert len(starts) == 1, starts
+        assert starts[0]["historyProjection"] == {
+            "kind": "conversational-tail", "maxMessages": 8, "maxChars": 12000,
+        }, starts
+        compare_snapshot_files(
+            {"step-start.json": json.dumps(starts, indent=2) + "\n"}, update_snapshots,
+            ADVANCED_SNAPSHOT_DIRECTORY.parent / "casual", ("step-start.json",),
         )
 
 

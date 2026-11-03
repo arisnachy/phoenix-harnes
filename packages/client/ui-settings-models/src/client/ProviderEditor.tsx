@@ -202,7 +202,8 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const keyRef = refFor(schema, namespace, settingsPath, props.provider)
   const oauth = props.oauth
   /** An account-only flow replaces the key field with its sign-in buttons. */
-  const oauthOnly = oauth !== undefined && !oauth.methods.some(method => method.id === 'api-key')
+  const isCodex = props.provider === 'openai-codex'
+  const oauthOnly = isCodex || (oauth !== undefined && !oauth.methods.some(method => method.id === 'api-key'))
   const { attempt, answer, setAnswer, failure: authFailure, begin, submitAnswer, cancel } =
     useAuthorizationAttempt(api.authorization, () => {
       setAuthRefresh(current => current + 1)
@@ -423,14 +424,16 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             an inline sign-in that never routes an OAuth grant through the
             API-key input. An account-only flow (no api-key method) is the
             whole credential story, so the key field below steps aside. */}
-        {oauth === undefined ? null : (
+        {oauth === undefined ? (isCodex ? (
+          <p role="status" className={styles['advancedHint']}>{t('accountUnavailable')}</p>
+        ) : null) : (
           <div className={styles['field']}>
             <span className={styles['fieldLabel']}>{t('accountSignIn')}</span>
             {oauth.connected && attempt?.status !== 'pending'
               ? <p role="status" className={styles['connectedChip']}>{t('accountSignedIn')}</p>
               : null}
             <div className={styles['authorizationActions']}>
-              {oauth.methods.map(method => (
+              {oauth.methods.filter(method => !isCodex || method.id === 'oauth').map(method => (
                 <button
                   key={method.id}
                   type="button"

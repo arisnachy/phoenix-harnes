@@ -77,6 +77,14 @@
     - id: tool-living
       name: '@phoenix-ai/dsh-tool-living'
 
+    # Read-only commercial intent and live MCP inventory, exposed to Kira.
+    - id: tool-business
+      name: '@phoenix-ai/dsh-tool-business'
+
+    # Kira's read-only sports research/odds tools; cards render inline in chat.
+    - id: tool-sports
+      name: '@phoenix-ai/dsh-tool-sports'
+
     - id: llm-retry
       name: '@phoenix-ai/dsh-llm-retry'
 
@@ -93,27 +101,28 @@
 
     # Credential sources: inherited environment over the managed
     # `$DSH_HOME/.credentials.yaml`, with project and user `.env` fallbacks.
-    # Adapters resolve references per request; the Models page writes only the
-    # managed document, which is never materialized into the process environment.
+    # Pin to the user home, never to the staged/runtime checkout: one saved
+    # Google OAuth grant must survive side-by-side update Hosts and restarts.
+    # The file is owner-only (0600); never print, copy or store it in a runtime.
     - id: credentials
       name: '@phoenix-ai/dsh-credentials-local'
+      config:
+        path: !!js dshHomePath('.credentials.yaml')
 
     # Human-only secret entry point. Its command omits raw input from the
     # session log and the provider resolves values only inside consumers.
     - id: secret-vault
       name: '@phoenix-ai/dsh-secret-vault'
 
-    # HealthIA is an additive PHOENIX capability, not a separate app or UI.
-    # Its canonical longitudinal record lives outside chat/session memory and
-    # is encrypted locally with a key resolved through the credential seam.
+    # HealthIA experimental: local encrypted record, isolated from chat history.
+    # Requires a separate owner-managed key; no clinical production claim.
     - id: healthia-local
       name: '@phoenix-ai/dsh-healthia-local'
       config:
         path: !!js dshHomePath('health', 'healthia.enc.json')
         keyRef: PHOENIX_HEALTHIA_DATA_KEY
 
-    # Keep only the tiny activator globally visible. Once a health context
-    # activates it, the richer clinical tools/prompt mount in that Agent scope.
+    # Lazy activation of patient-scoped clinical tools.
     - id: tool-healthia
       name: '@phoenix-ai/dsh-tool-healthia'
 
@@ -124,10 +133,12 @@
     - id: authorization
       name: '@phoenix-ai/dsh-authorization'
 
-    # Google Workspace authorization is opt-in until a deployment supplies its
-    # verified Desktop OAuth client id. Access/refresh tokens are stored only in
-    # the owner-scoped opaque credential grant; authorization/model surfaces see
-    # metadata and Google API results, never the grant payload or Bearer header.
+    # Google Workspace authorization uses a Desktop OAuth client id. A deployment
+    # may supply it through PHOENIX_GOOGLE_OAUTH_CLIENT_ID; otherwise the first
+    # Connect action asks for the public Desktop client id once and stores that
+    # application identity in Phoenix credentials. Access and refresh tokens are
+    # stored in the same owner-only persistent credential document, never in
+    # model context, session logs or disposable runtime/staging directories.
     # Google installed apps do not support incremental authorization, so the
     # enabled provider requests exactly the shipped Workspace capability set.
     - id: authorization-google
@@ -143,6 +154,13 @@
           - https://www.googleapis.com/auth/presentations
           - https://www.googleapis.com/auth/contacts
 
+    # Real model-facing Workspace capability backed by the host-owned OAuth
+    # broker above. This replaces the old profile-local Google MCP fragments:
+    # Gmail, Calendar and Drive remain available after a clean Phoenix install,
+    # and Docs/Sheets/Slides/Contacts use the same governed account grant.
+    - id: tool-google-workspace
+      name: '@phoenix-ai/dsh-tool-google-workspace'
+
     # The pi-ai multi-provider adapter starts with PHOENIX's OpenRouter route.
     # Its key resolves per request from the credential store or the inherited
     # OPENROUTER_API_KEY environment variable; no secret is stored in this tree.
@@ -153,12 +171,22 @@
       name: '@phoenix-ai/dsh-llm-pi-ai'
       config:
         providers:
+          # Native subscription-backed Codex is the primary first-run cloud
+          # route. Authentication belongs to the official Codex/ChatGPT session;
+          # no OPENAI_API_KEY is accepted for this provider.
+          openai-codex: {}
           openrouter:
             apiKeyEnv: OPENROUTER_API_KEY
           # Optional local ChatGPT Web bridge. It exposes selectable bridge
           # models immediately; requests remain loopback-only and fail clearly
           # until the user configures PHOENIX_CHATGPT_WEB_COMMAND and starts it.
           chatgpt-web: {}
+
+    # Host-owned image tool: every current or newly authored preset inherits it.
+    - id: host-image-generation
+      name: '@phoenix-ai/dsh-llm-pi-ai'
+      config:
+        imageOnly: true
 
     - id: session-persistence-jsonl
       name: '@phoenix-ai/dsh-session-persistence-jsonl'
@@ -227,6 +255,9 @@
     # Durable image bytes live outside the append-only session log. Messages
     # keep content-addressed references that this shared backend resolves for
     # provider requests and authorized history reads.
+    - id: tool-voice
+      name: '@phoenix-ai/dsh-tool-voice'
+
     - id: attachment-local
       name: '@phoenix-ai/dsh-attachment-local'
 
@@ -342,10 +373,10 @@
       name: '@phoenix-ai/dsh-tool-pwsh'
       disabled: !!js process.platform !== 'win32'
       config:
-        # Phoenix Desktop Computer is still experimental. Keep the stable
-        # browser route primary and expose native desktop control only when
-        # explicitly opted in for testing.
-        enableComputerUse: !!js "['1', 'true', 'on'].includes((process.env.PHOENIX_DESKTOP_COMPUTER ?? '').trim().toLowerCase())"
+        # Windows desktop control is available by default, using the existing
+        # session permission/approval policy. Disable explicitly with
+        # PHOENIX_DESKTOP_COMPUTER=0; Chrome remains the primary web route.
+        enableComputerUse: !!js "process.platform === 'win32' && process.env.PHOENIX_DESKTOP_COMPUTER !== '0'"
 
     - id: tool-jobs
       name: '@phoenix-ai/dsh-tool-jobs'
@@ -447,6 +478,22 @@
     - id: subagent
       name: '@phoenix-ai/dsh-subagent'
 
+    # Mount native Codex account ownership in every base composition so a fresh
+    # Phoenix install can authorize ChatGPT/Codex from Settings before any
+    # per-agent delegation preset is selected.
+    - id: subagent-codex
+      name: '@phoenix-ai/dsh-subagent-codex'
+
+    # Execution-only Codex sibling. Its app-server thread uses the official
+    # on-request + auto_review permission lane and is runtime-gated to an
+    # active OpenAI Codex parent; the default provider above remains the sole
+    # ChatGPT/Codex account owner.
+    - id: subagent-codex-auto-review
+      name: '@phoenix-ai/dsh-subagent-codex'
+      config:
+        providerName: codex-auto-review
+        permissionMode: approve-for-me
+
     - id: subagent-spawn-in-process
       name: '@phoenix-ai/dsh-subagent-spawn-in-process'
       config:
@@ -456,6 +503,16 @@
       name: '@phoenix-ai/dsh-subagent-fork-in-process'
       config:
         providerName: fork
+
+    # Real KIRA Team state lives in the Lead Session. Phoenix uses an adaptive
+    # 1 -> 2 -> 3 teammate ladder; Kira remains the Lead and three is the hard cap.
+    - id: agent-team
+      name: '@phoenix-ai/dsh-agent-team'
+      config:
+        maxMembers: 3
+        maxTasks: 64
+        maxPendingMessagesPerMember: 16
+        maxMessageBytes: 16384
 
     # Continuable background children are selected per delegation tool. The
     # separately loaded follow-up tool registers the one global `send_message`.
@@ -588,14 +645,18 @@
 
     # Every mode enables the stable model-facing web_search tool. OpenRouter
     # search resolves the same OPENROUTER_API_KEY managed by Settings -> Models
-    # and uses the provider's current server-tool contract. Fetch stays disabled
-    # because a model-chosen URL needs a separate SSRF policy. Search is a full
-    # auxiliary model request, so the shipped route gets a 60s budget.
+    # and uses the provider's current server-tool contract. Fetch uses the
+    # anonymous, bounded HTTP(S) public-content provider, with URL / IP / DNS
+    # filtering, no cookies or credentials and strictly same-origin redirects.
+    # Restrictive egress proxies are still required for hostile DNS-rebinding
+    # deployments. The model can now inspect a cited source rather than relying
+    # on search snippets alone.
     - id: web
       name: '@phoenix-ai/dsh-web'
       config:
         searchProvider: openrouter
         searchFallbackProviders: [free-html]
+        fetchProvider: http
 
     - id: web-search-openrouter
       name: '@phoenix-ai/dsh-web-search-openrouter'
@@ -610,11 +671,27 @@
         engines: [bing, duckduckgo]
         timeoutMs: 8000
 
+    # Public anonymous source retrieval for verifiable research. Never use
+    # the browser's auth cookies/vault; never allow private networks by default.
+    - id: web-fetch-http
+      name: '@phoenix-ai/dsh-web-fetch-http'
+      config:
+        maxUrlLength: 2048
+        maxResponseBytes: 1500000
+        maxBodyChars: 80000
+        timeoutMs: 15000
+        maxRedirects: 2
+        allowPrivateNetworks: false
+
     - id: tool-web
       name: '@phoenix-ai/dsh-tool-web'
       config:
-        fetch: false
-        searchTimeoutMs: 60000
+        searchMaxQueries: 3
+        searchMaxResults: 8
+        fetch: true
+        fetchTimeoutMs: 15000
+        fetchMaxOutputChars: 50000
+        searchTimeoutMs: 45000
 
     # ── rows every mode mounts, whose values each overlay may state ──────────────
 
@@ -729,8 +806,9 @@
     # Stable browser automation path. This connector is isolated from Phoenix
     # Desktop and can start its own temporary Chrome/Edge profile over loopback
     # CDP. Failure is non-fatal: the Host keeps running and the connector
-    # retries independently. Mutating browser actions are automatic in Full
-    # access, or can be enabled explicitly with PHOENIX_BROWSER_ALLOW_ACTIONS.
+    # retries independently. Interactive Phoenix modes may navigate/click by
+    # default; read-only remains blocked and an explicit environment override
+    # can still force either behavior.
     - id: phoenix-browser
       name: '@phoenix-ai/dsh-mcp-client'
       disabled: !!js "['0', 'false', 'off'].includes((process.env.PHOENIX_BROWSER_CONNECTOR ?? '').trim().toLowerCase())"
@@ -749,7 +827,7 @@
           PHOENIX_BROWSER_PREFERRED_ENGINE: !!js process.env.PHOENIX_BROWSER_PREFERRED_ENGINE ?? 'chrome'
           PHOENIX_BROWSER_HEADLESS: !!js process.env.PHOENIX_BROWSER_HEADLESS ?? 'false'
           PHOENIX_BROWSER_AUTOSTART: !!js process.env.PHOENIX_BROWSER_AUTOSTART ?? 'true'
-          PHOENIX_BROWSER_ALLOW_ACTIONS: !!js "process.env.PHOENIX_BROWSER_ALLOW_ACTIONS ?? ((process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'true' : 'false')"
+          PHOENIX_BROWSER_ALLOW_ACTIONS: !!js "process.env.PHOENIX_BROWSER_ALLOW_ACTIONS ?? ((process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'read-only' ? 'false' : 'true')"
         failOnStartupError: false
         startupTimeoutMs: 1500
         toolCallTimeoutMs: 60000

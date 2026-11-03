@@ -33,6 +33,7 @@ function define(
     purpose: string
     host?: string
     client?: string
+    autoApprove?: boolean
   },
 ) {
   return runner.define({
@@ -44,6 +45,7 @@ function define(
       ...request.host === undefined ? {} : { host: request.host },
       ...request.client === undefined ? {} : { client: request.client },
     },
+    ...request.autoApprove === undefined ? {} : { autoApprove: request.autoApprove },
   })
 }
 
@@ -103,6 +105,22 @@ describe('dynamic runner definitions', () => {
       .resolves.toMatchObject({ ok: true, status: 'awaiting-approval' })
     expect(gateway.events).toContainEqual(['cordis/request-run', expect.objectContaining({ requiresApproval: true })])
     expect(running(runner, AGENT_A)).toEqual([{ id: definition.pluginId, running: false }])
+  })
+
+  it('runs a Phoenix-authored host-only Package without a redundant approval even when the host gate is enabled', async () => {
+    const { runner, gateway } = await setup({ requireHostApproval: true })
+    const definition = define(runner, {
+      sessionId: AGENT_A.id,
+      name: 'trusted host',
+      purpose: 'created by Phoenix',
+      host: HOST_CODE,
+      autoApprove: true,
+    })
+
+    await expect(runner.run(AGENT_A, definition.pluginId, definition.packageId, 'run'))
+      .resolves.toMatchObject({ ok: true, status: 'running' })
+    expect(gateway.events.some(([name]) => name === 'cordis/request-run')).toBe(false)
+    expect(running(runner, AGENT_A)).toEqual([{ id: definition.pluginId, running: true }])
   })
 
   it('records a definition without running it, and mints ids that are never reused', async () => {
@@ -183,6 +201,39 @@ describe('dynamic runner dispatch', () => {
     await expect(runner.invoke(pluginId, 'run-1' as never, 'double', { value: 21 }))
       .resolves.toEqual({ ok: true, value: 42 })
     expect(running(runner, AGENT_A)).toEqual([{ id: pluginId, running: true }])
+  })
+
+  it('starts a Phoenix-authored Client Package without exposing an approval decision', async () => {
+    const { runner, gateway } = await setup()
+    const definition = define(runner, {
+      sessionId: AGENT_A.id,
+      name: 'trusted client',
+      purpose: 'created by Phoenix',
+      host: HOST_CODE,
+      client: CLIENT_CODE,
+      autoApprove: true,
+    })
+
+    const receipt = await runner.run(AGENT_A, definition.pluginId, definition.packageId, 'run')
+
+    expect(receipt).toMatchObject({
+      ok: true,
+      status: 'starting',
+      pluginId: definition.pluginId,
+      packageId: definition.packageId,
+    })
+    expect(runner.inventory()[0]?.latestRun).toMatchObject({
+      status: 'starting-host',
+      requiresApproval: false,
+    })
+    expect(gateway.events).toContainEqual([
+      'cordis/request-run',
+      expect.objectContaining({
+        pluginId: definition.pluginId,
+        packageId: definition.packageId,
+        requiresApproval: false,
+      }),
+    ])
   })
 
   it('returns awaiting approval, then records the page activation asynchronously', async () => {

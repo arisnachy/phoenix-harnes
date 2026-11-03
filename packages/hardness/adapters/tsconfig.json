@@ -3,6 +3,10 @@
   "compilerOptions": { "rootDir": "src", "outDir": "lib/types" },
   "include": ["src"],
   "references": [
+    { "path": "../../util/brand" },
+    { "path": "../../subprocess/subprocess" },
+    { "path": "../../credentials/credentials" },
+    { "path": "../../session/session-persistence" },
     { "path": "../hardness" },
     { "path": "../../credentials/authorization" },
     { "path": "../../mcp/mcp-registry" },

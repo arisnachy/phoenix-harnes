@@ -149,6 +149,35 @@ describe('web e2e: sidebar subagent activity', () => {
     const runningTrigger = page.getByRole('button', { name: '1 subagent running' })
     await runningTrigger.waitFor({ timeout: 10_000 })
     expect(await runningTrigger.locator('[data-state="ongoing"]').count()).toBe(1)
+    const teams = page.locator('[data-kira-teams]')
+    await teams.waitFor({ timeout: 10_000 })
+    expect(await teams.getAttribute('data-kira-layout')).toBe('activity-rail')
+    expect(await teams.locator('[data-kira-stack-avatar]').count()).toBe(1)
+    expect(await teams.locator('[data-kira-agent-rail]').count()).toBe(1)
+
+    const overlayGeometry = await teams.evaluate((dock) => {
+      const overlay = dock.closest('[data-shell-overlay]')
+      const center = overlay?.parentElement
+      const strip = dock.querySelector('[data-kira-activity-strip]')
+      const header = center?.querySelector('header')
+      if (!(overlay instanceof HTMLElement) || !(strip instanceof HTMLElement) || !(header instanceof HTMLElement)) {
+        throw new Error('KIRA overlay geometry anchors are missing')
+      }
+      const overlayBox = overlay.getBoundingClientRect()
+      const stripBox = strip.getBoundingClientRect()
+      const headerBox = header.getBoundingClientRect()
+      return {
+        overlayLeft: overlayBox.left,
+        overlayRight: overlayBox.right,
+        stripLeft: stripBox.left,
+        stripRight: stripBox.right,
+        stripTop: stripBox.top,
+        headerBottom: headerBox.bottom,
+      }
+    })
+    expect(overlayGeometry.stripLeft).toBeGreaterThanOrEqual(overlayGeometry.overlayLeft)
+    expect(overlayGeometry.stripRight).toBeLessThanOrEqual(overlayGeometry.overlayRight)
+    expect(overlayGeometry.stripTop).toBeGreaterThanOrEqual(overlayGeometry.headerBottom)
     await assertFixtureInventory(SNAPSHOT_DIR, ['owner-running.expected.md'])
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])

@@ -19,7 +19,8 @@ export function readProviderOrder(source: ProviderOrderSource | undefined): stri
 
 /**
  * Sort advisory provider groups by user preference and keep new providers
- * visible after the preferred entries. The preference never removes routes.
+ * visible after the preferred entries. With no preference, native Codex comes first.
+ * The preference never removes routes or changes the selected model.
  * @param groups - Provider groups returned by registered adapters.
  * @param providerOrder - Optional user-selected route order.
  * @returns A detached ordered group list.
@@ -28,10 +29,11 @@ export function orderModelProviderGroups(
   groups: readonly ModelProviderGroup[],
   providerOrder: readonly string[],
 ): ModelProviderGroup[] {
-  const rank = new Map(providerOrder.map((provider, index) => [provider, index]))
+  const effectiveOrder = providerOrder.length === 0 ? ['openai-codex'] : providerOrder
+  const rank = new Map(effectiveOrder.map((provider, index) => [provider, index]))
   return groups
     .map((group, index) => ({ group, index }))
-    .sort((left, right) => (rank.get(left.group.id) ?? providerOrder.length + left.index)
-      - (rank.get(right.group.id) ?? providerOrder.length + right.index))
-    .map(entry => entry.group)
+    .sort((left, right) => (rank.get(left.group.id) ?? effectiveOrder.length + left.index)
+      - (rank.get(right.group.id) ?? effectiveOrder.length + right.index))
+    .map(({ group }) => group.id === 'openai-codex' && group.name === group.id ? { ...group, name: 'OpenAI Codex' } : group)
 }

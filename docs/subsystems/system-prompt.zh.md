@@ -71,6 +71,8 @@ interface PromptSection {
    * interpolated later, by {@link renderPrompt}.
    */
   readonly text: string | ((context: AssembleContext) => string)
+  /** Whether `{{name}}` references in this section are interpolated (default true). */
+  readonly interpolateVariables?: boolean
   /**
    * Treat this contribution as the complete system prompt. Assembly still
    * runs the cooperative waterfall so tools, contexts, and variables can be

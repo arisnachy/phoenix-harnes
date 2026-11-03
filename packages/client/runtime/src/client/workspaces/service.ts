@@ -47,6 +47,12 @@ export class DirectoryBrowseError extends Error {
   }
 }
 
+/** Transient Host admission can fail even after both list baselines succeed.
+ * A failed first selection must retry without relying on another list event:
+ * otherwise the composer stays inert until the user manually chooses a Workspace.
+ */
+const INITIAL_SELECTION_RETRY_DELAYS_MS = [250, 750, 1500] as const
+
 /** Real Workspace object layer and Host actions. */
 export class WorkspaceRuntime implements IWorkspaces {
   /** UI-facing immutable projection; the manager remains wire truth. */
@@ -130,6 +136,8 @@ export class WorkspaceRuntime implements IWorkspaces {
     this.initialSelectionStarted = true
     let state: 'waiting' | 'connecting' | 'done' = 'waiting'
     let disposed = false
+    let retryIndex = 0
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
     const reconcile = (): void => {
       if (disposed || state !== 'waiting') return
       const workspace = this.list.getSnapshot()
@@ -138,12 +146,22 @@ export class WorkspaceRuntime implements IWorkspaces {
       const target = workspace.recentWorkspaceId
       if (current !== undefined || target === undefined) {
         state = 'done'
+        if (retryTimer !== undefined) clearTimeout(retryTimer)
+        retryTimer = undefined
         return
+      }
+      // A new authoritative projection can recover early, but do not admit a
+      // duplicate connect from repeated store notifications while one waits.
+      if (retryTimer !== undefined) {
+        clearTimeout(retryTimer)
+        retryTimer = undefined
       }
       state = 'connecting'
       void this.connectWorkspace(target).then(
         (sessionId) => {
           if (disposed) return
+          // Respect a real session that the user selected while Host creation
+          // was in flight; never replace their navigation with startup policy.
           if (this.sessions.list.getSnapshot().current === undefined) {
             this.sessions.open(sessionId)
           }
@@ -153,6 +171,19 @@ export class WorkspaceRuntime implements IWorkspaces {
           if (disposed) return
           state = 'waiting'
           console.warn('initial workspace selection failed:', reason)
+          // Recovery must not depend on a future workspace.list frame: a
+          // transient admission failure could otherwise leave the welcome
+          // composer permanently read-only despite a valid Workspace.
+          if (retryIndex < INITIAL_SELECTION_RETRY_DELAYS_MS.length) {
+            const delay = INITIAL_SELECTION_RETRY_DELAYS_MS[retryIndex]!
+            retryIndex++
+            retryTimer = setTimeout(() => {
+              retryTimer = undefined
+              reconcile()
+            }, delay)
+          }
+          // After bounded automatic attempts, manual Workspace selection
+          // remains available. An actual later list change may retry again.
         },
       )
     }
@@ -160,6 +191,7 @@ export class WorkspaceRuntime implements IWorkspaces {
     reconcile()
     return () => {
       disposed = true
+      if (retryTimer !== undefined) clearTimeout(retryTimer)
       unsubscribe()
     }
   }

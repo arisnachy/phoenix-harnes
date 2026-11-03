@@ -12,9 +12,9 @@ import { randomUUID } from 'node:crypto'
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { defineTool } from '@phoenix-ai/dsh-tools'
-import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
+import { latestModelSelectionPreference, type Agent, type AgentOptions } from '@phoenix-ai/dsh-agent'
 import { ReasoningEffortId, type ContentBlock } from '@phoenix-ai/dsh-llm'
-import { SessionId, type JsonValue } from '@phoenix-ai/dsh-session'
+import { foldRequestHeader, SessionId, type JsonValue } from '@phoenix-ai/dsh-session'
 import { assertSubagentMaxDepth, settleRun } from '@phoenix-ai/dsh-subagent'
 import type { SubagentProvider, SubagentResult, SubagentRun } from '@phoenix-ai/dsh-subagent'
 import type { JobOutcome } from '@phoenix-ai/dsh-jobs'
@@ -27,7 +27,7 @@ export const inject = ['tools', 'subagents', 'systemPrompt']
 const SUBAGENT_SECTION_ORDER = 116.5
 
 /** Phoenix normally delegates to one child; escalation requires explicit task-complexity evidence. */
-const MAX_ACTIVE_SUBAGENTS = 3
+const MAX_ACTIVE_SUBAGENTS_PER_PARENT = 3
 
 const ACTIVE_SUBAGENT_GUIDANCE =
   ' Presupuesto Phoenix de subagentes: usa 1 como norma. ' +
@@ -49,19 +49,18 @@ const LIVE_ACTIVITY_GUIDANCE =
   'razonamiento interno. Phoenix mostrará literalmente esa frase como actividad en vivo.'
 
 interface ActiveSubagentBudget {
-  /** One runtime-wide count shared by every parent session and provider alias. */
-  activeTotal: number
+  /** Active child count per parent session; aliases/providers share the same parent budget. */
   readonly activeByParent: Map<string, number>
   readonly continuableReleases: Map<string, () => void>
 }
 
-/** Shared across every tool-subagent instance mounted on one runtime, so provider aliases cannot bypass the cap. */
+/** Shared across every tool-subagent instance mounted on one runtime, so provider aliases cannot bypass a parent's cap. */
 const ACTIVE_BUDGETS = new WeakMap<object, ActiveSubagentBudget>()
 
 function activeBudgetFor(runtime: object): ActiveSubagentBudget {
   let state = ACTIVE_BUDGETS.get(runtime)
   if (state !== undefined) return state
-  state = { activeTotal: 0, activeByParent: new Map(), continuableReleases: new Map() }
+  state = { activeByParent: new Map(), continuableReleases: new Map() }
   ACTIVE_BUDGETS.set(runtime, state)
   return state
 }
@@ -73,12 +72,13 @@ function reserveActiveSubagent(
   escalation: { readonly hard: boolean; readonly extreme: boolean },
 ): () => void {
   const parentId = String(parent.id)
-  // Global means global: separate parent sessions cannot each obtain an
-  // independent 1→2→3 pool. Aliases and providers share this same runtime cap.
-  const active = state.activeTotal
-  if (active >= MAX_ACTIVE_SUBAGENTS) {
+  // The escalation ladder belongs to one parent task/conversation. Different
+  // parent sessions may each use their first child without being mistaken for
+  // a sibling escalation. Provider aliases still share this per-parent count.
+  const active = state.activeByParent.get(parentId) ?? 0
+  if (active >= MAX_ACTIVE_SUBAGENTS_PER_PARENT) {
     throw new Error(
-      'Presupuesto Phoenix agotado: ya hay 3 subagentes activos. Nunca lances un cuarto; ' +
+      'Presupuesto Phoenix agotado: ya hay 3 subagentes activos para esta tarea. Nunca lances un cuarto; ' +
       'espera o reutiliza uno de los existentes.',
     )
   }
@@ -95,13 +95,11 @@ function reserveActiveSubagent(
     )
   }
 
-  state.activeTotal = active + 1
-  state.activeByParent.set(parentId, (state.activeByParent.get(parentId) ?? 0) + 1)
+  state.activeByParent.set(parentId, active + 1)
   let released = false
   return () => {
     if (released) return
     released = true
-    state.activeTotal = Math.max(0, state.activeTotal - 1)
     const current = state.activeByParent.get(parentId) ?? 0
     if (current <= 1) state.activeByParent.delete(parentId)
     else state.activeByParent.set(parentId, current - 1)
@@ -514,11 +512,25 @@ export function apply(ctx: Context, config: Config): void {
         }
 
         const maxDepth = typeof config.maxDepth === 'number' ? config.maxDepth : undefined
-        const childRoute = config.childRoute !== undefined && parent.options.provider === config.childRoute.whenProvider
-          ? config.childRoute
-          : undefined
+        // Creation-time Agent.options can still point to Sol or a previous provider
+        // after the user changes the live selector. Resolve routing from the
+        // current request, then the durable preference, then legacy options.
+        const parentEvents = parent.session?.events ?? []
+        const requestRoute = foldRequestHeader(parentEvents)?.config
+        const durableRoute = latestModelSelectionPreference({ events: parentEvents })?.selection
+        const activeProvider = requestRoute?.provider ?? durableRoute?.provider ?? parent.options?.provider
+        const activeModel = requestRoute?.model ?? durableRoute?.model
+        const activeEffort = requestRoute?.reasoningEffort ?? durableRoute?.reasoningEffort
+        const selectedRoute: ConfiguredAgentOptions | undefined =
+          activeProvider === undefined || activeModel === undefined ? undefined : {
+            provider: activeProvider, model: activeModel,
+            ...activeEffort === undefined ? {} : { reasoningEffort: activeEffort },
+          }
+        const childRoute = config.childRoute !== undefined
+          && activeProvider === config.childRoute.whenProvider
+          ? config.childRoute : undefined
         const configuredAgentOptions = childRoute === undefined
-          ? config.agentOptions
+          ? selectedRoute === undefined ? config.agentOptions : { ...selectedRoute, ...config.agentOptions }
           : {
             ...config.agentOptions,
             provider: childRoute.provider,

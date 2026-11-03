@@ -11,7 +11,7 @@ describe('full preset memory parity', () => {
       "  name: '@phoenix-ai/dsh-tool-session-learning'",
     ].join('\n')
     const fullPresets = await Promise.all(
-      ['standard', 'code', 'cordis'].map(async name =>
+      ['standard', 'code', 'cordis', 'kira-max'].map(async name =>
         readFile(`${PRESET_ROOT}${name}/agent.cordis.yml`, 'utf8')),
     )
     const minimal = await readFile(`${PRESET_ROOT}minimal/agent.cordis.yml`, 'utf8')

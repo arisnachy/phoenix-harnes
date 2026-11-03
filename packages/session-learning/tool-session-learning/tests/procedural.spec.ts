@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   ProceduralExperienceTrace,
   ProceduralLearningEngine,
+  isLearnableToolResult,
   filterProceduralSearchHits,
   type ProceduralMemoryStore,
   type ProceduralMemoryWrite,
   type ProceduralStoredMemory,
 } from '../src/procedural.ts'
-import { formatProceduralContext } from '../src/procedural-presentation.ts'
+import { formatProceduralContext, formatRecoveryCandidates } from '../src/procedural-presentation.ts'
 
 class MemoryStore implements ProceduralMemoryStore {
   readonly rows: ProceduralStoredMemory[] = []
@@ -49,7 +50,44 @@ function provenance(now: number) {
   } as const
 }
 
+describe('evidence-backed tool trace filtering', () => {
+  const outcome = (content: string, isError = false) => ({
+    message: { content: [{ type: 'tool-result', isError,
+      content: [{ type: 'text', text: content }] }] },
+  })
+  it('learns only observed successful steps, never failed or unverified calls', () => {
+    expect(isLearnableToolResult(outcome('{"ok":true,"stage":"verified"}'))).toBe(true)
+    expect(isLearnableToolResult(outcome('{"status":"dispatched","verified":false}'))).toBe(false)
+    expect(isLearnableToolResult(outcome('{"ok":false,"reason":"NOT_FOUND"}'))).toBe(false)
+    expect(isLearnableToolResult(outcome('done', true))).toBe(false)
+    expect(isLearnableToolResult({ error: { code: 'EPIPE' }, ...outcome('ok') })).toBe(false)
+    expect(isLearnableToolResult({ message: { content: [] } })).toBe(false)
+  })
+})
+
 describe('ProceduralLearningEngine', () => {
+  it('recalls a blocked workflow as a clearly unverified recovery hint, not an active recipe', async () => {
+    const engine = new ProceduralLearningEngine(new MemoryStore())
+    await engine.recordExperience({
+      title: 'Brandpoll browser survey recovery', scope: 'phoenix',
+      trigger: 'Brandpoll survey browser workflow',
+      steps: ['Use tool browser_open', 'Use tool browser_inspect'],
+      evidence: 'Mission blocked before completion.',
+      verified: false, sessionId: 'session-recovery', eventSeq: 4, occurredAt: 500,
+      projectId: 'phoenix',
+    })
+    expect(engine.recommend({ taskContext: 'Brandpoll survey browser workflow', projectId: 'phoenix' })).toEqual([])
+    const recovered = engine.recoveryCandidates({
+      taskContext: 'Brandpoll survey browser workflow', projectId: 'phoenix',
+    })
+    expect(recovered).toHaveLength(1)
+    expect(recovered[0]?.status).toBe('candidate')
+    const text = formatRecoveryCandidates(recovered)
+    expect(text).toContain('UNFINISHED')
+    expect(text).toContain('browser_inspect')
+    expect(engine.recoveryCandidates({ taskContext: 'Prepare a clinical epidemiology lecture', projectId: 'phoenix' })).toEqual([])
+  })
+
   it('activates an explicit guided procedure with structured steps', async () => {
     const engine = new ProceduralLearningEngine(new MemoryStore())
     const learned = await engine.teach({
@@ -228,6 +266,11 @@ describe('ProceduralExperienceTrace', () => {
       'Recovery lesson: Validate the generated file before retrying the renderer.',
     ])
     expect(trace.complete('session-1')).toEqual([])
+    trace.toolCall('session-1', 'browser_open')
+    expect(trace.snapshot('session-1')).toEqual(['Use tool browser_open'])
+    expect(trace.snapshot('session-1')).toEqual(['Use tool browser_open'])
+    expect(trace.complete('session-1')).toEqual(['Use tool browser_open'])
+    expect(trace.snapshot('session-1')).toEqual([])
   })
 })
 

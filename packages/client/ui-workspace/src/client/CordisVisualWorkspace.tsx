@@ -2,12 +2,17 @@ import { useSyncExternalStore } from 'react'
 import type { ILayout } from '@phoenix-ai/dsh-client-ui-layout/client'
 import css from './CordisVisualWorkspace.module.css'
 
+/** Side rail Cordis should occupy beside the conversation. */
+export type CordisDockSide = 'left' | 'right'
+
 /** Media/document surfaces Cordis may present beside the conversation. */
-export type CordisVisualContent =
+export type CordisVisualContent = (
   | { readonly kind: 'image'; readonly src: string; readonly title?: string; readonly alt?: string }
   | { readonly kind: 'video'; readonly src: string; readonly title?: string; readonly poster?: string; readonly autoplay?: boolean }
   | { readonly kind: 'page'; readonly url: string; readonly title?: string }
+  | { readonly kind: 'html'; readonly html: string; readonly title?: string; readonly executable?: boolean }
   | { readonly kind: 'text'; readonly text: string; readonly title?: string }
+) & { readonly dock?: CordisDockSide }
 
 /** Public client service used by Phoenix plugins to drive the Cordis visual workspace. */
 export interface ICordisVisualWorkspace {
@@ -24,15 +29,20 @@ export interface ICordisVisualWorkspace {
 /** Event-backed controller for the Cordis visual workspace. */
 export class CordisVisualWorkspaceController implements ICordisVisualWorkspace {
   #content: CordisVisualContent | null = null
+  #dock: CordisDockSide | null = null
   #listeners = new Set<() => void>()
 
   constructor(private readonly layout: ILayout) {}
 
-  /** Show or replace the current visual surface. */
+  /** Show or replace the current visual surface in a real side rail. */
   show(content: CordisVisualContent): void {
     const wasClosed = this.#content === null
+    const nextDock = contentDock(content)
     this.#content = Object.freeze({ ...content })
-    if (wasClosed) this.layout.setWorkspaceOccupant('cordis', true)
+    if (wasClosed || this.#dock !== nextDock) {
+      this.layout.setWorkspaceOccupant('cordis', true, nextDock)
+      this.#dock = nextDock
+    }
     this.#emit()
   }
 
@@ -40,6 +50,7 @@ export class CordisVisualWorkspaceController implements ICordisVisualWorkspace {
   close(): void {
     if (this.#content === null) return
     this.#content = null
+    this.#dock = null
     this.#emit()
     this.layout.setWorkspaceOccupant('cordis', false)
   }
@@ -68,6 +79,10 @@ function contentTitle(content: CordisVisualContent): string {
   return content.title?.trim() || 'Cordis'
 }
 
+function contentDock(content: CordisVisualContent): CordisDockSide {
+  return content.dock ?? 'right'
+}
+
 function safePageUrl(raw: string): string | null {
   try {
     const url = new URL(raw)
@@ -75,6 +90,27 @@ function safePageUrl(raw: string): string | null {
   } catch {
     return null
   }
+}
+
+function sandboxCanvasDocument(html: string, executable: boolean): string {
+  const scriptSources = executable ? "script-src 'unsafe-inline'" : "script-src 'none'"
+  const csp = [
+    "default-src 'none'",
+    'img-src data: blob:',
+    'media-src data: blob:',
+    'font-src data:',
+    "style-src 'unsafe-inline'",
+    scriptSources,
+    "connect-src 'none'",
+    "frame-src 'none'",
+    "child-src 'none'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join('; ') + ';'
+  const head = /<head\b[^>]*>([\s\S]*?)<\/head>/i.exec(html)?.[1] ?? ''
+  const body = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;width:100%;height:100%;overflow:auto;font-family:system-ui,sans-serif}*{box-sizing:border-box}</style></head><body>${body}</body></html>`
 }
 
 function Surface({ content }: { content: CordisVisualContent }) {
@@ -90,6 +126,16 @@ function Surface({ content }: { content: CordisVisualContent }) {
           controls
           autoPlay={content.autoplay}
           playsInline
+        />
+      )
+    case 'html':
+      return (
+        <iframe
+          className={css.canvas}
+          title={content.title ?? 'Phoenix canvas'}
+          srcDoc={sandboxCanvasDocument(content.html, content.executable !== false)}
+          sandbox={content.executable === false ? '' : 'allow-scripts'}
+          referrerPolicy="no-referrer"
         />
       )
     case 'page': {
@@ -113,7 +159,7 @@ function Surface({ content }: { content: CordisVisualContent }) {
   }
 }
 
-/** Visual surface mounted in Phoenix's shared KIRA/Cordis right rail. */
+/** Visual surface mounted in Phoenix's shared KIRA/Cordis side rail. */
 export function CordisVisualWorkspace({
   controller,
   layout,
@@ -134,6 +180,7 @@ export function CordisVisualWorkspace({
     <aside
       className={css.root}
       data-cordis-workspace
+      data-cordis-dock={contentDock(content)}
       data-under-subagent={occupancy.subagent || undefined}
       aria-label="Cordis visual workspace"
     >

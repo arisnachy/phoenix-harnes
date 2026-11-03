@@ -77,6 +77,16 @@ interface GenericSkip {
 }
 
 const GENERIC_SKIPS: readonly GenericSkip[] = [
+  // Bare `cordis` names a shipped preset or visual-workspace occupant, not a package specifier.
+  { file: 'apps/cli/tests/full-preset-memory-parity.spec.ts', upstream: ['cordis'] },
+  { file: 'apps/cli/tests/phoenix-auto-parallel-luna.spec.ts', upstream: ['cordis'] },
+  { file: 'packages/client/ui-layout/src/client/stores.ts', upstream: ['cordis'] },
+  { file: 'packages/client/ui-layout/tests/layout-store.client.spec.ts', upstream: ['cordis'] },
+  { file: 'packages/client/ui-layout/tests/service.client.spec.ts', upstream: ['cordis'] },
+  { file: 'packages/client/ui-layout/tests/visual-workspace-frame.client.spec.tsx', upstream: ['cordis'] },
+  { file: 'packages/client/ui-workspace/src/client/CordisVisualWorkspace.tsx', upstream: ['cordis'] },
+  { file: 'packages/client/ui-workspace/tests/apply.client.spec.ts', upstream: ['cordis'] },
+  { file: 'packages/client/ui-workspace/tests/cordis-visual-workspace.client.spec.ts', upstream: ['cordis'] },
   // These plans name the shipped `cordis` preset id, not the vendored package.
   { file: 'docs/superpowers/plans/2026-08-27-visible-progress-hardness.md', upstream: ['cordis'] },
   { file: 'docs/superpowers/plans/2026-08-27-visible-progress-hardness.zh.md', upstream: ['cordis'] },
@@ -287,9 +297,9 @@ const VENDORED_LIBRARY = /^@phoenix-ai\\/(cosmokit|schemastery)(\\/|$)/
   {
     id: 'client-purity-vendored-libraries-predicate',
     file: 'packages/client/tsdown.client.ts',
-    find: '        if (INLINE_SAFE.test(source) || GENERATED_REMOTE.test(source)) return null // wire contribution: inline is the point',
-    replace: `        if (VENDORED_LIBRARY.test(source)) return null // vendored library: inline, no shared identity
-        if (INLINE_SAFE.test(source) || GENERATED_REMOTE.test(source)) return null // wire contribution: inline is the point`,
+    find: '          if (INLINE_SAFE.test(source) || GENERATED_REMOTE.test(source)) return null',
+    replace: `          if (VENDORED_LIBRARY.test(source)) return null
+          if (INLINE_SAFE.test(source) || GENERATED_REMOTE.test(source)) return null`,
     expect: 1,
   },
   {

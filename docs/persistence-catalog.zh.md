@@ -92,7 +92,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }[T]
 ```
 
-来源：[`packages/core/session/src/types.ts:340`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:347`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:376`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:408`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:345`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:352`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:381`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:413`](../packages/core/session/src/types.ts)
 
 ## 事件
 
@@ -118,6 +118,20 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 ```
 
 来源：[`packages/core/agent/src/types.ts:19`](../packages/core/agent/src/types.ts)
+
+<a id="agentmodel-selection--log-only"></a>
+
+#### `agent/model-selection` — 仅日志
+
+```ts persistence-catalog
+/**
+ * Durable model-routing preference, hidden from model history. Required on
+ * read: dropping it would change future provider/model and cost decisions.
+ */
+'agent/model-selection': ModelSelectionPreference
+```
+
+来源： [`packages/core/agent/src/model-selection.ts:34`](../packages/core/agent/src/model-selection.ts)
 
 ### `agent-preset/*`
 
@@ -218,7 +232,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[StreamChunk](subsystems/llm-streaming.zh.md)
 
-来源：[`packages/core/session/src/types.ts:266`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:271`](../packages/core/session/src/types.ts)
 
 <a id="assistantmessage--surface"></a>
 
@@ -240,7 +254,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[TokenUsage](subsystems/llm-streaming.zh.md)
 
-来源：[`packages/core/session/src/types.ts:277`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:282`](../packages/core/session/src/types.ts)
 
 ### `command/*`
 
@@ -663,7 +677,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'request/context': RequestContext
 ```
 
-来源：[`packages/core/session/src/types.ts:313`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:318`](../packages/core/session/src/types.ts)
 
 <a id="requestheader--log-only"></a>
 
@@ -677,7 +691,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'request/header': { header: EpochHeader; reason: RequestHeaderReason }
 ```
 
-来源：[`packages/core/session/src/types.ts:308`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:313`](../packages/core/session/src/types.ts)
 
 ### `sandbox/*`
 
@@ -752,7 +766,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'session/end-seed': Record<string, never>
 ```
 
-来源：[`packages/core/session/src/types.ts:336`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:341`](../packages/core/session/src/types.ts)
 
 <a id="sessiontitle--log-only"></a>
 
@@ -807,7 +821,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'step/end': { turn: number; step: number }
 ```
 
-来源：[`packages/core/session/src/types.ts:256`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:261`](../packages/core/session/src/types.ts)
 
 <a id="stepstart--log-only"></a>
 
@@ -815,7 +829,12 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 ```ts persistence-catalog
 /** Opens step `step` of turn `turn` — one model call plus the tool executions it requested. */
-'step/start': { turn: number; step: number }
+'step/start': {
+  turn: number
+  step: number
+  /** Deterministic model-history selection; absent means complete derived history. */
+  historyProjection?: { kind: 'conversational-tail'; maxMessages: number; maxChars: number }
+}
 ```
 
 来源：[`packages/core/session/src/types.ts:254`](../packages/core/session/src/types.ts)
@@ -841,6 +860,44 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 ### `team/*`
 
+<a id="teamchat-message--log-only"></a>
+
+#### `team/chat-message` — log-only
+
+```ts persistence-catalog
+/** Actual child output copied into its root's transcript, never model history. */
+'team/chat-message': { readonly version: 1
+  readonly update?: true
+  readonly message: TeamChatMessage }
+```
+
+Source: [`packages/subagent/agent-team/src/chat-types.ts:71`](../packages/subagent/agent-team/src/chat-types.ts)
+
+<a id="teamchat-participant--log-only"></a>
+
+#### `team/chat-participant` — log-only
+
+```ts persistence-catalog
+/** Complete, stable real child identity and operational state in its mission. */
+'team/chat-participant': { readonly version: 1
+  readonly participant: TeamChatParticipant }
+```
+
+Source: [`packages/subagent/agent-team/src/chat-types.ts:68`](../packages/subagent/agent-team/src/chat-types.ts)
+
+<a id="teamchat-reaction--log-only"></a>
+
+#### `team/chat-reaction` — log-only
+
+```ts persistence-catalog
+/** Idempotent per-person, per-emoji set/remove mutation, without waking a model. */
+'team/chat-reaction': { readonly version: 1
+  readonly reaction: TeamChatReaction
+  readonly active: boolean }
+```
+
+Source: [`packages/subagent/agent-team/src/chat-types.ts:75`](../packages/subagent/agent-team/src/chat-types.ts)
+
 <a id="teammember--log-only"></a>
 
 #### `team/member` — log-only
@@ -852,7 +909,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[TeamId](subsystems/agent-team.zh.md) · [TeamMemberSnapshot](subsystems/agent-team.zh.md)
 
-来源：[`packages/experimental/agent-team/src/types.ts:211`](../packages/experimental/agent-team/src/types.ts)
+来源：[`packages/subagent/agent-team/src/types.ts:257`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammessagedelivered--log-only"></a>
 
@@ -870,7 +927,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[TeamId](subsystems/agent-team.zh.md) · [TeamMessageId](subsystems/agent-team.zh.md)
 
-来源：[`packages/experimental/agent-team/src/types.ts:217`](../packages/experimental/agent-team/src/types.ts)
+来源：[`packages/subagent/agent-team/src/types.ts:263`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammessagequeued--log-only"></a>
 
@@ -883,7 +940,24 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[TeamId](subsystems/agent-team.zh.md) · [TeamMessageSnapshot](subsystems/agent-team.zh.md)
 
-来源：[`packages/experimental/agent-team/src/types.ts:215`](../packages/experimental/agent-team/src/types.ts)
+来源：[`packages/subagent/agent-team/src/types.ts:261`](../packages/subagent/agent-team/src/types.ts)
+
+<a id="teamreaction--log-only"></a>
+
+#### `team/reaction` — log-only
+
+```ts persistence-catalog
+/** Lightweight semantic reaction to a real Team message; stored only in the Team Lead Session. */
+'team/reaction': {
+  version: 1
+  teamId: TeamId
+  reaction: TeamReactionSnapshot
+}
+```
+
+类型：[TeamId](subsystems/agent-team.zh.md)
+
+来源：[`packages/subagent/agent-team/src/types.ts:270`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teamtask--log-only"></a>
 
@@ -896,7 +970,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[TeamId](subsystems/agent-team.zh.md) · [TeamTaskSnapshot](subsystems/agent-team.zh.md)
 
-来源：[`packages/experimental/agent-team/src/types.ts:213`](../packages/experimental/agent-team/src/types.ts)
+来源：[`packages/subagent/agent-team/src/types.ts:259`](../packages/subagent/agent-team/src/types.ts)
 
 ### `todo/*`
 
@@ -911,7 +985,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[TodoItem](subsystems/session.zh.md)
 
-来源：[`packages/core/session/src/types.ts:303`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:308`](../packages/core/session/src/types.ts)
 
 ### `tool/*`
 
@@ -930,7 +1004,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[CallId](subsystems/core.zh.md)
 
-来源：[`packages/core/session/src/types.ts:283`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:288`](../packages/core/session/src/types.ts)
 
 <a id="toolcode-dispatch--log-only"></a>
 
@@ -1005,7 +1079,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }
 ```
 
-来源：[`packages/core/session/src/types.ts:295`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:300`](../packages/core/session/src/types.ts)
 
 ### `tool-workflow/*`
 
@@ -1120,7 +1194,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'user/message': UserMessage
 ```
 
-来源：[`packages/core/session/src/types.ts:264`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:269`](../packages/core/session/src/types.ts)
 
 ### `web/*`
 

@@ -20,13 +20,16 @@
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import {
-  existsSync, mkdirSync, readFileSync, unlinkSync,
+  existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import process from 'node:process'
+import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
 import { classifyStableUpdate } from './phoenix-update-policy.mjs'
-import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
+import { diagnoseStalledPhoenixActivation, recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
+import { pinPhoenixUpdateLiveHelper, validPinnedPhoenixUpdateLiveHelper } from './phoenix-update-live-pin.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
 const REMOTE = process.env.PHOENIX_UPDATE_REMOTE ?? 'origin'
@@ -40,6 +43,15 @@ const MIN_POLL_MS = 15 * 1000
 const FETCH_ATTEMPTS = 3
 const FETCH_RETRY_MS = 750
 const MAX_NETWORK_BACKOFF_MS = 15 * 60 * 1000
+// The background watcher must not monopolize the launcher's Git/network stack
+// while github.com is unreachable. Normal staging/build commands are unaffected.
+const WATCH_FETCH_TIMEOUT_MS = 9_000
+const NETWORK_WARNING_INTERVAL_MS = 15 * 60 * 1000
+// A locked Windows orphan can survive indefinitely. Do not re-run the same
+// expensive cleanup and print the same capacity warning on every network poll.
+const STORAGE_RETRY_MS = 5 * 60 * 1000
+const STORAGE_WARNING_INTERVAL_MS = 15 * 60 * 1000
+let lastStorageWarningAt = Number.NEGATIVE_INFINITY
 const STATE_FILE = 'phoenix-update-state.json'
 const PREPARED_FILE = 'phoenix-update-prepared.json'
 const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'
@@ -47,6 +59,20 @@ const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 const REFRESH_REQUEST_FILE = 'phoenix-update-refresh-request.json'
 const MANAGED_MARKER = '.phoenix-managed-install'
 const UPDATE_MODE = normalizeMode(process.env.PHOENIX_UPDATE_MODE ?? 'auto')
+const configuredInactiveRuntimeBackups = Number.parseInt(
+  process.env.PHOENIX_UPDATE_RUNTIME_BACKUPS ?? '',
+  10,
+)
+const MAX_INACTIVE_RUNTIME_BACKUPS = Number.isFinite(configuredInactiveRuntimeBackups)
+  ? Math.max(0, Math.min(2, configuredInactiveRuntimeBackups))
+  : 1
+const configuredRuntimeDirectoryLimit = Number.parseInt(
+  process.env.PHOENIX_UPDATE_RUNTIME_LIMIT ?? '',
+  10,
+)
+const MAX_RUNTIME_DIRECTORIES = Number.isFinite(configuredRuntimeDirectoryLimit)
+  ? Math.max(2, Math.min(6, configuredRuntimeDirectoryLimit))
+  : Math.max(2, MAX_INACTIVE_RUNTIME_BACKUPS + 2)
 
 function normalizeMode(value) {
   const normalized = String(value).trim().toLowerCase()
@@ -56,23 +82,78 @@ function normalizeMode(value) {
   return normalized
 }
 
+let activeLiveUpdateStep
+let missingLiveHelperReported = false
+let pinnedLiveHelper
 function command(bin, args, options = {}) {
-  const result = spawnSync(bin, args, {
+  const cwd = options.cwd ?? process.cwd()
+  const installRoot = process.env.PHOENIX_INSTALL_ROOT?.trim()
+  const env = bin === 'git'
+    ? gitSafeDirectoryEnvironment(process.env, [
+        ...(installRoot === undefined || installRoot.length === 0 ? [] : [installRoot]),
+        cwd,
+      ])
+    : process.env
+  let liveTarget
+  let liveState
+  if (options.inherit && activeLiveUpdateStep !== undefined) {
+    try {
+      liveState = statePath(cwd)
+      const state = JSON.parse(readFileSync(liveState, 'utf8'))
+      if (typeof state?.target === 'string' && /^[a-f0-9]{40}$/iu.test(state.target)) liveTarget = state.target
+    } catch { /* preserve old command path without update state */ }
+  }
+  const liveEligible = liveTarget !== undefined && liveState !== undefined
+  // Pin a matched helper/state-module pair in the owner's stable Git dir.
+  // The source worktree may be replaced while this updater process is alive.
+  const helperCandidate = liveEligible
+    ? pinPhoenixUpdateLiveHelper(fileURLToPath(new URL('..', import.meta.url)), liveState)
+      // The watcher may outlive its original isolated runtime. Try the
+      // explicitly configured persistent install checkout before falling
+      // back to the direct command; never execute a missing module path.
+      ?? (installRoot && resolve(installRoot) !== resolve(fileURLToPath(new URL('..', import.meta.url)))
+        && remoteMatchesExpected(resolve(installRoot))
+        ? pinPhoenixUpdateLiveHelper(resolve(installRoot), liveState)
+        : undefined)
+    : undefined
+  if (helperCandidate !== undefined) pinnedLiveHelper = helperCandidate
+  const liveHelper = pinnedLiveHelper
+  const streamLive = liveEligible && validPinnedPhoenixUpdateLiveHelper(liveHelper)
+  const directStream = liveEligible && !streamLive
+  if (directStream && !missingLiveHelperReported) {
+    missingLiveHelperReported = true
+    console.error('[PHOENIX UPDATE] optional live output helper missing; '
+      + 'running the original updater command with direct console streaming.')
+  }
+  const liveArgs = streamLive ? [
+    liveHelper,
+    JSON.stringify({ cwd, bin, args, step: activeLiveUpdateStep, target: liveTarget, statePath: liveState }),
+  ] : args
+  const result = spawnSync(streamLive ? process.execPath : bin, liveArgs, {
     cwd: options.cwd,
     encoding: 'utf8',
-    stdio: options.inherit ? 'inherit' : ['ignore', 'pipe', 'pipe'],
+    stdio: streamLive || directStream ? 'inherit' : ['ignore', 'pipe', 'pipe'],
+    maxBuffer: 64 * 1024 * 1024,
     windowsHide: true,
-    env: process.env,
+    env,
+    ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs, killSignal: 'SIGTERM' }),
   })
+  // Preserve the native log stream while collecting any real exception output.
+  if (options.inherit && result.stdout) process.stdout.write(result.stdout)
+  if (options.inherit && result.stderr) process.stderr.write(result.stderr)
   if (result.error !== undefined) {
     if (options.allowFailure) return { ok: false, stdout: '', stderr: result.error.message, status: 1 }
+    result.error.diagnostic = [result.error.stack, result.stderr, result.stdout].filter(Boolean).join('\n')
     throw result.error
   }
   const status = result.status ?? 1
   const stdout = typeof result.stdout === 'string' ? result.stdout.trim() : ''
   const stderr = typeof result.stderr === 'string' ? result.stderr.trim() : ''
   if (status !== 0 && !options.allowFailure) {
-    throw new Error(`${bin} ${args.join(' ')} failed (${status})${stderr.length > 0 ? `: ${stderr}` : ''}`)
+    const error = new Error(`${bin} ${args.join(' ')} failed (${status})${stderr.length > 0 ? `: ${stderr}` : ''}`)
+    error.exitCode = status
+    error.diagnostic = [stderr && `STDERR:\n${stderr}`, stdout && `STDOUT:\n${stdout}`].filter(Boolean).join('\n')
+    throw error
   }
   return { ok: status === 0, stdout, stderr, status }
 }
@@ -134,6 +215,16 @@ function preparedPath(root) {
   return join(controlDirectory(root), PREPARED_FILE)
 }
 
+/** Read only the durable updater state; journal and checkout data stay separate. */
+function durableUpdateState(root) {
+  try {
+    const value = JSON.parse(readFileSync(statePath(root), 'utf8'))
+    return value?.schema === 1 && typeof value.status === 'string' ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function activeRuntimePath(root) {
   return join(controlDirectory(root), ACTIVE_RUNTIME_FILE)
 }
@@ -154,6 +245,11 @@ function readActiveRuntime(root) {
 function validatedActiveRuntime(root) {
   const value = readActiveRuntime(root)
   if (value === undefined) return undefined
+
+  // The supervisor writes the active-runtime marker during prewarm, while
+  // the OLD Host can still be serving requests. A marker without the
+  // supervisor's post-boot health attestation is a candidate, not "current".
+  if (typeof value.healthyAt !== 'string' || !Number.isFinite(Date.parse(value.healthyAt))) return undefined
 
   const candidate = resolve(value.path)
   if (!existsSync(candidate) || !sameRepositoryWorktree(root, candidate)) return undefined
@@ -231,7 +327,7 @@ function waitForFetchRetry(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }
 
-function fetchBranchCommit(root, branch, label, attempts = FETCH_ATTEMPTS) {
+function fetchBranchCommit(root, branch, label, attempts = FETCH_ATTEMPTS, timeoutMs) {
   const safeLabel = label.replace(/[^A-Za-z0-9._-]/gu, '-')
   const localRef = `refs/phoenix/update/fetch-${String(process.pid)}-${safeLabel}`
   let lastFailure
@@ -240,7 +336,7 @@ function fetchBranchCommit(root, branch, label, attempts = FETCH_ATTEMPTS) {
     const result = git(root, [
       'fetch', '--quiet', REMOTE,
       `+refs/heads/${branch}:${localRef}`,
-    ], { allowFailure: true })
+    ], { allowFailure: true, timeoutMs })
     if (result.ok) {
       const commit = git(root, ['rev-parse', `${localRef}^{commit}`]).stdout
       git(root, ['update-ref', '-d', localRef], { allowFailure: true })
@@ -259,18 +355,18 @@ function fetchBranchCommit(root, branch, label, attempts = FETCH_ATTEMPTS) {
   throw new Error(`git fetch ${label} failed after ${String(attempts)} attempts${detail?.length > 0 ? `: ${detail}` : ''}`)
 }
 
-function fetchStableManifest(root, attempts = FETCH_ATTEMPTS) {
-  const channelCommit = fetchBranchCommit(root, CHANNEL_BRANCH, 'stable-channel', attempts)
+function fetchStableManifest(root, attempts = FETCH_ATTEMPTS, timeoutMs) {
+  const channelCommit = fetchBranchCommit(root, CHANNEL_BRANCH, 'stable-channel', attempts, timeoutMs)
   const text = git(root, ['show', `${channelCommit}:${CHANNEL_PATH}`]).stdout
   return parseManifest(text)
 }
 
-function fetchTarget(root, manifest, attempts = FETCH_ATTEMPTS) {
+function fetchTarget(root, manifest, attempts = FETCH_ATTEMPTS, timeoutMs) {
   // The channel manifest is the signed identity/metadata record. The promoted
   // branch is the moving release pointer. Reading only manifest.sourceCommit
   // made later commits on origin/stable invisible until somebody published a
   // second channel commit, which is the failure this watcher must avoid.
-  const target = fetchBranchCommit(root, STABLE_SOURCE_BRANCH, STABLE_SOURCE_BRANCH, attempts)
+  const target = fetchBranchCommit(root, STABLE_SOURCE_BRANCH, STABLE_SOURCE_BRANCH, attempts, timeoutMs)
   const exists = git(root, ['cat-file', '-e', `${target}^{commit}`], { allowFailure: true })
   if (!exists.ok) throw new Error(`stable target ${target} is not available after fetching ${REMOTE}/${STABLE_SOURCE_BRANCH}`)
   return target
@@ -288,8 +384,8 @@ function inspectUpdate(root, options = {}) {
   if (!remoteMatchesExpected(root)) return { status: 'foreign-remote' }
   const branch = currentBranch(root)
   const attempts = options.fetchAttempts ?? FETCH_ATTEMPTS
-  const manifest = fetchStableManifest(root, attempts)
-  const target = fetchTarget(root, manifest, attempts)
+  const manifest = fetchStableManifest(root, attempts, options.fetchTimeoutMs)
+  const target = fetchTarget(root, manifest, attempts, options.fetchTimeoutMs)
   const sourceCurrent = currentCommit(root)
   const activeRuntime = validatedActiveRuntime(root)
   const current = activeRuntime?.target ?? sourceCurrent
@@ -319,6 +415,30 @@ function writeState(root, state) {
     })
   } catch (error) {
     console.error(`[PHOENIX UPDATE] warning: could not persist update state: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+function updateCommandStep(root, step, commandFn) {
+  let target
+  try {
+    const current = JSON.parse(readFileSync(statePath(root), 'utf8'))
+    if (typeof current?.target === 'string') target = current.target
+  } catch { /* legacy state without a target */ }
+  const path = statePath(root)
+  recordPhoenixUpdateStep(path, step, 'started', target)
+  const previousLiveStep = activeLiveUpdateStep
+  activeLiveUpdateStep = step
+  try {
+    const result = commandFn()
+    recordPhoenixUpdateStep(path, step, 'ok', target, 0)
+    return result
+  } catch (error) {
+    recordPhoenixUpdateStep(path, step, 'failed', target,
+      Number.isInteger(error?.exitCode) ? error.exitCode : 1,
+      error?.diagnostic || (error instanceof Error ? error.stack ?? error.message : String(error)))
+    throw error
+  } finally {
+    activeLiveUpdateStep = previousLiveStep
   }
 }
 
@@ -409,6 +529,134 @@ function stageDirectory(root) {
   return join(base, `phoenix-stage-${stageIdentity(root)}`)
 }
 
+function runtimePathKey(path) {
+  const normalized = resolve(path)
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+function updaterRuntimeDirectories(root) {
+  const base = stageBaseDirectory()
+  if (!existsSync(base)) return []
+  const identity = stageIdentity(root)
+  const pattern = new RegExp(`^phoenix-runtime-${identity}-[0-9a-f]{12}$`, 'iu')
+  return readdirSync(base, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && pattern.test(entry.name))
+    .map(entry => join(base, entry.name))
+}
+
+function updaterRuntimeMtimeMs(path) {
+  try {
+    return statSync(path).mtimeMs
+  } catch {
+    return Number.NEGATIVE_INFINITY
+  }
+}
+
+function updaterRegisteredWorktrees(root) {
+  const result = git(root, ['worktree', 'list', '--porcelain'], { allowFailure: true })
+  if (!result.ok) return undefined
+  const paths = new Set()
+  for (const line of result.stdout.split(/\r?\n/u)) {
+    if (!line.startsWith('worktree ')) continue
+    const path = line.slice('worktree '.length).trim()
+    if (path.length > 0) paths.add(runtimePathKey(path))
+  }
+  return paths
+}
+
+function removeOrphanedUpdaterRuntime(path) {
+  try {
+    rmSync(path, { recursive: true, force: true, maxRetries: 2, retryDelay: 250 })
+    return !existsSync(path)
+  } catch {
+    return false
+  }
+}
+
+function removeUpdaterRuntime(root, path, registeredWorktrees) {
+  const key = runtimePathKey(path)
+  if (registeredWorktrees !== undefined && !registeredWorktrees.has(key)) {
+    return removeOrphanedUpdaterRuntime(path)
+  }
+
+  const removed = git(root, ['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', path], {
+    allowFailure: true,
+  })
+  if (removed.ok || !existsSync(path)) return true
+
+  const refreshed = updaterRegisteredWorktrees(root)
+  if (/(?:is )?not a working tree/iu.test(removed.stderr)
+    || (refreshed !== undefined && !refreshed.has(key))) {
+    return removeOrphanedUpdaterRuntime(path)
+  }
+  return false
+}
+
+function cleanupUpdaterRuntimeStorage(root, { ensureCapacity = false } = {}) {
+  const keep = new Set()
+  const active = readActiveRuntime(root)
+  if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
+  const inheritedRuntimeRoot = process.env.PHOENIX_RUNTIME_ROOT?.trim()
+  if (inheritedRuntimeRoot !== undefined && inheritedRuntimeRoot.length > 0) {
+    keep.add(runtimePathKey(inheritedRuntimeRoot))
+  }
+
+  const registered = updaterRegisteredWorktrees(root)
+  const inactive = updaterRuntimeDirectories(root)
+    .filter(path => !keep.has(runtimePathKey(path)))
+    .sort((left, right) => updaterRuntimeMtimeMs(right) - updaterRuntimeMtimeMs(left))
+
+  let retained = 0
+  let removed = 0
+  const rollbackCandidates = []
+  for (const candidate of inactive) {
+    if (retained < MAX_INACTIVE_RUNTIME_BACKUPS) {
+      retained += 1
+      rollbackCandidates.push(candidate)
+      continue
+    }
+    if (!removeUpdaterRuntime(root, candidate, registered)) continue
+    removed += 1
+    console.error(`[PHOENIX UPDATE] updater janitor removed obsolete isolated runtime: ${candidate}`)
+  }
+
+  // If a stale orphan is EBUSY, a safely removable backup can be released
+  // instead. Never exceed the hard cap and never remove protected runtimes.
+  // Do not sacrifice rollback copies during a normal idle janitor pass.
+  if (ensureCapacity) {
+    for (const candidate of rollbackCandidates.reverse()) {
+      if (updaterRuntimeDirectories(root).length < MAX_RUNTIME_DIRECTORIES) break
+      if (!removeUpdaterRuntime(root, candidate, registered)) continue
+      removed += 1
+      console.error(`[PHOENIX UPDATE] updater janitor reclaimed inactive rollback runtime: ${candidate}`)
+    }
+  }
+  git(root, ['worktree', 'prune', '--expire', 'now'], { allowFailure: true })
+  return { removed, remaining: updaterRuntimeDirectories(root).length }
+}
+
+function updaterRuntimeStorageHasCapacity(root, target) {
+  const targetRuntime = join(
+    stageBaseDirectory(),
+    `phoenix-runtime-${stageIdentity(root)}-${target.slice(0, 12)}`,
+  )
+  if (existsSync(targetRuntime)) return true
+
+  const { remaining } = cleanupUpdaterRuntimeStorage(root, { ensureCapacity: true })
+  if (remaining < MAX_RUNTIME_DIRECTORIES) return true
+
+  const now = Date.now()
+  if (now - lastStorageWarningAt >= STORAGE_WARNING_INTERVAL_MS) {
+    console.error(
+      `[PHOENIX UPDATE] runtime storage safety limit reached (${String(remaining)}/${String(MAX_RUNTIME_DIRECTORIES)}); `
+      + 'the current Host will stay online and storage cleanup will be retried before another runtime is created. '
+      + 'If it remains blocked, close PHOENIX and run scripts/phoenix-windows-storage-repair.ps1 -Apply from your checkout.',
+    )
+    lastStorageWarningAt = now
+  }
+  return false
+}
+
 function sameRepositoryWorktree(root, stage) {
   if (!existsSync(stage)) return false
   const rootCommon = gitCommonDirectory(root)
@@ -419,19 +667,111 @@ function sameRepositoryWorktree(root, stage) {
     : rootCommon === stageCommon
 }
 
+function childDirectories(root) {
+  if (!existsSync(root)) return []
+  return readdirSync(root, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && entry.name !== 'node_modules' && !entry.name.startsWith('.'))
+    .map(entry => join(root, entry.name))
+}
+
+function pruneStaleWorkspaceShells(stage) {
+  const candidates = [
+    ...childDirectories(join(stage, 'vendor')),
+    ...childDirectories(join(stage, 'packages')).flatMap(group => childDirectories(group)),
+    join(stage, 'apps', 'cli'),
+  ]
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue
+    const relativePath = relative(stage, candidate).replace(/\\/gu, '/')
+    const tracked = git(stage, ['ls-files', '--', relativePath], { allowFailure: true })
+    if (!tracked.ok || tracked.stdout.length > 0) continue
+    rmSync(candidate, { recursive: true, force: true })
+    console.error(`[PHOENIX UPDATE] pruned stale staging workspace ${relativePath}`)
+  }
+}
+
+function missingTrackedFiles(stage, limit = 32) {
+  const listed = git(stage, ['ls-files'], { allowFailure: true })
+  if (!listed.ok) throw new Error(`could not enumerate tracked files in staging worktree: ${listed.stderr || 'git ls-files failed'}`)
+
+  const missing = []
+  for (const relativePath of listed.stdout.split(/\r?\n/u)) {
+    if (relativePath.length === 0) continue
+    if (existsSync(join(stage, relativePath))) continue
+    missing.push(relativePath)
+    if (missing.length >= limit) break
+  }
+  return missing
+}
+
+function ensureStagingMaterialized(stage, target) {
+  let missing = missingTrackedFiles(stage)
+  if (missing.length === 0) return
+
+  console.error(
+    `[PHOENIX UPDATE] staging worktree is incomplete (${String(missing.length)}+ tracked file(s) missing); restoring it before build...`,
+  )
+  // A stale sparse-checkout/skip-worktree state can leave a linked worktree
+  // partially materialized even when HEAD/index are correct. Disable it for the
+  // updater-only worktree, then force the target tree back onto disk.
+  git(stage, ['sparse-checkout', 'disable'], { allowFailure: true })
+  git(stage, ['reset', '--hard', target], { inherit: true })
+
+  missing = missingTrackedFiles(stage)
+  if (missing.length > 0) {
+    throw new Error(
+      `staging worktree remains incomplete after repair: ${missing.join(', ')}`,
+    )
+  }
+  console.error('[PHOENIX UPDATE] staging worktree materialization repaired successfully.')
+}
+
+function quarantineConflictingStagingPath(root, stage) {
+  // This exact path is reserved for the current checkout by stageIdentity().
+  // A leftover directory can survive a checkout move or a broken worktree
+  // registration, making Git unable to prove repository ownership. Do not
+  // delete an unverified directory: move it aside, prune stale Git metadata,
+  // and let the updater recreate its canonical stage. The supervisor later
+  // garbage-collects these conflict directories after the normal grace period.
+  git(root, ['worktree', 'prune', '--expire', 'now'], { allowFailure: true })
+  if (!existsSync(stage) || sameRepositoryWorktree(root, stage)) return
+
+  const quarantine = `${stage}-conflict-${String(process.pid)}-${String(Date.now())}`
+  try {
+    renameSync(stage, quarantine)
+  } catch (error) {
+    throw new Error(
+      `PHOENIX staging path is occupied by an unverifiable directory and could not be moved aside: ${stage}: `
+      + `${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+
+  git(root, ['worktree', 'prune', '--expire', 'now'], { allowFailure: true })
+  console.error(
+    `[PHOENIX UPDATE] quarantined stale/conflicting staging path: ${stage} -> ${quarantine}`,
+  )
+}
+
 function ensureStagingWorktree(root, target) {
   const stage = stageDirectory(root)
+  if (existsSync(stage) && !sameRepositoryWorktree(root, stage)) {
+    quarantineConflictingStagingPath(root, stage)
+  }
   if (existsSync(stage)) {
     if (!sameRepositoryWorktree(root, stage)) {
-      throw new Error(`PHOENIX staging path exists but is not this repository: ${stage}`)
+      throw new Error(`PHOENIX staging path remains unverifiable after repair: ${stage}`)
     }
     console.error(`[PHOENIX UPDATE] reusing persistent staging worktree ${stage}`)
     git(stage, ['reset', '--hard', target], { inherit: true })
     git(stage, ['clean', '-fd'], { allowFailure: true })
+    pruneStaleWorkspaceShells(stage)
+    ensureStagingMaterialized(stage, target)
     return stage
   }
   console.error(`[PHOENIX UPDATE] creating persistent staging worktree ${stage}`)
   git(root, ['worktree', 'add', '--detach', '--force', stage, target], { inherit: true })
+  ensureStagingMaterialized(stage, target)
   return stage
 }
 
@@ -503,7 +843,31 @@ function preparedCandidateValid(root, target) {
   return stagedCandidateValid(root, target) && cleanWorktree(root)
 }
 
+/**
+ * A different supervisor may finish activating this exact SHA while our
+ * preflight is still building or while a cached candidate is being reused.
+ * Once the verified runtime is already active, "restart to activate" is stale
+ * and must never re-arm the bridge or overwrite the current idle status.
+ */
+function reconcileAlreadyActiveTarget(root, inspection) {
+  const activeRuntime = validatedActiveRuntime(root)
+  if (activeRuntime?.target !== inspection.target) return false
+  clearPrepared(root)
+  if (readRestartRequest(root)?.target === inspection.target) clearRestartRequest(root)
+  writeState(root, {
+    status: 'current',
+    phase: 'idle',
+    current: inspection.target,
+    sourceCurrent: inspection.sourceCurrent,
+    runtimePath: activeRuntime.path,
+    detail: `Stable ${inspection.target.slice(0, 12)} is already active in the verified isolated runtime; no restart is required.`,
+  })
+  console.error(`[PHOENIX UPDATE] stable ${inspection.target.slice(0, 12)} is already active and verified; discarded stale prepared/restart state.`)
+  return true
+}
+
 function writePreparedState(root, inspection, plan) {
+  if (reconcileAlreadyActiveTarget(root, inspection)) return
   if (cleanWorktree(root)) {
     writeState(root, { status: 'ready', phase: 'ready', ...updateFacts(inspection) })
     return
@@ -528,7 +892,8 @@ function ensureDependencies(root, label, plan, onPhase) {
   }
   onPhase('dependencies')
   console.error(`[PHOENIX UPDATE] ${label}: refreshing locked dependencies...`)
-  corepack(root, ['pnpm', 'install', '--frozen-lockfile'], { inherit: true })
+  updateCommandStep(root, 'dependencies', () =>
+    corepack(root, ['pnpm', 'install', '--frozen-lockfile'], { inherit: true }))
 }
 
 function buildAndSmoke(root, label, plan, onPhase = () => {}) {
@@ -537,37 +902,66 @@ function buildAndSmoke(root, label, plan, onPhase = () => {}) {
   if (plan.mode === 'full') {
     onPhase('build')
     console.error(`[PHOENIX UPDATE] ${label}: full build (${String(plan.files.length)} changed file(s))...`)
-    corepack(root, ['pnpm', 'run', 'build'], { inherit: true })
+    updateCommandStep(root, 'build', () =>
+      corepack(root, ['pnpm', 'run', 'build'], { inherit: true }))
 
     const builtBin = join(root, 'apps', 'cli', 'lib', 'bin.js')
     if (!existsSync(builtBin)) throw new Error(`${label}: full build did not produce apps/cli/lib/bin.js`)
     onPhase('smoke')
     console.error(`[PHOENIX UPDATE] ${label}: smoke-testing built launcher...`)
-    node(root, [builtBin, '--version'], { inherit: true })
+    updateCommandStep(root, 'smoke', () =>
+      node(root, [builtBin, '--version'], { inherit: true }))
     return
   }
 
   if (plan.mode === 'client') {
     onPhase('build')
     console.error(`[PHOENIX UPDATE] ${label}: incremental client build (${String(plan.files.length)} changed file(s))...`)
-    corepack(root, ['pnpm', 'exec', 'tsx', 'scripts/build.ts', '--scope', 'client'], { inherit: true })
+    updateCommandStep(root, 'build', () =>
+      corepack(root, ['pnpm', 'exec', 'tsx', 'scripts/build.ts', '--scope', 'client'], { inherit: true }))
   } else {
     console.error(`[PHOENIX UPDATE] ${label}: documentation-only update; build skipped.`)
   }
 
   onPhase('smoke')
   console.error(`[PHOENIX UPDATE] ${label}: smoke-testing source launcher...`)
-  node(root, ['--import', 'tsx/esm', 'apps/cli/src/bin.ts', '--version'], { inherit: true })
+  updateCommandStep(root, 'smoke', () =>
+    node(root, ['--import', 'tsx/esm', 'apps/cli/src/bin.ts', '--version'], { inherit: true }))
+}
+
+function promotedTargetStillCurrent(root, target) {
+  const latest = fetchBranchCommit(root, STABLE_SOURCE_BRANCH, `${STABLE_SOURCE_BRANCH}-final`, 1)
+  if (latest === target) return { current: true, latest }
+
+  clearPrepared(root)
+  writeState(root, {
+    status: 'checking',
+    phase: 'superseded',
+    current: effectiveCurrentCommit(root),
+    target: latest,
+    detail: `Prepared stable ${target.slice(0, 12)} was superseded by ${latest.slice(0, 12)} during preflight; the stale candidate will not be activated.`,
+  })
+  console.error(
+    `[PHOENIX UPDATE] prepared candidate ${target.slice(0, 12)} became stale during preflight; `
+    + `latest stable is ${latest.slice(0, 12)}. Discarding the stale activation and checking again now.`,
+  )
+  return { current: false, latest }
 }
 
 function stageCandidate(root, inspection) {
   const target = inspection.target
   const facts = updateFacts(inspection)
   const plan = updatePlan(root, inspection)
+  if (reconcileAlreadyActiveTarget(root, inspection)) {
+    return { prepared: false, plan, latestTarget: target }
+  }
   if (stagedCandidateValid(root, target)) {
+    const freshness = promotedTargetStillCurrent(root, target)
+    if (!freshness.current) return { prepared: false, plan, latestTarget: freshness.latest }
+
     console.error(`[PHOENIX UPDATE] stable ${target.slice(0, 12)} was already prepared; reusing cached staging result.`)
     writePreparedState(root, inspection, plan)
-    return plan
+    return { prepared: true, plan, latestTarget: target }
   }
 
   clearPrepared(root)
@@ -578,6 +972,17 @@ function stageCandidate(root, inspection) {
     buildAndSmoke(stage, `preflight ${target.slice(0, 12)}`, plan, (phase) => {
       writeState(root, { status: 'preparing', phase, ...facts })
     })
+
+    // The stable pointer may advance while a full build is running. Never queue
+    // activation for the SHA observed before the build unless it is still the
+    // promoted stable target now that preflight has completed.
+    const freshness = promotedTargetStillCurrent(root, target)
+    if (!freshness.current) return { prepared: false, plan, latestTarget: freshness.latest }
+    // The Host can switch to this target while the expensive build runs.
+    if (reconcileAlreadyActiveTarget(root, inspection)) {
+      return { prepared: false, plan, latestTarget: target }
+    }
+
     writePrepared(root, inspection, plan)
     writePreparedState(root, inspection, plan)
     if (cleanWorktree(root)) {
@@ -585,7 +990,7 @@ function stageCandidate(root, inspection) {
     } else {
       console.error(`[PHOENIX UPDATE] stable ${target.slice(0, 12)} is prepared in isolated staging; local changes remain protected; restart to activate the verified isolated runtime.`)
     }
-    return plan
+    return { prepared: true, plan, latestTarget: target }
   } catch (error) {
     clearPrepared(root)
     throw error
@@ -679,7 +1084,10 @@ function applyUpdate(root, inspection, options = {}) {
   const action = replacingDivergedRelease ? 'replacing divergent managed release' : 'activating stable update'
   console.error(`[PHOENIX UPDATE] ${action} (${plan.mode}): ${previous.slice(0, 12)} -> ${target.slice(0, 12)}`)
   git(root, ['diff', '--check', previous, target])
-  if (!options.prepared || !preparedCandidateValid(root, target)) stageCandidate(root, inspection)
+  if (!options.prepared || !preparedCandidateValid(root, target)) {
+    const staged = stageCandidate(root, inspection)
+    if (!staged.prepared) return false
+  }
   if (!cleanWorktree(root)) throw new Error('worktree changed during preflight; refusing live update')
 
   recoveryRef(root, previous)
@@ -851,22 +1259,45 @@ async function watch(root, parentPid) {
   let pending
   let preparedTarget
   let consecutiveNetworkFailures = 0
+  let lastNetworkWarningAt = Number.NEGATIVE_INFINITY
+  let blockedStorageTarget
+  let nextStorageRetryAt = 0
+  cleanupUpdaterRuntimeStorage(root)
   recoverStaleStagingIndexLock(root)
   clearRefreshRequest(root)
-  writeState(root, {
-    status: 'checking',
-    phase: 'channel',
-    current: effectiveCurrentCommit(root),
-  })
+  const retained = durableUpdateState(root)
+  // The watcher may restart while the supervisor is relaunching the Host.
+  // Never erase its in-flight status or a real failed health checkpoint.
+  if (retained?.status !== 'restarting' && retained?.status !== 'applying'
+    && !(retained?.status === 'error'
+      && (retained.phase === 'health-check' || retained.phase === 'supervisor-timeout'))) {
+    writeState(root, {
+      status: 'checking',
+      phase: 'channel',
+      current: effectiveCurrentCommit(root),
+    })
+  }
 
   while (parentAlive(parentPid)) {
+    const manualRefreshRequested = existsSync(refreshRequestPath(root))
     clearRefreshRequest(root)
+    // This check is independent of network availability. If the supervisor
+    // never accepts an activation request, stop an otherwise endless loop and
+    // persist the evidence where the currently running Host can display it.
+    if (process.env.PHOENIX_UPDATE_SUPERVISED === '1'
+      && diagnoseStalledPhoenixActivation(statePath(root))) {
+      pending = undefined
+      preparedTarget = undefined
+      await waitForPollOrParentExit(root, parentPid, pollInterval())
+      continue
+    }
     let inspection
+    let repollImmediately = false
     try {
       // Watch mode makes one network attempt per poll. A failed internet
       // connection must never hold the updater in three consecutive ~20s Git
       // timeouts or compete with the live model/tool traffic.
-      inspection = inspectUpdate(root, { fetchAttempts: 1 })
+      inspection = inspectUpdate(root, { fetchAttempts: 1, fetchTimeoutMs: WATCH_FETCH_TIMEOUT_MS })
       consecutiveNetworkFailures = 0
     } catch (error) {
       // Channel/network failures are temporary check failures. Back off across
@@ -876,20 +1307,46 @@ async function watch(root, parentPid) {
         MAX_NETWORK_BACKOFF_MS,
         pollInterval() * 2 ** Math.min(consecutiveNetworkFailures - 1, 4),
       )
-      console.error(
-        `[PHOENIX UPDATE] watcher check failed; retrying in ${String(Math.ceil(retryMs / 1000))}s: `
-        + `${error instanceof Error ? error.message : String(error)}`,
-      )
-      writeState(root, {
-        status: 'checking',
-        phase: 'retry',
-        detail: `The stable channel is temporarily unavailable. PHOENIX will retry in about ${String(Math.ceil(retryMs / 1000))} seconds.`,
-      })
+      // Repeated offline probes are expected, not a crashed Host. Keep the
+      // first failure visible and suppress identical recurring noise. Manual
+      // refresh markers still wake the backoff wait immediately.
+      const now = Date.now()
+      if (now - lastNetworkWarningAt >= NETWORK_WARNING_INTERVAL_MS) {
+        console.error(
+          `[PHOENIX UPDATE] stable channel unreachable; keeping active Host and retrying in ${String(Math.ceil(retryMs / 1000))}s: `
+          + `${error instanceof Error ? error.message : String(error)}`,
+        )
+        lastNetworkWarningAt = now
+      }
+      const currentState = durableUpdateState(root)
+      if (currentState?.status !== 'restarting' && currentState?.status !== 'applying'
+        && !(currentState?.status === 'error'
+          && ['health-check', 'supervisor-timeout'].includes(currentState.phase))) {
+        writeState(root, {
+          status: 'checking',
+          phase: 'retry',
+          detail: `The stable channel is temporarily unavailable. PHOENIX will retry in about ${String(Math.ceil(retryMs / 1000))} seconds.`,
+        })
+      }
       await waitForPollOrParentExit(root, parentPid, retryMs)
       continue
     }
 
     try {
+      // A new Host that repeatedly crashes before its health checkpoint must
+      // not be relaunched automatically on every stable-channel poll. Preserve
+      // the last-known-good Host and wait for a new release or an explicit Retry.
+      const failedActivation = durableUpdateState(root)
+      if (process.env.PHOENIX_UPDATE_SUPERVISED === '1'
+        && !manualRefreshRequested
+        && failedActivation?.status === 'error'
+        && ['health-check', 'supervisor-timeout'].includes(failedActivation.phase)
+        && failedActivation.target === inspection.target) {
+        pending = undefined
+        preparedTarget = undefined
+        await waitForPollOrParentExit(root, parentPid, pollInterval())
+        continue
+      }
       const action = stableUpdateAction(root, inspection)
       switch (action) {
         case 'development':
@@ -923,16 +1380,68 @@ async function watch(root, parentPid) {
         case 'isolate':
         case 'apply':
         case 'replace': {
+          if (process.env.PHOENIX_UPDATE_SUPERVISED === '1') {
+            // A clean, fast-forwardable release checkout can use the verified
+            // staged activator in place if Windows has locked all spare runtime
+            // slots. Do not strand it at 3/3 merely because a zero-downtime
+            // isolated handoff is unavailable. Other checkout/dirty paths must
+            // still pass the isolated-runtime capacity guard.
+            const inPlaceFallbackEligible = action === 'apply'
+              && inspection.status === 'upgrade'
+              && inspection.current === inspection.sourceCurrent
+              && inspection.activeRuntime === undefined
+              && readActiveRuntime(root) === undefined
+              && (!process.env.PHOENIX_RUNTIME_ROOT
+                || runtimePathKey(process.env.PHOENIX_RUNTIME_ROOT) === runtimePathKey(root))
+              && cleanWorktree(root)
+            if (inPlaceFallbackEligible) {
+              blockedStorageTarget = undefined
+              nextStorageRetryAt = 0
+            } else {
+            // Avoid touching a known busy runtime on every channel poll.
+            // Changes to the candidate SHA bypass this wait; an unchanged
+            // target is retried after a bounded five-minute pause.
+            if (blockedStorageTarget === inspection.target && Date.now() < nextStorageRetryAt) break
+            if (!updaterRuntimeStorageHasCapacity(root, inspection.target)) {
+              pending = undefined
+              preparedTarget = undefined
+              blockedStorageTarget = inspection.target
+              nextStorageRetryAt = Date.now() + STORAGE_RETRY_MS
+              clearPrepared(root)
+              writeState(root, {
+                status: 'paused',
+                phase: 'storage',
+                ...updateFacts(inspection),
+                detail: 'Runtime storage is at its safety limit. PHOENIX kept the current Host online and will retry cleanup automatically.',
+              })
+              break
+            }
+            blockedStorageTarget = undefined
+            nextStorageRetryAt = 0
+            }
+          }
           pending = inspection
           if (preparedTarget !== inspection.target) {
             if (announcedTarget !== inspection.target) {
               announcedTarget = inspection.target
               console.error(`[PHOENIX UPDATE] new stable version ${inspection.target.slice(0, 12)} detected.`)
             }
-            stageCandidate(root, inspection)
-            preparedTarget = inspection.target
+            const staged = stageCandidate(root, inspection)
+            if (staged.prepared) {
+              preparedTarget = inspection.target
+            } else {
+              pending = undefined
+              preparedTarget = undefined
+              repollImmediately = true
+            }
           } else {
-            writePreparedState(root, inspection, updatePlan(root, inspection))
+            if (reconcileAlreadyActiveTarget(root, inspection)) {
+              pending = undefined
+              preparedTarget = undefined
+              repollImmediately = true
+            } else {
+              writePreparedState(root, inspection, updatePlan(root, inspection))
+            }
           }
           break
         }
@@ -992,6 +1501,7 @@ async function watch(root, parentPid) {
       })
     }
 
+    if (repollImmediately) continue
     await waitForPollOrParentExit(root, parentPid, pollInterval())
   }
 

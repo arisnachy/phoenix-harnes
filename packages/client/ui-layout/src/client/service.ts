@@ -4,11 +4,11 @@
  * card; Cordis occupancy additionally borrows and restores shell geometry.
  */
 import type { BoundActions } from '@phoenix-ai/dsh-client-ui-slots'
-import type { createLayoutStore, WorkspaceOccupant } from './stores.ts'
+import type { createLayoutStore, WorkspaceOccupant, WorkspaceSide } from './stores.ts'
 
 /** The layout store's bound action set (framework-baked, draft params peeled). */
 export type PanelActions = BoundActions<ReturnType<typeof createLayoutStore>>
-export type { WorkspaceOccupant } from './stores.ts'
+export type { WorkspaceOccupant, WorkspaceSide } from './stores.ts'
 
 /** Current occupants of the shared visual workspace. */
 export interface WorkspaceOccupancy {
@@ -20,6 +20,8 @@ export interface WorkspaceOccupancy {
 export interface ILayout {
   /** Toggle the sidebar panel. */
   toggleSidebar(): void
+  /** Contextual focus borrows the navigation rail, subject to manual overrides. */
+  setSidebarFocus(active: boolean): void
   /** Open the details/right-side panel. */
   openDetails(): void
   /** Close the details panel unless a visual workspace still owns it. */
@@ -31,7 +33,7 @@ export interface ILayout {
    * @param occupant - Stable visual-workspace owner name.
    * @param active - Whether that owner currently needs the visual rail.
    */
-  setWorkspaceOccupant(occupant: WorkspaceOccupant, active: boolean): void
+  setWorkspaceOccupant(occupant: WorkspaceOccupant, active: boolean, side?: WorkspaceSide): void
   /** Read the current visual-workspace occupancy snapshot. */
   getWorkspaceOccupancy(): WorkspaceOccupancy
   /** Subscribe to visual-workspace occupancy changes. */
@@ -42,6 +44,7 @@ export interface ILayout {
 export class LayoutController implements ILayout {
   #panels: PanelActions | undefined
   #occupancy: WorkspaceOccupancy = Object.freeze({ subagent: false, cordis: false })
+  #cordisSide: WorkspaceSide | null = null
   #occupancyListeners = new Set<() => void>()
 
   /**
@@ -57,6 +60,11 @@ export class LayoutController implements ILayout {
     this.#require().toggleSidebar()
   }
 
+  /** Stable callback prevents reactive focus oscillation across keystrokes. */
+  readonly setSidebarFocus = (active: boolean): void => {
+    this.#require().setSidebarFocus(active)
+  }
+
   /** Open the details panel. */
   openDetails(): void {
     this.#require().openDetails()
@@ -67,12 +75,28 @@ export class LayoutController implements ILayout {
     this.#require().closeDetails()
   }
 
-  /** Announce one shared visual-workspace owner's active lifetime. */
-  setWorkspaceOccupant(occupant: WorkspaceOccupant, active: boolean): void {
-    if (this.#occupancy[occupant] === active) return
-    this.#require().setWorkspaceOccupant(occupant, active)
-    this.#occupancy = Object.freeze({ ...this.#occupancy, [occupant]: active })
-    for (const listener of this.#occupancyListeners) listener()
+  /** Announce one shared visual-workspace owner's active lifetime and side. */
+  setWorkspaceOccupant(occupant: WorkspaceOccupant, active: boolean, side?: WorkspaceSide): void {
+    const currentActive = this.#occupancy[occupant]
+    const nextSide = occupant === 'cordis' && active
+      ? side ?? this.#cordisSide ?? 'right'
+      : null
+    if (
+      currentActive === active
+      && (occupant !== 'cordis' || this.#cordisSide === nextSide)
+    ) return
+
+    if (occupant === 'cordis' && active) {
+      this.#require().setWorkspaceOccupant(occupant, active, nextSide ?? 'right')
+    } else {
+      this.#require().setWorkspaceOccupant(occupant, active)
+    }
+    if (occupant === 'cordis') this.#cordisSide = active ? nextSide : null
+
+    if (currentActive !== active) {
+      this.#occupancy = Object.freeze({ ...this.#occupancy, [occupant]: active })
+      for (const listener of this.#occupancyListeners) listener()
+    }
   }
 
   /** Return the stable current occupancy snapshot. */

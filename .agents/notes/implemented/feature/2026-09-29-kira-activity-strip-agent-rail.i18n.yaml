@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-29-kira-activity-strip-agent-rail.md
+2026-09-29-kira-activity-strip-agent-rail.md: 4b0ffd597cb50b5eeb7695da4b5e5baf7e675b0e
+2026-09-29-kira-activity-strip-agent-rail.zh.md: 17214a2527308ef265b8c60d9c0f146d33ad74d4

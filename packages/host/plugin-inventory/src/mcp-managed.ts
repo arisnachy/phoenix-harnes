@@ -5,14 +5,24 @@ import { withFileLock, writeFileAtomic } from '@phoenix-ai/dsh-atomic-write'
 import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import type {
+  CuratedMcpConnectorId,
   ManagedMcpConnector,
+  ManagedMcpSource,
   McpRegistryCandidate,
   McpRegistryInstallReceipt,
   McpRegistryInstallRequest,
   McpRegistrySearchSnapshot,
+  XMcpIdentity,
 } from './types.ts'
 
 const MCP_CLIENT_PACKAGE = '@phoenix-ai/dsh-mcp-client'
+/**
+ * Services every PHOENIX-managed MCP must wait for before activation.
+ * Row order has no load semantics in Cordis; these explicit dependencies keep
+ * persisted connectors from snapshotting missing auth/credential services on
+ * a clean Host start.
+ */
+export const MANAGED_MCP_INJECT = ['tools', 'credentials', 'authorization', 'mcpConnectors'] as const
 const SERVER_NAME_MAX = 32
 const JEV_TOOL_TIMEOUT_MS = 30_000
 const JEV_STARTUP_TIMEOUT_MS = 5_000
@@ -20,6 +30,7 @@ const JEV_LEGACY_TOOL_TIMEOUT_MS = 1_800
 const JEV_LEGACY_STARTUP_TIMEOUT_MS = 1_200
 const X_API_TOOL_TIMEOUT_MS = 60_000
 const X_API_STARTUP_TIMEOUT_MS = 300_000
+const CANVA_TOOL_TIMEOUT_MS = 60_000
 
 interface ManagedMcpReconnect {
   enabled: boolean
@@ -35,6 +46,10 @@ interface ManagedStreamableHttpMcpConfig {
   headers: Record<string, string>
   oauth: boolean
   bearerTokenRef?: string
+  oauthClientIdRef?: string
+  oauthClientSecretRef?: string
+  oauthCallbackPort?: number
+  oauthTokenEndpointAuthMethod?: 'none' | 'client_secret_post' | 'client_secret_basic'
   toolCallTimeoutMs?: number
   startupTimeoutMs?: number
   failOnStartupError?: boolean
@@ -67,6 +82,50 @@ export const JEV_API_KEY_REF = 'JEV_API_KEY'
 export const BINANCE_AGENT_OS_SERVER_NAME = 'binance-agent-os'
 /** Official Binance Agent OS Streamable HTTP MCP endpoint. */
 export const BINANCE_AGENT_OS_URL = 'https://agent.binance.com/mcp/agentic'
+/** Stable local MCP namespace for the official Devpost Hackathons connector. */
+export const DEVPOST_HACKATHONS_SERVER_NAME = 'devpost'
+/** Official Devpost Hackathons Streamable HTTP MCP endpoint. */
+export const DEVPOST_HACKATHONS_URL = 'https://devpost.com/mcp'
+/** Stable local MCP namespace for Canva's official remote MCP. */
+export const CANVA_MCP_SERVER_NAME = 'canva'
+/** Official Canva Streamable HTTP MCP endpoint. */
+export const CANVA_MCP_URL = 'https://mcp.canva.com/mcp'
+/** Official hosted Supabase MCP endpoint. */
+export const SUPABASE_MCP_URL = 'https://mcp.supabase.com/mcp'
+/** Official HeyGen remote MCP endpoint. */
+export const HEYGEN_MCP_URL = 'https://mcp.heygen.com/mcp/v1/'
+/** Official Figma remote MCP endpoint (available only to Figma-catalog clients). */
+export const FIGMA_MCP_URL = 'https://mcp.figma.com/mcp'
+/** Official Figma Desktop local MCP endpoint usable by a custom Phoenix client. */
+export const FIGMA_DESKTOP_MCP_URL = 'http://127.0.0.1:3845/mcp'
+/** GitHub's official remote MCP endpoint (not a Copilot model login). */
+export const GITHUB_MCP_URL = 'https://api.githubcopilot.com/mcp/'
+/** Vault reference for a GitHub personal access token. Never persisted in MCP config. */
+export const GITHUB_MCP_TOKEN_REF = 'GITHUB_MCP_TOKEN'
+/** Official Meta Social Technologies (formerly Developer Tools) MCP endpoint. */
+export const META_DEVTOOLS_MCP_URL = 'https://mcp.facebook.com/devtools'
+/** Official WhatsApp Business Tools hosted MCP; not consumer WhatsApp. */
+export const META_WHATSAPP_BUSINESS_MCP_URL = 'https://mcp.facebook.com/whatsapp_business_tools'
+/** Public read-only, credential-free Microsoft Learn documentation MCP endpoint. */
+export const MICROSOFT_LEARN_MCP_URL = 'https://learn.microsoft.com/api/mcp'
+/** Official Vercel remote MCP endpoint. */
+export const VERCEL_MCP_URL = 'https://mcp.vercel.com'
+/** Official Notion remote MCP endpoint. */
+export const NOTION_MCP_URL = 'https://mcp.notion.com/mcp'
+/** Official Linear remote MCP endpoint. */
+export const LINEAR_MCP_URL = 'https://mcp.linear.app/mcp'
+/** Official Cloudflare API MCP endpoint. */
+export const CLOUDFLARE_MCP_URL = 'https://mcp.cloudflare.com/mcp'
+/** Official Slack MCP endpoint. Slack requires a registered client for custom harnesses. */
+export const SLACK_MCP_URL = 'https://mcp.slack.com/mcp'
+/** Phoenix vault reference for the Slack app OAuth client id. */
+export const SLACK_MCP_CLIENT_ID_REF = 'SLACK_MCP_CLIENT_ID'
+/** Phoenix vault reference for the Slack app OAuth client secret. */
+export const SLACK_MCP_CLIENT_SECRET_REF = 'SLACK_MCP_CLIENT_SECRET'
+/** Stable loopback callback registered in the Phoenix Slack app. */
+export const SLACK_MCP_CALLBACK_PORT = 17844
+/** Vault reference used by the official Brave Search MCP. */
+export const BRAVE_SEARCH_API_KEY_REF = 'BRAVE_API_KEY'
 /** Stable local MCP namespace for the official X API bridge. */
 export const X_API_MCP_SERVER_NAME = 'x-api'
 /** Official X API hosted MCP endpoint reached through xurl. */
@@ -74,7 +133,7 @@ export const X_API_MCP_URL = 'https://api.x.com/mcp'
 /** Dedicated MCP namespace for Phoenix's own X account. */
 export const X_PHOENIX_API_MCP_SERVER_NAME = 'x-api-phoenix'
 /** Public identity kinds supported by the managed X bridge. */
-export type XMcpIdentity = 'user' | 'phoenix'
+export type { XMcpIdentity } from './types.ts'
 /** Stable local MCP namespace for the official X documentation server. */
 export const X_DOCS_MCP_SERVER_NAME = 'x-docs'
 /** Official keyless X documentation MCP endpoint. */
@@ -87,7 +146,10 @@ export const X_CLIENT_SECRET_REF = 'X_CLIENT_SECRET'
 interface ManagedMcpRow {
   id: string
   name: typeof MCP_CLIENT_PACKAGE
+  /** Loader-level dependencies. Legacy managed rows may omit this until migrated. */
+  inject?: string[]
   config: ManagedMcpConfig
+  source?: ManagedMcpSource
 }
 
 interface ManagedMcpPatch {
@@ -96,7 +158,13 @@ interface ManagedMcpPatch {
 
 /** Minimal Loader mutation seam needed for immediate MCP activation and rollback. */
 export interface ManagedMcpLoader {
-  create(options: { name: string; config: ManagedMcpConfig }): Promise<string>
+  create(options: { name: string; inject?: readonly string[]; config: ManagedMcpConfig }): Promise<string>
+  /**
+   * Live Loader update used to migrate legacy managed rows in-place. The
+   * production Loader supports it; alternate embeddings may omit it and will
+   * still persist the corrected dependency list for the next Host start.
+   */
+  update?(id: string, options: { inject: readonly string[] }): Promise<void>
   remove(id: string): Promise<void>
 }
 
@@ -117,6 +185,290 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isEmptyRecord(value: unknown): value is Record<string, never> {
   return isRecord(value) && Object.keys(value).length === 0
+}
+
+function devpostHackathonsMcpConfig(): ManagedStreamableHttpMcpConfig {
+  return {
+    transport: 'streamable-http',
+    serverName: DEVPOST_HACKATHONS_SERVER_NAME,
+    url: DEVPOST_HACKATHONS_URL,
+    headers: {},
+    oauth: true,
+  }
+}
+
+function remoteOauthMcpConfig(
+  serverName: string,
+  url: string,
+  toolCallTimeoutMs = 60_000,
+): ManagedStreamableHttpMcpConfig {
+  return {
+    transport: 'streamable-http',
+    serverName,
+    url,
+    headers: {},
+    oauth: true,
+    toolCallTimeoutMs,
+    startupTimeoutMs: 5_000,
+    failOnStartupError: false,
+  }
+}
+
+function canvaMcpConfig(): ManagedStreamableHttpMcpConfig {
+  return {
+    ...remoteOauthMcpConfig(CANVA_MCP_SERVER_NAME, CANVA_MCP_URL, CANVA_TOOL_TIMEOUT_MS),
+  }
+}
+
+/** Remote GitHub MCP does not support dynamic OAuth client registration.
+ * GitHub Apps/OAuth Apps need separately registered client IDs; the default
+ * supported path for custom hosts is a vault-backed, revocable GitHub PAT.
+ */
+function githubMcpConfig(): ManagedStreamableHttpMcpConfig {
+  return {
+    ...remoteOauthMcpConfig('github', GITHUB_MCP_URL),
+    oauth: false,
+    bearerTokenRef: GITHUB_MCP_TOKEN_REF,
+  }
+}
+
+/** Public Microsoft Learn Docs MCP: no token, no OAuth and no private M365 data. */
+function microsoftLearnMcpConfig(): ManagedStreamableHttpMcpConfig {
+  return { ...remoteOauthMcpConfig('microsoft-learn', MICROSOFT_LEARN_MCP_URL), oauth: false }
+}
+
+function slackMcpConfig(): ManagedStreamableHttpMcpConfig {
+  return {
+    ...remoteOauthMcpConfig('slack', SLACK_MCP_URL),
+    oauthClientIdRef: SLACK_MCP_CLIENT_ID_REF,
+    oauthClientSecretRef: SLACK_MCP_CLIENT_SECRET_REF,
+    oauthCallbackPort: SLACK_MCP_CALLBACK_PORT,
+    oauthTokenEndpointAuthMethod: 'client_secret_post',
+  }
+}
+
+function figmaDesktopMcpConfig(): ManagedStreamableHttpMcpConfig {
+  return {
+    transport: 'streamable-http',
+    serverName: 'figma',
+    url: FIGMA_DESKTOP_MCP_URL,
+    headers: {},
+    oauth: false,
+    toolCallTimeoutMs: 60_000,
+    startupTimeoutMs: 2_000,
+    failOnStartupError: false,
+    reconnect: {
+      enabled: true,
+      initialDelayMs: 1_000,
+      maxDelayMs: 30_000,
+      maxAttempts: 120,
+    },
+  }
+}
+
+function localNpxMcpConfig(
+  serverName: string,
+  pkg: string,
+  extraArgs: readonly string[] = [],
+  envCredentialRefs: Readonly<Record<string, string>> = {},
+): ManagedStdioMcpConfig {
+  return {
+    transport: 'stdio',
+    serverName,
+    command: 'npx',
+    args: ['-y', pkg, ...extraArgs],
+    env: {},
+    envCredentialRefs: { ...envCredentialRefs },
+    cwd: '',
+    toolCallTimeoutMs: 60_000,
+    startupTimeoutMs: 20_000,
+    failOnStartupError: false,
+    reconnect: {
+      enabled: true,
+      initialDelayMs: 1000,
+      maxDelayMs: 30_000,
+      maxAttempts: 3,
+    },
+  }
+}
+
+function fetchMcpConfig(): ManagedStdioMcpConfig {
+  return {
+    transport: 'stdio',
+    serverName: 'fetch',
+    command: 'uvx',
+    args: ['mcp-server-fetch'],
+    env: {},
+    envCredentialRefs: {},
+    cwd: '',
+    toolCallTimeoutMs: 60_000,
+    startupTimeoutMs: 20_000,
+    failOnStartupError: false,
+    reconnect: {
+      enabled: true,
+      initialDelayMs: 1000,
+      maxDelayMs: 30_000,
+      maxAttempts: 3,
+    },
+  }
+}
+
+interface CuratedMcpSpec {
+  readonly label: string
+  readonly config: () => ManagedMcpConfig
+}
+
+/** One auditable, immutable launcher shape per Graph service. */
+function microsoftScopedMcpConfig(serverName: string, service: 'mail' | 'calendar' | 'contacts' | 'onedrive' | 'teams' | 'sharepoint'): ManagedStdioMcpConfig {
+  return {
+    transport: 'stdio',
+    serverName,
+    command: 'node',
+    args: ['scripts/phoenix-microsoft-personal-mcp.mjs', service],
+    env: {},
+    envCredentialRefs: {},
+    cwd: '',
+    toolCallTimeoutMs: 60_000,
+    startupTimeoutMs: 20_000,
+    failOnStartupError: false,
+    reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 3 },
+  }
+}
+
+const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>> = {
+  devpost: { label: 'Devpost Hackathons', config: devpostHackathonsMcpConfig },
+  canva: { label: 'Canva', config: canvaMcpConfig },
+  supabase: { label: 'Supabase', config: () => remoteOauthMcpConfig('supabase', SUPABASE_MCP_URL) },
+  heygen: { label: 'HeyGen', config: () => remoteOauthMcpConfig('heygen', HEYGEN_MCP_URL, 120_000) },
+  figma: { label: 'Figma', config: () => remoteOauthMcpConfig('figma', FIGMA_MCP_URL) },
+  github: { label: 'GitHub repositories', config: githubMcpConfig },
+  // X API uses the official xurl OAuth PKCE bridge. X Docs is public and independent.
+  // Install these from Phoenix Settings; never block on the external MCP registry.
+  x: { label: 'X API (OAuth user)', config: () => xApiMcpConfig('user') },
+  'x-docs': { label: 'X developer documentation', config: xDocsMcpConfig },
+  // Local Facebook Pages + Instagram Professional publishing through Graph API.
+  // Its four Host vault references are injected only into the private MCP child
+  // after explicit user authorization. Meta DevTools is NOT a publishing API.
+  'meta-publishing': {
+    label: 'Meta Graph Publishing (Facebook Page + Instagram Professional)',
+    config: () => ({
+      transport: 'stdio',
+      serverName: 'meta-publishing',
+      command: 'node',
+      args: ['scripts/phoenix-social-mcp.mjs'],
+      env: {},
+      envCredentialRefs: {
+        PHOENIX_SOCIAL_FACEBOOK_PAGE_TOKEN: 'PHOENIX_META_PAGE_TOKEN',
+        PHOENIX_SOCIAL_FACEBOOK_PAGE_ID: 'PHOENIX_META_PAGE_ID',
+        PHOENIX_SOCIAL_INSTAGRAM_TOKEN: 'PHOENIX_META_INSTAGRAM_TOKEN',
+        PHOENIX_SOCIAL_INSTAGRAM_USER_ID: 'PHOENIX_META_INSTAGRAM_USER_ID',
+      },
+      cwd: '',
+      toolCallTimeoutMs: 60_000,
+      startupTimeoutMs: 20_000,
+      failOnStartupError: false,
+      reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 3 },
+    }),
+  },
+  'meta-devtools': { label: 'Meta Social Technologies', config: () => remoteOauthMcpConfig('meta-devtools', META_DEVTOOLS_MCP_URL) },
+  'meta-whatsapp-business': { label: 'WhatsApp Business Tools', config: () => remoteOauthMcpConfig('meta-whatsapp-business', META_WHATSAPP_BUSINESS_MCP_URL) },
+  'microsoft-learn': { label: 'Microsoft Learn Docs', config: microsoftLearnMcpConfig },
+  // Free Microsoft Graph delegated access; no third-party mail server, Work IQ, or Azure billing.
+  // Only a local Node process and a user-owned Entra public-client app registration.
+  'social-engine': {
+    label: 'Phoenix Social Engine (X, Instagram, YouTube, Facebook, TikTok, LinkedIn)',
+    config: () => ({
+      transport: 'stdio',
+      serverName: 'social-engine',
+      command: 'node',
+      args: ['scripts/phoenix-social-mcp.mjs'],
+      env: {},
+      envCredentialRefs: {},
+      cwd: '',
+      toolCallTimeoutMs: 60_000,
+      startupTimeoutMs: 20_000,
+      failOnStartupError: false,
+      reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 3 },
+    }),
+  },
+  'microsoft-personal': {
+    label: 'Microsoft Personal (Outlook, Calendar, Contacts, OneDrive — free)',
+    config: () => ({
+      transport: 'stdio',
+      serverName: 'microsoft-personal',
+      command: 'node',
+      args: ['scripts/phoenix-microsoft-personal-mcp.mjs'],
+      env: {},
+      envCredentialRefs: {},
+      cwd: '',
+      toolCallTimeoutMs: 60_000,
+      startupTimeoutMs: 20_000,
+      failOnStartupError: false,
+      reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 3 },
+    }),
+  },
+  // Independent account scopes and credential storage; managed stdio specs are pinned.
+  'outlook-mail': { label: 'Outlook Mail', config: () => microsoftScopedMcpConfig('outlook-mail', 'mail') },
+  'outlook-calendar': { label: 'Outlook Calendar', config: () => microsoftScopedMcpConfig('outlook-calendar', 'calendar') },
+  'microsoft-contacts': { label: 'Microsoft Contacts', config: () => microsoftScopedMcpConfig('microsoft-contacts', 'contacts') },
+  onedrive: { label: 'OneDrive', config: () => microsoftScopedMcpConfig('onedrive', 'onedrive') },
+  'microsoft-teams': { label: 'Microsoft Teams (work/school)', config: () => microsoftScopedMcpConfig('microsoft-teams', 'teams') },
+  sharepoint: { label: 'SharePoint (work/school)', config: () => microsoftScopedMcpConfig('sharepoint', 'sharepoint') },
+  'microsoft-workiq': { label: 'Microsoft Work IQ (metered)', config: () => localNpxMcpConfig('microsoft-workiq', '@microsoft/workiq', ['mcp']) },
+  'microsoft-azure': { label: 'Microsoft Azure MCP (metered resources)', config: () => localNpxMcpConfig('microsoft-azure', '@azure/mcp@latest', ['server', 'start', '--mode', 'consolidated']) },
+  vercel: { label: 'Vercel', config: () => remoteOauthMcpConfig('vercel', VERCEL_MCP_URL) },
+  notion: { label: 'Notion', config: () => remoteOauthMcpConfig('notion', NOTION_MCP_URL) },
+  linear: { label: 'Linear', config: () => remoteOauthMcpConfig('linear', LINEAR_MCP_URL) },
+  cloudflare: { label: 'Cloudflare', config: () => remoteOauthMcpConfig('cloudflare', CLOUDFLARE_MCP_URL) },
+  slack: { label: 'Slack', config: slackMcpConfig },
+  'brave-search': {
+    label: 'Brave Search',
+    config: () => localNpxMcpConfig(
+      'brave-search',
+      '@brave/brave-search-mcp-server',
+      ['--transport', 'stdio'],
+      { BRAVE_API_KEY: BRAVE_SEARCH_API_KEY_REF },
+    ),
+  },
+  filesystem: {
+    label: 'Filesystem MCP',
+    config: () => localNpxMcpConfig('filesystem', '@modelcontextprotocol/server-filesystem', ['.']),
+  },
+  memory: {
+    label: 'Memory MCP',
+    config: () => localNpxMcpConfig('memory', '@modelcontextprotocol/server-memory'),
+  },
+  fetch: { label: 'Fetch MCP', config: fetchMcpConfig },
+}
+
+/**
+ * Core MCPs restored automatically on Phoenix startup.
+ * Binance is intentionally excluded: REAL Binance remains behind the existing
+ * high-risk activation/approval boundary.
+ */
+export const CORE_MCP_PACK_IDS: readonly CuratedMcpConnectorId[] = [
+  // Public Microsoft documentation is free and requires no private credentials.
+  // Metered Work IQ and Azure remain optional and never auto-install.
+  'microsoft-learn',
+  'x-docs',
+  'microsoft-personal',
+  'social-engine',
+  'canva',
+  'supabase',
+  'heygen',
+  'figma',
+  'notion',
+  'linear',
+  'cloudflare',
+  'slack',
+  'brave-search',
+  'filesystem',
+  'memory',
+  'fetch',
+]
+
+function isCuratedMcpConnectorId(value: string): value is CuratedMcpConnectorId {
+  return Object.prototype.hasOwnProperty.call(CURATED_MCP_SPECS, value)
 }
 
 function xDocsMcpConfig(): ManagedStreamableHttpMcpConfig {
@@ -193,6 +545,12 @@ function validXApiConfig(value: Record<string, unknown>): boolean {
 
 function validHttpConfig(value: Record<string, unknown>): boolean {
   if (exactJson(value, xDocsMcpConfig())) return true
+  if (exactJson(value, figmaDesktopMcpConfig())) return true
+  // Do not allow a persisted Microsoft Learn entry to silently gain OAuth,
+  // arbitrary headers or a bearer credential: the official Docs MCP is public.
+  if (value.serverName === 'microsoft-learn') {
+    return exactJson(value, microsoftLearnMcpConfig())
+  }
   if (typeof value.serverName !== 'string' || typeof value.url !== 'string'
     || typeof value.oauth !== 'boolean' || !isEmptyRecord(value.headers)) return false
   try {
@@ -201,8 +559,25 @@ function validHttpConfig(value: Record<string, unknown>): boolean {
     return false
   }
 
-  // Registry-managed remotes and Binance remain OAuth-only and may not smuggle a secret ref.
-  if (value.oauth) return value.bearerTokenRef === undefined
+  // Host-curated credentials are admitted by exact specification only.
+  // GitHub's official MCP remote does NOT support OAuth DCR; the previous
+  // PAT migration persisted oauth:false and bearerTokenRef:GITHUB_MCP_TOKEN.
+  // Reject any other bearer ref, arbitrary URL, headers, or extra OAuth fields.
+  if (exactJson(value, githubMcpConfig())) return true
+
+  // Slack is the one curated confidential OAuth client. Its references and
+  // fixed callback are admitted only as one exact Host-owned configuration.
+  if (exactJson(value, slackMcpConfig())) return true
+
+  // Registry-managed remotes, Binance, and dynamic OAuth curated remotes may
+  // not smuggle credential refs or fixed-client settings through persisted JSON.
+  if (value.oauth) {
+    return value.bearerTokenRef === undefined
+      && value.oauthClientIdRef === undefined
+      && value.oauthClientSecretRef === undefined
+      && value.oauthCallbackPort === undefined
+      && value.oauthTokenEndpointAuthMethod === undefined
+  }
 
   // Keep accepting the exact retired Jev form only so older owner overlays can be parsed and removed.
   if (value.serverName !== JEV_MCP_SERVER_NAME
@@ -219,10 +594,60 @@ function validHttpConfig(value: Record<string, unknown>): boolean {
     && reconnect.maxAttempts === 3
 }
 
+function validCuratedStdioConfig(value: Record<string, unknown>): boolean {
+  return Object.values(CURATED_MCP_SPECS)
+    .map(spec => spec.config())
+    .some(config => config.transport === 'stdio' && exactJson(value, config))
+}
+
 function validConfig(value: unknown): value is ManagedMcpConfig {
   if (!isRecord(value)) return false
-  if (value.transport === 'stdio') return validXApiConfig(value)
+  if (value.transport === 'stdio') return validXApiConfig(value) || validCuratedStdioConfig(value)
   return value.transport === 'streamable-http' && validHttpConfig(value)
+}
+
+function validManagedInject(value: unknown): value is string[] | undefined {
+  if (value === undefined) return true
+  return Array.isArray(value)
+    && value.length === MANAGED_MCP_INJECT.length
+    && value.every((entry, index) => entry === MANAGED_MCP_INJECT[index])
+}
+
+function hasManagedInject(row: ManagedMcpRow): boolean {
+  return validManagedInject(row.inject) && row.inject !== undefined
+}
+
+function managedLoaderOptions(config: ManagedMcpConfig): {
+  name: typeof MCP_CLIENT_PACKAGE
+  inject: string[]
+  config: ManagedMcpConfig
+} {
+  return {
+    name: MCP_CLIENT_PACKAGE,
+    inject: [...MANAGED_MCP_INJECT],
+    config,
+  }
+}
+
+function validManagedSource(value: unknown): value is ManagedMcpSource {
+  if (!isRecord(value)) return false
+  if (value.kind === 'registry') {
+    return typeof value.name === 'string'
+      && value.name.trim().length >= 2
+      && (value.version === undefined || (typeof value.version === 'string' && value.version.trim().length > 0))
+  }
+  return value.kind === 'curated'
+    && typeof value.connectorId === 'string'
+    && value.connectorId.trim().length > 0
+}
+
+/** Expose only the public MCP namespace for a rejected row; never log config. */
+function safeManagedRowLabel(value: unknown): string {
+  if (!isRecord(value) || !isRecord(value.config)) return ''
+  const serverName = value.config.serverName
+  return typeof serverName === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(serverName)
+    ? ` (server ${serverName})`
+    : ''
 }
 
 function parseManagedRows(raw: string): ManagedMcpRow[] {
@@ -236,12 +661,20 @@ function parseManagedRows(raw: string): ManagedMcpRow[] {
   }
   return patch.insert.map((value, index) => {
     if (!isRecord(value) || typeof value.id !== 'string' || value.name !== MCP_CLIENT_PACKAGE || !validConfig(value.config)) {
-      throw new Error(`managed MCP patch row ${index} is invalid`)
+      throw new Error(`managed MCP patch row ${index} is invalid${safeManagedRowLabel(value)}`)
+    }
+    if (!validManagedInject(value.inject)) {
+      throw new Error(`managed MCP patch row ${index} has an invalid inject dependency list`)
+    }
+    if (value.source !== undefined && !validManagedSource(value.source)) {
+      throw new Error(`managed MCP patch row ${index} has an invalid source`)
     }
     return {
       id: value.id,
       name: MCP_CLIENT_PACKAGE,
+      ...(value.inject === undefined ? {} : { inject: [...value.inject] }),
       config: value.config,
+      ...(value.source === undefined ? {} : { source: value.source }),
     }
   })
 }
@@ -265,10 +698,16 @@ async function writeManagedRows(path: string, rows: readonly ManagedMcpRow[]): P
 }
 
 function connectorOf(row: ManagedMcpRow): ManagedMcpConnector {
+  const url = row.config.transport === 'streamable-http'
+    ? row.config.url
+    : row.config.serverName === X_API_MCP_SERVER_NAME || row.config.serverName === X_PHOENIX_API_MCP_SERVER_NAME
+      ? X_API_MCP_URL
+      : `stdio://${row.config.serverName}`
   return {
     entryId: row.id,
     serverName: row.config.serverName,
-    url: row.config.transport === 'streamable-http' ? row.config.url : X_API_MCP_URL,
+    url,
+    ...(row.source === undefined ? {} : { source: row.source }),
   }
 }
 
@@ -288,6 +727,16 @@ function isRetiredJevCandidate(candidate: McpRegistryCandidate): boolean {
   const name = candidate.name.toLowerCase()
   const title = candidate.title.toLowerCase()
   return name === 'jev' || name.endsWith('/jev') || title === 'jev'
+}
+
+function isDevpostHackathonsManagedRow(row: ManagedMcpRow): boolean {
+  return row.config.serverName === DEVPOST_HACKATHONS_SERVER_NAME
+    || (row.config.transport === 'streamable-http' && row.config.url === DEVPOST_HACKATHONS_URL)
+}
+
+function isCanvaManagedRow(row: ManagedMcpRow): boolean {
+  return row.config.serverName === CANVA_MCP_SERVER_NAME
+    || (row.config.transport === 'streamable-http' && row.config.url === CANVA_MCP_URL)
 }
 
 function isBinanceAgentOsManagedRow(row: ManagedMcpRow): boolean {
@@ -326,6 +775,12 @@ function selectInstallableCandidate(
     throw new Error(`MCP registry candidate ${candidate.name} is not active`)
   }
   if (candidate.remoteUrl === undefined) {
+    if (candidate.remoteSetupRequired === 'headers') {
+      throw new Error('MCP requires provider-specific authorization headers; configure this server manually rather than installing a broken connection')
+    }
+    if (candidate.remoteSetupRequired === 'variables') {
+      throw new Error('MCP requires a tenant-specific URL or variables; configure its endpoint manually before connecting')
+    }
     throw new Error('Only registry-listed Streamable HTTP MCP servers can be installed automatically; review package-based servers manually')
   }
   return candidate
@@ -352,19 +807,88 @@ export class ManagedMcpController {
     this.registrySearch = options.registrySearch ?? searchOfficialMcpRegistry
   }
 
+  /**
+   * Recover a damaged persisted MCP overlay without executing suspect rows.
+   * The exact original is backed up with owner-only permissions before any
+   * repair. Only rows accepted by the existing strict parser are restored.
+   * The live Loader may need a restart to activate a recovered row.
+   */
+  async recoverInvalidOverlay(): Promise<{ recovered: number; quarantined: number; backupCreated: boolean }> {
+    return recoverManagedMcpOverlay(this.path)
+  }
+
+  /**
+   * Upgrade legacy persisted MCP rows that predate explicit loader dependencies.
+   * Updating `inject` causes the Loader to restart a live row and then hold it
+   * pending until credentials, authorization, tools, and lifecycle registry are
+   * all available. Successful upgrades are persisted atomically so later starts
+   * never repeat the startup race.
+   */
+  private async ensureManagedDependencies(rows: readonly ManagedMcpRow[]): Promise<{
+    rows: ManagedMcpRow[]
+    failed: Array<{ row: ManagedMcpRow; message: string }>
+  }> {
+    let changed = false
+    const failed: Array<{ row: ManagedMcpRow; message: string }> = []
+    const upgraded: ManagedMcpRow[] = []
+
+    for (const row of rows) {
+      if (hasManagedInject(row)) {
+        upgraded.push(row)
+        continue
+      }
+      try {
+        await this.loader.update?.(row.id, { inject: [...MANAGED_MCP_INJECT] })
+        upgraded.push({ ...row, inject: [...MANAGED_MCP_INJECT] })
+        changed = true
+      } catch (error) {
+        upgraded.push(row)
+        failed.push({
+          row,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    if (changed) await writeManagedRows(this.path, upgraded)
+    return { rows: upgraded, failed }
+  }
+
   private async installManagedConfig(
     config: ManagedMcpConfig,
     label: string,
+    source?: ManagedMcpSource,
   ): Promise<McpRegistryInstallReceipt> {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
     return withFileLock(this.path, async () => {
-      const rows = await readManagedRows(this.path)
-      const existing = rows.find(row => managedIdentity(row.config) === managedIdentity(config))
+      const migration = await this.ensureManagedDependencies(await readManagedRows(this.path))
+      const rows = migration.rows
+      // The registry can publish a new remote URL for an existing MCP. A
+      // second row with the same serverName would conflict at tool registration
+      // and appear 'broken' despite the old account still being configured.
+      const existing = rows.find(row => managedIdentity(row.config) === managedIdentity(config)
+        || row.config.serverName === config.serverName
+        || (source?.kind === 'registry' && row.source?.kind === 'registry' && row.source.name === source.name))
       if (existing !== undefined) {
+        const sameSource = source?.kind === 'registry' && existing.source?.kind === 'registry'
+          && existing.source.name === source.name
+        if (managedIdentity(existing.config) !== managedIdentity(config) && !sameSource) {
+          throw new Error(`MCP namespace "${config.serverName}" is already used by another connector. Remove or repair the existing entry first.`)
+        }
+        const failure = migration.failed.find(item => item.row.id === existing.id)
+        if (failure !== undefined) {
+          throw new Error(`failed to repair managed MCP dependencies for "${existing.id}": ${failure.message}`)
+        }
         return { status: 'already-installed', connector: connectorOf(existing) }
       }
-      const entryId = await this.loader.create({ name: MCP_CLIENT_PACKAGE, config })
-      const row: ManagedMcpRow = { id: entryId, name: MCP_CLIENT_PACKAGE, config }
+      const entryId = await this.loader.create(managedLoaderOptions(config))
+      const row: ManagedMcpRow = {
+        id: entryId,
+        name: MCP_CLIENT_PACKAGE,
+        inject: [...MANAGED_MCP_INJECT],
+        config,
+        ...(source === undefined ? {} : { source }),
+      }
       try {
         await writeManagedRows(this.path, [...rows, row])
       } catch (error) {
@@ -382,35 +906,41 @@ export class ManagedMcpController {
     }, { waitMs: 15_000 })
   }
 
-  private async removeManagedRows(
+  private async removeManagedRowsReceipt(
     matches: (row: ManagedMcpRow) => boolean,
-    label: string,
-  ): Promise<boolean> {
+  ): Promise<{ removed: boolean; liveUnloaded: boolean }> {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
     return withFileLock(this.path, async () => {
       const rows = await readManagedRows(this.path)
       const removed = rows.filter(matches)
-      if (removed.length === 0) return false
+      if (removed.length === 0) return { removed: false, liveUnloaded: true }
 
       // Persist removal first so a failed live unload cannot resurrect access
       // on the next Phoenix start.
       await writeManagedRows(this.path, rows.filter(row => !matches(row)))
-      const failures: unknown[] = []
+      let liveUnloaded = true
       for (const row of removed) {
         try {
           await this.loader.remove(row.id)
-        } catch (error: unknown) {
-          failures.push(error)
+        } catch {
+          liveUnloaded = false
         }
       }
-      if (failures.length > 0) {
-        throw new AggregateError(
-          failures,
-          `${label} was removed from persistent MCP config but one or more live entries could not be unloaded`,
-        )
-      }
-      return true
+      return { removed: true, liveUnloaded }
     }, { waitMs: 15_000 })
+  }
+
+  private async removeManagedRows(
+    matches: (row: ManagedMcpRow) => boolean,
+    label: string,
+  ): Promise<boolean> {
+    const result = await this.removeManagedRowsReceipt(matches)
+    if (result.removed && !result.liveUnloaded) {
+      throw new Error(
+        `${label} was removed from persistent MCP config but one or more live entries could not be unloaded`,
+      )
+    }
+    return result.removed
   }
 
   /**
@@ -421,6 +951,110 @@ export class ManagedMcpController {
     return (await readManagedRows(this.path))
       .filter(row => !isRetiredJevManagedRow(row))
       .map(connectorOf)
+  }
+
+  /**
+   * Remove exactly one PHOENIX-managed connector. Persistence is authoritative:
+   * a failed live unload never restores the entry to the managed overlay.
+   * @param request - Exact managed entry id to remove.
+   * @returns Whether persistence was removed and whether live unload also completed.
+   */
+  async remove(request: { entryId: string }): Promise<{ removed: boolean; liveUnloaded: boolean }> {
+    const entryId = request.entryId.trim()
+    if (entryId.length === 0) throw new Error('managed MCP removal requires a valid entry id')
+    return this.removeManagedRowsReceipt(row => row.id === entryId)
+  }
+
+  /**
+   * Recreate the persisted row when a repair fails after unload. The existing
+   * credentials are intentionally left untouched, and the original stable row
+   * remains available to the next Host start even if live restoration fails.
+   */
+  private async restoreRemovedManagedRow(row: ManagedMcpRow): Promise<void> {
+    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
+    await withFileLock(this.path, async () => {
+      const rows = await readManagedRows(this.path)
+      if (rows.some(existing => existing.id === row.id
+        || managedIdentity(existing.config) === managedIdentity(row.config))) return
+      await writeManagedRows(this.path, [...rows, row])
+    }, { waitMs: 15_000 })
+  }
+
+  /**
+   * Repair a managed registry connector from its persisted trusted source.
+   * Legacy rows without source metadata stay removable but are not guessed.
+   * @param request - Exact managed entry id to repair.
+   * @returns Installation receipt for the freshly re-resolved connector.
+   */
+  async repair(request: { entryId: string }): Promise<McpRegistryInstallReceipt> {
+    const entryId = request.entryId.trim()
+    if (entryId.length === 0) throw new Error('managed MCP repair requires a valid entry id')
+    const row = (await readManagedRows(this.path)).find(candidate => candidate.id === entryId)
+    if (row === undefined) throw new Error(`managed MCP entry "${entryId}" is not installed`)
+    if (row.source === undefined) {
+      throw new Error(`managed MCP entry "${entryId}" has no trusted repair source`)
+    }
+    if (row.source.kind === 'curated') {
+      const connectorId = row.source.connectorId
+      if (!isCuratedMcpConnectorId(connectorId)) {
+        throw new Error(`managed MCP entry "${entryId}" uses an unsupported curated repair source`)
+      }
+      const removed = await this.removeManagedRowsReceipt(candidateRow => candidateRow.id === entryId)
+      if (!removed.removed) throw new Error(`managed MCP entry "${entryId}" disappeared during repair`)
+      if (!removed.liveUnloaded) {
+        await this.restoreRemovedManagedRow(row)
+        throw new Error(`managed MCP entry "${entryId}" could not be unloaded; its previous configuration was preserved`)
+      }
+      try {
+        // The existing Figma Desktop MCP does not use browser OAuth. Repairing
+        // it must preserve its loopback endpoint rather than silently switching
+        // to Figma's separate remote OAuth integration.
+        if (connectorId === 'figma'
+          && row.config.transport === 'streamable-http'
+          && row.config.url === FIGMA_DESKTOP_MCP_URL) {
+          return await this.installManagedConfig(figmaDesktopMcpConfig(), 'Figma Desktop',
+            { kind: 'curated', connectorId: 'figma' })
+        }
+        return await this.installCuratedMcp(connectorId)
+      } catch (error) {
+        await this.restoreRemovedManagedRow(row)
+        throw new Error(`MCP repair failed; the previous configuration was preserved for the next Phoenix start: ${String(error)}`, { cause: error })
+      }
+    }
+
+    const snapshot = await this.registrySearch({ query: row.source.name, limit: 20 })
+    // Repair follows the latest active registry version. Keeping the originally
+    // installed version pinned makes repair fail whenever the publisher updates.
+    const candidate = selectInstallableCandidate(snapshot, { name: row.source.name })
+    if (isRetiredJevCandidate(candidate)) {
+      throw new Error('Jev integration is retired and cannot be repaired through the Official MCP Registry')
+    }
+    const remoteUrl = candidate.remoteUrl
+    if (remoteUrl === undefined) throw new Error('Registry candidate no longer exposes a Streamable HTTP endpoint')
+
+    const removed = await this.removeManagedRowsReceipt(candidateRow => candidateRow.id === entryId)
+    if (!removed.removed) throw new Error(`managed MCP entry "${entryId}" disappeared during repair`)
+    if (!removed.liveUnloaded) {
+      await this.restoreRemovedManagedRow(row)
+      throw new Error(`managed MCP entry "${entryId}" could not be unloaded; its previous configuration was preserved`)
+    }
+
+    try {
+      return await this.installManagedConfig({
+        transport: 'streamable-http',
+        serverName: serverNameFor(candidate),
+        url: remoteUrl,
+        headers: {},
+        oauth: true,
+      }, candidate.name, {
+        kind: 'registry',
+        name: candidate.name,
+        version: candidate.version,
+      })
+    } catch (error) {
+      await this.restoreRemovedManagedRow(row)
+      throw new Error(`MCP repair failed; the previous configuration was preserved for the next Phoenix start: ${String(error)}`, { cause: error })
+    }
   }
 
   /**
@@ -441,17 +1075,188 @@ export class ManagedMcpController {
   }
 
   /**
+   * Install one Phoenix-curated MCP from its exact Host-owned specification.
+   * No caller-supplied URL, executable, package, or environment value crosses
+   * this boundary.
+   * @param connectorId - Curated connector identity admitted by Phoenix.
+   * @returns Idempotent managed installation receipt.
+   */
+  async installCuratedMcp(connectorId: CuratedMcpConnectorId): Promise<McpRegistryInstallReceipt> {
+    const spec = CURATED_MCP_SPECS[connectorId]
+    return this.installManagedConfig(
+      spec.config(),
+      spec.label,
+      { kind: 'curated', connectorId },
+    )
+  }
+
+  /**
+   * Restore the default Phoenix MCP pack without blocking one provider on
+   * another. Missing live entries are created in parallel and then committed
+   * to the managed overlay in one atomic write. At Host boot use
+   * installMissing: false to preserve configured connectors without silently
+   * activating optional remote services that still need provider setup.
+   * @param options - Whether to install missing curated MCPs or migrate existing rows only.
+   * @returns Installed, already-present, and failed curated connector ids.
+   */
+  async ensureCoreMcpPack(options: { installMissing?: boolean } = {}): Promise<{
+    installed: readonly CuratedMcpConnectorId[]
+    alreadyInstalled: readonly CuratedMcpConnectorId[]
+    failed: readonly { connectorId: CuratedMcpConnectorId; message: string }[]
+  }> {
+    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
+    return withFileLock(this.path, async () => {
+      const migration = await this.ensureManagedDependencies(await readManagedRows(this.path))
+      const rows = migration.rows
+      const alreadyInstalled = CORE_MCP_PACK_IDS.filter((connectorId) => {
+        const config = CURATED_MCP_SPECS[connectorId].config()
+        return rows.some(row => managedIdentity(row.config) === managedIdentity(config)
+          || row.config.serverName === config.serverName)
+      })
+      // Boot restores only explicitly installed MCPs. Creating twelve optional
+      // connectors on every cold start made fresh accounts look broken before
+      // they had credentials, local dependencies, or an OAuth session.
+      const missing = options.installMissing === false
+        ? []
+        : CORE_MCP_PACK_IDS.filter(connectorId => !alreadyInstalled.includes(connectorId))
+      const attempted = await Promise.all(missing.map(async (connectorId) => {
+        const spec = CURATED_MCP_SPECS[connectorId]
+        const config = spec.config()
+        try {
+          const id = await this.loader.create(managedLoaderOptions(config))
+          const row: ManagedMcpRow = {
+            id,
+            name: MCP_CLIENT_PACKAGE,
+            inject: [...MANAGED_MCP_INJECT],
+            config,
+            source: { kind: 'curated', connectorId },
+          }
+          return { ok: true as const, connectorId, row }
+        } catch (error) {
+          return {
+            ok: false as const,
+            connectorId,
+            message: error instanceof Error ? error.message : String(error),
+          }
+        }
+      }))
+      const created = attempted.filter((result): result is Extract<typeof result, { ok: true }> => result.ok)
+      if (created.length > 0) {
+        try {
+          await writeManagedRows(this.path, [...rows, ...created.map(result => result.row)])
+        } catch (error) {
+          const rollbackErrors: unknown[] = []
+          for (const result of created) {
+            try {
+              await this.loader.remove(result.row.id)
+            } catch (rollbackError) {
+              rollbackErrors.push(rollbackError)
+            }
+          }
+          if (rollbackErrors.length > 0) {
+            throw new AggregateError(
+              [error, ...rollbackErrors],
+              'failed to persist the Phoenix core MCP pack and fully roll back live activation',
+            )
+          }
+          throw error
+        }
+      }
+      const migrationFailures = migration.failed.flatMap(({ row, message }) => {
+        const connectorId = row.source?.kind === 'curated' && isCuratedMcpConnectorId(row.source.connectorId)
+          ? row.source.connectorId
+          : undefined
+        return connectorId !== undefined && CORE_MCP_PACK_IDS.includes(connectorId)
+          ? [{ connectorId, message: `dependency migration failed: ${message}` }]
+          : []
+      })
+      return {
+        installed: created.map(result => result.connectorId),
+        alreadyInstalled,
+        failed: [
+          ...migrationFailures,
+          ...attempted
+            .filter((result): result is Extract<typeof result, { ok: false }> => !result.ok)
+            .map(result => ({ connectorId: result.connectorId, message: result.message })),
+        ],
+      }
+    }, { waitMs: 30_000 })
+  }
+
+  /**
+   * Install the pinned official Devpost Hackathons MCP.
+   * The endpoint is Host-owned so browser/model input cannot substitute another URL.
+   * @returns Idempotent managed connector installation receipt.
+   */
+  async installDevpostHackathons(): Promise<McpRegistryInstallReceipt> {
+    return this.installCuratedMcp('devpost')
+  }
+
+  /**
+   * Remove only the PHOENIX-managed Devpost Hackathons MCP.
+   * @returns true when one or more Devpost rows were removed.
+   */
+  async removeDevpostHackathons(): Promise<boolean> {
+    return this.removeManagedRows(isDevpostHackathonsManagedRow, 'Devpost Hackathons')
+  }
+
+  /**
+   * Install Canva's pinned official remote MCP with user-scoped OAuth.
+   * @returns Idempotent managed Canva installation receipt.
+   */
+  async installCanva(): Promise<McpRegistryInstallReceipt> {
+    return this.installCuratedMcp('canva')
+  }
+
+  /**
+   * Remove only the PHOENIX-managed Canva MCP.
+   * @returns Whether one or more managed Canva entries were removed.
+   */
+  async removeCanva(): Promise<boolean> {
+    return this.removeManagedRows(isCanvaManagedRow, 'Canva')
+  }
+
+  /**
    * Install the pinned official Binance Agent OS MCP.
    * @returns Idempotent managed connector installation receipt.
    */
   async installBinanceAgentOs(): Promise<McpRegistryInstallReceipt> {
+    // Binance's official Agentic server uses Streamable HTTP with browser
+    // OAuth; this is a host-configured MCP, not an HTTP API key or an API bot.
+    // Non-strict startup keeps the UI responsive until user consent is granted.
     return this.installManagedConfig({
-      transport: 'streamable-http',
-      serverName: BINANCE_AGENT_OS_SERVER_NAME,
-      url: BINANCE_AGENT_OS_URL,
-      headers: {},
-      oauth: true,
+      ...remoteOauthMcpConfig(BINANCE_AGENT_OS_SERVER_NAME, BINANCE_AGENT_OS_URL),
+      reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 3 },
     }, 'Binance Agent OS')
+  }
+
+  /**
+   * Repair legacy Binance MCP installations which were saved without a
+   * bounded startup budget. Preserve OAuth credentials in the secure vault;
+   * replace only the managed Loader row and restore it if installation fails.
+   * @returns Receipt for a freshly configured official MCP connection.
+   */
+  async repairBinanceAgentOs(): Promise<McpRegistryInstallReceipt> {
+    const matches = (await readManagedRows(this.path)).filter(isBinanceAgentOsManagedRow)
+    if (matches.length === 0) return this.installBinanceAgentOs()
+    if (matches.length !== 1 || matches[0]?.config.serverName !== BINANCE_AGENT_OS_SERVER_NAME
+      || matches[0]?.config.transport !== 'streamable-http'
+      || matches[0]?.config.url !== BINANCE_AGENT_OS_URL) {
+      throw new Error('Conflicting Binance MCP entries: remove duplicate connections before repair')
+    }
+    const previous = matches[0]
+    if (previous === undefined) throw new Error('Binance MCP entry unavailable')
+    const removed = await this.removeManagedRowsReceipt(row => row.id === previous.id)
+    if (!removed.removed || !removed.liveUnloaded) {
+      await this.restoreRemovedManagedRow(previous)
+      throw new Error('Binance MCP could not be safely unloaded; old configuration retained')
+    }
+    try {
+      return await this.installBinanceAgentOs()
+    } catch {
+      await this.restoreRemovedManagedRow(previous)
+      throw new Error('Binance MCP repair failed; old configuration preserved for Host restart')
+    }
   }
 
   /**
@@ -514,8 +1319,73 @@ export class ManagedMcpController {
       url: remoteUrl,
       headers: {},
       oauth: true,
-    }, candidate.name)
+    }, candidate.name, {
+      kind: 'registry',
+      name: candidate.name,
+      version: candidate.version,
+    })
   }
+}
+
+/**
+ * Restore only strictly validated MCP rows before Cordis loads the overlay.
+ * An owner-only, immutable-by-digest copy of the complete original is saved
+ * before changing any persistent data; malformed rows are never executed.
+ * @param path - PHOENIX owner-local managed.patch.yml absolute path.
+ * @returns Counts and backup receipt without config, secrets or local paths.
+ */
+export async function recoverManagedMcpOverlay(path: string): Promise<{
+  recovered: number
+  quarantined: number
+  backupCreated: boolean
+}> {
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 })
+    return withFileLock(path, async () => {
+      let original: string
+      try {
+        original = await readFile(path, 'utf8')
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          return { recovered: 0, quarantined: 0, backupCreated: false }
+        }
+        throw error
+      }
+      try {
+        const rows = parseManagedRows(original)
+        return { recovered: rows.length, quarantined: 0, backupCreated: false }
+      } catch {
+        // A malformed or manipulated row cannot bypass validConfig validation.
+        let document: unknown
+        try { document = JSON.parse(original) } catch { document = undefined }
+        const values: readonly unknown[] = Array.isArray(document) && document.length === 1
+          && isRecord(document[0]) && Array.isArray(document[0].insert)
+          ? document[0].insert
+          : []
+        const recovered: ManagedMcpRow[] = []
+        const usedIds = new Set<string>()
+        const usedNames = new Set<string>()
+        for (const value of values) {
+          try {
+            const row = parseManagedRows(JSON.stringify([{ insert: [value] }]))[0]
+            if (row === undefined || usedIds.has(row.id) || usedNames.has(row.config.serverName)) continue
+            usedIds.add(row.id)
+            usedNames.add(row.config.serverName)
+            recovered.push(row)
+          } catch {
+            // Preserve malformed rows only in the quarantined original.
+          }
+        }
+        const digest = createHash('sha256').update(original).digest('hex').slice(0, 16)
+        const backup = `${path}.quarantined-${digest}.bak`
+        await writeFileAtomic(backup, original, { mode: 0o600, dirMode: 0o700 })
+        await writeManagedRows(path, recovered)
+        return {
+          recovered: recovered.length,
+          quarantined: Math.max(1, values.length - recovered.length),
+          backupCreated: true,
+        }
+      }
+    }, { waitMs: 30_000 })
 }
 
 /**

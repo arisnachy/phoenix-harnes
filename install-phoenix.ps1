@@ -46,6 +46,15 @@ function Invoke-PhoenixPnpm([string[]]$Arguments) {
   }
 }
 
+function Add-PhoenixGitSafeDirectory([string]$Directory) {
+  $count = 0
+  if ($env:GIT_CONFIG_COUNT -match '^\d+$') { $count = [int]$env:GIT_CONFIG_COUNT }
+  $normalized = ([IO.Path]::GetFullPath($Directory)).Replace('\', '/')
+  [Environment]::SetEnvironmentVariable("GIT_CONFIG_KEY_$count", 'safe.directory', 'Process')
+  [Environment]::SetEnvironmentVariable("GIT_CONFIG_VALUE_$count", $normalized, 'Process')
+  [Environment]::SetEnvironmentVariable('GIT_CONFIG_COUNT', [string]($count + 1), 'Process')
+}
+
 function Get-PhoenixStableManifest {
   & git fetch --quiet origin "refs/heads/$stableChannelBranch`:refs/remotes/origin/$stableChannelBranch"
   if ($LASTEXITCODE -ne 0) { throw 'Could not fetch the PHOENIX stable channel.' }
@@ -124,6 +133,17 @@ try {
   try {
     Invoke-PhoenixPnpm @('install', '--frozen-lockfile')
     Invoke-PhoenixPnpm @('run', 'build')
+    # Prepare the isolated OpenClaw companion only on a compatible Node runtime.
+    # No Gateway daemon, account authorization or plugin execution is implicit.
+    $openClawBootstrap = Join-Path $resolvedInstallDirectory 'scripts/phoenix-openclaw-bootstrap.mjs'
+    if (Test-Path -LiteralPath $openClawBootstrap) {
+      try { & node $openClawBootstrap --ensure } catch { Write-Warning 'OpenClaw CLI setup deferred.' }
+    }
+    # Reuse the same ClawHub CLI bootstrap as the managed updater.
+    $clawHubBootstrap = Join-Path $resolvedInstallDirectory 'scripts/phoenix-clawhub-bootstrap.mjs'
+    if (Test-Path -LiteralPath $clawHubBootstrap) {
+      try { & node $clawHubBootstrap --ensure --update } catch { Write-Warning 'ClawHub CLI setup deferred.' }
+    }
     & node (Join-Path $resolvedInstallDirectory 'apps\cli\lib\bin.js') --version
     if ($LASTEXITCODE -ne 0) { throw 'PHOENIX launcher smoke test failed.' }
     & git update-ref refs/phoenix/recovery/last-good $target
@@ -149,47 +169,14 @@ try {
   Pop-Location
 }
 
-$shell = New-Object -ComObject WScript.Shell
-
-function New-PhoenixShortcut([string]$Path) {
-  $shortcut = $shell.CreateShortcut($Path)
-  $shortcut.TargetPath = Join-Path $resolvedInstallDirectory 'phoenix-windows.cmd'
-  $shortcut.WorkingDirectory = $resolvedInstallDirectory
-  $shortcut.IconLocation = "$env:SystemRoot\System32\shell32.dll,14"
-  $shortcut.Save()
-}
-
-$programs = [Environment]::GetFolderPath('Programs')
-$shortcutPath = Join-Path $programs 'PHOENIX HARDNESS.lnk'
-New-PhoenixShortcut $shortcutPath
-
-$startupShortcutPath = Join-Path ([Environment]::GetFolderPath('Startup')) 'PHOENIX HARDNESS.lnk'
-if (-not $NoStartup) {
-  New-PhoenixShortcut $startupShortcutPath
-}
-
-$taskbarShortcutPath = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\PHOENIX HARDNESS.lnk'
-if (-not $NoTaskbar) {
-  try {
-    $taskbarDirectory = Split-Path -Parent $taskbarShortcutPath
-    New-Item -ItemType Directory -Force -Path $taskbarDirectory | Out-Null
-    New-PhoenixShortcut $taskbarShortcutPath
-
-    # Windows exposes the pin verb only on some versions and locales. Invoke it
-    # when available; the taskbar-ready shortcut remains the deterministic fallback.
-    $programFolder = $shell.Namespace($programs)
-    $programItem = $programFolder.ParseName('PHOENIX HARDNESS.lnk')
-    $pinVerb = @($programItem.Verbs()) | Where-Object {
-      $_.Name.Replace('&', '') -match 'Pin to taskbar|barra de tareas|Taskleiste'
-    } | Select-Object -First 1
-    if ($null -ne $pinVerb) { $pinVerb.DoIt() }
-  } catch {
-    Write-Warning "Could not prepare the PHOENIX taskbar shortcut; the Start menu shortcut remains available. $($_.Exception.Message)"
+$shortcutRepair = Join-Path $resolvedInstallDirectory 'scripts\phoenix-windows-shortcut.mjs'
+if (Test-Path -LiteralPath $shortcutRepair) {
+  & node $shortcutRepair --install
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning 'PHOENIX installed, but Windows shortcut repair returned a non-zero exit code.'
   }
 }
 
-Write-Host "PHOENIX HARDNESS stable is installed at $resolvedInstallDirectory"
-Write-Host "Start menu shortcut: $shortcutPath"
-if (-not $NoStartup) { Write-Host "Windows startup shortcut: $startupShortcutPath" }
-if (-not $NoTaskbar) { Write-Host "Taskbar shortcut prepared: $taskbarShortcutPath" }
+Write-Host "PHOENIX stable is installed at $resolvedInstallDirectory"
+Write-Host 'Desktop/Start/taskbar integration is owned by the canonical Phoenix browser shortcut.'
 if (-not $NoLaunch) { & (Join-Path $resolvedInstallDirectory 'phoenix-windows.cmd') }

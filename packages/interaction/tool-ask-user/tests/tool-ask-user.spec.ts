@@ -111,6 +111,25 @@ describe('ask_user_question tool', () => {
     }])
   })
 
+  it('forwards sensitive questions to the existing ASK provider', async () => {
+    const ctx = await setup()
+    const seen: AskUserQuestionRequest[] = []
+    ctx.userQuestions.registerProvider({
+      async ask(request) {
+        seen.push(request)
+        return { answers: [{ id: 'clinical', selected: [] }], automatic: true }
+      },
+    })
+    const result = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('ask-clinical'),
+      name: 'ask_user_question',
+      arguments: { questions: [{ id: 'clinical', question: '¿Dolor?', sensitive: true }] },
+    })
+    expect(seen[0]?.questions[0]).toMatchObject({ sensitive: true })
+    expect(result).toMatchObject({ isError: false, value: { automatic: true, answers: [{ selected: [] }] } })
+  })
+
   it('passes recommended option labels through without adding schema fields', async () => {
     const ctx = await setup()
     const seen: AskUserQuestionRequest[] = []

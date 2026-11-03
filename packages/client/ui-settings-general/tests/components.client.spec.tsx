@@ -7,6 +7,7 @@ import { GeneralSection } from '../src/client/GeneralSection.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from '../src/client/chrome.tsx'
 import type { TriggerContentProps } from '../src/client/chrome.tsx'
 import { SettingsDocumentAction } from '../src/client/SettingsDocumentAction.tsx'
+import { DiagnosticsRow } from '../src/client/DiagnosticsRow.tsx'
 import { SettingsDescribeMirror } from '@phoenix-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
 import { SettingsDocumentStore } from '../src/client/settings-document-store.ts'
 import { en } from '../src/client/locales.ts'
@@ -145,5 +146,46 @@ describe('SettingsDocumentAction', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open configuration file' }))
     expect((await screen.findByRole('alert')).textContent).toBe('Could not open configuration file')
     expect(screen.getByRole('button', { name: 'Open configuration file' })).toBeTruthy()
+  })
+})
+
+
+describe('DiagnosticsRow', () => {
+  it('shows recent hidden-launch errors and opens the full log', async () => {
+    const openPath = vi.fn(() => Promise.resolve({
+      rpcId: 'open-diagnostics' as never,
+      result: { ok: true as const, value: { opened: true as const } },
+    }))
+    const host = {
+      describe: vi.fn(() => Promise.resolve({
+        rpcId: 'describe-diagnostics' as never,
+        result: {
+          ok: true as const,
+          value: {
+            version: '1',
+            cwd: 'C:\\Phoenix',
+            attachedSessions: 0,
+            home: 'C:\\Users\\tester',
+            canOpenPath: true,
+            diagnostics: {
+              available: true,
+              logPath: 'C:\\Users\\tester\\AppData\\Local\\Phoenix\\desktop-launch.log',
+              directory: 'C:\\Users\\tester\\AppData\\Local\\Phoenix',
+              recentErrors: ['[2026-10-04] ERROR example'],
+            },
+          },
+        },
+      })),
+      openPath,
+    }
+
+    render(<DiagnosticsRow {...kit} t={t} host={host as never} />)
+    expect(await screen.findByText('[2026-10-04] ERROR example')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Open full log' }))
+    await waitFor(() => {
+      expect(openPath).toHaveBeenCalledWith({
+        path: 'C:\\Users\\tester\\AppData\\Local\\Phoenix\\desktop-launch.log',
+      })
+    })
   })
 })

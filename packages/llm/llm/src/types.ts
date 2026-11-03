@@ -235,6 +235,11 @@ export interface LlmDiscoveredModel {
   contextWindow?: number
   /** Maximum output tokens, when disclosed. */
   maxTokens?: number
+  /** Exact available reasoning levels exposed by provider discovery, if any. */
+  reasoning?: {
+    efforts: Array<{ id: string; name: string; description?: string }>
+    defaultEffort?: string
+  }
 }
 
 /** One adapter-discovered model; catalog membership is advisory, not request validation. */

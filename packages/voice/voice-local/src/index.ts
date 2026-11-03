@@ -7,6 +7,8 @@
  */
 
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import type { Context } from '@phoenix-ai/cordis'
@@ -115,7 +117,11 @@ export function createSystemTextToSpeechProvider(options: SystemTtsProviderOptio
       assertSuccessful(await run({
         command,
         args,
-        stdin: request.text,
+        // Windows System.Speech must select an installed voice matching the
+        // requested language instead of silently using the English default.
+        stdin: platform === 'win32' && options.args === undefined
+          ? JSON.stringify({ text: request.text, language: request.language, gender: request.gender })
+          : request.text,
         ...request.signal === undefined ? {} : { signal: request.signal },
       }))
     },
@@ -163,7 +169,9 @@ export interface Config {
   readonly naturalRequestTimeoutMs?: number
   /** Maximum characters per semantic neural synthesis chunk. */
   readonly naturalMaxChunkChars?: number
-  /** Optional local Kokoro command; absence leaves Kokoro unavailable. */
+  /** Warm Kokoro in the background when an installed local model is detected. */
+  readonly kokoroPrewarm?: boolean
+  /** Optional local Kokoro command; absence auto-detects a completed PHOENIX install. */
   readonly kokoroCommand?: string
   /** Arguments for the Kokoro command. */
   readonly kokoroArgs?: string[]
@@ -171,7 +179,7 @@ export interface Config {
   readonly sttCommand?: string
   /** Arguments for the STT command. */
   readonly sttArgs?: string[]
-  /** Whether to register the platform fallback after neural TTS and Kokoro. */
+  /** Register legacy platform TTS for alerts; off by default on Windows to avoid robotic speech. */
   readonly systemTts?: boolean
 }
 
@@ -184,12 +192,34 @@ export const Config: z<Config> = z.object({
   naturalStartupTimeoutMs: z.number().default(45_000),
   naturalRequestTimeoutMs: z.number().default(120_000),
   naturalMaxChunkChars: z.number().default(180),
+  kokoroPrewarm: z.boolean().default(false),
   kokoroCommand: z.string(),
   kokoroArgs: z.array(z.string()).default([]),
   sttCommand: z.string(),
   sttArgs: z.array(z.string()).default([]),
-  systemTts: z.boolean().default(true),
+  systemTts: z.boolean().default(process.platform !== 'win32'),
 })
+
+/** Resolve the completed per-user Windows Kokoro installation.
+ * @param localAppData - Windows per-user application data directory.
+ * @param platform - Platform used to select the executable layout.
+ * @returns Persistent daemon process, or undefined until installation is complete.
+ */
+export function detectInstalledKokoro(
+  localAppData: string | undefined = process.env.LOCALAPPDATA,
+  platform: NodeJS.Platform = process.platform,
+): { readonly command: string; readonly args: readonly string[] } | undefined {
+  if (platform !== 'win32' || !localAppData?.trim()) return undefined
+  const home = join(localAppData, 'Phoenix', 'voice', 'kokoro')
+  const command = join(home, '.venv', 'Scripts', 'python.exe')
+  const daemon = join(home, 'kokoro-daemon.py')
+  const required = [
+    join(home, '.ready'), command, daemon,
+    join(home, 'kokoro-v1.0.onnx'), join(home, 'voices-v1.0.bin'),
+  ]
+  if (!required.every(file => existsSync(file))) return undefined
+  return { command, args: [daemon] }
+}
 
 /** Register configured local TTS and STT adapters into `ctx.voice`. */
 export function apply(ctx: Context, config: Config): void {
@@ -225,8 +255,43 @@ export function apply(ctx: Context, config: Config): void {
   const kokoroCommand = config.kokoroCommand?.trim()
   if (kokoroCommand !== undefined && kokoroCommand !== '') {
     voice.registerTextToSpeechProvider(createKokoroTextToSpeechProvider({ command: kokoroCommand, args: config.kokoroArgs ?? [] }))
+  } else {
+    let kokoro: ReturnType<typeof createNaturalTextToSpeechProvider> | undefined
+    let poll: ReturnType<typeof setInterval> | undefined
+    const attach = (): void => {
+      if (kokoro !== undefined) return
+      const installed = detectInstalledKokoro()
+      if (installed === undefined) return
+      kokoro = createNaturalTextToSpeechProvider({
+        id: 'kokoro',
+        priority: 100,
+        command: installed.command,
+        args: installed.args,
+      })
+      voice.registerTextToSpeechProvider(kokoro)
+      if (poll !== undefined) clearInterval(poll)
+      poll = undefined
+      if (config.kokoroPrewarm === true) {
+        void kokoro.warmup().catch((error: unknown) => {
+          ctx.logger('voice-local').warn(`Kokoro warmup failed; system voice remains available: ${String(error)}`)
+        })
+      }
+    }
+    attach()
+    if (process.platform === 'win32' && kokoro === undefined) {
+      poll = setInterval(attach, 15_000)
+      poll.unref()
+    }
+    ctx.effect(() => () => {
+      if (poll !== undefined) clearInterval(poll)
+      kokoro?.close()
+    }, 'kokoro voice installation and daemon teardown')
   }
-  if (config.systemTts !== false) voice.registerTextToSpeechProvider(createSystemTextToSpeechProvider())
+  // Windows SAPI defaults are characteristically robotic; opt in explicitly
+  // for alerts if desired. Hands-free conversation uses neural/browser routes.
+  if (config.systemTts ?? process.platform !== 'win32') {
+    voice.registerTextToSpeechProvider(createSystemTextToSpeechProvider())
+  }
   const sttCommand = config.sttCommand?.trim()
   if (sttCommand !== undefined && sttCommand !== '') {
     voice.registerSpeechToTextProvider(createLocalSpeechToTextProvider({ command: sttCommand, args: config.sttArgs ?? [] }))
@@ -311,7 +376,17 @@ function defaultSystemArgs(platform: NodeJS.Platform): readonly string[] {
   if (platform === 'win32') {
     return [
       '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
-      '$text = [Console]::In.ReadToEnd(); Add-Type -AssemblyName System.Speech; $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speaker.Speak($text)',
+      '$request = [Console]::In.ReadToEnd() | ConvertFrom-Json; Add-Type -AssemblyName System.Speech; ' +
+      '$speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer; ' +
+      '$culture = [string]$request.language; $language = $culture.Split("-")[0].ToLowerInvariant(); ' +
+      '$voices = @($speaker.GetInstalledVoices() | Where-Object { $_.Enabled -and $_.VoiceInfo.Culture.TwoLetterISOLanguageName -eq $language }); ' +
+      'if ($voices.Count -eq 0) { [Console]::Error.WriteLine("No native voice for " + $culture); exit 3 }; ' +
+      '$requestedGender = if ($request.gender -eq "masculine") { "Male" } else { "Female" }; ' +
+      '$gendered = @($voices | Where-Object { $_.VoiceInfo.Gender.ToString() -eq $requestedGender }); ' +
+      '$eligible = if ($gendered.Count -gt 0) { $gendered } else { $voices }; ' +
+      '$sameCulture = @($eligible | Where-Object { $_.VoiceInfo.Culture.Name -eq $culture }); ' +
+      '$choice = if ($sameCulture.Count -gt 0) { $sameCulture[0] } else { $eligible[0] }; ' +
+      '$speaker.SelectVoice($choice.VoiceInfo.Name); $speaker.Speak([string]$request.text)',
     ]
   }
   if (platform === 'darwin') return ['-f', '-']

@@ -1,6 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { AssistantMailPanel, type AssistantMailClient } from './AssistantMailPanel.tsx'
+import { TelegramConnectorSetup, type TelegramBotClient } from './TelegramConnectorSetup.tsx'
+import { TheOddsApiConnectorSetup,type TheOddsApiClient,type TheOddsApiSnapshot } from './TheOddsApiConnectorSetup.tsx'
+import { BinanceConnectorSetup } from './BinanceConnectorSetup.tsx'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { ChatGptWebSnapshot, IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
+import type { ChatGptWebSnapshot, IApiClient, OpenClawRuntimeSnapshot, ClawHubCatalogItem, ClawHubCatalogSnapshot } from '@phoenix-ai/dsh-api-remotes/client'
 import type { en } from './locales.ts'
 import type { ConnectorKey } from './connectors-locales.ts'
 import { CONNECTOR_CATALOG } from './connector-catalog.ts'
@@ -40,6 +44,7 @@ export interface McpRegistryCandidateView {
   repositoryUrl?: string
   websiteUrl?: string
   remoteUrl?: string
+  remoteSetupRequired?: 'headers' | 'variables'
 }
 
 /** One Host-proxied Official MCP Registry search result safe for the browser. */
@@ -60,10 +65,36 @@ export interface McpConnectorRuntimeView {
   reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
 }
 
+/** Secret-free PHOENIX-managed MCP identity and trusted reconstruction source. */
+export interface ManagedMcpConnectorView {
+  entryId: string
+  serverName: string
+  url: string
+  source?:
+    | { kind: 'registry'; name: string; version?: string }
+    | { kind: 'curated'; connectorId: string }
+}
+
+/** Secret-free readiness for an existing OpenClaw connector route. */
+export interface OpenClawConnectorView {
+  id: 'google-workspace' | 'github'
+  skillAlias: 'openclaw-gog' | 'openclaw-github'
+  skillInstalled: boolean
+  runtimeAvailable: boolean
+  connected: boolean
+  account?: string
+  phase: 'ready' | 'auth-required' | 'missing-runtime' | 'missing-skill' | 'api-unavailable'
+}
+
+/** OpenClaw connector routes currently reusable by Phoenix. */
+export interface OpenClawConnectorSnapshot {
+  connectors: OpenClawConnectorView[]
+}
+
 /** Combined runtime + managed MCP state returned by the Host. */
 export interface McpConnectorHubSnapshot {
   runtime: McpConnectorRuntimeView[]
-  managed: Array<{ entryId: string; serverName: string; url: string }>
+  managed: ManagedMcpConnectorView[]
 }
 
 /** Secret-free Jev setup/runtime projection. */
@@ -72,6 +103,17 @@ export interface JevMcpSnapshot {
   credentialConfigured: boolean
   status?: McpConnectorRuntimeView['status']
   reasonCode?: McpConnectorRuntimeView['reasonCode']
+}
+
+type CuratedMcpConnectorId = 'meta-publishing' | 'x' | 'x-docs' | 'social-engine' | 'microsoft-personal' | 'outlook-mail' | 'outlook-calendar' | 'microsoft-contacts' | 'onedrive' | 'microsoft-teams' | 'sharepoint' | 'github' | 'meta-devtools' | 'meta-whatsapp-business' | 'microsoft-learn' | 'microsoft-workiq' | 'microsoft-azure' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
+
+const CURATED_MCP_CONNECTOR_IDS = new Set<string>([
+  'meta-publishing', 'x', 'x-docs', 'social-engine', 'microsoft-personal', 'outlook-mail', 'outlook-calendar', 'microsoft-contacts', 'onedrive', 'microsoft-teams', 'sharepoint', 'github', 'meta-devtools', 'meta-whatsapp-business', 'microsoft-learn', 'microsoft-workiq', 'microsoft-azure', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
+  'slack', 'brave-search', 'filesystem', 'memory', 'fetch',
+])
+
+function isCuratedMcpConnectorId(value: string): value is CuratedMcpConnectorId {
+  return CURATED_MCP_CONNECTOR_IDS.has(value)
 }
 
 /** Browser-safe client for the Host-owned Official MCP Registry proxy and installer. */
@@ -87,6 +129,24 @@ export interface McpRegistryClient {
    * @returns Runtime and persistent managed connector state.
    */
   state(): Promise<McpConnectorHubSnapshot>
+  /** Secret-free X user/Phoenix account and developer credential status. */
+  xState?(): Promise<{
+    clientIdConfigured: boolean; clientSecretConfigured: boolean;
+    api: { configured: boolean; status?: string };
+    phoenixApi: { configured: boolean; status?: string };
+    docs: { configured: boolean; status?: string };
+  }>
+  /** Save credentials only through the trusted Host vault; never through a chat/tool response. */
+  configureX?(request: { clientId: string; clientSecret: string }): Promise<{
+    saved: true; clientIdConfigured: true; clientSecretConfigured: true
+  }>
+  /** Install one separately authorized X OAuth identity without registry lookup. */
+  connectX?(request: { identity?: 'user' | 'phoenix'; username?: string }): Promise<{
+    api: { status: 'installed' | 'already-installed'; connector: { serverName: string; entryId: string; url: string } };
+    docs: { status: 'installed' | 'already-installed'; connector: { serverName: string; entryId: string; url: string } }
+  }>
+  /** Retry one already-installed live MCP without clearing its stored authorization. */
+  reconnect?(request: { serverName: string }): Promise<{ accepted: boolean }>
   /**
    * Install an exact registry identity after Host-side endpoint revalidation.
    * @param request - Registry name and optional version selected by the user.
@@ -94,8 +154,33 @@ export interface McpRegistryClient {
    */
   install(request: { name: string; version?: string }): Promise<{
     status: 'installed' | 'already-installed'
-    connector: { entryId: string; serverName: string; url: string }
+    connector: ManagedMcpConnectorView
   }>
+  /** Install a Host-pinned curated MCP by connector id; no endpoint crosses the browser boundary. */
+  installCurated?(request: { connectorId: CuratedMcpConnectorId }): Promise<{
+    status: 'installed' | 'already-installed'
+    connector: ManagedMcpConnectorView
+  }>
+  /** Remove one exact PHOENIX-managed MCP. */
+  remove?(request: { entryId: string }): Promise<{ removed: boolean; liveUnloaded: boolean }>
+  /** Repair one managed MCP strictly from its persisted trusted source. */
+  repair?(request: { entryId: string }): Promise<{
+    status: 'installed' | 'already-installed'
+    connector: ManagedMcpConnectorView
+  }>
+  /** Reuse already-authenticated OpenClaw connector routes when present. */
+  openClawState?(): Promise<OpenClawConnectorSnapshot>
+  openClawRuntimeState?(): Promise<OpenClawRuntimeSnapshot>
+  openClawPluginTools?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>
+  openClawGatewayCredential?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>
+  configureOpenClawGatewayCredential?(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>
+  setOpenClawPluginTool?(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>
+  setOpenClawPluginEnabled?(request: { pluginId: string; enabled: boolean }): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>
+  clawHubCatalog?(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubCatalogRequest): Promise<ClawHubCatalogSnapshot>
+  clawHubState?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>
+  prepareClawHubCli?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>
+  clawHubInstallSkill?(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallReceipt>
+  clawHubInstallPackage?(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallReceipt>
   /** Read Jev setup/runtime state without exposing its secret. Optional for older hosts. */
   jevState?(): Promise<JevMcpSnapshot>
   /** Store a Jev key in Phoenix credentials and activate the pinned MCP endpoint. Optional for older hosts. */
@@ -144,6 +229,8 @@ interface AccountTelemetry {
   connectors?: ConnectorTelemetry[]
 }
 
+const NATIVE_CODEX_ACCOUNT_KEY = 'subagent-codex/account'
+
 interface Entry {
   key: string
   label: string
@@ -161,10 +248,15 @@ export interface AuthorizationPanelProps {
 }
 
 export interface ConnectorsSettingsSectionProps extends AuthorizationPanelProps {
+  /** Direct-launch mode from the main Phoenix navigation. */
+  launchContext?: 'discover' | 'connectors' | 'team' | 'codex-reconnect'
+  assistantMail?: AssistantMailClient
   connectorT: (key: ConnectorKey) => string
   chatGptWeb?: ChatGptWebBridgeClient
   settings?: ChatGptWebSettingsClient
   mcpRegistry?: McpRegistryClient
+  telegram?: TelegramBotClient
+  oddsApi?: TheOddsApiClient
 }
 
 function integer(value: number): string {
@@ -214,10 +306,19 @@ function normalize(value: string): string {
 }
 
 const TRANSIENT_CONNECTOR_REMOTE_RETRY_MS = [0, 150, 500, 1_500] as const
+// MCP plugins register their auth flow only after initialization. A plugin can
+// exceed the previous 2.87 s window (its initial startup budget is 5 s), so
+// do not declare an OAuth method absent before the registry has time to settle.
+const MCP_AUTH_FLOW_RETRY_MS = [0, 250, 500, 750, 1_000, 1_500, 2_000, 2_500, 3_000] as const
+const CURATED_OAUTH_MCP_IDS = new Set<string>([
+  'meta-devtools', 'meta-whatsapp-business', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare', 'slack',
+])
+const MCP_AUTH_FLOW_REFRESH_MS = 2_000
 
 function isTransientConnectorRemoteFailure(error: unknown): boolean {
   const message = String(error).toLowerCase()
   return [
+    'websocket disconnected',
     'failed to fetch',
     'fetch failed',
     'networkerror',
@@ -228,6 +329,12 @@ function isTransientConnectorRemoteFailure(error: unknown): boolean {
     'connection reset',
     'err_connection',
   ].some(fragment => message.includes(fragment))
+}
+
+async function readAuthorizationEntries(api: AuthorizationClient): Promise<Entry[]> {
+  const response = await api.list({})
+  if (!response.result.ok) throw new Error(response.result.error.message)
+  return response.result.value.entries as Entry[]
 }
 
 async function readConnectorRemoteWithRetry<T>(
@@ -286,8 +393,16 @@ function connectorStatus(
 
 function entryMatchesFamily(entry: Entry, family: string | undefined): boolean {
   if (family === undefined) return false
-  const needle = normalize(family)
-  return [entry.key, entry.label, entry.telemetry?.provider ?? ''].some(value => normalize(value).includes(needle))
+  const needle = normalize(family).split(/[^a-z0-9]+/u).filter(Boolean).join('-')
+  return [entry.key, entry.label, entry.telemetry?.provider ?? ''].some((value) => {
+    const tokens = normalize(value).split(/[^a-z0-9]+/u).filter(Boolean).join('-')
+    return `-${tokens}-`.includes(`-${needle}-`)
+  })
+}
+
+function entryMatchesDefinitionAuthorization(entry: Entry, definition: ConnectorDefinition): boolean {
+  if (definition.authorizationKey !== undefined) return entry.key === definition.authorizationKey
+  return entryMatchesFamily(entry, definition.providerFamily)
 }
 
 function liveMatchesDefinition(live: ConnectorTelemetry, definition: ConnectorDefinition): boolean {
@@ -295,6 +410,42 @@ function liveMatchesDefinition(live: ConnectorTelemetry, definition: ConnectorDe
   const liveId = normalize(live.id)
   const liveName = normalize(live.name)
   return ids.includes(liveId) || ids.includes(liveName) || normalize(definition.name) === liveName
+}
+
+function serverMatchesDefinition(serverName: string, definition: ConnectorDefinition): boolean {
+  if (definition.authorizationKey?.startsWith('llm-pi-ai/') === true) return false
+  const server = normalize(serverName)
+  // GitHub Copilot is an independent model provider, not a GitHub repository
+  // MCP runtime. Fuzzy "github" includes "github-copilot" and caused a false
+  // connected status and incorrect authorization routing.
+  if (definition.id === 'github') {
+    return server === 'github' || server === 'github-mcp' || server === 'github-mcp-server'
+  }
+  // Do not show X Docs or Kira's distinct Phoenix X identity as an authenticated
+  // X user. These have separate OAuth and publishing permissions.
+  if (definition.id === 'x') return server === 'x-api'
+  if (definition.id === 'x-docs') return server === 'x-docs'
+  if (definition.id === 'social-engine') return server === 'social-engine'
+  // Distinct Graph grants must never inherit the old combined Microsoft personal runtime.
+  if (['outlook-mail', 'outlook-calendar', 'microsoft-contacts', 'onedrive', 'microsoft-teams', 'sharepoint'].includes(definition.id)) {
+    return server === definition.id
+  }
+  const needles = [definition.id, definition.name, ...(definition.aliases ?? [])]
+    .map(normalize)
+    .filter(value => value.length >= 3)
+  return needles.some(needle => server === needle || server.includes(needle) || needle.includes(server))
+}
+
+function runtimeMatchesDefinition(runtime: McpConnectorRuntimeView, definition: ConnectorDefinition): boolean {
+  return serverMatchesDefinition(runtime.serverName, definition)
+}
+
+function managedMatchesDefinition(managed: ManagedMcpConnectorView, definition: ConnectorDefinition): boolean {
+  if (managed.source?.kind === 'curated') return managed.source.connectorId === definition.id
+  if (managed.source?.kind === 'registry' && definition.registryName !== undefined) {
+    return managed.source.name === definition.registryName
+  }
+  return serverMatchesDefinition(managed.serverName, definition)
 }
 
 
@@ -343,9 +494,8 @@ function accountPresentation(entry: Entry): {
   logoUrl?: string
   technical?: string
 } {
-  const definition = catalogDefinitionForText(
-    `${entry.label} ${entry.key} ${entry.telemetry?.provider ?? ''}`,
-  )
+  const definition = CONNECTOR_CATALOG.find(candidate =>
+    entryMatchesDefinitionAuthorization(entry, candidate))
   const technical = collapsedTechnicalName(entry.telemetry?.provider ?? entry.label)
   if (definition !== undefined) {
     return {
@@ -363,6 +513,14 @@ function accountPresentation(entry: Entry): {
   return { name, technical }
 }
 
+function managedAuthorizationEntry(
+  connector: ManagedMcpConnectorView,
+  entries: readonly Entry[],
+): Entry | undefined {
+  const id = connector.serverName.toLowerCase().replaceAll('_', '-')
+  return entries.find(entry => entry.key === `mcp-client/${id}`)
+}
+
 function runtimeForEntry(
   entry: Entry,
   runtime: readonly McpConnectorRuntimeView[],
@@ -376,9 +534,6 @@ function accountStatus(
   runtime: McpConnectorRuntimeView | undefined,
   t: ConnectorsSettingsSectionProps['connectorT'],
 ): { text: string; className: string } {
-  if (runtime?.status === 'ready' || entry.telemetry !== undefined) {
-    return { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
-  }
   if (runtime?.status === 'starting') {
     return { text: t('connectingStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
   }
@@ -394,6 +549,9 @@ function accountStatus(
   if (runtime?.status === 'disconnected') {
     return { text: t('disconnectedStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' }
   }
+  if (runtime?.status === 'ready' || entry.telemetry !== undefined) {
+    return { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
+  }
   if (entry.stored !== undefined) {
     return { text: t('reconnectRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
   }
@@ -401,27 +559,65 @@ function accountStatus(
 }
 
 function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
-  if (account?.stored === undefined) return false
+  if (account === undefined || (account.stored === undefined && account.telemetry === undefined)) return false
   const scopedConnectors = account.telemetry?.connectors
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, t, onAuthorize, onConfigure, pending }: {
+function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, openClawRuntime, onRefreshOpenClaw, clawHubFeatured, telegram, oddsApi, oddsApiSnapshot, onOddsApiStatus, connected, reauthorizeCodex, t, authorizationProgress,
+  onAuthorize, onDisconnect, onConfigure, onInstallCurated, onFindOfficial, onFindRegistry, onReconnect, onRepair, onRemove, onChanged,
+  pending, installingCurated, reconnecting,
+  repairing, removing }: {
   definition: ConnectorDefinition
   live?: ConnectorTelemetry | undefined
   account?: Entry | undefined
   mcpRuntime?: McpConnectorRuntimeView | undefined
-  managed?: boolean
+  managed?: ManagedMcpConnectorView | undefined
+  openClaw?: OpenClawConnectorView | undefined
+  openClawRuntime?: OpenClawRuntimeSnapshot | undefined
+  onRefreshOpenClaw?: (() => void) | undefined
+  clawHubFeatured?: readonly ClawHubCatalogItem[] | null | undefined
+  telegram?: TelegramBotClient | undefined
+  oddsApi?: TheOddsApiClient | undefined
+  oddsApiSnapshot?: TheOddsApiSnapshot | undefined
+  onOddsApiStatus: (snapshot:TheOddsApiSnapshot)=>void
+  connected: boolean
+  reauthorizeCodex?: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
-  onAuthorize: (entry: Entry) => void
+  authorizationProgress?: ReactNode
+  onChanged: () => void
+  onAuthorize: (entry: Entry, preferredMethod?: string) => void
+  onDisconnect?: ((entry: Entry) => void) | undefined
   onConfigure?: (() => void) | undefined
+  onInstallCurated?: (() => void) | undefined
+  onFindOfficial?: (() => void) | undefined
+  onFindRegistry?: (() => void) | undefined
+  onReconnect?: ((runtime: McpConnectorRuntimeView) => void) | undefined
+  onRepair?: ((connector: ManagedMcpConnectorView) => void) | undefined
+  onRemove?: ((connector: ManagedMcpConnectorView) => void) | undefined
   pending: boolean
+  installingCurated: boolean
+  reconnecting: boolean
+  repairing: boolean
+  removing: boolean
 }): ReactNode {
-  const connectedByAccount = accountGrantConnectsCatalogEntry(account)
+  const [microsoftBillingAcknowledged, setMicrosoftBillingAcknowledged] = useState(false)
+  const microsoftRequiresBillingAcknowledgement = definition.id === 'microsoft-workiq'
+    || definition.id === 'microsoft-azure'
+  const serviceGraph = ['microsoft-personal', 'outlook-mail', 'outlook-calendar',
+    'microsoft-contacts', 'onedrive', 'microsoft-teams', 'sharepoint'].includes(definition.id)
+  const needsIndependentVerification = serviceGraph || definition.id === 'x'
+  const connectedByAccount = managed === undefined
+    && mcpRuntime === undefined
+    && accountGrantConnectsCatalogEntry(account)
   const installUrl = safeExternalHref(live?.installUrl)
   const liveStatus = live === undefined ? undefined : connectorStatus(live, t)
   const mcpStatus = mcpRuntime?.status === 'ready'
-    ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
+    ? mcpRuntime.toolNames.length > 0
+      ? needsIndependentVerification
+        ? { text: 'MCP iniciado · verifica OAuth con Kira', className: connectorStyles['connectorStatusWarn'] ?? '' }
+        : { text: t('callableStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
+      : { text: t('registryNoToolsStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
     : mcpRuntime?.status === 'starting'
       ? { text: t('connectingStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
       : mcpRuntime?.status === 'auth-required'
@@ -430,23 +626,76 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, t, onAuth
           ? { text: t('brokenStatus'), className: connectorStyles['connectorStatusError'] ?? '' }
           : mcpRuntime?.status === 'disconnected'
             ? { text: t('disconnectedStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' }
-            : managed === true
-              ? { text: t('jevConfiguredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
+            : managed !== undefined
+              ? { text: t('runtimeMissingStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
               : undefined
-  const status = liveStatus ?? mcpStatus ?? (connectedByAccount
+  const companionStatus = definition.id === 'openclaw'
+    ? {
+        text: openClawRuntime === undefined ? t('ocWaiting')
+          : openClawRuntime.installed ? t('ocDetected') : t('ocMissing'),
+        className: connectorStyles['connectorStatusWarn'] ?? '',
+      }
+    : undefined
+  const openClawStatus = openClaw?.connected === true
+    ? { text: t('openClawConnectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
+    : undefined
+  // MCP state is authoritative whenever installed: a gh CLI session cannot
+  // hide a failed or unauthenticated GitHub MCP.
+  const status = (definition.id==='the-odds-api' && oddsApiSnapshot!==undefined
+    ? {text:oddsApiSnapshot.verified?'API verificada':oddsApiSnapshot.configured?'Clave guardada · sin verificar':'Clave pendiente',
+      className:oddsApiSnapshot.verified?(connectorStyles['connectorStatusReady']??''):(connectorStyles['connectorStatusWarn']??'')}
+    : undefined)
+    ?? (definition.id === 'binance' && mcpRuntime !== undefined && mcpRuntime.status !== 'ready'
+    ? { text: 'Agentic OAuth: aprobación de Binance pendiente', className: connectorStyles['connectorStatusWarn'] ?? '' }
+    : undefined)
+    ?? (reauthorizeCodex ? { text: t('reconnectRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' } : undefined)
+    ?? (managed !== undefined || mcpRuntime !== undefined ? mcpStatus : undefined)
+    ?? companionStatus ?? openClawStatus ?? mcpStatus ?? liveStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : definition.id === 'binance'
-      ? { text: t('binancePaperReadyStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
-      : definition.mode === 'mcp'
-        ? { text: definition.id === 'jev' ? t('jevOptionalStatus') : t('mcpReadyStatus'), className: '' }
-        : definition.mode === 'api-key'
-          ? { text: t('apiKeyStatus'), className: '' }
-          : account !== undefined
-            ? { text: t('availableStatus'), className: '' }
-            : { text: t('adapterNeededStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' })
-  const oauthAccount = account !== undefined && account.methods.some(candidate => candidate.id === 'oauth')
+      ? { text: t('binancePaperReadyStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
+      : definition.provenance === 'private-owner'
+        ? { text: t('privateOwnerStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
+        : definition.mode === 'native'
+          ? { text: t('availableStatus'), className: '' }
+          : definition.mode === 'mcp'
+            ? { text: t('mcpReadyStatus'), className: '' }
+            : definition.mode === 'api-key'
+              ? { text: t('apiKeyStatus'), className: '' }
+              : account !== undefined
+                ? { text: t('availableStatus'), className: '' }
+                : definition.curatedMcp === true || definition.registryName !== undefined
+                  ? { text: t('officialInstallAvailableStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
+                  : { text: t('officialAdapterUnavailableStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' })
+  const authorizationAccount = account !== undefined && account.methods.length > 0
     ? account
     : undefined
+  const reauthorizationRequired = mcpRuntime?.status === 'auth-required'
+    && authorizationAccount?.stored !== undefined
+  const openClawRuntimeMissing = definition.id === 'github' && openClaw?.phase === 'missing-runtime'
+  const shouldShowAuthorization = authorizationAccount !== undefined
+    // Stored Codex OAuth credentials are not proof that their refresh token works.
+    // Native Live must always offer reauthorization, including expired grants.
+    && (definition.id === 'codex' || !connectedByAccount)
+    && (openClaw?.connected !== true || managed !== undefined || mcpRuntime !== undefined)
+    && (!openClawRuntimeMissing || managed !== undefined || mcpRuntime !== undefined)
+    && (definition.id === 'codex' || authorizationAccount.stored === undefined || mcpRuntime?.status === 'auth-required'
+      || (authorizationAccount.methods.some(method => method.id === 'credentials')
+        && mcpRuntime !== undefined && mcpRuntime.status !== 'ready'))
+  const missingOAuthFlow = managed !== undefined && mcpRuntime?.status === 'auth-required'
+    && authorizationAccount === undefined
+  const canRepair = managed !== undefined && managed.source !== undefined && onRepair !== undefined
+    && (mcpRuntime === undefined || mcpRuntime.status === 'failed'
+      || mcpRuntime.status === 'disconnected'
+      || (mcpRuntime.status === 'ready' && mcpRuntime.toolNames.length === 0)
+      || missingOAuthFlow)
+  // Reconnecting an auth-required MCP with no registered flow cannot produce
+  // consent. Offer the source-aware Repair action instead of looping forever.
+  const canReconnect = mcpRuntime !== undefined
+    && (mcpRuntime.status === 'failed'
+      || mcpRuntime.status === 'disconnected'
+      || (missingOAuthFlow && !canRepair))
+    && onReconnect !== undefined
   return (
     <article className={connectorStyles['connectorCard']} data-connector-id={definition.id}>
       <div className={connectorStyles['connectorTop']}>
@@ -467,61 +716,364 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, t, onAuth
         </div>
       </div>
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
+      {definition.id === 'openclaw' ? (
+        <div className={styles['advancedHint']}>
+          <p>{t('ocNote')}</p>
+          {openClawRuntime?.hostNodeSupported === false ? <p>{t('ocNodeMismatch')}</p> : null}
+          {openClawRuntime === undefined ? <p>{t('ocWaiting')}</p> : (
+            <p>
+              {([
+                ['ocGateway', openClawRuntime.gateway],
+                ['ocBrowser', openClawRuntime.browser],
+                ['ocPlugins', openClawRuntime.plugins],
+                ['ocChannels', openClawRuntime.channels],
+              ] as const).map(([label, phase]) => (
+                <span key={label} style={{ display: 'inline-block', marginRight: 12 }}>
+                  {t(label)}: {phase === 'responded' ? t('ocResponded')
+                    : phase === 'not-installed' ? t('ocMissing') : t('ocUnavailable')}
+                </span>
+              ))}
+            </p>
+          )}
+          <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
+            <strong>{t('ocClawHubFeatured')}</strong>
+            {clawHubFeatured === undefined ? <p>{t('ocWaiting')}</p>
+              : clawHubFeatured === null ? <p>{t('ocClawHubUnavailable')}</p>
+                : clawHubFeatured.length === 0 ? <p>{t('ocClawHubNone')}</p>
+                  : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {clawHubFeatured.map(item => (
+                        <span key={item.name} className={connectorStyles['connectorCategory']}
+                          title={item.description}>{item.displayName}</span>
+                      ))}
+                    </div>}
+            <p>{t('ocClawHubMore')}</p>
+          </div>
+          {onRefreshOpenClaw === undefined ? null : (
+            <button className={hubStyles['compactButton']} type="button" onClick={onRefreshOpenClaw}>{t('ocRefresh')}</button>
+          )}
+        </div>
+      ) : null}
+      {definition.id === 'binance' ? <BinanceConnectorSetup onChanged={onChanged}
+        {...authorizationAccount?.methods.some(method => method.id === 'oauth')
+          ? { onAuthorizeMcp: () => { onAuthorize(authorizationAccount, 'oauth') } } : {}} /> : null}
+      {definition.id === 'telegram' ? <TelegramConnectorSetup client={telegram} /> : null}
+      {definition.id === 'the-odds-api' ? <TheOddsApiConnectorSetup client={oddsApi}
+        snapshot={oddsApiSnapshot} onStatus={onOddsApiStatus}/> : null}
+      {definition.id === 'github' ? (
+        <div className={styles['advancedHint']}>
+          <p>
+            GitHub MCP remoto no admite registro OAuth dinámico. Utiliza un token
+            personal (PAT); GitHub Copilot como proveedor de modelos es independiente.{' '}
+            <a href="https://github.com/settings/personal-access-tokens/new"
+              target="_blank" rel="noopener noreferrer">Crear token en GitHub</a>
+            {' '}·{' '}
+            <a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/github-mcp.md"
+              target="_blank" rel="noopener noreferrer">Guía completa</a>
+          </p>
+          <details>
+            <summary>Cómo crear el token y configurar los permisos</summary>
+            <ol>
+              <li>Inicia sesión en GitHub y abre «Crear token en GitHub».</li>
+              <li>En Token name escribe «Phoenix GitHub MCP» y elige una caducidad (por ejemplo, 90 días).</li>
+              <li>En Resource owner elige tu cuenta o la organización autorizada.</li>
+              <li>En Repository access selecciona solo los repositorios que utilizará Phoenix.</li>
+              <li>En Repository permissions concede Contents, Issues, Pull requests y Actions en Read-only según lo que necesites. Metadata es automático.</li>
+              <li>Solo si Kira debe modificar repositorios, aumenta a Read and write los permisos concretos necesarios.</li>
+              <li>Pulsa Generate token, cópialo una vez y pégalo únicamente en «Configurar token GitHub» dentro de Phoenix.</li>
+            </ol>
+            <p>No compartas el token en el chat, commits ni registros. Phoenix lo guardará en su vault local.</p>
+          </details>
+        </div>
+      ) : null}
+      {definition.id === 'meta-devtools' ? (
+        <div className={styles['advancedHint']}>
+          <p>
+            MCP oficial de Meta para tus aplicaciones, permisos, App Review, uso de API y webhooks.
+            No sirve para publicar directamente en páginas de Facebook o cuentas de Instagram.
+            {' '}<a href="https://developers.facebook.com/documentation/mcp/devtools-mcp"
+              target="_blank" rel="noopener noreferrer">Documentación oficial</a>
+            {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/meta-mcp.md"
+              target="_blank" rel="noopener noreferrer">Guía de Phoenix</a>.
+          </p>
+          <p>OAuth de Meta requiere autorización real y puede exigir un redirect HTTPS; si Meta rechaza
+            el callback local de Phoenix, la conexión permanecerá pendiente, nunca conectada ficticiamente.</p>
+        </div>
+      ) : null}
+      {definition.id === 'meta-whatsapp-business' ? (
+        <div className={styles['advancedHint']}>
+          <p>
+            Para WhatsApp Business Cloud API, no para WhatsApp personal.
+            Necesitas permisos de administrador en Meta Business y en la app de WhatsApp,
+            además de aceptar los términos de Cloud API.
+            {' '}<a href="https://mcp.facebook.com/whatsapp_business_tools"
+              target="_blank" rel="noopener noreferrer">Servidor oficial</a>
+            {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/meta-mcp.md"
+              target="_blank" rel="noopener noreferrer">Guía de Phoenix</a>.
+          </p>
+          <p>Conectar y consultar no supone envíos gratuitos ilimitados. Algunos mensajes y
+            operaciones pueden generar cargos de Meta: confirma el coste y pide aprobación
+            antes de cualquier envío o cambio de facturación.</p>
+        </div>
+      ) : null}
+      {definition.id === 'x' ? (
+        <div className={styles['advancedHint']}>
+          <p><strong>OAuth oficial de X no es OAuth MCP genérico.</strong> El puente xurl necesita
+            una aplicación X registrada, Client ID y Client Secret guardados en el vault,
+            el callback exacto <code>http://localhost:8080/callback</code> autorizado
+            en la configuración de la aplicación y acceso API habilitado.
+            El primer inicio abre la autorización del navegador desde Windows;
+            el servidor MCP iniciado no prueba que haya una sesión válida.</p>
+          <details>
+            <summary>Diagnosticar autorización que no abre o falla</summary>
+            <ol>
+              <li>Verifica el callback en el portal de desarrolladores X, incluido puerto 8080.</li>
+              <li>Comprueba que el puerto 8080 está libre y que el navegador puede acceder al equipo donde corre Phoenix.</li>
+              <li>En la terminal del mismo usuario Windows, ejecuta <code>npx -y @xdevplatform/xurl auth status</code> para ver el estado (sin copiar tokens al chat).</li>
+              <li>Si no aparece la ventana de autorización, usa la ruta oficial <code>npx -y @xdevplatform/xurl auth oauth2 --headless</code> y sigue las instrucciones locales. El código de retorno no debe pegarse en el chat.</li>
+              <li>Si OAuth funciona pero X devuelve <code>client-not-enrolled</code>, revisa la asignación del plan de API y el entorno Production en el portal X; pueden existir costes.</li>
+            </ol>
+            <p>Después reconecta el MCP y prueba una lectura real. No marcar como cuenta conectada solamente por ver herramientas.</p>
+            <a href="https://github.com/xdevplatform/xurl" target="_blank" rel="noopener noreferrer">Documentación oficial xurl</a>
+          </details>
+        </div>
+      ) : null}
+      {definition.id === 'microsoft-learn' ? (
+        <p className={styles['advancedHint']}>
+          Gratuito: documentación pública oficial sin inicio de sesión ni acceso a correos privados.
+          {' '}<a href="https://learn.microsoft.com/en-us/training/support/mcp-developer-reference"
+            target="_blank" rel="noopener noreferrer">Documentación oficial</a>.
+        </p>
+      ) : null}
+      {definition.id === 'microsoft-workiq' ? (
+        <div className={styles['advancedHint']}>
+          <p>Microsoft Work IQ es una puerta de entrada a Outlook, Calendar, Teams,
+            OneDrive y SharePoint, pero su API <strong>se factura por uso</strong>. Necesitas
+            plan de pago habilitado, consentimiento administrativo de Entra y aceptar
+            el contrato de licencia (EULA) antes del primer uso.</p>
+          <p>Tras instalarlo, acepta la licencia en una terminal propia:
+            <code>npx -y @microsoft/workiq accept-eula</code>. No se aceptará automáticamente.</p>
+          <p><a href="https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/cli"
+            target="_blank" rel="noopener noreferrer">Requisitos oficiales</a>
+            {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/microsoft-mcp.md"
+              target="_blank" rel="noopener noreferrer">Guía Phoenix</a></p>
+        </div>
+      ) : null}
+      {definition.id === 'microsoft-azure' ? (
+        <div className={styles['advancedHint']}>
+          <p>Azure MCP oficial utiliza <code>npx</code> y las credenciales de
+            <code>az login</code>. El MCP no tiene coste de licencia independiente,
+            pero ejecutar operaciones sobre recursos Azure puede generar cargos.
+            El modo consolidado reduce el volumen de herramientas.</p>
+          <p><a href="https://learn.microsoft.com/en-us/azure/developer/azure-mcp-server/concepts"
+            target="_blank" rel="noopener noreferrer">Documentación oficial</a>
+            {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/microsoft-mcp.md"
+              target="_blank" rel="noopener noreferrer">Guía Phoenix</a></p>
+        </div>
+      ) : null}
+      {serviceGraph ? (
+        <div className={styles['advancedHint']}>
+          <p><strong>OAuth Microsoft independiente:</strong> pulsa Instalar y luego pide a Kira
+            «Conecta {definition.name} con Microsoft». Kira debe ejecutar <code>microsoft_status</code>,
+            solicitar una sola vez el Application (client) ID público si falta mediante
+            <code>microsoft_setup</code>, iniciar <code>microsoft_login_start</code>, mostrar
+            el código y la URL oficial, completar <code>microsoft_login_complete</code> y
+            comprobar <code>microsoft_profile</code>. El dispositivo pide tu consentimiento;
+            no se debe pedir contraseña ni mostrar el conector como autenticado por iniciar su MCP.</p>
+          <p><a href="https://entra.microsoft.com/" target="_blank" rel="noopener noreferrer">Registrar aplicación Microsoft</a>
+            {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/microsoft-mcp.md"
+              target="_blank" rel="noopener noreferrer">Guía de autorización</a>.
+            {' '}Entra debe permitir cuentas personales y/o de organización, cliente público y flujo de dispositivo.
+            Teams y SharePoint requieren cuenta de trabajo/educación y pueden necesitar autorización administrativa.</p>
+        </div>
+      ) : null}
+      {microsoftRequiresBillingAcknowledgement && managed === undefined ? (
+        <label className={styles['advancedHint']}>
+          <input type="checkbox" checked={microsoftBillingAcknowledged}
+            onChange={(event) => { setMicrosoftBillingAcknowledged(event.target.checked) }} />
+          {' '}Comprendo que debo autorizar los costes y requisitos de Microsoft
+          antes de activar este MCP. La instalación no garantiza uso gratuito.
+        </label>
+      ) : null}
+      {definition.id === 'figma' && managed?.url === 'http://127.0.0.1:3845/mcp'
+        && mcpRuntime?.status !== 'ready' ? (
+          <p className={styles['advancedHint']}>
+            Figma Desktop no abre OAuth: inicia Figma, abre un diseño en Dev Mode y habilita el servidor MCP local.
+            Para OAuth utiliza el MCP remoto oficial de Figma.
+          </p>
+        ) : null}
+      {definition.id === 'memory' && mcpRuntime?.status === 'failed' ? (
+        <p className={styles['advancedHint']}>
+          Memory MCP es local (stdio), no requiere OAuth. Pulsa Reparar y comprueba que Node.js y npx están disponibles
+          para el proceso de PHOENIX; si continúa roto, revisa el error de arranque del Host.
+        </p>
+      ) : null}
+      {missingOAuthFlow && definition.id !== 'binance' ? (
+        <p role="alert" className={styles['advancedHint']}>
+          El Host solicita autorización, pero el plugin MCP no registró su método OAuth.
+          Usa Reparar para reconstruir el conector desde su origen oficial, sin eliminar las credenciales existentes.
+        </p>
+      ) : null}
+      {openClaw?.connected !== true ? null : (
+        <p className={styles['advancedHint']}>
+          {openClaw.account === undefined ? openClaw.skillAlias : `${openClaw.skillAlias} · ${openClaw.account}`}
+          {definition.id === 'github' ? ' · API CLI verificada (independiente del MCP)' : ''}
+        </p>
+      )}
+      {definition.id === 'github' && managed === undefined && mcpRuntime === undefined ? (
+        <p className={styles['advancedHint']}>
+          El MCP oficial de GitHub proporciona herramientas de repositorios y PR.
+          Se autoriza con GitHub, no con GitHub Copilot como modelo.
+        </p>
+      ) : null}
+      {definition.id === 'github' && openClaw?.phase === 'api-unavailable'
+        && managed === undefined ? (
+          <p role="alert" className={styles['advancedHint']}>
+            GitHub CLI está autenticado, pero gh api user no pudo verificar acceso a la API.
+            Comprueba permisos/red o utiliza el MCP oficial.
+          </p>
+        ) : null}
       <div className={connectorStyles['connectorFooter']}>
         <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
-        {onConfigure !== undefined ? (
-          <button className={connectorStyles['connectorPrimaryButton']} type="button" disabled={pending} onClick={onConfigure}>
-            {t('configure')}
-          </button>
-        ) : installUrl !== undefined ? (
-          <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
-        ) : oauthAccount === undefined || connectedByAccount ? null : (
-          <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight} onClick={() => { onAuthorize(oauthAccount) }}>
-            {t('authorize')}
-          </button>
-        )}
+        <div className={connectorStyles['connectorActions']}>
+          {onConfigure !== undefined ? (
+            <button className={connectorStyles['connectorPrimaryButton']} type="button" disabled={pending} onClick={onConfigure}>
+              {t('configure')}
+            </button>
+          ) : installUrl !== undefined ? (
+            <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
+          ) : null}
+          {shouldShowAuthorization && definition.id !== 'binance' ? (
+            <button className={hubStyles['compactButton']} type="button" disabled={pending || authorizationAccount.inFlight} onClick={() => { onAuthorize(authorizationAccount) }}>
+              {definition.id === 'github' && authorizationAccount.methods.some(method => method.id === 'credentials')
+                ? 'Configurar token GitHub'
+                : reauthorizationRequired || connected ? t('reauthorize') : t('authorize')}
+            </button>
+          ) : null}
+          {account?.stored !== undefined && account.disconnectable === true && onDisconnect !== undefined ? (
+            <button className={hubStyles['compactButton']} type="button" disabled={pending || account.inFlight}
+              onClick={() => { onDisconnect(account) }}>
+              {t('disconnect')}
+            </button>
+          ) : null}
+          {canReconnect ? (
+            <button
+              className={hubStyles['compactButton']}
+              type="button"
+              disabled={pending || reconnecting || repairing || removing}
+              onClick={() => {
+                if (mcpRuntime !== undefined) onReconnect?.(mcpRuntime)
+              }}
+            >
+              {reconnecting ? t('connectingStatus') : mcpRuntime.status === 'auth-required' ? t('authorize') : t('reconnect')}
+            </button>
+          ) : null}
+          {canRepair ? (
+            <button
+              className={hubStyles['compactButton']}
+              type="button"
+              disabled={pending || repairing || removing}
+              onClick={() => { onRepair(managed) }}
+            >
+              {repairing ? t('repairing') : t('repair')}
+            </button>
+          ) : null}
+          {managed !== undefined && onRemove !== undefined ? (
+            <button
+              className={connectorStyles['connectorSecondaryButton']}
+              type="button"
+              disabled={pending || repairing || removing}
+              onClick={() => { onRemove(managed) }}
+            >
+              {removing ? t('uninstalling') : t('uninstall')}
+            </button>
+          ) : null}
+          {managed === undefined && mcpRuntime === undefined && authorizationAccount === undefined
+            && (openClaw?.connected !== true || definition.id === 'github')
+            && definition.curatedMcp === true && onInstallCurated !== undefined ? (
+              <button
+                className={connectorStyles['connectorPrimaryButton']}
+                type="button"
+                disabled={pending || installingCurated
+                  || (microsoftRequiresBillingAcknowledgement && !microsoftBillingAcknowledged)}
+                onClick={onInstallCurated}
+              >
+                {installingCurated ? t('installing') : definition.id === 'github' ? 'Instalar MCP GitHub' : t('install')}
+              </button>
+            ) : null}
+          {managed === undefined && (authorizationAccount === undefined || openClawRuntimeMissing)
+            && openClaw?.connected !== true && onFindOfficial !== undefined ? (
+              <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFindOfficial}>
+                {definition.registryName === undefined ? t('findConnector') : t('findOfficialConnector')}
+              </button>
+            ) : null}
+          {managed === undefined && authorizationAccount === undefined && openClaw?.connected !== true && definition.provenance === 'registry-listed' && onFindRegistry !== undefined ? (
+            <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFindRegistry}>
+              {t('findConnector')}
+            </button>
+          ) : null}
+        </div>
       </div>
+      {authorizationProgress}
     </article>
   )
 }
 
 function registryCandidateLogo(candidate: McpRegistryCandidateView): string | undefined {
-  const registryIcon = candidate.icons
+  return candidate.icons
     .map(icon => safeExternalHref(icon.src))
     .find((src): src is string => src !== undefined)
-  if (registryIcon !== undefined) return registryIcon
-
-  const haystack = normalize(`${candidate.name} ${candidate.title}`)
-  const catalogMatch = CONNECTOR_CATALOG.find((definition) => {
-    const aliases = [definition.id, definition.name, ...(definition.aliases ?? [])]
-    return aliases.some((alias) => {
-      const needle = normalize(alias)
-      return needle.length >= 3 && haystack.includes(needle)
-    })
-  })
-  return safeExternalHref(catalogMatch?.logoUrl)
 }
 
-function OfficialMcpCard({ candidate, stale, installed, installing, t, onInstall }: {
+function OfficialMcpCard({ candidate, stale, managed, runtime, installing, reconnecting, repairing, removing, t,
+  onInstall, onReconnect, onRepair, onRemove }: {
   candidate: McpRegistryCandidateView
   stale: boolean
-  installed: boolean
+  managed?: ManagedMcpConnectorView | undefined
+  runtime?: McpConnectorRuntimeView | undefined
   installing: boolean
+  reconnecting: boolean
+  repairing: boolean
+  removing: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   onInstall: (candidate: McpRegistryCandidateView) => void
+  onReconnect?: ((runtime: McpConnectorRuntimeView) => void) | undefined
+  onRepair?: ((connector: ManagedMcpConnectorView) => void) | undefined
+  onRemove?: ((connector: ManagedMcpConnectorView) => void) | undefined
 }): ReactNode {
   const source = safeExternalHref(candidate.repositoryUrl) ?? safeExternalHref(candidate.websiteUrl)
   const logoUrl = registryCandidateLogo(candidate)
-  const definition = catalogDefinitionForText(`${candidate.name} ${candidate.title}`)
-  const displayName = definition?.name ?? candidate.title
+  const displayName = candidate.title
   const technicalName = normalize(displayName) === normalize(candidate.name) ? undefined : candidate.name
-  const configurePinnedJev = definition?.id === 'jev'
   const installable = candidate.status === 'active' && candidate.remoteUrl !== undefined
-  const status = installed
-    ? t('installedStatus')
+    && candidate.remoteSetupRequired === undefined
+  const needsRepair = managed !== undefined && (runtime === undefined || runtime.status === 'failed')
+  const canReconnect = runtime !== undefined
+    && (runtime.status === 'failed' || runtime.status === 'disconnected' || runtime.status === 'auth-required')
+    && onReconnect !== undefined
+  const setupStatus = candidate.remoteSetupRequired === 'headers'
+    ? t('registryHeadersSetupStatus')
+    : candidate.remoteSetupRequired === 'variables'
+      ? t('registryVariablesSetupStatus')
+      : candidate.packages.length > 0
+        ? t('registryPackageSetupStatus')
+        : t('registryNoCompatibleRemoteStatus')
+  const status = managed !== undefined
+    ? runtime === undefined
+      ? t('runtimeMissingStatus')
+      : runtime.status === 'ready'
+        ? runtime.toolNames.length > 0 ? t('callableStatus') : t('registryNoToolsStatus')
+        : runtime.status === 'starting'
+          ? t('connectingStatus')
+          : runtime.status === 'auth-required'
+            ? t('authorizationRequiredStatus')
+            : runtime.status === 'disconnected'
+              ? t('disconnectedStatus')
+              : t('brokenStatus')
     : candidate.status === 'deprecated' || candidate.status === 'deleted'
       ? t('registryDeprecatedStatus')
-      : t('registryListedStatus')
+      : candidate.status === 'active' && !installable
+        ? setupStatus
+        : t('registryListedStatus')
   return (
     <article className={`${connectorStyles['connectorCard'] ?? ''} ${connectorStyles['registryCard'] ?? ''}`.trim()} data-registry-server={candidate.name}>
       <div className={connectorStyles['connectorTop']}>
@@ -553,23 +1105,55 @@ function OfficialMcpCard({ candidate, stale, installed, installing, t, onInstall
       </div>
       <p className={connectorStyles['connectorDescription']}>{candidate.description}</p>
       <div className={connectorStyles['connectorFooter']}>
-        <span className={`${connectorStyles['connectorStatus'] ?? ''} ${installed ? connectorStyles['connectorStatusReady'] ?? '' : candidate.status === 'active' ? connectorStyles['connectorStatusInfo'] ?? '' : connectorStyles['connectorStatusDisabled'] ?? ''}`.trim()}>
+        <span title={status} className={`${connectorStyles['connectorStatus'] ?? ''} ${needsRepair ? connectorStyles['connectorStatusError'] ?? '' : runtime?.status === 'ready' && runtime.toolNames.length > 0 ? connectorStyles['connectorStatusReady'] ?? '' : candidate.status === 'active' ? connectorStyles['connectorStatusInfo'] ?? '' : connectorStyles['connectorStatusDisabled'] ?? ''}`.trim()}>
           {status}{stale ? ` · ${t('registryCachedStatus')}` : ''}
         </span>
         <div className={connectorStyles['connectorActions']}>
           {source === undefined ? null : (
             <a className={connectorStyles['connectorLink']} href={source} target="_blank" rel="noreferrer">{t('viewSource')}</a>
           )}
-          {installed || !installable ? null : (
+          {managed === undefined && installable ? (
             <button
               type="button"
               className={connectorStyles['connectorPrimaryButton']}
               disabled={installing}
               onClick={() => { onInstall(candidate) }}
             >
-              {installing ? t('installing') : configurePinnedJev ? t('configure') : t('install')}
+              {installing ? t('installing') : t('install')}
             </button>
-          )}
+          ) : null}
+          {canReconnect ? (
+            <button
+              type="button"
+              className={hubStyles['compactButton']}
+              disabled={reconnecting || repairing || removing}
+              onClick={() => {
+                if (runtime !== undefined) onReconnect?.(runtime)
+              }}
+            >
+              {reconnecting ? t('connectingStatus') : runtime?.status === 'auth-required' ? t('authorize') : t('reconnect')}
+            </button>
+          ) : null}
+          {needsRepair && managed.source !== undefined && onRepair !== undefined ? (
+            <button
+              type="button"
+              className={hubStyles['compactButton']}
+              disabled={repairing || removing}
+              onClick={() => { onRepair(managed) }}
+            >
+              {repairing ? t('repairing') : t('repair')}
+            </button>
+          ) : null}
+          {managed !== undefined && onRemove !== undefined ? (
+            <button
+              type="button"
+              className={connectorStyles['connectorSecondaryButton']}
+              disabled={repairing || removing}
+              onClick={() => { onRemove(managed) }}
+            >
+              {removing ? t('uninstalling') : t('uninstall')}
+            </button>
+          ) : null}
         </div>
       </div>
     </article>
@@ -577,39 +1161,176 @@ function OfficialMcpCard({ candidate, stale, installed, installing, t, onInstall
 }
 
 /**
- * Legacy embedded model-account surface. Account and connector inventory now
- * belongs to Settings → Connectors; provider-specific OAuth remains in each
- * model provider editor.
+ * Legacy compact account surface retained for compatibility tests. Product
+ * authentication is owned by Settings → Connectors; Models no longer renders
+ * this component.
  */
-export function AuthorizationPanel(_props: AuthorizationPanelProps): ReactNode {
-  return null
+export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelProps): ReactNode {
+  const [entries, setEntries] = useState<Entry[]>([])
+  const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
+  const [refresh, setRefresh] = useState(0)
+  const { attempt, answer, setAnswer, failure, preparingKey, begin, submitAnswer, cancel } =
+    useAuthorizationAttempt(api, () => {
+      setRefresh(current => current + 1)
+      onAuthorized()
+    })
+
+  useEffect(() => {
+    if (api === undefined) return
+    let stale = false
+    setCatalogFailure(undefined)
+    void readConnectorRemoteWithRetry(() => readAuthorizationEntries(api), () => stale).then((allEntries) => {
+      if (stale) return
+      const oauthEntries = allEntries.filter(entry => entry.methods.some(method => method.id === 'oauth'))
+      // Fresh installs put subscription-backed Codex first so the primary
+      // model route presents its native Auth action before generic providers.
+      oauthEntries.sort((left, right) =>
+        Number(right.key === NATIVE_CODEX_ACCOUNT_KEY) - Number(left.key === NATIVE_CODEX_ACCOUNT_KEY))
+      setEntries(oauthEntries)
+    }, (error: unknown) => {
+      if (!stale) setCatalogFailure(String(error))
+    })
+    return () => { stale = true }
+  }, [api, refresh])
+
+  if (api === undefined) return null
+  if (entries.length === 0 && catalogFailure === undefined) return null
+
+  return (
+    <section className={styles.authorizationPanel} aria-label={t('accountConnections')}>
+      <h3 className={styles.authorizationTitle}>{t('accountConnections')}</h3>
+      <p className={styles.intro}>{t('accountConnectionsHint')}</p>
+      {entries.map((entry) => {
+        const connected = entry.stored !== undefined
+        const busy = entry.inFlight || preparingKey === entry.key || (attempt?.status === 'pending' && attempt.key === entry.key)
+        const methods = entry.methods.filter(method => method.id === 'oauth')
+        return (
+          <div key={entry.key} className={styles.authorizationActions}>
+            <span className={styles.rowName}>{entry.label}</span>
+            <span className={styles.rowTag}>Auth</span>
+            <span className={connected ? styles.connectedChip : styles.notice}>
+              {connected ? t('accountSignedIn') : t('credentialMissing')}
+            </span>
+            {connected
+              ? null
+              : methods.map(method => (
+                <button
+                  key={method.id}
+                  type="button"
+                  className={styles.secondaryButton}
+                  disabled={busy}
+                  onClick={() => { begin(entry.key, method.id) }}
+                >
+                  {busy && attempt?.key === entry.key ? t('signingIn') : method.label}
+                </button>
+              ))}
+          </div>
+        )
+      })}
+      <AuthorizationAttemptProgress
+        attempt={attempt}
+        answer={answer}
+        setAnswer={setAnswer}
+        submitAnswer={submitAnswer}
+        cancel={cancel}
+        t={t}
+      />
+      {catalogFailure === undefined ? null : <p className={styles.error}>{catalogFailure}</p>}
+      {failure === undefined ? null : <p className={styles.error}>{failure}</p>}
+    </section>
+  )
 }
 
 /** Dedicated account and MCP/app connector settings page. */
-export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, settings, mcpRegistry, onAuthorized }: ConnectorsSettingsSectionProps): ReactNode {
+export function ConnectorsSettingsSection({ api,
+  t,
+  connectorT,
+  chatGptWeb,
+  settings,
+  mcpRegistry,
+  telegram,
+  oddsApi,
+  assistantMail,
+  launchContext,
+  onAuthorized }: ConnectorsSettingsSectionProps): ReactNode {
   const [entries, setEntries] = useState<Entry[]>([])
+  const [oddsApiSnapshot, setOddsApiSnapshot] = useState<TheOddsApiSnapshot | undefined>()
   const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
   const [disconnectingKey, setDisconnectingKey] = useState<string | undefined>()
   const [refresh, setRefresh] = useState(0)
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<ConnectorFilter>('connected')
+  const [filter, setFilter] = useState<ConnectorFilter>('all')
+  const catalogSearch = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (launchContext === 'discover') {
+      setFilter('available')
+      catalogSearch.current?.focus({ preventScroll: true })
+    } else if (launchContext === 'codex-reconnect') {
+      // The system opened this panel because native Codex login expired.
+      // Bring its existing official authorization card to the front; do not
+      // auto-submit a new OAuth flow without the human pressing Connect.
+      setFilter('all')
+      setQuery('codex')
+      catalogSearch.current?.focus({ preventScroll: true })
+    } else if (launchContext === 'connectors') {
+      setFilter('all')
+    }
+  }, [launchContext])
   const [registrySnapshot, setRegistrySnapshot] = useState<McpRegistrySearchSnapshot | undefined>()
   const [registryBusy, setRegistryBusy] = useState(false)
   const [registryFailure, setRegistryFailure] = useState(false)
   const [mcpHub, setMcpHub] = useState<McpConnectorHubSnapshot>({ runtime: [], managed: [] })
+  const [openClaw, setOpenClaw] = useState<OpenClawConnectorSnapshot>({ connectors: [] })
+  const [openClawRuntime, setOpenClawRuntime] = useState<OpenClawRuntimeSnapshot | undefined>()
+  const [runtimeRefresh, setRuntimeRefresh] = useState(0)
   const [jevState, setJevState] = useState<JevMcpSnapshot | undefined>()
   const [jevSetupOpen, setJevSetupOpen] = useState(false)
   const [jevApiKey, setJevApiKey] = useState('')
   const [jevBusy, setJevBusy] = useState(false)
   const [jevFailure, setJevFailure] = useState<string | undefined>()
+  const [xSetupOpen, setXSetupOpen] = useState(false)
+  const [xClientId, setXClientId] = useState('')
+  const [xClientSecret, setXClientSecret] = useState('')
+  const [xPhoenixUsername, setXPhoenixUsername] = useState('')
+  const [xBusy, setXBusy] = useState(false)
+  const [xNotice, setXNotice] = useState<string | undefined>()
   const [installingRegistryName, setInstallingRegistryName] = useState<string | undefined>()
+  const [installingCuratedId, setInstallingCuratedId] = useState<string | undefined>()
+  const [repairingEntryId, setRepairingEntryId] = useState<string | undefined>()
+  const [removingEntryId, setRemovingEntryId] = useState<string | undefined>()
+  const [reconnectingServerName, setReconnectingServerName] = useState<string | undefined>()
+  const [reconnectFailure, setReconnectFailure] = useState<{ serverName: string; message: string } | undefined>()
   const [chatGptWebState, setChatGptWebState] = useState<ChatGptWebSnapshot | undefined>()
   const [chatGptWebBusy, setChatGptWebBusy] = useState(false)
   const [chatGptWebFailure, setChatGptWebFailure] = useState<string | undefined>()
-  const { attempt, answer, setAnswer, failure, begin, submitAnswer, cancel } = useAuthorizationAttempt(api, () => {
+  const {
+    attempt,
+    answer,
+    setAnswer,
+    failure,
+    preparingKey,
+    lastAttemptKey,
+    reserveOAuthPopup,
+    closeOAuthPopup,
+    begin,
+    submitAnswer,
+    cancel,
+  } = useAuthorizationAttempt(api, () => {
     setRefresh(current => current + 1)
     onAuthorized()
   })
+
+  useEffect(() => {
+    if (oddsApi===undefined)return
+    let stale=false
+    void readConnectorRemoteWithRetry(()=>oddsApi.state(),()=>stale).then(
+      snapshot=>{if(!stale)setOddsApiSnapshot(snapshot)},
+      ()=>{if(!stale)setOddsApiSnapshot({
+        configured:false,verified:false,source:'none',status:'vault-unavailable',
+      })},
+    )
+    return ()=>{stale=true}
+  },[oddsApi])
 
   useEffect(() => {
     if (chatGptWeb === undefined) return
@@ -617,7 +1338,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     setChatGptWebFailure(undefined)
     void readConnectorRemoteWithRetry(() => chatGptWeb.state(), () => stale).then(
       (snapshot) => { if (!stale) setChatGptWebState(snapshot) },
-      (error) => {
+      (error: unknown) => {
         if (!stale && !isTransientConnectorRemoteFailure(error)) {
           setChatGptWebFailure(String(error))
         }
@@ -630,14 +1351,10 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     if (api === undefined) return
     let stale = false
     setCatalogFailure(undefined)
-    void api.list({}).then((response) => {
-      if (stale) return
-      if (!response.result.ok) {
-        setCatalogFailure(response.result.error.message)
-        return
-      }
-      setEntries(response.result.value.entries.filter(entry => entry.methods.some(method => method.id === 'oauth')) as Entry[])
-    }, (error: unknown) => { if (!stale) setCatalogFailure(String(error)) })
+    void readConnectorRemoteWithRetry(() => readAuthorizationEntries(api), () => stale).then(
+      (allEntries) => { if (!stale) setEntries(allEntries) },
+      (error: unknown) => { if (!stale) setCatalogFailure(String(error)) },
+    )
     return () => { stale = true }
   }, [api, refresh])
 
@@ -646,7 +1363,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     let stale = false
     void readConnectorRemoteWithRetry(() => mcpRegistry.state(), () => stale).then(
       (snapshot) => { if (!stale) setMcpHub(snapshot) },
-      (error) => {
+      (error: unknown) => {
         if (!stale && !isTransientConnectorRemoteFailure(error)) {
           setCatalogFailure(String(error))
         }
@@ -656,12 +1373,93 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
   }, [mcpRegistry, refresh])
 
   useEffect(() => {
-    const readJevState = mcpRegistry?.jevState
+    if (mcpRegistry === undefined || !mcpHub.runtime.some(entry => entry.status === 'starting')) return
+    const timer = window.setTimeout(() => {
+      setRefresh(current => current + 1)
+    }, 650)
+    return () => { window.clearTimeout(timer) }
+  }, [mcpRegistry, mcpHub.runtime])
+
+  useEffect(() => {
+    if (api === undefined && mcpRegistry === undefined) return
+    const timer = window.setInterval(() => {
+      setRefresh(current => current + 1)
+    }, 5_000)
+    return () => { window.clearInterval(timer) }
+  }, [api, mcpRegistry])
+
+  useEffect(() => {
+    if (api === undefined) return
+    const expectedKeys = mcpHub.managed.flatMap((connector) => {
+      const runtime = mcpHub.runtime.find(entry => entry.serverName === connector.serverName)
+      if (runtime?.status !== 'auth-required') return []
+      return [`mcp-client/${connector.serverName.toLowerCase().replaceAll('_', '-')}`]
+    })
+    if (expectedKeys.length === 0) return
+
+    const controller = new AbortController()
+    let retryTimer: ReturnType<typeof globalThis.setTimeout> | undefined
+    void (async () => {
+      for (const delayMs of MCP_AUTH_FLOW_RETRY_MS) {
+        if (delayMs > 0) {
+          await new Promise<void>((resolve) => { globalThis.setTimeout(resolve, delayMs) })
+        }
+        if (controller.signal.aborted) return
+        try {
+          const allEntries = await readAuthorizationEntries(api)
+          if (controller.signal.aborted) return
+          setEntries(allEntries)
+          if (expectedKeys.every(key => allEntries.some(entry => entry.key === key))) return
+        } catch (error: unknown) {
+          if (!isTransientConnectorRemoteFailure(error)) {
+            if (!controller.signal.aborted) setCatalogFailure(String(error))
+            return
+          }
+        }
+      }
+      if (!controller.signal.aborted) {
+        retryTimer = globalThis.setTimeout(() => {
+          setRefresh(current => current + 1)
+        }, MCP_AUTH_FLOW_REFRESH_MS)
+      }
+    })()
+    return () => {
+      controller.abort()
+      if (retryTimer !== undefined) globalThis.clearTimeout(retryTimer)
+    }
+  }, [api, mcpHub.managed, mcpHub.runtime])
+
+  useEffect(() => {
+    const readOpenClaw = mcpRegistry?.openClawState?.bind(mcpRegistry)
+    if (readOpenClaw === undefined) return
+    let stale = false
+    void readConnectorRemoteWithRetry(() => readOpenClaw(), () => stale).then(
+      (snapshot) => { if (!stale) setOpenClaw(snapshot) },
+      (error: unknown) => {
+        if (!stale && !isTransientConnectorRemoteFailure(error)) setCatalogFailure(String(error))
+      },
+    )
+    return () => { stale = true }
+  }, [mcpRegistry, refresh])
+
+  useEffect(() => {
+    const probe = mcpRegistry?.openClawRuntimeState?.bind(mcpRegistry)
+    if (probe === undefined) return
+    let stale = false
+    void probe().then(
+      value => { if (!stale) setOpenClawRuntime(value) },
+      () => { if (!stale) setOpenClawRuntime(undefined) },
+    )
+    return () => { stale = true }
+  }, [mcpRegistry, runtimeRefresh])
+
+  useEffect(() => {
+    const readJevState = mcpRegistry?.jevState?.bind(mcpRegistry)
     if (readJevState === undefined) return
     let stale = false
     void readConnectorRemoteWithRetry(() => readJevState(), () => stale).then(
       (snapshot) => { if (!stale) setJevState(snapshot) },
-      (error) => {
+      (error: unknown) => {
         if (!stale && !isTransientConnectorRemoteFailure(error)) setJevFailure(String(error))
       },
     )
@@ -674,7 +1472,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     // Jev is a pinned Phoenix integration with its own credential flow.
     // Never send Jev through the generic Official MCP Registry installer:
     // that path performs an unnecessary second registry lookup and can time out.
-    if (mcpRegistry === undefined || search.length < 2 || isRetiredJevSearchText(search) || catalogMatch?.id === 'jev') {
+    if (mcpRegistry === undefined || search.length < 2 || isRetiredJevSearchText(search) || catalogMatch !== undefined) {
       setRegistrySnapshot(undefined)
       setRegistryFailure(false)
       setRegistryBusy(false)
@@ -714,35 +1512,89 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     [entries],
   )
 
-  const catalogRows = useMemo(() => CONNECTOR_CATALOG.map((definition) => {
+  const catalogDefinitions = useMemo(() => {
+    const providers: ConnectorDefinition[] = entries.filter(entry =>
+      entry.key.startsWith('llm-pi-ai/')
+      && entry.key !== 'llm-pi-ai/github-copilot'
+      && !CONNECTOR_CATALOG.some(definition => entryMatchesDefinitionAuthorization(entry, definition)))
+      .map(entry => ({
+        id: entry.key, name: entry.label, category: connectorT('modelProviders'),
+        description: connectorT('modelProviderHint'),
+        mode: entry.methods.some(method => method.id === 'oauth') ? 'oauth' : 'api-key',
+        provenance: 'native', authorizationKey: entry.key, capabilities: ['models'],
+      }))
+    return [...CONNECTOR_CATALOG, ...providers]
+  }, [entries, connectorT])
+
+  const catalogRows = useMemo(() => catalogDefinitions.map((definition) => {
     const live = liveConnectors.find(candidate => liveMatchesDefinition(candidate, definition))
-    const account = entries.find(entry => entryMatchesFamily(entry, definition.providerFamily))
-    const mcpRuntime = definition.id === 'binance'
-      ? mcpHub.runtime.find(candidate => candidate.serverName === 'binance-agent-os')
-      : definition.id === 'jev'
-        ? mcpHub.runtime.find(candidate => candidate.serverName === 'jev')
-        : undefined
     const managed = definition.id === 'binance'
-      ? mcpHub.managed.some(candidate => candidate.serverName === 'binance-agent-os'
+      ? mcpHub.managed.find(candidate => candidate.serverName === 'binance-agent-os'
         || candidate.url === 'https://agent.binance.com/mcp/agentic')
       : definition.id === 'jev'
-        ? mcpHub.managed.some(candidate => candidate.serverName === 'jev')
-        : false
-    const connected = live?.installed === true
-      || live?.callable === true
-      || accountGrantConnectsCatalogEntry(account)
-      || mcpRuntime?.status === 'ready'
-      || definition.id === 'binance'
-    return { definition, live, account, mcpRuntime, managed, connected }
-  }), [entries, liveConnectors, mcpHub])
+        ? mcpHub.managed.find(candidate => candidate.serverName === 'jev')
+        : mcpHub.managed.find(candidate => managedMatchesDefinition(candidate, definition))
+    // Registry MCPs often use generated namespaces (e.g. mcp-<digest>).
+    // The persisted managed source binds them to a catalogue identity; matching
+    // runtime status by the UI's friendly name misses that exact server entirely.
+    const mcpRuntime = managed !== undefined
+      ? mcpHub.runtime.find(candidate => candidate.serverName === managed.serverName)
+      : definition.id === 'binance'
+        ? mcpHub.runtime.find(candidate => candidate.serverName === 'binance-agent-os')
+        : definition.id === 'jev'
+          ? mcpHub.runtime.find(candidate => candidate.serverName === 'jev')
+          : mcpHub.runtime.find(candidate => runtimeMatchesDefinition(candidate, definition))
+    // A legacy provider API-key grant can share the same name as a curated
+    // OAuth MCP (notably Cloudflare). Never substitute that unrelated flow:
+    // it prompts for an API token even though the official MCP offers login.
+    const catalogAccount = definition.curatedMcp === true
+      ? entries.find(entry => entry.key === `mcp-client/${definition.id}`)
+      : entries.find(entry => entryMatchesDefinitionAuthorization(entry, definition))
+    const account = managed === undefined
+      ? catalogAccount
+      : managedAuthorizationEntry(managed, entries) ?? catalogAccount
+    const openClawRoute = definition.openClawConnectorId === undefined
+      ? undefined
+      : openClaw.connectors.find(candidate => candidate.id === definition.openClawConnectorId)
+    const accountConnected = managed === undefined
+      && mcpRuntime === undefined
+      && accountGrantConnectsCatalogEntry(account)
+    const runtimeAuthoritative = managed !== undefined || mcpRuntime !== undefined
+    const connected = (definition.id==='the-odds-api' && oddsApiSnapshot?.verified===true)
+      || (openClawRoute?.connected === true && !runtimeAuthoritative)
+      || (runtimeAuthoritative
+        ? mcpRuntime?.status === 'ready' && mcpRuntime.toolNames.length > 0
+          && !(['microsoft-personal','outlook-mail','outlook-calendar','microsoft-contacts',
+            'onedrive','microsoft-teams','sharepoint','x'].includes(definition.id))
+        : live?.callable === true || accountConnected)
+    return { definition, live, account, mcpRuntime, managed, openClaw: openClawRoute, connected }
+  }), [catalogDefinitions, entries, liveConnectors, mcpHub, openClaw, oddsApiSnapshot])
+
+  // An exact registry identity already in the curated catalog is one connector.
+  const novelRegistryCandidates = (registrySnapshot?.candidates ?? []).filter(candidate =>
+    !CONNECTOR_CATALOG.some(definition => definition.registryName === candidate.name))
 
   const visibleRows = catalogRows.filter(({ definition, connected }) => {
     if (filter === 'connected' && !connected) return false
     if (filter === 'available' && connected) return false
     const needle = query.trim().toLowerCase()
     if (needle.length === 0) return true
-    return `${definition.name} ${definition.category} ${definition.description} ${definition.capabilities.join(' ')}`.toLowerCase().includes(needle)
+    return `${definition.name} ${(definition.aliases ?? []).join(' ')} ${definition.category} ${definition.description} ${definition.capabilities.join(' ')}`.toLowerCase().includes(needle)
   })
+
+  const visibleAccountEntries = useMemo(() => entries.filter(entry =>
+    entry.key !== 'llm-pi-ai/github-copilot'
+    && !catalogDefinitions.some(definition =>
+      entryMatchesDefinitionAuthorization(entry, definition))),
+  [catalogDefinitions, entries])
+  // Localize each credential or OAuth dialog at the exact connector card.
+  // Keep the header only as fallback while its card is hidden by filters.
+  const activeAuthorizationKey = attempt?.key ?? preparingKey ?? lastAttemptKey
+  const authorizationHasVisibleCard = activeAuthorizationKey !== undefined
+    && (visibleAccountEntries.some(entry => entry.key === activeAuthorizationKey)
+      || visibleRows.some(row => row.account?.key === activeAuthorizationKey
+        || (row.managed !== undefined
+          && `mcp-client/${row.managed.serverName.toLowerCase().replaceAll('_', '-')}` === activeAuthorizationKey)))
 
   const toggleChatGptWeb = (enabled: boolean): void => {
     if (chatGptWeb === undefined || settings === undefined || chatGptWebBusy) return
@@ -758,7 +1610,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
   }
 
   const configureJev = (): void => {
-    const configure = mcpRegistry?.configureJev
+    const configure = mcpRegistry?.configureJev?.bind(mcpRegistry)
     if (configure === undefined || jevBusy) return
     const apiKey = jevApiKey.trim()
     if (apiKey.length === 0 && jevState?.credentialConfigured !== true) {
@@ -782,6 +1634,235 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     ).finally(() => { setJevBusy(false) })
   }
 
+  const findOfficialConnector = (definition: ConnectorDefinition): void => {
+    const registryName = definition.registryName
+    if (mcpRegistry === undefined || registryBusy || definition.mode === 'native') return
+    setRegistryBusy(true)
+    setRegistryFailure(false)
+    setCatalogFailure(undefined)
+    // For providers without a pinned registry ID, allow discovery by product
+    // name. Installation is still limited to Host-verified registry entries.
+    const lookup = registryName ?? definition.name
+    setQuery(definition.name)
+    void mcpRegistry.search({ query: lookup, limit: 12 }).then(
+      (snapshot) => {
+        const matches = snapshot.candidates.filter(candidate =>
+          !isRetiredJevCandidate(candidate)
+          && (registryName === undefined || candidate.name === registryName))
+        setRegistrySnapshot({ ...snapshot, candidates: matches })
+        if (matches.length === 0) setCatalogFailure(connectorT('officialConnectorMissing'))
+      },
+      () => {
+        setRegistrySnapshot(undefined)
+        setRegistryFailure(true)
+        setCatalogFailure(connectorT('registryUnavailable'))
+      },
+    ).finally(() => { setRegistryBusy(false) })
+  }
+
+  const reconnectMcpConnector = (runtime: McpConnectorRuntimeView): void => {
+    const registry = mcpRegistry
+    const reconnect = registry?.reconnect?.bind(registry)
+    if (registry === undefined || reconnect === undefined || reconnectingServerName !== undefined) return
+    // An unreachable HTTP MCP can report "failed" rather than "auth-required"
+    // before OAuth discovery completes. Treat both as candidates for an auth
+    // handoff, but never force OAuth on stdio or on already-valid grants.
+    const expectedKey = `mcp-client/${runtime.serverName.toLowerCase().replaceAll('_', '-')}`
+    const knownFlow = entries.find(candidate => candidate.key === expectedKey)
+    const knownMethod = knownFlow?.methods[0]
+    const recoverAuthorization = runtime.transport === 'streamable-http'
+      && (runtime.status === 'auth-required'
+        || ((runtime.status === 'failed' || runtime.status === 'disconnected')
+          && knownFlow?.stored === undefined))
+    setCatalogFailure(undefined)
+    setReconnectFailure(undefined)
+    // If the runtime already asks for auth and the flow is registered, a
+    // reconnect cannot produce consent; go directly to the Host authorization.
+    if (runtime.status === 'auth-required' && knownFlow !== undefined && knownMethod !== undefined) {
+      begin(knownFlow.key, knownMethod.id)
+      return
+    }
+    if (recoverAuthorization) reserveOAuthPopup()
+    setReconnectingServerName(runtime.serverName)
+    // The registry can hold a pending transport generation indefinitely.
+    // Never make the user wait for that RPC without a visible failure.
+    let reconnectTimeout: ReturnType<typeof setTimeout> | undefined
+    void Promise.race([
+      reconnect({ serverName: runtime.serverName }),
+      new Promise<never>((_resolve, reject) => {
+        reconnectTimeout = setTimeout(() => reject(new Error(
+          'El Host MCP no confirmó la reconexión en 12 segundos. Comprueba la disponibilidad del servicio y vuelve a intentar.',
+        )), 12_000)
+      }),
+    ]).then(async (result) => {
+      if (!result.accepted) {
+        if (recoverAuthorization) closeOAuthPopup()
+        const message = connectorT('reconnectRequiredStatus')
+        setReconnectFailure({ serverName: runtime.serverName, message })
+        setCatalogFailure(message)
+        return
+      }
+      setRefresh(current => current + 1)
+      onAuthorized()
+      if (!recoverAuthorization) return
+      if (api === undefined) {
+        closeOAuthPopup()
+        const message = 'El Host no expone la API de autorización. Comprueba la instalación activa de Phoenix.'
+        setReconnectFailure({ serverName: runtime.serverName, message })
+        setCatalogFailure(message)
+        return
+      }
+
+      for (const delayMs of MCP_AUTH_FLOW_RETRY_MS) {
+        if (delayMs > 0) await new Promise<void>((resolve) => { globalThis.setTimeout(resolve, delayMs) })
+        const [snapshot, allEntries] = await Promise.all([
+          registry.state(),
+          readAuthorizationEntries(api),
+        ])
+        setMcpHub(snapshot)
+        setEntries(allEntries)
+        const currentRuntime = snapshot.runtime.find(entry => entry.serverName === runtime.serverName)
+        if (currentRuntime?.status === 'ready' && currentRuntime.toolNames.length > 0) {
+          closeOAuthPopup()
+          return
+        }
+        const entry = allEntries.find(candidate => candidate.key === expectedKey)
+        const method = entry?.methods[0]
+        // Start consent only if the MCP explicitly requested auth or has no
+        // stored grant. An ordinary network failure with a valid token must
+        // remain a reconnect error, not trigger unsolicited reauthorization.
+        if (entry !== undefined && method !== undefined
+          && (currentRuntime?.status === 'auth-required'
+            || ((currentRuntime?.status === 'failed' || currentRuntime?.status === 'disconnected')
+              && entry.stored === undefined && method.id === 'oauth'))) {
+          begin(entry.key, method.id)
+          return
+        }
+      }
+      closeOAuthPopup()
+      const message = `No se inició la autorización de ${runtime.serverName}: el MCP sigue sin exponer un método OAuth operativo. `
+        + 'Comprueba su URL, disponibilidad y si requiere API key, client ID o secret. El conector no está conectado.'
+      setReconnectFailure({ serverName: runtime.serverName, message })
+      setCatalogFailure(message)
+    }).catch((error: unknown) => {
+      if (recoverAuthorization) closeOAuthPopup()
+      const message = String(error)
+      setReconnectFailure({ serverName: runtime.serverName, message })
+      setCatalogFailure(message)
+    }).finally(() => {
+      if (reconnectTimeout !== undefined) clearTimeout(reconnectTimeout)
+      setReconnectingServerName(undefined)
+    })
+  }
+
+  const repairManagedConnector = (connector: ManagedMcpConnectorView): void => {
+    const repair = mcpRegistry?.repair?.bind(mcpRegistry)
+    if (repair === undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
+    setCatalogFailure(undefined)
+    setRepairingEntryId(connector.entryId)
+    void repair({ entryId: connector.entryId }).then(
+      () => {
+        setRefresh(current => current + 1)
+        onAuthorized()
+      },
+      (error: unknown) => { setCatalogFailure(String(error)) },
+    ).finally(() => { setRepairingEntryId(undefined) })
+  }
+
+  const removeManagedConnector = (connector: ManagedMcpConnectorView): void => {
+    const remove = mcpRegistry?.remove?.bind(mcpRegistry)
+    if (remove === undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
+    const account = managedAuthorizationEntry(connector, entries)
+    if (account?.stored !== undefined && account.disconnectable !== true) {
+      setCatalogFailure(connectorT('uninstallAuthCleanupUnavailable'))
+      return
+    }
+    setCatalogFailure(undefined)
+    setRemovingEntryId(connector.entryId)
+
+    const clearAccount = account?.stored === undefined || api === undefined
+      ? Promise.resolve()
+      : api.disconnect({ key: account.key }).then((response) => {
+        if (!response.result.ok) throw new Error(response.result.error.message)
+      })
+
+    void clearAccount.then(
+      () => remove({ entryId: connector.entryId }),
+    ).then(
+      (result) => {
+        if (result.removed && !result.liveUnloaded) {
+          setCatalogFailure(connectorT('uninstallRestartRequired'))
+        }
+        setRefresh(current => current + 1)
+        onAuthorized()
+      },
+      (error: unknown) => { setCatalogFailure(String(error)) },
+    ).finally(() => { setRemovingEntryId(undefined) })
+  }
+
+  /** Installation is not readiness: complete the explicit user's click by finding
+   * its actual Host auth flow and performing the next necessary step. */
+  const finishMcpInstall = async (serverName: string): Promise<void> => {
+    if (mcpRegistry === undefined) return
+    if (api === undefined) {
+      closeOAuthPopup()
+      setCatalogFailure('MCP instalado, pero el servicio de autorización de PHOENIX no está disponible. Reinicia PHOENIX e inténtalo de nuevo.')
+      return
+    }
+    const key = `mcp-client/${serverName.toLowerCase().replaceAll('_', '-')}`
+    for (const delayMs of MCP_AUTH_FLOW_RETRY_MS) {
+      if (delayMs > 0) await new Promise<void>((resolve) => { globalThis.setTimeout(resolve, delayMs) })
+      const [snapshot, allEntries] = await Promise.all([
+        readConnectorRemoteWithRetry(() => mcpRegistry.state(), () => false),
+        readConnectorRemoteWithRetry(() => readAuthorizationEntries(api), () => false),
+      ])
+      setMcpHub(snapshot)
+      setEntries(allEntries)
+      const runtime = snapshot.runtime.find(item => item.serverName === serverName)
+      if (runtime?.status === 'ready' && runtime.toolNames.length > 0) {
+        closeOAuthPopup()
+        return
+      }
+      const entry = allEntries.find(item => item.key === key)
+      const method = entry?.methods[0]
+      if (entry !== undefined && method !== undefined
+        && (runtime?.status === 'auth-required' || entry.stored === undefined)) {
+        begin(entry.key, method.id)
+        return
+      }
+      // A newly mounted MCP can fail its first connection before registering
+      // its authorization flow. Keep the bounded discovery window open.
+    }
+    closeOAuthPopup()
+    setCatalogFailure(
+      `El MCP ${serverName} se instaló, pero todavía no expone herramientas operativas. `
+        + 'Revisa su estado y utiliza Reparar o Autorizar; PHOENIX no lo marcará como conectado.',
+    )
+  }
+
+  const installCuratedConnector = (definition: ConnectorDefinition): void => {
+    const installCurated = mcpRegistry?.installCurated?.bind(mcpRegistry)
+    if (installCurated === undefined || definition.curatedMcp !== true || !isCuratedMcpConnectorId(definition.id)
+      || installingCuratedId !== undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
+    setCatalogFailure(undefined)
+    if (CURATED_OAUTH_MCP_IDS.has(definition.id)) reserveOAuthPopup()
+    setInstallingCuratedId(definition.id)
+    void installCurated({ connectorId: definition.id }).then(
+      async (receipt) => {
+        setRefresh(current => current + 1)
+        onAuthorized()
+        await finishMcpInstall(receipt.connector.serverName)
+      },
+      (error: unknown) => {
+        closeOAuthPopup()
+        setCatalogFailure(String(error))
+      },
+    ).catch((error: unknown) => {
+      closeOAuthPopup()
+      setCatalogFailure(String(error))
+    }).finally(() => { setInstallingCuratedId(undefined) })
+  }
+
   const installRegistryCandidate = (candidate: McpRegistryCandidateView): void => {
     if (mcpRegistry === undefined || installingRegistryName !== undefined || isRetiredJevCandidate(candidate)) return
     const definition = catalogDefinitionForText(`${candidate.name} ${candidate.title}`)
@@ -792,14 +1873,62 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
       return
     }
     setCatalogFailure(undefined)
+    reserveOAuthPopup()
     setInstallingRegistryName(candidate.name)
     void mcpRegistry.install({ name: candidate.name, version: candidate.version }).then(
-      () => {
+      async (receipt) => {
         setRefresh(current => current + 1)
         onAuthorized()
+        await finishMcpInstall(receipt.connector.serverName)
       },
-      (error: unknown) => { setCatalogFailure(String(error)) },
-    ).finally(() => { setInstallingRegistryName(undefined) })
+      (error: unknown) => {
+        closeOAuthPopup()
+        setCatalogFailure(String(error))
+      },
+    ).catch((error: unknown) => {
+      closeOAuthPopup()
+      setCatalogFailure(String(error))
+    }).finally(() => { setInstallingRegistryName(undefined) })
+  }
+
+  const setupX = (identity: 'user' | 'phoenix'): void => {
+    const xConnector = mcpRegistry
+    if (xBusy || xConnector?.connectX === undefined) return
+    const username = xPhoenixUsername.trim().replace(/^@/u, '')
+    if (identity === 'phoenix' && !/^[A-Za-z0-9_]{1,15}$/u.test(username)) {
+      setXNotice('Primero crea realmente el perfil de marca en X y escribe su @usuario (máximo 15 caracteres).')
+      return
+    }
+    const hasInput = xClientId.trim().length > 0 || xClientSecret.length > 0
+    if (hasInput && (xClientId.trim().length === 0 || xClientSecret.length === 0 || xConnector.configureX === undefined)) {
+      setXNotice('Introduce ambos valores de la aplicación X, o deja ambos vacíos si ya están almacenados.')
+      return
+    }
+    setXBusy(true)
+    setXNotice(undefined)
+    const save = hasInput
+      ? xConnector.configureX!({ clientId: xClientId.trim(), clientSecret: xClientSecret })
+      : Promise.resolve(undefined)
+    void save.then(() => {
+      setXClientId('')
+      setXClientSecret('')
+      return xConnector.connectX!({ identity, ...(identity === 'phoenix' ? { username } : {}) })
+    }).then(async (receipt) => {
+      // Reinstalling an already-running xurl bridge does not inject newly saved
+      // vault credentials into its existing child. Restart that exact namespace
+      // so it can start the real browser OAuth callback instead of staying broken.
+      if (receipt.api.status === 'already-installed' && xConnector.reconnect !== undefined) {
+        const restarted = await xConnector.reconnect({ serverName: receipt.api.connector.serverName })
+        if (!restarted.accepted) throw new Error('El puente X no pudo reiniciarse con la credencial actualizada.')
+      }
+      setRefresh(current => current + 1)
+      onAuthorized()
+      setXNotice('MCP ' + receipt.api.connector.serverName
+        + ' preparado. Comprueba en el navegador la autorización real de X y prueba una lectura; '
+        + 'la instalación no demuestra que la cuenta esté autenticada.')
+    }, (error: unknown) => {
+      setXNotice('No se pudo configurar X: ' + String(error).slice(0, 250))
+    }).finally(() => { setXBusy(false) })
   }
 
   const disconnect = (key: string): void => {
@@ -821,6 +1950,16 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     <div className={styles['section']}>
       <h2 className={styles['title']}>{connectorT('title')}</h2>
       <p className={styles['intro']}>{connectorT('intro')}</p>
+      {authorizationHasVisibleCard || preparingKey === undefined ? null
+        : <p role="status" className={styles['advancedHint']}>Contactando al servicio de autorización de PHOENIX…</p>}
+      {authorizationHasVisibleCard || failure === undefined ? null
+        : <p role="alert" className={styles['error']}>{failure}</p>}
+      {authorizationHasVisibleCard || attempt === undefined ? null : (
+        <section className={hubStyles['block']} aria-label={t('signingIn')}>
+          <AuthorizationAttemptProgress attempt={attempt} answer={answer} setAnswer={setAnswer}
+            submitAnswer={submitAnswer} cancel={cancel} t={t} />
+        </section>
+      )}
       <div className={hubStyles['intelligenceBanner']}>
         <div className={hubStyles['intelligenceIcon']} aria-hidden="true">✦</div>
         <div className={hubStyles['intelligenceCopy']}>
@@ -833,6 +1972,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
         </div>
       </div>
       <p className={hubStyles['safetyNote']}>{connectorT('setupHint')}</p>
+      {assistantMail === undefined ? null : <AssistantMailPanel client={assistantMail} />}
 
       {chatGptWeb === undefined || settings === undefined ? null : (
         <section className={hubStyles['block']} aria-label={connectorT('chatgptWebTitle')}>
@@ -879,23 +2019,36 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
         </section>
       )}
 
-      {entries.length === 0 ? null : (
+      {visibleAccountEntries.length === 0 ? null : (
         <section className={hubStyles['block']} aria-label={connectorT('accounts')}>
           <div className={hubStyles['heading']}>
             <h3>{connectorT('accounts')}</h3>
             <p>{connectorT('accountsHint')}</p>
           </div>
           <div className={connectorStyles['connectorGrid']}>
-            {entries.map((entry) => {
+            {visibleAccountEntries.map((entry) => {
               const lines = telemetryLines(entry.telemetry)
               const presentation = accountPresentation(entry)
               const runtime = runtimeForEntry(entry, mcpHub.runtime)
-              const status = accountStatus(entry, runtime, connectorT)
-              const actionLabel = runtime?.status === 'auth-required' && entry.stored !== undefined
+              const status = entry.key === 'mcp-client/binance-agent-os'
+                && runtime?.status !== 'ready'
+                ? { text: 'Cliente no admitido por Binance (3346001)',
+                  className: connectorStyles['connectorStatusWarn'] ?? '' }
+                : accountStatus(entry, runtime, connectorT)
+              const actionLabel = entry.key === NATIVE_CODEX_ACCOUNT_KEY && entry.stored !== undefined
                 ? connectorT('reauthorize')
-                : entry.stored === undefined ? connectorT('authorize') : connectorT('reconnect')
-              const authorizationPending = attempt?.status === 'pending'
-              const thisAuthorizationPending = authorizationPending && attempt.key === entry.key
+                : runtime?.status === 'auth-required' && entry.stored !== undefined
+                  ? connectorT('reauthorize')
+                  : entry.stored === undefined ? connectorT('authorize') : connectorT('reconnect')
+              const agenticClientUnlisted = entry.key === 'mcp-client/binance-agent-os'
+                && runtime?.status !== 'ready'
+              const runtimeReconnect = entry.stored !== undefined
+                && runtime !== undefined
+                && (runtime.status === 'failed' || runtime.status === 'disconnected')
+                && mcpRegistry?.reconnect !== undefined
+              const thisAuthorizationPending = preparingKey === entry.key
+                || (attempt?.status === 'pending' && attempt.key === entry.key)
+              const preferredMethod = entry.methods[0]
               return (
                 <article key={entry.key} className={connectorStyles['connectorCard']} data-authorization-key={entry.key}>
                   <div className={connectorStyles['connectorTop']}>
@@ -920,17 +2073,37 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
                     <p className={connectorStyles['connectorDescription']}>{presentation.description}</p>
                   )}
                   {lines.slice(0, 2).map(line => <p key={line} className={styles['advancedHint']}>{line}</p>)}
+                  {agenticClientUnlisted ? (
+                    <p className={styles['advancedHint']}>
+                      Binance no admite todavía la identidad OAuth propia de PHOENIX (3346001).
+                      No vuelvas a autorizar con este cliente. Puedes utilizar Binance REAL HMAC
+                      para lectura o un agente oficialmente compatible.
+                    </p>
+                  ) : null}
                   <div className={connectorStyles['connectorFooter']}>
                     <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
                     <div className={connectorStyles['connectorActions']}>
-                      <button
-                        type="button"
-                        className={connectorStyles['connectorPrimaryButton']}
-                        disabled={authorizationPending || entry.inFlight}
-                        onClick={() => { begin(entry.key, 'oauth') }}
-                      >
-                        {thisAuthorizationPending ? t('signingIn') : actionLabel}
-                      </button>
+                      {agenticClientUnlisted || preferredMethod === undefined || (entry.stored !== undefined
+                        && entry.key !== NATIVE_CODEX_ACCOUNT_KEY
+                         && runtime?.status !== 'auth-required' && !runtimeReconnect) ? null : (
+                          <button
+                            type="button"
+                            className={connectorStyles['connectorPrimaryButton']}
+                            disabled={thisAuthorizationPending || entry.inFlight
+                            || (runtimeReconnect && reconnectingServerName !== undefined)}
+                            onClick={() => {
+                              if (runtimeReconnect && runtime !== undefined) {
+                                reconnectMcpConnector(runtime)
+                                return
+                              }
+                              begin(entry.key, preferredMethod.id)
+                            }}
+                          >
+                            {runtimeReconnect && reconnectingServerName === runtime?.serverName
+                              ? connectorT('connectingStatus')
+                              : thisAuthorizationPending ? t('signingIn') : actionLabel}
+                          </button>
+                        )}
                       {entry.stored === undefined || entry.disconnectable !== true ? null : (
                         <button
                           type="button"
@@ -943,6 +2116,15 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
                       )}
                     </div>
                   </div>
+                  {preparingKey !== entry.key ? null : <p role="status">Iniciando autorización…</p>}
+                  {attempt?.key !== entry.key ? null : (
+                    <div className={styles['authorizationPrompt']}>
+                      <AuthorizationAttemptProgress attempt={attempt} answer={answer} setAnswer={setAnswer}
+                        submitAnswer={submitAnswer} cancel={cancel} t={t} />
+                    </div>
+                  )}
+                  {failure !== undefined && lastAttemptKey === entry.key
+                    ? <p role="alert" className={styles['error']}>{failure}</p> : null}
                 </article>
               )
             })}
@@ -950,8 +2132,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
         </section>
       )}
 
-      <AuthorizationAttemptProgress attempt={attempt} answer={answer} setAnswer={setAnswer} submitAnswer={submitAnswer} cancel={cancel} t={t} />
-      {failure === undefined ? null : <p className={styles['error']}>{failure}</p>}
+
       {catalogFailure === undefined ? null : <p className={styles['error']}>{catalogFailure}</p>}
 
       <section className={hubStyles['block']} aria-label={connectorT('catalog')}>
@@ -960,7 +2141,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
           <p>{connectorT('catalogHint')}</p>
         </div>
         <div className={hubStyles['toolbar']}>
-          <input className={hubStyles['search']} type="search" aria-label={connectorT('search')} placeholder={connectorT('searchRegistry')} value={query} onChange={(event) => { setQuery(event.target.value) }} />
+          <input ref={catalogSearch} className={hubStyles['search']} type="search" aria-label={connectorT('search')} placeholder={connectorT('searchRegistry')} value={query} onChange={(event) => { setQuery(event.target.value) }} />
           <div className={hubStyles['filters']}>
             {(['all', 'connected', 'available'] as const).map(value => (
               <button key={value} type="button" aria-pressed={filter === value} className={filter === value ? hubStyles['filterActive'] : undefined} onClick={() => { setFilter(value) }}>
@@ -971,23 +2152,138 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
         </div>
         {visibleRows.length === 0 ? <p className={styles['advancedHint']}>{connectorT('noResults')}</p> : (
           <div className={connectorStyles['connectorGrid']}>
-            {visibleRows.map(row => (
-              <CatalogCard
-                key={row.definition.id}
-                definition={row.definition}
-                live={row.live}
-                account={row.account}
-                mcpRuntime={row.mcpRuntime}
-                managed={row.managed || (row.definition.id === 'jev' && jevState?.configured === true)}
-                t={connectorT}
-                pending={attempt?.status === 'pending' || jevBusy}
-                onAuthorize={(entry) => { begin(entry.key, 'oauth') }}
-                onConfigure={row.definition.id === 'jev' && mcpRegistry?.configureJev !== undefined ? () => {
-                  setJevFailure(undefined)
-                  setJevSetupOpen(true)
-                } : undefined}
-              />
-            ))}
+            {visibleRows.map((row) => {
+              const authorizationKey = row.account?.key
+                ?? (row.managed === undefined
+                  ? undefined
+                  : `mcp-client/${row.managed.serverName.toLowerCase().replaceAll('_', '-')}`)
+              const rowAuthorizationPending = authorizationKey !== undefined
+                && (preparingKey === authorizationKey
+                  || (attempt?.status === 'pending' && attempt.key === authorizationKey))
+              return (
+                <CatalogCard
+                  key={row.definition.id}
+                  definition={row.definition}
+                  live={row.live}
+                  account={row.account}
+                  mcpRuntime={row.mcpRuntime}
+                  managed={row.managed}
+                  openClaw={row.openClaw}
+                  openClawRuntime={row.definition.id === 'openclaw' ? openClawRuntime : undefined}
+                  onRefreshOpenClaw={row.definition.id === 'openclaw' ? () => { setRuntimeRefresh(n => n + 1) } : undefined}
+                  telegram={telegram}
+                  oddsApi={oddsApi}
+                  oddsApiSnapshot={oddsApiSnapshot}
+                  onOddsApiStatus={setOddsApiSnapshot}
+                  connected={row.connected}
+                  reauthorizeCodex={launchContext === 'codex-reconnect' && row.definition.id === 'codex'}
+                  t={connectorT}
+                  authorizationProgress={preparingKey !== undefined && preparingKey === authorizationKey ? (
+                    <p role="status" className={styles['advancedHint']}>Iniciando autorización…</p>
+                  ) : attempt !== undefined && attempt.key === authorizationKey ? (
+                    <div className={styles['authorizationPrompt']}>
+                      <AuthorizationAttemptProgress attempt={attempt} answer={answer} setAnswer={setAnswer}
+                        submitAnswer={submitAnswer} cancel={cancel} t={t} />
+                      {failure !== undefined && lastAttemptKey === authorizationKey
+                        && !(attempt.status === 'failed' && attempt.error === failure)
+                        ? <p role="alert" className={styles['error']}>{failure}</p> : null}
+                    </div>
+                  ) : failure !== undefined && lastAttemptKey === authorizationKey ? (
+                    <p role="alert" className={styles['error']}>{failure}</p>
+                  ) : reconnectFailure !== undefined && row.mcpRuntime?.serverName === reconnectFailure.serverName ? (
+                    <p role="alert" className={styles['error']}>{reconnectFailure.message}</p>
+                  ) : undefined}
+                  pending={rowAuthorizationPending || jevBusy
+                    || (disconnectingKey !== undefined && disconnectingKey === row.account?.key)}
+                  installingCurated={installingCuratedId === row.definition.id}
+                  reconnecting={row.mcpRuntime !== undefined && reconnectingServerName === row.mcpRuntime.serverName}
+                  repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
+                  removing={row.managed !== undefined && removingEntryId === row.managed.entryId}
+                  onChanged={() => { setRefresh(current => current + 1) }}
+                  onAuthorize={(entry, preferredMethod) => {
+                    const method = entry.methods.find(candidate => candidate.id === preferredMethod) ?? entry.methods[0]
+                    if (method !== undefined) begin(entry.key, method.id)
+                  }}
+                  onDisconnect={(entry) => { disconnect(entry.key) }}
+                  onInstallCurated={mcpRegistry?.installCurated === undefined || row.definition.curatedMcp !== true
+                    ? undefined
+                    : () => { installCuratedConnector(row.definition) }}
+                  onFindOfficial={mcpRegistry?.search === undefined
+                    || row.definition.id === 'binance'
+                    || row.definition.id === 'the-odds-api'
+                    || row.definition.mode === 'native'
+                    || (row.definition.curatedMcp === true && mcpRegistry.installCurated !== undefined)
+                    ? undefined
+                    : () => { findOfficialConnector(row.definition) }}
+                  onFindRegistry={mcpRegistry === undefined || row.definition.provenance !== 'registry-listed'
+                    ? undefined
+                    : () => {
+                      setCatalogFailure(undefined)
+                      setRegistryFailure(false)
+                      setFilter('available')
+                      setQuery(row.definition.name)
+                    }}
+                  onReconnect={mcpRegistry?.reconnect === undefined || row.definition.id === 'binance'
+                    ? undefined : (runtime) => { reconnectMcpConnector(runtime) }}
+                  onRepair={mcpRegistry?.repair === undefined || row.definition.id === 'binance'
+                    ? undefined : repairManagedConnector}
+                  onRemove={mcpRegistry?.remove === undefined ? undefined : removeManagedConnector}
+                  onConfigure={row.definition.id === 'x' && mcpRegistry?.connectX !== undefined ? () => {
+                    setXNotice(undefined)
+                    setXSetupOpen(true)
+                  } : row.definition.id === 'jev' && mcpRegistry?.configureJev !== undefined ? () => {
+                    setJevFailure(undefined)
+                    setJevSetupOpen(true)
+                  } : undefined}
+                />
+              )
+            })}
+          </div>
+        )}
+        {!xSetupOpen ? null : (
+          <div className={styles['setupCard']} data-connector-setup="x">
+            <div className={styles['editorHeader']}>
+              <strong className={styles['editorTitle']}>Conectar X: cuenta personal o marca Phoenix IA</strong>
+              <span className={styles['advancedHint']}>OAuth del proveedor · Identidades separadas</span>
+            </div>
+            <p className={styles['advancedHint']}>
+              Registra una aplicación en X Developers y configura OAuth 2.0 con callback
+              http://localhost:8080/callback. Introduce los datos de la aplicación
+              solamente aquí, nunca en el chat. La cuenta propia de Phoenix debe
+              existir y haber pasado las verificaciones oficiales antes de enlazarla.
+            </p>
+            <label className={styles['field']}>
+              <span className={styles['fieldLabel']}>X Developer Client ID</span>
+              <input className={styles['input']} type="text" autoComplete="off"
+                value={xClientId} onChange={event => { setXClientId(event.target.value) }}
+                placeholder="Dejar vacío si ya está guardado" />
+            </label>
+            <label className={styles['field']}>
+              <span className={styles['fieldLabel']}>X Developer Client Secret</span>
+              <input className={styles['input']} type="password" autoComplete="new-password"
+                value={xClientSecret} onChange={event => { setXClientSecret(event.target.value) }}
+                placeholder="Se almacena solo en el vault del Host" />
+            </label>
+            <label className={styles['field']}>
+              <span className={styles['fieldLabel']}>Usuario X creado para Phoenix (opcional)</span>
+              <input className={styles['input']} type="text" autoComplete="off"
+                value={xPhoenixUsername} onChange={event => { setXPhoenixUsername(event.target.value) }}
+                placeholder="@PhoenixIA" />
+            </label>
+            {xNotice === undefined ? null : <p role="status" className={styles['advancedHint']}>{xNotice}</p>}
+            <div className={styles['editorActions']}>
+              <a className={connectorStyles['connectorLink']} href="https://console.x.com/" target="_blank" rel="noreferrer">
+                Portal oficial de X
+              </a>
+              <button type="button" className={styles['secondaryButton']} disabled={xBusy}
+                onClick={() => { setXClientId(''); setXClientSecret(''); setXSetupOpen(false); setXNotice(undefined) }}>
+                {t('cancel')}
+              </button>
+              <button type="button" className={styles['secondaryButton']} disabled={xBusy}
+                onClick={() => { setupX('user') }}>Conectar cuenta X personal</button>
+              <button type="button" className={styles['primaryButton']} disabled={xBusy}
+                onClick={() => { setupX('phoenix') }}>Conectar X de Kira</button>
+            </div>
           </div>
         )}
         {!jevSetupOpen ? null : (
@@ -1049,22 +2345,37 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
           </div>
           {registryBusy ? <p className={styles['advancedHint']}>{connectorT('registrySearching')}</p> : null}
           {registryFailure ? <p className={styles['error']}>{connectorT('registryUnavailable')}</p> : null}
-          {!registryBusy && !registryFailure && registrySnapshot !== undefined && registrySnapshot.candidates.length === 0
+          {!registryBusy && !registryFailure && registrySnapshot !== undefined && novelRegistryCandidates.length === 0
             ? <p className={styles['advancedHint']}>{connectorT('registryNoMatches')}</p>
             : null}
-          {registrySnapshot === undefined || registrySnapshot.candidates.length === 0 ? null : (
+          {registrySnapshot === undefined || novelRegistryCandidates.length === 0 ? null : (
             <div className={connectorStyles['connectorGrid']}>
-              {registrySnapshot.candidates.map(candidate => (
-                <OfficialMcpCard
-                  key={`${candidate.name}@${candidate.version}`}
-                  candidate={candidate}
-                  stale={registrySnapshot.stale}
-                  installed={candidate.remoteUrl !== undefined && mcpHub.managed.some(connector => connector.url === candidate.remoteUrl)}
-                  installing={installingRegistryName === candidate.name}
-                  t={connectorT}
-                  onInstall={installRegistryCandidate}
-                />
-              ))}
+              {novelRegistryCandidates.map((candidate) => {
+                const managed = mcpHub.managed.find(connector =>
+                  (connector.source?.kind === 'registry' && connector.source.name === candidate.name)
+                  || (candidate.remoteUrl !== undefined && connector.url === candidate.remoteUrl))
+                const runtime = managed === undefined
+                  ? undefined
+                  : mcpHub.runtime.find(entry => entry.serverName === managed.serverName)
+                return (
+                  <OfficialMcpCard
+                    key={`${candidate.name}@${candidate.version}`}
+                    candidate={candidate}
+                    stale={registrySnapshot.stale}
+                    managed={managed}
+                    runtime={runtime}
+                    installing={installingRegistryName === candidate.name}
+                    reconnecting={runtime !== undefined && reconnectingServerName === runtime.serverName}
+                    repairing={managed !== undefined && repairingEntryId === managed.entryId}
+                    removing={managed !== undefined && removingEntryId === managed.entryId}
+                    t={connectorT}
+                    onInstall={installRegistryCandidate}
+                    onReconnect={mcpRegistry.reconnect === undefined ? undefined : reconnectMcpConnector}
+                    onRepair={mcpRegistry.repair === undefined ? undefined : repairManagedConnector}
+                    onRemove={mcpRegistry.remove === undefined ? undefined : removeManagedConnector}
+                  />
+                )
+              })}
             </div>
           )}
         </section>

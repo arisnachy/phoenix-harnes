@@ -888,7 +888,11 @@ export async function runGate(gate: Gate): Promise<GateResult> {
   }>((resolveExit) => {
     const child = spawn(gate.command, gate.args, {
       cwd: root,
-      env: { ...process.env, ...gate.env },
+      // The aggregate owns the worktree lock for the whole gate graph. Child
+      // commands that themselves invoke run-gates must not try to reacquire
+      // their parent's lock (which would self-deadlock until the 15-minute
+      // stale-lock timeout).
+      env: { ...process.env, ...gate.env, DSH_GATE_LOCK_DISABLED: '1' },
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     child.stdout.setEncoding('utf8')

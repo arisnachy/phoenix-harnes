@@ -22,7 +22,6 @@ import { deriveKeyRef, messageOf, protocolChoices, providerUsable } from './stor
 import type { ModelsSettingsStore, ProviderRow } from './store.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import { ProviderEditor, type ProviderEditorProps } from './ProviderEditor.tsx'
-import { AuthorizationPanel } from './AuthorizationPanel.tsx'
 import type { en } from './locales.ts'
 import styles from './ModelsSection.module.css'
 
@@ -223,7 +222,6 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   // Registered account flows, keyed by the provider id after the scope slash
   // (`llm-pi-ai/openai-codex` → `openai-codex`): the same join the cards use.
   const [accountFlows, setAccountFlows] = useState<ReadonlyMap<string, AccountFlow>>(() => new Map())
-  const [flowNonce, setFlowNonce] = useState(0)
   const [reordering, setReordering] = useState(false)
   const [orderFailure, setOrderFailure] = useState<string | undefined>(undefined)
 
@@ -238,13 +236,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
       ])))
     }, () => undefined)
     return () => { stale = true }
-  }, [api.authorization, flowNonce])
-
-  /** After a sign-in ends authorized: refresh stored-flow state and the page. */
-  const refreshAccounts = (): void => {
-    setFlowNonce(current => current + 1)
-    void controller.load()
-  }
+  }, [api.authorization])
 
   /**
    * The provider's account flow, when this deployment registers one. A flow
@@ -360,15 +352,6 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
       <h2 className={styles['title']}>{t('title')}</h2>
       <p className={styles['intro']}>{t('intro')}</p>
       <p className={styles['intro']}>{t('providerOrder')}</p>
-      {api.authorization === undefined
-        ? null
-        : (
-          <AuthorizationPanel
-            api={api.authorization}
-            t={t}
-            onAuthorized={refreshAccounts}
-          />
-        )}
       {!state.writable && state.status === 'ready' ? <p className={styles['notice']}>{t('readOnly')}</p> : null}
       {savedIdentity === undefined
         ? null
@@ -396,15 +379,15 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                   api,
                   t,
                   readOnly: !state.writable,
-                  oauth: accountFlowFor(target.provider),
-                  onAuthorized: refreshAccounts,
                   onClose: (changed) => { closeSetup(changed, target) },
                 })}
               </li>
             )
           }
           const open = !adding && editing?.provider === row.entry.provider
-          const credentialConfigured = row.credential?.configured === true
+          const isCodex = row.entry.provider === CODEX_PROVIDER
+          const accountConnected = accountFlowFor(row.entry.provider)?.connected === true
+          const credentialConfigured = !isCodex && row.credential?.configured === true
           const credentialMissing = !credentialConfigured
             && row.apiKeyEnv !== undefined
             && row.credential?.configured === false
@@ -412,7 +395,14 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
             <li key={row.entry.provider} className={styles['rowCard']}>
               <div className={styles['rowHead']}>
                 <span className={styles['rowIdentity']}>
-                  <span className={styles['rowName']}>{row.entry.displayName}</span>
+                  <span className={styles['rowName']}>{isCodex && row.entry.displayName === CODEX_PROVIDER ? 'OpenAI Codex' : row.entry.displayName}</span>
+                  {isCodex ? (
+                    <span role="img" className={styles['rowTag']}
+                      aria-label={t(accountConnected ? 'accountAuthConnected' : 'accountAuthMissing')}
+                      title={t(accountConnected ? 'accountAuthConnected' : 'accountAuthMissing')}>
+                      AUTH
+                    </span>
+                  ) : null}
                   {/* Only the adapter can tell a hand-declared route from a
                       shipped one it also has a stored profile for, so the tag
                       follows its answer and stays off when it gives none. */}
@@ -499,8 +489,6 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                   api,
                   t,
                   readOnly: !state.writable,
-                  oauth: accountFlowFor(target.provider),
-                  onAuthorized: refreshAccounts,
                   onClose: (changed) => { closeEditor(changed, target) },
                 })
                 : null}
@@ -541,8 +529,6 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                 api={api}
                 t={t}
                 readOnly={!state.writable}
-                oauth={accountFlowFor(addTarget.provider)}
-                onAuthorized={refreshAccounts}
                 onClose={(changed) => { closeEditor(changed, addTarget) }}
               />
             </div>

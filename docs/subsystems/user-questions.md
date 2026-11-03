@@ -79,6 +79,8 @@ interface AskUserQuestionItem {
   options?: AskUserQuestionOption[]
   /** Whether more than one option may be selected. Defaults to single-select. */
   multiSelect?: boolean
+  /** Personal/sensitive question: expiration must never supply a fabricated answer or approval. */
+  sensitive?: boolean
   /** Optional presentation intent for capable UIs; absent asks for the generic option list. */
   intent?: AskUserQuestionIntent
 }

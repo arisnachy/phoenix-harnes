@@ -16,6 +16,10 @@ describe('CI workflow', () => {
     expect(Object.keys(workflow.on).sort()).toEqual(['pull_request', 'push', 'workflow_dispatch'])
     expect(workflow.on.pull_request).toMatchObject({ branches: ['main'] })
     expect(workflow.on.push).toMatchObject({ branches: ['main'] })
+    expect(workflow.concurrency).toMatchObject({
+      group: 'phoenix-main-guard-${{ github.ref }}',
+      'cancel-in-progress': "${{ github.event_name == 'pull_request' }}",
+    })
     const job = workflow.jobs['compiled-main']
     expect(job['runs-on']).toBe('windows-latest')
     if (!Array.isArray(job.steps)) throw new TypeError('compiled-main must define steps')
@@ -25,8 +29,33 @@ describe('CI workflow', () => {
     expect(job.env).toMatchObject({ PHOENIX_BUILD_TIMINGS: '1' })
     expect(commands.some(command => command.includes('pnpm run typecheck'))).toBe(true)
     expect(commands.some(command => command.includes('pnpm run build'))).toBe(true)
-    expect(commands.some(command => command.includes("Select-String -Path $log -SimpleMatch '[PLUGIN_TIMINGS]' -Quiet"))).toBe(true)
+    expect(commands.some(command => command.includes('plugin timing advisories'))).toBe(true)
+    expect(commands.some(command => command.includes('PLUGIN_TIMINGS regression detected'))).toBe(false)
     expect(commands).toContain('pnpm run check:ci:windows-blocking')
+  })
+
+  it('requires successful exact-SHA CI before stable promotion, including manual dispatch', () => {
+    const workflow = loadWorkflow('.github/workflows/phoenix-stable-update-channel.yml')
+    if (!isRecord(workflow.on) || !isRecord(workflow.jobs) || !isRecord(workflow.jobs.publish)) {
+      throw new TypeError('Stable channel must define a guarded publishing job')
+    }
+    expect(workflow.on.push).toBeUndefined()
+    expect(workflow.on.workflow_run).toMatchObject({
+      workflows: ['PHOENIX main guard'], types: ['completed'], branches: ['main'],
+    })
+    const job = workflow.jobs.publish
+    expect(String(job.if)).toContain("github.event.workflow_run.conclusion == 'success'")
+    expect(String(job.if)).toContain("github.event.workflow_run.event == 'push'")
+    if (!Array.isArray(job.steps)) throw new TypeError('Stable publishing steps are missing')
+    const commands = job.steps.filter((step): step is Record<string, unknown> & { run: string } =>
+      isRecord(step) && typeof step.run === 'string').map(step => step.run)
+    expect(commands.some(command => command.includes('head_sha=$target&status=success'))).toBe(true)
+    expect(commands.some(command => command.includes('TRIGGER_SHA') && command.includes('promote=false'))).toBe(true)
+    expect(commands.some(command => command.includes('git rev-parse origin/main') && command.includes('git push origin'))).toBe(true)
+    for (const name of ['Verify updater contract', 'Publish stable manifest']) {
+      expect(job.steps.find((step: unknown) => isRecord(step) && step.name === name))
+        .toMatchObject({ if: "steps.target.outputs.promote == 'true'" })
+    }
   })
 
   it('isolates every pnpm action setup destination per runner', () => {
@@ -96,16 +125,17 @@ describe('CI workflow', () => {
 
     // windows-native: portable real-kernel signal on a standard hosted runner.
     expect(windowsNative['runs-on']).toBe('windows-latest')
-    expect(windowsNative.name).toBe('windows node 24 / native complete')
+    expect(windowsNative.name).toBe('windows node 24 / native required')
     expect(windowsNative.if).toBe("github.event_name == 'pull_request'")
     expect(windowsNative.env).toMatchObject({
-      DSH_COVERAGE_TEST_TIMEOUT_MS: '30000',
+      DSH_GATE_CONCURRENCY: '1',
+      DSH_PUBLINT_CONCURRENCY: '2',
     })
     const nativeSteps = windowsNative.steps as unknown[]
     const nativeCommandSteps = nativeSteps.filter((step): step is Record<string, unknown> & { run: string } => (
       isRecord(step) && typeof step.run === 'string'
     ))
-    expect(nativeCommandSteps.map(step => step.run)).toContain('pnpm run check:ci:windows-complete')
+    expect(nativeCommandSteps.map(step => step.run)).toContain('pnpm run check:ci:windows-blocking')
 
     // wine-apt-cache: master-only, seeds the Wine apt cache, lives in ci-master.
     expect(wineAptCache.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/master'")
@@ -215,24 +245,28 @@ describe('CI workflow', () => {
     expect(config).not.toContain('packages/lsp/lsp-stdio/src/instance.ts')
   })
 
-  it('requires one release-shaped Python runtime target on every pull request', () => {
+  it('requires the actual keyless Python SDK suite on every pull request', () => {
     const workflow = loadWorkflow('.github/workflows/ci.yml')
-    const pythonRuntime = workflowJob(workflow, 'python-runtime')
+    const pythonSdk = workflowJob(workflow, 'python-sdk')
     const aggregate = workflowJob(workflow, 'all-checks-passed')
-    if (!Array.isArray(aggregate.needs)) {
-      throw new TypeError('CI aggregate must define required job dependencies')
+    if (!Array.isArray(aggregate.needs) || !Array.isArray(pythonSdk.steps)) {
+      throw new TypeError('CI aggregate and Python SDK steps must exist')
     }
 
-    expect(pythonRuntime).toMatchObject({
+    expect(pythonSdk).toMatchObject({
       if: "github.event_name == 'pull_request'",
-      name: 'python runtime / release-shaped Linux x64',
-      uses: './.github/workflows/build-exe-for-python-sdk.yml',
-      with: {
-        targets: 'node24-linux-x64',
-        ci: true,
-      },
+      name: 'python 3.10 / keyless SDK',
+      'runs-on': 'ubuntu-latest',
     })
-    expect(aggregate.needs).toContain('python-runtime')
+    const commands = pythonSdk.steps
+      .filter((step): step is Record<string, unknown> & { run: string } => isRecord(step) && typeof step.run === 'string')
+      .map(step => step.run)
+    expect(commands).toContain('uv run --python 3.10 --group test --project python/sdk pytest')
+    expect(pythonSdk.steps.some((step: unknown) => isRecord(step)
+      && step.uses === 'actions/setup-python@v6.3.0'
+      && isRecord(step.with)
+      && step.with['python-version'] === '3.10')).toBe(true)
+    expect(aggregate.needs).toContain('python-sdk')
   })
 
   it('keeps every Vitest project process-isolated on native Windows', () => {
@@ -240,6 +274,32 @@ describe('CI workflow', () => {
 
     expect(config).not.toContain("pool: process.platform === 'win32' ? 'threads' : 'forks'")
     expect(config.match(/pool: 'forks'/g)).toHaveLength(2)
+  })
+
+  it('restores workspace devDependencies after the Windows production seed', () => {
+    const workflow = loadWorkflow('.github/workflows/phoenix-windows-desktop.yml')
+    const windows = workflowJob(workflow, 'windows-desktop')
+    if (!Array.isArray(windows.steps)) throw new TypeError('Windows desktop workflow must define steps')
+
+    expect(windows.env).toMatchObject({ pnpm_config_verify_deps_before_run: 'false' })
+    const steps = windows.steps.filter(isRecord)
+    const buildIndex = steps.findIndex(step => step.name === 'Build Phoenix production runtime')
+    const restoreIndex = steps.findIndex(step => step.name === 'Restore workspace development dependencies')
+    const guardIndex = steps.findIndex(step => step.name === 'Guard Windows Host handoff, Game Studio build and Filesystem MCP')
+    if (buildIndex < 0 || restoreIndex < 0 || guardIndex < 0) {
+      throw new TypeError('Windows desktop workflow must define the seed, dependency restore, and guard steps')
+    }
+
+    expect(restoreIndex).toBeGreaterThan(buildIndex)
+    expect(restoreIndex).toBeLessThan(guardIndex)
+    const restore = steps[restoreIndex]
+    const guard = steps[guardIndex]
+    if (restore === undefined || guard === undefined) {
+      throw new TypeError('Windows desktop dependency restore and guard steps must be records')
+    }
+    expect(restore.run).toContain('pnpm install --frozen-lockfile --prod=false')
+    expect(restore.run).toContain('pnpm exec vitest --version')
+    expect(guard.run).toContain('pnpm exec vitest run')
   })
 })
 

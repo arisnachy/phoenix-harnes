@@ -120,7 +120,9 @@ describe('Binance trading activation boundary', () => {
       requestedByUser: true,
     }, context)).resolves.toMatchObject({
       mode: 'real',
-      realTradingEnabled: true,
+      realTradingEnabled: false,
+      mcpOperational: false,
+      tradeScopeVerified: false,
       status: 'installed',
       connector: {
         serverName: 'binance-agent-os',
@@ -157,5 +159,55 @@ describe('Binance trading activation boundary', () => {
       approvalOutcome: 'rejected',
     })
     expect(host.enableBinanceAgentOs).not.toHaveBeenCalled()
+  })
+})
+
+describe('Official Binance Agentic MCP readiness and recovery', () => {
+  it('does not confuse OAuth-required installation with a tradable account', async () => {
+    const host = agentOs()
+    const tool = createBinanceTradingTools({
+      broker: broker() as never, approval: { request: vi.fn() }, agentOs: host,
+    }).find(candidate => candidate.name === 'binance_mcp_health')
+    if (tool === undefined) throw new Error('binance_mcp_health missing')
+    const report = await tool.execute({ action: 'status' }, exec())
+    expect(report).toMatchObject({
+      configured: true, ready: false, toolCount: 0,
+      nextAction: 'authorize-in-settings',
+    })
+    expect(host.enableBinanceAgentOs).not.toHaveBeenCalled()
+  })
+
+  it('counts only live discovered tools and never equates them to Trade scopes', async () => {
+    const host = agentOs()
+    host.binanceAgentOsState.mockResolvedValue({
+      configured: true, status: 'ready',
+      toolNames: ['binance_spot_ticker', 'binance_account_balances'],
+    })
+    const tool = createBinanceTradingTools({
+      broker: broker() as never, approval: { request: vi.fn() }, agentOs: host,
+    }).find(candidate => candidate.name === 'binance_mcp_health')
+    if (tool === undefined) throw new Error('binance_mcp_health missing')
+    expect(await tool.execute({}, exec())).toMatchObject({
+      configured: true, ready: true, toolCount: 2,
+      toolNames: ['binance_spot_ticker', 'binance_account_balances'],
+      nextAction: 'use-live-mcp-tools',
+    })
+  })
+
+  it('allows MCP repair only on explicit request and preserves user approval boundary', async () => {
+    const host = {
+      ...agentOs(),
+      repairBinanceAgentOs: vi.fn(async () => ({ status: 'installed' as const,
+        connector: { entryId: 'next', serverName: 'binance-agent-os',
+          url: 'https://agent.binance.com/mcp/agentic' } })),
+    }
+    const tool = createBinanceTradingTools({
+      broker: broker() as never, approval: { request: vi.fn() }, agentOs: host,
+    }).find(candidate => candidate.name === 'binance_mcp_health')
+    if (tool === undefined) throw new Error('binance_mcp_health missing')
+    await expect(tool.execute({ action: 'repair' }, exec())).rejects.toThrow('explicit')
+    expect(host.repairBinanceAgentOs).not.toHaveBeenCalled()
+    await tool.execute({ action: 'repair', requestedByUser: true }, exec())
+    expect(host.repairBinanceAgentOs).toHaveBeenCalledTimes(1)
   })
 })

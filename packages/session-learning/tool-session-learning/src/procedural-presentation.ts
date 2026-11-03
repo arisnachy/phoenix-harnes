@@ -22,3 +22,16 @@ export function formatProceduralContext(states: readonly ProceduralLearningState
     '</validated_procedures>',
   ].join('\n').slice(0, MAX_CONTEXT_CHARS)
 }
+
+/** Expose relevant incomplete experience only as a recovery hint, not as success. */
+export function formatRecoveryCandidates(states: readonly ProceduralLearningState[]): string {
+  const lines = states.filter(state => state.status === 'candidate').slice(0, 2)
+    .map(state => `- [${state.scope}] ${state.title}; attempted steps: ${state.steps.slice(0, 12).join(' → ')}`)
+  if (lines.length === 0) return ''
+  return [
+    '<unverified_recovery_experience>',
+    'These actions were attempted during an UNFINISHED previous task. Do not claim they succeeded. Use only relevant steps as diagnostics; verify current page/tool state and avoid repeating failures. Do not reuse credentials, personal answers or stale attestations.',
+    ...lines,
+    '</unverified_recovery_experience>',
+  ].join('\n').slice(0, 2400)
+}

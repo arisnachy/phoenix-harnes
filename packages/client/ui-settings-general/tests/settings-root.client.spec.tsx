@@ -86,7 +86,12 @@ describe('SettingsRoot trigger', () => {
     const trigger = screen.getByRole('button', { name: 'Settings' })
     expect(trigger.hasAttribute('aria-label')).toBe(false)
     expect(renderSlot).toHaveBeenCalledWith('settings.trigger', { wide: true })
-    expect(trigger.contains(screen.getByTestId('settings-trailing-seat'))).toBe(true)
+    expect(renderSlot).toHaveBeenCalledWith('settings.trigger.trailing', { wide: true })
+    const trailing = screen.getByTestId('settings-trailing-seat')
+    // The meter sits NEXT to Settings, not on a separate full-height card.
+    expect(trigger.contains(trailing)).toBe(false)
+    expect(trigger.parentElement?.contains(trailing)).toBe(true)
+    expect(trigger.nextElementSibling?.contains(trailing)).toBe(true)
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(trigger)
     expect(screen.getByRole('dialog')).toBeTruthy()
@@ -100,6 +105,7 @@ describe('SettingsRoot trigger', () => {
     expect(renderSlot).toHaveBeenCalledWith('settings.trigger', { wide: false })
     expect(renderSlot).toHaveBeenCalledWith('settings.trigger.trailing', { wide: false })
     expect(trigger.contains(trailing)).toBe(false)
+    expect(trigger.previousElementSibling?.contains(trailing)).toBe(true)
   })
 })
 
@@ -168,6 +174,64 @@ describe('SettingsPanel close paths', () => {
 })
 
 describe('SettingsPanel navigation', () => {
+  it('opens an existing section through Phoenix primary navigation', () => {
+    mount({ rows: [
+      { id: 'general', order: 0, label: 'General' },
+      { id: 'connectors', order: 10, label: 'Connectors' },
+    ] })
+    act(() => { window.dispatchEvent(new CustomEvent('phoenix:open-settings-section', { detail: 'connectors' })) })
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByTestId('section-connectors')).toBeTruthy()
+    act(() => { window.dispatchEvent(new CustomEvent('phoenix:open-settings-section', { detail: 42 })) })
+    expect(screen.getByTestId('section-connectors')).toBeTruthy()
+  })
+
+
+  it('opens the real Codex reconnect surface without a second OAuth implementation', () => {
+    const { renderSlot } = mount({ rows: [
+      { id: 'connectors', order: 30, label: 'Connectors' },
+    ] })
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoenix:open-feature', {
+        detail: { destination: 'connectors', label: 'Reconectar Codex' },
+      }))
+    })
+    expect(screen.getByRole('dialog', { name: 'Reconectar Codex' })).toBeTruthy()
+    expect(renderSlot).toHaveBeenCalledWith('settings.section',
+      expect.objectContaining({ launchContext: 'codex-reconnect' }), { only: 'connectors' })
+  })
+
+  it('opens Discover as a focused MCP catalog, without the Settings section menu', () => {
+    const { renderSlot } = mount({ rows: [
+      { id: 'general', order: 0, label: 'General' },
+      { id: 'connectors', order: 30, label: 'Connectors' },
+    ] })
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoenix:open-feature', {
+        detail: { destination: 'discover', label: 'Discover' },
+      }))
+    })
+    expect(screen.getByRole('dialog', { name: 'Discover' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'General' })).toBeNull()
+    expect(screen.getByTestId('section-connectors')).toBeTruthy()
+    expect(renderSlot).toHaveBeenCalledWith('settings.section',
+      expect.objectContaining({ launchContext: 'discover' }), { only: 'connectors' })
+  })
+
+  it('does not route a missing feature to unrelated Settings content', () => {
+    mount({ rows: [{ id: 'general', order: 0, label: 'General' }] })
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoenix:open-feature', {
+        detail: { destination: 'team', label: 'Team' },
+      }))
+    })
+    expect(screen.getByRole('dialog', { name: 'Team' })).toBeTruthy()
+    expect(screen.queryByTestId('section-general')).toBeNull()
+    expect(screen.getByRole('status').textContent).toContain('no está disponible')
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(screen.getByTestId('section-general')).toBeTruthy()
+  })
+
   it('projects rows, marks the first active, and renders only that section', () => {
     mount()
     openPanel()
@@ -180,22 +244,23 @@ describe('SettingsPanel navigation', () => {
     mount({
       rows: [
         { id: 'general', order: 0, label: 'General' },
+        { id: 'profile', order: 5, label: 'Profile' },
         { id: 'models', order: 10, label: 'Models' },
         { id: 'agent-presets', order: 20, label: 'Agent presets' },
-        { id: 'plugins', order: 30, label: 'Plugins' },
+        { id: 'connectors', order: 30, label: 'Connectors' },
         { id: 'contributed', order: 40, label: 'Contributed' },
       ],
     })
     openPanel()
     // Glyphs carry no id of their own, so the drawn paths are what tells them apart.
-    const glyphs = ['General', 'Models', 'Agent presets', 'Plugins', 'Contributed']
+    const glyphs = ['General', 'Profile', 'Models', 'Agent presets', 'Connectors', 'Contributed']
       .map(name => screen.getByRole('button', { name }).querySelector('svg')?.innerHTML)
 
     expect(glyphs.every(glyph => glyph !== undefined && glyph !== '')).toBe(true)
-    // The three ids the shell names get their own glyph; every other section —
-    // including one this package never heard of — shares the gear.
-    expect(new Set(glyphs.slice(0, 4)).size).toBe(4)
-    expect(glyphs[4]).toBe(glyphs[0])
+    // Profile and Connectors have purpose-specific glyphs alongside the other
+    // shell-known sections; unknown contributions still fall back to the gear.
+    expect(new Set(glyphs.slice(0, 5)).size).toBe(5)
+    expect(glyphs[5]).toBe(glyphs[0])
   })
 
   it('switches the rendered section on nav click', () => {

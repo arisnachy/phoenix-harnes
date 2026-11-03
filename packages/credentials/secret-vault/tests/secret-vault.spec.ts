@@ -1,5 +1,5 @@
 import { Context } from '@phoenix-ai/cordis'
-import { credentialRef, originCredentialRef } from '@phoenix-ai/dsh-credentials'
+import { credentialRef } from '@phoenix-ai/dsh-credentials'
 import SessionStore, { SessionId } from '@phoenix-ai/dsh-session'
 import CommandRuntime from '@phoenix-ai/dsh-commands'
 import { describe, expect, it, vi } from 'vitest'
@@ -54,8 +54,11 @@ describe('/secret', () => {
     expect(missing?.result).toEqual({ kind: 'success', text: 'Secret DEMO_SECRET is not configured.' })
   })
 
-  it('stores one origin-bound login and grants unattended use without logging its values', async () => {
+  it('rejects credential messages and keeps login values out of storage and events', async () => {
     const { ctx, agent, values } = await mount()
+    const credentialUpdates: string[] = []
+    const disposeReference = ctx.on('credentials/reference-updated', (ref) => { credentialUpdates.push(ref) })
+    const disposeRecord = ctx.on('credentials/record-updated', (key) => { credentialUpdates.push(key) })
     const origin = 'https://Example.com/login'
     const account = 'unit-user@example.com'
     const loginSecret = 'synthetic-login-secret'
@@ -68,28 +71,19 @@ describe('/secret', () => {
     )
 
     expect(stored?.result).toEqual({
-      kind: 'success',
-      text: 'Login for https://example.com stored for unattended Phoenix browser use.',
+      kind: 'error',
+      text: 'Guarda los accesos web desde la tarjeta Secure Ask debajo del navegador; nunca escribas contraseñas como mensajes.',
     })
-    expect(values.get(originCredentialRef(origin, 'account'))).toBe(account)
-    expect(values.get(originCredentialRef(origin, 'secret'))).toBe(loginSecret)
-    expect(values.get(originCredentialRef(origin, 'autonomous'))).toBe('1')
-    const log = JSON.stringify(ctx.sessions.list().flatMap(item => item.events))
+    expect(values).toEqual(new Map())
+    const events = ctx.sessions.list().flatMap(item => item.events)
+    const log = JSON.stringify(events)
     expect(log).not.toContain(account)
     expect(log).not.toContain(loginSecret)
-
-    const status = await ctx.commands.execute(
-      agent, '/secret login-status https://example.com/account', [], new AbortController().signal,
-    )
-    expect(status?.result).toEqual({
-      kind: 'success',
-      text: 'Login for https://example.com is configured for unattended Phoenix browser use.',
-    })
-
-    await ctx.commands.execute(agent, '/secret login-delete https://example.com', [], new AbortController().signal)
-    expect(values.has(originCredentialRef(origin, 'account'))).toBe(false)
-    expect(values.has(originCredentialRef(origin, 'secret'))).toBe(false)
-    expect(values.has(originCredentialRef(origin, 'autonomous'))).toBe(false)
+    expect(credentialUpdates).toEqual([])
+    disposeReference()
+    disposeRecord()
+    const run = events.find(event => event.type === 'command/run')
+    expect(run?.type === 'command/run' && Object.hasOwn(run.data, 'args')).toBe(false)
   })
 
   it('rejects insecure remote login origins', async () => {

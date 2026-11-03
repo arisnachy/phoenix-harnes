@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Distrito Neón — Demo de acción 2D</title>
+<style>
+html,body{margin:0;min-height:100%;background:#090c19;color:#edf3ff;font-family:system-ui,sans-serif}
+main{max-width:1060px;margin:0 auto;padding:10px}h1{font-size:1.22rem;margin:2px 0 7px;letter-spacing:.04em}
+p{font-size:.84rem;color:#afc0da;line-height:1.5;margin:8px 0}
+canvas{display:block;width:100%;height:auto;background:#10162d;border:2px solid #4e5c8e;border-radius:8px;box-shadow:0 15px 50px #0008;touch-action:none}
+small{color:#9ab0d3}button{font:inherit;color:white;background:#314f81;border:1px solid #6f9be1;border-radius:6px;padding:7px 11px;cursor:pointer}
+menu{display:flex;gap:8px;margin:10px 0;padding:0;flex-wrap:wrap}
+</style></head><body><main><h1>DISTRITO NEÓN <small>· demo original / nivel 01</small></h1>
+<canvas id="game" width="960" height="540" tabindex="0" aria-label="Escenario jugable de lucha callejera"></canvas>
+<menu><button id="start">Iniciar / continuar</button><button id="restart">Reiniciar nivel</button><button id="sound">Sonido: apagado</button></menu>
+<p><b>Mover:</b> WASD o flechas · <b>Puñetazo:</b> J · <b>Patada:</b> K · <b>Agarrar:</b> L · <b>Lanzar:</b> U · <b>Saltar:</b> Espacio · <b>Pausa:</b> P · <b>Reiniciar:</b> R. Derrota a los tres pandilleros y al jefe final.</p>
+<p>Este es un prototipo técnico jugable; la ilustración vectorial y los efectos sintetizados no se presentan como arte o banda sonora comerciales.</p>
+</main>
+<script id="phoenix-game-manifest" type="application/json">{"schemaVersion":1,"title":"Distrito Neón — demo jugable de un nivel","genre":"original side-scrolling beat-em-up","gameType":"beat-em-up","references":[{"title":"Double Dragon (1987) — mechanics and street-brawler vocabulary","url":"https://www.arcade-museum.com/Videogame/double-dragon"},{"title":"Double Dragon arcade — stage/enemy/weapon patterns","url":"https://www.gamesdatabase.org/game/arcade/double-dragon.aspx"}],"player":{"id":"hero","states":["idle","run","jump","punch","kick","grab","hurt","death"],"animations":{"idle":4,"run":8,"jump":3,"punch":4,"kick":5,"grab":4,"hurt":3,"death":6},"abilities":[{"id":"three-hit-combo","input":"J J J","kind":"melee","damage":24,"cooldownSeconds":0.7},{"id":"overhead-throw","input":"L + K","kind":"grapple","damage":20,"cooldownSeconds":1.2}]},"enemies":[{"id":"street-scout","role":"rushdown","states":["idle","move","attack","hurt","death"]},{"id":"chain-fighter","role":"spacing","states":["idle","move","attack","hurt","death"]},{"id":"heavy-bruiser","role":"guard-break","states":["idle","move","attack","hurt","death"]}],"bosses":[{"id":"iron-warden","phases":["opening","enraged"],"attacks":[{"id":"sweep","phase":"opening","telegraphSeconds":0.48},{"id":"charge","phase":"enraged","telegraphSeconds":0.7}]}],"combat":{"depthAxis":true,"knockback":true,"hitboxes":{"depthTolerance":22,"attackArcs":true},"combos":[{"id":"triple-punch","inputs":["punch","punch","punch"]},{"id":"kick-chain","inputs":["punch","kick"]}],"grapples":[{"id":"throw","input":"grab+kick"}]},"level":{"scrollLength":1880,"belt":{"minY":290,"maxY":415},"layers":[{"id":"skyline","scrollFactor":0.12},{"id":"buildings","scrollFactor":0.4},{"id":"street-props","scrollFactor":0.85}],"zones":[{"id":"neon-alley","startX":0,"endX":1000,"artStyle":"night neon street"},{"id":"warehouse-district","startX":1000,"endX":1880,"artStyle":"rainy industrial district"}]},"controls":{"move":"WASD / Arrow keys, 8-way belt","punch":"J","kick":"K","jump":"Space","grab":"L","pause":"P"},"audio":{"mode":"prototype","cues":["punch","kick","hit","grab","boss","pickup"],"music":"procedural prototype — not a production soundtrack","voices":[]},"sources":[{"path":"examples/game-studio/street-brawler-demo.html","license":"original-prototype"}],"art":{"mode":"prototype"}}</script>
+<script>
+/* Phoenix Game Studio · street brawler runtime.
+ * Pure engine, no placeholder character rendering, no external network.
+ * Original/authorized PNG atlases and music/SFX must be supplied by the game author.
+ * Expose window.PhoenixBrawlerKit after inlining this file in a self-contained game.
+ */
+const PhoenixBrawlerKit = (() => {
+  'use strict';
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  const moves = Object.freeze({
+    punch: { windup: .10, active: .12, recovery: .19, range: 54, depth: 19, damage: 7, knockback: 23 },
+    kick: { windup: .17, active: .14, recovery: .27, range: 75, depth: 23, damage: 12, knockback: 44 },
+    grab: { windup: .15, active: .12, recovery: .32, range: 32, depth: 19, damage: 3, knockback: 0 },
+    throw: { windup: .23, active: .11, recovery: .42, range: 75, depth: 22, damage: 22, knockback: 105 },
+    sweep: { windup: .48, active: .23, recovery: .54, range: 94, depth: 32, damage: 17, knockback: 91 },
+    charge: { windup: .7, active: .28, recovery: .8, range: 120, depth: 28, damage: 23, knockback: 125 },
+  });
+  function fighter({ id, x = 0, y = 0, hp = 100, speed = 145, team = 'enemy', boss = false } = {}) {
+    if (!id) throw new Error('A fighter needs an id and a distinct approved atlas');
+    return { id, x, y, z: 0, vx: 0, vy: 0, hp, maxHp: hp, speed, team, boss,
+      face: 1, mode: 'idle', action: null, stateTime: 0, attackHits: new Set(),
+      stun: 0, hitstop: 0, invulnerable: 0, nextAction: null, cooldown: 0,
+      phase: 'opening', aiTime: 0, grabbedBy: null };
+  }
+  function walk(actor, horizontal, vertical, dt, belt, worldWidth) {
+    if (actor.hp <= 0 || actor.stun > 0 || actor.action || actor.grabbedBy || dt <= 0) return false;
+    const len = Math.hypot(horizontal, vertical);
+    const dx = len > 1 ? horizontal / len : horizontal;
+    const dy = len > 1 ? vertical / len : vertical;
+    actor.x = clamp(actor.x + dx * actor.speed * dt, 0, worldWidth);
+    actor.y = clamp(actor.y + dy * actor.speed * .68 * dt, belt.minY, belt.maxY);
+    if (dx) actor.face = dx > 0 ? 1 : -1;
+    actor.mode = dx || dy ? 'run' : 'idle';
+    return true;
+  }
+  function queueAttack(actor, move) {
+    if (!(move in moves) || actor.hp <= 0 || actor.stun > 0 || actor.grabbedBy) return false;
+    if (actor.action) {
+      // Chain only after the previous attack has become active.
+      if (actor.action.elapsed >= moves[actor.action.name].windup) {
+        actor.nextAction = move;
+        return true;
+      }
+      return false;
+    }
+    actor.action = { name: move, elapsed: 0, active: false };
+    actor.stateTime = 0;
+    actor.mode = move;
+    actor.attackHits.clear();
+    return true;
+  }
+  function advance(actor, dt, emit = () => {}) {
+    if (!(dt > 0)) return;
+    const step = Math.min(dt, .05);
+    if (actor.hp <= 0) { actor.mode = 'death'; actor.action = null; return; }
+    if (actor.hitstop > 0) { actor.hitstop = Math.max(0, actor.hitstop - step); return; }
+    actor.invulnerable = Math.max(0, actor.invulnerable - step);
+    actor.cooldown = Math.max(0, actor.cooldown - step);
+    if (actor.stun > 0) {
+      actor.stun = Math.max(0, actor.stun - step);
+      actor.x += actor.vx * step;
+      actor.vx *= .83;
+      actor.mode = 'hurt';
+      return;
+    }
+    actor.stateTime += step;
+    if (!actor.action) return;
+    actor.action.elapsed += step;
+    const data = moves[actor.action.name];
+    const name = actor.action.name;
+    const active = actor.action.elapsed >= data.windup && actor.action.elapsed < data.windup + data.active;
+    if (active && !actor.action.active) emit({ type: 'attack-active', actor: actor.id, move: name });
+    actor.action.active = active;
+    if (actor.action.elapsed >= data.windup + data.active + data.recovery) {
+      actor.action = null;
+      actor.mode = 'idle';
+      emit({ type: 'attack-finished', actor: actor.id, move: name });
+      if (actor.nextAction) {
+        const next = actor.nextAction;
+        actor.nextAction = null;
+        queueAttack(actor, next);
+      }
+    }
+  }
+  function resolveHits(attacker, targets, emit = () => {}) {
+    if (!attacker.action?.active || attacker.hp <= 0) return 0;
+    const data = moves[attacker.action.name];
+    let count = 0;
+    for (const target of targets) {
+      if (target.team === attacker.team || target.hp <= 0 || target.invulnerable > 0
+        || attacker.attackHits.has(target.id) || Math.abs(target.y - attacker.y) > data.depth
+        || (target.x - attacker.x) * attacker.face < -10
+        || Math.abs(target.x - attacker.x) > data.range) continue;
+      attacker.attackHits.add(target.id);
+      target.hp = Math.max(0, target.hp - data.damage);
+      target.vx = data.knockback * attacker.face * 2.5;
+      target.stun = target.hp > 0 ? .2 + data.damage / 110 : 0;
+      target.invulnerable = .17;
+      target.mode = target.hp ? 'hurt' : 'death';
+      target.action = null;
+      target.nextAction = null;
+      attacker.hitstop = .05;
+      emit({ type: 'hit', from: attacker.id, to: target.id, move: attacker.action.name,
+        damage: data.damage, defeated: target.hp === 0 });
+      if (attacker.action.name === 'grab' && target.hp > 0) {
+        target.grabbedBy = attacker.id;
+        emit({ type: 'grab', from: attacker.id, to: target.id });
+      }
+      count += 1;
+    }
+    return count;
+  }
+  function releaseGrab(actor, victims, emit = () => {}) {
+    for (const target of victims) {
+      if (target.grabbedBy !== actor.id) continue;
+      target.grabbedBy = null;
+      target.stun = Math.max(target.stun, .2);
+      emit({ type: 'grab-release', from: actor.id, to: target.id });
+    }
+  }
+  function enemyAI(enemy, player, dt, belt, width, emit = () => {}) {
+    if (enemy.hp <= 0) return;
+    enemy.aiTime += Math.min(dt, .05);
+    if (enemy.stun > 0 || enemy.action || enemy.grabbedBy) return;
+    const dx = player.x - enemy.x, dy = player.y - enemy.y;
+    const delta = Math.hypot(dx, dy);
+    if (delta > 560 || player.hp <= 0) { enemy.mode = 'idle'; return; }
+    enemy.face = dx >= 0 ? 1 : -1;
+    if (Math.abs(dx) > 54 || Math.abs(dy) > 15) {
+      // Approach on the depth axis, not only a horizontal 1D lane.
+      walk(enemy, Math.sign(dx) * (Math.abs(dx) > 48 ? 1 : 0),
+        Math.sign(dy) * (Math.abs(dy) > 10 ? .8 : 0), dt, belt, width);
+    } else if (enemy.cooldown === 0) {
+      const move = enemy.boss ? 'sweep' : enemy.speed > 150 ? 'kick' : 'punch';
+      queueAttack(enemy, move);
+      enemy.cooldown = enemy.boss ? 1.9 : 1.05;
+      emit({ type: 'telegraph', actor: enemy.id, move });
+    }
+  }
+  function bossAI(boss, player, dt, belt, width, emit = () => {}) {
+    if (boss.hp <= 0) { boss.phase = 'defeated'; return; }
+    const phase = boss.hp <= boss.maxHp * .45 ? 'enraged' : 'opening';
+    if (boss.phase !== phase) { boss.phase = phase; emit({ type: 'boss-phase', actor: boss.id, phase }); }
+    if (boss.stun > 0 || boss.action || boss.grabbedBy) return;
+    const dx = player.x - boss.x, dy = player.y - boss.y;
+    boss.face = dx >= 0 ? 1 : -1;
+    if (Math.abs(dx) > 100 || Math.abs(dy) > 25) {
+      walk(boss, Math.sign(dx) * (Math.abs(dx) > 100 ? 1 : 0),
+        Math.sign(dy) * (Math.abs(dy) > 25 ? .8 : 0), dt, belt, width);
+    } else if (boss.cooldown <= 0) {
+      const move = phase === 'enraged' && Math.floor(boss.aiTime * 2) % 2 === 0 ? 'charge' : 'sweep';
+      queueAttack(boss, move);
+      boss.cooldown = phase === 'enraged' ? .6 : 1.2;
+      emit({ type: 'boss-telegraph', actor: boss.id, move });
+    }
+    boss.aiTime += Math.min(dt, .05);
+  }
+  function cameraX(player, current, viewportWidth, worldWidth, dt) {
+    const target = clamp(player.x - viewportWidth * .38, 0, Math.max(0, worldWidth - viewportWidth));
+    return current + (target - current) * clamp(dt * 5, 0, 1);
+  }
+  function drawStage(ctx, level, imageFor, camera, viewportWidth, viewportHeight) {
+    // Multiple authored parallax layers and a zone-specific scenic image.
+    // A missing illustrated zone is a failed draw, never a painted rectangle fallback.
+    if (!Array.isArray(level.layers) || !Array.isArray(level.zones)) return false;
+    for (const layer of level.layers) {
+      const image = imageFor(layer.id, 'backgrounds');
+      if (!image?.complete || !image.naturalWidth) return false;
+      const tileWidth = Math.max(1, image.naturalWidth / image.naturalHeight * viewportHeight);
+      const offset = ((camera * layer.scrollFactor) % tileWidth + tileWidth) % tileWidth;
+      for (let x = -offset; x < viewportWidth; x += tileWidth) {
+        ctx.drawImage(image, x, 0, tileWidth + .5, viewportHeight);
+      }
+    }
+    // Draw an independent streetscape for each contiguous segment; do not
+    // reuse a single alley backdrop for warehouse and industrial zones.
+    for (const zone of level.zones) {
+      if (zone.endX <= camera || zone.startX >= camera + viewportWidth) continue;
+      const image = imageFor(zone.id, 'zones');
+      if (!image?.complete || !image.naturalWidth) return false;
+      ctx.drawImage(image, zone.startX - camera, 0, zone.endX - zone.startX, viewportHeight);
+    }
+    return true;
+  }
+  function drawActorsByDepth(ctx, actors, atlasFor, camera, clock, motionKit) {
+    if (!motionKit || typeof motionKit.drawSpriteState !== 'function')
+      throw new Error('Pass the real PhoenixGameKit renderer to drawActorsByDepth');
+    // Y-sorting guarantees foreground enemies occlude actors behind them.
+    const sorted = [...actors].sort((a, b) => a.y - b.y);
+    for (const actor of sorted) {
+      const art = atlasFor(actor.id);
+      if (!art || !art.image || !art.atlas) continue;
+      const state = actor.hp <= 0 ? 'death' : actor.action ? actor.action.name : actor.mode;
+      // Bosses change actual atlas sequences with their phase; attack IDs must
+      // also have their own sequences (sweep/charge), not a frozen idle frame.
+      const phaseFrames = actor.boss && !actor.action && ['idle', 'run'].includes(state)
+        ? art.atlas.phaseAnimations?.[actor.phase] : undefined;
+      const atlas = Array.isArray(phaseFrames) && phaseFrames.length > 0
+        ? { ...art.atlas, animations: { ...art.atlas.animations, [state]: phaseFrames } }
+        : art.atlas;
+      // Approved atlas is mandatory; no box/cartoon fallback.
+      motionKit.drawSpriteState(ctx, art.image, atlas, state, clock,
+        actor.x - camera - art.width / 2, actor.y - art.height, art.width, art.height, actor.face);
+    }
+  }
+  function audioBus(doc) {
+    let unlocked = false, muted = false;
+    return {
+      unlock() { unlocked = true; },
+      mute(value) { muted = Boolean(value); for (const el of doc.querySelectorAll('audio')) el.muted = muted; },
+      cue(name) {
+        if (!unlocked || muted) return false;
+        const el = doc.getElementById('phoenix-audio-' + name);
+        if (!el || !el.play) return false;
+        try { el.currentTime = 0; void el.play().catch(() => {}); return true; } catch { return false; }
+      },
+      music() {
+        if (!unlocked || muted) return false;
+        const el = doc.getElementById('phoenix-audio-music');
+        if (!el || !el.play) return false;
+        el.loop = true; void el.play().catch(() => {}); return true;
+      },
+      stop() { for (const el of doc.querySelectorAll('audio')) if (el.pause) el.pause(); },
+    };
+  }
+  return { fighter, moves, walk, queueAttack, advance, resolveHits, releaseGrab,
+    enemyAI, bossAI, cameraX, drawStage, drawActorsByDepth, audioBus };
+})();
+
+</script>
+<script>
+
+(() => {
+  'use strict';
+  const kit=PhoenixBrawlerKit;
+  const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+  const W=960,H=540,world=1880,belt={minY:366,maxY:464};
+  const keys=new Set(),fighters=[],sparks=[],message=[];
+  let hero,boss,cam=0,started=false,paused=false,victory=false,lost=false,frames=0,last=0,jumpVelocity=0;
+  let sound=false,audioContext;
+  const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+  const colors={hero:['#52d7ef','#064572'],scout:['#f76c80','#71323d'],chain:['#f6bc52','#795026'],bruiser:['#ba90ff','#4a3766'],boss:['#ff7565','#7b232d']};
+  function reset(){
+    fighters.length=0;sparks.length=0;message.length=0;
+    hero=kit.fighter({id:'hero',x:96,y:425,team:'player',hp:125,speed:195});
+    const roster=[
+      {id:'street-scout',x:510,y:416,hp:34,speed:172},
+      {id:'chain-fighter',x:870,y:398,hp:48,speed:140},
+      {id:'heavy-bruiser',x:1120,y:450,hp:70,speed:100}
+    ];
+    for(const item of roster) fighters.push(kit.fighter(item));
+    boss=kit.fighter({id:'iron-warden',x:1680,y:430,hp:150,speed:120,boss:true});
+    fighters.push(boss);cam=0;frames=0;last=0;jumpVelocity=0;victory=false;lost=false;paused=false;
+    started=false;keys.clear();updateStatus();
+  }
+  function soundCue(note=280){
+    if(!sound)return;
+    try{
+      audioContext??=new (window.AudioContext||window.webkitAudioContext)();
+      if(audioContext.state==='suspended')void audioContext.resume();
+      const t=audioContext.currentTime,o=audioContext.createOscillator(),g=audioContext.createGain();
+      o.type='triangle';o.frequency.setValueAtTime(note,t);o.frequency.exponentialRampToValueAtTime(Math.max(60,note/2),t+.12);
+      g.gain.setValueAtTime(.045,t);g.gain.exponentialRampToValueAtTime(.001,t+.13);
+      o.connect(g).connect(audioContext.destination);o.start(t);o.stop(t+.14);
+    }catch{sound=false}
+  }
+  function event(e){
+    if(e.type==='hit'){
+      sparks.push({x:entity(e.to)?.x||hero.x,y:entity(e.to)?.y||hero.y,t:.33});
+      message.push({text:'-'+e.damage,x:entity(e.to)?.x||hero.x,y:(entity(e.to)?.y||hero.y)-65,t:.8});
+      soundCue(e.defeated?110:220);
+    }
+    if(e.type==='boss-phase')message.push({text:'¡FASE 2!',x:boss.x,y:boss.y-95,t:2});
+    if(e.type==='boss-telegraph')soundCue(95);
+  }
+  function entity(id){return id==='hero'?hero:fighters.find(a=>a.id===id)}
+  function swing(name){
+    if(!started||paused||victory||lost)return;
+    if(name==='throw')kit.releaseGrab(hero,fighters,event);
+    if(kit.queueAttack(hero,name))soundCue(name==='kick'?190:name==='punch'?270:150);
+  }
+  function handleKey(e,down){
+    const prevent=['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'];
+    if(prevent.includes(e.code))e.preventDefault();
+    if(down){
+      if(e.code==='KeyR'){reset();started=true;return}
+      if(e.code==='KeyP'){paused=!paused;return}
+      if(!started)started=true;
+      if(!e.repeat){
+        if(e.code==='KeyJ')swing('punch');
+        if(e.code==='KeyK')swing('kick');
+        if(e.code==='KeyL')swing('grab');
+        if(e.code==='KeyU')swing('throw');
+        if(e.code==='Space'&&hero.z<=0){jumpVelocity=470;hero.mode='jump';soundCue(440)}
+      }
+      keys.add(e.code);
+    }else keys.delete(e.code);
+  }
+  document.addEventListener('keydown',e=>handleKey(e,true));
+  document.addEventListener('keyup',e=>handleKey(e,false));
+  window.addEventListener('blur',()=>keys.clear());
+  document.getElementById('start').addEventListener('click',()=>{started=true;paused=false;canvas.focus()});
+  document.getElementById('restart').addEventListener('click',()=>{reset();started=true;canvas.focus()});
+  document.getElementById('sound').addEventListener('click',e=>{
+    sound=!sound;e.currentTarget.textContent='Sonido: '+(sound?'encendido':'apagado');if(sound)soundCue(480);
+  });
+  function advance(dt){
+    if(!started||paused||victory||lost)return;
+    const dx=Number(keys.has('ArrowRight')||keys.has('KeyD'))-Number(keys.has('ArrowLeft')||keys.has('KeyA'));
+    const dy=Number(keys.has('ArrowDown')||keys.has('KeyS'))-Number(keys.has('ArrowUp')||keys.has('KeyW'));
+    kit.walk(hero,dx,dy,dt,belt,world-55);
+    if(hero.z>0||jumpVelocity>0){
+      hero.z=Math.max(0,hero.z+jumpVelocity*dt);
+      jumpVelocity-=1100*dt;
+      if(hero.z===0)jumpVelocity=0;
+      else if(!hero.action)hero.mode=jumpVelocity>0?'jump':'fall';
+    }
+    kit.advance(hero,dt,event);
+    kit.resolveHits(hero,fighters,event);
+    for(const enemy of fighters){
+      if(enemy.hp<=0)continue;
+      if(enemy.boss){if(hero.x>1050)kit.bossAI(enemy,hero,dt,belt,world,event)}
+      else kit.enemyAI(enemy,hero,dt,belt,world,event);
+      kit.advance(enemy,dt,event);
+      kit.resolveHits(enemy,[hero],event);
+    }
+    cam=kit.cameraX(hero,cam,W,world,dt);
+    for(const p of sparks)p.t-=dt;
+    for(const p of message)p.t-=dt;
+    for(let i=sparks.length-1;i>=0;i--)if(sparks[i].t<=0)sparks.splice(i,1);
+    for(let i=message.length-1;i>=0;i--)if(message[i].t<=0)message.splice(i,1);
+    if(hero.hp<=0)lost=true;
+    else if(boss.hp<=0&&fighters.every(a=>a.hp<=0))victory=true;
+    updateStatus();
+  }
+  function updateStatus(){
+    window.__phoenixDemoState={frames,started,paused,victory,lost,heroHp:hero.hp,heroX:Math.round(hero.x),
+      enemiesAlive:fighters.filter(a=>a.hp>0&&!a.boss).length,bossHp:boss.hp,bossPhase:boss.phase};
+  }
+  function box(x,y,w,h,fill){ctx.fillStyle=fill;ctx.fillRect(x,y,w,h)}
+  function gradient(top,bottom){const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,top);g.addColorStop(1,bottom);return g}
+  function background(time){
+    box(0,0,W,H,gradient('#081126','#26385b'));
+    const moonX=810-cam*.05;ctx.fillStyle='#b6d7f6';ctx.shadowColor='#bad6ff';ctx.shadowBlur=38;
+    ctx.beginPath();ctx.arc(moonX,80,29,0,7);ctx.fill();ctx.shadowBlur=0;
+    for(let k=0;k<35;k++){
+      const x=((k*81-cam*.12)%(W+110)+W+110)%(W+110)-50;
+      const bh=115+(k*47)%170;box(x,285-bh,44+(k*9)%35,bh,'#121d3a');
+      for(let h=0;h<4;h++)for(let j=0;j<2;j++)if((h+k+j)%3===0)box(x+8+j*21,290-bh+h*21,7,9,'#a6c9d54d');
+    }
+    for(let k=0;k<19;k++){
+      const x=k*129-cam*.52,bh=155+(k*37)%70;
+      box(x,332-bh,100,bh,'#192640');
+      box(x+8,338-bh,5,70,k%2?'#d353bc':'#1baac4');
+      for(let j=0;j<5;j++)box(x+22+j*13,350-bh,6,20,(k+j)%2?'#d39c6a':'#75acd2');
+    }
+    box(0,334,W,H-334,gradient('#3b4a62','#151b29'));
+    for(let i=0;i<17;i++){
+      let x=(i*155-cam*.84)%(W+155);if(x<0)x+=W+155;
+      box(x,339,6,180,'#7190b031');
+    }
+    for(let k=0;k<8;k++){
+      let x=k*320-cam;if(x<-350||x>W+160)continue;
+      box(x,310,13,45,'#293d50');box(x-6,306,27,8,'#0ab9d0');
+      box(x-60,320,90,15,k%2?'#bd3b8a':'#24a5b1');
+      box(x-52,320,74,6,'#e2eeff');
+      box(x-42,336,4,34,'#1e263e');
+    }
+    for(let i=0;i<30;i++)box((i*73-cam*.9)%(W+80),479+(i%3)*5,37,2,'#83acb023');
+    box(0,490,W,3,'#728ba35e');
+    for(let i=0;i<20;i++){
+      const x=((i*149+time*.07-cam*.36)%(W+120)+W+120)%(W+120);
+      box(x,58+(i*41)%360,1,11,'#b8e5ff55');
+    }
+  }
+  function fighterArt(actor,t){
+    if(actor.hp<=0)return;
+    const x=actor.x-cam,y=actor.y;
+    if(x<-100||x>W+100)return;
+    const key=actor===hero?'hero':actor.boss?'boss':actor.id==='street-scout'?'scout':actor.id==='chain-fighter'?'chain':'bruiser';
+    const [coat,dark]=colors[key],size=actor.boss?1.38:key==='bruiser'?1.17:1;
+    const bounce=actor.mode==='run'?Math.sin(t*12)*4:Math.sin(t*2)*1.6;
+    const hit=actor.mode==='hurt',attack=actor.action?.name;
+    ctx.fillStyle='#050a1690';ctx.beginPath();ctx.ellipse(x,y+2,24*size,6,0,0,7);ctx.fill();
+    ctx.save();ctx.translate(x,y-actor.z+bounce);ctx.scale(actor.face*size,size);
+    ctx.strokeStyle='#0b1526';ctx.lineWidth=8;ctx.lineCap='round';
+    const stride=actor.mode==='run'?Math.sin(t*12)*9:0;
+    ctx.beginPath();ctx.moveTo(-9,-35);ctx.lineTo(-11+stride,-8);ctx.lineTo(-17+stride,0);
+    ctx.moveTo(9,-35);ctx.lineTo(11-stride,-8);ctx.lineTo(18-stride,0);ctx.stroke();
+    ctx.strokeStyle=dark;ctx.lineWidth=7;ctx.beginPath();
+    ctx.moveTo(-7,-36);ctx.lineTo(-9+stride,-10);ctx.moveTo(7,-36);ctx.lineTo(9-stride,-10);ctx.stroke();
+    box(-18,-77,36,46,coat);box(-17,-73,8,33,dark);box(7,-73,8,33,'#dceefa56');
+    box(-10,-82,20,10,'#d0a384');
+    ctx.fillStyle=actor.boss?'#b8c1c9':'#c88f68';ctx.beginPath();ctx.arc(0,-96,16,0,7);ctx.fill();
+    box(-16,-111,32,9,key==='hero'?'#182442':'#232b35');
+    box(3,-101,10,5,actor.boss?'#fa5544':'#b7edff');
+    ctx.strokeStyle=hit?'#ffe2bd':coat;ctx.lineWidth=9;ctx.beginPath();
+    ctx.moveTo(-16,-67);ctx.lineTo(-27,-44);
+    ctx.moveTo(15,-66);ctx.lineTo(attack?(attack==='kick'?33:50):-1,-(attack?62:45));ctx.stroke();
+    if(attack){ctx.strokeStyle='#fcf1a3';ctx.lineWidth=3;ctx.beginPath();ctx.arc(attack==='kick'?35:45,-54,15,4.5,6.2);ctx.stroke()}
+    ctx.restore();
+    if(actor.boss||actor!==hero){
+      const width=actor.boss?90:45;box(x-width/2,y-146*size,width,5,'#0b1327');
+      box(x-width/2,y-146*size,width*(actor.hp/actor.maxHp),5,actor.boss?'#ff685e':'#e6ab56');
+    }
+  }
+  function hud(){
+    box(16,16,255,49,'#060c1fb8');box(18,18,251*(hero.hp/hero.maxHp),7,'#48d8da');
+    ctx.fillStyle='white';ctx.font='bold 17px system-ui';ctx.fillText('HÉROE  '+Math.ceil(hero.hp)+' HP',23,49);
+    ctx.font='13px system-ui';ctx.fillStyle='#ccdef1';
+    ctx.fillText('ENEMIGOS '+fighters.filter(a=>a.hp>0&&!a.boss).length+'   JEFE '+Math.ceil(boss.hp),700,35);
+    if(hero.x>1050&&boss.hp>0){box(325,18,300,8,'#121827');box(325,18,300*boss.hp/boss.maxHp,8,'#ff6e6b');}
+    for(const effect of sparks){ctx.fillStyle='#ffd6a8';ctx.beginPath();ctx.arc(effect.x-cam,effect.y-62,14*effect.t/.33,0,7);ctx.fill()}
+    for(const m of message){ctx.fillStyle='#fff0a4';ctx.font='bold 20px system-ui';ctx.fillText(m.text,m.x-cam,m.y-30*(1-m.t))}
+  }
+  function overlay(){
+    let heading,sub;
+    if(!started){heading='DISTRITO NEÓN';sub='PRESIONA INICIAR O UNA TECLA PARA COMENZAR'}
+    else if(lost){heading='MISIÓN FALLIDA';sub='PRESIONA R O REINICIAR PARA VOLVER A INTENTARLO'}
+    else if(victory){heading='NIVEL SUPERADO';sub='LOS CUATRO RIVALES HAN SIDO DERROTADOS'}
+    else if(paused){heading='PAUSA';sub='PRESIONA P PARA CONTINUAR'}
+    else return;
+    box(190,170,580,170,'#080d20e6');
+    ctx.strokeStyle='#62d7f8';ctx.lineWidth=2;ctx.strokeRect(190,170,580,170);
+    ctx.textAlign='center';ctx.fillStyle='#f2f8ff';ctx.font='bold 38px system-ui';ctx.fillText(heading,480,242);
+    ctx.fillStyle='#a4ceef';ctx.font='15px system-ui';ctx.fillText(sub,480,291);ctx.textAlign='start';
+  }
+  function render(t){
+    background(t);for(const actor of [hero,...fighters].sort((a,b)=>a.y-b.y))fighterArt(actor,t);
+    hud();overlay();
+  }
+  function frame(ms){
+    const dt=last?clamp((ms-last)/1000,0,.045):.016;last=ms;frames++;
+    advance(dt);render(ms/1000);updateStatus();window.requestAnimationFrame(frame);
+  }
+  reset();window.requestAnimationFrame(frame);
+})();
+</script></body></html>

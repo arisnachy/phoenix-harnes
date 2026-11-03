@@ -14,6 +14,8 @@ PHOENIX provides `ctx.voice` through `@phoenix-ai/dsh-voice`. It accepts only ex
 
 Kokoro is a configured provider rather than a mandatory dependency. The host does not download model weights or start a process during boot, so a missing local installation cannot prevent Phoenix from loading.
 
+Conversational requests use native OpenAI/Codex Realtime through authenticated WebRTC before local fallbacks. Its V1 and V3 app-server calls select `juniper` for feminine, `cove` for masculine, and `breeze` for neutral assistant presentation. A voice-validation rejection remains a V3 request failure; it must not trigger a V1 downgrade because that retry can produce a Quicksilver v2 header rejection.
+
 ## Alternatives considered
 
 **Browser-only speech:** Rejected as the sole implementation because host-side important-event announcements and local STT need a provider-neutral service independent of a particular browser.

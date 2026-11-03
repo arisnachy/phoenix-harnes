@@ -1,6 +1,7 @@
 /** Read-only Loader inventory plus trusted PHOENIX update and local-model controls. */
 
 import type { Context, FiberState } from '@phoenix-ai/cordis'
+import { credentialRef, type CredentialRef } from '@phoenix-ai/dsh-credentials'
 import type {} from '@phoenix-ai/cordis-plugin-loader'
 import { TypertRemoteService, Remote } from '@phoenix-ai/dsh-typert-protocol'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
@@ -19,6 +20,16 @@ import {
   type LocalModelRuntimeSnapshot,
 } from './local-model/index.ts'
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
+import { readBusinessLibrarySnapshot } from './business-library.ts'
+import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
+import { readOpenClawRuntimeSnapshot } from './openclaw-runtime.ts'
+import { readOpenClawRouting, setOpenClawRoutingPermission, setOpenClawPluginEnabled } from './openclaw-plugin-routing.ts'
+import { prepareLocalOpenClawGateway } from './openclaw-gateway-setup.ts'
+import { readClawHubCatalog } from './clawhub-catalog.ts'
+import { clawHubInstall, clawHubState, prepareClawHubCli } from './clawhub-marketplace.ts'
+import { TokenTelemetryCollector } from './telemetry.ts'
+import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
+import { theOddsApiConnectorState, configureTheOddsApiConnector, disconnectTheOddsApiConnector } from './odds-api-connector.ts'
 import {
   BINANCE_AGENT_OS_SERVER_NAME,
   BINANCE_AGENT_OS_URL,
@@ -30,18 +41,28 @@ import {
   X_DOCS_MCP_SERVER_NAME,
   JEV_MCP_SERVER_NAME,
   ManagedMcpController,
-  type XMcpIdentity,
+  recoverManagedMcpOverlay,
 } from './mcp-managed.ts'
 import type {
   ChatGptWebSnapshot,
+  BusinessLibrarySnapshot,
+  CuratedMcpInstallRequest,
   JevMcpConfigureRequest,
   JevMcpSnapshot,
+  ManagedMcpEntryRequest,
+  ManagedMcpRemoveReceipt,
   McpConnectorHubSnapshot,
   McpConnectorRuntimeEntry,
   McpRegistryInstallReceipt,
   McpRegistryInstallRequest,
+  XMcpIdentity,
   McpRegistrySearchRequest,
   McpRegistrySearchSnapshot,
+  OpenClawConnectorSnapshot,
+  OpenClawRuntimeSnapshot,
+  OpenClawRoutingSnapshot, OpenClawRoutingRequest, OpenClawPluginActivationRequest,
+  OpenClawGatewayCredentialState, OpenClawGatewayCredentialRequest,
+  ClawHubCatalogRequest, ClawHubCatalogSnapshot, ClawHubInstallRequest, ClawHubInstallReceipt, ClawHubState,
   PhoenixLocalEndpointReceipt,
   PhoenixLocalModeRequest,
   PhoenixLocalModelRequest,
@@ -49,13 +70,21 @@ import type {
   PhoenixUpdateRestartReceipt,
   PhoenixUpdateRefreshReceipt,
   PhoenixUpdateSnapshot,
+  TokenTelemetrySnapshot,
+  OddsApiConnectorState,
+  TokenTelemetryPreference,
+  TelegramBotSnapshot,
   PluginEntryId,
   PluginFiberPhase,
   PluginInventoryEntry,
   PluginInventorySnapshot,
+  PluginEnableRequest,
+  PluginBulkActivationReceipt,
 } from './types.ts'
 
 export type * from './types.ts'
+// Launcher-owned pre-boot recovery uses the same strict Host validator.
+export { recoverManagedMcpOverlay }
 
 /** Brand an existing Loader-tree entry id at the owning boundary. */
 function pluginEntryId(value: string): PluginEntryId {
@@ -103,19 +132,43 @@ function publicLocalSnapshot(snapshot: LocalModelRuntimeSnapshot): PhoenixLocalM
   }
 }
 
+/** Loader, updater, and Settings modules must not disable their own control plane. */
+const PROTECTED_PLUGIN_MODULES = new Set([
+  '@phoenix-ai/dsh-host-plugin-inventory',
+  '@phoenix-ai/dsh-host-webserver',
+  '@phoenix-ai/dsh-api-remotes',
+  '@phoenix-ai/dsh-client-ui-settings-plugin-inventory',
+  '@phoenix-ai/dsh-client-ui-settings',
+  '@phoenix-ai/dsh-client-runtime',
+  '@phoenix-ai/cordis-plugin-loader',
+  '@phoenix-ai/cordis-plugin-include',
+])
+
 /** Remote service exposing trusted Host diagnostics, updater controls, and Phoenix Local lifecycle. */
 export class PluginInventoryGateway extends TypertRemoteService {
+  // Diagnostics and managed MCPs require Loader; apiProxy is not used by this service.
+  // Do not leave inventory pending when the optional API bridge is unavailable.
   static inject = ['loader']
 
   private readonly localModel: Promise<LocalModelRuntimeManager>
   private readonly chatGptWeb: ChatGptWebIntegration
   private readonly managedMcp: ManagedMcpController
+  private readonly openClawConnectors: OpenClawConnectorBridge
+  private readonly telegram: TelegramInbox
+  private readonly telemetry: TokenTelemetryCollector
 
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
     this.localModel = createNodeLocalModelRuntimeManager()
     this.chatGptWeb = createChatGptWebIntegration()
     this.managedMcp = new ManagedMcpController(ctx.loader)
+    this.openClawConnectors = new OpenClawConnectorBridge()
+    // One receiver owned by this Host service, shared by all Settings RPCs.
+    this.telemetry = new TokenTelemetryCollector()
+    ctx.effect(() => async () => { await this.telemetry.dispose() }, 'token telemetry counters and listener cleanup')
+    this.telegram = new TelegramInbox(ctx)
+    this.telegram.start()
+    ctx.effect(() => () => { this.telegram.stop() }, 'telegram inbound message receiver')
     void ctx.effect(async () => {
       try {
         await this.managedMcp.retireJev()
@@ -125,6 +178,27 @@ export class PluginInventoryGateway extends TypertRemoteService {
       }
       return () => undefined
     }, 'managed Jev retirement')
+    void ctx.effect(() => {
+      let active = true
+      void this.managedMcp.recoverInvalidOverlay().then(async (recovery) => {
+        if (active && recovery.backupCreated) {
+          ctx.logger.warn(`quarantined ${recovery.quarantined} invalid managed MCP row(s); ${recovery.recovered} validated row(s) preserved; restart may be required`)
+        }
+        return this.managedMcp.ensureCoreMcpPack({ installMissing: false })
+      }).then((result) => {
+        if (!active) return
+        if (result.failed.length > 0) {
+          ctx.logger.warn(
+            `core MCP pack restored with ${result.failed.length} connector(s) pending recovery: ${result.failed.map(item => item.connectorId).join(', ')}`,
+          )
+        }
+      }, (error: unknown) => {
+        if (!active) return
+        ctx.logger.warn('core MCP pack restore failed safely; Phoenix remains available and will retry on the next start')
+        ctx.logger.warn(error)
+      })
+      return () => { active = false }
+    }, 'existing MCP dependency recovery')
     void ctx.effect(async () => {
       try {
         await this.chatGptWeb.restore()
@@ -179,14 +253,93 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   /**
+   * Change an existing non-group Loader entry, persisting through its tree.
+   * @param request - Exact existing entry id and requested state.
+   * @returns Actual effective entry state after the Loader applies the change.
+   */
+  @Remote('setPluginEnabled')
+  async setPluginEnabled(request: PluginEnableRequest): Promise<PluginInventoryEntry> {
+    if (typeof request?.entryId !== 'string' || request.entryId.trim().length === 0
+      || typeof request.enabled !== 'boolean') {
+      throw new Error('Invalid plugin enablement request')
+    }
+    const entry = this.ctx.loader.resolve(request.entryId)
+    if (entry.options.group) throw new Error('A plugin group cannot be switched individually')
+    if (!request.enabled && PROTECTED_PLUGIN_MODULES.has(entry.options.name)) {
+      throw new Error('This Phoenix control-plane plugin cannot be disabled here')
+    }
+    await this.ctx.loader.update(entry.id, { disabled: !request.enabled })
+    const updated = this.ctx.loader.resolve(entry.id)
+    return {
+      entryId: pluginEntryId(updated.id),
+      moduleName: updated.options.name,
+      enabled: !updated.disabled,
+      fiberPhase: updated.fiber === undefined ? null : FIBER_PHASE[updated.fiber.state],
+    }
+  }
+
+  /**
+   * Activate already configured entries, then install the trusted curated MCP
+   * pack. Arbitrary ClawHub code and credentials are never installed or granted.
+   * @returns Individual Loader results and curated MCP install summary.
+   */
+  @Remote('activateAvailablePlugins')
+  async activateAvailablePlugins(): Promise<PluginBulkActivationReceipt> {
+    const activated: PluginEntryId[] = []
+    const skipped: PluginEntryId[] = []
+    const failed: PluginEntryId[] = []
+    const targets = [...this.ctx.loader.entries()].filter(entry => !entry.options.group && entry.disabled)
+    for (const entry of targets) {
+      const id = pluginEntryId(entry.id)
+      // Conditional expressions and disabled parents must not be overwritten.
+      if (entry.options.disabled !== true) {
+        skipped.push(id)
+        continue
+      }
+      try {
+        await this.ctx.loader.update(entry.id, { disabled: false })
+        if (this.ctx.loader.resolve(entry.id).disabled) skipped.push(id)
+        else activated.push(id)
+      } catch {
+        failed.push(id)
+      }
+    }
+    const curated = await this.managedMcp.ensureCoreMcpPack({ installMissing: true })
+    return {
+      activated,
+      skipped,
+      failed,
+      curatedInstalled: curated.installed.length,
+      curatedExisting: curated.alreadyInstalled.length,
+      curatedFailed: curated.failed.map(result => result.connectorId),
+    }
+  }
+
+  /**
    * Read Phoenix Local state and installable catalog without exposing machine paths.
    * @returns Current sanitized Phoenix Local state and catalog.
    */
+  /** Read local products without exposing contents, orders or filesystem paths. */
+  @Remote('businessLibrary')
+  async businessLibrary(): Promise<BusinessLibrarySnapshot> {
+    return readBusinessLibrarySnapshot()
+  }
+
   @Remote('localModelState')
   async localModelState(): Promise<PhoenixLocalModelSnapshot> {
     return publicLocalSnapshot((await this.localModel).snapshot())
   }
 
+
+  /**
+   * Probe reusable OpenClaw connector sessions already present on this machine.
+   * No token, credential path, or command output crosses the Host boundary.
+   * @returns Secret-free OpenClaw Google/GitHub readiness.
+   */
+  @Remote('openClawConnectorState')
+  openClawConnectorState(): OpenClawConnectorSnapshot {
+    return this.openClawConnectors.snapshot()
+  }
 
   /**
    * Search the public Official MCP Registry from the Host. The browser never
@@ -195,6 +348,115 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * @param request - sanitized registry search query and result bound.
    * @returns normalized public registry search snapshot.
    */
+  /** Optional external OpenClaw command readiness; never executes plugins or captures a screen. */
+  @Remote('openClawRuntimeState')
+  async openClawRuntimeState(): Promise<OpenClawRuntimeSnapshot> {
+    return readOpenClawRuntimeSnapshot()
+  }
+
+  /** The official ClawHub registry is browseable even when OpenClaw Gateway is offline. */
+  @Remote('clawHubCatalog')
+  async clawHubCatalog(request: ClawHubCatalogRequest): Promise<ClawHubCatalogSnapshot> {
+    return readClawHubCatalog(request)
+  }
+
+  @Remote('clawHubState')
+  async clawHubState(): Promise<ClawHubState> {
+    return clawHubState()
+  }
+  /** Repair/update the ClawHub CLI in the user's PHOENIX toolchain on explicit click. */
+  @Remote('prepareClawHubCli')
+  async prepareClawHubCli(): Promise<ClawHubState> {
+    return prepareClawHubCli()
+  }
+
+  /** Only an explicitly clicked skill installation; plugins are never auto-executed. */
+  @Remote('clawHubInstallSkill')
+  async clawHubInstallSkill(request: ClawHubInstallRequest): Promise<ClawHubInstallReceipt> {
+    if (request.family !== 'skill') throw new Error('Native ClawHub plugins require runtime review')
+    return clawHubInstall(request)
+  }
+
+  /** Explicitly install an OpenClaw-native ClawHub plugin disabled, pending configuration. */
+  @Remote('clawHubInstallPackage')
+  async clawHubInstallPackage(request: ClawHubInstallRequest): Promise<ClawHubInstallReceipt> {
+    if (request.family !== 'code-plugin' && request.family !== 'bundle-plugin') {
+      throw new Error('Select a native plugin package for this operation')
+    }
+    return clawHubInstall(request)
+  }
+
+  /** Inspect the actual OpenClaw plugin runtime; no tool execution or account data. */
+  /** Gateway operator token is stored only in the trusted credential vault. */
+  @Remote('openClawGatewayCredential')
+  async openClawGatewayCredential(): Promise<OpenClawGatewayCredentialState> {
+    const service = (this.ctx.get as (key: string) => unknown)('credentials') as {
+      resolve(ref: CredentialRef): Promise<{ value: string } | undefined>
+    } | undefined
+    let configuredInVault = false
+    try {
+      configuredInVault = Boolean((await service?.resolve(credentialRef('PHOENIX_OPENCLAW_GATEWAY_TOKEN')))?.value)
+    } catch { /* vault may be temporarily unavailable */ }
+    return configuredInVault ? { configured: true, source: 'vault' }
+      : Boolean(process.env.PHOENIX_OPENCLAW_GATEWAY_TOKEN ?? process.env.OPENCLAW_GATEWAY_TOKEN)
+        ? { configured: true, source: 'environment' }
+        : { configured: false, source: 'none' }
+  }
+
+  /** Explicit owner-supplied operator token; it never crosses the model prompt. */
+  @Remote('configureOpenClawGatewayCredential')
+  async configureOpenClawGatewayCredential(
+    request: OpenClawGatewayCredentialRequest,
+  ): Promise<OpenClawGatewayCredentialState> {
+    const service = (this.ctx.get as (key: string) => unknown)('credentials') as {
+      set(ref: CredentialRef, value: string): Promise<void>
+    } | undefined
+    if (service === undefined) throw new Error('PHOENIX credential vault is unavailable')
+    if (request.auto === true) {
+      const handoff = await prepareLocalOpenClawGateway()
+      if (handoff.token !== undefined) {
+        await service.set(credentialRef('PHOENIX_OPENCLAW_GATEWAY_TOKEN'), handoff.token)
+        return { configured: true, source: 'vault', authorizationUrl: handoff.authorizationUrl }
+      }
+      // Browser pairing can succeed even when OpenClaw intentionally hides
+      // a SecretRef-managed shared operator token from external clients.
+      const existing = await this.openClawGatewayCredential()
+      return { ...existing, authorizationUrl: handoff.authorizationUrl }
+    }
+    if (typeof request.token !== 'string' || request.token.length < 16
+      || request.token.length > 2048 || /[\u0000-\u0020\u007f]/u.test(request.token)) {
+      throw new Error('Invalid OpenClaw Gateway credential')
+    }
+    await service.set(credentialRef('PHOENIX_OPENCLAW_GATEWAY_TOKEN'), request.token)
+    return { configured: true, source: 'vault' }
+  }
+
+  @Remote('openClawPluginTools')
+  async openClawPluginTools(): Promise<OpenClawRoutingSnapshot> {
+    const [snapshot, credential] = await Promise.all([
+      readOpenClawRouting(), this.openClawGatewayCredential(),
+    ])
+    return { ...snapshot, gatewayCredentialConfigured: credential.configured }
+  }
+
+  /** Owner-approved single-tool routing, stored outside the model's reach. */
+  @Remote('setOpenClawPluginTool')
+  async setOpenClawPluginTool(request: OpenClawRoutingRequest): Promise<OpenClawRoutingSnapshot> {
+    const [snapshot, credential] = await Promise.all([
+      setOpenClawRoutingPermission(request), this.openClawGatewayCredential(),
+    ])
+    return { ...snapshot, gatewayCredentialConfigured: credential.configured }
+  }
+
+  /** Explicit activation or deactivation of an installed OpenClaw-native plugin. */
+  @Remote('setOpenClawPluginEnabled')
+  async setOpenClawPluginEnabled(request: OpenClawPluginActivationRequest): Promise<OpenClawRoutingSnapshot> {
+    const [snapshot, credential] = await Promise.all([
+      setOpenClawPluginEnabled(request), this.openClawGatewayCredential(),
+    ])
+    return { ...snapshot, gatewayCredentialConfigured: credential.configured }
+  }
+
   @Remote('searchMcpRegistry')
   async searchMcpRegistry(request: McpRegistrySearchRequest): Promise<McpRegistrySearchSnapshot> {
     return searchOfficialMcpRegistry(request)
@@ -211,16 +473,50 @@ export class PluginInventoryGateway extends TypertRemoteService {
     const service = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
       | { list(): readonly McpConnectorRuntimeEntry[] }
       | undefined
-    return {
-      runtime: service === undefined ? [] : service.list().map(entry => ({
-        serverName: entry.serverName,
-        transport: entry.transport,
-        status: entry.status,
-        toolNames: [...entry.toolNames],
-        ...(entry.reasonCode === undefined ? {} : { reasonCode: entry.reasonCode }),
-      })),
-      managed: [...await this.managedMcp.snapshot()],
+    const runtime = service === undefined ? [] : service.list().map(entry => ({
+      serverName: entry.serverName,
+      transport: entry.transport,
+      status: entry.status,
+      toolNames: [...entry.toolNames],
+      ...(entry.reasonCode === undefined ? {} : { reasonCode: entry.reasonCode }),
+    }))
+    try {
+      return { runtime, managed: [...await this.managedMcp.snapshot()] }
+    } catch {
+      // Repair even if corruption was written while PHOENIX was already open.
+      // The strict validator quarantines the original before preserving rows.
+      // Do not include raw patch data, URLs or credentials in UI/Host logs.
+      try {
+        const recovery = await this.managedMcp.recoverInvalidOverlay()
+        if (recovery.backupCreated) {
+          this.ctx.logger.warn(`recovered ${recovery.recovered} valid managed MCP rows; quarantined ${recovery.quarantined} invalid row(s)`)
+        }
+        return { runtime, managed: [...await this.managedMcp.snapshot()] }
+      } catch {
+        this.ctx.logger.warn('managed MCP inventory unavailable; live connectors remain visible')
+        // Keep the validated Typert response shape; never export raw overlay.
+        return { runtime, managed: [] }
+      }
     }
+  }
+
+  /**
+   * Ask one already-registered MCP runtime to reconnect immediately.
+   * The browser supplies only the stable server namespace; no URL, credential,
+   * command, header, or provider detail crosses this boundary.
+   * @param request - MCP server namespace currently present in the live registry.
+   * @returns Whether a live connector accepted the reconnect request.
+   */
+  @Remote('reconnectMcpConnector')
+  reconnectMcpConnector(request: { serverName: string }): { accepted: boolean } {
+    const serverName = request.serverName.trim()
+    if (!/^[A-Za-z0-9_-]{1,32}$/.test(serverName)) {
+      throw new Error('invalid MCP server name')
+    }
+    const service = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
+      | { reconnect(serverName: string): boolean }
+      | undefined
+    return { accepted: service?.reconnect(serverName) ?? false }
   }
 
   /**
@@ -235,6 +531,94 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   /**
+   * Install one Host-curated MCP whose endpoint is pinned in Phoenix code.
+   * Browser input selects only a known connector id and can never supply a URL.
+   * @param request - Exact curated connector id.
+   * @returns Idempotent managed connector installation receipt.
+   */
+  @Remote('installCuratedMcpConnector')
+  async installCuratedMcpConnector(request: CuratedMcpInstallRequest): Promise<McpRegistryInstallReceipt> {
+    return this.managedMcp.installCuratedMcp(request.connectorId)
+  }
+
+  /**
+   * Remove one exact PHOENIX-managed MCP from persistence and the live Loader.
+   * The browser supplies only the managed entry id.
+   * @param request - Exact PHOENIX-managed entry id to remove.
+   * @returns Persistent/live removal result.
+   */
+  @Remote('removeManagedMcpConnector')
+  async removeManagedMcpConnector(request: ManagedMcpEntryRequest): Promise<ManagedMcpRemoveReceipt> {
+    return this.managedMcp.remove(request)
+  }
+
+  /**
+   * Repair one PHOENIX-managed MCP strictly from its persisted trusted source.
+   * No browser-provided URL, package, command, or environment is accepted.
+   * @param request - Exact PHOENIX-managed entry id to repair.
+   * @returns Managed connector installation receipt after trusted re-resolution.
+   */
+  @Remote('repairManagedMcpConnector')
+  async repairManagedMcpConnector(request: ManagedMcpEntryRequest): Promise<McpRegistryInstallReceipt> {
+    return this.managedMcp.repair(request)
+  }
+
+  /** Read The Odds API vault state and verify using the provider's zero-credit sports catalog.
+   * The returned snapshot contains no key, endpoint URL, or user secrets.
+   */
+  @Remote('theOddsApiState')
+  async theOddsApiState():Promise<OddsApiConnectorState>{
+    return theOddsApiConnectorState(this.ctx)
+  }
+
+  /** Save an owner-entered The Odds API v4 key only in the Host credential vault. */
+  @Remote('configureTheOddsApi')
+  async configureTheOddsApi(request:{apiKey:string}):Promise<OddsApiConnectorState>{
+    return configureTheOddsApiConnector(this.ctx,request.apiKey)
+  }
+
+  /** Forget the vault-owned The Odds API key without modifying ambient environment. */
+  @Remote('disconnectTheOddsApi')
+  async disconnectTheOddsApi():Promise<OddsApiConnectorState>{
+    return disconnectTheOddsApiConnector(this.ctx)
+  }
+
+  /** Describe the configured Telegram bot without revealing its token.
+   * @returns Secret-free Telegram bot status.
+   */
+  @Remote('telegramBotState')
+  async telegramBotState(): Promise<TelegramBotSnapshot> {
+    this.telegram.start()
+    return readTelegramBotState(this.ctx, this.telegram)
+  }
+
+  /** Verify with Telegram getMe *before* persisting the supplied bot token.
+   * @param request - Bot token submitted to the secure configuration endpoint.
+   * @returns Verified Telegram bot status without exposing the token.
+   */
+  @Remote('configureTelegramBot')
+  async configureTelegramBot(request: { token: string }): Promise<TelegramBotSnapshot> {
+    return saveTelegramBot(this.ctx, request.token, this.telegram)
+  }
+
+  /** Issue an ephemeral owner-linking code; only a private chat presenting it may issue tasks.
+   * @returns One-time pairing code and its validity in seconds.
+   */
+  @Remote('telegramPairingCode')
+  async telegramPairingCode(): Promise<{ code: string; expiresInSeconds: number }> {
+    this.telegram.start()
+    return { code: await this.telegram.pairing(), expiresInSeconds: 900 }
+  }
+
+  /** Forget the local Telegram credential without issuing a Telegram-side token revocation.
+   * @returns Disconnected Telegram bot status.
+   */
+  @Remote('disconnectTelegramBot')
+  async disconnectTelegramBot(): Promise<TelegramBotSnapshot> {
+    return removeTelegramBot(this.ctx, this.telegram)
+  }
+
+  /**
    * Read the official Binance Agent OS connector state for in-process policy
    * consumers. This is intentionally not a browser Remote: real activation is
    * mediated by the HARDNESS approval tool rather than a silent Settings call.
@@ -244,6 +628,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
     configured: boolean
     status?: McpConnectorRuntimeEntry['status']
     reasonCode?: McpConnectorRuntimeEntry['reasonCode']
+    toolNames: readonly string[]
   }> {
     const managed = await this.managedMcp.snapshot()
     const configured = managed.some(connector =>
@@ -254,6 +639,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
     const runtime = registry?.list().find(entry => entry.serverName === BINANCE_AGENT_OS_SERVER_NAME)
     return {
       configured,
+      toolNames: runtime?.status === 'ready' ? [...runtime.toolNames] : [],
       ...(runtime === undefined ? {} : {
         status: runtime.status,
         ...(runtime.reasonCode === undefined ? {} : { reasonCode: runtime.reasonCode }),
@@ -262,12 +648,37 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   /**
+   * Request a safe reconnect for the already-installed official Binance MCP.
+   * Does not authorize scopes, refresh grants silently, or place orders.
+   * @returns Whether an existing live MCP connector accepted the request.
+   */
+  async reconnectBinanceAgentOs(): Promise<{ accepted: boolean }> {
+    const state = await this.binanceAgentOsState()
+    if (!state.configured) return { accepted: false }
+    const registry = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
+      | { reconnect(serverName: string): boolean }
+      | undefined
+    return { accepted: registry?.reconnect(BINANCE_AGENT_OS_SERVER_NAME) ?? false }
+  }
+
+  /**
    * Activate the pinned official Binance Agent OS MCP after the model-facing
    * approval boundary has been satisfied. This method never places an order.
    * @returns Idempotent managed MCP receipt.
    */
   async enableBinanceAgentOs(): Promise<McpRegistryInstallReceipt> {
-    return this.managedMcp.installBinanceAgentOs()
+    const receipt = await this.managedMcp.installBinanceAgentOs()
+    // An already-installed row is not evidence of a live MCP. Ask the owning
+    // registered client to reconnect when it lost its transport or tools.
+    // Auth-required stays explicit: only a user can complete browser OAuth.
+    if (receipt.status === 'already-installed') {
+      const snapshot = await this.binanceAgentOsState()
+      if (snapshot.status === 'disconnected' || snapshot.status === 'failed'
+        || snapshot.status === 'ready' && snapshot.toolNames.length === 0) {
+        await this.reconnectBinanceAgentOs()
+      }
+    }
+    return receipt
   }
 
   /**
@@ -280,9 +691,19 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   /**
+   * Repair the managed official OAuth MCP using its pinned endpoint, without
+   * deleting the user's separately stored Binance authorization grant.
+   * @returns New Loader receipt; actual connectivity must be reverified.
+   */
+  async repairBinanceAgentOs(): Promise<McpRegistryInstallReceipt> {
+    return this.managedMcp.repairBinanceAgentOs()
+  }
+
+  /**
    * Read the official X MCP bundle state without exposing OAuth application secrets.
    * @returns Secret-free credential presence plus API/Docs connector lifecycle.
    */
+  @Remote('xMcpState')
   async xMcpState(): Promise<{
     clientIdConfigured: boolean
     clientSecretConfigured: boolean
@@ -344,11 +765,40 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * @param options - X identity selection and optional cached-account username.
    * @returns Idempotent receipts for both pinned connectors.
    */
-  async enableXMcp(options: { identity?: XMcpIdentity; username?: string } = {}): Promise<{
+  @Remote('enableXMcp')
+  async enableXMcp(options: { identity?: XMcpIdentity; username?: string }): Promise<{
     api: McpRegistryInstallReceipt
     docs: McpRegistryInstallReceipt
   }> {
     return this.managedMcp.installXMcp(options)
+  }
+
+  /**
+   * Store X Developer App credentials in the Host credential provider, never
+   * in an MCP configuration or a chat response. The caller must be a trusted
+   * Settings session; the bridge receives values through envCredentialRefs.
+   */
+  @Remote('configureXDeveloperApplication')
+  async configureXDeveloperApplication(request: {
+    clientId: string
+    clientSecret: string
+  }): Promise<{ saved: true; clientIdConfigured: true; clientSecretConfigured: true }> {
+    if (typeof request.clientId !== 'string'
+      || !/^[A-Za-z0-9_-]{5,256}$/u.test(request.clientId)
+      || typeof request.clientSecret !== 'string'
+      || request.clientSecret.length < 8 || request.clientSecret.length > 2048
+      || /\s/u.test(request.clientSecret)) {
+      throw new Error('Credenciales de aplicación X incompletas o inválidas.')
+    }
+    const credentials = (this.ctx.get as (name: string) => unknown)('credentials') as
+      | { set(ref: CredentialRef, value: string): Promise<void> }
+      | undefined
+    if (credentials === undefined) {
+      throw new Error('El almacén seguro de credenciales no está disponible en este Host.')
+    }
+    await credentials.set(credentialRef(X_CLIENT_ID_REF), request.clientId)
+    await credentials.set(credentialRef(X_CLIENT_SECRET_REF), request.clientSecret)
+    return { saved: true, clientIdConfigured: true, clientSecretConfigured: true }
   }
 
   /**
@@ -491,6 +941,31 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('disableChatGptWeb')
   async disableChatGptWeb(): Promise<ChatGptWebSnapshot> {
     return this.chatGptWeb.disable()
+  }
+
+  /** Read bounded local request counters without exposing prompts or identities.
+   * @returns Current telemetry status and recent model-request counters.
+   */
+  @Remote('tokenTelemetry')
+  tokenTelemetry(): TokenTelemetrySnapshot {
+    return this.telemetry.snapshot()
+  }
+
+  /** Set persisted, local-only telemetry collection preference.
+   * @param request - Explicit enabled value.
+   * @returns Updated counters and collection state.
+   */
+  @Remote('setTokenTelemetry')
+  setTokenTelemetry(request: TokenTelemetryPreference): Promise<TokenTelemetrySnapshot> {
+    return this.telemetry.setEnabled(request.enabled)
+  }
+
+  /** Clear telemetry counters without altering user conversations or model memory.
+   * @returns Empty telemetry snapshot with previous preference unchanged.
+   */
+  @Remote('clearTokenTelemetry')
+  clearTokenTelemetry(): Promise<TokenTelemetrySnapshot> {
+    return this.telemetry.clear()
   }
 
   /**

@@ -93,10 +93,28 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'a detached provider, model, and optional reasoning selection.',
       },
       {
+        signature: 'preferredSelection(): ModelSelection',
+        description: 'Recover the last picker model for a new, otherwise blank conversation.',
+        parameters: [],
+        returns: 'Last saved picker selection, or the provider-native default.',
+      },
+      {
+        signature: 'currentEclipseProfile(): EclipseRoutingSettings | undefined',
+        description: 'Resolve Eclipse settings live so a saved change affects the next model request.',
+        parameters: [],
+        returns: 'Detached Eclipse settings, or undefined when no user overrides exist.',
+      },
+      {
+        signature: 'async saveWebSelection(selected: ModelSelection, runtime: ModelSelection): Promise<void>',
+        description: 'Persist the accepted Web picker identity and native execution route atomically.',
+        parameters: [{ name: 'selected', description: 'Exact model the user last chose in the picker.' }, { name: 'runtime', description: 'Validated provider-native execution route (never a synthetic model).' }],
+        returns: 'Persistence completion; failures must not be described as saved.',
+      },
+      {
         signature: 'async saveSelection(next: ModelSelection): Promise<void>',
-        description: 'Save the complete default model selection. A deployment without a settings provider keeps its composition entry.',
-        parameters: [{ name: 'next', description: 'resolved selection accepted by an entry point.' }],
-        returns: 'fulfillment after the optional settings write settles.',
+        description: 'Persist a new model default without erasing user-owned Eclipse configuration.',
+        parameters: [{ name: 'next', description: 'Selected default provider, model and optional reasoning.' }],
+        returns: 'Completion after the settings write.',
       },
     ],
   },
@@ -310,6 +328,46 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Agent Teams service backed by the exact live Lead Session log.',
     methods: [
       {
+        signature: '@Remote(\'chatMessages\') async chatMessages(request: TeamChatReadRequest): Promise<TeamChatReadResult>',
+        description: 'Read actual team outputs without starting agents.',
+        parameters: [{ name: 'request', description: 'root identity.' }],
+        returns: 'durable transcript.',
+      },
+      {
+        signature: 'async readChatFor(actor: Agent, limit: number): Promise<TeamChatReadResult>',
+        description: 'Read a bounded transcript for the exact live caller.',
+        parameters: [{ name: 'actor', description: 'actual agent.' }, { name: 'limit', description: 'protocol message bound.' }],
+        returns: 'bounded rows.',
+      },
+      {
+        signature: 'async answerChat(actor: Agent, request: { readonly messageId: string; readonly text: string }): Promise<{ messageId: string }>',
+        description: 'Answer an accepted directed human question while retaining the caller\'s mission.',
+        parameters: [{ name: 'actor', description: 'Exact live addressed child.' }, { name: 'request', description: 'Durable human request identity and bounded answer.' }],
+        returns: 'Stable visible answer identity.',
+      },
+      {
+        signature: 'async replyToPeer(actor: Agent, request: { readonly messageId: string; readonly text: string }): Promise<{ messageId: string }>',
+        description: 'Publish the Lead\'s own concise reply to a real delivered specialist handoff.',
+        parameters: [{ name: 'actor', description: 'exact live Lead.' }, { name: 'request', description: 'durable peer message and bounded reply.' }],
+        returns: 'visible reply identity.',
+      },
+      {
+        signature: '@Remote(\'chatReact\') async chatReact(request: TeamChatReactRequest): Promise<void>',
+        description: 'Set/remove a human reaction.',
+        parameters: [{ name: 'request', description: 'message and Unicode emoji.' }],
+      },
+      {
+        signature: '@Remote(\'chatReply\') async chatReply(request: TeamChatReplyRequest): Promise<{ messageId: string; queued: boolean }>',
+        description: 'Reply from the main composer to a direct child.',
+        parameters: [{ name: 'request', description: 'target and reply context.' }],
+        returns: 'accepted identity.',
+      },
+      {
+        signature: 'async reactToChat(actor: Agent, request: TeamChatReactRequest): Promise<void>',
+        description: 'Set/remove a real agent reaction.',
+        parameters: [{ name: 'actor', description: 'exact live actor.' }, { name: 'request', description: 'target mutation.' }],
+      },
+      {
         signature: 'membership(agent: Agent): TeamMembership',
         description: 'Resolve one exact live Agent\'s Team role.',
         parameters: [{ name: 'agent', description: 'exact live Agent used as the authority credential.' }],
@@ -328,10 +386,22 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the active roster row.',
       },
       {
+        signature: 'missionSnapshot(caller: Agent): UniversalMissionSnapshot | undefined',
+        description: 'Read the authoritative root-owned mission checkpoint without waking workers.',
+        parameters: [{ name: 'caller', description: 'any live teammate or Lead in the mission.' }],
+        returns: 'durable state, or undefined before delegation.',
+      },
+      {
         signature: 'async sendMessage(caller: Agent, request: SendTeamMessageRequest): Promise<SendTeamMessageResult>',
         description: 'Queue one durable peer message, then attempt immediate delivery.',
         parameters: [{ name: 'caller', description: 'exact live sending Team member.' }, { name: 'request', description: 'target name, content, scheduling mode, and pre-queue cancellation.' }],
         returns: 'durable message identity and immediate-delivery observation.',
+      },
+      {
+        signature: 'async reactToMessage( caller: Agent, request: ReactToTeamMessageRequest, ): Promise<ReactToTeamMessageResult>',
+        description: 'Attach one lightweight semantic reaction to another member\'s durable message. A reaction is journal state, not a generated assistant turn, so acknowledgement does not consume an extra prose response.',
+        parameters: [{ name: 'caller', description: 'exact live Team member reacting.' }, { name: 'request', description: 'target message, semantic reaction, and cancellation signal.' }],
+        returns: 'the committed reaction receipt.',
       },
       {
         signature: 'async createTask(caller: Agent, request: CreateTeamTaskRequest): Promise<TeamTaskView>',
@@ -360,7 +430,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'async waitForChange(caller: Agent, timeoutMs: number, signal: AbortSignal): Promise<TeamWaitResult>',
         description: 'Wait for the next Team-domain or member-status change.',
-        parameters: [{ name: 'caller', description: 'exact live Team member waiting for activity.' }, { name: 'timeoutMs', description: 'bounded wait duration from ten seconds through one hour.' }, { name: 'signal', description: 'caller cancellation for the wait only.' }],
+        parameters: [{ name: 'caller', description: 'exact live Team member waiting for activity.' }, { name: 'timeoutMs', description: 'bounded wait duration from five seconds through one hour.' }, { name: 'signal', description: 'caller cancellation for the wait only.' }],
         returns: 'one observed change or a timeout result.',
       },
       {
@@ -997,6 +1067,31 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'googleApi',
+    summary: 'Google Host broker.',
+    description: 'Google Host broker. OAuth material never leaves this service instance.',
+    methods: [
+      {
+        signature: 'async inspect(): Promise<AuthorizationTelemetry | undefined>',
+        description: 'Secret-free telemetry exists only while this process owns a live grant.',
+        parameters: [],
+        returns: 'sanitized Google account and service capability telemetry, when connected.',
+      },
+      {
+        signature: 'async request(request: GoogleApiRequest): Promise<GoogleApiResponse>',
+        description: 'Execute one request inside a fixed Google service boundary.',
+        parameters: [{ name: 'request', description: 'bounded Google service request.' }],
+        returns: 'the bounded response without credential-bearing headers.',
+      },
+      {
+        signature: 'async disconnect(): Promise<{ revoked: boolean }>',
+        description: 'Clear the in-memory and durable grant even when provider revocation fails.',
+        parameters: [],
+        returns: 'whether Google acknowledged token revocation.',
+      },
+    ],
+  },
+  {
     key: 'home',
     summary: 'Cordis service owner for the Home Assistant gateway.',
     description: 'Cordis service owner for the Home Assistant gateway.',
@@ -1354,10 +1449,16 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Process-local MCP lifecycle registry. It stores no connection settings, credentials, URLs, headers, environment variables, or provider errors.',
     methods: [
       {
+        signature: 'subscribe(listener: McpConnectorListener): () => void',
+        description: 'Subscribe to secret-free lifecycle/tool changes without exposing transport configuration, credentials, URLs, provider errors, or reconnect callbacks.',
+        parameters: [{ name: 'listener', description: 'Synchronous observer removed by the returned disposer.' }],
+        returns: 'Idempotent disposer.',
+      },
+      {
         signature: 'register(input: McpConnectorRegistrationInput): McpConnectorRegistration',
         description: 'Register one server identity in stable insertion order.',
-        parameters: [{ name: 'input', description: 'secret-free server identity and transport.' }],
-        returns: 'a handle that publishes state and removes the entry.',
+        parameters: [{ name: 'input', description: 'Secret-free server identity and transport.' }],
+        returns: 'A handle that publishes state and removes the entry.',
       },
       {
         signature: 'reconnect(serverName: string): boolean',
@@ -2609,15 +2710,39 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [
       {
         signature: '@Remote(\'conversationStatus\') async conversationStatus(): Promise<VoiceConversationStatus>',
-        description: 'Report whether the local Client can route conversation speech through neural TTS.',
+        description: 'Report whether the local Client can route conversation speech through the deterministic Kokoro -> platform fallback chain.',
         parameters: [],
         returns: 'Current conversational voice availability and selected provider.',
+      },
+      {
+        signature: '@Remote(\'conversationRealtimeStatus\') async conversationRealtimeStatus(): Promise<VoiceConversationRealtimeStatus>',
+        description: 'Probe the native Codex realtime sidecar. This is separate from ordinary TTS so non-Codex providers can keep the existing browser/local voice route.',
+        parameters: [],
+        returns: 'Enabled state, sidecar availability and authentication status.',
+      },
+      {
+        signature: '@Remote(\'conversationRealtimeStart\') async conversationRealtimeStart( request: VoiceConversationRealtimeStartRequest, ): Promise<VoiceConversationRealtimeStartReceipt>',
+        description: 'Negotiate browser WebRTC directly with Codex Realtime through the locally authenticated app-server. No API key is accepted by this path.',
+        parameters: [{ name: 'request', description: 'Browser-owned call identity, model selection and SDP offer.' }],
+        returns: 'Accepted negotiation with answer SDP, or a classified rejection.',
+      },
+      {
+        signature: '@Remote(\'conversationRealtimeSpeak\') async conversationRealtimeSpeak( request: VoiceConversationRealtimeSpeakRequest, ): Promise<VoiceConversationRealtimeSpeakReceipt>',
+        description: 'Hand Phoenix-authorized answer text to Codex native V3 speech. This only accepts an already-active browser-owned call; it does not create a new thread, spawn a model, or switch to another voice provider.',
+        parameters: [{ name: 'request', description: 'Active browser call key and completed result or stable conversational sentence.' }],
+        returns: 'Whether the active native call accepted the authorized text.',
+      },
+      {
+        signature: '@Remote(\'conversationRealtimeStop\') async conversationRealtimeStop( request: VoiceConversationRealtimeStopRequest, ): Promise<VoiceConversationRealtimeStopReceipt>',
+        description: 'Stop one browser-owned Codex realtime call.',
+        parameters: [{ name: 'request', description: 'Browser-owned call identity to stop.' }],
+        returns: 'Whether an active call was stopped; invalid or unknown identities return false.',
       },
       {
         signature: '@Remote(\'conversationSpeak\') async conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceConversationSpeakReceipt>',
         description: 'Play one stable semantic segment on the Host without blocking the browser thread.',
         parameters: [{ name: 'request', description: 'Message identity, ordering, text, language, and final-segment metadata.' }],
-        returns: 'Admission/playback receipt for the selected neural provider.',
+        returns: 'Admission/playback receipt for the selected conversation TTS provider.',
       },
       {
         signature: '@Remote(\'conversationCancel\') async conversationCancel(request: VoiceConversationCancelRequest): Promise<VoiceConversationCancelReceipt>',
@@ -3033,6 +3158,22 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'ref', description: 'the reference whose stored value changed.' }],
   },
   {
+    name: 'credentials/web-login-resolve',
+    mode: 'serial',
+    signature: '\'credentials/web-login-resolve\'(origin: string): Promise<WebLoginResolution | undefined>',
+    summary: 'Resolve an unattended website login only for an origin-bound browser executor.',
+    description: 'Resolve an unattended website login only for an origin-bound browser executor. Denial is authoritative; consumers must not fall back to another identity or store.',
+    parameters: [{ name: 'origin', description: 'Canonical origin whose live browser destination is checked before filling.' }],
+  },
+  {
+    name: 'credentials/web-login-status',
+    mode: 'serial',
+    signature: '\'credentials/web-login-status\'(origin: string): Promise<WebLoginStatus | undefined>',
+    summary: 'Read saved website access without decrypting its values; undefined means no record.',
+    description: 'Read saved website access without decrypting its values; undefined means no record.',
+    parameters: [{ name: 'origin', description: 'Canonical origin to inspect.' }],
+  },
+  {
     name: 'domain/changed',
     mode: 'emit',
     signature: '\'domain/changed\'(change: DomainChanged): void',
@@ -3422,7 +3563,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AskUserQuestionItem',
-    declaration: 'export interface AskUserQuestionItem {\n    id: string;\n    question: string;\n    detail?: string;\n    header?: string;\n    options?: AskUserQuestionOption[];\n    multiSelect?: boolean;\n    intent?: AskUserQuestionIntent;\n}',
+    declaration: 'export interface AskUserQuestionItem {\n    id: string;\n    question: string;\n    detail?: string;\n    header?: string;\n    options?: AskUserQuestionOption[];\n    multiSelect?: boolean;\n    sensitive?: boolean;\n    intent?: AskUserQuestionIntent;\n}',
   },
   {
     name: 'AskUserQuestionOption',
@@ -3442,7 +3583,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AssembledSection',
-    declaration: 'export interface AssembledSection {\n    name: string;\n    text: string;\n}',
+    declaration: 'export interface AssembledSection {\n    name: string;\n    text: string;\n    interpolateVariables?: boolean;\n}',
   },
   {
     name: 'AssistantIdentity',
@@ -3486,11 +3627,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AuthorizationEntry',
-    declaration: 'export interface AuthorizationEntry {\n    key: CredentialKey;\n    label: string;\n    methods: readonly AuthorizationMethod[];\n    inFlight: boolean;\n    disconnectable?: true;\n}',
+    declaration: 'export interface AuthorizationEntry {\n    key: CredentialKey;\n    label: string;\n    methods: readonly AuthorizationMethod[];\n    inFlight: boolean;\n    connectors?: readonly AuthorizationConnectorTelemetry[];\n    disconnectable?: true;\n}',
   },
   {
     name: 'AuthorizationFlow',
-    declaration: 'export interface AuthorizationFlow {\n    readonly key: CredentialKey;\n    readonly label: string;\n    readonly methods: readonly [\n        AuthorizationMethod,\n        ...AuthorizationMethod[]\n    ];\n    inspect?(signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined>;\n    disconnect?(signal?: AbortSignal): Promise<void>;\n    run(session: AuthorizationSession): Promise<void>;\n}',
+    declaration: 'export interface AuthorizationFlow {\n    readonly key: CredentialKey;\n    readonly label: string;\n    readonly methods: readonly [\n        AuthorizationMethod,\n        ...AuthorizationMethod[]\n    ];\n    readonly connectors?: readonly AuthorizationConnectorTelemetry[];\n    inspect?(signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined>;\n    disconnect?(signal?: AbortSignal): Promise<void>;\n    run(session: AuthorizationSession): Promise<void>;\n}',
   },
   {
     name: 'AuthorizationInteraction',
@@ -3925,6 +4066,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DynamicCordisRunRequest {\n    requestId: ApprovalRequestId;\n    agentId: SessionId;\n    pluginId: CordisDynamicPluginId;\n    packageId: CordisDynamicPackageId;\n    mode: CordisDynamicRunMode;\n    name: string;\n    purpose: string;\n    requiresApproval: boolean;\n}',
   },
   {
+    name: 'EclipseModelRoute',
+    declaration: 'export interface EclipseModelRoute {\n    readonly provider: string;\n    readonly model: string;\n    readonly reasoningEffort?: string;\n}',
+  },
+  {
+    name: 'EclipseRoutingSettings',
+    declaration: 'export interface EclipseRoutingSettings {\n    readonly mode?: \'automatic\' | \'hybrid\' | \'manual\';\n    readonly planner?: EclipseModelRoute;\n    readonly coordinator?: EclipseModelRoute;\n    readonly subagent?: EclipseModelRoute;\n    readonly specialists?: Readonly<Record<string, EclipseModelRoute>>;\n    readonly maxTeammates?: number;\n    readonly escalationSensitivity?: \'adaptive\' | \'quality\' | \'economy\';\n}',
+  },
+  {
     name: 'EditGoalRequest',
     declaration: 'export interface EditGoalRequest {\n    readonly objective?: string;\n    readonly maxGoalRounds?: number;\n}',
   },
@@ -4099,6 +4248,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'GoalView',
     declaration: 'export interface GoalView extends GoalSnapshot {\n    readonly roundsStarted: number;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n    readonly activation: GoalActivation;\n}',
+  },
+  {
+    name: 'GoogleApiRequest',
+    declaration: 'export interface GoogleApiRequest {\n    service: GoogleWorkspaceService;\n    path: string;\n    method?: string;\n    headers?: Readonly<Record<string, string>>;\n    body?: BodyInit | null;\n    upload?: boolean;\n    signal?: AbortSignal;\n}',
+  },
+  {
+    name: 'GoogleApiResponse',
+    declaration: 'export interface GoogleApiResponse {\n    status: number;\n    ok: boolean;\n    contentType?: string;\n    body: string;\n}',
+  },
+  {
+    name: 'GoogleWorkspaceService',
+    declaration: 'export type GoogleWorkspaceService = \'gmail\' | \'calendar\' | \'drive\' | \'docs\' | \'sheets\' | \'slides\' | \'contacts\';',
   },
   {
     name: 'GrantRecord',
@@ -4401,12 +4562,24 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ManualCompactAgentContext extends CompactionAgentContext {\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n}',
   },
   {
+    name: 'McpConnectorChange',
+    declaration: 'export interface McpConnectorChange {\n    readonly kind: McpConnectorChangeKind;\n    readonly serverName: string;\n    readonly entry: McpConnectorEntry;\n}',
+  },
+  {
+    name: 'McpConnectorChangeKind',
+    declaration: 'export type McpConnectorChangeKind = \'registered\' | \'status\' | \'tools\' | \'disposed\';',
+  },
+  {
     name: 'McpConnectorEntry',
     declaration: 'export interface McpConnectorEntry {\n    readonly serverName: string;\n    readonly transport: McpConnectorTransport;\n    readonly status: McpConnectorStatus;\n    readonly toolNames: readonly string[];\n    readonly reasonCode?: McpConnectorReasonCode;\n}',
   },
   {
+    name: 'McpConnectorListener',
+    declaration: 'export type McpConnectorListener = (change: McpConnectorChange) => void;',
+  },
+  {
     name: 'McpConnectorReasonCode',
-    declaration: 'export type McpConnectorReasonCode = \'connection-failed\' | \'connection-lost\' | \'authorization-required\' | \'retry-exhausted\';',
+    declaration: 'export type McpConnectorReasonCode = \'connection-failed\' | \'endpoint-not-found\' | \'connection-lost\' | \'authorization-required\' | \'retry-exhausted\';',
   },
   {
     name: 'McpConnectorRegistration',
@@ -4531,6 +4704,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'MessageSourceMap',
     declaration: 'export interface MessageSourceMap {\n    user: {\n        kind: \'user\';\n    };\n    plugin: {\n        kind: \'plugin\';\n        plugin: string;\n    } & ContextFormed;\n    model: ModelMessageSource;\n    tool: ToolMessageSource;\n}',
+  },
+  {
+    name: 'MissionComplexity',
+    declaration: 'export type MissionComplexity = keyof typeof MISSION_TEAM_CEILINGS;',
   },
   {
     name: 'ModelMessageSource',
@@ -4682,7 +4859,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PromptSection',
-    declaration: 'export interface PromptSection {\n    readonly name: string;\n    readonly order: number;\n    readonly text: string | ((context: AssembleContext) => string);\n    readonly complete?: boolean;\n}',
+    declaration: 'export interface PromptSection {\n    readonly name: string;\n    readonly order: number;\n    readonly text: string | ((context: AssembleContext) => string);\n    readonly interpolateVariables?: boolean;\n    readonly complete?: boolean;\n}',
   },
   {
     name: 'ProviderRequestId',
@@ -4703,6 +4880,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'QuestionDeadline',
     declaration: 'export interface QuestionDeadline {\n    readonly requestedAt: number;\n    readonly expiresAt: number;\n}',
+  },
+  {
+    name: 'ReactToTeamMessageRequest',
+    declaration: 'export interface ReactToTeamMessageRequest {\n    readonly messageId: TeamMessageId;\n    readonly reaction: TeamReactionKind;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'ReactToTeamMessageResult',
+    declaration: 'export interface ReactToTeamMessageResult {\n    readonly messageId: TeamMessageId;\n    readonly reactorName: string;\n    readonly reaction: TeamReactionKind;\n}',
   },
   {
     name: 'ReadFileLine',
@@ -4886,7 +5071,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SendTeamMessageRequest',
-    declaration: 'export interface SendTeamMessageRequest {\n    readonly target: string;\n    readonly content: ContentBlock[];\n    readonly delivery: \'quiet\' | \'wakeup\';\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface SendTeamMessageRequest {\n    readonly target: string;\n    readonly content: ContentBlock[];\n    readonly purpose?: TeamMessagePurpose;\n    readonly delivery: \'quiet\' | \'wakeup\';\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'SendTeamMessageResult',
@@ -4906,7 +5091,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionEventMap',
-    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'assistant/chunk\': {\n        turn: number;\n        step: number;\n        chunk: StreamChunk;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: CallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'todo/write\': {\n        todos: TodoItem[];\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': Record<string, never>;\n}',
+    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n        historyProjection?: {\n            kind: \'conversational-tail\';\n            maxMessages: number;\n            maxChars: number;\n        };\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'assistant/chunk\': {\n        turn: number;\n        step: number;\n        chunk: StreamChunk;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: CallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'todo/write\': {\n        todos: TodoItem[];\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': Record<string, never>;\n}',
   },
   {
     name: 'SessionEventMetadataFilter',
@@ -5270,7 +5455,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SpawnTeammateRequest',
-    declaration: 'export interface SpawnTeammateRequest {\n    readonly name: string;\n    readonly description: string;\n    readonly prompt: ContentBlock[];\n    readonly context: \'fresh\' | \'fork\';\n    readonly provider: string;\n    readonly agentOptions?: AgentOptions;\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface SpawnTeammateRequest {\n    readonly name: string;\n    readonly description: string;\n    readonly prompt: ContentBlock[];\n    readonly context: \'fresh\' | \'fork\';\n    readonly provider: string;\n    readonly agentOptions?: AgentOptions;\n    readonly missionComplexity?: MissionComplexity;\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'SpawnTeammateResult',
@@ -5358,7 +5543,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SubagentFollowupOptions',
-    declaration: 'export interface SubagentFollowupOptions {\n    readonly source: MessageSource;\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface SubagentFollowupOptions {\n    readonly modelSelection?: ModelSelection;\n    readonly delivery?: \'next-turn\' | \'next-step\' | \'next-safe-step\';\n    readonly source: MessageSource;\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'SubagentInterruptAuthority',
@@ -5493,6 +5678,34 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type TableValueOf<S extends DomainSpec, N extends keyof S[\'tables\']> = S[\'tables\'][N] extends DomainTableSpec<string, infer V> ? V : never;',
   },
   {
+    name: 'TeamChatMessage',
+    declaration: 'export interface TeamChatMessage {\n    readonly id: string;\n    readonly senderId: string;\n    readonly senderName: string;\n    readonly senderKind: \'user\' | \'kira\' | \'agent\';\n    readonly avatar?: string | undefined;\n    readonly role?: string | undefined;\n    readonly missionId?: string | undefined;\n    readonly text: string;\n    readonly time: number;\n    readonly sourceSeq: number;\n    readonly targetId?: string | undefined;\n    readonly targetName?: string | undefined;\n    readonly replyTo?: string | undefined;\n    readonly replyQuote?: string | undefined;\n    readonly mentions: readonly string[];\n    readonly supervised?: boolean | undefined;\n    readonly deliveries?: readonly {\n        readonly targetId: string;\n        readonly accepted: boolean;\n        readonly error?: string | undefined;\n    }[] | undefined;\n    readonly reactions: readonly TeamChatReaction[];\n}',
+  },
+  {
+    name: 'TeamChatParticipant',
+    declaration: 'export interface TeamChatParticipant {\n    readonly id: string;\n    readonly name: string;\n    readonly role: string;\n    readonly status: string;\n    readonly avatar?: string | undefined;\n    readonly task?: string | undefined;\n    readonly modelProvider?: string | undefined;\n    readonly model?: string | undefined;\n    readonly missionId?: string | undefined;\n}',
+  },
+  {
+    name: 'TeamChatReaction',
+    declaration: 'export interface TeamChatReaction {\n    readonly id: string;\n    readonly messageId: string;\n    readonly reactorId: string;\n    readonly reactorName: string;\n    readonly reactorKind: \'user\' | \'kira\' | \'agent\';\n    readonly emoji: string;\n    readonly createdAt: number;\n}',
+  },
+  {
+    name: 'TeamChatReactRequest',
+    declaration: 'export interface TeamChatReactRequest extends TeamChatReadRequest {\n    readonly messageId: string;\n    readonly emoji: string;\n    readonly active: boolean;\n}',
+  },
+  {
+    name: 'TeamChatReadRequest',
+    declaration: 'export interface TeamChatReadRequest {\n    readonly sessionId: string;\n    readonly limit?: number;\n}',
+  },
+  {
+    name: 'TeamChatReadResult',
+    declaration: 'export interface TeamChatReadResult {\n    readonly messages: TeamChatMessage[];\n    readonly participants: TeamChatParticipant[];\n}',
+  },
+  {
+    name: 'TeamChatReplyRequest',
+    declaration: 'export interface TeamChatReplyRequest extends TeamChatReadRequest {\n    readonly requestId: string;\n    readonly targetId: string;\n    readonly targetIds?: readonly string[];\n    readonly text: string;\n    readonly replyTo?: string | undefined;\n}',
+  },
+  {
     name: 'TeamId',
     declaration: 'export type TeamId = Branded<\'TeamId\'>;',
   },
@@ -5501,12 +5714,24 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TeamMembership {\n    readonly root: Agent;\n    readonly id: TeamId;\n    readonly role: \'lead\' | \'teammate\';\n    readonly name: string;\n}',
   },
   {
+    name: 'TeamMemberUsage',
+    declaration: 'export interface TeamMemberUsage {\n    readonly inputTokens: number;\n    readonly outputTokens: number;\n    readonly cacheReadTokens: number;\n    readonly cacheWriteTokens: number;\n    readonly reasoningTokens: number;\n}',
+  },
+  {
     name: 'TeamMemberView',
-    declaration: 'export interface TeamMemberView {\n    readonly id: SessionId;\n    readonly name: string;\n    readonly role: \'lead\' | \'teammate\';\n    readonly status: \'running\' | \'idle\' | \'inactive\' | \'provisioning\' | \'failed\';\n    readonly description?: string;\n    readonly provider?: string;\n    readonly context?: \'fresh\' | \'fork\';\n    readonly modelProvider?: string;\n    readonly model?: string;\n    readonly diagnostics: string[];\n}',
+    declaration: 'export interface TeamMemberView {\n    readonly id: SessionId;\n    readonly name: string;\n    readonly role: \'lead\' | \'teammate\';\n    readonly status: \'running\' | \'idle\' | \'inactive\' | \'provisioning\' | \'failed\';\n    readonly description?: string;\n    readonly provider?: string;\n    readonly context?: \'fresh\' | \'fork\';\n    readonly modelProvider?: string;\n    readonly model?: string;\n    readonly usage?: TeamMemberUsage;\n    readonly diagnostics: string[];\n}',
   },
   {
     name: 'TeamMessageId',
     declaration: 'export type TeamMessageId = Branded<\'TeamMessageId\'>;',
+  },
+  {
+    name: 'TeamMessagePurpose',
+    declaration: 'export type TeamMessagePurpose = \'assignment\' | \'question\' | \'blocker\' | \'result\' | \'review\' | \'decision\' | \'update\';',
+  },
+  {
+    name: 'TeamReactionKind',
+    declaration: 'export type TeamReactionKind = \'ack\' | \'agree\' | \'insight\' | \'blocked\' | \'done\';',
   },
   {
     name: 'TeamTaskAction',
@@ -5690,7 +5915,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ToolOutputDefinition',
-    declaration: 'export interface ToolOutputDefinition {\n    readonly schema: JsonSchemaNode;\n    render(args: unknown, value: JsonValue): ContentBlock[];\n    presentationMeta?(args: unknown, value: JsonValue): JsonValue;\n}',
+    declaration: 'export interface ToolOutputDefinition {\n    readonly schema: JsonSchemaNode;\n    render(args: unknown, value: JsonValue): ContentBlock[];\n    presentationMeta?(args: unknown, value: JsonValue): JsonValue;\n    nestedPresentationMeta?: boolean;\n}',
   },
   {
     name: 'ToolPresentationMode',
@@ -5809,6 +6034,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TypertTypeModel {\n    readonly name: string;\n    readonly declaration: string;\n}',
   },
   {
+    name: 'UniversalMissionPhase',
+    declaration: 'export type UniversalMissionPhase = \'running\' | \'blocked\' | \'verifying\' | \'completed\' | \'partial\' | \'failed\' | \'cancelled\';',
+  },
+  {
+    name: 'UniversalMissionSnapshot',
+    declaration: 'export interface UniversalMissionSnapshot {\n    readonly id: string;\n    readonly teamId: TeamId;\n    readonly userMessageId: string;\n    readonly lastHumanMessageId?: string;\n    readonly objective: string;\n    readonly origin: \'chat\' | \'voice\' | \'telegram\' | \'schedule\' | \'connector\' | \'api\';\n    readonly phase: UniversalMissionPhase;\n    readonly revision: number;\n    readonly cancellationEpoch: number;\n    readonly maxTeammates: number;\n    readonly evidenceIds: readonly string[];\n    readonly blockers: readonly string[];\n    readonly verified: boolean;\n}',
+  },
+  {
     name: 'UpdateTeamTaskRequest',
     declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: string;\n}',
   },
@@ -5842,7 +6075,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'VoiceAnnouncementReceipt',
-    declaration: 'export interface VoiceAnnouncementReceipt {\n    readonly id: VoiceAnnouncementId;\n    readonly accepted: boolean;\n    readonly reason?: \'disabled\' | \'not-important\' | \'empty\' | \'queue-full\' | \'duplicate\' | \'no-provider\';\n    readonly text?: string;\n}',
+    declaration: 'export interface VoiceAnnouncementReceipt {\n    readonly id: VoiceAnnouncementId;\n    readonly accepted: boolean;\n    readonly reason?: \'disabled\' | \'not-important\' | \'empty\' | \'queue-full\' | \'duplicate\' | \'no-provider\' | \'native-realtime\';\n    readonly text?: string;\n}',
   },
   {
     name: 'VoiceConversationCancelReceipt',
@@ -5851,6 +6084,34 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'VoiceConversationCancelRequest',
     declaration: 'export interface VoiceConversationCancelRequest {\n    readonly key: string;\n}',
+  },
+  {
+    name: 'VoiceConversationRealtimeSpeakReceipt',
+    declaration: 'export interface VoiceConversationRealtimeSpeakReceipt {\n    readonly accepted: boolean;\n    readonly reason?: \'disabled\' | \'invalid\' | \'no-session\' | \'codex-unavailable\';\n}',
+  },
+  {
+    name: 'VoiceConversationRealtimeSpeakRequest',
+    declaration: 'export interface VoiceConversationRealtimeSpeakRequest {\n    readonly key: string;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'VoiceConversationRealtimeStartReceipt',
+    declaration: 'export interface VoiceConversationRealtimeStartReceipt {\n    readonly accepted: boolean;\n    readonly threadId?: string;\n    readonly answerSdp?: string;\n    readonly reason?: \'disabled\' | \'invalid\' | \'codex-unavailable\' | \'codex-login-required\' | \'experimental-unavailable\' | \'negotiation-failed\';\n    readonly detail?: string;\n}',
+  },
+  {
+    name: 'VoiceConversationRealtimeStartRequest',
+    declaration: 'export interface VoiceConversationRealtimeStartRequest {\n    readonly key: string;\n    readonly offerSdp: string;\n    readonly model?: string;\n}',
+  },
+  {
+    name: 'VoiceConversationRealtimeStatus',
+    declaration: 'export interface VoiceConversationRealtimeStatus {\n    readonly enabled: boolean;\n    readonly available: boolean;\n    readonly authenticated: boolean;\n    readonly provider: \'openai-codex\';\n    readonly reason?: \'disabled\' | \'codex-unavailable\' | \'codex-login-required\' | \'experimental-unavailable\';\n    readonly detail?: string;\n    readonly repair?: \'checking\' | \'updating\' | \'waiting-upstream\' | \'ready\' | \'blocked\' | \'disabled\';\n}',
+  },
+  {
+    name: 'VoiceConversationRealtimeStopReceipt',
+    declaration: 'export interface VoiceConversationRealtimeStopReceipt {\n    readonly stopped: boolean;\n}',
+  },
+  {
+    name: 'VoiceConversationRealtimeStopRequest',
+    declaration: 'export interface VoiceConversationRealtimeStopRequest {\n    readonly key: string;\n}',
   },
   {
     name: 'VoiceConversationSpeakReceipt',
@@ -5882,7 +6143,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'VoiceSynthesisRequest',
-    declaration: 'export interface VoiceSynthesisRequest {\n    readonly text: string;\n    readonly language: string;\n    readonly signal?: AbortSignal;\n}',
+    declaration: 'export interface VoiceSynthesisRequest {\n    readonly text: string;\n    readonly language: string;\n    readonly gender?: \'masculine\' | \'feminine\' | \'neutral\';\n    readonly signal?: AbortSignal;\n}',
   },
   {
     name: 'VoiceTextToSpeechProvider',
@@ -5931,6 +6192,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WebFetchResultView',
     declaration: 'export interface WebFetchResultView {\n    card: \'web\';\n    kind: \'fetch\';\n    title?: string;\n    url: string;\n    statusCode: number;\n    truncated: boolean;\n}',
+  },
+  {
+    name: 'WebLoginResolution',
+    declaration: 'export type WebLoginResolution = {\n    authorized: false;\n} | {\n    authorized: true;\n    account: string;\n    secret: string;\n    extras?: Record<string, string>;\n};',
+  },
+  {
+    name: 'WebLoginStatus',
+    declaration: 'export interface WebLoginStatus {\n    saved: boolean;\n    automatic: boolean;\n}',
   },
   {
     name: 'WebResultView',

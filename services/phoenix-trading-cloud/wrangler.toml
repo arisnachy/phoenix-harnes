@@ -1,0 +1,19 @@
+name = "phoenix-trading-paper"
+main = "src/worker.mjs"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# No real Binance keys, public-only market-data host.
+# D1 ID must be provisioned by the user's authenticated Cloudflare account.
+# Keep this placeholder in source; never claim deployment is complete.
+[[d1_databases]]
+binding = "DB"
+database_name = "phoenix-trading-paper"
+database_id = "REPLACE_WITH_CLOUDFLARE_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[triggers]
+crons = ["* * * * *"]
+
+[observability]
+enabled = true

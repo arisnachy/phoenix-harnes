@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { codexAccountTelemetry } from '../src/account.ts'
+import { codexAccountTelemetry, codexRefreshTokenExpired, mergeCodexRateLimitsUpdate } from '../src/account.ts'
 
 const accountSource = readFileSync(
   fileURLToPath(new URL('../src/account.ts', import.meta.url)),
@@ -17,10 +17,25 @@ describe('native Codex managed-account boundary', () => {
     expect(accountSource).toContain('account/usage/read')
   })
 
+  it('recognizes an expired official refresh credential but not offline or temporary failures', () => {
+    expect(codexRefreshTokenExpired(new Error(
+      'Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again.',
+    ))).toBe(true)
+    expect(codexRefreshTokenExpired(new Error('RefreshTokenExpired'))).toBe(true)
+    expect(codexRefreshTokenExpired(new Error('Network connection refused'))).toBe(false)
+    expect(codexRefreshTokenExpired(new Error('HTTP 429: rate limit exceeded'))).toBe(false)
+    expect(codexRefreshTokenExpired(new Error('access token expired but renewal still possible'))).toBe(false)
+    expect(accountSource).toContain("connection.request('account/read', { refreshToken }, signal)")
+    expect(accountSource).toContain('await readAccount(connection, session.signal, true)')
+    expect(accountSource).toContain('if (!codexRefreshTokenExpired(error)) throw error')
+    expect(accountSource).toContain("connection.request('account/logout', {}, session.signal)")
+    expect(accountSource).toContain('await ctx.credentials.deleteRecord(CODEX_ACCOUNT_KEY)')
+  })
+
   it('isolates native account probes and coalesces repeated inspection work', () => {
     expect(accountSource).toContain('codexAccountEnvironment(config.env)')
-    expect(accountSource).toContain('ACCOUNT_INSPECTION_TTL_MS')
-    expect(accountSource).toContain('ACCOUNT_FAILURE_COOLDOWN_MS')
+    expect(accountSource).toContain('const ACCOUNT_INSPECTION_TTL_MS = 10_000')
+    expect(accountSource).toContain('const ACCOUNT_FAILURE_COOLDOWN_MS = 15_000')
     expect(accountSource).toContain('inFlightSnapshot')
   })
 
@@ -42,6 +57,8 @@ describe('native Codex managed-account boundary', () => {
 
   it('keeps slow app-server teardown from becoming a Host-fatal account probe failure', () => {
     expect(accountSource).toContain('ACCOUNT_CLOSE_MIN_TIMEOUT_MS')
+    expect(accountSource).toContain('const ACCOUNT_NATURAL_EXIT_GRACE_MS = 3_000')
+    expect(accountSource).toContain('if (!naturalExit) this.child.terminate()')
     expect(accountSource).toContain('ACCOUNT_CLOSE_EXTRA_TIMEOUT_MS')
     expect(accountSource).toContain('continuing without failing the Host')
     expect(accountSource).not.toContain("if (!exited) throw new Error('subagent-codex account: app-server process tree did not terminate')")
@@ -156,6 +173,33 @@ describe('native Codex managed-account boundary', () => {
       primaryLimit: { usedPercent: 25, windowDurationMins: 300, resetsAt: 1_800_000_000 },
     })
     expect(telemetry).not.toHaveProperty('usage')
+  })
+
+  it('merges sparse live Codex quota updates without clearing unchanged windows', () => {
+    const merged = mergeCodexRateLimitsUpdate({
+      account: { type: 'chatgpt', planType: 'plus' },
+      requiresOpenaiAuth: true,
+      rateLimits: {
+        rateLimitsByLimitId: {
+          codex: {
+            primary: { usedPercent: 10, windowDurationMins: 300 },
+            secondary: { usedPercent: 20, windowDurationMins: 10080 },
+          },
+        },
+      },
+    }, {
+      primary: { usedPercent: 37, windowDurationMins: 300 },
+      secondary: null,
+    })
+
+    const telemetry = codexAccountTelemetry(merged)
+    expect(telemetry?.primaryLimit?.usedPercent).toBe(37)
+    expect(telemetry?.secondaryLimit?.usedPercent).toBe(20)
+  })
+
+  it('keeps an event-driven observer for official account/rateLimits/updated notifications', () => {
+    expect(accountSource).toContain('observeCodexRateLimitsUpdate')
+    expect(accountSource).toContain('withObservedCodexRateLimits')
   })
 
   it('prefers the modern Codex rateLimitsByLimitId bucket over an empty legacy snapshot', () => {

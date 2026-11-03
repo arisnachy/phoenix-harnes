@@ -12,11 +12,12 @@
 // after a click and the panel leaves (the InputBar returns) on the broadcast
 // resolved frame.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { RunningToolCall } from '@phoenix-ai/dsh-client-runtime/client'
 import { PendingApproval, type ApprovalComposerProps } from '../contract/slots.ts'
 import { rootToolCall } from '../tool-node-reader.ts'
+import { speakVoiceAssistantAttention } from '../voice.ts'
 import { ApprovalCountdown } from './ApprovalCountdown.tsx'
 import css from './ApprovalPanel.module.css'
 
@@ -59,6 +60,10 @@ function ApprovalFlow({ pending, command, t }: {
   // lands; until then the buttons must not re-fire. An answer failure
   // (rejected receipt / transport) re-arms them for retry.
   const [answered, setAnswered] = useState(false)
+  const attentionText = pending.reason ?? t('approval.escalation', { toolName: pending.toolName })
+  useEffect(() => {
+    speakVoiceAssistantAttention(attentionText)
+  }, [attentionText, pending.key])
   const answer = (outcome: 'allowed-once' | 'rejected'): void => {
     setAnswered(true)
     void pending.answer(outcome).catch(() => { setAnswered(false) })
@@ -71,7 +76,7 @@ function ApprovalFlow({ pending, command, t }: {
             holds nothing focusable of its own, so without one a keyboard-only
             user cannot reach the command's tail before answering. */}
         <div className={css.body} data-approval-scroll="" tabIndex={0} role="group" aria-label={t('approval.detail.aria')}>
-          <div className={css.headline}>{pending.reason ?? t('approval.escalation', { toolName: pending.toolName })}</div>
+          <div className={css.headline}>{attentionText}</div>
           {command !== undefined && <div className={css.command}>{command}</div>}
         </div>
         {pending.deadline === undefined

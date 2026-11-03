@@ -1,0 +1,42 @@
+name: Phoenix ESPN Public API live verification
+on:
+  pull_request:
+    paths:
+      - 'packages/core/tool-sports/**'
+      - 'scripts/phoenix-sports*'
+      - '.github/workflows/phoenix-sports-public-api.yml'
+  push:
+    branches:
+      - 'fix/phoenix-sports-public-espn-20261024'
+    paths:
+      - 'packages/core/tool-sports/**'
+      - 'scripts/phoenix-sports*'
+      - '.github/workflows/phoenix-sports-public-api.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-endpoints:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: ESPN five live public read-only API checks
+        run: node scripts/phoenix-sports-live-probe.mjs
+  keyless-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run keyless mocked source and ticket tests
+        run: |
+          node --check scripts/phoenix-sports-engine.mjs
+          node --check scripts/phoenix-sports-live-probe.mjs
+          node --test scripts/phoenix-sports.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/chat-sports.test.mjs

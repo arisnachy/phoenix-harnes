@@ -141,3 +141,33 @@ it('unwraps the pluginInventory Remote result before exposing ChatGPT Web state'
   await expect(injected.chatGptWeb?.state()).resolves.toEqual(snapshot)
   expect(chatGptWebState).toHaveBeenCalledTimes(1)
 })
+
+it('routes The Odds API key through the trusted Host remote, not settings JSON',async()=>{
+  const safe={configured:true,verified:true,source:'vault' as const,status:'ready' as const,
+    requestsRemaining:490}
+  const theOddsApiState=vi.fn(async()=>({ok:true as const,value:safe}))
+  const configureTheOddsApi=vi.fn(async()=>({ok:true as const,value:safe}))
+  const disconnectTheOddsApi=vi.fn(async()=>({
+    ok:true as const,value:{configured:false,verified:false,source:'none' as const,status:'unconfigured' as const},
+  }))
+  const ctx=new Context()
+  await ctx.plugin(SlotRegistry).await()
+  ctx.provide('locale',new LocaleRuntime(ctx))
+  new TestRemote(ctx)
+  ctx.provide('remote.pluginInventory',{theOddsApiState,configureTheOddsApi,disconnectTheOddsApi} as never)
+  ctx.provide('connection',{api:{authorization:{}}} as never)
+  await ctx.plugin({inject:[...settingsInject],apply:settingsApply}).await()
+  const slots=ctx.get('slots') as SlotRegistry
+  slots.register({name:'root',children:{
+    'settings.section':{kind:'list',scope:'root'},'settings.onboarding':{kind:'list',scope:'root'},
+  }} as never,()=>null)
+  await ctx.plugin({inject:[...inject],apply}).await()
+  const entry=slots.entries('settings.section').find(row=>row.options.id==='connectors')!
+  const props=(entry.inject as unknown as ()=>
+    import('../src/client/AuthorizationPanel.tsx').ConnectorsSettingsSectionProps)()
+  expect(await props.oddsApi?.state()).toMatchObject({configured:true,status:'ready'})
+  expect(await props.oddsApi?.configure('my-secret')).toMatchObject({verified:true})
+  expect(configureTheOddsApi).toHaveBeenCalledWith({apiKey:'my-secret'})
+  expect(await props.oddsApi?.disconnect()).toMatchObject({configured:false})
+  expect(disconnectTheOddsApi).toHaveBeenCalledTimes(1)
+})

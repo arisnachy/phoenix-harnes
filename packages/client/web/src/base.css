@@ -26,8 +26,15 @@ body {
      Firefox macOS equivalent; other engines ignore both lines. */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  color: var(--dsw-alias-label-primary, #0f1115);
-  background: var(--dsw-alias-bg-base, #fff);
+  /* The initial paint already matches Phoenix Modern Orange before the
+   * dynamically mounted theme sheet arrives. Dark preference stays dark. */
+  color: var(--dsw-alias-label-primary, #272522);
+  background: var(--dsw-alias-bg-base, #f8f7f4);
+}
+
+body[data-ds-dark-theme] {
+  color: var(--dsw-alias-label-primary, #f6f7f9);
+  background: var(--dsw-alias-bg-base, #151517);
 }
 
 /* Form controls don't inherit the body font (UA sheets pin their families —

@@ -17,6 +17,41 @@ const REALITY_CONTEXT_OPEN = '<phoenix_reality_context>'
 const REALITY_CONTEXT_CLOSE = '</phoenix_reality_context>'
 const PACKED_CHUNK_ROW_TYPES = new Set(['text-chunks', 'reasoning-chunks', 'tool-call-chunks'])
 
+const LIVE_ACTIVITY_GUIDANCE_PREFIX =
+  'Mientras trabajas, antes de usar una herramienta o cambiar de acción, escribe una sola frase breve '
+
+function isLiveActivityGuidanceBlock(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const block = value as Record<string, unknown>
+  return block.type === 'text'
+    && typeof block.text === 'string'
+    && block.text.startsWith(LIVE_ACTIVITY_GUIDANCE_PREFIX)
+}
+
+function stripLiveActivityGuidanceFromEnvelope(value: unknown): void {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return
+  const envelope = value as Record<string, unknown>
+  const source = envelope.source
+  if (source === null || typeof source !== 'object' || Array.isArray(source)
+    || (source as Record<string, unknown>).kind !== 'user') return
+  if (!Array.isArray(envelope.content)) return
+  envelope.content = envelope.content.filter(block => !isLiveActivityGuidanceBlock(block))
+}
+
+function scrubLiveActivityGuidance(record: Record<string, unknown>): void {
+  if (record.type === 'user/message') {
+    stripLiveActivityGuidanceFromEnvelope(record.data)
+    return
+  }
+  if (record.type !== 'agent/inbox/spliced'
+    || record.data === null
+    || typeof record.data !== 'object'
+    || Array.isArray(record.data)) return
+  const inserted = (record.data as Record<string, unknown>).inserted
+  if (!Array.isArray(inserted)) return
+  for (const envelope of inserted) stripLiveActivityGuidanceFromEnvelope(envelope)
+}
+
 function isPackedFixtureRow(record: Record<string, unknown>): boolean {
   return typeof record.type === 'string' && PACKED_CHUNK_ROW_TYPES.has(record.type)
 }
@@ -438,6 +473,7 @@ export function normalizeSessionLog(
         if ('expiresAt' in values) values.expiresAt = 0
       }
     }
+    scrubLiveActivityGuidance(record)
     return scrubValue(record, ctx, cwdPathMode) as Record<string, unknown>
   })
   return records.map(r => JSON.stringify(r)).join('\n') + '\n'

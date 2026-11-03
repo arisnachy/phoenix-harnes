@@ -1,0 +1,577 @@
+/** Team membership, continuable-child provisioning, and roster-owned teardown. */
+
+import { randomUUID } from 'node:crypto'
+import type { Context } from '@phoenix-ai/cordis'
+import type { Agent } from '@phoenix-ai/dsh-agent'
+import type { MessageId } from '@phoenix-ai/dsh-llm'
+import { SessionId } from '@phoenix-ai/dsh-session'
+import { foldSubagentDescriptor } from '@phoenix-ai/dsh-subagent'
+import type { ContinuableStart } from '@phoenix-ai/dsh-subagent'
+import { errorMessage, TeamError } from './error.ts'
+import type { TeamFoldState } from './fold.ts'
+import type { TeamJournal } from './journal.ts'
+import type { TeamRuntimeLifecycle } from './lifecycle.ts'
+import { messageAccepted } from './session-message.ts'
+import { TeamId } from './types.ts'
+import type {
+  SpawnTeammateRequest,
+  SpawnTeammateResult,
+  TeamMemberSnapshot,
+  TeamMemberView,
+} from './types.ts'
+import { requiredText, boundedTranscriptText } from './validation.ts'
+import { TEAM_PERSONAS } from './personas.ts'
+import { teamLanguageInstruction } from './language.ts'
+import { teamMissionClosed } from './mission-closure.ts'
+import { teammateBudgetForMission } from './mission-sizing.ts'
+
+const MEMBER_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
+
+/** Caller identity inside one implicit Team. */
+export interface TeamMembership {
+  readonly root: Agent
+  readonly id: TeamId
+  readonly role: 'lead' | 'teammate'
+  readonly name: string
+}
+
+/**
+ * Resolve one active Team member by model-facing name, including the Lead pseudo-row.
+ * @param root - exact live Team Lead.
+ * @param state - current Team fold.
+ * @param rawName - candidate member name.
+ * @returns resolved durable id and normalized name.
+ */
+export function resolveActiveMember(
+  root: Agent,
+  state: TeamFoldState,
+  rawName: string,
+): { id: SessionId; name: string } {
+  const name = rawName.trim()
+  if (name === 'lead') return { id: root.id, name }
+  const id = state.memberIdsByName.get(name)
+  const member = id === undefined ? undefined : state.members.get(id)
+  if (member === undefined || member.phase !== 'active') {
+    throw new TeamError(`active teammate "${name}" not found`, 'TEAM_MEMBER_NOT_FOUND')
+  }
+  return { id: member.id, name }
+}
+
+/** Sum finalized provider usage for one live Agent without double-counting streaming usage chunks. */
+function liveUsage(agent: Agent | undefined) {
+  if (agent === undefined) return undefined
+  let inputTokens = 0
+  let outputTokens = 0
+  let cacheReadTokens = 0
+  let cacheWriteTokens = 0
+  let reasoningTokens = 0
+  let seen = false
+  for (const event of agent.session.events) {
+    if (event.type !== 'assistant/message' || event.data.usage === undefined) continue
+    const usage = event.data.usage
+    inputTokens += usage.inputTokens
+    outputTokens += usage.outputTokens
+    cacheReadTokens += usage.cacheReadTokens ?? 0
+    cacheWriteTokens += usage.cacheWriteTokens ?? 0
+    reasoningTokens += usage.reasoningTokens ?? 0
+    seen = true
+  }
+  return seen
+    ? { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, reasoningTokens }
+    : undefined
+}
+
+/** Owns Team identities and the lifecycle of rostered continuable children. */
+export class TeamRoster {
+  private readonly inFlightCreations = new Set<Promise<unknown>>()
+
+  /**
+   * @param ctx - Team service context with Agent, Session, persistence, and subagent services.
+   * @param journal - authoritative Lead-log transaction owner.
+   * @param lifecycle - shared Team runtime admission cutoff.
+   * @param maxMembers - maximum provisioning or successfully created members per Team.
+   * @param maxMessageBytes - maximum public assignment text size.
+   */
+  constructor(
+    private readonly ctx: Context,
+    private readonly journal: TeamJournal,
+    private readonly lifecycle: TeamRuntimeLifecycle,
+    private readonly maxMembers: number,
+    private readonly maxMessageBytes: number,
+  ) {}
+
+  /**
+   * Resolve one exact live Agent's Team role.
+   * @param agent - exact live Agent used as the authority credential.
+   * @returns its root, Team identity, role, and model-facing name.
+   */
+  membership(agent: Agent): TeamMembership {
+    const membership = this.tryMembership(agent)
+    if (membership === undefined) {
+      throw new TeamError(`agent "${agent.id}" is not a member of an active Agent Team`, 'TEAM_NOT_MEMBER')
+    }
+    return membership
+  }
+
+  /**
+   * Resolve a caller without throwing for scoped installation and lifecycle observers.
+   * @param agent - candidate exact live Agent.
+   * @returns Team membership, or undefined for non-Team subagents and stale identities.
+   */
+  tryMembership(agent: Agent): TeamMembership | undefined {
+    if (this.ctx.agents.get(agent.id) !== agent) return undefined
+    try {
+      const parentId = agent.session.header.parentSession
+      if (parentId !== undefined) {
+        const root = this.ctx.agents.get(parentId)
+        if (root !== undefined) {
+          const member = this.journal.state(root).members.get(agent.id)
+          if (member?.phase === 'active' || member?.phase === 'provisioning') {
+            return { root, id: TeamId(root.id), role: 'teammate', name: member.name }
+          }
+          // A direct child outside the durable roster is not a teammate. Ordinary
+          // host forks are independent roots; subagent descriptors distinguish
+          // provider-owned workers that must not receive a nested Team identity.
+          if (this.subagentDescriptor(agent)) return undefined
+          return { root: agent, id: TeamId(agent.id), role: 'lead', name: 'lead' }
+        }
+      }
+      // A continuation can briefly outlive its parent during child-first teardown.
+      // Do not reinterpret that durable child as a new implicit root Team. A host-
+      // resumed ordinary fork has no descriptor in its own suffix and remains a
+      // valid new root whose inherited Team records fold out by TeamId.
+      if (this.subagentDescriptor(agent)) return undefined
+      return { root: agent, id: TeamId(agent.id), role: 'lead', name: 'lead' }
+    } catch {
+      // This method is used by lifecycle observers and teardown discovery. A
+      // malformed durable stream is surfaced by authoritative Team operations;
+      // the non-throwing probe must not veto unrelated Agent lifecycle edges.
+      return undefined
+    }
+  }
+
+  /**
+   * List the runtime-enriched roster visible to one Team member.
+   * @param membership - exact caller membership resolved by this roster.
+   * @returns Lead and teammate rows in creation order.
+   */
+  list(membership: TeamMembership): TeamMemberView[] {
+    const { root } = membership
+    const state = this.journal.state(root)
+    const rootUsage = liveUsage(root)
+    const result: TeamMemberView[] = [{
+      id: root.id,
+      name: 'lead',
+      role: 'lead',
+      status: root.status,
+      ...root.options.provider === undefined ? {} : { modelProvider: root.options.provider },
+      ...root.options.model === undefined ? {} : { model: root.options.model },
+      ...rootUsage === undefined ? {} : { usage: rootUsage },
+      diagnostics: [],
+    }]
+    for (const member of state.members.values()) {
+      const live = this.ctx.agents.get(member.id)
+      // Never mislabel an inactive worker with the Lead's Sol model.
+      // An unknown worker route must stay unknown until real child evidence exists.
+      const model = live?.options.model
+      const usage = liveUsage(live)
+      result.push({
+        id: member.id,
+        name: member.name,
+        role: 'teammate',
+        status: member.phase === 'failed'
+          ? 'failed'
+          : member.phase === 'provisioning'
+            ? 'provisioning'
+            : live?.status ?? 'inactive',
+        description: member.description,
+        provider: member.provider,
+        context: member.context,
+        ...live?.options.provider === undefined ? {} : { modelProvider: live.options.provider },
+        ...model === undefined ? {} : { model },
+        ...usage === undefined ? {} : { usage },
+        diagnostics: member.error === undefined ? [] : [member.error],
+      })
+    }
+    return result
+  }
+
+  /**
+   * Create one named, continuable direct child of the Team Lead.
+   * @param caller - exact live Lead Agent.
+   * @param request - immutable name, description, prompt, context mode, provider, and cancellation.
+   * @returns the active roster row.
+   */
+  async spawn(caller: Agent, request: SpawnTeammateRequest): Promise<SpawnTeammateResult> {
+    if (this.lifecycle.disposed) throw new TeamError('Agent Teams service is disposing', 'TEAM_DISPOSED')
+    const operation = this.spawnAdmitted(caller, request)
+    this.inFlightCreations.add(operation)
+    try {
+      return await operation
+    } finally {
+      this.inFlightCreations.delete(operation)
+    }
+  }
+
+  /**
+   * Return admitted creation operations captured for ordered disposal.
+   * @returns detached snapshot ordered only by Set insertion.
+   */
+  pendingCreations(): readonly Promise<unknown>[] {
+    return [...this.inFlightCreations]
+  }
+
+  /**
+   * Reconcile provisioning state when one Team member Session starts.
+   * @param agent - newly started exact live Agent.
+   * @param signal - shared runtime cancellation.
+   */
+  async recoverFor(agent: Agent, signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted()
+    const membership = this.tryMembership(agent)
+    if (membership?.role === 'lead') await this.reconcileProvisioning(membership.root, signal)
+  }
+
+  /**
+   * Interrupt one live teammate turn without clearing its pending inbox.
+   * @param caller - exact live Lead Agent.
+   * @param targetName - durable teammate name.
+   * @returns the target status sampled before cancellation.
+   */
+  interrupt(caller: Agent, targetName: string): { previousStatus: 'running' | 'idle' | 'inactive' } {
+    const membership = this.membership(caller)
+    if (membership.role !== 'lead') throw new TeamError('only the Team Lead can interrupt teammates', 'TEAM_LEAD_REQUIRED')
+    const state = this.journal.state(membership.root)
+    const target = resolveActiveMember(membership.root, state, targetName)
+    if (target.id === membership.root.id) throw new TeamError('the Team Lead cannot interrupt itself', 'TEAM_INVALID_TARGET')
+    const live = this.ctx.agents.get(target.id)
+    if (live === undefined) return { previousStatus: 'inactive' }
+    const previousStatus = live.status
+    this.ctx.subagents.interrupt(target.id, { kind: 'ancestor', agent: caller })
+    return { previousStatus }
+  }
+
+  /**
+   * Group exact live roster children by their current Lead for runtime teardown.
+   * @returns each live Lead and the roster child ids currently in the Agent registry.
+   */
+  liveChildrenByRoot(): Map<Agent, SessionId[]> {
+    const teams = new Map<Agent, SessionId[]>()
+    for (const agent of this.ctx.agents.list()) {
+      const rootId = agent.session.header.parentSession
+      if (rootId === undefined) continue
+      const root = this.ctx.agents.get(rootId)
+      if (root === undefined || !this.journal.state(root).members.has(agent.id)) continue
+      const children = teams.get(root) ?? []
+      children.push(agent.id)
+      teams.set(root, children)
+    }
+    return teams
+  }
+
+  /**
+   * Release exact teammate Activations through the continuation lifecycle owner.
+   * @param root - exact live Team Lead authorizing release.
+   * @param childIds - selected roster child ids.
+   */
+  async stopTeammates(root: Agent, childIds: readonly SessionId[]): Promise<void> {
+    await this.lifecycle.withTimeout(this.ctx.subagents.drainContinuableChildren(root, childIds))
+  }
+
+  /** Perform one creation admitted before the Team runtime disposal cutoff. */
+  private async spawnAdmitted(
+    caller: Agent,
+    request: SpawnTeammateRequest,
+  ): Promise<SpawnTeammateResult> {
+    const membership = this.membership(caller)
+    if (membership.role !== 'lead') {
+      throw new TeamError('only the Team Lead can create teammates', 'TEAM_LEAD_REQUIRED')
+    }
+    const signal = AbortSignal.any([request.signal, this.lifecycle.signal])
+    signal.throwIfAborted()
+    const root = membership.root
+    if (teamMissionClosed(root.session.events)) {
+      throw new TeamError('Kira already closed this mission; a new user turn is required', 'TEAM_MISSION_CLOSED')
+    }
+    const name = this.memberName(request.name)
+    const description = requiredText(request.description, 'description', 200)
+    const childId = SessionId(randomUUID())
+    const member: TeamMemberSnapshot = {
+      id: childId,
+      name,
+      description,
+      provider: requiredText(request.provider, 'provider', 200),
+      context: request.context,
+      phase: 'provisioning',
+    }
+
+    await this.journal.transact(root.id, async () => {
+      // Recheck inside the serialized admission, closing the race with turn/end.
+      if (teamMissionClosed(root.session.events)) {
+        throw new TeamError('Kira already closed this mission', 'TEAM_MISSION_CLOSED')
+      }
+      const state = this.journal.state(root)
+      if (state.memberIdsByName.has(name)) {
+        throw new TeamError(`teammate name "${name}" was already used in this Team`, 'TEAM_MEMBER_NAME_TAKEN')
+      }
+      const occupied = [...state.members.values()].filter(member =>
+        member.phase === 'provisioning'
+        || (member.phase === 'active' && this.ctx.agents.get(member.id) !== undefined))
+      // Enforce scope-specific limits INSIDE the serialized durable roster admission;
+      // model-side list_agents counts can race when several tool calls run in parallel.
+      const permitted = request.missionComplexity === undefined
+        ? this.maxMembers
+        : Math.min(this.maxMembers, teammateBudgetForMission(request.missionComplexity))
+      if (occupied.length >= permitted) {
+        throw new TeamError(`Concurrent Team member limit ${permitted} reached`, 'TEAM_MEMBER_LIMIT')
+      }
+      await this.journal.appendAndFlush(root, 'team/member', { version: 1, teamId: TeamId(root.id), member })
+    })
+
+    const initialPrompt = [
+      ...request.prompt,
+      name === 'aegis'
+        ? {
+          type: 'text' as const,
+          text: 'Aegis silent review mode. Do not acknowledge this assignment with a reaction or status message. Work quietly and send a Team message only for a real blocker, a required user decision, or material verification evidence.',
+        }
+        : {
+          type: 'text' as const,
+          text: `Visible Kira assignment reaction target: team-member:${childId}. This is Kira's real direct assignment to you. In your first normal work step, address Kira briefly with your concrete first action; immediately execute it in that same turn. This natural update is already visible under your identity, so do NOT call send_message just to acknowledge or narrate a plan. On a real finding, peer dependency or blocker, proactively use send_message or followup_task with the exact target and purpose. Try a materially different safe approach to a recoverable failure rather than repeating an unchanged call. Before ending, send lead a short result with evidence or a blocker with the failed receipt and next option. Never claim completed work without execution receipts. Do not claim completed work, repeat the assignment or add an acknowledgement-only turn. team_chat_react is optional; never substitute an emoji for the useful work update.`,
+        },
+      // Last instruction wins over English template examples in a fresh child.
+      {
+        type: 'text' as const,
+        text: teamLanguageInstruction(root.session.events),
+      },
+    ]
+    let started: ContinuableStart
+    try {
+      await this.journal.transact(root.id, async () => {
+        signal.throwIfAborted()
+        const task = request.prompt.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n').trim()
+        const addressedName = TEAM_PERSONAS.find(person => person.kind === name)?.name ?? name
+        const text = task.toLocaleLowerCase().startsWith(addressedName.toLocaleLowerCase() + ',')
+          ? task : `${addressedName}, ${task || description}`
+        const event = root.session.events.findLast(event => event.type === 'team/member' && event.data.member.id === childId)
+        if (event === undefined) throw new TeamError('assignment has no committed roster entry', 'TEAM_PROVISIONING_CONFLICT')
+        await this.journal.appendAndFlush(root, 'team/chat-message', { version: 1, update: true, message: {
+          id: `team-member:${childId}`, senderId: root.id, senderName: 'Kira', senderKind: 'kira',
+          avatar: 'kira', role: 'skill.orchestration', missionId: root.id,
+          text: boundedTranscriptText(text, this.maxMessageBytes), time: event.time, sourceSeq: event.seq,
+          targetId: childId, mentions: [childId], reactions: [],
+        } })
+      })
+      started = await this.ctx.subagents.startContinuable({
+        childId,
+        provider: request.provider,
+        label: `KIRA:${name} · ${description}`,
+        request: {
+          prompt: initialPrompt,
+          parent: root,
+          ...request.agentOptions === undefined ? {} : { agentOptions: request.agentOptions },
+        },
+        signal,
+      })
+      await this.checkpointInitialPrompt(childId, started.messageId, signal)
+      if (teamMissionClosed(root.session.events)) {
+        throw new TeamError('Kira closed this mission during teammate startup', 'TEAM_MISSION_CLOSED')
+      }
+    } catch (error: unknown) {
+      const failed: TeamMemberSnapshot = {
+        ...member,
+        phase: 'failed',
+        error: errorMessage(error),
+      }
+      try {
+        const phase = await this.settleProvisioning(root, failed)
+        await this.stopTeammates(root, [childId])
+        if (phase === 'active') {
+          throw new TeamError(
+            `teammate "${name}" became active while its creator reported failure`,
+            'TEAM_PROVISIONING_CONFLICT',
+            { cause: error },
+          )
+        }
+      } catch (recordError: unknown) {
+        throw new AggregateError([error, recordError], 'teammate creation and durable failure recording both failed')
+      }
+      throw error
+    }
+    const active = {
+      ...member,
+      phase: 'active' as const,
+    } satisfies TeamMemberSnapshot
+    // Once the continuation accepted its first prompt, it is a real child. If
+    // this checkpoint fails, keep the in-memory active edge instead of inventing
+    // an impossible active -> failed transition; restart reconciliation covers
+    // the provisioning-only durable prefix.
+    const settledPhase = await this.settleProvisioning(root, active)
+    if (settledPhase === 'failed') {
+      const conflict = new TeamError(
+        `teammate "${name}" was reconciled as failed while creation was in progress`,
+        'TEAM_PROVISIONING_CONFLICT',
+      )
+      try {
+        await this.stopTeammates(root, [childId])
+      } catch (cleanupError: unknown) {
+        /* v8 ignore next -- requires the independently tested HMR settlement conflict and cleanup failure together. */
+        throw new AggregateError([conflict, cleanupError], 'provisioning conflict cleanup failed')
+      }
+      throw conflict
+    }
+    return { member: this.memberView(active) }
+  }
+
+  /** Flush the accepted initial inbox item before the Lead can commit `active`. */
+  private async checkpointInitialPrompt(
+    childId: SessionId,
+    messageId: MessageId,
+    signal: AbortSignal,
+  ): Promise<void> {
+    while (true) {
+      signal.throwIfAborted()
+      const session = this.ctx.sessions.get(childId)
+      if (session === undefined) {
+        const stored = await this.ctx.sessionPersistence.inspect(childId, signal)
+        const suffix = stored.events.slice(stored.meta.seedLength ?? 0)
+        if (messageAccepted(suffix, message => message.id === messageId)) return
+        throw new TeamError(
+          `teammate "${childId}" initial prompt was not durably accepted`,
+          'TEAM_PROVISIONING_CONFLICT',
+        )
+      }
+
+      const progress = Promise.withResolvers<void>()
+      // Abort can win while the durability flush is still pending; mark the
+      // later-awaited rejection handled without changing its eventual result.
+      void progress.promise.catch(() => undefined)
+      const stopEvent = this.ctx.on('session/event', (candidate) => {
+        if (candidate === session) progress.resolve()
+      })
+      const stopDisposed = this.ctx.on('session/disposed', (candidate) => {
+        if (candidate === session) progress.resolve()
+      })
+      const onAbort = (): void => {
+        const reason: unknown = signal.reason
+        progress.reject(reason instanceof Error
+          ? reason
+          : new TeamError(`teammate creation aborted: ${errorMessage(reason)}`, 'TEAM_DISPOSED'))
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+      try {
+        signal.throwIfAborted()
+        await this.ctx.sessions.flush(session)
+        const suffix = session.events.slice(session.header.seedLength ?? 0)
+        if (messageAccepted(suffix, message => message.id === messageId)) return
+        if (this.ctx.sessions.get(childId) !== session) continue
+        await progress.promise
+      } finally {
+        signal.removeEventListener('abort', onAbort)
+        stopDisposed()
+        stopEvent()
+      }
+    }
+  }
+
+  /** Settle provisioning-only members from their independently durable child Sessions. */
+  private async reconcileProvisioning(root: Agent, signal: AbortSignal): Promise<void> {
+    const provisioning = [...this.journal.state(root).members.values()].filter(member => member.phase === 'provisioning')
+    for (const member of provisioning) {
+      signal.throwIfAborted()
+      // A live child means creation is still completing in this process. Its
+      // creator owns the terminal member edge.
+      if (this.ctx.agents.get(member.id) !== undefined) continue
+      let phase: 'active' | 'failed' = 'failed'
+      let failure = 'provisioning did not leave a resumable child Session'
+      try {
+        const loaded = await this.ctx.sessionPersistence.inspect(member.id, signal)
+        const suffix = loaded.events.slice(loaded.meta.seedLength ?? 0)
+        const descriptor = foldSubagentDescriptor(suffix)
+        const acceptedInitialPrompt = messageAccepted(suffix, message => message.source.kind === 'user')
+        if (loaded.meta.parentSession === root.id
+          && descriptor?.mode === 'continuable'
+          && descriptor.provider === member.provider
+          && acceptedInitialPrompt) {
+          phase = 'active'
+        } else {
+          failure = 'persisted child Session does not match the provisioned continuation'
+        }
+      } catch (error: unknown) {
+        failure = `child Session recovery failed: ${errorMessage(error)}`
+      }
+      signal.throwIfAborted()
+      await this.journal.transact(root.id, async () => {
+        signal.throwIfAborted()
+        const current = this.journal.state(root).members.get(member.id)
+        if (current?.phase !== 'provisioning') return
+        const settled: TeamMemberSnapshot = {
+          ...current,
+          phase,
+          ...phase === 'failed' ? { error: failure } : {},
+        }
+        await this.journal.appendAndFlush(root, 'team/member', {
+          version: 1,
+          teamId: TeamId(root.id),
+          member: settled,
+        })
+      })
+    }
+  }
+
+  /** Build one runtime member row after successful creation. */
+  private memberView(member: TeamMemberSnapshot & { readonly phase: 'active' }): TeamMemberView {
+    const live = this.ctx.agents.get(member.id)
+    const usage = liveUsage(live)
+    return {
+      id: member.id,
+      name: member.name,
+      role: 'teammate',
+      status: live?.status ?? 'inactive',
+      description: member.description,
+      provider: member.provider,
+      context: member.context,
+      ...live?.options.provider === undefined ? {} : { modelProvider: live.options.provider },
+      ...live?.options.model === undefined ? {} : { model: live.options.model },
+      ...usage === undefined ? {} : { usage },
+      diagnostics: [],
+    }
+  }
+
+  /** Validate a never-reused model-facing teammate name. */
+  private memberName(value: string): string {
+    if (!MEMBER_NAME.test(value) || value.length > 64 || value === 'lead') {
+      throw new TeamError(
+        'teammate name must be lower-kebab-case, at most 64 characters, and not "lead"',
+        'TEAM_INVALID_MEMBER_NAME',
+      )
+    }
+    return value
+  }
+
+  /** Append one terminal provisioning edge unless recovery already settled it. */
+  private async settleProvisioning(
+    root: Agent,
+    terminal: TeamMemberSnapshot,
+  ): Promise<'active' | 'failed'> {
+    return this.journal.transact(root.id, async () => {
+      const current = this.journal.state(root).members.get(terminal.id)
+      /* v8 ignore next 3 -- the append-only provisioning event is committed by this operation before settlement. */
+      if (current === undefined) {
+        throw new TeamError(`provisioned teammate "${terminal.id}" disappeared`, 'TEAM_PROVISIONING_CONFLICT')
+      }
+      if (current.phase !== 'provisioning') return current.phase
+      await this.journal.appendAndFlush(root, 'team/member', {
+        version: 1,
+        teamId: TeamId(root.id),
+        member: terminal,
+      })
+      return terminal.phase === 'active' ? 'active' : 'failed'
+    })
+  }
+
+  /** Whether a Session's own suffix identifies a provider-owned subagent child. */
+  private subagentDescriptor(agent: Agent): boolean {
+    return foldSubagentDescriptor(agent.session.events.slice(agent.session.header.seedLength ?? 0)) !== undefined
+  }
+}

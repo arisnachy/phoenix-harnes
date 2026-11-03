@@ -164,3 +164,70 @@
     transition: color 180ms ease-out;
   }
 }
+
+/* Two real Codex quota windows share the Settings row in wide mode.
+   Compact rings free height for chats; full reset details remain in tooltips. */
+.root {
+  flex: 0 1 auto;
+  width: 100%;
+  max-width: 148px;
+  height: 34px;
+  min-height: 0;
+  margin-left: auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+}
+.window {
+  flex: 0 1 auto;
+  display: grid;
+  grid-template-columns: 26px minmax(12px, auto);
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+.window + .window {
+  padding-left: 5px;
+  border-left: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
+}
+.meter {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: conic-gradient(#e98732 var(--quota-progress), color-mix(in srgb, var(--dsw-alias-border-l2) 74%, #f6d8bf 26%) 0);
+}
+.meter::before {
+  position: absolute;
+  inset: 3px;
+  content: '';
+  border-radius: 50%;
+  background: var(--dsw-specific-sidebar-fill);
+}
+.value {
+  position: relative;
+  z-index: 1;
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 650;
+  color: var(--dsw-alias-label-primary);
+}
+.copy { min-width: 0; gap: 1px; }
+.label { font-size: 10px; line-height: 12px; }
+.reset {
+  display: block;
+  font-size: 8px;
+  line-height: 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-tertiary);
+}
+@media (prefers-reduced-motion: reduce) {
+  .meter { transition: none; }
+}

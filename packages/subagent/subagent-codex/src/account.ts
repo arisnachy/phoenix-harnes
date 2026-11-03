@@ -23,15 +23,20 @@ import { codexAccountEnvironment, codexMetadataAppServerArgv } from './run.ts'
 /** Credential marker for the Codex-managed ChatGPT account session. */
 export const CODEX_ACCOUNT_KEY = credentialKey('subagent-codex', 'account')
 
-/** Keep Settings/telemetry re-renders from spawning a Codex app-server storm. */
-const ACCOUNT_INSPECTION_TTL_MS = 60_000
+/**
+ * Keep Settings/telemetry re-renders from spawning a Codex app-server storm
+ * while still letting the visible quota converge within tens of seconds after
+ * real Codex usage. The UI may poll the cheap authorization catalog more often;
+ * this TTL keeps the fallback responsive without spawning one app-server
+ * process per UI poll.
+ */
+const ACCOUNT_INSPECTION_TTL_MS = 10_000
 /**
  * A failed native probe is retried later, not once per UI subscriber/render.
- * Native Codex can spend its whole 30 s startup gate on a state-db backfill;
- * leave a larger quiet interval so Phoenix never turns that failure into a
- * self-sustaining app-server restart loop.
+ * The short cooldown repairs a temporarily stale counter while inFlightSnapshot
+ * still coalesces concurrent callers and prevents a restart storm.
  */
-const ACCOUNT_FAILURE_COOLDOWN_MS = 120_000
+const ACCOUNT_FAILURE_COOLDOWN_MS = 15_000
 /** Shared probe must outlive Codex's own 30 s state-db startup/backfill window. */
 const ACCOUNT_PROBE_TIMEOUT_MS = 45_000
 /** Optional quota metadata may be slower than account/read but must not stall Host boot. */
@@ -40,6 +45,10 @@ const ACCOUNT_RATE_LIMIT_TIMEOUT_MS = 12_000
 const ACCOUNT_USAGE_TIMEOUT_MS = 5_000
 /** Minimum bounded wait for asynchronous Windows taskkill /T /F cleanup. */
 const ACCOUNT_CLOSE_MIN_TIMEOUT_MS = 4_000
+// Account probes also refresh the shared model catalog. On Windows the async cache
+// writer can outlive the RPC by >750 ms, so preserve the process until its normal
+// shutdown completes instead of cancelling the Tokio task during models_cache.json.
+const ACCOUNT_NATURAL_EXIT_GRACE_MS = 3_000
 /** Small teardown headroom beyond the configured subprocess grace. */
 const ACCOUNT_CLOSE_EXTRA_TIMEOUT_MS = 1_000
 
@@ -135,6 +144,62 @@ function categoryOf(app: JsonObject): string | undefined {
   const categories = metadata?.categories
   if (!Array.isArray(categories)) return undefined
   return categories.find((value): value is string => typeof value === 'string' && value.length > 0)
+}
+
+/**
+ * Merge one sparse live Codex rate-limit notification into a full account
+ * snapshot. Null fields mean "unchanged" and never erase the last value.
+ * @param snapshot - last authoritative account snapshot.
+ * @param update - sparse rate-limit payload from Codex app-server.
+ * @returns account snapshot with the newest known Codex quota windows.
+ */
+export function mergeCodexRateLimitsUpdate(
+  snapshot: CodexAccountSnapshot,
+  update: unknown,
+): CodexAccountSnapshot {
+  const next = maybeObject(update)
+  if (next === undefined) return snapshot
+  const response = maybeObject(snapshot.rateLimits) ?? {}
+  const buckets = maybeObject(response.rateLimitsByLimitId) ?? {}
+  const current = maybeObject(buckets.codex) ?? response
+  const merged: JsonObject = { ...current }
+  for (const [key, value] of Object.entries(next)) {
+    if (value !== undefined && value !== null) merged[key] = value
+  }
+  return {
+    ...snapshot,
+    rateLimits: {
+      ...response,
+      rateLimitsByLimitId: { ...buckets, codex: merged },
+    },
+  }
+}
+
+let observedCodexRateLimits:
+  | { readonly value: JsonObject; readonly at: number }
+  | undefined
+
+/**
+ * Observe the official app-server account/rateLimits/updated notification.
+ * @param update - sparse rate-limit payload emitted by Codex.
+ */
+export function observeCodexRateLimitsUpdate(update: unknown): void {
+  const next = maybeObject(update)
+  if (next === undefined) return
+  const merged: JsonObject = { ...(observedCodexRateLimits?.value ?? {}) }
+  for (const [key, value] of Object.entries(next)) {
+    if (value !== undefined && value !== null) merged[key] = value
+  }
+  observedCodexRateLimits = { value: merged, at: Date.now() }
+}
+
+function withObservedCodexRateLimits(
+  snapshot: CodexAccountSnapshot,
+  sampledAfter: number,
+): CodexAccountSnapshot {
+  const observed = observedCodexRateLimits
+  if (observed === undefined || observed.at <= sampledAfter) return snapshot
+  return mergeCodexRateLimitsUpdate(snapshot, observed.value)
 }
 
 function connectorTelemetry(
@@ -338,7 +403,14 @@ class CodexAccountConnection {
     } catch {
       // A concurrently closed protocol pipe does not change tree ownership.
     }
-    this.child.terminate()
+
+    // Codex persists the refreshed model catalog on a background Tokio task.
+    // EOF is the normal app-server shutdown path, so first let the process
+    // finish naturally instead of immediately cancelling that cache writer.
+    const naturalExit = await this.child.waitForExit(
+      AbortSignal.timeout(ACCOUNT_NATURAL_EXIT_GRACE_MS),
+    ).catch(() => false)
+    if (!naturalExit) this.child.terminate()
 
     // Windows tree teardown is intentionally asynchronous in dsh-subprocess-local
     // so taskkill /T /F cannot freeze the Host event loop. Give that OS cleanup
@@ -348,7 +420,7 @@ class CodexAccountConnection {
       ACCOUNT_CLOSE_MIN_TIMEOUT_MS,
       Math.ceil(this.disposeGraceMs + ACCOUNT_CLOSE_EXTRA_TIMEOUT_MS),
     )
-    const exited = await this.child.waitForExit(AbortSignal.timeout(closeTimeoutMs))
+    const exited = naturalExit || await this.child.waitForExit(AbortSignal.timeout(closeTimeoutMs))
     if (!exited) {
       this.warn(
         `subagent-codex account: app-server process tree is still terminating after ${closeTimeoutMs}ms; continuing without failing the Host`,
@@ -388,12 +460,15 @@ async function openConnection(
   }
 }
 
+/** Native Codex owns the credential refresh; only explicit user sign-in may
+ * request a forced check. Passive quota telemetry must never rotate tokens. */
 async function readAccount(
   connection: CodexAccountConnection,
   signal: AbortSignal,
+  refreshToken = false,
 ): Promise<{ account: unknown; requiresOpenaiAuth: boolean }> {
   const response = object(await Promise.race([
-    connection.request('account/read', { refreshToken: false }, signal),
+    connection.request('account/read', { refreshToken }, signal),
     connection.processEnded(),
   ]), 'account/read response')
   return {
@@ -520,6 +595,15 @@ async function logoutManagedChatGpt(
   }
 }
 
+/** Only a terminal native Codex refresh-credential expiration allows an
+ * explicit user-triggered re-login to retire the obsolete official session.
+ * Do not log token data, delete arbitrary credential files or treat an offline
+ * network or temporary rate-limit error as an expired account. */
+export function codexRefreshTokenExpired(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /(?:refresh[\s_-]*token[^\r\n]{0,120}expired|refresh[\s_-]*token[\s_-]*expired)/iu.test(message)
+}
+
 async function loginManagedChatGpt(
   ctx: Context,
   config: CodexAccountBridgeConfig,
@@ -533,12 +617,28 @@ async function loginManagedChatGpt(
   }
   session.signal.addEventListener('abort', cancelLogin, { once: true })
   try {
-    const existing = await readAccount(connection, session.signal)
-    if (existing.account !== null && existing.account !== undefined) {
+    // The passive account/read snapshot may still say "chatgpt" after the
+    // underlying refresh token has expired. A user pressing "Connect" needs
+    // an authoritative native refresh check, not a stale cached login marker.
+    let existing: Awaited<ReturnType<typeof readAccount>> | undefined
+    try {
+      existing = await readAccount(connection, session.signal, true)
+    } catch (error: unknown) {
+      if (!codexRefreshTokenExpired(error)) throw error
+      // This is an explicit sign-in request, not a background maintenance task.
+      // Ask the official Codex app-server to discard only its invalid account.
+      await Promise.race([
+        connection.request('account/logout', {}, session.signal),
+        connection.processEnded(),
+      ])
+      await ctx.credentials.deleteRecord(CODEX_ACCOUNT_KEY)
+      session.notify({ message: 'La sesión de Codex caducó. Inicia sesión de nuevo con ChatGPT para recuperarla; las actualizaciones de Phoenix siguen siendo independientes.' })
+    }
+    if (existing?.account !== null && existing?.account !== undefined) {
       const account = object(existing.account, 'account')
       if (account.type === 'chatgpt') {
         await commitManagedAccountMarker(ctx)
-        session.notify({ message: 'Codex is already connected to ChatGPT; PHOENIX will reuse that managed session.' })
+        session.notify({ message: 'Codex is already connected to ChatGPT and the native session was verified.' })
         return
       }
     }
@@ -594,7 +694,11 @@ export function registerCodexAccountFlow(
   config: CodexAccountBridgeConfig,
 ): () => void {
   const lifecycle = new AbortController()
-  let cached: { readonly snapshot: CodexAccountSnapshot; readonly at: number } | undefined
+  let cached: {
+    readonly snapshot: CodexAccountSnapshot
+    readonly at: number
+    readonly probeStartedAt: number
+  } | undefined
   let failed: { readonly error: unknown; readonly at: number } | undefined
   let inFlightSnapshot: Promise<CodexAccountSnapshot> | undefined
 
@@ -615,7 +719,7 @@ export function registerCodexAccountFlow(
   const inspectSnapshot = async (signal: AbortSignal): Promise<CodexAccountSnapshot> => {
     const now = Date.now()
     if (cached !== undefined && now - cached.at < ACCOUNT_INSPECTION_TTL_MS) {
-      return cached.snapshot
+      return withObservedCodexRateLimits(cached.snapshot, cached.probeStartedAt)
     }
 
     if (inFlightSnapshot === undefined
@@ -627,9 +731,10 @@ export function registerCodexAccountFlow(
         lifecycle.signal,
         AbortSignal.timeout(ACCOUNT_PROBE_TIMEOUT_MS),
       ])
+      const probeStartedAt = Date.now()
       const job = readCodexAccountSnapshot(ctx, config, probeSignal).then(
         (snapshot) => {
-          cached = { snapshot, at: Date.now() }
+          cached = { snapshot, at: Date.now(), probeStartedAt }
           failed = undefined
           return snapshot
         },
@@ -651,7 +756,9 @@ export function registerCodexAccountFlow(
     // Once Phoenix has one good account snapshot, never make UI telemetry wait
     // behind a refresh/backfill. Serve the last sanitized snapshot immediately
     // while the single shared native probe refreshes it in the background.
-    if (cached !== undefined) return cached.snapshot
+    if (cached !== undefined) {
+      return withObservedCodexRateLimits(cached.snapshot, cached.probeStartedAt)
+    }
     if (inFlightSnapshot !== undefined) {
       return await waitForSharedSnapshot(inFlightSnapshot, signal)
     }
@@ -662,6 +769,7 @@ export function registerCodexAccountFlow(
   const invalidateInspection = (): void => {
     cached = undefined
     failed = undefined
+    observedCodexRateLimits = undefined
   }
 
   const unregister = ctx.authorization.registerFlow({

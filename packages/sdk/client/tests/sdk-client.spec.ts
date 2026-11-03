@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import { HARNESS_SDK_PROTOCOL_VERSION } from '@phoenix-ai/dsh-sdk-protocol'
 import {
   DeepSeekHarness,
   HarnessClient,
@@ -163,6 +164,7 @@ describe('DeepSeekHarness', () => {
     await harness.close()
     const records = (await readFile(recordFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as object)
     expect(records).toEqual([{
+      protocolVersion: HARNESS_SDK_PROTOCOL_VERSION,
       cwd: dir,
       provider: 'custom-provider',
       model: 'custom-model',

@@ -1,3 +1,4 @@
+import type { AssistantMessageEvent } from '@earendil-works/pi-ai'
 import type { GenerateOptions, ToolSchema } from '@phoenix-ai/dsh-llm'
 
 const ROOT_COMPOSITION_KEYS = ['oneOf', 'anyOf', 'allOf'] as const
@@ -141,6 +142,88 @@ export function normalizeCodexToolParameters(parameters: JsonObject): JsonObject
   return normalized
 }
 
+
+/**
+ * Limit a narrowly requested Paint turn to its relevant tool family. An
+ * unrelated social MCP with an invalid deferred schema must not poison
+ * Codex's *entire* function catalog before Computer Use even starts.
+ * This is a request-only view: the registry and subsequent turns are intact.
+ *
+ * @param options - Model request with identified human messages and tool list.
+ * @returns Same request, or a scoped shallow copy for native Paint work.
+ */
+export function scopeCodexToolsForPaint(options: GenerateOptions): GenerateOptions {
+  if (options.tools === undefined) return options
+  const human = [...options.messages].reverse().find(message =>
+    message.role === 'user' && message.source.kind === 'user')
+  if (human === undefined) return options
+  const text = human.content.map(block =>
+    block.type === 'text' ? block.text : '').join(' ')
+    .normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  const paint = /\b(?:paint|mspaint)\b/u.test(text)
+    && /\b(?:abre|abrir|entra|entrar|crea|crear|dibuja|dibujo|trazo|carita|usa|open|draw)\b/u.test(text)
+    && !/\b(?:publica|publicar|campana|campaign|redes sociales|social media|youtube|instagram|facebook|chrome|navegador)\b/u.test(text)
+  if (!paint) return options
+  const tools = options.tools.filter(tool => {
+    const name = tool.name.toLowerCase()
+    if (/^(?:image_generation|phoenix_3d)$/u.test(name)) return false
+    if (!name.startsWith('mcp__')) return true
+    return /(?:desktop|windows|filesystem|file-system|powershell|pwsh|shell|computer)/u.test(name)
+  })
+  return tools.length === options.tools.length ? options : { ...options, tools }
+}
+
+function rejectedFunctionSchemaName(detail: string): string | undefined {
+  if (!/invalid schema for function/iu.test(detail)
+    || !/schema must have type ['"]?object['"]?/iu.test(detail)) return undefined
+  return /invalid schema for function ['"]([^'"]+)['"]/iu.exec(detail)?.[1]
+}
+
+/**
+ * Turn pi-ai's terminal schema rejection event into an exception *before* its
+ * stream translator emits a usage/finish event. Without this bridge, a schema
+ * error is reported as a finished turn and the adapter never gets a chance to
+ * quarantine that malformed function definition.
+ *
+ * @param events - The original provider event stream.
+ * @returns The same provider events unless the provider rejects a function schema.
+ */
+export async function* surfaceRejectedCodexSchemaEvent(
+  events: AsyncIterable<AssistantMessageEvent>,
+): AsyncGenerator<AssistantMessageEvent> {
+  for await (const event of events) {
+    const diagnostic = event.type === 'error' ? event.error.errorMessage
+      : event.type === 'done' ? event.message.errorMessage : undefined
+    if (typeof diagnostic === 'string' && rejectedFunctionSchemaName(diagnostic) !== undefined) {
+      throw new Error(diagnostic)
+    }
+    yield event
+  }
+}
+
+/**
+ * Contain a provider-rejected function schema without abandoning the whole
+ * conversation. A 400 naming one invalid function is a pre-generation
+ * rejection, never a completed tool action; the caller may retry once without
+ * only that rejected tool. No unrelated tools or durable registry entries
+ * are removed.
+ *
+ * @param options - Original, unmodified model request.
+ * @param detail - Provider diagnostic including the exact rejected tool name.
+ * @returns A request with only the offending function quarantined, or undefined
+ * when the error is not the exact invalid-object-root failure.
+ */
+export function recoverRejectedCodexFunctionSchema(
+  options: GenerateOptions,
+  detail: string,
+): GenerateOptions | undefined {
+  const name = rejectedFunctionSchemaName(detail)
+  if (name === undefined || options.tools === undefined) return undefined
+  const remaining = options.tools.filter(tool => tool.name !== name)
+  if (remaining.length === options.tools.length) return undefined
+  return { ...options, tools: remaining }
+}
+
 function normalizeTool(tool: ToolSchema): ToolSchema {
   const parameters = normalizeCodexToolParameters(tool.parameters)
   return parameters === tool.parameters ? tool : { ...tool, parameters }
@@ -240,6 +323,16 @@ function normalizePayloadToolEntry(value: unknown, mondayMembrane: boolean): unk
   // after provider encoding.
   const isWireFunction = value.type === 'function'
   const isMcpContextTool = typeof value.name === 'string' && value.name.startsWith('mcp__')
+  // Some MCP/tool-search projections expose inputSchema or input_schema
+  // instead of the provider wire's parameters field. Never forward that
+  // root union unchanged into an OpenAI/Codex function definition.
+  const alternateSchema = isObject(value.inputSchema) ? value.inputSchema
+    : isObject(value.input_schema) ? value.input_schema : undefined
+  if ((isWireFunction || isMcpContextTool)
+    && !isObject(value.parameters) && alternateSchema !== undefined) {
+    const { inputSchema: _inputSchema, input_schema: _input_schema, ...rest } = value
+    return { ...rest, parameters: normalizeCodexToolParameters(alternateSchema) }
+  }
   if ((isWireFunction || isMcpContextTool) && isObject(value.parameters)) {
     if (mondayMembrane && isMondayToolName(value.name)) {
       if (isMondayEnvelopeParameters(value.parameters)) return value
@@ -253,7 +346,10 @@ function normalizePayloadToolEntry(value: unknown, mondayMembrane: boolean): unk
     return parameters === value.parameters ? value : { ...value, parameters }
   }
 
-  if (isWireFunction && isObject(value.function) && isObject(value.function.parameters)) {
+  if (isObject(value.function)
+    && typeof value.function.name === 'string'
+    && (isWireFunction || value.function.name.startsWith('mcp__'))
+    && isObject(value.function.parameters)) {
     if (mondayMembrane && isMondayToolName(value.function.name)) {
       if (isMondayEnvelopeParameters(value.function.parameters)) return value
       return {

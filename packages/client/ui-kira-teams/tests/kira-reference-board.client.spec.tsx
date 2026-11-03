@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { Children, isValidElement, type ReactElement, type ReactNode } from 'react'
+
+import { cleanup, render } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionId, SessionListState, SessionSummary } from '@phoenix-ai/dsh-client-runtime/client'
 import {
   KIRA_ROSTER,
@@ -12,6 +14,7 @@ import {
   performanceKeyOf,
   skillOf,
   isVisibleAgentSummary,
+  kiraTeamSpecialistOf,
   liveActivityTextOf,
   type KiraTeamsDockProps,
 } from '../src/client/KiraTeamsDock.tsx'
@@ -20,6 +23,8 @@ import {
   ModelActivityAvatar,
   portraitSrcForKind,
 } from '../src/client/ModelActivityAvatar.tsx'
+
+afterEach(cleanup)
 
 const sid = (id: string) => id as SessionId
 
@@ -63,6 +68,30 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(cards[0]?.name).toBe('Vega')
     expect(cards[0]?.kind).toBe('vega')
     expect(skillOf(active)).toBe('design')
+  })
+
+  it('keeps a real Team codename aligned with the same KIRA persona used in chat', () => {
+    const teammate = summary({
+      id: sid('team-worker'),
+      parentId: sid('root'),
+      origin: 'subagent',
+      running: true,
+      projectionValues: {
+        subagent: {
+          mode: 'continuable',
+          label: 'KIRA:la-forja · typescript engineer fixing code',
+          seq: 10,
+        },
+      },
+    })
+    const [card] = liveCardsOf([{ summary: teammate, depth: 1 }])
+    expect(card).toMatchObject({ name: 'La Forja', kind: 'atlas' })
+    expect(kiraTeamSpecialistOf('la-forja'))
+      .toMatchObject({ name: 'La Forja', kind: 'atlas' })
+    expect(kiraTeamSpecialistOf('aegis'))
+      .toMatchObject({ name: 'Aegis', kind: 'zenith' })
+    expect(kiraTeamSpecialistOf('nova'))
+      .toMatchObject({ name: 'Nova', kind: 'nova' })
   })
 
   it('assigns specialist identities from the requested capability instead of agent-id randomness', () => {
@@ -182,16 +211,16 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(liveActivityTextOf(runtime)).toBe('Estoy revisando la página cargada')
   })
 
-  it('does not duplicate a generic authored word when it equals the visible state', () => {
-    const root = summary({ id: sid('root-duplicate') })
+  it('never mirrors child-authored activity text into the overlay before the transcript', () => {
+    const root = summary({ id: sid('root-chat-first') })
     const child = summary({
-      id: sid('child-duplicate'), parentId: root.id, origin: 'subagent', running: true,
+      id: sid('child-chat-first'), parentId: root.id, origin: 'subagent', running: true,
       projectionValues: {
         subagent: { mode: 'continuable', label: 'support check', seq: 1 },
         subagentActivity: {
           model: 'gpt-5.6-luna',
           phase: 'preparing',
-          text: 'Preparando',
+          text: 'RESPUESTA_REAL_DEL_AGENTE',
         },
       },
     })
@@ -200,15 +229,17 @@ describe('approved KIRA compact live-agent dock', () => {
       byId: { [String(root.id)]: root, [String(child.id)]: child },
     } as unknown as SessionListState
     const props = {
-      list: { getSnapshot: () => state, subscribe: () => () => undefined },
+      useList: (selector: (value: SessionListState) => unknown) => selector(state),
       layout: { setWorkspaceOccupant: vi.fn() },
       openChild: vi.fn(),
       refresh: vi.fn(),
       t: translate,
     } as unknown as KiraTeamsDockProps
 
-    render(<KiraTeamsDock {...props} />)
-    expect(screen.getAllByText('Preparando')).toHaveLength(1)
+    const { container } = render(<KiraTeamsDock {...props} />)
+    expect(container.textContent).not.toContain('RESPUESTA_REAL_DEL_AGENTE')
+    expect(container.querySelector('[data-kira-activity-strip]')).toBeNull()
+    expect(container.querySelectorAll('[data-kira-agent-rail]')).toHaveLength(1)
   })
 
   it('describes what each running agent is actually doing', () => {
@@ -260,7 +291,7 @@ describe('approved KIRA compact live-agent dock', () => {
       byId: { [String(root.id)]: root, [String(stopped.id)]: stopped },
     } as unknown as SessionListState
     const props = {
-      list: { getSnapshot: () => state, subscribe: () => () => undefined },
+      useList: (selector: (value: SessionListState) => unknown) => selector(state),
       layout: { setWorkspaceOccupant: vi.fn() },
       openChild: vi.fn(),
       refresh: vi.fn(),
@@ -271,7 +302,7 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(container.querySelector('[data-kira-teams]')).toBeNull()
   })
 
-  it('floats above the conversation and renders only the currently live agent', () => {
+  it('uses a presence-only rail for the currently live agent', () => {
     const root = summary({ id: sid('root') })
     const supervisor = summary({
       id: sid('supervisor-live'), parentId: root.id, origin: 'subagent', running: true,
@@ -290,7 +321,7 @@ describe('approved KIRA compact live-agent dock', () => {
     } as unknown as SessionListState
     const setWorkspaceOccupant = vi.fn()
     const props = {
-      list: { getSnapshot: () => state, subscribe: () => () => undefined },
+      useList: (selector: (value: SessionListState) => unknown) => selector(state),
       layout: { setWorkspaceOccupant },
       openChild: vi.fn(),
       refresh: vi.fn(),
@@ -299,13 +330,47 @@ describe('approved KIRA compact live-agent dock', () => {
 
     const { container } = render(<KiraTeamsDock {...props} />)
 
-    expect(container.querySelector('[data-kira-layout]')?.getAttribute('data-kira-layout')).toBe('floating-live')
+    expect(container.querySelector('[data-kira-layout]')?.getAttribute('data-kira-layout')).toBe('agent-rail')
     expect(setWorkspaceOccupant).toHaveBeenCalledWith('subagent', false)
-    expect(container.querySelectorAll('[data-kira-agent-card]')).toHaveLength(1)
-    expect(screen.getByText('Coordinación / orquestación')).toBeTruthy()
-    expect(screen.getByText('Preparando')).toBeTruthy()
-    expect(screen.getByText('Coordinaré la revisión breve del agente.')).toBeTruthy()
+    expect(container.querySelector('[data-kira-activity-strip]')).toBeNull()
+    expect(container.querySelector('[data-kira-details]')).toBeNull()
+    expect(container.querySelectorAll('[data-kira-agent-rail]')).toHaveLength(1)
+    expect(container.textContent).not.toContain('Coordinaré la revisión breve del agente.')
   })
+
+  it('keeps every live agent selectable without restoring a duplicate top strip', () => {
+    const root = summary({ id: sid('root-many') })
+    const children = Array.from({ length: 5 }, (_, index) => summary({
+      id: sid(`child-${index}`),
+      parentId: root.id,
+      origin: 'subagent',
+      running: true,
+      projectionValues: {
+        subagent: { mode: 'continuable', label: `research agent ${index}`, seq: index + 1 },
+        subagentActivity: {
+          model: 'gpt-5.6-luna',
+          phase: 'running-tools',
+          text: `Revisando fuente ${index + 1}`,
+        },
+      },
+    }))
+    const byId = Object.fromEntries([root, ...children].map(item => [String(item.id), item]))
+    const state = { current: root.id, byId } as unknown as SessionListState
+    const props = {
+      useList: (selector: (value: SessionListState) => unknown) => selector(state),
+      layout: { setWorkspaceOccupant: vi.fn() },
+      openChild: vi.fn(),
+      refresh: vi.fn(),
+      t: translate,
+    } as unknown as KiraTeamsDockProps
+
+    const { container } = render(<KiraTeamsDock {...props} />)
+
+    expect(container.querySelector('[data-kira-activity-strip]')).toBeNull()
+    expect(container.querySelectorAll('[data-kira-agent-rail]')).toHaveLength(5)
+    expect(container.textContent).not.toContain('Revisando fuente 1')
+  })
+
 })
 
 describe('individual KIRA portrait assets', () => {
@@ -319,12 +384,12 @@ describe('individual KIRA portrait assets', () => {
   })
 
   it('renders the individual portrait while keeping live phase data for animation', () => {
-    const ready = ModelActivityAvatar({ kind: 'argo', activity: undefined, running: false, pending: false, ready: true, variant: 'card' })
-    const live = ModelActivityAvatar({
+    const ready: ReactElement<Record<string, unknown> & { children?: ReactNode }> = ModelActivityAvatar({ kind: 'argo', activity: undefined, running: false, pending: false, ready: true, variant: 'card' })
+    const live: ReactElement<Record<string, unknown> & { children?: ReactNode }> = ModelActivityAvatar({
       kind: 'atlas', activity: { model: 'gpt-5.6-luna', phase: 'running-tools' }, running: true, pending: false, variant: 'card',
     })
-    const readyChildren = Array.isArray(ready.props.children) ? ready.props.children : [ready.props.children]
-    const liveChildren = Array.isArray(live.props.children) ? live.props.children : [live.props.children]
+    const readyChildren = Children.toArray(ready.props.children).filter(isValidElement<Record<string, unknown>>)
+    const liveChildren = Children.toArray(live.props.children).filter(isValidElement<Record<string, unknown>>)
     const readyPortrait = readyChildren.find((child: { props?: Record<string, unknown> }) => child?.props?.['data-agent-portrait-image'] === true)
     const livePortrait = liveChildren.find((child: { props?: Record<string, unknown> }) => child?.props?.['data-agent-portrait-image'] === true)
 
@@ -335,4 +400,13 @@ describe('individual KIRA portrait assets', () => {
     expect(livePortrait?.type).toBe('img')
     expect(livePortrait?.props?.src).toBe(portraitSrcForKind('atlas'))
   })
+})
+
+it('uses the same durable name, portrait and assigned role in the dock as the transcript', () => {
+  const active = summary({ id: sid('canonical-argo'), parentId: sid('root'), origin: 'subagent', running: true })
+  const participant = { id: active.id, name: 'Argo', avatar: 'argo', role: 'skill.quality', status: 'working' }
+  const first = liveCardsOf([{ summary: active, depth: 1 }], { [active.id]: participant })
+  const afterRouteChange = liveCardsOf([{ summary: { ...active, agentPreset: 'another-engine' }, depth: 1 }], { [active.id]: participant })
+  expect(first[0]).toMatchObject({ name: 'Argo', kind: 'argo', specialty: 'skill.quality' })
+  expect(afterRouteChange[0]).toMatchObject({ name: 'Argo', kind: 'argo', specialty: 'skill.quality' })
 })

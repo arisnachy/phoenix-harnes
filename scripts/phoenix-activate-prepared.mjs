@@ -6,7 +6,8 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 import { classifyPreparedActivation, isManagedReleaseBranch } from './phoenix-update-policy.mjs'
-import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
+import { assertPromotedStableTarget } from './phoenix-stable-freshness.mjs'
+import { recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
 const REMOTE = process.env.PHOENIX_UPDATE_REMOTE ?? 'origin'
@@ -20,16 +21,25 @@ function command(bin, args, options = {}) {
   const result = spawnSync(bin, args, {
     cwd: options.cwd,
     encoding: 'utf8',
-    stdio: options.inherit ? 'inherit' : ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', 'pipe', 'pipe'],
+    maxBuffer: 64 * 1024 * 1024,
     windowsHide: true,
     env: process.env,
   })
-  if (result.error !== undefined) throw result.error
+  if (options.inherit && result.stdout) process.stdout.write(result.stdout)
+  if (options.inherit && result.stderr) process.stderr.write(result.stderr)
+  if (result.error !== undefined) {
+    result.error.diagnostic = [result.error.stack, result.stderr, result.stdout].filter(Boolean).join('\n')
+    throw result.error
+  }
   const status = result.status ?? 1
   const stdout = typeof result.stdout === 'string' ? result.stdout.trim() : ''
   const stderr = typeof result.stderr === 'string' ? result.stderr.trim() : ''
   if (status !== 0 && !options.allowFailure) {
-    throw new Error(`${bin} ${args.join(' ')} failed (${status})${stderr.length > 0 ? `: ${stderr}` : ''}`)
+    const error = new Error(`${bin} ${args.join(' ')} failed (${status})${stderr.length > 0 ? `: ${stderr}` : ''}`)
+    error.exitCode = status
+    error.diagnostic = [stderr && `STDERR:\n${stderr}`, stdout && `STDOUT:\n${stdout}`].filter(Boolean).join('\n')
+    throw error
   }
   return { ok: status === 0, stdout, stderr, status }
 }
@@ -170,6 +180,10 @@ function validatePrepared(root) {
     throw new Error('prepared staging HEAD no longer matches the requested target')
   }
 
+  // The release pointer can advance AFTER the watcher finished preflight.
+  // Reverify at activation time so an older UI cannot overwrite the theme.
+  assertPromotedStableTarget(root, prepared.target, STABLE_SOURCE_BRANCH)
+
   // The supervisor normally reanchors a prepared record before invoking this
   // activator. A stale updater/bridge can race that write and restore the old
   // runtime base between those two steps. At this boundary we have already
@@ -207,6 +221,9 @@ function smoke(root, mode) {
 }
 
 function rollback(root, previous, target, error) {
+  recordPhoenixUpdateStep(durablePath(root, STATE_FILE), 'runtime-activation', 'failed', target,
+    Number.isInteger(error?.exitCode) ? error.exitCode : 1,
+    error?.diagnostic || (error instanceof Error ? error.stack ?? error.message : String(error)))
   console.error(`[PHOENIX UPDATE] activation failed: ${error instanceof Error ? error.message : String(error)}`)
   console.error(`[PHOENIX UPDATE] rolling back ${target.slice(0, 12)} -> ${previous.slice(0, 12)}...`)
   writeState(root, { status: 'rolling-back', phase: 'activate', current: previous, target, detail: error instanceof Error ? error.message : String(error) })
@@ -217,6 +234,9 @@ function rollback(root, previous, target, error) {
     writeState(root, { status: 'rolled-back', previous, current: previous, failedTarget: target })
     return true
   } catch (rollbackError) {
+    recordPhoenixUpdateStep(durablePath(root, STATE_FILE), 'rollback', 'failed', target,
+      Number.isInteger(rollbackError?.exitCode) ? rollbackError.exitCode : 1,
+      rollbackError?.diagnostic || (rollbackError instanceof Error ? rollbackError.stack ?? rollbackError.message : String(rollbackError)))
     writeState(root, { status: 'rollback-failed', previous, failedTarget: target, detail: rollbackError instanceof Error ? rollbackError.message : String(rollbackError) })
     console.error(`[PHOENIX UPDATE] CRITICAL: rollback failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`)
     return false
@@ -267,13 +287,23 @@ function activate() {
     smoke(root, prepared.mode)
     clearFile(preparedPath)
     clearFile(requestPath)
-    writeState(root, { status: 'updated', phase: replacing ? 'realigned' : 'complete', previous: current, current: target, target })
-    console.error(`[PHOENIX UPDATE] activation complete at ${target.slice(0, 12)}.`)
+    // Compiling and smoke-testing are not proof that the replacement Host
+    // actually booted. The external supervisor owns the healthy checkpoint.
+    const awaitingHost = process.env.PHOENIX_UPDATE_SUPERVISED === '1'
+    writeState(root, {
+      status: awaitingHost ? 'restarting' : 'updated',
+      phase: awaitingHost ? 'host-health' : replacing ? 'realigned' : 'complete',
+      previous: current, current: target, target,
+    })
+    console.error(`[PHOENIX UPDATE] activation prepared at ${target.slice(0, 12)}; ${awaitingHost ? 'awaiting verified Host health.' : 'unsupervised activation complete.'}`)
     return 0
   } catch (error) {
     clearFile(requestPath)
     if (activated && !rollback(root, current, target, error)) return 12
     if (!activated) {
+      recordPhoenixUpdateStep(durablePath(root, STATE_FILE), 'runtime-activation', 'failed', target,
+        Number.isInteger(error?.exitCode) ? error.exitCode : 1,
+        error?.diagnostic || (error instanceof Error ? error.stack ?? error.message : String(error)))
       writeState(root, { status: 'error', phase: 'activate', current, target, detail: error instanceof Error ? error.message : String(error) })
     }
     return 1

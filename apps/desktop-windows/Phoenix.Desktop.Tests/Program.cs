@@ -31,6 +31,11 @@ Equal("http://localhost:3080/", BrowserNavigation.NormalizeAddress("localhost:30
 Equal("http://127.0.0.1:3080/", BrowserNavigation.NormalizeAddress("127.0.0.1:3080")?.ToString(), "loopback uses http", failures);
 Equal("https://www.bing.com/search?q=phoenix+embedded+browser", BrowserNavigation.NormalizeAddress("phoenix embedded browser")?.ToString(), "free text becomes search", failures);
 Equal("about:blank", BrowserNavigation.NormalizeAddress("about:blank")?.ToString(), "about blank allowed", failures);
+True(BrowserNavigation.IsInspectablePage(new Uri("https://example.com"), true), "loaded HTTPS page is inspectable", failures);
+True(BrowserNavigation.IsInspectablePage(new Uri("http://localhost:3080"), true), "loaded local page is inspectable", failures);
+False(BrowserNavigation.IsInspectablePage(new Uri("about:blank"), true), "blank page is not evidence", failures);
+False(BrowserNavigation.IsInspectablePage(new Uri("https://example.com"), false), "failed navigation is not evidence", failures);
+False(BrowserNavigation.IsInspectablePage(new Uri("file:///C:/private.txt"), true), "local file cannot be inspected as web page", failures);
 Equal(null, BrowserNavigation.NormalizeAddress("javascript:alert(1)")?.ToString(), "javascript scheme rejected", failures);
 Equal(null, BrowserNavigation.NormalizeAddress("data:text/html,boom")?.ToString(), "data scheme rejected", failures);
 Equal(null, BrowserNavigation.NormalizeAddress("file:///C:/Windows/System32")?.ToString(), "file scheme rejected", failures);
@@ -52,6 +57,31 @@ True(BrowserCommand.TryParse("{\"type\":\"phoenix.app.logout\"}", out var logout
 Equal("phoenix.app.logout", logout.Type, "native logout command type", failures);
 Equal(null, logout.Url, "native logout command has no url", failures);
 
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\"}", out _),
+    "web surface cannot start Windows audio capture", failures);
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.status\",\"sessionId\":\"turn-1\"}",
+    out var audioState, allowAutomation: true), "native pipe can inspect audio capability", failures);
+Equal("turn-1", audioState.SessionId, "audio status retains session", failures);
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\",\"seconds\":8}",
+    out var audioCapture, allowAutomation: true), "native pipe accepts bounded audio", failures);
+EqualInt(8, audioCapture.Seconds, "native audio clip bounded", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\",\"seconds\":60}",
+    out _, allowAutomation: true), "unbounded audio rejected", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"../other\"}",
+    out _, allowAutomation: true), "foreign session rejected", failures);
+
+
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\",\"seconds\":6,\"source\":\"microphone\"}",
+    out var audioMic, allowAutomation: true), "microphone capture requires native command", failures);
+Equal("microphone", audioMic.AudioSource, "microphone source retained", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\",\"source\":\"all\"}",
+    out _, allowAutomation: true), "arbitrary audio source rejected", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.senses.status\",\"sessionId\":\"turn-1\"}",
+    out _), "web bridge cannot query sense inventory", failures);
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.senses.status\",\"sessionId\":\"turn-1\"}",
+    out var senses, allowAutomation: true), "native pipe supports viewer inventory", failures);
+Equal("turn-1", senses.SessionId, "sense inventory retains session", failures);
+
 False(BrowserCommand.TryParse("{not-json}", out _), "malformed json rejected", failures);
 False(BrowserCommand.TryParse("{\"type\":\"phoenix.browser.open\",\"url\":\"javascript:alert(1)\"}", out _), "unsafe open command rejected", failures);
 
@@ -69,6 +99,57 @@ True(
     "runtime pipe admits browser inspection",
     failures);
 Equal("phoenix.browser.inspect", inspect.Type, "inspection command type", failures);
+False(
+    BrowserCommand.TryParse("{\"type\":\"phoenix.desktop.windows\"}", out _),
+    "web bridge cannot enumerate the desktop",
+    failures);
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.desktop.windows\"}",
+        out var desktopWindows,
+        allowAutomation: true),
+    "runtime pipe admits native window enumeration",
+    failures);
+Equal("phoenix.desktop.windows", desktopWindows.Type, "desktop windows command type", failures);
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.desktop.screenshot\"}",
+        out var desktopScreenshot,
+        allowAutomation: true),
+    "runtime pipe admits native desktop screenshots",
+    failures);
+Equal("phoenix.desktop.screenshot", desktopScreenshot.Type, "desktop screenshot command type", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.desktop.live-frame\",\"sessionId\":\"turn-1\"}", out _),
+    "web bridge may not request native Desktop Live frames", failures);
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.desktop.live-state\",\"sessionId\":\"turn-1\"}",
+    out var liveStatus, allowAutomation: true), "runtime accepts session-scoped native state", failures);
+Equal("turn-1", liveStatus.SessionId, "native desktop state carries conversation owner", failures);
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.desktop.live-frame\",\"sessionId\":\"turn-1\"}",
+    out var liveFrame, allowAutomation: true), "runtime accepts session-scoped native frame", failures);
+Equal("turn-1", liveFrame.SessionId, "native desktop frame carries conversation owner", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.desktop.live-frame\",\"sessionId\":\"../other\"}",
+    out _, allowAutomation: true), "native desktop frame rejects invalid conversation id", failures);
+False(
+    BrowserCommand.TryParse("{\"type\":\"phoenix.desktop.preview\",\"sessionId\":\"turn-1\"}", out _),
+    "web bridge cannot open Desktop Live",
+    failures);
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.desktop.preview\",\"target\":\"Paint\",\"sessionId\":\"turn-1\",\"observe\":false}",
+        out var desktopPreview,
+        allowAutomation: true),
+    "native pipe accepts session-scoped Desktop Live preview",
+    failures);
+Equal("Paint", desktopPreview.Text, "Desktop Live preserves target", failures);
+Equal("turn-1", desktopPreview.SessionId, "Desktop Live preserves conversation owner", failures);
+False(desktopPreview.Observe, "Desktop Live marks interactive preflight", failures);
+False(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.desktop.preview\",\"sessionId\":\"../../bad\"}",
+        out _,
+        allowAutomation: true),
+    "desktop session ids reject path characters",
+    failures);
 True(
     BrowserCommand.TryParse(
         "{\"type\":\"phoenix.browser.fill-form\",\"origin\":\"https://example.com/form\",\"fields\":[{\"field\":0,\"value\":\"synthetic-value\"}],\"submit\":true}",
@@ -78,6 +159,11 @@ True(
     failures);
 Equal("https://example.com", fill.Origin, "form origin canonicalized", failures);
 True(fill.Submit, "form submit preserved", failures);
+var markerFillScript = PhoenixDesktopWindow.BuildBrowserFillScript(new BrowserCommand(
+    "phoenix.browser.fill-form", Origin: "https://example.com", Submit: true,
+    Fields: [new BrowserFormValue(0, "__SUBMIT__", null)]));
+True(markerFillScript.Contains("__SUBMIT__", StringComparison.Ordinal),
+    "template markers in a form field remain literal", failures);
 EqualInt(1, fill.Fields?.Count ?? 0, "form field count preserved", failures);
 True(
     BrowserCommand.TryParse(
@@ -96,6 +182,28 @@ True(
     failures);
 Equal("https://example.com", loginCommand.Origin, "login origin canonicalized", failures);
 True(loginCommand.Submit, "login submits by default", failures);
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.login\",\"origin\":\"https://example.com\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\",\"extras\":{\"extra:0\":\"demo\"}}",
+        out var extraLoginCommand,
+        allowAutomation: true),
+    "runtime pipe admits saved site-specific login fields",
+    failures);
+Equal("demo", extraLoginCommand.Extras?.GetValueOrDefault("extra:0"), "site-specific login field preserved", failures);
+var markerLoginScript = PhoenixDesktopWindow.BuildBrowserLoginScript(new BrowserCommand(
+    "phoenix.browser.login", Origin: "https://example.com", Account: "__SECRET__",
+    Secret: "__EXTRAS____SUBMIT__", Submit: true));
+True(markerLoginScript.Contains("const account = \"__SECRET__\";", StringComparison.Ordinal),
+    "template markers in an account remain literal", failures);
+True(markerLoginScript.Contains("const secret = \"__EXTRAS____SUBMIT__\";", StringComparison.Ordinal),
+    "template markers in a password remain literal", failures);
+False(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.login\",\"origin\":\"https://example.com\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\",\"extras\":{\"extra:0\":42}}",
+        out _,
+        allowAutomation: true),
+    "runtime pipe rejects invalid extra login field values",
+    failures);
 False(
     BrowserCommand.TryParse(
         "{\"type\":\"phoenix.browser.login\",\"origin\":\"http://example.com\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\"}",
@@ -292,6 +400,10 @@ try
     DesktopSourceCheckout.RememberVerified(sourceInstallRoot, sourceTestRoot);
 
     var conventionalRoots = DesktopSourceCheckout.ConventionalRoots(@"C:\Users\arisn");
+    True(
+        conventionalRoots.Any(path => path.EndsWith(@"OneDrive\Documentos\ChatGPT\Phoenix", StringComparison.OrdinalIgnoreCase)),
+        "desktop detects the user's direct ChatGPT/Phoenix source checkout",
+        failures);
     True(
         conventionalRoots.Any(path => path.EndsWith(@"OneDrive\Documentos\ChatGPT\Fenix-evolution\phoenix-harnes\phoenix-harnes", StringComparison.OrdinalIgnoreCase)),
         "desktop discovers the nested Fenix-evolution checkout used by local Phoenix installs",

@@ -24,6 +24,8 @@
 
 ## 接口
 
+网站浏览器执行器先通过 `credentials/web-login-status` 查询所选身份的保存状态和自动使用授权，再通过 `credentials/web-login-resolve` 获取仅限精确 origin 的私密登录值。两个事件都使用串行分发；明确拒绝会阻止回退到其他身份或旧存储。值仅在可信浏览器执行器内部使用，不进入模型参数、工具输出或会话事件。没有 DPAPI 记录时才允许查询已有旧引用。
+
 ```ts
 import type { Context } from '@phoenix-ai/cordis'
 import { credentialKey, credentialRef, originCredentialRef } from '@phoenix-ai/dsh-credentials'

@@ -63,6 +63,51 @@ describe('conversation generative UI', () => {
     expect(splitGenerativeUiText(malformed)).toEqual([{ kind: 'markdown', text: malformed }])
   })
 
+  it('renders an interactive final explanation after prose without leaking JSON', () => {
+    const ui = {
+      component: 'ui_canvas',
+      version: 1,
+      props: {
+        title: 'Resultado de Phoenix',
+        subtitle: 'Evidencia verificada',
+        children: [
+          { type: 'group', layout: 'grid', children: [
+            { type: 'metric', label: 'Pruebas', value: '12/12', status: 'positive' },
+            { type: 'metric', label: 'Errores', value: '0', status: 'positive' },
+          ] },
+          { type: 'tabs', tabs: [
+            { label: 'Evidencia', children: [
+              { type: 'chart', title: 'Tareas verificadas', points: [
+                { label: 'Build', value: 1 }, { label: 'Smoke', value: 1 },
+              ] },
+            ] },
+            { label: 'Acciones', children: [
+              { type: 'input', id: 'consulta', label: 'Consulta' },
+              { type: 'button', label: 'Consultar', prompt: 'Verifica {consulta}', action: 'draft' },
+            ] },
+          ] },
+        ],
+      },
+    }
+    expect(parseGenerativeUiBlock(ui)).not.toBeNull()
+    const answer = ['La compilación terminó. Las pruebas anteriores son una muestra.',
+      '```generative-ui', JSON.stringify(ui), '```', 'Puedes consultar más detalles.'].join('\n')
+    const segments = splitGenerativeUiText(answer)
+    expect(segments.map(segment => segment.kind)).toEqual(['markdown', 'ui', 'markdown'])
+    expect(segments[0]).toMatchObject({ kind: 'markdown', text: expect.stringContaining('compilación') })
+    expect(segments[2]).toMatchObject({ kind: 'markdown', text: expect.stringContaining('consultar') })
+  })
+
+  it('rejects a final interactive canvas with script or unauthorized event handlers', () => {
+    expect(parseGenerativeUiBlock({
+      component: 'ui_canvas',
+      version: 1,
+      props: { title: 'Estado', children: [
+        { type: 'button', label: 'Ejecutar', prompt: 'Continúa', onclick: 'runExternalCode()' },
+      ] },
+    })).toBeNull()
+  })
+
   it('renders validated cards with a stable component marker', () => {
     const block: GenerativeUiBlock = {
       component: 'metric_card',
@@ -78,4 +123,29 @@ describe('conversation generative UI', () => {
     const view = GenerativeUi({ block }) as { props: Record<string, unknown> }
     expect(view.props['data-generative-ui']).toBe('metric_card')
   })
+  it('renders validated in-chat sports cards and rejects unsafe remote images', () => {
+    const sportsGame = {
+      component: 'sports_game_card', version: 1,
+      props: {title: 'MLB hoy', when: '24 oct 2026 · 4:00 p. m.', venue: 'Chase Field',
+        status:'Scheduled',source:'MLB Stats · 2026-10-24',
+        home:{label:'Local',logo:'https://a.espncdn.com/i/teamlogos/mlb/500/nyy.png'},
+        away:{label:'Visitante'},highlights:[{label:'Lanzador',value:'No confirmado'}],
+        askPrompt:'Kira, amplía este partido.'},
+    }
+    expect(parseGenerativeUiBlock(sportsGame)).toEqual(sportsGame)
+    expect(parseGenerativeUiBlock({
+      ...sportsGame,props:{...sportsGame.props,home:{label:'Local',logo:'https://evil.example/pixel.png'}},
+    })).toBeNull()
+    const ticket = {component:'sports_ticket_card',version:1,props:{
+      title:'Ticket de análisis',source:'The Odds API',note:'Sin apuesta real.',
+      legs:[{event:'A vs B',selection:'A',price:'1.90',bookmaker:'Casa'}],
+      combinedOdds:'1.90',grossReturn:'190.00',
+    }}
+    expect(parseGenerativeUiBlock(ticket)).toEqual(ticket)
+    const answer = ['Partidos verificados.', '\`\`\`generative-ui', JSON.stringify(sportsGame), '\`\`\`'].join('\n')
+    expect(splitGenerativeUiText(answer).some(s => s.kind === 'ui' && s.block.component === 'sports_game_card')).toBe(true)
+    const view = GenerativeUi({block: ticket as GenerativeUiBlock}) as {props:Record<string,unknown>}
+    expect(view.props['data-generative-ui']).toBe('sports_ticket_card')
+  })
+
 })

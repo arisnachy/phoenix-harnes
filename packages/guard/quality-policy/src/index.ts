@@ -129,6 +129,10 @@ interface QualityState {
   scaleVerifiedGeneration: number
   nudgedGeneration: number
   stopNudges: number
+  failedTool: string | undefined
+  failureNudged: boolean
+  handoffNudged: boolean
+  toolAttempts: number
   domains: Set<QualityDomain>
   signals: QualitySignals
 }
@@ -171,6 +175,10 @@ function newState(signals: QualitySignals = {
     scaleVerifiedGeneration: 0,
     nudgedGeneration: 0,
     stopNudges: 0,
+    failedTool: undefined,
+    failureNudged: false,
+    handoffNudged: false,
+    toolAttempts: 0,
     domains: new Set<QualityDomain>(),
     signals,
   }
@@ -242,6 +250,80 @@ function stopReminder(state: QualityState): UserMessage {
   )
 }
 
+/** A single stop-bound recovery chance after an unresolved tool error, even without file mutations. */
+function failureReminder(): UserMessage {
+  return pluginMessage(
+    'The last tool attempt failed or was blocked, and no successful alternative has been observed since. '
+      + 'Do not end the task merely because this route failed. Inspect the failure, then use a materially different, '
+      + 'relevant and permitted tool or source. Do not create unrelated accounts or financial side effects. '
+      + 'If only optional evidence is missing, provide the best truthful, useful result with clearly marked assumptions. '
+      + 'If credentials, permission, quota or another genuine external dependency prevent completion, state the exact '
+      + 'blocker and what was completed; never fabricate success or retry indefinitely.',
+    'unresolved tool failure: change strategy',
+  )
+}
+
+/** Detect a premature handoff after an unsuccessful lookup, without penalizing ordinary uncertainty.
+ * @param text - Last assistant message in the turn.
+ * @returns Whether the model transferred routine research back to the user without a usable output.
+ */
+export function isUnfinishedResearchHandoff(text: string): boolean {
+  // oxlint-disable-next-line @stylistic/max-len -- Auditable multilingual heuristic kept as one regex.
+  const missing = /(?:no encontr[eé]|no consegu[ií]|no (?:pude|puedo) (?:encontrar|obtener|verificar|acceder)|could not find|couldn't find|unable to find|did not find)/iu
+  // oxlint-disable-next-line @stylistic/max-len -- Explicit user handoff phrases across Spanish and English.
+  const asksUserToResearch = /(?:si (?:me |nos )?(?:compartes|env[ií]as|proporcionas|facilitas)|(?:comparte|env[ií]ame|facil[ií]tame) (?:una? |los? |las? )?(?:captura|lista|datos|cuotas|resultados)|if you (?:send|share|provide)|please (?:send|share|provide))/iu
+  return missing.test(text) && asksUserToResearch.test(text)
+}
+
+/**
+ * Detect a premature categorical refusal of an otherwise ongoing authorized task.
+ * A single refusal is not evidence the user objective was completed, but this
+ * nudge never overrides actual tool permissions, site terms or transaction consent.
+ */
+export function isPrematureAuthorizedTaskRefusal(text: string): boolean {
+  const refusal = /(?:no (?:puedo|podr[eé]|es posible) (?:armar|preparar|completar|rellenar|crear|configurar|terminar|continuar|hacer|realizar|enviar|colocar)|i (?:can't|cannot|won't|am unable to) (?:prepare|complete|fill|create|finish|continue|make|place|submit))/iu
+  const unfinished = /(?:no (?:qued[oó]|est[aá]) (?:list[oa]|terminad[oa])|no (?:hay|existe) (?:un[ao]? )?(?:recibo|confirmaci[oó]n)|(?:no puedo|can't|cannot)|(?:sigo|still) (?:sin|without))/iu
+  const prepared = /(?:aqu[ií] (?:tienes|est[aá]) (?:el|la|tu) (?:borrador|cup[oó]n|formulario)|(?:borrador|cup[oó]n|formulario) (?:preparado|listo|completado)|(?:draft|form) (?:is )?(?:ready|prepared))/iu
+  return refusal.test(text) && unfinished.test(text) && !prepared.test(text)
+}
+
+
+
+function assistantTextInTurn(agent: Agent, turn: number): string {
+  const last = agent.session.events.findLast(event =>
+    event.type === 'assistant/message' && event.data.turn === turn)
+  if (last?.type !== 'assistant/message') return ''
+  return last.data.message.content
+    .filter(block => block.type === 'text')
+    .map(block => block.text)
+    .join(' ')
+}
+
+function handoffReminder(): UserMessage {
+  return pluginMessage(
+    'You found no useful information on one search route, then asked the user to supply routine research inputs. '
+      + 'That is not completion. Keep the original objective and any as-of knowledge cutoff. '
+      + 'Try a materially different authoritative source or a bounded offline route. '
+      + 'If precise historical odds are unavailable, offer a usable conditional or hypothetical deliverable '
+      + 'with plainly marked unknowns, without inventing real games, data, or guaranteed outcomes. '
+      + 'Do not move funds or activate unrelated services. A truly indispensable credential, permission '
+      + 'or unknown user preference may still require a focused clarification.',
+    'research handoff before delivering result',
+  )
+}
+
+/** One bounded continuation after an unsupported, categorical early refusal. */
+function prematureRefusalReminder(): UserMessage {
+  return pluginMessage(
+    'The previous response stopped with a categorical inability statement although the user had asked for task execution. '
+      + 'Do not repeat the refusal. Identify the most specific unavailable final action and perform any remaining authorized preparation with the existing browser or tools. '
+      + 'For example, preparing a selection and leaving a betting slip unsubmitted are distinct from placing a money wager; finish permissible drafting and request transaction-specific confirmation before any monetary commitment. '
+      + 'Keep the user informed about what is prepared, what remains, and the exact missing authorization or capability. '
+      + 'Do not claim success, a booked transaction or a receipt without direct external evidence, and never bypass policy, site restrictions, or a mandatory approval.',
+    'premature task refusal: continue authorized preparation',
+  )
+}
+
 function markMutation(state: QualityState, argumentsValue: unknown): boolean {
   const wasFresh = state.generation === state.verifiedGeneration
   state.generation += 1
@@ -294,9 +376,17 @@ export function apply(ctx: Context, config: Config = {}): void {
     const downstream = await next()
     if (exec.agent === undefined) return downstream
 
+    const state = stateFor(states, exec.agent)
+    state.toolAttempts += 1
+    if (result.isError || downstream.kind === 'block') {
+      state.failedTool = exec.name
+      state.failureNudged = false
+    } else {
+      state.failedTool = undefined
+    }
+
     const activity = classifyQualityActivity(exec.name, exec.arguments)
     if (activity === 'other') return downstream
-    const state = stateFor(states, exec.agent)
 
     if (activity === 'mutation') {
       if (result.isError) return downstream
@@ -310,14 +400,35 @@ export function apply(ctx: Context, config: Config = {}): void {
     return downstream
   })
 
-  ctx.on('agent/turn-stopping', ({ agent }) => {
+  ctx.on('agent/turn-stopping', ({ agent, turn }) => {
     if (maxStopNudges === 0) return
     const state = states.get(agent)
-    if (state === undefined || evidenceFresh(state)) return
-    if (state.stopNudges >= maxStopNudges || state.nudgedGeneration === state.generation) return
+    if (state === undefined || state.stopNudges >= maxStopNudges) return
+    if (!evidenceFresh(state)) {
+      if (state.nudgedGeneration === state.generation) return
+      state.stopNudges += 1
+      state.nudgedGeneration = state.generation
+      agent.steer(stopReminder(state))
+      return
+    }
+    if (state.failedTool !== undefined && !state.failureNudged) {
+      state.stopNudges += 1
+      state.failureNudged = true
+      agent.steer(failureReminder())
+      return
+    }
+    if (state.handoffNudged) return
+    const answer = assistantTextInTurn(agent, turn)
+    if (isPrematureAuthorizedTaskRefusal(answer)) {
+      state.stopNudges += 1
+      state.handoffNudged = true
+      agent.steer(prematureRefusalReminder())
+      return
+    }
+    if (state.toolAttempts === 0 || !isUnfinishedResearchHandoff(answer)) return
     state.stopNudges += 1
-    state.nudgedGeneration = state.generation
-    agent.steer(stopReminder(state))
+    state.handoffNudged = true
+    agent.steer(handoffReminder())
   })
 
   ctx.on('agent/disposed', ({ agent }) => {

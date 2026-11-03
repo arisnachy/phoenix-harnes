@@ -56,3 +56,5 @@
 - **待处理问题会阻塞工具调用，直至用户作答**：该工具未声明 `timeout-policy` 预算；取消仅沿用当前轮次的 `exec.signal`。
 - **运行时中归属于其他 agent 的 subagent 不能向用户提问**：`ask_user_question` 会以 `DELEGATED_CALLER` 拒绝归属于另一个 agent 的存活子级；该子级必须在最终结果中包含尚未解决的问题或决策。持久谱系不能决定这一边界，因此带有谱系的会话恢复为运行时根后可以正常提问。
 - **Native 回答渲染为 JSON 文本**：规范值仍为结构化数据，但模型侧结果使用紧凑 JSON，而非更丰富的内容块词汇。
+
+**敏感 ASK 与临床记录。** 症状、用药、身份和医疗授权等问题可设置 `sensitive: true`：超时只返回空答案，不能推测患者的同意。仅当本机配置 `PHOENIX_CLINICAL_VAULT_KEY` 才启用 `clinical_longitudinal`，使用现有 ASK 确认后对每位患者的事件加密保存或读取。普通会话日志仍需单独管理保留期限。

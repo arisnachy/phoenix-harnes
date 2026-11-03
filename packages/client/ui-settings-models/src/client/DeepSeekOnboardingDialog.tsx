@@ -4,11 +4,11 @@
  * The first screen prefers the official ChatGPT / Codex app-server account
  * lifecycle. That subscription session is deliberately kept separate from
  * PHOENIX API-provider credentials: connecting Codex must never be treated as
- * if it had produced an OpenAI API key. A user may configure a chat provider
- * next, or defer that choice without blocking the application shell.
+ * if it had produced an OpenAI API key. A connected native account can power
+ * the main chat; configuring another API provider remains optional.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
@@ -27,7 +27,28 @@ import modelStyles from './ModelsSection.module.css'
 import styles from './DeepSeekOnboardingDialog.module.css'
 
 const NATIVE_CODEX_AUTH_KEY = 'subagent-codex/account'
+const NATIVE_CODEX_PROVIDER = 'openai-codex'
 const LOOPBACK_CHATGPT_WEB_PROVIDER = 'chatgpt-web'
+const CODEX_AUTH_PROMPT_MUTED_KEY = 'phoenix.codex-auth-prompt-muted.v1'
+
+function readCodexPromptMuted(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(CODEX_AUTH_PROMPT_MUTED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function persistCodexPromptMuted(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(CODEX_AUTH_PROMPT_MUTED_KEY, '1')
+  } catch {
+    // A privacy-restricted browser may reject storage. The in-memory state still
+    // silences the prompt for the current PHOENIX session.
+  }
+}
 
 interface AuthorizationEntry {
   key: string
@@ -89,7 +110,9 @@ export function DeepSeekOnboardingDialog(props: DeepSeekOnboardingDialogProps): 
   const state = useModels(snapshot => snapshot)
   const authorization = api.authorization
   const [showApiKey, setShowApiKey] = useState(false)
+  const dismissed = useRef(false)
   const [connectedThisRun, setConnectedThisRun] = useState(false)
+  const [codexPromptMuted, setCodexPromptMuted] = useState(readCodexPromptMuted)
   const [authorizationCatalog, setAuthorizationCatalog] = useState<AuthorizationCatalogState>(
     authorization === undefined
       ? { status: 'unavailable', entries: [] }
@@ -130,9 +153,12 @@ export function DeepSeekOnboardingDialog(props: DeepSeekOnboardingDialogProps): 
   const accountReady = connectedThisRun || codexConnected(codexEntry)
 
   // chatgpt-web is only a loopback declaration until its external bridge is
-  // installed and authenticated, so it must not suppress first-run setup.
+  // installed and authenticated. openai-codex is also keyless at the provider
+  // layer, so providerUsable() alone cannot prove that the native Codex account
+  // is authenticated. Neither route may suppress the Codex activation prompt.
   const anotherProviderReady = state.rows.some(row =>
     row.entry.provider !== LOOPBACK_CHATGPT_WEB_PROVIDER
+    && row.entry.provider !== NATIVE_CODEX_PROVIDER
     && providerUsable(row))
 
   const deepSeekRow = state.rows.find(candidate =>
@@ -159,35 +185,41 @@ export function DeepSeekOnboardingDialog(props: DeepSeekOnboardingDialogProps): 
   const modelFactsSettled = state.status === 'ready' || state.status === 'error'
 
   useEffect(() => {
-    if (!modelFactsSettled) return
-    // A confirmed chat provider means this installation is already usable; do
-    // not force account onboarding on an existing configured user.
-    if (anotherProviderReady) {
+    if (dismissed.current || !modelFactsSettled || authorizationCatalog.status === 'loading') return
+
+    // A usable non-Codex provider may keep PHOENIX operational, but it must not
+    // hide a missing native Codex login unless that login is already ready or
+    // the user explicitly silenced this startup reminder.
+    if (anotherProviderReady && (accountReady || codexEntry === undefined || codexPromptMuted)) {
       complete()
       return
     }
-    if (
-      authorizationCatalog.status !== 'loading'
-      && codexEntry === undefined
-      && !apiFallbackAvailable
-    ) {
+
+    if (codexEntry === undefined && !apiFallbackAvailable) {
       complete()
+      return
     }
+
+    // Silencing Codex should never strand a first-run user: when an API fallback
+    // exists we render it below; otherwise onboarding yields to the shell.
+    if (codexPromptMuted && !apiFallbackAvailable) complete()
   }, [
+    accountReady,
     anotherProviderReady,
     apiFallbackAvailable,
     authorizationCatalog.status,
     codexEntry,
+    codexPromptMuted,
     complete,
     modelFactsSettled,
   ])
 
-  if (!modelFactsSettled || authorizationCatalog.status === 'loading') return null
-  if (anotherProviderReady) return null
+  if (dismissed.current || !modelFactsSettled || authorizationCatalog.status === 'loading') return null
+  if (anotherProviderReady && (accountReady || codexEntry === undefined || codexPromptMuted)) return null
 
-  const useApiFallback = showApiKey || codexEntry === undefined
+  const useApiFallback = showApiKey || codexEntry === undefined || codexPromptMuted
   if (useApiFallback) {
-    if (!apiFallbackAvailable || deepSeekRow === undefined || deepSeekNamespace === undefined) {
+    if (!apiFallbackAvailable) {
       return accountReady
         ? (
           <OnboardingModal title={t('onboardingTitle')}>
@@ -255,7 +287,7 @@ export function DeepSeekOnboardingDialog(props: DeepSeekOnboardingDialogProps): 
           {apiFallbackAvailable ? (
             <button
               type="button"
-              className={modelStyles.primaryButton}
+              className={modelStyles.secondaryButton}
               onClick={() => { setShowApiKey(true) }}
             >
               {t('onboardingUseApiKey')}
@@ -263,17 +295,22 @@ export function DeepSeekOnboardingDialog(props: DeepSeekOnboardingDialogProps): 
           ) : null}
           <button
             type="button"
-            className={modelStyles.secondaryButton}
+            className={modelStyles.primaryButton}
             onClick={complete}
           >
-            {t('onboardingLater')}
+            {t('onboardingContinue')}
           </button>
         </div>
       </OnboardingModal>
     )
   }
 
-  if (codexEntry === undefined) return null
+  const silenceCodexPrompt = (): void => {
+    dismissed.current = true
+    persistCodexPromptMuted()
+    setCodexPromptMuted(true)
+    complete()
+  }
 
   const pending = attempt?.status === 'pending'
   const busy = pending || codexEntry.inFlight
@@ -317,6 +354,14 @@ export function DeepSeekOnboardingDialog(props: DeepSeekOnboardingDialogProps): 
           onClick={complete}
         >
           {t('onboardingLater')}
+        </button>
+        <button
+          type="button"
+          className={modelStyles.secondaryButton}
+          disabled={busy}
+          onClick={silenceCodexPrompt}
+        >
+          {t('onboardingMuteCodex')}
         </button>
       </div>
     </OnboardingModal>

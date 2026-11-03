@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import SessionStore, { SessionId } from '@phoenix-ai/dsh-session'
-import { CallId, createToolResultMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
+import { CallId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
 import LearningMemoryService from '../src/index.ts'
 
 const roots: string[] = []
@@ -213,4 +213,75 @@ describe('LearningMemoryService', () => {
     expect(() => ctx.learningMemory.cognitiveForSession(alpha.id, 1.5)).toThrow(TypeError)
     expect(() => ctx.learningMemory.cognitiveForSession(alpha.id, Number.MAX_SAFE_INTEGER + 1)).toThrow(TypeError)
   })
+  it('persists a Milwaukee favorite as an assistant decision, not a user preference, across restarts', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-sports-decision-'))
+    roots.push(root)
+    const path = join(root, 'memory.jsonl')
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(LearningMemoryService, { path })
+    const sports = ctx.sessions.create(SessionId('sports-pick-alpha'), { meta: { cwd: '/workspace/sports' } })
+    sports.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: '¿Cuál es tu favorito en Brewers–Rays?' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    const assistant = (text: string) => createAssistantMessage({
+      content: [{ type: 'text', text }],
+      source: { provider: 'test', model: 'test-model' },
+    })
+    sports.append('assistant/message', { turn: 1, step: 1, message: assistant('Mi favorito para Brewers–Rays es Milwaukee Brewers.') }, { surfaceOp: 'append' })
+    sports.append('assistant/message', { turn: 1, step: 2, message: assistant('No tengo favorito todavía en el otro encuentro.') }, { surfaceOp: 'append' })
+    sports.append('assistant/message', { turn: 1, step: 3, message: assistant('Prefiero respuestas breves.') }, { surfaceOp: 'append' })
+    const unrelated = ctx.sessions.create(SessionId('sports-pick-other'), { meta: { cwd: '/workspace/other' } })
+    unrelated.append('assistant/message', { turn: 1, step: 1, message: assistant('Mi favorito para Dodgers–Mets es Los Angeles Dodgers.') }, { surfaceOp: 'append' })
+
+    await ctx.learningMemory.ready()
+    expect(ctx.learningMemory.projectIdForSession(String(sports.id))).toBe('sports')
+    expect(ctx.learningMemory.projectIdForSession(String(unrelated.id))).toBe('other')
+    const choices = ctx.learningMemory.searchCognitive('Brewers Rays Milwaukee', 10, {
+      kind: 'decision', projectId: 'sports',
+    })
+    expect(choices).toHaveLength(1)
+    expect(choices[0]?.record.summary).toContain('Milwaukee Brewers')
+    expect(choices[0]?.record.provenance.sourceEventType).toBe('assistant/decision')
+    expect(ctx.learningMemory.searchCognitive('', 10, { kind: 'decision', projectId: 'other' })
+      .some(hit => hit.record.summary.includes('Milwaukee'))).toBe(false)
+    expect(ctx.learningMemory.searchCognitive('', 10, { kind: 'preference', projectId: 'sports' })
+      .some(hit => hit.record.content.includes('Prefiero respuestas breves.'))).toBe(false)
+
+    const restarted = new Context()
+    await restarted.plugin(SessionStore)
+    await restarted.plugin(LearningMemoryService, { path })
+    await restarted.learningMemory.ready()
+    expect(restarted.learningMemory.searchCognitive('Milwaukee', 10, { kind: 'decision', projectId: 'sports' }))
+      .toHaveLength(1)
+  })
+
+  it('replays an older assistant pick into the new decision index idempotently', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-decision-replay-'))
+    roots.push(root)
+    const path = join(root, 'memory.jsonl')
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(LearningMemoryService, { path })
+    const session = ctx.sessions.create(SessionId('historic-game'), { meta: { cwd: '/workspace/sports' } })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: '¿Quién es tu favorito para Brewers–Rays?' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    session.append('assistant/message', { turn: 1, step: 1, message: createAssistantMessage({
+      content: [{ type: 'text', text: 'Voy con Milwaukee.' }],
+      source: { provider: 'test', model: 'test-model' },
+    }) }, { surfaceOp: 'append' })
+    await ctx.learningMemory.ready()
+    const decision = ctx.learningMemory.searchCognitive('Milwaukee', 10, { kind: 'decision', projectId: 'sports' })
+    expect(decision).toHaveLength(1)
+    expect(ctx.learningMemory.searchCognitive('Brewers Rays', 10, { kind: 'decision', projectId: 'sports' }))
+      .toHaveLength(1)
+    const recordsBefore = ctx.learningMemory.allCognitiveRecords().length
+    // Reload and session-event replay must not duplicate the decision record.
+    await ctx.learningMemory.ready()
+    expect(ctx.learningMemory.allCognitiveRecords()).toHaveLength(recordsBefore)
+  })
+
 })

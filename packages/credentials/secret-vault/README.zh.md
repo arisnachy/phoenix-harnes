@@ -2,9 +2,11 @@
 
 [English](README.md) | 中文
 
-secret vault 在 `ctx.credentials` 之上提供仅供人工使用的 `/secret` 命令。可在编辑器中使用 `/secret set NAME VALUE`、`/secret status NAME` 或 `/secret delete NAME`。对于无人值守浏览器工作，`/secret login-set https://example.com ACCOUNT SECRET` 会保存按 origin 绑定的登录信息和一次性自主使用授权；`login-status` 与 `login-delete` 用于检查或删除该绑定。值会直接交给凭据提供方；`command/run` 会省略原始输入，确认消息只包含脱敏状态。命令不会发送给模型。
+secret vault 在 `ctx.credentials` 之上提供仅供人工使用的 `/secret` 命令。提供方机密使用 `/secret set NAME VALUE`、`/secret status NAME` 或 `/secret delete NAME` 管理。网站凭据在浏览器下方受保护的 Secure Ask 卡片输入和管理；`login-set` 拒绝凭据消息。网站记录采用 Windows DPAPI CurrentUser 加密，并按 origin 明确授权自动使用。命令值直接交给提供方，`command/run` 省略原始输入，确认信息只包含安全状态。
 
 像 LLM 适配器这样的消费者仍会在提供方操作内部解析指定的 `CredentialRef`。Windows 浏览器 broker 会根据规范化页面 origin 派生登录引用，在 DOM 注入前再次核对实时 origin，并且登录值只进入受信任执行路径。vault 不提供读取秘密的工具，也不会把秘密值放入模型上下文。
+
+vault 还会为 Windows 浏览器消费者注册仅限主机使用的 `credentials/web-login-status` 和 `credentials/web-login-resolve` 监听器。消费者使用规范化的实时 origin 调用这些事件；状态只返回是否存在记录和授权元数据，账户、秘密以及有界的 `extra:0` 到 `extra:3` 值只留在受信任的主机进程中。已有但未授予自动使用权的 DPAPI 记录会明确拒绝访问；只有不存在 DPAPI 记录时，消费者才可使用其独立负责的旧版迁移路径。
 
 默认本地提供方把值存储在仅所有者可访问的凭据文档中。在 Windows 上，文件系统 ACL 仍由账户和部署负责；本包保证命令值不会进入模型请求或持久化命令输入。
 

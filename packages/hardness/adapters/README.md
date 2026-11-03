@@ -4,9 +4,37 @@ English | [中文](README.zh.md)
 
 Projects metadata from existing PHOENIX tools and skills into the HARDNESS Tool Atlas.
 
-The adapters do not execute tools, load skill bodies, or grant permissions; each source registry retains authority.
+The comic publisher preserves its static-reader artifact metadata inside Code Mode subcalls, just as the native map publishers do. The durable nested result can therefore reopen the comic viewer after a session reload; the program's return value does not need to contain the HTML.
+
+The capability index does not execute tools, load skill bodies, or grant permissions; each source registry retains authority.
 
 The adapter separates host-owned indexing from model-facing tools. The host composition mounts `modelTools: false` to index capabilities and install the shared mission runtime once. Full agent presets mount `modelTools: true` to expose `hardness_run`, `connector_list`, and durable scheduled-task tools in their own scope without duplicating the shared HARDNESS registry. Minimal presets can therefore keep a deliberately small catalog.
+
+## HumanOS grounded self-model
+
+Full agent presets add a read-only `hardness:humanos-self-model` runtime context beside the existing Kira presence and initiative context. It observes the registered HARDNESS capability statuses and visible current-agent/global durable task counts without I/O, provider calls, new memory stores or permission changes. The projection separates declared verified capability metadata from live tool availability, excludes other agents' tasks and unrevealed surprises, and never exposes task text, identities, model names or credentials. Kira uses the observation only when relevant, then resolves and verifies actual capabilities before making claims. This is operational self-knowledge, not sentience, autonomous self-modification or permission to execute.
+
+HumanOS also performs bounded metacognitive calibration against the existing HARDNESS case ledger: at most 64 capability descriptors and the latest 12 evidence rows per descriptor. It counts same-version passes, failures, denials, obsolete-version evidence and conflicting observations without injecting names or payloads. This evidence is historical and never proves current availability or authorization; remaining descriptors are explicitly counted as unexamined.
+
+## Local assistant mailbox
+
+Mailbox management returns JSON values: unavailable draft and attachment metadata is omitted, and provider labels are normalized to strings.
+
+Kira can inspect, create, verify and refresh her own mailbox through `phoenix_mail_identity`. `phoenix_mail_send` sends explicitly requested immediate messages from that inbox to its verified owner with the stored AgentMail credential, without another sending integration. Its success includes the provider receipt; unconfirmed sends remain durable and must not be reported as delivered. Scheduled mail uses `phoenix_task_create`.
+
+The resident Web host can enroll a Phoenix-owned inbox on AgentMail's included `agentmail.to` domain from Settings → Connectors → Correo propio de Phoenix. Signup returns the actual provider address; verification sent to the nominated human owner must finish before incoming mail becomes work. An existing free-domain account can instead be connected with its API key and a separate owner challenge. Secrets stay in the credential service, outside chat, account files and status replies. No custom domain, paid upgrade or public webhook is provisioned.
+
+Explicit owner-bound recovery repeats official idempotent signup for the same human owner, stores the rotated access key and requires the new OTP; it recovers the existing inbox rather than promising another mailbox. A verified owner can explicitly create a separate included-domain inbox through `create-inbox`. Its durable client identity and expected address must match the provider receipt before replacing the active inbox; an uncertain request is checked on retry instead of creating another inbox. Owner, contacts and workspace remain unchanged. Enrollment, connection and verification cannot overlap.
+
+Only provider-authenticated incoming mail from the verified owner or explicitly configured contacts creates a job. Automatic messages, Phoenix's own mail, blocked/spam/unauthenticated messages and unlisted senders do not invoke a model. Email contents cannot grant permissions. Kira executes in a dedicated persisted session using the selected coordinator's model, workspace and preset; existing worker selection and normal approval/finalization gates apply. `phoenix_mail_complete` records a verified reply proposal; it cannot send mail or complete another session's job. Replies target the authorized sender, overriding Reply-To and excluding CC.
+
+Reception belongs to the local host, not the browser. Closing the chat leaves it running; shutting down the PC stops execution. On startup, polling reconciles missed mail and persisted jobs. Workspace startup defers pending jobs instead of blocking them; agent creation requests another reconciliation and records the selected workspace for restart recovery. Outgoing WebSocket notifications reduce latency and reconnect after interruption. Invalid message reads do not starve other jobs; failed reads are retried on later polls. Windows desktop installs optionally create/remove only the owned **PHOENIX Assistant** login shortcut, using the durable installation root and a hidden background launch without opening the browser.
+
+Local configuration: `mailDirectory` defaults to `phoenix-mail` beside the task ledger; `mailCredentialRef` defaults to `PHOENIX_AGENTMAIL_API_KEY`; `mailPollMs`, `mailTimeoutMs` and `mailWorkTimeoutMs` default to 60,000, 30,000 and 600,000 milliseconds. Account, job, reply/scheduled outbox and owner-only chat outbox files use serialized atomic private writes. Existing-account verification expires after 24 hours or ten attempts. Ambiguous signup is never automatically repeated. Reply and scheduled-email retries retain identical persisted content and idempotency keys; after the provider's 24-hour idempotency window an unconfirmed send is held for owner review rather than risking duplication. Provider quota stops work without a paid upgrade. Model usage retains its normal costs and limits.
+
+Home attention stores receipts beside the task ledger. Opening or dismissing a current suggestion hides that exact revision across reloads; new material revisions remain eligible. Receipts are applied before the eight-row endpoint limit. A successful newer run supersedes an old failure. Completed email results and concrete blockers join the existing home feed without a new dashboard.
+
+Scheduled host email checks mailbox readiness before model work and reuses any persisted occurrence without regenerating its body. Each outgoing message retains its task and occurrence identities. Every retry rechecks durable task state and recipient authorization; paused, cancelled, completed or missing tasks cannot send pending mail, while prior attempt evidence remains intact. Conditional email completes only after provider confirmation. Ambiguous deliveries beyond the 24-hour provider window require owner review and are excluded from automatic task retries. Host disposal cancels provider requests, drains owned sends, and rejects new sends. User-selected sender identities continue through their governed connector.
 
 ## Durable proactive tasks
 
@@ -20,6 +48,8 @@ A task may use `visibility: surprise`. It is omitted from ordinary listings unti
 
 The host polls the durable engine and also pumps it when an agent is created. Chat delivery wakes a live target agent with a proactive follow-up. Private preparation, scheduled office work, and email use a configured one-shot subagent provider. If no live execution target exists, execution is deferred without consuming the occurrence.
 
+Recurring `delivery: work` tasks can maintain an explicitly requested ongoing objective such as research, class preparation, project monitoring, or sports analysis. Execution revalidates reality and may use already-authorized MCP/connectors; a durable interest authorizes analysis, not external transactions. Material results enter a ranked, bounded loopback attention projection, unchanged recurring runs can return `NO_MATERIAL_UPDATE`, and the browser shows only the highest-value rows in the blank-session Hero. Optional task attention metadata controls whether results or upcoming occurrences participate without changing task execution.
+
 Email has two independent identity references. `userMailIdentity` identifies the authorized mailbox used for office work sent on the user's behalf. `harnessMailIdentity` identifies Phoenix's own mailbox for direct communication with the user. A task chooses `user`, `harness`, or `auto`; `auto` prefers the Phoenix identity and falls back to the user identity. These references do not contain credentials and scheduled execution does not bypass normal mail-tool authorization or approval.
 
 Relevant configuration keys are `taskLedgerPath`, `taskPollMs`, `privateWorkProvider`, `privateWorkResultChars`, `userMailIdentity`, and `harnessMailIdentity`. The special `:memory:` ledger exists only for deterministic tests and ephemeral compositions.
@@ -30,6 +60,24 @@ Model-facing presets expose `hardness_workflow.executionMode` so Phoenix can dis
 
 The same policy is reinforced in active goal rounds. An already-authorized mission continues through recoverable tool and verification failures using repair, alternate routes, capability acquisition/building, or a materially different strategy. Internal retry/round limits cannot complete or cancel the mission. Permission, credentials, safety policy, provider quota, explicit denial, and genuinely unsatisfied external dependencies remain hard boundaries and are never bypassed by the fast path.
 
+
+Game quality follows the requested genre and art direction. Game-development detection includes console references such as PS1/PSX/PlayStation and Sega, and uses development context for ambiguous names such as Snake or chess. Abstract board, puzzle and arcade games may use polished geometry, procedural audio and compact designed arenas as final production work; explicit character/background or external/original asset requests still require the relevant production and provenance workflow. Representational RPG/adventure/GTA work retains its production asset, cast and environment requirements. Every game still requires independent technical, visual-inspection and actual-play evidence from the current mutation generation.
+
+## Runtime validation
+
+Abstract games that request character or background assets also require an asset manifest and provenance. Sampled production audio accepts ordinary chained HTML media `.play()` calls while retaining embedded-file validation. Curated connector approval, results and call cards use human-readable names; stable connector IDs still address the Host installer.
+
+Paper candle reads clamp both the provider request and returned rows to 1–1000. Shell mutation classification reads the command argument. Runtime-service telemetry performs an immediate first probe and then reuses observations until their TTL expires.
+
+## Binance adaptive paper trading
+
+The on-demand `binance_adaptive_cycle` tool ranks up to five Spot USDT pairs using closed Binance candles and deterministic breakout, uptrend-pullback, and range-reversion candidates. `scan` is read-only; `paper-step` may place one virtual order in the existing fee-aware paper ledger while limiting each new position to 5% of virtual equity, aggregate exposure to 20%, and simultaneous holdings to two. Defensive liquidation takes precedence over new buys. Scores represent a rule ranking, not calibrated win probabilities; fresh prices are re-read before the virtual order. The scanner cannot authorize real orders or manage Binance account credentials. When the user explicitly starts PAPER automation through `binance_paper_auto`, the Host persists the chosen watchlist and runs one bounded virtual cycle immediately and on the configured 1–60 minute cadence without ongoing model inference. The separate `binance_paper_dashboard` tool publishes authenticated Host ledger evidence to a native in-chat visor. Its read-only same-origin endpoint refreshes the viewer approximately every ten seconds without model tokens. The visor's Start, Stop, and Check Now controls call a same-origin, POST-only PAPER endpoint that validates the browser Origin, content type, and bounded watchlist before modifying virtual automation; buttons do not consume LLM tokens. No REAL account action is exposed by that endpoint.
+
+## Official Binance Agentic MCP and Spot Testnet
+
+The official real-account MCP is the pinned Streamable HTTP server `https://agent.binance.com/mcp/agentic`. Phoenix connects using user-initiated browser OAuth, not production API keys. `binance_mcp_health` reports the actual MCP lifecycle and synchronized tool names; an installed connector alone is never proof of successful authentication or Trade scope. A `reconnect` retries the existing transport; `repair` (only on explicit user request) replaces the managed row while leaving credentials in the Host vault. Complete Binance authorization and the Agentic sub-account setup in the browser. The main account is read-only where permitted; Agentic must be funded manually. Every REAL order, cancel, or wallet transfer requires user confirmation at the provider.
+
+Testing offers local PAPER and a separate authenticated Binance Spot Testnet adapter (`https://testnet.binance.vision`). For Spot Testnet, set dedicated `PHOENIX_BINANCE_TESTNET_API_KEY` and `PHOENIX_BINANCE_TESTNET_API_SECRET` in the Host (never in chat); `binance_testnet_account` verifies the test-funds account, and `binance_testnet_order` submits one capped fake-funds order only after specific user intent and one-shot Phoenix approval. Kira first asks the user to choose Testing or Real, then distinguishes PAPER from Spot Testnet.
 
 ## Model Experience
 
@@ -46,7 +94,7 @@ Consumers may expose stable capability identifiers such as `tool:<name>`, `skill
 
 When the canonical system-prompt service is mounted, this package installs the `hardness:operating-protocol` section. It gives every model the same lifecycle vocabulary and requires resolution, approval, verification, presentation, and evidence before a task is described as complete.
 
-Model-facing scopes also install `hardness:proactivity-protocol`. It tells the model to use durable tasks for explicit reminders and useful autonomous follow-ups, avoid duplicates and spam, use private preparation for surprises, preserve calendar timing, and keep all scheduled external actions behind the same authorization policy used for immediate work.
+Model-facing scopes also install `hardness:proactivity-protocol`. It tells the model to use durable tasks for explicit reminders and useful autonomous follow-ups, turn explicit ongoing objectives into bounded recurring background work when useful, prefer authorized event-driven connectors over polling, suppress unchanged background results, preserve calendar timing, and keep all external actions behind the same authorization policy used for immediate work.
 
 Tool projections may subscribe to `tools/change`; this keeps dynamically connected tools, including MCP tools, represented in HARDNESS while registrations are reversible. The internal `hardness_run` tool is excluded from that projection to prevent recursive routing.
 
@@ -74,7 +122,7 @@ Inspect the need, resolve a verified capability, plan the operation, obtain appr
 ##### Connector inventory
 
 ```markdown
-The model also receives the read-only connector_list tool when the authorization or MCP connector seam is mounted. Authorization rows report registered flows, provider telemetry, and sanitized callable service metadata. MCP rows report server identity, transport, lifecycle status, stable reason code, and public tool names. The tool never begins authorization, grants permission, invokes a connection, or exposes credentials or transport configuration.
+The model also receives the read-only connector_list tool when the authorization or MCP connector seam is mounted. Authorization rows report registered flows, provider telemetry, and sanitized callable service metadata. MCP rows report server identity, transport, lifecycle status, stable reason code, and public tool names. The tool never begins authorization, grants permission, invokes a connection, or exposes credentials or transport configuration. Full model-tool scopes also expose `connector_discover` and the approval-gated `connector_install`: registry installs accept only the exact Official MCP Registry identity re-resolved by the Host, while `connectorId=devpost` selects the Host-pinned official Devpost Hackathons MCP without registry discovery. Neither path accepts arbitrary executable URLs or repositories.
 ```
 
 ##### X MCP activation
@@ -95,5 +143,5 @@ The projected catalog and proactivity protocol are cache-friendly while source s
 
 - External extension execution remains governed by the Capability Broker and isolated package-host contract rather than being activated eagerly at startup.
 - Durable mission tracing requires a live agent session; direct unit-level runner calls without one remain unrecorded and are not production proof.
-- Email identities are configuration references only; this package does not create external mailbox accounts. The selected provider/tool must already be configured and authorized.
+- Legacy scheduled email identities remain configuration references requiring authorized mail tools. The local assistant mailbox separately enrolls an included-domain AgentMail account; live signup and verification require the owner and provider availability. Incoming task text is bounded; attachments are not automatically executed.
 - Surprise visibility hides unrevealed content from ordinary task listings and compact tool presentation, but the durable ledger intentionally remains auditable to an authorized operator.

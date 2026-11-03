@@ -14,6 +14,8 @@ PHOENIX 通过 `@phoenix-ai/dsh-voice` 提供 `ctx.voice`。它只接受明确�
 
 Kokoro 是配置的 provider，而不是必需依赖。host 不会在启动时下载模型权重或启动进程，因此缺少本地安装不会阻止 Phoenix 加载。
 
+对话请求通过已认证的 WebRTC 优先使用原生 OpenAI/Codex Realtime，然后才使用本地 fallback。其 V1 和 V3 app-server 请求根据助手呈现方式分别选择女性 `juniper`、男性 `cove` 和中性 `breeze`。语音校验拒绝仍属于 V3 请求失败；不得因此降级到 V1，因为重试可能触发 Quicksilver v2 标头拒绝。
+
 ## Alternatives considered
 
 **仅使用浏览器语音：** 不作为唯一实现，因为 host 端的重要事件播报和本地 STT 需要与特定浏览器无关的 provider-neutral 服务。

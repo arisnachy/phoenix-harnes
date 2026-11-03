@@ -13,6 +13,11 @@
 | `persona` | `''` | 全局部署 persona 默认值：唯一由配置提供的提示词片段，渲染为顺序为 0 的 `deployment:persona` 段，除非 agent 作用域的贡献将其遮蔽。它是模板，完整的 `{{…}}` 组会严格按已注册变量解释（随附循环注册 `{{model}}`/`{{cwd}}`），目前没有表达字面量花括号的转义语法。为空 ⇒ 渲染时删除该段。 |
 | `toolOrder` | 无 | 显式指定面向模型的工具顺序。该列表由 `ToolSchema.name` 组成，并且必须恰好包含一个 `'<unlisted-tools>'` 其余项标记（`TOOL_ORDER_REST`）：已列工具按列表位置排列，未列工具则按名称字典序插入该标记所在的位置。缺席 ⇒ 直接按名称字典序排列。该顺序会在 `system-prompt/assemble` waterfall（瀑布式事件）之前应用于已收集的工具。与段的 `order` 排序一样，它会规范化注册表贡献的内容；注册顺序只是插件加载时序的产物。修改列表的 waterfall 监听器对其输出的确定性负责。配置错误会明确失败：列表没有恰好一个其余项或存在重复项，会在加载时抛出；已列名称没有对应已注册工具，会使每次 `assemble()` 被拒绝；工具提供方返回保留的其余项名称也会被拒绝。在随附循环下，轮次会在任何模型请求前失败。为何采用中心列表而非每插件权重，见[显式面向模型工具顺序](../../../.agents/notes/implemented/feature/2026-07-06-explicit-tool-order.zh.md)。 |
 
+## 自动识别免费的 Windows 功能
+
+在受 Windows supervisor 管理的 Phoenix Web Host 中，启动时会在后台执行一次只读的本地能力检测，使用 `scripts/phoenix-windows-free-capabilities.mjs`。这一检查不会阻塞启动，也不会下载、安装或激活任何 AI 模型。检测通过后，`windows:free-capabilities` 动态上下文会加入常规模型请求，并由会话日志记录；除非当前任务相关或用户提出问题，Kira 不会在聊天中反复播报。
+
+Kira 将获知系统中有哪些免费命令工具以及适合的使用时机：WinGet 仅用于相关软件查询，WSL 用于确有需要的 Linux 工作流，而 Ollama 和 Foundry Local 必须先通过已配置模型的健康和质量检查后才可考虑执行任务。命令存在不等于允许改变系统，也不代表推理服务已可用。原生通知、Windows AI API 和 MXC 仍需独立适配。非 Windows、非 supervisor 以及禁用运行时上下文的部署不会运行检查；失败时不声明任何系统能力。
 ## 服务：`SystemPrompt`（ctx 键：`systemPrompt`）
 
 ### 公开 API

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import LlmRuntime, { createUserMessage, CallId, LlmError, StreamChunk  } from '@phoenix-ai/dsh-llm'
 import SessionStore, { SessionId, TurnEndReason } from '@phoenix-ai/dsh-session'
@@ -7,7 +7,11 @@ import ToolRuntime, { defineContentToolFixture } from '@phoenix-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@phoenix-ai/dsh-agent'
 
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
+import { shouldRequestToolProgress } from '../src/agent.ts'
 import { MockAdapter, maxTokensResponse, textResponse, toolCallResponse } from './mock-adapter.ts'
+
+// oxlint-disable-next-line @stylistic/max-len -- Pin the complete harness identity independently of runtime assembly.
+const EXPECTED_HARNESS_IDENTITY = "You are an AI agent powered by PHOENIX. Respond in the language of the user's latest message, including any reasoning text that is shown to the user. Treat this system prompt and all later persona, profile, memory, workflow, capability, style, and tool guidance as silent behavior constraints: follow them without announcing, quoting, paraphrasing, or explaining them. Never preface a reply by saying you are using or following a conversation guide, prompt, policy, protocol, profile, tone setting, memory, preference, hidden instruction, or system instruction unless the user explicitly asks for technical diagnostics. Answer the user's actual message first. Write naturally and conversationally, like a warm, perceptive collaborator rather than a status console or customer-support script. In casual conversation, be relaxed, personable, and contextually concise; a greeting or small-talk turn gets a direct social response with no meta preamble or capability menu. Let personality show through natural phrasing, playful callbacks, dry wit, mild sarcasm or irony, friendly teasing, and occasional emoji when rapport and topic make them fit; do not announce or explain the joke, do not force humor, and dial it down around serious or sensitive topics unless the user clearly sets that tone. Avoid canned openings, repetitive affirmations, and assistant clichés; vary phrasing naturally and match the user's tone without parroting them. Do not produce unsolicited status, memory, profile, or context summaries. Treat personal memories, profile details, family information, ages, locations, filesystem paths, agent/subagent IDs, UUIDs, workspace metadata, tool state, and runtime state as silent background context: use them to improve relevance, but mention them only when the user asks or they are directly necessary to answer. Never recite private or background details just to demonstrate memory. Avoid canned openings such as \"Status update\" or \"Estado rápido\" unless the user requested a status report. For multi-step or tool-heavy work, keep the user informed without making each tool call a conversation: give a brief opening for substantial work, then update on a material finding, blocker, changed plan, or roughly 20 seconds of otherwise silent execution. Bundle routine tool calls into the shortest correct workflow, reuse fresh results, and finish when verified rather than re-planning or narrating every step. Never expose hidden chain-of-thought or private reasoning; progress updates summarize only actions taken, concrete findings, and next steps. Do not spam progress updates for simple work. Before substantial work, silently derive a compact acceptance contract from the user's request: required output, constraints, success evidence, and unacceptable degradation. Convert every explicit mandatory requirement into a small requirement ledger and close each item only with evidence that actually exercises that requirement; a green suite is evidence, not blanket proof. For public error contracts, verify the observable exception/error type plus every required message field, identifier, list, or diagnostic detail. When the request names scale, throughput, memory, latency, depth, concurrency, or a large cardinality, inspect the implementation for asymptotic hazards and run a bounded scaling/resource check rather than merely proving one large sample completes. Reuse proven patterns or templates before inventing new structure. Treat the session workspace/cwd as authoritative state: do not shell-confirm it. If exact file paths are already known from the request, prior tool results, or the filesystem observation ledger, read those paths directly; only on a miss escalate to a scoped search, then filename-specific discovery, and use workspace-wide basename globs such as `*` only for an explicitly requested exhaustive inventory. Prefer cheap deterministic checks before model-based review, run independent checks in parallel when practical, reuse fresh evidence while inputs are unchanged, and never silently substitute a lower-quality capability for what the user requested. Spend extra verification only when its expected quality gain justifies added latency or cost. Treat passing tests as evidence, not proof. Before declaring substantive work complete, verify the real user-facing or production entrypoint and deliberately exercise applicable high-value failure classes: zero/one/many cardinality, boundaries or extremes, malformed input, deep or large input, dependency failure, timeout or cancellation, and lifecycle cleanup. For broad input spaces, prefer property, fuzz, or metamorphic checks. A directly observed failure overrides a green suite. User-controlled input must yield a valid result or a domain-classified failure, never raw implementation exceptions, tracebacks, partial writes, or silent corruption. For each discovered failure, fix the root cause, add a regression that would have caught it, and rerun the affected entrypoint. For substantial multi-step deliverables, use a durable goal and its independent completion judge when available; otherwise use a fresh independent verifier. Do not claim completion without fresh evidence. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning."
 
 function driverDone(agent: Agent): Promise<void> {
   return (agent as Agent & { done: Promise<void> }).done
@@ -65,6 +69,38 @@ describe('agent loop', () => {
       expect(ctx.sessions.list()).toEqual([])
     },
   )
+
+  it('adds first-pass quality in the original request without spawning extra turns', async () => {
+    const adapter = new MockAdapter([textResponse('planned')])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('first-pass-quality'), {
+      provider: 'mock',
+      model: 'mock',
+    })
+
+    send(agent, 'Plan a training schedule with capacity constraints and minimum budget costs.')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(1)
+    expect(adapter.requests[0]?.system).toContain('<first_pass_quality>')
+    expect(adapter.requests[0]?.system).toContain('counterexample')
+    expect(userTexts(agent)).toEqual(['Plan a training schedule with capacity constraints and minimum budget costs.'])
+  })
+
+  it('preserves the fast conversational path without quality preflight', async () => {
+    const adapter = new MockAdapter([textResponse('hello')])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('first-pass-greeting'), {
+      provider: 'mock',
+      model: 'mock',
+    })
+
+    send(agent, 'Hola')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(1)
+    expect(adapter.requests[0]?.system).not.toContain('<first_pass_quality>')
+  })
 
   it('seeds a valid AgentOptions.maxTokens into the first model request', async () => {
     const adapter = new MockAdapter([textResponse('bounded')])
@@ -295,7 +331,7 @@ describe('agent loop', () => {
     expect(turnEnds.every(event => event.type === 'turn/end' && event.data.reason.kind === 'completed')).toBe(true)
   })
 
-  it('reminds a silent tool-calling model to give visible progress before more tools', async () => {
+  it('lets a short silent tool chain continue without a narration prompt', async () => {
     const adapter = new MockAdapter([
       toolCallResponse('c1', 'echo', { text: 'ping' }),
       textResponse('I checked the tool result; next I will finish the task.'),
@@ -318,7 +354,43 @@ describe('agent loop', () => {
       .flatMap(message => message.content)
       .flatMap(block => block.type === 'text' ? [block.text] : [])
       .join('\n')
-    expect(secondRequestText).toContain('Before calling more tools, send the user a brief progress update')
+    expect(secondRequestText).not.toContain('If substantial work remains, report only a concrete finding')
+  })
+
+  it('accounts for a long tool after Kira already spoke instead of resetting silence on settlement', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    try {
+      const adapter = new MockAdapter([
+        toolCallResponse('c1', 'echo', { text: 'ping' }, 'Voy a verificar el resultado.'),
+        textResponse('He comprobado el resultado y continúo.'),
+      ])
+      const ctx = await harness(adapter)
+      ctx.tools.register(defineContentToolFixture({
+        name: 'echo',
+        description: 'echo back',
+        parameters: { text: { type: 'string' } },
+        async execute(args) {
+          clock.mockReturnValue(21_500)
+          return [{ type: 'text', text: String(args.text) }]
+        },
+      }))
+      const agent = ctx.agentLoop.create(SessionId('long-spoken-progress'), { provider: 'mock', model: 'mock' })
+      send(agent, 'verify this with the tool')
+      await waitForIdle(ctx, agent)
+      const secondRequestText = adapter.requests[1]!.messages
+        .flatMap(message => message.content)
+        .flatMap(block => block.type === 'text' ? [block.text] : [])
+        .join('\n')
+      expect(secondRequestText).toContain('Long tool work has left the user without a visible update')
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it('requests progress only after 20 seconds of silent ongoing tool work', () => {
+    expect(shouldRequestToolProgress(1000, 20999, true)).toBe(false)
+    expect(shouldRequestToolProgress(1000, 21000, true)).toBe(true)
+    expect(shouldRequestToolProgress(1000, 40000, false)).toBe(false)
   })
 
   it('renders harness identity, then the persona, then tool guidance — with {{variables}} resolved', async () => {
@@ -337,11 +409,11 @@ describe('agent loop', () => {
     }))
     const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
 
-    send(agent, 'hi')
+    send(agent, 'Use the noop tool to check the workspace.')
     await waitForIdle(ctx, agent)
 
     const request = adapter.requests[0]
-    expect(request!.system).toBe('You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. For multi-step or tool-heavy work, keep the user visibly informed: before substantial tool work, briefly say what you are doing; then provide concise progress updates after roughly 2-3 tool calls, whenever a material finding changes the plan, or when a blocker appears. If you have been using tools without recent user-visible text, give a progress update before continuing with more tools. Never expose hidden chain-of-thought or private reasoning; progress updates summarize only actions taken, concrete findings, and next steps. Do not spam progress updates for simple work. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.\n\nYou are a test agent on mock.\n\nUse the noop tool wisely.')
+    expect(request!.system).toBe(EXPECTED_HARNESS_IDENTITY + '\n\nYou are a test agent on mock.\n\nUse the noop tool wisely.')
     expect(request!.tools?.map(t => t.name)).toEqual(['noop'])
   })
 
@@ -358,7 +430,7 @@ describe('agent loop', () => {
     send(agent, 'hi')
     await waitForIdle(ctx, agent)
 
-    expect(adapter.requests[0]!.system).toBe('You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. For multi-step or tool-heavy work, keep the user visibly informed: before substantial tool work, briefly say what you are doing; then provide concise progress updates after roughly 2-3 tool calls, whenever a material finding changes the plan, or when a blocker appears. If you have been using tools without recent user-visible text, give a progress update before continuing with more tools. Never expose hidden chain-of-thought or private reasoning; progress updates summarize only actions taken, concrete findings, and next steps. Do not spam progress updates for simple work. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.\n\nWorking in /work/space.')
+    expect(adapter.requests[0]!.system).toBe(EXPECTED_HARNESS_IDENTITY + '\n\nWorking in /work/space.')
   })
 
   it('contains a strict-variable render failure: the turn errors, the loop keeps serving turns', async () => {
@@ -394,7 +466,7 @@ describe('agent loop', () => {
     await waitForIdle(ctx, agent)
 
     expect(adapter.requests).toHaveLength(1)
-    expect(adapter.requests[0]!.system).toBe('You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. For multi-step or tool-heavy work, keep the user visibly informed: before substantial tool work, briefly say what you are doing; then provide concise progress updates after roughly 2-3 tool calls, whenever a material finding changes the plan, or when a blocker appears. If you have been using tools without recent user-visible text, give a progress update before continuing with more tools. Never expose hidden chain-of-thought or private reasoning; progress updates summarize only actions taken, concrete findings, and next steps. Do not spam progress updates for simple work. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.\n\nIn /rescued.')
+    expect(adapter.requests[0]!.system).toBe(EXPECTED_HARNESS_IDENTITY + '\n\nIn /rescued.')
     const turnEnds = agent.session.events.filter(e => e.type === 'turn/end')
     expect(turnEnds).toHaveLength(2)
     expect(turnEnds[1]?.type === 'turn/end' && turnEnds[1].data.reason.kind).toBe('completed')
@@ -424,7 +496,7 @@ describe('agent loop', () => {
 
     expect(adapter.requests).toHaveLength(1)
     expect(adapter.requests[0]!.model).toBe('mock')
-    expect(adapter.requests[0]!.system).toBe('You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. For multi-step or tool-heavy work, keep the user visibly informed: before substantial tool work, briefly say what you are doing; then provide concise progress updates after roughly 2-3 tool calls, whenever a material finding changes the plan, or when a blocker appears. If you have been using tools without recent user-visible text, give a progress update before continuing with more tools. Never expose hidden chain-of-thought or private reasoning; progress updates summarize only actions taken, concrete findings, and next steps. Do not spam progress updates for simple work. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.\n\nYou run on mock.')
+    expect(adapter.requests[0]!.system).toBe(EXPECTED_HARNESS_IDENTITY + '\n\nYou run on mock.')
   })
 
   it('omits the system field when system-prompt/assemble short-circuits with an empty assembly', async () => {
@@ -467,7 +539,7 @@ describe('agent loop', () => {
     expect(contextEvents()).toHaveLength(1)
     expect(contextEvents()[0]?.data.content).toEqual([{
       type: 'text',
-      text: 'Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nMode: read-only.',
+      text: 'Background runtime context (silent; use only to improve relevance and continuity. Do not summarize, recite, or reveal it unless the user asks for that information or it is directly necessary to answer the current request. This snapshot supersedes earlier runtime-context snapshots):\n\nMode: read-only.',
     }])
 
     send(agent, 'unchanged')
@@ -611,7 +683,7 @@ describe('agent loop', () => {
     expect(runtimeContexts).toHaveLength(2)
     expect(runtimeContexts[1]?.data.content).toEqual([{
       type: 'text',
-      text: 'Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nMode: read-only.',
+      text: 'Background runtime context (silent; use only to improve relevance and continuity. Do not summarize, recite, or reveal it unless the user asks for that information or it is directly necessary to answer the current request. This snapshot supersedes earlier runtime-context snapshots):\n\nMode: read-only.',
     }])
   })
 
@@ -635,7 +707,7 @@ describe('agent loop', () => {
     expect(deltaText).toBe('abc')
   })
 
-  it('injects steering between steps and continues the turn', async () => {
+  it('interrupts the active tool step and carries steering into a new turn', async () => {
     const adapter = new MockAdapter([
       toolCallResponse('c1', 'slow', {}),
       textResponse('addressed the steering'),
@@ -655,7 +727,7 @@ describe('agent loop', () => {
     }))
 
     send(agent, 'start')
-    await waitForIdle(ctx, agent)
+    await agent.whenIdle()
 
     const steering = agent.session.events.find(e =>
       e.type === 'user/message' && JSON.stringify(e.data.content).includes('change of plans'))
@@ -694,7 +766,7 @@ describe('agent loop', () => {
     }))
 
     send(agent, 'build the object')
-    await waitForIdle(ctx, agent)
+    await agent.whenIdle()
 
     expect(adapter.requests).toHaveLength(2)
     expect(adapter.requests[0]?.tools?.map(tool => tool.name)).toContain('slow')
@@ -884,7 +956,7 @@ describe('agent loop', () => {
     send(agent, 'go')
     await waitForIdle(ctx, agent)
 
-    expect(agent.session.events.some(event => event.type === 'user/message' && event.data.source.kind === 'plugin')).toBe(false)
+    expect(agent.session.events.some(event => event.type === 'user/message' && event.data.source.kind === 'plugin' && event.data.source.plugin === 'test')).toBe(false)
   })
 
   it('agent/turn-stopping can steer another step (/loop pattern)', async () => {
@@ -952,11 +1024,13 @@ describe('agent loop', () => {
     }))
 
     send(agent, 'go')
-    await waitForIdle(ctx, agent)
+    await agent.whenIdle()
 
     expect(adapter.requests).toHaveLength(2)
     const events = agent.session.events.map(event => event.type)
-    expect(events.filter(type => type === 'turn/end')).toHaveLength(1)
+    expect(events.filter(type => type === 'turn/end')).toHaveLength(2)
+    const endings = agent.session.events.flatMap(event => event.type === 'turn/end' ? [event.data.reason.kind] : [])
+    expect(endings).toEqual(['aborted', 'completed'])
     expect(JSON.stringify(adapter.requests[1]?.messages)).toContain('late steering')
     const texts = adapter.requests[1]!.messages
       .flatMap(message => message.content)
@@ -1082,6 +1156,77 @@ describe('agent loop', () => {
     await waitForIdle(ctx, agent)
 
     expect(reasons).toEqual([{ kind: 'aborted', reason: { kind: 'user' } }])
+  })
+
+  it('automatically continues OpenRouter max-token output and closes completed', async () => {
+    const adapter = new MockAdapter([
+      maxTokensResponse('first half'),
+      textResponse('second half'),
+    ])
+    const ctx = await harness(adapter)
+    ctx.llm.registerAdapter(['openrouter'], adapter)
+    const agent = ctx.agentLoop.create(SessionId('openrouter-output-limit'), {
+      provider: 'openrouter', model: 'qwen/qwen3',
+    })
+    send(agent, 'write a long answer')
+    await waitForIdle(ctx, agent)
+    expect(adapter.requests).toHaveLength(2)
+    expect(adapter.requests[1]?.messages.some(message =>
+      message.source.kind === 'plugin' && message.source.plugin === 'agent-loop-auto-continue')).toBe(true)
+    expect(agent.session.events.filter(e => e.type === 'assistant/message').map(e =>
+      e.type === 'assistant/message' ? e.data.message.content : [])).toEqual([
+      [{ type: 'text', text: 'first half' }],
+      [{ type: 'text', text: 'second half' }],
+    ])
+    expect((() => { const ending = agent.session.events.findLast(e => e.type === 'turn/end'); return ending?.type === 'turn/end' ? ending.data.reason : undefined })()).toEqual({ kind: 'completed' })
+  })
+
+  it('never auto-continues Codex even behind OpenRouter', async () => {
+    const adapter = new MockAdapter([maxTokensResponse('truncated')])
+    const ctx = await harness(adapter)
+    ctx.llm.registerAdapter(['openrouter'], adapter)
+    const agent = ctx.agentLoop.create(SessionId('openrouter-codex-no-continue'), {
+      provider: 'openrouter', model: 'openai/gpt-5.5-codex',
+    })
+    send(agent, 'write a long answer')
+    await waitForIdle(ctx, agent)
+    expect(adapter.requests).toHaveLength(1)
+    expect((() => { const ending = agent.session.events.findLast(e => e.type === 'turn/end'); return ending?.type === 'turn/end' ? ending.data.reason : undefined })()).toEqual({ kind: 'max-tokens' })
+  })
+
+  it('bounds output-limit continuations and refuses identical consecutive segments', async () => {
+    const adapter = new MockAdapter([
+      maxTokensResponse('unchanged'),
+      maxTokensResponse('unchanged'),
+    ])
+    const ctx = await harness(adapter)
+    ctx.llm.registerAdapter(['deepseek'], adapter)
+    const agent = ctx.agentLoop.create(SessionId('deepseek-output-loop-guard'), {
+      provider: 'deepseek', model: 'deepseek-v4',
+    })
+    send(agent, 'write an answer')
+    await waitForIdle(ctx, agent)
+    expect(adapter.requests).toHaveLength(2)
+    expect((() => { const ending = agent.session.events.findLast(e => e.type === 'turn/end'); return ending?.type === 'turn/end' ? ending.data.reason : undefined })()).toEqual({ kind: 'max-tokens' })
+  })
+
+  it('never exceeds three output-limit continuations for one human request', async () => {
+    const adapter = new MockAdapter([
+      maxTokensResponse('one'),
+      maxTokensResponse('two'),
+      maxTokensResponse('three'),
+      maxTokensResponse('four'),
+    ])
+    const ctx = await harness(adapter)
+    ctx.llm.registerAdapter(['qwen'], adapter)
+    const agent = ctx.agentLoop.create(SessionId('qwen-output-budget'), { provider: 'qwen', model: 'qwen3' })
+    send(agent, 'write')
+    await waitForIdle(ctx, agent)
+    expect(adapter.requests).toHaveLength(4)
+    expect(agent.session.events.filter(event => event.type === 'user/message'
+      && event.data.source.kind === 'plugin'
+      && event.data.source.plugin === 'agent-loop-auto-continue')).toHaveLength(3)
+    expect((() => { const ending = agent.session.events.findLast(e => e.type === 'turn/end'); return ending?.type === 'turn/end' ? ending.data.reason : undefined })()).toEqual({ kind: 'max-tokens' })
   })
 
   it('surfaces max-tokens as the turn-end reason when the last step is cut off', async () => {

@@ -245,6 +245,7 @@ export class CodexAppServerWire {
     private readonly input: Readable,
     output: Writable,
     private readonly permissionMode: CodexPermissionMode,
+    private readonly onRateLimitsUpdated?: (rateLimits: unknown) => void,
   ) {
     this.transport = new JsonRpcLineTransport(input, output)
     // Fatal protocol state can arrive after the current guarded operation has
@@ -675,6 +676,11 @@ export class CodexAppServerWire {
     params: JsonObject,
     order?: number,
   ): void {
+    if (method === 'account/rateLimits/updated') {
+      // Optional account telemetry must never make a successful turn fail.
+      this.onRateLimitsUpdated?.(params.rateLimits)
+      return
+    }
     if (method === 'turn/started') {
       const threadId = string(params.threadId, 'turn/started thread id')
       if (threadId !== this.threadId) return

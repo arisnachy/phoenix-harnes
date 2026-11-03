@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ModelSelection } from '@phoenix-ai/dsh-api-remotes/client'
 import { createSnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ComponentProps } from 'react'
 import type { ModelDirectoryState } from '../src/client/directory.ts'
 import { ModelSelect } from '../src/client/ModelSelect.tsx'
-import { zh } from '../src/client/locales.ts'
+import { en, es, zh } from '../src/client/locales.ts'
 import { zh as commonZh } from '@phoenix-ai/dsh-client-locale/src/locales/zh.ts'
 
 // The seat's key domain is model ∪ common; the stub mirrors the real lookup
@@ -367,6 +367,90 @@ describe('ModelSelect reasoning effort', () => {
   })
 })
 
+describe('ModelSelect popup viewport', () => {
+  it('opens downward near the top and keeps the first model accessible', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state())
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    const trigger = screen.getByRole('button', { name: /DeepSeek V4 Flash/ })
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      top: 90, bottom: 118, left: 1000, right: 1180,
+    } as DOMRect)
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    const menu = screen.getByRole('menu')
+    expect(menu.style.top).toBe('calc(100% + 8px)')
+    expect(menu.style.bottom).toBe('auto')
+    expect(screen.getByRole('menuitemradio', { name: 'DeepSeek V4 Flash' })).toBeTruthy()
+  })
+
+  it('caps upward dropdown height to the available viewport space', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state())
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    const trigger = screen.getByRole('button', { name: /DeepSeek V4 Flash/ })
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      top: 320, bottom: 348, left: 1000, right: 1180,
+    } as DOMRect)
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    const menu = screen.getByRole('menu')
+    expect(menu.style.bottom).toBe('calc(100% + 8px)')
+    expect(parseInt(menu.style.maxHeight, 10)).toBeLessThanOrEqual(300)
+    expect(screen.getByRole('menuitemradio', { name: 'DeepSeek V4 Flash' })).toBeTruthy()
+  })
+})
+
+describe('ModelSelect catalog scrolling', () => {
+  it('returns to the first row when a startup refresh replaces the open catalog', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state())
+    const { container } = render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /DeepSeek V4 Flash/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+
+    const list = container.querySelector('.scrollable') as HTMLDivElement
+    list.scrollTop = 96
+
+    act(() => {
+      directory.set(state({
+        groups: [{
+          id: 'deepseek-official',
+          name: 'DeepSeek',
+          models: [
+            { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', reasoning },
+            { id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash', reasoning },
+          ],
+        }],
+      }))
+    })
+
+    expect(list.scrollTop).toBe(0)
+    expect(screen.getByRole('menuitemradio', { name: 'DeepSeek V4 Pro' })).toBeTruthy()
+  })
+})
+
 describe('ModelSelect provider accordion', () => {
   const groups = [
     {
@@ -435,5 +519,92 @@ describe('ModelSelect provider accordion', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
     expect(screen.getByRole('menuitemradio', { name: 'Alpha One' })).toBeTruthy()
     expect(screen.queryByRole('menuitemradio', { name: 'Beta One' })).toBeNull()
+  })
+})
+
+describe('ModelSelect searchable provider catalog', () => {
+  const groups = [
+    { id: 'alpha', name: 'Alpha', models: [{ id: 'a1', name: 'Alpha One' }] },
+    { id: 'beta', name: 'Beta', models: [
+      { id: 'b1', name: 'Beta One' },
+      { id: 'b2', name: 'Beta Two' },
+    ] },
+  ]
+
+  it('searches models in collapsed providers and selects the exact routed model', async () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      groups,
+      current: { provider: 'alpha', model: 'a1' },
+    }))
+    const select = vi.fn(async () => true)
+    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: /Alpha One/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    expect(screen.queryByRole('menuitemradio', { name: 'Beta Two' })).toBeNull()
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索模型' }), {
+      target: { value: 'b2' },
+    })
+    expect(screen.getByRole('menuitem', { name: 'Beta' })).toBeTruthy()
+    expect(screen.getByRole('menuitemradio', { name: 'Beta Two' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Alpha' })).toBeNull()
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Beta Two' }))
+    await waitFor(() => {
+      expect(select).toHaveBeenCalledWith({ provider: 'beta', model: 'b2' })
+    })
+  })
+
+  it('supports provider names, clearing a query, and a clear empty state', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      groups,
+      current: { provider: 'beta', model: 'b1' },
+    }))
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+    fireEvent.click(screen.getByRole('button', { name: /Beta One/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    const search = screen.getByRole('searchbox', { name: '搜索模型' })
+    fireEvent.change(search, { target: { value: 'ALPHA' } })
+    expect(screen.getByRole('menuitemradio', { name: 'Alpha One' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Beta' })).toBeNull()
+    fireEvent.change(search, { target: { value: 'no-such-model' } })
+    expect(screen.getByText('没有匹配的模型。')).toBeTruthy()
+    fireEvent.change(search, { target: { value: '' } })
+    expect(screen.getByRole('menuitemradio', { name: 'Beta One' })).toBeTruthy()
+  })
+})
+
+describe('Fénix Eclipse is the visible name of Phoenix automatic routing', () => {
+  it('keeps the same Fénix Eclipse display name across Spanish, English and Chinese', () => {
+    expect(es['trigger.auto']).toBe('Fénix Eclipse')
+    expect(en['trigger.auto']).toBe('Fénix Eclipse')
+    expect(zh['trigger.auto']).toBe('Fénix Eclipse')
+    expect(es['trigger.autoDetail']).toContain('Sol planifica')
+    expect(es['trigger.autoDetail']).toContain('Luna ejecuta')
+  })
+
+  it('uses Fénix Eclipse in the trigger and menu without changing the Host selection', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'phoenix', model: 'phoenix-auto' },
+      groups: [{
+        id: 'phoenix',
+        name: 'Phoenix',
+        models: [{ id: 'phoenix-auto', name: 'Phoenix Auto' }],
+      }],
+    }))
+    const select = vi.fn()
+    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} t={t} />)
+    expect(screen.getByRole('button', { name: /Fénix Eclipse/ })).not.toBeNull()
+    expect(screen.queryByText('Phoenix Auto')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Fénix Eclipse/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /^模型/ }))
+    expect(screen.getByRole('menuitemradio', { name: 'Fénix Eclipse' })).not.toBeNull()
+    expect(select).not.toHaveBeenCalled()
   })
 })

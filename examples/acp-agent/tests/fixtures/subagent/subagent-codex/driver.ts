@@ -24,7 +24,8 @@ const ctx = await boot(
 )
 
 try {
-  const providerNames = ['codex', 'codex-primary', 'codex-secondary'] as const
+  // Include the Bundle's registered approve-for-me Auto-review sibling in the real Loader check.
+  const providerNames = ['codex', 'codex-primary', 'codex-secondary', 'codex-auto-review'] as const
   const toolNames = [
     'subagent_codex',
     'subagent_codex_primary',

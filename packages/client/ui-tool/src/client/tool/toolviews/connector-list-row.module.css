@@ -66,6 +66,42 @@
   overflow-wrap: anywhere;
 }
 
+.prompt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.prompt label {
+  display: flex;
+  min-width: min(320px, 100%);
+  flex: 1 1 220px;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.prompt input,
+.prompt select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  outline: none;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+.prompt input:focus,
+.prompt select:focus {
+  border-color: var(--dsw-alias-border-l3);
+}
+
+
 .button {
   min-width: 104px;
   min-height: 38px;

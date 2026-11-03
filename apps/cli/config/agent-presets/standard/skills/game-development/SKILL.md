@@ -1,424 +1,122 @@
 ---
 name: game-development
 description: >-
-  Diseña, construye, prueba y pule videojuegos modernos o retro. Úsala para Unreal, Unity, Godot, Blender,
-  pixel art, NES, SNES, Sega Mega Drive/Genesis, Master System, Game Gear, Game Boy, ROM homebrew,
-  emulación, gameplay, niveles, assets, shaders, audio, builds y depuración visual.
+  Use when creating, improving or debugging playable games: browser arcade, Snake, puzzles, 2D/3D,
+  Game Boy, NES, SNES, Sega, PlayStation/PS1/PSX, GTA-style open worlds, Godot, Unity, Unreal,
+  homebrew ROMs, controls, levels, game assets, audio, builds or playtesting.
 ---
 
-# Desarrollo de videojuegos
-
-Phoenix debe tratar un videojuego como un producto ejecutable, no como una demo de código. El objetivo incluye
-gameplay, arte coherente, audio, controles, rendimiento, build reproducible y una ronda real de juego/pruebas.
-
-## Mandato premium de producción
-
-Cuando el usuario pida un videojuego terminado o de alta calidad, Phoenix/Hardness debe asumir que también es responsable
-de la producción audiovisual necesaria para que el resultado alcance ese nivel. No puede limitarse al código y esperar
-que el usuario aporte después los personajes, escenarios, UI, texturas, animaciones, efectos o sonido salvo que el usuario
-haya reservado explícitamente esa parte.
-
-El objetivo por defecto es competir con referencias actuales fuertes de la misma categoría y, cuando el alcance y las
-herramientas lo permitan, superarlas en acabado, coherencia, legibilidad, respuesta y personalidad. No afirmes que se
-superó a una referencia solo por intención: exige evidencia visual, técnica y jugable.
-
-Antes de producir, identifica 2-5 referencias relevantes por género/plataforma/estilo cuando exista acceso web y extrae
-atributos concretos que importan al proyecto: densidad visual, iluminación, siluetas, animación, feedback, cámara, UI,
-mezcla sonora, ritmo, rendimiento y claridad. Usa esas referencias como barra de calidad, nunca para copiar personajes,
-niveles, marcas, música o assets protegidos.
-
-
-### Benchmark obligatorio contra el juego actual
-
-Cuando el usuario pida mejorar un juego existente, **el propio juego actual es el primer benchmark**. Antes de cambiar
-arte, UI o presentación, ejecuta la versión vigente y captura al menos una escena representativa. Conserva esa evidencia
-como baseline y repite una captura comparable después de los cambios: misma zona o una equivalente, viewport/cámara
-comparables y actores visibles suficientes para juzgar protagonista, enemigo, NPC/actor interactivo y entorno.
-
-La iteración solo puede cerrar como mejora si el candidato muestra una ganancia material observable sin introducir
-regresiones relevantes. Compara, según aplique: legibilidad y silueta de actores, riqueza/densidad del escenario,
-variedad de tiles/props, integración del HUD, claridad de combate/interacción, cobertura y fluidez de animación,
-feedback/VFX, sonido, frame-time y estabilidad. Si el usuario dijo "mejor que el juego actual", "más bonito" o equivalente,
-un resultado meramente distinto o funcional **no satisface la petición**.
-
-Las referencias externas sirven para elevar la barra, no para copiar IP. Captura atributos de dirección artística,
-composición, densidad, lectura, animación, cámara y UI; crea assets, personajes, niveles y música originales.
-
-### Pipeline de herramientas primero, no primitivas de reemplazo
-
-Para arte 2D/raster, pasa primero por el router `asset-first`: un modelo textual/rápido o una sesión sin
-backend artístico fuerte debe buscar recursos licenciados antes de intentar dibujarlos. Cuando el router determine que
-la generación original puede igualar o superar los candidatos encontrados, usa `image_generation` con `backend=auto`
-y `read_image` para inspeccionar el resultado antes de integrarlo. Para pixel art/tilesets, usa Aseprite/Tiled si están
-instalados o disponibles de forma segura; para 3D usa Blender y el pipeline nativo del motor; para audio usa el
-conector/generador autorizado disponible o síntesis procedural adecuada. Usa `connector_list` y
-`connector_discover` para encontrar la herramienta específica cuando no esté visible.
-
-Un motor puede renderizar sobre canvas/WebGL, pero **canvas no es licencia para dibujar el arte final con rectángulos,
-círculos y líneas**. Del mismo modo, HTML/CSS/SVG pueden alojar el juego o su UI, pero no sustituyen sprites, tiles,
-fondos, retratos, personajes, enemigos, NPC ni VFX finales cuando la dirección pide arte representacional.
-
-Si `image_generation` no está disponible, no caigas silenciosamente a cajas CSS. Para pixel art genera raster real
-mediante matrices/capas de píxeles, normaliza paleta y transparencia, crea spritesheets/atlases y revísalos con visión.
-Si una dependencia artística bloquea de verdad el nivel solicitado, mantén la misión abierta o declara el bloqueo exacto.
-
-Para juegos retro/top-down, evita que las heurísticas de diseño web contaminen la pantalla jugable: tarjetas SaaS,
-píldoras gigantes, glassmorphism, cuadrículas de dashboard, iconos de app y paneles sobredimensionados no deben dominar
-el playfield salvo petición explícita. El HUD debe sentirse parte del juego y dejar que el mundo, los sprites y la acción
-sean la jerarquía visual principal.
-
-### Router `asset-first`: reutiliza antes de dibujar
-
-Para arte final de videojuegos, Phoenix debe optimizar por calidad y tiempo, no por demostrar que el modelo
-puede dibujar. Antes de fabricar un personaje, enemigo, NPC, tileset, prop, textura o modelo 3D desde cero,
-decide si existe un recurso reutilizable de mayor calidad y con licencia compatible.
-
-La decisión es por **capacidad real**, no solo por el nombre del modelo:
-
-1. Si el usuario pide explícitamente personajes o assets originales creados por Phoenix, usa generación
-   original como primera vía y emplea recursos externos solo como referencia visual legal, nunca para copiar.
-2. Si el modelo activo es principalmente textual/rápido o no existe un backend artístico de alta calidad
-   verificado, el modo `asset-first` es obligatorio: busca primero assets terminados y no gastes tiempo
-   intentando sustituirlos con SVG, canvas, primitivas, pixel art pobre o meshes básicos.
-3. Si existe un backend fuerte de imagen/3D, busca también candidatos reutilizables cuando ello pueda ahorrar
-   tiempo. Genera un candidato propio cuando aporte identidad o cubra un hueco y compara ambos resultados.
-4. Un asset generado **no gana por defecto por haber sido generado**. Debe superar visualmente al mejor
-   candidato reutilizable y cumplir las mismas puertas de estilo, animación, integración y rendimiento.
-5. Si ya existe un pack coherente que cubre protagonista/NPC/enemigos o mundo/UI con calidad suficiente,
-   prioriza ese pack completo sobre mezclar muchas fuentes o regenerar trabajo equivalente.
-
-#### Fase obligatoria de scouting de assets
-
-Cuando la petición implique crear o mejorar la presentación visual de un juego —personajes, enemigos, NPC, mundo,
-tiles, UI, VFX, audio o calidad "premium"— **no empieces dibujando primitivas ni montando el HUD**. Antes del arte final:
-
-1. Define un mini `asset brief`: motor/target, cámara, resolución lógica, tamaño de tile/sprite, perspectiva, paleta,
-   densidad de detalle, animaciones obligatorias y referencias de calidad.
-2. Ejecuta descubrimiento real con `web_search`, navegador o conectores. Busca al menos 3 candidatos cuando existan
-   resultados razonables y compara packs completos antes que piezas aisladas. Para 2D/retro consulta primero Kenney
-   y al menos otra fuente adecuada como OpenGameArt, itch.io Game Assets o una biblioteca equivalente; para 3D usa
-   Quaternius/Poly Haven/ambientCG cuando encajen.
-3. Inspecciona la página exacta del pack elegido y su licencia. No basta con "conocer" que una web suele tener assets
-   libres. Registra el candidato, URL, licencia, autor/publicador, compatibilidad de uso y motivo de aceptación/rechazo.
-4. Si ningún pack supera la barra o el usuario exige identidad original, usa `image_generation`, Aseprite/Tiled,
-   Blender o la herramienta artística correspondiente. Después inspecciona el asset real con visión antes de importarlo.
-5. Antes de cerrar una misión visual, deja evidencia durable en `asset-manifest.json` o `asset-sourcing.json`.
-   Para assets generados, registra origen `generated`, herramienta/provider y prompts/transformaciones relevantes;
-   para assets externos, registra además licencia y procedencia.
-
-Para un juego top-down de aventura/RPG, el mundo debe dominar la pantalla. Un gran panel lateral tipo dashboard,
-tarjetas SaaS o un HUD que robe una porción sustancial y permanente del viewport es una regresión visual salvo que
-la referencia del género lo justifique. El mapa debe mostrar composición, caminos/transiciones, estructuras o
-landmarks, vegetación/props variados, sombras/iluminación y actores con sprites reales. Un campo de tiles repetidos
-con personajes de pocos bloques de color es prototipo y debe fallar la revisión.
-
-La secuencia preferida para 2D premium es:
-`asset brief -> búsqueda/comparación de packs -> licencia/procedencia -> importación o generación -> atlas/tileset -> motor -> ejecución -> captura -> read_image -> iteración`.
-
-#### Fuentes de descubrimiento
-
-Cuando haya acceso web, navegador o conectores, consulta varias bibliotecas apropiadas al proyecto. Entre las
-fuentes preferidas de descubrimiento están Kenney, itch.io Game Assets, OpenGameArt y Quaternius. Para 3D,
-materiales y entornos también pueden ser útiles Poly Haven y ambientCG. Servicios con cuenta o términos
-específicos, como Mixamo, solo se usan mediante flujos autorizados y sin automatizar interfaces privadas.
-
-La presencia de una fuente en esta lista **no concede licencia automática**. Verifica siempre la página del
-asset o pack exacto antes de descargarlo o integrarlo. No uses scraping para saltar autenticación, pago,
-CAPTCHA, límites del servicio ni términos de uso.
-
-#### License Gate y procedencia obligatoria
-
-Antes de importar un recurso externo, registra como mínimo:
-
-- fuente y URL/identificador original;
-- autor o publicador;
-- licencia exacta y evidencia disponible;
-- uso comercial permitido o no;
-- modificación permitida o no;
-- atribución requerida;
-- fecha de adquisición y hash del archivo descargado cuando sea viable.
-
-Si la licencia es desconocida, ambigua o incompatible con el proyecto, el candidato queda rechazado. Los
-assets aprobados se copian al proyecto o a una caché local controlada; el build final no debe depender de
-hotlinks remotos. Mantén `asset-manifest.json`, `licenses.json` y, cuando aplique, `credits.md`.
-
-#### Style Match y parada temprana
-
-Evalúa los candidatos antes de integrarlos. En 2D compara resolución/tamaño de píxel, perspectiva, paleta,
-outline, sombreado, proporciones, densidad de detalle, cadencia de frames y cobertura de animaciones. En 3D
-compara escala, topología, rig, materiales, texel density, iluminación objetivo y lenguaje de formas.
-
-Usa una puntuación interna de 100 para decidir rápido:
-
-- 30: coherencia con la dirección artística;
-- 20: calidad visual y lectura del actor/objeto;
-- 20: cobertura funcional y de animaciones;
-- 15: compatibilidad técnica/importación;
-- 15: integración con el resto del pack y del mundo.
-
-La licencia es una puerta previa, no puntos adicionales. Si un pack reutilizable alcanza **85/100** y cubre
-los estados necesarios, deja de buscar por inercia y úsalo. Solo sigue explorando si existe una carencia
-material. Para mezclar packs, exige compatibilidad artística equivalente a 85/100 o superior.
-
-Cuando haya un candidato generado y otro reutilizable, revisa ambos a escala real dentro del juego. Elige el
-que produzca el mejor resultado final. Si empatan, prefiere el reutilizable cuando ahorre trabajo y mantenga
-la identidad del proyecto; si el usuario pidió originalidad explícita, prefiere el generado que pase la puerta.
-
-#### Ruta rápida por tipo de arte
-
-- 2D/NES/SNES/Genesis moderno: busca primero packs coherentes de sprites, tiles y animaciones; después genera
-  únicamente lo que falte o lo que deba ser único para el juego.
-- Retro nativo: además de la licencia, valida límites reales de paleta, tile, sprite, VRAM y formato del target
-  antes de aceptar un asset.
-- 3D: busca primero modelos/rigs/animaciones reutilizables y compatibles; adapta o retargetea con Blender y el
-  motor cuando la licencia lo permita. No sustituyas un actor final por un primitive mesh.
-- UI/VFX/audio: aplica la misma política: reutiliza recursos legales y coherentes cuando sean mejores, y
-  genera desde cero cuando aporte una mejora material o el usuario lo haya pedido.
-
-El resultado buscado es simple: un modelo ligero no pierde minutos creando arte mediocre; un modelo o backend
-artístico fuerte sí puede crear arte original cuando pueda hacerlo mejor; y Phoenix siempre conserva la opción
-de usar recursos existentes si producen un juego más bonito, coherente y terminado.
-
-Hardness debe crear o coordinar activamente, según el proyecto:
-
-- dirección artística, paleta, shape language y style bible;
-- concept art y diseño final de personajes, enemigos, NPC, props y criaturas;
-- escenarios, fondos, tilesets, set dressing, iluminación y storytelling ambiental;
-- modelos 3D, materiales, texturas, UV, rig, facial/body animation y LOD cuando corresponda;
-- sprites, tiles, backgrounds, parallax, portrait art y animación pixel-perfect en 2D/retro;
-- VFX, partículas, shaders, hit effects, camera shake y feedback audiovisual;
-- HUD, menús, iconografía, tipografía, accesibilidad visual y UX;
-- música, ambience, Foley/SFX, UI sounds, loops, transiciones y mezcla;
-- trailers/capturas/material de presentación solo después de que el juego real tenga calidad suficiente.
-
-Usa `image_generation` para producir recursos raster originales cuando sea apropiado y Blender para 3D cuando haga falta.
-Si existe un conector de audio/generación musical autorizado, úsalo para el audio original; si no existe, crea sonido
-procedural cuando sea viable o usa únicamente recursos con licencia compatible y documenta su procedencia. Nunca presentes
-un silencio, beep temporal, cube/mannequin por defecto, checker texture o placeholder como producción final.
-
-### Puerta obligatoria de calidad para personajes, enemigos y NPC
-
-Todo actor que el jugador vea o con el que pueda interactuar —protagonista, enemigo, jefe, aldeano/NPC,
-criatura, aliado o comerciante— debe existir como un asset visual de producción reconocible y animado.
-La geometría de colisión puede ser simple internamente, pero **nunca debe usarse como apariencia final**.
-
-No aceptes como actor final un `fillRect`, rectángulo, caja, círculo, cápsula, emoji, letra, texto, silueta de
-un solo bloque, maniquí del motor o primitive mesh, salvo que el usuario haya pedido explícitamente una
-dirección artística abstracta/minimalista y esa decisión esté respaldada por referencias y evidencia visual.
-Si un personaje puede describirse honestamente como "una caja con ojos", la revisión debe fallar y regenerarlo.
-
-Para 2D/pixel art, exige como mínimo:
-
-- silueta distinta por rol y lectura inmediata a la escala real de juego;
-- cabeza/cuerpo/extremidades o shape language equivalente, con detalles de identidad y varias regiones de
-  color/valor; no un bloque plano;
-- densidad de píxel, paleta, outline, sombreado y escala coherentes con el tileset y con el resto del reparto;
-- fondo transparente y atlas/sprite sheet limpio, sin halos ni antialiasing accidental;
-- `idle` y `walk` en todas las direcciones relevantes; en top-down, usa cuatro direcciones por defecto;
-- para actores de combate: `attack/telegraph`, `hurt` y `death` además de locomoción;
-- para NPC interactivo: `idle` y al menos una respuesta visible de interacción cuando corresponda;
-- hitbox/collision shape separada del sprite para que la lógica no degrade la apariencia.
-
-Para 3D, exige modelado/materiales/rig/animación que comuniquen el rol del actor; un cubo, cápsula,
-maniquí, rig por defecto sin personalización suficiente o mesh temporal no puede cerrar producción.
-
-Pipeline preferido para sprites/actores raster:
-`image_generation` o herramienta artística autorizada -> limpieza/transparencia -> normalización de
-paleta/resolución/pixel grid -> corte de frames/atlas -> importación al motor -> ejecución -> captura ->
-revisión visual. Si no hay generador disponible, crea pixel art procedural por matrices/capas de píxeles o
-assets vector/raster propios con detalle suficiente; **no reemplaces la generación por primitivas geométricas
-de una sola capa**.
-
-La prueba visual debe incluir al menos una captura reciente a escala normal de gameplay y otra inspección
-ampliada de los actores principales. El revisor debe comparar jugador, al menos un enemigo y un NPC/actor
-interactivo cuando existan. Si cualquiera resulta indistinguible, inconsistente, desproporcionado, sin
-animación suficiente o visualmente provisional, el resultado es `needs_changes`, no PASS.
-
-### Puerta obligatoria de riqueza del mundo y reparto
-
-Un juego de aventura/RPG/top-down no puede cerrar con un campo vacío y unas pocas rocas o árboles repetidos.
-El escenario final debe sentirse construido y habitable: terreno con transiciones coherentes, caminos, bordes,
-vegetación variada, props, landmarks, estructuras/edificios cuando correspondan, sombras/iluminación, capas,
-set dressing y storytelling ambiental. Repetir el mismo árbol/roca sobre una cuadrícula o dejar grandes zonas
-sin composición deliberada es prototipo, no producción.
-
-Mantén una ficha visual persistente del reparto (character bible) para protagonista, enemigos, jefes y NPC:
-silueta, proporciones, paleta/materiales, rostro o rasgos identificables, vestuario/equipo, escala y set de
-animaciones. Los secundarios deben pertenecer al mismo lenguaje artístico pero seguir siendo reconocibles por
-rol; simples recolores, cajas, cápsulas o variaciones mínimas no satisfacen una petición de alta calidad.
-
-### Intro, title screen y presentación inicial
-
-Cuando el usuario pida una intro, opening, presentación, title sequence, menú o cinemática, esa parte es un
-entregable obligatorio. No empieces directamente en gameplay ni sustituyas la apertura por texto provisional.
-
-Flujo mínimo cuando aplique:
-`Boot -> Title -> Intro/Cutscene -> Main Menu -> Gameplay`.
+# Crear y entregar videojuegos
 
-La apertura debe compartir la misma dirección artística y sonora del juego, tener transiciones reales, timing,
-cámara/parallax/animación según el estilo, música o ambience, y permitir saltarse la secuencia cuando sea
-apropiado. En 2D usa escenas/estados separados para boot, title, intro y gameplay; en 3D usa el pipeline
-cinematográfico nativo del motor. La revisión debe ejecutar el flujo completo y comprobar que termina en una
-partida controlable sin errores.
+## Publicación directa del archivo creado (obligatoria cuando existe)
 
-### Rúbrica interna de 100 puntos
+El usuario solamente necesita decir «haz un juego de…». Kira crea en su espacio de trabajo el HTML autónomo, con género, mecánicas y manifiesto fieles a esa petición, y usa **`phoenix_game` con `file_path`** apuntando al archivo generado. El publicador lee el archivo dentro del workspace, valida el juego y lo muestra en el chat; Kira no debe copiar miles de líneas HTML en una llamada ni pedir al usuario el nombre del archivo o la herramienta. Para juegos breves escritos ya en memoria sigue disponible `html` inline, pero **son vías excluyentes**. El archivo debe tener extensión .html y estar dentro del workspace real; prohibido publicar rutas ajenas o URLs.
 
-Usa esta rúbrica como guía de iteración, no como sustituto de evidencia:
+Ciclo de ejecución: crear archivo → ejecutar comprobación mínima de sintaxis/movimiento según género → publicar desde `file_path` → verificar que apareció el artefacto interactivo → completar pruebas restantes y corregir. Los agentes de apoyo pueden generar recursos en paralelo, pero el coordinador no espera investigaciones de contratos que ya existen. Si falta un recurso opcional, publica una versión **jugable y etiquetada honestamente como prototipo**, no una ilustración presentada como juego final. Ante error de publicación, conserva el archivo, corrige la causa una vez y reintenta de forma acotada; no reinicies la misión desde la planificación. Una misión que pide un juego completo no se considera terminada solo porque publicó una demo.
 
-- 15: dirección artística y coherencia visual;
-- 15: personajes, siluetas, rig y animación;
-- 15: ambientes, iluminación, composición y storytelling;
-- 10: VFX, shaders, cámara y feedback;
-- 10: UI/UX, legibilidad y accesibilidad;
-- 10: música, ambience, SFX y mezcla;
-- 15: gameplay feel, controles, cámara, colisiones, combate/interacción y pacing;
-- 10: rendimiento, estabilidad, tiempos de carga y calidad del build.
+## Entrada por intención natural, sin instrucciones técnicas del usuario
 
-Un promedio alto no compensa una categoría esencial ausente. Para un entregable que se presenta como premium, apunta a
-90/100 o más y no aceptes ninguna categoría material por debajo de un nivel profesional. Si una categoría no aplica,
-redistribuye su peso entre las categorías relevantes y documenta el criterio.
+El usuario solo pide el resultado: «haz un juego de carreras», «crea un juego tipo Double Dragon», «haz un RPG», «quiero un juego de misterio». **Kira interpreta el género, el estilo, el alcance y el destino razonable de la petición, sin pedir nombres de habilidades, rutas de archivos, nombres de herramientas, motores ni manifiestos.** El cargador de habilidades activa Game Studio al reconocer una solicitud explícita de crear un juego; la composición del juego sigue siendo libre y personalizada, no un catálogo de nombres de videojuegos. Nunca conviertas la plantilla de lucha callejera en la respuesta predeterminada de otros géneros.
 
-### Puerta de finalización
-
-Hardness no debe permitir PASS final mientras ocurra cualquiera de estas condiciones:
+Distingue solicitudes de diseño, explicación o crítica de las solicitudes de **crear**. Para crear, determina internamente el resultado mínimo jugable fiel al género: carreras requieren conducción y pista; puzles requieren reglas y solución; RPG requiere exploración, decisiones y progresión; beat-em-up requiere combate. Si el usuario pidió un nivel, demo o prototipo en el chat, crea y publica directamente un HTML5 jugable honesto, sin navegador de control ni herramienta nativa innecesaria. Si pidió un videojuego completo y profesional, produce el proyecto y recursos adecuados, con motor de autoría y pruebas reales; no lo rebajes silenciosamente a una demo.
 
-- quedan placeholders, assets de template o elementos visuales incoherentes;
-- personajes principales parecen genéricos o tienen animaciones claramente provisionales;
-- escenarios relevantes están vacíos, repetitivos o sin iluminación/set dressing suficiente;
-- falta música/ambience/SFX material para la experiencia o la mezcla resulta deficiente;
-- la UI parece prototipo o rompe la identidad artística;
-- el gameplay solo fue compilado pero no ejecutado y probado;
-- no existe evidencia audiovisual reciente del juego real en ejecución;
-- el rendimiento objetivo no se verificó cuando es material;
-- el proyecto depende de una afirmación de "calidad AAA/premium" sin comparación observable.
+El usuario no debe dirigir los pasos técnicos de Kira. Si hay un bloqueo concreto, busca una ruta viable sin perder el género ni el objetivo y reporta la capacidad específica que falta. Planificación, delegación y auditoría apoyan la entrega, **nunca la sustituyen**.
 
-## 1. Detecta el tipo de proyecto antes de elegir herramientas
+## Ruta rápida obligatoria: demo jugable de un nivel
 
-Inspecciona primero el workspace.
+Si la petición es «crea un juego tipo Double Dragon, dame un demo de un level», «demo de un nivel», «prototipo jugable», «vertical slice» o equivalente, el primer resultado debe ser **una escena jugable HTML5 autocontenida en `phoenix_game`**, no un plan ni un navegador. Ejecuta el router con `--delivery chat --quality prototype`. Esta ruta NO instala Godot/Blender/Tiled/FFmpeg, NO necesita Chrome/CDP ni usa el mininavegador para fabricar el juego; usa archivos, el runtime local, el manifiesto de beat-em-up y el publicador real. Godot y el pipeline premium se reservan para solicitudes de producción compleja o ampliación posterior.
 
-- Unreal: existe un `.uproject`, `Config/DefaultEngine.ini` o el usuario pide UE/AAA/fotorrealismo.
-- Unity: existe `ProjectSettings/ProjectVersion.txt`, `Assets/` o el usuario pide Unity.
-- Godot: existe `project.godot` o el juego es 2D/indie/retro moderno y no se exige otro motor.
-- Retro nativo: el usuario pide ROM o compatibilidad real con NES, SNES, Mega Drive/Genesis,
-  Master System/Game Gear o Game Boy.
-- Retro moderno: el usuario pide "tipo NES/SNES/Sega", pixel art o estética 8/16-bit, pero no exige
-  ejecutar en hardware original. En ese caso prefiere Godot para 2D salvo que el proyecto ya use otro motor.
-- Blender: úsalo cuando hagan falta modelos 3D, rigging, UV, materiales, animación, LOD o conversión de assets.
+Secuencia con prioridad: (1) lee el contrato local de `phoenix_game` y `examples/game-studio/street-brawler.manifest.json` una sola vez; (2) construye inmediatamente HTML5 con movimiento de profundidad, puñetazo, patada, agarre/arrojar, tres enemigos y un jefe, cámara y reinicio; (3) añade el manifiesto `art.mode="prototype"` cuando el arte definitivo aún no exista, valida sintaxis/controles y publica el HTML real; (4) ejecuta comprobaciones y ofrece el código fuente. **No espera a un subagente para conocer un esquema ya incluido en el repositorio.** Un subagente puede verificar en paralelo sin bloquear la construcción; si no hay entrega concreta, Kira continúa sin él. Si `phoenix_game` está ausente, guarda un `.html` ejecutable y explica el bloqueo de publicación, sin fingir que se publicó.
 
-No cambies de motor solo porque otro parezca mejor. Un proyecto existente conserva su motor salvo petición explícita.
+No muestres «Listo» ni «Detenido» como éxito sin salida. En interrupciones, conserva el objetivo y los archivos útiles; al reanudar ejecuta el siguiente paso concreto, sin reiniciar investigación ni abrir Phoenix dentro de su propio navegador. Los errores de captura del MiniBrowser jamás bloquean una tarea local que no requiere navegación web.
 
-## 2. Selección automática de conectores
+El resultado es un juego ejecutable adecuado al género, plataforma y alcance pedido. Si solicitan jugar en el chat de Phoenix, la entrega mínima es invocar la herramienta `phoenix_game` con HTML5 ejecutable autónomo: publica el MIME `application/vnd.phoenix.game+html` directamente en el visor del chat, no una imagen PNG, spritesheet, manifiesto o explicación. Incluye un manifiesto JSON `phoenix-game-manifest` y script ejecutable; confirma el resultado de la herramienta antes de presentar la misión como terminada. Una hoja de sprites no marca terminado el juego, incluso si image_generation respondió exitosamente. Comprueba las herramientas realmente expuestas (habilidad, archivos, shell, equipo y publicación de artefactos) antes de informar que no están disponibles. El proyecto incluye `examples/game-studio/jungle-echo.html` como punto de partida offline adaptable; revisa también `.agents/skills/phoenix-game-studio/SKILL.md`. Pide La Forja mediante el equipo real cuando el usuario la solicita; si falla la delegación, continúa por una ruta autónoma viable y menciona el fallo concreto. Nunca afirmes que se probó una partida sin pruebas ejecutadas. Responde en el idioma de la solicitud, también después de una revisión externa. Las referencias del usuario orientan calidad o estilo; un ejemplo no impone su diseño a todos los juegos.
 
-Antes de improvisar una integración con un editor:
+Para una demo de un solo nivel ya existe `examples/game-studio/street-brawler-demo.html` como base HTML5 autocontenida y original, con controles, tres enemigos, jefe y reinicio. Cuando encaje con la petición, úsala como prototipo inicial y publícala con `phoenix_game` antes de pedir trabajo adicional; no finjas que es un juego nuevo de arte final.
 
-1. Si ya ves herramientas `mcp__unreal__*`, `mcp__unity__*`, `mcp__godot__*`,
-   `mcp__blender__*` o `mcp__gameplay__*`, usa la que corresponde al proyecto.
-2. Si el conector no está visible, llama `connector_list` con un target específico.
-3. Si no hay coincidencia, usa `connector_discover` para el producto concreto.
-4. Instala desde el registro oficial solo cuando el resultado permita instalación y el usuario apruebe.
-5. No ejecutes automáticamente paquetes stdio o repositorios GitHub de terceros descubiertos al azar.
-6. Si no hay MCP fiable, continúa mediante archivos, shell/PowerShell, CLI oficial del motor y computer/visión
-   cuando estén disponibles. La ausencia de MCP no bloquea la creación del juego.
+## Godot Game Studio: instalación y uso real obligatorios cuando corresponda
 
-La prioridad de control es: conector específico del motor > CLI/editor oficial > automatización de escritorio.
-No uses computer para editar cientos de propiedades si un conector o API del motor puede hacerlo de forma determinista.
+Kira debe abrir primero `.agents/skills/phoenix-game-studio/SKILL.md` y usar el router real `game-tools.mjs route`. Para juegos de acción, lucha o 3D de calidad de producción, el motor de autoría es **Godot**, incluso si el resultado debe jugarse dentro del chat en HTML5 independiente. No basta con mencionar el motor ni publicar una imagen. Ejecuta realmente el flujo oficial para un proyecto nuevo:
 
-## 3. Motores modernos
+```sh
+node examples/game-studio/godot/bootstrap.mjs doctor
+node examples/game-studio/godot/bootstrap.mjs setup --project "RUTA/NUEVO-JUEGO" --allow-install
+```
 
-### Unreal Engine
+`setup` instala Godot por un gestor autorizado solo si falta, verifica `--version`, crea escenas/scripts reales y ejecuta importación, prueba `tests/smoke.gd` y 120 fotogramas headless. Requiere permiso para instalar herramientas concedido por la misión; no se ejecuta al inicio de Phoenix. Con un proyecto existente el generador **no sobrescribe archivos**. Si la misión no autoriza software nuevo, ejecuta `doctor` y solicita autorización antes de usar `--allow-install`. Si la verificación devuelve bloqueo, no digas «Godot instalado y funcionando».
 
-Úsalo por defecto para 3D de alta fidelidad, iluminación avanzada, cinemáticas, mundos grandes,
-Blueprints complejos o cuando el usuario pida calidad visual cercana a AAA.
+La demo nativa es un andamiaje técnico con animaciones procedurales, héroe y jefe de dos fases; no contiene arte ni audio de producción. Transforma los presets ilustrados de todos los actores, ataques, escenarios y efectos en `AnimatedSprite2D/AnimationPlayer`, escenas, colisiones y sonidos realmente utilizados; ejecuta el editor y prueba visual/sonoramente. Si Godot AI MCP está conectado, utiliza las herramientas verdaderas de Godot AI; si no, usa el CLI de Godot, sin fingir que hay MCP. Para juegos dentro del chat, entrega **además** HTML5 autocontenido, porque la exportación de Godot usa varios archivos.
 
-Con el conector Unreal, prioriza operaciones estructuradas para niveles, actores, Blueprints, materiales,
-Niagara, Behavior Trees, UMG, Sequencer y compilación. Usa Python/C++ solo cuando la API estructurada
-no cubra la operación. Después de cambios importantes: guarda, compila, inicia PIE, recoge errores y verifica
-visualmente el viewport o el juego.
+## Kira: el manifiesto y el preflight van PRIMERO, nunca después del rechazo
 
-### Unity
+Antes de generar o publicar un videojuego en el chat, **escribe el manifiesto JSON real** del juego según el género: `schemaVersion:1`, `title`, `genre`, `gameType`, `controls`, `level`, `audio` y las entidades realmente implementadas (protagonista, enemigos, jefes, animaciones, escenarios, armas, poderes, objetos y efectos cuando procedan). Usa como referencias de esquema `examples/game-studio/jungle-echo.manifest.json` y `lumen-circuit.manifest.json`, sin copiar personajes ni afirmar que algo existe si no está creado.
 
-Úsalo cuando el proyecto ya sea Unity o cuando importen especialmente móvil, XR, multiplataforma,
-ecosistema C# o paquetes específicos de Unity.
+En la **primera** llamada a la herramienta real `phoenix_game`, prefiere `file_path` del juego ya creado en el workspace y, cuando el manifiesto no está incrustado, pasa también `manifest_json` como cadena JSON independiente. `html` completo en línea sigue disponible solo como alternativa breve, no junto con `file_path`. El publicador incrusta automáticamente el bloque HTML requerido `<script id="phoenix-game-manifest" type="application/json">`, o corrige un bloque JSON válido que solo carecía del `id`. También valida controles, nivel y audio y no inventa activos. Si `html` ya lleva un manifiesto válido y coincide con `manifest_json`, lo conserva. Evita el ciclo «primer intento rechazado → descubro el manifiesto → segundo intento». Una validación estructural no prueba que el juego sea jugable o visualmente profesional.
 
-Con el conector Unity, usa operaciones de escena/GameObject/componentes/assets antes de editar YAML interno.
-Ejecuta tests, Play Mode y build target cuando existan. No declares terminado un cambio que solo compila C#.
+## Producción completa del juego: no te detengas en el protagonista
 
-### Godot
+Cuando el usuario pide un juego ilustrado (especialmente de disparos/aventura), el atlas del héroe es **solo una tarea de una producción conjunta**. Antes de crear el primer dibujo:
 
-Es la opción preferida para 2D de alta calidad, pixel art, plataformas, metroidvania, RPG 2D,
-arcade y retro moderno cuando no existe una restricción de motor.
+1. Define el reparto en el manifiesto real: héroe, cada tipo de enemigo, jefe y fases, aliados/NPC cuando correspondan; niveles y capas; armas/proyectiles, poderes/pickups, objetos interactivos, VFX y audio. Establece para cada tipo su id, papel jugable, estilo visual y estados.
+2. Ejecuta `node examples/game-studio/plan-game-assets.mjs manifest.json plan.json` y trata **cada tarea pendiente** como trabajo real, no como evidencia de producción. Kira coordina arte/animación, mundo/comportamiento y audio/QA, con máximo tres colaboradores reales y sin duplicar encargos.
+3. Produce recursos originales **para todas las familias**, no un solo spritesheet aislado: enemigos con poses de movimiento/ataque/daño/muerte; jefe con silueta distinta y frames de cada fase; armas y fogonazos, balas, habilidades, cofres/cajas, objetos, explosiones; capas de cielo, fondo y primer plano; música y efectos asociados a eventos.
+4. Convierte los spritesheets a recursos reales del motor y embébelos en el HTML offline. El manifiesto de producción de un run-and-gun exige `art.enemies`, `art.bosses` y `phaseAnimations`, `art.backgrounds` para cada `level.layers[].id`, `art.weapons`, `art.projectiles`, `art.powers`, `art.props`, `art.effects`, además del `art.hero`. Cada entrada tiene `id`, `imageId`; los actores también `frameWidth`, `frameHeight` y `animations` válidas. **La imagen tiene que ser cargada y dibujada de verdad**. Los PNG de diseño no utilizados no cuentan.
+5. Integra estados, hitboxes, IA, aparición y derrota de enemigos, transición real de fases del jefe, pickups y poderes, impactos, efectos, audio y parallax. Prueba con capturas del juego en distintos estados y compara escala, detalle y coherencia con el arte aprobado. No declares calidad de producción con geometría sustituta. Reintenta solo los fallos observados y documenta bloqueos.
+6. Solo cuando la escena esté realmente integrada, ejecuta preflight y publica mediante `phoenix_game`. Su revisión estructural **no es prueba de juego completado**, que requiere controles, animaciones, audio y observación real en navegador.
 
-Usa escenas/nodos/resources de Godot de forma estructurada. Mantén pixel snapping, filtrado nearest y escalado
-entero cuando el estilo lo requiera. Ejecuta el proyecto y revisa errores de GDScript y comportamiento real.
+Para juegos abstractos de tablero, carreras, estrategia y otros géneros, adapta el reparto y los activos a sus mecánicas; no inventes un jefe o una pistola innecesaria. Los assets pueden variar por género, pero nunca desaparecen silenciosamente elementos que el usuario solicitó. Si aún faltan recursos, usa `art.mode="prototype"` y explica el alcance; no lo llames juego terminado.
 
-### Blender
+## Puerta obligatoria: el personaje diseñado debe ser el personaje jugable
 
-Para assets 3D, usa el conector oficial de Blender cuando esté disponible. Crea topología limpia, UV,
-materiales PBR, rig y animaciones con nombres estables. Exporta al formato que mejor conserve el pipeline
-del motor. No añadas detalle geométrico que destruya el presupuesto de rendimiento.
+Si el usuario enseña una ilustración o aprueba un diseño del protagonista, **esa misma identidad debe aparecer dentro del juego**. No uses un retrato bonito solo en la conversación mientras el juego dibuja cajas, líneas o un muñeco genérico. Antes de declarar acabado:
 
-## 4. Retro moderno de alta calidad
+1. Guarda la ilustración/asset de referencia real y crea un sprite atlas original compatible, con transparencia real y poses distintas de caminar/correr/saltar/caer/apuntar/disparar/daño/muerte. Un retrato aislado NO equivale a una animación. Revisa visualmente cada frame, pasos alternados, proporciones, manos y armas.
+2. Incorpora el atlas y al menos un fondo ilustrado en el HTML offline; vincula `document.getElementById('hero-art')` y el fondo con llamadas efectivas a `ctx.drawImage(hero, ...)` y `ctx.drawImage(bg, ...)`. Espera `HTMLImageElement.decode()` o un evento `load` cuando proceda antes de usar píxeles para renderizar.
+3. En el manifiesto dentro de `<script id="phoenix-game-manifest" type="application/json">`, además de `schemaVersion`, `title`, `genre`, controles, nivel y audio, registra `art.mode: "production"`, `art.designReference`, `art.hero.imageId`, `frameWidth`, `frameHeight`, `animations` con **índices reales**, y `art.backgrounds` con cada imagen `imageId`. Las dimensiones deben corresponder al PNG real; `run` incluye mínimo cuatro frames distintos. `phoenix_game` rechaza imágenes enlazadas remotamente, atlases ausentes y los que no se dibujan realmente.
+4. Usa las herramientas del repositorio: `node examples/game-studio/embed-game-assets.mjs input.html images.json con-assets.html` (PNG locales a data URI sin CDN), y `pnpm exec tsx examples/game-studio/prepare-game.ts con-assets.html manifest.json publicable.html` (inserción/validación del manifiesto). Si el origen ya lleva manifiesto, debe coincidir exactamente con el JSON externo, sin duplicarlo.
+5. Ejecuta el resultado **de verdad** en navegador y captura fotogramas comparables, como mínimo quieto, corriendo, apuntando arriba/abajo, disparando, salto y enemigos, más vista de escenario. Compara con el arte de referencia del propio usuario; corrige incoherencias antes de terminar. Prueba sonido tras gesto y revisa consola. Una validación de PNG/JSON no sustituye esta puerta visual.
 
-"Tipo NES/SNES/Sega" no significa producir un juego pobre. Mantén las reglas visuales esenciales de la era,
-pero aplica diseño, animación, controles, UX y contenido modernos.
+Cuando aún falte el atlas o el escenario, declara conscientemente `art.mode: "prototype"`; el publicador y el visor lo marcarán como **arte provisional**, no como un juego final impecable. No simules `art.mode: "production"` ni inventes imágenes, hashes o evidencias. Si no puedes convertir el arte aprobado a sprites animados, informa del bloqueo real en lugar de sustituirlo por primitivas. Para juegos abstractos (puzles y tablero) no impongas un protagonista artificial. Kira debe abrir la habilidad y estos contratos ANTES del primer intento de publicación, no aprenderlos mediante errores repetidos.
 
-Antes de crear arte define un perfil técnico:
+## Decidir antes de construir
 
-- resolución lógica y relación de aspecto;
-- tamaño de tile y sprite;
-- paleta y presupuesto de colores;
-- número de frames y siluetas;
-- reglas de scrolling/parallax;
-- tipografía pixel;
-- audio/chiptune o híbrido;
-- FPS objetivo.
+Inspecciona el proyecto y conserva su motor. Registra un breve `GAME_PLAN.md`: género y bucle jugable; plataforma y formato de entrega; motor y versión; dirección artística; controles de teclado/mando/táctil; contenido y criterios de aceptación; presupuesto de rendimiento; herramientas disponibles; prueba técnica, visual y de juego; instrucciones de ejecución.
 
-Para estética NES usa como referencia restricciones de 8-bit solo cuando ayuden al estilo.
-Para SNES/Mega Drive permite más capas, color, parallax y animación. Evita mezclar pixel sizes o aplicar
-antialiasing borroso. Mantén una cuadrícula de píxeles consistente.
+Para «tipo Game Boy/NES/SNES/Sega/PlayStation» ofrece estética moderna por defecto. Solo crea ROM o imagen de disco cuando se solicite hardware/emulador real. No declares una web como ROM. Si un requisito esencial falta, pregunta por él mientras avanzas en lo independiente.
 
-Aseprite y Tiled son herramientas preferidas cuando estén instaladas. Si no existen, Phoenix puede generar
-assets raster y procesarlos, pero debe revisar escala, paleta, bordes, transparencia y consistencia antes de importarlos.
+| Pedido | Ruta inicial si no existe motor |
+|---|---|
+| Arcade/puzzle pequeño de navegador | HTML/CSS + Canvas y JavaScript; Phaser si la complejidad justifica esa dependencia |
+| Plataforma, RPG, aventura 2D | Godot 4; tiles/sprites y animaciones cuando corresponda |
+| PS1 moderno, low-poly, 3D o mundo abierto original | Godot 4 3D + Blender; una sección jugable completa antes de ampliar contenido |
+| Web 3D | Three.js/Babylon.js o exportación web de Godot según límites y controles |
+| Unity/Unreal existentes o pedidos explícitamente | Motor solicitado, comandos/editor y documentación de la versión instalada |
+| Hardware retro real | SDK nativo de la plataforma; compilación y emulación independientes |
 
-## 5. Retro nativo: ROM para hardware real
+## Preparar herramientas
 
-Cuando el usuario pida compatibilidad real, no uses Godot/Unity como sustituto.
+Lee el recurso correspondiente antes de ejecutar comandos: [navegador](references/browser-games.md), [Godot/Blender](references/godot-games.md), [ROM y PlayStation real](references/native-retro.md).
 
-- NES: cc65/ca65/ld65 y librerías homebrew apropiadas; prueba ROM con Mesen o RetroArch.
-- SNES: PVSnesLib u otra toolchain homebrew explícitamente elegida; verifica LoROM/HiROM y mapa de memoria.
-- Mega Drive/Genesis: SGDK; respeta VRAM, tiles, palettes, DMA y límites del VDP.
-- Master System/Game Gear: devkitSMS/SMSlib o toolchain equivalente validada.
-- Game Boy/Game Boy Color: GBDK-2020 cuando ese sea el target.
-- Emulación: RetroArch o un emulador específico sirve para pruebas, no para copiar ROMs o assets comerciales.
+Ejecuta `node <base-de-esta-habilidad>/scripts/game-tools.mjs doctor --target web` o el target necesario: `godot`, `blender`, `gameboy`, `nes`, `snes`, `genesis`, `sms`, `ps1`. Salida JSON: 0 listo para los requisitos comprobados, 1 no listo, 2 comando inválido/error. Un compilador detectado no demuestra que el SDK completo, emulador o exportación estén listos.
 
-No distribuyas ROMs, BIOS, música, sprites ni contenido propietario de terceros. Los juegos creados deben usar
-código y assets propios o debidamente licenciados.
+`plan --target godot|blender` muestra una instalación sin ejecutarla. `install --target godot|blender` instala solo ese motor gratuito mediante winget/Homebrew/Flatpak, dentro de la autorización del trabajo. Requiere un gestor disponible y su fuente configurada; mantiene su verificación de paquetes. Repite doctor y prueba el motor. Las rutas configuradas `PHOENIX_GODOT_BIN` y `PHOENIX_BLENDER_BIN` prevalecen sobre autodetección. No instales todos los motores ni arranques editores al iniciar Phoenix.
 
-En hardware real, valida tamaño final de ROM, memoria, banco, VRAM, sprites por scanline, sonido,
-input y timings según el target. Si una restricción es crítica, conviértela en test o chequeo de build.
+MCP es opcional: usa conectores ya configurados o herramientas de archivos, shell, navegador, visión y comandos locales. Descubre una capacidad necesaria con `connector_list`/`connector_discover`; valida su origen y la autorización antes de instalarla. La ausencia de MCP no bloquea un juego ejecutable.
 
-## 6. Assets, audio y contenido
+## Regla obligatoria de reutilización y uso real de assets
 
-Cuando el router de calidad elija generación original, usa `image_generation` para concept art,
-backgrounds, UI, texturas y sprites. Cuando gane un asset externo, impórtalo solo después del License Gate y
-del Style Match. Para pixel art generado o reutilizado, normaliza resolución, paleta, transparencia y escala;
-no introduzcas píxeles semitransparentes o tamaños inconsistentes sin intención.
+Antes de generar sprites, escenarios, spritesheets, música o efectos, inspecciona los archivos existentes y conserva un inventario `assets.json` con `images`/`audio` y pares `id`/`path`. Ejecuta `node examples/game-studio/plan-game-assets.mjs manifest.json plan.json assets.json`. El plan verifica bytes locales: `reusable-needs-integration` evita regenerar el archivo, pero NO acredita que aparezca en la partida. Revisa `existingAssets.unbound` e `invalid`, vincula cada recurso al elemento real en `art` y al runtime y corrige IDs sin generar sustitutos.
 
-Para 3D, pasa por Blender cuando haga falta modelado o rig. Para audio, prioriza formatos, sample rate,
-loop points y compresión apropiados al motor/target. En retro nativo, el presupuesto de canales y memoria
-forma parte del diseño.
+Genera recursos en incrementos pequeños: antes de crear cada nuevo lote, conecta lo ya creado al animador/dibujo/sonido, arranca el juego y prueba el comportamiento. Ejecuta `embed-game-assets.mjs` y luego `prepare-game.ts`: el empaquetador rechaza imágenes y audio sin una ruta de consumo detectable. El preflight es estructural; valida visualmente movimiento, enemigos, jefe, capas parallax y sonidos reales en el navegador/engine. No sigas generando si los recursos existentes sirven. Detente una vez superada la aceptación sin nuevas rondas de auditoría.
 
-## 7. Bucle de calidad obligatorio
+## Construcción y revisión
 
-Después de implementar una parte jugable:
+Kira coordina trabajo real y verifica resultados; delega piezas independientes con criterios y límites claros, y reutiliza evidencia y assets válidos. El modelo/imagen/conector disponible determina la capacidad real. Mantén el layout de Phoenix.
 
-1. compila o exporta;
-2. ejecuta el juego o ROM;
-3. observa pantalla/logs y, si existe, usa el conector gameplay o computer/visión;
-4. prueba controles, colisiones, cámara, UI, audio, transiciones y estados de fallo;
-5. mide FPS/frame time y memoria cuando corresponda;
-6. corrige defectos;
-7. repite hasta que el criterio de aceptación se cumpla.
+La dirección artística determina la producción: en arcade/tablero abstracto, geometría, CSS y Canvas deliberados y pulidos pueden ser finales. Para actores/entornos representacionales, carga [producción de arte](references/production-art.md); usa raster/modelos/animación adecuados, visión y procedencia. No conviertas colisiones o placeholders en personajes finales.
 
-Una captura bonita no demuestra un juego funcional y una suite verde no demuestra buen gameplay.
-La entrega final necesita ambas cosas: evidencia técnica y una pasada visual/jugable.
+Implementa el bucle, estados, controles, pausa/reinicio, progreso/guardado, sonido y accesibilidad que correspondan al género. Divide una petición grande en entregables completos, conserva el objetivo completo y continúa hasta cumplirlo; no llames «GTA completo/AAA» a una escena o una sección jugable.
+
+Cierra con tres pruebas separadas: build/importación/tests; captura actual inspeccionada; partida ejecutada que pruebe los criterios, controles, transiciones y fallos. Comprueba consola/logs, rendimiento material y guardado tras recarga/reinicio. Prueba desktop y móvil si ambos son targets. Corrige y repite solo lo invalidado.
+
+Entrega fuentes, versión y comandos reproducibles, ejecutable/ROM/web solicitado, controles y evidencia verificable. Un screenshot no prueba gameplay; un build no prueba acabado; una puntuación interna no prueba calidad. Informa exactamente lo no probado o bloqueado.

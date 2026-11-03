@@ -121,7 +121,7 @@
         env:
           PHOENIX_BROWSER_AUTOSTART: 'true'
           PHOENIX_BROWSER_PREFERRED_ENGINE: chrome
-          PHOENIX_BROWSER_ALLOW_ACTIONS: 'true'
+          PHOENIX_BROWSER_ALLOW_ACTIONS: !!js "process.env.PHOENIX_BROWSER_ALLOW_ACTIONS ?? ((process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'read-only' ? 'false' : 'true')"
         failOnStartupError: false
         startupTimeoutMs: 1000
         reconnect:
@@ -138,7 +138,9 @@
     - id: cordis-host-runner
       name: '@phoenix-ai/dsh-cordis-host-runner'
       config:
-        # Dynamic host code requires a human approval event in the web app.
+        # Non-Phoenix/manual dynamic host code requires a human approval event.
+        # Packages authored through Phoenix's cordis_define carry an exact-package
+        # auto-approval marker and do not prompt the user a second time.
         requireHostApproval: true
 
     # Ordinary provider for the parsed Web flags. Its plugin-level injection
@@ -482,4 +484,4 @@
     - id: agent-presets
       name: '@phoenix-ai/dsh-agent-presets'
       config:
-        default: standard
+        default: kira-max

@@ -32,11 +32,11 @@ import { HarnessError } from '@phoenix-ai/dsh-llm'
 
 import type {
   AuthorizationEntry, AuthorizationMethod, AuthorizationNotice, AuthorizationOutcome, AuthorizationPrompt,
-  AuthorizationSettlement, AuthorizationTelemetry,
+  AuthorizationConnectorTelemetry, AuthorizationSettlement, AuthorizationTelemetry,
 } from './types.ts'
 
 export type {
-  AuthorizationAccountTelemetry, AuthorizationCreditsTelemetry, AuthorizationEntry, AuthorizationMethod,
+  AuthorizationAccountTelemetry, AuthorizationConnectorTelemetry, AuthorizationCreditsTelemetry, AuthorizationEntry, AuthorizationMethod,
   AuthorizationNotice, AuthorizationOutcome, AuthorizationPrompt, AuthorizationPromptOption,
   AuthorizationRateLimitWindow, AuthorizationSettlement, AuthorizationStatus, AuthorizationTelemetry,
   AuthorizationUsageTelemetry,
@@ -129,6 +129,13 @@ export interface AuthorizationFlow {
    * cannot be begun, and the type says so at the one place flows are written.
    */
   readonly methods: readonly [AuthorizationMethod, ...AuthorizationMethod[]]
+  /**
+   * Static connector capabilities unlocked by this authorization flow. These
+   * remain visible while disconnected so orchestration can match Gmail,
+   * Calendar, Drive, etc. to the right Connect action without pretending the
+   * account is already usable.
+   */
+  readonly connectors?: readonly AuthorizationConnectorTelemetry[]
   /**
    * Optional secret-free live account telemetry. The authorization seam never
    * invents or widens this data; the fixed type is the exfiltration boundary.
@@ -301,6 +308,7 @@ export class AuthorizationService extends Service {
       label: flow.label,
       methods: flow.methods,
       inFlight: this.running.has(flow.key),
+      ...(flow.connectors === undefined ? {} : { connectors: flow.connectors }),
       ...(flow.disconnect === undefined ? {} : { disconnectable: true as const }),
     }
   }

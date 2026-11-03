@@ -8,18 +8,35 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { gitSafeDirectoryEnvironment } from '../../../scripts/phoenix-git-safe-directory.mjs'
 
 /** Start one best-effort watcher for the lifetime of this PHOENIX process. */
 export function startPhoenixUpdateWatcher(): void {
+  const installRoot = process.env.PHOENIX_INSTALL_ROOT?.trim()
+  const safeEnv = gitSafeDirectoryEnvironment(process.env, [
+    process.cwd(),
+    ...(installRoot === undefined || installRoot.length === 0 ? [] : [installRoot]),
+  ])
   const rootResult = spawnSync('git', ['rev-parse', '--show-toplevel'], {
     encoding: 'utf8',
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'ignore'],
+    env: safeEnv,
   })
-  if (rootResult.status !== 0 || typeof rootResult.stdout !== 'string') return
-  const root = resolve(rootResult.stdout.trim())
-  if (root.length === 0) return
+  // A packaged Windows Host may start outside a Git checkout. Its explicit
+  // install root is still authoritative for the managed Codex/upstream watchers;
+  // do not return before launching them just because git rev-parse failed.
+  const gitRoot = rootResult.status === 0 && typeof rootResult.stdout === 'string'
+    && rootResult.stdout.trim().length > 0 ? resolve(rootResult.stdout.trim()) : undefined
+  const root = installRoot === undefined || installRoot.length === 0
+    ? gitRoot
+    : resolve(installRoot)
+  if (root === undefined) return
 
+  // Windows runtime/storage garbage collection is owned by the external
+  // supervisor at startup and safe handoff boundaries. Launching another
+  // cleanup-only supervisor from every Host duplicated cleanup passes and
+  // raced the same stale directories during update handoff.
   const updateMode = (process.env.PHOENIX_UPDATE_MODE ?? 'auto').trim().toLowerCase()
 
   // The external Windows supervisor owns the authoritative stable watcher.
@@ -32,18 +49,26 @@ export function startPhoenixUpdateWatcher(): void {
     if (process.env.PHOENIX_AUTO_UPDATE !== '0' && updateMode === 'auto' && existsSync(bridge)) {
       startWatcher(root, bridge, 'PHOENIX UPDATE', ['--parent-pid', String(process.pid)])
     }
-    return
+  } else {
+    const stableWorker = resolve(root, 'scripts', 'phoenix-auto-update.mjs')
+    if (process.env.PHOENIX_AUTO_UPDATE !== '0' && updateMode !== 'off' && existsSync(stableWorker)) {
+      startWatcher(root, stableWorker, 'PHOENIX UPDATE', ['--watch', '--parent-pid', String(process.pid)])
+    }
   }
 
-  const stableWorker = resolve(root, 'scripts', 'phoenix-auto-update.mjs')
-  if (process.env.PHOENIX_AUTO_UPDATE !== '0' && updateMode !== 'off' && existsSync(stableWorker)) {
-    startWatcher(root, stableWorker, 'PHOENIX UPDATE', ['--watch', '--parent-pid', String(process.pid)])
-  }
-
+  // Upstream/plugin and Codex CLI intake belong to the live Host even when
+  // the Windows supervisor owns source updates. Do not return early in
+  // supervised mode: that previously disabled both background intake paths.
   const upstreamMode = (process.env.PHOENIX_UPSTREAM_UPDATE_MODE ?? 'auto').trim().toLowerCase()
   const upstreamWorker = resolve(root, 'scripts', 'phoenix-upstream-update.mjs')
   if (upstreamMode !== 'off' && existsSync(upstreamWorker)) {
     startWatcher(root, upstreamWorker, 'PHOENIX UPSTREAM UPDATE', ['--watch', '--parent-pid', String(process.pid)])
+  }
+
+  const codexMode = (process.env.PHOENIX_CODEX_UPDATE_MODE ?? 'auto').trim().toLowerCase()
+  const codexWorker = resolve(root, 'scripts', 'phoenix-codex-cli-update.mjs')
+  if (codexMode !== 'off' && existsSync(codexWorker)) {
+    startWatcher(root, codexWorker, 'PHOENIX CODEX UPDATE', ['--watch', '--parent-pid', String(process.pid)])
   }
 }
 
@@ -51,7 +76,7 @@ function startWatcher(root: string, worker: string, label: string, args: string[
   try {
     const child = spawn(process.execPath, [worker, ...args], {
       cwd: root,
-      env: process.env,
+      env: gitSafeDirectoryEnvironment(process.env, [root]),
       stdio: ['ignore', 'inherit', 'inherit'],
       windowsHide: true,
     })

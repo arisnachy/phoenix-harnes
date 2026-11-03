@@ -175,9 +175,10 @@ export interface ConversationNodeDefinition<State = unknown> {
   /**
    * Extract this Definition's stable business identity from one event.
    * @param event - raw Session event; no Context or history access is available.
+   * @param location - Immutable event location assigned by the conversation engine.
    * @returns identity and lifecycle role, or null when unrelated.
    */
-  match(event: SessionEvent): ConversationMatchResult | null
+  match(event: SessionEvent, location?: ConversationLocation): ConversationMatchResult | null
   /**
    * Create State from the unique start Match.
    * @param context - complete evidence currently collected for the Context.

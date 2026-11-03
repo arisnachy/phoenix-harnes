@@ -47,11 +47,10 @@ describe('hardness_workflow tool adapter', () => {
 
     expect(tool.name).toBe('hardness_workflow')
     expect(tool.description).toContain('deterministic HARDNESS cognitive workflow')
-    expect(tool.description).toContain('before execution planning')
+    expect(tool.description).toContain('without requiring this tool call')
     expect(tool.parameters).toEqual(expect.objectContaining({
       type: 'object',
       required: ['profile'],
-      additionalProperties: false,
       properties: expect.objectContaining({
         profile: expect.objectContaining({
           type: 'object',

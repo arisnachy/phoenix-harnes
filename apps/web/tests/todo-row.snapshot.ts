@@ -46,6 +46,10 @@ describe('assembled todo surfaces', () => {
 
     const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
     fireEvent.click(await within(tree).findByText('Fixture 历史会话'))
+    const toolGroups = await screen.findAllByRole('button', { name: 'Tools' }, { timeout: 10_000 })
+    for (const group of toolGroups) {
+      if (group.getAttribute('aria-expanded') === 'false') fireEvent.click(group)
+    }
     // The todo turn is the fixture's last, so wait for its keyed row rather
     // than for chat content in general.
     const row = await waitFor(() => {

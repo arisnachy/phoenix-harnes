@@ -7,7 +7,7 @@ import {
   type XMcpHostService,
 } from '../src/connector-install-tool.ts'
 
-function exec(agent: Agent | undefined = {} as Agent) {
+function exec(agent: Agent | undefined) {
   return {
     agent,
     callId: 'call-install' as never,
@@ -21,7 +21,10 @@ function exec(agent: Agent | undefined = {} as Agent) {
   } as never
 }
 
-function installer(): McpRegistryInstallerService & { installMcpRegistryServer: ReturnType<typeof vi.fn> } {
+function installer(): McpRegistryInstallerService & {
+  installMcpRegistryServer: ReturnType<typeof vi.fn>
+  installCuratedMcpConnector: ReturnType<typeof vi.fn>
+} {
   return {
     installMcpRegistryServer: vi.fn(async () => ({
       status: 'installed' as const,
@@ -29,6 +32,14 @@ function installer(): McpRegistryInstallerService & { installMcpRegistryServer: 
         entryId: 'managed-1',
         serverName: 'calendar-abc1234',
         url: 'https://mcp.example.com/calendar',
+      },
+    })),
+    installCuratedMcpConnector: vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: {
+        entryId: 'devpost-entry',
+        serverName: 'devpost',
+        url: 'https://devpost.com/mcp',
       },
     })),
   }
@@ -40,7 +51,9 @@ describe('connector_install', () => {
     const service = installer()
     const tool = createConnectorInstallTool(approval, service)
 
-    await expect(tool.execute({ name: ' ' }, exec())).rejects.toThrow('exact registry server name')
+    await expect(tool.execute({}, exec({} as Agent))).rejects.toThrow('exactly one of name or connectorId')
+    await expect(tool.execute({ name: 'io.example/calendar', connectorId: 'devpost' }, exec({} as Agent)))
+      .rejects.toThrow('exactly one of name or connectorId')
     await expect(tool.execute({ name: 'io.example/calendar' }, exec(undefined))).rejects.toThrow('active agent session')
     expect(approval.request).not.toHaveBeenCalled()
     expect(service.installMcpRegistryServer).not.toHaveBeenCalled()
@@ -50,7 +63,7 @@ describe('connector_install', () => {
     const approval = { request: vi.fn(async () => 'rejected' as const) }
     const service = installer()
     const tool = createConnectorInstallTool(approval, service)
-    const context = exec()
+    const context = exec({} as Agent)
 
     await expect(tool.execute({ name: ' io.example/calendar ', version: '1.0.0' }, context)).resolves.toEqual({
       status: 'denied',
@@ -63,7 +76,6 @@ describe('connector_install', () => {
       reason: 'Install registry-listed MCP io.example/calendar @ 1.0.0 into PHOENIX',
       risk: 'medium',
       reversible: true,
-      signal: expect.any(AbortSignal),
     }))
     expect(service.installMcpRegistryServer).not.toHaveBeenCalled()
   })
@@ -73,12 +85,44 @@ describe('connector_install', () => {
     const service = installer()
     const tool = createConnectorInstallTool(approval, service)
 
-    await expect(tool.execute({ name: 'io.example/calendar' }, exec())).resolves.toEqual({
+    await expect(tool.execute({ name: 'io.example/calendar' }, exec({} as Agent))).resolves.toEqual({
       status: 'installed',
       serverName: 'calendar-abc1234',
       message: 'Installed io.example/calendar. Use connector_list to check whether it is ready or needs authorization.',
     })
     expect(service.installMcpRegistryServer).toHaveBeenCalledWith({ name: 'io.example/calendar' })
+  })
+
+  it('activates the pinned Devpost MCP after approval without registry discovery', async () => {
+    const approval = { request: vi.fn(async () => 'allowed-once' as const) }
+    const service = installer()
+    const tool = createConnectorInstallTool(approval, service)
+
+    await expect(tool.execute({ connectorId: 'devpost' }, exec({} as Agent))).resolves.toEqual({
+      status: 'installed',
+      serverName: 'devpost',
+      message: 'Installed Devpost Hackathons. Use connector_list to check whether it is ready or needs authorization.',
+    })
+    expect(approval.request).toHaveBeenCalledWith(expect.objectContaining({
+      reason: 'Activate the Phoenix-curated official Devpost Hackathons MCP',
+      risk: 'medium',
+      reversible: true,
+    }))
+    expect(service.installCuratedMcpConnector).toHaveBeenCalledWith({ connectorId: 'devpost' })
+    expect(service.installMcpRegistryServer).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when the curated Devpost installer is unavailable', async () => {
+    const service = installer()
+    const registryOnly: McpRegistryInstallerService = {
+      installMcpRegistryServer: service.installMcpRegistryServer,
+    }
+    const tool = createConnectorInstallTool({
+      request: vi.fn(async () => 'allowed-once' as const),
+    }, registryOnly)
+
+    await expect(tool.execute({ connectorId: 'devpost' }, exec({} as Agent)))
+      .rejects.toThrow('curated Devpost MCP installation is unavailable')
   })
 
   it('passes an exact version and preserves the already-installed outcome', async () => {
@@ -94,7 +138,7 @@ describe('connector_install', () => {
     })
     const tool = createConnectorInstallTool(approval, service)
 
-    await expect(tool.execute({ name: 'io.example/calendar', version: '1.0.0' }, exec())).resolves.toEqual({
+    await expect(tool.execute({ name: 'io.example/calendar', version: '1.0.0' }, exec({} as Agent))).resolves.toEqual({
       status: 'already-installed',
       serverName: 'calendar-abc1234',
       message: 'io.example/calendar is already installed. Use connector_list to check its current authorization state.',
@@ -112,6 +156,12 @@ describe('connector_install', () => {
       title: 'Install MCP: io.example/calendar',
       kind: 'edit',
       rawInput: 'io.example/calendar',
+    })
+    expect(tool.presentCall?.({ connectorId: 'devpost' })).toEqual({
+      card: 'generic',
+      title: 'Install MCP: Devpost Hackathons',
+      kind: 'edit',
+      rawInput: 'Devpost Hackathons',
     })
   })
 })
@@ -152,15 +202,15 @@ describe('x_mcp_activate', () => {
     const host = xHost()
     const tool = createXMcpActivateTool(approval, host)
 
-    await expect(tool.execute({ requestedByUser: false }, exec())).resolves.toEqual({
+    await expect(tool.execute({ requestedByUser: false }, exec({} as Agent))).resolves.toEqual({
       status: 'denied',
       message: 'X MCP activation requires an explicit user request.',
     })
     await expect(tool.execute({ requestedByUser: true }, exec(undefined))).rejects.toThrow('active agent session')
-    await expect(createXMcpActivateTool(approval).execute({ requestedByUser: true }, exec()))
+    await expect(createXMcpActivateTool(approval).execute({ requestedByUser: true }, exec({} as Agent)))
       .rejects.toThrow('host integration is unavailable')
     await expect(createXMcpActivateTool(approval, { enableXMcp: host.enableXMcp })
-      .execute({ requestedByUser: true }, exec()))
+      .execute({ requestedByUser: true }, exec({} as Agent)))
       .rejects.toThrow('host integration is unavailable')
     expect(approval.request).not.toHaveBeenCalled()
     expect(host.enableXMcp).not.toHaveBeenCalled()
@@ -170,7 +220,7 @@ describe('x_mcp_activate', () => {
     const approval = { request: vi.fn(async () => 'rejected' as const) }
     const host = xHost()
     const tool = createXMcpActivateTool(approval, host)
-    const context = exec()
+    const context = exec({} as Agent)
 
     await expect(tool.execute({ requestedByUser: true }, context)).resolves.toEqual({
       status: 'denied',
@@ -183,7 +233,6 @@ describe('x_mcp_activate', () => {
       callId: 'call-install',
       risk: 'medium',
       reversible: true,
-      signal: expect.any(AbortSignal),
     }))
     expect(host.enableXMcp).not.toHaveBeenCalled()
   })
@@ -193,21 +242,21 @@ describe('x_mcp_activate', () => {
     const ready = xHost({ credentials: true })
     const readyTool = createXMcpActivateTool(approval, ready)
 
-    await expect(readyTool.execute({ requestedByUser: true }, exec())).resolves.toMatchObject({
+    await expect(readyTool.execute({ requestedByUser: true }, exec({} as Agent))).resolves.toMatchObject({
       status: 'enabled',
       identity: 'user',
       api: 'installed',
       docs: 'installed',
       credentialsReady: true,
-      message: expect.stringContaining('Complete the X browser authorization'),
+      message: 'Official X MCP is installed for the user identity. Complete the X browser authorization if xurl requests it; Phoenix can keep the user and Phoenix-owned accounts authorized separately.',
     })
 
     const missing = xHost({ credentials: false })
     const missingTool = createXMcpActivateTool(approval, missing)
-    await expect(missingTool.execute({ requestedByUser: true }, exec())).resolves.toMatchObject({
+    await expect(missingTool.execute({ requestedByUser: true }, exec({} as Agent))).resolves.toMatchObject({
       status: 'enabled',
       credentialsReady: false,
-      message: expect.stringContaining('/secret'),
+      message: 'Official X MCP is installed. X Docs can work without credentials; X API needs X_CLIENT_ID and X_CLIENT_SECRET stored with the human-only /secret command before xurl can authorize.',
     })
     expect(ready.enableXMcp).toHaveBeenCalledWith({ identity: 'user' })
     expect(missing.enableXMcp).toHaveBeenCalledWith({ identity: 'user' })
@@ -216,7 +265,7 @@ describe('x_mcp_activate', () => {
       requestedByUser: true,
       identity: 'phoenix',
       username: '@PhoenixAI',
-    }, exec())).resolves.toMatchObject({
+    }, exec({} as Agent))).resolves.toMatchObject({
       status: 'enabled',
       identity: 'phoenix',
       credentialsReady: true,
@@ -232,7 +281,7 @@ describe('x_mcp_activate', () => {
     const host = xHost()
     const tool = createXMcpActivateTool(approval, host)
     const deferred = vi.fn()
-    const context = exec() as unknown as { deferContext: typeof deferred }
+    const context = exec({} as Agent) as unknown as { deferContext: typeof deferred }
     context.deferContext = deferred
 
     await expect(tool.execute({
@@ -252,10 +301,10 @@ describe('x_mcp_activate', () => {
       identity: 'phoenix',
       signupUrl: 'https://x.com/signup',
       requiresHumanVerification: true,
-      message: expect.stringContaining('official X signup flow'),
+      message: 'Phoenix-owned X account setup is ready. Phoenix will continue in the official X signup flow and stop only when X requires human verification.',
     })
     expect(approval.request).toHaveBeenCalledWith(expect.objectContaining({
-      reason: expect.stringContaining('Phoenix-owned X account'),
+      reason: 'Start one-time setup for a Phoenix-owned X account using the official X signup flow. Phoenix will use Computer Use and stop for any required human verification.',
       risk: 'medium',
     }))
     expect(host.enableXMcp).not.toHaveBeenCalled()
@@ -263,7 +312,7 @@ describe('x_mcp_activate', () => {
       source: { kind: 'plugin', plugin: 'x-mcp' },
       content: [expect.objectContaining({
         type: 'text',
-        text: expect.stringContaining('browser_open to https://x.com/signup'),
+        text: 'Continue the approved Phoenix-owned X account onboarding now. Use the computer tool with browser_open to https://x.com/signup in the Phoenix embedded browser. Advance through the official signup flow using only information the user has already authorized. Stop and ask for human intervention when X requires email/SMS verification, CAPTCHA, MFA, acceptance of materially changed terms, or any other verification that must be completed by a person. After signup succeeds, inspect the resulting profile to determine the new X username. If X exposes its automated-account transparency/label setup, stop for the human owner to complete or confirm that linkage before autonomous social actions. Then call x_mcp_activate again with requestedByUser=true, identity="phoenix", and that username. Do not post, follow, DM, or perform any other X account action during setup.',
       })],
     }))
   })
@@ -276,10 +325,10 @@ describe('x_mcp_activate', () => {
     await expect(tool.execute({
       requestedByUser: true,
       identity: 'phoenix',
-    }, exec())).resolves.toMatchObject({
+    }, exec({} as Agent))).resolves.toMatchObject({
       status: 'enabled',
       identity: 'phoenix',
-      message: expect.stringContaining('already configured'),
+      message: 'Phoenix-owned X identity is already configured as x-api-phoenix.',
     })
     expect(approval.request).not.toHaveBeenCalled()
     expect(host.enableXMcp).not.toHaveBeenCalled()

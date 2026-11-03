@@ -26,6 +26,22 @@ function send(agent: Agent, text: string): void {
 }
 
 describe('Agent', () => {
+  it('keeps complete capabilities for operational tasks but avoids verbose identity on greetings', async () => {
+    const adapter = new MockAdapter([textResponse('hola'), textResponse('verificado')])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('prompt-fast-identity'), { provider: 'mock', model: 'mock' })
+    send(agent, 'hola')
+    await agent.whenIdle()
+    send(agent, 'Analiza la arquitectura de Phoenix y verifica las integraciones')
+    await agent.whenIdle()
+    const fast = adapter.requests[0]?.system ?? ''
+    const operational = adapter.requests[1]?.system ?? ''
+    expect(fast).toContain('PHOENIX')
+    expect(operational).toContain('PHOENIX')
+    expect(fast.length).toBeLessThan(operational.length / 3)
+    expect(operational).toContain('requirement ledger')
+  })
+
   it('idle inject() durably stages context without opening a turn', async () => {
     const adapter = new MockAdapter([textResponse('ok')])
     const ctx = await harness(adapter)
@@ -96,6 +112,29 @@ describe('Agent', () => {
       agent.inject(createUserMessage({ content: [{ type: 'text', text: 'x', bad: 1n } as never], source: { kind: 'plugin', plugin: 'p' } }))
     }).toThrow(/non-JSON-serializable/)
     expect(agent.session.events).toHaveLength(0)
+  })
+
+  it('never misattributes an internal Team handoff as a human stop', async () => {
+    const adapter = new MockAdapter(['hang'])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('team-handoff-no-user-stop'), { provider: 'mock', model: 'mock' })
+
+    send(agent, 'run substantive work')
+    await vi.waitFor(() => { expect(adapter.requests).toHaveLength(1) })
+    agent.steer(createUserMessage({
+      content: [{ type: 'text', text: 'Eclipse delivered a verified calculation' }],
+      source: { kind: 'plugin', plugin: 'team-handoff' },
+    }))
+    expect(agent.status).toBe('running')
+    expect(agent.inbox.nextStep).toHaveLength(1)
+    expect(agent.session.events.some(event => event.type === 'turn/end'
+      && event.data.reason.kind === 'aborted')).toBe(false)
+
+    // An actual user cancellation still has authority and clears the Team inbox.
+    agent.cancel({ kind: 'user' })
+    await agent.whenIdle()
+    expect(agent.session.events.findLast(event => event.type === 'turn/end')?.data.reason)
+      .toEqual({ kind: 'aborted', reason: { kind: 'user' } })
   })
 
   it('steer() while idle becomes a woken prompt turn', async () => {

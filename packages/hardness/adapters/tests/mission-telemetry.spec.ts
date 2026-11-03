@@ -27,7 +27,7 @@ describe('HARDNESS mission telemetry', () => {
       completedMissions: 1,
       blockedMissions: 1,
       recoveryAttempts: 1,
-      durations: { count: 4, totalMs: 57, maxMs: 25 },
+      durations: { count: 3, totalMs: 57, maxMs: 25 },
       blockedReasonCodes: { 'execution-threw': 1, 'mission-blocked': 1 },
       steps: {
         execute: { completed: 1, blocked: 1 },

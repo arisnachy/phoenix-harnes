@@ -2,7 +2,11 @@
 
 [English](README.md) | 中文
 
-会话领域：骨架（标题栏／标签页／编辑器／空状态）、聊天视图（分组步骤摘要流、流式尾部隔离与轮次状态）、编辑器 dock（与输入区一同 sticky 的会话统计行）、输入区 dock（队列行加 todo 计划条）、详情壳层，以及按 scope 寻址的 ConversationController。工具展示属于 [`ui-tool`](../ui-tool/README.zh.md)。
+纯展示型 HTML 页面在禁用脚本的 iframe 中加载远程图片；可执行 HTML 必须针对每份文档获得图片联网许可，脚本仍无法建立网络连接。
+
+Comic Studio 制品提供可展开的静态阅读器，以及自包含的 `.html` 下载。关闭阅读器后恢复行内版本；两个视图均不启用脚本。下载版本包含内容安全策略，即使在 iframe 外打开，也阻止脚本与远程资源。原生地图制品保留交互式选择与导出控件。
+
+会话领域：骨架（标题栏／标签页／编辑器／空状态）、聊天视图（分组步骤摘要流、流式尾部隔离与轮次状态）、编辑器 dock（与输入区一同 sticky 的会话统计行）、输入区 dock（队列行加 todo 计划条）、详情壳层，以及按 scope 寻址的 ConversationController。工具展示属于 [`ui-tool`](../ui-tool/README.zh.md)。 轮次页脚保留确切的持久结束原因，即使没有助手文本也显示本地化状态。它区分用户取消、父代理取消、进程释放、崩溃恢复、轮次阻塞和最终失败。空回复结束不被视为任务成功。这些提示不消耗模型轮次、不承诺自动继续，也不绕过提供商重试与用户取消策略。
 
 普通编辑器发送会在 Host 接纳完成之前，以乐观投影立即出现在 transcript（文本记录）的尾部。这个投影绝不会跑到已加载历史之前；持久化的 `user/message` 到达后，会在同一阅读位置接替乐观行，而持久日志始终是权威来源。交接要求邻近的持久用户行与精确的模型可见文本匹配，因此带引用的草稿在接纳期间会同时保留展示文本和序列化文本。文本接纳不再设置独立的八秒 UI watchdog：有界请求 deadline 由 carrier 负责，输入状态机只保留一个未结算提交槽，所以一次含糊的慢确认不会再变成 signal 错误后又重试出重复消息（[决策](../../../.agents/notes/implemented/bug-fix/2026-09-18-web-optimistic-user-message-tail.zh.md)）。
 
@@ -10,13 +14,15 @@
 
 常驻会话壳会跨无会话与会话状态切换而保留。没有当前会话时，它会锁定消息操作，并让整张虚线编辑器卡片成为根作用域 `conversation.hero.workspace` Workspace picker 的入口；textarea 保持只读且支持键盘操作。Hero 在独立的根作用域 `conversation.hero.brand.mark` slot 旁显示 PHOENIX，未被占用时回退到 PHOENIX 标志。选择 Workspace 会连接或复用由 Host 拥有的空白会话，并在不替换会话壳的情况下打开该会话。根组件始终拥有同一个滚动容器与 Hero／编辑器子树；首个会话到达时，彼此独立的严格会话页头和主体 outlet 只填入各自区域，因此 Workspace picker、滚动主体、编辑器 seat 与 textarea 都保留原有 React 和 DOM identity。空白会话与活跃会话渲染相同的输入区主体；InputHub 则在 Workspace 切换间携带草稿，并将草稿镜像到会话 store。活跃阶段，会话标题栏作为普通列 chrome，显示当前会话 title、可选谱系控件和视图标签；普通 fork 谱系仍保留为会话数据，不投影到标题栏。其下滚动容器（`data-conversation-scroll`）承载流动排版的各视图与 sticky 编辑器栈（统计 dock＋输入区 dock＋输入栏）。该滚动容器无条件预留自己的滚动条槽，选用编辑器 overlay 的视图也仍把它保留为滚动容器，因此无论对话记录是否滚动、无论展示哪个视图标签，输入卡片都保持同一个横向位置（[决策](../../../.agents/notes/implemented/bug-fix/2026-08-04-composer-tab-gutter-reservation.zh.md)）。textarea 上的滚轮会链式处理：限高草稿先在本地滚动，到达边缘后再转交给该宿主。只有 Safari 会在原生编辑缩短草稿并留下陈旧软换行溢出时执行绘制前恢复；草稿增长、程序化更新与其他浏览器都不会为这项恢复读取布局（[决策](../../../.agents/notes/implemented/bug-fix/2026-08-13-safari-textarea-soft-wrap-reflow.zh.md)）。
 
+空白会话 Hero 还会从本地 Host 读取经过浏览器安全处理的 proactive-attention 投影，并在问候语下方最多渲染两条内联信息。它不会增加 card、badge、toast 或 modal 打断：实质性的后台结果、有用的 upcoming 工作与最近失败会按有界分数竞争；没有变化的循环工作保持隐藏；Host 不可用或版本较旧时，Hero 只会保持原样。客户端会验证 loopback payload，并以低频率轮询；task instruction、credential、尚未 reveal 的 surprise 与原始 connector payload 永远不会进入这个 UI 投影。
+
 别的插件可以经 `ctx.conversation.blocks` 让某个会话的编辑器变为惰性：它设置一个携带自己本地化理由的 block，输入栏就渲染同一个禁用的 textarea，并把该理由作为 placeholder——复用无 Workspace 时的那套姿态。推送方向是约束而非偏好：知道某会话发不出消息的插件（ui-model-selection，在没有适配器服务其路由时）本就依赖本包，因此本包读不到它们。模型 seat 是 block 唯一保留可用的控件——这份约定里的每个 block 都靠选模型来解除，把它一起锁上会让编辑器索要它自己拦下的那件事。block 只是提示性设计；无论客户端禁用了什么，宿主都会拒绝一个它无法路由的提示词。两者同时成立时以无 Workspace 姿态为准，因为选 Workspace 是更靠前的前提。
 
 视图环是一个 slot：严格会话主体注册在 `children` 表中声明会话作用域的 `'conversation.view'` 列表，并通过自身的 renderSlot share 渲染活跃配置项（`only: <active id>`）；视图标签页则从注册选项（`id`／`order`／`label`）投影而来。聊天视图是该包自身的配置项；ui-trajectory 等插件通过 `ctx.slots.register` 贡献标签页，每个视图负责自己的 chrome。
 
 HARDNESS 工件使用一个自适应表面来显示 JSON、表格、代码、HTML、图像、文本和执行结果。该表面在有界的响应式范围内测量内容，将工件保留在对话投影中，并且只为显式声明可执行的代码显示运行/停止控件。HTML 保留在具有唯一来源的 iframe 中，使用限制性 CSP，禁止网络和父页面访问；代码执行委托给 Host 挂载的运行时。
 
-编辑器的麦克风会启动明确的浏览器原生语音助手模式。启用后，每个最终识别片段都会自动作为排队轮次提交，轮次之间会重新启动识别器，每个新结算的 assistant 回复都会在对话文本清理、自然语音选择和适中语速处理后通过 `speechSynthesis` 播放；再次点击麦克风会停止识别和播放。此功能需要浏览器权限以及原生 `SpeechRecognition`/`speechSynthesis` 支持，并不声称提供远程实时语音服务。
+编辑器的麦克风会启动明确的浏览器原生语音助手模式。启用后，每个最终识别片段都会自动作为排队轮次提交，轮次之间会重新启动识别器。当活动的 Codex Live 通道携带持久化的 `conversational-tail` step，且其中只有文本或 reasoning block 时，已完成的句子会在到达时发送给原生语音，每次只发送一个 response；最终尾部通过 cursor 去重。上下文或工具 step 仍然只有在所属轮次完成后才获准播报。没有原生 Codex Live 时，现有的 `speechSynthesis` 路径会进行对话文本清理、自然语音选择和适中语速处理。再次点击麦克风会停止识别和播放。此功能需要浏览器权限以及原生 `SpeechRecognition`/`speechSynthesis` 支持。
 
 Chat 业务行是彼此独立的注册表贡献，不是封闭的内建联合。Client 插件通过 declaration merging 增加类型化 `ChatNodeDataMap` key，在 `ctx.conversationEvents` 上注册 `ConversationNodeDefinition`，再向 `conversation.chat.node` 注册匹配的 keyed renderer；它无须修改会话 fold 或中央 renderer switch。稳定事件 id、append/prepend 回放、Location data 与 renderer 约束见 [Conversation Node 实操手册](../../../docs/cookbook/adding-a-conversation-node.zh.md)。
 
@@ -52,6 +58,19 @@ Host 带 placement 的 `session/queue` 快照也会携带待处理 steering。Qu
 
 完成的一轮会物化一个有序的 `turn-tail` Conversation Node。它由引擎维护的 `TurnLocation` 提供收尾 Assistant 和 Turn data；renderer 在该 Node 的 IconActions 之前渲染 `conversation.chat.turnTail` chain，并派发包含 Turn、收尾 seq 和 `openFile` 的 `TurnTailOwnerProps`。本包只拥有空位；`@phoenix-ai/dsh-client-ui-deliverables` 把改写工具的 `locations` 累积到 Turn data，并拥有产物行、chip 上限和文案，因此把该插件从 cordis.yml 中组合掉即可关闭该交互面，空位以零成本渲染为空。收尾正文经由同一个开关参与其中：chat 视图向可选的 `chatFileMentions` service（ctx.get；由同一插件提供）索取收尾消息的行内代码词表，并把结果接进 MarkdownText 的 `fileMentions` seam——service 缺席时正文保持死文本。
 
+
+主页提示携带实质版本。打开或关闭提示时通过 loopback host 记录版本，仅确认成功后移除。刷新保留回执，新版本仍可出现。邮箱结果共用现有提示区域，不改变聊天与团队布局。
+
+
+Assistant 作者贡献接收对应消息实际 provider/model 的来源信息。流式输出使用所属 Step 的已准备 `request/header` 配置，包括重试时的变更，以及未产生新 header 时保留的路由。已完成输出优先使用持久化 `assistant/message` 的来源；后续路由变更不会改写历史消息的模型标记。
+## 内嵌 MiniBrowser
+
+Secure Ask 在浏览器下方显示为可折叠的受保护卡片，不替换实时对话活动。手动和自动入口在请求凭据前检查页面实际字段。未观察到或不完整的表单显示诊断信息，不生成虚构输入框。保存失败时保留用户输入以便重试，确认保存后清空。机密直接发送到本地凭据库，不进入对话事件。
+
+Chrome 活动自动打开预览，包括 Code Mode 中嵌套的检查、表单和截图调用，不依赖 Tools 历史是否展开。最新的显式工具目标绑定到卡片；稍后到达的目标替换推断的全局标签页，同时手动选择在重新激活后保留。绑定目标丢失时显示错误，不启动或替换成其他浏览器。浏览器界面及活动侧栏使用 Phoenix 主题变量、清晰的连接状态、键盘焦点和响应式控件。
+
+会话中的 MiniBrowser 通过 `/phoenix-mini-browser` 客户端路由展示 Phoenix 正在操作的同一 Chromium 标签页。状态、操作和画面请求都有客户端时限，并在卡片失活或卸载时取消；先读取响应体再验证 JSON，使中断的 Host 响应成为可恢复状态。后续截图等待或失败时保留最后一张有效画面，用户操作完成后立即请求刷新。文档隐藏时暂停轮询与截图，在下一次可见性事件中恢复，使现有 localhost 应用保持可预览，同时避免会话处于后台时浪费截图资源。Chrome 启动具有更长的明确时限；启动超时后由用户主动重试，不会自动重复启动。
+
 ## 模型体验
 
 无。会话 UI 在浏览器中渲染会话历史与流；这里没有任何内容进入模型请求。
@@ -71,3 +90,9 @@ Host 带 placement 的 `session/queue` 快照也会携带待处理 steering。Qu
 - **TodoPanel 将过长条目截成单行省略号**：figma 条没有换行或展开入口，完整文本无法在行内读完。
 - **Queue 编辑仅支持文本**：包含非文本块的行仍显示扁平化预览，但由于内联编辑器无法保留这些块，其编辑控件会被禁用。文本行进入编辑模式后，删除和严格 steering 操作会被保存和取消取代；Enter 保存，Escape 取消。
 - **Queue 严格 steering 会保留完整消息**：agent 运行期间，steering 操作会以原子方式把所寻址的 Queue 单次入队项转移到当前 next-step 窗口。包含混合内容的行仍可使用此操作，因为它会转发不可变消息，而非文本投影。带 placement 的 Host 快照会在会话流末尾渲染待处理 steering，直到已消费的 `user/message` 折叠进持久 transcript（文本记录），因此立即展示、重连和回放共享同一个线性权威。
+
+`conversation/addressed-submit` 异步路由钩子允许团队插件在普通提交之前处理显式的代理提及或上下文回复。插件使用现有主聊天输入框并返回提交结果；无关消息继续走普通路由。真实的成员消息及其发送者和接收者身份保留在主聊天记录中。
+
+团队委派从准备到激活始终保留同一条聊天记录。真实的具名任务替换临时标题，并在重放后保留；激活不会覆盖任务文本。成员更新来自实际发布的消息，并显示其自身身份。
+
+原生关系图采用严格验证且不执行脚本的 `diagram` 第一版结构。`phoenix_diagram` 发布可重放的 `application/vnd.phoenix.diagram+json` 对话工件；同一结构还可通过 `generative-ui` 块在助手消息中直接显示。`DiagramSurface` 支持家系图、流程图、思维导图和网络图：节点包含 `id`、`label`、`x`、`y`、`shape` 和可选 `detail`，边包含 `from`、`to`、可选端口与路径点 `via`。界面提供键盘选择、说明、SVG 导出和回到输入框的交互。SVG 画布尺寸为 1000×620，普通节点中心坐标为 x=95..905、y=80..520，隐藏的 `point` 汇合点和连线路径点允许完整范围。家系图使用方形和圆形表示基本男性与女性符号，不会杜撰医疗信息。无效数据会产生明确提示；工具回执只能确认发布，不能证明浏览器可视化成功。[设计说明](../../../.agents/notes/implemented/feature/2026-10-20-native-universal-diagrams.zh.md)。

@@ -15,6 +15,14 @@ function codexLoaderEntryCount(source: string): number {
 }
 
 describe('web-app Cordis composition', () => {
+  it('keeps both shipped browser routes on the same permission-aware action policy', () => {
+    const webPatch = readFileSync(WEB_PATCH, 'utf8')
+    expect(webPatch).toContain(
+      `PHOENIX_BROWSER_ALLOW_ACTIONS: !!js "process.env.PHOENIX_BROWSER_ALLOW_ACTIONS ?? ((process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'read-only' ? 'false' : 'true')"`,
+    )
+    expect(webPatch).not.toContain("PHOENIX_BROWSER_ALLOW_ACTIONS: 'true'")
+  })
+
   it('lets the Codex package own the subagent-codex loader id exactly once', () => {
     const webPatch = readFileSync(WEB_PATCH, 'utf8')
     const codexPatch = readFileSync(CODEX_PATCH, 'utf8')

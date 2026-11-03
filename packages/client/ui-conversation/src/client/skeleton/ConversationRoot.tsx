@@ -4,9 +4,14 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
+import { IconSearchOutline16 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SessionId, WorkspaceId } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps, InputZone } from '../contract/slots.ts'
-import { HeroGlow, HeroShell, WorkspaceChip, workspaceLabel } from './EmptyHero.tsx'
+import {
+  HeroAttentionList, HeroGlow, HeroMissionLaunchpad, HeroShell, WorkspaceChip,
+  heroAttentionPrompt, workspaceLabel,
+} from './EmptyHero.tsx'
+import type { HeroMissionStarter } from './EmptyHero.tsx'
 import css from './ConversationRoot.module.css'
 
 /** Full props composed from the slot contract. */
@@ -39,8 +44,8 @@ const SessionBodyOutlet = memo(function SessionBodyOutlet({
 })
 
 export function ConversationRoot({
-  sessionId, useSession, useSessions, useWorkspaces, useInput, useComposerBlock, useUserProfile,
-  renderSlot, renderSlotChain, selectWorkspace, t,
+  sessionId, useSession, useSessions, useWorkspaces, useInput, inputActions, useComposerBlock, useUserProfile,
+  useProactivityAttention, recordAttention, setSidebarFocus, renderSlot, renderSlotChain, selectWorkspace, t,
 }: ConversationRootProps) {
   const openState = useSession(s => s.openState)
   const composerPhase = useSession(s => s.composerPhase)
@@ -54,10 +59,129 @@ export function ConversationRoot({
   // send; its reason is already localized by whoever raised it.
   const composerBlock = useComposerBlock(block => block)
   const preferredName = useUserProfile(profile => profile.preferredName)
+  const profileInitials = preferredName?.trim().split(/\s+/).slice(0, 2).map(part => part[0] ?? '').join('').toUpperCase() || 'PX'
+  const proactiveAttention = useProactivityAttention(items => items)
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pendingWorkspaceId, setPendingWorkspaceId] = useState<WorkspaceId | undefined>()
   const pickerAnchor = useRef<HTMLButtonElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [visualActive, setVisualActive] = useState(false)
+  // Collapsing on the FIRST keystroke blocks the input's first paint.
+  // Only a first locally admitted submission in a blank session can arm focus.
+  const [awaitingFirstBubbleFor, setAwaitingFirstBubbleFor] = useState<SessionId | undefined>()
+  const [firstBubbleSettledFor, setFirstBubbleSettledFor] = useState<SessionId | undefined>()
+  const firstSendGuard = useRef({
+    sessionId,
+    wasBlank: composerPhase === 'blank',
+    armed: false,
+  })
+  if (firstSendGuard.current.sessionId !== sessionId) {
+    firstSendGuard.current = { sessionId, wasBlank: composerPhase === 'blank', armed: false }
+  } else if (composerPhase === 'blank') {
+    firstSendGuard.current.wasBlank = true
+  }
+  // Compact chrome lives on the right until someone starts composing.
+  // Explicit pinning is the sole override: hovering a tiny right-aligned pill
+  // must never expand it and cause the pointer to enter/leave repeatedly.
+  const [headerPinnedOpen, setHeaderPinnedOpen] = useState(false)
+
+  useEffect(() => {
+    setVisualActive(false)
+    setHeaderPinnedOpen(false)
+  }, [sessionId])
+
+  const pendingSubmitAt = inputState?.pendingSubmit?.startedAt
+  useEffect(() => {
+    const guard = firstSendGuard.current
+    if (sessionId === undefined || pendingSubmitAt === undefined || guard.sessionId !== sessionId
+      || !guard.wasBlank || guard.armed) return
+    guard.armed = true
+    setAwaitingFirstBubbleFor(sessionId)
+  }, [sessionId, pendingSubmitAt])
+
+  // ChatView paints an optimistic user bubble as soon as the input machine
+  // admits Enter OR a Send click. Never collapse until that bubble is in the
+  // DOM; one animation frame + 72ms gives the bubble its own paint first.
+  // A pending Host admission must not hold typing or trigger on rejected sends.
+  useEffect(() => {
+    if (sessionId === undefined || awaitingFirstBubbleFor !== sessionId
+      || typeof MutationObserver === 'undefined') return
+    const scroller = rootRef.current?.querySelector('[data-conversation-scroll]')
+    if (scroller === null || scroller === undefined) return
+    let raf: number | undefined
+    let timeout: number | undefined
+    let found = false
+    const onBubble = (): void => {
+      if (found || scroller.querySelector(
+        '[data-chat-flow] [data-pending-steering="true"], [data-chat-flow] [data-chat-flow-kind="user"]',
+      ) === null) return
+      found = true
+      observer.disconnect()
+      raf = window.requestAnimationFrame(() => {
+        timeout = window.setTimeout(() => {
+          setFirstBubbleSettledFor(sessionId)
+        }, 72)
+      })
+    }
+    const observer = new MutationObserver(onBubble)
+    observer.observe(scroller, { subtree: true, childList: true })
+    onBubble()
+    return () => {
+      observer.disconnect()
+      if (raf !== undefined) window.cancelAnimationFrame(raf)
+      if (timeout !== undefined) window.clearTimeout(timeout)
+    }
+  }, [awaitingFirstBubbleFor, sessionId])
+
+  // Rendered browser/visual blocks arrive asynchronously as transcript nodes.
+  // DOM observation here avoids coupling the chat shell to individual plugins.
+  useEffect(() => {
+    const scroller = rootRef.current?.querySelector('[data-conversation-scroll]')
+    if (scroller == null || typeof MutationObserver === 'undefined') return
+    const refresh = (): void => {
+      setVisualActive(scroller.querySelector(
+        '[data-mini-browser-focus="true"], [data-phoenix-visual-qa]:not([data-phoenix-visual-qa="fail"]), [data-universal-artifact], [data-phoenix-scene3d], [data-phoenix-visual-kind]',
+      ) !== null)
+    }
+    const observer = new MutationObserver(refresh)
+    observer.observe(scroller, {
+      childList: true, subtree: true, attributes: true,
+      attributeFilter: ['data-mini-browser-focus', 'data-phoenix-visual-qa', 'data-universal-artifact', 'data-phoenix-scene3d', 'data-phoenix-visual-kind'],
+    })
+    refresh()
+    return () => { observer.disconnect() }
+  }, [sessionId])
+
+  useEffect(() => {
+    setSidebarFocus((sessionId !== undefined && firstBubbleSettledFor === sessionId) || visualActive)
+  }, [setSidebarFocus, sessionId, firstBubbleSettledFor, visualActive])
+  useEffect(() => () => { setSidebarFocus(false) }, [setSidebarFocus])
+
+  const openSettingsSection = useCallback((id: string): void => {
+    window.dispatchEvent(new CustomEvent('phoenix:open-settings-section', { detail: id }))
+  }, [])
+  const openWorkspaceSearch = useCallback((): void => {
+    window.dispatchEvent(new Event('phoenix:open-workspace-search'))
+  }, [])
+
+  const selectAttention = useCallback((item: (typeof proactiveAttention)[number]): void => {
+    if (inputActions === undefined) return
+    inputActions.setDraft(heroAttentionPrompt(item))
+    void recordAttention(item, 'handled')
+    requestAnimationFrame(() => {
+      rootRef.current?.querySelector('textarea')?.focus()
+    })
+  }, [inputActions, recordAttention])
+
+  const selectMission = useCallback((mission: HeroMissionStarter): void => {
+    // Never overwrite an unsent user draft and never trigger a model request.
+    if (inputActions === undefined || (inputState?.draft ?? '').trim() !== '') return
+    inputActions.setDraft(mission.prompt)
+    requestAnimationFrame(() => {
+      rootRef.current?.querySelector('textarea')?.focus()
+    })
+  }, [inputActions, inputState?.draft])
 
   // Publishes the seat's live height as --dsh-composer-height on the scroll
   // body so floating controls (ChatView back-to-bottom) clear the composer as
@@ -190,10 +314,45 @@ export function ConversationRoot({
       {hero && heroWorkspaceRow}
       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
       {inputBar}
+      {hero && <HeroAttentionList attention={proactiveAttention} onSelect={selectAttention} onDismiss={(item) => { void recordAttention(item, 'dismissed') }} />}
+      {hero && !inert && !blocked && proactiveAttention.length === 0
+        && (inputState?.draft ?? '').trim() === ''
+        && <HeroMissionLaunchpad onSelect={selectMission} />}
     </div>
   )
 
   const phase = settling ? 'settling' : hero ? 'hero' : 'active'
+  // Blank home and existing conversations initially show only the right-side
+  // tools. Typing (including a restored draft) expands the complete header.
+  // The first send waits for the painted user bubble so the header doesn't
+  // jump during admission, then any real content/visualizer collapses it again.
+  const hasDraft = (inputState?.draft ?? '').trim().length > 0
+  const [headerDraftReady, setHeaderDraftReady] = useState<{ sessionId: SessionId | undefined }>()
+  useEffect(() => {
+    if (!hasDraft) {
+      setHeaderDraftReady(undefined)
+      return
+    }
+    let timer: number | undefined
+    // Expanding hidden session chrome changes the entire column's geometry.
+    // Let the first draft glyph paint before admitting that layout work.
+    const frame = window.requestAnimationFrame(() => {
+      timer = window.setTimeout(() => { setHeaderDraftReady({ sessionId }) }, 0)
+    })
+    return () => {
+      window.cancelAnimationFrame(frame)
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }, [hasDraft, sessionId])
+  const headerHasDraft = hasDraft && headerDraftReady !== undefined && headerDraftReady.sessionId === sessionId
+  const firstSendPending = firstSendGuard.current.armed && firstBubbleSettledFor !== sessionId
+  const headerAutoCompact = hero
+    ? !firstSendPending
+    : firstBubbleSettledFor === sessionId
+      || (!firstSendPending && (summaryBlank === false || !firstSendGuard.current.wasBlank))
+  // Browser, game and visual surfaces take priority over typing; the manual
+  // pin remains available for users who need the whole navigation bar.
+  const headerCompact = !headerPinnedOpen && (visualActive || (!headerHasDraft && headerAutoCompact))
   const composer = renderSlotChain(
     'conversation.composer',
     { interactions: pending, session },
@@ -211,9 +370,41 @@ export function ConversationRoot({
   )
 
   return (
-    <div className={css.root} data-phase={phase}>
-      <SessionHeaderOutlet sessionId={sessionId} renderSlot={renderSlot} />
+    <div ref={rootRef} className={css.root} data-phase={phase} data-header-compact={headerCompact ? 'true' : undefined}>
+      <div className={css.unifiedHeader} aria-label="Barra superior de la conversación">
+        <div className={css.sessionChrome}>
+          <SessionHeaderOutlet sessionId={sessionId} renderSlot={renderSlot} />
+        </div>
+        <div className={css.headerGlobal} aria-label="Herramientas globales">
+          <button type="button" className={css.headerToggle}
+            aria-label={headerPinnedOpen ? 'Activar colapso automático' : headerCompact ? 'Expandir barra superior' : 'Fijar barra superior expandida'}
+            title={headerPinnedOpen ? 'Activar colapso automático' : headerCompact ? 'Expandir barra superior' : 'Fijar barra superior expandida'}
+            aria-expanded={!headerCompact}
+            aria-pressed={headerPinnedOpen}
+            onClick={() => { setHeaderPinnedOpen(current => !current) }}>
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              {headerCompact ? <path d="m7 10 5 5 5-5" /> : <path d="m7 14 5-5 5 5" />}
+            </svg>
+          </button>
+          <button type="button" className={css.heroTopIcon} aria-label="Buscar sesiones" onClick={openWorkspaceSearch}>
+            <IconSearchOutline16 size={19} />
+          </button>
+          <button type="button" className={css.heroTopIcon} aria-label="Descubrir herramientas" onClick={() => { openSettingsSection('plugins') }}>
+            <svg viewBox="0 0 20 20" width="19" height="19" fill="currentColor" aria-hidden="true">
+              {Array.from({ length: 9 }, (_, index) => (
+                <circle key={index} cx={4 + (index % 3) * 6} cy={4 + Math.floor(index / 3) * 6} r="1.45" />
+              ))}
+            </svg>
+          </button>
+          <button type="button" className={css.heroTopProfile} aria-label="Abrir perfil" onClick={() => { openSettingsSection('profile') }}>
+            {profileInitials}
+          </button>
+        </div>
+      </div>
       <div className={css.scrollBody} data-conversation-scroll="">
+        {settling && summaryBlank !== false && (
+          <div className={css.recoveryStatus} role="status">{t('chat.loadingHistory')}</div>
+        )}
         <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
         {composerSeat}
       </div>

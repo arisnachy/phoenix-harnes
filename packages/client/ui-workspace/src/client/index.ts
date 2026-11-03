@@ -26,7 +26,7 @@ export { callHardnessMission } from './hardness-rpc.ts'
 export { renderGenerativeUi, validateUiSchema } from './generative-ui.ts'
 export type { GenerativeUiRenderModel, UiNode, UiSchema } from './generative-ui.ts'
 export { CordisVisualWorkspaceController } from './CordisVisualWorkspace.tsx'
-export type { CordisVisualContent, ICordisVisualWorkspace } from './CordisVisualWorkspace.tsx'
+export type { CordisDockSide, CordisVisualContent, ICordisVisualWorkspace } from './CordisVisualWorkspace.tsx'
 import { en, es, zh, type WorkspaceKey } from './locales.ts'
 
 export type {
@@ -45,7 +45,7 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
 
 declare module '@phoenix-ai/cordis' {
   interface Context {
-    /** Rich right-side visual surface controlled by Phoenix/Cordis plugins. */
+    /** Rich side-rail visual surface controlled by Phoenix/Cordis plugins. */
     visualWorkspace: ICordisVisualWorkspace
   }
 }

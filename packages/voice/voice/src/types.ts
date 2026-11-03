@@ -32,3 +32,59 @@ export interface VoiceConversationCancelRequest {
 export interface VoiceConversationCancelReceipt {
   readonly cancelled: number
 }
+
+
+/** Capability of the native Codex/ChatGPT realtime voice sidecar. */
+export interface VoiceConversationRealtimeStatus {
+  readonly enabled: boolean
+  readonly available: boolean
+  readonly authenticated: boolean
+  readonly provider: 'openai-codex'
+  readonly reason?: 'disabled' | 'codex-unavailable' | 'codex-login-required' | 'experimental-unavailable'
+  /** Sanitized diagnostic from Codex CLI on failed native startup. */
+  readonly detail?: string
+  /** Existing single-owner updater's progress; optional for rolling clients. */
+  readonly repair?: 'checking' | 'updating' | 'waiting-upstream' | 'ready' | 'blocked' | 'disabled'
+}
+
+/** Browser WebRTC offer for one PHOENIX session using its current Codex route. */
+export interface VoiceConversationRealtimeStartRequest {
+  readonly key: string
+  readonly offerSdp: string
+  /** Current direct Codex model. Phoenix Auto omits its synthetic id. */
+  readonly model?: string
+}
+
+/** WebRTC answer returned after Codex app-server negotiated the realtime call. */
+export interface VoiceConversationRealtimeStartReceipt {
+  readonly accepted: boolean
+  readonly threadId?: string
+  readonly answerSdp?: string
+  readonly reason?: 'disabled' | 'invalid' | 'codex-unavailable' | 'codex-login-required' | 'experimental-unavailable' | 'negotiation-failed'
+  /** Bounded sanitized startup diagnostic when native Codex negotiation fails. */
+  readonly detail?: string
+}
+
+/** Read aloud a Phoenix-authorized final answer over the active Codex V3 session. */
+export interface VoiceConversationRealtimeSpeakRequest {
+  /** Browser-owned call key; never the raw Codex thread id. */
+  readonly key: string
+  /** Completed result or stable conversational sentence authorized by Phoenix. */
+  readonly text: string
+}
+
+/** Admission result for authorized native speech; acceptance does not prove audible playback. */
+export interface VoiceConversationRealtimeSpeakReceipt {
+  readonly accepted: boolean
+  readonly reason?: 'disabled' | 'invalid' | 'no-session' | 'codex-unavailable'
+}
+
+/** Stop one native Codex realtime session addressed by its PHOENIX session key. */
+export interface VoiceConversationRealtimeStopRequest {
+  readonly key: string
+}
+
+/** Whether a native Codex realtime session was active and stopped. */
+export interface VoiceConversationRealtimeStopReceipt {
+  readonly stopped: boolean
+}

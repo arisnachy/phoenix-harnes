@@ -12,7 +12,13 @@ import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime, { type JsonValue } from '@phoenix-ai/dsh-tools'
 import type { PostToolDecision } from '@phoenix-ai/dsh-tools'
 import { publicToolName, syncTools, type ToolBridgeOptions } from '@phoenix-ai/dsh-mcp-client/src/tools.ts'
-import { createTransport, normalizeBearerToken, repairPhoenixStdioProxyArgs } from '@phoenix-ai/dsh-mcp-client/src/transport.ts'
+import {
+  createTransport,
+  hydrateFetchMcpNodeEnvironment,
+  normalizeBearerToken,
+  normalizeWindowsNpxMcpLaunch,
+  repairPhoenixStdioProxyArgs,
+} from '@phoenix-ai/dsh-mcp-client/src/transport.ts'
 import type { Config } from '@phoenix-ai/dsh-mcp-client'
 
 const testToolSignal = new AbortController().signal
@@ -1005,6 +1011,22 @@ describe('tool execution', () => {
     expect('value' in result).toBe(false)
   })
 
+  it('reports JWT authentication failures returned by a real MCP tool call', async () => {
+    const onAuthorizationRequired = vi.fn()
+    const client = createMockClient(
+      [{ name: 'protected', inputSchema: { type: 'object' } }],
+      { content: [{ type: 'text', text: 'JWT authentication required' }], isError: true },
+    )
+
+    await syncTools(client as never, ctx, { ...defaultOpts, onAuthorizationRequired }, new Map())
+    const result = await ctx.tools.execute({
+      signal: testToolSignal, callId: CallId('jwt-auth'), name: 'mcp__srv__protected', arguments: {},
+    })
+
+    expect(result.isError).toBe(true)
+    expect(onAuthorizationRequired).toHaveBeenCalledTimes(1)
+  })
+
   it('rejects tools that require task-based execution', async () => {
     const client = createMockClient([
       { name: 'task-only', inputSchema: { type: 'object' }, execution: { taskSupport: 'required' } },
@@ -1278,7 +1300,145 @@ describe('tool execution edge cases', () => {
   })
 })
 
+describe('Fetch MCP Windows Node/npm environment hydration', () => {
+  const fetchServer = { serverName: 'fetch', command: 'uvx', args: ['mcp-server-fetch'] }
+  const nodePath = 'C:\\Program Files\\nodejs'
+  const nodeExe = nodePath + '\\node.exe'
+  const fileExists = (name: string): boolean => {
+    const normalized = name.toLowerCase()
+    return normalized === nodeExe.toLowerCase()
+      || normalized === (nodePath + '\\npm.cmd').toLowerCase()
+  }
+
+  it('adds the verified local Node and npm directory for curated Python Fetch when PATH is stale', () => {
+    const env = { Path: 'C:\\Windows\\System32', SAFE_VAR: 'preserved' }
+    const result = hydrateFetchMcpNodeEnvironment(fetchServer, env, {
+      platform: 'win32', nodeExecutable: nodeExe, fileExists,
+    })
+    expect(result).toEqual({
+      Path: 'C:\\Program Files\\nodejs;C:\\Windows\\System32',
+      SAFE_VAR: 'preserved',
+    })
+    expect(env.Path).toBe('C:\\Windows\\System32')
+  })
+
+  it('preserves a working PATH and Windows environment key casing', () => {
+    const env = { PATH: 'C:\\Program Files\\nodejs;C:\\Windows\\System32' }
+    const result = hydrateFetchMcpNodeEnvironment(fetchServer, env, {
+      platform: 'win32', nodeExecutable: nodeExe, fileExists,
+    })
+    expect(result).toEqual(env)
+    expect(Object.keys(result)).toEqual(['PATH'])
+  })
+
+  it('activates a Fetch-only npm.cmd shim even when Node is already on PATH', () => {
+    const result = hydrateFetchMcpNodeEnvironment(fetchServer, {
+      Path: 'C:\\Program Files\\nodejs;C:\\Windows\\System32',
+      PYTHONPATH: 'C:\\PythonExtras',
+    }, {
+      platform: 'win32',
+      nodeExecutable: nodeExe,
+      fileExists: (name) => fileExists(name) || name.endsWith('sitecustomize.py'),
+    })
+    expect(result.Path).toBe('C:\\Program Files\\nodejs;C:\\Windows\\System32')
+    expect(result.PHOENIX_FETCH_MCP_NPM_SHIM).toBe('1')
+    expect(result.PYTHONPATH).toContain('phoenix-fetch-mcp-sitecustomize')
+    expect(result.PYTHONPATH).toContain('C:\\PythonExtras')
+    expect(Object.keys(result).filter(name => name.toUpperCase() === 'PYTHONPATH')).toHaveLength(1)
+  })
+
+  it('does not enable the Python hook without a verified Node/npm or the bundled hook', () => {
+    const original = { Path: 'C:\\Windows\\System32' }
+    const missingNpm = hydrateFetchMcpNodeEnvironment(fetchServer, original, {
+      platform: 'win32', nodeExecutable: nodeExe,
+      fileExists: name => name.endsWith('sitecustomize.py') || name.toLowerCase() === nodeExe.toLowerCase(),
+    })
+    expect(missingNpm).toEqual(original)
+    const missingHook = hydrateFetchMcpNodeEnvironment(fetchServer, original, {
+      platform: 'win32', nodeExecutable: nodeExe, fileExists,
+    })
+    expect(missingHook.PHOENIX_FETCH_MCP_NPM_SHIM).toBeUndefined()
+  })
+
+  it('normalizes duplicate Windows Path/PATH aliases while keeping the explicit override', () => {
+    const result = hydrateFetchMcpNodeEnvironment(fetchServer, {
+      Path: 'C:\\old', PATH: 'C:\\Windows\\System32',
+    }, { platform: 'win32', nodeExecutable: nodeExe, fileExists })
+    expect(result).toEqual({ PATH: 'C:\\Program Files\\nodejs;C:\\Windows\\System32' })
+  })
+
+  it('finds a system Node installation if Phoenix itself runs a standalone node.exe', () => {
+    const result = hydrateFetchMcpNodeEnvironment(
+      { ...fetchServer, command: 'uvx.exe' },
+      { Path: 'C:\\Windows\\System32', ProgramFiles: 'C:\\Program Files' },
+      { platform: 'win32', nodeExecutable: 'D:\\portable\\node.exe', fileExists },
+    )
+    expect(result.Path).toBe('C:\\Program Files\\nodejs;C:\\Windows\\System32')
+  })
+
+  it('does not claim Node/npm are available if only Node exists', () => {
+    const result = hydrateFetchMcpNodeEnvironment(
+      fetchServer,
+      { Path: 'C:\\Windows\\System32' },
+      { platform: 'win32', nodeExecutable: nodeExe,
+        fileExists: (path) => path.toLowerCase() === nodeExe.toLowerCase() },
+    )
+    expect(result).toEqual({ Path: 'C:\\Windows\\System32' })
+  })
+
+  it('does not alter non-Fetch servers, non-uvx commands or non-Windows environments', () => {
+    const original = { Path: 'C:\\Windows\\System32' }
+    for (const config of [
+      { ...fetchServer, serverName: 'memory' },
+      { ...fetchServer, command: 'python' },
+      { ...fetchServer, args: ['other-server'] },
+    ]) {
+      expect(hydrateFetchMcpNodeEnvironment(config, original, {
+        platform: 'win32', nodeExecutable: nodeExe, fileExists,
+      })).toEqual(original)
+    }
+    expect(hydrateFetchMcpNodeEnvironment(fetchServer, original, {
+      platform: 'linux', nodeExecutable: nodeExe, fileExists,
+    })).toEqual(original)
+  })
+})
+
 describe('createTransport', () => {
+  it('launches the bundled Filesystem MCP entrypoint directly on Windows', () => {
+    const launch = normalizeWindowsNpxMcpLaunch(
+      'npx',
+      ['-y', '@modelcontextprotocol/server-filesystem', '.'],
+      'win32',
+    )
+
+    expect(launch.command).toBe(process.execPath)
+    expect(launch.args[0]?.replace(/\\/g, '/')).toMatch(
+      /@modelcontextprotocol\/server-filesystem\/dist\/index\.js$/u,
+    )
+    expect(launch.args.slice(1)).toEqual(['.'])
+  })
+
+  it('repairs a legacy direct mcp-server-filesystem command on Windows', () => {
+    const launch = normalizeWindowsNpxMcpLaunch('mcp-server-filesystem', ['.'], 'win32')
+
+    expect(launch.command).toBe(process.execPath)
+    expect(launch.args[0]?.replace(/\\/g, '/')).toMatch(
+      /@modelcontextprotocol\/server-filesystem\/dist\/index\.js$/u,
+    )
+    expect(launch.args.slice(1)).toEqual(['.'])
+  })
+
+  it('keeps the safe cmd wrapper for other curated NPX MCPs on Windows', () => {
+    expect(normalizeWindowsNpxMcpLaunch(
+      'npx',
+      ['-y', '@modelcontextprotocol/server-memory'],
+      'win32',
+    )).toEqual({
+      command: 'cmd.exe',
+      args: ['/d', '/c', 'npx', '-y', '@modelcontextprotocol/server-memory'],
+    })
+  })
+
   it('repairs a stale absolute PHOENIX stdio proxy path from a previous installation', () => {
     const stale = 'C:\\Users\\old\\Fenix-evolution\\phoenix-harnes\\scripts\\mcp-stdio-proxy.mjs'
     const repaired = repairPhoenixStdioProxyArgs([stale, 'npx', '--yes'])
@@ -1515,6 +1675,100 @@ describe('tool execution — non-object args fallback', () => {
 
     expect(client.callTool).toHaveBeenCalledWith(
       { name: 'coerce2', arguments: {} },
+      undefined,
+      expect.anything(),
+    )
+  })
+})
+
+describe('Phoenix MiniBrowser MCP conversation isolation', () => {
+  const url = 'https://www.youtube.com/'
+
+  const browserTool: MockTool = {
+    name: 'navigate',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string' },
+        sessionId: { type: 'string' },
+      },
+      required: ['url'],
+    },
+  }
+
+  function chatAgent(id: string, origin: string = 'user', parentSession?: string): object {
+    return { id, session: { header: { origin, parentSession }, requestHeader: () => undefined } }
+  }
+
+  it('injects the real chat ID into phoenix_browser even when the model omits it', async () => {
+    const ctx = await mountRegistry()
+    const client = createMockClient([browserTool])
+    await syncTools(client as never, ctx, { ...defaultOpts, serverName: 'phoenix_browser' }, new Map())
+
+    for (const id of ['chat-one', 'chat-two']) {
+      await ctx.tools.execute({
+        signal: testToolSignal,
+        callId: CallId('navigate-' + id),
+        name: 'mcp__phoenix_browser__navigate',
+        arguments: { url },
+        agent: chatAgent(id) as never,
+      })
+      expect(client.callTool).toHaveBeenLastCalledWith(
+        { name: 'navigate', arguments: { url, sessionId: id } },
+        undefined,
+        expect.anything(),
+      )
+    }
+  })
+
+  it('overrides an invented model sessionId and routes a subagent to its parent chat', async () => {
+    const ctx = await mountRegistry()
+    const client = createMockClient([browserTool])
+    await syncTools(client as never, ctx, { ...defaultOpts, serverName: 'phoenix_browser' }, new Map())
+
+    await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('navigate-child'),
+      name: 'mcp__phoenix_browser__navigate',
+      arguments: { url, sessionId: 'other-chat' },
+      agent: chatAgent('subagent-1', 'subagent', 'parent-chat') as never,
+    })
+
+    expect(client.callTool).toHaveBeenCalledWith(
+      { name: 'navigate', arguments: { url, sessionId: 'parent-chat' } },
+      undefined,
+      expect.anything(),
+    )
+  })
+
+  it('never silently opens the shared browser if the trusted chat identity is absent', async () => {
+    const ctx = await mountRegistry()
+    const client = createMockClient([browserTool])
+    await syncTools(client as never, ctx, { ...defaultOpts, serverName: 'phoenix_browser' }, new Map())
+
+    const result = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('navigate-unscoped'),
+      name: 'mcp__phoenix_browser__navigate',
+      arguments: { url },
+    })
+    expect(result.isError).toBe(true)
+    expect(client.callTool).not.toHaveBeenCalled()
+  })
+
+  it('does not inject a chat ID into unrelated MCP integrations', async () => {
+    const ctx = await mountRegistry()
+    const client = createMockClient([browserTool])
+    await syncTools(client as never, ctx, { ...defaultOpts, serverName: 'generic_connector' }, new Map())
+    await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('generic-nav'),
+      name: 'mcp__generic_connector__navigate',
+      arguments: { url },
+      agent: chatAgent('chat-one') as never,
+    })
+    expect(client.callTool).toHaveBeenCalledWith(
+      { name: 'navigate', arguments: { url } },
       undefined,
       expect.anything(),
     )

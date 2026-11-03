@@ -1,4 +1,114 @@
+
+/** ClawHub entries are catalog metadata, never proof a third-party package is executable. */
+export type ClawHubFamily = 'skill' | 'code-plugin' | 'bundle-plugin'
+export interface ClawHubListing {
+  readonly name: string
+  readonly family: ClawHubFamily
+  readonly description: string
+  readonly version: string
+}
+export interface ClawHubQuery {
+  readonly query: string
+  readonly family: ClawHubFamily
+  readonly limit?: number
+}
+export interface ClawHubInstallRequest {
+  readonly name: string
+  readonly family: ClawHubFamily
+}
+export interface ClawHubInstallReceipt {
+  readonly name: string
+  readonly family: ClawHubFamily
+  readonly status: 'installed-skill' | 'installed-in-openclaw'
+  readonly detail: string
+}
+export interface ClawHubState {
+  readonly cli: 'managed' | 'global' | 'missing'
+  readonly openclaw: 'available' | 'missing'
+  readonly skillsDirectory: string
+  readonly pluginExecution: 'openclaw-runtime' | 'not-configured'
+  /** Actual verified local CLI readiness, not just a package.json on disk. */
+  readonly cliStatus: 'ready' | 'installing' | 'missing' | 'install-failed' | 'incompatible-node'
+  readonly cliVersion?: string
+  readonly latestCliVersion?: string
+  readonly lastCheckedAt?: number
+  /** Safe enum; raw npm output and credential material are never exposed. */
+  readonly failureReason?: 'npm-cli-not-found' | 'registry-unreachable' | 'npm-install-or-cli-health-check-failed'
+}
+
+
+/** Search results from the public ClawHub registry; not installed/active tools. */
+export interface ClawHubCatalogRequest {
+  readonly family: ClawHubFamily
+  readonly query?: string
+  readonly officialOnly?: boolean
+  readonly limit?: number
+}
+export interface ClawHubCatalogItem {
+  readonly name: string
+  readonly displayName: string
+  readonly description: string
+  readonly version: string
+  readonly family: ClawHubFamily
+  readonly official: boolean
+  readonly installed: boolean
+}
+export interface ClawHubCatalogSnapshot {
+  readonly source: 'clawhub'
+  readonly family: ClawHubFamily
+  readonly items: readonly ClawHubCatalogItem[]
+}
+
+/** Secret-free The Odds API v4 credential state projected to trusted clients. */
+export interface OddsApiConnectorState {
+  readonly configured: boolean
+  readonly verified: boolean
+  readonly source: 'vault' | 'environment' | 'none'
+  readonly status: 'ready' | 'unconfigured' | 'invalid-key' | 'unreachable' | 'rate-limited' | 'vault-unavailable'
+  readonly requestsRemaining?: number
+  readonly requestsUsed?: number
+  readonly lastRequestCost?: number
+}
+
 import type { Branded } from '@phoenix-ai/dsh-brand'
+
+/** One request's bounded input and actual provider token counters. No text or session IDs. */
+export interface TokenTelemetryRecord {
+  readonly at: number
+  readonly provider: string
+  readonly model: string
+  readonly reasoningEffort: string
+  readonly systemChars: number
+  /** Identical leading system text versus previous request to the same model; not a provider cache hit. */
+  readonly reusedSystemPrefixChars?: number
+  readonly schemaChars: number
+  readonly historyChars: number
+  readonly humanChars: number
+  readonly assistantChars: number
+  readonly toolResultChars: number
+  readonly runtimeContextChars: number
+  readonly otherHistoryChars: number
+  readonly messageCount: number
+  readonly toolCount: number
+  readonly approximateInputTokens: number
+  readonly inputTokens?: number
+  readonly outputTokens?: number
+  readonly cacheReadTokens?: number
+  readonly cacheWriteTokens?: number
+  readonly reasoningTokens?: number
+}
+
+/** Counters collected locally; percentages of provider quotas are not inferred. */
+export interface TokenTelemetrySnapshot {
+  readonly enabled: boolean
+  readonly records: readonly TokenTelemetryRecord[]
+}
+
+/** Explicit Settings preference update, validated at the Host boundary. */
+export interface TokenTelemetryPreference {
+  readonly enabled: boolean
+}
+
 
 /** Stable Loader-tree identity of one configured plugin entry. */
 export type PluginEntryId = Branded<'PluginEntryId'>
@@ -25,6 +135,43 @@ export interface PluginInventoryEntry {
 /** Point-in-time inventory returned by the plugin inventory Remote. */
 export interface PluginInventorySnapshot {
   readonly entries: readonly PluginInventoryEntry[]
+}
+
+/** Exact existing Loader entry request from trusted Settings. */
+export interface PluginEnableRequest {
+  readonly entryId: PluginEntryId
+  readonly enabled: boolean
+}
+
+/** Results of activating configured plugins and the pinned curated MCP pack. */
+export interface PluginBulkActivationReceipt {
+  readonly activated: readonly PluginEntryId[]
+  readonly skipped: readonly PluginEntryId[]
+  readonly failed: readonly PluginEntryId[]
+  readonly curatedInstalled: number
+  readonly curatedExisting: number
+  readonly curatedFailed: readonly CuratedMcpConnectorId[]
+}
+
+/** Secret-free Business Engine product projection. No local paths or order identifiers. */
+export interface BusinessLibraryProduct {
+  readonly id: string
+  readonly title: string
+  readonly type: string
+  readonly updatedAt: string
+  readonly fileCount: number
+  readonly chapterCount: number
+  readonly listingCount: number
+  readonly plannedChapters: number
+  readonly writtenWords: number
+  readonly targetWords: number | null
+  readonly buildStatus: 'not-built' | 'current' | 'stale'
+  readonly listingStage: 'not-prepared' | 'assets-missing' | 'review-required' | 'integrity-failed'
+}
+export interface BusinessLibrarySnapshot {
+  readonly totalCount: number
+  readonly truncated: boolean
+  readonly products: readonly BusinessLibraryProduct[]
 }
 
 
@@ -65,6 +212,8 @@ export interface McpRegistryCandidate {
   readonly repositoryUrl?: string
   readonly websiteUrl?: string
   readonly remoteUrl?: string
+  /** A remote is listed but cannot be installed from a bare URL. */
+  readonly remoteSetupRequired?: 'headers' | 'variables'
 }
 
 /** Browser/model request for an Official MCP Registry name search. */
@@ -89,14 +238,22 @@ export interface McpConnectorRuntimeEntry {
   readonly transport: 'stdio' | 'streamable-http'
   readonly status: 'starting' | 'ready' | 'disconnected' | 'failed' | 'auth-required'
   readonly toolNames: readonly string[]
-  readonly reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
+  // This must include every McpConnectorReasonCode published by mcp-registry;
+  // a missing literal is rejected at the generated Typert Remote result boundary.
+  readonly reasonCode?: 'connection-failed' | 'endpoint-not-found' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
 }
+
+/** Trusted reconstruction source for one PHOENIX-managed MCP. */
+export type ManagedMcpSource =
+  | { readonly kind: 'registry'; readonly name: string; readonly version?: string }
+  | { readonly kind: 'curated'; readonly connectorId: string }
 
 /** One PHOENIX-managed remote MCP persisted in the managed overlay. */
 export interface ManagedMcpConnector {
   readonly entryId: string
   readonly serverName: string
   readonly url: string
+  readonly source?: ManagedMcpSource
 }
 
 /** Combined MCP state used by Settings without exposing credentials or headers. */
@@ -111,10 +268,73 @@ export interface McpRegistryInstallRequest {
   readonly version?: string
 }
 
+/** Exact curated connector ids accepted by the Host-owned pinned installer. */
+export type CuratedMcpConnectorId =
+  | 'devpost'
+  | 'canva'
+  | 'supabase'
+  | 'heygen'
+  | 'figma'
+  | 'github'
+  | 'meta-devtools'
+  | 'meta-whatsapp-business'
+  | 'meta-publishing'
+  | 'x'
+  | 'x-docs'
+  | 'microsoft-learn'
+  | 'microsoft-personal'
+  | 'outlook-mail'
+  | 'outlook-calendar'
+  | 'microsoft-contacts'
+  | 'onedrive'
+  | 'microsoft-teams'
+  | 'sharepoint'
+  | 'social-engine'
+  | 'microsoft-workiq'
+  | 'microsoft-azure'
+  | 'vercel'
+  | 'notion'
+  | 'linear'
+  | 'cloudflare'
+  | 'slack'
+  | 'brave-search'
+  | 'filesystem'
+  | 'memory'
+  | 'fetch'
+
+/** Secret-free Telegram Bot API configuration state; this does not mean an inbox is running. */
+export interface TelegramBotSnapshot {
+  readonly configured: boolean
+  readonly verified: boolean
+  readonly phase: 'unconfigured' | 'verified' | 'invalid-token' | 'unreachable' | 'credentials-unavailable'
+  readonly username?: string
+  /** True only after a successful inbound polling request on this Host. */
+  readonly inboxActive: boolean
+  readonly paired: boolean
+  /** A sanitized polling diagnostic, never a Telegram token or URL. */
+  readonly reason?: string
+}
+
+/** Browser/model-safe request selecting one Host-curated MCP identity. */
+export interface CuratedMcpInstallRequest {
+  readonly connectorId: CuratedMcpConnectorId
+}
+
 /** Result of installing a safe registry-listed Streamable HTTP MCP. */
 export interface McpRegistryInstallReceipt {
   readonly status: 'installed' | 'already-installed'
   readonly connector: ManagedMcpConnector
+}
+
+/** Exact PHOENIX-managed entry request; callers never provide a URL or executable. */
+export interface ManagedMcpEntryRequest {
+  readonly entryId: string
+}
+
+/** Result of removing one PHOENIX-managed connector. */
+export interface ManagedMcpRemoveReceipt {
+  readonly removed: boolean
+  readonly liveUnloaded: boolean
 }
 
 /** Secret-bearing Jev setup request accepted only by the trusted Host remote. */
@@ -148,6 +368,24 @@ export type PhoenixUpdateStatus =
   | 'rollback-failed'
   | 'off'
 
+/** Whitelisted durable progress event, without raw terminal output or secrets. */
+export interface PhoenixUpdateEvent {
+  readonly at: string
+  readonly step: string
+  readonly result: 'started' | 'ok' | 'failed' | 'info'
+  readonly exitCode?: number
+  /** Redacted diagnostic output from the failing process, when available. */
+  readonly diagnostic?: string
+}
+
+/** One bounded, credential-redacted line emitted by a real updater child process. */
+export interface PhoenixUpdateConsoleLine {
+  readonly at: string
+  readonly step: string
+  readonly stream: 'stdout' | 'stderr'
+  readonly line: string
+}
+
 /** Sanitized updater state read from the repository-owned Git directory. */
 export interface PhoenixUpdateSnapshot {
   readonly status: PhoenixUpdateStatus
@@ -159,6 +397,8 @@ export interface PhoenixUpdateSnapshot {
   readonly channelPublishedAt?: string
   readonly detail?: string
   readonly at?: string
+  readonly events?: readonly PhoenixUpdateEvent[]
+  readonly console?: readonly PhoenixUpdateConsoleLine[]
 }
 
 /** Result of asking the live Host to restart into a prepared update. */
@@ -244,3 +484,80 @@ export interface ChatGptWebSnapshot {
   readonly baseUrl: string
   readonly detail: string
 }
+
+
+/** OpenClaw-backed connector identities PHOENIX can verify without exposing credentials. */
+export type OpenClawConnectorId = 'google-workspace' | 'github'
+
+/** Secret-free readiness of one OpenClaw connector route. */
+export interface OpenClawConnectorEntry {
+  readonly id: OpenClawConnectorId
+  readonly skillAlias: 'openclaw-gog' | 'openclaw-github'
+  readonly skillInstalled: boolean
+  readonly runtimeAvailable: boolean
+  readonly connected: boolean
+  readonly account?: string
+  readonly phase: 'ready' | 'auth-required' | 'missing-runtime' | 'missing-skill' | 'api-unavailable'
+}
+
+/** Current OpenClaw connector readiness projected to Settings. */
+export interface OpenClawConnectorSnapshot {
+  readonly connectors: readonly OpenClawConnectorEntry[]
+}
+
+
+/** CLI readiness is not proof of live runtime state or granted capabilities. */
+export type OpenClawProbeState = 'not-installed' | 'responded' | 'unavailable'
+export interface OpenClawRuntimeSnapshot {
+  /** Runtime compatibility of PHOENIX's Host Node, not the Gateway Node. */
+  readonly hostNodeSupported: boolean
+  readonly installed: boolean
+  readonly gateway: OpenClawProbeState
+  readonly browser: OpenClawProbeState
+  readonly plugins: OpenClawProbeState
+  readonly channels: OpenClawProbeState
+  readonly nativePluginsRoutedToPhoenix: false
+}
+
+/** OpenClaw tools can only be routed after the owner approves the exact registered identity. */
+export interface OpenClawRoutedTool {
+  readonly pluginId: string
+  readonly name: string
+  readonly enabled: boolean
+  readonly imported: boolean
+  readonly approved: boolean
+}
+export interface OpenClawInstalledPlugin {
+  readonly id: string
+  readonly enabled: boolean
+  readonly loaded: boolean
+  readonly status: 'loaded' | 'enabled' | 'disabled' | 'error' | 'unknown'
+}
+export interface OpenClawRoutingSnapshot {
+  readonly gatewayCredentialConfigured: boolean
+  readonly tools: readonly OpenClawRoutedTool[]
+  readonly plugins: readonly OpenClawInstalledPlugin[]
+  readonly inspectionAvailable: boolean
+}
+export interface OpenClawPluginActivationRequest {
+  readonly pluginId: string
+  readonly enabled: boolean
+}
+export interface OpenClawGatewayCredentialState {
+  readonly configured: boolean
+  readonly source: 'vault' | 'environment' | 'none'
+  /** Short-lived local pairing link; only sent to the trusted Settings UI. */
+  readonly authorizationUrl?: string
+}
+export interface OpenClawGatewayCredentialRequest {
+  readonly token?: string
+  readonly auto?: boolean
+}
+export interface OpenClawRoutingRequest {
+  readonly pluginId: string
+  readonly toolName: string
+  readonly approved: boolean
+}
+
+/** Public X connector identity accepted by the Host remote boundary. */
+export type XMcpIdentity = 'user' | 'phoenix'

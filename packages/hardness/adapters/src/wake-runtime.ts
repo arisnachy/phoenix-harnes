@@ -33,6 +33,7 @@ function chooseAgent(agents: Pick<AgentRegistry, 'get' | 'roots' | 'list'>, targ
   if (targetAgentId !== undefined) {
     const exact = agents.get(targetAgentId as never)
     if (exact !== undefined) return exact
+    throw new Error(`wake target "${targetAgentId}" is not live; refusing to dispatch into another conversation`)
   }
   const agent = agents.roots()[0] ?? agents.list()[0]
   if (agent === undefined) throw new Error('no live Phoenix agent is available')
@@ -78,21 +79,46 @@ function wakePrompt(input: WakeExecution): string {
  * @returns Executor that converts durable wake executions into agent follow-ups.
  */
 export function createWakeExecutor(
-  agents: Pick<AgentRegistry, 'get' | 'roots' | 'list'>,
+  agents: Pick<AgentRegistry, 'get' | 'roots' | 'list'> & Partial<Pick<AgentRegistry, 'resume'>>,
+  options: { readonly composeResumedAgent?: (ctx: Context) => Promise<void> } = {},
 ): WakeExecutor {
   return {
     async execute(input) {
-      const parent = chooseAgent(agents, input.trigger.targetAgentId)
-      parent.followup(createUserMessage({
-        content: [{ type: 'text', text: wakePrompt(input) }],
-        source: {
-          kind: 'plugin',
-          plugin: 'hardness-adapters',
-          form: 'notice',
-          summary: boundContextSummary(`Wake: ${input.trigger.title}`),
-        },
-      }))
-      return { summary: 'wake event accepted by the live Phoenix agent inbox' }
+      const targetId = input.trigger.targetAgentId
+      // A trigger belongs to the exact session that created it. Never fall back
+      // to a different user's open conversation when the original is closed.
+      const needsResume = targetId !== undefined && agents.get(targetId as never) === undefined
+      if (needsResume && agents.resume === undefined) {
+        throw new Error(`wake target "${targetId}" is not live or resumable`)
+      }
+      const resumed = needsResume && targetId !== undefined && agents.resume !== undefined
+        ? await agents.resume({
+          resumeSessionId: targetId as never,
+          ...(options.composeResumedAgent === undefined ? {} : { setup: options.composeResumedAgent }),
+        })
+        : undefined
+      try {
+        const parent = resumed?.agent ?? chooseAgent(agents, targetId)
+        parent.followup(createUserMessage({
+          content: [{ type: 'text', text: wakePrompt(input) }],
+          source: {
+            kind: 'plugin',
+            plugin: 'hardness-adapters',
+            form: 'notice',
+            summary: boundContextSummary(`Wake: ${input.trigger.title}`),
+          },
+        }))
+        // A cold-resumed session must finish its task before we release it;
+        // otherwise a wake can be recorded as delivered while still pending.
+        if (resumed !== undefined) await parent.whenIdle()
+        return {
+          summary: resumed === undefined
+            ? 'wake event accepted by the live Phoenix agent inbox'
+            : 'wake event completed in the restored Phoenix session',
+        }
+      } finally {
+        if (resumed !== undefined) await resumed.dispose()
+      }
     },
   }
 }

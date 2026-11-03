@@ -1,0 +1,417 @@
+/**
+ * Universal research entrypoint over the existing governed web capability seam.
+ * Source names are discovery hints, NEVER pre-authorized API connections.
+ * No third-party endpoint, credential, or executable plugin is installed here.
+ */
+import type { Context } from '@phoenix-ai/cordis'
+import { defineTool, ToolArgsError } from '@phoenix-ai/dsh-tools'
+import type { WebSearchResult, WebSearchSource } from '@phoenix-ai/dsh-web'
+
+/** Candidate research host metadata. A listing does not grant network or API execution authority. */
+export interface ResearchSource {
+  readonly name: string
+  readonly host: string
+  readonly access: 'public' | 'mixed' | 'restricted'
+}
+
+/** Extensible starting map. Hosts are search scopes, not unverified direct API endpoints. */
+export const RESEARCH_SOURCES: Record<string, readonly ResearchSource[]> = {
+  general: [],
+  sports: [
+    { name: 'Official competition websites', host: 'fifa.com', access: 'public' },
+    { name: 'ESPN', host: 'espn.com', access: 'mixed' },
+    { name: 'MLB', host: 'mlb.com', access: 'public' },
+  ],
+  fx: [
+    { name: 'Banco Central de la República Dominicana', host: 'bancentral.gov.do', access: 'public' },
+    { name: 'European Central Bank', host: 'ecb.europa.eu', access: 'public' },
+    { name: 'Frankfurter', host: 'frankfurter.dev', access: 'public' },
+  ],
+  crypto: [
+    { name: 'CoinGecko', host: 'coingecko.com', access: 'mixed' },
+    { name: 'Binance', host: 'binance.com', access: 'mixed' },
+  ],
+  finance: [
+    { name: 'SEC EDGAR', host: 'sec.gov', access: 'public' },
+    { name: 'FRED', host: 'fred.stlouisfed.org', access: 'public' },
+  ],
+  public_health: [
+    { name: 'Pan American Health Organization', host: 'paho.org', access: 'public' },
+    { name: 'World Bank', host: 'worldbank.org', access: 'public' },
+    { name: 'National Statistics Office RD', host: 'one.gob.do', access: 'public' },
+    { name: 'Ministry of Public Health RD', host: 'msp.gob.do', access: 'public' },
+    { name: 'National Health Service RD', host: 'sns.gob.do', access: 'public' },
+    { name: 'Health Insurance Superintendent RD', host: 'sisalril.gob.do', access: 'public' },
+    { name: 'World Health Organization', host: 'who.int', access: 'public' },
+    { name: 'World Bank Data', host: 'datos.bancomundial.org', access: 'public' },
+  ],
+  medicine: [
+    { name: 'PubMed', host: 'pubmed.ncbi.nlm.nih.gov', access: 'public' },
+    { name: 'ClinicalTrials.gov', host: 'clinicaltrials.gov', access: 'public' },
+    { name: 'World Health Organization', host: 'who.int', access: 'public' },
+  ],
+  neuroscience: [
+    { name: 'PubMed', host: 'pubmed.ncbi.nlm.nih.gov', access: 'public' },
+    { name: 'OpenNeuro', host: 'openneuro.org', access: 'public' },
+  ],
+  science: [
+    { name: 'OpenAlex', host: 'openalex.org', access: 'mixed' },
+    { name: 'arXiv', host: 'arxiv.org', access: 'public' },
+    { name: 'Crossref', host: 'crossref.org', access: 'public' },
+  ],
+  economics: [
+    { name: 'World Bank', host: 'worldbank.org', access: 'public' },
+    { name: 'IMF', host: 'imf.org', access: 'public' },
+    { name: 'CEPAL', host: 'cepal.org', access: 'public' },
+  ],
+  law: [
+    { name: 'EUR-Lex', host: 'eur-lex.europa.eu', access: 'public' },
+    { name: 'Congress.gov', host: 'congress.gov', access: 'public' },
+  ],
+  weather: [
+    { name: 'NOAA', host: 'noaa.gov', access: 'public' },
+    { name: 'Open-Meteo', host: 'open-meteo.com', access: 'public' },
+  ],
+  geography: [
+    { name: 'OpenStreetMap', host: 'openstreetmap.org', access: 'public' },
+    { name: 'USGS', host: 'usgs.gov', access: 'public' },
+  ],
+  travel: [
+    { name: 'IATA', host: 'iata.org', access: 'public' },
+    { name: 'Amadeus', host: 'amadeus.com', access: 'mixed' },
+  ],
+  news: [
+    { name: 'GDELT', host: 'gdeltproject.org', access: 'public' },
+    { name: 'Reuters', host: 'reuters.com', access: 'mixed' },
+  ],
+  commerce: [
+    { name: 'eBay', host: 'ebay.com', access: 'mixed' },
+    { name: 'Mercado Libre', host: 'mercadolibre.com', access: 'mixed' },
+  ],
+  entertainment: [
+    { name: 'TMDb', host: 'themoviedb.org', access: 'mixed' },
+    { name: 'MusicBrainz', host: 'musicbrainz.org', access: 'public' },
+  ],
+  books: [
+    { name: 'Open Library', host: 'openlibrary.org', access: 'public' },
+    { name: 'Library of Congress', host: 'loc.gov', access: 'public' },
+  ],
+  education: [
+    { name: 'ERIC', host: 'eric.ed.gov', access: 'public' },
+    { name: 'UNESCO', host: 'unesco.org', access: 'public' },
+  ],
+  environment: [
+    { name: 'NASA Earthdata', host: 'earthdata.nasa.gov', access: 'mixed' },
+    { name: 'Copernicus', host: 'copernicus.eu', access: 'mixed' },
+  ],
+  agriculture: [
+    { name: 'FAOSTAT', host: 'fao.org', access: 'public' },
+    { name: 'USDA', host: 'usda.gov', access: 'public' },
+  ],
+  energy: [
+    { name: 'US EIA', host: 'eia.gov', access: 'public' },
+    { name: 'IEA', host: 'iea.org', access: 'mixed' },
+  ],
+  cybersecurity: [
+    { name: 'CISA', host: 'cisa.gov', access: 'public' },
+    { name: 'NVD', host: 'nvd.nist.gov', access: 'public' },
+    { name: 'OSV', host: 'osv.dev', access: 'public' },
+  ],
+  software: [
+    { name: 'GitHub', host: 'github.com', access: 'mixed' },
+    { name: 'npm', host: 'npmjs.com', access: 'public' },
+    { name: 'PyPI', host: 'pypi.org', access: 'public' },
+  ],
+  patents: [
+    { name: 'European Patent Office', host: 'epo.org', access: 'mixed' },
+    { name: 'WIPO', host: 'wipo.int', access: 'public' },
+  ],
+  businesses: [
+    { name: 'Companies House', host: 'find-and-update.company-information.service.gov.uk', access: 'public' },
+    { name: 'OpenCorporates', host: 'opencorporates.com', access: 'mixed' },
+  ],
+  transport: [
+    { name: 'OpenStreetMap', host: 'openstreetmap.org', access: 'public' },
+    { name: 'OpenSky Network', host: 'opensky-network.org', access: 'mixed' },
+  ],
+}
+
+const DOMAIN_PATTERNS: readonly (readonly [string, RegExp])[] = [
+  ['fx', /\b(d[oó]lar|euro|divisa|exchange rate|currency|tipo de cambio|usd|dop|eur)\b/iu],
+  ['crypto', /\b(bitcoin|ethereum|criptomoneda|crypto|blockchain|token|btc)\b/iu],
+  ['sports', /\b(partido|f[uú]tbol|football|soccer|nba|mlb|b[eé]isbol|tenis|liga|marcador|resultado deportivo|champions|real madrid)\b/iu],
+  ['neuroscience', /\b(neurociencia|neuropsicolog|neuroplasticidad|neuroimagen|cognitiv|alzheimer|alzh[eé]imer)\b/iu],
+  ['public_health', /\b(aps|atenci[oó]n primaria|primer nivel|cobertura sanitaria|cobertura efectiva|salud p[uú]blica|sistema sanitario|sistema de salud|servicios de salud|mortalidad materna|mortalidad infantil|sisalril|servicio nacional de salud|ministerio de salud p[uú]blica)\b/iu],
+  ['medicine', /\b(medicina|clinical|cl[ií]nic|ensayo|tratamiento|paciente|salud|f[aá]rmaco|epidemiolog)\b/iu],
+  ['finance', /\b(acciones|bolsa|stock|bonos|inversiones|nasdaq|s&p|sec edgar)\b/iu],
+  ['economics', /\b(inflaci[oó]n|pib|gdp|desempleo|econom[ií]a|banco mundial|pol[ií]ticas p[uú]blicas)\b/iu],
+  ['weather', /\b(clima|tiempo atmosf[eé]rico|hurac[aá]n|meteorolog|pron[oó]stico|weather)\b/iu],
+  ['law', /\b(ley|decreto|jurisprudencia|legislaci[oó]n|normativa|derecho|legal)\b/iu],
+  ['travel', /\b(vuelo|aeropuerto|hotel|viaje|turismo|flight|airline)\b/iu],
+  ['news', /\b(noticias|actualidad|breaking|noticia|acontecimiento)\b/iu],
+  ['cybersecurity', /\b(cve|vulnerabilidad|ciberseguridad|malware|exploit|seguridad inform[aá]tica)\b/iu],
+  ['education', /\b(educaci[oó]n|pedagog|curso|universidad|ense[nñ]anza|aprendizaje)\b/iu],
+  ['science', /\b(ciencia|investigaci[oó]n|art[ií]culos cient[ií]ficos|papers|estudio cient[ií]fico|arxiv)\b/iu],
+  ['geography', /\b(mapa|geograf[ií]a|coordenada|cartograf[ií]a)\b/iu],
+  ['commerce', /\b(comprar|producto|precio|tienda|oferta|shopping)\b/iu],
+  ['entertainment', /\b(pel[ií]cula|serie|spotify|actor|cine|m[uú]sica)\b/iu],
+  ['books', /\b(libro|novela|biblioteca|isbn|autor literario)\b/iu],
+  ['environment', /\b(medioambiente|contaminaci[oó]n|emisiones|ecosistema|biodiversidad)\b/iu],
+  ['agriculture', /\b(agricultura|cultivo|siembra|cosecha)\b/iu],
+  ['energy', /\b(energ[ií]a|electricidad|petr[oó]leo|combustible)\b/iu],
+  ['software', /\b(programaci[oó]n|github|typescript|python|software|api|repositorio)\b/iu],
+  ['patents', /\b(patente|patent|inventor)\b/iu],
+  ['businesses', /\b(empresa|corporaci[oó]n|compa[nñ][ií]a|registro mercantil)\b/iu],
+  ['transport', /\b(log[ií]stica|transporte|tracking|paquete|env[ií]o)\b/iu],
+]
+
+/** Bounded federated query plan, independent of the active web-search provider. */
+export interface ResearchPlan {
+  readonly domain: string
+  readonly queries: string[]
+  readonly candidates: ResearchSource[]
+  readonly batch: number
+  readonly totalBatches: number
+}
+
+/**
+ * Infer a research domain and create a bounded source-aware search plan.
+ * @param question - user's research question, from 3 to 500 characters.
+ * @param requestedDomain - optional explicit catalogue domain.
+ * @returns broad and authority-scoped queries plus candidate metadata.
+ */
+function scopeQuery(question: string, host: string, domain: string): string {
+  if (domain !== 'public_health' || !/rep[uú]blica dominicana|dominican republic|\bRD\b/iu.test(question)) {
+    return question + ' site:' + host
+  }
+  const years = [...question.matchAll(/\b(?:19|20)\d{2}\b/gu)].map(match => match[0]).slice(0, 2).join(' ')
+  const focus = /mortalidad|resultados sanitarios|indicadores/iu.test(question) ? 'mortalidad indicadores'
+    : /cobertura/iu.test(question) ? 'cobertura sanitaria'
+      : /primer nivel|atenci[oó]n primaria|\bAPS\b/iu.test(question) ? 'atención primaria salud'
+        : 'sistema de salud'
+  const english = host === 'worldbank.org' || host === 'who.int'
+  const isAps = /primer nivel|atenci[oó]n primaria|\bAPS\b/iu.test(question)
+  const targeted = isAps && (host === 'paho.org' || host === 'msp.gob.do' || host === 'sns.gob.do')
+    ? 'atención primaria primer nivel' : host === 'sisalril.gob.do' ? 'afiliación cobertura salud'
+      : isAps && english ? 'primary health care mortality coverage'
+        : english ? 'health mortality coverage' : focus
+  const location = english ? 'Dominican Republic' : 'República Dominicana'
+  return [location, targeted, years, 'site:' + host].filter(Boolean).join(' ')
+}
+
+/**
+ * Plan consecutive authority batches instead of silently stopping after two institutions.
+ * @param question - user topic and geographic or temporal constraints.
+ * @param requestedDomain - optional explicit source domain.
+ * @param batch - zero-based source batch; 0 includes broad recall.
+ * @returns bounded provider searches and total batches required for institutional coverage.
+ */
+export function planResearch(question: string, requestedDomain?: string, batch = 0): ResearchPlan {
+  const q = question.trim()
+  if (q.length < 3 || q.length > 500) throw new ToolArgsError(['question must contain 3–500 characters'])
+  const domain = requestedDomain === undefined || requestedDomain.trim() === ''
+    ? (DOMAIN_PATTERNS.find(([, pattern]) => pattern.test(q))?.[0] ?? 'general')
+    : requestedDomain.trim().toLowerCase()
+  if (!Object.hasOwn(RESEARCH_SOURCES, domain)) {
+    throw new ToolArgsError([`unknown domain: ${domain}; use research_sources to inspect supported domains`])
+  }
+  const hosts = RESEARCH_SOURCES[domain] ?? []
+  const totalBatches = Math.max(1, Math.ceil(hosts.length / 2))
+  if (!Number.isInteger(batch) || batch < 0 || batch >= totalBatches) {
+    throw new ToolArgsError(['batch must be an integer from 0 to ' + String(totalBatches - 1)])
+  }
+  const candidates = hosts.slice(batch * 2, batch * 2 + 2)
+  return {
+    domain, batch, totalBatches, candidates,
+    queries: [...(batch === 0 ? [q] : []), ...candidates.map(source => scopeQuery(q, source.host, domain))],
+  }
+}
+
+function canonicalUrl(raw: string): string | undefined {
+  try {
+    const url = new URL(raw)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined
+    url.hash = ''
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^(utm_|fbclid$|gclid$)/iu.test(key)) url.searchParams.delete(key)
+    }
+    return url.toString()
+  } catch { return undefined }
+}
+
+/** Auditable research leads and explicit partial-failure outcome. */
+export interface ResearchOutcome {
+  readonly domain: string
+  readonly queries: string[]
+  readonly candidates: ResearchSource[]
+  readonly sources: WebSearchSource[]
+  readonly failedQueries: string[]
+  readonly batch: number
+  readonly totalBatches: number
+  readonly offTopicDropped: number
+  readonly truncated: boolean
+  readonly status: 'ok' | 'partial' | 'empty'
+  readonly note: string
+}
+
+/**
+ * Failures do not discard independent successful searches; no response is fabricated.
+ * @param ctx - host-owned web seam with configured search providers.
+ * @param plan - domain-aware research plan.
+ * @param maxResults - cap on retained result URLs.
+ * @param signal - cancellation signal for all live provider requests.
+ * @returns deduplicated search leads and diagnostic status.
+ */
+export async function executeResearch(
+  ctx: Pick<Context, 'web'>,
+  plan: ResearchPlan,
+  maxResults: number,
+  signal: AbortSignal,
+): Promise<ResearchOutcome> {
+  const outcomes = await Promise.allSettled(plan.queries.map(query => ctx.web.search({ query, maxResults }, signal)))
+  if (signal.aborted) throw signal.reason ?? new Error('research cancelled')
+  const failedQueries: string[] = []
+  const successful: WebSearchResult[] = []
+  for (let index = 0; index < outcomes.length; index++) {
+    const outcome = outcomes[index]
+    if (outcome?.status === 'fulfilled') successful.push(outcome.value)
+    else failedQueries.push(plan.queries[index] as string)
+  }
+  if (successful.length === 0) throw new Error('No search provider succeeded; check provider credentials or availability.')
+  const seen = new Set<string>()
+  const sources: WebSearchSource[] = []
+  let dropped = false
+  let offTopicDropped = 0
+  const countryFocus = plan.domain === 'public_health'
+    && plan.queries.some(query => /rep[uú]blica dominicana|dominican republic|\bRD\b/iu.test(query))
+  const isRelevant = (source: WebSearchSource, url: string): boolean => {
+    if (plan.domain !== 'public_health') return true
+    const evidence = (source.title ?? '') + ' ' + (source.snippet ?? '') + ' ' + url
+    const topic = /salud|health|primary care|atenci[oó]n primaria|primer nivel|cobertura|coverage|mortalidad/iu.test(evidence)
+      || /mortality|maternal|infant|\buhc\b|aseguramiento|afiliaci[oó]n|sanitari|healthcare/iu.test(evidence)
+    const country = !countryFocus || /rep[uú]blica dominicana|dominican republic|\bDOM\b|\.gob\.do/iu.test(evidence)
+    return topic && country
+  }
+  const maxRanks = Math.max(0, ...successful.map(result => result.sources.length))
+  outer: for (let rank = 0; rank < maxRanks; rank++) {
+    for (const result of successful) {
+      const source = result.sources[rank]
+      if (source === undefined) continue
+      const url = canonicalUrl(source.url)
+      if (url === undefined || seen.has(url)) continue
+      seen.add(url)
+      if (!isRelevant(source, url)) { offTopicDropped++; continue }
+      if (sources.length >= maxResults) { dropped = true; break outer }
+      sources.push({ ...source, url })
+    }
+  }
+  return {
+    domain: plan.domain,
+    queries: plan.queries,
+    candidates: plan.candidates,
+    batch: plan.batch,
+    totalBatches: plan.totalBatches,
+    offTopicDropped,
+    sources,
+    failedQueries,
+    truncated: dropped || successful.some(result => result.truncated),
+    status: failedQueries.length > 0 ? 'partial' : sources.length > 0 ? 'ok' : 'empty',
+    note: 'Search hits are leads, not verified evidence. Inspect filtered titles against original documents, '
+      + 'continue remaining source batches and topic-specific searches. Report missing years and blocked '
+      + 'providers explicitly; no official API is silently installed.',
+  }
+}
+
+const sourceSchema = {
+  type: 'object' as const,
+  additionalProperties: false,
+  properties: {
+    name: { type: 'string' as const, required: true },
+    host: { type: 'string' as const, required: true },
+    access: { type: 'string' as const, required: true },
+  },
+} as const
+
+/**
+ * Register bounded federated research and candidate source discovery in the existing tool registry.
+ * @param ctx - Cordis plugin context.
+ * @param maxResults - maximum result URLs per tool call.
+ * @param timeoutMs - existing cooperative web timeout budget.
+ */
+export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: number): void {
+  ctx.systemPrompt.section({
+    name: 'tool:research_search',
+    order: 112,
+    text: 'RESEARCH PROTOCOL: for theses and evidence-intensive reports, plan subtopics and institutional source batches. Use research_search with domain=public_health for health systems/APS; repeat batch=0,1,... until totalBatches is covered. Use research_scholar in several thematic queries for scientific literature. A subagent cap such as 15 references is PER BATCH, never a limit for the thesis. Accumulate and deduplicate by DOI/PMID/URL, inspect primary documents using web_fetch where available, use research_health_series for official World Bank annual data and preserve null years; cross-check official datasets and units/years, keep evidence gaps and inaccessible providers explicit. If results are off topic, shorten queries and switch primary host. Call phoenix_research_plan with input:{intent,level,citation_style,document_type,target_pages} and retry with minimum valid fields if cover validation fails. Do not claim real-time or exhaustive coverage from snippets or fill gaps with invented data.',
+  })
+  ctx.tools.register(defineTool({
+    name: 'research_sources',
+    description: 'List candidate authoritative source hosts by research domain. This is metadata, not an API connection, credential or live availability claim.',
+    parameters: { domain: { type: 'string', description: 'Optional domain, for example sports, fx, medicine, science, economics, weather, law or general.' } },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          domains: { type: 'array', required: true, items: { type: 'string' } },
+          sources: { type: 'array', required: true, items: sourceSchema },
+          note: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    isConcurrencySafe: () => true,
+    execute(args) {
+      const domain = args.domain?.trim().toLowerCase()
+      if (domain !== undefined && domain !== '' && !Object.hasOwn(RESEARCH_SOURCES, domain)) {
+        throw new ToolArgsError(['unknown domain; use research_sources without a domain to list domains'])
+      }
+      return Promise.resolve({
+        domains: Object.keys(RESEARCH_SOURCES),
+        sources: domain === undefined || domain === '' ? [] : [...(RESEARCH_SOURCES[domain] ?? [])],
+        note: 'Candidates require independent checks for API capability, freshness, credentials, rate limits, license and coverage.',
+      })
+    },
+  }))
+  ctx.tools.register(defineTool({
+    name: 'research_search',
+    description: 'Búsqueda interdisciplinaria de evidencia por lotes de dos instituciones. Para APS/salud pública RD utiliza domain=public_health y batch=0,1,2,3 hasta cubrir OPS, Banco Mundial, ONE, MSP, SNS, SISALRIL y OMS. Filtra indicios irrelevantes y muestra los lotes restantes; no certifica fuentes. Para tesis complementa con research_scholar paginado y phoenix_research_verify_sources; nunca tomes 15 registros como tope global.',
+    parameters: {
+      question: { type: 'string', required: true },
+      domain: { type: 'string', description: 'Optional research domain; APS and health systems use public_health.' },
+      batch: { type: 'integer', description: 'Zero-based source batch; continue 0,1,... totalBatches-1.' },
+    },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          domain: { type: 'string', required: true },
+          queries: { type: 'array', required: true, items: { type: 'string' } },
+          candidates: { type: 'array', required: true, items: sourceSchema },
+          sources: { type: 'array', required: true, items: {
+            type: 'object', additionalProperties: false,
+            properties: {
+              url: { type: 'string', required: true },
+              title: { type: 'string' },
+              snippet: { type: 'string' },
+              publishedAt: { type: 'string' },
+            },
+          } },
+          failedQueries: { type: 'array', required: true, items: { type: 'string' } },
+          batch: { type: 'integer', required: true },
+          totalBatches: { type: 'integer', required: true },
+          offTopicDropped: { type: 'integer', required: true },
+          truncated: { type: 'boolean', required: true },
+          status: { type: 'string', required: true, enum: ['ok', 'partial', 'empty'] },
+          note: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    timeoutMs,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      const plan = planResearch(args.question, args.domain, args.batch ?? 0)
+      return executeResearch(ctx, plan, maxResults, exec.signal)
+    },
+  }))
+}

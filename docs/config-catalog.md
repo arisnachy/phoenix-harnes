@@ -298,6 +298,30 @@ Depends on: [`AgentLoopConfig`](#phoenix-aidsh-agent-loop) · [`GoalDomainConfig
 
 Source: [`packages/examples/agent-spine-demo/src/index.ts:92`](../packages/examples/agent-spine-demo/src/index.ts)
 
+<a id="phoenix-aidsh-agent-team"></a>
+
+## `@phoenix-ai/dsh-agent-team`
+
+Requires: `agents` · `sessions` · `sessionPersistence` · `subagents`
+
+```ts config-catalog
+/** Team-service deployment limits. */
+export interface Config {
+  /** Maximum immutable teammate names retained by one Team. */
+  readonly maxMembers?: number
+  /** Maximum non-deleted tasks retained by one Team. */
+  readonly maxTasks?: number
+  /** Maximum queued-minus-delivered messages for one target member. */
+  readonly maxPendingMessagesPerMember?: number
+  /** Maximum UTF-8 bytes in one complete sender-framed delivery. */
+  readonly maxMessageBytes?: number
+  /** Maximum milliseconds allowed for Team-owned runtime disposal. */
+  readonly disposalTimeoutMs?: number
+}
+```
+
+Source: [`packages/subagent/agent-team/src/types.ts:160`](../packages/subagent/agent-team/src/types.ts)
+
 <a id="phoenix-aidsh-agent-tool-presentation"></a>
 
 ## `@phoenix-ai/dsh-agent-tool-presentation`
@@ -646,52 +670,6 @@ export type E2BRetention = 'kill' | 'pause' | 'retain'
 
 Source: [`packages/e2b/e2b/src/index.ts:49`](../packages/e2b/e2b/src/index.ts)
 
-<a id="phoenix-aidsh-experimental-agent-team"></a>
-
-## `@phoenix-ai/dsh-experimental-agent-team`
-
-Requires: `agents` · `sessions` · `sessionPersistence` · `subagents`
-
-```ts config-catalog
-/** Team-service deployment limits. */
-export interface Config {
-  /** Maximum immutable teammate names retained by one Team. */
-  readonly maxMembers?: number
-  /** Maximum non-deleted tasks retained by one Team. */
-  readonly maxTasks?: number
-  /** Maximum queued-minus-delivered messages for one target member. */
-  readonly maxPendingMessagesPerMember?: number
-  /** Maximum UTF-8 bytes in one complete sender-framed delivery. */
-  readonly maxMessageBytes?: number
-  /** Maximum milliseconds allowed for Team-owned runtime disposal. */
-  readonly disposalTimeoutMs?: number
-}
-```
-
-Source: [`packages/experimental/agent-team/src/types.ts:128`](../packages/experimental/agent-team/src/types.ts)
-
-<a id="phoenix-aidsh-experimental-tool-agent-team"></a>
-
-## `@phoenix-ai/dsh-experimental-tool-agent-team`
-
-Requires: `agents` · `agentTeams` · `tools` · `systemPrompt`
-
-```ts config-catalog
-/** Tool routing configuration. */
-export interface Config {
-  /** Continuable-subagent provider used for fresh teammates. */
-  readonly freshProvider?: string
-  /** Continuable-subagent provider used for completed-prefix fork teammates. */
-  readonly forkProvider?: string
-  /** Named provider/model routes the Lead may assign; empty means inheritance only. */
-  readonly modelProfiles?: Record<string, AgentOptions>
-}
-```
-
-Depends on: [`AgentOptions`](subsystems/core.md)
-
-Source: [`packages/experimental/tool-agent-team/src/index.ts:17`](../packages/experimental/tool-agent-team/src/index.ts)
-
 <a id="phoenix-aidsh-file-reference-local"></a>
 
 ## `@phoenix-ai/dsh-file-reference-local`
@@ -796,12 +774,22 @@ export interface Config {
   privateWorkResultChars?: number
   /** Configured mail identity reference used for office mail sent on the user's behalf. */
   userMailIdentity?: string
+  /** Local mailbox settings; no provider activity until an owner enrolls. */
+  mailDirectory?: string
+  /** Credential service reference for the local AgentMail key; never a secret value. */
+  mailCredentialRef?: string
+  /** Local mailbox reconciliation interval in milliseconds; defaults to 60,000. */
+  mailPollMs?: number
+  /** Provider request deadline in milliseconds; defaults to 30,000. */
+  mailTimeoutMs?: number
+  /** Active mail mission deadline in milliseconds; defaults to 600,000 before owner review. */
+  mailWorkTimeoutMs?: number
   /** Configured mail identity reference Phoenix uses when communicating as itself. */
   harnessMailIdentity?: string
 }
 ```
 
-Source: [`packages/hardness/adapters/src/index.ts:152`](../packages/hardness/adapters/src/index.ts)
+Source: [`packages/hardness/adapters/src/index.ts:188`](../packages/hardness/adapters/src/index.ts)
 
 <a id="phoenix-aidsh-headless"></a>
 
@@ -1404,7 +1392,7 @@ export type PiAiThinkingFormat = NonNullable<OpenAICompletionsCompat['thinkingFo
 
 Depends on: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`)
 
-Source: [`packages/llm/llm-pi-ai/src/config.ts:260`](../packages/llm/llm-pi-ai/src/config.ts)
+Source: [`packages/llm/llm-pi-ai/src/config.ts:263`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="phoenix-aidsh-llm-replay"></a>
 
@@ -1596,6 +1584,14 @@ export interface StreamableHttpConfig {
   bearerTokenRef?: string
   /** Whether to attach the host-managed OAuth provider when available. */
   oauth?: boolean
+  /** Credential reference containing a fixed OAuth client id for servers that do not support DCR. */
+  oauthClientIdRef?: string
+  /** Credential reference containing the matching fixed OAuth client secret. */
+  oauthClientSecretRef?: string
+  /** Optional deterministic loopback callback port required by a pre-registered OAuth app. */
+  oauthCallbackPort?: number
+  /** Token endpoint client authentication method for a pre-registered OAuth app. */
+  oauthTokenEndpointAuthMethod?: 'none' | 'client_secret_post' | 'client_secret_basic'
   /** Per-tool-call timeout in milliseconds. */
   toolCallTimeoutMs: number
   /** Fail plugin activation when the initial connection or tool synchronization fails. */
@@ -1622,7 +1618,7 @@ export interface ReconnectConfig {
 }
 ```
 
-Source: [`packages/mcp/mcp-client/src/index.ts:143`](../packages/mcp/mcp-client/src/index.ts)
+Source: [`packages/mcp/mcp-client/src/index.ts:151`](../packages/mcp/mcp-client/src/index.ts)
 
 <a id="phoenix-aidsh-message-feedback"></a>
 
@@ -2504,7 +2500,7 @@ export type CodexPermissionMode =
   | 'dangerously-bypass-approvals-and-sandbox'
 ```
 
-Source: [`packages/subagent/subagent-codex/src/index.ts:40`](../packages/subagent/subagent-codex/src/index.ts)
+Source: [`packages/subagent/subagent-codex/src/index.ts:41`](../packages/subagent/subagent-codex/src/index.ts)
 
 <a id="phoenix-aidsh-subagent-dsh-sdk"></a>
 
@@ -2636,7 +2632,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/system-prompt/src/index.ts:203`](../packages/core/system-prompt/src/index.ts)
+Source: [`packages/core/system-prompt/src/index.ts:208`](../packages/core/system-prompt/src/index.ts)
 
 <a id="phoenix-aidsh-terminal-bash"></a>
 
@@ -2732,6 +2728,40 @@ export type TokenMeterConfig = Record<string, never>
 ```
 
 Source: [`packages/llm/token-meter/src/types.ts:12`](../packages/llm/token-meter/src/types.ts)
+
+<a id="phoenix-aidsh-tool-agent-team"></a>
+
+## `@phoenix-ai/dsh-tool-agent-team`
+
+Requires: `agents` · `agentTeams` · `tools` · `systemPrompt`
+
+```ts config-catalog
+/** Tool routing configuration. */
+export interface Config {
+  /** Continuable-subagent provider used for fresh teammates. */
+  readonly freshProvider?: string
+  /** Continuable-subagent provider used for completed-prefix fork teammates. */
+  readonly forkProvider?: string
+  /** Profile automatically used when spawn_teammate omits model_profile. */
+  readonly defaultModelProfile?: string
+  /** Named provider/model routes the Lead may assign; empty means inheritance only. */
+  readonly modelProfiles?: Record<string, TeamModelProfile>
+}
+
+/** One deployment-owned LLM route for a teammate identity. */
+export interface TeamModelProfile {
+  /** Provider route used for this teammate profile. */
+  readonly provider: string
+  /** Provider-specific model identifier. */
+  readonly model: string
+  /** Optional maximum output-token budget for each request. */
+  readonly maxTokens?: number
+  /** Optional provider reasoning tier for the teammate. */
+  readonly reasoningEffort?: string
+}
+```
+
+Source: [`packages/subagent/tool-agent-team/src/index.ts:41`](../packages/subagent/tool-agent-team/src/index.ts)
 
 <a id="phoenix-aidsh-tool-bash"></a>
 
@@ -3028,7 +3058,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/session-learning/tool-session-learning/src/index.ts:27`](../packages/session-learning/tool-session-learning/src/index.ts)
+Source: [`packages/session-learning/tool-session-learning/src/index.ts:29`](../packages/session-learning/tool-session-learning/src/index.ts)
 
 <a id="phoenix-aidsh-tool-session-query"></a>
 
@@ -3168,7 +3198,7 @@ type ConfiguredAgentOptions = Omit<AgentOptions, 'reasoningEffort'> & {
 
 Depends on: [`AgentOptions`](subsystems/core.md)
 
-Source: [`packages/subagent/tool-subagent/src/index.ts:107`](../packages/subagent/tool-subagent/src/index.ts)
+Source: [`packages/subagent/tool-subagent/src/index.ts:116`](../packages/subagent/tool-subagent/src/index.ts)
 
 <a id="phoenix-aidsh-tool-subagent-report"></a>
 
@@ -3258,7 +3288,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/web/tool-web/src/index.ts:37`](../packages/web/tool-web/src/index.ts)
+Source: [`packages/web/tool-web/src/index.ts:43`](../packages/web/tool-web/src/index.ts)
 
 <a id="phoenix-aidsh-tool-workflow"></a>
 
@@ -3306,13 +3336,20 @@ export interface Config {
    * restores strictly serial dispatch. Must be a positive integer.
    */
   maxParallelSubCalls?: number
+  /**
+   * Number of visible `mcp__*` tools at which native presentation switches to
+   * deferred discovery. Native tools remain in the prompt; MCP schemas are
+   * returned by `tool_search` and become visible only for the calling agent.
+   * Must be a positive integer.
+   */
+  mcpToolLazyThreshold?: number
 }
 
 /** How the registry presents its tools to the model (see {@link Config.mode}). */
 export type ToolPresentationMode = 'native' | 'code' | 'both'
 ```
 
-Source: [`packages/core/tools/src/index.ts:776`](../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts:794`](../packages/core/tools/src/index.ts)
 
 <a id="phoenix-aidsh-typert-loader"></a>
 
@@ -3396,10 +3433,12 @@ export interface VoiceRuntimeConfig {
   readonly ttsProvider?: string
   /** Preferred STT provider. */
   readonly sttProvider?: string
+  /** Native Codex/ChatGPT realtime voice, using Codex login rather than API keys. */
+  readonly codexRealtime?: boolean
 }
 ```
 
-Source: [`packages/voice/voice/src/index.ts:124`](../packages/voice/voice/src/index.ts)
+Source: [`packages/voice/voice/src/index.ts:143`](../packages/voice/voice/src/index.ts)
 
 <a id="phoenix-aidsh-voice-local"></a>
 
@@ -3424,7 +3463,9 @@ export interface Config {
   readonly naturalRequestTimeoutMs?: number
   /** Maximum characters per semantic neural synthesis chunk. */
   readonly naturalMaxChunkChars?: number
-  /** Optional local Kokoro command; absence leaves Kokoro unavailable. */
+  /** Warm Kokoro in the background when an installed local model is detected. */
+  readonly kokoroPrewarm?: boolean
+  /** Optional local Kokoro command; absence auto-detects a completed PHOENIX install. */
   readonly kokoroCommand?: string
   /** Arguments for the Kokoro command. */
   readonly kokoroArgs?: string[]
@@ -3432,12 +3473,12 @@ export interface Config {
   readonly sttCommand?: string
   /** Arguments for the STT command. */
   readonly sttArgs?: string[]
-  /** Whether to register the platform fallback after neural TTS and Kokoro. */
+  /** Register legacy platform TTS for alerts; off by default on Windows to avoid robotic speech. */
   readonly systemTts?: boolean
 }
 ```
 
-Source: [`packages/voice/voice-local/src/index.ts:151`](../packages/voice/voice-local/src/index.ts)
+Source: [`packages/voice/voice-local/src/index.ts:157`](../packages/voice/voice-local/src/index.ts)
 
 <a id="phoenix-aidsh-web"></a>
 
@@ -3487,7 +3528,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/bundle/web-app/src/index.ts:42`](../packages/bundle/web-app/src/index.ts)
+Source: [`packages/bundle/web-app/src/index.ts:43`](../packages/bundle/web-app/src/index.ts)
 
 <a id="phoenix-aidsh-web-fetch-http"></a>
 
@@ -3751,7 +3792,9 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@phoenix-ai/dsh-subprocess-local` ([`packages/subprocess/subprocess-local/src/index.ts`](../packages/subprocess/subprocess-local/src/index.ts))
 - `@phoenix-ai/dsh-terminal` ([`packages/terminal/terminal/src/index.ts`](../packages/terminal/terminal/src/index.ts))
 - `@phoenix-ai/dsh-tool-ask-user` — requires `tools` · `userQuestions` ([`packages/interaction/tool-ask-user/src/index.ts`](../packages/interaction/tool-ask-user/src/index.ts))
+- `@phoenix-ai/dsh-tool-business` — requires `tools` · `systemPrompt` ([`packages/core/tool-business/src/index.ts`](../packages/core/tool-business/src/index.ts))
 - `@phoenix-ai/dsh-tool-cordis` — requires `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect` ([`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts))
+- `@phoenix-ai/dsh-tool-google-workspace` — requires `tools` · `googleApi` ([`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts))
 - `@phoenix-ai/dsh-tool-home-gateway` — requires `tools` · `home` · `systemPrompt` ([`packages/home/tool-home-gateway/src/index.ts`](../packages/home/tool-home-gateway/src/index.ts))
 - `@phoenix-ai/dsh-tool-living` — requires `living` · `tools` · `systemPrompt` ([`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts))
 - `@phoenix-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))

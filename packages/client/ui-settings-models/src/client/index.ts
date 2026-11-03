@@ -1,3 +1,4 @@
+import type { AssistantMailClient, AssistantMailSnapshot } from './AssistantMailPanel.tsx'
 /**
  * Models, Connectors, and product-onboarding settings plugin, browser half.
  * It registers independent Models and Connectors pages plus the ordered
@@ -13,12 +14,15 @@ import type {} from '@phoenix-ai/dsh-api-remotes/client'
 import type { ModelsSectionInjected } from './ModelsSection.tsx'
 import { ModelsWithLocalSection } from './ModelsWithLocalSection.tsx'
 import type { ModelsWithLocalSectionInjected } from './ModelsWithLocalSection.tsx'
+import { EclipseRoutingPanel } from './EclipseRoutingPanel.tsx'
+import type { EclipseCatalogChoice } from './EclipseRoutingPanel.tsx'
 import type {
   PhoenixLocalModelClient,
   PhoenixLocalModelMode,
   PhoenixLocalModelSnapshot,
 } from './PhoenixLocalPanel.tsx'
 import { ConnectorsSettingsSection } from './AuthorizationPanel.tsx'
+import { ClawHubConnectorStore } from './ClawHubConnectorStore.tsx'
 import type { ChatGptWebBridgeClient } from './chatgpt-web-toggle.ts'
 import type {
   ConnectorsSettingsSectionProps,
@@ -26,6 +30,8 @@ import type {
   McpRegistryClient,
   McpRegistrySearchSnapshot,
 } from './AuthorizationPanel.tsx'
+import type { TelegramBotClient, TelegramBotSnapshot } from './TelegramConnectorSetup.tsx'
+import type { TheOddsApiClient, TheOddsApiSnapshot } from './TheOddsApiConnectorSetup.tsx'
 import { DeepSeekOnboardingDialog } from './DeepSeekOnboardingDialog.tsx'
 import type { DeepSeekOnboardingInjected } from './DeepSeekOnboardingDialog.tsx'
 import { WelcomeNotice } from './WelcomeNotice.tsx'
@@ -61,6 +67,49 @@ const LOCAL_NS = 'settings.models.local'
 const CONNECTORS_NS = 'settings.connectors'
 export type { ModelsSettingsState, ProviderRow } from './store.ts'
 
+/** Preserve every account-visible model from Codex, in its reported order.
+ * A newer GPT family must never hide older models that the account can still
+ * select. Only remove duplicate route ids and PHOENIX's virtual auto route.
+ * @param choices - Live choices reported by the connected Codex adapter.
+ * @returns Detached available Codex choices, without synthetic model ids.
+ */
+export function selectCurrentCodexModels(
+  choices: readonly EclipseCatalogChoice[],
+): EclipseCatalogChoice[] {
+  const seen = new Set<string>()
+  return choices.filter((choice) => {
+    if (choice.provider !== 'openai-codex' || choice.model === 'phoenix-auto') return false
+    if (seen.has(choice.model)) return false
+    seen.add(choice.model)
+    return true
+  }).map(choice => ({ ...choice, reasoningEfforts: [...choice.reasoningEfforts] }))
+}
+
+/**
+ * Read Eclipse choices from the authenticated Codex app-server itself.
+ * llm.models can contain configured/pinned or last-good adapter models and is
+ * deliberately not an account-visibility authority. Never synthesize models
+ * or silently fall back on a stale catalog after discovery fails.
+ *
+ * @param api - Connected Host API exposing account-scoped model discovery.
+ * @returns Every non-hidden Codex model and its advertised reasoning levels.
+ */
+export async function loadEclipseCodexCatalog(
+  api: ConnectionHandle['api'],
+): Promise<readonly EclipseCatalogChoice[]> {
+  const response = await api.llm.discoverModels({
+    settingsNs: 'llm-pi-ai',
+    provider: 'openai-codex',
+  })
+  if (!response.result.ok) throw new Error(response.result.error.message)
+  return selectCurrentCodexModels(response.result.value.models.map(model => ({
+    provider: 'openai-codex',
+    model: model.id,
+    name: model.name ?? model.id,
+    reasoningEfforts: model.reasoning?.efforts.map(effort => effort.id) ?? [],
+  })))
+}
+
 type PluginInventoryRemoteResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: { code: string; message: string } }
@@ -75,10 +124,123 @@ type PluginInventoryChatGptWebRemote = {
 type PluginInventoryMcpRegistryRemote = {
   searchMcpRegistry(request: { query: string; limit?: number }): Promise<PluginInventoryRemoteResult<McpRegistrySearchSnapshot>>
   mcpConnectorHubState(): Promise<PluginInventoryRemoteResult<McpConnectorHubSnapshot>>
+  xMcpState(): Promise<PluginInventoryRemoteResult<{
+    clientIdConfigured: boolean
+    clientSecretConfigured: boolean
+    api: { configured: boolean; status?: string }
+    phoenixApi: { configured: boolean; status?: string }
+    docs: { configured: boolean; status?: string }
+  }>>
+  configureXDeveloperApplication(request: { clientId: string; clientSecret: string }): Promise<PluginInventoryRemoteResult<{
+    saved: true
+    clientIdConfigured: true
+    clientSecretConfigured: true
+  }>>
+  enableXMcp(request: { identity?: 'user' | 'phoenix'; username?: string }): Promise<PluginInventoryRemoteResult<{
+    api: { status: 'installed' | 'already-installed'; connector: { serverName: string; entryId: string; url: string } }
+    docs: { status: 'installed' | 'already-installed'; connector: { serverName: string; entryId: string; url: string } }
+  }>>
+  reconnectMcpConnector(request: { serverName: string }): Promise<PluginInventoryRemoteResult<{ accepted: boolean }>>
   installMcpRegistryServer(request: { name: string; version?: string }): Promise<PluginInventoryRemoteResult<{
     status: 'installed' | 'already-installed'
-    connector: { entryId: string; serverName: string; url: string }
+    connector: {
+      entryId: string
+      serverName: string
+      url: string
+      source?: { kind: 'registry'; name: string; version?: string } | { kind: 'curated'; connectorId: string }
+    }
   }>>
+  installCuratedMcpConnector(request: { connectorId: 'meta-publishing' | 'x' | 'x-docs' | 'social-engine' | 'microsoft-personal' | 'outlook-mail' | 'outlook-calendar' | 'microsoft-contacts' | 'onedrive' | 'microsoft-teams' | 'sharepoint' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'github' | 'meta-devtools' | 'meta-whatsapp-business' | 'microsoft-learn' | 'microsoft-workiq' | 'microsoft-azure' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch' }): Promise<PluginInventoryRemoteResult<{
+    status: 'installed' | 'already-installed'
+    connector: {
+      entryId: string
+      serverName: string
+      url: string
+      source?: { kind: 'registry'; name: string; version?: string } | { kind: 'curated'; connectorId: string }
+    }
+  }>>
+  removeManagedMcpConnector(request: { entryId: string }): Promise<PluginInventoryRemoteResult<{
+    removed: boolean
+    liveUnloaded: boolean
+  }>>
+  repairManagedMcpConnector(request: { entryId: string }): Promise<PluginInventoryRemoteResult<{
+    status: 'installed' | 'already-installed'
+    connector: {
+      entryId: string
+      serverName: string
+      url: string
+      source?: { kind: 'registry'; name: string; version?: string } | { kind: 'curated'; connectorId: string }
+    }
+  }>>
+  openClawRuntimeState(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRuntimeSnapshot>>
+  openClawPluginTools(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>>
+  openClawGatewayCredential(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>>
+  configureOpenClawGatewayCredential(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>>
+  setOpenClawPluginTool(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>>
+  setOpenClawPluginEnabled(request: { pluginId: string; enabled: boolean }): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>>
+  clawHubState(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>>
+  prepareClawHubCli(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>>
+  clawHubInstallSkill(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallReceipt>>
+  clawHubInstallPackage(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallReceipt>>
+  clawHubCatalog(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubCatalogRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').ClawHubCatalogSnapshot>>
+  openClawConnectorState(): Promise<PluginInventoryRemoteResult<{
+    connectors: Array<{
+      id: 'google-workspace' | 'github'
+      skillAlias: 'openclaw-gog' | 'openclaw-github'
+      skillInstalled: boolean
+      runtimeAvailable: boolean
+      connected: boolean
+      account?: string
+      phase: 'ready' | 'auth-required' | 'missing-runtime' | 'missing-skill'
+    }>
+  }>>
+}
+
+type PluginInventoryOddsRemote = {
+  theOddsApiState(): Promise<PluginInventoryRemoteResult<TheOddsApiSnapshot>>
+  configureTheOddsApi(request: { apiKey: string }): Promise<PluginInventoryRemoteResult<TheOddsApiSnapshot>>
+  disconnectTheOddsApi(): Promise<PluginInventoryRemoteResult<TheOddsApiSnapshot>>
+}
+
+/** Expose only secret-free snapshots. Password values travel to the trusted Host and never to Settings JSON. */
+function theOddsApiClient(ctx: ClientContext): TheOddsApiClient {
+  const remote = (): PluginInventoryOddsRemote => {
+    const service = ctx.get('remote.pluginInventory') as PluginInventoryOddsRemote | undefined
+    if (service === undefined) throw new Error('The Odds API connector requires the PHOENIX Host.')
+    return service
+  }
+  return {
+    state: async () => unwrapPluginInventory('theOddsApiState', await remote().theOddsApiState()),
+    configure: async apiKey => unwrapPluginInventory(
+      'configureTheOddsApi', await remote().configureTheOddsApi({apiKey}),
+    ),
+    disconnect: async () => unwrapPluginInventory(
+      'disconnectTheOddsApi', await remote().disconnectTheOddsApi(),
+    ),
+  }
+}
+
+type PluginInventoryTelegramRemote = {
+  telegramBotState(): Promise<PluginInventoryRemoteResult<TelegramBotSnapshot>>
+  configureTelegramBot(request: { token: string }): Promise<PluginInventoryRemoteResult<TelegramBotSnapshot>>
+  disconnectTelegramBot(): Promise<PluginInventoryRemoteResult<TelegramBotSnapshot>>
+  telegramPairingCode(): Promise<PluginInventoryRemoteResult<{ code: string; expiresInSeconds: number }>>
+}
+
+function telegramBotClient(ctx: ClientContext): TelegramBotClient {
+  const remote = (): PluginInventoryTelegramRemote => {
+    const value = ctx.get('remote.pluginInventory') as PluginInventoryTelegramRemote | undefined
+    if (value === undefined) throw new Error('Telegram setup is unavailable on this Host.')
+    return value
+  }
+  return {
+    state: async () => unwrapPluginInventory('telegramBotState', await remote().telegramBotState()),
+    configure: async token => unwrapPluginInventory(
+      'configureTelegramBot', await remote().configureTelegramBot({ token }),
+    ),
+    disconnect: async () => unwrapPluginInventory('disconnectTelegramBot', await remote().disconnectTelegramBot()),
+    pairing: async () => unwrapPluginInventory('telegramPairingCode', await remote().telegramPairingCode()),
+  }
 }
 
 type PluginInventoryLocalRemote = {
@@ -119,10 +281,62 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
       'mcpConnectorHubState',
       await remote().mcpConnectorHubState(),
     ),
+    xState: async () => unwrapPluginInventory('xMcpState', await remote().xMcpState()),
+    configureX: async request => unwrapPluginInventory(
+      'configureXDeveloperApplication',
+      await remote().configureXDeveloperApplication(request),
+    ),
+    connectX: async request => unwrapPluginInventory(
+      'enableXMcp', await remote().enableXMcp(request),
+    ),
+    reconnect: async request => unwrapPluginInventory(
+      'reconnectMcpConnector',
+      await remote().reconnectMcpConnector(request),
+    ),
     install: async request => unwrapPluginInventory(
       'installMcpRegistryServer',
       await remote().installMcpRegistryServer(request),
     ),
+    installCurated: async request => unwrapPluginInventory(
+      'installCuratedMcpConnector',
+      await remote().installCuratedMcpConnector(request),
+    ),
+    remove: async request => unwrapPluginInventory(
+      'removeManagedMcpConnector',
+      await remote().removeManagedMcpConnector(request),
+    ),
+    repair: async request => unwrapPluginInventory(
+      'repairManagedMcpConnector',
+      await remote().repairManagedMcpConnector(request),
+    ),
+    openClawState: async () => unwrapPluginInventory(
+      'openClawConnectorState',
+      await remote().openClawConnectorState(),
+    ),
+    openClawRuntimeState: async () => unwrapPluginInventory(
+      'openClawRuntimeState',
+      await remote().openClawRuntimeState(),
+    ),
+    clawHubCatalog: async request => unwrapPluginInventory('clawHubCatalog', await remote().clawHubCatalog(request)),
+    openClawPluginTools: async () => unwrapPluginInventory(
+      'openClawPluginTools', await remote().openClawPluginTools(),
+    ),
+    openClawGatewayCredential: async () => unwrapPluginInventory(
+      'openClawGatewayCredential', await remote().openClawGatewayCredential(),
+    ),
+    configureOpenClawGatewayCredential: async request => unwrapPluginInventory(
+      'configureOpenClawGatewayCredential', await remote().configureOpenClawGatewayCredential(request),
+    ),
+    setOpenClawPluginTool: async request => unwrapPluginInventory(
+      'setOpenClawPluginTool', await remote().setOpenClawPluginTool(request),
+    ),
+    setOpenClawPluginEnabled: async request => unwrapPluginInventory(
+      'setOpenClawPluginEnabled', await remote().setOpenClawPluginEnabled(request),
+    ),
+    clawHubState: async () => unwrapPluginInventory('clawHubState', await remote().clawHubState()),
+    prepareClawHubCli: async () => unwrapPluginInventory('prepareClawHubCli', await remote().prepareClawHubCli()),
+    clawHubInstallSkill: async request => unwrapPluginInventory('clawHubInstallSkill', await remote().clawHubInstallSkill(request)),
+    clawHubInstallPackage: async request => unwrapPluginInventory('clawHubInstallPackage', await remote().clawHubInstallPackage(request)),
   }
 }
 
@@ -203,6 +417,10 @@ export function apply(ctx: ClientContext): void {
   const connectorT = ctx.locale.bind(CONNECTORS_NS) as ConnectorsSettingsSectionProps['connectorT']
   const localModel = localModelClient(ctx)
   const mcpRegistry = mcpRegistryClient(ctx)
+  const telegram = telegramBotClient(ctx)
+  const oddsApi = theOddsApiClient(ctx)
+  const loadEclipseCatalog = (): Promise<readonly EclipseCatalogChoice[]> =>
+    loadEclipseCodexCatalog(connection.api)
   const injected = (): ModelsWithLocalSectionInjected => ({
     controller,
     hooks: { snapshot: controller.store },
@@ -212,13 +430,102 @@ export function apply(ctx: ClientContext): void {
     localModel,
     localT,
   })
+  const eclipseInjected = () => ({
+    controller,
+    api: connection.api,
+    t,
+    loadCatalog: loadEclipseCatalog,
+  })
+  const assistantMailRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+  const assistantMail: AssistantMailClient = {
+    call: async (action, input = {}) => {
+      const result = await connection.rpc.call('/phoenix-mail', action, input)
+      if (!result.ok) throw new Error(result.error.message)
+      const value: unknown = result.value
+      const stringOrAbsent = (candidate: unknown): boolean => candidate === undefined || typeof candidate === 'string'
+      if (!assistantMailRecord(value) || !assistantMailRecord(value.account)
+        || !Array.isArray(value.jobs) || !Array.isArray(value.account.contacts)
+        || typeof value.account.state !== 'string' || typeof value.connection !== 'string'
+        || !(value.account.contacts as unknown[]).every(contact => typeof contact === 'string')
+        || ![value.account.inboxId, value.account.ownerEmail, value.account.ownerLink, value.account.sessionId].every(stringOrAbsent)
+        || (value.account.ownerLink !== undefined
+          && !['attached', 'pending', 'provider-conflict'].includes(String(value.account.ownerLink)))
+        || !(value.jobs as unknown[]).every(job => assistantMailRecord(job)
+          && typeof job.id === 'string' && typeof job.title === 'string' && typeof job.state === 'string'
+          && stringOrAbsent(job.summary) && stringOrAbsent(job.error))
+        || (value.providerIssue !== undefined && (!assistantMailRecord(value.providerIssue)
+          || typeof value.providerIssue.status !== 'number'
+          || ![value.providerIssue.code, value.providerIssue.reason,
+            value.providerIssue.permission, value.providerIssue.fix].every(stringOrAbsent)))
+        || (value.startup !== undefined && (!assistantMailRecord(value.startup)
+          || typeof value.startup.supported !== 'boolean' || typeof value.startup.enabled !== 'boolean'))) {
+        throw new Error('Invalid local mailbox response')
+      }
+      return value as unknown as AssistantMailSnapshot
+    },
+    checkConsoleKey: async (apiKey) => {
+      const result = await connection.rpc.call('/phoenix-mail', 'console-key-check', { apiKey })
+      if (!result.ok) throw new Error(result.error.message)
+      const value: unknown = result.value
+      if (!assistantMailRecord(value)
+        || value.valid !== true
+        || typeof value.organizationId !== 'string'
+        || typeof value.inboxCount !== 'number'
+        || (value.inboxLimit !== undefined && typeof value.inboxLimit !== 'number')
+        || typeof value.capacityAvailable !== 'boolean'
+        || typeof value.inboxRead !== 'boolean'
+        || (value.reusableInboxId !== undefined && typeof value.reusableInboxId !== 'string')
+        || (value.scopeType !== undefined && !['organization', 'pod', 'inbox'].includes(String(value.scopeType)))
+        || (value.inboxCreate !== undefined && typeof value.inboxCreate !== 'boolean')
+        || (value.messageSend !== undefined && typeof value.messageSend !== 'boolean')
+        || (value.currentInboxAccess !== undefined && typeof value.currentInboxAccess !== 'boolean')
+        || (value.messageRead !== undefined && typeof value.messageRead !== 'boolean')
+        || (value.realtime !== undefined && typeof value.realtime !== 'boolean')
+        || (value.authenticationType !== undefined && typeof value.authenticationType !== 'string')) {
+        throw new Error('Invalid AgentMail API key check response')
+      }
+      return {
+        valid: true as const,
+        organizationId: value.organizationId,
+        ...(value.authenticationType === undefined ? {} : { authenticationType: value.authenticationType }),
+        inboxCount: value.inboxCount,
+        ...(value.inboxLimit === undefined ? {} : { inboxLimit: value.inboxLimit }),
+        capacityAvailable: value.capacityAvailable,
+        inboxRead: value.inboxRead,
+        ...(value.reusableInboxId === undefined ? {} : { reusableInboxId: value.reusableInboxId }),
+        ...(value.scopeType === undefined ? {} : { scopeType: value.scopeType as 'organization' | 'pod' | 'inbox' }),
+        ...(value.inboxCreate === undefined ? {} : { inboxCreate: value.inboxCreate }),
+        ...(value.messageSend === undefined ? {} : { messageSend: value.messageSend }),
+        ...(value.currentInboxAccess === undefined ? {} : { currentInboxAccess: value.currentInboxAccess }),
+        ...(value.messageRead === undefined ? {} : { messageRead: value.messageRead }),
+        ...(value.realtime === undefined ? {} : { realtime: value.realtime }),
+      }
+    },
+    prepareClaim: async () => {
+      const result = await connection.rpc.call('/phoenix-mail', 'claim', {})
+      if (!result.ok) throw new Error(result.error.message)
+      const value: unknown = result.value
+      if (!assistantMailRecord(value)
+        || value.copied !== true
+        || typeof value.inboxId !== 'string'
+        || typeof value.claimUrl !== 'string'
+        || value.claimUrl !== 'https://console.agentmail.to/claim') {
+        throw new Error('Invalid local mailbox claim response')
+      }
+      return { copied: true as const, inboxId: value.inboxId, claimUrl: value.claimUrl }
+    },
+  }
   const connectorsInjected = (): ConnectorsSettingsSectionProps => ({
     api: connection.api.authorization,
+    assistantMail,
     t,
     connectorT,
     chatGptWeb: chatGptWebClient(ctx),
     settings: connection.api.settings,
     mcpRegistry,
+    telegram,
+    oddsApi,
     onAuthorized: () => { refreshIfLoaded(controller) },
   })
   const deepSeekOnboardingInjected = (): DeepSeekOnboardingInjected => ({
@@ -261,11 +568,25 @@ export function apply(ctx: ClientContext): void {
   }, ModelsWithLocalSection))
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
+    id: 'eclipse',
+    order: 11,
+    label: () => t('eclipseNav'),
+    inject: eclipseInjected,
+  }, EclipseRoutingPanel))
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
     id: 'connectors',
     order: 12,
     label: () => connectorT('nav'),
     inject: connectorsInjected,
   }, ConnectorsSettingsSection))
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'clawhub',
+    order: 13,
+    label: () => 'OpenClaw · ClawHub',
+    inject: () => ({ registry: mcpRegistry, t: connectorT, connectedIds: [] }),
+  }, ClawHubConnectorStore))
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',
     id: 'welcome-notice',

@@ -7,6 +7,7 @@ import { Context, type Plugin } from '@phoenix-ai/cordis'
 import Loader from '@phoenix-ai/cordis-plugin-loader'
 import { remoteMethods } from '@phoenix-ai/dsh-typert-protocol'
 import PluginInventoryGateway from '../src/index.ts'
+import { PluginEnablementStore } from '../src/plugin-enablement.ts'
 
 const contexts: Context[] = []
 const tempRoots: string[] = []
@@ -38,6 +39,10 @@ async function harness(): Promise<{
   ctx.loader.builtins.pending = pendingPlugin
   await ctx.plugin(PluginInventoryGateway)
   const inventory = ctx.get('pluginInventory') as PluginInventoryGateway
+  const preferencesRoot = mkdtempSync(join(tmpdir(), 'phoenix-plugin-enablement-'))
+  tempRoots.push(preferencesRoot)
+  ;(inventory as unknown as { pluginPreferences: PluginEnablementStore }).pluginPreferences =
+    new PluginEnablementStore(join(preferencesRoot, 'settings', 'plugin-enablement.json'))
   return { ctx, inventory }
 }
 
@@ -64,12 +69,21 @@ describe('PluginInventoryGateway', () => {
       serviceKey: 'pluginInventory',
       namespace: 'pluginInventory',
     })
-    expect(remoteMethods(inventory)).toEqual([
+    const exposed = remoteMethods(inventory)
+    expect(exposed).toEqual(expect.arrayContaining([
       { method: 'list', invocation: { kind: 'direct' } },
+      { method: 'setPluginEnabled', invocation: { kind: 'direct' } },
+      { method: 'activateAvailablePlugins', invocation: { kind: 'direct' } },
       { method: 'updateState', invocation: { kind: 'direct' } },
       { method: 'restartForUpdate', invocation: { kind: 'direct' } },
       { method: 'refreshForUpdate', invocation: { kind: 'direct' } },
-    ])
+      { method: 'mcpConnectorHubState', invocation: { kind: 'direct' } },
+      { method: 'theOddsApiState', invocation: { kind: 'direct' } },
+      { method: 'configureTheOddsApi', invocation: { kind: 'direct' } },
+      { method: 'disconnectTheOddsApi', invocation: { kind: 'direct' } },
+    ]))
+    expect(new Set(exposed.map(entry => entry.method)).size).toBe(exposed.length)
+    expect(exposed.every(entry => entry.invocation.kind === 'direct')).toBe(true)
   })
 
   it('projects current non-group Loader entries without a second cache', async () => {
@@ -117,6 +131,67 @@ describe('PluginInventoryGateway', () => {
     expect(inventory.list().entries.some(entry => entry.entryId === pendingId)).toBe(false)
   })
 
+  it('switches existing entries and refuses disabling the Host control plane', async () => {
+    const { ctx, inventory } = await harness()
+    const id = await ctx.loader.create({ name: 'cordis:active', disabled: true })
+    await expect(inventory.setPluginEnabled({ entryId: id as never, enabled: true }))
+      .resolves.toMatchObject({ entryId: id, enabled: true, fiberPhase: 'active' })
+    await expect(inventory.setPluginEnabled({ entryId: id as never, enabled: false }))
+      .resolves.toMatchObject({ entryId: id, enabled: false })
+    await expect(inventory.setPluginEnabled({ entryId: '' as never, enabled: true })).rejects.toThrow()
+    const control = await ctx.loader.create({
+      name: '@phoenix-ai/dsh-host-plugin-inventory',
+      disabled: true,
+    })
+    await expect(inventory.setPluginEnabled({ entryId: control as never, enabled: false }))
+      .rejects.toThrow('control-plane')
+  })
+
+  it('persists user choices outside the Loader and reapplies them after config reset', async () => {
+    const { ctx, inventory } = await harness()
+    const id = await ctx.loader.create({ name: 'cordis:active', disabled: true })
+    await inventory.setPluginEnabled({ entryId: id as never, enabled: true })
+    const preferences = (inventory as unknown as { pluginPreferences: PluginEnablementStore }).pluginPreferences
+    const saved = await preferences.list()
+    expect(saved).toEqual([{ entryId: id, moduleName: 'cordis:active', enabled: true }])
+    await ctx.loader.update(id, { disabled: true })
+    expect(inventory.list().entries.find(entry => entry.entryId === id)?.enabled).toBe(false)
+    ;(inventory as unknown as { schedulePluginRestore(): void }).schedulePluginRestore()
+    await vi.waitFor(() => {
+      expect(inventory.list().entries.find(entry => entry.entryId === id)?.enabled).toBe(true)
+    }, { timeout: 3000 })
+  })
+
+  it('does not persist an activation rejected by the real Loader', async () => {
+    const { ctx, inventory } = await harness()
+    const id = await ctx.loader.create({ name: 'cordis:plugin-not-found', disabled: true })
+    await expect(inventory.setPluginEnabled({ entryId: id as never, enabled: true })).rejects.toThrow()
+    const preferences = (inventory as unknown as { pluginPreferences: PluginEnablementStore }).pluginPreferences
+    expect(await preferences.list()).toEqual([])
+    expect(inventory.list().entries.find(entry => entry.entryId === id)?.enabled).toBe(false)
+  })
+
+  it('reports partial activation and uses the existing pinned MCP pack installer', async () => {
+    const { ctx, inventory } = await harness()
+    const good = await ctx.loader.create({ name: 'cordis:active', disabled: true })
+    const missing = await ctx.loader.create({ name: 'cordis:missing-plugin', disabled: true })
+    const managed = (inventory as unknown as {
+      managedMcp: { ensureCoreMcpPack(options: { installMissing: boolean }): Promise<unknown> }
+    }).managedMcp
+    const install = vi.spyOn(managed, 'ensureCoreMcpPack').mockResolvedValue({
+      installed: ['fetch'],
+      alreadyInstalled: ['memory'],
+      failed: [{ connectorId: 'figma', message: 'authorization needed' }],
+    })
+    const receipt = await inventory.activateAvailablePlugins()
+    expect(receipt.activated).toContain(good)
+    expect(receipt.failed).toContain(missing)
+    expect(receipt.curatedInstalled).toBe(1)
+    expect(receipt.curatedExisting).toBe(1)
+    expect(receipt.curatedFailed).toContain('figma')
+    expect(install).toHaveBeenCalledWith({ installMissing: true })
+  })
+
   it('projects MCP lifecycle and managed installs without credentials', async () => {
     const { ctx, inventory } = await harness()
     ;(ctx as unknown as { provide(name: string, value: unknown): void }).provide('mcpConnectors', {
@@ -150,6 +225,50 @@ describe('PluginInventoryGateway', () => {
         serverName: 'figma',
         url: 'https://mcp.example.com/figma',
       }],
+    })
+  })
+
+  it('projects the exact endpoint-not-found code emitted after MCP HTTP 404', async () => {
+    const { ctx, inventory } = await harness()
+    ;(ctx as unknown as { provide(name: string, value: unknown): void }).provide('mcpConnectors', {
+      list: () => [{
+        serverName: 'notion', transport: 'streamable-http', status: 'failed',
+        reasonCode: 'endpoint-not-found', toolNames: [],
+      }],
+    })
+    const managed = (inventory as unknown as {
+      managedMcp: { snapshot(): Promise<unknown[]> }
+    }).managedMcp
+    vi.spyOn(managed, 'snapshot').mockResolvedValue([])
+    await expect(inventory.mcpConnectorHubState()).resolves.toEqual({
+      runtime: [{
+        serverName: 'notion', transport: 'streamable-http', status: 'failed',
+        reasonCode: 'endpoint-not-found', toolNames: [],
+      }],
+      managed: [],
+    })
+  })
+
+  it('keeps the validated MCP Remote response shape when managed persistence is corrupt', async () => {
+    const { ctx, inventory } = await harness()
+    ;(ctx as unknown as { provide(name: string, value: unknown): void }).provide('mcpConnectors', {
+      list: () => [{
+        serverName: 'github', transport: 'streamable-http', status: 'ready',
+        toolNames: ['mcp__github__get_me'],
+      }],
+    })
+    const managed = (inventory as unknown as {
+      managedMcp: { snapshot(): Promise<unknown[]> }
+    }).managedMcp
+    vi.spyOn(managed, 'snapshot').mockRejectedValue(new Error('managed MCP patch row 16 is invalid'))
+    vi.spyOn(managed as unknown as { recoverInvalidOverlay(): Promise<unknown> }, 'recoverInvalidOverlay')
+      .mockResolvedValue({ recovered: 0, quarantined: 1, backupCreated: true })
+    await expect(inventory.mcpConnectorHubState()).resolves.toEqual({
+      runtime: [{
+        serverName: 'github', transport: 'streamable-http', status: 'ready',
+        toolNames: ['mcp__github__get_me'],
+      }],
+      managed: [],
     })
   })
 
@@ -216,7 +335,7 @@ describe('PluginInventoryGateway', () => {
         status: 'ready',
       },
     })
-    await expect(inventory.enableXMcp()).resolves.toMatchObject({
+    await expect(inventory.enableXMcp({})).resolves.toMatchObject({
       api: { status: 'installed' },
       docs: { status: 'installed' },
     })
@@ -265,6 +384,33 @@ describe('PluginInventoryGateway', () => {
       name: 'io.example/calendar',
       version: '1.0.0',
     })
+  })
+
+  it('delegates generic managed connector uninstall and repair by exact entry id', async () => {
+    const { inventory } = await harness()
+    const managed = (inventory as unknown as {
+      managedMcp: {
+        remove(request: { entryId: string }): Promise<{ removed: boolean; liveUnloaded: boolean }>
+        repair(request: { entryId: string }): Promise<unknown>
+      }
+    }).managedMcp
+    const remove = vi.spyOn(managed, 'remove').mockResolvedValue({ removed: true, liveUnloaded: true })
+    const repair = vi.spyOn(managed, 'repair').mockResolvedValue({
+      status: 'installed',
+      connector: {
+        entryId: 'repaired-id',
+        serverName: 'canva-a1b2c3d',
+        url: 'https://mcp.canva.example/',
+        source: { kind: 'registry', name: 'com.canva.mcp/mcp', version: '1.0.0' },
+      },
+    })
+
+    await expect(inventory.removeManagedMcpConnector({ entryId: 'managed-id' }))
+      .resolves.toEqual({ removed: true, liveUnloaded: true })
+    await expect(inventory.repairManagedMcpConnector({ entryId: 'managed-id' }))
+      .resolves.toMatchObject({ status: 'installed', connector: { entryId: 'repaired-id' } })
+    expect(remove).toHaveBeenCalledWith({ entryId: 'managed-id' })
+    expect(repair).toHaveBeenCalledWith({ entryId: 'managed-id' })
   })
 
   it('reads idle updater state and refuses an unprepared restart without scheduling exit', async () => {

@@ -7,6 +7,7 @@ import { registerUnknownConversationFallback } from './fallback.ts'
 import { registerHardnessArtifactConversationNode } from './hardness-artifact.ts'
 import { registerInboxConversationNodes } from './inbox.ts'
 import { registerMessageConversationNode } from './message.ts'
+import { registerKiraTeamMessageNode } from './kira-team-message.ts'
 import { registerRetryConversationNode } from './retry.ts'
 import { registerToolConversationNode } from './tool.ts'
 import { registerTurnErrorConversationNode } from './turn-error.ts'
@@ -20,6 +21,7 @@ import { registerTurnTailConversationNode } from './turn-tail.ts'
 export function registerConversationNodes(ctx: Context): void {
   registerInboxConversationNodes(ctx)
   registerMessageConversationNode(ctx)
+  registerKiraTeamMessageNode(ctx)
   registerAssistantConversationNode(ctx)
   registerToolConversationNode(ctx)
   registerHardnessArtifactConversationNode(ctx)

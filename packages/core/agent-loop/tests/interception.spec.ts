@@ -102,7 +102,7 @@ describe('agent/pre-step', () => {
 
     expect(seen).toEqual([
       { turn: 1, step: 1, messages: 1 },
-      { turn: 1, step: 2, messages: 0 },
+      { turn: 1, step: 2, messages: 1 },
     ])
   })
 
@@ -642,7 +642,7 @@ describe('tool additionalContexts buffering across a step', () => {
 
     // Event order in the log: both tool/results, THEN both injected contexts —
     // never interleaved (which would break tool-call/result adjacency).
-    const injected = events(agent).filter(e => e.type === 'user/message' && e.data.source.kind === 'plugin')
+    const injected = events(agent).filter(e => e.type === 'user/message' && e.data.source.kind === 'plugin' && e.data.source.plugin === 'p')
     const seqs = events(agent)
     const firstResult = seqs.findIndex(e => e.type === 'tool/result')
     const lastResult = seqs.map(e => e.type).lastIndexOf('tool/result')
@@ -679,7 +679,7 @@ describe('tool additionalContexts buffering across a step', () => {
 
     const log = events(agent)
     const resultIndex = log.findIndex(event => event.type === 'tool/result')
-    const contextEvents = log.filter(event => event.type === 'user/message' && event.data.source.kind === 'plugin')
+    const contextEvents = log.filter(event => event.type === 'user/message' && event.data.source.kind === 'plugin' && ['a', 'b'].includes(event.data.source.plugin))
     expect(resultIndex).toBeGreaterThanOrEqual(0)
     expect(log.findIndex(event => event === contextEvents[0])).toBeGreaterThan(resultIndex)
     expect(contextEvents.map(event => event.type === 'user/message' && event.data.source)).toEqual([

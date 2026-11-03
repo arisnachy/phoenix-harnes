@@ -10,6 +10,8 @@
 
 <a id="slot-declaration-injection"></a>
 
+
+Conversation Definition 的 `match(event, location)` 可通过第二个可选参数接收引擎分配的不可变事件 Location。Definition 可将不携带 turn/step 标识的事件关联到所属 Step；仅接收事件的现有匹配函数仍然有效。Location data 的每个 key 只允许一个所有者，因此同一 Step 中的重复更新归属于同一个 Context。
 ## Slot 声明注入
 
 `ctx.slots.inject(name, callback)` 将完整的 `SlotMap` key 作为贡献项的依赖，适用于贡献方插件可独立于声明条目激活的情形。声明存在时，它会同步运行 `callback`，否则等待；声明折叠会 dispose（资源释放）回调 effect，重新声明则会再次运行回调。控制器归调用方的插件 fiber 所有，因此卸载贡献方会取消等待或移除其活跃注册项。直接调用 `slots.register()` 向未声明 slot 注册仍会抛出异常。

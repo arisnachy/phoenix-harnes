@@ -15,7 +15,7 @@ import type { ViewTab } from './contract/views.ts'
 import type {
   ApprovalWait, ChatNodeTurnDataInjected, ChatScrollPosition, ChatViewInjected, ComposerBarInjected,
   ComposerChainProps, ConversationInjected, ConversationSessionHeaderInjected, ConversationSessionInjected,
-  ConversationUserProfileState, DetailsInjected,
+  ConversationUserProfileState, DetailsInjected, ProactivityAttentionItem,
 } from './contract/slots.ts'
 import type { InputNotice } from './input/contract.ts'
 import { createChatStore } from './stores.ts'
@@ -34,6 +34,7 @@ import { ApprovalPanel } from './skeleton/ApprovalPanel.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
 import { queueDockEntry } from './queue/QueueDock.tsx'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
+import { recordProactivityAttention, refreshProactivityAttention } from './skeleton/ProactivityAttention.ts'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { DetailsPanel } from './skeleton/DetailsPanel.tsx'
 import { en, es, NS, zh, type ConversationKey } from './locales.ts'
@@ -41,7 +42,8 @@ import { registerConversationNodes } from './conversation-nodes/register.ts'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, type ConversationSettings } from '../submission-settings.ts'
 import {
-  configureVoiceAssistantRemote, refreshVoiceAssistantRemote,
+  configureVoiceAssistantRemote, configureVoiceModelRouteResolver, refreshVoiceAssistantRemote,
+  speakVoiceAssistantAttention,
 } from './voice.ts'
 
 declare module '@phoenix-ai/dsh-client-ui-slots' {
@@ -95,6 +97,35 @@ const CHAT_NODE_INJECT: ChatNodeTurnDataInjected = {
   },
 }
 
+interface CanvasVisualWorkspace {
+  show(content: {
+    readonly kind: 'html'
+    readonly html: string
+    readonly title?: string
+    readonly executable?: boolean
+  }): void
+}
+
+function openCanvasWorkspace(ctx: Context, canvas: {
+  readonly title: string
+  readonly html: string
+  readonly executable: boolean
+}): boolean {
+  const workspace = (ctx.get as unknown as (name: string) => unknown)('visualWorkspace') as CanvasVisualWorkspace | undefined
+  if (workspace === undefined || typeof workspace.show !== 'function') return false
+  try {
+    workspace.show({
+      kind: 'html',
+      html: canvas.html,
+      title: canvas.title,
+      executable: canvas.executable,
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Resolve the session-scoped conversation face (scope-addressed send/cancel), failing loud. */
 function scopedConversation(sessions: ISessions, id: SessionId): IConversation {
   const scoped = sessions.scope(id)
@@ -128,7 +159,16 @@ export function apply(ctx: Context): void {
   const disposeVoiceRemote = configureVoiceAssistantRemote(
     ctx.remote.voice,
   )
-  ctx.effect(() => disposeVoiceRemote, 'ui-conversation: host voice remote')
+  const disposeVoiceRoute = configureVoiceModelRouteResolver(async (sessionKey) => {
+    const connection = ctx.get('connection') as ConnectionHandle | undefined
+    if (connection === undefined) return undefined
+    const { result } = await connection.api.sessions.models({ sessionId: sessionKey as SessionId })
+    return result.ok ? result.value.current : undefined
+  })
+  ctx.effect(() => () => {
+    disposeVoiceRoute()
+    disposeVoiceRemote()
+  }, 'ui-conversation: host voice remote')
   ctx.on('connection/reset', () => { void refreshVoiceAssistantRemote() })
 
   registerConversationNodes(ctx)
@@ -164,6 +204,39 @@ export function apply(ctx: Context): void {
     () => userProfileScope.subscribe(syncUserProfile),
     'ui-conversation: hero preferred-name mirror',
   )
+
+  const proactivityAttention = createSnapshotStore<readonly ProactivityAttentionItem[]>([])
+  const spokenAttention = new Set<string>()
+  const speakingAttention = new Set<string>()
+  const refreshAttention = async (): Promise<void> => {
+    await refreshProactivityAttention(
+      ctx.get('connection') as ConnectionHandle | undefined,
+      proactivityAttention,
+    )
+    const rows = proactivityAttention.getSnapshot()
+    const liveKeys = new Set(rows.map(item => `${item.id}:${item.revision}`))
+    for (const key of spokenAttention) {
+      if (!liveKeys.has(key)) spokenAttention.delete(key)
+    }
+    const pending = rows.find(item => !spokenAttention.has(`${item.id}:${item.revision}`)
+      && !speakingAttention.has(`${item.id}:${item.revision}`))
+    if (pending === undefined) return
+    const key = `${pending.id}:${pending.revision}`
+    speakingAttention.add(key)
+    try {
+      if (await speakVoiceAssistantAttention(pending.title, pending.detail, userProfile.getSnapshot().preferredName)) {
+        spokenAttention.add(key)
+      }
+    } finally {
+      speakingAttention.delete(key)
+    }
+  }
+  void refreshAttention()
+  ctx.effect(() => {
+    const timer = setInterval(() => { void refreshAttention() }, 60_000)
+    return () => { clearInterval(timer) }
+  }, 'ui-conversation: proactive attention poll')
+  ctx.on('connection/reset', () => { void refreshAttention() })
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
@@ -242,9 +315,12 @@ export function apply(ctx: Context): void {
       'conversation.hero.agentPreset': { kind: 'single', scope: 'root' },
     },
     inject: (sessionId: SessionId | undefined): ConversationInjected => ({
+      setSidebarFocus: layout.setSidebarFocus,
+      recordAttention: (item, state) => recordProactivityAttention(ctx.get('connection') as ConnectionHandle | undefined, proactivityAttention, item, state),
       hooks: {
         composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
         userProfile,
+        proactivityAttention,
       },
       selectWorkspace: async (workspaceId) => {
         const nextId = await workspaces.connectWorkspace(workspaceId)
@@ -420,6 +496,8 @@ export function apply(ctx: Context): void {
     children: {
       'conversation.chat.node': { kind: 'keyed', scope: 'session', inject: CHAT_NODE_INJECT },
       'conversation.message.images': { kind: 'single', scope: 'session' },
+      'conversation.chat.message-author': { kind: 'list', scope: 'session' },
+      'conversation.chat.message-actions': { kind: 'list', scope: 'session' },
     },
     store: chatStore,
     inject: (sessionId: SessionId, actions: BoundActions<typeof chatStore>): ChatViewInjected => {
@@ -427,6 +505,7 @@ export function apply(ctx: Context): void {
       const scoped = scopedConversation(sessions, sessionId)
       const connection = ctx.get('connection') as ConnectionHandle
       return {
+        openCanvas: canvas => openCanvasWorkspace(ctx, canvas),
         openDetails: (target) => {
           actions.select(target)
           layout.openDetails()

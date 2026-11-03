@@ -83,6 +83,58 @@ Configure credentials, the model catalog, and deployment-specific transport sett
 
 The dict shape makes duplicate routes unrepresentable, and the pre-release array shape (with per-profile `provider` fields) fails load with migration directions. `providers` may also be empty or omitted entirely: the adapter then mounts **dormant** — zero routes, no extra catalog entries — and registers routes the moment the `llm-pi-ai:` settings section supplies profiles, dropping them again when it empties. Dormant or not, the plugin declares every installed catalog provider in the configurable-provider directory (`ctx.llm.listConfigurableProviders()`, settings path `providers.<provider>`), joined with every route the current profiles declare, so configuration surfaces can offer the full catalog before any route exists and can still address a hand-declared one. Each entry carries `declared`: whether pi-ai ships nothing under that key. It follows the installed catalog, never the settings document, because narrowing a shipped provider's models stores a profile too and that route is still one pi-ai knows — only the adapter can tell the two apart, which is why the directory answers rather than leaving a surface to infer it. Which adapters exist is composition; which providers run can be entirely the user's settings document. Registration with `ctx.llm` is atomic: a collision with any provider route already owned by another adapter fails plugin loading without registering the remaining routes. Model ids are not lifecycle config; a model the route does not configure fails before any provider request with `LlmError('UNKNOWN_MODEL')`.
 
+## Automatic NVIDIA Build catalog
+
+For the standard `nvidia` provider pointing to `https://integrate.api.nvidia.com/v1`,
+PHOENIX refreshes the public `GET /v1/models` catalog every five minutes
+while the Host runs. It also refreshes on first use and when the model picker
+requests an updated list. New chat-capable IDs become available without a
+release or a manual Settings edit; missing IDs disappear from the picker.
+Embedding, parsing, scoring, and guard/safety endpoints are not presented
+as chat-completions models.
+
+A failed, invalid, or empty listing **does not** erase the last working list.
+Requests already selecting a retired model keep the historical descriptor for
+session compatibility; if a replacement from the same publisher is available,
+the adapter automatically routes the next turn to it. NVIDIA HTTP 410 errors
+quarantine the rejected ID for an hour, trigger an immediate refresh, and
+allow **one** pre-output fallback attempt to a different model. It never
+replays a turn after any content or tool-call chunk has been emitted. No
+successful inference or account-level access is inferred merely from the
+public catalog: a key without Public API Endpoints permission can still fail.
+
+This automatic hosted discovery never changes custom `nvidia.baseURL`
+deployments (including self-hosted NIM). Those use their own `GET /v1/models`
+for explicit Settings discovery. Saved credentials and pinned model
+preferences are not overwritten.
+
+## Generic non-Codex provider error recovery
+
+For a pi-ai request that returns an otherwise unclassified `PI_AI_ERROR`,
+non-Codex routes expose the distinct `PI_AI_TRANSIENT_ERROR` retry code.
+The installed `llm-retry` plugin retries it with normal, bounded backoff
+(two retries by default), keeping the same verified session and tool-error
+context. The native `openai`, `openai-codex`, and `chatgpt-web` routes, as
+well as OpenAI/Codex model IDs behind OpenRouter, retain their existing error
+behavior. Known invalid requests, authentication, and quota failures are
+never reclassified as transient. An explicitly configured `retryPolicy`
+overrides the retry-code defaults, including opting out with `maxRetries: 0`.
+Retry exhaustion remains an honest failure, not a fabricated completed task.
+
+Research publication continues to require real `report.references` with
+HTTPS URLs and citation keys. Invalid `phoenix_research_publish` arguments
+are a tool validation error, not a reason to bypass the publication gate;
+the model receives guidance to research sources before trying again.
+
+## OpenRouter output-limit recovery
+
+An OpenRouter `length` stop is treated as an output-limit finish instead
+of inferring context overflow merely because the provider returned fewer tokens
+than the model's declared maximum. Actual context-window overflows remain
+errors. When the agent-loop's Phoenix Auto-Continue policy selects this route,
+it can then resume safely with preserved text and a bounded number of calls.
+This does not change OpenAI Codex's native route.
+
 ## Catalog resolution
 
 A profile's `models` list *replaces* the route's installed catalog rather than extending it; omitting it (or leaving it empty) serves that catalog unchanged. Each entry defaults its unset fields from the installed model of the same `id`, so narrowing a catalog route to two models, correcting one capacity, or adding a model newer than the installed catalog are all one-line edits — but declaring any `models` list means every model the route should keep serving must appear in it, an entry of nothing but `id` being enough. The configurable entry fields are `id`, `name`, `contextWindow`, `maxTokens`, `reasoningEfforts`, and `compat`. Pricing and input modalities have no harness consumer and ride the installed entry or are absent.

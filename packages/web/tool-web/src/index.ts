@@ -11,11 +11,19 @@ import z from '@phoenix-ai/schemastery'
 import type {} from '@phoenix-ai/dsh-web'
 import { applyWebSearchTool, WEB_SEARCH_MAX_QUERIES, WEB_SEARCH_MAX_RESULTS } from './search.ts'
 import { applyWebFetchTool } from './fetch.ts'
+import { applyResearchTools } from './research.ts'
+import { createScholarlySearchTool } from './scholarly.ts'
+import { createWorldBankHealthSeriesTool } from './health-series.ts'
 
 export { WEB_SEARCH_MAX_QUERIES, WEB_SEARCH_MAX_RESULTS, applyWebSearchTool, formatSearchOutput, presentSearchCall, presentSearchResult, searchMetaFromValue, searchMetaFromResult } from './search.ts'
 export type { WebSearchMeta } from './search.ts'
 export { applyWebFetchTool, formatFetchOutput, parseFetchArgs, presentFetchCall, presentFetchResult, fetchMetaFromValue, fetchMetaFromResult } from './fetch.ts'
 export type { WebFetchMeta } from './fetch.ts'
+export { RESEARCH_SOURCES, planResearch, executeResearch, applyResearchTools } from './research.ts'
+export type { ResearchSource, ResearchPlan, ResearchOutcome } from './research.ts'
+export { searchEuropePmc, projectEuropePmcRecords, createScholarlySearchTool } from './scholarly.ts'
+export type { ScholarlyRecord } from './scholarly.ts'
+export { fetchWorldBankHealthSeries, createWorldBankHealthSeriesTool, HEALTH_INDICATORS } from './health-series.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'tool-web'
@@ -90,6 +98,9 @@ export function apply(ctx: Context, config: Config): void {
   assertPositiveInteger('fetchMaxOutputChars', resolved.fetchMaxOutputChars)
   if (resolved.search) {
     applyWebSearchTool(ctx, resolved.searchMaxResults, resolved.searchMaxQueries, resolved.searchTimeoutMs, resolved.fetch)
+    applyResearchTools(ctx, resolved.searchMaxResults, resolved.searchTimeoutMs)
+    ctx.tools.register(createScholarlySearchTool())
+    ctx.tools.register(createWorldBankHealthSeriesTool())
   }
   if (resolved.fetch) applyWebFetchTool(ctx, resolved.fetchTimeoutMs, resolved.fetchMaxOutputChars)
 }

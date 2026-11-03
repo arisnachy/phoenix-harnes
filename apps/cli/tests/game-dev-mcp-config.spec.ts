@@ -54,21 +54,42 @@ describe('game development connector pack', () => {
     for (const preset of [standardPreset, codePreset]) {
       const source = readFileSync(preset, 'utf8')
       expect(source).toContain("new URL('skills/', baseUrl)")
+      expect(source).toContain(preset === standardPreset ? 'carga la habilidad `game-development`' : 'load the `game-development` skill')
     }
   })
 
-  it('teaches engine routing and both modern-retro and native-retro workflows', () => {
-    const source = readFileSync(skill, 'utf8')
+  it('prevents Spanish Game Studio missions from ending with one PNG or an unsupported capability denial', () => {
+    const code = readFileSync(codePreset, 'utf8')
+    const standard = readFileSync(standardPreset, 'utf8')
+    const studioSkill = readFileSync(resolve(root, '.agents/skills/phoenix-game-studio/SKILL.md'), 'utf8')
+    const fallbackGame = resolve(root, 'examples/game-studio/jungle-echo.html')
 
-    expect(source).toContain('Retro moderno')
-    expect(source).toContain('Retro nativo')
-    expect(source).toContain('cc65/ca65/ld65')
+    expect(code).toContain('Responde en español natural cuando el usuario escribe en español')
+    expect(standard).toContain('Responde en español natural cuando el usuario escriba en español')
+    for (const preset of [code, standard]) {
+      expect(preset).toContain('examples/game-studio/jungle-echo.html')
+      expect(preset).toContain('application/vnd.phoenix.game+html')
+      expect(preset).toContain('phoenix_game')
+      expect(preset).toContain('spawn_teammate')
+    }
+    expect(studioSkill).toContain('a sprite sheet is an intermediate resource')
+    expect(studioSkill).toContain('Before any "tools unavailable" conclusion')
+    expect(readFileSync(fallbackGame, 'utf8')).toContain('phoenix-game-manifest')
+  })
+
+  it('teaches engine routing and both modern-retro and native-retro workflows', () => {
+    const directory = resolve(skill, '..')
+    const source = ['SKILL.md', 'references/production-art.md', 'references/browser-games.md', 'references/godot-games.md', 'references/native-retro.md'].map(resource => readFileSync(resolve(directory, resource), 'utf8')).join('\n')
+
+    expect(source).toContain('estética moderna por defecto')
+    expect(source).toContain('Hardware retro real')
+    expect(source).toContain('cc65')
     expect(source).toContain('PVSnesLib')
     expect(source).toContain('SGDK')
     expect(source).toContain('GBDK-2020')
     expect(source).toContain('connector_list')
     expect(source).toContain('connector_discover')
-    expect(source).toContain('Bucle de calidad obligatorio')
+    expect(source).toContain('tres pruebas separadas')
     expect(source).toContain('Mandato premium de producción')
     expect(source).toContain('Rúbrica interna de 100 puntos')
     expect(source).toContain('90/100 o más')

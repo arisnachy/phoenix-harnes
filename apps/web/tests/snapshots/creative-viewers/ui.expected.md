@@ -1,0 +1,85 @@
+- article:
+  - text: application/vnd.phoenix.comic+html
+  - strong: Cómic de prueba
+  - button "Copy"
+  - button "Download"
+  - button "Expand"
+  - 'region "Comic Studio: Cómic de prueba"':
+    - paragraph: Comic Studio · Páginas ilustradas · Vista editorial sin navegador
+    - iframe
+
+- article:
+  - text: application/vnd.phoenix.scene-map+json
+  - strong: Isla Bruma
+  - text: json
+  - button "Copy"
+  - button "Download"
+  - button "Expand"
+  - text: ATLAS INTERACTIVO · MUNDO FICTICIO
+  - heading "Isla Bruma" [level=3]
+  - paragraph: Atlas narrativo interactivo · Datos completamente ficticios
+  - text: Mapa narrativo
+  - button "Acercar mapa ficticio": +
+  - button "Alejar mapa ficticio" [disabled]: −
+  - button "Ver mapa completo"
+  - checkbox "Rutas" [checked]
+  - text: Rutas
+  - checkbox "Nombres" [checked]
+  - text: Nombres
+  - button "Exportar SVG"
+  - img "Mapa ficticio interactivo Isla Bruma":
+    - button "Explorar Puerto de la Niebla": ⚓ Puerto de la Niebla
+    - button "Explorar Bosque Susurrante": ♠ Bosque Susurrante
+    - button "Explorar Torre del Viento": ♜ Torre del Viento
+    - button "Explorar Ruinas del Alba": ✦ Ruinas del Alba
+    - button "Explorar Ciudad de Sal": ◆ Ciudad de Sal
+    - text: N Atlas imaginario · No representa geografía real
+  - complementary "Lugares del mapa":
+    - strong: Explorar lugares
+    - text: 5 puntos
+    - button "⚓ Puerto de la Niebla"
+    - button "♠ Bosque Susurrante"
+    - button "♜ Torre del Viento" [pressed]
+    - button "✦ Ruinas del Alba"
+    - button "◆ Ciudad de Sal"
+    - text: LUGAR SELECCIONADO
+    - heading "Torre del Viento" [level=4]
+    - paragraph: El vigía escucha los nombres del viento.
+  - paragraph: Isla de fantasía ficticia, con rutas narrativas no geográficas.
+  - text: Mapa ilustrado y narrativo · Autonomía sin conexión · No usa geocodificación
+
+- article:
+  - text: application/vnd.phoenix.geo+json
+  - strong: Mapa geográfico de prueba
+  - text: json
+  - button "Copy"
+  - button "Download"
+  - button "Expand"
+  - text: PHOENIX GEO INTELLIGENCE
+  - heading "Mapa geográfico de prueba" [level=3]
+  - text: Territorial Ubicaciones y áreas
+  - strong: "1"
+  - text: Capas visibles
+  - strong: "1"
+  - text: Valores numéricos
+  - strong: "7"
+  - group "Navegación del mapa":
+    - button "Acercar mapa": +
+    - button "Alejar mapa": −
+    - button "Ver todo"
+    - button "Centrar"
+  - group "Exportar datos e informes":
+    - text: Exportar
+    - button "GeoJSON"
+    - button "CSV"
+    - button "SVG"
+    - button "PDF · Informe"
+  - group "Modo de visualización":
+    - button "Vista 3D"
+  - 'region "Mapa interactivo: Mapa geográfico de prueba"':
+    - text: Mapa temático · Nivel 16
+    - button "Seleccionar Sitio de prueba"
+    - text: © OpenStreetMap contributors
+  - text: Leyenda Prueba Capas
+  - checkbox "Prueba 1" [checked]
+  - text: "Prueba 1 1 elementos · 1 con datos numéricos · WGS84 Fuente: Datos sintéticos para verificar el visor"

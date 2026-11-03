@@ -22,6 +22,8 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { latestModelSelectionPreference, persistModelSelectionPreference } from '@phoenix-ai/dsh-agent'
+import type { ModelSelection } from '@phoenix-ai/dsh-agent'
 import type { Context } from '@phoenix-ai/cordis'
 import type {
   Agent,
@@ -148,6 +150,12 @@ export type SubagentInterruptAuthority =
 
 /** Options for following up with one continuable child. */
 export interface SubagentFollowupOptions {
+  /** Optional next-request route supplied by a managed Team; omission preserves the child's own route. */
+  readonly modelSelection?: ModelSelection
+  /** next-turn queues work; next-step interrupts active work.
+   * next-safe-step waits for the current action before joining the next model step.
+   */
+  readonly delivery?: 'next-turn' | 'next-step' | 'next-safe-step'
   /** Durable attribution retained on the delivered message; it grants no authority. */
   readonly source: MessageSource
   /** Caller cancellation, owning the operation only until inbox acceptance. */
@@ -519,7 +527,7 @@ export class SubagentContinuationManager {
         if (activation.disposal !== undefined) {
           return activation.disposal.then(() => undefined, () => undefined)
         }
-        return this.submitAdmitted(activation, content, options.source, parent, options.signal)
+        return this.submitAdmitted(activation, content, options.source, parent, options.signal, options.delivery, options.modelSelection)
       })
       /* v8 ignore start -- only the lost-cutoff arm above returns undefined, so only that
        * race reaches the retry below, which then cold-resumes a new Activation. */
@@ -972,6 +980,9 @@ export class SubagentContinuationManager {
         'NOT_RESUMABLE',
       )
     }
+    const restoredSelection = latestModelSelectionPreference({
+      events: loaded.events.slice(loaded.meta.seedLength ?? 0),
+    })?.selection
     let activation: Activation
     try {
       activation = await this.materialize({
@@ -981,6 +992,7 @@ export class SubagentContinuationManager {
         agentOptions: {
           ...descriptor.agentProvider !== undefined ? { provider: descriptor.agentProvider } : {},
           ...descriptor.agentModel !== undefined ? { model: descriptor.agentModel } : {},
+          ...restoredSelection,
         },
         composition: { persona: descriptor.persona, toolFilter: descriptor.toolFilter },
         signal: options.signal,
@@ -990,7 +1002,7 @@ export class SubagentContinuationManager {
       if (error instanceof SubagentError) throw error
       throw new SubagentError(`subagent "${childId}" is unavailable`, 'NOT_RESUMABLE', { cause: error })
     }
-    return this.submitMaterialized(activation, content, options.source, parent, options.signal)
+    return this.submitMaterialized(activation, content, options.source, parent, options.signal, options.modelSelection)
   }
 
   /**
@@ -1008,9 +1020,10 @@ export class SubagentContinuationManager {
     source: MessageSource,
     parent: Agent,
     signal: AbortSignal,
+    modelSelection?: ModelSelection,
   ): Promise<MessageId> {
     try {
-      return this.submitAdmitted(activation, content, source, parent, signal)
+      return this.submitAdmitted(activation, content, source, parent, signal, 'next-turn', modelSelection)
     } catch (error: unknown) {
       /* v8 ignore next -- rollback disposal failures must not mask the
        * pre-acceptance signal, drain, or lifecycle failure. */
@@ -1062,6 +1075,16 @@ export class SubagentContinuationManager {
       if (create !== undefined) {
         appendDelegatedPolicyOverrides((childCtx.agent as Agent).session, create.delegatedPolicies)
       }
+      childCtx.on('agent/request', async (_step, next) => {
+        const proposed = await next()
+        const child = childCtx.agent as Agent
+        const ownEvents = child.session.events.slice(child.session.header.seedLength ?? 0)
+        const selected = latestModelSelectionPreference({ events: ownEvents })?.selection
+        if (selected === undefined) return proposed
+        const { reasoningEffort: _priorEffort, ...config } = proposed
+        return { ...config, provider: selected.provider, model: selected.model,
+          ...selected.reasoningEffort === undefined ? {} : { reasoningEffort: selected.reasoningEffort } }
+      })
       applyChildComposition(childCtx, parent, inputs.composition)
       return this.setupRegistry.apply(childCtx)
     }
@@ -1194,13 +1217,16 @@ export class SubagentContinuationManager {
     content: ContentBlock[],
     source: MessageSource,
     parent: Agent,
+    delivery: 'next-turn' | 'next-step' | 'next-safe-step' = 'next-turn',
   ): MessageId {
     // Parent-originated delivery keeps the parent live through ownership, so
     // establish it before the message can enter the child's inbox.
     this.acquireOwnership(parent, activation.childId)
     const message = createUserMessage({ content, source })
     const accepted = this.admitWaking(activation, message.id, () => {
-      activation.handle.agent.followup(message)
+      if (delivery === 'next-step') activation.handle.agent.steer(message)
+      else if (delivery === 'next-safe-step') activation.handle.agent.send(message, 'next-step', true)
+      else activation.handle.agent.followup(message)
     })
     // Past this point the caller has an id for this child, so its eventual
     // settlement is something the parent is owed an account of.
@@ -1246,6 +1272,8 @@ export class SubagentContinuationManager {
     source: MessageSource,
     parent: Agent,
     signal: AbortSignal,
+    delivery: 'next-turn' | 'next-step' | 'next-safe-step' = 'next-turn',
+    modelSelection?: ModelSelection,
   ): MessageId {
     signal.throwIfAborted()
     this.assertAdmitting(parent)
@@ -1262,7 +1290,17 @@ export class SubagentContinuationManager {
       activation.childId,
       activation.handle.agent.session.header.parentSession,
     )
-    return this.submit(activation, content, source, parent)
+    if (modelSelection !== undefined) {
+      // Assembly owns request snapshots: changing the next route cannot change
+      // a request or tool action that is already executing.
+      const child = activation.handle.agent
+      persistModelSelectionPreference(child.session, modelSelection, 'default')
+      child.options.provider = modelSelection.provider
+      child.options.model = modelSelection.model
+      if (modelSelection.reasoningEffort === undefined) delete child.options.reasoningEffort
+      else child.options.reasoningEffort = modelSelection.reasoningEffort
+    }
+    return this.submit(activation, content, source, parent, delivery)
   }
 
   /**
@@ -1493,14 +1531,14 @@ export class SubagentContinuationManager {
         return
       }
       // An idle parent has nothing else to look at, so it gets one ordinary
-      // turn. A busy parent is steered instead of woken: `Inbox.claim()` takes
+      // turn. A busy parent gets non-interrupting next-step input: `Inbox.claim()` takes
       // the whole next-step batch at one boundary, so several children settling
-      // together cost one step rather than one turn each. Steering rather than
-      // injecting closes the window where a driver retires between this status
+      // together cost one step rather than one turn each. A waking send rather
+      // than a quiet injection closes the window where a driver retires between this status
       // read and the send, which would strand the notice unclaimed.
       this.sendWaking(parent, message, () => {
         if (parent.status === 'idle') parent.followup(message)
-        else parent.steer(message)
+        else parent.send(message, 'next-step', true)
       })
     } catch (error: unknown) {
       this.ctx.logger.warn(

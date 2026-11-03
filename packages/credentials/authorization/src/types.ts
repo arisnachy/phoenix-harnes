@@ -160,6 +160,11 @@ export interface AuthorizationEntry {
   methods: readonly AuthorizationMethod[]
   /** Whether an attempt for this key is running right now. */
   inFlight: boolean
+  /**
+   * Static secret-free connector capabilities this flow can unlock even while
+   * it is disconnected. Live telemetry may later override callable state.
+   */
+  connectors?: readonly AuthorizationConnectorTelemetry[]
   /** Present only when the owner can revoke/logout this account through the same seam. */
   disconnectable?: true
 }

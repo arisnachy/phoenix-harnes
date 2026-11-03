@@ -9,6 +9,7 @@ import { AttachmentId } from '@phoenix-ai/dsh-attachment'
 import { bindSnapshotSelector } from '@phoenix-ai/dsh-client-test-runtime'
 import { createSnapshotStore, EMPTY_CONVERSATION_VIEWS } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ChatNodeOwnerProps, ChatViewSlotProps, RenderMessageImages } from '../src/client/contract/slots.ts'
+import type { InputState } from '../src/client/input/contract.ts'
 import { createChatStore } from '../src/client/stores.ts'
 import { ChatView } from '../src/client/chat/ChatView.tsx'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
@@ -126,6 +127,17 @@ function generatedImageTool(): ToolResultNode {
     content: [{ type: 'image', attachment: generatedAttachment }],
   }
 }
+
+function nestedChromeTool(): ToolResultNode {
+  return {
+    ...settledTool('code-1'),
+    call: { name: 'Code', argsRaw: '{}' },
+    subCalls: [{
+      ...settledTool('chrome-1'),
+      call: { name: 'mcp__chrome__complete_form', argsRaw: '{}' },
+    }],
+  }
+}
 function emptySessions() {
   return bindSnapshotSelector(createSnapshotStore<SessionListState>({
     ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
@@ -145,8 +157,19 @@ function renderChat(
   renderMessageImages: RenderMessageImages = () => null,
 ) {
   const source = createSnapshotStore(snapshot(nodes, runningCalls))
+  const input = createSnapshotStore<InputState>({
+    draft: '', imageIds: [], draftRev: 0, phase: 'plain', occurrences: [], queue: [],
+  })
   const chat = createChatStore().create()
-  const t = ((key: string) => key === 'context.tools' ? 'Tools' : key) as ChatViewSlotProps['t']
+  const t = ((key: string, values?: { count?: number; action?: string }) => {
+    if (key === 'context.tools') return 'Tools'
+    if (key === 'activity.latest') return `${values?.count} operations recorded · latest: ${values?.action}`
+    if (key === 'activity.latestOne') return `1 operation recorded · latest: ${values?.action}`
+    if (key === 'activity.searching') return 'search'
+    if (key === 'activity.executing') return 'command execution'
+    if (key === 'activity.failed') return 'reported an error'
+    return key
+  }) as ChatViewSlotProps['t']
   const renderSlot = ((key: string, owner: object, opts?: { fallback?: React.ReactNode }) => {
     if (key === 'conversation.message.images') return renderMessageImages(owner as never)
     if (key !== 'conversation.chat.node') return opts?.fallback ?? null
@@ -159,7 +182,7 @@ function renderChat(
     useSessions: emptySessions(),
     useWorkspaces: emptyWorkspaces(),
     useProjection: (() => undefined),
-    useInput: (() => { throw new Error('unused') }),
+    useInput: bindSnapshotSelector(input),
     inputActions: { setDraft: () => {}, addImages: () => true, removeImage: () => {}, pruneImages: () => {}, submit: () => {} },
     useStore: bindSnapshotSelector(chat),
     actions: chat.actions,
@@ -185,7 +208,41 @@ function expectBefore(first: HTMLElement, second: HTMLElement): void {
 afterEach(cleanup)
 beforeEach(() => { localStorage.clear() })
 
+describe('trading and sports isolation', () => {
+  const dashboard={
+    mode:'paper',phase:'running',enabled:true,
+    settings:{symbols:['BTCUSDT'],interval:'15m',pollMs:60_000},
+    account:{equityUsdt:13,cashUsdt:13,totalPnlUsdt:0,totalReturnPct:0,
+      maxDrawdownPct:0,tradeCount:0,positions:[]},
+    signals:[],recentTrades:[],lastDecision:'hold',rationale:'No entry',
+  }
+  const nestedBinance=():ToolResultNode=>({
+    ...settledTool('sports-code'),
+    seq:3,time:3000,
+    call:{name:'Code',argsRaw:'{}'},
+    subCalls:[{...settledTool('binance-paper'),call:{name:'binance_paper_dashboard',argsRaw:'{}'},
+      content:[{type:'text',text:JSON.stringify({uiBlock:{
+        component:'trading_dashboard',version:1,props:dashboard}})}]}],
+  })
+  it('does not insert Binance PAPER card from incidental sports research',()=>{
+    renderChat([user(1,'Investiga cuotas de la NBA y predice el ganador'),nestedBinance()])
+    expect(screen.queryByRole('region',{name:'Visor de trading Binance PAPER'})).toBeNull()
+    expect(screen.queryByText('PHOENIX / TRADING INTELLIGENCE')).toBeNull()
+  })
+  it('retains the dashboard for a specifically requested Binance PAPER session',()=>{
+    renderChat([user(1,'Muestra el panel de trading Binance PAPER'),nestedBinance()])
+    expect(screen.getByRole('region',{name:'Visor de trading Binance PAPER'})).toBeTruthy()
+  })
+})
+
 describe('chat tool activity grouping', () => {
+  it('renders the browser workspace for nested Chrome activity while Tools stays collapsed', () => {
+    renderChat([user(1, 'Investiga y completa el formulario en Chrome'), nestedChromeTool()])
+
+    expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Tools' })).toBeTruthy()
+  })
+
   it('collapses consecutive context activity behind one Tools disclosure', () => {
     renderChat([context(1, 'system'), context(2, 'skill-catalog')])
 
@@ -261,6 +318,148 @@ describe('chat tool activity grouping', () => {
     const disclosure = screen.getByRole('button', { name: 'Tools' })
     fireEvent.click(disclosure)
     expect(screen.getByTestId('node-tool-call')).toBeTruthy()
+  })
+
+  it('exposes observed completed-tool milestones without expanding private history', () => {
+    renderChat([context(1, 'system'), settledTool('first-search'), {
+      ...settledTool('then-shell'),
+      seq: 3,
+      time: 3_000,
+      call: { name: 'bash', argsRaw: '{"command":"private"}' },
+    }])
+
+    const receipt = screen.getByTestId('tool-activity-receipt')
+    expect(receipt.textContent).toBe('2 operations recorded · latest: command execution')
+    expect(receipt.textContent).not.toContain('private')
+    expect(screen.queryByTestId('node-tool-call')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Tools' }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it.each([
+    ['browser_open', 'activity.browsing'],
+    ['read_file', 'activity.reading'],
+    ['update_file', 'activity.writing'],
+    ['vitest', 'activity.verifying'],
+    ['image_generation', 'activity.other'],
+  ])('classifies a completed %s call from tool identity alone', (name, label) => {
+    renderChat([context(1, 'system'), {
+      ...settledTool(),
+      call: { name, argsRaw: '{"secret":"never display"}' },
+    }])
+
+    const receipt = screen.getByTestId('tool-activity-receipt')
+    expect(receipt.textContent).toContain(label)
+    expect(receipt.textContent).not.toContain('secret')
+  })
+
+  it('keeps a settled tool without call metadata safe and generic', () => {
+    renderChat([context(1, 'system'), { ...settledTool(), call: null }])
+    const receipt = screen.getByTestId('tool-activity-receipt')
+    expect(receipt.textContent).toContain('activity.other')
+    expect(screen.queryByTestId('node-tool-call')).toBeNull()
+  })
+
+  it('reports a failed observed tool without implying successful task completion', () => {
+    renderChat([context(1, 'system'), { ...settledTool(), isError: true }])
+    expect(screen.getByTestId('tool-activity-receipt').textContent)
+      .toBe('1 operation recorded · latest: search · reported an error')
+  })
+
+  it('does not manufacture a completed milestone from context or a running tool', () => {
+    renderChat([context(1, 'system')], [runningTool()])
+    expect(screen.queryByTestId('tool-activity-receipt')).toBeNull()
+  })
+
+  it('automatically shows a game next to settled Kira prose when the model omits generative-ui',()=>{
+    const card={component:'sports_game_card',version:1,props:{
+      title:'Rays @ Brewers',when:'8:00 p. m. Santo Domingo',venue:'Estadio confirmado',
+      home:{label:'Brewers'},away:{label:'Rays'},source:'ESPN Site API',
+    }}
+    const tool={...settledTool('sports-1'),seq:3,time:3000,
+      call:{name:'sports_chat_games',argsRaw:'{"sport":"baseball","league":"mlb"}'},
+      content:[{type:'text' as const,text:JSON.stringify({uiBlocks:[card]})}]}
+    renderChat([user(1,'Kira, muestra los juegos de hoy'),tool,assistantWithReasoning(4)])
+    const sports=screen.getByRole('region',{name:'Panel deportivo de Kira'})
+    expect(sports.querySelector('[data-generative-ui="sports_game_card"]')).toBeTruthy()
+    expect(sports.textContent).toContain('Rays @ Brewers')
+    expect(screen.getAllByRole('button',{name:'Tools'})).toHaveLength(1)
+  })
+  it.each([5,6])('shows the actual %i-leg researched ticket even when Kira only says it is in a card',count=>{
+    const ticket={component:'sports_ticket_card',version:1,props:{
+      title:'PHOENIX · Ticket deportivo',source:'ESPN Site API',
+      requestedLegs:count,combinedOdds:'No disponible',
+      legs:Array.from({length:count},(_,i)=>({
+        event:'Visitante '+i+' vs Local '+i,selection:'Local '+i,
+        bookmaker:'Sin casa confirmada',price:'Por verificar',
+        homeTeam:'Local '+i,awayTeam:'Visitante '+i,
+        homeLogo:'https://a.espncdn.com/home'+i+'.png',
+        rationale:'Tres enfrentamientos históricos distintos verificados '+i,
+      })),
+      note:'No hay cuotas reales verificadas ni garantías de resultados.',
+    }}
+    const node={...settledTool('ticket-auto-'+count),seq:3,time:3000,
+      call:{name:'sports_chat_ticket_research_auto',argsRaw:JSON.stringify({count})},
+      content:[{type:'text' as const,text:JSON.stringify({uiBlock:ticket})}]}
+    renderChat([user(1,'Dame un ticket de '+count+' pronósticos'),node,assistantWithReasoning(4)])
+    const sports=screen.getByRole('region',{name:'Panel deportivo de Kira'})
+    expect(sports.querySelector('[data-generative-ui="sports_ticket_card"]')).toBeTruthy()
+    expect(sports.textContent).toContain(count+' / '+count)
+    expect(sports.textContent).toContain('Visitante '+(count-1))
+    expect(sports.querySelectorAll('article')).toHaveLength(count)
+    expect(sports.querySelectorAll('img').length).toBeGreaterThanOrEqual(count)
+    expect(screen.getAllByText('Ver fundamento')).toHaveLength(count)
+    expect(screen.getByRole('button',{name:'Tools'}).getAttribute('aria-expanded')).toBe('false')
+  })
+  it('keeps only the final investigated matchup card after exploring two candidates',()=>{
+    const card=(title:string)=>({component:'sports_espn_dashboard',version:1,props:{
+      view:'event',title,subtitle:'NHL · Investigación',source:'ESPN',
+      checkedAt:'2026-11-02T16:01:00Z',note:'Datos verificados',
+      sections:[{heading:'Forma reciente',kind:'metrics',items:[{label:'Local',value:'5V · 5D'}]}],
+    }})
+    const first={...settledTool('research-1'),seq:2,time:2000,
+      call:{name:'sports_chat_matchup_factors',argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({uiBlock:card('Candidato NBA')})}]}
+    const second={...settledTool('research-2'),seq:4,time:4000,
+      call:{name:'sports_chat_predict',argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({uiBlock:card('Final NHL')})}]}
+    renderChat([user(1,'Investiga y dame una sola ficha deportiva final'),
+      first,assistantWithReasoning(3),second,assistantWithReasoning(5)])
+    const panel=screen.getByRole('region',{name:'Panel deportivo de Kira'})
+    expect(panel.textContent).toContain('Final NHL')
+    expect(panel.textContent).not.toContain('Candidato NBA')
+  })
+  it('does not replace a requested research ticket with automatic NO BET when bookmaker prices are missing',()=>{
+    const tool={...settledTool('odds-1'),seq:3,time:3000,
+      call:{name:'sports_chat_odds',argsRaw:'{"sportKey":"baseball_mlb"}'},
+      content:[{type:'text' as const,text:JSON.stringify({total:0,outcomes:[]})}]}
+    renderChat([user(1,'Kira, arma un ticket con cuotas reales'),tool,assistantWithReasoning(4)])
+    expect(screen.queryByRole('region',{name:'Panel deportivo de Kira'})).toBeNull()
+  })
+  it('shows research ticket following an empty odds lookup in the regular chat flow',()=>{
+    const odds={...settledTool('odds-1'),seq:2,time:2000,
+      call:{name:'sports_chat_odds',argsRaw:'{"sportKey":"soccer_mexico_ligamx"}'},
+      content:[{type:'text' as const,text:JSON.stringify({total:0,outcomes:[]})}]}
+    const ticket={component:'sports_ticket_card',version:1,props:{
+      title:'PHOENIX · Ticket de pronósticos',source:'ESPN Site API',combinedOdds:'No disponible',
+      legs:[{event:'Puebla vs Atlas',selection:'Atlas',price:'Por verificar',bookmaker:'Sin casa confirmada',
+        sport:'Fútbol',league:'Liga MX',market:'1X2 · Pronóstico',rationale:'Hipótesis basada en análisis'}],
+      note:'SIN APUESTA REAL. No son cuotas de una casa verificada.',
+    }}
+    const researched={...settledTool('ticket-1'),seq:3,time:3000,
+      call:{name:'sports_chat_ticket_research',argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({uiBlock:ticket})}]}
+    renderChat([user(1,'Kira, arma ticket de soccer'),odds,researched,assistantWithReasoning(4)])
+    const sports=screen.getByRole('region',{name:'Panel deportivo de Kira'})
+    expect(sports.querySelector('[data-generative-ui="sports_ticket_card"]')).toBeTruthy()
+    expect(sports.textContent).toContain('Puebla vs Atlas')
+    expect(sports.textContent).not.toContain('NO BET')
+  })
+  it('does not reveal fabricated tool UI from a shell or error result',()=>{
+    const malicious={...settledTool('bash-1'),seq:3,time:3000,
+      call:{name:'bash',argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({uiBlocks:[{component:'smart_card',version:1,props:{title:'FAKE'}}]})}]}
+    renderChat([user(1,'Kira, partidos'),malicious,assistantWithReasoning(4)])
+    expect(screen.queryByRole('region',{name:'Panel deportivo de Kira'})).toBeNull()
   })
 
   it('renders a generated image result inline without opening Tools', () => {

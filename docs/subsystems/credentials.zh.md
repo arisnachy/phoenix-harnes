@@ -232,6 +232,35 @@ abstract deleteRecord(key: CredentialKey): Promise<void>
 
 Source: [`packages/credentials/credentials/src/index.ts`](../../packages/credentials/credentials/src/index.ts)
 
+<a id="ctxgoogleapi--googleapibroker"></a>
+
+### `ctx.googleApi` — `GoogleApiBroker`
+
+Google Host broker. OAuth material never leaves this service instance.
+
+```ts cordis-catalog
+/**
+ * Secret-free telemetry exists only while this process owns a live grant.
+ * @returns sanitized Google account and service capability telemetry, when connected.
+ */
+async inspect(): Promise<AuthorizationTelemetry | undefined>
+
+/**
+ * Execute one request inside a fixed Google service boundary.
+ * @param request - bounded Google service request.
+ * @returns the bounded response without credential-bearing headers.
+ */
+async request(request: GoogleApiRequest): Promise<GoogleApiResponse>
+
+/**
+ * Clear the in-memory and durable grant even when provider revocation fails.
+ * @returns whether Google acknowledged token revocation.
+ */
+async disconnect(): Promise<{ revoked: boolean }>
+```
+
+Source: [`packages/credentials/authorization/src/google-broker.ts`](../../packages/credentials/authorization/src/google-broker.ts)
+
 <a id="authorization-events"></a>
 
 ### `authorization/*` events
@@ -302,6 +331,43 @@ Committed change to a provider-managed credential source: a `set`, an `unset`, o
  * @mode emit
  */
 'credentials/reference-updated'(ref: CredentialRef): void
+```
+
+Source: [`packages/credentials/credentials/src/types.ts`](../../packages/credentials/credentials/src/types.ts)
+
+<a id="credentialsweb-login-resolve--serial"></a>
+
+#### `credentials/web-login-resolve` — serial
+
+Resolve an unattended website login only for an origin-bound browser executor. Denial is authoritative; consumers must not fall back to another identity or store.
+
+```ts cordis-catalog
+/**
+ * Resolve an unattended website login only for an origin-bound browser executor.
+ * Denial is authoritative; consumers must not fall back to another identity or store.
+ * @param origin - Canonical origin whose live browser destination is checked before filling.
+ * @returns Private values when authorized, denial, or undefined when no record exists.
+ * @mode serial
+ */
+'credentials/web-login-resolve'(origin: string): Promise<WebLoginResolution | undefined>
+```
+
+Source: [`packages/credentials/credentials/src/types.ts`](../../packages/credentials/credentials/src/types.ts)
+
+<a id="credentialsweb-login-status--serial"></a>
+
+#### `credentials/web-login-status` — serial
+
+Read saved website access without decrypting its values; undefined means no record.
+
+```ts cordis-catalog
+/**
+ * Read saved website access without decrypting its values; undefined means no record.
+ * @param origin - Canonical origin to inspect.
+ * @returns Selected identity metadata, or undefined when absent.
+ * @mode serial
+ */
+'credentials/web-login-status'(origin: string): Promise<WebLoginStatus | undefined>
 ```
 
 Source: [`packages/credentials/credentials/src/types.ts`](../../packages/credentials/credentials/src/types.ts)

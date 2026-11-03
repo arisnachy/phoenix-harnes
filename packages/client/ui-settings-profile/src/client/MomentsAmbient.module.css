@@ -1,0 +1,28 @@
+/* The ambient is a small, accessible, light-theme-first accessory, never a modal. */
+.ambient {
+  position: fixed;
+  top: 72px;
+  right: 20px;
+  z-index: 9;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: min(260px, 45vw);
+  padding: 6px 11px;
+  border: 1px solid var(--dsw-alias-border-l2, #ddd);
+  border-radius: 999px;
+  color: var(--dsw-alias-label-secondary, #555);
+  background: var(--dsw-alias-bg-layer-1, #fff);
+  box-shadow: 0 3px 14px rgb(0 0 0 / 5%);
+  font-size: 11px;
+  opacity: .96;
+}
+.label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.symbol { font-size: 15px; }
+.spark { color: #d69b38; }
+.ambient[data-variant="1"] { border-style: dashed; }
+.ambient[data-variant="2"] .spark { color: #9c79b9; }
+.ambient[data-phoenix-moment="solemn"] .spark { display: none; }
+@media (max-width: 700px) { .ambient { top: 61px; right: 8px; max-width: 145px; } }
+@media (prefers-reduced-motion: reduce) { .ambient { animation: none !important; transition: none !important; } }

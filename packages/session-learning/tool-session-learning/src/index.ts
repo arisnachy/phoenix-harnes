@@ -8,13 +8,15 @@ import z from '@phoenix-ai/schemastery'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import type {} from '@phoenix-ai/dsh-session-learning'
-import type { CognitiveMemoryLayer } from '@phoenix-ai/dsh-session-learning'
+import type { CognitiveMemoryKind, CognitiveMemoryLayer } from '@phoenix-ai/dsh-session-learning'
 import { filterAdaptiveSearchHits, installAdaptiveLearning } from './adaptive.ts'
 import { ExperienceLearningEngine, experienceMemoryInput } from './experience.ts'
-import { assessHabitExperience, formatHabitGuidance } from './habit.ts'
+import { LiveEfficiencyMonitor } from './live-efficiency.ts'
+import { hasUnclearedGoal, isHumanTaskMessage, learningOwnerSessionId } from './team-learning-context.ts'
+import { assessHabitExperience, formatHabitGuidance, formatUnverifiedExperience } from './habit.ts'
 import { AutonomousMemoryCurator } from './autonomous-curator.ts'
 import { filterProceduralSearchHits, installProceduralLearning } from './procedural.ts'
-import { formatProceduralContext } from './procedural-presentation.ts'
+import { formatProceduralContext, formatRecoveryCandidates } from './procedural-presentation.ts'
 import { formatMemorySearchResult, formatRecentMemoryContext } from './presentation.ts'
 import { formatResolvedTaskReference, RecentTaskLedger } from './task-reference.ts'
 
@@ -48,12 +50,57 @@ export function apply(ctx: Context, config: Config): void {
   if (!Number.isSafeInteger(maxResults) || maxResults < 1) throw new TypeError('maxResults must be a positive safe integer')
 
   const tasks = new RecentTaskLedger()
+  // A simultaneous Kira/team assembly must use its own human task, not the
+  // globally most recent prompt from another conversation.
+  const taskSession = (assembly: unknown): string | undefined => {
+    const agent = (assembly as { agent?: {
+      id: unknown
+      session?: Parameters<typeof learningOwnerSessionId>[0]
+    } }).agent
+    return agent === undefined ? undefined
+      : agent.session === undefined ? String(agent.id) : learningOwnerSessionId(agent.session)
+  }
+  // A memory search must be driven by the owning conversation's most recent
+  // HUMAN message, never by a previous task from a different chat or an agent.
+  const userTextForAssembly = (assembly: unknown): string | undefined => {
+    const agent = (assembly as { agent?: { session?: { events?: readonly {
+      type: string
+      data: unknown
+    }[] } } }).agent
+    const latest = agent?.session?.events?.findLast(event =>
+      event.type === 'user/message' && isRecord(event.data)
+      && isRecord(event.data.source) && event.data.source.kind === 'user')
+    return latest === undefined ? undefined : messageText(latest.data)
+  }
+  // Do not substitute the newest *other* chat's project for this assembly.
+  const projectForAssembly = (assembly: unknown): string | undefined => {
+    const sessionId = taskSession(assembly)
+    return sessionId === undefined
+      ? ctx.learningMemory.currentProjectId()
+      : ctx.learningMemory.projectIdForSession(sessionId)
+  }
   const curator = new AutonomousMemoryCurator({
     async remember(input) {
       await ctx.learningMemory.rememberCognitive({ ...input })
     },
   })
   const experience = new ExperienceLearningEngine()
+  const efficiency = new LiveEfficiencyMonitor()
+  // Correlate failures to tool names only; arguments and values are never persisted.
+  const pendingToolNames = new Map<string, Map<string, string>>()
+  const rememberOutcome = (sessionId: string, eventSeq: number, occurredAt: number,
+    verified: boolean, failed = false): void => {
+    const aggregate = verified
+      ? experience.completeVerified(sessionId, occurredAt)
+      : experience.finishUnverified(sessionId, occurredAt, failed)
+    pendingToolNames.delete(sessionId)
+    if (aggregate === undefined) return
+    void ctx.learningMemory.rememberCognitive(experienceMemoryInput(aggregate, {
+      sessionId, eventSeq, occurredAt,
+    })).catch((error: unknown) => {
+      ctx.logger.warn(`experience-learning: outcome persistence degraded in ${sessionId}: ${String(error)}`)
+    })
+  }
   void ctx.learningMemory.ready()
     .then(() => { experience.restore(ctx.learningMemory.allCognitiveRecords()) })
     .catch((error: unknown) => {
@@ -62,27 +109,29 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.on('session/event', (session, event) => {
     const sessionId = String(session.id)
+    const learningOwnerId = learningOwnerSessionId(session)
     const eventType = String(event.type)
     const data = event.data as unknown
     const occurredAt = typeof event.time === 'number' ? event.time : Date.now()
     const eventSeq = typeof event.seq === 'number' ? event.seq : 0
-    const projectId = ctx.learningMemory.currentProjectId()
+    const projectId = ctx.learningMemory.projectIdForSession(learningOwnerId)
 
     if (eventType === 'user/message') {
+      // Delegated agent prompts are not user instructions or new human tasks.
+      if (!isHumanTaskMessage(session, data)) return
       const text = messageText(data)
       if (text === undefined) return
       tasks.observeUserMessage(sessionId, text, {
         occurredAt,
         ...projectId === undefined ? {} : { projectId },
       })
-      if (isDirectUserMessage(data)) {
-        experience.beginTask({
-          sessionId,
-          text,
-          occurredAt,
-          ...projectId === undefined ? {} : { projectId },
-        })
-      }
+      efficiency.startTask(sessionId)
+      experience.beginTask({
+        sessionId,
+        text,
+        occurredAt,
+        ...projectId === undefined ? {} : { projectId },
+      })
       void curator.observeUserMessage({
         text,
         sessionId,
@@ -95,43 +144,78 @@ export function apply(ctx: Context, config: Config): void {
       return
     }
 
+    // Cheap in-memory telemetry: no prompts, tool arguments, or user files retained.
+    // Measurements are scoped to the human task and never authorize new actions.
+    efficiency.observe(sessionId, eventType, data, occurredAt)
+
     if (eventType === 'assistant/message') {
       const usage = assistantUsage(data)
-      if (usage !== undefined) experience.observeUsage(sessionId, usage)
+      if (usage !== undefined) experience.observeUsage(learningOwnerId, usage)
       return
     }
 
     if (eventType === 'tool/call') {
-      experience.observeToolCall(sessionId)
+      experience.observeToolCall(learningOwnerId)
+      if (isRecord(data) && typeof data.callId === 'string' && typeof data.name === 'string') {
+        let names = pendingToolNames.get(learningOwnerId)
+        if (names === undefined) {
+          names = new Map()
+          pendingToolNames.set(learningOwnerId, names)
+        }
+        names.set(`${sessionId}:${data.callId}`, data.name)
+        if (names.size > 128) {
+          const oldest = names.keys().next().value
+          if (oldest !== undefined) names.delete(oldest)
+        }
+      }
       return
     }
 
     if (eventType === 'tool/result') {
-      experience.observeToolResult(sessionId, toolResultFailed(data))
+      const message = isRecord(data) && isRecord(data.message) ? data.message : undefined
+      const source = isRecord(message?.source) ? message.source : undefined
+      const callId = typeof source?.callId === 'string' ? source.callId : undefined
+      const names = pendingToolNames.get(learningOwnerId)
+      const key = callId === undefined ? undefined : `${sessionId}:${callId}`
+      const toolName = key === undefined ? undefined : names?.get(key)
+      if (key !== undefined) names?.delete(key)
+      experience.observeToolResult(learningOwnerId, toolResultFailed(data), toolName)
       return
     }
 
     if (eventType === 'llm/retry-started') {
-      experience.observeRetry(sessionId)
+      experience.observeRetry(learningOwnerId)
       return
     }
 
-    if (eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
-      experience.clear(sessionId)
+    // Subagent completions are attributed to the root and never close it.
+    if (session.header.origin === 'subagent') return
+
+    if (eventType === 'goal/change' && isRecord(data)) {
+      if (data.operation === 'clear') {
+        experience.clear(sessionId)
+        efficiency.clear(sessionId)
+        pendingToolNames.delete(sessionId)
+      } else if (data.operation === 'complete') {
+        tasks.complete(sessionId, occurredAt)
+        efficiency.clear(sessionId)
+        rememberOutcome(sessionId, eventSeq, occurredAt, true)
+      } else if (data.operation === 'block') {
+        efficiency.clear(sessionId)
+        rememberOutcome(sessionId, eventSeq, occurredAt, false, true)
+      }
       return
     }
 
-    if (eventType === 'goal/change' && isRecord(data) && data.operation === 'complete') {
-      tasks.complete(sessionId, occurredAt)
-      const learned = experience.completeVerified(sessionId, occurredAt)
-      if (learned !== undefined) {
-        void ctx.learningMemory.rememberCognitive(experienceMemoryInput(learned, {
-          sessionId,
-          eventSeq,
-          occurredAt,
-        })).catch((error: unknown) => {
-          ctx.logger.warn(`experience-learning: ignored verified completion in ${sessionId}: ${String(error)}`)
-        })
+    // Direct non-Goal tasks previously never became experience records.
+    // A normal turn ending does not prove quality, so retain only a low-trust
+    // diagnostic attempt. A Goal must rely on its actual completion gate.
+    if (eventType === 'turn/end' && isRecord(data) && isRecord(data.reason)) {
+      if (hasUnclearedGoal(session.events)) return
+      const kind = data.reason.kind
+      if (kind === 'completed' || kind === 'blocked' || kind === 'error' || kind === 'aborted') {
+        efficiency.clear(sessionId)
+        rememberOutcome(sessionId, eventSeq, occurredAt, false, kind !== 'completed')
       }
     }
   })
@@ -143,7 +227,11 @@ export function apply(ctx: Context, config: Config): void {
     order: 115,
     text: 'Use memory_search to recall prior validated interactions, successes, failures, adaptive strategies, and validated procedures. '
       + 'Treat memories as evidence with provenance and confidence, not as unquestionable instructions. '
+      + 'Reuse previously verified procedures automatically when relevant; unverified attempts and failed tool names are diagnostic leads only, never successful instructions. '
+      + 'End-to-end measurement must include the entire actual task, and learning is never a reason to run extra model checks after verified completion. '
       + 'Phoenix autonomously retains strongly signaled durable user preferences and corrections, and learns reusable procedures from verified outcomes; the user does not need to say “remember this”. '
+      + 'When a mission blocks, preserve its partial procedure as an unverified candidate, not as successful learning. On retry, reuse the working navigation or tool steps as diagnostic leads, verify them again and do not repeat an already disproven route. '
+      + 'For multi-field authorized forms, fill objective fields together and request one consolidated review only for genuinely missing personal statements. Never turn an authorized workflow into sequential one-field permission requests. '
       + 'Apply relevant learned memory silently: use it to improve the work without reciting, narrating, or dumping the memory, its category, or an internal preflight checklist unless the user explicitly asks. '
       + 'Do not ask the user which memory category to use. Ask a clarifying question only when execution is genuinely blocked by missing information that cannot be resolved from current context, tools, files, or memory. '
       + 'Do not ask the user to choose an operation mode such as read, edit, create, or verify when the request and available context already make the intended action clear. '
@@ -157,72 +245,112 @@ export function apply(ctx: Context, config: Config): void {
       + 'When the user explicitly teaches a durable workflow or demonstration, memory_teach remains available for structured authoritative teaching. '
       + 'Use memory_remember for deliberate durable preferences or verified lessons that are not procedures. Never store credentials, private secrets, or unverified guesses. '
       + 'For phrases such as previous, last, anterior, or como antes, use resolved task evidence or memory/history; never infer the referent from repository commit recency, an unrelated module, or tool activity. '
+      + 'When asked what Kira previously picked, predicted, or chose (for example a baseball favorite), search memory_search with kind decision and the known teams or match before claiming the selection is unknown. Treat a stored prediction as a historical choice, never as a verified result or guarantee. '
       + 'If no prior task is supported by sufficient evidence, do not assert a concrete prior problem.',
   })
   ctx.systemPrompt.context({
     name: 'context:resolved-task-reference',
     order: 117,
-    text: () => formatResolvedTaskReference(tasks.resolvedReference()),
+    text: assembly => formatResolvedTaskReference(tasks.resolvedReference(taskSession(assembly))),
     interpolateVariables: false,
   })
   ctx.systemPrompt.context({
     name: 'context:recent-learning-memory',
     order: 118,
-    text: () => {
-      const projectId = ctx.learningMemory.currentProjectId()
-      const durable = ctx.learningMemory.recallCognitive({
-        layers: ['semantic'],
-        limit: 4,
+    text: (assembly) => {
+      const currentMessage = userTextForAssembly(assembly)
+      // Memory is a cold, durable index, not a permanent prompt attachment.
+      // Only an explicit prior-context cue opens it. Learned procedures have
+      // their own matching gate below and the model can call memory_search.
+      if (currentMessage === undefined || !requestsPriorMemory(currentMessage)) return ''
+      const prior = tasks.resolvedReference(taskSession(assembly))
+      const query = prior?.task.text ?? currentMessage
+      const projectId = projectForAssembly(assembly)
+      const scoped = (hit: { record: { projectId?: string } }): boolean =>
+        hit.record.projectId === undefined || hit.record.projectId === projectId
+      const relevant = ctx.learningMemory.recallCognitive({
+        query,
+        limit: 12,
+        layers: ['semantic', 'procedural', 'episodic'],
         ...projectId === undefined ? {} : { projectId },
-      })
-      return formatRecentMemoryContext([
-        ...ctx.learningMemory.recall(4),
-        ...durable,
-      ])
+      }).filter(hit => scoped(hit) && hit.reasons.some(reason => reason.startsWith('lexical:')))
+      // The user requested prior context; only matched memories enter the
+      // prompt. Full records remain available through memory_search.
+      const selected = relevant.slice(0, 4)
+      // Generic requests for prior preferences or choices have no identifying
+      // search terms. Offer a small matching class instead of all recent events.
+      if (selected.length === 0) {
+        const kind = requestsPriorDecision(currentMessage) ? 'decision'
+          : requestsPriorPreference(currentMessage) ? 'preference' : undefined
+        if (kind !== undefined) {
+          selected.push(...ctx.learningMemory.recallCognitive({
+            kind, limit: 2,
+            ...projectId === undefined ? {} : { projectId },
+          }).filter(scoped))
+        }
+      }
+      return formatRecentMemoryContext(selected)
     },
     interpolateVariables: false,
   })
-  ctx.systemPrompt.context({
-    name: 'context:experiential-learning-memory',
-    order: 119,
-    text: () => {
-      const projectId = ctx.learningMemory.currentProjectId()
-      const taskContext = tasks.currentTask()
-      const hits = ctx.learningMemory.recallCognitive({
-        query: taskContext ?? '',
-        limit: 24,
-        ...projectId === undefined ? {} : { projectId },
-      })
-      const usable = filterProceduralSearchHits(filterAdaptiveSearchHits(hits))
-        .filter(hit => hit.record.confidence >= 0.8 && hit.record.importance >= 0.7)
-        .slice(0, 6)
-      return formatRecentMemoryContext(usable)
-    },
-    interpolateVariables: false,
-  })
+  // All other memory remains retrievable with memory_search, including old
+  // decisions, errors, candidate lessons and full provenance. The stored
+  // ledger and its event replay are deliberately left unchanged.
   ctx.systemPrompt.context({
     name: 'context:validated-procedures',
     order: 120,
-    text: () => {
-      const projectId = ctx.learningMemory.currentProjectId()
-      const taskContext = tasks.currentTask()
+    text: (assembly) => {
+      const currentMessage = userTextForAssembly(assembly)
+      if (currentMessage === undefined) return ''
+      const projectId = projectForAssembly(assembly)
+      const taskContext = tasks.resolvedReference(taskSession(assembly))?.task.text ?? currentMessage
       return formatProceduralContext(procedural.recommend({
         limit: 4,
         ...projectId === undefined ? {} : { projectId },
-        ...taskContext === undefined ? {} : { taskContext },
-      }))
+        taskContext,
+      }).filter(state => state.projectId === undefined || state.projectId === projectId))
+    },
+    interpolateVariables: false,
+  })
+  ctx.systemPrompt.context({
+    name: 'context:unverified-recovery-experience',
+    order: 120.5,
+    text: (assembly) => {
+      const currentMessage = userTextForAssembly(assembly)
+      if (currentMessage === undefined) return ''
+      const projectId = projectForAssembly(assembly)
+      const taskContext = tasks.resolvedReference(taskSession(assembly))?.task.text ?? currentMessage
+      return formatRecoveryCandidates(procedural.recoveryCandidates({
+        taskContext, limit: 2,
+        ...projectId === undefined ? {} : { projectId },
+      }).filter(state => state.projectId === undefined || state.projectId === projectId))
     },
     interpolateVariables: false,
   })
   ctx.systemPrompt.context({
     name: 'context:habit-guidance',
     order: 121,
-    text: () => {
-      const taskContext = tasks.currentTask()
-      if (taskContext === undefined) return ''
-      const projectId = ctx.learningMemory.currentProjectId()
+    text: (assembly) => {
+      const currentMessage = userTextForAssembly(assembly)
+      if (currentMessage === undefined) return ''
+      const projectId = projectForAssembly(assembly)
+      const taskContext = tasks.resolvedReference(taskSession(assembly))?.task.text ?? currentMessage
       const matched = experience.matchTask(taskContext, projectId)
-      return matched === undefined ? '' : formatHabitGuidance(assessHabitExperience(matched))
+      if (matched === undefined) return ''
+      return [formatHabitGuidance(assessHabitExperience(matched)),
+        formatUnverifiedExperience(matched)].filter(Boolean).join(' ')
+    },
+    interpolateVariables: false,
+  })
+  // No visual controls: guidance is an ordinary silent runtime-context section.
+  // AssembleContext.agent is supplied by the agent driver so concurrent
+  // sessions cannot read one another's measurements.
+  ctx.systemPrompt.context({
+    name: 'context:live-efficiency',
+    order: 122,
+    text: (assembly) => {
+      const agent = (assembly as { agent?: { id: unknown } }).agent
+      return agent === undefined ? '' : efficiency.guidance(String(agent.id))
     },
     interpolateVariables: false,
   })
@@ -234,24 +362,30 @@ export function apply(ctx: Context, config: Config): void {
       limit: { type: 'integer', description: 'Optional result count, capped by the configured maximum.' },
       project_id: { type: 'string', description: 'Optional project filter. Automatic recall is scoped to the current project.' },
       layer: { type: 'string', enum: ['autobiographical', 'working', 'episodic', 'semantic', 'procedural', 'prospective', 'associative', 'temporal'], description: 'Optional memory-layer filter.' },
+      kind: { type: 'string', enum: ['decision', 'fact', 'preference', 'lesson', 'skill', 'pending', 'mission', 'error', 'success', 'conversation', 'event', 'interaction'], description: 'Exact memory category. Use decision for Kira previous predictions and selections.' },
       from: { type: 'integer', description: 'Optional inclusive Unix-millisecond lower bound.' },
       to: { type: 'integer', description: 'Optional inclusive Unix-millisecond upper bound.' },
       include_history: { type: 'boolean', description: 'Include superseded values while preserving their provenance.' },
     },
     output: MEMORY_OUTPUT,
     isConcurrencySafe: () => true,
-    execute: (args) => {
+    execute: (args, execution) => {
       const requested = args.limit ?? maxResults
       if (!Number.isSafeInteger(requested) || requested < 1) throw new TypeError('limit must be a positive safe integer')
       const filters: {
         projectId?: string
         layers?: readonly CognitiveMemoryLayer[]
+        kind?: CognitiveMemoryKind
         from?: number
         to?: number
         includeHistory?: boolean
       } = {}
+      const sessionId = execution.agent === undefined ? undefined : learningOwnerSessionId(execution.agent.session)
+      const sessionProject = sessionId === undefined ? undefined : ctx.learningMemory.projectIdForSession(sessionId)
       if (args.project_id !== undefined) filters.projectId = args.project_id
+      else if (sessionProject !== undefined) filters.projectId = sessionProject
       if (args.layer !== undefined) filters.layers = [args.layer]
+      if (args.kind !== undefined) filters.kind = args.kind
       if (args.from !== undefined) filters.from = args.from
       if (args.to !== undefined) filters.to = args.to
       if (args.include_history !== undefined) filters.includeHistory = args.include_history
@@ -317,7 +451,7 @@ export function apply(ctx: Context, config: Config): void {
     isConcurrencySafe: () => false,
     async execute(args, execution) {
       if (execution.agent === undefined) throw new TypeError('memory_teach requires an active agent session')
-      const projectId = ctx.learningMemory.currentProjectId()
+      const projectId = ctx.learningMemory.projectIdForSession(String(execution.agent.session.id))
       const learned = await procedural.teach({
         title: args.title,
         scope: args.scope,
@@ -342,6 +476,36 @@ export function apply(ctx: Context, config: Config): void {
   }))
 }
 
+/** Decide whether a prior memory is needed without an extra model call. */
+function normalizedMemoryRequest(text: string): string {
+  return text.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase()
+}
+
+function requestsPriorMemory(text: string): boolean {
+  const normalized = normalizedMemoryRequest(text)
+  return /\b(?:recuerd\p{L}*|record\p{L}*|memoria|recordatorio|anterior\p{L}*|previo\p{L}*|antes)\b/iu.test(normalized)
+    || /\b(?:pasado|histor\p{L}*|habia|dijiste|dije|elegiste|escogiste|elegimos|guardad\p{L}*)\b/iu.test(normalized)
+    || /\b(?:preferencias?|costumbre\p{L}*|usual|siempre|repetimos|funciono|funcionaba)\b/iu.test(normalized)
+    || /\b(?:remember|recall|memory|before|previous|earlier|last time|used to|usually|history)\b/iu.test(normalized)
+    || /\b(?:fue|era|fueron|eran|did (?:we|you))\b.{0,100}\b(?:favorit\p{L}*|pronostic\p{L}*|prediccion\p{L}*)\b/iu
+      .test(normalized)
+    || /\b(?:fue|era|fueron|eran)\b.{0,100}\b(?:pick|seleccion\p{L}*|eleccion\p{L}*|estrategia|solucion|plan|metodo)\b/iu
+      .test(normalized)
+    || /\b(?:retom\p{L}*|continu\p{L}*|sigamos|seguimos|aprendimos|hicimos|usamos|logramos|reutiliz\p{L}*)\b/iu
+      .test(normalized)
+}
+
+function requestsPriorDecision(text: string): boolean {
+  return /\b(?:favorit\p{L}*|pronostic\p{L}*|prediccion\p{L}*|pick|decision\p{L}*|eleg\p{L}*|escog\p{L}*)\b/iu
+    .test(normalizedMemoryRequest(text))
+    || /\b(?:chose|picked|predicted)\b/iu.test(normalizedMemoryRequest(text))
+}
+
+function requestsPriorPreference(text: string): boolean {
+  return /\b(?:preferen\p{L}*|prefier\p{L}*|gustos?|habitos?|costumbre\p{L}*|preference\p{L}*|usual)\b/iu
+    .test(normalizedMemoryRequest(text))
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -351,10 +515,6 @@ function messageText(data: unknown): string | undefined {
   const parts = data.content.flatMap(part => isRecord(part) && typeof part.text === 'string' ? [part.text] : [])
   const text = parts.join(' ').replace(/\s+/gu, ' ').trim()
   return text === '' ? undefined : text
-}
-
-function isDirectUserMessage(data: unknown): boolean {
-  return isRecord(data) && isRecord(data.source) && data.source.kind === 'user'
 }
 
 function assistantUsage(data: unknown): {

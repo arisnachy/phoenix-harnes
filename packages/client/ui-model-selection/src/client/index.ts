@@ -21,6 +21,7 @@ import type { ModelDirectoryState } from './directory.ts'
 import { ModelDirectoryResolver } from './service.ts'
 import type { ModelSelectInjected } from './slots.ts'
 import { ModelSelect } from './ModelSelect.tsx'
+import { isPhoenixAutoRouting } from './presentation.ts'
 import { CodexQuotaRemaining } from './CodexQuotaRemaining.tsx'
 import type { CodexQuotaRemainingInjected } from './CodexQuotaRemaining.tsx'
 import { en, es, zh, type ModelKey } from './locales.ts'
@@ -49,8 +50,10 @@ function optionsOf(directory: SessionModels, t: TranslateNS<'model'>): SelectOpt
     for (const model of group.models) {
       rows.push({
         id: rowId(group.id, model.id),
-        label: model.name,
-        detail: model.description !== undefined ? `${group.name} · ${model.description}` : group.name,
+        label: isPhoenixAutoRouting(model.id, model.name) ? t('trigger.auto') : model.name,
+        detail: isPhoenixAutoRouting(model.id, model.name)
+          ? t('trigger.autoDetail')
+          : model.description !== undefined ? `${group.name} · ${model.description}` : group.name,
         ...(directory.current.provider === group.id && directory.current.model === model.id
           ? { active: true } : {}),
       })
@@ -127,23 +130,24 @@ export function apply(ctx: ClientContext): void {
   ctx.inject(['slots', 'modelDirectories'], (scope: ClientContext) => {
     const models = scope.modelDirectories
     const sessions = scope.sessions
+    const injectModel = (sessionId: Parameters<typeof models.directoryFor>[0]): ModelSelectInjected => {
+      const directory = models.directoryFor(sessionId)
+      const available = sessions.subagentAddress(sessionId) === undefined
+      return {
+        available,
+        directory: directory.store,
+        load: () => {
+          if (available) directory.load().catch(() => { /* surfaced on the store */ })
+        },
+        select: (selection: ModelSelection) => available
+          ? directory.select(selection).then(() => true, () => false)
+          : Promise.resolve(false),
+      }
+    }
     scope.slots.inject('conversation.input.model', () => scope.slots.register({
       name: 'conversation.input.model',
       locale: NS,
-      inject: (sessionId): ModelSelectInjected => {
-        const directory = models.directoryFor(sessionId)
-        const available = sessions.subagentAddress(sessionId) === undefined
-        return {
-          available,
-          directory: directory.store,
-          load: () => {
-            if (available) directory.load().catch(() => { /* surfaced on the store */ })
-          },
-          select: (selection: ModelSelection) => available
-            ? directory.select(selection).then(() => true, () => false)
-            : Promise.resolve(false),
-        }
-      },
+      inject: injectModel,
     }, ModelSelect))
   })
 

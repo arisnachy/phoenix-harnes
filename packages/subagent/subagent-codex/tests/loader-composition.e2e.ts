@@ -23,7 +23,7 @@ const bundlePatchPath = join(packageDir, bundlePatch)
 const repoTsconfig = fileURLToPath(new URL('../../../../tsconfig.json', import.meta.url))
 
 describe('Codex provider public Loader composition', () => {
-  it('loads the Bundle default, two named instances, their tools, and job controls without starting Codex', async () => {
+  it('loads the Bundle default, three named instances, their tools, and job controls without starting Codex', async () => {
     const { stdout, stderr } = await runLoaderSmoke({
       label: 'subagent-codex Loader composition',
       tempDirPrefix: 'dsh-subagent-codex-loader-',
@@ -40,7 +40,7 @@ describe('Codex provider public Loader composition', () => {
 
     expect(stderr).toBe('')
     expect(JSON.parse(stdout)).toEqual({
-      providers: ['codex-primary', 'codex-secondary', 'codex'],
+      providers: ['codex-primary', 'codex-secondary', 'codex', 'codex-auto-review'],
       providerDetails: [
         {
           name: 'codex',
@@ -64,6 +64,16 @@ describe('Codex provider public Loader composition', () => {
         },
         {
           name: 'codex-secondary',
+          capabilities: {
+            outputSchema: false,
+            depthLimit: false,
+            toolFilter: false,
+            persona: false,
+          },
+          inheritsParentContext: false,
+        },
+        {
+          name: 'codex-auto-review',
           capabilities: {
             outputSchema: false,
             depthLimit: false,

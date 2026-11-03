@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { assertServiceable, Config, resolveProfiles } from '../src/config.ts'
+import { assertServiceable, Config, resolveProfiles, resolvePiAiRetryPolicy } from '../src/config.ts'
+import { isNonCodexRecoveryModel, RECOVERABLE_PI_AI_ERROR_CODE } from '../src/provider-recovery.ts'
 
 /** Validate one hand-declared route, with the caller's fields layered onto it. */
 const routeWith = (profile: Record<string, unknown>): (() => unknown) =>
@@ -17,6 +18,39 @@ const routeWith = (profile: Record<string, unknown>): (() => unknown) =>
 /** Validate that route with the caller's fields on its single model entry. */
 const configWith = (model: Record<string, unknown>): (() => unknown) =>
   routeWith({ models: [{ id: 'm', ...model }] })
+
+describe('bounded recovery for generic non-Codex pi-ai failures', () => {
+  it('enables the generic failure retry code only on eligible provider routes by default', () => {
+    for (const route of ['openrouter', 'deepseek', 'qwen', 'anthropic', 'acme-gateway']) {
+      const policy = resolvePiAiRetryPolicy(route)
+      expect(policy.mode).toBe('normal')
+      if (policy.mode !== 'normal') continue
+      expect(policy.maxRetries).toBe(2)
+      expect(policy.retryableCodes).toContain(RECOVERABLE_PI_AI_ERROR_CODE)
+      expect(policy.retryableCodes).not.toContain('INVALID_REQUEST')
+    }
+    for (const route of ['openai', 'openai-codex', 'chatgpt-web']) {
+      const policy = resolvePiAiRetryPolicy(route)
+      expect(policy.mode).toBe('normal')
+      if (policy.mode !== 'normal') continue
+      expect(policy.retryableCodes).not.toContain(RECOVERABLE_PI_AI_ERROR_CODE)
+    }
+  })
+
+  it('retains explicit retry policy including a deliberate opt-out', () => {
+    const policy = resolvePiAiRetryPolicy('openrouter', {
+      mode: 'normal', maxRetries: 0, retryableCodes: ['TRANSPORT'],
+    })
+    expect(policy).toMatchObject({ mode: 'normal', maxRetries: 0, retryableCodes: ['TRANSPORT'] })
+  })
+
+  it('blocks Codex models even when the route is OpenRouter', () => {
+    expect(isNonCodexRecoveryModel('openrouter', 'openai/gpt-5.5-codex')).toBe(false)
+    expect(isNonCodexRecoveryModel('openrouter', 'openai/gpt-5.5')).toBe(false)
+    expect(isNonCodexRecoveryModel('openrouter', 'qwen/qwen3')).toBe(true)
+    expect(isNonCodexRecoveryModel('openrouter', 'deepseek/deepseek-v4')).toBe(true)
+  })
+})
 
 describe('reasoning schema boundary', () => {
   it('rejects a level pi-ai does not know at the write that produced it', () => {

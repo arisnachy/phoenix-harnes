@@ -4,13 +4,22 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { mkdir, stat } from 'node:fs/promises'
+import { mkdir, open as openFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import { z as zod } from 'zod'
 import type { Context } from '@phoenix-ai/cordis'
-import { defaultExecutionHandoff, installModelSelection } from '@phoenix-ai/dsh-agent'
-import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@phoenix-ai/dsh-agent'
+import {
+  defaultExecutionHandoff,
+  installModelSelection,
+  latestModelSelectionPreference,
+  persistModelSelectionPreference,
+  isPhoenixCodexAutoSelection,
+  PHOENIX_CODEX_AUTO_MODEL,
+  PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+  PHOENIX_CODEX_AUTO_WORKER_MODEL,
+} from '@phoenix-ai/dsh-agent'
+import type { Agent, AgentHandle, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@phoenix-ai/dsh-agent'
 import type {} from '@phoenix-ai/dsh-agent-presets/types'
 import { AttachmentError, admitEncodedFiles, admitEncodedImages } from '@phoenix-ai/dsh-attachment'
 import type { FileAttachmentRef, ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
@@ -139,6 +148,60 @@ const SESSION_SEARCH_PROVIDER_CALL_LIMIT = 100
 const COLD_SUMMARY_BATCH_SIZE = 64
 /** Default maximum artifact size eligible for one cold blankness read. */
 export const DEFAULT_COLD_BLANK_PROBE_MAX_BYTES = 1024
+
+const PHOENIX_DIAGNOSTIC_TAIL_BYTES = 64 * 1024
+const PHOENIX_DIAGNOSTIC_LINE_LIMIT = 12
+const PHOENIX_DIAGNOSTIC_LINE = /(error|failed|failure|warning|warn|exception|elifecycle|enoent|tsconfig_error|timeout|unavailable)/iu
+
+function phoenixDiagnosticsPaths(): { directory: string; logPath: string } {
+  const localAppData = process.env.LOCALAPPDATA?.trim()
+  const directory = process.platform === 'win32'
+    ? join(localAppData && localAppData.length > 0 ? localAppData : join(homedir(), 'AppData', 'Local'), 'Phoenix')
+    : join(homedir(), '.local', 'state', 'Phoenix')
+  return { directory, logPath: join(directory, 'desktop-launch.log') }
+}
+
+function safeDiagnosticLine(line: string): string {
+  return line
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/gu, 'sk-[redacted]')
+    .replace(/\b(Bearer|Authorization|api[_-]?key)(\s*[:=]\s*)\S+/giu, '$1$2[redacted]')
+    .slice(0, 2_000)
+}
+
+async function phoenixDiagnosticsSnapshot(): Promise<{
+  available: boolean
+  logPath: string
+  directory: string
+  recentErrors: string[]
+  updatedAt?: number
+}> {
+  const paths = phoenixDiagnosticsPaths()
+  try {
+    const info = await stat(paths.logPath)
+    if (!info.isFile()) return { ...paths, available: false, recentErrors: [] }
+    const length = Math.min(info.size, PHOENIX_DIAGNOSTIC_TAIL_BYTES)
+    const handle = await openFile(paths.logPath, 'r')
+    try {
+      const buffer = Buffer.alloc(length)
+      if (length > 0) await handle.read(buffer, 0, length, Math.max(0, info.size - length))
+      const recentErrors = buffer.toString('utf8')
+        .split(/\r?\n/u)
+        .filter(line => PHOENIX_DIAGNOSTIC_LINE.test(line))
+        .slice(-PHOENIX_DIAGNOSTIC_LINE_LIMIT)
+        .map(safeDiagnosticLine)
+      return {
+        ...paths,
+        available: true,
+        recentErrors,
+        updatedAt: Math.max(0, Math.floor(info.mtimeMs)),
+      }
+    } finally {
+      await handle.close()
+    }
+  } catch {
+    return { ...paths, available: false, recentErrors: [] }
+  }
+}
 
 /** Conversation message event types (the pagination counting unit). */
 const MESSAGE_TYPES = new Set(['user/message', 'assistant/message'])
@@ -360,10 +423,19 @@ async function buildModelCatalog(ctx: Context): Promise<{
           ...reasoning === undefined ? {} : { reasoning },
         }
       }))
+      const hasPhoenixAutoPair = provider.id === 'openai-codex'
+        && entries.some(model => model.id === PHOENIX_CODEX_AUTO_PLANNER_MODEL)
+        && entries.some(model => model.id === PHOENIX_CODEX_AUTO_WORKER_MODEL)
       const group: ModelProviderGroup = {
         id: provider.id,
         name: provider.name,
-        models: entries,
+        models: hasPhoenixAutoPair
+          ? [{
+            id: PHOENIX_CODEX_AUTO_MODEL,
+            name: 'Fénix Eclipse',
+            description: 'GPT-6.1 Sol plans · GPT-6 Luna Max executes · Sol rescues stalled work',
+          }, ...entries]
+          : entries,
       }
       return { kind: 'group' as const, group }
     } catch (error: unknown) {
@@ -381,6 +453,25 @@ async function buildModelCatalog(ctx: Context): Promise<{
     groups: orderModelProviderGroups(groups, readProviderOrder(profile)),
     failures: catalog.flatMap(item => item.kind === 'failure' ? [item.failure] : []),
   }
+}
+
+/**
+ * Decide whether image admission must be refused for the session's selected
+ * route. Phoenix Auto is a synthetic selector row: it never reaches the LLM
+ * directly, so its capability is the intersection of the real planner/worker
+ * routes it may dispatch for the turn.
+ */
+async function selectedRouteRejectsImages(ctx: Context, current: ModelSelection): Promise<boolean> {
+  if (isPhoenixCodexAutoSelection(current)) {
+    const routed = await Promise.all([
+      ctx.llm.resolveModelInfo(current.provider, PHOENIX_CODEX_AUTO_PLANNER_MODEL),
+      ctx.llm.resolveModelInfo(current.provider, PHOENIX_CODEX_AUTO_WORKER_MODEL),
+    ])
+    return routed.some(info =>
+      info.inputModalities !== undefined && !info.inputModalities.includes('image'))
+  }
+  const modelInfo = await ctx.llm.resolveModelInfo(current.provider, current.model)
+  return modelInfo.inputModalities !== undefined && !modelInfo.inputModalities.includes('image')
 }
 
 /** Wrap an error result echoing the request's rpcId. */
@@ -656,6 +747,10 @@ export interface ApiProxyDefaults {
    * and undoing it because storage failed would be the worse outcome.
    */
   saveDefaultModelSelection?: (selection: ModelSelection) => Promise<void>
+  /** Last model explicitly chosen in the Web picker; can be a synthetic model. */
+  defaultDisplayModelSelection?: () => ModelSelection
+  /** Persist the exact picker choice and executable route in one durable transaction. */
+  saveWebModelSelection?: (selected: ModelSelection, runtime: ModelSelection) => Promise<void>
   /** Default project directory for new sessions whose create request carries no cwd. */
   cwd: string
   /** Native open-with-default-application; injectable for carrier tests. */
@@ -722,7 +817,6 @@ interface AuthorizationAttempt {
   nextSeq: number
   prompt?: PendingAuthorizationPrompt
   error?: string
-  removeSignalListener?: () => void
 }
 
 /** Project a pending entry into its answerable mux frame (initial push and mux-open replay share it). */
@@ -1152,10 +1246,24 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     ?? DEFAULT_COLD_BLANK_PROBE_MAX_BYTES
   /** The seed model each create/resume declares; re-read so it never goes stale. */
   const agentOptions = (): AgentOptions => {
-    const { provider, model } = defaults.defaultModelSelection()
-    return { provider, model }
+    const selected = defaults.defaultModelSelection()
+    if (isPhoenixCodexAutoSelection(selected)) {
+      // The synthetic selector row is never sent to a provider. Seed resumed
+      // Agents on the real worker route; installModelSelection preserves the
+      // synthetic selection and resolves Sol/Luna per step before dispatch.
+      return {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        reasoningEffort: ReasoningEffortId('max'),
+      }
+    }
+    return {
+      provider: selected.provider,
+      model: selected.model,
+      ...selected.reasoningEffort === undefined ? {} : { reasoningEffort: selected.reasoningEffort },
+    }
   }
-  type WebModelSelectionRef = ModelSelectionRef & { current: ModelSelection }
+  type WebModelSelectionRef = ModelSelectionRef & { current: ModelSelection; accept(next: ModelSelection): Promise<void> }
   const selections = new WeakMap<Agent, WebModelSelectionRef>()
   /**
    * Serializes `agentPreset.select` per session. Two concurrent selects both
@@ -1167,6 +1275,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   const presetSwitches = new Map<SessionId, Promise<unknown>>()
   /** Client-chosen identity creation/resume, deduplicated across concurrent retries. */
   const sessionCreations = new Map<SessionId, Promise<Agent>>()
+  /** Retain owned disposal handles: looking up an Agent is not authority to tear it down. */
+  const sessionOwners = new Map<SessionId, AgentHandle>()
+  /** Fence all admission paths while the owner drains a user-requested deletion. */
+  const deletingSessions = new Set<SessionId>()
+  const rememberSessionOwner = (handle: AgentHandle): void => {
+    sessionOwners.set(handle.agent.id, handle)
+  }
   /** Serializes path ownership and explicit title checks with Workspace mutations. */
   let workspaceCreationChain = Promise.resolve()
   const pendingQuestions = new Map<RpcId, PendingQuestion>()
@@ -1202,10 +1317,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     const selection: WebModelSelectionRef = {
       get current(): ModelSelection {
         if (picked !== undefined) return picked
+        const preference = latestModelSelectionPreference(agent.session)
+        if (preference !== undefined) return preference.selection
         // Incrementally folded by the session, so a per-step read costs
         // O(new events) rather than a rescan.
         const logged = agent.session.requestHeader()?.config
-        if (logged === undefined) return defaults.defaultModelSelection()
+        if (logged === undefined) {
+          return defaults.defaultDisplayModelSelection?.() ?? defaults.defaultModelSelection()
+        }
         return {
           provider: logged.provider,
           model: logged.model,
@@ -1214,11 +1333,33 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             : { reasoningEffort: logged.reasoningEffort },
         }
       },
-      set current(next: ModelSelection) {
+      async accept(next: ModelSelection): Promise<void> {
+        const previous = selection.current
+        const prior = latestModelSelectionPreference(agent.session)
+        // Keep readers and prompt assembly on the accepted route while its
+        // replacement waits for the session's durable write barrier.
+        picked = previous
+        persistModelSelectionPreference(agent.session, next, 'explicit')
+        try {
+          await ctx.sessions.flush(agent.session)
+        } catch (error: unknown) {
+          persistModelSelectionPreference(agent.session, prior?.selection ?? previous, prior?.source ?? 'default')
+          try {
+            await ctx.sessions.flush(agent.session)
+          } catch (rollbackError: unknown) {
+            throw new Error(
+              `Model selection was not saved; the previous live route is retained, but durable storage is uncertain: ${String(error)}; `
+              + `restoring the persisted preference also failed: ${String(rollbackError)}`,
+            )
+          }
+          throw new Error(`Model selection was not saved; the previous route was restored: ${String(error)}`)
+        }
         picked = next
       },
       assembled: undefined,
     }
+    // The picker retains the planner/rescue preference while Codex workers
+    // execute on Luna Max. Other providers retain the selected route.
     installModelSelection(agent.ctx, selection, defaultExecutionHandoff)
     selections.set(agent, selection)
     return selection
@@ -1312,6 +1453,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     agentOptions,
     setup: async ({ meta, events }) =>
       (await composeAgent(resolveSessionPreset({ header: meta, events }))).setup,
+    onOwnedHandle: rememberSessionOwner,
+    isDeletingSession: id => deletingSessions.has(id),
   })
 
   /** Send one transient frame to every connected mux consumer. */
@@ -1688,6 +1831,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     checkPersistedIdentity: boolean,
     presetId?: string,
   ): Promise<Agent> {
+    if (deletingSessions.has(sessionId)) throw new Error(`session "${sessionId}" is being deleted`)
     let creation = sessionCreations.get(sessionId)
     if (creation === undefined) {
       creation = (async () => {
@@ -1721,11 +1865,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // session's history was produced under that composition, and
           // rebuilding it differently would replay tool calls the model can no
           // longer make.
-          return (await ctx.agents.resume({
+          if (deletingSessions.has(sessionId)) throw new Error(`session "${sessionId}" is being deleted`)
+          const handle = await ctx.agents.resume({
             resumeSessionId: sessionId,
             agentOptions: agentOptions(),
             setup: (await composeAgent(storedPreset)).setup,
-          })).agent
+          })
+          rememberSessionOwner(handle)
+          return handle.agent
         }
 
         try {
@@ -1734,7 +1881,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           throw new Error(`failed to ensure project directory "${cwd}": ${String(error)}`, { cause: error })
         }
         const composition = await composeAgent(presetId)
-        return (await ctx.agents.create({
+        if (deletingSessions.has(sessionId)) throw new Error(`session "${sessionId}" is being deleted`)
+        const handle = await ctx.agents.create({
           sessionId,
           agentOptions: agentOptions(),
           meta: {
@@ -1742,7 +1890,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             ...composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset },
           },
           setup: composition.setup,
-        })).agent
+        })
+        rememberSessionOwner(handle)
+        return handle.agent
       })().catch((error: unknown) => {
         // Another Host entry path may have published the same identity while
         // this operation crossed an asynchronous persistence/filesystem step.
@@ -1832,8 +1982,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           }),
         )
         const summaries: SessionSummary[] = []
-        for (let index = 0; index < settled.length; index++) {
-          const result = settled[index]!
+        for (const [index, result] of settled.entries()) {
           if (result.status === 'fulfilled') {
             summaries.push(result.value)
             continue
@@ -1842,7 +1991,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // temporarily unreadable cold row does not. A single persisted
           // conversation must never blank the entire sidebar on a fresh page.
           signal?.throwIfAborted()
-          const meta = batch[index]!
+          const meta = batch[index]
+          if (meta === undefined) throw new Error('session.list: missing metadata for settled summary')
           ctx.logger.warn(
             `session.list: cold summary for "${meta.id}" failed (serving header fallback): ${String(result.reason)}`,
           )
@@ -2141,6 +2291,28 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     }
   }
 
+  /**
+   * Browser catalog probes must never starve the high-priority authorization
+   * begin/status RPCs. The provider may ignore AbortSignal (notably during
+   * Codex native state refresh); abort alone cannot bound an awaited inspect.
+   * @param probe - Optional catalog lookup; its late result is deliberately ignored.
+   * @returns The lookup result, or undefined after the catalog time budget.
+   */
+  async function boundedAuthorizationCatalogProbe<T>(probe: () => Promise<T>): Promise<T | undefined> {
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    try {
+      return await Promise.race([
+        probe(),
+        new Promise<undefined>(resolve => {
+          timeout = setTimeout(() => resolve(undefined), AUTHORIZATION_INSPECTION_UI_BUDGET_MS)
+          timeout.unref?.()
+        }),
+      ])
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout)
+    }
+  }
+
   /** Remove a pending prompt and reject its waiter without retaining its answer. */
   function rejectAuthorizationPrompt(attempt: AuthorizationAttempt, error: unknown): void {
     const prompt = attempt.prompt
@@ -2152,8 +2324,30 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
   /** Redact flow failures before they become browser-visible. */
   function authorizationFailure(error: unknown): string {
+    // Do not expose raw provider responses: OAuth errors may embed secrets,
+    // authorization codes, callback URLs, or request headers. Only known-safe
+    // stage codes and generic diagnostics are allowed across the browser API.
     const code = (error as { code?: unknown } | null)?.code
-    return typeof code === 'string' ? `authorization failed (${code})` : 'authorization failed'
+    if (code === 'MCP_OAUTH_DISCOVERY_TIMEOUT') {
+      return 'El MCP no entregó una URL de autorización en 38 segundos. Comprueba el endpoint, la conexión al proveedor y si exige registrar un cliente OAuth.'
+    }
+    if (code === 'MCP_OAUTH_NO_CONSENT_URL') {
+      return 'El MCP terminó la preparación sin una URL de autorización ni un token válido. Comprueba que el servidor admita OAuth o configura su método de acceso oficial.'
+    }
+    const message = error instanceof Error ? error.message : ''
+    if (/dynamic client registration|client registration|invalid_client|registration not supported/i.test(message)) {
+      return 'El MCP rechazó el registro del cliente OAuth. Este proveedor puede requerir un client ID/secret registrados y una URI de retorno autorizada.'
+    }
+    if (error instanceof Error && (error.name === 'TimeoutError'
+      || /ETIMEDOUT|timed out|timeout|operation was aborted due to timeout/i.test(message))) {
+      return 'El proveedor MCP agotó el tiempo de respuesta durante la preparación OAuth. Revisa la URL remota y su disponibilidad; Phoenix no recibió la página de inicio de sesión.'
+    }
+    if (/ENOTFOUND|ECONNREFUSED|fetch failed|certificate|network error/i.test(message)) {
+      return 'No se pudo contactar al proveedor MCP para iniciar OAuth. Comprueba la URL, red, DNS y certificados; el navegador no recibió una URL de autorización.'
+    }
+    return typeof code === 'string' && /^(?:NO_FLOW|UNKNOWN_METHOD|ALREADY_IN_FLIGHT|NOT_COMMITTED)$/.test(code)
+      ? `authorization failed (${code})`
+      : 'authorization failed (consulta el estado del MCP y sus requisitos de acceso)'
   }
 
   /** Retain terminal snapshots for a bounded period of attempts. */
@@ -2171,7 +2365,6 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     id: string,
     key: string,
     method: string,
-    signal: AbortSignal | undefined,
   ): void {
     const attempt = authorizationAttempts.get(id)
     const authorization = ctx.get('authorization')
@@ -2230,14 +2423,6 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         current.prompt = pending
       }),
     }
-    const onAbort = (): void => {
-      rejectAuthorizationPrompt(attempt, new AuthorizationDeclinedError('authorization was cancelled'))
-      attempt.controller.abort(signal?.reason)
-    }
-    if (signal !== undefined) {
-      signal.addEventListener('abort', onAbort, { once: true })
-      attempt.removeSignalListener = () => { signal.removeEventListener('abort', onAbort) }
-    }
     void authorization.begin({
       key: parseCredentialKey(key),
       method,
@@ -2250,8 +2435,6 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       attempt.error = authorizationFailure(error)
     }).finally(() => {
       rejectAuthorizationPrompt(attempt, new Error('authorization attempt ended'))
-      attempt.removeSignalListener?.()
-      delete attempt.removeSignalListener
       authorizationAttemptByKey.delete(key)
       trimAuthorizationAttempts()
     })
@@ -2518,36 +2701,83 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         if ('error' in found) return err(request, found.error)
         return serializeImageAdmission(found.agent, async () => {
           try {
-            const resolved = await ctx.llm.resolveCallConfig({
+            const requested: ModelSelection = {
               provider,
               model,
               ...reasoningEffort === undefined
                 ? {}
                 : { reasoningEffort: ReasoningEffortId(reasoningEffort) },
-            })
-            const selected: ModelSelection = {
-              provider: resolved.provider,
-              model: resolved.model,
-              ...resolved.reasoningEffort === undefined
-                ? {}
-                : { reasoningEffort: resolved.reasoningEffort },
             }
-            selectionFor(found.agent).current = selected
-            // Synchronize the live Agent route so delegators (subagent /
-            // workflow childRoute) inherit the newly selected provider/model
-            // instead of reading the stale options captured at agent creation.
-            found.agent.options.provider = selected.provider
-            found.agent.options.model = selected.model
-            if (selected.reasoningEffort === undefined) {
-              delete found.agent.options.reasoningEffort
+            let selected: ModelSelection
+            let liveRoute: ModelSelection
+            if (isPhoenixCodexAutoSelection(requested)) {
+              if (reasoningEffort !== undefined) {
+                throw new Error('Phoenix Auto manages reasoning effort automatically')
+              }
+              const [planner, worker] = await Promise.all([
+                ctx.llm.resolveCallConfig({
+                  provider: 'openai-codex',
+                  model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+                  reasoningEffort: ReasoningEffortId('medium'),
+                }),
+                ctx.llm.resolveCallConfig({
+                  provider: 'openai-codex',
+                  model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+                  reasoningEffort: ReasoningEffortId('max'),
+                }),
+              ])
+              if (planner.provider !== 'openai-codex' || worker.provider !== 'openai-codex') {
+                throw new Error('Phoenix Auto requires OpenAI Codex GPT-6.1 Sol and GPT-6 Luna routes')
+              }
+              selected = { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }
+              liveRoute = {
+                provider: worker.provider,
+                model: worker.model,
+                ...worker.reasoningEffort === undefined
+                  ? {}
+                  : { reasoningEffort: worker.reasoningEffort },
+              }
             } else {
-              found.agent.options.reasoningEffort = selected.reasoningEffort
+              const resolved = await ctx.llm.resolveCallConfig(requested)
+              selected = {
+                provider: resolved.provider,
+                model: resolved.model,
+                ...resolved.reasoningEffort === undefined
+                  ? {}
+                  : { reasoningEffort: resolved.reasoningEffort },
+              }
+              liveRoute = selected
             }
             try {
-              await defaults.saveDefaultModelSelection?.(selected)
+              await selectionFor(found.agent).accept(selected)
+            } catch (error: unknown) {
+              return err(request, {
+                code: 'internal', message: error instanceof Error ? error.message : String(error), details: {},
+              })
+            }
+            // Synchronize the live Agent route so delegators inherit a real
+            // provider route. Phoenix Auto itself remains a selector-level
+            // virtual model and resolves Sol/Luna immediately before requests.
+            found.agent.options.provider = liveRoute.provider
+            found.agent.options.model = liveRoute.model
+            if (liveRoute.reasoningEffort === undefined) {
+              delete found.agent.options.reasoningEffort
+            } else {
+              found.agent.options.reasoningEffort = liveRoute.reasoningEffort
+            }
+            try {
+              // Persist the picker identity, not the provider-native execution route.
+              // Phoenix Auto is a durable user preference: agentOptions() seeds
+              // Agents on Luna Max so the synthetic id is still never sent to OpenAI,
+              // while selectionFor() preserves Phoenix Auto for new blank sessions.
+              if (defaults.saveWebModelSelection !== undefined) {
+                await defaults.saveWebModelSelection(selected, liveRoute)
+              } else {
+                await defaults.saveDefaultModelSelection?.(selected)
+              }
             } catch (error: unknown) {
               ctx.logger.warn(
-                `api-proxy: the model switch applies to this session but was not saved as the default: ${String(error)}`,
+                `api-proxy: the model switch applies to this session but the last-used picker choice was NOT saved: ${String(error)}`,
               )
             }
             return ok(request, { selected: { ...selected } })
@@ -2593,13 +2823,6 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       async delete(request) {
         const { sessionId } = request.payload
-        if (ctx.agents.get(sessionId) !== undefined || ctx.sessions.get(sessionId) !== undefined) {
-          return err(request, {
-            code: 'agent-busy',
-            message: `session "${sessionId}" is active and cannot be deleted`,
-            details: { reason: 'stop the active session before deleting its durable log' },
-          })
-        }
         const persistence = ctx.get('sessionPersistence')
         if (persistence === undefined) {
           return err(request, {
@@ -2608,7 +2831,47 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: {},
           })
         }
+        if (deletingSessions.has(sessionId)) {
+          return err(request, {
+            code: 'agent-busy', message: 'This conversation is already being deleted.', details: { reason: 'deletion already in progress' },
+          })
+        }
+        deletingSessions.add(sessionId)
         try {
+          // Drain creation and implicit cold resume already admitted before the
+          // deletion fence. No other entry path can resume this id until done.
+          await sessionCreations.get(sessionId)?.then(() => undefined, () => undefined)
+          await agentFor.waitForPending(sessionId)
+          const live = ctx.agents.get(sessionId)
+          if (live !== undefined && hasSubagentOwner(live.session, live)) {
+            return err(request, {
+              code: 'agent-busy',
+              message: 'This session is owned by an active subagent and must first be stopped by its parent.',
+              details: { reason: 'subagent is owned by its parent lifecycle' },
+            })
+          }
+          const owner = sessionOwners.get(sessionId)
+          if (live !== undefined && (owner === undefined || owner.agent !== live)) {
+            return err(request, {
+              code: 'agent-busy',
+              message: 'The session is owned by a different lifecycle and cannot be removed without its disposal authority.',
+              details: { reason: 'the session is not owned by this web host' },
+            })
+          }
+          if (owner !== undefined) {
+            // Owner disposal cancels/drains the running loop and removes the
+            // attached Session. Persistence retirement then finishes its final
+            // writes before remove() physically deletes the durable record.
+            await owner.dispose()
+            if (sessionOwners.get(sessionId) === owner) sessionOwners.delete(sessionId)
+          }
+          if (ctx.sessions.get(sessionId) !== undefined) {
+            return err(request, {
+              code: 'agent-busy',
+              message: 'Session is still attached to a live owner; its stored data was not deleted.',
+              details: { reason: 'session is still attached' },
+            })
+          }
           if (!await persistence.remove(sessionId)) {
             return err(request, {
               code: 'session-not-found',
@@ -2624,6 +2887,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             message: `failed to delete session "${sessionId}": ${String(error)}`,
             details: {},
           })
+        } finally {
+          deletingSessions.delete(sessionId)
         }
       },
 
@@ -2687,7 +2952,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // plane, composing nothing would leave the child with no tools at all.
         const forkComposition = await composeAgent(resolveSessionPreset(source))
         try {
-          await ctx.agents.create({
+          const forkHandle = await ctx.agents.create({
             sessionId: childId,
             seed: events.slice(0, cut),
             meta: {
@@ -2701,6 +2966,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             agentOptions: agentOptions(),
             setup: forkComposition.setup,
           })
+          rememberSessionOwner(forkHandle)
         } catch (error: unknown) {
           return err(request, {
             code: 'internal',
@@ -2756,8 +3022,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           try {
             if (hasImage) {
               const current = selectionFor(agent).current
-              const modelInfo = await ctx.llm.resolveModelInfo(current.provider, current.model)
-              if (modelInfo.inputModalities !== undefined && !modelInfo.inputModalities.includes('image')) {
+              if (await selectedRouteRejectsImages(ctx, current)) {
                 const route = await resolveVisionFallbackRoute(ctx, current, defaults.visionFallback ?? {})
                 if (route === undefined) {
                   return err(request, {
@@ -3215,10 +3480,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     },
 
     host: {
-      describe(request) {
+      async describe(request) {
         // TODO: version should read apps/cli's package.json; placeholder for now.
         const selection = defaults.defaultModelSelection()
-        return Promise.resolve(ok(request, {
+        const diagnostics = await phoenixDiagnosticsSnapshot()
+        return ok(request, {
           version: '0.0.1',
           // Same source as session.create's fallback: the UI's default project
           // must match where an unspecified-cwd session actually lands.
@@ -3230,7 +3496,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           attachedSessions: ctx.agents.list().length,
           home: homedir(),
           canOpenPath: canOpenPaths(),
-        }))
+          diagnostics,
+        })
       },
 
       async pickDirectory(request, signal) {
@@ -3737,8 +4004,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           let stored: { kind: 'api-key' | 'grant' } | undefined
           if (credentials !== undefined) {
             try {
-              const info = await credentials.describeRecord(parseCredentialKey(String(entry.key)))
-              if (info.configured && info.kind !== undefined) stored = { kind: info.kind }
+              const info = await boundedAuthorizationCatalogProbe(
+                () => credentials.describeRecord(parseCredentialKey(String(entry.key))),
+              )
+              if (info?.configured === true && info.kind !== undefined) stored = { kind: info.kind }
             } catch {
               // The key did not address a record this deployment stores; leave stored off.
             }
@@ -3750,10 +4019,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             // this catalog request a short wait budget; provider-owned
             // single-flight refreshes may continue in the background and the
             // next UI poll will pick up their cached sanitized telemetry.
-            telemetry = await authorization.inspect(
+            telemetry = await boundedAuthorizationCatalogProbe(() => authorization.inspect(
               entry.key,
               AbortSignal.timeout(AUTHORIZATION_INSPECTION_UI_BUDGET_MS),
-            )
+            ))
           } catch {
             // Live provider inspection is optional; the flow itself remains usable.
           }
@@ -3762,6 +4031,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             label: entry.label,
             methods: entry.methods.map(method => ({ id: method.id, label: method.label })),
             inFlight: entry.inFlight,
+            ...(entry.connectors === undefined ? {} : { connectors: entry.connectors }),
             ...(entry.disconnectable === true ? { disconnectable: true as const } : {}),
             ...stored === undefined ? {} : { stored },
             ...telemetry === undefined ? {} : { telemetry },
@@ -3770,7 +4040,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         return ok(request, { entries })
       },
 
-      begin(request, signal) {
+      begin(request) {
         const authorization = ctx.get('authorization')
         if (authorization === undefined) {
           return Promise.resolve(err(request, {
@@ -3816,7 +4086,21 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         }
         authorizationAttempts.set(id, attempt)
         authorizationAttemptByKey.set(request.payload.key, id)
-        startAuthorizationAttempt(id, request.payload.key, method, signal)
+        // This attempt outlives the unary HTTP request that created it. Carrier
+        // cancellation must not tear down OAuth before the provider URL is
+        // published; explicit authorization.cancel owns user cancellation.
+        // Finish the begin RPC before running provider code. Some OAuth flows
+        // perform synchronous startup work before their first await, which
+        // otherwise starves the response and triggers the browser's 12s limit.
+        setImmediate(() => {
+          if (attempt.controller.signal.aborted) {
+            attempt.status = 'cancelled'
+            authorizationAttemptByKey.delete(attempt.key)
+            trimAuthorizationAttempts()
+            return
+          }
+          startAuthorizationAttempt(id, attempt.key, method)
+        })
         return Promise.resolve(ok(request, { attemptId: id, status: 'pending' as const }))
       },
 

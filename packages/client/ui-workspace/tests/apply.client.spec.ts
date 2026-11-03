@@ -34,6 +34,7 @@ async function bench() {
   const occupancy: WorkspaceOccupancy = Object.freeze({ subagent: false, cordis: false })
   const layout: ILayout = {
     toggleSidebar: vi.fn(),
+    setSidebarFocus: vi.fn(),
     openDetails: vi.fn(),
     closeDetails: vi.fn(),
     setWorkspaceOccupant,

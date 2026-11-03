@@ -90,7 +90,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }[T]
 ```
 
-Sources: [`packages/core/session/src/types.ts:340`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:347`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:376`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:408`](../packages/core/session/src/types.ts)
+Sources: [`packages/core/session/src/types.ts:345`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:352`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:381`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:413`](../packages/core/session/src/types.ts)
 
 ## Events
 
@@ -116,6 +116,20 @@ Sources: [`packages/core/session/src/types.ts:340`](../packages/core/session/src
 ```
 
 Source: [`packages/core/agent/src/types.ts:19`](../packages/core/agent/src/types.ts)
+
+<a id="agentmodel-selection--log-only"></a>
+
+#### `agent/model-selection` — log-only
+
+```ts persistence-catalog
+/**
+ * Durable model-routing preference, hidden from model history. Required on
+ * read: dropping it would change future provider/model and cost decisions.
+ */
+'agent/model-selection': ModelSelectionPreference
+```
+
+Source: [`packages/core/agent/src/model-selection.ts:94`](../packages/core/agent/src/model-selection.ts)
 
 ### `agent-preset/*`
 
@@ -216,7 +230,7 @@ Source: [`packages/interaction/user-approval/src/index.ts:68`](../packages/inter
 
 Types: [StreamChunk](subsystems/llm-streaming.md)
 
-Source: [`packages/core/session/src/types.ts:266`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:271`](../packages/core/session/src/types.ts)
 
 <a id="assistantmessage--surface"></a>
 
@@ -238,7 +252,7 @@ Source: [`packages/core/session/src/types.ts:266`](../packages/core/session/src/
 
 Types: [TokenUsage](subsystems/llm-streaming.md)
 
-Source: [`packages/core/session/src/types.ts:277`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:282`](../packages/core/session/src/types.ts)
 
 ### `command/*`
 
@@ -660,7 +674,7 @@ Source: [`packages/plan/plan-mode/src/index.ts:53`](../packages/plan/plan-mode/s
 'request/context': RequestContext
 ```
 
-Source: [`packages/core/session/src/types.ts:313`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:318`](../packages/core/session/src/types.ts)
 
 <a id="requestheader--log-only"></a>
 
@@ -674,7 +688,7 @@ Source: [`packages/core/session/src/types.ts:313`](../packages/core/session/src/
 'request/header': { header: EpochHeader; reason: RequestHeaderReason }
 ```
 
-Source: [`packages/core/session/src/types.ts:308`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:313`](../packages/core/session/src/types.ts)
 
 ### `sandbox/*`
 
@@ -749,7 +763,7 @@ Source: [`packages/schedule/schedule/src/types.ts:219`](../packages/schedule/sch
 'session/end-seed': Record<string, never>
 ```
 
-Source: [`packages/core/session/src/types.ts:336`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:341`](../packages/core/session/src/types.ts)
 
 <a id="sessiontitle--log-only"></a>
 
@@ -804,7 +818,7 @@ Source: [`packages/goal/goal/src/domain.ts:235`](../packages/goal/goal/src/domai
 'step/end': { turn: number; step: number }
 ```
 
-Source: [`packages/core/session/src/types.ts:256`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:261`](../packages/core/session/src/types.ts)
 
 <a id="stepstart--log-only"></a>
 
@@ -812,7 +826,12 @@ Source: [`packages/core/session/src/types.ts:256`](../packages/core/session/src/
 
 ```ts persistence-catalog
 /** Opens step `step` of turn `turn` — one model call plus the tool executions it requested. */
-'step/start': { turn: number; step: number }
+'step/start': {
+  turn: number
+  step: number
+  /** Deterministic model-history selection; absent means complete derived history. */
+  historyProjection?: { kind: 'conversational-tail'; maxMessages: number; maxChars: number }
+}
 ```
 
 Source: [`packages/core/session/src/types.ts:254`](../packages/core/session/src/types.ts)
@@ -838,6 +857,44 @@ Source: [`packages/subagent/subagent/src/descriptor.ts:37`](../packages/subagent
 
 ### `team/*`
 
+<a id="teamchat-message--log-only"></a>
+
+#### `team/chat-message` — log-only
+
+```ts persistence-catalog
+/** Actual child output copied into its root's transcript, never model history. */
+'team/chat-message': { readonly version: 1
+  readonly update?: true
+  readonly message: TeamChatMessage }
+```
+
+Source: [`packages/subagent/agent-team/src/chat-types.ts:75`](../packages/subagent/agent-team/src/chat-types.ts)
+
+<a id="teamchat-participant--log-only"></a>
+
+#### `team/chat-participant` — log-only
+
+```ts persistence-catalog
+/** Complete, stable real child identity and operational state in its mission. */
+'team/chat-participant': { readonly version: 1
+  readonly participant: TeamChatParticipant }
+```
+
+Source: [`packages/subagent/agent-team/src/chat-types.ts:72`](../packages/subagent/agent-team/src/chat-types.ts)
+
+<a id="teamchat-reaction--log-only"></a>
+
+#### `team/chat-reaction` — log-only
+
+```ts persistence-catalog
+/** Idempotent per-person, per-emoji set/remove mutation, without waking a model. */
+'team/chat-reaction': { readonly version: 1
+  readonly reaction: TeamChatReaction
+  readonly active: boolean }
+```
+
+Source: [`packages/subagent/agent-team/src/chat-types.ts:79`](../packages/subagent/agent-team/src/chat-types.ts)
+
 <a id="teammember--log-only"></a>
 
 #### `team/member` — log-only
@@ -849,7 +906,7 @@ Source: [`packages/subagent/subagent/src/descriptor.ts:37`](../packages/subagent
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamMemberSnapshot](subsystems/agent-team.md)
 
-Source: [`packages/experimental/agent-team/src/types.ts:211`](../packages/experimental/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:260`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammessagedelivered--log-only"></a>
 
@@ -867,7 +924,7 @@ Source: [`packages/experimental/agent-team/src/types.ts:211`](../packages/experi
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamMessageId](subsystems/agent-team.md)
 
-Source: [`packages/experimental/agent-team/src/types.ts:217`](../packages/experimental/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:266`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammessagequeued--log-only"></a>
 
@@ -880,7 +937,35 @@ Source: [`packages/experimental/agent-team/src/types.ts:217`](../packages/experi
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamMessageSnapshot](subsystems/agent-team.md)
 
-Source: [`packages/experimental/agent-team/src/types.ts:215`](../packages/experimental/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:264`](../packages/subagent/agent-team/src/types.ts)
+
+<a id="teammission--log-only"></a>
+
+#### `team/mission` — log-only
+
+```ts persistence-catalog
+/** Versioned root-owned universal mission checkpoint. */
+'team/mission': UniversalMissionEvent
+```
+
+Source: [`packages/subagent/agent-team/src/universal-mission.ts:42`](../packages/subagent/agent-team/src/universal-mission.ts)
+
+<a id="teamreaction--log-only"></a>
+
+#### `team/reaction` — log-only
+
+```ts persistence-catalog
+/** Lightweight semantic reaction to a real Team message; stored only in the Team Lead Session. */
+'team/reaction': {
+  version: 1
+  teamId: TeamId
+  reaction: TeamReactionSnapshot
+}
+```
+
+Types: [TeamId](subsystems/agent-team.md)
+
+Source: [`packages/subagent/agent-team/src/types.ts:273`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teamtask--log-only"></a>
 
@@ -893,7 +978,7 @@ Source: [`packages/experimental/agent-team/src/types.ts:215`](../packages/experi
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamTaskSnapshot](subsystems/agent-team.md)
 
-Source: [`packages/experimental/agent-team/src/types.ts:213`](../packages/experimental/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:262`](../packages/subagent/agent-team/src/types.ts)
 
 ### `todo/*`
 
@@ -908,7 +993,7 @@ Source: [`packages/experimental/agent-team/src/types.ts:213`](../packages/experi
 
 Types: [TodoItem](subsystems/session.md)
 
-Source: [`packages/core/session/src/types.ts:303`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:308`](../packages/core/session/src/types.ts)
 
 ### `tool/*`
 
@@ -927,7 +1012,7 @@ Source: [`packages/core/session/src/types.ts:303`](../packages/core/session/src/
 
 Types: [CallId](subsystems/core.md)
 
-Source: [`packages/core/session/src/types.ts:283`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:288`](../packages/core/session/src/types.ts)
 
 <a id="toolcode-dispatch--log-only"></a>
 
@@ -952,7 +1037,7 @@ Source: [`packages/core/session/src/types.ts:283`](../packages/core/session/src/
 'tool/code-dispatch': CodeDispatchEventData
 ```
 
-Source: [`packages/core/tools/src/types.ts:56`](../packages/core/tools/src/types.ts)
+Source: [`packages/core/tools/src/types.ts:58`](../packages/core/tools/src/types.ts)
 
 <a id="toolcode-dispatch-start--log-only"></a>
 
@@ -975,7 +1060,7 @@ Source: [`packages/core/tools/src/types.ts:56`](../packages/core/tools/src/types
 'tool/code-dispatch-start': CodeDispatchStartEventData
 ```
 
-Source: [`packages/core/tools/src/types.ts:40`](../packages/core/tools/src/types.ts)
+Source: [`packages/core/tools/src/types.ts:42`](../packages/core/tools/src/types.ts)
 
 <a id="toolresult--surface"></a>
 
@@ -1002,7 +1087,7 @@ Source: [`packages/core/tools/src/types.ts:40`](../packages/core/tools/src/types
 }
 ```
 
-Source: [`packages/core/session/src/types.ts:295`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:300`](../packages/core/session/src/types.ts)
 
 ### `tool-workflow/*`
 
@@ -1117,7 +1202,7 @@ Source: [`packages/core/session/src/types.ts:243`](../packages/core/session/src/
 'user/message': UserMessage
 ```
 
-Source: [`packages/core/session/src/types.ts:264`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:269`](../packages/core/session/src/types.ts)
 
 ### `web/*`
 

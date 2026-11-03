@@ -157,19 +157,64 @@ const stages: StageHandle[] = []
  * @param command - executable, resolved from the workspace bin when local.
  * @param args - command arguments.
  * @param local - whether to resolve `command` from the workspace's installed bins.
+ * @param readyPattern - output proving the watcher finished its initial build and is listening.
+ * @returns once the watcher has reached its ready state.
  */
-function spawnStage(stage: string, command: string, args: readonly string[], local: boolean): void {
+async function spawnStage(
+  stage: string,
+  command: string,
+  args: readonly string[],
+  local: boolean,
+  readyPattern: RegExp,
+): Promise<void> {
+  let resolveReady: (() => void) | undefined
+  let rejectReady: ((error: Error) => void) | undefined
+  const ready = new Promise<void>((resolveStage, rejectStage) => {
+    resolveReady = resolveStage
+    rejectReady = rejectStage
+  })
   const child = execa(command, [...args], {
     cwd: repoRoot,
-    stdio: 'inherit',
+    stdin: 'inherit',
+    stdout: 'pipe',
+    stderr: 'pipe',
     preferLocal: local,
     reject: false,
   })
   stages.push({ kill: () => { child.kill() } })
+
+  let output = ''
+  let settled = false
+  const observe = (chunk: string, stream: NodeJS.WriteStream): void => {
+    stream.write(chunk)
+    if (settled) return
+    output = (output + chunk).slice(-65_536)
+    readyPattern.lastIndex = 0
+    if (!readyPattern.test(output)) return
+    settled = true
+    resolveReady?.()
+  }
+  child.stdout.setEncoding('utf8')
+  child.stderr.setEncoding('utf8')
+  child.stdout.on('data', (chunk: string) => { observe(chunk, process.stdout) })
+  child.stderr.on('data', (chunk: string) => { observe(chunk, process.stderr) })
+
   void child.then((result) => {
+    if (!settled) {
+      settled = true
+      rejectReady?.(new Error(`dev-web: ${stage} exited before becoming ready (code ${String(result.exitCode)}):\n${output}`))
+    }
     console.error(`dev-web: ${stage} exited (code ${String(result.exitCode)}); the artifact chain is now stale`)
     process.exit(1)
+  }, (error: unknown) => {
+    if (!settled) {
+      settled = true
+      rejectReady?.(new Error(`dev-web: ${stage} failed before becoming ready:\n${output}`, { cause: error }))
+    }
+    console.error(`dev-web: ${stage} failed; the artifact chain is now stale`)
+    process.exit(1)
   })
+  await ready
 }
 
 /** The only capability this script needs from a live watcher process. */
@@ -214,24 +259,39 @@ if (isMain) {
   // natively watching on a network mount where inotify never fires: it stops
   // re-emitting lib/types, and the two later stages then rebuild forever from
   // stale input without printing anything.
-  spawnStage(`tsc -b ${CLIENT_TYPE_PROGRAM} --watch`, 'tsc', [
+  await spawnStage(`tsc -b ${CLIENT_TYPE_PROGRAM} --watch`, 'tsc', [
     '-b', CLIENT_TYPE_PROGRAM, '--watch', '--preserveWatchOutput',
     ...pollInterval !== undefined
       ? ['--watchFile', 'fixedPollingInterval', '--watchDirectory', 'fixedPollingInterval']
       : [],
-  ], true)
+  ], true, /Watching for file changes/i)
 
   // tsdown's initial builds are awaited before the dist watcher starts so vite's
   // first build reads current lib bundles rather than whatever the last full
   // build left. Its own watch then covers later lib rewrites — those files are
   // in its module graph.
-  await watchClientPlugins(repoRoot, [...pluginDirs, ...libraryDirs], pollInterval)
+  const clientBundles = await watchClientPlugins(repoRoot, [...pluginDirs, ...libraryDirs], pollInterval)
+  // Keep the tsdown bundle handles strongly reachable for the lifetime of the
+  // dev loop. Tsdown's watch handles are disposable objects; dropping the
+  // returned array after the initial build can leave the process alive while
+  // the client-bundle watcher itself is no longer retained.
+  stages.push({
+    kill: () => {
+      for (const bundle of clientBundles) void bundle[Symbol.asyncDispose]()
+    },
+  })
   // Through the shell's own `watch` script rather than vite's API: vite is not a
   // repository-root dependency, and more importantly the vite root is its
   // working directory — `resolve.dedupe` resolves react from that root, so
   // running vite from anywhere but apps/web silently switches which react copy
   // the bundle gets.
-  spawnStage('vite build --watch', 'pnpm', ['--filter', SHELL_PACKAGE, 'run', 'watch'], false)
+  await spawnStage(
+    'vite build --watch',
+    'pnpm',
+    ['--filter', SHELL_PACKAGE, 'run', 'watch'],
+    false,
+    /built in/i,
+  )
 
   console.log(
     `dev-web: watching ${String(pluginDirs.length)} dsh.client plugin packages`

@@ -14,6 +14,12 @@
 - id: hmr
   disabled: true
 
+# Headless is intentionally non-browser. dsh-base ships this connector enabled
+# for interactive profiles, so override it here instead of leaving a child
+# process alive after a one-shot task completes.
+- id: phoenix-browser
+  disabled: true
+
 - id: tools
   config:
     # Keep the same temporary process-wide Code Mode opt-in as the Web surface.

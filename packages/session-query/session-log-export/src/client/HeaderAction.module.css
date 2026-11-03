@@ -2,10 +2,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 111px;
-  height: 32px;
+  min-width: 112px;
+  height: 34px;
   padding: 6px 12px;
-  gap: 4px;
+  gap: 6px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 18px;
   color: var(--dsw-alias-label-primary);
@@ -33,4 +33,19 @@
 
 .sessionLogButton span {
   white-space: nowrap;
+}
+
+/* Keep download accessible beside compact right-hand toolbar controls. */
+.sessionLogButton:focus-visible {
+  outline: 2px solid var(--dsw-alias-border-l2);
+  outline-offset: 2px;
+}
+@media (max-width: 720px) {
+  .sessionLogButton {
+    width: 34px;
+    min-width: 34px;
+    padding: 0;
+  }
+  .sessionLogButton span { display: none; }
+  .sessionLogButton svg { width: 16px; height: 16px; }
 }

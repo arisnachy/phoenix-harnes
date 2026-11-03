@@ -28,6 +28,18 @@
     },
     {
       "path": "../../util/home-paths"
+    },
+    {
+      "path": "../../core/agent"
+    },
+    {
+      "path": "../../credentials/credentials"
+    },
+    {
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../../core/session"
     }
   ]
 }

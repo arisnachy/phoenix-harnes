@@ -1,18 +1,30 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { spokenLanguage } from '../src/client/speech-output.ts'
 import {
+  configureCodexRealtimeUserTranscriptHandler,
   configureVoiceAssistantRemote,
+  configureVoiceModelRouteResolver,
+  codexRealtimeStatusFailureReason, codexRealtimeRequiresLogin, codexLiveRepairFromStatus,
+  isCodexLiveRepairPending, openCodexReconnection, waitForCodexLiveRepair,
   createVoiceRecognition,
   getVoiceAssistantSnapshot,
   hasVoiceRecognition,
+  hasApprovedVoiceFallback,
+  setApprovedVoiceFallback,
   interruptVoiceAssistantSpeech,
+  isCodexRealtimeVoiceActive,
   isLikelyVoiceAssistantEcho,
   refreshVoiceAssistantRemote,
   setVoiceAssistantActive,
   setVoiceAssistantListening,
+  speakVoiceAssistantAttention,
   speakVoiceAssistantResponse,
+  cancelVoiceAssistantSentenceStream,
   streamVoiceAssistantResponse,
+  stopCodexRealtimeVoice,
+  tryStartCodexRealtimeVoice,
   type VoiceRecognitionLike,
 } from '../src/client/voice.ts'
 
@@ -37,11 +49,778 @@ class FakeRecognition implements VoiceRecognitionLike {
 }
 
 describe('browser voice adapter', () => {
+  it('uses Spanish for the panel and text rather than a hidden Host English default', () => {
+    expect(spokenLanguage('Completado.', 'es')).toBe('es-DO')
+    expect(spokenLanguage('He encontrado el problema. Voy a corregirlo.', 'en')).toBe('es-DO')
+    expect(spokenLanguage('The task is complete and ready.', 'es')).toBe('en-US')
+    expect(spokenLanguage('Hola, todo está listo.', 'en')).toBe('es-DO')
+    expect(spokenLanguage('您好。', 'zh-CN')).toBe('zh-CN')
+  })
+
+  it('uses the same-language native Host TTS when Codex Live is not connected', async () => {
+    const before = document.documentElement.lang
+    document.documentElement.lang = 'es-DO'
+    const speak = vi.fn(async () => ({
+      ok: true as const,
+      value: { accepted: true, provider: 'kokoro' },
+    }))
+    const dispose = configureVoiceAssistantRemote({
+      conversationStatus: vi.fn(async () => ({ ok: true as const, value: { enabled: true, natural: true } })),
+      conversationSpeak: speak,
+      conversationCancel: vi.fn(async () => ({ ok: true as const, value: { cancelled: 0 } })),
+    })
+    try {
+      expect(isCodexRealtimeVoiceActive()).toBe(false)
+      await expect(speakVoiceAssistantAttention(
+        'Necesito tu autorización', 'Revisa esta solicitud.', 'Arisnachy',
+      )).resolves.toBe(true)
+      expect(speak).toHaveBeenCalledWith(expect.objectContaining({
+        key: 'phoenix:proactive-attention',
+        text: 'Arisnachy, Necesito tu autorización. Revisa esta solicitud.',
+        language: 'es-DO',
+        final: true,
+      }))
+    } finally {
+      dispose()
+      document.documentElement.lang = before
+    }
+  })
+
+  it('does not pronounce an English technical status using the Spanish engine', async () => {
+    const before = document.documentElement.lang
+    document.documentElement.lang = 'es-DO'
+    const speak = vi.fn(async () => ({ ok: true as const, value: { accepted: true, provider: 'system' } }))
+    const dispose = configureVoiceAssistantRemote({
+      conversationStatus: vi.fn(async () => ({ ok: true as const, value: { enabled: true, natural: false } })),
+      conversationSpeak: speak,
+      conversationCancel: vi.fn(async () => ({ ok: true as const, value: { cancelled: 0 } })),
+    })
+    try {
+      await expect(speakVoiceAssistantAttention('Your task needs review', 'Please approve before continuing.'))
+        .resolves.toBe(true)
+      expect(speak).toHaveBeenCalledWith(expect.objectContaining({
+        language: 'es-DO',
+        text: 'necesito tu atención. Revisa la solicitud pendiente en PHOENIX.',
+      }))
+    } finally {
+      dispose()
+      document.documentElement.lang = before
+    }
+  })
+
   afterEach(() => { setVoiceAssistantActive(false) })
+
+  it('requires prior explicit opt-in before reusing a browser-vendor voice backup', () => {
+    const source = new Map<string, string>()
+    const storage = {
+      getItem: (name: string) => source.get(name) ?? null,
+      setItem: (name: string, value: string) => { source.set(name, value) },
+      removeItem: (name: string) => { source.delete(name) },
+    }
+    expect(hasApprovedVoiceFallback(storage)).toBe(false)
+    setApprovedVoiceFallback(true, storage)
+    expect(hasApprovedVoiceFallback(storage)).toBe(true)
+    setApprovedVoiceFallback(false, storage)
+    expect(hasApprovedVoiceFallback(storage)).toBe(false)
+    expect(hasApprovedVoiceFallback({
+      getItem: () => { throw new Error('Storage blocked') },
+    })).toBe(false)
+    expect(() => setApprovedVoiceFallback(true, {
+      setItem: () => { throw new Error('Storage blocked') },
+      removeItem: () => {},
+    })).not.toThrow()
+  })
 
   it('reports unsupported browsers without constructing a recognizer', () => {
     expect(hasVoiceRecognition({})).toBe(false)
     expect(createVoiceRecognition(() => {}, () => {}, 'en-US', {})).toBeUndefined()
+  })
+
+  it('reads optional Codex status diagnostics with stale generated Remote types', () => {
+    // The source Host supports `detail` but an incremental client may still
+    // see the previous generated Remote declaration with only `reason`.
+    const legacyStatus = { reason: 'experimental-unavailable' } as const
+    expect(codexRealtimeStatusFailureReason(legacyStatus)).toBe('experimental-unavailable')
+    const extendedStatus = {
+      reason: 'experimental-unavailable',
+      detail: 'Codex CLI native realtime feature is unavailable',
+    } as const
+    expect(codexRealtimeStatusFailureReason(extendedStatus))
+      .toBe('Codex CLI native realtime feature is unavailable')
+    expect(codexRealtimeStatusFailureReason({
+      reason: 'codex-login-required',
+      detail: '  ',
+    })).toBe('codex-login-required')
+    expect(codexRealtimeStatusFailureReason({})).toBe('codex-realtime-unavailable')
+  })
+
+  it('decodes updater progress from newer and older Host Remote contracts', () => {
+    expect(isCodexLiveRepairPending('codex-live-repair-pending')).toBe(true)
+    expect(isCodexLiveRepairPending('refresh token expired')).toBe(false)
+    expect(codexLiveRepairFromStatus({ repair: 'ready' })).toBe('ready')
+    expect(codexLiveRepairFromStatus({ repair: 'waiting-upstream' })).toBe('waiting-upstream')
+    expect(codexLiveRepairFromStatus({ repair: 'blocked' })).toBe('blocked')
+    expect(codexLiveRepairFromStatus({ reason: 'experimental-unavailable' })).toBeUndefined()
+    expect(codexLiveRepairFromStatus({ repair: 'unknown-version' })).toBeUndefined()
+    expect(codexLiveRepairFromStatus(null)).toBeUndefined()
+  })
+
+  it('stops the repair spinner immediately when the updater is waiting on official support', async () => {
+    const remote = {
+      conversationStatus: vi.fn(async () => ({
+        ok: true as const, value: { enabled: true, natural: false },
+      })),
+      conversationSpeak: vi.fn(async () => ({
+        ok: true as const, value: { accepted: false, reason: 'disabled' as const },
+      })),
+      conversationCancel: vi.fn(async () => ({
+        ok: true as const, value: { cancelled: 0 },
+      })),
+      conversationRealtimeStatus: vi.fn(async () => ({
+        ok: true as const,
+        value: {
+          enabled: true, available: false, authenticated: false,
+          provider: 'openai-codex' as const, repair: 'waiting-upstream' as const,
+        },
+      })),
+    }
+    const dispose = configureVoiceAssistantRemote(remote)
+    try {
+      await expect(waitForCodexLiveRepair(new AbortController().signal, {
+        timeoutMs: 100, pollMs: 1,
+      })).resolves.toBe('waiting-upstream')
+      expect(remote.conversationRealtimeStatus).toHaveBeenCalledTimes(1)
+    } finally {
+      dispose()
+    }
+  })
+
+  it('opens the existing Codex connector window for expired credentials only', () => {
+    const seen: unknown[] = []
+    const onFeature = (event: Event) => { seen.push((event as CustomEvent).detail) }
+    window.addEventListener('phoenix:open-feature', onFeature)
+    try {
+      expect(codexRealtimeRequiresLogin('codex-login-required')).toBe(true)
+      expect(codexRealtimeRequiresLogin('refresh token has expired')).toBe(true)
+      expect(codexRealtimeRequiresLogin('refresh token has expired')).toBe(true)
+      expect(codexRealtimeRequiresLogin('refresh_token_has_expired')).toBe(true)
+      expect(codexRealtimeRequiresLogin('experimental-unavailable')).toBe(false)
+      expect(codexRealtimeRequiresLogin('ETIMEDOUT')).toBe(false)
+      openCodexReconnection()
+      expect(seen).toEqual([{ destination: 'connectors', label: 'Reconectar Codex' }])
+    } finally {
+      window.removeEventListener('phoenix:open-feature', onFeature)
+    }
+  })
+
+  it('attempts Codex voice for a Phoenix Auto/non-Codex task route instead of skipping it', async () => {
+    const disposeRoute = configureVoiceModelRouteResolver(async () => ({
+      provider: 'phoenix-auto',
+      model: 'phoenix-auto',
+    }))
+    try {
+      // This fixture has no Host remote: the failure must describe the missing
+      // voice service, NOT reject the selected Phoenix Auto execution model.
+      await expect(tryStartCodexRealtimeVoice('session-auto')).resolves.toEqual({
+        kind: 'failed',
+        reason: 'host-realtime-unavailable',
+      })
+    } finally {
+      disposeRoute()
+    }
+  })
+
+  it('probes Codex voice even without an optional text-model resolver', async () => {
+    await expect(tryStartCodexRealtimeVoice('session-no-route')).resolves.toEqual({
+      kind: 'failed',
+      reason: 'host-realtime-unavailable',
+    })
+  })
+
+  it('starts the Codex voice probe without waiting for an unrelated model catalog', async () => {
+    const dispose = configureVoiceModelRouteResolver(async () => new Promise<undefined>(() => {}))
+    try {
+      await expect(tryStartCodexRealtimeVoice('voice-catalog-slow')).resolves.toEqual({
+        kind: 'failed',
+        reason: 'host-realtime-unavailable',
+      })
+    } finally {
+      dispose()
+    }
+  })
+
+  it('keeps Codex realtime failures explicit instead of silently using fallback speech', async () => {
+    const disposeRoute = configureVoiceModelRouteResolver(async () => ({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+    }))
+    try {
+      await expect(tryStartCodexRealtimeVoice('session-codex')).resolves.toEqual({
+        kind: 'failed',
+        reason: 'host-realtime-unavailable',
+      })
+    } finally {
+      disposeRoute()
+    }
+  })
+
+
+  it('uses native realtime only as speech transport while Phoenix harness owns the answer', async () => {
+    class FakeDataChannel {
+      static instance: FakeDataChannel | undefined
+      readyState: 'connecting' | 'open' | 'closing' | 'closed' = 'open'
+      onopen: (() => void) | null = null
+      onmessage: ((event: { data: string }) => void) | null = null
+      readonly send = vi.fn((_payload: string) => undefined)
+      close(): void { this.readyState = 'closed' }
+      constructor() { FakeDataChannel.instance = this }
+    }
+    class FakePeer {
+      static instance: FakePeer | undefined
+      iceGatheringState = 'complete'
+      connectionState: 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed' = 'connected'
+      localDescription: { type: 'offer'; sdp: string } | null = null
+      ontrack: ((event: { streams: MediaStream[]; track: MediaStreamTrack }) => void) | null = null
+      onconnectionstatechange: (() => void) | null = null
+      constructor() { FakePeer.instance = this }
+      createDataChannel(): FakeDataChannel { return new FakeDataChannel() }
+      addTrack(): void {}
+      async getStats(): Promise<Map<string, { type: string; kind: string; bytesReceived: number }>> {
+        return new Map([['remote-audio', { type: 'inbound-rtp', kind: 'audio', bytesReceived: 4_096 }]])
+      }
+      async createOffer(): Promise<{ type: 'offer'; sdp: string }> {
+        return { type: 'offer', sdp: 'v=0\r\n' }
+      }
+      async setLocalDescription(value: { type: 'offer'; sdp: string }): Promise<void> {
+        this.localDescription = value
+      }
+      async setRemoteDescription(): Promise<void> {}
+      close(): void { this.connectionState = 'closed' }
+    }
+
+    const microphoneTrack = { enabled: true, stop: vi.fn() }
+    const rtcDescriptor = Object.getOwnPropertyDescriptor(window, 'RTCPeerConnection')
+    const mediaDescriptor = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices')
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)
+    Object.defineProperty(window, 'RTCPeerConnection', {
+      configurable: true,
+      value: FakePeer,
+    })
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn(async () => ({
+          getTracks: () => [microphoneTrack],
+          getAudioTracks: () => [microphoneTrack],
+        })),
+      },
+    })
+    const transcript = vi.fn<(text: string) => void>()
+    const disposeTranscript = configureCodexRealtimeUserTranscriptHandler(transcript)
+    const disposeRoute = configureVoiceModelRouteResolver(async () => ({
+      provider: 'phoenix-auto',
+      model: 'phoenix-auto',
+    }))
+    const realtimeStart = vi.fn(async (_request: {
+      readonly key: string
+      readonly offerSdp: string
+      readonly model?: string
+    }) => ({
+      ok: true as const,
+      value: {
+        accepted: true,
+        threadId: 'thread-harness',
+        answerSdp: 'v=0\r\n',
+      },
+    }))
+    let rejectNativeSpeech = false
+    type NativeReceipt = { ok: true; value: { accepted: boolean; reason?: 'disabled' } }
+    let delayedNativeSpeech: Promise<NativeReceipt> | undefined
+    const realtimeSpeak = vi.fn(async (_request: { readonly key: string; readonly text: string }) => {
+      if (delayedNativeSpeech !== undefined) {
+        const pending = delayedNativeSpeech
+        delayedNativeSpeech = undefined
+        return pending
+      }
+      if (rejectNativeSpeech) {
+        return {
+          ok: true as const,
+          value: { accepted: false as const, reason: 'disabled' as const },
+        }
+      }
+      return {
+        ok: true as const,
+        value: { accepted: true as const },
+      }
+    })
+    const disposeRemote = configureVoiceAssistantRemote({
+      conversationStatus: async () => ({
+        ok: true,
+        value: { enabled: true, natural: false },
+      }),
+      conversationSpeak: async () => ({
+        ok: true,
+        value: { accepted: false, reason: 'natural-unavailable' },
+      }),
+      conversationCancel: async () => ({
+        ok: true,
+        value: { cancelled: 0 },
+      }),
+      conversationRealtimeStatus: async () => ({
+        ok: true,
+        value: {
+          enabled: true,
+          available: true,
+          authenticated: true,
+          provider: 'openai-codex',
+        },
+      }),
+      conversationRealtimeStart: realtimeStart,
+      conversationRealtimeSpeak: realtimeSpeak,
+      conversationRealtimeStop: async () => ({
+        ok: true,
+        value: { stopped: true },
+      }),
+    })
+    try {
+      await expect(tryStartCodexRealtimeVoice('session-harness')).resolves.toEqual({ kind: 'started' })
+      // Phoenix Auto's text model must never be forced into Codex's voice thread.
+      expect(realtimeStart).toHaveBeenCalledWith({
+        key: 'session-harness',
+        offerSdp: 'v=0\r\n',
+      })
+      const channel = FakeDataChannel.instance
+      expect(channel).toBeDefined()
+      const audio = document.querySelector<HTMLAudioElement>('[data-phoenix-codex-voice]')
+      expect(audio?.muted).toBe(true)
+      expect(microphoneTrack.enabled).toBe(true)
+      channel?.onopen?.()
+      // AVAS V3 session configuration belongs to the official app-server.
+      // Sending public Realtime VAD fields here causes unknown_parameter.
+      expect(channel?.send).not.toHaveBeenCalled()
+
+      // The same Live data channel is the canonical microphone/transcript
+      // source. V3 and V1 final-user events both feed the composer handler.
+      channel?.onmessage?.({
+        data: JSON.stringify({
+          type: 'turn.done',
+          turn: { role: 'user', transcript: '  usa el harness y escribe en el chat  ' },
+        }),
+      })
+      channel?.onmessage?.({
+        data: JSON.stringify({
+          type: 'conversation.item.input_audio_transcription.completed',
+          transcript: 'usa el harness y escribe en el chat',
+        }),
+      })
+      channel?.onmessage?.({
+        data: JSON.stringify({
+          type: 'conversation.item.input_audio_transcription.completed',
+          transcript: 'segunda orden',
+        }),
+      })
+      expect(transcript.mock.calls).toEqual([
+        ['usa el harness y escribe en el chat'],
+        ['segunda orden'],
+      ])
+
+      const peer = FakePeer.instance
+      expect(peer).toBeDefined()
+
+      // A long Hardness/tool turn can make WebRTC report a transient
+      // "disconnected". Native Codex voice must remain the selected transport.
+      if (peer !== undefined) {
+        peer.connectionState = 'disconnected'
+        peer.onconnectionstatechange?.()
+      }
+      expect(isCodexRealtimeVoiceActive()).toBe(true)
+      expect(getVoiceAssistantSnapshot().active).toBe(true)
+
+      const activatedAt = getVoiceAssistantSnapshot().activatedAt
+
+      if (channel !== undefined) channel.readyState = 'open'
+      if (peer !== undefined) {
+        peer.connectionState = 'connected'
+        peer.onconnectionstatechange?.()
+      }
+      await Promise.resolve()
+      // A durable conversational-tail answer speaks its first sentence while
+      // the remaining text is still arriving. Each later sentence waits for
+      // the preceding native response.done; the final full tail adds no copy.
+      const streamed = 'Primera frase. Segunda frase.'
+      streamVoiceAssistantResponse(
+        'assistant:harness:stream', streamed, activatedAt, false, false, true,
+      )
+      // The authorized first sentence becomes audible synchronously: an RPC
+      // acknowledgement can arrive after Codex has already streamed its audio.
+      expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('requested')
+      expect(audio?.muted).toBe(false)
+      expect(microphoneTrack.enabled).toBe(true)
+      expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('echo-filtered-for-output')
+      expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe('none')
+      expect(document.documentElement.dataset.phoenixVoiceSpeechOrigin).toBe('provisional-chat-stream')
+      await Promise.resolve()
+      expect(document.documentElement.dataset.phoenixVoiceAudioThisReply).toBe('inbound-audio-received')
+      expect(document.documentElement.dataset.phoenixVoiceInboundBytes).toBe('4096')
+      // A delayed AVAS transcript while the RTC microphone is disabled must
+      // not cancel Kira's authorized speech or steer the harness.
+      channel?.onmessage?.({ data: JSON.stringify({
+        type: 'turn.done', turn: { role: 'user', transcript: 'falso eco de la bocina' },
+      }) })
+      expect(transcript).toHaveBeenCalledTimes(2)
+      expect(microphoneTrack.enabled).toBe(true)
+      expect(audio?.muted).toBe(false)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'input_audio_buffer.speech_started' }) })
+      expect(getVoiceAssistantSnapshot().phase).toBe('speaking')
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenLastCalledWith({
+        key: 'session-harness', text: 'Primera frase.',
+      })
+      // React view remounts must never interrupt an already-authorized voice.
+      const cancelBeforeRemount = channel?.send.mock.calls.length
+      cancelVoiceAssistantSentenceStream('assistant:harness:stream', true)
+      expect(channel?.send).toHaveBeenCalledTimes(cancelBeforeRemount ?? 0)
+      expect(audio?.muted).toBe(false)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenLastCalledWith({
+        key: 'session-harness', text: 'Segunda frase.',
+      })
+      // Codex V3 can describe one completed first sentence using both
+      // response.done and assistant turn.done. The duplicate MUST NOT
+      // consume the second sentence before Codex has even started it.
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.done', turn: { role: 'assistant' } }) })
+      expect(document.documentElement.dataset.phoenixVoiceLastNativeTerminal)
+        .toBe('ignored-duplicate-terminal')
+      expect(realtimeSpeak).toHaveBeenCalledTimes(2)
+      expect(audio?.muted).toBe(false)
+      streamVoiceAssistantResponse(
+        'assistant:harness:stream', streamed, activatedAt, true, false, true,
+      )
+      expect(realtimeSpeak).toHaveBeenCalledTimes(2)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(2)
+
+      // A rewrite cancels the in-flight native response but waits for its
+      // terminal event before reusing the channel. This prevents the old
+      // response.done from advancing the corrected sentence cursor.
+      streamVoiceAssistantResponse(
+        'assistant:harness:rewrite', 'Borrador inicial. Segunda parte.', activatedAt, false, false, true,
+      )
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(3)
+      streamVoiceAssistantResponse(
+        'assistant:harness:rewrite', 'Versión corregida.', activatedAt, false, false, true,
+      )
+      expect(JSON.parse(String(channel?.send.mock.calls.at(-1)?.[0]))).toEqual({ type: 'response.cancel' })
+      expect(realtimeSpeak).toHaveBeenCalledTimes(3)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenLastCalledWith({
+        key: 'session-harness', text: 'Versión corregida.',
+      })
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      await Promise.resolve()
+
+      // A permanently rejected native append restores the cursor and reports
+      // the error, but must not spin an unbounded microtask retry loop.
+      rejectNativeSpeech = true
+      streamVoiceAssistantResponse(
+        'assistant:harness:rejected', 'La voz fue rechazada.', activatedAt, false, false, true,
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(5)
+      rejectNativeSpeech = false
+
+      // If the data channel is temporarily unwritable when Hardness returns,
+      // keep the answer queued for Codex instead of falling back to system TTS.
+      if (channel !== undefined) channel.readyState = 'connecting'
+      // A settled step can precede a browser tool; Live must wait for
+      // the actual completed Turn, never narrate premature progress.
+      streamVoiceAssistantResponse(
+        'assistant:harness:interim',
+        'Sigo en ello.',
+        activatedAt,
+        true,
+      )
+      speakVoiceAssistantResponse(
+        'assistant:harness:1',
+        'La tarea terminó correctamente.',
+        activatedAt,
+      )
+      expect(channel?.send).toHaveBeenCalledTimes(1)
+
+      if (channel !== undefined) channel.readyState = 'open'
+      if (peer !== undefined) {
+        peer.connectionState = 'connected'
+        peer.onconnectionstatechange?.()
+      }
+      await Promise.resolve()
+      // V3 uses the authenticated Codex app-server appendSpeech RPC: a
+      // response.create with ad hoc instructions on the raw datachannel is
+      // not the official pathway for client-selected speech.
+      expect(realtimeSpeak).toHaveBeenCalledWith({
+        key: 'session-harness', text: 'La tarea terminó correctamente.',
+      })
+      expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('accepted')
+      expect(document.documentElement.dataset.phoenixVoiceSpeechOrigin).toBe('final-harness-chat')
+      expect(document.documentElement.dataset.phoenixVoiceAuthorizedLength)
+        .toBe(String('La tarea terminó correctamente.'.length))
+      expect(channel?.send).toHaveBeenCalledTimes(1)
+      expect(audio?.muted).toBe(false)
+      // V3 may surface first audio frames before the response.created event.
+      // A harness-approved utterance must never stay accidentally muted.
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.output_audio.delta' }) })
+      expect(audio?.muted).toBe(false)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.created' }) })
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.created', turn: { role: 'assistant' } }) })
+      expect(audio?.muted).toBe(false)
+
+      // A second spoken event queues until the real completion of the
+      // first response; keep the same Codex V3 speech channel serialized.
+      expect(await speakVoiceAssistantAttention(
+        'Aprobación 550e8400-e29b-41d4-a716-446655440000',
+        'Revisa la acción antes de continuar; referencia 123456789 needs attention.',
+      )).toBe(true)
+      expect(realtimeSpeak).toHaveBeenCalledTimes(6)
+      // User turn markers must not complete the assistant's speech.
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.done', turn: { role: 'user' } }) })
+      expect(realtimeSpeak).toHaveBeenCalledTimes(6)
+      expect(document.documentElement.dataset.phoenixVoiceLastTurnRole).toBe('user')
+      // V3 completes spoken output using assistant turn.done.
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.done', turn: { role: 'assistant' } }) })
+      expect(document.documentElement.dataset.phoenixVoiceLastTurnRole).toBe('assistant')
+      // Generation is finished, but the WebRTC speaker may still be draining
+      // previously buffered audio. Keep Kira audible until an explicit cancel.
+      expect(audio?.muted).toBe(false)
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(7)
+      const attention = realtimeSpeak.mock.calls
+        .map(call => call[0])
+        .find(request => request.text.includes('Revisa la acción'))
+      expect(attention).toBeDefined()
+      expect(attention?.text).not.toContain('550e8400-e29b-41d4-a716-446655440000')
+      expect(attention?.text).not.toContain('123456789 needs attention')
+      expect(attention?.text).toContain('Revisa la acción')
+
+      expect(interruptVoiceAssistantSpeech()).toBe(true)
+      expect(microphoneTrack.enabled).toBe(true)
+      expect(JSON.parse(String(channel?.send.mock.calls[1]?.[0]))).toEqual({ type: 'response.cancel' })
+
+      // The Realtime model must not autonomously claim a tool is running:
+      // no harness-final request is active, so abort unsolicited responses.
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.created' }) })
+      expect(JSON.parse(String(channel?.send.mock.calls[2]?.[0]))).toEqual({ type: 'response.cancel' })
+      expect(audio?.muted).toBe(true)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.created', turn: { role: 'assistant' } }) })
+      expect(JSON.parse(String(channel?.send.mock.calls.at(-1)?.[0]))).toEqual({ type: 'response.cancel' })
+      expect(audio?.muted).toBe(true)
+      expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe('unsolicited-response')
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(7)
+
+      // A stale renderer from another UI session may share turn/step numbers,
+      // but it cannot append speech to this session's native Codex call.
+      const beforeForeignSession = realtimeSpeak.mock.calls.length
+      streamVoiceAssistantResponse(
+        'session-b:assistant:turn-1:step-1',
+        'No debe salir por la sesión anterior.',
+        activatedAt,
+        false,
+        false,
+        true,
+        'session-b',
+      )
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(beforeForeignSession)
+
+      // A short tail can finish its only stable sentence before the harness
+      // emits the final message projection. The final projection must mark
+      // that accepted cursor as spoken instead of recreating it at zero.
+      const beforeStableTail = realtimeSpeak.mock.calls.length
+      streamVoiceAssistantResponse(
+        'assistant:harness:stable-tail',
+        'Una sola frase estable.',
+        activatedAt,
+        false,
+        false,
+        true,
+      )
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenLastCalledWith({
+        key: 'session-harness', text: 'Una sola frase estable.',
+      })
+      const afterStableSentence = realtimeSpeak.mock.calls.length
+      expect(afterStableSentence).toBe(beforeStableTail + 1)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(afterStableSentence)
+      streamVoiceAssistantResponse(
+        'assistant:harness:stable-tail',
+        'Una sola frase estable.',
+        activatedAt,
+        true,
+        false,
+        true,
+      )
+      // A duplicate final projection has the same result: one accepted native
+      // request, no replay after the stream cursor is finalized.
+      streamVoiceAssistantResponse(
+        'assistant:harness:stable-tail',
+        'Una sola frase estable.',
+        activatedAt,
+        true,
+        false,
+        true,
+      )
+      expect(realtimeSpeak).toHaveBeenCalledTimes(afterStableSentence)
+
+      // The separately rendered completed turn uses the same canonical key.
+      speakVoiceAssistantResponse('assistant:harness:stable-tail', 'Una sola frase estable.', activatedAt)
+      expect(realtimeSpeak).toHaveBeenCalledTimes(afterStableSentence)
+      // View unmount/remount preserves completed admission; an explicit
+      // rewrite revokes it even after the cursor has drained.
+      cancelVoiceAssistantSentenceStream('assistant:harness:stable-tail', true)
+      streamVoiceAssistantResponse('assistant:harness:stable-tail', 'Una sola frase estable.', activatedAt, true, true, true)
+      expect(realtimeSpeak).toHaveBeenCalledTimes(afterStableSentence)
+      cancelVoiceAssistantSentenceStream('assistant:harness:stable-tail')
+      streamVoiceAssistantResponse('assistant:harness:stable-tail', 'Respuesta corregida.', activatedAt, true, true, true)
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenLastCalledWith({ key: 'session-harness', text: 'Respuesta corregida.' })
+      vi.useFakeTimers()
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done', response: { status: 'completed' } }) })
+      await Promise.resolve()
+      expect(document.documentElement.dataset.phoenixVoiceLastResponseStatus).toBe('completed')
+      expect(audio?.muted).toBe(false)
+      // Codex V3 can deliver a trailing assistant turn.created after its
+      // completion marker. It is not a new unauthorized response and must not
+      // cut already-buffered audio.
+      const sendsBeforeLateTurn = channel?.send.mock.calls.length
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.created', turn: { role: 'assistant' } }) })
+      expect(audio?.muted).toBe(false)
+      expect(getVoiceAssistantSnapshot().phase).toBe('speaking')
+      expect(microphoneTrack.enabled).toBe(true)
+      expect(channel?.send).toHaveBeenCalledTimes(sendsBeforeLateTurn ?? 0)
+      // Kira's question can contain the user's exact answer. The first new
+      // human transcript must pass before the six-second audible drain ends,
+      // even if its words also occur in the last spoken reply.
+      await vi.advanceTimersByTimeAsync(950)
+      expect(audio?.muted).toBe(false)
+      expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('listening')
+      channel?.onmessage?.({ data: JSON.stringify({
+        type: 'turn.done', turn: { role: 'user', transcript: 'Respuesta corregida.' },
+      }) })
+      expect(transcript).toHaveBeenLastCalledWith('Respuesta corregida.')
+      // The permission eventually closes automatically, without the developer
+      // console manually toggling HTMLAudioElement.muted.
+      await vi.advanceTimersByTimeAsync(6_100)
+      expect(audio?.muted).toBe(true)
+      expect(microphoneTrack.enabled).toBe(true)
+      expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('listening')
+      expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe('authorized-audio-drained')
+      expect(getVoiceAssistantSnapshot().phase).toBe('listening')
+      // Genuine new user speech becomes available again after playback.
+      channel?.onmessage?.({ data: JSON.stringify({
+        type: 'turn.done', turn: { role: 'user', transcript: 'una nueva orden del usuario' },
+      }) })
+      expect(transcript).toHaveBeenLastCalledWith('una nueva orden del usuario')
+      vi.useRealTimers()
+      // A genuinely new V3 response after the grace must still be cancelled.
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.created' }) })
+      expect(audio?.muted).toBe(true)
+      expect(JSON.parse(String(channel?.send.mock.calls.at(-1)?.[0]))).toEqual({ type: 'response.cancel' })
+
+      // Native completion may arrive before the Host RPC result. Retain one
+      // in-flight operation until explicit admission; rejection is never a
+      // delivered final token, and a later render may retry once.
+      for (const outcome of ['accepted', 'rejected', 'failed'] as const) {
+        let resolveAdmission!: (receipt: NativeReceipt) => void
+        let rejectAdmission!: (error: Error) => void
+        delayedNativeSpeech = new Promise((resolve, reject) => {
+          resolveAdmission = resolve
+          rejectAdmission = reject
+        })
+        const messageKey = `assistant:harness:terminal-before-${outcome}`
+        const beforeAdmission = realtimeSpeak.mock.calls.length
+        streamVoiceAssistantResponse(messageKey, 'Una respuesta autorizada.', activatedAt, true, false, true)
+        // Phoenix itself has authorized this speech before invoking the RPC.
+        // Native output arriving before acceptance must remain audible.
+        expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('requested')
+        expect(audio?.muted).toBe(false)
+        expect(microphoneTrack.enabled).toBe(true)
+        channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.created', turn: { role: 'assistant' } }) })
+        expect(audio?.muted).toBe(false)
+        channel?.onmessage?.({ data: JSON.stringify({ type: 'output_audio.delta', audio: 'fixture' }) })
+        expect(audio?.muted).toBe(false)
+        channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+        streamVoiceAssistantResponse(messageKey, 'Una respuesta autorizada.', activatedAt, true, false, true)
+        expect(realtimeSpeak).toHaveBeenCalledTimes(beforeAdmission + 1)
+        if (outcome === 'failed') rejectAdmission(new Error('fixture admission failed'))
+        else resolveAdmission({ ok: true, value: { accepted: outcome === 'accepted', ...(outcome === 'rejected' ? { reason: 'disabled' } : {}) } })
+        await vi.waitFor(() => expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe(outcome))
+        expect(audio?.muted).toBe(outcome !== 'accepted')
+        expect(microphoneTrack.enabled).toBe(true)
+        expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe(
+          outcome === 'accepted' ? 'none' : outcome === 'rejected' ? 'append-speech-rejected' : 'append-speech-failed',
+        )
+        streamVoiceAssistantResponse(messageKey, 'Una respuesta autorizada.', activatedAt, true, false, true)
+        expect(realtimeSpeak).toHaveBeenCalledTimes(beforeAdmission + (outcome === 'accepted' ? 1 : 2))
+        await Promise.resolve()
+        channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+        await Promise.resolve()
+      }
+      const beforeForeignTail = realtimeSpeak.mock.calls.length
+      speakVoiceAssistantResponse('session-b:assistant:turn-1:step-1', 'Otra sesión.', activatedAt, 'session-b')
+      expect(realtimeSpeak).toHaveBeenCalledTimes(beforeForeignTail)
+
+      // Regression: the V3 sideband sometimes acknowledges appendSpeech and
+      // delivers the first sentence without response.done/assistant turn.done.
+      // Do not leave the entire rest of Kira's answer blocked forever.
+      vi.useFakeTimers()
+      const beforeStalledSpeech = realtimeSpeak.mock.calls.length
+      streamVoiceAssistantResponse(
+        'assistant:harness:missing-terminal', 'Primera frase. Segunda frase.', activatedAt, true, false, true,
+      )
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(beforeStalledSpeech + 1)
+      expect(realtimeSpeak).toHaveBeenLastCalledWith({ key: 'session-harness', text: 'Primera frase.' })
+      expect(microphoneTrack.enabled).toBe(true)
+      await vi.advanceTimersByTimeAsync(16_000)
+      expect(document.documentElement.dataset.phoenixVoiceLastNativeTerminal).toBe('watchdog-missing-terminal')
+      expect(realtimeSpeak).toHaveBeenCalledTimes(beforeStalledSpeech + 2)
+      expect(realtimeSpeak).toHaveBeenLastCalledWith({ key: 'session-harness', text: 'Segunda frase.' })
+      expect(microphoneTrack.enabled).toBe(true)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.completed' }) })
+      await Promise.resolve()
+      vi.useRealTimers()
+
+      // Telegram/browser disconnection must never leave voice stuck: grant a
+      // short reconnection window, then release the mic and return to text.
+      vi.useFakeTimers()
+      if (peer !== undefined) {
+        peer.connectionState = 'disconnected'
+        peer.onconnectionstatechange?.()
+      }
+      expect(isCodexRealtimeVoiceActive()).toBe(true)
+      await vi.advanceTimersByTimeAsync(30_001)
+      expect(isCodexRealtimeVoiceActive()).toBe(false)
+      expect(getVoiceAssistantSnapshot().active).toBe(false)
+      expect(audio?.isConnected).toBe(false)
+    } finally {
+      vi.useRealTimers()
+      await stopCodexRealtimeVoice()
+      disposeRemote()
+      disposeRoute()
+      disposeTranscript()
+      pause.mockRestore()
+      if (rtcDescriptor === undefined) Reflect.deleteProperty(window, 'RTCPeerConnection')
+      else Object.defineProperty(window, 'RTCPeerConnection', rtcDescriptor)
+      if (mediaDescriptor === undefined) Reflect.deleteProperty(navigator, 'mediaDevices')
+      else Object.defineProperty(navigator, 'mediaDevices', mediaDescriptor)
+    }
   })
 
   it('configures one explicit recognition session and forwards final text', () => {
@@ -135,10 +914,10 @@ describe('browser voice adapter', () => {
     }
   })
 
-  it('routes streaming speech to the Host neural voice and cancels it on barge-in', async () => {
+  it('routes streaming speech to Host Kokoro even when it is not the neural provider flag', async () => {
     const status = vi.fn(async () => ({
       ok: true as const,
-      value: { enabled: true, natural: true, provider: 'phoenix-natural' },
+      value: { enabled: true, natural: false, provider: 'kokoro' },
     }))
     const speak = vi.fn(async (_request: {
       readonly key: string
@@ -148,7 +927,7 @@ describe('browser voice adapter', () => {
       readonly final?: boolean
     }) => ({
       ok: true as const,
-      value: { accepted: true, provider: 'phoenix-natural' },
+      value: { accepted: true, provider: 'kokoro' },
     }))
     const cancel = vi.fn(async (_request: { readonly key: string }) => ({
       ok: true as const,
@@ -175,11 +954,46 @@ describe('browser voice adapter', () => {
         key: 'assistant:2:1',
         sequence: 0,
         text: 'Encontré el problema.',
+        language: 'es-DO',
       })
 
       expect(interruptVoiceAssistantSpeech()).toBe(true)
       await Promise.resolve()
       expect(cancel).toHaveBeenCalledWith({ key: 'assistant:2:1' })
+    } finally {
+      setVoiceAssistantActive(false)
+      dispose()
+    }
+  })
+
+  it('does not send unfinished clauses to neural speech where filler words can be generated', async () => {
+    const speak = vi.fn(async () => ({
+      ok: true as const,
+      value: { accepted: true, provider: 'kokoro' },
+    }))
+    const dispose = configureVoiceAssistantRemote({
+      conversationStatus: async () => ({
+        ok: true as const,
+        value: { enabled: true, natural: true, provider: 'kokoro' },
+      }),
+      conversationSpeak: speak,
+      conversationCancel: async () => ({
+        ok: true as const,
+        value: { cancelled: 0 },
+      }),
+    })
+    try {
+      await refreshVoiceAssistantRemote()
+      setVoiceAssistantActive(true)
+      const started = getVoiceAssistantSnapshot().activatedAt
+      const growing = 'Esta conversación sigue generando una explicación larga sin haber terminado todavía la frase '.repeat(3)
+      streamVoiceAssistantResponse('assistant:unfinished', growing, started)
+      await Promise.resolve()
+      expect(speak).not.toHaveBeenCalled()
+      streamVoiceAssistantResponse('assistant:unfinished', growing.trim() + '.', started, true)
+      await Promise.resolve()
+      expect(speak).toHaveBeenCalled()
+      expect(speak.mock.calls.length).toBeGreaterThan(0)
     } finally {
       setVoiceAssistantActive(false)
       dispose()

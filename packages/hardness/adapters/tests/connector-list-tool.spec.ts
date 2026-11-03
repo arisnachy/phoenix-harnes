@@ -14,6 +14,16 @@ function service(overrides: Partial<{
       label: 'Google Workspace',
       methods: [{ id: 'oauth', label: 'Sign in with Google' }],
       inFlight: false,
+      connectors: [{
+        id: 'gmail',
+        name: 'Gmail',
+        description: 'Mail',
+        category: 'Communication',
+        accessible: true,
+        enabled: true,
+        installed: true,
+        callable: false,
+      }],
       disconnectable: true as const,
     }]),
     inspect: overrides.inspect ?? (async () => ({
@@ -69,18 +79,32 @@ describe('connector_list tool', () => {
   it('distinguishes an inspectable disconnected flow from a provider without telemetry', async () => {
     const tool = createConnectorListTool(service({ inspect: vi.fn(async () => undefined) }))
     await expect(tool.execute({}, {} as never)).resolves.toMatchObject({
-      connectors: [{ status: 'not-connected', recommended_action: 'connect-or-reconnect', services: [] }],
+      connectors: [{
+        status: 'not-connected',
+        recommended_action: 'connect-or-reconnect',
+        services: [{ id: 'gmail', name: 'Gmail', callable: false }],
+      }],
     })
 
     const unknown = createConnectorListTool(service({ inspect: vi.fn(async () => { throw new Error('offline') }) }))
     await expect(unknown.execute({}, {} as never)).resolves.toMatchObject({
-      connectors: [{ status: 'unknown', recommended_action: 'inspect', services: [] }],
+      connectors: [{
+        status: 'unknown',
+        recommended_action: 'inspect',
+        services: [{ id: 'gmail', name: 'Gmail', callable: false }],
+      }],
     })
   })
 
   it('returns an empty inventory when no authorization flows are registered', async () => {
     const tool = createConnectorListTool(service({ list: () => [] }))
     await expect(tool.execute({}, {} as never)).resolves.toEqual({ kind: 'connector_list', connectors: [] })
+    const snapshot = await tool.execute({ target: 'mcp' }, {} as never)
+    expect(tool.output.presentationMeta?.({ target: 'mcp' }, snapshot as never)).toMatchObject({
+      artifact: { data: {
+        visualType: 'metrics', metrics: [{ label: 'Registro MCP del Host', value: 'No disponible' }],
+      } },
+    })
   })
 
   it('merges ready and unavailable MCP state without exposing configuration', async () => {
@@ -152,7 +176,29 @@ describe('connector_list tool', () => {
         },
       ],
     })
+    expect(tool.output.presentationMeta?.({}, result as never)).toEqual({})
+    const meta = tool.output.presentationMeta?.({ target: 'mcp' }, result as never)
+    expect(meta).toMatchObject({
+      artifact: {
+        title: 'Estado real de conectores MCP',
+        data: {
+          visualType: 'table',
+          columns: ['Conector', 'Estado', 'Herramientas', 'Diagnóstico'],
+          rows: [
+            ['MCP github', 'ready', 1, 'Sin error reportado'],
+            ['MCP local', 'disconnected', 1, 'connection-lost'],
+            ['MCP private', 'auth-required', 0, 'authorization-required'],
+          ],
+        },
+      },
+    })
     const rendered = JSON.stringify(result)
+    const emptyMcp = createConnectorListTool(undefined, { list: () => [] })
+    const emptyInventory = await emptyMcp.execute({ target: 'mcp' }, {} as never)
+    expect(emptyMcp.output.presentationMeta?.({ target: 'mcp' }, emptyInventory as never))
+      .toMatchObject({ artifact: { data: {
+        visualType: 'metrics', metrics: [{ label: 'MCP observados en esta sesión', value: 0 }],
+      } } })
     expect(rendered).not.toContain('https://')
     expect(rendered).not.toContain('Authorization')
     expect(rendered).not.toContain('token')
@@ -207,6 +253,17 @@ describe('connector_list tool', () => {
       has_relevant_match: true,
       connectors: [{
         label: 'Google Workspace',
+        relevant: true,
+      }],
+    })
+
+    await expect(tool.execute({ target: 'Gmail' }, {} as never)).resolves.toMatchObject({
+      requested_target: 'Gmail',
+      has_relevant_match: true,
+      connectors: [{
+        label: 'Google Workspace',
+        status: 'not-connected',
+        services: [{ id: 'gmail', name: 'Gmail', callable: false }],
         relevant: true,
       }],
     })

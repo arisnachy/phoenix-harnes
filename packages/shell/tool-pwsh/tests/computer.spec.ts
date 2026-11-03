@@ -4,15 +4,70 @@ import {
   browserCommandForAction,
   computerActionNeedsApproval,
   computerModeForSandbox,
+  desktopControlConnectionWasNeverEstablished,
+  desktopPreviewCommandForAction,
+  legacyDesktopObservationCommandForAction,
   parseDesktopBrowserControlDescriptor,
   residentComputerRequestForAction,
   runWindowsComputerAction,
+  miniBrowserFallbackCommand,
+  runMiniBrowserFallback,
+  isMiniBrowserReceipt,
   shouldCaptureAfterAction,
+  systemBrowserOpenInvocation,
   validateComputerArgs,
   windowsComputerInvocation,
+  computerVerificationTarget,
+  computerActionWithPinnedTarget,
+  desktopScreenshotLabel,
+  nativeDesktopTurnActive,
+  nativeDesktopFallbackDenied,
+  normalizedDesktopTarget,
+  attachmentWriter,
 } from '../src/computer.ts'
 
 describe('Computer Use permissions', () => {
+  it('reads optional attachments via ctx.get rather than un-injected context getters', () => {
+    const store = { saveImage: async () => ({ width: 4, height: 4 }) }
+    const ctx = {
+      get(name: string) { expect(name).toBe('attachments'); return store },
+      get attachments() { throw new Error('cannot get property "attachments" without inject') },
+    }
+    expect(attachmentWriter(ctx as never)).toBe(store)
+    expect(attachmentWriter({ get: () => undefined } as never)).toBeUndefined()
+  })
+
+  it('preserves the selected application across observations within one session', () => {
+    expect(computerActionWithPinnedTarget({ action: 'screenshot' }, 'hwnd:0x420024')).toEqual({
+      action: 'screenshot', target: 'hwnd:0x420024',
+    })
+    expect(computerActionWithPinnedTarget({ action: 'click', x: 10, y: 15 }, 'hwnd:0x420024')).toEqual({
+      action: 'click', x: 10, y: 15, target: 'hwnd:0x420024',
+    })
+    expect(computerActionWithPinnedTarget({ action: 'screenshot', target: 'Notepad' }, 'hwnd:0x420024').target)
+      .toBe('Notepad')
+    expect(computerActionWithPinnedTarget({ action: 'windows' }, 'hwnd:0x420024')).toEqual({ action: 'windows' })
+    expect(computerActionWithPinnedTarget({ action: 'focus', target: 'Notepad' }, 'hwnd:0x420024'))
+      .toEqual({ action: 'focus', target: 'Notepad' })
+  })
+
+  it('pins screenshot verification to the acted-on HWND instead of whichever window gets focus later', () => {
+    expect(computerVerificationTarget({ target: 'Paint' }, 'hwnd=0x123 active=true title=Paint')).toBe('Paint')
+    expect(computerVerificationTarget({}, 'hwnd=0x420024 pid=9 active=true title=Paint')).toBe('hwnd:0x420024')
+    expect(computerVerificationTarget({}, 'no real target')).toBeUndefined()
+    expect(desktopScreenshotLabel('Desktop', undefined)).toBe('Desktop')
+    expect(desktopScreenshotLabel('Desktop', 'hwnd:0x420024')).toContain('absolute screen coordinates')
+    const selected = windowsComputerInvocation({ action: 'screenshot', target: 'hwnd:0x420024' })
+    expect(selected.env.PHX_TARGET).toBe('hwnd:0x420024')
+    expect(selected.stdin).toContain('[PhoenixDesktop]::SnapshotWindow($hwnd, $hdc)')
+    expect(selected.stdin).toContain('selected window refused PrintWindow capture')
+  })
+
+  it('uses a normalized HWND for both resident control and Desktop Live preview', () => {
+    expect(residentComputerRequestForAction({ action: 'focus', target: 'hwnd=0x420024 title=Paint' }).target).toBe('hwnd:0x420024')
+    expect(desktopPreviewCommandForAction({ action: 'focus', target: 'hwnd=0x420024 title=Paint' }, 'session-1').target).toBe('hwnd:0x420024')
+  })
+
   it('derives desktop authority from the existing sandbox permission', () => {
     expect(computerModeForSandbox(undefined)).toBe('off')
     expect(computerModeForSandbox('read-only')).toBe('observe')
@@ -38,6 +93,80 @@ describe('Computer Use permissions', () => {
     expect(computerActionNeedsApproval('workspace-write', 'browser_inspect')).toBe(false)
     expect(computerActionNeedsApproval('workspace-write', 'browser_login')).toBe(true)
     expect(computerActionNeedsApproval('read-only', 'click')).toBe(false)
+  })
+})
+
+describe('Computer Use desktop broker recovery', () => {
+  it('replays only failures that prove the named pipe was never connected', () => {
+    expect(desktopControlConnectionWasNeverEstablished(Object.assign(new Error('missing pipe'), { code: 'ENOENT' }))).toBe(true)
+    expect(desktopControlConnectionWasNeverEstablished(Object.assign(new Error('refused'), { code: 'ECONNREFUSED' }))).toBe(true)
+    expect(desktopControlConnectionWasNeverEstablished(Object.assign(new Error('lost after write'), { code: 'EPIPE' }))).toBe(false)
+    expect(desktopControlConnectionWasNeverEstablished(new Error('timed out'))).toBe(false)
+  })
+
+  it('opens fallback browser URLs without putting user input on the PowerShell command line', () => {
+    const invocation = systemBrowserOpenInvocation('https://example.com/game?q=phoenix')
+    expect(invocation.file).toBe('powershell.exe')
+    expect(invocation.argv.join(' ')).not.toContain('example.com')
+    expect(invocation.env.PHX_URL).toBe('https://example.com/game?q=phoenix')
+    expect((invocation as unknown as { stdin?: string }).stdin).toContain('Start-Process')
+    expect(() => systemBrowserOpenInvocation('file:///C:/secret.txt')).toThrow(/HTTP\(S\)/i)
+  })
+})
+
+describe('Integrated browser without Phoenix Desktop', () => {
+  it('routes only safe actions through a scoped MiniBrowser and never downgrades credentials', () => {
+    const owner = 'session-1'
+    expect(miniBrowserFallbackCommand({ action: 'browser_open', url: 'https://example.org' }, owner))
+      .toEqual({ type: 'open', sessionId: owner, url: 'https://example.org' })
+    expect(miniBrowserFallbackCommand({ action: 'browser_back' }, owner)).toEqual({ type: 'back', sessionId: owner })
+    expect(miniBrowserFallbackCommand({ action: 'browser_forward' }, owner)).toEqual({ type: 'forward', sessionId: owner })
+    expect(miniBrowserFallbackCommand({ action: 'browser_reload' }, owner)).toEqual({ type: 'reload', sessionId: owner })
+    expect(miniBrowserFallbackCommand({ action: 'browser_focus' }, owner)).toEqual({ type: 'start', sessionId: owner })
+    expect(miniBrowserFallbackCommand({ action: 'browser_inspect' }, owner)).toEqual({ type: 'inspect', sessionId: owner })
+    expect(miniBrowserFallbackCommand({
+      action: 'browser_fill_form', origin: 'https://example.org',
+      fields: [{ field: 1, value: 'secret' }],
+    }, owner)).toBeUndefined()
+    expect(miniBrowserFallbackCommand({ action: 'browser_click_text', origin: 'https://example.org', text: 'Pay' }, owner)).toBeUndefined()
+    expect(miniBrowserFallbackCommand({ action: 'browser_login', origin: 'https://example.org' }, owner)).toBeUndefined()
+    expect(() => miniBrowserFallbackCommand({ action: 'browser_inspect' }, '../other-session')).toThrow(/valid owning conversation/)
+  })
+
+  it('uses loopback-only scoped navigation and never reports content verified before inspection', async () => {
+    const calls: Array<{ url: string; body: string }> = []
+    const send = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, body: String(init?.body ?? '') })
+      return new Response(JSON.stringify({ available: true, tabId: 'tab-1', url: 'about:blank', title: '' }), { status: 200 })
+    }) as typeof fetch
+    const received = await runMiniBrowserFallback({ action: 'browser_open', url: 'https://example.org' }, 'session-1', undefined, send)
+    expect(JSON.parse(received)).toMatchObject({
+      browser: 'phoenix-mini-browser', status: 'navigation-started; inspect to verify content', tabId: 'tab-1',
+    })
+    expect(isMiniBrowserReceipt(received)).toBe(true)
+    expect(isMiniBrowserReceipt('hwnd=0x420024 active=true')).toBe(false)
+    expect(calls[0]?.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/phoenix-mini-browser\/action$/u)
+    expect(JSON.parse(calls[0]!.body!)).toEqual({ type: 'open', sessionId: 'session-1', url: 'https://example.org' })
+    expect(JSON.stringify(calls)).not.toContain('secret')
+  })
+
+  it('fails explicitly when Chrome or the web controller is unavailable', async () => {
+    const send = (async () => new Response(JSON.stringify({ error: 'No Chrome' }), { status: 503 })) as typeof fetch
+    await expect(runMiniBrowserFallback(
+      { action: 'browser_inspect' }, 'session-1', undefined, send,
+    )).rejects.toThrow(/MiniBrowser unavailable/)
+    await expect(runMiniBrowserFallback(
+      { action: 'browser_login', origin: 'https://example.org' }, 'session-1', undefined, send,
+    )).rejects.toThrow(/Never send vault credentials/)
+  })
+})
+
+describe('Computer Use native observation routing', () => {
+  it('routes only side-effect-free observations over the legacy desktop pipe', () => {
+    expect(legacyDesktopObservationCommandForAction('windows')).toEqual({ type: 'phoenix.desktop.windows' })
+    expect(legacyDesktopObservationCommandForAction('screenshot')).toEqual({ type: 'phoenix.desktop.screenshot' })
+    expect(legacyDesktopObservationCommandForAction('click')).toBeUndefined()
+    expect(legacyDesktopObservationCommandForAction('type')).toBeUndefined()
   })
 })
 
@@ -81,8 +210,9 @@ describe('Computer Use argument contract', () => {
     const invocation = windowsComputerInvocation({ action: 'windows' })
     expect(invocation.argv).toContain('-STA')
     expect(invocation.argv).toContain('-Command')
-    expect(invocation.argv.at(-1)).toBe('-')
+    expect(invocation.argv.at(-1)).toContain('[scriptblock]::Create([Console]::In.ReadToEnd())')
     expect(invocation.argv.join(' ').length).toBeLessThan(256)
+    expect(invocation.argv.join(' ')).not.toContain('Invoke-Expression')
     const driver = (invocation as unknown as { stdin?: string }).stdin
     expect(driver).toBeDefined()
     expect(driver).toContain('[FieldOffset(0)] public MOUSEINPUT mi;')
@@ -93,6 +223,8 @@ describe('Computer Use argument contract', () => {
     expect(driver).toContain('SetForegroundWindow')
     expect(driver).toContain('GetForegroundWindow')
     expect(driver).toContain('AttachThreadInput')
+    expect(driver).toContain('[DllImport("kernel32.dll", ExactSpelling = true)]')
+    expect(driver).not.toMatch(/\[DllImport\("user32\.dll"\)\]\s*private static extern uint GetCurrentThreadId/u)
   })
 
   it('forces a fresh observation after state-changing desktop actions', () => {
@@ -215,4 +347,63 @@ describe('Computer Use native Windows driver', () => {
     const output = await runWindowsComputerAction({ action: 'windows' })
     expect(typeof output).toBe('string')
   }, 60_000)
+})
+
+describe('Desktop Live side-pane preflight', () => {
+  it('carries the conversation owner and target without shell text', () => {
+    expect(desktopPreviewCommandForAction({ action: 'focus', target: 'Paint' }, 'session-4')).toEqual({
+      type: 'phoenix.desktop.preview', target: 'Paint', sessionId: 'session-4', observe: false,
+    })
+    expect(desktopPreviewCommandForAction({ action: 'screenshot' }, 'session-4').observe).toBe(true)
+    expect(() => desktopPreviewCommandForAction({ action: 'click', x: 4, y: 8 }, '../../unsafe')).toThrow(/session id/i)
+  })
+})
+
+describe('native Windows Paint task ownership', () => {
+  const human = (text: string) => ({
+    type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] },
+  })
+  it('restricts browser actions for a Paint prompt, not across the whole conversation', () => {
+    expect(nativeDesktopTurnActive([human('entra en paint y crea una carita')])).toBe(true)
+    expect(nativeDesktopTurnActive([human('abre Paint y haz un trazo')])).toBe(true)
+    expect(nativeDesktopTurnActive([human('abre Paint'), {
+      type: 'user/message', data: { source: { kind: 'plugin' }, content: [{ type: 'text', text: 'browser inspect' }] },
+    }])).toBe(true)
+    expect(nativeDesktopTurnActive([human('abre Paint'), human('ahora abre YouTube en Chrome')])).toBe(false)
+    expect(nativeDesktopTurnActive([human('busca un tutorial de Paint en Chrome')])).toBe(false)
+  })
+  it('uses verified window handles instead of title guessing', () => {
+    expect(normalizedDesktopTarget('hwnd=0x420024 title=Sin título - Paint')).toBe('hwnd:0x420024')
+    expect(normalizedDesktopTarget('hwnd:0x420024')).toBe('hwnd:0x420024')
+    expect(normalizedDesktopTarget('pid=1234 title=Paint')).toBe('pid:1234')
+    expect(normalizedDesktopTarget('Sin título - Paint')).toBe('Sin título - Paint')
+    expect(windowsComputerInvocation({ action: 'focus', target: 'hwnd=0x420024' }).env.PHX_TARGET).toBe('hwnd:0x420024')
+  })
+  it('separates deliberate bounded focus retry from guarded clicks', () => {
+    const driver = windowsComputerInvocation({ action: 'focus', target: 'Paint' }).stdin
+    expect(driver).toContain('for (int attempt = 0; attempt < 3')
+    expect(driver).toContain('target lost foreground')
+    expect(driver).not.toContain('if (!String.IsNullOrWhiteSpace(selector)) FocusWindow(selector, false)')
+  })
+})
+
+describe('monotonic native Windows turn browser/image fallback guard', () => {
+  const user = (text: string) => [{
+    type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] },
+  }]
+  const paint = user('entra en Paint y crea una carita')
+  it('rejects Chrome, browser, and generated images for native Paint requests', () => {
+    expect(nativeDesktopFallbackDenied('mcp__chrome__inspect_page', {}, paint)).toMatch(/native Windows/u)
+    expect(nativeDesktopFallbackDenied('mcp__browser__navigate', {}, paint)).toMatch(/native Windows/u)
+    expect(nativeDesktopFallbackDenied('computer', { action: 'browser_inspect' }, paint)).toMatch(/native Windows/u)
+    expect(nativeDesktopFallbackDenied('image_generation', {}, paint)).toMatch(/native Windows/u)
+    expect(nativeDesktopFallbackDenied('phoenix_3d', {}, paint)).toMatch(/native Windows/u)
+  })
+  it('permits native Computer and shell, and does not leak the lock across turns', () => {
+    expect(nativeDesktopFallbackDenied('computer', { action: 'focus', target: 'hwnd:0x420024' }, paint)).toBeUndefined()
+    expect(nativeDesktopFallbackDenied('computer', { action: 'screenshot' }, paint)).toBeUndefined()
+    expect(nativeDesktopFallbackDenied('pwsh', { script: 'mspaint' }, paint)).toBeUndefined()
+    expect(nativeDesktopFallbackDenied('mcp__chrome__inspect_page', {}, user('abre Chrome'))).toBeUndefined()
+    expect(nativeDesktopFallbackDenied('image_generation', {}, user('genera una carita'))).toBeUndefined()
+  })
 })

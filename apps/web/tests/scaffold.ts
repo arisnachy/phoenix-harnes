@@ -433,6 +433,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       },
     },
     { id: 'session-persistence-jsonl', config: { root: persistenceRoot } },
+    { id: 'hardness-adapters', config: { modelTools: false, judgeProvider: 'spawn', taskLedgerPath: join(workspaceCwd, '.phoenix-tasks.json'), wakeLedgerPath: join(workspaceCwd, '.phoenix-wake.json'), mailDirectory: join(workspaceCwd, '.phoenix-mail'), mailCredentialRef: 'PHOENIX_TEST_AGENTMAIL_API_KEY' } },
     // Content search is enabled here although the shipped bundles default it
     // off (`openAt: never`, pinned by apps/cli/tests/lazy-search-startup):
     // the seeded-session scenarios navigate by content search, and these e2e
@@ -474,6 +475,11 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
           shutdownTimeoutMillis: 1_000,
         },
       },
+    // Browser e2e owns its Playwright browser. External MCP browser children
+    // are unrelated to these UI/session assertions and would make the hermetic
+    // temp workspace depend on optional host browser tooling.
+    { id: 'phoenix-browser', disabled: true },
+    { id: 'chrome-browser-primary', disabled: true },
     {
       id: 'webserver',
       config: { host: '127.0.0.1', port: 0 },

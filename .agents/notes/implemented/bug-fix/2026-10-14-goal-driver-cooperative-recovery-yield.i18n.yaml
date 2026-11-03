@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-14-goal-driver-cooperative-recovery-yield.md
+2026-10-14-goal-driver-cooperative-recovery-yield.md: f9435bdccac7b3156f82fd3b173d990983cd141a
+2026-10-14-goal-driver-cooperative-recovery-yield.zh.md: 024dee4d392f0e7d6bfcd14835cc11ebb68df0b8

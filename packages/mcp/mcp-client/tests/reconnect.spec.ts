@@ -139,6 +139,38 @@ describe('reconnect supervisor', () => {
     ctx = await mountRegistry()
   })
 
+  it('does not report ready if a live MCP cannot register its advertised tools', async () => {
+    ctx.tools.register({
+      name: 'mcp__srv__remote',
+      description: 'Pre-existing foreign tool in this MCP namespace',
+      parameters: { type: 'object' },
+      output: { schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value as string }] },
+      execute: async () => 'foreign',
+    })
+    const registration = ctx.mcpConnectors.register({
+      serverName: 'srv',
+      transport: 'stdio',
+      reconnect: () => undefined,
+    })
+    const config = stdioConfig({ enabled: false })
+    const handle = startConnection(
+      ctx, config, resolveReconnectPolicy(config.reconnect, 'mcp'),
+      registration,
+    )
+    const outcome = await handle.ready
+    expect(outcome.error).toBeInstanceOf(Error)
+    expect(ctx.mcpConnectors.list()).toEqual([
+      expect.objectContaining({
+        serverName: 'srv', status: 'failed', toolNames: [],
+        reasonCode: 'connection-failed',
+      }),
+    ])
+    expect(ctx.tools.get('mcp__srv__remote')).toBeDefined()
+    await handle.dispose()
+    registration.dispose()
+  })
+
   it('re-resolves a Bearer credential for each fresh HTTP generation', async () => {
     const resolveBearerToken = vi.fn()
       .mockResolvedValueOnce('jev-token-1')
@@ -207,6 +239,34 @@ describe('reconnect supervisor', () => {
     instances[0]!.onclose?.()
     await sleep(30)
     expect(instances).toHaveLength(2)
+  })
+
+  it('keeps a real HTTP 404 as endpoint-not-found and never burns retries', async () => {
+    const { warns } = captureLogs(ctx)
+    const registration = ctx.mcpConnectors.register({
+      serverName: 'srv', transport: 'streamable-http', reconnect: () => undefined,
+    })
+    const config: Config = {
+      transport: 'streamable-http',
+      serverName: 'srv',
+      url: 'https://smithery.example/expired/mcp',
+      headers: {}, oauth: false, toolCallTimeoutMs: 1_800,
+      failOnStartupError: false,
+      reconnect: { enabled: true, initialDelayMs: 2, maxDelayMs: 8, maxAttempts: 10 },
+    }
+    mockConnect.mockRejectedValue(Object.assign(new Error('Server not found'), { code: 404 }))
+    const supervisor = startConnection(ctx, config, resolveReconnectPolicy(config.reconnect, 'reconnect'), registration)
+    expect((await supervisor.ready).error).toBeDefined()
+    await vi.waitFor(() => {
+      expect(ctx.mcpConnectors.list()[0]).toMatchObject({
+        status: 'failed', reasonCode: 'endpoint-not-found', toolNames: [],
+      })
+    })
+    await sleep(40)
+    expect(mockConnect).toHaveBeenCalledTimes(1)
+    expect(warns.some(line => line.includes('configured MCP endpoint responded 404/410'))).toBe(true)
+    await supervisor.dispose()
+    registration.dispose()
   })
 
   it('stops at the failure cap, unregisters the tools, and reports final failure', async () => {

@@ -4,9 +4,37 @@
 
 将 PHOENIX 现有 tools 与 skills 的 metadata 投影到 HARDNESS Tool Atlas。
 
-适配器不会执行 tools、加载 skill 正文或授予权限；每个源 registry 仍保留其 authority。
+漫画发布器与原生地图发布器一样，在 Code Mode 子调用中保留静态阅读器的制品元数据。因此，持久化的嵌套结果可以在会话重新加载后再次打开漫画查看器；程序返回值无需包含 HTML。
+
+Capability index 不会执行 tools、加载 skill 正文或授予权限；每个源 registry 仍保留其 authority。
 
 适配器将 host 负责的索引与面向模型的工具分开。Host composition 使用 `modelTools: false`，只索引 capability 并安装一次共享的 mission runtime。完整 Agent preset 使用 `modelTools: true`，在自己的 scope 中提供 `hardness_run` 与 `connector_list`，不会重复注册共享的 HARDNESS registry。因此 minimal preset 可以保持有意精简的工具目录。
+
+## HumanOS 有证据的自我状态
+
+完整 Agent preset 在现有 Kira 人性化交互与主动关注上下文之外，新增只读的 `hardness:humanos-self-model` 运行时上下文。它读取 HARDNESS 已登记的能力状态，以及当前 Agent 和全局可见持久任务的数量；不会发起 I/O、模型调用、建立新记忆库或更改权限。投影明确区分“已验证的能力元数据”和工具在当前运行时实际可用，不泄漏其他 Agent 的任务、尚未揭示的惊喜、任务内容、模型名称或凭据。Kira 仅在相关时利用这些观察，并在声称能力或成功前实际解析、执行必要的验证。这是可核验的操作自知，不是主观意识、自由修改自身或操作授权。
+
+HumanOS 还会基于原有 HARDNESS 验证案例日志执行有界的元认知校准：最多检查 64 个能力描述符及每个描述符最新的 12 条证据。它汇总同版本的成功、失败、拒绝、旧版本证据和互相矛盾的结果，不将名称和原始载荷注入模型；超出检查范围的能力会明确计数。这些属于历史证据，不代表工具此刻可用，也不构成操作授权。
+
+## 本地助手邮箱
+
+邮箱管理返回 JSON 值：缺失的草稿及附件元数据省略，服务商标签规范化为字符串。
+
+Kira 可通过 `phoenix_mail_identity` 查询、创建、验证及刷新自己的邮箱。`phoenix_mail_send` 使用已保存的 AgentMail 凭据，从该邮箱向已验证所有者发送明确请求的即时邮件，不需要另接发送服务。成功结果包含服务商回执；未确认邮件持久保存，不得声称已送达。定时邮件使用 `phoenix_task_create`。
+
+驻留 Web host 可在 Settings → Connectors → Correo propio de Phoenix 中注册 Phoenix 自有邮箱，使用 AgentMail 免费方案包含的 `agentmail.to` 域名。注册显示服务商实际返回的地址；指定的人类所有者必须先完成邮件验证，收到的邮件才会成为任务。已有免费域名账户可用 API key 连接，再单独验证所有者。密钥保存在 credential service 中，不进入聊天、账户文件或状态响应。不创建自定义域名、付费升级或公开 webhook。
+
+显式恢复使用同一人类所有者重复调用官方幂等注册，保存轮换后的访问密钥，并要求新的 OTP 验证；它恢复已有邮箱，不承诺创建新邮箱。已验证所有者可通过 `create-inbox` 显式创建另一个包含域名的邮箱。只有服务商回执匹配持久客户端标识和预期地址后，才替换活动邮箱；结果不明确时，重试只检查该请求，不重复创建。所有者、联系人及工作区保持不变。注册、连接和验证不能并发执行。
+
+只有经服务商认证、来自已验证所有者或显式授权联系人的入站邮件才能创建任务。自动邮件、Phoenix 自身邮件、被阻止、垃圾、未认证邮件及未授权发件人不会调用模型。邮件正文不能授予权限。Kira 使用所选协调者的模型、工作目录和 preset，在独立持久会话中执行任务；沿用现有子代理选择、审批及正常回合完成规则。`phoenix_mail_complete` 只记录经验证的回复提议，不能发送邮件，也不能完成其他会话的任务。回复仅发给授权发件人，覆盖 Reply-To 并排除 CC。
+
+收件由本地 host 持有，不由浏览器持有。关闭聊天后 host 继续运行；关闭 PC 后停止执行。启动时轮询补收邮件并恢复持久任务。工作区尚未就绪时任务保持待处理，不变为永久阻塞；创建代理会再次触发检查，并保存所选工作区以便重启恢复。出站 WebSocket 通知降低延迟，断线后重新连接。单封邮件读取失败不会阻塞其他任务；后续轮询会重试。Windows 桌面安装可选择创建或删除仅由 Phoenix 持有的 **PHOENIX Assistant** 登录快捷方式，从持久安装目录隐藏启动后台进程，不打开浏览器。
+
+本地配置：`mailDirectory` 默认为 task ledger 旁的 `phoenix-mail`；`mailCredentialRef` 默认为 `PHOENIX_AGENTMAIL_API_KEY`；`mailPollMs`、`mailTimeoutMs`、`mailWorkTimeoutMs` 默认分别为 60,000、30,000、600,000 毫秒。账户、任务、回复/定时 outbox 及仅发送给所有者的聊天 outbox 使用串行原子私有文件写入。已有账户验证在 24 小时或十次尝试后失效。注册结果不确定时不会自动重复注册。回复和定时邮件重试保持相同的持久化正文与幂等键；超过服务商 24 小时幂等窗口仍未确认的发送会等待所有者核查，避免重复邮件。达到免费额度时停止，不升级付费。模型仍遵守原有费用与限制。
+
+主页提示的处理回执保存在 task ledger 旁。打开或关闭当前提示后，同一版本在刷新后仍被隐藏；新的实质版本仍可出现。先过滤回执，再限制 endpoint 最多返回八行。较新成功运行会取代旧错误。邮件结果与具体阻塞原因加入现有主页，不增加新仪表盘。
+
+驻留 host 在调用模型前检查邮箱是否可用，并复用已持久化的邮件内容，不重新生成正文。每封出站邮件保留任务与执行周期标识。每次重试重新检查持久任务状态和收件人授权；暂停、取消、完成或缺失的任务不能发送待处理邮件，已有尝试证据仍予保留。条件邮件仅在服务商确认发送后完成。超过服务商 24 小时幂等窗口仍未确认的邮件需要所有者核查，不会自动重试任务。Host 销毁会取消服务商请求、等待已有发送结束并拒绝新发送。用户选择的发件身份继续使用受治理的连接器。
 
 ## 持久主动任务
 
@@ -20,6 +48,8 @@ Task 可以使用 `visibility: surprise`。在 reveal time 之前，它不会出
 
 Host 会轮询持久 engine，并在 agent 创建时主动 pump。Chat delivery 通过 proactive follow-up 唤醒在线目标 agent。私有 preparation、定时 office work 与 email 使用配置的一次性 subagent provider。若不存在在线 execution target，则 execution 会延后，不会消耗该 occurrence。
 
+循环 `delivery: work` 任务可以维护用户明确要求的持续目标，例如研究、课程准备、项目监控或体育分析。执行时会重新验证现实状态，并可使用已经授权的 MCP/connector；持久兴趣授权分析，而不是外部交易。实质结果会进入有界排序的 loopback attention 投影，没有变化的循环运行可以返回 `NO_MATERIAL_UPDATE`，浏览器只在空白会话 Hero 中显示价值最高的少量信息。可选的 task attention metadata 只控制结果或 upcoming occurrence 是否参与展示，不会改变任务执行。
+
 Email 有两个独立 identity reference。`userMailIdentity` 表示获授权的用户 mailbox，用于代表用户发送 office work；`harnessMailIdentity` 表示 Phoenix 自己的 mailbox，用于直接与用户通信。Task 可选择 `user`、`harness` 或 `auto`；`auto` 优先使用 Phoenix identity，并在不可用时回退到 user identity。这些 reference 不包含 credential，scheduled execution 也不会绕过正常的 mail-tool authorization 或 approval。
 
 相关配置键为 `taskLedgerPath`、`taskPollMs`、`privateWorkProvider`、`privateWorkResultChars`、`userMailIdentity` 与 `harnessMailIdentity`。特殊的 `:memory:` ledger 仅用于确定性测试与临时 composition。
@@ -29,6 +59,24 @@ Email 有两个独立 identity reference。`userMailIdentity` 表示获授权的
 面向模型的 preset 现在暴露 `hardness_workflow.executionMode`，使 Phoenix 能在 execution planning 前区分范围明确的 `fast` 工作与 `standard`、`deep` mission。对于 fast work，组装后的 HARDNESS guidance 对 generic methodology-skill 仪式拥有过程 authority：不能仅因为 generic skill catalog 列出了 brainstorming 或 implementation planning，就再次要求 routine approval。Phoenix 执行最小安全变更并收集新的定向验证；如果证据显示失败、新风险、更大范围、外部依赖或独立工作，workflow 会被增强，而不是放弃 mission。
 
 同一策略也会在 active goal round 中被强化。已经授权的 mission 遇到可恢复的 tool 或 verification failure 时，会通过修复、替代 route、能力获取/构建或实质不同的策略继续推进。内部 retry/round limit 不能完成或取消 mission。Permission、credential、safety policy、provider quota、明确拒绝以及真正无法满足的外部 dependency 仍是硬边界，fast path 永远不会绕过这些限制。
+
+游戏质量要求遵循所请求的类型与美术方向。游戏开发识别涵盖 PS1/PSX/PlayStation、Sega 等主机参考，并通过开发语境区分 Snake、国际象棋等名称的歧义。抽象棋盘、解谜和街机游戏可将精致几何图形、程序化音频及紧凑且经过设计的场地作为成品；明确请求角色、背景、外部或原创资源时，仍须采用相关制作与来源记录流程。具象 RPG、冒险及 GTA 类作品保留角色、环境和制作资源要求。所有游戏仍须提供当前修改轮次的独立技术验证、画面检查和实际游玩证据。
+
+## 运行时验证
+
+请求角色或背景资源的抽象游戏也必须提供资源清单和来源记录。成品采样音频允许普通 HTML 媒体的链式 `.play()` 调用，同时保留嵌入文件验证。精选连接器的批准、结果和调用卡片使用可读名称；稳定连接器 ID 仍用于调用 Host 安装器。
+
+模拟蜡烛图读取将 provider 请求和返回行数都限制为 1–1000。Shell 修改分类读取 command 参数。运行时服务遥测立即执行首次探测，随后在 TTL 过期前复用观察结果。
+
+## Binance 自适应模拟交易
+
+按需使用的 `binance_adaptive_cycle` 工具根据已收盘的 Binance K 线，对最多五个 Spot USDT 交易对评分，比较突破、上涨趋势回调和区间均值回归等确定性候选策略。`scan` 只读；`paper-step` 最多在现有、计入手续费的模拟账本中执行一笔虚拟交易，新仓位不超过模拟权益的 5%，总持仓敞口不超过 20%，同时最多持有两个币种。已有仓位的防御性退出优先于新买入。评分是规则排序，不代表经过校准的胜率；执行虚拟订单前会重新读取市场价格。本扫描器不会授权真实订单或管理 Binance 账户凭据。用户通过 `binance_paper_auto` 明确启用 PAPER 自动交易后，Host 持久化关注列表，立即运行一个有上限的虚拟交易周期，并按 1–60 分钟的配置间隔重复运行，不持续调用语言模型。独立的 `binance_paper_dashboard` 工具将可信的 Host 模拟账本投影为聊天内的原生交易面板；只读、同源 HTTP 端点约每十秒刷新一次，不消耗模型 token。面板中的开始、停止和立即检查按钮调用同源的 POST-only PAPER 端点；该端点先验证浏览器 Origin、Content-Type 和有界关注列表，才允许改变虚拟自动交易状态，因此按钮不消耗 LLM token。该端点完全不开放 REAL 账户操作。
+
+## Binance 官方 Agentic MCP 与 Spot Testnet
+
+真实账户的官方 MCP 使用固定的 Streamable HTTP 服务 `https://agent.binance.com/mcp/agentic`。Phoenix 通过用户主动完成的浏览器 OAuth 连接，而不是使用生产 API 密钥。`binance_mcp_health` 报告实际 MCP 连接状态和同步的工具名称；仅安装连接器不代表授权成功或取得 Trade 权限。 `reconnect` 重试已有连接；仅在用户明确要求时，`repair` 更换受管配置行， 而不删除 Host Vault 中保存的授权记录。用户需在浏览器完成 Binance 授权及 Agentic 子账户设置。主账户仅在允许时只读；必须由用户自行向 Agentic 子账户 划转资金。每笔真实订单、撤单和钱包划转都需要用户确认。
+
+测试模式包括本地 PAPER 和单独认证的 Binance Spot Testnet (`https://testnet.binance.vision`)。Spot Testnet 必须在 Host 中分别配置 `PHOENIX_BINANCE_TESTNET_API_KEY` 和 `PHOENIX_BINANCE_TESTNET_API_SECRET`，不能通过聊天提交。 `binance_testnet_account` 检查模拟资金账户；`binance_testnet_order` 仅在用户明确要求并完成 Phoenix 单次批准后提交有金额限制的测试订单。 Kira 应先询问 Testing 或 Real，再区分 PAPER 与 Spot Testnet。
 
 ## Model Experience
 
@@ -45,7 +93,7 @@ Consumers may expose stable capability identifiers such as `tool:<name>`, `skill
 
 When the canonical system-prompt service is mounted, this package installs the `hardness:operating-protocol` section. It gives every model the same lifecycle vocabulary and requires resolution, approval, verification, presentation, and evidence before a task is described as complete.
 
-Model-facing scopes also install `hardness:proactivity-protocol`. It tells the model to use durable tasks for explicit reminders and useful autonomous follow-ups, avoid duplicates and spam, use private preparation for surprises, preserve calendar timing, and keep all scheduled external actions behind the same authorization policy used for immediate work.
+Model-facing scopes also install `hardness:proactivity-protocol`. It tells the model to use durable tasks for explicit reminders and useful autonomous follow-ups, turn explicit ongoing objectives into bounded recurring background work when useful, prefer authorized event-driven connectors over polling, suppress unchanged background results, preserve calendar timing, and keep all external actions behind the same authorization policy used for immediate work.
 
 Tool projections may subscribe to `tools/change`; this keeps dynamically connected tools, including MCP tools, represented in HARDNESS while registrations are reversible. The internal `hardness_run` tool is excluded from that projection to prevent recursive routing.
 
@@ -73,7 +121,7 @@ Inspect the need, resolve a verified capability, plan the operation, obtain appr
 ##### Connector inventory
 
 ```markdown
-The model also receives the read-only connector_list tool when the authorization or MCP connector seam is mounted. Authorization rows report registered flows, provider telemetry, and sanitized callable service metadata. MCP rows report server identity, transport, lifecycle status, stable reason code, and public tool names. The tool never begins authorization, grants permission, invokes a connection, or exposes credentials or transport configuration.
+The model also receives the read-only connector_list tool when the authorization or MCP connector seam is mounted. Authorization rows report registered flows, provider telemetry, and sanitized callable service metadata. MCP rows report server identity, transport, lifecycle status, stable reason code, and public tool names. The tool never begins authorization, grants permission, invokes a connection, or exposes credentials or transport configuration. Full model-tool scopes also expose `connector_discover` and the approval-gated `connector_install`: registry installs accept only the exact Official MCP Registry identity re-resolved by the Host, while `connectorId=devpost` selects the Host-pinned official Devpost Hackathons MCP without registry discovery. Neither path accepts arbitrary executable URLs or repositories.
 ```
 
 ##### X MCP activation
@@ -90,9 +138,10 @@ protocol section 和 capability metadata 会增加模型 token；单纯索引源
 
 只要源 schema、extension metadata 与验证状态保持不变，投影 catalog 就保持良好的 KV cache 复用特性。
 
+
 ## Known Limitations and Deferred Work
 
 - 外部 extension 执行继续由 Capability Broker 与隔离 package-host contract 管理，不会在启动时被 eager activate。
 - 持久化 mission trace 需要 live agent session；没有 session 的直接 runner 单元调用不会记录，也不能作为 production proof。
-- Email identity 只是配置引用；本包不会创建外部 mailbox 账户。所选 provider/tool 必须事先完成配置并获得授权。
+- 旧版定时邮件 identity 仍是配置引用，需要已授权的邮件工具。本地助手邮箱单独注册 AgentMail 免费域名账户；真实注册和验证需要所有者及服务商可用。入站任务正文有长度限制，附件不会自动执行。
 - `surprise` visibility 会从普通 task listing 与 compact tool presentation 中隐藏尚未 reveal 的内容，但持久 ledger 会有意保留，以便获授权的 operator 审计。

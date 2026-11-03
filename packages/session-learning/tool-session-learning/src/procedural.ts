@@ -1,6 +1,7 @@
 /** Evidence-backed procedural learning for Phoenix. */
 
 import type { Context } from '@phoenix-ai/cordis'
+import { hasUnclearedGoal, learningOwnerSessionId } from './team-learning-context.ts'
 import type { CognitiveMemoryHit, CognitiveMemoryRecord } from '@phoenix-ai/dsh-session-learning'
 import {
   decodeTaskFingerprint,
@@ -198,6 +199,23 @@ export class ProceduralLearningEngine {
         || right.state.confidence - left.state.confidence
         || right.state.confirmations - left.state.confirmations
         || right.state.lastObservedAt - left.state.lastObservedAt)
+      .slice(0, limit)
+      .map(item => item.state)
+  }
+
+  /**
+   * Recover incomplete workflows as diagnostic leads, never as proven recipes.
+   * Called only when the current request matches the stored task.
+   */
+  recoveryCandidates(query: ProceduralRecommendationQuery): ProceduralLearningState[] {
+    if (query.taskContext === undefined || normalizeText(query.taskContext) === '') return []
+    const limit = Math.min(2, query.limit ?? 2)
+    const task = fingerprintTask(query.taskContext)
+    return this.states(query)
+      .filter(state => state.status === 'candidate')
+      .map(state => ({ state, score: taskSimilarity(task, state.taskFingerprint ?? fingerprintProcedure(state)) }))
+      .filter(item => item.score >= TASK_RELEVANCE_THRESHOLD)
+      .sort((a, b) => b.score - a.score || b.state.lastObservedAt - a.state.lastObservedAt)
       .slice(0, limit)
       .map(item => item.state)
   }
@@ -500,6 +518,11 @@ export class ProceduralExperienceTrace {
     return steps
   }
 
+  /** Inspect partial operational steps without falsely certifying task success. */
+  snapshot(sessionId: string): string[] {
+    return [...(this.traces.get(sessionId) ?? [])]
+  }
+
   /**
    * Drop an unfinished trace when its goal is cleared.
    * @param sessionId - Session whose stale work should be discarded.
@@ -527,9 +550,13 @@ export function installProceduralLearning(
 ): ProceduralLearningEngine {
   const engine = new ProceduralLearningEngine(cognitiveStore(ctx))
   const trace = new ProceduralExperienceTrace()
+  // A tool call is only an *attempt*. Teach reusable procedures from observed
+  // non-error results, never failed, rejected or merely dispatched actions.
+  const pendingTools = new Map<string, Map<string, string>>()
 
   ctx.on('session/event', (session, event) => {
     const sessionId = String(session.id)
+    const ownerSessionId = learningOwnerSessionId(session)
     const eventType = String(event.type)
     const data = event.data as unknown
     const eventSeq = typeof event.seq === 'number' ? event.seq : 0
@@ -537,26 +564,85 @@ export function installProceduralLearning(
     const projectId = ctx.learningMemory.currentProjectId()
 
     const run = async (): Promise<void> => {
-      if (eventType === 'tool/call' && isRecord(data) && typeof data.name === 'string' && data.name.trim() !== '') {
-        if (data.name === 'living_act' && isRecord(data.arguments) && typeof data.arguments.action === 'string') {
-          trace.livingAction(sessionId, data.arguments.action)
-        } else {
-          trace.toolCall(sessionId, data.name)
-        }
+      if (eventType === 'tool/call' && isRecord(data)
+        && typeof data.name === 'string' && typeof data.callId === 'string') {
+        let perSession = pendingTools.get(sessionId)
+        if (!perSession) { perSession = new Map(); pendingTools.set(sessionId, perSession) }
+        perSession.set(data.callId, data.name)
+        if (perSession.size > 128) perSession.delete(perSession.keys().next().value!)
+        return
+      }
+      if (eventType === 'tool/result' && isRecord(data)) {
+        const message = isRecord(data.message) ? data.message : undefined
+        const source = isRecord(message?.source) ? message.source : undefined
+        const callId = typeof source?.callId === 'string' ? source.callId : undefined
+        const perSession = pendingTools.get(sessionId)
+        const name = callId === undefined ? undefined : perSession?.get(callId)
+        if (callId !== undefined) perSession?.delete(callId)
+        if (name && isLearnableToolResult(data)) trace.toolCall(ownerSessionId, name)
         return
       }
       if (eventType === 'hardness/kernel' && isRecord(data)) {
         if (data.kind === 'learning-recorded' && isRecord(data.learning) && typeof data.learning.solution === 'string') {
-          trace.recovery(sessionId, data.learning.solution)
+          trace.recovery(ownerSessionId, data.learning.solution)
           return
         }
         if (data.kind === 'route-selected' && typeof data.strategy === 'string') {
-          trace.decision(sessionId, data.strategy)
+          trace.decision(ownerSessionId, data.strategy)
           return
         }
       }
+      // A delegated team member contributes to the lead's procedure, but its
+      // own turn, failure or completion cannot close the human mission.
+      if (session.header.origin === 'subagent') return
+
+      // Every ordinary tool-driven turn is experience even when no durable
+      // Goal exists. Retain a recoverable CANDIDATE, never an active recipe,
+      // because a normal assistant completion does not prove quality.
+      if (eventType === 'turn/end' && isRecord(data) && isRecord(data.reason)) {
+        if (hasUnclearedGoal(session.events)) return
+        const steps = trace.complete(sessionId)
+        const currentTask = taskContext?.currentTask(sessionId)
+        if (steps.length === 0 || currentTask === undefined) return
+        await engine.recordExperience({
+          title: `Ordinary task attempt: ${currentTask.slice(0, 160)}`,
+          scope: projectId ?? 'global',
+          trigger: currentTask,
+          steps,
+          evidence: 'Ordinary turn ended without a Goal verification gate; treat this observed sequence as unverified diagnostic history, not a successful recipe.',
+          verified: false,
+          sessionId,
+          eventSeq,
+          occurredAt,
+          ...projectId === undefined ? {} : { projectId },
+        })
+        return
+      }
+
       if (eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
+        pendingTools.delete(sessionId)
         trace.clear(sessionId)
+        return
+      }
+      if (eventType === 'goal/change' && isRecord(data) && data.operation === 'block') {
+        // Do not discard learning when a user-authorized mission hit a real
+        // blocker. This is explicitly *candidate* work, never a verified
+        // successful workflow. Keep raw arguments and credentials out of it.
+        const steps = trace.snapshot(sessionId)
+        const currentTask = taskContext?.currentTask(sessionId)
+        if (steps.length === 0 || currentTask === undefined) return
+        await engine.recordExperience({
+          title: `Unfinished recovery: ${currentTask.slice(0, 160)}`,
+          scope: projectId ?? 'global',
+          trigger: currentTask,
+          steps,
+          evidence: 'Goal blocked before verified completion. Partial tool sequence only; diagnose failures and rerun checks before reuse.',
+          verified: false,
+          sessionId,
+          eventSeq,
+          occurredAt,
+          ...projectId === undefined ? {} : { projectId },
+        })
         return
       }
       if (eventType !== 'goal/change' || !isRecord(data) || data.operation !== 'complete') return
@@ -625,6 +711,31 @@ function cognitiveRow(record: CognitiveMemoryRecord): ProceduralStoredMemory {
     ...record.value === undefined ? {} : { value: record.value },
     ...record.projectId === undefined ? {} : { projectId: record.projectId },
   }
+}
+
+/** Only successful observed tool results may teach an active workflow.
+ * A bare sent/queued/dispatch receipt lacks evidence of an achieved effect.
+ */
+export function isLearnableToolResult(data: unknown): boolean {
+  if (!isRecord(data) || data.error !== undefined || !isRecord(data.message)
+    || !Array.isArray(data.message.content)) return false
+  const blocks = data.message.content as unknown[]
+  if (!blocks.length) return false
+  for (const outer of blocks) {
+    if (!isRecord(outer)) return false
+    if (outer.type === 'tool-result' && outer.isError === true) return false
+    const inner: unknown = outer.type === 'tool-result' ? outer.content : [outer]
+    if (!Array.isArray(inner)) return false
+    for (const block of inner) {
+      if (!isRecord(block) || block.type !== 'text' || typeof block.text !== 'string') continue
+      try {
+        const receipt: unknown = JSON.parse(block.text)
+        if (isRecord(receipt) && (receipt.verified === false || receipt.ok === false
+          || receipt.status === 'dispatched' || receipt.status === 'pending-verification')) return false
+      } catch { /* Ordinary text results are not a structured error receipt. */ }
+    }
+  }
+  return true
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

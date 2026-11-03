@@ -1,22 +1,39 @@
 /** Provider-neutral asynchronous voice capability for PHOENIX.
  *
- * Voice is an optional side channel. It consumes important durable events and
- * never participates in execution, planning, or completion decisions.
+ * Voice is an optional side channel for announcements and speech output. A
+ * finalized realtime user transcript is ordinary conversation input: when its
+ * Phoenix Agent is live it enters that Agent's inbox, so planning, tools,
+ * hardness policy, persistence, and completion all stay on the normal harness.
  * @module @phoenix-ai/dsh-voice
  */
 
 import { randomUUID } from 'node:crypto'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@phoenix-ai/cordis'
 import { Remote, TypertRemoteService } from '@phoenix-ai/dsh-typert-protocol'
 import z from '@phoenix-ai/schemastery'
-import type {} from '@phoenix-ai/dsh-session'
+import { SessionId } from '@phoenix-ai/dsh-session'
+import { createAssistantMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
 import type {
   VoiceConversationCancelReceipt,
   VoiceConversationCancelRequest,
+  VoiceConversationRealtimeStartReceipt,
+  VoiceConversationRealtimeStartRequest,
+  VoiceConversationRealtimeSpeakRequest,
+  VoiceConversationRealtimeSpeakReceipt,
+  VoiceConversationRealtimeStatus,
+  VoiceConversationRealtimeStopReceipt,
+  VoiceConversationRealtimeStopRequest,
   VoiceConversationSpeakReceipt,
   VoiceConversationSpeakRequest,
   VoiceConversationStatus,
 } from './types.ts'
+import {
+  CodexRealtimeBridge, codexLiveCurrentCliVersion, codexLiveRepairPhase, codexRealtimeNeedsLogin,
+  type CodexRealtimeInitialItem,
+  type CodexRealtimeTranscript,
+} from './codex-realtime.ts'
 
 export type * from './types.ts'
 
@@ -41,6 +58,8 @@ export interface VoiceSynthesisRequest {
   readonly text: string
   /** BCP 47 language tag. */
   readonly language: string
+  /** Presentation selected in the active assistant profile. */
+  readonly gender?: 'masculine' | 'feminine' | 'neutral'
   /** Aborts queued or active provider work. */
   readonly signal?: AbortSignal
 }
@@ -101,7 +120,7 @@ export interface VoiceAnnouncementReceipt {
   /** Whether the event entered the bounded side-channel queue. */
   readonly accepted: boolean
   /** Why an event was not accepted. */
-  readonly reason?: 'disabled' | 'not-important' | 'empty' | 'queue-full' | 'duplicate' | 'no-provider'
+  readonly reason?: 'disabled' | 'not-important' | 'empty' | 'queue-full' | 'duplicate' | 'no-provider' | 'native-realtime'
   /** Normalized text, when accepted. */
   readonly text?: string
 }
@@ -134,6 +153,8 @@ export interface VoiceRuntimeConfig {
   readonly ttsProvider?: string
   /** Preferred STT provider. */
   readonly sttProvider?: string
+  /** Native Codex/ChatGPT realtime voice, using Codex login rather than API keys. */
+  readonly codexRealtime?: boolean
 }
 
 interface ResolvedVoiceRuntimeConfig {
@@ -143,6 +164,7 @@ interface ResolvedVoiceRuntimeConfig {
   readonly maxChars: number
   readonly ttsProvider?: string
   readonly sttProvider?: string
+  readonly codexRealtime: boolean
 }
 
 interface QueuedAnnouncement {
@@ -160,6 +182,18 @@ interface ConversationSpeechChannel {
 
 interface UnknownRecord {
   readonly [key: string]: unknown
+}
+
+type RealtimeAssistantGender = 'masculine' | 'feminine' | 'neutral'
+
+interface RealtimeAssistantIdentity {
+  readonly name: string
+  readonly gender: RealtimeAssistantGender
+}
+
+interface RealtimeTranscriptTurn {
+  readonly turn: number
+  readonly step: number
 }
 
 declare module '@phoenix-ai/cordis' {
@@ -193,6 +227,10 @@ export function displayOutputToVoiceText(displayOutput: string, maxChars = 480):
     .replace(/^\s*#{1,6}\s*/gm, '')
     .replace(/^\s*[-*+]\s+/gm, '')
     .replace(/[>*_~`|{}[\]\\]/g, ' ')
+    // These are legal/visual symbols, not words. Otherwise some TTS backends
+    // pronounce "marca registrada" or "trademark" even though nobody said it.
+    .replace(/[®™℠©]/gu, ' ')
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/gu, '')
     .replace(/[\p{Extended_Pictographic}\u200D\uFE0F]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -205,51 +243,177 @@ export function displayOutputToVoiceText(displayOutput: string, maxChars = 480):
 
 /** Return one event only when it is an explicitly speakable important event.
  * @param input - untrusted session event candidate.
+ * @param language - Configured voice language, using es-DO by default.
  * @returns a normalized important voice event, or undefined.
  */
-export function sessionEventToVoiceEvent(input: unknown): VoiceImportantEvent | undefined {
+export function sessionEventToVoiceEvent(input: unknown, language = 'es-DO'): VoiceImportantEvent | undefined {
   if (!isRecord(input) || typeof input.type !== 'string' || !isRecord(input.data)) return undefined
   const data = input.data
   const id = stringValue(data.id) ?? stringValue(data.goalId) ?? 'event'
+  const revision = stringValue(data.revision) ?? 'current'
+  const messages = importantVoiceMessages(language)
   switch (input.type) {
-    case 'approval/asked': {
-      const toolName = stringValue(data.toolName) ?? 'an action'
+    case 'approval/asked':
       return {
         kind: 'authorization',
-        displayOutput: `Authorization is required for ${toolName}.`,
+        displayOutput: messages.authorization,
         dedupeKey: `authorization:${id}`,
+        language,
       }
-    }
     case 'goal/judge': {
-      const goalId = stringValue(data.goalId) ?? 'the mission'
       const verdict = data.verdict
+      const summary = naturalEventSummary(data.summary)
+      // Never feed unmistakably English judge prose to a Spanish phonemizer.
+      // A localized status is preferable to unintelligible mixed-language audio.
+      const spokenSummary = language.toLowerCase().startsWith('es')
+        && summary !== undefined
+        && /\b(?:the|your|task|completed|waiting|needs|please|before|review|approved|cannot|has been)\b/iu.test(summary)
+        ? undefined : summary
       if (verdict === 'pass') {
-        return { kind: 'mission-completed', displayOutput: `${goalId} completed and passed review.`, dedupeKey: `completed:${goalId}:${stringValue(data.revision) ?? 'current'}` }
+        return {
+          kind: 'mission-completed',
+          displayOutput: spokenSummary ?? messages.completed,
+          dedupeKey: `completed:${id}:${revision}`,
+          language,
+        }
       }
       if (verdict === 'blocked') {
-        return { kind: 'blocked', displayOutput: `${goalId} is blocked and needs attention.`, dedupeKey: `blocked:${goalId}:${stringValue(data.revision) ?? 'current'}` }
+        return {
+          kind: 'blocked',
+          displayOutput: spokenSummary === undefined ? messages.blocked : `${messages.blocked} ${spokenSummary}`,
+          dedupeKey: `blocked:${id}:${revision}`,
+          language,
+        }
       }
       return undefined
     }
-    case 'goal/supervisor': {
+    case 'goal/supervisor':
       if (data.status !== 'blocked' && data.nextAction !== 'blocked') return undefined
-      const goalId = stringValue(data.goalId) ?? 'the mission'
-      return { kind: 'blocked', displayOutput: `${goalId} is blocked and needs attention.`, dedupeKey: `blocked:${goalId}:${stringValue(data.revision) ?? 'current'}` }
-    }
+      return {
+        kind: 'blocked',
+        displayOutput: messages.blocked,
+        dedupeKey: `blocked:${id}:${revision}`,
+        language,
+      }
     default:
       return undefined
   }
+}
+
+/** Human-facing notification prompts in the configured speech language. */
+function importantVoiceMessages(language: string): { authorization: string; completed: string; blocked: string } {
+  switch (language.toLowerCase().split('-')[0]) {
+    case 'es':
+      return {
+        authorization: 'Necesito tu autorización para continuar.',
+        completed: 'He terminado la tarea y he comprobado el resultado.',
+        blocked: 'Necesito que revises algo para poder continuar.',
+      }
+    case 'pt':
+      return {
+        authorization: 'Preciso da sua autorização para continuar.',
+        completed: 'Terminei a tarefa e verifiquei o resultado.',
+        blocked: 'Preciso da sua ajuda para continuar.',
+      }
+    case 'fr':
+      return {
+        authorization: 'J’ai besoin de votre autorisation pour continuer.',
+        completed: 'J’ai terminé la tâche et vérifié le résultat.',
+        blocked: 'J’ai besoin de votre aide pour continuer.',
+      }
+    case 'it':
+      return {
+        authorization: 'Ho bisogno della tua autorizzazione per continuare.',
+        completed: 'Ho completato il compito e verificato il risultato.',
+        blocked: 'Ho bisogno del tuo aiuto per continuare.',
+      }
+    default:
+      return {
+        authorization: 'I need your approval before I can continue.',
+        completed: 'The task is complete and has passed review.',
+        blocked: 'I need your input before I can continue with the task.',
+      }
+  }
+}
+
+function naturalEventSummary(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const text = value
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/giu, ' ')
+    .replace(/\b[0-9a-f]{16,}\b/giu, ' ')
+    .replace(/\b\d{6,}\b/gu, ' ')
+    .replace(/\bneeds? attention\b/giu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+  return text === '' ? undefined : text.slice(0, 320)
+}
+
+const CODEX_REALTIME_CONTEXT_MAX_ITEMS = 6
+const CODEX_REALTIME_CONTEXT_MAX_CHARS = 6_000
+const CODEX_REALTIME_CONTEXT_MAX_ITEM_CHARS = 1_800
+
+/**
+ * Project only recent visible user/assistant prose into Codex Realtime V3
+ * initialItems. Tool calls, tool results, reasoning, images, files, system
+ * context, and plugin injections stay out so voice does not repay the full
+ * Phoenix prompt on every activation.
+ * @param messages - PHOENIX derived message history, accepted as unknown for a
+ *   dependency-light voice package boundary.
+ * @returns Oldest-first compact role/text items bounded to a small token proxy.
+ */
+export function phoenixMessagesToCodexRealtimeInitialItems(
+  messages: readonly unknown[],
+): CodexRealtimeInitialItem[] {
+  const newestFirst: CodexRealtimeInitialItem[] = []
+  let remaining = CODEX_REALTIME_CONTEXT_MAX_CHARS
+
+  for (let index = messages.length - 1; index >= 0 && newestFirst.length < CODEX_REALTIME_CONTEXT_MAX_ITEMS && remaining > 0; index -= 1) {
+    const message = messages[index]
+    if (!isRecord(message) || (message.role !== 'user' && message.role !== 'assistant')
+      || !isRecord(message.source)) continue
+    if (message.role === 'user' && message.source.kind !== 'user') continue
+    if (message.role === 'assistant' && message.source.kind !== 'model') continue
+    if (!Array.isArray(message.content)) continue
+
+    const text = message.content
+      .filter((block): block is UnknownRecord => isRecord(block) && block.type === 'text' && typeof block.text === 'string')
+      .map(block => String(block.text))
+      .join('\n')
+      .replace(/\s+/gu, ' ')
+      .trim()
+    if (text === '') continue
+
+    const itemLimit = Math.min(CODEX_REALTIME_CONTEXT_MAX_ITEM_CHARS, remaining)
+    const bounded = compactRealtimeContextText(text, itemLimit)
+    if (bounded === '') continue
+    newestFirst.push({ role: message.role, text: bounded })
+    remaining -= bounded.length
+  }
+
+  return newestFirst.reverse()
+}
+
+function compactRealtimeContextText(text: string, limit: number): string {
+  if (limit <= 0) return ''
+  if (text.length <= limit) return text
+  if (limit < 24) return text.slice(-limit)
+  const separator = ' … '
+  const content = limit - separator.length
+  const head = Math.ceil(content / 2)
+  const tail = content - head
+  return `${text.slice(0, head)}${separator}${text.slice(-tail)}`
 }
 
 /** Provider registry and non-blocking important-event announcement queue. */
 export class VoiceRuntime extends TypertRemoteService {
   static Config: z<VoiceRuntimeConfig> = z.object({
     enabled: z.boolean().default(true),
-    language: z.string().default('en-US'),
+    language: z.string().default('es-DO'),
     maxQueue: z.number().default(3),
     maxChars: z.number().default(480),
     ttsProvider: z.string(),
     sttProvider: z.string(),
+    codexRealtime: z.boolean().default(true),
   })
 
   private readonly config: ResolvedVoiceRuntimeConfig
@@ -260,52 +424,222 @@ export class VoiceRuntime extends TypertRemoteService {
   private current: QueuedAnnouncement | undefined
   private draining = false
   private readonly conversationSpeech = new Map<string, ConversationSpeechChannel>()
+  private readonly realtimeTranscriptTurns = new Map<string, RealtimeTranscriptTurn>()
+  private codexRealtime: CodexRealtimeBridge | undefined
 
   constructor(ctx: Context, config: VoiceRuntimeConfig = {}) {
     super(ctx, 'voice')
     this.config = {
       enabled: config.enabled ?? true,
-      language: config.language?.trim() || 'en-US',
+      language: config.language?.trim() || 'es-DO',
       maxQueue: positiveInteger(config.maxQueue ?? 3, 'maxQueue'),
       maxChars: positiveInteger(config.maxChars ?? 480, 'maxChars'),
       ...config.ttsProvider?.trim() ? { ttsProvider: config.ttsProvider.trim() } : {},
       ...config.sttProvider?.trim() ? { sttProvider: config.sttProvider.trim() } : {},
+      codexRealtime: config.codexRealtime ?? true,
     }
     ctx.on('voice/important', (event) => { void this.announce(event) })
     ctx.on('session/event', (_session, event) => {
-      const important = sessionEventToVoiceEvent(event)
+      const important = sessionEventToVoiceEvent(event, this.config.language)
       if (important !== undefined) void this.announce(important)
     })
     ctx.effect(() => () => { this.stop() }, 'voice queue teardown')
   }
 
   /**
-   * Report whether the local Client can route conversation speech through neural TTS.
+   * Report whether the local Client can route conversation speech through the
+   * deterministic Kokoro -> platform fallback chain.
    * @returns Current conversational voice availability and selected provider.
    */
   @Remote('conversationStatus')
   async conversationStatus(): Promise<VoiceConversationStatus> {
-    const provider = this.selectTtsProvider()
+    const provider = this.selectConversationTtsProvider()
     return {
       enabled: this.config.enabled,
-      natural: this.config.enabled && provider?.id === 'phoenix-natural',
+      natural: this.config.enabled && (provider?.id === 'kokoro' || provider?.id === 'phoenix-natural'),
       ...(provider === undefined ? {} : { provider: provider.id }),
     }
   }
 
   /**
+   * Probe the native Codex realtime sidecar. This is separate from ordinary TTS
+   * so non-Codex providers can keep the existing browser/local voice route.
+   * @returns Enabled state, sidecar availability and authentication status.
+   */
+  @Remote('conversationRealtimeStatus')
+  async conversationRealtimeStatus(): Promise<VoiceConversationRealtimeStatus> {
+    if (!this.config.enabled || !this.config.codexRealtime) {
+      return {
+        enabled: false,
+        available: false,
+        authenticated: false,
+        provider: 'openai-codex',
+        reason: 'disabled',
+      }
+    }
+    const dshHome = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
+    // An already-current CLI cannot be repaired by a new npm poll. Do not
+    // permanently block the voice button behind a stale 'waiting-upstream'
+    // request; permit the controlled, one-time app-server recovery instead.
+    const observedRepair = codexLiveRepairPhase(dshHome)
+    const repair = observedRepair === 'waiting-upstream' && codexLiveCurrentCliVersion(dshHome) !== undefined
+      ? 'idle'
+      : observedRepair
+    if (repair !== 'idle' && repair !== 'ready') {
+      return {
+        enabled: true, available: false, authenticated: false, provider: 'openai-codex',
+        reason: 'experimental-unavailable',
+        detail: repair === 'waiting-upstream'
+          ? 'Codex Live espera una versión oficial compatible. Phoenix seguirá comprobando las actualizaciones.'
+          : repair === 'blocked' || repair === 'disabled'
+            ? 'La reparación automática de Codex Live no pudo continuar.'
+            : 'Phoenix está actualizando Codex CLI para recuperar Live.',
+        repair,
+      }
+    }
+    const probe = await this.codexRealtimeBridge().probe()
+    return {
+      ...(repair === 'ready' ? { repair } : {}),
+      enabled: true,
+      available: probe.available,
+      authenticated: probe.authenticated,
+      provider: 'openai-codex',
+      ...(probe.reason === undefined ? {} : { reason: probe.reason }),
+      ...(probe.detail === undefined ? {} : { detail: probe.detail }),
+    }
+  }
+
+  /**
+   * Negotiate browser WebRTC directly with Codex Realtime through the locally
+   * authenticated app-server. No API key is accepted by this path.
+   * @param request Browser-owned call identity, model selection and SDP offer.
+   * @returns Accepted negotiation with answer SDP, or a classified rejection.
+   */
+  @Remote('conversationRealtimeStart')
+  async conversationRealtimeStart(
+    request: VoiceConversationRealtimeStartRequest,
+  ): Promise<VoiceConversationRealtimeStartReceipt> {
+    if (!this.config.enabled || !this.config.codexRealtime) {
+      return { accepted: false, reason: 'disabled' }
+    }
+    const key = request.key.trim()
+    // SDP is a line-oriented protocol. Preserve the browser-generated bytes,
+    // including the terminal CRLF required by strict SDP parsers. Trimming the
+    // offer here turns a valid Chrome SDP into a truncated payload that Codex
+    // rejects with "failed to unmarshal SDP: EOF".
+    const offerSdp = request.offerSdp
+    const model = request.model?.trim()
+    if (key === '' || key.length > 256 || offerSdp.trim() === '' || offerSdp.length > 131_072
+      || (model !== undefined && (model === '' || model.length > 128))) {
+      return { accepted: false, reason: 'invalid' }
+    }
+    try {
+      const probe = await this.codexRealtimeBridge().probe()
+      if (!probe.available || !probe.authenticated) {
+        return {
+          accepted: false,
+          reason: probe.reason ?? (probe.available ? 'codex-login-required' : 'codex-unavailable'),
+        }
+      }
+      // Codex Live is microphone transcription + speech transport only.
+      // Its independent ephemeral thread must NOT inherit stale chat history:
+      // the Phoenix harness alone knows tool receipts, browser outcomes and
+      // final answer state. Only explicit appendSpeech receives that final text.
+      const identity = realtimeAssistantIdentity(this.ctx)
+      const result = await this.codexRealtimeBridge().start({
+        key,
+        offerSdp,
+        ...(model === undefined ? {} : { model }),
+        assistantName: identity.name,
+        assistantGender: identity.gender,
+        onTranscript: (transcript) => {
+          this.appendRealtimeTranscript(key, model, transcript)
+        },
+      })
+      return {
+        accepted: true,
+        threadId: result.threadId,
+        answerSdp: result.answerSdp,
+      }
+    } catch (error) {
+      const message = String(error)
+      if (codexRealtimeNeedsLogin(error) || /(?:chatgpt (?:login|sign-in) required|login required|not authenticated)/iu.test(message)) {
+        return { accepted: false, reason: 'codex-login-required' }
+      }
+      if (/not found|enoent|could not start|spawn/i.test(message)) {
+        return { accepted: false, reason: 'codex-unavailable' }
+      }
+      this.ctx.logger('voice').warn(`Codex realtime negotiation failed: ${message}`)
+      return {
+        accepted: false,
+        reason: 'negotiation-failed',
+        detail: codexRealtimeFailureDetail(error),
+      }
+    }
+  }
+
+  /**
+   * Hand Phoenix-authorized answer text to Codex native V3 speech. This
+   * only accepts an already-active browser-owned call; it does not create
+   * a new thread, spawn a model, or switch to another voice provider.
+   * @param request - Active browser call key and completed result or stable conversational sentence.
+   * @returns Whether the active native call accepted the authorized text.
+   */
+  @Remote('conversationRealtimeSpeak')
+  async conversationRealtimeSpeak(
+    request: VoiceConversationRealtimeSpeakRequest,
+  ): Promise<VoiceConversationRealtimeSpeakReceipt> {
+    if (!this.config.enabled || !this.config.codexRealtime) {
+      return { accepted: false, reason: 'disabled' }
+    }
+    const key = request.key.trim()
+    const text = displayOutputToVoiceText(request.text, 4800)
+    if (key === '' || key.length > 256 || text === '' || request.text.length > 8000) {
+      return { accepted: false, reason: 'invalid' }
+    }
+    if (this.codexRealtime === undefined || !this.codexRealtime.hasActiveSession()) {
+      return { accepted: false, reason: 'no-session' }
+    }
+    try {
+      const accepted = await this.codexRealtime.speak(key, text)
+      return accepted ? { accepted: true } : { accepted: false, reason: 'no-session' }
+    } catch (error) {
+      this.ctx.logger('voice').warn('Codex native appendSpeech failed: ' + String(error).slice(0, 180))
+      return { accepted: false, reason: 'codex-unavailable' }
+    }
+  }
+
+  /** Stop one browser-owned Codex realtime call.
+   * @param request Browser-owned call identity to stop.
+   * @returns Whether an active call was stopped; invalid or unknown identities return false.
+   */
+  @Remote('conversationRealtimeStop')
+  async conversationRealtimeStop(
+    request: VoiceConversationRealtimeStopRequest,
+  ): Promise<VoiceConversationRealtimeStopReceipt> {
+    const key = request.key.trim()
+    if (key === '' || key.length > 256 || this.codexRealtime === undefined) return { stopped: false }
+    this.closeRealtimeTranscriptTurn(key, 'interrupted')
+    return { stopped: await this.codexRealtime.stop(key).catch(() => false) }
+  }
+
+  /**
    * Play one stable semantic segment on the Host without blocking the browser thread.
    * @param request - Message identity, ordering, text, language, and final-segment metadata.
-   * @returns Admission/playback receipt for the selected neural provider.
+   * @returns Admission/playback receipt for the selected conversation TTS provider.
    */
   @Remote('conversationSpeak')
   async conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceConversationSpeakReceipt> {
     if (!this.config.enabled) return { accepted: false, reason: 'disabled' }
-    const provider = this.selectTtsProvider()
-    if (provider?.id !== 'phoenix-natural') {
-      return { accepted: false, reason: 'natural-unavailable', ...(provider === undefined ? {} : { provider: provider.id }) }
-    }
+    const language = request.language?.trim() || this.config.language
     const key = request.key.trim()
+    // Important UI alerts allow a same-language platform voice after neural TTS.
+    // Ordinary live conversation keeps the neural-only provider contract.
+    const providers = this.conversationTtsProviders(language, key.startsWith('phoenix:proactive-attention'))
+    const provider = providers[0]
+    if (provider === undefined) {
+      return { accepted: false, reason: 'natural-unavailable' }
+    }
     if (key === '' || key.length > 256 || !Number.isSafeInteger(request.sequence) || request.sequence < 0) {
       return { accepted: false, reason: 'invalid', provider: provider.id }
     }
@@ -323,16 +657,23 @@ export class VoiceRuntime extends TypertRemoteService {
     channel.lastSequence = request.sequence
     const controller = new AbortController()
     channel.controllers.add(controller)
-    const language = request.language?.trim() || this.config.language
     const final = request.final === true
     const currentChannel = channel
+    let spokenProvider = provider.id
+    let playbackError: unknown
     const task = channel.tail
       .catch(() => {})
       .then(async () => {
         if (controller.signal.aborted) return
-        await this.speakThroughProviders(text, language, controller.signal)
+        spokenProvider = await this.speakThroughProviders(
+          text,
+          language,
+          controller.signal,
+          providers,
+        ) ?? spokenProvider
       })
       .catch((error: unknown) => {
+        playbackError = error
         if (!controller.signal.aborted) {
           this.ctx.logger('voice').warn(`conversation voice failed: ${String(error)}`)
         }
@@ -348,7 +689,10 @@ export class VoiceRuntime extends TypertRemoteService {
     // the Client never awaits it on its render path. The completion signal lets
     // hands-free mode return from "speaking" to "listening" truthfully.
     await task
-    return { accepted: true, provider: provider.id }
+    if (playbackError !== undefined || controller.signal.aborted) {
+      return { accepted: false, reason: 'natural-unavailable', provider: spokenProvider }
+    }
+    return { accepted: true, provider: spokenProvider }
   }
 
   /**
@@ -396,16 +740,24 @@ export class VoiceRuntime extends TypertRemoteService {
     if (!isVoiceEventKind(event.kind)) return { id, accepted: false, reason: 'not-important' }
     const text = displayOutputToVoiceText(event.displayOutput, this.config.maxChars)
     if (text === '') return { id, accepted: false, reason: 'empty' }
+    // Never mix the browser/system TTS voice into an active native Codex call.
+    // The browser realtime surface (or the finalized harness answer) owns these
+    // audible notifications while the authenticated Codex session is alive.
+    if (this.codexRealtime?.hasActiveSession() === true) {
+      return { id, accepted: false, reason: 'native-realtime' }
+    }
     const key = event.dedupeKey
     if (key !== undefined && (this.pendingKeys.has(key) || this.current?.event.dedupeKey === key)) {
       return { id, accepted: false, reason: 'duplicate' }
     }
     if (this.queue.length >= this.config.maxQueue) return { id, accepted: false, reason: 'queue-full' }
-    if (this.selectTtsProvider() === undefined) return { id, accepted: false, reason: 'no-provider' }
+    if (this.speechProviders(event.language ?? this.config.language).length === 0) return { id, accepted: false, reason: 'no-provider' }
     const queued: QueuedAnnouncement = { id, event, text, controller: new AbortController() }
     this.queue.push(queued)
     if (key !== undefined) this.pendingKeys.add(key)
-    void this.drain()
+    void this.drain().catch((error: unknown) => {
+      this.ctx.logger('voice').warn(`important voice announcement failed: ${String(error)}`)
+    })
     return { id, accepted: true, text }
   }
 
@@ -445,6 +797,11 @@ export class VoiceRuntime extends TypertRemoteService {
       for (const controller of channel.controllers) controller.abort('voice stopped')
     }
     this.conversationSpeech.clear()
+    for (const key of [...this.realtimeTranscriptTurns.keys()]) {
+      this.closeRealtimeTranscriptTurn(key, 'interrupted')
+    }
+    this.codexRealtime?.close()
+    this.codexRealtime = undefined
   }
 
   /**
@@ -463,7 +820,7 @@ export class VoiceRuntime extends TypertRemoteService {
    * @returns Current queue, speaking, and selected-provider state.
    */
   status(): VoiceRuntimeStatus {
-    const ttsProvider = this.selectTtsProvider()
+    const ttsProvider = this.speechProviders(this.config.language)[0]
     const sttProvider = this.selectSttProvider()
     return {
       enabled: this.config.enabled,
@@ -473,6 +830,107 @@ export class VoiceRuntime extends TypertRemoteService {
       ...ttsProvider === undefined ? {} : { ttsProvider: ttsProvider.id },
       ...sttProvider === undefined ? {} : { sttProvider: sttProvider.id },
     }
+  }
+
+  private appendRealtimeTranscript(
+    key: string,
+    model: string | undefined,
+    transcript: CodexRealtimeTranscript,
+  ): void {
+    const text = transcript.text.trim()
+    if (text === '') return
+
+    // Realtime voice is an input/output transport, not a second agent loop.
+    // Route final human speech through the exact live Phoenix Agent so the
+    // normal harness owns planning, tools, hardness, durable events, and the
+    // assistant response. Ignore the realtime model's independent assistant
+    // transcript in this case; the live Agent is the single source of truth.
+    const sessionId = SessionId(key)
+    const agents = this.ctx.get('agents') as unknown as {
+      get(id: SessionId): { followup(message: ReturnType<typeof createUserMessage>): void } | undefined
+    } | undefined
+    const agent = agents?.get(sessionId)
+    if (agent !== undefined) {
+      // Browser PHOENIX sessions admit the finalized Live transcript through
+      // the ordinary composer/session prompt path. That path renders the user
+      // message immediately and then wakes this same live Agent. Keep the
+      // app-server notification as compatibility input only for standalone
+      // voice compositions so one spoken turn cannot be dispatched twice.
+      return
+    }
+
+    // Standalone voice compositions can intentionally omit an Agent registry.
+    // Keep their legacy transcript journal so the package still degrades to a
+    // useful conversation record instead of dropping speech.
+    const store = this.ctx.get('sessions')
+    const session = store?.get(sessionId)
+    if (session === undefined) return
+
+    if (transcript.role === 'user') {
+      this.closeRealtimeTranscriptTurn(key, 'user')
+      const turn = nextRealtimeTurn(session.events)
+      const step = 1
+      session.append('turn/start', { turn })
+      session.append('user/message', createUserMessage({
+        source: { kind: 'user' },
+        content: [{ type: 'text', text }],
+      }), { surfaceOp: 'append' })
+      session.append('step/start', { turn, step })
+      this.realtimeTranscriptTurns.set(key, { turn, step })
+      void store?.flush(session).catch((error: unknown) => {
+        this.ctx.logger('voice').warn(`realtime user transcript flush failed: ${String(error)}`)
+      })
+      return
+    }
+
+    let state = this.realtimeTranscriptTurns.get(key)
+    if (state === undefined) {
+      state = { turn: nextRealtimeTurn(session.events), step: 1 }
+      session.append('turn/start', { turn: state.turn })
+      session.append('step/start', state)
+      this.realtimeTranscriptTurns.set(key, state)
+    }
+    session.append('assistant/message', {
+      turn: state.turn,
+      step: state.step,
+      message: createAssistantMessage({
+        source: {
+          provider: 'openai-codex',
+          model: model?.trim() || 'codex-realtime',
+        },
+        content: [{ type: 'text', text }],
+      }),
+    }, { surfaceOp: 'append' })
+    session.append('step/end', state)
+    session.append('turn/end', { turn: state.turn, reason: { kind: 'completed' } })
+    this.realtimeTranscriptTurns.delete(key)
+    void store?.flush(session).catch((error: unknown) => {
+      this.ctx.logger('voice').warn(`realtime assistant transcript flush failed: ${String(error)}`)
+    })
+  }
+
+  private closeRealtimeTranscriptTurn(key: string, reason: 'user' | 'interrupted'): void {
+    const state = this.realtimeTranscriptTurns.get(key)
+    if (state === undefined) return
+    const store = this.ctx.get('sessions')
+    const session = store?.get(SessionId(key))
+    this.realtimeTranscriptTurns.delete(key)
+    if (session === undefined) return
+    session.append('step/end', state)
+    session.append('turn/end', {
+      turn: state.turn,
+      reason: reason === 'user'
+        ? { kind: 'aborted', reason: { kind: 'user' } }
+        : { kind: 'interrupted' },
+    })
+    void store?.flush(session).catch((error: unknown) => {
+      this.ctx.logger('voice').warn(`realtime transcript close flush failed: ${String(error)}`)
+    })
+  }
+
+  private codexRealtimeBridge(): CodexRealtimeBridge {
+    this.codexRealtime ??= new CodexRealtimeBridge()
+    return this.codexRealtime
   }
 
   private registerProvider<P extends { readonly id: string }>(store: Map<string, P>, provider: P): () => void {
@@ -485,8 +943,25 @@ export class VoiceRuntime extends TypertRemoteService {
     return () => { void dispose() }
   }
 
-  private selectTtsProvider(): VoiceTextToSpeechProvider | undefined {
-    return selectProvider(this.ttsProviders, this.config.ttsProvider)
+  /** Prefer verified language-matched engines; never pronounce Spanish through
+   * an unvalidated CosyVoice reference (a common source of gibberish).
+   * To enable Spanish CosyVoice, verify it acoustically and opt in explicitly.
+   */
+  private speechProviders(language: string): VoiceTextToSpeechProvider[] {
+    const spanish = language.toLowerCase().split('-')[0] === 'es'
+    const naturalVerified = process.env.PHOENIX_NATURAL_VOICE_ES_VERIFIED === '1'
+    return orderedProviders(this.ttsProviders, this.config.ttsProvider)
+      .filter(provider => !spanish || naturalVerified || provider.id !== 'phoenix-natural')
+  }
+
+  private conversationTtsProviders(language = this.config.language, allowSystem = false): VoiceTextToSpeechProvider[] {
+    const ids = allowSystem ? ['phoenix-natural', 'kokoro', 'system'] : ['phoenix-natural', 'kokoro']
+    const providers = this.speechProviders(language)
+    return ids.flatMap(id => providers.filter(provider => provider.id === id))
+  }
+
+  private selectConversationTtsProvider(): VoiceTextToSpeechProvider | undefined {
+    return this.conversationTtsProviders()[0]
   }
 
   private selectSttProvider(): VoiceSpeechToTextProvider | undefined {
@@ -501,7 +976,7 @@ export class VoiceRuntime extends TypertRemoteService {
         const item = this.queue.shift()
         if (item === undefined) continue
         if (item.event.dedupeKey !== undefined) this.pendingKeys.delete(item.event.dedupeKey)
-        const providers = orderedProviders(this.ttsProviders, this.config.ttsProvider)
+        const providers = this.speechProviders(item.event.language ?? this.config.language)
         if (providers.length === 0) continue
         this.current = item
         try {
@@ -524,24 +999,82 @@ export class VoiceRuntime extends TypertRemoteService {
     text: string,
     language: string,
     signal: AbortSignal,
-    candidates = orderedProviders(this.ttsProviders, this.config.ttsProvider),
-  ): Promise<void> {
+    candidates = this.speechProviders(language),
+  ): Promise<string | undefined> {
     let lastError: unknown
     for (const provider of candidates) {
-      if (signal.aborted) return
+      if (signal.aborted) return undefined
       try {
-        await provider.speak({ text, language, signal })
-        return
+        await provider.speak({ text, language, gender: realtimeAssistantIdentity(this.ctx).gender, signal })
+        return provider.id
       } catch (error) {
         lastError = error
-        if (signal.aborted) return
+        if (signal.aborted) return undefined
         this.ctx.logger('voice').warn(
           `voice provider "${provider.id}" failed; trying fallback: ${String(error)}`,
         )
       }
     }
     if (lastError !== undefined) throw lastError
+    return undefined
   }
+}
+
+function realtimeAssistantIdentity(ctx: Context): RealtimeAssistantIdentity {
+  const service = ctx.get('userProfile') as {
+    getAssistantIdentity?: () => { name?: unknown; gender?: unknown }
+  } | undefined
+  const configured = service?.getAssistantIdentity?.()
+  const name = typeof configured?.name === 'string' && configured.name.trim() !== ''
+    ? configured.name.trim().slice(0, 120)
+    : 'KIRA'
+  const gender: RealtimeAssistantGender = configured?.gender === 'masculine'
+    || configured?.gender === 'neutral'
+    || configured?.gender === 'feminine'
+    ? configured.gender
+    : 'feminine'
+  return {
+    name,
+    gender,
+    // The Realtime bridge chooses a compatible voice for V3 or legacy V1.
+  }
+}
+
+function nextRealtimeTurn(events: readonly { readonly type: string; readonly data: unknown }[]): number {
+  let maximum = 0
+  for (const event of events) {
+    if (typeof event.data !== 'object' || event.data === null || !('turn' in event.data)) continue
+    const turn = (event.data as { readonly turn?: unknown }).turn
+    if (typeof turn === 'number' && Number.isSafeInteger(turn) && turn > maximum) maximum = turn
+  }
+  return maximum + 1
+}
+
+function codexRealtimeFailureDetail(value: unknown): string {
+  const message = (value instanceof Error ? value.message : String(value)).trim()
+  // A backend AVAS header rejection is protocol incompatibility, never a
+  // reason to dump a raw provider JSON payload in Phoenix's voice overlay.
+  if (/invalid_quicksilver_alpha_header|AVAS requires OpenAI-Alpha:\s*quicksilver=v2/iu.test(message)) {
+    const overrideKeys = [
+      'experimental_realtime_webrtc_call_base_url',
+      'experimental_realtime_ws_base_url',
+      'openai_base_url',
+      'chatgpt_base_url',
+    ].filter(key => message.includes(key))
+    return 'Codex Live: servidor rechazó WebRTC v3 (invalid_quicksilver_alpha_header). '
+      + 'El Codex oficial ya solicita quicksilver=v2; el chat de texto sigue disponible.'
+      + (overrideKeys.length > 0
+        ? ' Se detectaron rutas personalizadas en Codex: ' + overrideKeys.join(', ')
+          + '. Comprueba config.toml sin borrar credenciales.'
+        : ' Si Codex oficial falla también, revisa la disponibilidad del servicio.')
+  }
+  if (/\b403\b[^\r\n]{0,160}(?:voice|realtime|forbidden|access denied)|voice session access denied/iu.test(message)) {
+    return 'Codex Live: el servidor rechazó la sesión de voz (HTTP 403). La sesión de ChatGPT para texto puede continuar válida.'
+  }
+  const redacted = message
+    .replace(/\b(?:sk|sess|token)-[A-Za-z0-9._-]{8,}\b/gu, '[redacted]')
+    .replace(/Bearer\s+[a-z0-9._~+\/-]+=*/giu, 'Bearer [redacted]')
+  return (redacted === '' ? 'Codex realtime negotiation failed' : redacted).slice(0, 1_024)
 }
 
 function orderedProviders<P extends { readonly id: string; readonly priority: number; available(): boolean }>(

@@ -31,6 +31,8 @@ export interface ToolBridgeOptions {
   registrationFailure: 'contain' | 'throw'
   serverName: string
   toolCallTimeoutMs: number
+  /** Report a real tool-call authentication rejection back to connector lifecycle state. */
+  onAuthorizationRequired?: (error: unknown) => void
 }
 
 /** State for one sync generation: the current set of disposers keyed by public name. */
@@ -190,6 +192,19 @@ function modelInputSchema(candidate: SchemaObject): SchemaObject {
 
 /** Raw result record: the bridge owns JSON-value validation after transport. */
 const RawCallToolResultSchema = z.record(z.string(), z.unknown())
+
+function isToolAuthorizationFailure(value: unknown): boolean {
+  if (typeof value === 'object' && value !== null) {
+    const { status, code } = value as { status?: unknown; code?: unknown }
+    if (status === 401 || status === 403 || code === 401 || code === 403) return true
+  }
+  const message = value instanceof Error ? value.message : String(value)
+  return /(?:jwt\s+authentication\s+required|authentication\s+required|authorization\s+required|unauthori[sz]ed|invalid\s+(?:jwt|token)|expired\s+(?:jwt|token)|\b(?:401|403)\b)/i.test(message)
+}
+
+function reportToolAuthorizationFailure(opts: ToolBridgeOptions, error: unknown): void {
+  if (isToolAuthorizationFailure(error)) opts.onAuthorizationRequired?.(error)
+}
 
 /** Raster formats supported by the durable attachment vocabulary. */
 const IMAGE_MEDIA_TYPES: readonly ImageMediaType[] = [
@@ -391,12 +406,19 @@ function createDefinition(
   transformArguments?: (args: Record<string, unknown>) => Record<string, unknown>,
 ): ToolDefinition {
   const projections = new WeakMap<ToolExecution, PreparedProjection>()
+  const properties = parameters.properties
+  // MCP namespaces use both hyphenated and underscored names:
+  // phoenix_browser was previously missing here, so navigation opened a
+  // headless *global* tab while the conversation's MiniBrowser stayed blank.
+  const scopedChromeTool = /(?:^|[-_])(?:chrome|browser)(?:[-_]|$)/iu.test(opts.serverName)
+    && properties !== null && typeof properties === 'object'
+    && 'sessionId' in properties
   return {
     name: publicName,
     description,
     parameters,
     output: createOutput(rawName, structuredSchema),
-    execute: createExecutor(client, ctx, rawName, taskRequired, opts, projections, transformArguments),
+    execute: createExecutor(client, ctx, rawName, taskRequired, opts, projections, transformArguments, scopedChromeTool),
     finalizeContent(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>) {
       const projection = projections.get(exec)
       if (projection === undefined) return undefined
@@ -444,6 +466,7 @@ function createOutput(rawName: string, structuredSchema: JsonSchemaNode | undefi
  * @param opts - bridge timeout and namespace options.
  * @param projections - execution-local rich result projections.
  * @param transformArguments - optional local argument-envelope unwrapping before the wire call.
+ * @param scopedChromeTool - true only when the browser tool explicitly supports conversation IDs.
  * @returns the ToolRuntime execute callback for this remote tool.
  */
 function createExecutor(
@@ -454,6 +477,7 @@ function createExecutor(
   opts: ToolBridgeOptions,
   projections: WeakMap<ToolExecution, PreparedProjection>,
   transformArguments?: (args: Record<string, unknown>) => Record<string, unknown>,
+  scopedChromeTool = false,
 ): ToolDefinition['execute'] {
   return async (args: unknown, exec: ToolExecution) => {
     if (taskRequired) {
@@ -465,7 +489,28 @@ function createExecutor(
     // specific "missing required param" error the model can learn from.
     const argsObj = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
     const wireArgs = transformArguments === undefined ? argsObj : transformArguments(argsObj)
-    const result = await callToolUncached(client, rawName, wireArgs, exec, opts)
+    // Route every Chrome tool invocation using the REAL agent's conversation
+    // identity, never a model-supplied sessionId or the global last Chrome tab.
+    // Other MCP integrations are untouched.
+    const chromeScope = scopedChromeTool && exec.agent?.id !== undefined
+    const agent = exec.agent
+    // Delegated specialists use the coordinator's parent conversation.
+    // A user-created fork (no subagent origin) remains a separate browser.
+    const ownerId = !scopedChromeTool || agent === undefined ? undefined
+      : agent.session.header?.origin === 'subagent'
+        ? (agent.session.header.parentSession ?? agent.id)
+        : agent.id
+    // Fail closed rather than fall back to shared Chromium when the caller
+    // has no trusted conversation identity. Model-supplied IDs are never trusted.
+    if (scopedChromeTool && ownerId === undefined) {
+      throw new Error('No se identificó la conversación del MiniBrowser; no se abrió ninguna página.')
+    }
+    const routedArgs = chromeScope && ownerId !== undefined
+      ? { ...wireArgs, sessionId: ownerId } : wireArgs
+    const result = await callToolUncached(client, rawName, routedArgs, exec, opts).catch((error: unknown) => {
+      reportToolAuthorizationFailure(opts, error)
+      throw error
+    })
 
     // The SDK may return a legacy `toolResult` shape; normalize to content array.
     if (!Array.isArray(result.content)) {
@@ -473,7 +518,11 @@ function createExecutor(
         ? JSON.stringify(result.toolResult)
         : '(no output)'
       const text = typeof rendered === 'string' ? rendered : '(no output)'
-      if (result.isError === true) throw new Error(text)
+      if (result.isError === true) {
+        const error = new Error(text)
+        reportToolAuthorizationFailure(opts, error)
+        throw error
+      }
       return {
         content: [{ type: 'text', text }],
         ...result.structuredContent !== undefined
@@ -490,7 +539,9 @@ function createExecutor(
 
     // MCP isError → throw so ToolRuntime produces an isError result for the model.
     if (result.isError === true) {
-      throw new Error(text)
+      const error = new Error(text)
+      reportToolAuthorizationFailure(opts, error)
+      throw error
     }
 
     const value: McpResult = {

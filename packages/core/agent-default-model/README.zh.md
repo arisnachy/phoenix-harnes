@@ -9,6 +9,8 @@
 - `ctx.agentDefaultModel.currentSelection()` 返回一份独立的 `{ provider, model, reasoningEffort? }` 选择，供新创建的 Agent 使用。
 - `ctx.agentDefaultModel.saveSelection(selection)` 保存完整的用户选择。未挂载设置提供方时，此调用不执行任何操作，组合配置项仍为当前值。
 
+Fénix Eclipse 在 `eclipse-routing` 分节中提供两个可配置路由：供 Kira 使用的 `coordinator`，以及供委派团队成员使用的 `subagent`。新的规范路由必须使用 `openai-codex`；其 `reasoningEffort` 是由实时 Codex 目录提供的不透明提供方值，因此设置层不维护会过时的固定允许列表。由旧三席编辑器写入的配置可以暂时保留 `planner`；只有在缺少 `coordinator` 时才会将其读取为 `coordinator`，用户保存两席表单后该旧字段会被移除。
+
 该服务不校验目录成员关系。提供方路由可以服务未在目录中公布的模型；实际发起模型请求的消费方负责可用性诊断。
 
 ## 模型体验

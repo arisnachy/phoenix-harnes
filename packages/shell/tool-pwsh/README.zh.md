@@ -30,7 +30,7 @@
 
 Windows 组合还会注册受保护的 `computer` 工具。在 Phoenix Desktop 中，其结构化浏览器动作直接操作内嵌 WebView2：`browser_inspect` 返回可见文字、字段元数据与按钮，但不会返回字段当前值；`browser_fill_form` 填写已检查的非机密字段；`browser_click_text` 按可见文字点击按钮/链接；`browser_login` 则在内部从 `ctx.credentials` 解析按 origin 绑定的登录信息。
 
-用户只需一次执行 `/secret login-set https://example.com ACCOUNT SECRET` 即可授权该站点。之后这个精确的规范化 origin 会拥有 `autonomous` 授权，用于无人值守的打开、登录、填表与点击，因此重复任务不必在每一步再次请求 workspace-write 批准。账户机密不会成为模型参数、工具结果、prompt token 或检查结果。TypeScript broker 与 WebView 脚本都会再次核对 origin；远程授权必须使用 HTTPS（回环地址 HTTP 例外）。其他 Computer Use 动作仍遵守原有 sandbox/审批策略。
+用户在浏览器下方受保护的 Secure Ask 卡片保存网站凭据并授权自动访问。Computer 通过凭据接口读取所选身份；明确拒绝会阻止旧存储回退。精确规范化的 origin 授权无人值守的打开、登录、填表和点击。原生浏览器只在所选登录表单内填写保存的网站专用字段，遇到必填字段缺失或跨 origin 的表单目标时拒绝提交。账户机密不会成为模型参数、工具结果、prompt token 或检查结果。TypeScript broker 与 WebView 脚本都会再次核对 origin；远程授权必须使用 HTTPS（回环地址 HTTP 例外）。其他 Computer Use 动作仍遵守原有 sandbox/审批策略。
 
 ### Managed shell environment
 

@@ -116,7 +116,7 @@ describe('abort during tool execution ends the turn', () => {
         || event.type === 'step/end' || event.type === 'turn/end')
       .map(event => event.type))
       .toEqual(['tool/result', 'step/end', 'turn/end'])
-    expect(agent.inbox.nextStep.map(inboxText))
+    expect(agent.inbox.nextStep.filter(message => !(message.source.kind === 'plugin' && message.source.plugin === 'agent-loop')).map(inboxText))
       .toEqual(['accepted result context after abort'])
 
     const idle = waitForIdle(ctx, agent)
@@ -124,7 +124,7 @@ describe('abort during tool execution ends the turn', () => {
     await idle
 
     expect(agent.session.events
-      .flatMap(event => event.type === 'user/message' && event.data.source.kind === 'plugin'
+      .flatMap(event => event.type === 'user/message' && event.data.source.kind === 'plugin' && event.data.source.plugin === 'test'
         ? [event.data.content]
         : []))
       .toEqual([
@@ -181,7 +181,7 @@ describe('abort during tool execution ends the turn', () => {
       .map(event => event.type))
       .toEqual(['tool/result', 'tool/result', 'step/end', 'turn/end'])
     expect(events.flatMap(event =>
-      event.type === 'user/message' && event.data.source.kind === 'plugin'
+      event.type === 'user/message' && event.data.source.kind === 'plugin' && event.data.source.plugin === 'test'
         ? [event.data.content]
         : [])[0])
       .toBeUndefined()
@@ -243,11 +243,11 @@ describe('abort during tool execution ends the turn', () => {
     await fiber.dispose()
 
     expect(agent.session.events
-      .flatMap(event => event.type === 'user/message' && event.data.source.kind === 'plugin'
+      .flatMap(event => event.type === 'user/message' && event.data.source.kind === 'plugin' && event.data.source.plugin === 'test'
         ? [event.data.content]
         : []))
       .toEqual([])
-    expect(agent.inbox.nextStep.map(inboxText))
+    expect(agent.inbox.nextStep.filter(message => !(message.source.kind === 'plugin' && message.source.plugin === 'agent-loop')).map(inboxText))
       .toEqual(['accepted result context during disposal'])
     expect(agent.session.events.filter(event => event.type === 'turn/start'))
       .toHaveLength(1)
@@ -306,7 +306,7 @@ describe('abort during tool execution ends the turn', () => {
     await waitForIdle(ctx, agent)
 
     expect(agent.session.events.flatMap(event =>
-      event.type === 'user/message' && event.data.source.kind === 'plugin'
+      event.type === 'user/message' && event.data.source.kind === 'plugin' && event.data.source.plugin === 'test'
         ? [event.data.content]
         : [])[0])
       .toEqual([{ type: 'text', text: 'new turn context' }])
@@ -487,6 +487,7 @@ describe('adapter registration, routing, and accepted-input ownership', () => {
     ctx.on('session/event', (session, event) => {
       if (session !== agent.session || event.type !== 'agent/inbox/spliced') return
       for (const message of event.data.inserted) {
+        if (message.source.kind === 'plugin' && message.source.plugin === 'agent-loop') continue
         insertedSources.push(message.source)
         insertedShapes.push(Object.keys(message).sort())
         targets.push(event.data.target)
@@ -494,7 +495,7 @@ describe('adapter registration, routing, and accepted-input ownership', () => {
     })
 
     send(agent, 'go') // no explicit source → default {kind:'user'} must be visible
-    await waitForIdle(ctx, agent)
+    await agent.whenIdle()
 
     expect(insertedSources).toEqual([
       { kind: 'user' },
@@ -506,7 +507,7 @@ describe('adapter registration, routing, and accepted-input ownership', () => {
     ])
     expect(targets).toEqual(['next-turn', 'next-step'])
     const steeringSources = agent.session.events.flatMap(e =>
-      e.type === 'user/message' && e.data.source.kind === 'plugin' ? [e.data.source] : [])
+      e.type === 'user/message' && e.data.source.kind === 'plugin' && e.data.source.plugin === 'goal' ? [e.data.source] : [])
     expect(steeringSources).toEqual([{ kind: 'plugin', plugin: 'goal' }])
   })
 

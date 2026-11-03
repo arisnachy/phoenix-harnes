@@ -22,9 +22,13 @@ import type { DraftAttachmentId } from '../src/client/input/contract.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
 import { zh } from '../src/client/locales.ts'
+import * as voiceAdapter from '../src/client/voice.ts'
 import type { VoiceRecognitionLike } from '../src/client/voice.ts'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  voiceAdapter.setApprovedVoiceFallback(false)
+})
 
 // jsdom implements no Range geometry at all — `Range.prototype.getBoundingClientRect`
 // is absent — and the composer measures the caret with one when it restores the
@@ -1695,7 +1699,20 @@ describe('command launcher chrome and control seats', () => {
     expect((live.view.getByLabelText(/^访问模式/) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('submits each final browser speech fragment automatically in assistant mode', async () => {
+  it('keeps the Codex Live microphone available without browser SpeechRecognition', () => {
+    const browser = vi.spyOn(voiceAdapter, 'hasVoiceRecognition').mockReturnValue(false)
+    const codex = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    try {
+      const { view } = bench()
+      expect(view.getByRole('button', { name: '开始语音助手' })).toBeDefined()
+    } finally {
+      cleanup()
+      browser.mockRestore()
+      codex.mockRestore()
+    }
+  })
+
+  it('does not open a competing browser microphone while Codex Live owns transcript input', async () => {
     class FakeRecognition implements VoiceRecognitionLike {
       static instance: FakeRecognition | undefined
       lang = ''
@@ -1707,28 +1724,282 @@ describe('command launcher chrome and control seats', () => {
       onerror: VoiceRecognitionLike['onerror'] = null
       onresult: VoiceRecognitionLike['onresult'] = null
       constructor() { FakeRecognition.instance = this }
-      start(): void {}
+      start(): void { this.onstart?.() }
       stop(): void { this.onend?.() }
       abort(): void {}
     }
     const descriptor = Object.getOwnPropertyDescriptor(window, 'SpeechRecognition')
     Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: FakeRecognition })
-    try {
-      const { view, sink } = bench({ draft: 'Hola' })
-      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
-      await act(async () => {
-        FakeRecognition.instance?.onstart?.()
-        FakeRecognition.instance?.onresult?.({
-          resultIndex: 0,
-          results: [{ isFinal: false, 0: { transcript: 'ignored' } }, { isFinal: true, 0: { transcript: 'mundo' } }],
-        })
+    let transcriptHandler: ((text: string) => void) | undefined
+    const transcript = vi.spyOn(voiceAdapter, 'configureCodexRealtimeUserTranscriptHandler')
+      .mockImplementation((handler) => {
+        transcriptHandler = handler
+        return () => {
+          if (transcriptHandler === handler) transcriptHandler = undefined
+        }
       })
-      expect(sink).toHaveBeenCalledWith('Hola mundo', [], 'queue', expect.any(AbortSignal))
-      expect(view.getByRole('button', { name: '停止语音助手' })).toBeTruthy()
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice').mockImplementation(async () => {
+      voiceAdapter.setVoiceAssistantActive(true)
+      return { kind: 'started' }
+    })
+    try {
+      const { view, sink } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+
+      expect(FakeRecognition.instance).toBeUndefined()
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(true)
+      expect(transcriptHandler).toBeDefined()
+
+      await act(async () => {
+        transcriptHandler?.('usa el harness y escribe en el chat')
+      })
+      expect(sink).toHaveBeenCalledWith(
+        'usa el harness y escribe en el chat',
+        [],
+        'queue',
+        expect.any(AbortSignal),
+      )
     } finally {
+      voiceAdapter.setVoiceAssistantActive(false)
+      live.mockRestore()
+      transcript.mockRestore()
       cleanup()
       if (descriptor === undefined) delete (window as Window & { SpeechRecognition?: unknown }).SpeechRecognition
       else Object.defineProperty(window, 'SpeechRecognition', descriptor)
     }
   })
+
+  it('queues a native Codex Live answer while the previous harness turn settles instead of stopping it', async () => {
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const active = vi.spyOn(voiceAdapter, 'isCodexRealtimeVoiceActive').mockReturnValue(true)
+    let transcriptHandler: ((text: string) => void) | undefined
+    const transcript = vi.spyOn(voiceAdapter, 'configureCodexRealtimeUserTranscriptHandler')
+      .mockImplementation((handler) => {
+        transcriptHandler = handler
+        return () => {
+          if (transcriptHandler === handler) transcriptHandler = undefined
+        }
+      })
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice').mockImplementation(async () => {
+      voiceAdapter.setVoiceAssistantActive(true)
+      return { kind: 'started' }
+    })
+    try {
+      const { view, sink } = bench({ running: true })
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+      await act(async () => { transcriptHandler?.('el de los retos') })
+      expect(sink).toHaveBeenCalledWith(
+        'el de los retos', [], 'queue', expect.any(AbortSignal),
+      )
+    } finally {
+      voiceAdapter.setVoiceAssistantActive(false)
+      support.mockRestore()
+      active.mockRestore()
+      live.mockRestore()
+      transcript.mockRestore()
+      cleanup()
+    }
+  })
+
+  it('resumes native Codex Live once after a verified automatic CLI repair', async () => {
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const wait = vi.spyOn(voiceAdapter, 'waitForCodexLiveRepair').mockResolvedValue('ready')
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
+      .mockResolvedValueOnce({ kind: 'failed', reason: 'codex-live-repair-pending' })
+      .mockResolvedValueOnce({ kind: 'started' })
+    try {
+      const { view } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(wait).toHaveBeenCalledOnce()
+      expect(live).toHaveBeenCalledTimes(2)
+      expect(view.container.querySelector('[data-codex-voice-fallback]')).toBeNull()
+    } finally {
+      live.mockRestore()
+      wait.mockRestore()
+      support.mockRestore()
+      cleanup()
+    }
+  })
+
+  it('lets the user cancel recovery without starting browser speech or a second Codex call', async () => {
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
+      .mockResolvedValue({ kind: 'failed', reason: 'codex-live-repair-pending' })
+    let watchSignal: AbortSignal | undefined
+    const wait = vi.spyOn(voiceAdapter, 'waitForCodexLiveRepair')
+      .mockImplementation((signal) => {
+        watchSignal = signal
+        return new Promise((resolve) => {
+          signal.addEventListener('abort', () => { resolve('cancelled') }, { once: true })
+        })
+      })
+    try {
+      const { view } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+      expect(view.getByRole('button', { name: 'Cancelar recuperación de Codex Live' })).toBeTruthy()
+      fireEvent.click(view.getByRole('button', { name: 'Cancelar recuperación de Codex Live' }))
+      await act(async () => { await Promise.resolve() })
+      expect(watchSignal?.aborted).toBe(true)
+      expect(live).toHaveBeenCalledTimes(1)
+      expect(view.container.querySelector('[data-codex-voice-fallback]')).toBeNull()
+    } finally {
+      wait.mockRestore()
+      live.mockRestore()
+      support.mockRestore()
+      cleanup()
+    }
+  })
+
+  it('reveals the Codex Live startup failure instead of silently choosing another voice', async () => {
+    const recognition = vi.spyOn(voiceAdapter, 'hasVoiceRecognition').mockReturnValue(false)
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
+      .mockResolvedValue({ kind: 'failed', reason: 'codex-login-required' })
+    try {
+      const { view } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+      const notice = view.container.querySelector('[data-codex-voice-fallback]')
+      expect(notice?.textContent).toContain('Codex desconectado')
+      expect(view.getByRole('button', { name: '开始语音助手' })
+        .getAttribute('data-codex-voice-failure')).toBe('codex-login-required')
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(false)
+    } finally {
+      live.mockRestore()
+      support.mockRestore()
+      recognition.mockRestore()
+      cleanup()
+    }
+  })
+
+  it('keeps the upstream Quicksilver error available without displaying an oversized tooltip', async () => {
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
+      .mockResolvedValue({ kind: 'failed', reason: 'invalid_quicksilver_alpha_header: AVAS requires OpenAI-Alpha quicksilver=v2' })
+    try {
+      const { view } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+      const notice = view.container.querySelector('[data-codex-voice-fallback]')
+      expect(notice?.textContent).toContain('Codex Live sin conexión')
+      expect(notice?.getAttribute('title')).not.toContain('invalid_quicksilver')
+      const microphone = view.getByRole('button', { name: '开始语音助手' })
+      expect(microphone.getAttribute('data-codex-voice-failure'))
+        .toContain('invalid_quicksilver_alpha_header')
+      expect(view.getByText('Detalles').closest('details')?.textContent)
+        .toContain('invalid_quicksilver_alpha_header')
+    } finally {
+      support.mockRestore()
+      live.mockRestore()
+      cleanup()
+    }
+  })
+
+  it('offers Kokoro/natural voice only after explicit opt-in on Quicksilver rejection', async () => {
+    const available = vi.spyOn(voiceAdapter, 'hasVoiceRecognition').mockReturnValue(true)
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
+      .mockResolvedValue({ kind: 'failed', reason: 'invalid_quicksilver_alpha_header' })
+    const start = vi.fn()
+    const recognition = vi.spyOn(voiceAdapter, 'createVoiceRecognition')
+      .mockReturnValue({
+        lang: 'es-DO', continuous: true, interimResults: false, maxAlternatives: 1,
+        onstart: null, onend: null, onerror: null, onresult: null,
+        start, stop: vi.fn(), abort: vi.fn(),
+      })
+    try {
+      const { view } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+      expect(recognition).not.toHaveBeenCalled()
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(false)
+      const alternate = view.getByRole('button', { name: 'Usar voz alternativa de Phoenix' })
+      fireEvent.click(alternate)
+      await act(async () => { await Promise.resolve() })
+      expect(recognition).toHaveBeenCalledTimes(1)
+      expect(start).toHaveBeenCalledTimes(1)
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(true)
+      expect(live).toHaveBeenCalledTimes(1)
+      expect(view.container.querySelector('[data-codex-voice-fallback]')).toBeNull()
+    } finally {
+      voiceAdapter.setVoiceAssistantActive(false)
+      recognition.mockRestore()
+      live.mockRestore()
+      support.mockRestore()
+      available.mockRestore()
+      cleanup()
+    }
+  })
+
+  it('recovers an already approved voice backup on the same microphone click', async () => {
+    const available = vi.spyOn(voiceAdapter, 'hasVoiceRecognition').mockReturnValue(true)
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
+      .mockResolvedValue({ kind: 'failed', reason: 'invalid_quicksilver_alpha_header' })
+    const start = vi.fn()
+    const recognition = vi.spyOn(voiceAdapter, 'createVoiceRecognition')
+      .mockReturnValue({
+        lang: 'es-DO', continuous: true, interimResults: false, maxAlternatives: 1,
+        onstart: null, onend: null, onerror: null, onresult: null,
+        start, stop: vi.fn(), abort: vi.fn(),
+      })
+    voiceAdapter.setApprovedVoiceFallback(true)
+    try {
+      const { view } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+      expect(live).toHaveBeenCalledOnce()
+      expect(start).toHaveBeenCalledOnce()
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(true)
+      expect(view.getByText('Voz alternativa activa')).toBeTruthy()
+      fireEvent.click(view.getByRole('button', { name: 'Revocar permiso' }))
+      expect(voiceAdapter.hasApprovedVoiceFallback()).toBe(false)
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(false)
+    } finally {
+      voiceAdapter.setVoiceAssistantActive(false)
+      recognition.mockRestore()
+      live.mockRestore()
+      support.mockRestore()
+      available.mockRestore()
+      cleanup()
+    }
+  })
+
+  it('never opens browser speech recognition when Codex CLI Live fails', async () => {
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const browser = vi.spyOn(voiceAdapter, 'createVoiceRecognition')
+      .mockImplementation(() => { throw new Error('browser microphone must stay off') })
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
+      .mockResolvedValue({ kind: 'failed', reason: 'codex-login-required' })
+    const reconnect = vi.fn((_event: Event) => {})
+    window.addEventListener('phoenix:open-feature', reconnect)
+    try {
+      const { view } = bench({ draft: 'Hola' })
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+      expect(live).toHaveBeenCalled()
+      expect(reconnect).toHaveBeenCalledTimes(1)
+      expect((reconnect.mock.calls[0]?.[0] as CustomEvent).detail)
+        .toEqual({ destination: 'connectors', label: 'Reconectar Codex' })
+      expect(browser).not.toHaveBeenCalled()
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(false)
+      expect(view.getByRole('button', { name: '开始语音助手' })
+        .getAttribute('data-codex-voice-failure')).toBe('codex-login-required')
+    } finally {
+      support.mockRestore()
+      window.removeEventListener('phoenix:open-feature', reconnect)
+      browser.mockRestore()
+      live.mockRestore()
+      cleanup()
+    }
+  })
+
 })

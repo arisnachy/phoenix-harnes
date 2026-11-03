@@ -80,6 +80,58 @@ describe('bootstrap failure rendering', () => {
 })
 
 describe('plugin activation', () => {
+  it('loads other plugins while priority prefetch is still waiting on HTTP', async () => {
+    const container = document.createElement('div')
+    document.body.append(container)
+    const target = installFacade()
+    win.__DSH_BOOT__ = { rev: 'graph', entries: [
+      { id: MODULES_ID, url: '/modules.js', rev: '1' },
+      { id: 'priority', url: '/priority.js', rev: '1', immediately: true },
+      { id: 'renderer', url: '/renderer.js', rev: '1' },
+    ] }
+    let releasePriority: () => void = () => {}
+    const priorityGate = new Promise<void>((resolve) => { releasePriority = () => { resolve() } })
+    const started: string[] = []
+    const registrations = new Map<string, ClientBundleRegistration>([
+      ['/priority.js', { id: 'priority', factory: () => ({ apply: () => {} }) }],
+      ['/renderer.js', {
+        id: 'renderer',
+        factory: () => ({
+          apply: (ctx: Context) => {
+            ctx.reflect.provide('uiRenderer', {
+              mount: (element: HTMLElement) => {
+                element.textContent = 'mounted'
+                return () => {}
+              },
+            })
+          },
+        }),
+      }],
+    ])
+    const entry = new AppWebEntry(container, {
+      loadBundle: async (url) => {
+        started.push(url)
+        if (url === '/priority.js') await priorityGate
+        const registration = registrations.get(url)
+        if (registration === undefined) throw new Error(`missing fixture registration ${url}`)
+        target.load(registration)
+      },
+    })
+    const boot = entry.run()
+    try {
+      // Previously the awaited prefetch gate blocked the renderer's request.
+      for (let i = 0; i < 20 && !started.includes('/renderer.js'); i += 1) {
+        await new Promise((resolve) => { setTimeout(resolve, 10) })
+      }
+      expect(started).toContain('/priority.js')
+      expect(started).toContain('/renderer.js')
+    } finally {
+      releasePriority()
+      await boot
+      await entry.dispose()
+    }
+  })
+
   it('allows a modules-dependent row to be created before the modules row', async () => {
     const events: string[] = []
     const container = document.createElement('div')
@@ -129,6 +181,74 @@ describe('plugin activation', () => {
 
     expect(target.mode).toBe('live')
     expect(events).toEqual(['consumer', 'mount'])
+    expect(container.textContent).toBe('mounted')
+    await entry.dispose()
+  })
+
+  it('overlaps immediate prefetch with entry creation and deduplicates the arrival', async () => {
+    const events: string[] = []
+    const calls = new Map<string, number>()
+    let releaseImmediate!: () => void
+    const immediateGate = new Promise<void>((resolve) => { releaseImmediate = resolve })
+    const container = document.createElement('div')
+    document.body.append(container)
+    const target = installFacade()
+    const entries: WebBootEntry[] = [
+      { id: 'immediate', url: '/immediate.js', rev: '1', immediately: true },
+      { id: 'lazy', url: '/lazy.js', rev: '1' },
+      { id: 'renderer', url: '/renderer.js', rev: '1' },
+    ]
+    win.__DSH_BOOT__ = { rev: 'graph', entries }
+    const registrations = new Map<string, ClientBundleRegistration>([
+      ['/immediate.js', { id: 'immediate', factory: () => ({ apply: () => {} }) }],
+      ['/lazy.js', { id: 'lazy', factory: () => ({ apply: () => {} }) }],
+      ['/renderer.js', {
+        id: 'renderer',
+        factory: () => ({
+          apply: (ctx: Context) => {
+            ctx.reflect.provide('uiRenderer', {
+              mount: (element: HTMLElement) => {
+                element.textContent = 'mounted'
+                return () => {}
+              },
+            })
+          },
+        }),
+      }],
+    ])
+    const entry = new AppWebEntry(container, {
+      loadBundle: async (url) => {
+        calls.set(url, (calls.get(url) ?? 0) + 1)
+        events.push(`start:${url}`)
+        if (url === '/immediate.js') await immediateGate
+        const registration = registrations.get(url)
+        if (registration === undefined) throw new Error(`missing fixture registration ${url}`)
+        target.load(registration)
+        events.push(`loaded:${url}`)
+      },
+    })
+
+    const running = entry.run()
+    let waitError: unknown
+    try {
+      await vi.waitFor(() => {
+        expect(events).toContain('start:/immediate.js')
+        expect(events).toContain('start:/lazy.js')
+      }, { timeout: 1_000 })
+    } catch (error) {
+      waitError = error
+    } finally {
+      releaseImmediate()
+    }
+    await running
+    if (waitError !== undefined) throw waitError
+
+    expect(events.indexOf('start:/lazy.js')).toBeLessThan(events.indexOf('loaded:/immediate.js'))
+    expect(calls).toEqual(new Map([
+      ['/immediate.js', 1],
+      ['/lazy.js', 1],
+      ['/renderer.js', 1],
+    ]))
     expect(container.textContent).toBe('mounted')
     await entry.dispose()
   })

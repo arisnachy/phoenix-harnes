@@ -118,17 +118,18 @@ export function providerOrderOf(namespace: SettingsNamespaceView | undefined): s
   return [...new Set(order.filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== ''))]
 }
 
-/** Sort provider rows by the user's order while retaining new routes at the end.
+/** Sort provider rows by the user's order, or put native Codex first when no order is saved.
  * @param rows - provider rows returned by the host directory.
  * @param providerOrder - preferred route order from user settings.
  * @returns a detached ordered row list.
  */
 export function orderProviderRows(rows: readonly ProviderRow[], providerOrder: readonly string[]): ProviderRow[] {
-  const rank = new Map(providerOrder.map((provider, index) => [provider, index]))
+  const effectiveOrder = providerOrder.length === 0 ? ['openai-codex'] : providerOrder
+  const rank = new Map(effectiveOrder.map((provider, index) => [provider, index]))
   return rows
     .map((row, index) => ({ row, index }))
-    .sort((left, right) => (rank.get(left.row.entry.provider) ?? providerOrder.length + left.index)
-      - (rank.get(right.row.entry.provider) ?? providerOrder.length + right.index))
+    .sort((left, right) => (rank.get(left.row.entry.provider) ?? effectiveOrder.length + left.index)
+      - (rank.get(right.row.entry.provider) ?? effectiveOrder.length + right.index))
     .map(entry => entry.row)
 }
 
@@ -200,7 +201,8 @@ export class ModelsSettingsStore {
         entry,
         configured,
         removable,
-        apiKeyEnv: apiKeyEnvOf(namespace, entry.settingsPath, this.schema),
+        // Native Codex uses account authorization; older API references are not credentials for this route.
+        apiKeyEnv: entry.provider === 'openai-codex' ? undefined : apiKeyEnvOf(namespace, entry.settingsPath, this.schema),
         credential: undefined,
       }
     })

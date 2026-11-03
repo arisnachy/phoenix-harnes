@@ -39,6 +39,12 @@
     "packages/client/*/tests/**/*.host.spec.ts"
   ],
   "references": [
+    // The loader-composition.client.spec.ts directly imports Include from the
+    // vendored source path alias. TypeScript composite mode needs this direct
+    // project reference to build vendor/include/lib/types/index.d.ts before
+    // checking the client aggregate; relying on the Host's prior emit produces
+    // TS6305 in freshly isolated Windows runtimes.
+    { "path": "./vendor/include" },
     // Shared leaf: web e2e boots the real host webserver (fixture + real-host
     // smoke policy). webserver has zero workspace deps and no cordis merge,
     // so it cannot drag host-side Context augmentation into this program.

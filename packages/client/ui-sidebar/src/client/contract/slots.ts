@@ -12,6 +12,7 @@ import type { PropsLocale, PropsRenderSlots, PropsRuntime } from '@phoenix-ai/ds
 // program that sees this contract, so PropsRuntime<'sidebar'> resolves.
 import type {} from '@phoenix-ai/dsh-client-ui-layout/client'
 import type { WorkspaceId } from '@phoenix-ai/dsh-client-runtime/client'
+import type { TaskCenterConnection } from '../TaskCenter.tsx'
 
 declare module '@phoenix-ai/dsh-client-ui-slots' {
   interface SlotMap {
@@ -99,6 +100,8 @@ export type SidebarRootInjected = {
   startSession: (workspaceId?: WorkspaceId) => void
   /** Toggle the sidebar column through the layout service. */
   toggleSidebar: () => void
+  /** Loopback task RPC shared with the model-owned proactivity engine. */
+  taskConnection?: TaskCenterConnection
 }
 
 /**

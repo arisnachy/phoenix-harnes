@@ -100,7 +100,7 @@ describe('Google Workspace account telemetry', () => {
     const drive = telemetry.connectors?.find(service => service.id === 'drive')
     expect(gmail).toMatchObject({ name: 'Gmail', installed: true, callable: true, accessible: true, enabled: true })
     expect(calendar).toMatchObject({ name: 'Google Calendar', installed: true, callable: true })
-    expect(drive).toMatchObject({ name: 'Google Drive', installed: false, callable: false })
+    expect(drive).toMatchObject({ name: 'Google Drive', installed: true, callable: false })
 
     expect(JSON.stringify(telemetry)).not.toMatch(/access-token-private|refresh-token-private|authorization-code-private/)
   })

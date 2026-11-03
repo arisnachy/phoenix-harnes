@@ -7,6 +7,7 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $marker = Join-Path $root '.phoenix-managed-install'
 $managedUpdater = Join-Path $root 'scripts\phoenix-managed-update.mjs'
 $fallbackUpdater = Join-Path $root 'scripts\phoenix-auto-update.mjs'
+$shortcutRepair = Join-Path $root 'scripts\phoenix-windows-shortcut.mjs'
 
 if (-not (Test-Path -LiteralPath $marker)) { return }
 if ($env:PHOENIX_AUTO_UPDATE -eq '0') { return }
@@ -38,6 +39,44 @@ try {
   }
 } finally {
   Pop-Location
+}
+
+# Optional ClawHub CLI dependency. An offline registry must not block startup.
+$clawHubBootstrap = Join-Path $root 'scripts/phoenix-clawhub-bootstrap.mjs'
+if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $clawHubBootstrap)) {
+  try { & node $clawHubBootstrap --ensure --update } catch { Write-Warning 'ClawHub CLI install deferred.' }
+}
+
+# Companion CLI is best-effort: never change the PHOENIX runtime if Node is incompatible
+# or a third-party package registry cannot be reached. No Gateway service starts here.
+$openClawBootstrap = Join-Path $root 'scripts/phoenix-openclaw-bootstrap.mjs'
+if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $openClawBootstrap)) {
+  try {
+    & node $openClawBootstrap --ensure
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'OpenClaw CLI setup deferred.' }
+  } catch {
+    Write-Warning 'OpenClaw CLI setup deferred.'
+  }
+}
+
+# Optional sports sources install after a successful stable update; do not block
+# PHOENIX because GitHub/OddsPortal/Python may be unavailable temporarily.
+$sportsAuto = Join-Path $root 'scripts\phoenix-sports-source-auto.mjs'
+if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $sportsAuto)) {
+  try {
+    & node $sportsAuto
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'Sports sources auto-install was deferred; PHOENIX core remains available.' }
+  } catch {
+    Write-Warning "Sports sources auto-install unavailable: $($_.Exception.Message)"
+  }
+}
+
+if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $shortcutRepair)) {
+  try {
+    & node $shortcutRepair --install
+  } catch {
+    Write-Warning "PHOENIX updated successfully, but the desktop shortcut could not be repaired: $($_.Exception.Message)"
+  }
 }
 
 # Preserve the semantic exit code from the Node updater. The desktop launcher

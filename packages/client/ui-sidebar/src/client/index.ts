@@ -4,6 +4,7 @@ import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import type { SidebarRootInjected } from './contract/slots.ts'
 import { SidebarRoot } from './SidebarRoot.tsx'
+import type { TaskCenterConnection } from './TaskCenter.tsx'
 import { en, es, zh, type SidebarKey } from './locales.ts'
 
 export type {
@@ -23,7 +24,7 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
 const NS = 'sidebar'
 
 /** Services required by the sidebar plugin. */
-export const inject = ['slots', 'layout', 'sessions', 'workspaces', 'locale']
+export const inject = ['slots', 'layout', 'sessions', 'workspaces', 'locale', 'connection']
 
 /** Registers the sidebar shell and its service callbacks.
  * @param ctx - Client root context.
@@ -36,6 +37,7 @@ export function apply(ctx: ClientContext): void {
     // (current Session Workspace, then recent Workspace).
     startSession: (workspaceId) => { ctx.workspaces.startSession(workspaceId) },
     toggleSidebar: () => { ctx.layout.toggleSidebar() },
+    taskConnection: ctx.get('connection') as TaskCenterConnection,
   })
   ctx.effect(
     () => ctx.slots.register({

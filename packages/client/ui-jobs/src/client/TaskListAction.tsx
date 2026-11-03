@@ -26,6 +26,7 @@ type TaskStatus = 'scheduled' | 'running' | 'completed' | 'failed' | 'paused' | 
 type TaskRecurrence =
   | { readonly kind: 'once' }
   | { readonly kind: 'interval'; readonly everyMs: number }
+  | { readonly kind: 'calendar'; readonly unit: 'week' | 'month'; readonly every: number; readonly timezone?: string }
   | { readonly kind: 'yearly'; readonly everyYears: number; readonly timezone?: string }
 
 interface TaskView {
@@ -48,6 +49,14 @@ function parseRecurrence(value: unknown): TaskRecurrence {
   if (!isRecord(value)) throw new Error('invalid task recurrence')
   if (value.kind === 'once') return { kind: 'once' }
   if (value.kind === 'interval' && typeof value.everyMs === 'number') return { kind: 'interval', everyMs: value.everyMs }
+  if (value.kind === 'calendar' && (value.unit === 'week' || value.unit === 'month')
+    && typeof value.every === 'number'
+    && (value.timezone === undefined || typeof value.timezone === 'string')) {
+    return {
+      kind: 'calendar', unit: value.unit, every: value.every,
+      ...(value.timezone === undefined ? {} : { timezone: value.timezone }),
+    }
+  }
   if (value.kind === 'yearly' && typeof value.everyYears === 'number'
     && (value.timezone === undefined || typeof value.timezone === 'string')) {
     return {
@@ -104,6 +113,10 @@ function statusLabel(status: TaskStatus, t: TranslateNS<typeof NS>): string {
 
 function recurrenceLabel(recurrence: TaskRecurrence, t: TranslateNS<typeof NS>): string {
   if (recurrence.kind === 'once') return t('task.recurrence.once')
+  if (recurrence.kind === 'calendar') {
+    const unit = recurrence.unit === 'week' ? 'task.recurrence.weeks' : 'task.recurrence.months'
+    return t(unit, { count: recurrence.every })
+  }
   if (recurrence.kind === 'yearly') return recurrence.everyYears === 1
     ? t('task.recurrence.yearly')
     : t('task.recurrence.years', { count: recurrence.everyYears })

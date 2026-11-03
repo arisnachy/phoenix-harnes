@@ -41,7 +41,7 @@ describe('SidebarRoot.module.css', () => {
   })
 
   it('moves the four upper controls while the settings seat only fades', () => {
-    const animation = 'rail-in 150ms var(--ds-ease-in-out) backwards'
+    const animation = 'rail-in 80ms ease-out'
     for (const selector of [
       '.railIn .iconButton',
       '.railIn .newSession',
@@ -50,10 +50,10 @@ describe('SidebarRoot.module.css', () => {
       expect(declarations(selector)?.get('animation')).toBe(animation)
     }
     expect(declarations('.railIn .footArea')?.get('animation')).toBe(
-      'rail-fade-in 150ms var(--ds-ease-in-out) backwards',
+      'rail-fade-in 80ms ease-out',
     )
     expect(css).toMatch(
-      /@keyframes rail-in\s*\{\s*from\s*\{\s*opacity: 0;\s*transform: translateX\(49px\);\s*}\s*}/,
+      /@keyframes rail-in\s*\{\s*from\s*\{\s*opacity: \.55;\s*}\s*}/,
     )
     expect(css).toMatch(/@keyframes rail-fade-in\s*\{\s*from\s*\{\s*opacity: 0;\s*}\s*}/)
   })
@@ -66,17 +66,17 @@ describe('SidebarRoot.module.css', () => {
   })
 
   it('keeps a calmer PHOENIX identity inside the existing header geometry', () => {
-    expect(declarations('.logoRow')?.get('height')).toBe('52px')
+    expect(declarations('.logoRow')?.get('height')).toBe('56px')
     expect(declarations('.logoRow')?.get('margin-bottom')).toBe('4px')
     expect(declarations('.brandIdentity')?.get('height')).toBe('36px')
-    expect(declarations('.brandMark img')?.get('width')).toBe('36px')
-    expect(declarations('.brandMark img')?.get('height')).toBe('36px')
+    expect(declarations('.brandMark img')?.get('width')).toBe('38px')
+    expect(declarations('.brandMark img')?.get('height')).toBe('38px')
     expect(declarations('.brandName')?.get('height')).toBe('30px')
     expect(declarations('.brandName')?.get('line-height')).toBe('1')
-    expect(declarations('.brandName')?.get('font-size')).toBe('18px')
+    expect(declarations('.brandName')?.get('font-size')).toBe('17px')
     expect(declarations('.brandName')?.get('font-weight')).toBe('600')
-    expect(declarations('.brandName')?.get('letter-spacing')).toBe('0.16em')
-    expect(declarations('.brandName')?.get('border-left')).toBe('1px solid var(--dsw-alias-border-l2)')
+    expect(declarations('.brandName')?.get('letter-spacing')).toBe('0.18em')
+    expect(declarations('.brandName')?.get('border-left')).toBe('none')
     expect(declarations('.fallbackBrandName')?.get('font-size')).toBe('0')
     expect(declarations('.fallbackBrandName')?.get('white-space')).toBe('nowrap')
   })

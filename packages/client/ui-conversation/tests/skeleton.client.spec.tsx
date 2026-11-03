@@ -4,7 +4,7 @@
 // owned draft, and the hero workspace picker (switching = retargetWorkspace).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
-import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { bindSnapshotSelector } from '@phoenix-ai/dsh-client-test-runtime'
 import {
   createSnapshotStore, EMPTY_CHAT_SNAPSHOT, EMPTY_CONVERSATION_VIEWS,
@@ -27,13 +27,15 @@ import type { HeroShellProps } from '../src/client/skeleton/EmptyHero.tsx'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
 import type {
-  ComposerBarOwnerProps, ConversationHeaderLineageOwnerProps,
+  ComposerBarOwnerProps, ConversationHeaderLineageOwnerProps, ProactivityAttentionItem,
 } from '../src/client/contract/slots.ts'
 import type { ViewTab } from '../src/client/contract/views.ts'
 
 /** Machine-backed wiring over a sink spy. */
-function fakeWiring() {
-  const sink = vi.fn(() => Promise.resolve({ kind: 'success' as const }))
+function fakeWiring(holdSubmit = false) {
+  const sink = vi.fn(() => holdSubmit
+    ? new Promise<{ kind: 'success' }>(() => {})
+    : Promise.resolve({ kind: 'success' as const }))
   const shell = new SessionInputShell({ actx: {} as ClientContext, defaultSink: sink, commandImages: { serialize: () => Promise.resolve([]), release: () => {}, unsupportedNotice: (token: string) => `${token.trim()} images-unsupported` } })
   return { wiring: shell, sink, shell }
 }
@@ -52,6 +54,8 @@ afterEach(() => {
 beforeEach(() => {
   localStorage.clear()
   vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => window.setTimeout(() => { callback(0) }, 16))
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => window.clearTimeout(id))
 })
 
 // Mirrors the real lookup chain (conversation namespace, then common).
@@ -105,6 +109,8 @@ function mount(
     preferredName?: string
     /** Mutable view ledger used by registration-order regressions. */
     viewTabs?: ViewTab[]
+    /** Keep the local submit receipt visible until the test explicitly unmounts. */
+    holdSubmit?: boolean
   } = {},
 ) {
   const root = sid('root')
@@ -137,10 +143,11 @@ function mount(
   const userProfile = createSnapshotStore<{ preferredName?: string }>(
     options.preferredName === undefined ? {} : { preferredName: options.preferredName },
   )
+  const proactivityAttention = createSnapshotStore<readonly ProactivityAttentionItem[]>([])
   const useSession = bindSnapshotSelector(session)
   const chat = createChatStore().create()
   chat.actions.setDraft('ordinary draft')
-  const { wiring, sink } = fakeWiring()
+  const { wiring, sink } = fakeWiring(options.holdSubmit === true)
   const useInput = bindSnapshotSelector(wiring.state)
   const inputActions = wiring.actions
   const stop = vi.fn()
@@ -151,10 +158,11 @@ function mount(
     { id: 'chat', label: 'Chat' },
     { id: 'trajectory', label: 'Trajectory' },
   ]
+  const viewListeners = new Set<() => void>()
   const views = {
     list: () => viewTabs,
-    subscribe: () => () => {},
-    version: () => 1,
+    subscribe: (listener: () => void) => { viewListeners.add(listener); return () => { viewListeners.delete(listener) } },
+    version: () => viewTabs.map(view => view.id).join('|').length,
   }
   /** Owner share handed to the two composer tool-row seats, per render. */
   const seatOwners: { key: string; owner: unknown }[] = []
@@ -239,6 +247,7 @@ function mount(
             // The bar's own seats: recorded so a case can assert what share
             // each tool-row control received.
             seatOwners.push({ key, owner: seatOwner })
+            slotCalls.push(key)
             return null
           }) as InputBarProps['renderSlot']}
           {...bar}
@@ -259,6 +268,7 @@ function mount(
       )
       : (opts?.fallback ?? null)
   )) as ConversationRootProps['renderSlotChain']
+  const focusSidebar = vi.fn()
   const props: ConversationRootProps = {
     sessionId: SID,
     SessionProvider: ({ children }) => children(SID),
@@ -268,6 +278,9 @@ function mount(
     useProjection: (() => undefined),
     useComposerBlock: select => select(options.composerBlock),
     useUserProfile: bindSnapshotSelector(userProfile),
+    useProactivityAttention: bindSnapshotSelector(proactivityAttention),
+    recordAttention: async () => {},
+    setSidebarFocus: focusSidebar,
     useInput,
     inputActions,
     renderSlot,
@@ -277,9 +290,9 @@ function mount(
   }
   const view = render(<ConversationRoot {...props} />)
   return {
-    view, chat, sink, retargetWorkspace, session, slotCalls, lineageOwners, seatOwners, open,
+    view, chat, sink, wiring, retargetWorkspace, session, slotCalls, lineageOwners, seatOwners, open, focusSidebar,
     pickerOwner: () => pickerOwner,
-    rerender: () => { view.rerender(<ConversationRoot {...props} />) },
+    rerender: () => { act(() => { for (const listener of viewListeners) listener() }); view.rerender(<ConversationRoot {...props} />) },
   }
 }
 
@@ -302,7 +315,54 @@ describe('Hero chrome', () => {
   })
 })
 
+describe('Approved welcome chrome', () => {
+  it('keeps global tools without duplicating the composer model selector', () => {
+    const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }))
+    expect(b.view.getByRole('button', { name: 'Buscar sesiones' })).toBeTruthy()
+    expect(b.view.getByRole('button', { name: 'Abrir perfil' })).toBeTruthy()
+    expect(b.slotCalls).not.toContain('conversation.hero.model')
+    expect(b.slotCalls).toContain('conversation.input.model')
+    const unified = b.view.container.querySelector('[aria-label="Barra superior de la conversación"]')
+    expect(unified?.contains(b.view.getByRole('button', { name: 'Buscar sesiones' }))).toBe(true)
+    const sections: string[] = []
+    const onSettings = (event: Event) => { sections.push((event as CustomEvent<string>).detail) }
+    window.addEventListener('phoenix:open-settings-section', onSettings)
+    try {
+      fireEvent.click(b.view.getByRole('button', { name: 'Abrir perfil' }))
+      fireEvent.click(b.view.getByRole('button', { name: 'Descubrir herramientas' }))
+      expect(sections).toEqual(['profile', 'plugins'])
+    } finally {
+      window.removeEventListener('phoenix:open-settings-section', onSettings)
+    }
+  })
+})
+
 describe('ConversationRoot resident composer', () => {
+  it('keeps the original composer and universal Kira mission starters', () => {
+    const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }))
+    expect(b.view.getByRole('textbox')).toBeTruthy()
+    expect(b.view.getByText(/podemos trabajar hoy/)).toBeTruthy()
+    expect(b.view.queryByRole('button', { name: 'Crear' })).toBeNull()
+    expect(b.view.queryByRole('button', { name: 'Analizar' })).toBeNull()
+    expect(b.view.queryByRole('button', { name: 'Programar' })).toBeNull()
+    expect(b.view.queryByRole('button', { name: 'Dame una gráfica de datos ficticios' })).toBeNull()
+    expect(b.slotCalls).toContain('conversation.hero.workspace')
+    expect(b.slotCalls).toContain('conversation.hero.agentPreset')
+    expect(b.slotCalls).toContain('conversation.input.model')
+    expect(b.sink).not.toHaveBeenCalled()
+    const textarea = b.view.getByRole('textbox') as HTMLTextAreaElement
+    // The restored draft wins over shortcuts. They must never overwrite user input.
+    expect(b.view.queryByRole('button', { name: 'Continuar misión' })).toBeNull()
+    fireEvent.change(textarea, { target: { value: '' } })
+    expect(b.view.getByRole('button', { name: 'Continuar misión' })).toBeTruthy()
+    expect(b.view.getByRole('button', { name: 'Investigar' })).toBeTruthy()
+    expect(b.view.getByRole('button', { name: 'Construir' })).toBeTruthy()
+    fireEvent.click(b.view.getByRole('button', { name: 'Continuar misión' }))
+    expect(textarea.value).toContain('estado verificado de la misión activa')
+    expect(b.sink).not.toHaveBeenCalled()
+    expect(b.view.queryByRole('button', { name: 'Continuar misión' })).toBeNull()
+  })
+
   it('renders the composer inert with the blocker\u2019s own reason', () => {
     const b = mount(conversationSnapshot(), undefined, undefined, {
       composerBlock: { reason: 'select a model first' },
@@ -405,6 +465,12 @@ describe('ConversationRoot resident composer', () => {
     expect(b.slotCalls).toContain('conversation.session.header.lineage')
     expect(b.slotCalls).toContain('conversation.session.header.actions')
     expect(b.slotCalls).toContain('conversation.session.header.utilities')
+    const unified = b.view.container.querySelector('[aria-label="Barra superior de la conversación"]')
+    expect(unified?.contains(header)).toBe(true)
+    expect(unified?.contains(b.view.getByRole('button', { name: 'Buscar sesiones' }))).toBe(true)
+    expect(b.view.getByRole('tab', { name: 'Chat' })).toBeTruthy()
+    expect(b.view.getByRole('tab', { name: 'Trajectory' })).toBeTruthy()
+    expect(b.slotCalls).not.toContain('conversation.hero.model')
   })
 
   it('sticky composer seat wraps the whole overlay chain, not only the fallback stack', () => {
@@ -430,8 +496,8 @@ describe('ConversationRoot resident composer', () => {
     const header = b.view.container.querySelector('header')
     expect(host).not.toBeNull()
     expect(header?.getAttribute('aria-hidden')).toBe('true')
-    expect(b.view.getByText('PHOENIX')).toBeTruthy()
-    expect(b.view.getByText('预览版')).toBeTruthy()
+    expect(b.view.getByRole('heading', { level: 1 })).toBeTruthy()
+    expect(b.view.getByText('¿En qué podemos trabajar hoy?')).toBeTruthy()
     expect(b.view.queryByTestId('view-chat')).toBeNull()
     // The same machine-backed textarea is live in the hero, and the
     // persistence mirror stays bound (ConversationSession mounts chrome-hidden
@@ -479,7 +545,7 @@ describe('ConversationRoot resident composer', () => {
     // blank the column for the history round-trip.
     const root = b.view.container.querySelector('[data-phase]')
     expect(root?.getAttribute('data-phase')).toBe('hero')
-    expect(b.view.getByText('PHOENIX')).toBeTruthy()
+    expect(b.view.getByRole('heading', { level: 1 })).toBeTruthy()
     expect(b.view.getByRole('textbox')).toBeTruthy()
   })
 
@@ -562,5 +628,184 @@ describe('ConversationRoot resident composer', () => {
     }))
     expect(b.view.getByRole('alert').textContent).toContain('Message send failed (offline)')
     expect(b.view.queryByRole('button', { name: 'Retry' })).toBeNull()
+  })
+})
+
+describe('Contextual focus chrome', () => {
+  it('does not collapse during typing, newlines, or sending an existing conversation', async () => {
+    const b = mount(conversationSnapshot(), undefined, undefined, { holdSubmit: true })
+    const textarea = b.view.getByRole('textbox')
+    fireEvent.change(textarea, { target: { value: 'Escribiendo en Phoenix' } })
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
+    expect(b.focusSidebar).toHaveBeenLastCalledWith(false)
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    await act(async () => { await Promise.resolve() })
+    const scroll = b.view.container.querySelector('[data-conversation-scroll]')
+    if (scroll === null) throw new Error('conversation scroll surface is required')
+    const flow = document.createElement('div')
+    flow.setAttribute('data-chat-flow', '')
+    flow.innerHTML = '<div data-pending-steering="true">Sent in existing chat</div>'
+    act(() => { scroll.prepend(flow) })
+    await act(async () => { await new Promise(resolve => window.setTimeout(resolve, 110)) })
+    expect(b.focusSidebar).toHaveBeenLastCalledWith(false)
+  })
+
+  it.each(['enter', 'button'] as const)(
+    'waits for first-user-bubble paint after %s before collapsing the sidebar', async (method) => {
+      vi.useFakeTimers()
+      vi.stubGlobal('requestAnimationFrame',
+        (callback: FrameRequestCallback) => window.setTimeout(() => { callback(0) }, 16))
+      vi.stubGlobal('cancelAnimationFrame', (id: number) => window.clearTimeout(id))
+      try {
+        const b = mount(
+          conversationSnapshot({ composerPhase: 'blank', blank: true }),
+          undefined, undefined, { summaryBlank: true, holdSubmit: true },
+        )
+        const textarea = b.view.getByRole('textbox')
+        fireEvent.change(textarea, { target: { value: 'Primer mensaje' } })
+        expect(b.focusSidebar).toHaveBeenLastCalledWith(false)
+        if (method === 'enter') {
+          fireEvent.keyDown(textarea, { key: 'Enter' })
+        } else {
+          fireEvent.click(b.view.getByRole('button', { name: '发送消息' }))
+        }
+        await act(async () => { await Promise.resolve(); await Promise.resolve() })
+        expect(b.focusSidebar).toHaveBeenLastCalledWith(false)
+        const scroll = b.view.container.querySelector('[data-conversation-scroll]')
+        if (scroll === null) throw new Error('conversation scroll surface is required')
+        const flow = document.createElement('div')
+        flow.setAttribute('data-chat-flow', '')
+        const bubble = document.createElement('div')
+        bubble.setAttribute('data-pending-steering', 'true')
+        bubble.textContent = 'Primer mensaje'
+        // The blank hero remains expanded while admission is pending.
+        act(() => { scroll.prepend(flow) })
+        await act(async () => { await vi.advanceTimersByTimeAsync(250) })
+        expect(b.focusSidebar).toHaveBeenLastCalledWith(false)
+        act(() => { flow.append(bubble) })
+        await act(async () => { await Promise.resolve() })
+        await act(async () => { await vi.advanceTimersByTimeAsync(16) })
+        expect(b.focusSidebar).toHaveBeenLastCalledWith(false)
+        await act(async () => { await vi.advanceTimersByTimeAsync(71) })
+        expect(b.focusSidebar).toHaveBeenLastCalledWith(false)
+        await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+        expect(b.focusSidebar).toHaveBeenLastCalledWith(true)
+      } finally {
+        cleanup()
+        vi.useRealTimers()
+      }
+    },
+  )
+
+  it('paints the first draft before expanding chrome and cancels stale expansion on clear', async () => {
+    let nextFrame: FrameRequestCallback | undefined
+    vi.useFakeTimers()
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { nextFrame = callback; return 1 })
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    try {
+      const b = mount(conversationSnapshot())
+      const root = b.view.container.querySelector('[data-phase="active"]')
+      const textarea = b.view.getByRole('textbox')
+      if (!(textarea instanceof HTMLTextAreaElement)) throw new Error('composer textarea is required')
+      if (root === null) throw new Error('conversation shell is required')
+      fireEvent.change(textarea, { target: { value: 'p' } })
+      expect(textarea.value).toBe('p')
+      expect(b.view.container.querySelector('[data-input-backdrop]')?.textContent).toContain('p')
+      expect(root.getAttribute('data-header-compact')).toBe('true')
+      act(() => { nextFrame?.(0) })
+      expect(root.getAttribute('data-header-compact')).toBe('true')
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(root.hasAttribute('data-header-compact')).toBe(false)
+      fireEvent.change(textarea, { target: { value: '' } })
+      fireEvent.change(textarea, { target: { value: 'q' } })
+      act(() => { nextFrame?.(0) })
+      fireEvent.change(textarea, { target: { value: '' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(root.getAttribute('data-header-compact')).toBe('true')
+      expect(textarea.value).toBe('')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('starts with a right-side compact header; hover does not cause a width jump, typing expands it', async () => {
+    const b = mount(conversationSnapshot())
+    const root = b.view.container.querySelector('[data-phase="active"]')
+    const header = b.view.container.querySelector('[aria-label="Barra superior de la conversación"]')
+    if (root === null || header === null) throw new Error('header is required')
+    expect(root.getAttribute('data-header-compact')).toBe('true')
+    fireEvent.mouseEnter(header)
+    expect(root.getAttribute('data-header-compact')).toBe('true')
+    fireEvent.mouseLeave(header)
+    const search = b.view.getByRole('button', { name: 'Buscar sesiones' })
+    fireEvent.focus(search)
+    expect(root.getAttribute('data-header-compact')).toBe('true')
+    const textarea = b.view.getByRole('textbox')
+    fireEvent.change(textarea, { target: { value: 'Quiero crear un juego' } })
+    expect(root.getAttribute('data-header-compact')).toBe('true')
+    await waitFor(() => { expect(root.hasAttribute('data-header-compact')).toBe(false) })
+    fireEvent.change(textarea, { target: { value: '' } })
+    expect(root.getAttribute('data-header-compact')).toBe('true')
+  })
+
+  it('opens the home screen compact, expands on draft, and collapses for a game/visual presentation', async () => {
+    const b = mount(
+      conversationSnapshot({ composerPhase: 'blank', blank: true }),
+      undefined, undefined, { summaryBlank: true },
+    )
+    const root = b.view.container.querySelector('[data-phase="hero"]')
+    const scroll = b.view.container.querySelector('[data-conversation-scroll]')
+    if (root === null || scroll === null) throw new Error('hero shell is required')
+    expect(root.getAttribute('data-header-compact')).toBe('true')
+    expect(b.view.getByRole('button', { name: 'Expandir barra superior' })).toBeTruthy()
+    const textarea = b.view.getByRole('textbox')
+    fireEvent.change(textarea, { target: { value: 'Juego con animaciones y sonido' } })
+    await waitFor(() => { expect(root.hasAttribute('data-header-compact')).toBe(false) })
+    const game = document.createElement('div')
+    game.setAttribute('data-universal-artifact', 'game')
+    act(() => { scroll.append(game) })
+    await waitFor(() => { expect(root.getAttribute('data-header-compact')).toBe('true') })
+    act(() => { game.remove() })
+    await waitFor(() => { expect(root.hasAttribute('data-header-compact')).toBe(false) })
+    fireEvent.change(textarea, { target: { value: '' } })
+    expect(root.getAttribute('data-header-compact')).toBe('true')
+  })
+
+  it('keeps a manually pinned header expanded after visual focus ends', async () => {
+    const b = mount(conversationSnapshot())
+    act(() => { b.wiring.actions.setDraft('') })
+    const root = b.view.container.querySelector('[data-phase="active"]')
+    const scroll = b.view.container.querySelector('[data-conversation-scroll]')
+    if (root === null || scroll === null) throw new Error('conversation shell is required')
+    expect(root.getAttribute('data-header-compact')).toBe('true')
+    const visual = document.createElement('div')
+    visual.setAttribute('data-phoenix-visual-qa', 'pass')
+    act(() => { scroll.append(visual) })
+    await waitFor(() => { expect(b.focusSidebar).toHaveBeenLastCalledWith(true) })
+    fireEvent.click(b.view.getByRole('button', { name: 'Expandir barra superior' }))
+    expect(root.hasAttribute('data-header-compact')).toBe(false)
+    expect(b.view.getByRole('button', { name: 'Activar colapso automático' }).getAttribute('aria-pressed')).toBe('true')
+    act(() => { visual.remove() })
+    await waitFor(() => { expect(b.focusSidebar).toHaveBeenLastCalledWith(false) })
+    expect(root.hasAttribute('data-header-compact')).toBe(false)
+    fireEvent.click(b.view.getByRole('button', { name: 'Activar colapso automático' }))
+    expect(root.getAttribute('data-header-compact')).toBe('true')
+  })
+
+  it('keeps browser focus without locking the header expanded', async () => {
+    const b = mount(conversationSnapshot())
+    act(() => { b.wiring.actions.setDraft('') })
+    const root = b.view.container.querySelector('[data-phase="active"]')
+    const scroll = b.view.container.querySelector('[data-conversation-scroll]')
+    if (root === null || scroll === null) throw new Error('conversation shell is required')
+    const browser = document.createElement('span')
+    browser.hidden = true
+    browser.setAttribute('data-mini-browser-focus', 'true')
+    act(() => { scroll.append(browser) })
+    await waitFor(() => { expect(b.focusSidebar).toHaveBeenLastCalledWith(true) })
+    expect(root.getAttribute('data-header-compact')).toBe('true')
+    act(() => { browser.remove() })
+    await waitFor(() => { expect(b.focusSidebar).toHaveBeenLastCalledWith(false) })
+    expect(root.getAttribute('data-header-compact')).toBe('true')
   })
 })

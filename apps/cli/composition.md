@@ -38,6 +38,10 @@ flowchart LR
   cfg --> plugin_dsh_base_living_local
   plugin_dsh_base_tool_living["tool-living<br/>@phoenix-ai/dsh-tool-living"]
   cfg --> plugin_dsh_base_tool_living
+  plugin_dsh_base_tool_business["tool-business<br/>@phoenix-ai/dsh-tool-business"]
+  cfg --> plugin_dsh_base_tool_business
+  plugin_dsh_base_tool_sports["tool-sports<br/>@phoenix-ai/dsh-tool-sports"]
+  cfg --> plugin_dsh_base_tool_sports
   plugin_dsh_base_llm_retry["llm-retry<br/>@phoenix-ai/dsh-llm-retry"]
   cfg --> plugin_dsh_base_llm_retry
   plugin_dsh_base_settings["settings<br/>@phoenix-ai/dsh-settings-file"]
@@ -52,8 +56,12 @@ flowchart LR
   cfg --> plugin_dsh_base_authorization
   plugin_dsh_base_authorization_google["authorization-google<br/>@phoenix-ai/dsh-authorization/google"]
   cfg --> plugin_dsh_base_authorization_google
+  plugin_dsh_base_tool_google_workspace["tool-google-workspace<br/>@phoenix-ai/dsh-tool-google-workspace"]
+  cfg --> plugin_dsh_base_tool_google_workspace
   plugin_dsh_base_llm_pi_ai["llm-pi-ai<br/>@phoenix-ai/dsh-llm-pi-ai"]
   cfg --> plugin_dsh_base_llm_pi_ai
+  plugin_dsh_base_host_image_generation["host-image-generation<br/>@phoenix-ai/dsh-llm-pi-ai"]
+  cfg --> plugin_dsh_base_host_image_generation
   plugin_dsh_base_session_persistence_jsonl["session-persistence-jsonl<br/>@phoenix-ai/dsh-session-persistence-jsonl"]
   cfg --> plugin_dsh_base_session_persistence_jsonl
   plugin_dsh_base_session_learning["session-learning<br/>@phoenix-ai/dsh-session-learning"]
@@ -130,10 +138,16 @@ flowchart LR
   cfg --> plugin_dsh_base_command_compact
   plugin_dsh_base_subagent["subagent<br/>@phoenix-ai/dsh-subagent"]
   cfg --> plugin_dsh_base_subagent
+  plugin_dsh_base_subagent_codex["subagent-codex<br/>@phoenix-ai/dsh-subagent-codex"]
+  cfg --> plugin_dsh_base_subagent_codex
+  plugin_dsh_base_subagent_codex_auto_review["subagent-codex-auto-review<br/>@phoenix-ai/dsh-subagent-codex"]
+  cfg --> plugin_dsh_base_subagent_codex_auto_review
   plugin_dsh_base_subagent_spawn_in_process["subagent-spawn-in-process<br/>@phoenix-ai/dsh-subagent-spawn-in-process"]
   cfg --> plugin_dsh_base_subagent_spawn_in_process
   plugin_dsh_base_subagent_fork_in_process["subagent-fork-in-process<br/>@phoenix-ai/dsh-subagent-fork-in-process"]
   cfg --> plugin_dsh_base_subagent_fork_in_process
+  plugin_dsh_base_agent_team["agent-team<br/>@phoenix-ai/dsh-agent-team"]
+  cfg --> plugin_dsh_base_agent_team
   plugin_dsh_base_tool_subagent_control["tool-subagent-control<br/>@phoenix-ai/dsh-tool-subagent-control"]
   cfg --> plugin_dsh_base_tool_subagent_control
   plugin_dsh_base_tool_subagent_list_agents["tool-subagent-list-agents<br/>@phoenix-ai/dsh-tool-subagent-control/list-agents"]
@@ -180,6 +194,8 @@ flowchart LR
   cfg --> plugin_dsh_base_web_search_openrouter
   plugin_dsh_base_web_search_free["web-search-free<br/>@phoenix-ai/dsh-web-search-free"]
   cfg --> plugin_dsh_base_web_search_free
+  plugin_dsh_base_web_fetch_http["web-fetch-http<br/>@phoenix-ai/dsh-web-fetch-http"]
+  cfg --> plugin_dsh_base_web_fetch_http
   plugin_dsh_base_tool_web["tool-web<br/>@phoenix-ai/dsh-tool-web"]
   cfg --> plugin_dsh_base_tool_web
   plugin_dsh_base_mcp_connector_registry["mcp-connector-registry<br/>@phoenix-ai/dsh-mcp-connector-registry"]
@@ -229,6 +245,8 @@ flowchart LR
 | `jobs` | `@phoenix-ai/dsh-jobs-local` |
 | `living-local` | `@phoenix-ai/dsh-living-local` |
 | `tool-living` | `@phoenix-ai/dsh-tool-living` |
+| `tool-business` | `@phoenix-ai/dsh-tool-business` |
+| `tool-sports` | `@phoenix-ai/dsh-tool-sports` |
 | `llm-retry` | `@phoenix-ai/dsh-llm-retry` |
 | `settings` | `@phoenix-ai/dsh-settings-file` |
 | `user-profile` | `@phoenix-ai/dsh-user-profile` |
@@ -236,7 +254,9 @@ flowchart LR
 | `secret-vault` | `@phoenix-ai/dsh-secret-vault` |
 | `authorization` | `@phoenix-ai/dsh-authorization` |
 | `authorization-google` | `@phoenix-ai/dsh-authorization/google` |
+| `tool-google-workspace` | `@phoenix-ai/dsh-tool-google-workspace` |
 | `llm-pi-ai` | `@phoenix-ai/dsh-llm-pi-ai` |
+| `host-image-generation` | `@phoenix-ai/dsh-llm-pi-ai` |
 | `session-persistence-jsonl` | `@phoenix-ai/dsh-session-persistence-jsonl` |
 | `session-learning` | `@phoenix-ai/dsh-session-learning` |
 | `cognitive-runtime` | `@phoenix-ai/dsh-cognitive-runtime` |
@@ -275,8 +295,11 @@ flowchart LR
 | `compaction-basic` | `@phoenix-ai/dsh-compaction-basic` |
 | `command-compact` | `@phoenix-ai/dsh-command-compact` |
 | `subagent` | `@phoenix-ai/dsh-subagent` |
+| `subagent-codex` | `@phoenix-ai/dsh-subagent-codex` |
+| `subagent-codex-auto-review` | `@phoenix-ai/dsh-subagent-codex` |
 | `subagent-spawn-in-process` | `@phoenix-ai/dsh-subagent-spawn-in-process` |
 | `subagent-fork-in-process` | `@phoenix-ai/dsh-subagent-fork-in-process` |
+| `agent-team` | `@phoenix-ai/dsh-agent-team` |
 | `tool-subagent-control` | `@phoenix-ai/dsh-tool-subagent-control` |
 | `tool-subagent-list-agents` | `@phoenix-ai/dsh-tool-subagent-control/list-agents` |
 | `tool-subagent` | `@phoenix-ai/dsh-tool-subagent` |
@@ -300,6 +323,7 @@ flowchart LR
 | `web` | `@phoenix-ai/dsh-web` |
 | `web-search-openrouter` | `@phoenix-ai/dsh-web-search-openrouter` |
 | `web-search-free` | `@phoenix-ai/dsh-web-search-free` |
+| `web-fetch-http` | `@phoenix-ai/dsh-web-fetch-http` |
 | `tool-web` | `@phoenix-ai/dsh-tool-web` |
 | `mcp-connector-registry` | `@phoenix-ai/dsh-mcp-connector-registry` |
 | `mcp-blender-game-dev` | `@phoenix-ai/dsh-mcp-client` |

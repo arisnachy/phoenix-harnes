@@ -11,7 +11,7 @@ import type { ScopeKey, ScopeLayer, Scoped } from '@phoenix-ai/dsh-scope'
 import type { CallId, ContentBlock, ToolSchema } from '@phoenix-ai/dsh-llm'
 import { assertNever, deepFreeze, HarnessError } from '@phoenix-ai/dsh-llm'
 import type { Agent } from '@phoenix-ai/dsh-agent'
-import { snapshotJsonValue } from '@phoenix-ai/dsh-session'
+import { isJsonValue, snapshotJsonValue } from '@phoenix-ai/dsh-session'
 import type { JsonValue, UserMessage } from '@phoenix-ai/dsh-session'
 import type { AssembleContext, ToolProviderResult } from '@phoenix-ai/dsh-system-prompt'
 import type { CodeRuntime } from '@phoenix-ai/dsh-code-runtime'
@@ -64,10 +64,28 @@ const SDK_RENDERERS: Record<string, (schemas: ToolSdkSchema[]) => string> = {
 } satisfies Record<CodeSdkLanguage, (schemas: ToolSdkSchema[]) => string>
 
 const NATIVE_IMAGE_GENERATION_TOOL = 'image_generation'
+const MCP_TOOL_PREFIX = 'mcp__'
+const TOOL_SEARCH_NAME = 'tool_search'
+const DEFAULT_MCP_TOOL_LAZY_THRESHOLD = 16
+const DEFAULT_MCP_TOOL_SEARCH_LIMIT = 16
+const MAX_MCP_TOOL_SEARCH_RESULT_CHARS = 32_000
+const MAX_MCP_TOOL_SUMMARY_DESCRIPTION_CHARS = 512
+const MAX_DISCOVERED_MCP_TOOLS = 64
+const MAX_DISCOVERED_MCP_SCHEMA_CHARS = 64_000
+const MAX_EAGER_MCP_SCHEMA_CHARS = 8_000
+
+function isMcpToolName(name: string): boolean {
+  return name.startsWith(MCP_TOOL_PREFIX)
+}
+
+/** Narrow the session validator's lossless-JSON result for typed projections. */
+function isJsonValueShape(value: unknown): value is JsonValue {
+  return isJsonValue(value)
+}
 
 /**
- * Match only explicit requests to CREATE an image. Merely discussing, reading,
- * or analyzing an existing image must keep the ordinary tool catalog.
+ * Match standalone image creation. Illustrated projects and interactive maps
+ * need their inspection, composition and publication tools before generation.
  *
  * Normalizing accents once keeps the policy deterministic across Spanish and
  * English without tying it to any model/provider.
@@ -82,9 +100,10 @@ function explicitlyRequestsImageGeneration(message: UserMessage): boolean {
     .replace(/\p{Diacritic}/gu, '')
     .toLowerCase()
 
-  const action = /\b(?:generate|create|make|design|draw|render|visualize|produce|genera(?:r|me)?|crea(?:r|me)?|disena(?:r|me)?|dibuja(?:r|me)?|renderiza(?:r|me)?|visualiza(?:r|me)?|produce|haz(?:me)?)\b/u
-  const subject = /\b(?:image|images|photo|photos|picture|pictures|illustration|illustrations|logo|banner|poster|cover|mockup|thumbnail|hero|imagen(?:es)?|foto(?:s)?|fotografia(?:s)?|ilustracion(?:es)?|portada|miniatura|fotorealista|photorealistic)\b/u
-  return action.test(text) && subject.test(text)
+  const action = /\b(?:generate|create|make|design|draw|render|visualize|produce|genera(?:r|me)?|crea(?:r|me)?|disena(?:r|me)?|dibuja(?:r|me)?|renderiza(?:r|me)?|visualiza(?:r|me)?|produce|haz(?:me)?)\b/u // oxlint-disable-line @stylistic/max-len -- Keep the bilingual matcher as one regular expression.
+  const subject = /\b(?:image|images|photo|photos|picture|pictures|illustration|illustrations|logo|banner|poster|cover|mockup|thumbnail|hero|imagen(?:es)?|foto(?:s)?|fotografia(?:s)?|ilustracion(?:es)?|portada|miniatura|fotorealista|photorealistic)\b/u // oxlint-disable-line @stylistic/max-len -- Keep the bilingual matcher as one regular expression.
+  const project = /\b(?:comic|comics|manga|historieta|webtoon|game|videojuego|juego|map|maps|mapa|mapas|atlas|website|webpage|dashboard|presentation|presentacion|report|informe|pdf|app|aplicacion|diagram|diagrama|genograma)\b/u // oxlint-disable-line @stylistic/max-len -- Keep the bilingual project matcher together.
+  return action.test(text) && subject.test(text) && !project.test(text)
 }
 
 const MCP_FUNCTION_ROOT_FORBIDDEN_KEYS = new Set(['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not'])
@@ -336,8 +355,10 @@ export interface ToolOutputDefinition {
   readonly schema: JsonSchemaNode
   /** Pure projection from validated arguments and value to Native/model content. */
   render(args: unknown, value: JsonValue): ContentBlock[]
-  /** Pure replayable presentation projection, computed only for top-level calls. */
+  /** Pure replayable presentation projection, normally used for top-level calls. */
   presentationMeta?(args: unknown, value: JsonValue): JsonValue
+  /** Trusted opt-in to retain nested Code Mode presentation metadata. */
+  nestedPresentationMeta?: boolean
 }
 
 /** A registered tool: its schema plus the execution function. */
@@ -793,6 +814,13 @@ export interface Config {
    * restores strictly serial dispatch. Must be a positive integer.
    */
   maxParallelSubCalls?: number
+  /**
+   * Number of MCP tools at which an agent receives deferred discovery.
+   * Native tools remain available; the Code Mode SDK shows tool_search
+   * before full MCP signatures, which are admitted per agent on demand.
+   * Must be a positive integer.
+   */
+  mcpToolLazyThreshold?: number
 }
 
 /**
@@ -912,6 +940,7 @@ export class ToolRuntime extends Service {
   static Config: z<Config> = z.object({
     mode: z.union(['native', 'code', 'both'] as const).default('native'),
     maxParallelSubCalls: z.natural().min(1).default(10),
+    mcpToolLazyThreshold: z.natural().min(1).default(DEFAULT_MCP_TOOL_LAZY_THRESHOLD),
   })
 
   /** Internal staged view consumed by `dsh-agent-loop`'s parallel scheduler. */
@@ -931,7 +960,7 @@ export class ToolRuntime extends Service {
   /** Definition-owned final content transform snapshotted before policy begins. */
   private contentFinalizers = new WeakMap<ToolRunContext, ToolDefinition['finalizeContent']>()
   /**
-   * Agents whose current claimed prompt explicitly requests image creation.
+   * Agents whose current claimed prompt requests standalone image creation.
    * While armed, the model sees only the first-party image_generation
    * capability (plus run_code when presentation mode requires it). This is an
    * execution-structural preference, not prompt advice, so connector discovery
@@ -945,6 +974,9 @@ export class ToolRuntime extends Service {
   /** Presentation for scopes that declare none; {@link presentAs} shadows it per scope. */
   private readonly defaultMode: ToolPresentationMode
   private readonly maxParallelSubCalls: number
+  private readonly mcpToolLazyThreshold: number
+  /** MCP schemas selected by one exact agent scope; never process-global. */
+  private readonly discoveredMcpTools = new WeakMap<ScopeKey, Set<string>>()
   /**
    * Reserved presentation transport, kept outside the filterable registration
    * layers. Built on first need rather than at construction: which agents run
@@ -959,22 +991,24 @@ export class ToolRuntime extends Service {
     // optional-input type for direct (non-Loader) construction in tests.
     this.defaultMode = config.mode ?? 'native'
     this.maxParallelSubCalls = resolveMaxParallelSubCalls(config.maxParallelSubCalls)
+    this.mcpToolLazyThreshold = config.mcpToolLazyThreshold ?? DEFAULT_MCP_TOOL_LAZY_THRESHOLD
+    if (!Number.isInteger(this.mcpToolLazyThreshold) || this.mcpToolLazyThreshold < 1) {
+      throw new Error('mcpToolLazyThreshold must be a positive integer')
+    }
 
     // Arm before system-prompt assembly: Inbox.claim() emits this notification
     // immediately before the loop asks SystemPrompt to assemble the next model
     // request. The exact same gate therefore covers Native and Code Mode.
     ctx.on('agent/inbox/claimed', ({ agent, message }) => {
       if (explicitlyRequestsImageGeneration(message)) this.nativeImageFirst.add(agent)
+      else if (message.source.kind === 'user') this.nativeImageFirst.delete(agent)
     })
-    // image_generation owns Codex -> local -> free. External image
-    // connectors become visible only if that complete first-party chain fails.
-    // A successful image keeps the gate armed until the turn goes idle, which
-    // prevents a redundant second generator call after success.
-    ctx.on('tools/result', (exec, result) => {
+    // image_generation owns Codex -> local -> free. Once the attempt settles,
+    // restore the tools needed to inspect, integrate and publish its result.
+    ctx.on('tools/result', (exec) => {
       if (
         exec.name === NATIVE_IMAGE_GENERATION_TOOL
         && exec.agent !== undefined
-        && result.isError
       ) {
         this.nativeImageFirst.delete(exec.agent)
       }
@@ -982,7 +1016,10 @@ export class ToolRuntime extends Service {
     // Never leak a gate into a later turn when a model elects to answer
     // without using a tool.
     ctx.on('agent/status', ({ agent, status }) => {
-      if (status === 'idle') this.nativeImageFirst.delete(agent)
+      if (status === 'idle') {
+        this.nativeImageFirst.delete(agent)
+        this.discoveredMcpTools.delete(agent)
+      }
     })
 
     ctx.systemPrompt.tools(context => this.wireSchemas(context.scope, context.agent))
@@ -1028,10 +1065,16 @@ export class ToolRuntime extends Service {
    * dropped from the rendered prompt.
    * @returns the section registration.
    */
-  private sdkSection(): { name: string; order: number; text: (context: AssembleContext) => string } {
+  private sdkSection(): {
+    name: string
+    order: number
+    text: (context: AssembleContext) => string
+    interpolateVariables: false
+  } {
     return {
       name: 'tools:sdk',
       order: SDK_SECTION_ORDER,
+      interpolateVariables: false,
       // Regenerate from the calling scope's visible tools in stable order.
       text: (context) => {
         const mode = this.modeFor(context.scope)
@@ -1042,7 +1085,14 @@ export class ToolRuntime extends Service {
         const render = SDK_RENDERERS[runtime.language]
         /* v8 ignore next -- requireCodeRuntime rejects an unknown language before this runs. */
         if (render === undefined) throw new Error(`dsh-tools: no SDK renderer for ${runtime.language}`)
-        return render(this.sdkSchemas(context.scope, context.agent))
+        const sdk = render(this.sdkSchemas(context.scope, context.agent))
+        const view = this.view(context.scope)
+        if (!view.visible.has(TOOL_SEARCH_NAME)
+          || !this.deferredMcpCatalog(view.visible.values(), context.scope)) return sdk
+        // Full signatures appear on discovery, but code bindings remain
+        // callable and authorization still happens on every execution.
+        return sdk + '\nTo use other MCP capabilities, call tools.tool_search({ query: "task keywords" })'
+          + ' inside run_code. The next step shows their exact full signatures.'
       },
     }
   }
@@ -1129,14 +1179,283 @@ export class ToolRuntime extends Service {
     return dispose
   }
 
+  /** Definition for the deferred MCP catalog search/discovery capability. */
+  private createMcpSearchTool(): ToolDefinition {
+    return {
+      name: TOOL_SEARCH_NAME,
+      description: 'Search the deferred MCP catalog. Matching tool schemas become available to this agent on the next model request.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Case-insensitive text matched against MCP tool names and descriptions.',
+          },
+          names: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional exact MCP tool names to discover.',
+          },
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: DEFAULT_MCP_TOOL_SEARCH_LIMIT,
+            default: DEFAULT_MCP_TOOL_SEARCH_LIMIT,
+          },
+        },
+        additionalProperties: false,
+      },
+      output: {
+        schema: {
+          type: 'object',
+          properties: {
+            enabled: { type: 'boolean' },
+            matched: { type: 'integer' },
+            selected: { type: 'integer' },
+            tools: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  description: { type: 'string' },
+                  parameters: {},
+                  schemaDeferred: { type: 'boolean' },
+                  requiresExact: { type: 'boolean' },
+                },
+                required: ['name', 'description'],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ['enabled', 'matched', 'selected', 'tools'],
+          additionalProperties: false,
+        },
+        render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+      },
+      execute: (args, exec) => Promise.resolve(this.searchMcpTools(args, exec.agent)),
+    }
+  }
+
+  /** Whether the visible MCP catalog is large enough to defer its schemas. */
+  private defersMcpTools(definitions: Iterable<ToolDefinition>): boolean {
+    let count = 0
+    let schemaChars = 0
+    for (const definition of definitions) {
+      if (!isMcpToolName(definition.name)) continue
+      count += 1
+      schemaChars += JSON.stringify(this.schemaOf(definition, false)).length
+      if (count > this.mcpToolLazyThreshold || schemaChars > MAX_EAGER_MCP_SCHEMA_CHARS) return true
+    }
+    return false
+  }
+
+  /** Deferred MCP schemas apply to every presentation mode for scoped agents. */
+  private deferredMcpCatalog(definitions: Iterable<ToolDefinition>, scope?: ScopeKey): boolean {
+    // Prompt presentation is deferred, not registration, Code bindings or
+    // execution permissions. Host and inventory views retain full schemas.
+    return scope !== undefined && this.defersMcpTools(definitions)
+  }
+
+  /** Exact-agent selection; no unscoped or ancestor/global selection exists. */
+  private selectedMcpTools(scope?: ScopeKey): ReadonlySet<string> {
+    return scope === undefined ? new Set<string>() : (this.discoveredMcpTools.get(scope) ?? new Set<string>())
+  }
+
+  /** Project one scope's visible definitions into its prompt-facing catalog. */
+  private promptVisibleDefinitions(view: ToolView, scope?: ScopeKey): ToolDefinition[] {
+    // A restriction may intentionally remove discovery. In that case keep
+    // the admitted MCP catalog eager rather than hiding it without a route.
+    const deferred = view.visible.has(TOOL_SEARCH_NAME) && this.deferredMcpCatalog(view.visible.values(), scope)
+    const selected = this.selectedMcpTools(scope)
+    return [...view.visible.values()].filter((definition) => {
+      if (definition.name === TOOL_SEARCH_NAME) return deferred
+      return !isMcpToolName(definition.name) || !deferred || selected.has(definition.name)
+    })
+  }
+
+  /** Return and select a bounded set of visible MCP schemas for one agent. */
+  private searchMcpTools(rawArgs: unknown, scope?: ScopeKey): JsonValue {
+    const view = this.view(scope)
+    const candidates = [...view.visible.values()].filter(definition => isMcpToolName(definition.name))
+    if (!this.deferredMcpCatalog(view.visible.values(), scope) || scope === undefined) {
+      return { enabled: false, matched: 0, selected: 0, tools: [] }
+    }
+
+    const args = typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
+      ? rawArgs as Record<string, unknown>
+      : {}
+    const query = typeof args.query === 'string' ? args.query.trim().toLocaleLowerCase() : ''
+    const queryTerms = query.split(/\s+/u).filter(term => term.length > 0)
+    const names = Array.isArray(args.names)
+      ? new Set(args.names.filter((name): name is string => typeof name === 'string'))
+      : undefined
+    const parsedLimit = typeof args.limit === 'number' && Number.isInteger(args.limit) ? args.limit : DEFAULT_MCP_TOOL_SEARCH_LIMIT
+    const limit = Math.max(1, Math.min(DEFAULT_MCP_TOOL_SEARCH_LIMIT, parsedLimit))
+    const matched = candidates.filter((definition) => {
+      if (names !== undefined && !names.has(definition.name)) return false
+      if (queryTerms.length === 0) return true
+      const haystack = `${definition.name} ${definition.description}`.toLocaleLowerCase()
+      return queryTerms.every(term => haystack.includes(term))
+    })
+    let discovered = this.discoveredMcpTools.get(scope)
+    if (discovered === undefined) {
+      discovered = new Set<string>()
+      this.discoveredMcpTools.set(scope, discovered)
+    }
+
+    const schemaLengths = new Map<string, number>()
+    const definitionByName = new Map(candidates.map(definition => [definition.name, definition]))
+    const schemaLength = (definition: ToolDefinition): number => {
+      const cached = schemaLengths.get(definition.name)
+      if (cached !== undefined) return cached
+      const length = JSON.stringify(this.schemaOf(definition, false)).length
+      schemaLengths.set(definition.name, length)
+      return length
+    }
+    // Drop names whose registration or restriction disappeared since the last
+    // request, then measure the active prompt window before adding this batch.
+    for (const name of [...discovered]) {
+      if (!definitionByName.has(name)) discovered.delete(name)
+    }
+    let activeSchemaChars = 0
+    for (const name of discovered) {
+      const definition = definitionByName.get(name)
+      if (definition !== undefined) activeSchemaChars += schemaLength(definition)
+    }
+
+    const isExactNameRequest = (definition: ToolDefinition): boolean => {
+      if (names?.has(definition.name)) return true
+      return queryTerms.length === 1 && query === definition.name.toLocaleLowerCase()
+    }
+    // One explicitly named oversized schema is reachable as an exception. A
+    // description search may use the same exception only when it has one
+    // oversized match; broad oversized results return name metadata requiring
+    // an exact follow-up instead of silently returning an empty result.
+    const oversizedMatches = matched.filter(definition => schemaLength(definition) > MAX_DISCOVERED_MCP_SCHEMA_CHARS)
+    const oversizedExceptionCandidate = matched.find(definition =>
+      isExactNameRequest(definition) && schemaLength(definition) > MAX_DISCOVERED_MCP_SCHEMA_CHARS)
+      ?? (matched.length === 1 && oversizedMatches.length === 1 ? oversizedMatches[0] : undefined)
+    const selectionCandidates = oversizedExceptionCandidate === undefined ? matched : [oversizedExceptionCandidate]
+    if (oversizedExceptionCandidate !== undefined) {
+      discovered.clear()
+      activeSchemaChars = 0
+    }
+
+    const selected: JsonValue[] = []
+    const selectedNames: string[] = []
+    const selectedThisBatch = new Set<string>()
+    for (const definition of selectionCandidates) {
+      if (selectedNames.length >= limit) break
+      const schema = this.schemaOf(definition, true)
+      // ToolSchema.parameters is intentionally broad for provider adapters;
+      // validate the detached object before admitting it to a JsonValue result.
+      const detachedSchema = snapshotJsonValue({
+        name: schema.name,
+        description: schema.description,
+        parameters: schema.parameters,
+      })
+      if (detachedSchema === undefined || !isJsonValueShape(detachedSchema)) {
+        throw new Error(`tool "${definition.name}" schema must be lossless JSON before discovery`)
+      }
+
+      const candidateLength = schemaLength(definition)
+      const oversizedException = candidateLength > MAX_DISCOVERED_MCP_SCHEMA_CHARS
+        && (definition === oversizedExceptionCandidate || isExactNameRequest(definition))
+      if (candidateLength > MAX_DISCOVERED_MCP_SCHEMA_CHARS && !oversizedException) {
+        // Broad oversized searches still reveal names, but require an exact
+        // follow-up before activating one in the prompt window.
+        const metadata = {
+          name: schema.name,
+          description: schema.description.slice(0, MAX_MCP_TOOL_SUMMARY_DESCRIPTION_CHARS),
+          schemaDeferred: true,
+          requiresExact: true,
+        }
+        const metadataLength = JSON.stringify({
+          enabled: true,
+          matched: matched.length,
+          selected: selectedNames.length,
+          tools: [...selected, metadata],
+        }).length
+        if (metadataLength <= MAX_MCP_TOOL_SEARCH_RESULT_CHARS) selected.push(metadata)
+        continue
+      }
+
+      // Discovery activates the complete schema in the NEXT model request.
+      // Echoing its parameters in this tool result sends the same large schema
+      // twice (as conversation history and as a wire tool definition), and the
+      // duplicate can persist throughout the turn. Return only bounded metadata
+      // while preserving the full validated definition for subsequent dispatch.
+      const resultLength = (entry: JsonValue): number => JSON.stringify({
+        enabled: true,
+        matched: matched.length,
+        selected: selectedNames.length + 1,
+        tools: [...selected, entry],
+      }).length
+      const summaryWithDescription = {
+        name: schema.name,
+        description: schema.description.slice(0, MAX_MCP_TOOL_SUMMARY_DESCRIPTION_CHARS),
+        schemaDeferred: true,
+      }
+      const resultEntry: JsonValue = resultLength(summaryWithDescription) <= MAX_MCP_TOOL_SEARCH_RESULT_CHARS
+        ? summaryWithDescription
+        : { name: schema.name, description: '', schemaDeferred: true }
+      if (resultLength(resultEntry) > MAX_MCP_TOOL_SEARCH_RESULT_CHARS) continue
+
+      const alreadyActive = discovered.has(definition.name)
+      if (candidateLength > MAX_DISCOVERED_MCP_SCHEMA_CHARS && !oversizedException) continue
+      if (!alreadyActive && oversizedException) {
+        // The exact-name exception deliberately replaces the whole active
+        // window, including any names selected earlier in this request.
+        discovered.clear()
+        activeSchemaChars = candidateLength
+      } else if (!alreadyActive) {
+        // Evict only prior-window entries. Never evict a name selected earlier
+        // in this same batch; otherwise `selected` would overstate the active
+        // prompt window when many large schemas match one search.
+        while (activeSchemaChars + candidateLength > MAX_DISCOVERED_MCP_SCHEMA_CHARS) {
+          const oldest = [...discovered].find(name => !selectedThisBatch.has(name))
+          if (oldest === undefined) break
+          const oldDefinition = definitionByName.get(oldest)
+          if (oldDefinition !== undefined) activeSchemaChars -= schemaLength(oldDefinition)
+          discovered.delete(oldest)
+        }
+        if (activeSchemaChars + candidateLength > MAX_DISCOVERED_MCP_SCHEMA_CHARS) continue
+        activeSchemaChars += candidateLength
+      }
+
+      discovered.delete(definition.name)
+      discovered.add(definition.name)
+      selectedThisBatch.add(definition.name)
+      selected.push(resultEntry)
+      selectedNames.push(schema.name)
+    }
+
+    while (discovered.size > MAX_DISCOVERED_MCP_TOOLS) {
+      const oldest = [...discovered].find(name => !selectedThisBatch.has(name))
+      if (oldest === undefined) break
+      discovered.delete(oldest)
+    }
+    return {
+      enabled: true,
+      matched: matched.length,
+      selected: selectedNames.length,
+      tools: selected,
+    }
+  }
+
   /**
    * Build one scope's wire schemas and names for prompt-order validation.
    * Restrictions do not make known tools invalid, but a mode collapse does.
    */
   private wireSchemas(scope?: ScopeKey, agent?: Agent): ToolProviderResult {
     const view = this.view(scope)
-    const visible = this.modelVisibleDefinitions(view.visible.values(), agent)
     const mode = this.modeFor(scope)
+    // Defer costly native MCP schemas in native and both. Both retains its
+    // complete Code Mode SDK and nested execution capabilities, so no tool
+    // disappears from the run_code transport when its direct schema defers.
+    const definitions = mode === 'code' ? [...view.visible.values()] : this.promptVisibleDefinitions(view, scope)
+    const visible = this.modelVisibleDefinitions(definitions, agent)
     if (mode === 'native') {
       const schemas = visible.map(definition => this.schemaOf(definition, false))
       return { schemas, knownNames: [...view.knownNames] }
@@ -1210,6 +1529,9 @@ export class ToolRuntime extends Service {
     // collision the moment a preset mounted.
     if (name === RUN_CODE_NAME) {
       throw new Error(`tool name "${RUN_CODE_NAME}" is reserved for the Code Mode presentation transport and cannot be registered or shadowed`)
+    }
+    if (name === TOOL_SEARCH_NAME) {
+      throw new Error(`tool name "${TOOL_SEARCH_NAME}" is reserved for deferred MCP discovery and cannot be registered or shadowed`)
     }
     return this.layers.effect(
       this.ctx,
@@ -1346,6 +1668,16 @@ export class ToolRuntime extends Service {
     if (this.modeFor(scope) !== 'native') {
       visible.set(RUN_CODE_NAME, this.requireCodeTransport())
     }
+    // Discovery remains absent for small catalogs and Host inventory views.
+    // Larger scoped catalogs expose one searchable entry across all modes.
+    const deferred = this.deferredMcpCatalog(visible.values(), scope)
+    // `tool_search` is a virtual global only for an exposed deferred catalog;
+    // empty/small scopes must keep the historical known-name set unchanged.
+    if (deferred) restrictableNames.add(TOOL_SEARCH_NAME)
+    if (deferred && layers.every(layer => layer.admits(TOOL_SEARCH_NAME))) {
+      visible.set(TOOL_SEARCH_NAME, this.createMcpSearchTool())
+      knownNames.add(TOOL_SEARCH_NAME)
+    }
     return { visible, knownNames, restrictableNames }
   }
 
@@ -1376,8 +1708,17 @@ export class ToolRuntime extends Service {
    * @returns the definition that may run, or undefined when the call must be rejected.
    */
   private resolveExecution(name: string, scope: ScopeKey | undefined, nested: boolean): ToolDefinition | undefined {
-    const tool = this.get(name, scope)
+    const view = this.view(scope)
+    const tool = view.visible.get(name)
     if (tool === undefined) return undefined
+    // Deferred MCP tools are still registered and retain their normal policy
+    // path, but a model/direct call cannot bypass discovery by guessing a
+    // hidden name. Discovery selection is exact-agent state.
+    if (isMcpToolName(name)
+      && view.visible.has(TOOL_SEARCH_NAME)
+      && this.deferredMcpCatalog(view.visible.values(), scope)
+      && !nested
+      && !this.selectedMcpTools(scope).has(name)) return undefined
     if (this.collapses(name, scope, nested)) return undefined
     return tool
   }
@@ -1389,7 +1730,8 @@ export class ToolRuntime extends Service {
    * @returns one deep-cloned schema per visible tool.
    */
   schemas(scope?: ScopeKey): ToolSchema[] {
-    return [...this.view(scope).visible.values()].map(definition => this.schemaOf(definition, true))
+    const view = this.view(scope)
+    return [...view.visible.values()].map(definition => this.schemaOf(definition, true))
   }
 
   /**
@@ -1408,9 +1750,10 @@ export class ToolRuntime extends Service {
       definition.name === NATIVE_IMAGE_GENERATION_TOOL || definition.name === RUN_CODE_NAME)
   }
 
-  /** Project visible callable tools onto the generated Code Mode SDK contract. */
+  /** Project admitted/discovered MCP tools, retaining full run_code bindings. */
   private sdkSchemas(scope?: ScopeKey, agent?: Agent): ToolSdkSchema[] {
-    return this.modelVisibleDefinitions(this.view(scope).visible.values(), agent)
+    const view = this.view(scope)
+    return this.modelVisibleDefinitions(this.promptVisibleDefinitions(view, scope), agent)
       .filter(definition => definition.name !== RUN_CODE_NAME)
       .map((definition): ToolSdkSchema => {
         const output = snapshotJsonValue(definition.output.schema)
@@ -1981,7 +2324,8 @@ export class ToolRuntime extends Service {
     }
     const content = snapshotProjection(tool.name, 'render', rendered)
     let meta: JsonValue | undefined
-    if (exec.parent === undefined && tool.output.presentationMeta !== undefined) {
+    if ((exec.parent === undefined || tool.output.nestedPresentationMeta === true)
+      && tool.output.presentationMeta !== undefined) {
       let projected: JsonValue
       try {
         projected = tool.output.presentationMeta(exec.arguments, value)

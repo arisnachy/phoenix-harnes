@@ -1,6 +1,6 @@
 /** Model-route policy shared by completion testers and judges. */
 
-import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
+import { PHOENIX_CODEX_AUTO_WORKER_MODEL, type Agent, type AgentOptions } from '@phoenix-ai/dsh-agent'
 import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import type { LlmRuntime } from '@phoenix-ai/dsh-llm'
 
@@ -8,7 +8,7 @@ const REASONING_RANK = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'ma
 
 /**
  * Resolve the exact independent verifier model route.
- * Codex parents use Luna xhigh. Every non-Codex parent keeps the exact active
+ * Codex parents use Phoenix's current Luna worker at Max. Every non-Codex parent keeps the exact active
  * provider and model, with the same effort or the highest advertised effort
  * when the parent omitted one.
  * @param input - parent route, optional model catalog, and cancellation signal.
@@ -24,8 +24,8 @@ export async function resolveGoalJudgeAgentOptions(input: {
   if (provider === 'openai-codex') {
     return {
       provider: 'openai-codex',
-      model: 'gpt-5.6-luna',
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+      reasoningEffort: ReasoningEffortId('max'),
     }
   }
   if (reasoningEffort !== undefined) return { provider, model, reasoningEffort }

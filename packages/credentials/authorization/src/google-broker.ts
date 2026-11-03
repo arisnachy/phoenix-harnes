@@ -3,13 +3,15 @@
  *
  * The browser ceremony uses Google's Desktop/installed-application flow with a
  * loopback redirect, PKCE S256, and state. Access and refresh tokens remain
- * private fields of this Host Service and are never written to the file-backed
- * credential provider. The credential store receives only a secret-free marker
- * so the neutral authorization seam can observe a completed human login.
+ * Host-owned and are persisted only as an opaque authorization grant in the
+ * credential provider so a normal PHOENIX restart can resume the user's Google
+ * session and refresh it silently. They are never exposed through model-facing
+ * authorization telemetry or Google tool results.
  *
  * API callers choose a fixed Google service rather than supplying an arbitrary
- * URL or OAuth scope. A PHOENIX restart intentionally requires Google login
- * again until a credential backend isolated from same-UID tool processes exists.
+ * URL or OAuth scope. The local credential provider's documented same-UID
+ * filesystem limitation still applies; deployments needing a stronger boundary
+ * can replace that provider without changing this broker's grant contract.
  *
  * @module @phoenix-ai/dsh-authorization/google
  */
@@ -17,11 +19,22 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import { Service, type Context } from '@phoenix-ai/cordis'
-import { credentialKey, type CredentialKey } from '@phoenix-ai/dsh-credentials'
+import { credentialKey, credentialRef, type CredentialKey } from '@phoenix-ai/dsh-credentials'
 import { AuthorizationError, type AuthorizationSession, type AuthorizationTelemetry } from './index.ts'
+import {
+  authorizeGoogleWithOpenClaw,
+  disconnectGoogleWithOpenClaw,
+  findOpenClawGoogleAccount,
+  registerOpenClawGithubAuthorization,
+  requestGoogleWithOpenClaw,
+} from './openclaw-workspace.ts'
 
-/** Secret-free durable marker for the process-local Google account. */
+/** Durable Host-owned Google account authorization record. */
 export const GOOGLE_ACCOUNT_KEY: CredentialKey = credentialKey('authorization-google', 'account')
+/** Durable public OAuth application id used when deployment env does not provide one. */
+export const GOOGLE_CLIENT_ID_REF = credentialRef('PHOENIX_GOOGLE_OAUTH_CLIENT_ID')
+/** Secret half of a Google Desktop OAuth client, stored only in the credential provider. */
+export const GOOGLE_CLIENT_SECRET_REF = credentialRef('PHOENIX_GOOGLE_OAUTH_CLIENT_SECRET')
 
 const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
@@ -34,12 +47,15 @@ const EXPIRY_SKEW_MS = 60_000
 export interface Config {
   /** Google Desktop OAuth client id. It identifies the app; it is not a user secret. */
   clientId?: string
+  /** Optional Google Desktop OAuth client secret. Prefer credential storage over source config. */
+  clientSecret?: string
   /** Consent set offered to the human. Installed apps do not support incremental authorization. */
   scopes: readonly string[]
 }
 
 interface ResolvedSpec {
   clientId?: string
+  clientSecret?: string
   scopes: readonly string[]
 }
 
@@ -49,6 +65,17 @@ interface GoogleGrant {
   expiresAt: number
   scopes: readonly string[]
 }
+
+interface DurableGoogleGrantV1 {
+  provider: 'google-oauth'
+  version: 1
+  accessToken: string
+  refreshToken?: string
+  expiresAt: number
+  scopes: string[]
+}
+
+const GOOGLE_GRANT_VERSION = 1
 
 interface TokenResponse {
   access_token: string
@@ -131,19 +158,24 @@ const SERVICES: Readonly<Record<GoogleWorkspaceService, ServiceSpec>> = {
   },
 }
 
+function serviceCatalog(): NonNullable<Extract<AuthorizationTelemetry, { kind: 'account' }>['connectors']> {
+  return (Object.entries(SERVICES) as Array<[GoogleWorkspaceService, ServiceSpec]>).map(([id, spec]) => ({
+    id,
+    name: spec.name,
+    description: spec.description,
+    category: spec.category,
+    accessible: true,
+    enabled: true,
+    installed: true,
+    callable: false,
+  }))
+}
+
 function serviceTelemetry(grant: GoogleGrant): NonNullable<Extract<AuthorizationTelemetry, { kind: 'account' }>['connectors']> {
-  return (Object.entries(SERVICES) as Array<[GoogleWorkspaceService, ServiceSpec]>).map(([id, spec]) => {
+  return serviceCatalog().map((connector) => {
+    const spec = SERVICES[connector.id as GoogleWorkspaceService]
     const granted = grant.scopes.includes(spec.scope)
-    return {
-      id,
-      name: spec.name,
-      description: spec.description,
-      category: spec.category,
-      accessible: true,
-      enabled: true,
-      installed: granted,
-      callable: granted,
-    }
+    return { ...connector, callable: granted }
   })
 }
 
@@ -183,6 +215,17 @@ function nonEmpty(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== ''
 }
 
+function normalizeGoogleClientId(value: string): string {
+  const clientId = value.trim()
+  if (!/^[A-Za-z0-9._-]+\.apps\.googleusercontent\.com$/u.test(clientId)) {
+    throw new AuthorizationError(
+      'Google OAuth client id must be a Desktop OAuth client id ending in .apps.googleusercontent.com',
+      'GOOGLE_CLIENT_INVALID',
+    )
+  }
+  return clientId
+}
+
 function gmailProfileEmail(body: string): string | undefined {
   try {
     const value: unknown = JSON.parse(body)
@@ -214,7 +257,12 @@ export function resolveGoogleSpec(config: Config): ResolvedSpec {
     throw new TypeError('authorization-google: scopes must not contain duplicates')
   }
   const clientId = nonEmpty(config.clientId) ? config.clientId.trim() : undefined
-  return clientId === undefined ? { scopes } : { clientId, scopes }
+  const clientSecret = nonEmpty(config.clientSecret) ? config.clientSecret.trim() : undefined
+  return {
+    scopes,
+    ...(clientId === undefined ? {} : { clientId }),
+    ...(clientSecret === undefined ? {} : { clientSecret }),
+  }
 }
 
 function base64url(value: Buffer): string {
@@ -237,6 +285,26 @@ function parseGrantedScopes(value: string | undefined): readonly string[] {
     )
   }
   return [...new Set(value.trim().split(/\s+/u))]
+}
+
+function durableGoogleGrant(value: unknown): GoogleGrant | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const payload = value as Partial<DurableGoogleGrantV1>
+  if (payload.provider !== 'google-oauth' || payload.version !== GOOGLE_GRANT_VERSION) return undefined
+  if (!nonEmpty(payload.accessToken)
+    || (payload.refreshToken !== undefined && !nonEmpty(payload.refreshToken))
+    || typeof payload.expiresAt !== 'number'
+    || !Number.isFinite(payload.expiresAt)
+    || payload.expiresAt <= 0
+    || !Array.isArray(payload.scopes)
+    || payload.scopes.length === 0
+    || !payload.scopes.every(nonEmpty)) return undefined
+  return {
+    accessToken: payload.accessToken,
+    ...(payload.refreshToken === undefined ? {} : { refreshToken: payload.refreshToken }),
+    expiresAt: payload.expiresAt,
+    scopes: [...new Set(payload.scopes)],
+  }
 }
 
 function parseTokenResponse(value: unknown): TokenResponse {
@@ -268,6 +336,20 @@ async function readTokenResponse(response: Response): Promise<TokenResponse> {
     throw new AuthorizationError('Google returned a non-JSON token response', 'GOOGLE_TOKEN_RESPONSE')
   }
   return parseTokenResponse(value)
+}
+
+/** Only Google's explicit invalid_grant proves that the saved refresh token
+ * cannot be reused. Other 400/401 errors (invalid_client, malformed OAuth
+ * app setup, proxy failures) must NOT delete the user's durable connection. */
+async function revokedGoogleRefreshToken(response: Response): Promise<boolean> {
+  if (response.status !== 400 && response.status !== 401) return false
+  try {
+    const body: unknown = await response.json()
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) return false
+    return (body as { error?: unknown }).error === 'invalid_grant'
+  } catch {
+    return false
+  }
 }
 
 function form(fields: Readonly<Record<string, string>>): URLSearchParams {
@@ -443,12 +525,18 @@ function createAuthorizationUrl(spec: ResolvedSpec, redirectUri: string, state: 
   return url.toString()
 }
 
+declare module '@phoenix-ai/cordis' {
+  interface Context {
+    googleApi: GoogleApiBroker
+  }
+}
+
 /** Google Host broker. OAuth material never leaves this service instance. */
 export default class GoogleApiBroker extends Service {
   static inject = ['authorization', 'credentials']
 
   private readonly spec: ResolvedSpec
-  private readonly startupCleanup: Promise<void>
+  private readonly startupRestore: Promise<void>
   private grant: GoogleGrant | undefined
   private refreshInFlight: Promise<GoogleGrant> | undefined
   private accountEmail: string | undefined
@@ -457,20 +545,24 @@ export default class GoogleApiBroker extends Service {
   constructor(ctx: Context, config: Config) {
     super(ctx, 'googleApi')
     this.spec = resolveGoogleSpec(config)
-    this.startupCleanup = this.purgeStaleRecord()
-    // Cleanup starts at construction so a secret grant or marker left by an
-    // earlier process cannot be mistaken for this process's live session.
-    // Attach a rejection handler immediately to avoid an unhandled rejection;
-    // every public operation still awaits the original promise and fails loud.
-    void this.startupCleanup.catch(() => {})
+    this.startupRestore = this.restoreStoredGrant()
+    // Restore starts at construction so authorization inspection and tool calls
+    // see one consistent persisted session. Attach a rejection handler
+    // immediately to avoid an unhandled rejection; every public operation still
+    // awaits the original promise and fails loud.
+    void this.startupRestore.catch(() => {})
     ctx.effect(() => ctx.authorization.registerFlow({
       key: GOOGLE_ACCOUNT_KEY,
       label: 'Google Workspace',
       methods: [{ id: 'oauth', label: 'Sign in with Google' }],
+      connectors: serviceCatalog(),
       inspect: () => this.inspect(),
       disconnect: () => this.disconnect().then(() => undefined),
       run: session => this.authorize(session),
     }))
+
+    ctx.effect(() => registerOpenClawGithubAuthorization(ctx), 'authorization-openclaw-github')
+
   }
 
   /**
@@ -478,7 +570,22 @@ export default class GoogleApiBroker extends Service {
    * @returns sanitized Google account and service capability telemetry, when connected.
    */
   async inspect(): Promise<AuthorizationTelemetry | undefined> {
-    await this.startupCleanup
+    await this.startupRestore
+    // A gog account is available only after the user explicitly adopted that
+    // account. Never silently switch a restored native grant to an arbitrary
+    // first account reported by a globally installed gog CLI.
+    const preferredOpenClawAccount = await this.openClawMarkerAccount()
+    const openClawAccount = preferredOpenClawAccount === undefined
+      ? undefined : await findOpenClawGoogleAccount(undefined, preferredOpenClawAccount)
+    if (openClawAccount !== undefined) {
+      return {
+        kind: 'account',
+        provider: 'Google Workspace',
+        accountType: 'openclaw-gog',
+        email: openClawAccount,
+        connectors: serviceCatalog().map(connector => ({ ...connector, callable: true })),
+      }
+    }
     const grant = this.grant
     if (grant === undefined) return undefined
     const email = await this.inspectAccountEmail(grant)
@@ -516,11 +623,32 @@ export default class GoogleApiBroker extends Service {
    * @returns the bounded response without credential-bearing headers.
    */
   async request(request: GoogleApiRequest): Promise<GoogleApiResponse> {
+    const preferredOpenClawAccount = await this.openClawMarkerAccount()
+    const openClawAccount = preferredOpenClawAccount === undefined
+      ? undefined : await findOpenClawGoogleAccount(request.signal, preferredOpenClawAccount)
+    if (openClawAccount !== undefined) {
+      const bridged = await requestGoogleWithOpenClaw(openClawAccount, request)
+      if (bridged !== undefined) return bridged
+      if (this.grant === undefined) {
+        throw new AuthorizationError(
+          'This Google Workspace operation is connected through OpenClaw gog but is not mapped to the legacy REST tool. Use the official openclaw-gog skill for this operation.',
+          'GOOGLE_OPENCLAW_UNMAPPED',
+        )
+      }
+    }
     const destination = serviceUrl(request)
     const headers = callerHeaders(request.headers)
     const grant = await this.usableGrant(destination.scope, request.signal)
     headers.set('authorization', `Bearer ${grant.accessToken}`)
-    const response = await internals.fetch(destination.url, apiFetchInit(request, headers))
+    let response = await internals.fetch(destination.url, apiFetchInit(request, headers))
+    // Access tokens can be invalidated before the local expiry timestamp.
+    // Retry a 401 exactly once after a shared refresh, preserving refresh-token
+    // rotation and avoiding a false "not connected" report after a restart.
+    if (response.status === 401 && grant.refreshToken !== undefined) {
+      const refreshed = await this.refresh(grant, destination.scope, request.signal)
+      headers.set('authorization', `Bearer ${refreshed.accessToken}`)
+      response = await internals.fetch(destination.url, apiFetchInit(request, headers))
+    }
     const contentType = response.headers.get('content-type') ?? undefined
     const body = await response.text()
     return {
@@ -532,18 +660,25 @@ export default class GoogleApiBroker extends Service {
   }
 
   /**
-   * Clear the process grant and secret-free marker even when provider revocation fails.
+   * Clear the in-memory and durable grant even when provider revocation fails.
    * @returns whether Google acknowledged token revocation.
    */
   async disconnect(): Promise<{ revoked: boolean }> {
-    await this.startupCleanup
+    await this.startupRestore
+    const openClawAccount = await this.openClawMarkerAccount()
     const grant = this.grant
     this.grant = undefined
     this.refreshInFlight = undefined
     this.accountEmail = undefined
     this.emailLookupInFlight = undefined
-    let revoked = grant === undefined
-    if (grant !== undefined) {
+    let revoked = grant === undefined && openClawAccount === undefined
+    if (openClawAccount !== undefined) {
+      try {
+        revoked = await disconnectGoogleWithOpenClaw(openClawAccount)
+      } catch {
+        revoked = false
+      }
+    } else if (grant !== undefined) {
       const token = grant.refreshToken ?? grant.accessToken
       try {
         revoked = (await internals.fetch(GOOGLE_REVOKE_ENDPOINT, {
@@ -561,28 +696,36 @@ export default class GoogleApiBroker extends Service {
   }
 
   private async authorize(session: AuthorizationSession): Promise<void> {
-    await this.startupCleanup
-    const clientId = this.spec.clientId
-    if (clientId === undefined) {
-      throw new AuthorizationError(
-        'Google OAuth is not configured. Set PHOENIX_GOOGLE_OAUTH_CLIENT_ID to a Google Desktop OAuth client id and restart PHOENIX.',
-        'GOOGLE_CLIENT_UNCONFIGURED',
-      )
+    await this.startupRestore
+    const openClawAccount = await authorizeGoogleWithOpenClaw(session)
+    if (openClawAccount !== undefined) {
+      await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({
+        kind: 'grant',
+        payload: { provider: 'openclaw-gog', account: openClawAccount },
+      }))
+      this.grant = undefined
+      this.refreshInFlight = undefined
+      this.accountEmail = openClawAccount
+      this.emailLookupInFlight = undefined
+      return
     }
+    const clientId = await this.resolveClientId(session)
+    let clientSecret = await this.resolveClientSecret()
     const state = base64url(randomBytes(32))
     const pkce = createPkce()
     const receiver = await internals.openLoopback(state, session.signal)
     try {
       session.notify({
-        message: 'Continue with Google in your browser. PHOENIX keeps OAuth tokens inside the Host process.',
-        url: createAuthorizationUrl(this.spec, receiver.redirectUri, state, pkce.challenge),
+        message: 'Continue with Google in your browser. PHOENIX keeps OAuth tokens in its Host-only credential store so this connection survives normal restarts.',
+        url: createAuthorizationUrl({ ...this.spec, clientId }, receiver.redirectUri, state, pkce.challenge),
       })
       const code = await receiver.code
-      const response = await internals.fetch(GOOGLE_TOKEN_ENDPOINT, {
+      const exchange = (secret: string | undefined): Promise<Response> => internals.fetch(GOOGLE_TOKEN_ENDPOINT, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: form({
           client_id: clientId,
+          ...(secret === undefined ? {} : { client_secret: secret }),
           code,
           code_verifier: pkce.verifier,
           grant_type: 'authorization_code',
@@ -591,6 +734,14 @@ export default class GoogleApiBroker extends Service {
         signal: session.signal,
         redirect: 'error',
       })
+      let response = await exchange(clientSecret)
+      if (!response.ok && clientSecret === undefined && (response.status === 400 || response.status === 401)) {
+        session.notify({
+          message: 'Google rejected the Desktop OAuth client without its client secret. Enter the secret from the same Google Desktop OAuth credentials file; Phoenix stores it only in Credentials.',
+        })
+        clientSecret = await this.resolveClientSecret(session)
+        response = await exchange(clientSecret)
+      }
       if (!response.ok) {
         throw new AuthorizationError(`Google token exchange failed with HTTP ${String(response.status)}`, 'GOOGLE_TOKEN_EXCHANGE')
       }
@@ -604,7 +755,7 @@ export default class GoogleApiBroker extends Service {
         expiresAt: internals.now() + token.expires_in * 1000,
         scopes: parseGrantedScopes(token.scope),
       }
-      await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({ kind: 'api-key' }))
+      await this.persistGrant(next)
       this.accountEmail = undefined
       this.emailLookupInFlight = undefined
       this.grant = next
@@ -614,7 +765,7 @@ export default class GoogleApiBroker extends Service {
   }
 
   private async usableGrant(requiredScope: string, signal?: AbortSignal): Promise<GoogleGrant> {
-    await this.startupCleanup
+    await this.startupRestore
     const current = this.grant
     if (current === undefined) {
       throw new AuthorizationError('Google is not signed in for this PHOENIX process', 'GOOGLE_REAUTH_REQUIRED')
@@ -626,7 +777,7 @@ export default class GoogleApiBroker extends Service {
     return this.refresh(current, requiredScope, signal)
   }
 
-  private refresh(current: GoogleGrant, requiredScope: string, signal?: AbortSignal): Promise<GoogleGrant> {
+  private async refresh(current: GoogleGrant, requiredScope: string, signal?: AbortSignal): Promise<GoogleGrant> {
     const checkScope = (next: GoogleGrant): GoogleGrant => {
       if (!next.scopes.includes(requiredScope)) {
         throw new AuthorizationError('Google permission for this capability was not granted', 'GOOGLE_SCOPE_DENIED')
@@ -634,39 +785,114 @@ export default class GoogleApiBroker extends Service {
       return next
     }
     if (this.refreshInFlight !== undefined) return this.refreshInFlight.then(checkScope)
-    const clientId = this.spec.clientId
-    const refreshToken = current.refreshToken
-    if (clientId === undefined || refreshToken === undefined) {
-      return Promise.reject(new AuthorizationError(
-        'Google session needs interactive authorization again', 'GOOGLE_REAUTH_REQUIRED'))
+    // A concurrent request may have already refreshed this grant. Do not
+    // re-send its superseded refresh token, which can trigger invalid_grant.
+    if (this.grant !== undefined && this.grant.accessToken !== current.accessToken) {
+      return checkScope(this.grant)
     }
-    const running = this.refreshGrant(current, clientId, refreshToken, signal).finally(() => {
+    const refreshToken = current.refreshToken
+    if (refreshToken === undefined) {
+      throw new AuthorizationError('Google session needs interactive authorization again', 'GOOGLE_REAUTH_REQUIRED')
+    }
+    const clientId = await this.resolveClientId()
+    const clientSecret = await this.resolveClientSecret()
+    const running = this.refreshGrant(current, clientId, clientSecret, refreshToken, signal).finally(() => {
       if (this.refreshInFlight === running) this.refreshInFlight = undefined
     })
     this.refreshInFlight = running
     return running.then(checkScope)
   }
 
+  private async resolveClientSecret(session?: AuthorizationSession): Promise<string | undefined> {
+    if (this.spec.clientSecret !== undefined) return this.spec.clientSecret
+
+    const stored = await this.ctx.credentials.resolve(GOOGLE_CLIENT_SECRET_REF)
+    if (stored !== undefined && nonEmpty(stored.value)) return stored.value.trim()
+    if (session === undefined) return undefined
+
+    const entered = await session.prompt({
+      kind: 'secret',
+      message: 'Google Desktop OAuth client secret',
+      placeholder: 'GOCSPX-…',
+    })
+    if (!nonEmpty(entered)) {
+      throw new AuthorizationError('Google OAuth client secret cannot be empty', 'GOOGLE_CLIENT_INVALID')
+    }
+    const clientSecret = entered.trim()
+    await this.ctx.credentials.set(GOOGLE_CLIENT_SECRET_REF, clientSecret)
+    return clientSecret
+  }
+
+  private async resolveClientId(session?: AuthorizationSession): Promise<string> {
+    if (this.spec.clientId !== undefined) return normalizeGoogleClientId(this.spec.clientId)
+
+    const stored = await this.ctx.credentials.resolve(GOOGLE_CLIENT_ID_REF)
+    if (stored !== undefined) return normalizeGoogleClientId(stored.value)
+
+    if (session === undefined) {
+      throw new AuthorizationError(
+        'Google OAuth application is not configured; authorize Google Workspace again to configure it.',
+        'GOOGLE_CLIENT_UNCONFIGURED',
+      )
+    }
+
+    session.notify({
+      message: 'Google Workspace needs a Google Desktop OAuth client id once. Phoenix will store this public application id locally, then open Google authorization.',
+    })
+    const entered = await session.prompt({
+      kind: 'text',
+      message: 'Google Desktop OAuth client ID',
+      placeholder: '1234567890-abc.apps.googleusercontent.com',
+    })
+    const clientId = normalizeGoogleClientId(entered)
+    await this.ctx.credentials.set(GOOGLE_CLIENT_ID_REF, clientId)
+    return clientId
+  }
+
   private async refreshGrant(
     current: GoogleGrant,
     clientId: string,
+    clientSecret: string | undefined,
     refreshToken: string,
     signal?: AbortSignal,
   ): Promise<GoogleGrant> {
     const response = await internals.fetch(GOOGLE_TOKEN_ENDPOINT, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: form({ client_id: clientId, refresh_token: refreshToken, grant_type: 'refresh_token' }),
+      body: form({
+        client_id: clientId,
+        ...(clientSecret === undefined ? {} : { client_secret: clientSecret }),
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
       ...(signal === undefined ? {} : { signal }),
       redirect: 'error',
     })
     if (!response.ok) {
-      if (response.status === 400 || response.status === 401) {
-        this.grant = undefined
-        await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
-        throw new AuthorizationError('Google authorization is no longer valid; reconnect Google', 'GOOGLE_REAUTH_REQUIRED')
+      if (await revokedGoogleRefreshToken(response)) {
+        // Side-by-side old/new Hosts may have rotated the refresh token in
+        // the same durable store. Adopt that newer grant instead of deleting
+        // the account or telling the user to authorize again.
+        const persisted = await this.ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)
+        const durable = persisted?.kind === 'grant' ? durableGoogleGrant(persisted.payload) : undefined
+        if (durable !== undefined && durable.refreshToken !== refreshToken) {
+          this.grant = durable
+          return durable
+        }
+        if (durable?.refreshToken === refreshToken && this.grant?.refreshToken === refreshToken) {
+          this.grant = undefined
+          this.accountEmail = undefined
+          await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
+        }
+        throw new AuthorizationError('Google revoked or expired the refresh token; reconnect Google', 'GOOGLE_REAUTH_REQUIRED')
       }
-      throw new AuthorizationError(`Google token refresh failed with HTTP ${String(response.status)}`, 'GOOGLE_REFRESH_FAILED')
+      // Retain the durable grant for invalid_client, transient failures and
+      // malformed error bodies. Fixing the OAuth app config must not require
+      // the user to grant access again.
+      throw new AuthorizationError(
+        `Google token refresh temporarily failed with HTTP ${String(response.status)}; saved authorization retained`,
+        'GOOGLE_REFRESH_FAILED',
+      )
     }
     const token = await readTokenResponse(response)
     if (token.token_type.toLowerCase() !== 'bearer') {
@@ -678,14 +904,55 @@ export default class GoogleApiBroker extends Service {
       expiresAt: internals.now() + token.expires_in * 1000,
       scopes: token.scope === undefined ? current.scopes : parseGrantedScopes(token.scope),
     }
+    await this.persistGrant(next)
     this.grant = next
     return next
   }
 
-  /** Remove any Google credential record that predates this process-local broker instance. */
-  private async purgeStaleRecord(): Promise<void> {
-    const info = await this.ctx.credentials.describeRecord(GOOGLE_ACCOUNT_KEY)
-    if (info.configured) await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
+  private async persistGrant(grant: GoogleGrant): Promise<void> {
+    const payload: DurableGoogleGrantV1 = {
+      provider: 'google-oauth',
+      version: GOOGLE_GRANT_VERSION,
+      accessToken: grant.accessToken,
+      ...(grant.refreshToken === undefined ? {} : { refreshToken: grant.refreshToken }),
+      expiresAt: grant.expiresAt,
+      scopes: [...grant.scopes],
+    }
+    await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({
+      kind: 'grant',
+      payload,
+    }))
+  }
+
+  /** Read the durable, secret-free OpenClaw account adoption marker. */
+  private async openClawMarkerAccount(): Promise<string | undefined> {
+    const stored = await this.ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)
+    if (stored?.kind !== 'grant' || typeof stored.payload !== 'object' || stored.payload === null) return undefined
+    const payload = stored.payload as { provider?: unknown; account?: unknown }
+    return payload.provider === 'openclaw-gog'
+      && typeof payload.account === 'string'
+      && payload.account.trim().length > 0
+      ? payload.account.trim()
+      : undefined
+  }
+
+  /**
+   * Restore a durable native Google grant or OpenClaw adoption. Legacy
+   * secret-free markers and pre-versioned secret payloads are not guessed:
+   * they cannot prove a reusable current authorization and are removed once.
+   */
+  private async restoreStoredGrant(): Promise<void> {
+    const stored = await this.ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)
+    if (stored === undefined) return
+    if (await this.openClawMarkerAccount() !== undefined) return
+    if (stored.kind === 'grant') {
+      const restored = durableGoogleGrant(stored.payload)
+      if (restored !== undefined) {
+        this.grant = restored
+        return
+      }
+    }
+    await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
   }
 }
 

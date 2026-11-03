@@ -575,6 +575,9 @@ function clientConfig(id: string, entry: string): UserConfig {
     }],
     outputOptions: {
       entryFileNames: 'client.js',
+      // A module-table factory is served as one artifact; relative CJS chunks
+      // cannot be resolved by its injected require, including lazy imports.
+      codeSplitting: false,
       // The map is served from /plugins/<scoped-package>/client.js.map. The
       // browser resolves its local sources back into URLs that mirror the
       // /packages/<group>/<package>/src directories; sourcesContent keeps them usable

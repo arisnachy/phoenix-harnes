@@ -51,9 +51,10 @@ class StubAdapter extends LlmAdapter {
   }
 
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+    const listed = this.listed.find(candidate => candidate.id === model)
     return Promise.resolve({
       provider, id: model, name: model,
-      inputModalities: [...this.modalities] as never,
+      inputModalities: [...(listed?.inputModalities ?? this.modalities)] as never,
     })
   }
 
@@ -125,6 +126,7 @@ async function harness(options?: {
     ...input.name === undefined ? {} : { name: input.name },
   }))
   const attachments = {
+    fileLimits: { maxFilesPerMessage: 2, maxFileBytes: 64, maxMessageFileBytes: 128 },
     imageLimits: {
       maxImageBytes: 64,
       maxImagesPerMessage: 2,
@@ -249,6 +251,85 @@ describe('Borrowed-eyes prompt admission', () => {
     })
     expect(followup).not.toHaveBeenCalled()
     expect(eyeCalls).toHaveLength(1)
+    await ctx.fiber.dispose()
+  })
+
+  it('treats Phoenix Auto as the image capability of its real Codex planner and worker routes', async () => {
+    const { ctx, agent, sessionId, followup } = await harness()
+    ctx.llm.registerAdapter(['openai-codex'], new StubAdapter(
+      'Codex',
+      [
+        {
+          provider: 'openai-codex',
+          id: 'gpt-6.1-sol',
+          name: 'GPT-6.1 Sol',
+          inputModalities: ['text', 'image'],
+        },
+        {
+          provider: 'openai-codex',
+          id: 'gpt-6-luna',
+          name: 'GPT-6 Luna',
+          inputModalities: ['text', 'image'],
+        },
+      ],
+      ['text', 'image'],
+    ))
+    agent.session.append('request/header', {
+      header: { config: { provider: 'openai-codex', model: 'phoenix-auto' } },
+      reason: 'change',
+    })
+
+    const api = proxy(ctx)
+    const result = await api.sessions.prompt(request({
+      sessionId,
+      mode: 'queue' as const,
+      content: [IMAGE_PART, { type: 'text', text: '¿Qué ves?' }],
+    }))
+
+    expect(result.result.ok).toBe(true)
+    expect(followup).toHaveBeenCalledTimes(1)
+    const delivered = (followup.mock.calls[0]?.[0] as UserMessage).content
+    expect(delivered.some(block => block.type === 'image')).toBe(true)
+    await ctx.fiber.dispose()
+  })
+
+  it('refuses Phoenix Auto images when one possible routed Codex model is explicitly text-only', async () => {
+    const { ctx, agent, sessionId, followup } = await harness()
+    ctx.llm.registerAdapter(['openai-codex'], new StubAdapter(
+      'Codex',
+      [
+        {
+          provider: 'openai-codex',
+          id: 'gpt-6.1-sol',
+          name: 'GPT-6.1 Sol',
+          inputModalities: ['text', 'image'],
+        },
+        {
+          provider: 'openai-codex',
+          id: 'gpt-6-luna',
+          name: 'GPT-6 Luna',
+          inputModalities: ['text'],
+        },
+      ],
+      ['text'],
+    ))
+    agent.session.append('request/header', {
+      header: { config: { provider: 'openai-codex', model: 'phoenix-auto' } },
+      reason: 'change',
+    })
+
+    const api = proxy(ctx)
+    const result = await api.sessions.prompt(request({
+      sessionId,
+      mode: 'queue' as const,
+      content: [IMAGE_PART],
+    }))
+
+    expect(result.result).toMatchObject({
+      ok: false,
+      error: { code: 'attachment-error', details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' } },
+    })
+    expect(followup).not.toHaveBeenCalled()
     await ctx.fiber.dispose()
   })
 

@@ -207,6 +207,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Flows are registered by the plugin that knows how to obtain one credential and keyed by the record they write; the seam owns the conversation and the one-attempt-per-key lifecycle, never the protocol.',
   },
   {
+    key: 'googleApi',
+    pkg: 'authorization',
+    title: 'Host-owned Google Workspace API broker',
+    mode: 'core',
+    consumers: ['tool-google-workspace'],
+    note: 'Owns Google OAuth tokens, fixed service roots and scopes, refresh, revocation, and the final authenticated fetch boundary; model-facing Workspace tools receive only bounded API results.',
+  },
+  {
     key: 'sessionTelemetry',
     pkg: 'session-telemetry',
     title: 'Session telemetry seam',

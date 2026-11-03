@@ -6,9 +6,27 @@ import {
   type ToolDefinition,
 } from '@phoenix-ai/dsh-tools'
 
-/** Host-owned install seam for registry-listed Streamable HTTP MCPs. */
+const CURATED_CONNECTOR_LABELS = {
+  devpost: 'Devpost Hackathons', canva: 'Canva', supabase: 'Supabase',
+  heygen: 'HeyGen', figma: 'Figma', notion: 'Notion', linear: 'Linear',
+  cloudflare: 'Cloudflare', slack: 'Slack', 'brave-search': 'Brave Search',
+  filesystem: 'Filesystem', memory: 'Memory', fetch: 'Fetch',
+  'microsoft-personal': 'Microsoft Personal (legacy)', 'outlook-mail': 'Outlook Mail',
+  'outlook-calendar': 'Outlook Calendar', 'microsoft-contacts': 'Microsoft Contacts',
+  onedrive: 'OneDrive', 'microsoft-teams': 'Microsoft Teams', sharepoint: 'SharePoint',
+} as const
+
+/** Host-owned install seam for registry-listed and Phoenix-curated Streamable HTTP MCPs. */
 export interface McpRegistryInstallerService {
   installMcpRegistryServer(request: { name: string; version?: string }): Promise<{
+    status: 'installed' | 'already-installed'
+    connector: {
+      entryId: string
+      serverName: string
+      url: string
+    }
+  }>
+  installCuratedMcpConnector?(request: { connectorId: 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch' | 'microsoft-personal' | 'outlook-mail' | 'outlook-calendar' | 'microsoft-contacts' | 'onedrive' | 'microsoft-teams' | 'sharepoint' }): Promise<{
     status: 'installed' | 'already-installed'
     connector: {
       entryId: string
@@ -74,10 +92,11 @@ export function createConnectorInstallTool(
 ): ToolDefinition {
   return defineTool({
     name: 'connector_install',
-    description: 'Install a missing MCP only after connector_discover found it in the Official MCP Registry. This always asks the user for one-shot approval. Pass only the exact registry name/version; PHOENIX re-resolves the HTTPS endpoint Host-side and never executes an arbitrary GitHub URL or package from this tool.',
+    description: 'Install a missing MCP after connector_discover found its exact Official MCP Registry identity, or activate one Phoenix-curated MCP by connectorId. Curated ids include Microsoft Outlook Mail, Calendar, Contacts, OneDrive, Teams, SharePoint, Microsoft Personal legacy, devpost, canva, supabase, heygen, figma, notion, linear, cloudflare, slack, brave-search, filesystem, memory, and fetch. For a requested Microsoft service install exactly that service; then use its microsoft_setup, microsoft_login_start, microsoft_login_complete and microsoft_profile tools for actual Graph authorization. Tools/installation alone do not mean authenticated. This always asks the user for one-shot approval. PHOENIX resolves every endpoint/package Host-side and never executes an arbitrary URL, GitHub repository, or command from this tool. Binance REAL is intentionally excluded and must use binance_trading_activate.',
     parameters: {
-      name: { type: 'string', required: true },
+      name: { type: 'string', description: 'Exact Official MCP Registry name. Use either name or connectorId, never both.' },
       version: { type: 'string' },
+      connectorId: { type: 'string', enum: ['devpost', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack', 'brave-search', 'filesystem', 'memory', 'fetch', 'microsoft-personal', 'outlook-mail', 'outlook-calendar', 'microsoft-contacts', 'onedrive', 'microsoft-teams', 'sharepoint'], description: 'Phoenix-curated MCP identity. Binance REAL is intentionally not installable through this generic route.' },
     },
     output: {
       schema: {
@@ -92,14 +111,23 @@ export function createConnectorInstallTool(
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args, exec) {
-      const name = args.name.trim()
-      if (name.length < 2) throw new Error('connector_install requires an exact registry server name')
+      const name = args.name?.trim() || undefined
+      const connectorId = args.connectorId
+      if ((name === undefined) === (connectorId === undefined)) {
+        throw new Error('connector_install requires exactly one of name or connectorId')
+      }
+      if (name !== undefined && name.length < 2) {
+        throw new Error('connector_install requires an exact registry server name')
+      }
       if (exec.agent === undefined) throw new Error('connector_install requires an active agent session')
+      const label = connectorId === undefined ? name : CURATED_CONNECTOR_LABELS[connectorId]
       const outcome = await approval.request({
         agent: exec.agent,
         toolName: 'connector_install',
         callId: exec.callId,
-        reason: `Install registry-listed MCP ${name}${args.version === undefined ? '' : ` @ ${args.version}`} into PHOENIX`,
+        reason: connectorId !== undefined
+          ? `Activate the Phoenix-curated ${connectorId === 'devpost' ? 'official ' : ''}${label} MCP`
+          : `Install registry-listed MCP ${name}${args.version === undefined ? '' : ` @ ${args.version}`} into PHOENIX`,
         risk: 'medium',
         reversible: true,
         signal: exec.signal,
@@ -110,24 +138,38 @@ export function createConnectorInstallTool(
           message: `MCP installation was not approved (${outcome}).`,
         }
       }
-      const receipt = await installer.installMcpRegistryServer({
-        name,
-        ...(args.version === undefined ? {} : { version: args.version }),
-      })
+      let receipt: Awaited<ReturnType<McpRegistryInstallerService['installMcpRegistryServer']>>
+      if (connectorId !== undefined) {
+        if (installer.installCuratedMcpConnector === undefined) {
+          throw new Error(`curated ${connectorId === 'devpost' ? 'Devpost ' : `${label} `}MCP installation is unavailable in this Phoenix runtime`)
+        }
+        receipt = await installer.installCuratedMcpConnector({ connectorId })
+      } else {
+        if (name === undefined) throw new Error('connector_install requires an exact registry server name')
+        receipt = await installer.installMcpRegistryServer({
+          name,
+          ...(args.version === undefined ? {} : { version: args.version }),
+        })
+      }
       return {
         status: receipt.status,
         serverName: receipt.connector.serverName,
         message: receipt.status === 'installed'
-          ? `Installed ${name}. Use connector_list to check whether it is ready or needs authorization.`
-          : `${name} is already installed. Use connector_list to check its current authorization state.`,
+          ? connectorId !== undefined && (connectorId.startsWith('outlook-') || ['microsoft-personal','microsoft-contacts','onedrive','microsoft-teams','sharepoint'].includes(connectorId))
+            ? `Installed ${label}. Next: use this MCP server's microsoft_status; if unconfigured, ask once for Entra public client ID and run microsoft_setup. Use microsoft_login_start to show the official device-code URL and code, then microsoft_login_complete after the user consents, and verify microsoft_profile. Do not claim a live Microsoft account from MCP tool availability alone.`
+            : `Installed ${label}. Use connector_list to check whether it is ready or needs authorization.`
+          : connectorId !== undefined && (connectorId.startsWith('outlook-') || ['microsoft-personal','microsoft-contacts','onedrive','microsoft-teams','sharepoint'].includes(connectorId))
+            ? `${label} is already installed. Use microsoft_status and a real Microsoft profile/Graph read to verify the service's current authorization.`
+            : `${label} is already installed. Use connector_list to check its current authorization state.`,
       }
     },
     presentCall(args) {
+      const label = args.connectorId === undefined ? args.name : CURATED_CONNECTOR_LABELS[args.connectorId]
       return {
         card: 'generic',
-        title: `Install MCP: ${args.name}`,
+        title: `Install MCP: ${label}`,
         kind: 'edit',
-        rawInput: args.name,
+        rawInput: label ?? 'connector_install',
       }
     },
   })

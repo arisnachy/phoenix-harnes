@@ -1,11 +1,9 @@
 /**
- * Sidebar shell: column geometry only. Collapse is a slide plus crossfade:
- * content freezes at its expanded width (inline style) and fades out in place
- * while the sliding column (AppFrame grid tracks) clips it — nothing reflows
- * mid-slide. At settle the wide-only content unmounts and the four upper
- * controls enter the 56px rail from the same horizontal offset (one icon each,
- * same top-down order) on one fade that ends with the slide. The bottom-pinned
- * settings control only fades. The workspace/session browsing region between
+ * Sidebar shell: instant column geometry and compositor-only icon fades.
+ * The frame snaps between its wide column and its 56px icon rail, avoiding
+ * repeated resizing of the main chat. Expanded-only content unmounts within
+ * the same render instead of waiting for a fade/settle timer.
+ * The workspace/session browsing region between
  * the New Session button and the foot is the `sidebar.workspaces` registrant's,
  * and the foot holds `sidebar.settings` plus `sidebar.footer.action`; the shell
  * hands them the wide flag (plus an expand request callback for the browser).
@@ -18,13 +16,12 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
-  IconNewChatOutline16, IconPanelLeftOutline16, PhoenixLogo, Tooltip,
+  IconAgentPresetOutline16, IconFolderOpenOutline16, IconNewChatOutline16,
+  IconPanelLeftOutline16, IconPlugOutline16, PhoenixLogo, Tooltip,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SidebarRootComponentProps } from './contract/slots.ts'
+import { TaskCenter } from './TaskCenter.tsx'
 import css from './SidebarRoot.module.css'
-
-/** Wide-content unmount delay; matches the 150ms wide-content fade-out. */
-const COLLAPSE_SETTLE_MS = 150
 
 /**
  * How long the column's scrollbars stay drawn after the pointer leaves it.
@@ -41,27 +38,23 @@ const SCROLLBAR_LINGER_MS = 2000
  */
 export function SidebarRoot({
   collapsed,
-  width,
   startSession,
   toggleSidebar,
   t,
   renderSlot,
+  taskConnection,
 }: SidebarRootComponentProps) {
-  // Wide content stays mounted while the collapse animates (fading via
-  // .collapsed .wide), unmounts at settle, and remounts right away on expand.
-  const [settled, setSettled] = useState(collapsed)
-  useEffect(() => {
-    if (!collapsed) { setSettled(false); return }
-    const timer = window.setTimeout(() => { setSettled(true) }, COLLAPSE_SETTLE_MS)
-    return () => { window.clearTimeout(timer) }
-  }, [collapsed])
-  const wide = !collapsed || !settled
-
-  // Freeze the content at its expanded width while it fades out (collapsed
-  // && wide): the sliding column then clips it instead of reflowing it. The
-  // rail layout (.collapsed styles) only applies once the fade settles.
-  const lastWideWidth = useRef(width)
-  if (!collapsed) lastWideWidth.current = width
+  // Match rendered controls to the actual sidebar width immediately.
+  // The old 150ms settle timer blocked the rail and retained costly wide rows.
+  const wide = !collapsed
+  const [tasksOpen, setTasksOpen] = useState(false)
+  // Navigation destinations open an actionable, focused surface — never the Settings menu.
+  const openFeature = (destination: 'connectors' | 'team', label: string): void => {
+    window.dispatchEvent(new CustomEvent('phoenix:open-feature', { detail: { destination, label } }))
+  }
+  const openLibrary = (): void => {
+    window.dispatchEvent(new Event('phoenix:open-workspace-library'))
+  }
 
   // Rail-in only crossfades a live collapse: a refresh straight into the
   // collapsed state renders the rail statically (no delay-hidden icons).
@@ -93,20 +86,30 @@ export function SidebarRoot({
   // here, and the bars would stay drawn over a column nobody is pointing at.
   // The element's own leave stays as the one signal geometry cannot give: a
   // pointer that leaves the window emits no further moves.
+  // Throttle layout reads to a single rAF instead of EVERY pointer event.
   useEffect(() => {
     if (!pointerInside) return
+    let frame: number | null = null
+    let x = 0
+    let y = 0
     const onMove = (event: PointerEvent): void => {
-      const rect = column.current?.getBoundingClientRect()
-      /* v8 ignore next -- the listener only exists while the column is mounted and revealed. */
-      if (rect === undefined) return
-      const inside = event.clientX >= rect.left && event.clientX < rect.right
-        && event.clientY >= rect.top && event.clientY < rect.bottom
-      if (inside) cancelLinger()
-      else armLinger()
+      x = event.clientX
+      y = event.clientY
+      if (frame !== null) return
+      frame = requestAnimationFrame(() => {
+        frame = null
+        const rect = column.current?.getBoundingClientRect()
+        if (rect === undefined) return
+        const inside = x >= rect.left && x < rect.right
+          && y >= rect.top && y < rect.bottom
+        if (inside) cancelLinger()
+        else armLinger()
+      })
     }
-    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointermove', onMove, { passive: true })
     return () => {
       document.removeEventListener('pointermove', onMove)
+      if (frame !== null) cancelAnimationFrame(frame)
       cancelLinger()
     }
   }, [pointerInside])
@@ -115,10 +118,9 @@ export function SidebarRoot({
     <div
       ref={column}
       className={clsx(
-        css.root, !wide && css.collapsed, !wide && everWide.current && css.railIn,
-        collapsed && wide && css.fading, !pointerInside && css.quietBars,
+        css.root, collapsed && css.collapsed, collapsed && everWide.current && css.railIn,
+        !pointerInside && css.quietBars,
       )}
-      style={wide ? { width: collapsed ? lastWideWidth.current : width } : undefined}
       onPointerEnter={() => {
         cancelLinger()
         setPointerInside(true)
@@ -165,7 +167,7 @@ export function SidebarRoot({
           >
             {!wide && (
               <span className={css.railMark} aria-hidden="true">
-                {renderSlot('sidebar.brand.mark', { size: 24 }, { fallback: <PhoenixLogo size={24} /> })}
+                {renderSlot('sidebar.brand.mark', { size: 34 }, { fallback: <PhoenixLogo size={34} /> })}
               </span>
             )}
             {/* Rail icons render at 18 (figma rail spec); expanded keeps the glyph-native sizes. */}
@@ -187,6 +189,31 @@ export function SidebarRoot({
         </button>
       </Tooltip>
 
+      {/* Preserve exactly the existing navigation actions on the collapsed rail. */}
+      <nav className={css.primaryNavigation} aria-label="Navegación principal">
+        <button type="button" className={css.navLink} aria-label={t('nav.home')} title={wide ? undefined : t('nav.home')} onClick={() => { startSession() }}>
+          <svg viewBox="0 0 24 24" width={wide ? 19 : 18} height={wide ? 19 : 18}
+            fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z" />
+          </svg>{wide && <span>{t('nav.home')}</span>}
+        </button>
+        <button type="button" className={css.navLink} aria-label={t('nav.tasks')} title={wide ? undefined : t('nav.tasks')} onClick={() => { setTasksOpen(true) }}>
+          <svg viewBox="0 0 24 24" width={wide ? 19 : 18} height={wide ? 19 : 18}
+            fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" /><path d="M12 6v6l4 2" />
+          </svg>{wide && <span>{t('nav.tasks')}</span>}
+        </button>
+        <button type="button" className={css.navLink} aria-label={t('nav.connectors')} title={wide ? undefined : t('nav.connectors')} onClick={() => { openFeature('connectors', t('nav.connectors')) }}>
+          <IconPlugOutline16 size={wide ? 19 : 18} />{wide && <span>{t('nav.connectors')}</span>}
+        </button>
+        <button type="button" className={css.navLink} aria-label={t('nav.team')} title={wide ? undefined : t('nav.team')} onClick={() => { window.dispatchEvent(new Event('phoenix:toggle-team-directory')) }}>
+          <IconAgentPresetOutline16 size={wide ? 19 : 18} />{wide && <span>{t('nav.team')}</span>}
+        </button>
+        <button type="button" className={css.navLink} aria-label={t('nav.library')} title={wide ? undefined : t('nav.library')} onClick={openLibrary}>
+          <IconFolderOpenOutline16 size={wide ? 19 : 18} />{wide && <span>{t('nav.library')}</span>}
+        </button>
+      </nav>
+
       {/* The browsing region fills the column between the controls and the
           foot in both states; its rail icon column rides the same slot. */}
       <div className={css.regionArea}>
@@ -205,6 +232,7 @@ export function SidebarRoot({
           {renderSlot('sidebar.settings', { wide })}
         </div>
       </div>
+      {tasksOpen && <TaskCenter connection={taskConnection} onClose={() => { setTasksOpen(false) }} />}
     </div>
   )
 }

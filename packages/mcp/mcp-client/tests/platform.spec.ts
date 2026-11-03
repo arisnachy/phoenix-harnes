@@ -3,8 +3,100 @@ import {
   checkPlatformCompatibility,
   resolveSupportedPlatforms,
 } from '@phoenix-ai/dsh-mcp-client/src/platform.ts'
+import { normalizeWindowsNpxMcpLaunch } from '@phoenix-ai/dsh-mcp-client/src/transport.ts'
 
 describe('MCP stdio platform compatibility', () => {
+  it('wraps the official Memory MCP NPX launcher with cmd on Windows', () => {
+    expect(normalizeWindowsNpxMcpLaunch(
+      'npx',
+      ['-y', '@modelcontextprotocol/server-memory'],
+      'win32',
+    )).toEqual({
+      command: 'cmd.exe',
+      args: ['/d', '/c', 'npx', '-y', '@modelcontextprotocol/server-memory'],
+    })
+  })
+
+  it('starts curated Filesystem MCP using a bundled entrypoint or an explicit NPX fallback', () => {
+    const officialPackage = '@modelcontextprotocol/server-filesystem'
+    const result = normalizeWindowsNpxMcpLaunch(
+      'npx',
+      ['-y', officialPackage, '.'],
+      'win32',
+    )
+    if (result.command === process.execPath) {
+      expect(result.args[0]?.replace(/\\/gu, '/')).toContain('/dist/index.js')
+      expect(result.args.slice(1)).toEqual(['.'])
+    } else {
+      expect(result).toEqual({
+        command: 'cmd.exe',
+        args: ['/d', '/c', 'npx', '-y', officialPackage, '.'],
+      })
+    }
+  })
+
+  it('never retries a bare missing Filesystem Windows shim', () => {
+    const result = normalizeWindowsNpxMcpLaunch(
+      'mcp-server-filesystem',
+      ['C:\\\\Users\\\\example\\\\Documents'],
+      'win32',
+    )
+    expect(result.command).not.toBe('mcp-server-filesystem')
+    if (result.command === process.execPath) {
+      expect(result.args[0]?.replace(/\\/gu, '/')).toContain('/dist/index.js')
+    } else {
+      expect(result).toEqual({
+        command: 'cmd.exe',
+        args: ['/d', '/c', 'npx', '-y', '@modelcontextprotocol/server-filesystem',
+          'C:\\\\Users\\\\example\\\\Documents'],
+      })
+    }
+  })
+
+  it('launches only the pinned official X bridge via cmd.exe on Windows', () => {
+    expect(normalizeWindowsNpxMcpLaunch(
+      'npx', ['-y', '@xdevplatform/xurl', 'mcp', 'https://api.x.com/mcp'], 'win32',
+    )).toEqual({
+      command: 'cmd.exe',
+      args: ['/d', '/c', 'npx', '-y', '@xdevplatform/xurl', 'mcp', 'https://api.x.com/mcp'],
+    })
+    expect(normalizeWindowsNpxMcpLaunch(
+      'npx', ['-y', '@xdevplatform/xurl', 'mcp', '-u', 'PhoenixAI', 'https://api.x.com/mcp'], 'win32',
+    )).toEqual({
+      command: 'cmd.exe',
+      args: ['/d', '/c', 'npx', '-y', '@xdevplatform/xurl', 'mcp', '-u', 'PhoenixAI', 'https://api.x.com/mcp'],
+    })
+    for (const args of [
+      ['-y', '@xdevplatform/xurl', 'mcp', 'https://attacker.example/mcp'],
+      ['-y', '@xdevplatform/xurl', 'mcp', '-u', 'x&whoami', 'https://api.x.com/mcp'],
+      ['-y', '@xdevplatform/xurl', 'mcp', 'https://api.x.com/mcp', '&whoami'],
+    ]) {
+      expect(normalizeWindowsNpxMcpLaunch('npx', args, 'win32').command).toBe('npx')
+    }
+  })
+
+  it('does not introduce a shell for arbitrary registry NPX packages', () => {
+    expect(normalizeWindowsNpxMcpLaunch(
+      'npx',
+      ['-y', '@example/untrusted-mcp', 'a&whoami'],
+      'win32',
+    )).toEqual({
+      command: 'npx',
+      args: ['-y', '@example/untrusted-mcp', 'a&whoami'],
+    })
+  })
+
+  it('keeps curated NPX launchers unchanged off Windows', () => {
+    expect(normalizeWindowsNpxMcpLaunch(
+      'npx',
+      ['-y', '@modelcontextprotocol/server-memory'],
+      'linux',
+    )).toEqual({
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-memory'],
+    })
+  })
+
   it('blocks persisted XcodeBuildMCP configs on Windows before spawn', () => {
     const compatibility = checkPlatformCompatibility({
       serverName: 'XcodeBuildMCP',

@@ -104,6 +104,64 @@ describe('PluginInventorySettingsTab', () => {
     expect(screen.queryByText(en.unobserved)).toBeNull()
   })
 
+  it('offers individual status selectors and a real bulk install action', async () => {
+    const list = vi.fn<PluginInventorySettingsTabInjected['list']>(async () => SNAPSHOT)
+    const setPluginEnabled = vi.fn<NonNullable<PluginInventorySettingsTabInjected['setPluginEnabled']>>()
+      .mockResolvedValue({ entryId: 'disabled-entry' as never, moduleName: 'test', enabled: true, fiberPhase: 'active' })
+    const activateAvailablePlugins = vi.fn<NonNullable<PluginInventorySettingsTabInjected['activateAvailablePlugins']>>()
+      .mockResolvedValue({
+        activated: ['disabled-entry' as never], skipped: [], failed: [],
+        curatedInstalled: 1, curatedExisting: 0, curatedFailed: [],
+      })
+    render(<PluginInventorySettingsTab {...props(list)}
+      setPluginEnabled={setPluginEnabled} activateAvailablePlugins={activateAvailablePlugins} />)
+    const selector = await screen.findByRole('combobox', { name: /directory-picker-native/ })
+    fireEvent.change(selector, { target: { value: 'on' } })
+    await waitFor(() => { expect(setPluginEnabled).toHaveBeenCalledWith({
+      entryId: 'disabled-entry', enabled: true,
+    }) })
+    fireEvent.click(screen.getByRole('button', { name: en.bulkAction }))
+    await waitFor(() => { expect(activateAvailablePlugins).toHaveBeenCalledOnce() })
+    expect(await screen.findByText(/plugins enabled/)).toBeTruthy()
+  })
+
+  it('holds the requested selector value until the Host confirms it', async () => {
+    const pending = Promise.withResolvers<Awaited<ReturnType<NonNullable<PluginInventorySettingsTabInjected['setPluginEnabled']>>>>()
+    const list = vi.fn<PluginInventorySettingsTabInjected['list']>()
+      .mockResolvedValueOnce(SNAPSHOT)
+      .mockResolvedValue({
+        entries: SNAPSHOT.entries.map(entry => entry.entryId === 'disabled-entry'
+          ? { ...entry, enabled: true, fiberPhase: 'active' }
+          : entry),
+      })
+    const toggle = vi.fn<NonNullable<PluginInventorySettingsTabInjected['setPluginEnabled']>>()
+      .mockImplementation(() => pending.promise)
+    render(<PluginInventorySettingsTab {...props(list)} setPluginEnabled={toggle} />)
+    const selector = await screen.findByRole('combobox', { name: /directory-picker-native/ }) as HTMLSelectElement
+    expect(selector.value).toBe('off')
+    fireEvent.change(selector, { target: { value: 'on' } })
+    expect(selector.value).toBe('on')
+    expect(selector.disabled).toBe(true)
+    await act(async () => {
+      pending.resolve({ entryId: 'disabled-entry' as never,
+        moduleName: '@phoenix-ai/dsh-host-directory-picker-native', enabled: true, fiberPhase: 'active' })
+    })
+    await waitFor(() => { expect(selector.value).toBe('on') })
+    expect(screen.getByText(en.pluginChanged)).toBeTruthy()
+  })
+
+  it('shows the rejected entry and reason rather than silently reverting', async () => {
+    const toggle = vi.fn<NonNullable<PluginInventorySettingsTabInjected['setPluginEnabled']>>()
+      .mockRejectedValue(new Error('Parent configuration is disabled'))
+    render(<PluginInventorySettingsTab {...props(async () => SNAPSHOT)} setPluginEnabled={toggle} />)
+    const selector = await screen.findByRole('combobox', { name: /directory-picker-native/ }) as HTMLSelectElement
+    fireEvent.change(selector, { target: { value: 'on' } })
+    await waitFor(() => {
+      expect(screen.getByRole('status').textContent).toContain('Parent configuration is disabled')
+      expect(selector.value).toBe('off')
+    })
+  })
+
   it('filters by module name or Loader entry id', async () => {
     render(<PluginInventorySettingsTab {...props(async () => SNAPSHOT)} />)
     const search = await screen.findByRole('searchbox', { name: en.search })
@@ -305,6 +363,75 @@ describe('UpdateFooterAction', () => {
     expect(refreshForUpdate).toHaveBeenCalledOnce()
   })
 
+  it('opens running updates by default, but lets the user collapse the live console', async () => {
+    const target = 'c'.repeat(40)
+    render(<UpdateFooterAction {...updateProps(async () => ({
+      status: 'preparing', phase: 'build', target, detail: 'Building stable runtime',
+    }))} />)
+    const card = await screen.findByTestId('phoenix-update-card')
+    await screen.findByTestId('phoenix-update-live-console')
+    expect(screen.getByText('cccccccccccc')).toBeTruthy()
+    expect(screen.getByText(/Building stable runtime/)).toBeTruthy()
+    expect(card.querySelector('[class*="expandedDetails"]')).not.toBeNull()
+    const collapse = screen.getByRole('button', { name: en.updateHideDetails })
+    expect(collapse.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(collapse)
+    expect(screen.queryByText('cccccccccccc')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en.updateShowDetails }))
+    expect(screen.getByText('cccccccccccc')).toBeTruthy()
+  })
+
+  it('streams actual command stdout/stderr without an old error and hides it after verified success', async () => {
+    const target = 'd'.repeat(40)
+    const at = new Date().toISOString()
+    const copy = vi.fn(async (_text: string) => {})
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } })
+    let status: PhoenixUpdateSnapshot = {
+      status: 'preparing', phase: 'build', target, at,
+      console: [
+        { at, stream: 'stdout', step: 'build', line: 'Building Phoenix packages 28/40' },
+        { at, stream: 'stderr', step: 'build', line: 'Warning: optional Windows package unavailable' },
+      ],
+      events: [{ at, step: 'host-restart', result: 'failed', diagnostic: 'Old failure from last attempt' }],
+    }
+    const view = render(<UpdateFooterAction {...updateProps(async () => status)} />)
+    const log = await screen.findByTestId('phoenix-update-live-console')
+    expect(log.textContent).toContain('Building Phoenix packages 28/40')
+    expect(log.textContent).toContain('optional Windows package')
+    expect(screen.queryByTestId('phoenix-update-diagnostic')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en.updateLiveCopy }))
+    expect(copy).toHaveBeenCalledWith(expect.stringContaining('Building Phoenix packages 28/40'))
+
+    status = { status: 'updated', current: target, target }
+    view.rerender(<UpdateFooterAction {...updateProps(async () => status)} />)
+    await waitFor(() => { expect(screen.queryByTestId('phoenix-update-live-console')).toBeNull() })
+  })
+
+  it('opens the real, copyable PowerShell error automatically after an update failure', async () => {
+    const copy = vi.fn(async (_text: string) => {})
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } })
+    const diagnostic = 'PowerShell failed at activate.ps1:93\nError: EADDRINUSE 127.0.0.1:3080'
+    render(<UpdateFooterAction {...updateProps(async () => ({
+      status: 'error',
+      target: 'e'.repeat(40),
+      phase: 'runtime-activation',
+      detail: 'Candidate could not start',
+      events: [{
+        at: new Date().toISOString(),
+        step: 'runtime-activation',
+        result: 'failed',
+        exitCode: 1,
+        diagnostic,
+      }],
+    }))} />)
+    const trace = await screen.findByTestId('phoenix-update-diagnostic')
+    expect(trace.textContent).toContain('EADDRINUSE 127.0.0.1:3080')
+    expect(trace.textContent).toContain('activate.ps1:93')
+    expect(screen.getByRole('button', { name: en.updateHideDetails })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en.updateDiagnosticCopy }))
+    expect(copy).toHaveBeenCalledWith(diagnostic)
+  })
+
   it('renders a ready update as a compact restart action', async () => {
     const target = 'b'.repeat(40)
     render(<UpdateFooterAction {...updateProps(async () => ({ status: 'ready', target }))} />)
@@ -312,7 +439,8 @@ describe('UpdateFooterAction', () => {
     const card = await screen.findByTestId('phoenix-update-card')
     expect(card.getAttribute('data-update-status')).toBe('ready')
     expect(card.querySelector('[data-update-progress]')?.getAttribute('aria-valuenow')).toBe('100')
-    expect(screen.getByText('bbbbbbbbbbbb')).toBeTruthy()
+    expect(screen.getByTitle('bbbbbbbbbbbb')).toBeTruthy()
+    expect(screen.queryByText('bbbbbbbbbbbb')).toBeNull()
     expect(screen.queryByText(en.updateChannel)).toBeNull()
   })
 

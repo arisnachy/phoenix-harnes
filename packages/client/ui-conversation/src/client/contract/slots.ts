@@ -113,7 +113,32 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
      * conversation snapshot through the standard kit.
      */
     'conversation.view': { kind: 'list'; scope: 'session'; owner: ConvViewOwnerProps }
-    /** Final business node renderer, dispatched by `ChatConversationViewNode.kind`. */
+    /** Register additive author badges for the current ordinary chat message.
+     * Components receive session runtime and projection hooks. No entry leaves the built-in author presentation intact.
+     */
+    'conversation.chat.message-author': {
+      kind: 'list'
+      scope: 'session'
+      owner: { provenance?: { provider: string; model: string } }
+    }
+    /** Register additive controls beside every ordinary or team transcript message.
+     * Components receive message/author identity and a public reply preview; no entry leaves messages without extra controls.
+     */
+    'conversation.chat.message-actions': {
+      kind: 'list'
+      scope: 'session'
+      owner: {
+        messageId: string
+        authorId: string
+        authorKind: 'user' | 'kira' | 'agent'
+        authorName?: string
+        replyPreview?: string
+        originMissionId?: string
+      }
+    }
+    /** Register one renderer keyed by the final business node kind.
+     * Components receive that node and turn runtime; a matching registration owns its rendering and absence uses the fallback.
+     */
     'conversation.chat.node': {
       kind: 'keyed'
       scope: 'session'
@@ -419,14 +444,25 @@ export interface ChatNodeTurnDataInjected {
   }
 }
 
+/** HTML canvas payload that Phoenix may route to its side visual workspace. */
+export interface CanvasWorkspaceRequest {
+  readonly title: string
+  readonly html: string
+  readonly executable: boolean
+}
+
 /** Stable owner currency delivered to one keyed Chat business renderer. */
 export interface ChatNodeOwnerProps {
+  /** Additive per-message controls already rendered for this exact transcript node. */
+  messageActions?: ReactNode
   /** Selected Tool call, when the shared details store names one. */
   selectedCallId?: CallId | undefined
   /** Session workspace root; Tool summaries display paths relative to it. */
   cwd?: string | undefined
   openFile: (path: string) => void
   inspectCall: (callId: CallId) => void
+  /** Open a Phoenix canvas beside the chat without making the renderer depend on the workspace plugin. */
+  openCanvas?: (canvas: CanvasWorkspaceRequest) => boolean
   /** Execute a code artifact through the host's isolated HARDNESS runtime. */
   runArtifact?: (artifact: {
     readonly id: string
@@ -488,6 +524,18 @@ export type ConvViewProps = PropsRuntime<'conversation.view'>
 /** The shared chat store handle type declared by the Session header/body, details, and chat-view registrations. */
 export type ChatStore = ReturnType<typeof createChatStore>
 
+/** One non-intrusive proactive signal shown only in the blank-session Hero. */
+export interface ProactivityAttentionItem {
+  readonly id: string
+  readonly revision: string
+  readonly taskId: string
+  readonly kind: 'result' | 'failure' | 'upcoming'
+  readonly title: string
+  readonly detail?: string
+  readonly at: string
+  readonly score: number
+}
+
 /** Minimal private profile projection used by the local welcome chrome. */
 export interface ConversationUserProfileState {
   /** User-configured preferred name; model-context consent does not gate local UI chrome. */
@@ -496,6 +544,10 @@ export interface ConversationUserProfileState {
 
 /** Business callbacks injected into the conversation slot. */
 export interface ConversationInjected {
+  /** Tell layout when writing or a live visualization requires focused space. */
+  setSidebarFocus: (active: boolean) => void
+  /** Persist acknowledgement of the exact home-feed revision. */
+  recordAttention: (item: ProactivityAttentionItem, state: 'handled' | 'dismissed') => Promise<void>
   /**
    * Connect the selected Workspace and open its reusable/new blank session.
    * When a blank session is already current, carry its draft to the target.
@@ -509,6 +561,8 @@ export interface ConversationInjected {
   hooks: {
     composerBlock: ObservableSnapshot<ComposerBlock | undefined>
     userProfile: ObservableSnapshot<ConversationUserProfileState>
+    /** Ranked background results/upcoming work for the quiet Hero feed. */
+    proactivityAttention: ObservableSnapshot<readonly ProactivityAttentionItem[]>
   }
 }
 
@@ -781,6 +835,8 @@ export interface ChatScrollPosition {
  * outside the view (layout orchestration; the session object layer).
  */
 export interface ChatViewInjected {
+  /** Route an HTML canvas into Phoenix's visual workspace when that service is available. */
+  openCanvas?: (canvas: CanvasWorkspaceRequest) => boolean
   /** Selection write + details panel opening in one gesture (store action + layout orchestration). */
   openDetails: (target: SelectionTarget) => void
   /**
@@ -830,7 +886,7 @@ export interface ChatViewInjected {
 /** Full chat-view component props: runtime & its Tool/command/tail render shares & store & injected & locale seat. */
 export type ChatViewSlotProps =
   PropsRuntime<'conversation.view'>
-  & PropsRenderSlots<'conversation.chat.node' | 'conversation.message.images'>
+  & PropsRenderSlots<'conversation.chat.node' | 'conversation.message.images' | 'conversation.chat.message-actions' | 'conversation.chat.message-author'>
   & PropsStore<ChatStore> & ChatViewInjected & PropsLocale<'conversation'>
 
 /** Full props of the attachment plugin's composer entry. */

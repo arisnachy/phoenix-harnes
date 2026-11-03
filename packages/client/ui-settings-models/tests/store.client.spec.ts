@@ -1,6 +1,6 @@
 /** Page-store join: directory × namespaces × credentials, with last-good rows on failure. */
 import { describe, expect, it, vi } from 'vitest'
-import type { RpcResponse } from '@phoenix-ai/dsh-api-remotes/client'
+import type { RpcResponse, SettingsNamespaceView } from '@phoenix-ai/dsh-api-remotes/client'
 import { SettingsDescribeMirror } from '@phoenix-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
 import { settingsSchema } from './settings-schema.client.ts'
 import { messageOf, ModelsSettingsStore } from '../src/client/store.ts'
@@ -52,7 +52,7 @@ const NAMESPACES = [
 
 function api(overrides: {
   providers?: () => Promise<RpcResponse<{ providers: typeof DIRECTORY }>>
-  describeSettings?: () => Promise<RpcResponse<{ writable: boolean; namespaces: typeof NAMESPACES }>>
+  describeSettings?: () => Promise<RpcResponse<{ writable: boolean; namespaces: readonly SettingsNamespaceView[] }>>
   describeCredentials?: (refs: string[]) => Promise<RpcResponse<{ credentials: Record<string, unknown> }>>
 } = {}) {
   const seenRefs: string[][] = []
@@ -321,4 +321,18 @@ describe('messageOf', () => {
     expect(messageOf('the host refused')).toBe('the host refused')
     expect(messageOf(undefined)).toBe('undefined')
   })
+})
+
+it('treats Codex as account-authenticated despite a stale API-key reference', async () => {
+  const directory = [...DIRECTORY, { provider: 'openai-codex', displayName: 'OpenAI Codex', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai-codex'], active: true }]
+  const namespaces = NAMESPACES.map(view => view.ns === 'user-profile' ? { ...view, value: {}, user: {} }
+    : view.ns === 'llm-pi-ai' ? { ...view, value: { providers: { openai: { apiKeyEnv: 'OPENAI_API_KEY' }, 'openai-codex': { apiKeyEnv: 'STALE_CODEX_API_KEY' } } } } : view)
+  const { face, mirror, seenRefs } = api({ providers: () => Promise.resolve(ok({ providers: directory })),
+    describeSettings: () => Promise.resolve(ok({ writable: true, namespaces })) })
+  const controller = new ModelsSettingsStore(face, settingsSchema, mirror)
+  await controller.load()
+  const row = controller.store.getSnapshot().rows[0]
+  expect(row?.entry.provider).toBe('openai-codex')
+  expect(row?.apiKeyEnv).toBeUndefined()
+  expect(seenRefs.flat()).not.toContain('STALE_CODEX_API_KEY')
 })

@@ -147,6 +147,10 @@ const CHAT_TEMPLATE_VAR_GATE: Record<PiAiChatTemplateVar, true> = {
 export const CHAT_TEMPLATE_VARS = Object.keys(CHAT_TEMPLATE_VAR_GATE) as readonly PiAiChatTemplateVar[]
 
 const DEEPSEEK_CANONICAL_FLASH_ID = 'deepseek-flash'
+const PHOENIX_CODEX_VISION_IDS = new Set([
+  'gpt-6.1-sol',
+  'gpt-6-luna',
+])
 const DEEPSEEK_FLASH_VISION_IDS = new Set([
   DEEPSEEK_CANONICAL_FLASH_ID,
   'deepseek-v4-flash',
@@ -155,13 +159,56 @@ const DEEPSEEK_FLASH_VISION_IDS = new Set([
   'deepseek-v4.1-flash',
 ])
 
-function documentedVendorInput(provider: string, modelId: string): Model<Api>['input'] | undefined {
+/**
+ * Return vendor-documented input modalities Phoenix must preserve even when a
+ * transient upstream catalog under-claims them.
+ *
+ * GPT-6.1 Sol and GPT-6 Luna are the two concrete routes behind Phoenix Auto;
+ * both accept image input. Treating either as text-only makes the synthetic
+ * router reject images before the request ever reaches Codex.
+ *
+ * @param provider - provider route id.
+ * @param modelId - provider-owned model id.
+ * @returns documented modalities, or undefined when Phoenix has no override.
+ */
+export function documentedVendorInput(provider: string, modelId: string): Model<Api>['input'] | undefined {
+  if (provider === 'openai-codex' && PHOENIX_CODEX_VISION_IDS.has(modelId)) return ['text', 'image']
   return provider === 'deepseek' && DEEPSEEK_FLASH_VISION_IDS.has(modelId)
     ? ['text', 'image']
     : undefined
 }
 
+/** NVIDIA's old MiniMax-M3 trial endpoint is deprecated, but partner access may remain.
+ * Offer the documented M3.1 Flash free endpoint without rewriting any user's model choice.
+ * https://build.nvidia.com/minimaxai/minimax-m3.1-flash
+ */
+export const NVIDIA_MINIMAX_M31_FLASH_ID = 'minimaxai/minimax-m3.1-flash'
+
 function normalizeVendorCatalog(provider: string, models: Model<Api>[]): Model<Api>[] {
+  if (provider === 'nvidia') {
+    if (models.some(model => model.id === NVIDIA_MINIMAX_M31_FLASH_ID)) return models
+    // NVIDIA's official chat-completions API; do not clone another model's
+    // private headers, reasoning dialect, or context limits.
+    const flash: Model<Api> = {
+      id: NVIDIA_MINIMAX_M31_FLASH_ID,
+      name: 'MiniMax M3.1 Flash',
+      api: 'openai-completions',
+      provider: 'nvidia',
+      baseUrl: 'https://integrate.api.nvidia.com/v1',
+      reasoning: false,
+      input: ['text', 'image'],
+      cost: NO_COST,
+      contextWindow: 262_144,
+      maxTokens: 65_536,
+    }
+    return [flash, ...models]
+  }
+  if (provider === 'openai-codex') {
+    return models.map(model => ({
+      ...model,
+      ...(PHOENIX_CODEX_VISION_IDS.has(model.id) ? { input: ['text', 'image'] as Model<Api>['input'] } : {}),
+    }))
+  }
   if (provider !== 'deepseek') return models
   const normalized = models.map(model => ({
     ...model,
@@ -232,6 +279,20 @@ export function catalogModels(provider: string): Map<string, Model<Api>> {
  * from the dict is not offered.
  */
 export type PiAiReasoningEfforts = Partial<Record<ModelThinkingLevel, string | null>>
+
+/**
+ * Safe default capability for a Codex model typed by hand before its installed
+ * pi-ai catalog knows the id. The OpenAI Codex route is reasoning-native; this
+ * keeps the same selector vocabulary Phoenix already exposes for discovered
+ * Codex models. An explicit `reasoningEfforts: false` still disables it.
+ */
+const CODEX_MANUAL_REASONING_EFFORTS: PiAiReasoningEfforts = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  xhigh: 'xhigh',
+  max: 'max',
+}
 
 /**
  * Whether one pi-ai compat field is configurable on a profile.
@@ -685,7 +746,9 @@ function resolveModelReasoning(
   entry: PiAiModelProfile,
   base: Model<Api> | undefined,
 ): ModelReasoning {
-  const efforts = entry.reasoningEfforts
+  const efforts = entry.reasoningEfforts !== undefined
+    ? entry.reasoningEfforts
+    : (provider === 'openai-codex' && base === undefined ? CODEX_MANUAL_REASONING_EFFORTS : undefined)
   if (efforts === undefined) {
     // Reasoning rides the installed entry or is absent: a bare capability flag
     // would make pi-ai advertise effort levels with no `thinkingLevelMap` to
@@ -820,6 +883,37 @@ function normalizeOfficialOpenAiContextWindow(
     || !OPENAI_GPT56_MODEL_IDS.has(modelId)) return contextWindow
   return OPENAI_GPT56_CONTEXT_WINDOW
 }
+const OPENROUTER_NEMOTRON3_NANO_ID = 'nvidia/nemotron-3-nano-30b-a3b'
+const OPENROUTER_NEMOTRON3_NANO_CONTEXT_WINDOW = 262_144
+
+/**
+ * The OpenRouter model directory publishes 262,144 input-context tokens for
+ * Nemotron 3 Nano. Older pi-ai catalog snapshots advertise a smaller window,
+ * causing Phoenix to reject otherwise valid long requests before any network
+ * I/O. This corrects only the inherited catalog capacity on OpenRouter's
+ * official API, never a user's explicit model override or a private gateway.
+ *
+ * Source: https://openrouter.ai/nvidia/nemotron-3-nano-30b-a3b
+ * @param provider - requested route.
+ * @param baseUrl - effective API origin.
+ * @param modelId - exact catalog model.
+ * @param inherited - unconfigured capacity from catalog or route fallback.
+ * @param explicit - optional user-selected context capacity.
+ */
+export function documentedOpenRouterContextWindow(
+  provider: string,
+  baseUrl: string,
+  modelId: string,
+  inherited: number,
+  explicit?: number,
+): number {
+  if (explicit !== undefined) return explicit
+  if (provider !== 'openrouter'
+    || !/^https:\/\/openrouter\.ai\/api\/v1\/?$/u.test(baseUrl)
+    || modelId !== OPENROUTER_NEMOTRON3_NANO_ID) return inherited
+  return Math.max(inherited, OPENROUTER_NEMOTRON3_NANO_CONTEXT_WINDOW)
+}
+
 /** One route's materialized catalog, plus the request caps its profile chose. */
 export interface RouteCatalog {
   /** The materialized models in configuration order. */
@@ -914,7 +1008,13 @@ export function resolveRouteModels(request: RouteCatalogRequest): RouteCatalog {
     // discloses nothing but ids still yields a serviceable route. The fallback
     // is a guess by construction, which is why it is a configurable route field
     // rather than a constant buried here.
-    const configuredContextWindow = entry.contextWindow ?? base?.contextWindow ?? request.defaultContextWindow
+    const configuredContextWindow = documentedOpenRouterContextWindow(
+      provider,
+      baseUrl,
+      entry.id,
+      base?.contextWindow ?? request.defaultContextWindow,
+      entry.contextWindow,
+    )
     const contextWindow = normalizeOfficialOpenAiContextWindow(
       provider,
       baseUrl,

@@ -1,6 +1,7 @@
 import { defineConfig } from 'tsdown'
 import { decoratorLoweringPlugin } from './packages/typert/generator/lib/types/tsdown-plugin.js'
 import { optimizePhoenixTsdownInput } from './scripts/tsdown-performance.ts'
+import { phoenixTsdownWorkspace } from './scripts/tsdown-workspace.ts'
 
 function isBuildFaceClient(value: unknown): boolean {
   if (value === undefined || value === 'host') return false
@@ -18,7 +19,7 @@ function isBuildFaceClient(value: unknown): boolean {
 export default defineConfig(({ env }) => {
   const client = isBuildFaceClient(env?.DSH_BUILD_FACE)
   return {
-    workspace: ['vendor/*', 'packages/*/*', 'apps/cli'],
+    workspace: phoenixTsdownWorkspace(process.cwd()),
     entry: client ? '' : ['lib/types/{index,invariant,startup}.js'],
     outDir: 'lib',
     format: ['esm'],

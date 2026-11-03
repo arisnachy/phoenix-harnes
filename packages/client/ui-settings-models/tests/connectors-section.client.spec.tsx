@@ -27,6 +27,275 @@ function renderHub(api: IApiClient['authorization'], extra: Partial<ConnectorsSe
 }
 
 describe('connectors settings section', () => {
+  it('shows explicit Binance authentication controls instead of generic MCP registry discovery', async () => {
+    const api = {
+      list: vi.fn(async () => ok({entries:[]})),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({runtime:[],managed:[]})),
+      install: vi.fn(), search: vi.fn(),
+    }
+    renderHub(api, { mcpRegistry: mcpRegistry as unknown as NonNullable<ConnectorsSettingsSectionProps['mcpRegistry']> })
+    const card = document.querySelector('[data-connector-id="binance"]')
+    expect(card).toBeTruthy()
+    expect(card?.textContent).toContain('Conectar / autenticar Binance')
+    expect(Array.from(card?.querySelectorAll('button') ?? [])
+      .some(button => button.textContent === connectorEn.findConnector)).toBe(false)
+    expect(card?.textContent).toContain('PAPER ready')
+    await waitFor(() => { expect(mcpRegistry.state).toHaveBeenCalled() })
+    // Keyless PAPER readiness must not satisfy the Connected-account filter.
+    fireEvent.click(screen.getByRole('button', { name: connectorEn.connected }))
+    expect(document.querySelector('[data-connector-id="binance"]')).toBeNull()
+  })
+
+  it('shows OpenClaw companion diagnostics in its existing connector card without claiming tool access', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const openClawRuntimeState = vi.fn(async () => ({
+      installed: true, hostNodeSupported: true, gateway: 'responded' as const, browser: 'unavailable' as const,
+      plugins: 'responded' as const, channels: 'unavailable' as const,
+      nativePluginsRoutedToPhoenix: false as const,
+    }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      openClawRuntimeState,
+      search: vi.fn(), install: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="openclaw"]')
+    expect(card).toBeTruthy()
+    await waitFor(() => expect(card?.textContent).toContain(connectorEn.ocDetected))
+    expect(card?.textContent).toContain(connectorEn.ocNote)
+    expect(card?.textContent).toContain(connectorEn.ocBrowser)
+    expect(card?.textContent).toContain(connectorEn.ocUnavailable)
+    expect(document.querySelectorAll('[data-connector-id="openclaw"]')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: connectorEn.connected }))
+    expect(document.querySelector('[data-connector-id="openclaw"]')).toBeNull()
+    expect(openClawRuntimeState).toHaveBeenCalledOnce()
+  })
+
+  it('starts the registered Binance Agentic OAuth authorization instead of merely reinstalling MCP',async()=>{
+    const fetcher=vi.fn(async(input: RequestInfo | URL)=>{
+      const path=String(input)
+      if(path.endsWith('/testnet-status'))return new Response(JSON.stringify({configured:false,connected:false}))
+      if(path.endsWith('/real-status'))return new Response(JSON.stringify({configured:false,connected:false,canRead:false,tradingAuthorized:false}))
+      if(path.endsWith('/mcp-status'))return new Response(JSON.stringify({
+        configured:true,connected:false,status:'auth-required',toolCount:0,
+        accountVerified:false,tradeScopeVerified:false,
+        authorizationAvailability:'provider-approval-required',knownProviderRejection:'3346001',
+      }))
+      throw new Error('Unexpected connector route')
+    })
+    vi.stubGlobal('fetch',fetcher)
+    const begin=vi.fn(async()=>ok({attemptId:'binance-oauth-auth'}))
+    const api={
+      list:vi.fn(async()=>ok({entries:[{
+        key:'mcp-client/binance-agent-os',label:'MCP binance-agent-os',
+        methods:[{id:'credentials',label:'Configure API'},{id:'oauth',label:'Authorize Binance'}],inFlight:false,
+      }]})),
+      begin,status:vi.fn(async()=>ok({attemptId:'binance-oauth-auth',status:'pending',
+        nextSeq:0,notices:[]})),answer:vi.fn(),cancel:vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry={
+      state:vi.fn(async()=>({runtime:[{
+        serverName:'binance-agent-os',transport:'streamable-http' as const,
+        status:'auth-required' as const,toolNames:[],
+      }],managed:[{
+        entryId:'managed-binance',serverName:'binance-agent-os',
+        url:'https://agent.binance.com/mcp/agentic',
+      }]})),
+      install:vi.fn(),search:vi.fn(),
+    }
+    renderHub(api,{mcpRegistry:mcpRegistry as unknown as NonNullable<ConnectorsSettingsSectionProps['mcpRegistry']>})
+    await waitFor(()=>expect(document.querySelector('[data-connector-id="binance"]')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button',{name:'Conectar / autenticar Binance'}))
+    await screen.findByText('Autorización PHOENIX no admitida por Binance · código 3346001')
+    expect(screen.queryByRole('button',{name:'Autorizar Binance OAuth'})).toBeNull()
+    // Only owners who have separately obtained Binance approval may retry.
+    await waitFor(() => expect(
+      (screen.getByRole('button',{name:'Opciones avanzadas (solo si Binance aprueba PHOENIX)'}) as HTMLButtonElement).disabled,
+    ).toBe(false))
+    fireEvent.click(screen.getByRole('button',{name:'Opciones avanzadas (solo si Binance aprueba PHOENIX)'}))
+    const button=await screen.findByRole('button',{name:'Autorizar Binance OAuth'})
+    fireEvent.click(button)
+    await waitFor(()=>expect(begin).toHaveBeenCalledWith({
+      key:'mcp-client/binance-agent-os',method:'oauth',
+    }))
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps Codex reconnect visible with an expired native account marker', async () => {
+    const begin = vi.fn(async () => ok({ attemptId: 'codex-reauth' }))
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{
+        key: 'subagent-codex/account', label: 'ChatGPT / Codex',
+        methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
+        inFlight: false, stored: { kind: 'grant' as const },
+      }] })),
+      begin, status: vi.fn(), answer: vi.fn(), cancel: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    renderHub(api, { launchContext: 'codex-reconnect' })
+    await waitFor(() => {
+      const card = document.querySelector('[data-connector-id="codex"]')
+      expect(card).toBeTruthy()
+      expect(card?.textContent).toContain('OpenAI Codex')
+      expect(card?.textContent).toContain(connectorEn.reconnectRequiredStatus)
+      expect(card?.querySelector('button')).toBeTruthy()
+    })
+    const card = document.querySelector('[data-connector-id="codex"]')!
+    const reconnect = Array.from(card.querySelectorAll('button'))
+      .find(button => /Reauthorize|Reconnect|Authorize/i.test(button.textContent ?? ''))
+    expect(reconnect).toBeTruthy()
+    fireEvent.click(reconnect!)
+    await waitFor(() => {
+      expect(begin).toHaveBeenCalledWith({ key: 'subagent-codex/account', method: 'oauth' })
+    })
+  })
+
+  it('automatically presents authenticated DeepSeek and newly registered model providers in the store', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [
+        { key: 'llm-pi-ai/deepseek', label: 'DeepSeek', methods: [{ id: 'api-key', label: 'API key' }],
+          inFlight: false, disconnectable: true, stored: { kind: 'api-key' },
+          telemetry: { kind: 'account', provider: 'DeepSeek' } },
+        { key: 'llm-pi-ai/new-model', label: 'New Model', methods: [{ id: 'oauth', label: 'Sign in' }],
+          inFlight: false, telemetry: { kind: 'account', provider: 'New Model' } },
+      ] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    renderHub(api)
+    await waitFor(() => {
+      for (const key of ['llm-pi-ai/deepseek', 'llm-pi-ai/new-model']) {
+        const card = document.querySelector(`[data-connector-id="${key}"]`)
+        expect(card?.textContent).toContain('Connected')
+        expect(card?.textContent).not.toContain('Authorize')
+      }
+    })
+    expect(screen.getAllByText('DeepSeek')).toHaveLength(1)
+    const deepSeekCard = document.querySelector('[data-connector-id="llm-pi-ai/deepseek"]')
+    const disconnect = Array.from(deepSeekCard?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Disconnect')
+    expect(disconnect).toBeTruthy()
+    api.disconnect = vi.fn(async () => ok({ disconnected: true as const })) as typeof api.disconnect
+    fireEvent.click(disconnect!)
+    await waitFor(() => { expect(api.disconnect).toHaveBeenCalledWith({ key: 'llm-pi-ai/deepseek' }) })
+  })
+
+  it('recovers the initial authorization list after a temporary host disconnection', async () => {
+    const list = vi.fn().mockRejectedValueOnce(new Error('WebSocket disconnected'))
+      .mockResolvedValue(ok({ entries: [{ key: 'llm-pi-ai/deepseek', label: 'DeepSeek',
+        methods: [{ id: 'api-key', label: 'API key' }], inFlight: false, stored: { kind: 'api-key' } }] }))
+    renderHub({ list, begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn() } as unknown as IApiClient['authorization'])
+    await waitFor(() => { expect(list).toHaveBeenCalledTimes(2) }, { timeout: 2000 })
+    expect(await screen.findByText('DeepSeek')).toBeTruthy()
+  })
+
+  it('finishes installation by authorizing even after the first MCP connection fails', async () => {
+    let installed = false
+    let reads = 0
+    const begin = vi.fn(async () => ok({ attemptId: 'late-brave' }))
+    const api = {
+      list: vi.fn(async () => {
+        const ready = installed && ++reads > 2
+        return ok({ entries: ready ? [{ key: 'mcp-client/brave-search', label: 'MCP brave-search',
+          methods: [{ id: 'credentials', label: 'Configure' }], inFlight: false }] : [] })
+      }),
+      begin, status: vi.fn(async () => ok({ attemptId: 'late-brave', status: 'pending', notices: [], nextSeq: 0 })),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const connector = { entryId: 'brave', serverName: 'brave-search', url: 'stdio://brave-search',
+      source: { kind: 'curated' as const, connectorId: 'brave-search' } }
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: installed ? [connector] : [], runtime: installed ? [{
+        serverName: 'brave-search', transport: 'stdio' as const, status: 'failed' as const, toolNames: [],
+      }] : [] })),
+      installCurated: vi.fn(async () => { installed = true; return { status: 'installed' as const, connector } }),
+      install: vi.fn(), search: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="brave-search"]')
+    const install = Array.from(card?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Install')
+    expect(install).toBeTruthy()
+    fireEvent.click(install!)
+    await waitFor(() => {
+      expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/brave-search', method: 'credentials' })
+    }, { timeout: 3000 })
+  })
+
+  it('keeps the actual OAuth prompt visible outside catalog filters without opening a blank tab', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{ key: 'llm-pi-ai/probe', label: 'Probe Provider',
+        methods: [{ id: 'oauth', label: 'Sign in' }], inFlight: false }] })),
+      begin: vi.fn(async () => ok({ attemptId: 'prompt-probe' })),
+      status: vi.fn(async () => ok({ attemptId: 'prompt-probe', status: 'pending', nextSeq: 1, notices: [],
+        prompt: { promptId: 'client', kind: 'text', message: 'Provider client ID' } })),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    try {
+      renderHub(api)
+      const card = (await screen.findByText('Probe Provider')).closest('article')
+      fireEvent.click(Array.from(card?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Authorize')!)
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'not-in-catalog' } })
+      expect(await screen.findByText('Provider client ID', {}, { timeout: 2000 })).toBeTruthy()
+      expect(open).not.toHaveBeenCalled()
+    } finally { open.mockRestore() }
+  })
+
+  it('opens only the real provider consent URL and preserves the link if the popup is blocked', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{ key: 'llm-pi-ai/probe', label: 'Probe Provider',
+        methods: [{ id: 'oauth', label: 'Sign in' }], inFlight: false }] })),
+      begin: vi.fn(async () => ok({ attemptId: 'url-probe' })),
+      status: vi.fn(async () => ok({ attemptId: 'url-probe', status: 'pending', nextSeq: 1,
+        notices: [{ seq: 1, notice: { message: 'Continue with provider', url: 'https://provider.example/consent' } }] })),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    try {
+      renderHub(api)
+      const card = (await screen.findByText('Probe Provider')).closest('article')
+      fireEvent.click(Array.from(card?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Authorize')!)
+      expect(open).not.toHaveBeenCalled()
+      const link = await screen.findByRole('link', { name: 'Open authorization page' }, { timeout: 2000 })
+      expect(link.getAttribute('href')).toBe('https://provider.example/consent')
+      // The only attempted popup is the real provider URL; the UI retains
+      // the direct consent link when Chrome declines that async request.
+      expect(open).toHaveBeenCalledWith('https://provider.example/consent', '_blank')
+      expect(api.cancel).not.toHaveBeenCalled()
+    } finally { open.mockRestore() }
+  })
+
+  it('keeps the authorization result after account refresh and the old dismissal deadline', async () => {
+    vi.useFakeTimers()
+    let authorized = false
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{ key: 'llm-pi-ai/probe', label: 'Probe Provider',
+        methods: [{ id: 'api-key', label: 'Configure' }], inFlight: false,
+        ...(authorized ? { stored: { kind: 'api-key' as const } } : {}) }] })),
+      begin: vi.fn(async () => ok({ attemptId: 'result-probe' })),
+      status: vi.fn(async () => {
+        authorized = true
+        return ok({ attemptId: 'result-probe', status: 'authorized', nextSeq: 1,
+          notices: [{ seq: 1, notice: { message: 'Provider login completed' } }] })
+      }),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    try {
+      renderHub(api)
+      await act(async () => { await Promise.resolve() })
+      const card = screen.getByText('Probe Provider').closest('article')
+      fireEvent.click(Array.from(card?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Authorize')!)
+      await act(async () => { await Promise.resolve() })
+      await act(async () => { await vi.advanceTimersByTimeAsync(700) })
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'not-in-catalog' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(6000) })
+      expect(screen.getByText('Provider login completed')).toBeTruthy()
+      expect(document.querySelector('[data-authorization-outcome="success"]')).toBeTruthy()
+    } finally { vi.useRealTimers() }
+  })
+
   it('shows the ChatGPT Web switch and exposes its route only after bridge readiness', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
@@ -57,9 +326,420 @@ describe('connectors settings section', () => {
     })
   })
 
+  it('uses official Cloudflare MCP OAuth and never substitutes a legacy API-key flow', async () => {
+    const begin = vi.fn(async () => ok({ attemptId: 'cloudflare-oauth', status: 'pending' as const }))
+    const api = {
+      list: vi.fn(async () => ok({ entries: [
+        {
+          key: 'authorization-cloudflare/account',
+          label: 'Cloudflare API',
+          methods: [{ id: 'api-key', label: 'Cloudflare API token' }],
+          inFlight: false,
+        },
+        {
+          key: 'mcp-client/cloudflare',
+          label: 'MCP cloudflare',
+          methods: [{ id: 'oauth', label: 'Cloudflare OAuth' }],
+          inFlight: false,
+        },
+      ] })),
+      begin,
+      status: vi.fn(async () => ok({
+        attemptId: 'cloudflare-oauth', status: 'pending' as const,
+        notices: [], nextSeq: 0,
+      })),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'cloudflare-entry',
+          serverName: 'cloudflare',
+          url: 'https://mcp.cloudflare.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'cloudflare' },
+        }],
+        runtime: [{
+          serverName: 'cloudflare',
+          transport: 'streamable-http' as const,
+          status: 'auth-required' as const,
+          toolNames: [],
+        }],
+      })),
+      install: vi.fn(), search: vi.fn(),
+    }
+    const popup = { closed: false, close: vi.fn(), location: { replace: vi.fn() } }
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
+    try {
+      renderHub(api, { mcpRegistry })
+      const card = await waitFor(() => {
+        const found = document.querySelector('[data-connector-id="cloudflare"]')
+        if (found === null || !found.textContent?.includes('Authorization required')) throw new Error('Cloudflare MCP not ready')
+        return found
+      })
+      const authorize = Array.from(card.querySelectorAll('button')).find(button => button.textContent === 'Authorize')
+      expect(authorize).toBeTruthy()
+      fireEvent.click(authorize!)
+      await waitFor(() => expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/cloudflare', method: 'oauth' }))
+      expect(begin).not.toHaveBeenCalledWith({ key: 'authorization-cloudflare/account', method: 'api-key' })
+    } finally {
+      open.mockRestore()
+    }
+  })
+
+  it('takes installed Canva straight to its registered OAuth flow instead of stopping after install', async () => {
+    let installed = false
+    const begin = vi.fn(async () => ok({ attemptId: 'canva-live-oauth' }))
+    const api = {
+      list: vi.fn(async () => ok({ entries: installed ? [{
+        key: 'mcp-client/canva', label: 'MCP canva',
+        methods: [{ id: 'oauth', label: 'Authorize Canva' }], inFlight: false,
+      }] : [] })),
+      begin,
+      status: vi.fn(async () => ok({
+        attemptId: 'canva-live-oauth', status: 'pending' as const,
+        nextSeq: 0, notices: [],
+      })),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const receipt = {
+      status: 'installed' as const,
+      connector: { entryId: 'canva-live', serverName: 'canva', url: 'https://mcp.canva.com/mcp' },
+    }
+    const installCurated = vi.fn(async () => {
+      installed = true
+      return receipt
+    })
+    const state = vi.fn(async () => ({
+      managed: installed ? [receipt.connector] : [],
+      runtime: installed ? [{
+        serverName: 'canva', transport: 'streamable-http' as const,
+        status: 'auth-required' as const, reasonCode: 'authorization-required' as const,
+        toolNames: [],
+      }] : [],
+    }))
+    const popup = vi.spyOn(window, 'open').mockReturnValue(null)
+    try {
+      renderHub(api, { mcpRegistry: { state, install: vi.fn(), installCurated, search: vi.fn() } })
+      const card = document.querySelector('[data-connector-id="canva"]')
+      const button = Array.from(card?.querySelectorAll('button') ?? [])
+        .find(item => item.textContent === 'Install')
+      expect(button).toBeTruthy()
+      fireEvent.click(button!)
+      await waitFor(() => expect(begin).toHaveBeenCalledWith({
+        key: 'mcp-client/canva', method: 'oauth',
+      }))
+      expect(installCurated).toHaveBeenCalledWith({ connectorId: 'canva' })
+    } finally {
+      popup.mockRestore()
+    }
+  })
+
+  it('does not call a no-tools MCP connected even when its transport reports ready', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const state = vi.fn(async () => ({
+      managed: [{
+        entryId: 'canva-no-tools', serverName: 'canva', url: 'https://mcp.canva.com/mcp',
+        source: { kind: 'curated' as const, connectorId: 'canva' },
+      }],
+      runtime: [{
+        serverName: 'canva', transport: 'streamable-http' as const,
+        status: 'ready' as const, toolNames: [],
+      }],
+    }))
+    renderHub(api, { mcpRegistry: { state, install: vi.fn(), search: vi.fn() } })
+    await waitFor(() => expect(document.querySelector('[data-connector-id="canva"]')?.textContent)
+      .toContain(connectorEn.registryNoToolsStatus))
+    fireEvent.click(screen.getByRole('button', { name: connectorEn.connected }))
+    expect(document.querySelector('[data-connector-id="canva"]')).toBeNull()
+  })
+
+  it('offers official Cloudflare MCP installation instead of a legacy API-key prompt', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{
+        key: 'authorization-cloudflare/account',
+        label: 'Cloudflare API',
+        methods: [{ id: 'api-key', label: 'Cloudflare API token' }],
+        inFlight: false,
+      }] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async () => ({ status: 'installed' as const, connector: {
+      entryId: 'cf', serverName: 'cloudflare', url: 'https://mcp.cloudflare.com/mcp',
+    } }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      install: vi.fn(), installCurated, search: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="cloudflare"]')
+    expect(card).not.toBeNull()
+    expect(Array.from(card?.querySelectorAll('button') ?? []).some(button => button.textContent === 'Authorize')).toBe(false)
+    const install = Array.from(card?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Install')
+    expect(install).toBeTruthy()
+    fireEvent.click(install!)
+    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'cloudflare' }))
+  })
+
   it('keeps the legacy Models authorization panel empty', () => {
     const { container } = render(<AuthorizationPanel t={key => en[key]} onAuthorized={vi.fn()} />)
     expect(container.childElementCount).toBe(0)
+  })
+
+  it('reuses verified OpenClaw Google/GitHub sessions without duplicating provider cards', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [
+        {
+          key: 'authorization-google/account',
+          label: 'Google Workspace',
+          methods: [{ id: 'oauth', label: 'Sign in with Google' }],
+          inFlight: false,
+        },
+        {
+          key: 'authorization-openclaw/github',
+          label: 'GitHub',
+          methods: [{ id: 'oauth', label: 'Authorize GitHub' }],
+          inFlight: false,
+        },
+        {
+          key: 'llm-pi-ai/github-copilot',
+          label: 'GitHub Copilot',
+          methods: [{ id: 'oauth', label: 'GitHub Copilot' }],
+          inFlight: false,
+        },
+      ] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      openClawState: vi.fn(async () => ({
+        connectors: [
+          {
+            id: 'google-workspace' as const,
+            skillAlias: 'openclaw-gog' as const,
+            skillInstalled: true,
+            runtimeAvailable: true,
+            connected: true,
+            account: 'owner@example.com',
+            phase: 'ready' as const,
+          },
+          {
+            id: 'github' as const,
+            skillAlias: 'openclaw-github' as const,
+            skillInstalled: true,
+            runtimeAvailable: true,
+            connected: true,
+            phase: 'ready' as const,
+          },
+        ],
+      })),
+      install: vi.fn(),
+      search: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+
+    await waitFor(() => { expect(mcpRegistry.openClawState).toHaveBeenCalled() })
+    expect(screen.getAllByText('Google Workspace')).toHaveLength(1)
+    expect(screen.queryByText('Gmail')).toBeNull()
+    expect(screen.queryByText('Google Drive')).toBeNull()
+    expect(screen.queryByText('Google Calendar')).toBeNull()
+    expect(screen.queryByText('Google Contacts')).toBeNull()
+    expect(screen.getByText('openclaw-gog · owner@example.com')).toBeTruthy()
+
+    const googleCard = document.querySelector('[data-connector-id="google-workspace"]')
+    const githubCard = document.querySelector('[data-connector-id="github"]')
+    expect(googleCard?.textContent).toContain('Connected · OpenClaw')
+    expect(githubCard?.textContent).toContain('Connected · OpenClaw')
+
+    // Copilot's MODEL login is not a GitHub REPOSITORY connector.
+    expect(screen.queryByText('GitHub Copilot')).toBeNull()
+    expect(githubCard?.textContent).toContain('GitHub Copilot como proveedor de modelos es independiente')
+    expect(document.querySelector('[data-authorization-key="authorization-openclaw/github"]')).toBeNull()
+    expect(document.querySelector('[data-authorization-key="llm-pi-ai/github-copilot"]')).toBeNull()
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
+  it('shows the official token URL and least-privilege setup instructions inside GitHub card', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      install: vi.fn(), installCurated: vi.fn(), search: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="github"]')!
+    await waitFor(() => expect(card.querySelector('details')).toBeTruthy())
+    const link = Array.from(card.querySelectorAll('a'))
+      .find(a => a.textContent === 'Crear token en GitHub')
+    expect(link?.getAttribute('href'))
+      .toBe('https://github.com/settings/personal-access-tokens/new')
+    expect(link?.getAttribute('rel')).toContain('noopener')
+    expect(card.textContent).toContain('Resource owner')
+    expect(card.textContent).toContain('Repository permissions')
+    expect(card.textContent).toContain('Read-only')
+    expect(card.textContent).toContain('90 días')
+    expect(card.textContent).toContain('Generate token')
+    expect(card.textContent).toContain('vault')
+  })
+
+  it('offers GitHub PAT setup instead of an OAuth URL for a broken remote MCP', async () => {
+    const begin = vi.fn(async () => ok({ attemptId: 'github-pat' }))
+    const api = { list: vi.fn(async () => ok({ entries: [{
+      key: 'mcp-client/github', label: 'MCP github', inFlight: false,
+      stored: { kind: 'grant' as const },
+      methods: [{ id: 'credentials', label: 'Configure github token' }],
+    }] })),
+      begin, status: vi.fn(async () => ok({
+        attemptId: 'github-pat', status: 'pending', nextSeq: 0, notices: [],
+      })), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [{ entryId: 'git-1',
+        serverName: 'github', url: 'https://api.githubcopilot.com/mcp/',
+        source: { kind: 'curated' as const, connectorId: 'github' },
+      }], runtime: [{ serverName: 'github', transport: 'streamable-http' as const,
+        status: 'failed' as const, toolNames: [] }] })),
+      search: vi.fn(), install: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="github"]')!
+    await waitFor(() => expect(card.textContent).toContain('Configurar token GitHub'))
+    expect(card.textContent).toContain('no admite registro OAuth dinámico')
+    const button = Array.from(card.querySelectorAll('button'))
+      .find(item => item.textContent === 'Configurar token GitHub')
+    fireEvent.click(button!)
+    await waitFor(() => expect(begin).toHaveBeenCalledWith({
+      key: 'mcp-client/github', method: 'credentials',
+    }))
+  })
+
+  it('never mistakes a github-copilot runtime for the GitHub repository MCP', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{
+        key: 'llm-pi-ai/github-copilot', label: 'GitHub Copilot',
+        methods: [{ id: 'oauth', label: 'GitHub Copilot' }], inFlight: false,
+      }] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [{
+        serverName: 'github-copilot', transport: 'streamable-http' as const,
+        status: 'ready' as const, toolNames: ['copilot_models'],
+      }] })),
+      install: vi.fn(), installCurated: vi.fn(), search: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="github"]')!
+    await waitFor(() => expect(card.textContent).toContain('Instalar MCP GitHub'))
+    expect(card.textContent).not.toContain('Connected')
+    expect(card.textContent).not.toContain('Callable')
+    expect(document.querySelector('[data-authorization-key="llm-pi-ai/github-copilot"]')).toBeNull()
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
+  it('installs official GitHub MCP even if gh CLI is authenticated', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: { entryId: 'github-mcp', serverName: 'github',
+        url: 'https://api.githubcopilot.com/mcp/',
+        source: { kind: 'curated' as const, connectorId: 'github' },
+      },
+    }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      openClawState: vi.fn(async () => ({ connectors: [{
+        id: 'github' as const, skillAlias: 'openclaw-github' as const,
+        skillInstalled: true, runtimeAvailable: true, connected: true, phase: 'ready' as const,
+      }] })),
+      install: vi.fn(), installCurated, search: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="github"]')!
+    const button = Array.from(card.querySelectorAll('button'))
+      .find(item => item.textContent === 'Instalar MCP GitHub')
+    expect(button).toBeTruthy()
+    fireEvent.click(button!)
+    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'github' }))
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
+  it('does not report GitHub connected from gh CLI when its official MCP needs authorization', async () => {
+    const begin = vi.fn(async () => ok({ attemptId: 'github-mcp-auth' }))
+    const api = { list: vi.fn(async () => ok({ entries: [{
+      key: 'mcp-client/github', label: 'MCP github',
+      methods: [{ id: 'oauth', label: 'Authorize GitHub MCP' }], inFlight: false,
+    }, {
+      key: 'llm-pi-ai/github-copilot', label: 'GitHub Copilot',
+      methods: [{ id: 'oauth', label: 'Authorize Copilot' }], inFlight: false,
+    }] })),
+      begin, status: vi.fn(async () => ok({
+        attemptId: 'github-mcp-auth', status: 'pending', nextSeq: 0, notices: [],
+      })), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({
+        managed: [{ entryId: 'github-mcp', serverName: 'github',
+          url: 'https://api.githubcopilot.com/mcp/',
+          source: { kind: 'curated' as const, connectorId: 'github' } }],
+        runtime: [{ serverName: 'github', transport: 'streamable-http' as const,
+          status: 'auth-required' as const, toolNames: [] }],
+      })),
+      openClawState: vi.fn(async () => ({ connectors: [{
+        id: 'github' as const, skillAlias: 'openclaw-github' as const,
+        skillInstalled: true, runtimeAvailable: true, connected: true, phase: 'ready' as const,
+      }] })),
+      install: vi.fn(), search: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="github"]')!
+    await waitFor(() => expect(card.textContent).toContain('Authorization required'))
+    expect(card.textContent).not.toContain('Connected · OpenClaw')
+    const button = Array.from(card.querySelectorAll('button')).find(item => item.textContent === 'Authorize')
+    expect(button).toBeTruthy()
+    fireEvent.click(button!)
+    await waitFor(() => expect(begin).toHaveBeenCalledWith({
+      key: 'mcp-client/github', method: 'oauth',
+    }))
+    expect(begin).not.toHaveBeenCalledWith({
+      key: 'llm-pi-ai/github-copilot', method: 'oauth',
+    })
+  })
+
+  it('offers the official GitHub MCP instead of a dead Authorize action when gh is missing', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'authorization-openclaw/github',
+        label: 'GitHub',
+        methods: [{ id: 'oauth', label: 'Authorize GitHub' }],
+        inFlight: false,
+      }] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      openClawState: vi.fn(async () => ({
+        connectors: [{
+          id: 'github' as const,
+          skillAlias: 'openclaw-github' as const,
+          skillInstalled: true,
+          runtimeAvailable: false,
+          connected: false,
+          phase: 'missing-runtime' as const,
+        }],
+      })),
+      install: vi.fn(),
+      search: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    await waitFor(() => { expect(mcpRegistry.openClawState).toHaveBeenCalled() })
+
+    const githubCard = document.querySelector('[data-connector-id="github"]')
+    expect(githubCard).toBeTruthy()
+    expect(githubCard?.textContent).toContain('Instalar MCP GitHub')
+    expect(githubCard?.textContent).not.toContain('Authorize')
+    expect(api.begin).not.toHaveBeenCalled()
   })
 
   it('recovers transient plugin inventory fetch failures without breaking Connectors', async () => {
@@ -100,28 +780,1010 @@ describe('connectors settings section', () => {
     expect(screen.getByRole('heading', { name: 'MCP connectors' })).toBeTruthy()
   })
 
-  it('defaults the connector catalog to connected and reveals the broad catalog on demand', async () => {
+  it('defaults the connector catalog to all so missing adapters are visible and actionable', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
       begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
     } as unknown as IApiClient['authorization']
 
-    renderHub(api)
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      install: vi.fn(),
+      search: vi.fn(async () => ({
+        source: 'official-mcp-registry' as const,
+        query: 'Notion',
+        fetchedAt: '2026-10-03T00:00:00.000Z',
+        stale: false,
+        candidates: [],
+      })),
+    }
+
+    renderHub(api, { mcpRegistry })
     expect(screen.getByRole('heading', { name: 'MCP connectors' })).toBeTruthy()
     expect(screen.getByText('Phoenix knows which MCPs you already have')).toBeTruthy()
     expect(screen.queryByText('Capability presets')).toBeNull()
-    expect(screen.queryByText('Default')).toBeNull()
-    expect(screen.queryByText('Security / Codex Security')).toBeNull()
-    // The catalog defaults to the connected filter: non-operational adapters
-    // stay out of the default view instead of flooding it with "not installed".
-    expect(screen.queryByText('Adapter not installed')).toBeNull()
-
-    // Revealing the broad catalog still lists unconnected adapters.
-    fireEvent.click(screen.getByRole('button', { name: 'All' }))
-    expect(screen.getByText('Devpost')).toBeTruthy()
-    expect(screen.getByText('Microsoft Teams')).toBeTruthy()
+    expect(screen.getByText('Devpost Hackathons')).toBeTruthy()
+    expect(screen.getByText('Microsoft Teams · canales')).toBeTruthy()
     expect(screen.getByText('Firebase')).toBeTruthy()
-    expect(screen.getAllByText('Adapter not installed').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Official adapter not available in this build').length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Find official / install' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Find / install' }).length).toBeGreaterThan(0)
+  })
+
+  it('installs the Host-curated Devpost Hackathons MCP without registry discovery', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: {
+        entryId: 'devpost-entry',
+        serverName: 'devpost',
+        url: 'https://devpost.com/mcp',
+        source: { kind: 'curated' as const, connectorId: 'devpost' },
+      },
+    }))
+    const search = vi.fn()
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      install: vi.fn(),
+      installCurated,
+      search,
+    }
+
+    renderHub(api, { mcpRegistry })
+    const devpostCard = document.querySelector('[data-connector-id="devpost"]')
+    expect(devpostCard?.textContent).toContain('Devpost Hackathons')
+    const installButton = Array.from(devpostCard?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Install')
+    expect(installButton).toBeTruthy()
+    fireEvent.click(installButton!)
+
+    await waitFor(() => { expect(installCurated).toHaveBeenCalledWith({ connectorId: 'devpost' }) })
+    expect(search).not.toHaveBeenCalled()
+  })
+
+
+  it('offers independent official Meta DevTools and WhatsApp Business install actions with honest limitations', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async ({ connectorId }: { connectorId: string }) => ({
+      status: 'installed' as const,
+      connector: {
+        entryId: connectorId + '-entry',
+        serverName: connectorId,
+        url: connectorId === 'meta-devtools'
+          ? 'https://mcp.facebook.com/devtools'
+          : 'https://mcp.facebook.com/whatsapp_business_tools',
+        source: { kind: 'curated' as const, connectorId },
+      },
+    }))
+    const search = vi.fn()
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      install: vi.fn(), installCurated, search,
+    } })
+    const devtools = document.querySelector('[data-connector-id="meta-devtools"]')!
+    const whatsapp = document.querySelector('[data-connector-id="meta-whatsapp-business"]')!
+    expect(devtools).toBeTruthy()
+    expect(whatsapp).toBeTruthy()
+    expect(devtools.textContent).toContain('No sirve para publicar')
+    expect(devtools.querySelector('a[href="https://developers.facebook.com/documentation/mcp/devtools-mcp"]'))
+      .toBeTruthy()
+    expect(whatsapp.textContent).toContain('no para WhatsApp personal')
+    expect(whatsapp.textContent).toContain('generar cargos de Meta')
+    expect(devtools.querySelector('button')?.textContent).toBeDefined()
+    const installMeta = Array.from(devtools.querySelectorAll('button')).find(b => b.textContent === 'Install')
+    expect(installMeta).toBeTruthy()
+    fireEvent.click(installMeta!)
+    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'meta-devtools' }))
+    expect(search).not.toHaveBeenCalled()
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
+  it('makes public Microsoft Learn installable without OAuth or billing approval', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: { entryId: 'microsoft-learn-entry', serverName: 'microsoft-learn',
+        url: 'https://learn.microsoft.com/api/mcp',
+        source: { kind: 'curated' as const, connectorId: 'microsoft-learn' },
+      },
+    }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      install: vi.fn(), installCurated, search: vi.fn(),
+    } })
+    const learn = document.querySelector('[data-connector-id="microsoft-learn"]')!
+    expect(learn.textContent).toContain('Gratuito')
+    const install = Array.from(learn.querySelectorAll('button')).find(b => b.textContent === 'Install')!
+    expect(install).toBeTruthy()
+    expect(install.disabled).toBe(false)
+    fireEvent.click(install)
+    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'microsoft-learn' }))
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
+  it('shows six independent Graph installers and never mistakes running tool servers for authorized accounts', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const ids = ['outlook-mail', 'outlook-calendar', 'microsoft-contacts',
+      'onedrive', 'microsoft-teams', 'sharepoint'] as const
+    const managed = [...ids, 'x'].map(id => ({
+      entryId: id + '-entry', serverName: id === 'x' ? 'x-api' : id, url: 'stdio://' + id,
+      source: { kind: 'curated' as const, connectorId: id },
+    }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed,
+        runtime: managed.map(row => ({
+          serverName: row.serverName, transport: 'stdio' as const,
+          status: 'ready' as const, toolNames: ['microsoft_status'],
+        })),
+      })),
+      install: vi.fn(), installCurated: vi.fn(), search: vi.fn(),
+    } })
+    for (const id of ids) {
+      const card = document.querySelector(`[data-connector-id="${id}"]`)
+      expect(card).not.toBeNull()
+      await waitFor(() => expect(card?.textContent).toContain('MCP iniciado · verifica OAuth con Kira'))
+      expect(card?.textContent).toContain('microsoft_login_start')
+    }
+    const xCard = document.querySelector('[data-connector-id="x"]')
+    expect(xCard?.textContent).toContain('callback')
+    expect(xCard?.textContent).toContain('MCP iniciado · verifica OAuth con Kira')
+    fireEvent.click(screen.getByRole('button', { name: connectorEn.connected }))
+    for (const id of [...ids, 'x']) {
+      expect(document.querySelector(`[data-connector-id="${id}"]`)).toBeNull()
+    }
+  })
+
+  it.each(['outlook-mail', 'outlook-calendar', 'microsoft-contacts',
+    'onedrive', 'microsoft-teams', 'sharepoint'] as const)(
+    'offers %s through an independent scoped curated installer', async (id) => {
+      const api = { list: vi.fn(async () => ok({ entries: [] })),
+        begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+      } as unknown as IApiClient['authorization']
+      const installCurated = vi.fn(async ({ connectorId }: { connectorId: string }) => ({
+        status: 'installed' as const,
+        connector: { entryId: connectorId, serverName: connectorId,
+          url: 'stdio://' + connectorId, source: { kind: 'curated' as const, connectorId } },
+      }))
+      renderHub(api, { mcpRegistry: {
+        state: vi.fn(async () => ({ managed: [], runtime: [] })),
+        install: vi.fn(), installCurated, search: vi.fn(),
+      } })
+      const card = document.querySelector(`[data-connector-id="${id}"]`)!
+      expect(card).toBeTruthy()
+      const install = Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Install')
+      expect(install).toBeTruthy()
+      expect(install!.disabled).toBe(false)
+      fireEvent.click(install!)
+      await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: id }))
+      expect(api.begin).not.toHaveBeenCalled()
+    },
+  )
+
+  it('requires explicit acknowledgement before optionally installing billed Microsoft MCPs', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async ({ connectorId }: { connectorId: string }) => ({
+      status: 'installed' as const,
+      connector: { entryId: connectorId + '-entry', serverName: connectorId,
+        url: `stdio://${connectorId}`,
+        source: { kind: 'curated' as const, connectorId },
+      },
+    }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      install: vi.fn(), installCurated, search: vi.fn(),
+    } })
+    for (const id of ['microsoft-workiq', 'microsoft-azure'] as const) {
+      const card = document.querySelector(`[data-connector-id="${id}"]`)!
+      const install = Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Install')!
+      const checkbox = card.querySelector('input[type="checkbox"]') as HTMLInputElement
+      expect(install).toBeTruthy()
+      expect(install.disabled).toBe(true)
+      expect(checkbox.checked).toBe(false)
+      expect(card.textContent).toContain('Comprendo que debo autorizar los costes')
+      fireEvent.click(checkbox)
+      expect(checkbox.checked).toBe(true)
+      expect(install.disabled).toBe(false)
+      fireEvent.click(install)
+      await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: id }))
+    }
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
+  it('installs Canva directly as a Host-curated official MCP when the Host supports it', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: {
+        entryId: 'canva-entry',
+        serverName: 'canva',
+        url: 'https://mcp.canva.com/mcp',
+        source: { kind: 'curated' as const, connectorId: 'canva' },
+      },
+    }))
+    const search = vi.fn()
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      install: vi.fn(),
+      installCurated,
+      search,
+    }
+
+    renderHub(api, { mcpRegistry })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), {
+      target: { value: 'Canvas' },
+    })
+    const canvaCard = document.querySelector('[data-connector-id="canva"]')
+    expect(canvaCard?.textContent).toContain('Canva')
+    expect(canvaCard?.textContent).toContain('MCP')
+    const installButton = Array.from(canvaCard?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Install')
+    expect(installButton).toBeTruthy()
+    expect(Array.from(canvaCard?.querySelectorAll('button') ?? [])
+      .some(button => button.textContent === 'Find official / install')).toBe(false)
+    fireEvent.click(installButton!)
+
+    await waitFor(() => { expect(installCurated).toHaveBeenCalledWith({ connectorId: 'canva' }) })
+    expect(search).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a non-OAuth MCP credential flow and starts its real auth method', async () => {
+    const begin = vi.fn(async () => ok({ attemptId: 'brave-auth-1' }))
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'mcp-client/brave-search',
+        label: 'MCP brave-search',
+        methods: [{ id: 'credentials', label: 'Configure brave-search' }],
+        inFlight: false,
+      }] }))),
+      begin,
+      status: vi.fn(async () => ok({
+        attemptId: 'brave-auth-1',
+        status: 'pending' as const,
+        nextSeq: 0,
+        notices: [],
+      })),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'brave-entry',
+          serverName: 'brave-search',
+          url: 'stdio://brave-search',
+          source: { kind: 'curated' as const, connectorId: 'brave-search' },
+        }],
+        runtime: [{
+          serverName: 'brave-search',
+          transport: 'stdio' as const,
+          status: 'auth-required' as const,
+          reasonCode: 'authorization-required' as const,
+          toolNames: [],
+        }],
+      })),
+      install: vi.fn(), installCurated: vi.fn(), search: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    const braveCard = await waitFor(() => {
+      const card = document.querySelector('[data-connector-id="brave-search"]')
+      if (card === null) throw new Error('Brave Search connector card was not rendered')
+      return card
+    })
+    expect(braveCard.textContent).toContain('Authorization required')
+    const authorize = Array.from(braveCard.querySelectorAll('button'))
+      .find(button => button.textContent === 'Authorize')
+    expect(authorize).toBeTruthy()
+    fireEvent.click(authorize!)
+    await waitFor(() => {
+      expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/brave-search', method: 'credentials' })
+    })
+  })
+
+  it('keeps Brave Search API key input inside its own card, not the page header', async () => {
+    const answer = vi.fn(async () => ok({ accepted: true }))
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{
+        key: 'mcp-client/brave-search', label: 'MCP brave-search',
+        methods: [{ id: 'credentials', label: 'Configure Brave Search' }], inFlight: false,
+      }] })),
+      begin: vi.fn(async () => ok({ attemptId: 'brave-secret' })),
+      status: vi.fn(async () => ok({ attemptId: 'brave-secret', status: 'pending' as const,
+        nextSeq: 1, notices: [], prompt: {
+          promptId: 'api-key', kind: 'secret' as const,
+          message: 'Introduce BRAVE_API_KEY',
+        },
+      })),
+      answer, cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ managed: [{
+        entryId: 'brave', serverName: 'brave-search', url: 'stdio://brave-search',
+        source: { kind: 'curated' as const, connectorId: 'brave-search' },
+      }], runtime: [{ serverName: 'brave-search', transport: 'stdio' as const,
+        status: 'auth-required' as const, toolNames: [] }] })),
+      install: vi.fn(), installCurated: vi.fn(), search: vi.fn(),
+    }
+    renderHub(api, { mcpRegistry })
+    const card = document.querySelector('[data-connector-id="brave-search"]')!
+    await waitFor(() => expect(card.querySelector('button')).toBeTruthy())
+    fireEvent.click(Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Authorize')!)
+    await waitFor(() => expect(card.textContent).toContain('Introduce BRAVE_API_KEY'), { timeout: 2500 })
+    const input = card.querySelector('input[type="password"]') as HTMLInputElement | null
+    expect(input).not.toBeNull()
+    expect(document.querySelector('.authorizationPanel input[type="password"]')).toBeNull()
+    fireEvent.change(input!, { target: { value: 'test-brave-key' } })
+    fireEvent.click(Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Continue')!)
+    await waitFor(() => expect(answer).toHaveBeenCalledWith({
+      attemptId: 'brave-secret', promptId: 'api-key', value: 'test-brave-key',
+    }))
+  })
+
+  it('provides a real curated Vercel MCP installer instead of an inert available card', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async () => ({
+      status: 'installed' as const, connector: { entryId: 'vercel',
+        serverName: 'vercel', url: 'https://mcp.vercel.com',
+        source: { kind: 'curated' as const, connectorId: 'vercel' },
+      },
+    }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      install: vi.fn(), installCurated, search: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="vercel"]')!
+    const button = Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Install')
+    expect(button).toBeTruthy()
+    fireEvent.click(button!)
+    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'vercel' }))
+  })
+
+  it('offers official MCP registry discovery for an uninstalled provider without a pinned id', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const search = vi.fn(async () => ({ source: 'official-mcp-registry' as const,
+      query: 'Neon', fetchedAt: '2026-10-09T00:00:00Z', stale: false, candidates: [] }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      install: vi.fn(), search,
+    } })
+    const card = document.querySelector('[data-connector-id="neon"]')!
+    const button = Array.from(card.querySelectorAll('button'))
+      .find(b => b.textContent === 'Find connector')
+    expect(button).toBeTruthy()
+    fireEvent.click(button!)
+    await waitFor(() => expect(search).toHaveBeenCalledWith({ query: 'Neon', limit: 12 }))
+  })
+
+  it('lets auth-required runtime state override stale connected telemetry', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'telemetry/source',
+        label: 'Telemetry source',
+        methods: [{ id: 'oauth', label: 'Authorize source' }],
+        inFlight: false,
+        telemetry: {
+          kind: 'account' as const,
+          provider: 'Telemetry',
+          connectors: [{
+            id: 'devpost',
+            name: 'Devpost',
+            enabled: true,
+            accessible: true,
+            installed: true,
+            callable: true,
+          }],
+        },
+      }] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'managed-devpost',
+          serverName: 'devpost',
+          url: 'https://devpost.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'devpost' },
+        }],
+        runtime: [{
+          serverName: 'devpost',
+          transport: 'streamable-http' as const,
+          status: 'auth-required' as const,
+          reasonCode: 'authorization-required' as const,
+          toolNames: [],
+        }],
+      })),
+      reconnect: vi.fn(async () => ({ accepted: true })),
+      install: vi.fn(), search: vi.fn(), repair: vi.fn(), remove: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    const card = await waitFor(() => {
+      const current = document.querySelector('[data-connector-id="devpost"]')
+      if (current === null || !current.textContent?.includes('Authorization required')) {
+        throw new Error('auth-required runtime did not win status precedence')
+      }
+      return current
+    })
+    expect(card.textContent).not.toContain('Connected · callable')
+  })
+
+  it('refreshes a starting MCP until the store shows it connected', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'mcp-client/canva',
+        label: 'MCP canva',
+        methods: [{ id: 'oauth', label: 'Authorize canva' }],
+        inFlight: false,
+        stored: { kind: 'grant' as const },
+        disconnectable: true as const,
+      }] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const managed = [{
+      entryId: 'canva-entry',
+      serverName: 'canva',
+      url: 'https://mcp.canva.com/mcp',
+      source: { kind: 'curated' as const, connectorId: 'canva' },
+    }]
+    const state = vi.fn()
+      .mockResolvedValueOnce({
+        managed,
+        runtime: [{
+          serverName: 'canva', transport: 'streamable-http' as const,
+          status: 'starting' as const, toolNames: [],
+        }],
+      })
+      .mockResolvedValue({
+        managed,
+        runtime: [{
+          serverName: 'canva', transport: 'streamable-http' as const,
+          status: 'ready' as const, toolNames: ['mcp__canva__design'],
+        }],
+      })
+    const mcpRegistry = { state, install: vi.fn(), installCurated: vi.fn(), search: vi.fn() }
+
+    renderHub(api, { mcpRegistry })
+    const canvaCard = await waitFor(() => {
+      const card = document.querySelector('[data-connector-id="canva"]')
+      if (card === null) throw new Error('Canva connector card was not rendered')
+      expect(card.textContent).toContain('Connecting')
+      return card
+    })
+    await waitFor(() => {
+      expect(state).toHaveBeenCalledTimes(2)
+      expect(canvaCard.textContent).toContain('Connected')
+    }, { timeout: 2_000 })
+  })
+
+  it('shows an explicit official lookup even when the search box is empty', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const search = vi.fn(async () => ({
+      source: 'official-mcp-registry' as const,
+      query: 'com.canva.mcp/mcp',
+      fetchedAt: '2026-10-04T00:00:00.000Z',
+      stale: false,
+      candidates: [{
+        name: 'com.canva.mcp/mcp', title: 'Canva', description: 'Canva tools.', version: '1.0.0',
+        status: 'active' as const, trust: 'registry-listed' as const, icons: [],
+        transports: ['streamable-http' as const], packages: [], remoteUrl: 'https://mcp.canva.com/mcp',
+      }],
+    }))
+    const mcpRegistry = { state: vi.fn(async () => ({ runtime: [], managed: [] })), install: vi.fn(), search }
+
+    renderHub(api, { mcpRegistry })
+    const officialButtons = await screen.findAllByRole('button', { name: 'Find official / install' })
+    const canvaCard = document.querySelector('[data-connector-id="canva"]')
+    const canvaButton = Array.from(canvaCard?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Find official / install')
+    expect(canvaButton).toBeTruthy()
+    fireEvent.click(canvaButton!)
+
+    expect(await screen.findByText('Registry-listed · vendor not verified')).toBeTruthy()
+    expect(search).toHaveBeenCalledWith({ query: 'com.canva.mcp/mcp', limit: 12 })
+    expect(officialButtons.length).toBeGreaterThan(0)
+  })
+  it('keeps known Canva on its curated official identity instead of generic registry search', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const search = vi.fn(async ({ query }: { query: string }) => ({
+      source: 'official-mcp-registry' as const,
+      query,
+      fetchedAt: '2026-10-04T00:00:00.000Z',
+      stale: false,
+      candidates: [{
+        name: 'com.canva.mcp/mcp',
+        title: 'Canva',
+        description: 'Official Canva MCP.',
+        version: '1.0.0',
+        status: 'active' as const,
+        trust: 'registry-listed' as const,
+        icons: [],
+        transports: ['streamable-http' as const],
+        packages: [],
+        remoteUrl: 'https://mcp.canva.com/mcp',
+      }],
+    }))
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      install: vi.fn(),
+      remove: vi.fn(),
+      repair: vi.fn(),
+      search,
+    }
+
+    renderHub(api, { mcpRegistry })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), {
+      target: { value: 'Canva' },
+    })
+    await act(async () => { await Promise.resolve() })
+    expect(screen.getByText('Canva')).toBeTruthy()
+    expect(search).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Find official / install' }))
+    await waitFor(() => {
+      expect(search).toHaveBeenCalledWith({ query: 'com.canva.mcp/mcp', limit: 12 })
+    })
+    expect(await screen.findByText('Registry-listed · vendor not verified')).toBeTruthy()
+  })
+
+  it('keeps Official MCP Registry transport internals out of the connector UI', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const search = vi.fn(async () => {
+      throw new Error('pluginInventory.searchMcpRegistry failed: internal: Official MCP Registry lookup failed: This operation was aborted')
+    })
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      install: vi.fn(),
+      remove: vi.fn(),
+      repair: vi.fn(),
+      search,
+    }
+
+    renderHub(api, { mcpRegistry })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), {
+      target: { value: 'Canva' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Find official / install' }))
+
+    expect(await screen.findByText('The Official MCP Registry is unavailable right now.')).toBeTruthy()
+    expect(screen.queryByText(/pluginInventory\.searchMcpRegistry failed/)).toBeNull()
+  })
+
+  it('shows broken managed connectors with repair and uninstall actions', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const repair = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: {
+        entryId: 'new-id', serverName: 'supabase-new', url: 'https://mcp.supabase.com/mcp',
+        source: { kind: 'registry' as const, name: 'com.supabase/mcp', version: '0.13.0' },
+      },
+    }))
+    const remove = vi.fn(async () => ({ removed: true, liveUnloaded: true }))
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'broken-id',
+          serverName: 'supabase-broken',
+          url: 'https://mcp.supabase.com/mcp',
+          source: { kind: 'registry' as const, name: 'com.supabase/mcp', version: '0.13.0' },
+        }],
+        runtime: [{
+          serverName: 'supabase-broken',
+          transport: 'streamable-http' as const,
+          status: 'failed' as const,
+          reasonCode: 'connection-failed' as const,
+          toolNames: [],
+        }],
+      })),
+      install: vi.fn(), search: vi.fn(), repair, remove,
+    }
+
+    renderHub(api, { mcpRegistry })
+    const card = (await screen.findByText('Supabase')).closest('article')
+    expect(card?.textContent).toContain('Broken')
+    const repairButton = screen.getByRole('button', { name: 'Repair' })
+    const uninstallButton = screen.getByRole('button', { name: 'Uninstall' })
+    fireEvent.click(repairButton)
+    await waitFor(() => { expect(repair).toHaveBeenCalledWith({ entryId: 'broken-id' }) })
+    fireEvent.click(uninstallButton)
+    await waitFor(() => { expect(remove).toHaveBeenCalledWith({ entryId: 'broken-id' }) })
+  })
+
+  it('reconnects a failed MCP with its stored OAuth grant instead of forcing authorization again', async () => {
+    const begin = vi.fn()
+    const reconnect = vi.fn(async () => ({ accepted: true }))
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'mcp-client/supabase-broken',
+        label: 'MCP supabase-broken',
+        methods: [{ id: 'oauth', label: 'Authorize supabase-broken' }],
+        inFlight: false,
+        stored: { kind: 'grant' as const },
+        disconnectable: true as const,
+      }] }))),
+      begin, status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'managed-supabase',
+          serverName: 'supabase-broken',
+          url: 'https://mcp.supabase.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'supabase' },
+        }],
+        runtime: [{
+          serverName: 'supabase-broken',
+          transport: 'streamable-http' as const,
+          status: 'failed' as const,
+          reasonCode: 'connection-failed' as const,
+          toolNames: [],
+        }],
+      })),
+      reconnect,
+      install: vi.fn(), search: vi.fn(), repair: vi.fn(), remove: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    const card = (await screen.findByText('Supabase')).closest('article')
+    const reconnectButton = Array.from(card?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Reconnect')
+
+    expect(reconnectButton).toBeTruthy()
+    expect(Array.from(card?.querySelectorAll('button') ?? [])
+      .some(button => button.textContent === 'Reauthorize')).toBe(false)
+
+    fireEvent.click(reconnectButton!)
+    await waitFor(() => {
+      expect(reconnect).toHaveBeenCalledWith({ serverName: 'supabase-broken' })
+    })
+    expect(begin).not.toHaveBeenCalled()
+  })
+
+  it('launches late OAuth consent after a failed HTTP MCP reconnect, not just the transport retry', async () => {
+    const reconnect = vi.fn(async () => ({ accepted: true }))
+    const begin = vi.fn(async () => ok({ attemptId: 'late-consent', status: 'pending' as const }))
+    const list = vi.fn(async () => ok({ entries: reconnect.mock.calls.length === 0 ? [] : [{
+      key: 'mcp-client/notion',
+      label: 'MCP notion',
+      methods: [{ id: 'oauth', label: 'Authorize notion' }],
+      inFlight: false,
+    }] }))
+    const api = {
+      list, begin,
+      status: vi.fn(() => new Promise(() => undefined)),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'managed-notion',
+          serverName: 'notion',
+          url: 'https://mcp.notion.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'notion' },
+        }],
+        runtime: [{
+          serverName: 'notion',
+          transport: 'streamable-http' as const,
+          status: 'failed' as const,
+          reasonCode: 'connection-failed' as const,
+          toolNames: [],
+        }],
+      })),
+      reconnect,
+      install: vi.fn(), search: vi.fn(), repair: vi.fn(), remove: vi.fn(),
+    }
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    try {
+      renderHub(api, { mcpRegistry })
+      const card = (await screen.findByText('Notion')).closest('article')
+      const button = Array.from(card?.querySelectorAll('button') ?? [])
+        .find(node => node.textContent === 'Reconnect')
+      expect(button).toBeTruthy()
+      fireEvent.click(button!)
+      await waitFor(() => {
+        expect(reconnect).toHaveBeenCalledWith({ serverName: 'notion' })
+        expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
+      })
+    } finally { open.mockRestore() }
+  })
+
+  it('shows an OAuth Host rejection inside the Notion card, not only in the global header', async () => {
+    const begin = vi.fn(async () => { throw new Error('Host authorization unavailable') })
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{
+        key: 'mcp-client/notion', label: 'MCP notion',
+        methods: [{ id: 'oauth', label: 'Authorize Notion' }], inFlight: false,
+      }] })),
+      begin,
+      status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{ entryId: 'notion-id', serverName: 'notion', url: 'https://mcp.notion.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'notion' } }],
+        runtime: [{ serverName: 'notion', transport: 'streamable-http' as const,
+          status: 'auth-required' as const, reasonCode: 'authorization-required' as const, toolNames: [] }],
+      })),
+      reconnect: vi.fn(), install: vi.fn(), search: vi.fn(), repair: vi.fn(), remove: vi.fn(),
+    }
+    renderHub(api, { mcpRegistry })
+    const card = (await screen.findByText('Notion')).closest('article')!
+    const connect = Array.from(card.querySelectorAll('button'))
+      .find(button => button.textContent === 'Authorize')!
+    fireEvent.click(connect)
+    await waitFor(() => {
+      expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
+      expect(card.textContent).toContain('Host authorization unavailable')
+    })
+    expect(mcpRegistry.reconnect).not.toHaveBeenCalled()
+  })
+
+  it('keeps Authorize visible while an auth-required MCP flow is still registering', async () => {
+    const reconnect = vi.fn(async () => ({ accepted: true }))
+    const begin = vi.fn()
+    const list = vi.fn()
+      .mockResolvedValueOnce(ok({ entries: [] }))
+      .mockResolvedValue(ok({ entries: [{
+        key: 'mcp-client/notion',
+        label: 'MCP notion',
+        methods: [{ id: 'oauth', label: 'Authorize notion' }],
+        inFlight: false,
+      }] }))
+    const api = {
+      list,
+      begin, status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const authRequired = {
+      managed: [{
+        entryId: 'managed-notion',
+        serverName: 'notion',
+        url: 'https://mcp.notion.com/mcp',
+        source: { kind: 'curated' as const, connectorId: 'notion' },
+      }],
+      runtime: [{
+        serverName: 'notion',
+        transport: 'streamable-http' as const,
+        status: 'auth-required' as const,
+        reasonCode: 'authorization-required' as const,
+        toolNames: [],
+      }],
+    }
+    const mcpRegistry = {
+      state: vi.fn(async () => authRequired),
+      reconnect,
+      install: vi.fn(), search: vi.fn(), repair: vi.fn(), remove: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    const card = (await screen.findByText('Notion')).closest('article')
+    const authorize = Array.from(card?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Authorize')
+    expect(authorize).toBeTruthy()
+    fireEvent.click(authorize!)
+    await waitFor(() => {
+      expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
+    })
+  })
+
+  it('opens Notion directly when its provider consent URL arrives', async () => {
+    const consentUrl = 'https://www.notion.so/oauth/authorize?client_id=phoenix-test'
+    const popupDocument = document.implementation.createHTMLDocument()
+    const popup = {
+      closed: false,
+      close: vi.fn(),
+      document: popupDocument,
+      location: { replace: vi.fn() },
+    }
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
+    const reconnect = vi.fn(async () => ({ accepted: true }))
+    const entry = {
+      key: 'mcp-client/notion',
+      label: 'MCP notion',
+      methods: [{ id: 'oauth', label: 'Authorize notion' }],
+      inFlight: false,
+    }
+    const list = vi.fn(() => Promise.resolve(ok({
+      entries: reconnect.mock.calls.length === 0 ? [] : [entry],
+    })))
+    const begin = vi.fn(() => Promise.resolve(ok({
+      attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546117',
+      status: 'pending' as const,
+    })))
+    const status = vi.fn(() => Promise.resolve(ok({
+      attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546117',
+      status: 'pending' as const,
+      nextSeq: 1,
+      notices: [{ seq: 1, notice: { message: 'Continue with Notion', url: consentUrl } }],
+    })))
+    const api = {
+      list, begin, status, answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const authRequired = {
+      managed: [{
+        entryId: 'managed-notion',
+        serverName: 'notion',
+        url: 'https://mcp.notion.com/mcp',
+        source: { kind: 'curated' as const, connectorId: 'notion' },
+      }],
+      runtime: [{
+        serverName: 'notion',
+        transport: 'streamable-http' as const,
+        status: 'auth-required' as const,
+        reasonCode: 'authorization-required' as const,
+        toolNames: [],
+      }],
+    }
+    const mcpRegistry = {
+      state: vi.fn(async () => authRequired),
+      reconnect,
+      install: vi.fn(), search: vi.fn(), repair: vi.fn(), remove: vi.fn(),
+    }
+
+    try {
+      renderHub(api, { mcpRegistry })
+      const card = (await screen.findByText('Notion')).closest('article')
+      const authorize = Array.from(card?.querySelectorAll('button') ?? [])
+        .find(button => button.textContent === 'Authorize')
+      expect(authorize).toBeTruthy()
+
+      fireEvent.click(authorize!)
+
+      expect(open).not.toHaveBeenCalled()
+
+      await waitFor(() => {
+        expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
+      })
+      await waitFor(() => {
+        expect(open).toHaveBeenCalledWith(consentUrl, '_blank')
+      }, { timeout: 2_000 })
+
+      const manual = screen.getByRole('link', { name: 'Open authorization page' }) as HTMLAnchorElement
+      expect(manual.href).toBe(consentUrl)
+    } finally {
+      open.mockRestore()
+    }
+  })
+
+  it('disconnects an installed MCP account before removing the managed connector', async () => {
+    const disconnect = vi.fn(() => Promise.resolve(ok({})))
+    const remove = vi.fn(async () => ({ removed: true, liveUnloaded: true }))
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'mcp-client/supabase-broken',
+        label: 'MCP supabase-broken',
+        methods: [{ id: 'oauth', label: 'Authorize supabase-broken' }],
+        inFlight: false,
+        stored: { kind: 'grant' as const },
+        disconnectable: true as const,
+      }] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect,
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'managed-supabase',
+          serverName: 'supabase-broken',
+          url: 'https://mcp.supabase.com/mcp',
+          source: { kind: 'registry' as const, name: 'com.supabase/mcp', version: '1.0.0' },
+        }],
+        runtime: [{
+          serverName: 'supabase-broken', transport: 'streamable-http' as const,
+          status: 'failed' as const, reasonCode: 'connection-failed' as const, toolNames: [],
+        }],
+      })),
+      install: vi.fn(), search: vi.fn(), repair: vi.fn(), remove,
+    }
+
+    renderHub(api, { mcpRegistry })
+    expect((await screen.findAllByText('Supabase')).length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }))
+
+    await waitFor(() => {
+      expect(disconnect).toHaveBeenCalledWith({ key: 'mcp-client/supabase-broken' })
+      expect(remove).toHaveBeenCalledWith({ entryId: 'managed-supabase' })
+    })
+    expect(disconnect.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]!)
+  })
+  it('refreshes late MCP authorization flows so installed auth-required connectors remain connectable', async () => {
+    const list = vi.fn()
+      .mockResolvedValueOnce(ok({ entries: [] }))
+      .mockResolvedValue(ok({ entries: [{
+        key: 'mcp-client/notion',
+        label: 'MCP notion',
+        methods: [{ id: 'oauth', label: 'Authorize notion' }],
+        inFlight: false,
+        stored: { kind: 'grant' as const },
+      }] }))
+    const api = {
+      list,
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'managed-notion',
+          serverName: 'notion',
+          url: 'https://mcp.notion.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'notion' },
+        }],
+        runtime: [{
+          serverName: 'notion',
+          transport: 'streamable-http' as const,
+          status: 'auth-required' as const,
+          reasonCode: 'authorization-required' as const,
+          toolNames: [],
+        }],
+      })),
+      install: vi.fn(), search: vi.fn(), remove: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+
+    const notionCard = (await screen.findByText('Notion')).closest('article')
+    await waitFor(() => {
+      expect(list).toHaveBeenCalledTimes(2)
+      expect(Array.from(notionCard?.querySelectorAll('button') ?? [])
+        .some(button => button.textContent === 'Reauthorize')).toBe(true)
+    })
+    expect(notionCard?.textContent).toContain('Authorization required')
+    expect(notionCard?.textContent).not.toContain('Connected')
+  })
+
+  it('uses the authorization method actually offered by non-OAuth provider flows', async () => {
+    const begin = vi.fn(() => Promise.resolve(ok({
+      attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546099', status: 'pending' as const,
+    })))
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'llm-pi-ai/z-ai',
+        label: 'Z.AI',
+        methods: [{ id: 'api-key', label: 'API key' }],
+        inFlight: false,
+      }] }))),
+      begin,
+      status: vi.fn(() => new Promise(() => undefined)),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+
+    renderHub(api)
+    const card = (await screen.findByText('Z.AI')).closest('article')
+    const authorize = Array.from(card?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Authorize')
+    expect(authorize).toBeTruthy()
+    fireEvent.click(authorize!)
+
+    await waitFor(() => {
+      expect(begin).toHaveBeenCalledWith({ key: 'llm-pi-ai/z-ai', method: 'api-key' })
+    })
   })
 
   it('reuses registered OAuth flows and live connector telemetry', async () => {
@@ -159,7 +1821,7 @@ describe('connectors settings section', () => {
     expect(screen.queryByText(/access-token|refresh-token|password/i)).toBeNull()
   })
 
-  it('cancels a pending OAuth attempt when the user closes the consent window and restores connector actions', async () => {
+  it('keeps Host OAuth active across a severed popup, and cancels only on explicit user action', async () => {
     vi.useFakeTimers()
     const popup = {
       closed: false,
@@ -206,9 +1868,12 @@ describe('connectors settings section', () => {
         await Promise.resolve()
       })
 
+      expect(cancel).not.toHaveBeenCalled()
+      expect(status).toHaveBeenCalled()
+      fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' }).at(-1)!)
+      await act(async () => { await Promise.resolve(); await Promise.resolve() })
       expect(cancel).toHaveBeenCalledWith({ attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546015' })
-      expect(screen.getByText('Authorization cancelled')).toBeTruthy()
-      expect((screen.getAllByRole('button', { name: 'Authorize' })[0] as HTMLButtonElement).disabled).toBe(false)
+      expect(screen.getByText(en.authorizationCancelled)).toBeTruthy()
     } finally {
       open.mockRestore()
       vi.useRealTimers()
@@ -250,18 +1915,15 @@ describe('connectors settings section', () => {
       renderHub(api)
       await act(async () => { await Promise.resolve() })
       fireEvent.click(screen.getAllByRole('button', { name: 'Authorize' })[0]!)
-      await act(async () => {
-        await Promise.resolve()
-        vi.advanceTimersByTime(700)
-        await Promise.resolve()
-        await Promise.resolve()
-      })
+      expect(open).not.toHaveBeenCalled()
+      await act(async () => { await Promise.resolve() })
+      await act(async () => { await vi.advanceTimersByTimeAsync(700) })
 
       const notice = document.querySelector('[data-authorization-outcome="success"]')
       expect(notice).not.toBeNull()
       expect(notice?.textContent).toContain('Account connected')
       expect(notice?.textContent).toContain('Authorization complete')
-      expect(popup.close).toHaveBeenCalled()
+      expect(popup.close).not.toHaveBeenCalled()
     } finally {
       open.mockRestore()
       vi.useRealTimers()
@@ -297,7 +1959,7 @@ describe('connectors settings section', () => {
     expect(screen.queryByText('BigQuery')).toBeNull()
   })
 
-  it('marks a stored OAuth grant without live telemetry as reconnect-required', async () => {
+  it('keeps a stored OAuth grant without live telemetry and does not restart sign-in', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
         key: 'mcp-client/example',
@@ -311,9 +1973,14 @@ describe('connectors settings section', () => {
     } as unknown as IApiClient['authorization']
 
     renderHub(api)
-    expect(await screen.findByText('Reconnect required')).toBeTruthy()
-    expect(screen.queryByText('Connected', { selector: 'span' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy()
+    const card = await waitFor(() => {
+      const value = document.querySelector('[data-authorization-key="mcp-client/example"]')
+      if (value === null) throw new Error('Stored account was not rendered')
+      return value
+    })
+    expect(card.textContent).toContain('Reconnect required')
+    expect(Array.from(card.querySelectorAll('button')).some(button => button.textContent === 'Reconnect')).toBe(false)
+    expect(api.begin).not.toHaveBeenCalled()
   })
 
   it('keeps retired Jev out of both the catalog and Official MCP Registry results', async () => {
@@ -363,20 +2030,20 @@ describe('connectors settings section', () => {
     } as unknown as IApiClient['authorization']
     const install = vi.fn(async () => ({
       status: 'installed' as const,
-      connector: { entryId: 'managed-calendar', serverName: 'calendar-a1b2c3d', url: 'https://mcp.example.com/calendar' },
+      connector: { entryId: 'managed-calendar', serverName: 'calendar-a1b2c3d', url: 'https://mcp.example.com/registry-fixture' },
     }))
     const mcpRegistry = {
       state: vi.fn(async () => ({ runtime: [], managed: [] })),
       install,
       search: vi.fn(async () => ({
         source: 'official-mcp-registry' as const,
-        query: 'calendar',
+        query: 'registry-fixture',
         fetchedAt: '2026-09-18T12:00:00.000Z',
         stale: false,
         candidates: [{
-          name: 'io.example/calendar',
-          title: 'Example Calendar MCP',
-          description: 'Calendar tools.',
+          name: 'io.example/registry-fixture',
+          title: 'Registry Fixture MCP',
+          description: 'Registry fixture tools.',
           version: '1.0.0',
           status: 'active' as const,
           trust: 'registry-listed' as const,
@@ -388,27 +2055,27 @@ describe('connectors settings section', () => {
           transports: ['streamable-http' as const],
           packages: [],
           repositoryUrl: 'https://github.com/example/calendar-mcp',
-          remoteUrl: 'https://mcp.example.com/calendar',
+          remoteUrl: 'https://mcp.example.com/registry-fixture',
         }],
       })),
     }
 
     renderHub(api, { mcpRegistry })
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'calendar' } })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'registry-fixture' } })
 
-    expect(await screen.findByText('Example Calendar MCP')).toBeTruthy()
-    expect(mcpRegistry.search).toHaveBeenCalledWith({ query: 'calendar', limit: 12 })
-    expect(screen.getByText('Registry-listed · approval required')).toBeTruthy()
+    expect(await screen.findByText('Registry Fixture MCP')).toBeTruthy()
+    expect(mcpRegistry.search).toHaveBeenCalledWith({ query: 'registry-fixture', limit: 12 })
+    expect(screen.getByText('Registry-listed · vendor not verified')).toBeTruthy()
     expect(screen.getByText('streamable-http')).toBeTruthy()
-    const logo = document.querySelector('article[data-registry-server="io.example/calendar"] img')
+    const logo = document.querySelector('article[data-registry-server="io.example/registry-fixture"] img')
     expect(logo?.getAttribute('src')).toBe('https://cdn.example.com/calendar.png')
     expect(logo?.getAttribute('referrerpolicy')).toBe('no-referrer')
     expect(screen.getByRole('link', { name: 'View source' }).getAttribute('href'))
       .toBe('https://github.com/example/calendar-mcp')
     fireEvent.click(screen.getByRole('button', { name: 'Install' }))
     await waitFor(() => {
-      expect(install).toHaveBeenCalledWith({ name: 'io.example/calendar', version: '1.0.0' })
+      expect(install).toHaveBeenCalledWith({ name: 'io.example/registry-fixture', version: '1.0.0' })
     })
   })
 
@@ -446,41 +2113,350 @@ describe('connectors settings section', () => {
     expect(screen.getByRole('button', { name: 'Reauthorize' })).toBeTruthy()
   })
 
-  it('marks an already managed registry remote as installed instead of offering another install', async () => {
+  it('explains why header-protected registry remotes cannot be auto-installed', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
       begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
     } as unknown as IApiClient['authorization']
+    const install = vi.fn()
     const mcpRegistry = {
-      state: vi.fn(async () => ({
-        runtime: [],
-        managed: [{ entryId: 'x', serverName: 'calendar-x', url: 'https://mcp.example.com/calendar' }],
-      })),
-      install: vi.fn(),
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      install,
       search: vi.fn(async () => ({
         source: 'official-mcp-registry' as const,
-        query: 'calendar',
-        fetchedAt: '2026-09-18T12:00:00.000Z',
+        query: 'restricted-registry-fixture',
+        fetchedAt: '2026-10-07T12:00:00.000Z',
         stale: false,
         candidates: [{
-          name: 'io.example/calendar',
-          title: 'Calendar',
-          description: 'Calendar tools.',
+          name: 'io.example/restricted-registry-fixture',
+          title: 'Restricted Remote MCP',
+          description: 'Needs provider key headers.',
           version: '1.0.0',
           status: 'active' as const,
           trust: 'registry-listed' as const,
           icons: [],
           transports: ['streamable-http' as const],
           packages: [],
-          remoteUrl: 'https://mcp.example.com/calendar',
+          remoteUrl: 'https://example.com/requires-key/mcp',
+          remoteSetupRequired: 'headers' as const,
+        }],
+      })),
+    }
+    renderHub(api, { mcpRegistry })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'restricted-registry-fixture' } })
+    const card = (await screen.findByText('Restricted Remote MCP')).closest('article')
+    expect(card?.textContent).toContain('Needs provider-specific API headers')
+    expect(card?.querySelector('button')).toBeNull()
+    expect(install).not.toHaveBeenCalled()
+  })
+
+  it('offers source-aware Repair instead of endless reconnect when Notion has no OAuth flow', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const repair = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: { entryId: 'notion-repaired', serverName: 'notion',
+        url: 'https://mcp.notion.com/mcp', source: { kind: 'curated' as const, connectorId: 'notion' } },
+    }))
+    const reconnect = vi.fn()
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({
+        managed: [{ entryId: 'notion-stale', serverName: 'notion',
+          url: 'https://mcp.notion.com/mcp', source: { kind: 'curated' as const, connectorId: 'notion' } }],
+        runtime: [{ serverName: 'notion', transport: 'streamable-http' as const,
+          status: 'auth-required' as const, reasonCode: 'authorization-required' as const, toolNames: [] }],
+      })),
+      repair, reconnect, install: vi.fn(), search: vi.fn(),
+    } })
+    await waitFor(() => {
+      const card = document.querySelector('[data-connector-id="notion"]')
+      expect(card?.textContent).toContain('no registró su método OAuth')
+    })
+    const card = document.querySelector('[data-connector-id="notion"]')!
+    const repairButton = Array.from(card.querySelectorAll('button')).find(button => button.textContent === 'Repair')
+    expect(repairButton).toBeTruthy()
+    expect(Array.from(card.querySelectorAll('button')).some(button => button.textContent === 'Authorize')).toBe(false)
+    fireEvent.click(repairButton!)
+    await waitFor(() => expect(repair).toHaveBeenCalledWith({ entryId: 'notion-stale' }))
+    expect(reconnect).not.toHaveBeenCalled()
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
+  it('uses the managed Notion registry identity to find hashed MCP runtime and OAuth key', async () => {
+    const begin = vi.fn(async () => ok({ attemptId: 'registered-notion-oauth' }))
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{
+        key: 'mcp-client/mcp-a1b2c3d',
+        label: 'MCP mcp-a1b2c3d',
+        methods: [{ id: 'oauth', label: 'Authorize Notion' }],
+        inFlight: false,
+      }] })),
+      begin, status: vi.fn(async () => ok({
+        attemptId: 'registered-notion-oauth', status: 'pending',
+        nextSeq: 0, notices: [],
+      })),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'notion-installed',
+          serverName: 'mcp-a1b2c3d',
+          url: 'https://mcp.notion.com/mcp',
+          source: { kind: 'registry' as const, name: 'com.notion/mcp', version: '1.0.0' },
+        }],
+        runtime: [{
+          serverName: 'mcp-a1b2c3d',
+          transport: 'streamable-http' as const,
+          status: 'auth-required' as const,
+          reasonCode: 'authorization-required' as const,
+          toolNames: [],
+        }],
+      })),
+      reconnect: vi.fn(), install: vi.fn(), search: vi.fn(),
+    }
+    renderHub(api, { mcpRegistry })
+    await waitFor(() => {
+      const card = document.querySelector('[data-connector-id="notion"]')
+      expect(card?.textContent).toContain('Authorization required')
+      expect(card?.textContent).not.toContain('Install')
+    })
+    const card = document.querySelector('[data-connector-id="notion"]')!
+    const authorize = Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Authorize')
+    expect(authorize).toBeTruthy()
+    fireEvent.click(authorize!)
+    await waitFor(() => {
+      expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/mcp-a1b2c3d', method: 'oauth' })
+    })
+  })
+
+  it('offers an actual Authorize action for a registry-installed MCP that needs OAuth', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const reconnect = vi.fn(async () => ({ accepted: false }))
+    const popup = { closed: false, close: vi.fn(), location: { replace: vi.fn() } }
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        runtime: [{
+          serverName: 'registry-auth-123',
+          transport: 'streamable-http' as const,
+          status: 'auth-required' as const,
+          reasonCode: 'authorization-required' as const,
+          toolNames: [],
+        }],
+        managed: [{
+          entryId: 'registry-auth-entry',
+          serverName: 'registry-auth-123',
+          url: 'https://mcp.example.com/registry-auth-fixture',
+          source: { kind: 'registry' as const, name: 'io.example/registry-auth-fixture', version: '1.0.0' },
+        }],
+      })),
+      reconnect,
+      install: vi.fn(),
+      search: vi.fn(async () => ({
+        source: 'official-mcp-registry' as const,
+        query: 'registry-auth-fixture',
+        fetchedAt: '2026-10-07T12:00:00.000Z',
+        stale: false,
+        candidates: [{
+          name: 'io.example/registry-auth-fixture',
+          title: 'OAuth Registry MCP',
+          description: 'OAuth connector.',
+          version: '1.0.0',
+          status: 'active' as const,
+          trust: 'registry-listed' as const,
+          icons: [],
+          transports: ['streamable-http' as const],
+          packages: [],
+          remoteUrl: 'https://mcp.example.com/registry-auth-fixture',
+        }],
+      })),
+    }
+    try {
+      renderHub(api, { mcpRegistry })
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'registry-auth-fixture' } })
+      const card = (await screen.findByText('OAuth Registry MCP')).closest('article')
+      expect(card?.textContent).toContain('Authorization required')
+      const authorize = Array.from(card?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Authorize')
+      expect(authorize).toBeTruthy()
+      fireEvent.click(authorize!)
+      await waitFor(() => { expect(reconnect).toHaveBeenCalledWith({ serverName: 'registry-auth-123' }) })
+      expect(open).not.toHaveBeenCalled()
+    } finally {
+      open.mockRestore()
+    }
+  })
+
+  it('does not claim a ready registry connector is callable when no tools were registered', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        runtime: [{
+          serverName: 'empty-tools-fixture',
+          transport: 'streamable-http' as const,
+          status: 'ready' as const,
+          toolNames: [],
+        }],
+        managed: [{
+          entryId: 'empty-tools-entry',
+          serverName: 'empty-tools-fixture',
+          url: 'https://mcp.example.com/empty-tools-fixture',
+          source: { kind: 'registry' as const, name: 'io.example/empty-tools-fixture', version: '1.0.0' },
+        }],
+      })),
+      install: vi.fn(),
+      search: vi.fn(async () => ({
+        source: 'official-mcp-registry' as const,
+        query: 'empty-tools-fixture',
+        fetchedAt: '2026-10-07T12:00:00.000Z',
+        stale: false,
+        candidates: [{
+          name: 'io.example/empty-tools-fixture',
+          title: 'Empty Tools MCP',
+          description: 'No tools registered.',
+          version: '1.0.0',
+          status: 'active' as const,
+          trust: 'registry-listed' as const,
+          icons: [],
+          transports: ['streamable-http' as const],
+          packages: [],
+          remoteUrl: 'https://mcp.example.com/empty-tools-fixture',
+        }],
+      })),
+    }
+    renderHub(api, { mcpRegistry })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'empty-tools-fixture' } })
+    const card = (await screen.findByText('Empty Tools MCP')).closest('article')
+    expect(card?.textContent).toContain('Connected · no tools exposed')
+    expect(card?.textContent).not.toContain('Connected · callable')
+  })
+
+  it('marks a persisted registry connector with no runtime as broken and removable', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const remove = vi.fn(async () => ({ removed: true, liveUnloaded: true }))
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        runtime: [],
+        managed: [{ entryId: 'x', serverName: 'registry-fixture-x', url: 'https://mcp.example.com/registry-fixture' }],
+      })),
+      install: vi.fn(),
+      remove,
+      search: vi.fn(async () => ({
+        source: 'official-mcp-registry' as const,
+        query: 'registry-fixture',
+        fetchedAt: '2026-09-18T12:00:00.000Z',
+        stale: false,
+        candidates: [{
+          name: 'io.example/registry-fixture',
+          title: 'Registry Fixture',
+          description: 'Registry fixture tools.',
+          version: '1.0.0',
+          status: 'active' as const,
+          trust: 'registry-listed' as const,
+          icons: [],
+          transports: ['streamable-http' as const],
+          packages: [],
+          remoteUrl: 'https://mcp.example.com/registry-fixture',
         }],
       })),
     }
     renderHub(api, { mcpRegistry })
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'calendar' } })
-    expect(await screen.findByText('Installed')).toBeTruthy()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'registry-fixture' } })
+    expect(await screen.findByText('Installed · runtime not started')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Install' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Repair' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }))
+    await waitFor(() => { expect(remove).toHaveBeenCalledWith({ entryId: 'x' }) })
+  })
+
+  it('configures X developer credentials through the vault and isolates Kira identity', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const configureX = vi.fn(async () => ({
+      saved: true as const, clientIdConfigured: true as const, clientSecretConfigured: true as const,
+    }))
+    const connectX = vi.fn(async () => ({
+      api: { status: 'installed' as const, connector: {
+        entryId: 'phoenix-x', serverName: 'x-api-phoenix', url: 'https://api.x.com/mcp',
+      } },
+      docs: { status: 'already-installed' as const, connector: {
+        entryId: 'x-docs', serverName: 'x-docs', url: 'https://docs.x.com/mcp',
+      } },
+    }))
+    const registry = {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      search: vi.fn(), install: vi.fn(), configureX, connectX,
+    }
+    renderHub(api, { mcpRegistry: registry })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), {
+      target: { value: 'X · cuenta de usuario' },
+    })
+    const card = document.querySelector('[data-connector-id="x"]')
+    expect(card).toBeTruthy()
+    const configure = Array.from(card!.querySelectorAll('button')).find(b => /Configure/i.test(b.textContent || ''))
+    expect(configure).toBeTruthy()
+    fireEvent.click(configure!)
+    fireEvent.change(screen.getByPlaceholderText('Dejar vacío si ya está guardado'), {
+      target: { value: 'publicClient123' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Se almacena solo en el vault del Host'), {
+      target: { value: 'secretClientValue123' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('@PhoenixIA'), {
+      target: { value: '@PhoenixIA' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Conectar X de Kira' }))
+    await waitFor(() => {
+      expect(configureX).toHaveBeenCalledWith({
+        clientId: 'publicClient123', clientSecret: 'secretClientValue123',
+      })
+      expect(connectX).toHaveBeenCalledWith({ identity: 'phoenix', username: 'PhoenixIA' })
+    })
+    expect(document.body.textContent).not.toContain('secretClientValue123')
+  })
+
+  it('restarts an already-installed X bridge when connecting so saved credentials reach xurl', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const connectX = vi.fn(async () => ({
+      api: { status: 'already-installed' as const, connector: {
+        entryId: 'x-1', serverName: 'x-api', url: 'https://api.x.com/mcp',
+      } },
+      docs: { status: 'already-installed' as const, connector: {
+        entryId: 'x-docs-1', serverName: 'x-docs', url: 'https://docs.x.com/mcp',
+      } },
+    }))
+    const reconnect = vi.fn(async () => ({ accepted: true }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      search: vi.fn(), install: vi.fn(), connectX, reconnect,
+    } })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), {
+      target: { value: 'X · cuenta de usuario' },
+    })
+    const card = document.querySelector('[data-connector-id="x"]')!
+    const configure = Array.from(card.querySelectorAll('button')).find(b => /Configure/i.test(b.textContent || ''))!
+    fireEvent.click(configure)
+    fireEvent.click(screen.getByRole('button', { name: 'Conectar cuenta X personal' }))
+    await waitFor(() => expect(connectX).toHaveBeenCalledWith({ identity: 'user' }))
+    await waitFor(() => expect(reconnect).toHaveBeenCalledWith({ serverName: 'x-api' }))
+    expect(document.body.textContent).not.toContain('cuenta esté autenticada por instalar')
   })
 
   it('rejects unsafe connector links instead of opening a blank or custom-scheme window', () => {

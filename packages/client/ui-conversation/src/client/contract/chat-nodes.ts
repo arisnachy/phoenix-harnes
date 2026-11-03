@@ -1,10 +1,42 @@
+import type { TurnEndReason } from '@phoenix-ai/dsh-session'
 import type {
-  AssistantBlock, AssistantMessageNode, ChatConversationViewNode, CommandNode,
+  AssistantBlock, AssistantMessageNode, AssistantProvenanceView, ChatConversationViewNode, CommandNode,
   CompactionSummaryNode, ModelRetryNode, RunningToolCall, ToolCallBlock,
 } from '@phoenix-ai/dsh-client-runtime/client'
 
+/** One lightweight reaction rendered under a real KIRA Team message. */
+export interface KiraTeamReactionChatData {
+  readonly reactorId: string
+  readonly reactorName: string
+  readonly reaction: 'ack' | 'agree' | 'insight' | 'blocked' | 'done'
+}
+
+/** Durable KIRA Team message projected into the ordinary Phoenix chat stream. */
+export interface KiraTeamMessageChatData {
+  readonly pendingDelivery?: boolean
+  readonly avatar?: string
+  readonly role?: string
+  readonly missionId?: string
+  readonly senderKind?: 'user' | 'kira' | 'agent'
+  readonly replyTo?: string
+  readonly replyQuote?: string
+  readonly messageId: string
+  readonly senderId: string
+  readonly senderName: string
+  readonly targetId: string
+  readonly targetName?: string
+  readonly purpose?: 'assignment' | 'question' | 'blocker' | 'result' | 'review' | 'decision' | 'update'
+  readonly content: readonly unknown[]
+  readonly time: number
+  readonly seq: number
+  readonly reactions: readonly KiraTeamReactionChatData[]
+}
+
 /** Merge-extensible payload registry keyed by final Chat renderer kind. */
-export interface ChatNodeDataMap {}
+export interface ChatNodeDataMap {
+  /** Real peer-to-peer KIRA Team collaboration, never synthetic role-play. */
+  'kira-team-message': KiraTeamMessageChatData
+}
 
 /** Renderer kinds contributed by the currently installed Chat business modules. */
 export type ChatNodeKind = Extract<keyof ChatNodeDataMap, string>
@@ -25,6 +57,8 @@ export interface AssistantChatData {
   readonly blocks: readonly AssistantBlock[]
   readonly time: number
   readonly usage?: unknown
+  /** Actual model source of this output; absent when no durable model source exists. */
+  readonly provenance?: AssistantProvenanceView
   readonly finalNode?: AssistantMessageNode
 }
 
@@ -52,6 +86,8 @@ export interface RetryChatData {
 
 /** Turn-local footer row that owns actions and optional feature contributions. */
 export interface TurnTailChatData {
+  /** Durable terminal cause; a turn ending is not proof of mission completion. */
+  readonly reason: TurnEndReason
   readonly turn: number
   readonly seq: number
   readonly time: number

@@ -31,8 +31,12 @@ import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
 import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
 import {
-  createVoiceRecognition, getVoiceAssistantSnapshot, hasVoiceRecognition, interruptVoiceAssistantSpeech,
-  isLikelyVoiceAssistantEcho, setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant,
+  configureCodexRealtimeUserTranscriptHandler,
+  createVoiceRecognition, getVoiceAssistantSnapshot, hasCodexRealtimeVoiceSupport, hasVoiceRecognition,
+  interruptVoiceAssistantSpeech, isCodexLiveRepairPending, waitForCodexLiveRepair, stopCodexRealtimeVoice,
+  isCodexRealtimeVoiceActive, isLikelyVoiceAssistantEcho, openCodexReconnection, codexRealtimeRequiresLogin,
+  setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant, tryStartCodexRealtimeVoice,
+  hasApprovedVoiceFallback, setApprovedVoiceFallback,
   type VoiceInputState, type VoiceRecognitionLike,
 } from '../voice.ts'
 import css from './InputBar.module.css'
@@ -134,13 +138,16 @@ export function InputBar({
   // developer-facing and keep the raw message plus code.
   useEffect(() => {
     if (promptError === null) return
+    if (codexRealtimeRequiresLogin(promptError.error.message)) openCodexReconnection()
     showToast(promptError.error.code === 'attachment-error'
       ? attachmentErrorText(t, promptError.error.details.reason, imageLimits, fileLimits)
       : `${promptError.error.message} (${promptError.error.code})`)
   }, [promptError, showToast, t, imageLimits, fileLimits])
   useEffect(() => {
-    if (notice?.level === 'error') showToast(notice.text)
-  }, [notice, showToast])
+    if (notice?.level !== 'error') return
+    showToast(notice.text)
+    if (codexRealtimeRequiresLogin(notice.text)) openCodexReconnection()
+  }, [notice?.level, notice?.text, showToast])
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const cardRef = useRef<HTMLDivElement | null>(null)
@@ -189,9 +196,18 @@ export function InputBar({
   const canSteerQueue = !locked && !machineBusy && !commandMenuOpen && empty && running && subagent === null
     && input.queue.some(row => row.placement === 'queued')
 
-  // Voice is an explicit browser capability. Hands-free mode keeps the browser
-  // recognizer alive across turns, submits each final transcript automatically,
-  // and lets the assistant tail speak the next completed response.
+  // Native Codex remains the default. Browser STT is only used after explicit
+  // opt-in, which may be remembered locally for future upstream failures.
+  const [useAlternativeVoice, setUseAlternativeVoice] = useState(false)
+  const nativeCodexVoiceOnly = !useAlternativeVoice
+  // Voice is an input/output layer over the ordinary PHOENIX execution path.
+  // For an OpenAI Codex route, native Realtime owns microphone/audio and its
+  // finalized transcript is admitted through this same composer path as typed
+  // input. The PHOENIX agent therefore remains
+  // the only planner/executor for tools, Hardness, approvals and orchestration.
+  // If native Realtime is unavailable or its account quota cannot open a call,
+  // browser recognition stays as the input fallback while Host TTS selects
+  // Kokoro first and the platform voice second.
   const [voiceState, setVoiceState] = useState<VoiceInputState>(() => (
     hasVoiceRecognition() ? 'idle' : 'unsupported'
   ))
@@ -201,8 +217,12 @@ export function InputBar({
     getVoiceAssistantSnapshot,
   )
   const voiceEnabled = voiceAssistant.active
+  const [codexVoiceFailure, setCodexVoiceFailure] = useState<string | null>(null)
+  const [voiceRepairing, setVoiceRepairing] = useState(false)
+  const voiceRepairAbortRef = useRef<AbortController | null>(null)
   const voiceRef = useRef<VoiceRecognitionLike | null>(null)
   const voiceSubmitPendingRef = useRef(false)
+  const voiceStartingRef = useRef(false)
   const appendVoiceText = useCallback((text: string): void => {
     if (keyboard === undefined || locked || machineBusy) return
     if (isLikelyVoiceAssistantEcho(text)) return
@@ -219,6 +239,8 @@ export function InputBar({
     voiceSubmitPendingRef.current = true
     requestAnimationFrame(() => { inputRef.current?.focus({ preventScroll: true }) })
   }, [keyboard, locked, machineBusy])
+  useEffect(() => configureCodexRealtimeUserTranscriptHandler(appendVoiceText), [appendVoiceText])
+
   const startVoiceRecognition = useCallback((): void => {
     const recognition = voiceRef.current
     if (recognition === null || voiceState === 'listening' || locked || machineBusy
@@ -231,18 +253,8 @@ export function InputBar({
       setVoiceState('error')
     }
   }, [locked, machineBusy, running, voiceAssistant.phase, voiceState])
-  useEffect(() => () => {
-    setVoiceAssistantActive(false)
-    voiceRef.current?.abort()
-    voiceRef.current = null
-  }, [])
-  const toggleVoice = useCallback((): void => {
-    if (locked || machineBusy) return
-    if (voiceEnabled) {
-      setVoiceAssistantActive(false)
-      voiceRef.current?.stop()
-      return
-    }
+  const ensureHarnessVoiceRecognition = useCallback((): VoiceRecognitionLike | undefined => {
+    if (voiceRef.current !== null) return voiceRef.current
     const recognition = createVoiceRecognition(
       appendVoiceText,
       (next) => {
@@ -256,12 +268,175 @@ export function InputBar({
     )
     if (recognition === undefined) {
       setVoiceState('unsupported')
+      return undefined
+    }
+    voiceRef.current = recognition
+    return recognition
+  }, [appendVoiceText])
+  useEffect(() => () => {
+    voiceStartingRef.current = false
+    voiceRepairAbortRef.current?.abort()
+    voiceRepairAbortRef.current = null
+    // Approval/Hardness composer takeovers temporarily unmount InputBar. Keep
+    // the native Codex WebRTC call alive across that UI swap so the same voice
+    // can announce the request and resume the harness answer. Legacy browser
+    // recognition remains component-owned and still shuts down on unmount.
+    const keepNativeCodex = isCodexRealtimeVoiceActive()
+    voiceRef.current?.abort()
+    voiceRef.current = null
+    if (!keepNativeCodex) setVoiceAssistantActive(false)
+  }, [])
+  /** Complete the microphone action without requiring a second user click. */
+  const resumeAfterRepair = useCallback((key: string): void => {
+    voiceRepairAbortRef.current?.abort()
+    const controller = new AbortController()
+    voiceRepairAbortRef.current = controller
+    setVoiceRepairing(true)
+    setCodexVoiceFailure('Phoenix está recuperando Codex Live automáticamente…')
+    void waitForCodexLiveRepair(controller.signal).then(async outcome => {
+      if (controller.signal.aborted || voiceRepairAbortRef.current !== controller) return
+      if (outcome === 'ready') {
+        voiceStartingRef.current = true
+        try {
+          const restored = await tryStartCodexRealtimeVoice(key)
+          if (controller.signal.aborted || voiceRepairAbortRef.current !== controller) {
+            if (restored.kind === 'started') await stopCodexRealtimeVoice()
+            return
+          }
+          if (restored.kind === 'started') { setCodexVoiceFailure(null); return }
+          if (restored.kind === 'failed' && codexRealtimeRequiresLogin(restored.reason)) {
+            setCodexVoiceFailure('codex-login-required')
+            openCodexReconnection()
+          } else {
+            // A new CLI cannot manufacture server-side Quicksilver support.
+            // Stop here instead of relaunching npm or WebRTC indefinitely.
+            setCodexVoiceFailure(isCodexLiveRepairPending(restored.kind === 'failed' ? restored.reason : '')
+              ? 'La versión oficial instalada todavía no admite este protocolo. Phoenix seguirá comprobando actualizaciones.'
+              : restored.kind === 'failed' ? restored.reason : 'codex-live-unavailable')
+          }
+        } finally {
+          voiceStartingRef.current = false
+        }
+      } else {
+        setCodexVoiceFailure(outcome === 'waiting-upstream'
+          ? 'Codex Live necesita soporte oficial para Quicksilver v2. No hay una versión compatible para instalar todavía.'
+          : outcome === 'timeout'
+            ? 'No se confirmó una actualización compatible de Codex Live. Puedes volver a intentarlo después.'
+            : 'La recuperación automática de Codex Live no está disponible por ahora.')
+      }
+    }).catch(() => {
+      if (!controller.signal.aborted && voiceRepairAbortRef.current === controller) {
+        setCodexVoiceFailure('No se pudo comprobar la actualización de Codex Live.')
+      }
+    }).finally(() => {
+      if (voiceRepairAbortRef.current === controller) {
+        voiceRepairAbortRef.current = null
+        setVoiceRepairing(false)
+      }
+    })
+  }, [])
+
+  const chooseAlternativeVoice = useCallback((): void => {
+    if (locked || machineBusy || voiceStartingRef.current) return
+    // Explicitly choosing the alternative cancels any outdated Codex updater
+    // wait instead of leaving the mic button blocked on a service outage.
+    voiceRepairAbortRef.current?.abort()
+    voiceRepairAbortRef.current = null
+    setVoiceRepairing(false)
+    void stopCodexRealtimeVoice()
+    // Browser-vendor recognition is opt-in. The next service failure may
+    // reuse this approval, but the UI always labels the alternative clearly.
+    const recognition = ensureHarnessVoiceRecognition()
+    if (recognition === undefined) {
+      setCodexVoiceFailure('La voz alternativa necesita reconocimiento de voz del navegador.')
       return
     }
+    setApprovedVoiceFallback(true)
+    setUseAlternativeVoice(true)
+    setCodexVoiceFailure(null)
     setVoiceAssistantActive(true)
-    voiceRef.current = recognition
     startVoiceRecognition()
-  }, [appendVoiceText, locked, machineBusy, startVoiceRecognition, voiceEnabled])
+  }, [ensureHarnessVoiceRecognition, locked, machineBusy, startVoiceRecognition])
+
+  const toggleVoice = useCallback(async (): Promise<void> => {
+    if (voiceRepairAbortRef.current !== null) {
+      voiceRepairAbortRef.current.abort()
+      voiceRepairAbortRef.current = null
+      setVoiceRepairing(false)
+      setCodexVoiceFailure(null)
+      void stopCodexRealtimeVoice()
+      return
+    }
+    if (locked || machineBusy || voiceStartingRef.current) return
+    if (voiceEnabled) {
+      setVoiceAssistantActive(false)
+      voiceRef.current?.stop()
+      voiceRef.current = null
+      setUseAlternativeVoice(false)
+      setCodexVoiceFailure(null)
+      return
+    }
+
+    setCodexVoiceFailure(null)
+    voiceStartingRef.current = true
+    try {
+      // Codex Live + the profile voice (Juniper for Kira's feminine profile)
+      // owns microphone/audio whenever the selected Codex account can open
+      // native Realtime. Do not start a second SpeechRecognition microphone:
+      // the app-server's finalized Live transcript is the single source of the
+      // human turn and is dispatched by VoiceRuntime into the live PHOENIX Agent.
+      // Agent.followup then owns normal chat/session persistence and the harness.
+      const realtime = await tryStartCodexRealtimeVoice(String(sessionId))
+      if (realtime.kind === 'started') return
+      if (realtime.kind === 'failed') {
+        if (isCodexLiveRepairPending(realtime.reason) && !hasApprovedVoiceFallback()) {
+          resumeAfterRepair(String(sessionId))
+          return
+        }
+        setCodexVoiceFailure(codexRealtimeRequiresLogin(realtime.reason)
+          ? 'codex-login-required' : realtime.reason)
+        // A missing or expired login should display the actual Connectors
+        // dialog immediately. The user must click the official authorization
+        // button there; we never start a login or open a made-up OAuth URL.
+        if (codexRealtimeRequiresLogin(realtime.reason)) openCodexReconnection()
+      }
+
+      // The user can explicitly approve browser recognition using the nearby
+      // alternative button. Reuse that browser-local approval on subsequent
+      // service outages; never silently opt in a fresh user or use paid APIs.
+      if (nativeCodexVoiceOnly && !hasApprovedVoiceFallback()) return
+      const recognition = ensureHarnessVoiceRecognition()
+      if (recognition === undefined) return
+      setUseAlternativeVoice(true)
+      setVoiceAssistantActive(true)
+      startVoiceRecognition()
+    } finally {
+      voiceStartingRef.current = false
+    }
+  }, [ensureHarnessVoiceRecognition, locked, machineBusy, nativeCodexVoiceOnly, resumeAfterRepair, sessionId, startVoiceRecognition, voiceEnabled])
+
+  // Browser recognition is fallback input only. Never compete with an active
+  // Codex Live microphone; when Live ends, the published assistant state causes
+  // this effect to attach SpeechRecognition automatically.
+  useEffect(() => {
+    if (!voiceAssistant.active || isCodexRealtimeVoiceActive()
+      || voiceRef.current !== null || voiceStartingRef.current) return
+    if (nativeCodexVoiceOnly) {
+      // A remounted composer must not acquire SpeechRecognition after a
+      // temporary WebRTC loss or a previous fallback-owned snapshot.
+      setVoiceAssistantActive(false)
+      return
+    }
+    const recognition = ensureHarnessVoiceRecognition()
+    if (recognition === undefined) {
+      setVoiceAssistantActive(false)
+      return
+    }
+    startVoiceRecognition()
+  }, [
+    ensureHarnessVoiceRecognition, running, startVoiceRecognition,
+    voiceAssistant.active, voiceAssistant.phase, nativeCodexVoiceOnly,
+  ])
 
   // A final recognition fragment is a complete voice turn. Waiting for the
   // machine's published draft avoids submitting the previous draft snapshot.
@@ -270,8 +445,14 @@ export function InputBar({
     if (input.phase !== 'plain' || input.draft.trim() === '') return
     voiceSubmitPendingRef.current = false
     voiceRef.current?.stop()
-    keyboard.submit('queue')
-  }, [input?.draft, input?.phase, keyboard])
+    // A native Live transcript is often the answer to Kira's preceding
+    // question while its harness Turn is still settling. Steering that answer
+    // stops the previous Turn ("Detenido") instead of continuing dialogue.
+    // Queue it as the next conversational Turn; explicit Stop and typed Steer
+    // remain available. Browser fallback retains its existing barge-in route.
+    keyboard.submit(running && subagent === null && !isCodexRealtimeVoiceActive()
+      ? 'steer' : 'queue')
+  }, [input?.draft, input?.phase, keyboard, running, subagent])
 
   // Chrome/WebKit can end a recognition segment after a response or due to a
   // browser timeout. Restart only while the user explicitly enabled hands-free
@@ -949,21 +1130,84 @@ export function InputBar({
             {rightItems}
             {renderSlot('conversation.input.model', { locked: modelSeatLocked })}
             <ContextMeter useProjection={useProjection} t={t} />
-            {voiceState !== 'unsupported' && (
+            {codexVoiceFailure !== null && !voiceEnabled && (
+              <span
+                role="status"
+                className={clsx(css.voiceFallback, (voiceRepairing || codexRealtimeRequiresLogin(codexVoiceFailure)) && css.voiceReconnect)}
+                data-codex-voice-fallback
+                title={voiceRepairing
+                  ? 'Codex Live: comprobando disponibilidad'
+                  : codexRealtimeRequiresLogin(codexVoiceFailure)
+                  ? 'Codex Live: inicia sesión de nuevo'
+                  : 'Codex Live no disponible. Abre Detalles para conocer el motivo.'}
+              >
+                {voiceRepairing
+                  ? <>Recuperando Codex Live… · <button type="button" className={css.voiceReconnectAction} onClick={() => { void toggleVoice() }}>Cancelar</button></>
+                  : codexRealtimeRequiresLogin(codexVoiceFailure)
+                  ? <>Codex desconectado · <button type="button" className={css.voiceReconnectAction} onClick={openCodexReconnection}>Reconectar</button></>
+                  : <>Codex Live sin conexión</>}
+              </span>
+            )}
+            {codexVoiceFailure !== null && !voiceRepairing
+              && !codexRealtimeRequiresLogin(codexVoiceFailure) && !voiceEnabled && (
+              <details className={css.voiceDetails}>
+                <summary aria-label="Mostrar diagnóstico de Codex Live">Detalles</summary>
+                <div className={css.voiceDetailsBody}>
+                  <p>Codex no pudo establecer el canal nativo de voz. Kira puede seguir trabajando con el respaldo de voz autorizado.</p>
+                  <code>{codexVoiceFailure.slice(0, 460)}</code>
+                </div>
+              </details>
+            )}
+            {voiceEnabled && useAlternativeVoice && (
+              <span className={css.voiceAlternativeActive} role="status"
+                title="Respaldo autorizado: reconocimiento del navegador y voz de Phoenix (Kokoro si está disponible). No es Codex Live.">
+                Voz alternativa activa
+                <button type="button" className={css.voiceReconnectAction}
+                  onClick={() => {
+                    setApprovedVoiceFallback(false)
+                    voiceRef.current?.abort()
+                    voiceRef.current = null
+                    setVoiceAssistantActive(false)
+                    setUseAlternativeVoice(false)
+                    setCodexVoiceFailure(null)
+                  }}>Revocar permiso</button>
+              </span>
+            )}
+            {codexVoiceFailure !== null
+              && !codexRealtimeRequiresLogin(codexVoiceFailure)
+              && voiceState !== 'unsupported' && !voiceEnabled && (
+              <button
+                type="button"
+                className={css.voiceReconnectAction}
+                data-phoenix-voice-alternative
+                aria-label="Usar voz alternativa de Phoenix"
+                title="Autorizar el reconocimiento del navegador y síntesis de Phoenix (Kokoro si está disponible). No es Codex Live. Guarda el permiso localmente hasta revocarlo."
+                disabled={locked || machineBusy}
+                onClick={chooseAlternativeVoice}
+              >
+                Usar voz alternativa
+              </button>
+            )}
+            {(voiceState !== 'unsupported' || hasCodexRealtimeVoiceSupport()) && (
               <Tooltip
-                label={voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
+                label={voiceRepairing
+                  ? 'Cancelar la recuperación automática de Codex Live'
+                  : codexVoiceFailure !== null
+                  ? 'Codex Live no disponible. Usa la voz alternativa autorizada.'
+                  : voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
                 side="top"
                 delayMs={500}
               >
                 <button
                   type="button"
                   className={clsx(css.voice, voiceEnabled && css.voiceActive)}
-                  aria-label={voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
+                  aria-label={voiceRepairing ? 'Cancelar recuperación de Codex Live' : voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
                   aria-pressed={voiceEnabled}
                   data-voice-state={voiceState}
-                  disabled={locked || machineBusy}
+                  data-codex-voice-failure={codexVoiceFailure ?? undefined}
+                  disabled={(locked || machineBusy) && !voiceRepairing}
                   onMouseDown={keepFocus}
-                  onClick={toggleVoice}
+                  onClick={() => { void toggleVoice() }}
                 >
                   <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
                     <path d="M8 1.5a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0V4A2.5 2.5 0 0 0 8 1.5Zm-4 6.5a4 4 0 0 0 8 0h1.5a5.5 5.5 0 0 1-4.75 5.44V15h-1.5v-1.56A5.5 5.5 0 0 1 2.5 8H4Z" fill="currentColor" />

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import type { ScheduledMissionScope } from './mission-scope.ts'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
@@ -18,11 +19,16 @@ export type ProactivitySenderIdentity = 'user' | 'harness' | 'auto'
 export type ProactivityPhase = 'prepare' | 'deliver'
 /** Terminal status of one attempted phase. */
 export type ProactivityHistoryStatus = 'completed' | 'failed'
+/** How a task participates in Phoenix's quiet home attention feed. */
+export type ProactivityAttentionMode = 'auto' | 'result' | 'upcoming' | 'off'
+/** Relative ranking among otherwise comparable attention signals. */
+export type ProactivityAttentionPriority = 'low' | 'normal' | 'high'
 
-/** Supported recurrence forms. Interval schedules stay anchored; yearly schedules preserve local calendar time. */
+/** Supported recurrence forms. Calendar schedules preserve local wall-clock time across DST and month lengths. */
 export type ProactivityRecurrence =
   | { readonly kind: 'once' }
   | { readonly kind: 'interval'; readonly everyMs: number }
+  | { readonly kind: 'calendar'; readonly unit: 'week' | 'month'; readonly every: number; readonly timezone?: string; readonly anchorDay?: number }
   | { readonly kind: 'yearly'; readonly everyYears: number; readonly timezone?: string }
 
 /** One immutable execution-history row. */
@@ -58,6 +64,14 @@ export interface ProactivityTask {
   readonly senderIdentity: ProactivitySenderIdentity
   readonly recipient?: string
   readonly targetAgentId?: string
+  /** An automatic task that belongs to a finite UME mission (not a user recurring task). */
+  readonly missionScope?: ScheduledMissionScope
+  /** Optional home-feed policy; omitted keeps the adaptive default. */
+  readonly attentionMode?: ProactivityAttentionMode
+  /** Optional home-feed priority; omitted ranks as normal. */
+  readonly attentionPriority?: ProactivityAttentionPriority
+  /** Optional concise copy for an upcoming occurrence. */
+  readonly attentionText?: string
   readonly status: ProactivityTaskStatus
   readonly history: readonly ProactivityHistoryEntry[]
 }
@@ -80,6 +94,14 @@ export interface CreateProactivityTaskInput {
   readonly senderIdentity?: ProactivitySenderIdentity
   readonly recipient?: string
   readonly targetAgentId?: string
+  /** Scope applied only to non-user followups created within an active mission. */
+  readonly missionScope?: ScheduledMissionScope
+  /** Optional home-feed policy; omitted keeps the adaptive default. */
+  readonly attentionMode?: ProactivityAttentionMode
+  /** Optional home-feed priority; omitted ranks as normal. */
+  readonly attentionPriority?: ProactivityAttentionPriority
+  /** Optional concise copy for an upcoming occurrence. */
+  readonly attentionText?: string
 }
 
 /** Input delivered to the host executor for one phase of one occurrence. */
@@ -149,6 +171,12 @@ function nonEmpty(value: string, field: string): string {
   const trimmed = value.trim()
   if (trimmed.length === 0) throw new Error(`${field} must be a non-empty string`)
   return trimmed
+}
+
+function boundedNonEmpty(value: string, field: string, maxChars: number): string {
+  const normalized = nonEmpty(value, field)
+  if (normalized.length > maxChars) throw new Error(`${field} must be at most ${maxChars} characters`)
+  return normalized
 }
 
 function finitePositive(value: number, field: string): number {
@@ -256,8 +284,41 @@ function addYears(scheduledFor: string, everyYears: number, timezone?: string): 
   return new Date(zonedLocalToEpoch(target, new Date(sourceMs).getUTCMilliseconds(), timezone)).toISOString()
 }
 
+/** Advance weekly/monthly work at its originally chosen local clock time. */
+function addCalendar(
+  scheduledFor: string,
+  recurrence: Extract<ProactivityRecurrence, { readonly kind: 'calendar' }>,
+): string {
+  const sourceMs = Date.parse(scheduledFor)
+  const date = new Date(sourceMs)
+  const source: ZonedParts = recurrence.timezone === undefined
+    ? {
+      year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(),
+      hour: date.getUTCHours(), minute: date.getUTCMinutes(), second: date.getUTCSeconds(),
+    }
+    : zonedParts(sourceMs, recurrence.timezone)
+  let target: ZonedParts
+  if (recurrence.unit === 'week') {
+    const advanced = new Date(Date.UTC(source.year, source.month - 1, source.day + recurrence.every * 7))
+    target = {
+      ...source, year: advanced.getUTCFullYear(), month: advanced.getUTCMonth() + 1, day: advanced.getUTCDate(),
+    }
+  } else {
+    const advanced = new Date(Date.UTC(source.year, source.month - 1 + recurrence.every, 1))
+    const year = advanced.getUTCFullYear()
+    const month = advanced.getUTCMonth() + 1
+    target = { ...source, year, month, day: Math.min(recurrence.anchorDay ?? source.day, daysInMonth(year, month)) }
+  }
+  const milliseconds = date.getUTCMilliseconds()
+  return new Date(recurrence.timezone === undefined
+    ? Date.UTC(target.year, target.month - 1, target.day, target.hour, target.minute, target.second, milliseconds)
+    : zonedLocalToEpoch(target, milliseconds, recurrence.timezone)).toISOString()
+}
+
 function cloneTask(task: ProactivityTask): ProactivityTask {
-  return { ...task, recurrence: { ...task.recurrence }, history: task.history.map(entry => ({ ...entry })) }
+  return { ...task, recurrence: { ...task.recurrence },
+    ...(task.missionScope === undefined ? {} : { missionScope: { ...task.missionScope } }),
+    history: task.history.map(entry => ({ ...entry })) }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -296,6 +357,19 @@ function parseRecurrence(raw: Record<string, unknown>): ProactivityRecurrence {
   if (raw.kind === 'interval' && typeof raw.everyMs === 'number') {
     return { kind: 'interval', everyMs: finitePositive(raw.everyMs, 'recurrence.everyMs') }
   }
+  if (raw.kind === 'calendar'
+    && (raw.unit === 'week' || raw.unit === 'month')
+    && typeof raw.every === 'number'
+    && (raw.timezone === undefined || typeof raw.timezone === 'string')
+    && (raw.anchorDay === undefined || typeof raw.anchorDay === 'number')) {
+    const every = finitePositive(raw.every, 'recurrence.every')
+    const anchorDay = raw.anchorDay === undefined ? undefined : finitePositive(raw.anchorDay, 'recurrence.anchorDay')
+    if (anchorDay !== undefined && anchorDay > 31) throw new Error('recurrence.anchorDay must be at most 31')
+    return { kind: 'calendar', unit: raw.unit, every,
+      ...(raw.timezone === undefined ? {} : { timezone: canonicalTimezone(raw.timezone, 'recurrence.timezone') }),
+      ...(anchorDay === undefined ? {} : { anchorDay }),
+    }
+  }
   if (raw.kind === 'yearly' && typeof raw.everyYears === 'number'
     && (raw.timezone === undefined || typeof raw.timezone === 'string')) {
     return {
@@ -332,6 +406,19 @@ function parseTask(raw: unknown): ProactivityTask {
   if (raw.condition !== undefined && typeof raw.condition !== 'string') throw new Error('invalid condition')
   if (raw.recipient !== undefined && typeof raw.recipient !== 'string') throw new Error('invalid recipient')
   if (raw.targetAgentId !== undefined && typeof raw.targetAgentId !== 'string') throw new Error('invalid targetAgentId')
+  const missionScope = raw.missionScope
+  if (missionScope !== undefined && (!isRecord(missionScope)
+    || typeof missionScope.sessionId !== 'string' || missionScope.sessionId.length === 0
+    || typeof missionScope.missionId !== 'string' || missionScope.missionId.length === 0
+    || typeof missionScope.epoch !== 'number' || !Number.isSafeInteger(missionScope.epoch)
+    || missionScope.epoch < 0)) throw new Error('invalid missionScope')
+  if (raw.attentionMode !== undefined
+    && raw.attentionMode !== 'auto' && raw.attentionMode !== 'result'
+    && raw.attentionMode !== 'upcoming' && raw.attentionMode !== 'off') throw new Error('invalid attentionMode')
+  if (raw.attentionPriority !== undefined
+    && raw.attentionPriority !== 'low' && raw.attentionPriority !== 'normal'
+    && raw.attentionPriority !== 'high') throw new Error('invalid attentionPriority')
+  if (raw.attentionText !== undefined && typeof raw.attentionText !== 'string') throw new Error('invalid attentionText')
   return {
     id: nonEmpty(raw.id, 'id'),
     title: nonEmpty(raw.title, 'title'),
@@ -351,6 +438,10 @@ function parseTask(raw: unknown): ProactivityTask {
     senderIdentity: raw.senderIdentity,
     ...(raw.recipient === undefined ? {} : { recipient: nonEmpty(raw.recipient, 'recipient') }),
     ...(raw.targetAgentId === undefined ? {} : { targetAgentId: nonEmpty(raw.targetAgentId, 'targetAgentId') }),
+    ...(missionScope === undefined ? {} : { missionScope: missionScope as unknown as ScheduledMissionScope }),
+    ...(raw.attentionMode === undefined ? {} : { attentionMode: raw.attentionMode }),
+    ...(raw.attentionPriority === undefined ? {} : { attentionPriority: raw.attentionPriority }),
+    ...(raw.attentionText === undefined ? {} : { attentionText: boundedNonEmpty(raw.attentionText, 'attentionText', 320) }),
     status: raw.status,
     history: parseHistory(raw.history),
   }
@@ -415,11 +506,16 @@ function nextAfter(task: ProactivityTask, scheduledFor: string): string | undefi
   if (task.recurrence.kind === 'interval') {
     return new Date(Date.parse(scheduledFor) + task.recurrence.everyMs).toISOString()
   }
-  return addYears(scheduledFor, task.recurrence.everyYears, task.recurrence.timezone)
+  if (task.recurrence.kind === 'yearly') {
+    return addYears(scheduledFor, task.recurrence.everyYears, task.recurrence.timezone)
+  }
+  return addCalendar(scheduledFor, task.recurrence)
 }
 
-function nextYearlyOccurrences(task: ProactivityTask, nowMs: number): { count: number; latest?: string; future: string; all: string[] } {
-  if (task.recurrence.kind !== 'yearly') throw new Error('yearly recurrence required')
+function nextCalendarOccurrences(task: ProactivityTask, nowMs: number): { count: number; latest?: string; future: string; all: string[] } {
+  if (task.recurrence.kind !== 'yearly' && task.recurrence.kind !== 'calendar') {
+    throw new Error('calendar recurrence required')
+  }
   let cursor = task.nextRunAt
   let count = 0
   let latest: string | undefined
@@ -431,7 +527,7 @@ function nextYearlyOccurrences(task: ProactivityTask, nowMs: number): { count: n
     const next = nextAfter(task, cursor)
     if (next === undefined || Date.parse(next) <= Date.parse(cursor)) throw new Error('yearly recurrence did not advance')
     cursor = next
-    if (count >= YEARLY_SEARCH_LIMIT) throw new Error('yearly recurrence catch-up search exceeded safety limit')
+    if (count >= YEARLY_SEARCH_LIMIT) throw new Error('calendar recurrence catch-up search exceeded safety limit')
   }
   return { count, ...(latest === undefined ? {} : { latest }), future: cursor, all }
 }
@@ -481,6 +577,10 @@ export class ProactivityEngine {
       const now = new Date().toISOString()
       const recurrence = input.recurrence ?? { kind: 'once' as const }
       if (recurrence.kind === 'interval') finitePositive(recurrence.everyMs, 'recurrence.everyMs')
+      if (recurrence.kind === 'calendar') {
+        finitePositive(recurrence.every, 'recurrence.every')
+        if (recurrence.timezone !== undefined) canonicalTimezone(recurrence.timezone, 'recurrence.timezone')
+      }
       if (recurrence.kind === 'yearly') {
         finitePositive(recurrence.everyYears, 'recurrence.everyYears')
         if (recurrence.timezone !== undefined) canonicalTimezone(recurrence.timezone, 'recurrence.timezone')
@@ -488,13 +588,29 @@ export class ProactivityEngine {
       if ((input.prepareLeadMs === undefined) !== (input.preparationInstruction === undefined)) {
         throw new Error('preparationInstruction and prepareLeadMs must be supplied together')
       }
+      if (input.missionScope !== undefined
+        && (!Number.isSafeInteger(input.missionScope.epoch) || input.missionScope.epoch < 0)) {
+        throw new Error('invalid missionScope.epoch')
+      }
       const normalizedRecurrence: ProactivityRecurrence = recurrence.kind === 'yearly'
         ? {
           kind: 'yearly',
           everyYears: recurrence.everyYears,
           ...(recurrence.timezone === undefined ? {} : { timezone: canonicalTimezone(recurrence.timezone, 'recurrence.timezone') }),
         }
-        : { ...recurrence }
+        : recurrence.kind === 'calendar'
+          ? {
+            kind: 'calendar',
+            unit: recurrence.unit,
+            every: recurrence.every,
+            ...(recurrence.timezone === undefined ? {} : { timezone: canonicalTimezone(recurrence.timezone, 'recurrence.timezone') }),
+            ...(recurrence.unit === 'month' ? {
+              anchorDay: recurrence.timezone === undefined
+                ? new Date(iso(input.runAt, 'runAt')).getUTCDate()
+                : zonedParts(Date.parse(input.runAt), recurrence.timezone).day,
+            } : {}),
+          }
+          : { ...recurrence }
       const task: ProactivityTask = {
         id: nonEmpty(this.id(), 'id'),
         title: nonEmpty(input.title, 'title'),
@@ -514,8 +630,35 @@ export class ProactivityEngine {
         senderIdentity: input.senderIdentity ?? 'auto',
         ...(input.recipient === undefined ? {} : { recipient: nonEmpty(input.recipient, 'recipient') }),
         ...(input.targetAgentId === undefined ? {} : { targetAgentId: nonEmpty(input.targetAgentId, 'targetAgentId') }),
+        ...(input.missionScope === undefined || input.createdBy === 'user' ? {} : {
+          missionScope: {
+            sessionId: nonEmpty(input.missionScope.sessionId, 'missionScope.sessionId'),
+            missionId: nonEmpty(input.missionScope.missionId, 'missionScope.missionId'),
+            epoch: input.missionScope.epoch,
+          },
+        }),
+        ...(input.attentionMode === undefined ? {} : { attentionMode: input.attentionMode }),
+        ...(input.attentionPriority === undefined ? {} : { attentionPriority: input.attentionPriority }),
+        ...(input.attentionText === undefined ? {} : { attentionText: boundedNonEmpty(input.attentionText, 'attentionText', 320) }),
         status: 'scheduled',
         history: [],
+      }
+      // Phoenix-created follow-ups are idempotent while the same mission is
+      // active. User-requested copies remain deliberate and are not collapsed.
+      if (task.createdBy !== 'user') {
+        const equivalent = snapshot.tasks.find(candidate =>
+          candidate.createdBy !== 'user'
+          && (candidate.status === 'scheduled' || candidate.status === 'running' || candidate.status === 'paused')
+          && candidate.title === task.title
+          && candidate.instruction === task.instruction
+          && candidate.condition === task.condition
+          && candidate.delivery === task.delivery
+          && candidate.recipient === task.recipient
+          && candidate.targetAgentId === task.targetAgentId
+          && candidate.missionScope?.missionId === task.missionScope?.missionId
+          && candidate.missionScope?.epoch === task.missionScope?.epoch
+          && JSON.stringify(candidate.recurrence) === JSON.stringify(task.recurrence))
+        if (equivalent !== undefined) return cloneTask(equivalent)
       }
       if (snapshot.tasks.some(candidate => candidate.id === task.id)) throw new Error(`duplicate proactivity task id: ${task.id}`)
       await this.commit([...snapshot.tasks, task])
@@ -569,8 +712,8 @@ export class ProactivityEngine {
     return this.exclusive(async () => {
       const snapshot = await this.snapshot()
       const index = snapshot.tasks.findIndex(task => task.id === id)
-      if (index < 0) throw new Error(`unknown proactivity task: ${id}`)
-      const current = snapshot.tasks[index]!
+      const current = snapshot.tasks[index]
+      if (current === undefined) throw new Error(`unknown proactivity task: ${id}`)
       if ((current.status === 'completed' || current.status === 'cancelled') && status !== 'cancelled') {
         throw new Error(`task ${id} is terminal: ${current.status}`)
       }
@@ -606,8 +749,8 @@ export class ProactivityEngine {
     if (nowMs < nextMs) return []
     const recurrence = task.recurrence
     if (recurrence.kind === 'once') return [task.nextRunAt]
-    if (recurrence.kind === 'yearly') {
-      const scan = nextYearlyOccurrences(task, nowMs)
+    if (recurrence.kind === 'yearly' || recurrence.kind === 'calendar') {
+      const scan = nextCalendarOccurrences(task, nowMs)
       if (task.catchUp === 'skip' && scan.count > 1) return []
       if (task.catchUp === 'latest') return scan.latest === undefined ? [] : [scan.latest]
       return scan.all.slice(0, this.maxCatchUpOccurrences)
@@ -624,8 +767,8 @@ export class ProactivityEngine {
     if (task.catchUp !== 'skip') return undefined
     const recurrence = task.recurrence
     if (recurrence.kind === 'once') return undefined
-    if (recurrence.kind === 'yearly') {
-      const scan = nextYearlyOccurrences(task, nowMs)
+    if (recurrence.kind === 'yearly' || recurrence.kind === 'calendar') {
+      const scan = nextCalendarOccurrences(task, nowMs)
       return scan.count > 1 ? scan.future : undefined
     }
     const nextMs = Date.parse(task.nextRunAt)
@@ -664,12 +807,14 @@ export class ProactivityEngine {
     const preparationResult = phase === 'deliver' ? completedSummary(leased, 'prepare', scheduledFor) : undefined
 
     try {
+      const instruction = phase === 'prepare' ? leased.preparationInstruction : leased.instruction
+      if (instruction === undefined) throw new Error(`missing preparation instruction for proactivity task: ${taskId}`)
       const result = await this.executor.execute({
         phase,
         task: cloneTask(leased),
         scheduledFor,
         idempotencyKey,
-        instruction: phase === 'prepare' ? leased.preparationInstruction! : leased.instruction,
+        instruction,
         ...(preparationResult === undefined ? {} : { preparationResult }),
       })
       const finishedAt = new Date().toISOString()

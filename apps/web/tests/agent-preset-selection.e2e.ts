@@ -221,6 +221,23 @@ describe('web e2e: agent-preset selection', () => {
     await page.keyboard.press('Escape')
   })
 
+  it('selecting Kira Max preserves the workspace and an enabled input, then allows switching back', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-kira-max-composer'))
+    await page.getByRole('button', { name: 'Standard mode' }).click()
+    await page.getByRole('menuitem', { name: /Kira Max/ }).click()
+    await expect.poll(() => livePreset(scaffold.baseUrl), { timeout: 20_000 }).toBe('kira-max')
+    const input = page.locator('textarea:enabled').last()
+    await input.waitFor({ timeout: 15_000 })
+    await input.fill('Kira Max input ready')
+    expect(await input.inputValue()).toBe('Kira Max input ready')
+    await input.fill('')
+    await page.getByRole('button', { name: 'Kira Max' }).click()
+    await page.getByRole('menuitem', { name: /^Standard mode/ }).click()
+    await expect.poll(() => livePreset(scaffold.baseUrl), { timeout: 20_000 }).toBe('standard')
+    await input.waitFor({ state: 'visible', timeout: 15_000 })
+    expect(await input.isEnabled()).toBe(true)
+  }, 60_000)
+
   it('applies the staged pick to the blank session, and the host honors it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-agent-preset-stage'))
     await page.getByRole('button', { name: 'Standard mode' }).click()
@@ -288,6 +305,27 @@ describe('web e2e: agent-preset selection', () => {
     // the host would refuse to change.
     expect(snapshot).not.toContain('button "Minimal mode"')
   })
+
+  it('boots a fresh Kira Max default and activates the composer after choosing a workspace', async () => {
+    const kiraScaffold = await launchWebScaffold({
+      agentPresets: { roots: [{ path: SHIPPED_PRESETS, trust: 'system' }], default: 'kira-max' },
+    })
+    const kiraBrowser = await chromium.launch()
+    const kiraPage = await newEnglishPage(kiraBrowser)
+    try {
+      await kiraPage.goto(kiraScaffold.baseUrl, { waitUntil: 'load' })
+      await kiraPage.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+      await connectFreshWorkspace(kiraPage, kiraScaffold.workspaceCwd)
+      await expect.poll(() => livePreset(kiraScaffold.baseUrl), { timeout: 25_000 }).toBe('kira-max')
+      const active = kiraPage.locator('textarea:enabled').last()
+      await active.waitFor({ timeout: 25_000 })
+      await active.fill('Nuevo mensaje con Kira')
+      expect(await active.inputValue()).toBe('Nuevo mensaje con Kira')
+    } finally {
+      await kiraBrowser.close()
+      await kiraScaffold.close()
+    }
+  }, 120_000)
 
   it('drove every surface without a page error or a stream warning', () => {
     expect(tripwire.pageErrors).toEqual([])

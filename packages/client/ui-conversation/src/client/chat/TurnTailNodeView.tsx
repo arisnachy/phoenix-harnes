@@ -5,13 +5,14 @@ import { MessageIconActions } from './MessageIconActions.tsx'
 import { assistantText } from './turn-assistant.ts'
 import { speakVoiceAssistantResponse } from '../voice.ts'
 import css from './TurnTailNodeView.module.css'
+import { turnStopNotice } from './turn-stop.ts'
 
 type TurnTailNodeViewProps = ChatNodeViewProps<'turn-tail'>
   & PropsRenderSlots<'conversation.chat.turnTail' | 'conversation.chat.assistant-actions'>
 
 /** Turn-local actions and feature tail over the Location index, independent of Assistant placement. */
 export const TurnTailNodeView = memo(function TurnTailNodeView({
-  node, openFile, forkAt, renderSlot, renderSlotChain, t, useSession,
+  node, openFile, forkAt, renderSlot, renderSlotChain, t, useSession, sessionId,
 }: TurnTailNodeViewProps) {
   const data = node.data
   const hasLaterChatNode = useSession(snapshot =>
@@ -22,13 +23,20 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
   const closing = data.closing
   const responseText = closing === null ? '' : assistantText(closing.blocks)
   useEffect(() => {
-    if (closing === null || responseText === '') return
-    speakVoiceAssistantResponse(`assistant:${closing.turn}:${closing.step}`, responseText, closing.time)
-  }, [closing, node.key, responseText])
+    // Only the actual completed Turn closes the harness action. Do not voice
+    // stale intermediate prose when a tool result arrived after that message.
+    if (closing === null || responseText === ''
+      || data.reason.kind !== 'completed' || data.branchUnavailable) return
+    speakVoiceAssistantResponse(`${String(sessionId)}:assistant:${closing.turn}:${closing.step}`,
+      responseText, closing.time, String(sessionId))
+  }, [closing, data.branchUnavailable, data.reason.kind, node.key, responseText, sessionId])
   if (turn === undefined) return null
   const owner: TurnTailOwnerProps = { turn, seq: closing?.finalNode.seq ?? data.seq, openFile }
-  const tail = renderSlotChain('conversation.chat.turnTail', owner)
-  if (closing === null) return tail === null ? null : <div className={css.root}>{tail}</div>
+  const key = turnStopNotice(data.reason, closing !== null)
+  const notice = key === undefined ? null : <p role="status" data-turn-stop={data.turn}>{t(key)}</p>
+  const featureTail = renderSlotChain('conversation.chat.turnTail', owner)
+  const tail = <>{notice}{featureTail}</>
+  if (closing === null) return notice === null && featureTail === null ? null : <div className={css.root}>{tail}</div>
   const runMs = turn.start === undefined || turn.end === undefined
     ? undefined
     : Math.max(0, turn.end.time - turn.start.time)

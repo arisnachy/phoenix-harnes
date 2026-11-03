@@ -44,6 +44,17 @@ describe('UserQuestionService', () => {
     ])).toEqual({ answers: [{ id: 'mode', selected: ['Fast'] }] })
   })
 
+  it('never fabricates answers to a sensitive question when ASK expires', () => {
+    expect(automaticAnswerForQuestion({
+      id: 'anemia', question: '¿Presenta disnea?', sensitive: true,
+      options: [{ label: 'Sí', recommended: true }, { label: 'No' }],
+    })).toEqual({ id: 'anemia', selected: [] })
+    expect(automaticAnswerForQuestions([
+      { id: 'consent', question: '¿Autoriza guardar su expediente?', sensitive: true,
+        options: [{ label: 'Sí, autorizo', recommended: true }, { label: 'No' }] },
+    ])).toEqual({ answers: [{ id: 'consent', selected: [] }] })
+  })
+
   it('delegates ask requests to the registered provider', async () => {
     const ctx = new Context()
     await ctx.plugin(UserQuestionService)

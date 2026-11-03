@@ -1,7 +1,7 @@
 /** Host BFF policy for resolving Remote Agent and Session identities. */
 
 import type { Context } from '@phoenix-ai/cordis'
-import type { Agent, AgentOptions, AgentSetup } from '@phoenix-ai/dsh-agent'
+import type { Agent, AgentHandle, AgentOptions, AgentSetup } from '@phoenix-ai/dsh-agent'
 import type { Session, SessionEvent, SessionHeader, SessionId } from '@phoenix-ai/dsh-session'
 import type {} from '@phoenix-ai/dsh-session-persistence'
 import { TypertLookupFailure } from '@phoenix-ai/dsh-typert-protocol'
@@ -36,6 +36,14 @@ export interface ApiRemoteAgentOptions {
   readonly setup?: (
     session: { meta: SessionHeader; events: readonly SessionEvent[] },
   ) => AgentSetup | Promise<AgentSetup>
+  /** A Host owner must keep the disposal capability for user-requested deletion. */
+  readonly onOwnedHandle?: (handle: AgentHandle) => void
+  /** A deletion fence blocks late and concurrent cold resumes. */
+  readonly isDeletingSession?: (sessionId: SessionId) => boolean
+}
+/** Ordinary resolver callable, with an admission barrier for deletion. */
+export type ApiRemoteAgentResolver = ((sessionId: SessionId) => Promise<ApiRemoteAgentResult>) & {
+  waitForPending(sessionId: SessionId): Promise<void>
 }
 
 /** Cold identity absent from the durable session store. */
@@ -121,8 +129,13 @@ export async function inspectApiRemoteSession(
 export function createApiRemoteAgentResolver(
   ctx: Context,
   options: ApiRemoteAgentOptions,
-): (sessionId: SessionId) => Promise<ApiRemoteAgentResult> {
+): ApiRemoteAgentResolver {
   const resumes = new Map<SessionId, Promise<Agent>>()
+  const deletingError = (sessionId: SessionId): ApiRemoteLookupError => ({
+    code: 'agent-busy',
+    message: `session "${sessionId}" is being permanently deleted`,
+    details: { reason: 'deletion is already in progress' },
+  })
 
   const fencedLiveAgent = (sessionId: SessionId): ApiRemoteAgentResult | undefined => {
     const live = ctx.agents.get(sessionId)
@@ -134,6 +147,7 @@ export function createApiRemoteAgentResolver(
   }
 
   const agentFor = async (sessionId: SessionId): Promise<ApiRemoteAgentResult> => {
+    if (options.isDeletingSession?.(sessionId)) return { error: deletingError(sessionId) }
     const fenced = fencedLiveAgent(sessionId)
     if (fenced !== undefined) return fenced
     const attached = ctx.sessions.get(sessionId)
@@ -159,11 +173,19 @@ export function createApiRemoteAgentResolver(
             && hasApiRemoteSubagentOwner(ctx, publishedSession, publishedAgent)) {
             throw new ApiRemoteSubagentSessionOwnership(sessionId)
           }
+          if (options.isDeletingSession?.(sessionId)) {
+            throw new Error(`session "${sessionId}" is being deleted`)
+          }
           const handle = await ctx.agents.resume({
             resumeSessionId: sessionId,
             ...options.agentOptions === undefined ? {} : { agentOptions: options.agentOptions() },
             ...setup === undefined ? {} : { setup },
           })
+          options.onOwnedHandle?.(handle)
+          if (options.isDeletingSession?.(sessionId)) {
+            await handle.dispose()
+            throw new Error(`session "${sessionId}" is being deleted`)
+          }
           return handle.agent
         } finally {
           resumes.delete(sessionId)
@@ -196,6 +218,14 @@ export function createApiRemoteAgentResolver(
     }
   }
 
+  const resolver: ApiRemoteAgentResolver = Object.assign(agentFor, {
+    async waitForPending(sessionId: SessionId): Promise<void> {
+      // Deletion waits for a cold resume already admitted before its fence.
+      // The outcome does not matter: only the completed ownership transition does.
+      await resumes.get(sessionId)?.then(() => undefined, () => undefined)
+    },
+  })
+
   ctx.inject(['typert'], (typeCtx) => {
     const resolveAgent = async (sessionId: SessionId): Promise<Agent> => {
       const found = await agentFor(sessionId)
@@ -207,5 +237,5 @@ export function createApiRemoteAgentResolver(
     typeCtx.typert.contexts.configureHost('agent', async sessionId => (await resolveAgent(sessionId)).ctx)
   })
 
-  return agentFor
+  return resolver
 }

@@ -70,9 +70,10 @@ import {
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { CODEX_PROVIDER } from './codex-live-catalog.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
-import { applyMondayCodexMembrane, normalizeCodexToolSchemas, normalizeOpenAiFunctionToolPayload, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
+import { applyMondayCodexMembrane, normalizeCodexToolSchemas, recoverRejectedCodexFunctionSchema, scopeCodexToolsForPaint, normalizeOpenAiFunctionToolPayload, surfaceRejectedCodexSchemaEvent, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
 import { fitGenerateOptionsToContext, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
+import { isNonCodexRecoveryModel } from './provider-recovery.ts'
 
 /** One resolution's frozen view: the profiles and the collection built from them. */
 interface PiAiSnapshot {
@@ -109,6 +110,10 @@ export interface PiAiAdapterOptions {
    * exact-model miss. The plugin owns caching/fallback; the adapter only asks.
    */
   refreshModels?: (provider: string, force?: boolean) => Promise<readonly string[] | undefined>
+  /** Account-visible replacement for a model removed from a live catalog. */
+  preferredModel?: (provider: string, model: string, needsImage: boolean) => string | undefined
+  /** Quarantine HTTP 410, refresh, and choose at most one replacement per turn. */
+  onModelUnavailable?: (provider: string, model: string, needsImage: boolean) => Promise<string | undefined>
   /**
    * Authoritative per-model reasoning metadata supplied by a live provider
    * catalog. Codex uses this to preserve effort names added after pi-ai's
@@ -358,8 +363,10 @@ export class PiAiAdapter extends LlmAdapter {
     model: string,
     _signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
-    const snapshot = await this.snapshotForModel(provider, model)
-    return this.modelInfo(snapshot, provider, model)
+    if (provider === 'nvidia') await this.config.refreshModels?.(provider)
+    const selected = this.config.preferredModel?.(provider, model, false) ?? model
+    const snapshot = await this.snapshotForModel(provider, selected)
+    return this.modelInfo(snapshot, provider, selected)
   }
 
   private modelInfo(
@@ -393,11 +400,13 @@ export class PiAiAdapter extends LlmAdapter {
   }
 
   override async prepareCall(provider: string, model: string, _signal?: AbortSignal): Promise<PreparedAdapterCall> {
-    const snapshot = await this.snapshotForModel(provider, model)
-    const liveReasoning = this.config.reasoningForModel?.(provider, model)
+    if (provider === 'nvidia') await this.config.refreshModels?.(provider)
+    const selected = this.config.preferredModel?.(provider, model, false) ?? model
+    const snapshot = await this.snapshotForModel(provider, selected)
+    const liveReasoning = this.config.reasoningForModel?.(provider, selected)
     return {
-      model: this.modelInfo(snapshot, provider, model, liveReasoning),
-      stream: options => this.streamWithSnapshot(options, snapshot, liveReasoning),
+      model: this.modelInfo(snapshot, provider, selected, liveReasoning),
+      stream: options => this.streamWithSnapshot({ ...options, model: selected }, snapshot, liveReasoning),
     }
   }
 
@@ -410,9 +419,27 @@ export class PiAiAdapter extends LlmAdapter {
     options: GenerateOptions,
     snapshot: PiAiSnapshot,
     liveReasoning: LlmModelReasoningInfo | undefined,
+    recoveredSchema = false,
+    recoveredModel = false,
   ): AsyncIterable<StreamChunk> {
     if (options.stop !== undefined) {
       throw new LlmError('llm-pi-ai does not support GenerateOptions.stop', 'UNSUPPORTED_OPTION')
+    }
+    // A live NVIDIA catalog may retire a model between two turns. Redirect
+    // before any provider I/O, never after producing content or tool calls.
+    if (!recoveredModel) {
+      const needsImage = options.messages.some(message => contentHasImage(message.content))
+      const selected = this.config.preferredModel?.(options.provider, options.model, needsImage)
+      if (selected !== undefined && selected !== options.model) {
+        yield* this.streamWithSnapshot(
+          { ...options, model: selected },
+          this.current(),
+          this.config.reasoningForModel?.(options.provider, selected),
+          recoveredSchema,
+          true,
+        )
+        return
+      }
     }
     // One capture per stream call, taken before any await: the profile, the
     // model descriptor, and the collection all come from the same immutable
@@ -488,6 +515,7 @@ export class PiAiAdapter extends LlmAdapter {
       : AbortSignal.any([options.signal, consumer.signal])
     const streamIdleTimeoutMs = profile.streamIdleTimeoutMs
     using watchdog = idleWatchdog(upstream, streamIdleTimeoutMs, 'LLM_STREAM_IDLE_TIMEOUT')
+    let emittedChunk = false
 
     try {
       const desiredMaxOutput = options.maxTokens ?? model.maxTokens
@@ -502,7 +530,7 @@ export class PiAiAdapter extends LlmAdapter {
       const requiresFunctionSchemaProjection = requiresObjectRootFunctionSchemas(options.provider, model.api)
       const requiresMondayMembrane = requiresMondayCodexMembrane(options.provider, model.api)
       const projectedOptions = requiresFunctionSchemaProjection
-        ? normalizeCodexToolSchemas(fitted.options)
+        ? normalizeCodexToolSchemas(scopeCodexToolsForPaint(fitted.options))
         : fitted.options
       const requestOptions = requiresMondayMembrane
         ? applyMondayCodexMembrane(projectedOptions)
@@ -560,11 +588,14 @@ export class PiAiAdapter extends LlmAdapter {
         ? openAIResponsesApi().streamSimple(wireModel, providerContext, streamOptions)
         : snapshot.models.streamSimple(wireModel, providerContext, streamOptions)
       const iterator = toStreamChunks(
-        events,
+        requiresFunctionSchemaProjection ? surfaceRejectedCodexSchemaEvent(events) : events,
         model.contextWindow,
         desiredMaxOutput,
+        options.provider === 'openrouter',
+        isNonCodexRecoveryModel(options.provider, options.model),
       )[Symbol.asyncIterator]()
       let exhausted = false
+      let pendingUsage: StreamChunk | undefined
       try {
         while (true) {
           const result = await watchdog.next(iterator)
@@ -572,8 +603,41 @@ export class PiAiAdapter extends LlmAdapter {
           if (timeout !== undefined) throw timeout
           if (result.done) {
             exhausted = true
+            if (pendingUsage !== undefined) yield pendingUsage
             return
           }
+          // pi-ai sends usage immediately before terminal finish. Hold only
+          // this metadata while inspecting a 410 so a recovered turn cannot
+          // emit duplicate token usage or a stale error finish.
+          if (result.value.type === 'usage') {
+            pendingUsage = result.value
+            continue
+          }
+          if (!emittedChunk && !recoveredModel
+            && result.value.type === 'finish'
+            && result.value.reason.kind === 'error'
+            && result.value.reason.failure.code === 'MODEL_UNAVAILABLE') {
+            const needsImage = options.messages.some(message => contentHasImage(message.content))
+            const replacement = await this.config.onModelUnavailable?.(
+              options.provider, options.model, needsImage,
+            )
+            if (replacement !== undefined && replacement !== options.model) {
+              yield* this.streamWithSnapshot(
+                { ...options, model: replacement },
+                this.current(),
+                this.config.reasoningForModel?.(options.provider, replacement),
+                recoveredSchema,
+                true,
+              )
+              return
+            }
+          }
+          if (pendingUsage !== undefined) {
+            emittedChunk = true
+            yield pendingUsage
+            pendingUsage = undefined
+          }
+          emittedChunk = true
           yield result.value
         }
       } finally {
@@ -594,6 +658,38 @@ export class PiAiAdapter extends LlmAdapter {
         throw new LlmError('pi-ai request aborted by caller', 'ABORTED', { cause: error })
       }
       const detail = errorChain(error)
+      // Some SDKs throw transport errors instead of emitting terminal error
+      // events. Treat a bare NVIDIA 410 the same way: one safe replacement
+      // attempt before any streamed content, never an unbounded retry.
+      if (!emittedChunk && !recoveredModel && /\b410\b/u.test(detail)) {
+        const needsImage = options.messages.some(message => contentHasImage(message.content))
+        const replacement = await this.config.onModelUnavailable?.(
+          options.provider, options.model, needsImage,
+        )
+        if (replacement !== undefined && replacement !== options.model) {
+          yield* this.streamWithSnapshot(
+            { ...options, model: replacement },
+            this.current(),
+            this.config.reasoningForModel?.(options.provider, replacement),
+            recoveredSchema,
+            true,
+          )
+          return
+        }
+      }
+      // Codex can reject one broken *tool definition* before generating any
+      // response, even after normalization (e.g. a deferred MCP catalog). That
+      // is not a failed social campaign action. Quarantine only its exact
+      // function name and make at most one fresh model attempt. Once streaming
+      // has begun, never silently replay a potentially side-effecting turn.
+      if (!emittedChunk && !recoveredSchema
+        && requiresObjectRootFunctionSchemas(options.provider, model.api)) {
+        const recovered = recoverRejectedCodexFunctionSchema(options, detail)
+        if (recovered !== undefined) {
+          yield* this.streamWithSnapshot(recovered, snapshot, liveReasoning, true)
+          return
+        }
+      }
       // pi-ai transports several OpenAI-compatible providers (including the
       // Phoenix Local loopback). Normalize their provider-specific context
       // overflow wording so compaction-basic can repair the durable surface

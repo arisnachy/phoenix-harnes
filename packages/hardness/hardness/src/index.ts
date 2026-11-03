@@ -68,6 +68,27 @@ export type {
   CognitiveWorkflowPlan,
 } from './cognitive-workflow.ts'
 
+export { GeneralizationGate } from './generalization-gate.ts'
+export type { GeneralizationAssessment, GeneralizationMetrics, GeneralizationSnapshot, GeneralizationTrial } from './generalization-gate.ts'
+
+export {
+  EvolutionBaselineRegistry,
+  verifyEvolutionBaseline,
+  verifyEvolutionCheckpoint,
+  verifyEvolutionTransfer,
+  verifyEvolutionProbe,
+  assessUniversalEvolution,
+} from './universal-evolution.ts'
+export type {
+  EvolutionPhase,
+  EvolutionBaseline,
+  EvolutionCheckpoint,
+  EvolutionTransfer,
+  EvolutionProbe,
+  EvolutionVerdict,
+  EvolutionReadiness,
+} from './universal-evolution.ts'
+
 export type * from './types.ts'
 
 function sameDescriptorRevision(left: CapabilityDescriptor, right: CapabilityDescriptor): boolean {
@@ -142,7 +163,7 @@ export class HardnessRegistry extends Service implements HardnessService {
   }
 
   resolveNeed(need: CapabilityNeed, context: CapabilityResolutionContext = {}): CapabilityResolution {
-    return resolveCapabilityNeed(this.list(), need, context)
+    return resolveCapabilityNeed(this.list(), need, context, [...this.evidence.values()])
   }
 
   route(need: CapabilityNeed, options: CapabilityRouteOptions = {}): CapabilityRouteResult {

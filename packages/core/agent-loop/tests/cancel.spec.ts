@@ -49,7 +49,7 @@ function waitForIdle(ctx: Context, agent: Agent): Promise<void> {
 /** All user-message texts recorded in the log (to assert what actually ran). */
 function userTexts(agent: Agent): string[] {
   return agent.session.events
-    .filter(e => e.type === 'user/message')
+    .filter(e => e.type === 'user/message' && !(e.data.source.kind === 'plugin' && e.data.source.plugin === 'agent-loop'))
     .flatMap(e => e.type === 'user/message' ? e.data.content : [])
     .flatMap(b => b.type === 'text' ? [b.text] : [])
 }
@@ -920,6 +920,96 @@ describe('Agent.cancel()', () => {
     expect(turnEnd?.type === 'turn/end' && turnEnd.data.reason).toEqual({ kind: 'aborted', reason: { kind: 'user' } })
   })
 
+  it.each(['ya detenlo', 'Kira, para la prueba', 'Kira no sigas', 'stop this test'])(
+    'an explicit stop (%s) aborts the real turn without spawning another model request',
+    async (text) => {
+      const adapter = new MockAdapter(['hang', textResponse('new task')])
+      const ctx = await harness(adapter)
+      const agent = ctx.agentLoop.create(SessionId('user-stop-no-resume'), { provider: 'mock', model: 'mock' })
+      send(agent, 'start slow review')
+      await expect.poll(() => adapter.requests.length).toBe(1)
+      const signal = adapter.requests[0]?.signal
+
+      agent.steer(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))
+      await agent.whenIdle()
+
+      expect(signal?.aborted).toBe(true)
+      expect(adapter.requests).toHaveLength(1)
+      expect(userTexts(agent)).toEqual(['start slow review'])
+      expect(agent.inbox.nextStep).toHaveLength(0)
+      expect(agent.inbox.nextTurn).toHaveLength(0)
+      expect(agent.session.events.filter(event => event.type === 'turn/start')).toHaveLength(1)
+      expect(agent.session.events.findLast(event => event.type === 'turn/end')?.data.reason)
+        .toEqual({ kind: 'aborted', reason: { kind: 'user' } })
+
+      // A genuinely new instruction after stop is allowed to run normally.
+      send(agent, 'new independent task')
+      await agent.whenIdle()
+      expect(adapter.requests).toHaveLength(2)
+      expect(userTexts(agent)).toEqual(['start slow review', 'new independent task'])
+    },
+  )
+
+  it('the followup ingress stops active work and clears queued missions without replaying them', async () => {
+    const adapter = new MockAdapter(['hang', textResponse('never executed')])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('followup-stop-queue'), { provider: 'mock', model: 'mock' })
+    send(agent, 'start automation')
+    await expect.poll(() => adapter.requests.length).toBe(1)
+    send(agent, 'queued automation')
+    expect(agent.inbox.nextTurn).toHaveLength(1)
+
+    send(agent, 'Kira, detén la ejecución')
+    await agent.whenIdle()
+
+    expect(adapter.requests).toHaveLength(1)
+    expect(userTexts(agent)).toEqual(['start automation'])
+    expect(agent.inbox.nextTurn).toHaveLength(0)
+    expect(agent.inbox.nextStep).toHaveLength(0)
+    expect(agent.session.events.filter(event => event.type === 'turn/start')).toHaveLength(1)
+  })
+
+  it('a stop during a form automation tool aborts the tool and never continues the mission', async () => {
+    const adapter = new MockAdapter([
+      toolCallResponse('fill-form', 'fill-form', {}),
+      textResponse('should never continue'),
+    ])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('stop-active-form-tool'), { provider: 'mock', model: 'mock' })
+    const toolStarted = Promise.withResolvers<void>()
+    let toolAborted = false
+    ctx.tools.register(defineContentToolFixture({
+      name: 'fill-form',
+      description: 'Simulate a cooperatively cancellable browser form operation',
+      parameters: {},
+      execute: async (_args, exec) => {
+        toolStarted.resolve(undefined)
+        if (!exec.signal.aborted) {
+          await new Promise<void>((resolve) => {
+            exec.signal.addEventListener('abort', () => { toolAborted = true; resolve() }, { once: true })
+          })
+        }
+        return [{ type: 'text', text: 'tool stopped' }]
+      },
+    }))
+
+    send(agent, 'complete the Selenium practice form')
+    await toolStarted.promise
+    agent.steer(createUserMessage({
+      content: [{ type: 'text', text: 'Kira, para la prueba' }],
+      source: { kind: 'user' },
+    }))
+    await agent.whenIdle()
+
+    expect(toolAborted).toBe(true)
+    expect(adapter.requests).toHaveLength(1)
+    expect(agent.inbox.nextTurn).toHaveLength(0)
+    expect(agent.inbox.nextStep).toHaveLength(0)
+    expect(agent.session.events.filter(event => event.type === 'turn/start')).toHaveLength(1)
+    expect(agent.session.events.findLast(event => event.type === 'turn/end')?.data.reason)
+      .toEqual({ kind: 'aborted', reason: { kind: 'user' } })
+  })
+
   it('steer interrupts an active model stream and immediately replays the steering input', async () => {
     const adapter = new MockAdapter([
       'hang',
@@ -948,6 +1038,8 @@ describe('Agent.cancel()', () => {
 
     expect(firstSignal.aborted).toBe(true)
     expect(adapter.requests).toHaveLength(2)
+    expect(JSON.stringify(adapter.requests[1]?.messages)).toContain('answer this now')
+    expect(JSON.stringify(adapter.requests[1]?.messages)).toContain('resume the task that was in progress')
     expect(userTexts(agent)).toEqual(['start slow model', 'answer this now'])
     expect(agent.inbox.nextStep).toHaveLength(0)
     expect(agent.session.events
@@ -997,6 +1089,8 @@ describe('Agent.cancel()', () => {
     ])
 
     expect(adapter.requests).toHaveLength(2)
+    expect(JSON.stringify(adapter.requests[1]?.messages)).toContain('answer this now')
+    expect(JSON.stringify(adapter.requests[1]?.messages)).toContain('resume the task that was in progress')
     expect(userTexts(agent)).toEqual(['start long tool', 'answer this now'])
     expect(agent.inbox.nextStep).toHaveLength(0)
     expect(agent.session.events

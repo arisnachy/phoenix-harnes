@@ -119,6 +119,24 @@ export function formatHabitGuidance(assessment: HabitAssessment): string {
   ].join(' ')
 }
 
+/**
+ * Reuse only the diagnostic signal from unverified prior episodes.
+ * @param state - Similar task experience with evidence-backed metrics.
+ * @returns Short warning, not a plan or permission to repeat failed actions.
+ */
+export function formatUnverifiedExperience(state: ExperienceAggregate): string {
+  const last = state.recentRuns.at(-1)
+  if (last?.verified !== false) return ''
+  const failedTools = [...new Set(state.recentRuns.flatMap(run => run.failedTools ?? []))].slice(-4)
+  return [
+    'Phoenix previously attempted a similar task without a verified successful outcome.',
+    `Prior attempts=${state.runs}, verified_successes=${state.verifiedSuccesses}, failures=${state.failures}.`,
+    ...(failedTools.length > 0 ? [`Tool operations that previously failed: ${failedTools.join(', ')}.`] : []),
+    'Do not blindly replay those steps; check current tools/site state once, reuse valid work, change the failed step, and require fresh quality evidence.',
+    'Prior failure is diagnostic context, NOT proof this task is complete.',
+  ].join(' ')
+}
+
 function detectDrift(runs: readonly ExperienceRunMetrics[]): boolean {
   if (runs.length < 4) return false
   const split = Math.floor(runs.length / 2)

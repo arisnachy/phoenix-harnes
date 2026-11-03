@@ -74,6 +74,34 @@ describe('automatic memory context', () => {
     })
   })
 
+  it('bounds repeated or oversized projections while leaving original records untouched', () => {
+    const original = 'A precise recoverable decision: ' + 'R'.repeat(3_500)
+    const entries = Array.from({ length: 7 }, (_, index) => ({
+      id: `memory-long-${index}` as never,
+      sessionId: 'one-session',
+      eventSeq: index,
+      kind: 'lesson' as const,
+      summary: index === 1 ? original : index === 0 ? original : `distinct-${index} ${'D'.repeat(3_500)}`,
+      sourceEventType: 'memory/explicit',
+      confidence: 0.95,
+      occurredAt: index + 1,
+      recordedAt: index + 1,
+      status: 'active' as const,
+    }))
+    const projected = formatRecentMemoryContext(entries)
+    const serialized = JSON.parse(projected.slice(projected.indexOf('{'), projected.lastIndexOf('}') + 1)) as {
+      memories: { summary: string }[]
+    }
+    expect(serialized.memories).toHaveLength(4)
+    expect(serialized.memories.map(row => row.summary)).toEqual([
+      original.slice(0, 480),
+      ...[2, 3, 4].map(index => `distinct-${index} ${'D'.repeat(3_500)}`.slice(0, 480)),
+    ])
+    expect(projected.length).toBeLessThan(3_000)
+    expect(entries[0]?.summary).toBe(original)
+    expect(entries[0]?.summary).toHaveLength(original.length)
+  })
+
   it('neutralizes prompt variable delimiters inside untrusted memory text', () => {
     const context = formatRecentMemoryContext([{
       id: 'memory-unsafe' as never,

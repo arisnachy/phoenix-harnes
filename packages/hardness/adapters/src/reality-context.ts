@@ -223,14 +223,13 @@ export function realityConfigFromEnvironment(env: NodeJS.ProcessEnv = process.en
     && longitude >= -180
     && longitude <= 180
   const configuredRefresh = finiteNumber(env.PHOENIX_REALITY_REFRESH_MS)
+  const accuracyMeters = positiveNumber(env.PHOENIX_REALITY_ACCURACY_METERS)
   return {
     refreshMs: configuredRefresh !== undefined && configuredRefresh >= 5_000
       ? Math.round(configuredRefresh)
       : 30_000,
     ...(validCoordinates ? { latitude, longitude } : {}),
-    ...(positiveNumber(env.PHOENIX_REALITY_ACCURACY_METERS) === undefined
-      ? {}
-      : { accuracyMeters: positiveNumber(env.PHOENIX_REALITY_ACCURACY_METERS)! }),
+    ...(accuracyMeters === undefined ? {} : { accuracyMeters }),
     ...(env.PHOENIX_REALITY_LOCATION_LABEL?.trim()
       ? { locationLabel: env.PHOENIX_REALITY_LOCATION_LABEL.trim() }
       : {}),
@@ -1165,7 +1164,7 @@ export class RealityContextEngine {
    * @param ctx - Cordis context exposing the optional runtime services.
    */
   async refreshRuntimeServices(ctx: Context): Promise<void> {
-    if (Date.now() <= this.runtimeServices.expiresAt) return
+    if (this.runtimeServices.source !== 'not-probed' && Date.now() <= this.runtimeServices.expiresAt) return
     if (this.runtimeRefreshJob !== undefined) return this.runtimeRefreshJob
     const job = this.performRuntimeRefresh(ctx).finally(() => {
       if (this.runtimeRefreshJob === job) this.runtimeRefreshJob = undefined

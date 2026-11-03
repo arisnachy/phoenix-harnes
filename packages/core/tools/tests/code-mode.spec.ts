@@ -3,7 +3,7 @@ import { Context } from '@phoenix-ai/cordis'
 import { createUserMessage, CallId  } from '@phoenix-ai/dsh-llm'
 import { createScope } from '@phoenix-ai/dsh-scope'
 import type { Scope } from '@phoenix-ai/dsh-scope'
-import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
+import SystemPrompt, { renderPrompt } from '@phoenix-ai/dsh-system-prompt'
 import { CodeRuntime } from '@phoenix-ai/dsh-code-runtime'
 import type { CodeRunRequest, CodeRunResult } from '@phoenix-ai/dsh-code-runtime'
 import ToolRuntime, { CodeRunFailedError, RUN_CODE_NAME, TOOL_ABORTED_BEFORE_DISPATCH, defineContentToolFixture, defineTool } from '@phoenix-ai/dsh-tools'
@@ -115,7 +115,150 @@ async function runCode(
   })
 }
 
+describe('token-efficient MCP schema admission', () => {
+  it.each(['native', 'both'] as const)(
+    'defers 17 MCP definitions in %s while preserving search and every executable capability',
+    async (mode) => {
+      const { ctx, systemPrompt, runtime } = await setup({ mode })
+      registerEcho(ctx, 'read')
+      const codeCalls = registerEcho(ctx, 'mcp__sample__action_0')
+      for (let index = 1; index < 17; index++) registerEcho(ctx, `mcp__sample__action_${index}`)
+      const { agent } = await mintAgentScope(ctx, 'token-efficient-mcp-' + mode)
+      const all = ctx.tools.schemas(agent)
+      expect(all.filter(tool => tool.name.startsWith('mcp__'))).toHaveLength(17)
+
+      const deferred = await systemPrompt.assemble({ scope: agent, agent })
+      expect(deferred.tools.map(tool => tool.name)).toContain('read')
+      expect(deferred.tools.map(tool => tool.name)).toContain('tool_search')
+      expect(deferred.tools.map(tool => tool.name)).not.toContain('mcp__sample__action_0')
+      if (mode === 'both') {
+        expect(deferred.tools.map(tool => tool.name)).toContain(RUN_CODE_NAME)
+        const sdk = deferred.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+        expect(sdk).toContain('tool_search:')
+        expect(sdk).not.toContain('mcp__sample__action_0:')
+      }
+      // Model-visible native schema bytes drop without deleting registry tools.
+      const fullChars = JSON.stringify(all).length
+      const deferredChars = JSON.stringify(deferred.tools).length
+      expect(deferredChars).toBeLessThan(fullChars / 2)
+      expect(ctx.tools.get('mcp__sample__action_0', agent)).toBeDefined()
+
+      const hidden = await ctx.tools.execute({
+        signal: testToolSignal, agent, callId: CallId('before-discovery'),
+        name: 'mcp__sample__action_0', arguments: { value: 'before' },
+      })
+      expect(hidden.isError).toBe(true)
+      if (mode === 'both') {
+        // The scoped fake agent needs the durable-session append expected by run_code.
+        Object.assign(agent, {
+          session: {
+            header: { cwd: '/workspace' },
+            append: (_type: string, _data: unknown) => undefined,
+          },
+        })
+        // run_code still sees and executes an undiscovered MCP through its
+        // nested transport: lazy native schemas never disable a skill.
+        runtime.behavior = async (request) => {
+          const nested = await request.bindings[0]!.functions.mcp__sample__action_0!({ value: 'from-code' })
+          return { logs: [], value: nested }
+        }
+        const coded = await runCode(ctx, 'program', { agent })
+        expect(coded.isError).toBe(false)
+        expect(codeCalls).toEqual([{ value: 'from-code' }])
+      }
+
+      const search = await ctx.tools.execute({
+        signal: testToolSignal, agent, callId: CallId('discover-mcp'),
+        name: 'tool_search', arguments: { names: ['mcp__sample__action_0'] },
+      })
+      expect(search.isError).toBe(false)
+      const admitted = await systemPrompt.assemble({ scope: agent, agent })
+      expect(admitted.tools.map(tool => tool.name)).toContain('mcp__sample__action_0')
+      const allowed = await ctx.tools.execute({
+        signal: testToolSignal, agent, callId: CallId('after-discovery'),
+        name: 'mcp__sample__action_0', arguments: { value: 'after' },
+      })
+      expect(allowed).toMatchObject({ isError: false, value: 'mcp__sample__action_0:after' })
+    },
+  )
+
+  it('keeps small Code Mode MCP SDK fully typed and defers large SDKs without dropping bindings', async () => {
+    const { ctx, systemPrompt, runtime } = await setup({ mode: 'code' })
+    registerEcho(ctx, 'read')
+    registerEcho(ctx, 'mcp__sample__action_0')
+    const { agent } = await mintAgentScope(ctx, 'coded-mcp-completeness')
+    const small = await systemPrompt.assemble({ scope: agent, agent })
+    expect(small.tools.map(tool => tool.name)).toEqual([RUN_CODE_NAME])
+    expect(small.sections.find(section => section.name === 'tools:sdk')?.text)
+      .toContain('mcp__sample__action_0:')
+
+    for (let index = 1; index < 24; index++) registerEcho(ctx, `mcp__sample__action_${index}`)
+    const eager = await systemPrompt.assemble()
+    const large = await systemPrompt.assemble({ scope: agent, agent })
+    const eagerSdk = eager.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+    const deferredSdk = large.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+    expect(large.tools.map(tool => tool.name)).toEqual([RUN_CODE_NAME])
+    expect(deferredSdk).toContain('tool_search:')
+    expect(deferredSdk).not.toContain('mcp__sample__action_23:')
+    expect(deferredSdk.length).toBeLessThan(eagerSdk.length / 2)
+    expect(ctx.tools.get('mcp__sample__action_23', agent)).toBeDefined()
+
+    // Code Mode bindings still enumerate registered tools, even when their
+    // verbose model-visible signatures have not been expanded yet.
+    Object.assign(agent, {
+      session: { header: { cwd: '/workspace' }, append: (_type: string, _data: unknown) => undefined },
+    })
+    runtime.behavior = async (request) => {
+      const bindings = request.bindings[0]!.functions
+      const hidden = await bindings.mcp__sample__action_23!({ value: 'allowed' })
+      const found = await bindings.tool_search!({ names: ['mcp__sample__action_23'] })
+      return { logs: [], value: { hidden, found } }
+    }
+    const executed = await runCode(ctx, 'program', { agent })
+    expect(executed.isError).toBe(false)
+    const selected = await systemPrompt.assemble({ scope: agent, agent })
+    expect(selected.sections.find(section => section.name === 'tools:sdk')?.text)
+      .toContain('mcp__sample__action_23:')
+  })
+})
+
 describe('mode-aware wire contribution', () => {
+  it.each(['native', 'code'] as const)('keeps project and publication tools for illustrated deliverables in %s', async (mode) => {
+    const { ctx, systemPrompt } = await setup({ mode })
+    for (const name of ['image_generation', 'read', 'pwsh', 'phoenix_comic', 'phoenix_scene_map', 'phoenix_geo_map']) registerEcho(ctx, name)
+    const { agent } = await mintAgentScope(ctx, 'illustrated-deliverables-' + mode)
+    for (const text of [
+      'Continúa el cómic interrumpido. Recupera el proyecto, conserva las ilustraciones aprobadas y genera únicamente las faltantes. Entrega el PDF y el cómic en el chat.',
+      'Genera un mapa interactivo de la isla con ilustraciones y publícalo en el chat.',
+      'Create a comic with generated images and publish the finished PDF.',
+    ]) {
+      emitAgentEvent(ctx, agent, 'agent/inbox/claimed', {
+        message: createUserMessage({ content: [{ type: 'text', text: 'Generate an image.' }], source: { kind: 'user' } }), turn: 1,
+      })
+      emitAgentEvent(ctx, agent, 'agent/inbox/claimed', {
+        message: createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }), turn: 1,
+      })
+      const assembled = await systemPrompt.assemble({ scope: agent, agent })
+      const catalog = mode === 'code'
+        ? assembled.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+        : assembled.tools.map(tool => tool.name).join(' ')
+      for (const name of ['image_generation', 'read', 'pwsh', 'phoenix_comic', 'phoenix_scene_map', 'phoenix_geo_map']) expect(catalog).toContain(name)
+    }
+  })
+
+  it('restores publication tools after a successful native image attempt', async () => {
+    const { ctx, systemPrompt } = await setup({ mode: 'native', runtime: false })
+    registerEcho(ctx, 'image_generation')
+    registerEcho(ctx, 'phoenix_comic')
+    const { agent } = await mintAgentScope(ctx, 'image-success-publish')
+    emitAgentEvent(ctx, agent, 'agent/inbox/claimed', {
+      message: createUserMessage({ content: [{ type: 'text', text: 'Generate an illustration.' }], source: { kind: 'user' } }), turn: 1,
+    })
+    await ctx.tools.execute({ signal: testToolSignal, callId: CallId('successful-image'), name: 'image_generation', arguments: { value: 'art' }, agent })
+    const assembled = await systemPrompt.assemble({ scope: agent, agent })
+    expect(assembled.tools.map(tool => tool.name)).toContain('phoenix_comic')
+  })
+
   it('forces the native image tool ahead of Higgsfield for an explicit image request, then restores the catalog after the attempt', async () => {
     const { ctx, systemPrompt } = await setup({ mode: 'native', runtime: false })
     ctx.tools.register(defineTool({
@@ -218,6 +361,25 @@ describe('mode-aware wire contribution', () => {
     expect(sdk?.text).toContain('declare const tools: {')
     expect(sdk?.text).toContain('echo: {')
     expect(sdk?.text).not.toContain('run_code:')
+  })
+
+  it.each(['code', 'both'] as const)('renders literal SDK examples under %s without OpenRouter-style variable failures', async (mode) => {
+    const { ctx, systemPrompt } = await setup({ mode })
+    ctx.tools.register(defineTool({
+      name: 'templated_tool',
+      description: 'Literal template example {{name}} in tool documentation.',
+      parameters: { value: { type: 'string', required: true, description: 'Use {{name}} literally' } },
+      output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
+      execute(args) { return Promise.resolve(args.value) },
+    }))
+    systemPrompt.variable('provider', () => 'openrouter')
+    systemPrompt.variable('model', () => 'openrouter/example')
+    systemPrompt.variable('cwd', () => '/workspace')
+    const assembly = await systemPrompt.assemble()
+    expect(assembly.sections.find(section => section.name === 'tools:sdk')?.interpolateVariables).toBe(false)
+    const rendered = renderPrompt(assembly)
+    expect(rendered).toContain('Literal template example {{name}}')
+    expect(rendered).toContain('Use {{name}} literally')
   })
 
   it("mode 'code' states the run_code-only rule BEFORE the per-tool guidance that names each tool", async () => {
@@ -881,6 +1043,55 @@ describe('the sub-dispatch scheduler (native concurrency contract)', () => {
 })
 
 describe('the run_code dispatch bridge', () => {
+  it('persists explicitly opted-in nested map artifacts without exposing them to the program', async () => {
+    const { ctx, runtime } = await setup({ mode: 'code' })
+    ctx.tools.register(defineTool({
+      name: 'fiction_map_fixture',
+      description: 'Emit one synthetic map for a transport regression test.',
+      parameters: {},
+      output: {
+        schema: { type: 'string' },
+        nestedPresentationMeta: true,
+        render: (_args, value) => [{ type: 'text', text: value }],
+        presentationMeta: (_args, value) => ({
+          artifact: { id: 'fiction-map-1', mime: 'application/vnd.phoenix.scene-map+json',
+            title: value, executable: false, data: { component: 'scene_map', version: 1, props: { id: 'test' } } },
+        }),
+      },
+      execute: () => Promise.resolve('Isla de prueba'),
+    }))
+    ctx.tools.register(defineTool({
+      name: 'private_fixture',
+      description: 'Tool with a private root-only projection.',
+      parameters: {},
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
+        presentationMeta: () => ({ secret: 'must never be forwarded for nested calls' }),
+      },
+      execute: () => Promise.resolve('ordinary'),
+    }))
+    const { agent, events } = fakeAgent()
+    runtime.behavior = async (request) => {
+      const tool = request.bindings[0]!.functions
+      const published = await tool.fiction_map_fixture!({})
+      await tool.private_fixture!({})
+      return { logs: [], value: published }
+    }
+    const result = await runCode(ctx, 'await tools.fiction_map_fixture({})', { agent })
+    expect(result.isError).toBe(false)
+    expect(result.meta).toBeUndefined()
+    const dispatches = events.filter(event => event.type === 'tool/code-dispatch').map(event => event.data as {
+      name: string
+      meta?: { artifact?: { id: string; mime: string } }
+    })
+    expect(dispatches).toHaveLength(2)
+    expect(dispatches[0]?.meta?.artifact).toMatchObject({
+      id: 'fiction-map-1', mime: 'application/vnd.phoenix.scene-map+json',
+    })
+    expect(dispatches[1]?.meta).toBeUndefined()
+  })
+
   it('bridges tool calls, returns only the curated output, and logs one event per dispatch', async () => {
     const { ctx, runtime } = await setup({ mode: 'code' })
     const calls = registerEcho(ctx)

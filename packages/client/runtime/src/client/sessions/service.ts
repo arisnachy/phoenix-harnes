@@ -321,7 +321,15 @@ export class SessionRuntime implements ISessions {
    * @param id - listed or addressed session id.
    */
   open(id: SessionId): void {
+    // Selecting an already-staged session must also recover a failed history
+    // request. The stage follower intentionally skips unchanged ids, so simply
+    // selecting the same sidebar row previously left the chat on its error view.
+    const staged = this.watched === id
     this.manager.select(id)
+    if (staged) {
+      const session = this.scopes.get(id)?.session
+      if (session?.getSnapshot().openState === 'error') void session.open()
+    }
   }
 
   /**

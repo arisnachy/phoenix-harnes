@@ -25,6 +25,13 @@
   container-type: inline-size;
 }
 
+/* Keep long embedded questionnaires and sheets scrollable above the sticky
+   chat composer, including when the outer conversation owns scrolling. */
+.scroll:has([data-artifact-kind='html']) {
+  scroll-padding-block-end: calc(var(--dsh-composer-height, 152px) + 24px);
+  padding-bottom: calc(var(--dsh-composer-height, 152px) + 24px);
+}
+
 :global([data-conversation-scroll]) .root {
   flex: 0 0 auto;
   min-height: auto;
@@ -62,6 +69,57 @@
    An empty flex item must not consume the column gap. */
 .flowItem:empty {
   display: none;
+}
+
+/* Apply the agent-card treatment to Kira's actual narration only. Empty
+   reasoning/tool-only steps keep the existing compact transcript layout. */
+.flowItem[data-chat-flow-kind='assistant-step']:has(> [data-team-author='kira'] + [data-assistant-body]) {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 76%, transparent);
+  border-radius: 20px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 6%, transparent);
+}
+
+.flowItem[data-chat-flow-kind='assistant-step']:has(> [data-team-author='kira'] + [data-assistant-body]) > [data-team-author='kira'] {
+  min-height: 59px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 18px 12px 40px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 68%, transparent);
+  border-radius: 20px 20px 0 0;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 36%, var(--dsw-alias-bg-layer-1));
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.flowItem[data-chat-flow-kind='assistant-step']:has(> [data-team-author='kira'] + [data-assistant-body]) > [data-team-author='kira'] > :first-child {
+  position: relative;
+  z-index: 1;
+  margin-left: -65px;
+  margin-right: 7px;
+}
+
+.flowItem[data-chat-flow-kind='assistant-step'] > [data-assistant-body] {
+  padding: 18px 22px 20px;
+}
+
+@media (max-width: 620px) {
+  .flowItem[data-chat-flow-kind='assistant-step']:has(> [data-team-author='kira'] + [data-assistant-body]) > [data-team-author='kira'] {
+    min-height: 51px;
+    padding: 10px 12px 10px 32px;
+  }
+
+  .flowItem[data-chat-flow-kind='assistant-step']:has(> [data-team-author='kira'] + [data-assistant-body]) > [data-team-author='kira'] > :first-child {
+    margin-left: -53px;
+  }
+
+  .flowItem[data-chat-flow-kind='assistant-step'] > [data-assistant-body] {
+    padding: 13px 15px 15px;
+  }
 }
 
 .callRow {
@@ -424,4 +482,129 @@
 /* Host open-path refusal: same dialog family as the workspace folder error. */
 .modalAction {
   min-width: 72px;
+}
+
+/* Phoenix Light: match approved warm orange activity indicator (real runtime
+   state only; no fake timers, fake thinking messages, or extra agent turns). */
+.turnStatus {
+  height: 38px;
+  align-items: center;
+  gap: 12px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 16px;
+  font-weight: 500;
+}
+.turnStatusText {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+  font-size: 16px;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  animation: none;
+}
+.turnStatusBrand {
+  margin-right: 0;
+  color: #ea5b22;
+  font-weight: 650;
+  -webkit-text-fill-color: #ea5b22;
+}
+.phoenixActivity {
+  width: 44px;
+  height: 44px;
+}
+.phoenixActivity > img {
+  width: 34px;
+  height: 34px;
+  filter: brightness(0) saturate(100%) invert(47%) sepia(92%) saturate(2370%)
+    hue-rotate(347deg) brightness(100%) contrast(95%) drop-shadow(0 1px 2px rgba(222, 102, 33, .18));
+}
+.phoenixActivity::before {
+  inset: 2px;
+  background: conic-gradient(from 15deg, transparent 0deg, #e96125 77deg,
+    #f8b24d 150deg, #f6d69a 230deg, #e96125 304deg, transparent 360deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+}
+.phoenixActivity::after {
+  inset: 7px;
+  background: radial-gradient(circle, rgba(250, 192, 130, .3), transparent 80%);
+  opacity: .5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .phoenixActivity::before, .phoenixActivity::after {
+    animation: none;
+  }
+}
+
+/* Reference preparation state: no invented activity. Only the first real
+   pending response receives this calm centered, warm-orange identity. */
+.turnStatus[data-centered='true'] {
+  align-self: center;
+  justify-content: center;
+  margin: clamp(60px, 9vh, 110px) auto 16px;
+  max-width: min(100%, 700px);
+  min-height: 48px;
+  height: auto;
+  gap: 12px;
+  color: var(--dsw-alias-label-primary);
+}
+.turnStatus[data-centered='true'] .turnStatusText {
+  font-size: clamp(15px, 1.4vw, 18px);
+  line-height: 1.45;
+  font-weight: 500;
+}
+.turnStatus[data-centered='true'] .phoenixActivity {
+  width: 46px;
+  height: 46px;
+}
+.turnStatus[data-centered='true'] .phoenixActivity > img {
+  width: 39px;
+  height: 39px;
+}
+@media (max-width: 720px) {
+  .turnStatus[data-centered='true'] {
+    margin-top: clamp(36px, 7vh, 64px);
+    white-space: normal;
+    text-align: center;
+  }
+  .turnStatus[data-centered='true'] .turnStatusText { white-space: normal; }
+}
+
+/* A live browser uses the otherwise unused side gutters. Ordinary chat
+   messages keep their familiar centered measure before/after the activity. */
+.column:has(> [data-browser-workspace]) {
+  max-width: min(1560px, calc(100vw - 114px));
+  transform: none;
+}
+.column:has(> [data-browser-workspace]) > :not([data-browser-workspace]) {
+  width: min(100%, var(--dsh-chat-content-width));
+  margin-inline: auto;
+}
+@media (max-width: 850px) {
+  .column:has(> [data-browser-workspace]) { max-width: 100%; }
+}
+
+/* Kira's user-facing updates and specialist turns share a quiet visual rhythm. */
+.flowItem[data-chat-flow-kind='assistant-step']:has(> [data-team-author='kira'] + [data-assistant-body]) {
+  border-radius: 17px;
+  border-color: color-mix(in srgb, var(--dsw-alias-border-l2) 61%, transparent);
+  box-shadow: none;
+}
+.flowItem[data-chat-flow-kind='assistant-step']:has(> [data-team-author='kira'] + [data-assistant-body]) > [data-team-author='kira'] {
+  min-height: 45px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  border-radius: 17px 17px 0 0;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 22%, var(--dsw-alias-bg-layer-1));
+}
+.flowItem[data-chat-flow-kind='assistant-step'] > [data-assistant-body] {
+  padding-top: 12px;
+  padding-bottom: 14px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+@media (max-width: 620px) {
+  .flowItem[data-chat-flow-kind='assistant-step'] > [data-assistant-body] {
+    padding: 11px 12px 13px;
+  }
 }

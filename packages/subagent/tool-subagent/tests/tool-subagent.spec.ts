@@ -7,7 +7,7 @@ import Loader from '@phoenix-ai/cordis-plugin-loader'
 import { CallId } from '@phoenix-ai/dsh-llm'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime, { TOOL_ABORTED_BEFORE_DISPATCH } from '@phoenix-ai/dsh-tools'
-import { assembleContextFor, type Agent } from '@phoenix-ai/dsh-agent'
+import { assembleContextFor, persistModelSelectionPreference, type Agent } from '@phoenix-ai/dsh-agent'
 import AgentRegistry from '@phoenix-ai/dsh-agent'
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@phoenix-ai/dsh-agent-loop-testkit'
@@ -20,7 +20,7 @@ import * as ToolTasks from '@phoenix-ai/dsh-tool-jobs'
 import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import * as mock from './scripted-provider.ts'
 import * as tool from '../src/index.ts'
-import { SessionId } from '@phoenix-ai/dsh-session'
+import { Session, SessionId } from '@phoenix-ai/dsh-session'
 
 const testToolSignal = new AbortController().signal
 
@@ -263,53 +263,48 @@ describe('dsh-tool-subagent', () => {
     expect(retry.isError).toBe(false)
   })
 
-  it('shares the 1 -> 2 -> 3 escalation budget across different parent sessions', async () => {
+  it('isolates the escalation budget per parent session', async () => {
     const gate = Promise.withResolvers<void>()
     const started: string[] = []
     const ctx = await setup({ provider: 'mock', enableRunInBackground: false }, {
       onStart: (request: SubagentStartRequest) => {
-        const label = request.label ?? '(unlabeled)'
-        started.push(label)
-        // Calls labelled blocked would only reach the provider if the global
-        // guard regressed; let them settle immediately so the test fails fast.
-        return label.includes('blocked') ? Promise.resolve() : gate.promise
+        started.push(request.label ?? '(unlabeled)')
+        return gate.promise
       },
     })
+
+    const firstParent = fakeAgent('parent-a')
+    const secondParent = fakeAgent('parent-b')
 
     const first = callSubagent(
       ctx,
       { description: 'first parent', prompt: 'p1' },
-      { agent: fakeAgent('parent-a') },
+      { agent: firstParent },
     )
     await vi.waitFor(() => { expect(started).toEqual(['first parent']) })
 
-    const secondBlocked = await callSubagent(
+    // A child running for another conversation must not consume this parent's
+    // first slot or force hard_parallelism on an unrelated task.
+    const independentFirst = callSubagent(
       ctx,
-      { description: 'second blocked', prompt: 'p2' },
-      { agent: fakeAgent('parent-b') },
+      { description: 'independent first', prompt: 'p2' },
+      { agent: secondParent },
     )
-    expect(secondBlocked.isError).toBe(true)
-    expect(text(secondBlocked)).toContain('1 subagente es la norma')
-    expect(started).toEqual(['first parent'])
+    await vi.waitFor(() => {
+      expect(started).toEqual(['first parent', 'independent first'])
+    })
 
-    const second = callSubagent(
+    const secondSameParentBlocked = await callSubagent(
       ctx,
-      { description: 'second hard', prompt: 'p2', hard_parallelism: true },
-      { agent: fakeAgent('parent-b') },
+      { description: 'second same parent blocked', prompt: 'p3' },
+      { agent: secondParent },
     )
-    await vi.waitFor(() => { expect(started).toEqual(['first parent', 'second hard']) })
-
-    const thirdBlocked = await callSubagent(
-      ctx,
-      { description: 'third blocked', prompt: 'p3', hard_parallelism: true },
-      { agent: fakeAgent('parent-c') },
-    )
-    expect(thirdBlocked.isError).toBe(true)
-    expect(text(thirdBlocked)).toContain('Un tercero solo se admite en casos extremos')
-    expect(started).toEqual(['first parent', 'second hard'])
+    expect(secondSameParentBlocked.isError).toBe(true)
+    expect(text(secondSameParentBlocked)).toContain('1 subagente es la norma')
+    expect(started).toEqual(['first parent', 'independent first'])
 
     gate.resolve()
-    const accepted = await Promise.all([first, second])
+    const accepted = await Promise.all([first, independentFirst])
     expect(accepted.every(result => !result.isError)).toBe(true)
   })
 
@@ -459,6 +454,31 @@ describe('dsh-tool-subagent', () => {
       const otherParent = { ...fakeAgent('other-parent'), options: { provider: 'openrouter', model: 'ox-alpha' } } as Agent
       await callSubagent(ctx, { description: 'd', prompt: 'p' }, { agent: otherParent })
       expect(seen?.agentOptions).toBeUndefined()
+
+      // The visible selector can change after the Lead was created. Codex now
+      // gets Luna even if its stale Agent.options still says OpenRouter.
+      const switchedSession = Session.create(SessionId('switched-selector'))
+      persistModelSelectionPreference(switchedSession, {
+        provider: 'openai-codex', model: 'gpt-6.1-sol',
+      }, 'explicit')
+      const switchedParent = { ...fakeAgent('switched-parent'), session: switchedSession,
+        options: { provider: 'openrouter', model: 'old-provider' } } as Agent
+      await callSubagent(ctx, { description: 'd', prompt: 'p' }, { agent: switchedParent })
+      expect(seen?.agentOptions).toEqual({
+        provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: 'high',
+      })
+
+      // Conversely, switching away from Codex must not force Codex workers.
+      const awaySession = Session.create(SessionId('switched-away'))
+      persistModelSelectionPreference(awaySession, {
+        provider: 'openrouter', model: 'new-external-model',
+      }, 'explicit')
+      const awayParent = { ...fakeAgent('switched-away'), session: awaySession,
+        options: { provider: 'openai-codex', model: 'gpt-6.1-sol' } } as Agent
+      await callSubagent(ctx, { description: 'd', prompt: 'p' }, { agent: awayParent })
+      expect(seen?.agentOptions).toEqual({
+        provider: 'openrouter', model: 'new-external-model',
+      })
     },
   )
 

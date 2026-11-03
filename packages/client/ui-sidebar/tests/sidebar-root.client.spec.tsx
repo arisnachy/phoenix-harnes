@@ -82,6 +82,34 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
 }
 
 describe('SidebarRoot shell', () => {
+  it('routes primary navigation to focused action surfaces instead of Settings navigation', () => {
+    const b = mountShell()
+    const features: Array<{ destination: string; label: string }> = []
+    let libraries = 0
+    const onFeature = (event: Event) => {
+      features.push((event as CustomEvent<{ destination: string; label: string }>).detail)
+    }
+    const onLibrary = () => { libraries++ }
+    window.addEventListener('phoenix:open-feature', onFeature)
+    window.addEventListener('phoenix:open-workspace-library', onLibrary)
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+      expect(b.startSession).toHaveBeenCalledOnce()
+      fireEvent.click(screen.getByRole('button', { name: 'Scheduled tasks' }))
+      expect(screen.getByRole('dialog', { name: 'Tareas programadas' })).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Cerrar tareas programadas' }))
+      expect(screen.queryByRole('dialog', { name: 'Tareas programadas' })).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Connectors' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Team' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Library' }))
+      expect(features).toEqual([{ destination: 'connectors', label: 'Connectors' }])
+      expect(libraries).toBe(1)
+    } finally {
+      window.removeEventListener('phoenix:open-feature', onFeature)
+      window.removeEventListener('phoenix:open-workspace-library', onLibrary)
+    }
+  })
+
   it('routes New Session (capsule + wordmark) and the column toggle', () => {
     const b = mountShell()
     expect(screen.getByTestId('custom-brand-mark')).toBeTruthy()
@@ -111,24 +139,16 @@ describe('SidebarRoot shell', () => {
     expect(container.querySelector('svg')).not.toBeNull()
   })
 
-  it('uses the refined spaced PHOENIX wordmark styling in the sidebar', () => {
+  it('uses the warm premium sidebar geometry and maintains the accessible collapse control', () => {
     const css = readFileSync(resolve(process.cwd(), 'packages/client/ui-sidebar/src/client/SidebarRoot.module.css'), 'utf8')
-    const brandName = css.match(/\.brandName\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''
-
-    expect(brandName).toContain("font-family: 'Avenir Next', Inter")
-    expect(brandName).toContain('font-size: 20px')
-    expect(brandName).toContain('font-weight: 600')
-    expect(brandName).toContain('letter-spacing: 0.18em')
-    expect(brandName).toContain('border-left: 1px solid var(--dsw-alias-border-l2)')
-    expect(brandName).toContain('white-space: nowrap')
-
-    const brandMark = css.match(/\.brandMark img\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''
-    expect(brandMark).toContain('width: 42px')
-    expect(brandMark).toContain('height: 42px')
-
-    const officialBrandName = css.match(/\.brandName\s*>\s*\[role=['"]img['"]\]\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''
-    expect(officialBrandName).toContain('letter-spacing: 0.18em !important')
-    expect(officialBrandName).toContain('font-size: inherit !important')
+    expect(css).toContain('--phoenix-side-ember: #e76020')
+    expect(css).toContain('border-radius: 0 22px 22px 0')
+    expect(css).toContain('background: var(--phoenix-side-ember)')
+    expect(css).toContain('.root:not(.collapsed) .navLink:first-child')
+    expect(css).toContain('.root:not(.collapsed) .footerActions:not(:empty)')
+    expect(css).toContain('.root:not(.collapsed) .regionArea')
+    mountShell()
+    expect(screen.getByRole('button', { name: 'Collapse sidebar' })).toBeTruthy()
   })
 
   it('hands the region its wide flag and clamps expandSidebar to the collapsed state', () => {
@@ -142,19 +162,43 @@ describe('SidebarRoot shell', () => {
     expect(b.toggleSidebar).not.toHaveBeenCalled()
   })
 
-  it('keeps the region mounted through collapse and expands on its request', () => {
-    vi.useFakeTimers()
+  it('switches immediately to the rail and restores expanded controls on demand', () => {
     const b = mountShell()
     b.rerender({ collapsed: true })
-    // Wide content survives the crossfade window, then settles into the rail.
-    expect(b.regionOwner().wide).toBe(true)
-    vi.advanceTimersByTime(200)
-    b.rerender({})
     expect(b.regionOwner().wide).toBe(false)
     expect(b.footerActionOwner().wide).toBe(false)
-    expect(screen.getByTestId('region')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open sidebar' })).toBeTruthy()
     b.regionOwner().expandSidebar()
     expect(b.toggleSidebar).toHaveBeenCalledOnce()
+    b.rerender({ collapsed: false })
+    expect(b.regionOwner().wide).toBe(true)
+    expect(b.footerActionOwner().wide).toBe(true)
+    expect(screen.getByRole('button', { name: 'Collapse sidebar' })).toBeTruthy()
+  })
+
+  it('keeps original navigation actions available while the sidebar is closed', () => {
+    const b = mountShell({ collapsed: true, width: 104 })
+    const received: string[] = []
+    const onFeature = (e: Event) => { received.push((e as CustomEvent<{ destination: string }>).detail.destination) }
+    const onLibrary = () => { received.push('library') }
+    const onTeam = () => { received.push('team') }
+    window.addEventListener('phoenix:open-feature', onFeature)
+    window.addEventListener('phoenix:open-workspace-library', onLibrary)
+    window.addEventListener('phoenix:toggle-team-directory', onTeam)
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Discover' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Connectors' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Team' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Library' }))
+      expect(b.startSession).toHaveBeenCalledOnce()
+      expect(received).toEqual(['connectors', 'team', 'library'])
+      expect(screen.queryByText('Scheduled tasks')).toBeNull()
+    } finally {
+      window.removeEventListener('phoenix:open-feature', onFeature)
+      window.removeEventListener('phoenix:open-workspace-library', onLibrary)
+      window.removeEventListener('phoenix:toggle-team-directory', onTeam)
+    }
   })
 
   it('renders statically collapsed on a cold start (no crossfade classes)', () => {

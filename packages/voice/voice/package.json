@@ -52,7 +52,8 @@
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
-    "@phoenix-ai/dsh-typert-protocol": "workspace:^"
+    "@phoenix-ai/dsh-typert-protocol": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^"
   },
   "dependencies": {
     "@phoenix-ai/schemastery": "workspace:^",
@@ -62,6 +63,7 @@
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
-    "@phoenix-ai/dsh-typert-protocol": "workspace:^"
+    "@phoenix-ai/dsh-typert-protocol": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^"
   }
 }

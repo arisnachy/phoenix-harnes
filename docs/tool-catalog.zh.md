@@ -32,6 +32,7 @@
 | `@phoenix-ai/dsh-tool-fs-search` | `glob`、`grep` | `ctx.tools`、`ctx.subprocess`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | glob 和 grep 是无条件可用的发现工具，通过 ctx.subprocess spawn 随包提供的 ripgrep 二进制文件（`@vscode/ripgrep`），并作为普通前台调用运行，绝不作为后台任务；无需在宿主机安装 `rg`，也不经过 shell 层。本目录使用 `sampleOverCapGlobResults: true`；部署必须显式选择该行为。结果超过上限时，会通过可选的 ctx.spillStore 后端保存完整的格式化列表；在共置部署中，如果后端公开本地路径，返回的定位信息可供后续读取／搜索。 |
 | `@phoenix-ai/dsh-tool-terminal` | `terminal_close`、`terminal_list`、`terminal_open`、`terminal_read`、`terminal_send`、`terminal_signal` | `ctx.tools`、`ctx.terminals`、`ctx.systemPrompt`、`ctx.jobs at call time for run_in_background` | `tool/call`、`tool/result` | - | 这 6 个终端工具需要选择启用，用于补充一次性 bash／文件系统工具。`terminal_send(run_in_background: true)` 会注册到 `ctx.jobs`；schema 不包含 TUI、具名按键序列、BEL、调整尺寸、自动启动和跨 agent 共享。 |
 | `@phoenix-ai/dsh-tool-goal` | `create_goal`、`get_goal`、`specialist_lab`、`update_goal` | `ctx.tools`、`ctx.agents`、`ctx.goals`、`ctx.systemPrompt`、`a calling Agent in an authorized open turn` | `tool/call`、`goal/change for mutations`、`tool/result` | - | create、edit、pause 和 resume 要求直接来自人类的根权限；complete 和 blocked 也接受确切的当前 Goal Round。blocked 的默认下限是 3 个获准的 Round。 |
+| `@phoenix-ai/dsh-tool-google-workspace` | `gmail_read`, `gmail_search`, `gmail_send`, `google_calendar_create_event`, `google_calendar_list_events`, `google_drive_search`, `google_workspace_request` | `ctx.tools`, `ctx.googleApi` | `tool/call`, `bounded Google Workspace request through the host OAuth broker`, `tool/result` | - | schema 提取提供不联网的 googleApi seam。实时调用始终在 Host 拥有的 OAuth broker 内执行：它固定 Google 服务根地址和 scope，仅在 fetch 时注入 Bearer token，绝不向面向模型的工具包暴露 OAuth 材料。 |
 | `@phoenix-ai/dsh-tool-home-gateway` | `home_control`、`home_list_devices` | `ctx.tools`、`ctx.home`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`Home Assistant request at execution time` | - | schema harvest 使用私有 fake endpoint，绝不发起请求。Live 部署在操作员提供私有 endpoint、token 变量和两个 allowlist 前保持禁用。 |
 | `@phoenix-ai/dsh-schedule` | `schedule_create`、`schedule_delete`、`schedule_list` | `ctx.tools`、`ctx.sessions`、Session 持久化、未来创建的 live 根 Agent | `tool/call`、`schedule/change create or delete`、`tool/result` | - | 仅在选择启用的 Schedule 插件加载后创建的 live 根 Agent scope 内注册。版本 1 接受 after_seconds、显式绝对 at 和有界固定速率 every_seconds，并披露 session-local 交付；管理读取与变更必须通过共享的 Session 持久化 barrier。 |
 | `@phoenix-ai/dsh-tool-living` | `living_act`、`living_forget_creation`、`living_get_connector_kit`、`living_inspect_creation`、`living_list_creations`、`living_read_state`、`living_register_creation`、`living_verify_creation` | `ctx.tools`、`ctx.living`、`ctx.systemPrompt` | `tool/call`、`durable living creation manifest`、`live creation state/actions/events through ctx.living`、`tool/result` | - | 通用、领域无关的控制表面：任意未来创建物类型自行描述状态、动作、事件、资源、参与者及目标集成级别；低于目标级别时验证会拒绝交付。 |
@@ -44,7 +45,7 @@
 | `@phoenix-ai/dsh-tool-subagent-control` | `interrupt_agent`、`list_agents`、`send_message` | `ctx.tools`、`ctx.subagents`、`ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`、`tool/result`、`child session events through ctx.subagents` | - | 这些是控制可继续后台 subagent 的全局命名工具：绑定提供方的 `tool-subagent` 实例注册不同的委派工具；本包注册一次 `send_message` 和 `interrupt_agent`，另由 `list_agents` 通过单独加载的 `/list-agents` 插件提供，其目录行使用 sessionProjections 和实时 Agent 注册表。 |
 | `@phoenix-ai/dsh-tool-subagent-report` | `report` | `ctx.subagents`、`ctx.systemPrompt`、`a live continuable in-process child Agent` | `tool/call`、`tool/result`、`a user-role message in the direct parent session` | - | 按可继续的进程内子级注册，而非全局注册，因此该 schema 仅在这种子级内部可见，并且不受其全局 `toolFilter` 影响。同一份贡献还会安装子级作用域的 `tool:report` 系统提示词 section，本目录不渲染该 section。面向父级的 `send_message` 工具单独安装。 |
 | `@phoenix-ai/dsh-tool-jobs` | `job_kill`、`job_list`、`job_output` | `ctx.tools`、`ctx.jobs`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`user/message via agent.inject() for background completion notices` | - | 与任务种类无关的后台任务控制器：后台 bash 命令、PTY 发送和 subagent 都通过相同的 3 个工具读取、列出和终止。加载该插件会挂接控制器，从而启用生产方的 `ctx.jobs.start()`。 |
-| `@phoenix-ai/dsh-experimental-tool-agent-team` | `followup_task`、`interrupt_agent`、`list_agents`、`send_message`、`spawn_teammate`、`team_task_create`、`team_task_get`、`team_task_list`、`team_task_update`、`wait_agent` | `ctx.tools`、`ctx.systemPrompt`、`ctx.agentTeams`、`an exact live Team member Agent` | `tool/call`、`team/member`、`team/message/queued`、`team/message/delivered`、`team/task`、`tool/result` | - | 这 10 个工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。 |
+| `@phoenix-ai/dsh-tool-agent-team` | `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_chat_answer`, `team_chat_react`, `team_chat_read`, `team_react`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`、`ctx.systemPrompt`、`ctx.agentTeams`、`an exact live Team member Agent` | `tool/call`、`team/member`、`team/message/queued`、`team/message/delivered`、`team/task`、`tool/result` | - | Team 工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。 |
 | `@phoenix-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`、`owning Agent session` | `tool/call`、`todo/write`、`tool/result` | - | todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。 |
 | `@phoenix-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
 | `@phoenix-ai/dsh-tool-web` | `web_fetch`、`web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
@@ -55,7 +56,7 @@
 
 ### `ask_user_question`
 
-继续操作前，如果需要确认、选择或缺失的信息，请向用户提出简明问题。发送一个或多个问题，每个问题都带一个稳定 id，该 id 会在答案中原样返回。如果用户在一分钟内没有回答，Phoenix 会采用最安全的推荐选项；请使用 `recommended=true` 标记该选项。
+继续操作前，如果需要确认、选择或缺失的信息，请向用户提出简明问题。发送一个或多个问题，每个问题都带一个稳定 id，该 id 会在答案中原样返回。如果用户在一分钟内没有回答，Phoenix 会采用最安全的推荐选项；请使用 `recommended=true` 标记该选项。 对症状、病史、用药、医疗授权、财务或其他敏感问题设置 `sensitive=true`，超时只返回空答案，不能猜测事实或同意。
 
 ```json
 {
@@ -104,6 +105,10 @@
                 "label"
               ]
             }
+          },
+          "sensitive": {
+            "type": "boolean",
+            "description": "Mark sensitive clinical, identity, consent, or other personal questions. On expiration, no option is selected; do not treat an automatic answer as a patient statement."
           },
           "multi_select": {
             "type": "boolean",
@@ -280,7 +285,7 @@ pwsh 工具是 Windows 组合中 bash 执行器 seam 的 PowerShell 方言消费
 
 ### `cordis_define`
 
-定义一个不可变的 Cordis Package。新建 Plugin 时使用 kind:"new"，只提供 3 至 6 位小写英文字母组成的语义前缀；Host 返回最终 pluginId 和 packageId。修改现有 Plugin 时使用 kind:"existing" 并传入精确 pluginId，以追加 Package 而不覆盖旧版本。code.host 与 code.client 至少提供一个；每个值都是返回 Cordis Plugin 的 plain JavaScript 函数体，不经过 TypeScript、JSX 或 import 转换。依赖 Service、Event、Builtin、Slot 或 token 前先查询 Inspect。Define 只校验参数和语法并记录源码，不申请审批、不执行 apply，也不改变 currentPackageId。成功后用返回的 ID 调用 cordis_run。
+定义一个不可变的 Cordis Package。新建 Plugin 时使用 kind:"new"，只提供 3 至 6 位小写英文字母组成的语义前缀；Host 返回最终 pluginId 和 packageId。修改现有 Plugin 时使用 kind:"existing" 并传入精确 pluginId，以追加 Package 而不覆盖旧版本。code.host 与 code.client 至少提供一个；每个值都是返回 Cordis Plugin 的 plain JavaScript 函数体，不经过 TypeScript、JSX 或 import 转换。依赖 Service、Event、Builtin、Slot 或 token 前先查询 Inspect。Define 只校验参数和语法并记录源码，不执行 apply，也不改变 currentPackageId。通过 Phoenix 此工具编写的 Package 会在内部预授权，因此 cordis_run 不应再次要求用户批准。成功后用返回的 ID 调用 cordis_run。
 
 ```json
 {
@@ -435,7 +440,7 @@ pwsh 工具是 Windows 组合中 bash 执行器 seam 的 PowerShell 方言消费
 
 ### `cordis_run`
 
-激活动态 Plugin 的一个精确 Package。首次激活、重启 currentPackageId 或回退使用 mode:"run"；已有 current 时，即使 Plugin 当前已停止，切换到其他 Package 也使用 mode:"update"。未授权的 Client Package 创建审批请求并返回 awaiting-approval；已授权的 Package 返回 starting，并在浏览器中异步继续。两种结果都不会在 Tool 内等待最终结局。currentPackageId 只在完整成功后改变；失败时保留旧 current 和目标 next。异步成功、拒绝或技术失败通过状态与 steering 报告。技术失败后，用 cordis_inspect_self 读取诊断，修正同一 Plugin 并自主重试。用户拒绝后不要再次申请审批。
+激活动态 Plugin 的一个精确 Package。首次激活、重启 currentPackageId 或回退使用 mode:"run"；已有 current 时，即使 Plugin 当前已停止，切换到其他 Package 也使用 mode:"update"。通过 Phoenix 的 cordis_define 创建的 Package 已获得授权，不需要用户再次批准即可异步继续。只有非 Phoenix 或手动定义可能返回 awaiting-approval。两种结果都不会在 Tool 内等待最终结局。currentPackageId 只在完整成功后改变；失败时保留旧 current 和目标 next。异步成功、拒绝或技术失败通过状态与 steering 报告。技术失败后，用 cordis_inspect_self 读取诊断，修正同一 Plugin 并自主重试。用户拒绝后不要再次申请审批。
 
 ```json
 {
@@ -1562,6 +1567,249 @@ Source: [`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/
 
 create、edit、pause 和 resume 要求直接来自人类的根权限；complete 和 blocked 也接受确切的当前 Goal Round。blocked 的默认下限是 3 个获准的 Round。
 
+<a id="phoenix-aidsh-tool-google-workspace"></a>
+
+## `@phoenix-ai/dsh-tool-google-workspace`
+
+### `gmail_read`
+
+按 ID 从已连接的邮箱读取一封 Gmail 邮件。full 格式包含邮件头和 MIME 正文部分。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string"
+    },
+    "format": {
+      "type": "string",
+      "description": "minimal, full, metadata, or raw. Defaults to full."
+    }
+  },
+  "required": [
+    "message_id"
+  ]
+}
+```
+
+来源：[`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `gmail_search`
+
+使用 Gmail 查询语法搜索已连接的 Gmail 邮箱。此工具用于账户邮件，不用于公开网页搜索。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Gmail search query such as is:unread newer_than:7d."
+    },
+    "max_results": {
+      "type": "number",
+      "description": "Maximum messages to return, 1-100. Defaults to 20."
+    },
+    "page_token": {
+      "type": "string",
+      "description": "Optional Gmail pagination token."
+    }
+  },
+  "required": [
+    "query"
+  ]
+}
+```
+
+来源：[`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `gmail_send`
+
+从已连接的 Gmail 账户发送邮件。仅在用户要求发送或批准邮件内容时调用。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "to": {
+      "type": "string",
+      "description": "Recipient address or comma-separated recipient addresses."
+    },
+    "subject": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string"
+    },
+    "cc": {
+      "type": "string",
+      "description": "Optional comma-separated CC addresses."
+    },
+    "bcc": {
+      "type": "string",
+      "description": "Optional comma-separated BCC addresses."
+    },
+    "html": {
+      "type": "boolean",
+      "description": "Send body as text/html instead of text/plain."
+    }
+  },
+  "required": [
+    "to",
+    "subject",
+    "body"
+  ]
+}
+```
+
+来源：[`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_calendar_create_event`
+
+在已连接的 Google Calendar 中创建活动。仅在用户要求安排或创建活动时使用。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "start": {
+      "type": "string",
+      "description": "RFC3339 start date-time."
+    },
+    "end": {
+      "type": "string",
+      "description": "RFC3339 end date-time."
+    },
+    "calendar_id": {
+      "type": "string",
+      "description": "Calendar id. Defaults to primary."
+    },
+    "time_zone": {
+      "type": "string",
+      "description": "Optional IANA time zone, such as America/Santo_Domingo."
+    },
+    "description": {
+      "type": "string"
+    },
+    "attendees": {
+      "type": "array",
+      "description": "Optional attendee email addresses.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "summary",
+    "start",
+    "end"
+  ]
+}
+```
+
+来源：[`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_calendar_list_events`
+
+列出已连接的 Google Calendar 中的活动，可选用 RFC3339 开始和结束时间限定范围。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "calendar_id": {
+      "type": "string",
+      "description": "Calendar id. Defaults to primary."
+    },
+    "time_min": {
+      "type": "string",
+      "description": "Optional RFC3339 lower bound."
+    },
+    "time_max": {
+      "type": "string",
+      "description": "Optional RFC3339 upper bound."
+    },
+    "max_results": {
+      "type": "number",
+      "description": "Maximum events, 1-250. Defaults to 50."
+    }
+  }
+}
+```
+
+来源：[`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_drive_search`
+
+使用 Drive v3 q 语法搜索或列出已连接的 Google Drive 中的文件。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Optional Drive v3 q expression."
+    },
+    "page_size": {
+      "type": "number",
+      "description": "Maximum files, 1-100. Defaults to 50."
+    },
+    "page_token": {
+      "type": "string"
+    }
+  }
+}
+```
+
+来源：[`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_workspace_request`
+
+通过 PHOENIX OAuth 执行高级受限 Google Workspace REST 调用。仅在专用 Gmail、Calendar 或 Drive 工具无法完成任务时使用。service 限于 gmail、calendar、drive、docs、sheets、slides、contacts；path 必须是相对路径，禁止调用方提供认证请求头。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "service": {
+      "type": "string"
+    },
+    "path": {
+      "type": "string"
+    },
+    "method": {
+      "type": "string",
+      "description": "GET, POST, PUT, PATCH, DELETE. Defaults to GET."
+    },
+    "body": {
+      "type": "string",
+      "description": "Optional request body, normally JSON text."
+    },
+    "content_type": {
+      "type": "string",
+      "description": "Defaults to application/json when body is present."
+    },
+    "upload": {
+      "type": "boolean",
+      "description": "Use the fixed upload API for Gmail/Drive."
+    }
+  },
+  "required": [
+    "service",
+    "path"
+  ]
+}
+```
+
+来源：[`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+schema 提取提供不联网的 googleApi seam。实时调用始终在 Host 拥有的 OAuth broker 内执行：它固定 Google 服务根地址和 scope，仅在 fetch 时注入 Bearer token，绝不向面向模型的工具包暴露 OAuth 材料。
+
 <a id="phoenix-aidsh-tool-home-gateway"></a>
 
 ## `@phoenix-ai/dsh-tool-home-gateway`
@@ -2627,9 +2875,9 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
 
 与任务种类无关的后台任务控制器：后台 bash 命令、PTY 发送和 subagent 都通过相同的 3 个工具读取、列出和终止。加载该插件会挂接控制器，从而启用生产方的 `ctx.jobs.start()`。
 
-<a id="phoenix-aidsh-experimental-tool-agent-team"></a>
+<a id="phoenix-aidsh-tool-agent-team"></a>
 
-## `@phoenix-ai/dsh-experimental-tool-agent-team`
+## `@phoenix-ai/dsh-tool-agent-team`
 
 ### `followup_task`
 
@@ -2643,19 +2891,33 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
       "type": "string",
       "description": "Team member name, or lead."
     },
+    "purpose": {
+      "type": "string",
+      "description": "Operational purpose. Use blocker only for a real obstacle that needs the Lead to change strategy.",
+      "enum": [
+        "assignment",
+        "question",
+        "blocker",
+        "result",
+        "review",
+        "decision",
+        "update"
+      ]
+    },
     "message": {
       "type": "string",
-      "description": "Self-contained message for the target."
+      "description": "Self-contained message for the target in the current user conversational language; preserve exact code and error strings."
     }
   },
   "required": [
     "target",
+    "purpose",
     "message"
   ]
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `interrupt_agent`
 
@@ -2676,7 +2938,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `list_agents`
 
@@ -2689,7 +2951,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `send_message`
 
@@ -2703,23 +2965,37 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
       "type": "string",
       "description": "Team member name, or lead."
     },
+    "purpose": {
+      "type": "string",
+      "description": "Operational purpose. Use blocker only for a real obstacle that needs the Lead to change strategy.",
+      "enum": [
+        "assignment",
+        "question",
+        "blocker",
+        "result",
+        "review",
+        "decision",
+        "update"
+      ]
+    },
     "message": {
       "type": "string",
-      "description": "Self-contained message for the target."
+      "description": "Self-contained message for the target in the current user conversational language; preserve exact code and error strings."
     }
   },
   "required": [
     "target",
+    "purpose",
     "message"
   ]
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `spawn_teammate`
 
-创建一名具名、持久的 teammate。只有 Team Lead 可以调用此工具。
+创建一名真实、持久的专家。Kira 按任务选择必要的最小团队（简单任务 1 名、中等任务 2 名、困难或特殊任务 3 名）；不进行角色扮演，也不创建浪费 token 的 worker。只有 Team Lead 可以调用此工具。
 
 ```json
 {
@@ -2727,11 +3003,21 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
   "properties": {
     "name": {
       "type": "string",
-      "description": "Unique lower-kebab-case teammate name."
+      "description": "Optional unique lower-kebab-case teammate name. Omit for automatic specialist selection from the delegated responsibility."
     },
     "description": {
       "type": "string",
       "description": "Short description of the delegated responsibility."
+    },
+    "mission_complexity": {
+      "type": "string",
+      "description": "Classify the real mission before spawning. The runtime caps teammates at 1/2/3/3 for simple/medium/difficult/exceptional; exceptional never exceeds three independent workstreams. Omit for legacy calls; never inflate the tier to create conversational theater.",
+      "enum": [
+        "simple",
+        "medium",
+        "difficult",
+        "exceptional"
+      ]
     },
     "prompt": {
       "type": "string",
@@ -2747,14 +3033,116 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
     }
   },
   "required": [
-    "name",
     "description",
     "prompt"
   ]
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `team_chat_answer`
+
+使用已投递的 Team 用户消息 ID 回答发给你的交谈性请求，然后继续现有任务。这不会完成任务或替代实际执行证据。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "message_id",
+    "text"
+  ]
+}
+```
+
+来源： [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `team_chat_react`
+
+在共享对话记录中，为真实的用户/Kira/agent 消息添加或移除可见的 Unicode emoji 反应。这是规范的反应工具。反应是可选的；仅在有用且自然、不会增加可避免的轮次或成本时使用。允许使用任何有效的 Unicode emoji；绝不要对自己的消息反应，绝不要使用固定默认值，也不要例行反应。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string"
+    },
+    "emoji": {
+      "type": "string"
+    },
+    "active": {
+      "type": "boolean",
+      "description": "False removes your selected emoji; default true."
+    }
+  },
+  "required": [
+    "message_id",
+    "emoji"
+  ]
+}
+```
+
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `team_chat_read`
+
+Read recent real user/Kira/agent conversation messages and IDs for replies or reactions. Does not wake agents.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "limit": {
+      "type": "integer",
+      "description": "Recent message count, from 1 through 50; default 20."
+    }
+  }
+}
+```
+
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `team_react`
+
+对另一名 Team member 的持久对等消息使用旧版语义反应。共享对话记录中的可见反应优先使用 team_chat_react；本工具保留兼容性，其语义反应投影到相同的 emoji 界面。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "description": "Stable Team message id from the delivered peer item."
+    },
+    "reaction": {
+      "type": "string",
+      "description": "Semantic reaction: acknowledged, agreed, useful insight, blocker, or completed.",
+      "enum": [
+        "ack",
+        "agree",
+        "insight",
+        "blocked",
+        "done"
+      ]
+    }
+  },
+  "required": [
+    "message_id",
+    "reaction"
+  ]
+}
+```
+
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `team_task_create`
 
@@ -2794,7 +3182,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `team_task_get`
 
@@ -2815,7 +3203,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `team_task_list`
 
@@ -2854,7 +3242,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `team_task_update`
 
@@ -2921,11 +3309,11 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `wait_agent`
 
-等待本次调用开始后下一次 teammate 状态、mailbox 或共享任务变更。它绝不会唤醒 inactive member；若没有其他 member 正在 running 或 provisioning，则立即返回 noProgress。唤醒或超时后应重新列出状态，而不是轮询。
+等待一次新的 Team 活动；不进行无限轮询。实际等待最多为 12000ms。如果连续两次超时且 Team 没有变化，返回 stalled-team，而不是再次等待。
 
 ```json
 {
@@ -2933,15 +3321,15 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
   "properties": {
     "timeout_ms": {
       "type": "integer",
-      "description": "Wait duration in milliseconds, from 10000 through 3600000. Defaults to 30000."
+      "description": "Requested wait duration 5000 through 3600000ms, capped internally at 12000ms. Defaults to 5000ms."
     }
   }
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
-这 10 个工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。
+Team 工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。
 
 
 <a id="phoenix-aidsh-tool-todo"></a>

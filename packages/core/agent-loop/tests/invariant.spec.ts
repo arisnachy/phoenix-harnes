@@ -42,6 +42,30 @@ describe('request-reconstruction invariant', () => {
     expect(() => { dispatch(ctx, options) }).not.toThrow()
   })
 
+  it('reconstructs the logged conversational tail and rejects omitted or altered messages', async () => {
+    const { ctx, session } = await requestSetup()
+    session.append('step/end', { turn: 1, step: 1 })
+    session.append('step/start', { turn: 1, step: 2, historyProjection: {
+      kind: 'conversational-tail', maxMessages: 1, maxChars: 10,
+    } })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'context' }], source: { kind: 'plugin', plugin: 'x' },
+    }), { surfaceOp: 'append' })
+    const newest = createUserMessage({
+      content: [{ type: 'text', text: 'thanks' }], source: { kind: 'user' },
+    })
+    session.append('user/message', newest, { surfaceOp: 'append' })
+    const boundary = session.deriveMessages()
+    const selected = boundary.slice(-1)
+    const request = (messages: typeof boundary) => loopRequest({
+      model: 'm', messages: Object.freeze(messages), sessionId: session.id,
+    })
+    expect(() => { dispatch(ctx, request(selected)) }).not.toThrow()
+    for (const invalid of [[], boundary, boundary.slice(0, 1)]) {
+      expect(() => { dispatch(ctx, request(invalid)) }).toThrow(/durable derivation/)
+    }
+  })
+
   it('includes context appended inside the open step before dispatch', async () => {
     const { ctx, session } = await requestSetup()
     session.append('user/message', createUserMessage({

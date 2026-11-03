@@ -100,6 +100,42 @@ describe('dsh-base bundle', () => {
     })
   })
 
+  it('keeps the bundled browser actionable in interactive modes while preserving read-only', () => {
+    const root = fileURLToPath(new URL('..', import.meta.url))
+    const parsed = yaml.load(
+      readFileSync(resolve(root, 'cordis.patch.yml'), 'utf8'),
+      { schema: entryListSchema },
+    )
+    if (!Array.isArray(parsed)) throw new TypeError('base patch must parse to a patch list')
+    const rows = parsed.flatMap((patch): Record<string, unknown>[] =>
+      typeof patch === 'object' && patch !== null
+        ? (patch as { insert?: Record<string, unknown>[] }).insert ?? []
+        : [],
+    )
+    const browser = rows.find(candidate => candidate.id === 'phoenix-browser')
+    if (browser === undefined) throw new Error('base patch must mount phoenix-browser')
+    const config = browser.config as Record<string, unknown>
+    const env = config.env as Record<string, unknown>
+    const expression = (env.PHOENIX_BROWSER_ALLOW_ACTIONS as { __jsExpr?: string } | undefined)?.__jsExpr
+    if (expression === undefined) throw new Error('phoenix-browser action policy must be a !!js expression')
+
+    const allowed = (mode?: string, explicit?: string): unknown =>
+      evaluate({
+        process: {
+          env: {
+            ...(mode === undefined ? {} : { DSH_PERMISSION_MODE: mode }),
+            ...(explicit === undefined ? {} : { PHOENIX_BROWSER_ALLOW_ACTIONS: explicit }),
+          },
+        },
+      }, expression)
+
+    expect(allowed()).toBe('true')
+    expect(allowed('workspace-write')).toBe('true')
+    expect(allowed('danger-full-access')).toBe('true')
+    expect(allowed('read-only')).toBe('false')
+    expect(allowed('workspace-write', 'false')).toBe('false')
+  })
+
   it('gates each shell stack by platform with a symmetric disabled expression', () => {
     const root = fileURLToPath(new URL('..', import.meta.url))
     const parsed = yaml.load(

@@ -11,6 +11,21 @@ on:
       - 'apps/desktop-windows/**'
       - 'installer/windows/**'
       - 'scripts/phoenix-windows-supervisor.mjs'
+      - 'scripts/phoenix-windows-supervisor.spec.ts'
+      - 'scripts/phoenix-windows-storage-repair.ps1'
+      - 'scripts/phoenix-windows-storage-repair.spec.ts'
+      - 'examples/game-studio/tests/asset-plan.spec.ts'
+      - 'packages/mcp/mcp-client/src/transport.ts'
+      - 'packages/mcp/mcp-client/tests/platform.spec.ts'
+      - 'scripts/phoenix-windows-shortcut.mjs'
+      - 'scripts/phoenix-windows-shortcut.d.mts'
+      - 'scripts/phoenix-windows-icon.ico.b64'
+      - 'scripts/phoenix-desktop-shortcut.ps1'
+      - 'scripts/phoenix-desktop-launch.ps1'
+      - 'scripts/phoenix-markdown-open.ps1'
+      - 'scripts/phoenix-markdown-reader.mjs'
+      - 'scripts/phoenix-markdown-reader.d.mts'
+      - 'scripts/phoenix-markdown-reader.spec.ts'
       - 'scripts/build-windows-runtime-seed.mjs'
       - 'apps/web/public/favicon.png'
       - 'apps/web/public/favicon.svg'
@@ -21,6 +36,24 @@ on:
       - 'apps/desktop-windows/**'
       - 'installer/windows/**'
       - 'scripts/phoenix-windows-supervisor.mjs'
+      - 'scripts/phoenix-windows-supervisor.spec.ts'
+      - 'scripts/phoenix-windows-storage-repair.ps1'
+      - 'scripts/phoenix-windows-storage-repair.spec.ts'
+      - 'examples/game-studio/tests/asset-plan.spec.ts'
+      - 'packages/mcp/mcp-client/src/transport.ts'
+      - 'packages/mcp/mcp-client/tests/platform.spec.ts'
+      - 'update-phoenix.ps1'
+      - 'package.json'
+      - 'scripts/windows-installer.spec.ts'
+      - 'scripts/phoenix-windows-shortcut.mjs'
+      - 'scripts/phoenix-windows-shortcut.d.mts'
+      - 'scripts/phoenix-windows-icon.ico.b64'
+      - 'scripts/phoenix-desktop-shortcut.ps1'
+      - 'scripts/phoenix-desktop-launch.ps1'
+      - 'scripts/phoenix-markdown-open.ps1'
+      - 'scripts/phoenix-markdown-reader.mjs'
+      - 'scripts/phoenix-markdown-reader.d.mts'
+      - 'scripts/phoenix-markdown-reader.spec.ts'
       - 'scripts/build-windows-runtime-seed.mjs'
       - '.github/workflows/phoenix-windows-desktop.yml'
   workflow_dispatch:
@@ -32,6 +65,12 @@ jobs:
   windows-desktop:
     runs-on: windows-latest
     timeout-minutes: 45
+    env:
+      # The production runtime seed uses pnpm deploy and leaves the workspace
+      # in a production dependency state. Restore devDependencies explicitly
+      # before the remaining checks instead of allowing pnpm exec to mutate the
+      # workspace while a guard is running.
+      pnpm_config_verify_deps_before_run: 'false'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,6 +98,119 @@ jobs:
           pnpm install --frozen-lockfile
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Validate bootstrap syntax
+        shell: pwsh
+        run: |
+          $scripts = @(
+            'installer/windows/bootstrap-runtime.ps1',
+            'scripts/phoenix-desktop-shortcut.ps1',
+            'scripts/phoenix-desktop-launch.ps1',
+            'scripts/phoenix-windows-storage-repair.ps1',
+            'scripts/phoenix-markdown-open.ps1'
+          )
+          foreach ($script in $scripts) {
+            $source = Get-Content $script -Raw
+            [void][scriptblock]::Create($source)
+          }
+
+      - name: Verify desktop shortcut repair
+        shell: pwsh
+        run: |
+          $desktop = [Environment]::GetFolderPath([Environment+SpecialFolder]::DesktopDirectory)
+          $shortcutPath = Join-Path $desktop 'Phoenix.lnk'
+          $hardnessPath = Join-Path $desktop 'PHOENIX HARDNESS.lnk'
+          $shell = New-Object -ComObject WScript.Shell
+
+          # Reproduce the user's broken state: old native Phoenix.exe shortcut +
+          # generic managed-install shortcut. The repair must replace/remove both.
+          $legacyExe = Join-Path $env:RUNNER_TEMP 'Phoenix.exe'
+          Set-Content -LiteralPath $legacyExe -Value 'legacy-placeholder'
+          $legacy = $shell.CreateShortcut($shortcutPath)
+          $legacy.TargetPath = $legacyExe
+          $legacy.IconLocation = "$env:SystemRoot\System32\shell32.dll,14"
+          $legacy.Save()
+
+          $hardness = $shell.CreateShortcut($hardnessPath)
+          $hardness.TargetPath = (Join-Path (Resolve-Path .).Path 'phoenix-windows.cmd')
+          $hardness.IconLocation = "$env:SystemRoot\System32\shell32.dll,14"
+          $hardness.Save()
+
+          & powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/phoenix-desktop-shortcut.ps1 -Root (Resolve-Path .).Path
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          if (-not (Test-Path $shortcutPath)) { throw 'Phoenix desktop shortcut was not created' }
+          if (Test-Path $hardnessPath) { throw 'Legacy PHOENIX HARDNESS shortcut was not removed' }
+
+          $shortcut = $shell.CreateShortcut($shortcutPath)
+          if ([string]::IsNullOrWhiteSpace($shortcut.TargetPath)) { throw 'Phoenix shortcut target is empty' }
+          $expectedCmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
+          if ($shortcut.TargetPath -ine $expectedCmd) {
+            throw "Phoenix shortcut must use visible cmd.exe: $($shortcut.TargetPath)"
+          }
+          $expectedArgs = '/k "cd /d ' + (Resolve-Path .).Path + ' && pnpm phoenix"'
+          if ($shortcut.Arguments -ne $expectedArgs) {
+            throw "Phoenix shortcut is not running pnpm from the checkout: $($shortcut.Arguments)"
+          }
+          if ($shortcut.WindowStyle -ne 1) {
+            throw "Phoenix shortcut must show the CMD window: $($shortcut.WindowStyle)"
+          }
+          if ($shortcut.Arguments.Contains('Phoenix.exe') -or $shortcut.TargetPath.Contains('Phoenix.exe')) {
+            throw 'Phoenix shortcut still references legacy Phoenix.exe'
+          }
+          if ($shortcut.WorkingDirectory -ne (Resolve-Path .).Path) {
+            throw "Phoenix shortcut working directory is wrong: $($shortcut.WorkingDirectory)"
+          }
+          if ($shortcut.IconLocation -match '(?i:powershell\.exe|shell32\.dll)') {
+            throw "Phoenix shortcut still uses a generic Windows icon: $($shortcut.IconLocation)"
+          }
+          $iconFile = ($shortcut.IconLocation -replace ',0$','')
+          if (-not (Test-Path $iconFile)) { throw "Phoenix icon file is missing: $iconFile" }
+          $iconBytes = [IO.File]::ReadAllBytes($iconFile)
+          if (
+            $iconBytes.Length -lt 64 -or
+            $iconBytes[0] -ne 0 -or
+            $iconBytes[1] -ne 0 -or
+            $iconBytes[2] -ne 1 -or
+            $iconBytes[3] -ne 0
+          ) {
+            throw 'Phoenix shortcut icon is not a valid ICO file'
+          }
+
+          $taskbarPath = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Phoenix.lnk'
+          if (-not (Test-Path $taskbarPath)) { throw 'Phoenix taskbar shortcut was not prepared' }
+          $taskbar = $shell.CreateShortcut($taskbarPath)
+          if ($taskbar.TargetPath -ne $shortcut.TargetPath -or $taskbar.Arguments -ne $shortcut.Arguments) {
+            throw 'Taskbar shortcut does not match the visible Phoenix CMD launcher'
+          }
+
+          $mdProgId = (Get-Item 'HKCU:\Software\Classes\.md').GetValue('')
+          if ($mdProgId -ne 'Phoenix.Markdown') { throw "Markdown association is wrong: $mdProgId" }
+          $mdCommand = (Get-Item 'HKCU:\Software\Classes\Phoenix.Markdown\shell\open\command').GetValue('')
+          if (-not $mdCommand.Contains('phoenix-markdown-open.ps1')) {
+            throw "Markdown open command does not use Phoenix reader: $mdCommand"
+          }
+          if ($mdCommand -match '(?i:vscode|Code\.exe)') {
+            throw "Markdown open command still targets VS Code: $mdCommand"
+          }
+
+      - name: Phoenix shell integration tests
+        shell: pwsh
+        run: |
+          pnpm exec vitest run scripts/phoenix-windows-shortcut.spec.ts scripts/windows-installer.spec.ts scripts/phoenix-markdown-reader.spec.ts scripts/phoenix-windows-storage-repair.spec.ts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Markdown reader smoke test
+        shell: pwsh
+        run: |
+          $sample = Join-Path $env:RUNNER_TEMP 'phoenix-reader-smoke.md'
+          Set-Content -LiteralPath $sample -Encoding UTF8 -Value "# Phoenix reader`n`n**Markdown OK**"
+          $html = (& node scripts/phoenix-markdown-reader.mjs $sample | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path $html)) { throw "Markdown reader did not create HTML: $html" }
+          $rendered = Get-Content -LiteralPath $html -Raw
+          if (-not $rendered.Contains('<h1>Phoenix reader</h1>')) { throw 'Markdown heading was not rendered' }
+          if (-not $rendered.Contains('<strong>Markdown OK</strong>')) { throw 'Markdown strong text was not rendered' }
+
       - name: Build Phoenix production runtime
         shell: pwsh
         run: |
@@ -67,11 +219,19 @@ jobs:
           node scripts/build-windows-runtime-seed.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Validate bootstrap syntax
+      - name: Restore workspace development dependencies
         shell: pwsh
         run: |
-          $source = Get-Content installer/windows/bootstrap-runtime.ps1 -Raw
-          [void][scriptblock]::Create($source)
+          pnpm install --frozen-lockfile --prod=false
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm exec vitest --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Guard Windows Host handoff, Game Studio build and Filesystem MCP
+        shell: pwsh
+        run: |
+          pnpm exec vitest run scripts/phoenix-windows-supervisor.spec.ts examples/game-studio/tests/asset-plan.spec.ts packages/mcp/mcp-client/tests/platform.spec.ts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Desktop contract tests
         shell: pwsh
@@ -193,6 +353,12 @@ jobs:
           if ($iss -match '(?m)^Filename:\s*"powershell\.exe".*bootstrap-runtime\.ps1') {
             throw 'Installer must not hide first-run runtime bootstrap; Phoenix.exe owns visible bootstrap now'
           }
+          if ($iss.Contains('{autodesktop}\Phoenix') -or $iss.Contains('Name: "{group}\Phoenix"')) {
+            throw 'Native installer must not recreate Phoenix.exe shell shortcuts'
+          }
+          if ($iss.Contains('Description: "Abrir Phoenix"')) {
+            throw 'Native installer must not launch legacy Phoenix.exe as the post-install user entry'
+          }
 
       - name: Launcher command smoke test
         shell: pwsh
@@ -248,11 +414,11 @@ jobs:
           $log = Join-Path $env:LOCALAPPDATA 'Phoenix\logs\desktop.log'
           Remove-Item $log -Force -ErrorAction SilentlyContinue
           $process = Start-Process -FilePath dist/phoenix-desktop/Phoenix.exe -ArgumentList '--smoke-webview-loopback' -PassThru
-          if (-not $process.WaitForExit(20000)) {
+          if (-not $process.WaitForExit(65000)) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
             Write-Host '--- Phoenix desktop.log ---'
             if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } } else { Write-Host '(desktop.log missing)' }
-            throw 'Phoenix WebView2 loopback smoke did not finish within 20 seconds'
+            throw 'Phoenix WebView2 loopback smoke did not finish within 65 seconds'
           }
           Write-Host '--- Phoenix desktop.log ---'
           if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } }

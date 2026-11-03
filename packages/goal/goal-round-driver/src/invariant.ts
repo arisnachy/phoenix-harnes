@@ -6,7 +6,7 @@ import { foldGoal, type FoldedGoal, type GoalJudgeAuditEntry, type GoalMessageSo
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import { renderGoalRoundPrompt } from './prompt.ts'
-import { replayGoalStrategy } from './strategy.ts'
+import { measureGoalWorkProgress, replayGoalStrategy } from './strategy.ts'
 
 const PACKAGE_NAME = '@phoenix-ai/dsh-goal-round-driver'
 
@@ -62,20 +62,34 @@ function validateEvent(
   prior: readonly SessionEvent[],
   event: SessionEvent,
   fail: InvariantFailure,
+  legacyReplay = false,
 ): void {
   if (event.type !== 'user/message') return
   const source = event.data.source
   if (source.kind !== 'goal' || source.round <= 0) return
   const goal = goalView(foldChecked(prior, fail), source, fail)
+  const strategy = latestStrategy(prior, source.goalId)
+  const stalledRounds = measureGoalWorkProgress(prior, source.goalId).stagnantRounds
   const expected = renderGoalRoundPrompt(
     goal,
     source.round,
     latestJudge(prior, source.goalId),
-    latestStrategy(prior, source.goalId)?.strategy,
+    strategy?.strategy,
+    stalledRounds,
   )
-  if (!isDeepStrictEqual(event.data.content, expected)) {
-    fail(`goal round ${source.round} content does not match the package-owned continuation prompt`)
-  }
+  if (isDeepStrictEqual(event.data.content, expected)) return
+  // Existing sessions predate persisted strategy selections and the stall
+  // guidance. During startup replay, accept their exact legacy renderer while
+  // keeping new events strict on the live dispatch path.
+  if (legacyReplay && strategy === undefined
+    && isDeepStrictEqual(event.data.content, renderGoalRoundPrompt(
+      goal,
+      source.round,
+      latestJudge(prior, source.goalId),
+      undefined,
+      0,
+    ))) return
+  fail(`goal round ${source.round} content does not match the package-owned continuation prompt`)
 }
 
 /** Check existing sessions and every candidate event before Session publishes it. */
@@ -83,7 +97,7 @@ const install: InvariantInstaller = Object.assign((ctx: Context, fail: Invariant
   for (const session of ctx.sessions.list()) {
     const prior: SessionEvent[] = []
     for (const event of session.events) {
-      validateEvent(prior, event, fail)
+      validateEvent(prior, event, fail, true)
       prior.push(event)
     }
   }

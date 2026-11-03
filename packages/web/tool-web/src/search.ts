@@ -317,7 +317,7 @@ export function applyWebSearchTool(
     name: 'tool:web_search',
     order: 110,
     text: fetchEnabled
-      ? `Use the web_search tool to discover current information on the web. The required queries array accepts 1–${maxQueries} non-empty search queries; use a one-item array for a single search. It returns an optional answer plus a list of source URLs. Follow up with web_fetch when you need the full content of a specific result, and cite the relevant URLs as markdown links.`
+      ? `Use web_search for current information with 1–${maxQueries} focused queries (one is normally enough). Search results and snippets are leads, not proof. For consequential or contested claims, inspect the actual source using web_fetch, prioritizing primary and independent evidence. Cite the direct URLs near supported statements; separate confirmed facts, source disagreements and unknowns. Stop searching after enough credible evidence, avoiding repeated equivalent searches. Search returns source URLs with an optional summary, not a substitute for checking original pages.`
       : `Use the web_search tool to discover current information on the web. The required queries array accepts 1–${maxQueries} non-empty search queries; use a one-item array for a single search. It returns an optional answer plus a list of source URLs. Use the returned source snippets when available, and cite the relevant URLs as markdown links.`,
   })
 

@@ -13,12 +13,14 @@ Use a foreground connector budget of at most two connect/repair attempts or abou
 
 1. Decide whether a connector is actually needed.
 - Use a connector when the task depends on private/account-scoped data, an external application's live state, or an action inside that application.
+- Creating or editing an artifact, HTML page, website, app, game, document, script, dashboard, or local system does NOT imply connector work. Do not add, generate, scaffold, install, or wire a PHOENIX connector, MCP bridge, telemetry bridge, remote-control seam, background sync, connector manifest, healthcheck, or connector-specific boilerplate unless the user explicitly asks for that integration or the requested deliverable fundamentally cannot work without it.
 - Do not use a connector merely because one exists. General knowledge, local reasoning/code, public web information, or a native PHOENIX capability that fully satisfies the request should not trigger connector setup.
 - Respect explicit user intent: when the user asks to work in a named connected app/account, prefer that app's connector rather than silently substituting a public source.
 - Match by capability semantics, not by brand-name guessing. Mail tasks need a mail capability, meetings need calendar/scheduling, account files need storage/drive, designs need design tooling, code/PR work needs repository tooling, and workspace documents need the matching workspace/document capability.
 
 2. Select the fastest healthy path.
 - If the matching connector tool is already available and healthy, call it directly. Do not call connector_list first just to confirm what the tool registry already proves.
+- To report the current status of MCP connectors as an inventory/dashboard, call connector_list with target="mcp". Its receipt automatically generates the live status visualization; do not duplicate it via phoenix_visualize or claim that a model-generated table is a live state.
 - Call connector_list once when the needed app capability is not directly available, when several connectors could satisfy the request, or after an authorization/connection failure. When the user named a service/provider, pass that concise name in connector_list.target (for example "Hostinger" or "Google Workspace") so only connectors relevant to this task can become actionable.
 - Read connector status, advertised services, callable flags, MCP tool names, and relevance. A connector that is auth-required but not relevant to connector_list.target is background inventory, not a user action. An untargeted connector_list result is inventory-only: before showing Connect/Reconnect, re-run connector_list with the specific service/capability target and require relevant=true. Prefer an already connected/ready connector that actually exposes the required capability. Do not install a duplicate connector.
 - connected/ready plus a callable matching capability -> use it.
@@ -63,6 +65,7 @@ Use a foreground connector budget of at most two connect/repair attempts or abou
 - Keep recurring connector work event-driven or scheduled, low-resource, and within the shared agent budget.
 
 Connector setup is a dependency, not the mission. Minimize setup work, keep the user's goal active, and continue as soon as the dependency is healthy.
+Default to zero connector creation for ordinary artifact/app/site generation. Connector integration is opt-in unless it is intrinsically required by the user's requested external/account action.
 </phoenix_connector_protocol>`
 
 /**

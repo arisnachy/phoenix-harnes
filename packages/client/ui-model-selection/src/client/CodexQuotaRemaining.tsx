@@ -54,7 +54,11 @@ export type CodexQuotaRemainingProps = {
   sessionId: SessionId | undefined
 } & InjectFace<CodexQuotaRemainingInjected>
 
-const QUOTA_REFRESH_MS = 60_000
+// Poll the cheap local authorization catalog frequently. The Codex account
+// bridge independently coalesces/TTL-bounds native app-server probes, so this
+// does not spawn Codex every five seconds; it only lets the UI pick up a
+// completed background refresh promptly instead of waiting another full minute.
+const QUOTA_REFRESH_MS = 5_000
 const QUOTA_STARTUP_RETRY_MS = 2_000
 const QUOTA_STORAGE_KEY = 'phoenix.codex-quota.v1'
 const LOADING_WINDOW_LABELS = ['5h', '7d'] as const

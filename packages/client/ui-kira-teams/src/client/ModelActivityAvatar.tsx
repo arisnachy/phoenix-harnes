@@ -1,10 +1,14 @@
 import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
-import { KIRA_AGENT_PORTRAITS, type KiraPortraitKey } from './KiraAgentPortraits.ts'
+import type { KiraPortraitKey } from './KiraAgentPortraits.ts'
+import { KIRA_MODERN_STILL_PORTRAITS } from './KiraModernStillPortraits.ts'
 import css from './ModelActivityAvatar.module.css'
+/** Deprecated animation props remain accepted for existing callers; portraits stay still. */
+type AvatarExpression = 'neutral' | 'warm' | 'focused' | 'happy' | 'concerned' | 'confident'
+type AvatarMotion = 'auto' | 'off'
 
 /** Exact visible identities from the user-approved 20-avatar KIRA reference. */
 export type ModelAvatarKind =
-  | 'sol' | 'luna' | 'terra' | 'generic'
+  | 'kira' | 'sol' | 'luna' | 'terra' | 'generic'
   | 'vortice' | 'aurora' | 'atlas' | 'nova' | 'lumen'
   | 'helix' | 'prisma' | 'orion' | 'vega' | 'eclipse'
   | 'argo' | 'solaria' | 'nexo' | 'astra' | 'lyra'
@@ -20,7 +24,7 @@ const AGENT_AVATAR_KINDS: readonly PortraitKey[] = [
   'zenith', 'cobalto', 'quasar', 'senda', 'orbita',
 ]
 
-const PORTRAIT_ALIAS: Record<ModelAvatarKind, PortraitKey> = {
+const PORTRAIT_ALIAS: Record<Exclude<ModelAvatarKind, 'kira'>, PortraitKey> = {
   sol: 'solaria',
   luna: 'eclipse',
   terra: 'senda',
@@ -69,9 +73,88 @@ export function modelAvatarKind(model: string | undefined): ModelAvatarKind {
   return 'generic'
 }
 
+/** The badge class is observed model provenance, never the specialist's persona. */
+export type ModelEngineFamily = 'sol' | 'luna' | 'astra' | 'other'
+
+/** Recognize the actual engine route; an absent model must never produce a badge. */
+export function modelEngineFamily(model: string | undefined, provider?: string): ModelEngineFamily | undefined {
+  if (model === undefined || model.trim() === '') return undefined
+  if (provider !== undefined && provider !== 'openai-codex') return 'other'
+  if (/^gpt-\d+(?:\.\d+)?-sol(?:$|[-_])/iu.test(model)) return 'sol'
+  if (/^gpt-\d+(?:\.\d+)?-luna(?:$|[-_])/iu.test(model)) return 'luna'
+  if (/^gpt-\d+(?:\.\d+)?-astra(?:$|[-_])/iu.test(model)) return 'astra'
+  return provider === undefined ? undefined : 'other'
+}
+
+/** A small, consistent icon across the Lead and all real Team workers. */
+export function modelEngineMark(model: string | undefined, provider?: string): '☀' | '☾' | '★' | 'ϟ' | undefined {
+  const family = modelEngineFamily(model, provider)
+  if (family === 'sol') return '☀'
+  if (family === 'luna') return '☾'
+  if (family === 'astra') return '★'
+  return family === 'other' ? 'ϟ' : undefined
+}
+
+/** Neutral line icons share one visual language with Phoenix's portrait frame.
+ * The existing Unicode mark stays hidden in the DOM for legacy selectors.
+ */
+function ModelBadgeIcon({ family }: { family: ModelEngineFamily }) {
+  const base = { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none',
+    stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const, 'aria-hidden': true as const }
+  if (family === 'sol') return (
+    <svg {...base}><circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></svg>
+  )
+  if (family === 'luna') return (
+    <svg {...base}><path d="M20.4 14.3A8.6 8.6 0 0 1 9.7 3.6 8.6 8.6 0 1 0 20.4 14.3Z" /></svg>
+  )
+  if (family === 'astra') return (
+    <svg {...base}><path d="m12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5Z" /></svg>
+  )
+  return <svg {...base}><circle cx="12" cy="12" r="2.8" />
+    <ellipse cx="12" cy="12" rx="10" ry="5.2" transform="rotate(-34 12 12)" />
+    <path d="m19 3 .75 1.65L21.5 5.4l-1.75.75L19 7.8l-.75-1.65L16.5 5.4l1.75-.75Z" /></svg>
+}
+
+/** Human-readable model families, independent from the team persona. */
+const MODEL_ENGINE_LABEL: Readonly<Record<ModelEngineFamily, string>> = {
+  sol: 'Sol',
+  luna: 'Luna',
+  astra: 'Astra',
+  other: 'Orión',
+}
+
+/** Display verified model provenance outside the portrait in message headers.
+ * Other providers are visibly called Orión, while the tooltip retains their actual identity.
+ */
+export function ModelEngineBadge({ model, provider, placement = 'avatar' }: {
+  model?: string | undefined
+  provider?: string | undefined
+  placement?: 'avatar' | 'header'
+}) {
+  const family = modelEngineFamily(model, provider)
+  if (family === undefined || model === undefined) return null
+  const label = MODEL_ENGINE_LABEL[family]
+  const provenance = `${provider ?? 'modelo observado'} · ${model}`
+  return <span
+    className={`${css.engineBadge} ${placement === 'header' ? css.headerEngineBadge : ''}`}
+    title={`${label} · ${provenance}`}
+    aria-label={`${label} · ${provenance}`}
+    data-engine-model={model}
+    data-engine-mark={modelEngineMark(model, provider)}
+    data-engine-family={family}
+  >
+    <ModelBadgeIcon family={family} />
+    <span className={css.engineMarkText}>{modelEngineMark(model, provider)}</span>
+    {placement === 'header' && <span className={css.engineName}>{label}</span>}
+  </span>
+}
+
 /** Resolve one KIRA identity to its standalone public portrait asset. */
 export function portraitSrcForKind(kind: ModelAvatarKind): string {
-  return KIRA_AGENT_PORTRAITS[PORTRAIT_ALIAS[kind]]
+  if (kind === 'kira') return KIRA_MODERN_STILL_PORTRAITS.kira
+  return KIRA_MODERN_STILL_PORTRAITS[PORTRAIT_ALIAS[kind]]
 }
 
 export interface ModelActivityAvatarProps {
@@ -79,26 +162,45 @@ export interface ModelActivityAvatarProps {
   running: boolean
   pending: boolean
   agentId?: string
+  /** Verified model provenance of this teammate. No Lead-model fallback.
+   * Optional values may be undefined while the worker's first result is pending.
+   */
+  model?: string | undefined
+  modelProvider?: string | undefined
+  /** The chat header owns its separate model badge; avoid displaying a second one over the portrait. */
+  showEngineBadge?: boolean
   /** Explicit board persona; wins over the agent-id/model fallbacks. */
   kind?: ModelAvatarKind
   /** A roster persona that is available but not currently occupied by a subagent. */
   ready?: boolean
   /** Compact is backward-compatible; card matches the approved board portrait scale. */
   variant?: 'compact' | 'card'
+  /** Override for authored team events, never inferred from model names. */
+  emotion?: AvatarExpression | undefined
+  speaking?: boolean
+  listening?: boolean
+  motion?: AvatarMotion
+  /** Face pose: optional explicit look direction, with subtle autonomous movement otherwise. */
+  pose?: 'auto' | 'forward' | 'left' | 'right' | 'up' | 'down'
 }
 
-/** Render one exact KIRA portrait with restrained state-reactive motion. */
+/** A single high-quality fixed portrait: no animated sprites, facial overlays or motion effects. */
 export function ModelActivityAvatar({
   activity,
   running,
   pending,
   agentId,
   kind,
+  model,
+  modelProvider,
+  showEngineBadge = true,
   ready = false,
   variant = 'compact',
+  emotion,
 }: ModelActivityAvatarProps) {
   const resolvedKind = kind
     ?? (agentId === undefined ? modelAvatarKind(activity?.model) : agentAvatarKind(agentId))
+  const observedModel = model ?? activity?.model
   const phase = running ? (activity?.phase ?? 'preparing') : 'idle'
   const state = pending
     ? 'pending'
@@ -112,23 +214,20 @@ export function ModelActivityAvatar({
       data-avatar={resolvedKind}
       data-phase={phase}
       data-state={state}
+      data-expression={emotion ?? (pending ? 'concerned' : running ? 'focused' : 'neutral')}
       aria-hidden="true"
     >
-      <span className={css.aura} />
       <span className={css.ring} />
-      <span className={css.core} />
       <img
         className={css.portraitImage}
         src={portraitSrcForKind(resolvedKind)}
         alt=""
         draggable={false}
+        decoding="async"
         data-agent-portrait-image={true}
       />
-      <span className={css.lifeGlint} />
-      <span className={css.scanLine} />
-      <span className={css.energyRibbon} />
-      <span className={css.phaseCue}><span className={css.phaseCueInner} /></span>
       <span className={css.badge} />
+      {showEngineBadge ? ModelEngineBadge({ model: observedModel, provider: modelProvider }) : null}
     </span>
   )
 }

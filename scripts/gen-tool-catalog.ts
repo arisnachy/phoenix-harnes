@@ -41,6 +41,8 @@ import * as SkillFileSystem from '@phoenix-ai/dsh-skill-filesystem'
 import LocalJobRegistry from '@phoenix-ai/dsh-jobs-local'
 import LocalLivingRegistry from '@phoenix-ai/dsh-living-local'
 import * as ToolLiving from '@phoenix-ai/dsh-tool-living'
+import * as ToolBusiness from '@phoenix-ai/dsh-tool-business'
+import * as ToolSports from '@phoenix-ai/dsh-tool-sports'
 import * as ToolAskUser from '@phoenix-ai/dsh-tool-ask-user'
 import * as ToolBash from '@phoenix-ai/dsh-tool-bash'
 import * as ToolPwsh from '@phoenix-ai/dsh-tool-pwsh'
@@ -54,6 +56,7 @@ import * as ToolStrReplaceEditor from '@phoenix-ai/dsh-tool-str-replace-editor'
 import TerminalSessionService from '@phoenix-ai/dsh-terminal'
 import * as ToolPty from '@phoenix-ai/dsh-tool-terminal'
 import * as ToolGoal from '@phoenix-ai/dsh-tool-goal'
+import * as ToolGoogleWorkspace from '@phoenix-ai/dsh-tool-google-workspace'
 import HomeAssistantGatewayService from '@phoenix-ai/dsh-home-gateway'
 import * as ToolHomeGateway from '@phoenix-ai/dsh-tool-home-gateway'
 import * as ToolSchedule from '@phoenix-ai/dsh-schedule'
@@ -64,11 +67,13 @@ import * as ToolSessionQuery from '@phoenix-ai/dsh-tool-session-query'
 import * as ToolSessionLearning from '@phoenix-ai/dsh-tool-session-learning'
 import LearningMemoryService from '@phoenix-ai/dsh-session-learning'
 import * as ToolTasks from '@phoenix-ai/dsh-tool-jobs'
-import type TeamService from '@phoenix-ai/dsh-experimental-agent-team'
-import * as ToolTeam from '@phoenix-ai/dsh-experimental-tool-agent-team'
+import type TeamService from '@phoenix-ai/dsh-agent-team'
+import * as ToolTeam from '@phoenix-ai/dsh-tool-agent-team'
 import * as ToolTodo from '@phoenix-ai/dsh-tool-todo'
 import * as ToolSubagent from '@phoenix-ai/dsh-tool-subagent'
 import * as ToolWeb from '@phoenix-ai/dsh-tool-web'
+import VoiceRuntime from '@phoenix-ai/dsh-voice'
+import * as ToolVoice from '@phoenix-ai/dsh-tool-voice'
 import VmWorkflowEngine from '@phoenix-ai/dsh-workflow-worker-thread'
 import * as ToolRalph from '@phoenix-ai/dsh-tool-ralph'
 import * as ToolWorkflow from '@phoenix-ai/dsh-tool-workflow'
@@ -379,6 +384,21 @@ const TOOL_PACKAGES: ToolPackage[] = [
       'create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds.',
   },
   {
+    pkg: '@phoenix-ai/dsh-tool-google-workspace',
+    dir: 'tool-google-workspace',
+    source: 'packages/credentials/tool-google-workspace/src/index.ts',
+    requires: ['ctx.tools', 'ctx.googleApi'],
+    writes: ['tool/call', 'bounded Google Workspace request through the host OAuth broker', 'tool/result'],
+    async mount(ctx) {
+      ctx.provide('googleApi', {
+        request: () => Promise.reject(new Error('tool-catalog Google API request is unreachable')),
+      } as unknown as Context['googleApi'])
+      await ctx.plugin(ToolGoogleWorkspace)
+    },
+    note:
+      'The schema harvest supplies a non-networking googleApi seam. Live calls stay inside the Host-owned OAuth broker, which fixes the Google service root and scope, injects the Bearer token only at fetch time, and never exposes OAuth material to the model-facing tool package.',
+  },
+  {
     pkg: '@phoenix-ai/dsh-tool-home-gateway',
     dir: 'tool-home-gateway',
     source: 'packages/home/tool-home-gateway/src/index.ts',
@@ -419,6 +439,17 @@ const TOOL_PACKAGES: ToolPackage[] = [
       + 'management reads and mutations require the shared Session persistence barrier.',
   },
   {
+    pkg: '@phoenix-ai/dsh-tool-business',
+    dir: 'tool-business',
+    source: 'packages/core/tool-business/src/index.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.mcpConnectors (optional at execution)'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolBusiness)
+    },
+    note: 'Read-only intent and live MCP capability planning. Tool names and connection status never confer publication rights.',
+  },
+  {
     pkg: '@phoenix-ai/dsh-tool-living',
     dir: 'tool-living',
     source: 'packages/core/tool-living/src/index.ts',
@@ -431,6 +462,17 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'Universal domain-neutral control surface: arbitrary future creation kinds describe their own state, actions, events, resources, actors, and target integration level; verification refuses delivery below that target.',
+  },
+  {
+    pkg: '@phoenix-ai/dsh-tool-sports',
+    dir: 'tool-sports',
+    source: 'packages/core/tool-sports/src/index.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolSports)
+    },
+    note: 'Read-only sports market and game context with inline chat cards. Tickets simulate returns, never transact or promise wins.',
   },
   {
     pkg: '@phoenix-ai/dsh-tool-lsp',
@@ -577,9 +619,9 @@ const TOOL_PACKAGES: ToolPackage[] = [
       'The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers\' `ctx.jobs.start()`.',
   },
   {
-    pkg: '@phoenix-ai/dsh-experimental-tool-agent-team',
+    pkg: '@phoenix-ai/dsh-tool-agent-team',
     dir: 'tool-agent-team',
-    source: 'packages/experimental/tool-agent-team/src/index.ts',
+    source: 'packages/subagent/tool-agent-team/src/index.ts',
     requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.agentTeams', 'an exact live Team member Agent'],
     writes: ['tool/call', 'team/member', 'team/message/queued', 'team/message/delivered', 'team/task', 'tool/result'],
     async mount(ctx) {
@@ -612,7 +654,7 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     scope: ctx => catalogChildScopes.get(ctx) as Agent,
     note:
-      'All ten tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names.',
+      'The Team tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names.',
   },
   {
     pkg: '@phoenix-ai/dsh-tool-todo',
@@ -641,6 +683,19 @@ const TOOL_PACKAGES: ToolPackage[] = [
       await ctx.plugin(VmWorkflowEngine, { provider: 'mock' })
       await ctx.plugin(ToolWorkflow)
     },
+  },
+  {
+    pkg: '@phoenix-ai/dsh-tool-voice',
+    dir: 'tool-voice',
+    source: 'packages/voice/tool-voice/src/index.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.voice'],
+    writes: ['tool/call', 'Host speech synthesis or Codex Live output acceptance', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(VoiceRuntime, { enabled: false, codexRealtime: false })
+      await ctx.plugin(ToolVoice)
+    },
+    note:
+      'Speech is an explicit user-requested output side channel. A provider receipt is not proof that speakers were audible; this catalog boot never plays audio.',
   },
   {
     pkg: '@phoenix-ai/dsh-tool-web',

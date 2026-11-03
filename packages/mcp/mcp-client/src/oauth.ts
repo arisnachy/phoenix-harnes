@@ -28,6 +28,10 @@ export interface McpOAuthProviderOptions {
   store: McpOAuthStateStore
   onAuthorizationUrl: (url: URL) => void | Promise<void>
   state?: string | (() => string | Promise<string>)
+  clientInformation?: OAuthClientInformationMixed | (() => Promise<OAuthClientInformationMixed | undefined>)
+  /** Called when this provider dynamically registers a client for its current redirect URI. */
+  onClientInformationSaved?: (clientInformation: OAuthClientInformationMixed) => void | Promise<void>
+  tokenEndpointAuthMethod?: 'none' | 'client_secret_post' | 'client_secret_basic'
 }
 
 function cloneWithout<T extends object, K extends keyof T>(value: T, key: K): Omit<T, K> {
@@ -47,6 +51,16 @@ function randomState(): string {
   return randomBytes(32).toString('base64url')
 }
 
+/** One wall-clock budget for all pre-consent OAuth discovery and DCR requests. */
+const MCP_OAUTH_PRECONSENT_TIMEOUT_MS = 38_000
+
+function preconsentTimeoutError(serverName: string): Error & { code: string } {
+  return Object.assign(
+    new Error(`MCP OAuth for ${serverName} could not obtain a provider consent URL within ${MCP_OAUTH_PRECONSENT_TIMEOUT_MS / 1000} seconds`),
+    { code: 'MCP_OAUTH_DISCOVERY_TIMEOUT' },
+  )
+}
+
 /**
  * Build the SDK OAuth provider for one MCP server. Token and registration data
  * are read and written only through the supplied host-owned store.
@@ -60,7 +74,7 @@ export function createMcpOAuthProvider(options: McpOAuthProviderOptions): OAuthC
     redirect_uris: [options.redirectUrl],
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
-    token_endpoint_auth_method: 'none',
+    token_endpoint_auth_method: options.tokenEndpointAuthMethod ?? 'none',
   }
 
   return {
@@ -72,16 +86,30 @@ export function createMcpOAuthProvider(options: McpOAuthProviderOptions): OAuthC
         ? configuredState
         : () => configuredState,
     async clientInformation() {
+      if (options.clientInformation !== undefined) {
+        return typeof options.clientInformation === 'function'
+          ? options.clientInformation()
+          : options.clientInformation
+      }
       return (await options.store.read())?.clientInformation
     },
     async saveClientInformation(clientInformation) {
       await updateState(options.store, current => ({ ...current, clientInformation }))
+      await options.onClientInformationSaved?.(clientInformation)
     },
     async tokens() {
       return (await options.store.read())?.tokens
     },
     async saveTokens(tokens) {
-      await updateState(options.store, current => ({ ...current, tokens }))
+      await updateState(options.store, (current) => {
+        const previousRefreshToken = current.tokens?.refresh_token
+        const nextRefreshToken = tokens.refresh_token
+        const durableTokens = (typeof previousRefreshToken === 'string' && previousRefreshToken.length > 0)
+          && (typeof nextRefreshToken !== 'string' || nextRefreshToken.length === 0)
+          ? { ...tokens, refresh_token: previousRefreshToken }
+          : tokens
+        return { ...current, tokens: durableTokens }
+      })
     },
     async redirectToAuthorization(authorizationUrl) {
       await options.onAuthorizationUrl(authorizationUrl)
@@ -170,11 +198,13 @@ interface PendingCallback {
 export class McpOAuthCallbackServer {
   private readonly server: Server
   private readonly path: string
+  private readonly port: number
   private pending: PendingCallback | undefined
   private _redirectUri: string | undefined
 
-  constructor(serverName: string) {
+  constructor(serverName: string, port = 0) {
     this.path = `/mcp/oauth/${encodeURIComponent(serverName)}`
+    this.port = port
     this.server = createServer((request, response) => { this.handle(request, response) })
   }
 
@@ -198,7 +228,7 @@ export class McpOAuthCallbackServer {
       }
       this.server.once('error', onError)
       this.server.once('listening', onListening)
-      this.server.listen(0, '127.0.0.1')
+      this.server.listen(this.port, '127.0.0.1')
     })
     const address = this.server.address()
     if (address === null || typeof address === 'string') {
@@ -346,6 +376,13 @@ function mcpCredentialKey(serverName: string): CredentialKey {
   return credentialKey('mcp-client', id)
 }
 
+/** Optional fixed-client settings for OAuth servers that do not support DCR. */
+export interface McpOAuthControllerOptions {
+  callbackPort?: number
+  resolveClientInformation?: () => Promise<OAuthClientInformationMixed | undefined>
+  tokenEndpointAuthMethod?: 'none' | 'client_secret_post' | 'client_secret_basic'
+}
+
 /** Host controller for one MCP server's OAuth lifecycle. */
 export class McpOAuthController {
   /** Credential-store key for this MCP server's OAuth state. */
@@ -357,14 +394,29 @@ export class McpOAuthController {
   private readonly store: McpOAuthStateStore
   private readonly serverName: string
   private readonly serverUrl: string
+  private readonly resolveClientInformation: (() => Promise<OAuthClientInformationMixed | undefined>) | undefined
+  private readonly tokenEndpointAuthMethod: 'none' | 'client_secret_post' | 'client_secret_basic' | undefined
+  /**
+   * True only after this controller instance has registered client information
+   * against its current loopback redirect URI. Persisted registrations from a
+   * previous Host start deliberately do not set this flag.
+   */
+  private currentRedirectClientRegistered = false
   private closed = false
 
-  constructor(credentials: CredentialProvider, serverName: string, serverUrl: string) {
+  constructor(
+    credentials: CredentialProvider,
+    serverName: string,
+    serverUrl: string,
+    options: McpOAuthControllerOptions = {},
+  ) {
     this.serverName = serverName
     this.serverUrl = serverUrl
+    this.resolveClientInformation = options.resolveClientInformation
+    this.tokenEndpointAuthMethod = options.tokenEndpointAuthMethod
     this.key = mcpCredentialKey(serverName)
     this.store = createCredentialStateStore(credentials, this.key)
-    this.callbackServer = new McpOAuthCallbackServer(serverName)
+    this.callbackServer = new McpOAuthCallbackServer(serverName, options.callbackPort)
     this.ready = this.callbackServer.start()
   }
 
@@ -387,6 +439,13 @@ export class McpOAuthController {
       redirectUrl: this.callbackServer.redirectUri,
       store: this.store,
       onAuthorizationUrl,
+      onClientInformationSaved: () => { this.currentRedirectClientRegistered = true },
+      ...(this.resolveClientInformation === undefined
+        ? {}
+        : { clientInformation: this.resolveClientInformation }),
+      ...(this.tokenEndpointAuthMethod === undefined
+        ? {}
+        : { tokenEndpointAuthMethod: this.tokenEndpointAuthMethod }),
     })
   }
 
@@ -397,21 +456,26 @@ export class McpOAuthController {
   async authorize(session: AuthorizationSession): Promise<void> {
     await this.ready
     const previous = await this.store.read()
-    // The callback server deliberately binds an ephemeral loopback port. Any
-    // dynamically registered OAuth client from an earlier PHOENIX process is
-    // therefore bound to a redirect_uri that no longer exists. Reusing that
-    // client_id makes providers such as monday.com reject the new authorization
-    // request with "redirect_uri is not registered for this app". An explicit
-    // authorization attempt is a fresh registration boundary: keep reusable
-    // discovery metadata, but drop the old client registration, tokens, and
-    // verifier so the SDK registers a client for the callback URI of this run.
+    // The callback server deliberately binds an ephemeral loopback port, so a
+    // persisted dynamic client from an earlier Host process can point at a dead
+    // redirect URI and must be discarded. However, the live Streamable HTTP
+    // transport may already have completed discovery + DCR in THIS controller
+    // before the user clicks Authorize. That registration was created for this
+    // exact callback URI. Throwing it away here forces a second DCR round-trip
+    // before the SDK can build the authorization URL; providers can rate-limit,
+    // reject, or stall that duplicate registration, leaving the UI forever at
+    // "Preparando autorización…" with no URL. Preserve only registrations that
+    // this controller observed being saved; a new Host starts with the flag
+    // false and still drops genuinely stale registrations.
     if (previous !== undefined) {
       const {
-        clientInformation: _clientInformation,
         tokens: _tokens,
         codeVerifier: _codeVerifier,
-        ...reusable
+        ...withoutSessionCredentials
       } = previous
+      const reusable = this.currentRedirectClientRegistered
+        ? withoutSessionCredentials
+        : cloneWithout(withoutSessionCredentials, 'clientInformation')
       await this.store.write(reusable)
     }
     const state = randomState()
@@ -420,33 +484,126 @@ export class McpOAuthController {
     // `await attempt.code` (for example when discovery fails). Mark its rejection
     // as observed without changing the rejection delivered to the awaiting flow.
     void attempt.code.catch(() => undefined)
+    const preparationDeadline = new AbortController()
+    let consentUrlPublished = false
+    let preparingConsent = true
+    const timeout = setTimeout(() => {
+      preparationDeadline.abort(preconsentTimeoutError(this.serverName))
+    }, MCP_OAUTH_PRECONSENT_TIMEOUT_MS)
+    timeout.unref()
     const provider = createMcpOAuthProvider({
       serverName: this.serverName,
       redirectUrl: this.callbackServer.redirectUri,
       store: this.store,
       state,
+      onClientInformationSaved: () => { this.currentRedirectClientRegistered = true },
       onAuthorizationUrl: (url) => {
+        // Ignore a late redirect from an SDK request that timed out or was
+        // cancelled. The browser must not open a stale authorization attempt.
+        if (preparationDeadline.signal.aborted || session.signal.aborted) return
+        consentUrlPublished = true
         session.notify({
           message: `Continúa en tu navegador para autorizar ${this.serverName}. PHOENIX conserva los tokens solo en el Host.`,
           url: String(url),
         })
       },
+      ...(this.resolveClientInformation === undefined
+        ? {}
+        : { clientInformation: this.resolveClientInformation }),
+      ...(this.tokenEndpointAuthMethod === undefined
+        ? {}
+        : { tokenEndpointAuthMethod: this.tokenEndpointAuthMethod }),
     })
+    session.notify({
+      message: `Preparando autorización de ${this.serverName}…`,
+    })
+    let lastStage = 'contactando al servidor MCP'
+    let lastHttpStatus: number | undefined
     try {
-      const first = await auth(provider, { serverUrl: this.serverUrl })
-      if (first !== 'REDIRECT') return
+      // The Host (not the browser) owns discovery/DCR. Publish only coarse,
+      // secret-free stages so users can see *why* no consent URL was returned.
+      // Ignore exact URLs, query strings, state, tokens and client credentials.
+      const fetchFn: typeof globalThis.fetch = (input, init) => {
+        let stage = 'comprobando el endpoint OAuth'
+        try {
+          const raw = typeof input === 'string' ? input
+            : input instanceof URL ? input.href : input.url
+          const pathname = new URL(raw).pathname.toLowerCase()
+          if (pathname.includes('/.well-known/')) stage = 'descubriendo los metadatos OAuth'
+          else if (pathname.includes('/register')) stage = 'registrando el cliente OAuth'
+          else if (pathname.includes('/token')) stage = 'validando el token OAuth'
+        } catch {
+          // No externally supplied URL or query parameter is shown to users.
+        }
+        if (stage !== lastStage) {
+          lastStage = stage
+          session.notify({ message: `MCP ${this.serverName}: ${stage}…` })
+        }
+        return globalThis.fetch(input, {
+          ...init,
+          signal: AbortSignal.any([
+            session.signal,
+            ...(preparingConsent ? [preparationDeadline.signal] : []),
+            AbortSignal.timeout(30_000),
+            ...(init?.signal == null ? [] : [init.signal]),
+          ]),
+        }).then(response => {
+          // 4xx from optional well-known documents may be normal SDK fallback.
+          // Keep it only for diagnosis if the entire OAuth flow fails.
+          if (!response.ok) lastHttpStatus = response.status
+          return response
+        })
+      }
+      // The MCP SDK may perform multiple sequential OAuth metadata requests
+      // and dynamic registration round-trips. A per-request timeout does not
+      // bound that whole phase, so race its *entire* pre-consent operation.
+      // Once the URL is published, user approval has no time limit.
+      const aborted = new Promise<never>((_resolve, reject) => {
+        preparationDeadline.signal.addEventListener('abort', () => {
+          reject(preparationDeadline.signal.reason)
+        }, { once: true })
+      })
+      const first = await Promise.race([
+        auth(provider, { serverUrl: this.serverUrl, fetchFn }),
+        aborted,
+      ])
+      preparingConsent = false
+      clearTimeout(timeout)
+      if (first !== 'REDIRECT') {
+        if (!await this.isAuthorized()) {
+          throw Object.assign(
+            new Error(`MCP OAuth for ${this.serverName} completed without a consent URL or usable token`),
+            { code: 'MCP_OAUTH_NO_CONSENT_URL' },
+          )
+        }
+        return
+      }
+      if (!consentUrlPublished) {
+        throw Object.assign(
+          new Error(`MCP OAuth for ${this.serverName} did not publish a consent URL`),
+          { code: 'MCP_OAUTH_NO_CONSENT_URL' },
+        )
+      }
       const code = await attempt.code
-      const final = await auth(provider, { serverUrl: this.serverUrl, authorizationCode: code })
+      const final = await auth(provider, { serverUrl: this.serverUrl, authorizationCode: code, fetchFn })
       if (final !== 'AUTHORIZED') throw new Error(`MCP OAuth did not authorize ${this.serverName}`)
     } catch (error) {
+      if (!session.signal.aborted && !consentUrlPublished) {
+        session.notify({
+          message: `No se obtuvo la página OAuth de ${this.serverName}. Última etapa: ${lastStage}${lastHttpStatus === undefined ? '' : ` (última respuesta HTTP ${lastHttpStatus})`}. Revisa el error del conector en PHOENIX.`,
+        })
+      }
       if (!this.closed || !isExpectedMcpOAuthClose(error)) throw error
     } finally {
+      preparingConsent = false
+      clearTimeout(timeout)
       attempt.close()
     }
   }
 
   /** Clear persisted OAuth state for this MCP server. */
   async disconnect(): Promise<void> {
+    this.currentRedirectClientRegistered = false
     await this.store.clear()
   }
 

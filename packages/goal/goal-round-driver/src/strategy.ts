@@ -65,6 +65,124 @@ export function measureGoalVerificationProgress(
 }
 
 /**
+ * Measurable operational progress, independent of final verification gates.
+ * A model turn, narration, fresh plan or repeated identical read is NOT work.
+ */
+export interface GoalWorkProgress {
+  readonly stagnantRounds: number
+  readonly completedRounds: number
+  readonly repeatedOperations: readonly string[]
+}
+
+/**
+ * Inspect persisted Goal rounds across execution-window revisions. A unique
+ * successful tools with distinct observable results, newly completed tasks
+ * or fresh verification evidence advance work. Repeated or unchanged tool
+ * results are NOT proof of progress, even if the arguments/call IDs differ.
+ * The explicit human-authorized resume resets this recovery window.
+ *
+ * @param events - canonical append-only Lead session.
+ * @param goalId - goal being supervised.
+ * @returns bounded, deterministic stall diagnostics.
+ */
+export function measureGoalWorkProgress(
+  events: readonly SessionEvent[],
+  goalId: GoalId | string,
+): GoalWorkProgress {
+  const first = events.findLastIndex(event => event.type === 'goal/change'
+    && (event.data.operation === 'create' || event.data.operation === 'resume')
+    && event.data.goal.id === goalId)
+  // If the Goal has not been created yet, no automatic round is attributable.
+  if (first < 0) return { stagnantRounds: 0, completedRounds: 0, repeatedOperations: [] }
+  const calls = new Map<string, { name: string; args: string }>()
+  const observed = new Set<string>()
+  const verified = new Set<string>()
+  const completedTasks = new Set<string>()
+  let bestCompletedTodos = 0
+  let bestChecks = 0
+  let completedRounds = 0
+  let stagnantRounds = 0
+  let repeatedOperations: string[] = []
+  let round: { progressed: boolean; repeated: string[] } | undefined
+
+  for (const event of events.slice(first + 1)) {
+    if (event.type === 'user/message' && event.data.source.kind === 'goal'
+      && event.data.source.goalId === goalId && event.data.source.round > 0) {
+      round = { progressed: false, repeated: [] }
+      continue
+    }
+    if (event.type === 'tool/call') {
+      calls.set(String(event.data.callId), { name: event.data.name, args: event.data.arguments })
+    } else if (event.type === 'tool/result'
+      && event.data.error === undefined
+      && event.data.message.content.every(block => block.isError !== true)) {
+      const call = calls.get(String(event.data.message.source.callId))
+      if (call !== undefined) {
+        // Treat genuinely different returned evidence as work, rather than
+        // counting repeated reads, screenshot attempts or differently
+        // parameterized clicks as progress. Image bytes and transient tokens
+        // are intentionally excluded from the fingerprint.
+        const contents = event.data.message.content.flatMap(result => result.content)
+        const stableBlocks = contents.map(block =>
+          block.type === 'text' ? block.text.slice(0, 12_000) : block.type)
+        // Tool protocols can explicitly mark dispatch receipts as unverified.
+        // An accepted click/key/submit request is not evidence that its goal
+        // was achieved; a subsequent observation must confirm the effect.
+        const unverified = contents.some(block => {
+          if (block.type !== 'text') return false
+          try {
+            const parsed: unknown = JSON.parse(block.text)
+            return typeof parsed === 'object' && parsed !== null
+              && 'verified' in parsed && parsed.verified === false
+          } catch { return false }
+        })
+        const fingerprint = JSON.stringify([call.name, stableBlocks])
+        const novel = !unverified && !observed.has(fingerprint)
+        if (round !== undefined) {
+          if (novel) round.progressed = true
+          else if (observed.has(fingerprint) && !round.repeated.includes(call.name)) round.repeated.push(call.name)
+        }
+        observed.add(fingerprint)
+      }
+    } else if (event.type === 'todo/write') {
+      const completed = event.data.todos.filter(todo => todo.status === 'completed').length
+      if (round !== undefined && completed > bestCompletedTodos) round.progressed = true
+      bestCompletedTodos = Math.max(bestCompletedTodos, completed)
+    } else if ((event.type as string) === 'team/task') {
+      // Agent Teams owns this optional SessionEvent extension. Goal driver
+      // must stay buildable without importing the Team package as a dependency.
+      const payload: unknown = event.data
+      if (typeof payload === 'object' && payload !== null && 'task' in payload) {
+        const task = payload.task
+        if (typeof task === 'object' && task !== null && 'id' in task && 'status' in task
+          && typeof task.id === 'string' && task.status === 'completed' && !completedTasks.has(task.id)) {
+          if (round !== undefined) round.progressed = true
+          completedTasks.add(task.id)
+        }
+      }
+    } else if (event.type === 'goal/completion-gate' && event.data.goalId === goalId) {
+      const fresh = event.data.evidenceLedger.filter(entry =>
+        entry.mandatory && entry.status === 'verified' && !verified.has(entry.criterionId))
+      const passed = Object.values(event.data.checks).filter(check => check === 'pass').length
+      if (round !== undefined && (fresh.length > 0 || passed > bestChecks)) round.progressed = true
+      for (const entry of fresh) verified.add(entry.criterionId)
+      bestChecks = Math.max(bestChecks, passed)
+    } else if (event.type === 'turn/end' && round !== undefined) {
+      // Provider failures are also real consumed execution attempts; without
+      // counting them a repeatedly failing model can bypass this fence forever.
+      if (event.data.reason.kind === 'completed' || event.data.reason.kind === 'max-tokens'
+        || event.data.reason.kind === 'error') {
+        completedRounds += 1
+        stagnantRounds = round.progressed ? 0 : stagnantRounds + 1
+        repeatedOperations = round.repeated.slice(0, 4)
+      }
+      round = undefined
+    }
+  }
+  return { stagnantRounds, completedRounds, repeatedOperations }
+}
+
+/**
  * Keep the current strategy while independent evidence is still increasing.
  * Rotate only after a verifier round adds no new useful coverage.
  * @param previous - strategy used by the preceding round, when one exists.

@@ -12,7 +12,7 @@ import { LayoutController } from './service.ts'
 import { ThemePresenter } from './theme-presenter.ts'
 
 export { LayoutController } from './service.ts'
-export type { ILayout, WorkspaceOccupancy, WorkspaceOccupant } from './service.ts'
+export type { ILayout, WorkspaceOccupancy, WorkspaceOccupant, WorkspaceSide } from './service.ts'
 
 declare module '@phoenix-ai/cordis' {
   interface Context {

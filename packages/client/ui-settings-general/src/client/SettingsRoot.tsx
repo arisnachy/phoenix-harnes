@@ -10,24 +10,29 @@
  * sessions-derived empty-Hero fact is active. Visible dialog chrome belongs
  * to the step, so a mounted-but-deciding step paints nothing here.
  */
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useId, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   IconAgentPresetOutline16, IconCloseOutline16, IconDataOutline16,
-  IconPersonalizationOutline16, IconSettingsOutline16,
+  IconPlugOutline16, IconProfileOutline16, IconSettingsOutline16,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SettingsRootComponentProps, SettingsSectionRow } from './shell-contract.ts'
 import css from './SettingsRoot.module.css'
 
 /** Nav glyph by section id; unknown ids fall back to the settings gear. */
 function navIcon(id: string) {
-  if (id === 'models') return <IconDataOutline16 className={css.navIcon} size={16} />
+  if (id === 'profile') return <IconProfileOutline16 className={css.navIcon} size={16} />
+  if (id === 'models' || id === 'telemetry') return <IconDataOutline16 className={css.navIcon} size={16} />
   if (id === 'agent-presets') return <IconAgentPresetOutline16 className={css.navIcon} size={16} />
-  if (id === 'plugins') return <IconPersonalizationOutline16 className={css.navIcon} size={16} />
+  if (id === 'connectors' || id === 'plugins') return <IconPlugOutline16 className={css.navIcon} size={16} />
   return <IconSettingsOutline16 className={css.navIcon} size={16} />
 }
 
+type FeatureDestination = 'discover' | 'connectors' | 'team'
+type FeatureFocus = { destination: FeatureDestination; label: string }
+
 type PanelProps = {
+  focus: FeatureFocus | undefined
   rows: readonly SettingsSectionRow[]
   renderSlot: SettingsRootComponentProps['renderSlot']
   activeId: string | undefined
@@ -40,10 +45,16 @@ type PanelProps = {
  * header button, a mask click, and document-level Escape (mounted only while
  * open, so the listener lifetime is the panel's).
  */
-function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelProps) {
+function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose, focus }: PanelProps) {
   // Entries can unmount underneath the requested id, so the render-time
   // projection falls back to the first row when the id is gone.
-  const active = rows.find(r => r.id === activeId)?.id ?? rows[0]?.id
+  // A direct destination must never silently fall back to unrelated Settings content.
+  const active = rows.find(r => r.id === activeId)?.id ?? (focus === undefined ? rows[0]?.id : undefined)
+  const deferredActive = useDeferredValue(active)
+  // Direct navigation never paints a previous Settings section during a deferred transition.
+  const renderedActive = focus === undefined
+    ? rows.some(row => row.id === deferredActive) ? deferredActive : active
+    : active
   const titleId = useId()
 
   useEffect(() => {
@@ -61,8 +72,8 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
   return (
     <div className={css.overlay} role="presentation">
       <div className={css.mask} aria-hidden="true" onClick={onClose} />
-      <div className={css.panel} role="dialog" aria-modal="true" aria-labelledby={titleId}>
-        <nav className={css.nav}>
+      <div className={clsx(css.panel, focus !== undefined && css.focusedPanel)} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        {focus === undefined && <nav className={css.nav}>
           <div className={css.navTitle} id={titleId}>{renderSlot('settings.header', {})}</div>
           <div className={css.navList}>
             {rows.map(row => (
@@ -78,17 +89,27 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
               </button>
             ))}
           </div>
-        </nav>
+        </nav>}
         <div className={css.content}>
           <div className={css.header}>
-            <div className={css.actions}>{renderSlot('settings.action', {})}</div>
+            {focus === undefined
+              ? <div className={css.actions}>{renderSlot('settings.action', {})}</div>
+              : <h2 id={titleId} className={css.focusTitle}>{focus.label}</h2>}
             <button ref={closeButton} type="button" className={css.close} onClick={onClose}>
               <IconCloseOutline16 size={14} />
               <span className={css.hiddenLabel}>{renderSlot('settings.close', {})}</span>
             </button>
           </div>
           <div className={css.options}>
-            {active !== undefined && renderSlot('settings.section', { close: onClose }, { only: active })}
+            {renderedActive !== undefined
+              ? renderSlot('settings.section', {
+                close: onClose,
+                ...(focus === undefined ? {} : {
+                  launchContext: focus.destination === 'connectors' && focus.label === 'Reconectar Codex'
+                    ? 'codex-reconnect' : focus.destination,
+                }),
+              }, { only: renderedActive })
+              : focus !== undefined ? <p role="status">Esta función todavía no está disponible en esta instalación de Phoenix.</p> : null}
           </div>
         </div>
       </div>
@@ -105,14 +126,40 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   const { wide, useSections, useOnboardingSteps, useSessions, renderSlot } = props
   const [open, setOpen] = useState(false)
   const [activeId, setActiveId] = useState<string | undefined>(undefined)
+  const [focus, setFocus] = useState<FeatureFocus | undefined>(undefined)
   const [completedOnboarding, setCompletedOnboarding] = useState<ReadonlySet<string>>(() => new Set())
   const close = useCallback(() => {
     setOpen(false)
     setActiveId(undefined)
+    setFocus(undefined)
   }, [])
   const openSection = useCallback((id: string) => {
+    setFocus(undefined)
     setActiveId(id)
     setOpen(true)
+  }, [])
+  useEffect(() => {
+    const onNavigate = (event: Event): void => {
+      const requested = (event as CustomEvent<unknown>).detail
+      if (typeof requested === 'string') openSection(requested)
+    }
+    window.addEventListener('phoenix:open-settings-section', onNavigate)
+    return () => { window.removeEventListener('phoenix:open-settings-section', onNavigate) }
+  }, [openSection])
+
+  useEffect(() => {
+    const onFeature = (event: Event): void => {
+      const detail = (event as CustomEvent<unknown>).detail
+      if (typeof detail !== 'object' || detail === null) return
+      const { destination, label } = detail as { destination?: unknown; label?: unknown }
+      if ((destination !== 'discover' && destination !== 'connectors' && destination !== 'team')
+        || typeof label !== 'string' || label.trim().length === 0) return
+      setActiveId(destination === 'team' ? 'agent-presets' : 'connectors')
+      setFocus({ destination, label })
+      setOpen(true)
+    }
+    window.addEventListener('phoenix:open-feature', onFeature)
+    return () => { window.removeEventListener('phoenix:open-feature', onFeature) }
   }, [])
 
   // The ledger tick keeps the nav rows fresh: registrants re-register with
@@ -152,17 +199,22 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
           className={clsx(css.trigger, !wide && css.rail)}
           aria-haspopup="dialog"
           aria-expanded={open}
-          onClick={() => { setOpen(true) }}
+          onClick={() => { setFocus(undefined); setActiveId(undefined); setOpen(true) }}
         >
           {renderSlot('settings.trigger', { wide })}
-          {wide && renderSlot('settings.trigger.trailing', { wide })}
         </button>
+        {wide && (
+          <div className={css.wideQuotaPanel}>
+            {renderSlot('settings.trigger.trailing', { wide })}
+          </div>
+        )}
       </div>
       {open && (
         <SettingsPanel
           rows={rows}
           renderSlot={renderSlot}
           activeId={activeId}
+          focus={focus}
           onSelect={setActiveId}
           onClose={close}
         />

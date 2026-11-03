@@ -28,9 +28,12 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-tool-fs-search` | `glob`, `grep` | `ctx.tools`, `ctx.subprocess`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | glob and grep are unconditional discovery tools that spawn the packaged ripgrep binary (`@vscode/ripgrep`) through ctx.subprocess as ordinary foreground calls (never background jobs) — no host `rg` install and no shell layer. The catalog uses `sampleOverCapGlobResults: true`; deployments must choose that behavior explicitly. Capped results save the complete formatted list through the optional ctx.spillStore backend; returned locators are follow-up-readable/searchable when the backend exposes local paths in co-located deployments. |
 | `@phoenix-ai/dsh-tool-terminal` | `terminal_close`, `terminal_list`, `terminal_open`, `terminal_read`, `terminal_send`, `terminal_signal` | `ctx.tools`, `ctx.terminals`, `ctx.systemPrompt`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The six terminal tools are opt-in and complement one-shot shell/filesystem tools. `terminal_send(run_in_background: true)` registers with `ctx.jobs`; TUI, named key sequences, BEL, resize, auto-start, and cross-agent sharing are absent from the schema. |
 | `@phoenix-ai/dsh-tool-goal` | `create_goal`, `get_goal`, `organization_forge`, `specialist_lab`, `update_goal` | `ctx.tools`, `ctx.agents`, `ctx.goals`, `ctx.systemPrompt`, `a calling Agent in an authorized open turn` | `tool/call`, `goal/change for mutations`, `tool/result` | - | create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds. |
+| `@phoenix-ai/dsh-tool-google-workspace` | `gmail_read`, `gmail_search`, `gmail_send`, `google_calendar_create_event`, `google_calendar_list_events`, `google_drive_search`, `google_workspace_request` | `ctx.tools`, `ctx.googleApi` | `tool/call`, `bounded Google Workspace request through the host OAuth broker`, `tool/result` | - | The schema harvest supplies a non-networking googleApi seam. Live calls stay inside the Host-owned OAuth broker, which fixes the Google service root and scope, injects the Bearer token only at fetch time, and never exposes OAuth material to the model-facing tool package. |
 | `@phoenix-ai/dsh-tool-home-gateway` | `home_control`, `home_list_devices` | `ctx.tools`, `ctx.home`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `Home Assistant request at execution time` | - | The schema harvest uses a private fake endpoint and never performs a request. Live deployments remain disabled until the operator supplies a private endpoint, token variable, and both allowlists. |
 | `@phoenix-ai/dsh-schedule` | `schedule_create`, `schedule_delete`, `schedule_list` | `ctx.tools`, `ctx.sessions`, `Session persistence`, `a future live root Agent` | `tool/call`, `schedule/change create or delete`, `tool/result` | - | Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, and discloses session-local delivery; management reads and mutations require the shared Session persistence barrier. |
+| `@phoenix-ai/dsh-tool-business` | `business_plan_mission` | `ctx.tools`, `ctx.systemPrompt`, `ctx.mcpConnectors (optional at execution)` | `tool/call`, `tool/result` | - | Read-only intent and live MCP capability planning. Tool names and connection status never confer publication rights. |
 | `@phoenix-ai/dsh-tool-living` | `living_act`, `living_forget_creation`, `living_get_connector_kit`, `living_inspect_creation`, `living_list_creations`, `living_read_state`, `living_register_creation`, `living_verify_creation` | `ctx.tools`, `ctx.living`, `ctx.systemPrompt` | `tool/call`, `durable living creation manifest`, `live creation state/actions/events through ctx.living`, `tool/result` | - | Universal domain-neutral control surface: arbitrary future creation kinds describe their own state, actions, events, resources, actors, and target integration level; verification refuses delivery below that target. |
+| `@phoenix-ai/dsh-tool-sports` | `sports_chat_catalog`, `sports_chat_discover`, `sports_chat_games`, `sports_chat_mlb_pitchers`, `sports_chat_odds`, `sports_chat_ticket`, `sports_chat_ticket_research` | `ctx.tools`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | Read-only sports market and game context with inline chat cards. Tickets simulate returns, never transact or promise wins. |
 | `@phoenix-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`, `ctx.lsp`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | The lsp tool keeps provider selection and language-server subprocesses behind ctx.lsp, so its model-visible schema stays stable across providers. Requires a registered provider (e.g. `@phoenix-ai/dsh-lsp-stdio`) at runtime; without one, a query returns the structured `LSP_UNAVAILABLE` error rather than changing the schema. |
 | `@phoenix-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`, `ctx.workflowEngine`, `ctx.subagents`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents every fresh round)` | `tool/call`, `tool/result`, `workflow and child session events during execution` | - | A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap. |
 | `@phoenix-ai/dsh-tool-skill` | `skill` | `ctx.tools`, `ctx.agents`, `ctx.skills` | `tool/call`, `tool/result`, `user/message replacement catalogs via agent.inject()` | - | - |
@@ -40,10 +43,10 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
 | `@phoenix-ai/dsh-tool-subagent-report` | `report` | `ctx.subagents`, `ctx.systemPrompt`, `a live continuable in-process child Agent` | `tool/call`, `tool/result`, `a user-role message in the direct parent session` | - | Registered per continuable in-process child rather than globally, so this schema is visible only inside such a child and survives its global `toolFilter`. The same contribution installs the child-scoped `tool:report` prompt section, which this catalog does not render. The parent-facing `send_message` tool is installed independently. |
 | `@phoenix-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
-| `@phoenix-ai/dsh-experimental-tool-agent-team` | `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All ten tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
+| `@phoenix-ai/dsh-tool-agent-team` | `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_chat_answer`, `team_chat_react`, `team_chat_read`, `team_chat_reply_to_peer`, `team_react`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | The Team tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
 | `@phoenix-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@phoenix-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
-| `@phoenix-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
+| `@phoenix-ai/dsh-tool-web` | `research_scholar`, `research_search`, `research_sources`, `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
 
 <a id="phoenix-aidsh-tool-ask-user"></a>
 
@@ -51,7 +54,7 @@ This table connects model-visible tool names to the plugin package and service s
 
 ### `ask_user_question`
 
-Ask the user a concise question when you need confirmation, a choice, or missing information before proceeding. Send one or more questions, each with a stable id that will be echoed in the answer. If the user does not answer within one minute, Phoenix applies the safest recommended option; mark that option with recommended=true. An automatic answer is only a decision for this step: it never completes, cancels, or blocks an active mission. Use it, change strategy when needed, and continue until the requested deliverable is verified.
+Ask the user a concise question when you need confirmation, a choice, or missing information before proceeding. Send one or more questions, each with a stable id that will be echoed in the answer. If the user does not answer within one minute, Phoenix applies the safest recommended option; mark that option with recommended=true. An automatic answer is only a decision for this step: it never completes, cancels, or blocks an active mission. Use it, change strategy when needed, and continue until the requested deliverable is verified. For health symptoms, history, medication, consent, finances or other sensitive questions set sensitive=true: expiry then returns no answer, never an inferred fact or consent.
 
 ```json
 {
@@ -100,6 +103,10 @@ Ask the user a concise question when you need confirmation, a choice, or missing
                 "label"
               ]
             }
+          },
+          "sensitive": {
+            "type": "boolean",
+            "description": "Mark sensitive clinical, identity, consent, or other personal questions. On expiration, no option is selected; do not treat an automatic answer as a patient statement."
           },
           "multi_select": {
             "type": "boolean",
@@ -276,7 +283,7 @@ The pwsh tool is the PowerShell-dialect consumer of the bash executor seam for W
 
 ### `cordis_define`
 
-Define an immutable Cordis Package. For a new Plugin, use kind:"new" and provide only a semantic prefix of 3–6 lowercase English letters; the Host returns the final pluginId and packageId. To modify an existing Plugin, use kind:"existing" with its exact pluginId to append a Package without overwriting older versions. Provide at least one of code.host and code.client. Each value is a plain JavaScript function body that returns a Cordis Plugin; no TypeScript, JSX, or import transformation occurs. Query Inspect before depending on a Service, Event, Builtin, Slot, or token. Define only validates parameters and syntax and records source: it does not request approval, execute apply, or change currentPackageId. On success, call cordis_run with the returned IDs.
+Define an immutable Cordis Package. For a new Plugin, use kind:"new" and provide only a semantic prefix of 3–6 lowercase English letters; the Host returns the final pluginId and packageId. To modify an existing Plugin, use kind:"existing" with its exact pluginId to append a Package without overwriting older versions. Provide at least one of code.host and code.client. Each value is a plain JavaScript function body that returns a Cordis Plugin; no TypeScript, JSX, or import transformation occurs. Query Inspect before depending on a Service, Event, Builtin, Slot, or token. Define only validates parameters and syntax and records source: it does not execute apply or change currentPackageId. Packages authored through this Phoenix tool are internally pre-authorized, so cordis_run must not ask the user for a second approval. On success, call cordis_run with the returned IDs.
 
 ```json
 {
@@ -431,7 +438,7 @@ Source: [`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/
 
 ### `cordis_run`
 
-Activate one exact Package of a dynamic Plugin. Use mode:"run" for the first activation, restarting currentPackageId, or rollback. When current exists, use mode:"update" to switch to a different Package, even if the Plugin is currently stopped. An unauthorized Client Package creates an approval request and returns awaiting-approval; an authorized Package returns starting and continues asynchronously in the browser. Neither result waits for the final outcome inside the Tool. currentPackageId changes only after complete success; on failure, the old current and target next remain. Asynchronous success, rejection, or technical failure is reported through state and steering. After a technical failure, read diagnostics with cordis_inspect_self, correct the same Plugin, and retry autonomously. Do not request approval again after the user rejects it.
+Activate one exact Package of a dynamic Plugin. Use mode:"run" for the first activation, restarting currentPackageId, or rollback. When current exists, use mode:"update" to switch to a different Package, even if the Plugin is currently stopped. Packages created by Phoenix through cordis_define are already authorized and continue asynchronously without a second user approval. Only non-Phoenix/manual definitions can return awaiting-approval. Neither result waits for the final outcome inside the Tool. currentPackageId changes only after complete success; on failure, the old current and target next remain. Asynchronous success, rejection, or technical failure is reported through state and steering. After a technical failure, read diagnostics with cordis_inspect_self, correct the same Plugin, and retry autonomously. Do not request approval again after the user rejects it.
 
 ```json
 {
@@ -1556,6 +1563,249 @@ Source: [`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/
 
 create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds.
 
+<a id="phoenix-aidsh-tool-google-workspace"></a>
+
+## `@phoenix-ai/dsh-tool-google-workspace`
+
+### `gmail_read`
+
+Read one Gmail message by id from the connected mailbox. Full format includes headers and MIME body parts.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string"
+    },
+    "format": {
+      "type": "string",
+      "description": "minimal, full, metadata, or raw. Defaults to full."
+    }
+  },
+  "required": [
+    "message_id"
+  ]
+}
+```
+
+Source: [`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `gmail_search`
+
+Search the connected Gmail mailbox using Gmail query syntax. Use this for account mail, not public web search.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Gmail search query such as is:unread newer_than:7d."
+    },
+    "max_results": {
+      "type": "number",
+      "description": "Maximum messages to return, 1-100. Defaults to 20."
+    },
+    "page_token": {
+      "type": "string",
+      "description": "Optional Gmail pagination token."
+    }
+  },
+  "required": [
+    "query"
+  ]
+}
+```
+
+Source: [`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `gmail_send`
+
+Send an email from the connected Gmail account. Call only when the user asked to send or approved the message content.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "to": {
+      "type": "string",
+      "description": "Recipient address or comma-separated recipient addresses."
+    },
+    "subject": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string"
+    },
+    "cc": {
+      "type": "string",
+      "description": "Optional comma-separated CC addresses."
+    },
+    "bcc": {
+      "type": "string",
+      "description": "Optional comma-separated BCC addresses."
+    },
+    "html": {
+      "type": "boolean",
+      "description": "Send body as text/html instead of text/plain."
+    }
+  },
+  "required": [
+    "to",
+    "subject",
+    "body"
+  ]
+}
+```
+
+Source: [`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_calendar_create_event`
+
+Create an event in the connected Google Calendar. Use only when the user asked to schedule/create it.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "start": {
+      "type": "string",
+      "description": "RFC3339 start date-time."
+    },
+    "end": {
+      "type": "string",
+      "description": "RFC3339 end date-time."
+    },
+    "calendar_id": {
+      "type": "string",
+      "description": "Calendar id. Defaults to primary."
+    },
+    "time_zone": {
+      "type": "string",
+      "description": "Optional IANA time zone, such as America/Santo_Domingo."
+    },
+    "description": {
+      "type": "string"
+    },
+    "attendees": {
+      "type": "array",
+      "description": "Optional attendee email addresses.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "summary",
+    "start",
+    "end"
+  ]
+}
+```
+
+Source: [`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_calendar_list_events`
+
+List events from the connected Google Calendar, optionally bounded by RFC3339 start/end times.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "calendar_id": {
+      "type": "string",
+      "description": "Calendar id. Defaults to primary."
+    },
+    "time_min": {
+      "type": "string",
+      "description": "Optional RFC3339 lower bound."
+    },
+    "time_max": {
+      "type": "string",
+      "description": "Optional RFC3339 upper bound."
+    },
+    "max_results": {
+      "type": "number",
+      "description": "Maximum events, 1-250. Defaults to 50."
+    }
+  }
+}
+```
+
+Source: [`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_drive_search`
+
+Search/list files in the connected Google Drive using Drive v3 q syntax.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Optional Drive v3 q expression."
+    },
+    "page_size": {
+      "type": "number",
+      "description": "Maximum files, 1-100. Defaults to 50."
+    },
+    "page_token": {
+      "type": "string"
+    }
+  }
+}
+```
+
+Source: [`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_workspace_request`
+
+Advanced bounded Google Workspace REST call through PHOENIX OAuth. Use only when a dedicated Gmail/Calendar/Drive tool does not cover the task. service is restricted to gmail, calendar, drive, docs, sheets, slides, contacts; path must be relative and caller authentication headers are forbidden.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "service": {
+      "type": "string"
+    },
+    "path": {
+      "type": "string"
+    },
+    "method": {
+      "type": "string",
+      "description": "GET, POST, PUT, PATCH, DELETE. Defaults to GET."
+    },
+    "body": {
+      "type": "string",
+      "description": "Optional request body, normally JSON text."
+    },
+    "content_type": {
+      "type": "string",
+      "description": "Defaults to application/json when body is present."
+    },
+    "upload": {
+      "type": "boolean",
+      "description": "Use the fixed upload API for Gmail/Drive."
+    }
+  },
+  "required": [
+    "service",
+    "path"
+  ]
+}
+```
+
+Source: [`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+The schema harvest supplies a non-networking googleApi seam. Live calls stay inside the Host-owned OAuth broker, which fixes the Google service root and scope, injects the Bearer token only at fetch time, and never exposes OAuth material to the model-facing tool package.
+
 <a id="phoenix-aidsh-tool-home-gateway"></a>
 
 ## `@phoenix-ai/dsh-tool-home-gateway`
@@ -1703,6 +1953,33 @@ List every active reminder in the current session in creation order, including i
 Source: [`packages/schedule/schedule/src/tools.ts`](../packages/schedule/schedule/src/tools.ts)
 
 Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, and discloses session-local delivery; management reads and mutations require the shared Session persistence barrier.
+
+<a id="phoenix-aidsh-tool-business"></a>
+
+## `@phoenix-ai/dsh-tool-business`
+
+### `business_plan_mission`
+
+Interpreta la intención comercial de una solicitud y consulta el inventario MCP real de Phoenix para sugerir herramientas listas, autorizaciones pendientes y alternativas seguras. Solo planificación, jamás publica ni gasta.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "string",
+      "description": "La petición comercial exacta del usuario, sin credenciales."
+    }
+  },
+  "required": [
+    "request"
+  ]
+}
+```
+
+Source: [`packages/core/tool-business/src/index.ts`](../packages/core/tool-business/src/index.ts)
+
+Read-only intent and live MCP capability planning. Tool names and connection status never confer publication rights.
 
 <a id="phoenix-aidsh-tool-living"></a>
 
@@ -1924,6 +2201,251 @@ Fail unless a creation has reached its declared target integration level. Use on
 Source: [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
 
 Universal domain-neutral control surface: arbitrary future creation kinds describe their own state, actions, events, resources, actors, and target integration level; verification refuses delivery below that target.
+
+<a id="phoenix-aidsh-tool-sports"></a>
+
+## `@phoenix-ai/dsh-tool-sports`
+
+### `sports_chat_catalog`
+
+Lista disciplinas y ligas documentadas. No crea menú ni abre otra pantalla.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_discover`
+
+Descubre competiciones adicionales directamente en el catálogo público ESPN, sin API key ni acceso a URLs arbitrarias.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Disciplina ESPN como soccer, baseball, basketball, cricket, golf o hockey."
+    }
+  },
+  "required": [
+    "sport"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_games`
+
+Eventos reales en el chat: liga, horario, estadio, equipos y estadísticas verificables. Devuelve tarjetas renderizables.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Deporte: soccer, baseball, basketball, etc."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga: mlb, nba, mex.1, eng.1, etc."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD, opcional: hoy en Santo Domingo."
+    }
+  },
+  "required": [
+    "sport",
+    "league"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_mlb_pitchers`
+
+Analiza rotación y bullpen de MLB por equipo, ERA, WHIP, entradas y ponches con datos de temporada verificados.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "teamId": {
+      "type": "integer",
+      "description": "ID del equipo, extraído de datos reales MLB."
+    },
+    "season": {
+      "type": "integer",
+      "description": "Año de la temporada MLB."
+    }
+  },
+  "required": [
+    "teamId",
+    "season"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_odds`
+
+Busca cuotas públicas ESPN sin clave o The Odds API si está configurada; puede devolver vacío cuando ESPN no publica precios.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sportKey": {
+      "type": "string",
+      "description": "Clave del proveedor: baseball_mlb, basketball_nba, soccer_epl, etc."
+    },
+    "markets": {
+      "type": "string",
+      "description": "h2h, totals o spreads. Por defecto h2h."
+    }
+  },
+  "required": [
+    "sportKey"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_ticket`
+
+Genera un ticket visual SIMULADO con selecciones verificadas nuevamente en cuotas reales. No ejecuta apuestas.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sportKey": {
+      "type": "string",
+      "description": "Clave deportiva de The Odds API. Para varios deportes utiliza sportKeys."
+    },
+    "sportKeys": {
+      "type": "array",
+      "description": "Claves para ticket multisport, máximo cuatro.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "markets": {
+      "type": "string",
+      "description": "h2h, totals o spreads, mismo mercado de las selecciones."
+    },
+    "selections": {
+      "type": "array",
+      "description": "Entre una y diez selecciones verificables.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "eventId": {
+            "type": "string"
+          },
+          "bookmaker": {
+            "type": "string"
+          },
+          "market": {
+            "type": "string"
+          },
+          "selection": {
+            "type": "string"
+          },
+          "point": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "eventId",
+          "bookmaker",
+          "market",
+          "selection"
+        ]
+      }
+    },
+    "stake": {
+      "type": "number",
+      "description": "Importe ficticio para simular el retorno; no es una operación financiera."
+    }
+  },
+  "required": [
+    "selections"
+  ]
+}
+```
+
+### `sports_chat_ticket_research`
+
+GENERA UN TICKET VISUAL REALMENTE RENDERIZABLE de pronósticos para encuentros futuros verificados en ESPN, incluso SIN cuotas ni API key. Úsalo cuando un usuario pida un ticket y sports_chat_odds venga vacío. No lo confundas con un boleto cotizado.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha de los eventos AAAA-MM-DD; por defecto hoy en Santo Domingo."
+    },
+    "legs": {
+      "type": "array",
+      "description": "De 1 a 6 selecciones, con IDs de los partidos obtenidos de sports_chat_games y motivos basados en investigación. No inventar IDs.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sport": {
+            "type": "string",
+            "description": "Deporte de la cartelera, normalmente soccer."
+          },
+          "league": {
+            "type": "string",
+            "description": "Liga ESPN válida, por ejemplo mex.1 o usa.1."
+          },
+          "eventId": {
+            "type": "string",
+            "description": "ID real de un partido confirmado en sports_chat_games."
+          },
+          "pick": {
+            "type": "string",
+            "description": "home o away; draw solo si es soccer."
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Fundamento breve de la selección; hipótesis de Kira, no una certeza."
+          }
+        },
+        "required": [
+          "sport",
+          "league",
+          "eventId",
+          "pick"
+        ]
+      }
+    }
+  },
+  "required": [
+    "legs"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+Read-only sports market and game context with inline chat cards. Tickets simulate returns, never transact or promise wins.
 
 <a id="phoenix-aidsh-tool-lsp"></a>
 
@@ -2620,9 +3142,9 @@ Source: [`packages/jobs/tool-jobs/src/index.ts`](../packages/jobs/tool-jobs/src/
 
 The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`.
 
-<a id="phoenix-aidsh-experimental-tool-agent-team"></a>
+<a id="phoenix-aidsh-tool-agent-team"></a>
 
-## `@phoenix-ai/dsh-experimental-tool-agent-team`
+## `@phoenix-ai/dsh-tool-agent-team`
 
 ### `followup_task`
 
@@ -2636,19 +3158,33 @@ Send a durable follow-up task to another Team member and start a turn when neede
       "type": "string",
       "description": "Team member name, or lead."
     },
+    "purpose": {
+      "type": "string",
+      "description": "Operational purpose. A natural conversational answer to Kira may use result without an external tool. Use blocker only for a genuine unresolved task obstacle, never a routine conversation or wait.",
+      "enum": [
+        "assignment",
+        "question",
+        "blocker",
+        "result",
+        "review",
+        "decision",
+        "update"
+      ]
+    },
     "message": {
       "type": "string",
-      "description": "Self-contained message for the target."
+      "description": "Self-contained message for the target in the current user conversational language; preserve exact code and error strings."
     }
   },
   "required": [
     "target",
+    "purpose",
     "message"
   ]
 }
 ```
 
-Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `interrupt_agent`
 
@@ -2669,7 +3205,7 @@ Interrupt one teammate's current turn while preserving its pending inbox. Team L
 }
 ```
 
-Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `list_agents`
 
@@ -2682,7 +3218,7 @@ List the Lead and every durable teammate with current runtime status.
 }
 ```
 
-Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `send_message`
 
@@ -2696,23 +3232,37 @@ Send durable information to another Team member without starting an idle member.
       "type": "string",
       "description": "Team member name, or lead."
     },
+    "purpose": {
+      "type": "string",
+      "description": "Operational purpose. A natural conversational answer to Kira may use result without an external tool. Use blocker only for a genuine unresolved task obstacle, never a routine conversation or wait.",
+      "enum": [
+        "assignment",
+        "question",
+        "blocker",
+        "result",
+        "review",
+        "decision",
+        "update"
+      ]
+    },
     "message": {
       "type": "string",
-      "description": "Self-contained message for the target."
+      "description": "Self-contained message for the target in the current user conversational language; preserve exact code and error strings."
     }
   },
   "required": [
     "target",
+    "purpose",
     "message"
   ]
 }
 ```
 
-Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `spawn_teammate`
 
-Create one named, durable teammate. Only the Team Lead may call this tool.
+Create one REAL durable specialist. Kira chooses the smallest warranted team (1 simple, 2 medium, 3 difficult/exceptional); no role-play or token-wasting workers. Only the Team Lead may call this tool.
 
 ```json
 {
@@ -2720,11 +3270,21 @@ Create one named, durable teammate. Only the Team Lead may call this tool.
   "properties": {
     "name": {
       "type": "string",
-      "description": "Unique lower-kebab-case teammate name."
+      "description": "Optional unique lower-kebab-case teammate name. Omit for automatic specialist selection from the delegated responsibility."
     },
     "description": {
       "type": "string",
       "description": "Short description of the delegated responsibility."
+    },
+    "mission_complexity": {
+      "type": "string",
+      "description": "Classify the real mission before spawning. The runtime caps teammates at 1/2/3/3 for simple/medium/difficult/exceptional; exceptional never exceeds three independent workstreams. Omit for legacy calls; never inflate the tier to create conversational theater.",
+      "enum": [
+        "simple",
+        "medium",
+        "difficult",
+        "exceptional"
+      ]
     },
     "prompt": {
       "type": "string",
@@ -2740,14 +3300,142 @@ Create one named, durable teammate. Only the Team Lead may call this tool.
     }
   },
   "required": [
-    "name",
     "description",
     "prompt"
   ]
 }
 ```
 
-Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `team_chat_answer`
+
+Only answer a genuine delivered user-authored directed conversational question using its Team-user message id. Never use for teammate-to-Kira evidence or a result: use send_message target=lead purpose=review/result or blocker.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "message_id",
+    "text"
+  ]
+}
+```
+
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `team_chat_react`
+
+Add/remove your visible Unicode emoji reaction to a real user/Kira/agent message in the shared transcript. This is the canonical reaction tool. Reactions are optional; use one only when useful and natural without avoidable turns or cost. Any valid Unicode emoji is allowed; never react to your own message, never use a fixed default, and never react by routine.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string"
+    },
+    "emoji": {
+      "type": "string"
+    },
+    "active": {
+      "type": "boolean",
+      "description": "False removes your selected emoji; default true."
+    }
+  },
+  "required": [
+    "message_id",
+    "emoji"
+  ]
+}
+```
+
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `team_chat_read`
+
+Read recent real user/Kira/agent conversation messages and IDs for replies or reactions. Does not wake agents.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "limit": {
+      "type": "integer",
+      "description": "Recent message count, from 1 through 50; default 20."
+    }
+  }
+}
+```
+
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `team_chat_reply_to_peer`
+
+Only Kira: publish one real direct answer to an actually delivered teammate result, question, blocker or review without waking that teammate. Requires the original Team message id, one meaningful acceptance/decision, no invented speech. For new work use send_message or followup_task.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "description": "Id of the actual delivered specialist-to-Kira handoff."
+    },
+    "text": {
+      "type": "string",
+      "description": "Brief answer addressed to the specialist in the user language, maximum 800 UTF-8 bytes."
+    }
+  },
+  "required": [
+    "message_id",
+    "text"
+  ]
+}
+```
+
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `team_react`
+
+Legacy semantic reaction for another Team member's durable peer message. Prefer team_chat_react for the visible shared transcript; this tool remains for compatibility and its semantic reaction is projected into the same emoji UI.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "description": "Stable Team message id from the delivered peer item."
+    },
+    "reaction": {
+      "type": "string",
+      "description": "Semantic reaction: acknowledged, agreed, useful insight, blocker, or completed.",
+      "enum": [
+        "ack",
+        "agree",
+        "insight",
+        "blocked",
+        "done"
+      ]
+    }
+  },
+  "required": [
+    "message_id",
+    "reaction"
+  ]
+}
+```
+
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `team_task_create`
 
@@ -2787,7 +3475,7 @@ Create one unowned pending task on the shared Team task board.
 }
 ```
 
-Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `team_task_get`
 
@@ -2808,7 +3496,7 @@ Read the complete latest value of one shared task before changing or executing i
 }
 ```
 
-Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `team_task_list`
 
@@ -2847,7 +3535,7 @@ List shared tasks, including readiness, owner, revision, blockers, and write-sco
 }
 ```
 
-Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `team_task_update`
 
@@ -2914,11 +3602,11 @@ Compare-and-set a shared task action using the latest revision from team_task_ge
 }
 ```
 
-Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `wait_agent`
 
-Wait for the next teammate status, mailbox, or shared-task change after this call starts. This never wakes inactive members and returns noProgress immediately when no other member is running or provisioning. Re-list after wakeup or timeout instead of polling.
+Wait once for new Team activity; never poll indefinitely. Actual waiting is capped at 12000ms. After two timeouts without any Team change, return stalled-team instead of waiting again.
 
 ```json
 {
@@ -2926,15 +3614,15 @@ Wait for the next teammate status, mailbox, or shared-task change after this cal
   "properties": {
     "timeout_ms": {
       "type": "integer",
-      "description": "Wait duration in milliseconds, from 10000 through 3600000. Defaults to 30000."
+      "description": "Requested wait duration 5000 through 3600000ms, capped internally at 12000ms. Defaults to 12000ms; completes earlier on actual teammate activity."
     }
   }
 }
 ```
 
-Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
-All ten tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names.
+The Team tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names.
 
 <a id="phoenix-aidsh-tool-todo"></a>
 
@@ -3084,6 +3772,73 @@ Source: [`packages/workflow/tool-workflow/src/index.ts`](../packages/workflow/to
 <a id="phoenix-aidsh-tool-web"></a>
 
 ## `@phoenix-ai/dsh-tool-web`
+
+### `research_scholar`
+
+Busca metadatos científicos REALES mediante la API pública oficial Europe PMC: PubMed, PubMed Central, artículos, preprints y otras fuentes indexadas. Devuelve autor, título, año, revista, DOI/PMID/PMCID, URL original, resumen cuando exista y fecha de consulta. Úsala antes de redactar informes biomédicos o al verificar referencias; NO implica que el artículo tenga revisión por pares, texto completo disponible o evidencia clínica sólida. Búsqueda de máximo 10 registros, sin claves API inventadas. La herramienta devuelve estado unavailable si el proveedor falla.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Consulta académica, 3 a 400 caracteres."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Resultados 1 a 10, por defecto 5."
+    }
+  },
+  "required": [
+    "query"
+  ]
+}
+```
+
+Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
+
+### `research_search`
+
+Run bounded multidisciplinary live web research with domain-aware source-scoped queries, deduplication and partial failure recovery. Returns source leads and provenance, not directly verified API data.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "question": {
+      "type": "string"
+    },
+    "domain": {
+      "type": "string",
+      "description": "Optional source domain. Call research_sources to list valid values."
+    }
+  },
+  "required": [
+    "question"
+  ]
+}
+```
+
+Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
+
+### `research_sources`
+
+List candidate authoritative source hosts by research domain. This is metadata, not an API connection, credential or live availability claim.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string",
+      "description": "Optional domain, for example sports, fx, medicine, science, economics, weather, law or general."
+    }
+  }
+}
+```
+
+Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
 
 ### `web_fetch`
 

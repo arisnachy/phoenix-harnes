@@ -13,6 +13,7 @@ function fakeLayout(subagent = false): ILayout {
   const occupancy: WorkspaceOccupancy = Object.freeze({ subagent, cordis: false })
   return {
     toggleSidebar: vi.fn(),
+    setSidebarFocus: vi.fn(),
     openDetails: vi.fn(),
     closeDetails: vi.fn(),
     setWorkspaceOccupant: vi.fn(),
@@ -37,7 +38,7 @@ describe('CordisVisualWorkspaceController', () => {
     controller.show({ kind: 'image', src: 'https://example.test/a.png', title: 'Image' })
     expect(controller.getSnapshot()).toEqual({ kind: 'image', src: 'https://example.test/a.png', title: 'Image' })
     expect(layout.setWorkspaceOccupant).toHaveBeenCalledTimes(1)
-    expect(layout.setWorkspaceOccupant).toHaveBeenLastCalledWith('cordis', true)
+    expect(layout.setWorkspaceOccupant).toHaveBeenLastCalledWith('cordis', true, 'right')
 
     controller.show({ kind: 'video', src: 'https://example.test/a.mp4', title: 'Video' })
     expect(controller.getSnapshot()).toEqual({ kind: 'video', src: 'https://example.test/a.mp4', title: 'Video' })
@@ -60,8 +61,19 @@ describe('CordisVisualWorkspaceController', () => {
     controller.dispose()
 
     expect(layout.setWorkspaceOccupant).toHaveBeenCalledTimes(2)
-    expect(layout.setWorkspaceOccupant).toHaveBeenNthCalledWith(1, 'cordis', true)
+    expect(layout.setWorkspaceOccupant).toHaveBeenNthCalledWith(1, 'cordis', true, 'right')
     expect(layout.setWorkspaceOccupant).toHaveBeenNthCalledWith(2, 'cordis', false)
+  })
+
+  it('can move an open Cordis surface between right and left rails without closing it', () => {
+    const layout = fakeLayout()
+    const controller = new CordisVisualWorkspaceController(layout)
+
+    controller.show({ kind: 'text', text: 'left', dock: 'left' })
+    controller.show({ kind: 'text', text: 'right', dock: 'right' })
+
+    expect(layout.setWorkspaceOccupant).toHaveBeenNthCalledWith(1, 'cordis', true, 'left')
+    expect(layout.setWorkspaceOccupant).toHaveBeenNthCalledWith(2, 'cordis', true, 'right')
   })
 })
 
@@ -75,6 +87,7 @@ describe('CordisVisualWorkspace', () => {
     act(() => { controller.show({ kind: 'image', src: 'https://example.test/a.png', title: 'Image' }) })
     const workspace = view.getByLabelText('Cordis visual workspace')
     expect(workspace.hasAttribute('data-under-subagent')).toBe(false)
+    expect(workspace.getAttribute('data-cordis-dock')).toBe('right')
     expect(view.getByText('Image')).toBeTruthy()
     expect(view.getByRole('img').getAttribute('alt')).toBe('Image')
 
@@ -105,6 +118,26 @@ describe('CordisVisualWorkspace', () => {
     fireEvent.click(view.getByRole('button', { name: 'Close Cordis workspace' }))
     expect(view.queryByLabelText('Cordis visual workspace')).toBeNull()
     expect(layout.setWorkspaceOccupant).toHaveBeenLastCalledWith('cordis', false)
+  })
+
+  it('renders interactive Phoenix canvas HTML inside the reserved side workspace', () => {
+    const layout = fakeLayout()
+    const controller = new CordisVisualWorkspaceController(layout)
+    controller.show({
+      kind: 'html',
+      html: '<canvas id="art"></canvas><script>document.body.dataset.ready="1"</script>',
+      title: 'Floral dream',
+      executable: true,
+    })
+    const view = renderWorkspace(controller, layout)
+    const frame = view.getByTitle('Floral dream') as HTMLIFrameElement
+
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(frame.getAttribute('referrerpolicy')).toBe('no-referrer')
+    expect(frame.getAttribute('srcdoc')).toContain("connect-src 'none'")
+    expect(frame.getAttribute('srcdoc')).toContain('<canvas id="art"></canvas>')
+    expect(view.getByLabelText('Cordis visual workspace').getAttribute('data-cordis-dock')).toBe('right')
+    expect(layout.setWorkspaceOccupant).toHaveBeenCalledWith('cordis', true, 'right')
   })
 
   it('renders HTTP(S) pages sandboxed with an external escape hatch', () => {

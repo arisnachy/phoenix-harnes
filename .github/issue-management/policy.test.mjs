@@ -1,3 +1,10 @@
+import { createServer } from 'node:http'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -424,4 +431,51 @@ test('resolves the active downstream repository independently of project config'
 
 test('rejects malformed workflow repository coordinates', () => {
   assert.throws(() => resolveRepositoryCoordinates('broken/repo/slug'), /GITHUB_REPOSITORY/)
+})
+
+
+test('policy CLI accepts unavailable optional native fields on a personal repository', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-policy-'))
+  let fieldStatus = 404
+  let ownerType = 'User'
+  const server = createServer((request, response) => {
+    response.setHeader('Content-Type', 'application/json')
+    const route = request.url
+    let value
+    if (route === '/repos/test/phoenix') value = { owner: { type: ownerType } }
+    else if (route === '/repos/test/phoenix/pulls/1') value = { draft: false, user: { type: 'User' }, labels: [{ name: 'kind/bug-fix' }, { name: 'area/infra' }], body: 'Closes #2' }
+    else if (route === '/repos/test/phoenix/pulls/1/requested_reviewers') value = { users: [{ login: 'reviewer' }], teams: [] }
+    else if (route?.startsWith('/repos/test/phoenix/pulls/1/reviews')) value = []
+    else if (route === '/repos/test/phoenix/issues/2') value = { node_id: 'issue-2', title: '修复', assignees: [], labels: [], state: 'open', state_reason: null }
+    else if (route?.startsWith('/repos/test/phoenix/issues/2/issue-field-values')) { response.statusCode = fieldStatus; value = { message: 'Not Found' } }
+    else { response.statusCode = 500; value = { message: 'Unexpected request' } }
+    response.end(JSON.stringify(value))
+  })
+  try {
+    await new Promise(resolve => { server.listen(0, '127.0.0.1', resolve) })
+    const address = server.address()
+    assert.ok(address && typeof address === 'object')
+    const event = join(directory, 'event.json')
+    await writeFile(event, JSON.stringify({ pull_request: { number: 1 } }))
+    const { stdout } = await promisify(execFile)(process.execPath, [fileURLToPath(new URL('./policy.mjs', import.meta.url)), 'pr'], {
+      timeout: 10_000,
+      env: { ...process.env, GH_TOKEN: 'keyless-policy-token', GITHUB_REPOSITORY: 'test/phoenix', GITHUB_API_URL: `http://127.0.0.1:${address.port}`, GITHUB_EVENT_PATH: event },
+    })
+    assert.match(stdout, /Issue policy/u)
+    ownerType = 'Organization'
+    await assert.rejects(promisify(execFile)(process.execPath, [fileURLToPath(new URL('./policy.mjs', import.meta.url)), 'pr'], {
+      timeout: 10_000,
+      env: { ...process.env, GH_TOKEN: 'keyless-policy-token', GITHUB_REPOSITORY: 'test/phoenix', GITHUB_API_URL: `http://127.0.0.1:${address.port}`, GITHUB_EVENT_PATH: event },
+    }), /native issue fields unavailable/u)
+    ownerType = 'User'
+    fieldStatus = 403
+    await assert.rejects(promisify(execFile)(process.execPath, [fileURLToPath(new URL('./policy.mjs', import.meta.url)), 'pr'], {
+      timeout: 10_000,
+      env: { ...process.env, GH_TOKEN: 'keyless-policy-token', GITHUB_REPOSITORY: 'test/phoenix', GITHUB_API_URL: `http://127.0.0.1:${address.port}`, GITHUB_EVENT_PATH: event },
+    }), /403/u)
+
+  } finally {
+    await new Promise((resolve, reject) => { server.close(error => { if (error) reject(error); else resolve() }) })
+    await rm(directory, { recursive: true, force: true })
+  }
 })

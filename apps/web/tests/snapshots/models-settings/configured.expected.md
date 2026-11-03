@@ -4,9 +4,15 @@
     - button "通用设置":
       - img
       - text: 通用设置
+    - button "个人资料":
+      - img
+      - text: 个人资料
     - button "模型":
       - img
       - text: 模型
+    - button "连接器":
+      - img
+      - text: 连接器
     - button "插件":
       - img
       - text: 插件
@@ -18,17 +24,68 @@
     - img
     - text: 关闭
   - heading "模型" [level=2]
-  - paragraph: 填入各提供方的 API 密钥即可使用其模型。
+  - paragraph: 连接 OpenAI Codex 账号或配置其他模型提供方。
+  - paragraph: 提供方顺序——使用箭头选择模型选择器中的显示顺序。
+  - region "账户连接":
+    - heading "账户连接" [level=3]
+    - paragraph: ChatGPT/Codex 登录与 OpenAI API 密钥彼此独立。PHOENIX 不会索取你的 OpenAI 密码。
+    - text: Google Workspace Auth API 密钥缺失
+    - button "Sign in with Google"
+    - text: Anthropic Auth API 密钥缺失
+    - button "Anthropic (Claude Pro/Max)"
+    - text: GitHub Copilot Auth API 密钥缺失
+    - button "GitHub Copilot"
+    - text: Kimi For Coding Auth API 密钥缺失
+    - button "Sign in with Kimi Code"
+    - text: OpenRouter Auth API 密钥缺失
+    - button "Sign in with OpenRouter"
+    - text: xAI Auth API 密钥缺失
+    - button "Sign in with SuperGrok or X Premium"
   - status: 已保存 minimax-cn。
   - list:
     - listitem:
+      - text: OpenAI Codex
+      - img "需要登录账号（AUTH）": AUTH
+      - 'button "上移提供方: OpenAI Codex" [disabled]': ↑
+      - 'button "下移提供方: OpenAI Codex"': ↓
+      - button "编辑 OpenAI Codex (openai-codex)": 编辑
+    - listitem:
       - text: minimax-cn
       - img "API 密钥已配置"
+      - 'button "上移提供方: minimax-cn"': ↑
+      - 'button "下移提供方: minimax-cn"': ↓
       - button "编辑 minimax-cn": 编辑
       - button "删除 minimax-cn": 删除
+    - listitem:
+      - text: openrouter
+      - img "API 密钥缺失"
+      - 'button "上移提供方: openrouter"': ↑
+      - 'button "下移提供方: openrouter"': ↓
+      - button "编辑 openrouter": 编辑
+    - listitem:
+      - text: ChatGPT Web 自定义
+      - 'button "上移提供方: ChatGPT Web"': ↑
+      - 'button "下移提供方: ChatGPT Web" [disabled]': ↓
+      - button "编辑 ChatGPT Web (chatgpt-web)": 编辑
   - button "添加提供方":
     - img
     - text: 添加提供方
   - button "添加自定义提供方":
     - img
     - text: 添加自定义提供方
+  - region "Phoenix Local":
+    - heading "Phoenix Local" [level=3]
+    - paragraph: 在本机运行私有离线模型，无需云端 API 密钥。
+    - text: 离线 状态
+    - strong: 未安装
+    - text: 本地模型
+    - combobox "本地模型":
+      - option "Gemma 4 E2B-it Q4_0 · 推荐" [selected]
+      - option "Qwen3.5-4B Q4_K_M"
+    - text: 运行模式
+    - combobox "运行模式":
+      - option "关闭"
+      - option "按需" [selected]
+      - option "始终运行"
+    - text: "下载: 2.6 GB 预计内存: 5.6 GB 上下文: 131,072 tokens"
+    - button "安装"

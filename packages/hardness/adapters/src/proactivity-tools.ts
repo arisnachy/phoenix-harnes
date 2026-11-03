@@ -6,6 +6,7 @@ import {
   type ToolRunContext,
 } from '@phoenix-ai/dsh-tools'
 import type { ProactivityEngine, ProactivityRecurrence, ProactivityTask } from './proactivity-engine.ts'
+import { activeScheduledMissionScope } from './mission-scope.ts'
 
 /** Optional integrations used by the model-facing proactivity tools. */
 export interface ProactivityToolOptions {
@@ -29,6 +30,10 @@ function positiveInteger(value: number | undefined, field: string): number | und
 function recurrenceView(recurrence: ProactivityRecurrence): JsonValue {
   if (recurrence.kind === 'once') return { kind: 'once' }
   if (recurrence.kind === 'interval') return { kind: 'interval', every_ms: recurrence.everyMs }
+  if (recurrence.kind === 'calendar') return {
+    kind: 'calendar', unit: recurrence.unit, every: recurrence.every,
+    ...(recurrence.timezone === undefined ? {} : { timezone: recurrence.timezone }),
+  }
   return {
     kind: 'yearly',
     every_years: recurrence.everyYears,
@@ -49,6 +54,9 @@ function taskView(task: ProactivityTask): Record<string, JsonValue> {
     ...(task.condition === undefined ? {} : { condition: task.condition }),
     sender_identity: task.senderIdentity,
     created_by: task.createdBy,
+    ...(task.attentionMode === undefined ? {} : { attention_mode: task.attentionMode }),
+    ...(task.attentionPriority === undefined ? {} : { attention_priority: task.attentionPriority }),
+    ...(task.attentionText === undefined ? {} : { attention_text: task.attentionText }),
     history: task.history.slice(-5).map(row => ({
       phase: row.phase,
       scheduled_for: row.scheduledFor,
@@ -93,11 +101,19 @@ async function emailRecipient(
   return resolved
 }
 
-function recurrence(args: { everyMinutes?: number; everyYears?: number; timezone?: string }): ProactivityRecurrence | undefined {
+function recurrence(args: {
+  everyMinutes?: number
+  everyWeeks?: number
+  everyMonths?: number
+  everyYears?: number
+  timezone?: string
+}): ProactivityRecurrence | undefined {
   const everyMs = minutesToMs(args.everyMinutes, 'everyMinutes')
+  const everyWeeks = positiveInteger(args.everyWeeks, 'everyWeeks')
+  const everyMonths = positiveInteger(args.everyMonths, 'everyMonths')
   const everyYears = positiveInteger(args.everyYears, 'everyYears')
-  if (everyMs !== undefined && everyYears !== undefined) {
-    throw new ToolArgsError(['everyMinutes and everyYears are mutually exclusive'])
+  if ([everyMs, everyWeeks, everyMonths, everyYears].filter(value => value !== undefined).length > 1) {
+    throw new ToolArgsError(['only one of everyMinutes, everyWeeks, everyMonths and everyYears may be set'])
   }
   // One-shot and interval tasks are anchored by runAt itself. If runAt already
   // carries an explicit UTC offset, a supplied timezone is harmless context
@@ -105,6 +121,14 @@ function recurrence(args: { everyMinutes?: number; everyYears?: number; timezone
   // are only persisted for yearly recurrence, where local wall-clock time must
   // survive DST/rule changes.
   if (everyMs !== undefined) return { kind: 'interval', everyMs }
+  if (everyWeeks !== undefined) {
+    return { kind: 'calendar', unit: 'week', every: everyWeeks,
+      ...(args.timezone === undefined ? {} : { timezone: args.timezone }) }
+  }
+  if (everyMonths !== undefined) {
+    return { kind: 'calendar', unit: 'month', every: everyMonths,
+      ...(args.timezone === undefined ? {} : { timezone: args.timezone }) }
+  }
   if (everyYears !== undefined) {
     return { kind: 'yearly', everyYears, ...(args.timezone === undefined ? {} : { timezone: args.timezone }) }
   }
@@ -123,15 +147,17 @@ export function createProactivityCreateTool(
 ): ToolDefinition {
   return defineTool({
     name: 'phoenix_task_create',
-    description: 'Create durable scheduled work for Phoenix. Use it for reminders, follow-ups, recurring work, future office tasks, annual dates such as birthdays, and private surprise preparation. Tasks survive Phoenix restarts and catch up after the computer was off.',
+    description: 'Create durable scheduled work for Phoenix. Use it for reminders, follow-ups, recurring background intelligence, future office tasks, annual dates such as birthdays, private surprise preparation, and explicitly requested email delivery. For "send/email this now", use a one-shot task with runAt set to the current time and delivery=email. delivery=work can maintain an ongoing user objective in the background. Tasks survive Phoenix restarts and catch up after the computer was off.',
     parameters: {
       title: { type: 'string', required: true },
       instruction: { type: 'string', required: true },
       runAt: { type: 'string', required: true, description: 'ISO-8601 date-time for the next delivery occurrence, including the intended UTC offset when known.' },
       requestedByUser: { type: 'boolean', description: 'True when the user explicitly requested this task; false/omitted for Phoenix-initiated work.' },
       everyMinutes: { type: 'number', description: 'Optional anchored recurrence interval in minutes, for example 1440 for daily or 21600 for every 15 days.' },
+      everyWeeks: { type: 'number', description: 'Optional weekly recurrence at the same local clock time, e.g. 1 for every Monday when runAt is a Monday. Supply timezone to handle DST.' },
+      everyMonths: { type: 'number', description: 'Optional monthly recurrence at the same local clock time and original day of month; a 31st is clamped to shorter months without losing the original anchor.' },
       everyYears: { type: 'number', description: 'Optional calendar recurrence in years. Use 1 for birthdays and anniversaries. Mutually exclusive with everyMinutes.' },
-      timezone: { type: 'string', description: 'Optional IANA timezone, for example America/Santo_Domingo. Persisted for everyYears calendar recurrence; accepted but not required for one-shot/interval tasks because runAt defines the exact instant.' },
+      timezone: { type: 'string', description: 'IANA timezone for weekly, monthly and yearly calendar recurrences (for example America/Santo_Domingo). Preserves local wall-clock time across DST. Optional for one-shot/interval tasks.' },
       catchUp: { type: 'string', enum: ['latest', 'all', 'skip'] },
       visibility: { type: 'string', enum: ['visible', 'surprise'] },
       revealAt: { type: 'string', description: 'Optional ISO-8601 time before which an unrevealed surprise is omitted from ordinary task listings. For recurring surprises, omit this to hide each occurrence until its own delivery time.' },
@@ -140,6 +166,9 @@ export function createProactivityCreateTool(
       delivery: { type: 'string', enum: ['chat', 'email', 'work'] },
       senderIdentity: { type: 'string', enum: ['user', 'harness', 'auto'] },
       recipient: { type: 'string', description: 'Optional delivery recipient, normally an email address for email tasks.' },
+      attentionMode: { type: 'string', enum: ['auto', 'result', 'upcoming', 'off'], description: 'Controls the quiet Phoenix home feed. auto surfaces material background results and useful one-shot/upcoming context; off never surfaces this task there.' },
+      attentionPriority: { type: 'string', enum: ['low', 'normal', 'high'], description: 'Relative ranking for useful home-feed signals. Do not mark routine work high.' },
+      attentionText: { type: 'string', description: 'Optional concise user-facing reason an upcoming occurrence matters. Keep it short and specific.' },
     },
     output: {
       schema: { type: 'object', additionalProperties: true },
@@ -157,6 +186,8 @@ export function createProactivityCreateTool(
         throw new ToolArgsError(['preparationInstruction and prepareLeadMinutes must be supplied together'])
       }
       const agentId = targetAgent(exec)
+      const automaticScope = args.requestedByUser === true || exec.agent === undefined
+        ? undefined : activeScheduledMissionScope(exec.agent.session)
       const recipient = await emailRecipient(args.delivery, args.recipient, options)
       const task = await engine.create({
         title: args.title,
@@ -172,7 +203,13 @@ export function createProactivityCreateTool(
         ...(args.delivery === undefined ? {} : { delivery: args.delivery }),
         ...(args.senderIdentity === undefined ? {} : { senderIdentity: args.senderIdentity }),
         ...(recipient === undefined ? {} : { recipient }),
+        ...(args.attentionMode === undefined ? {} : { attentionMode: args.attentionMode }),
+        ...(args.attentionPriority === undefined ? {} : { attentionPriority: args.attentionPriority }),
+        ...(args.attentionText === undefined ? {} : { attentionText: args.attentionText }),
         ...(agentId === undefined ? {} : { targetAgentId: agentId }),
+        // Explicit human schedules survive the current conversation; model-
+        // initiated followups are fenced to the active UME mission instead.
+        ...(automaticScope === undefined ? {} : { missionScope: automaticScope }),
       })
       return taskView(task)
     },
@@ -205,11 +242,13 @@ export function createProactivityWatchTool(engine: ProactivityEngine): ToolDefin
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args, exec) {
-      const everyMs = minutesToMs(args.everyMinutes, 'everyMinutes')!
-      if (everyMs < 60 * 60_000) {
+      const everyMs = minutesToMs(args.everyMinutes, 'everyMinutes')
+      if (everyMs === undefined || everyMs < 60 * 60_000) {
         throw new ToolArgsError(['everyMinutes must be at least 60 for condition watches'])
       }
       const agentId = targetAgent(exec)
+      const automaticScope = args.requestedByUser === true || exec.agent === undefined
+        ? undefined : activeScheduledMissionScope(exec.agent.session)
       const task = await engine.create({
         title: args.title,
         condition: args.condition,
@@ -219,7 +258,11 @@ export function createProactivityWatchTool(engine: ProactivityEngine): ToolDefin
         recurrence: { kind: 'interval', everyMs },
         catchUp: 'latest',
         delivery: 'chat',
+        attentionMode: 'off',
         ...(agentId === undefined ? {} : { targetAgentId: agentId }),
+        // Explicit human schedules survive the current conversation; model-
+        // initiated followups are fenced to the active UME mission instead.
+        ...(automaticScope === undefined ? {} : { missionScope: automaticScope }),
       })
       return taskView(task)
     },

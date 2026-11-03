@@ -2,16 +2,25 @@
 
 import { spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, fstatSync, lstatSync, openSync, readFileSync, readSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import type {
   PhoenixUpdateRestartReceipt,
   PhoenixUpdateRefreshReceipt,
   PhoenixUpdateSnapshot,
   PhoenixUpdateStatus,
+  PhoenixUpdateEvent,
+  PhoenixUpdateConsoleLine,
 } from './types.ts'
 
 const STATE_FILE = 'phoenix-update-state.json'
+const PROGRESS_JOURNAL_FILE = 'phoenix-update-events.jsonl'
+const LIVE_CONSOLE_FILE = 'phoenix-update-live.jsonl'
+const MAX_CONSOLE_READ_BYTES = 160 * 1024
+const MAX_CONSOLE_LINES = 72
+const MAX_EVENT_READ_BYTES = 256 * 1024
+const MAX_DIAGNOSTIC_CHARS = 96 * 1024
+const MAX_DISPLAY_EVENTS = 24
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 const REFRESH_REQUEST_FILE = 'phoenix-update-refresh-request.json'
 const SHA_PATTERN = /^[0-9a-f]{40}$/i
@@ -19,11 +28,27 @@ const STATE_READ_ATTEMPTS = 3
 const STATE_READ_RETRY_MS = 12
 const STATE_WRITE_ATTEMPTS = 4
 const STATE_WRITE_RETRY_MS = 20
+const GIT_FILE_MARKER_MAX_BYTES = 4096
+const EVENT_STEPS = new Set([
+  'git-worktree', 'git-reset', 'git-clean', 'dependencies', 'build',
+  'smoke', 'boot-preflight', 'handoff', 'host-restart', 'health-check',
+  'runtime-activation', 'rollback', 'checking', 'available', 'preparing',
+  'ready', 'restarting', 'applying', 'updated', 'current', 'rolling-back',
+  'rolled-back', 'error', 'rollback-failed', 'paused',
+])
+
 const STATUSES: ReadonlySet<PhoenixUpdateStatus> = new Set([
   'idle', 'checking', 'current', 'available', 'preparing', 'ready', 'restarting',
   'applying', 'rolling-back', 'updated', 'rolled-back', 'paused', 'error',
   'rollback-failed', 'off',
 ])
+
+type ControlDirectoryCacheEntry = {
+  marker: string
+  controlDir: string | undefined
+}
+
+const controlDirectoryCache = new Map<string, ControlDirectoryCacheEntry>()
 
 /** Default checkout root selected by the PHOENIX launcher. */
 function runtimeRoot(): string {
@@ -59,9 +84,31 @@ function gitCommonDirectory(root: string): string | undefined {
   return isAbsolute(value) ? value : resolve(root, value)
 }
 
+/** Return a cheap signature for the checkout's Git marker used to invalidate path resolution. */
+function gitMarker(root: string): string {
+  const markerPath = join(root, '.git')
+  try {
+    const stat = lstatSync(markerPath)
+    const kind = stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : 'other'
+    if (!stat.isFile()) return [kind, stat.dev, stat.ino].join(':')
+    const content = stat.size <= GIT_FILE_MARKER_MAX_BYTES ? readFileSync(markerPath, 'utf8') : undefined
+    return [kind, stat.dev, stat.ino, stat.size, stat.mtimeMs, content].join(':')
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    return code === 'ENOENT' || code === 'ENOTDIR' ? 'missing' : `error:${code ?? 'unknown'}`
+  }
+}
+
 /** Match the updater's control-file location even when Host runs in an isolated worktree. */
 function controlDirectory(root: string): string | undefined {
-  return gitCommonDirectory(root) ?? gitDirectory(root)
+  const key = resolve(root)
+  const marker = gitMarker(key)
+  const cached = controlDirectoryCache.get(key)
+  if (cached?.marker === marker) return cached.controlDir
+
+  const controlDir = gitCommonDirectory(key) ?? gitDirectory(key)
+  controlDirectoryCache.set(key, { marker, controlDir })
+  return controlDir
 }
 
 /** Return one optional bounded string field from an updater state object. */
@@ -175,6 +222,126 @@ export function parsePhoenixUpdateSnapshot(value: unknown): PhoenixUpdateSnapsho
 }
 
 /**
+ * Parse only known, secret-free fields from a durable journal tail.
+ * Unknown codes, raw output, and entries from another release target are dropped.
+ * @param content - last bytes of the newline-delimited journal.
+ * @param target - exact release commit currently being displayed.
+ * @returns bounded and validated stage events for the current release.
+ */
+export function parsePhoenixUpdateEvents(content: string, target?: string): readonly PhoenixUpdateEvent[] {
+  const events: PhoenixUpdateEvent[] = []
+  for (const line of content.split(/\r?\n/u)) {
+    if (!line.startsWith('{"schema":1,')) continue
+    try {
+      const value = JSON.parse(line) as Record<string, unknown>
+      if (value.schema !== 1
+        || typeof value.step !== 'string' || !EVENT_STEPS.has(value.step)
+        || !['started', 'ok', 'failed', 'info'].includes(String(value.result))
+        || typeof value.at !== 'string' || !Number.isFinite(Date.parse(value.at))
+        || (target !== undefined && value.target !== target)) continue
+      const exitCode = value.exitCode
+      // Never trust a journal edited externally: validate length, result and
+      // redact again at the RPC boundary before returning browser-visible data.
+      const diagnostic = typeof value.diagnostic === 'string' && value.result === 'failed'
+        ? value.diagnostic.slice(0, MAX_DIAGNOSTIC_CHARS + 100)
+          .replace(/\u001b\[[0-9;]*[a-z]/giu, '')
+          .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@/giu, 'https://[CREDENTIALS_REMOVED]@')
+          .replace(/\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/giu, '[SECRET_REMOVED]')
+          .replace(/\bBearer\s+[^\s"']+/giu, 'Bearer [SECRET_REMOVED]')
+          .replace(/(\b(?:password|passwd|token|access_token|refresh_token|api[_-]?key|client_secret|authorization|secret|_authToken)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
+    .replace(/(\b[A-Za-z0-9_]*(?:TOKEN|API_KEY|PASSWORD|SECRET|AUTH_KEY|PRIVATE_KEY|ACCESS_KEY)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
+        : undefined
+      events.push({
+        step: value.step,
+        result: value.result as PhoenixUpdateEvent['result'],
+        at: value.at,
+        ...(typeof exitCode === 'number' && Number.isSafeInteger(exitCode)
+          && exitCode >= 0 && exitCode <= 255 ? { exitCode } : {}),
+        ...(diagnostic === undefined || diagnostic.length === 0 ? {} : { diagnostic }),
+      })
+    } catch {
+      // Torn/legacy lines are never surfaced to the browser.
+    }
+  }
+  return events.slice(-MAX_DISPLAY_EVENTS)
+}
+
+/** Read the last bounded portion of the journal, without loading long build logs. */
+function readPhoenixUpdateEvents(controlDir: string, target?: string): readonly PhoenixUpdateEvent[] {
+  const path = join(controlDir, PROGRESS_JOURNAL_FILE)
+  let fd: number | undefined
+  try {
+    fd = openSync(path, 'r')
+    const size = fstatSync(fd).size
+    const count = Math.min(size, MAX_EVENT_READ_BYTES)
+    if (count <= 0) return []
+    const buffer = Buffer.allocUnsafe(count)
+    const bytes = readSync(fd, buffer, 0, count, size - count)
+    const raw = buffer.subarray(0, bytes).toString('utf8')
+    // When reading the tail, discard the partial first JSON line.
+    const boundary = size > count ? raw.indexOf('\n') : -1
+    return parsePhoenixUpdateEvents(boundary < 0 ? raw : raw.slice(boundary + 1), target)
+  } catch {
+    return []
+  } finally {
+    if (fd !== undefined) closeSync(fd)
+  }
+}
+
+/**
+ * Validate streamed command output at the Host boundary and redact again.
+ */
+export function parsePhoenixUpdateConsole(
+  content: string, target?: string, since = 0,
+): readonly PhoenixUpdateConsoleLine[] {
+  const rows: PhoenixUpdateConsoleLine[] = []
+  for (const raw of content.split(/\r?\n/u)) {
+    if (!raw.startsWith('{"schema":1,')) continue
+    try {
+      const value = JSON.parse(raw) as Record<string, unknown>
+      if (value.schema !== 1 || value.target !== target
+        || typeof value.step !== 'string' || !EVENT_STEPS.has(value.step)
+        || (value.stream !== 'stdout' && value.stream !== 'stderr')
+        || typeof value.at !== 'string' || !Number.isFinite(Date.parse(value.at))
+        || Date.parse(value.at) < since
+        || typeof value.line !== 'string' || value.line.length > 2700) continue
+      const line = value.line
+        .replace(/\u001b\[[0-9;]*[a-z]/giu, '')
+        .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@/giu, 'https://[CREDENTIALS_REMOVED]@')
+        .replace(/\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/giu, '[SECRET_REMOVED]')
+        .replace(/\bBearer\s+[^\s"']+/giu, 'Bearer [SECRET_REMOVED]')
+        .replace(/(\b(?:password|passwd|token|access_token|refresh_token|api[_-]?key|client_secret|authorization|secret|_authToken)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
+        .replace(/(\b[A-Za-z0-9_]*(?:TOKEN|API_KEY|PASSWORD|SECRET|AUTH_KEY|PRIVATE_KEY|ACCESS_KEY)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
+      rows.push({ at: value.at, step: value.step, stream: value.stream, line })
+    } catch {
+      // Partial JSON line from the detached command.
+    }
+  }
+  return rows.slice(-MAX_CONSOLE_LINES)
+}
+
+function readPhoenixUpdateConsole(controlDir: string, target?: string, since = 0): readonly PhoenixUpdateConsoleLine[] {
+  if (target === undefined) return []
+  const path = join(controlDir, LIVE_CONSOLE_FILE)
+  let fd: number | undefined
+  try {
+    fd = openSync(path, 'r')
+    const size = fstatSync(fd).size
+    const count = Math.min(size, MAX_CONSOLE_READ_BYTES)
+    if (count <= 0) return []
+    const buffer = Buffer.allocUnsafe(count)
+    const bytes = readSync(fd, buffer, 0, count, size - count)
+    const raw = buffer.subarray(0, bytes).toString('utf8')
+    const boundary = size > count ? raw.indexOf('\n') : -1
+    return parsePhoenixUpdateConsole(boundary < 0 ? raw : raw.slice(boundary + 1), target, since)
+  } catch {
+    return []
+  } finally {
+    if (fd !== undefined) closeSync(fd)
+  }
+}
+
+/**
  * Read the current updater state without making updater availability a Host boot dependency.
  * @param root - PHOENIX checkout root; defaults to the launcher-protected runtime root.
  * @returns sanitized durable updater state, or `idle` when no updater state exists.
@@ -190,14 +357,23 @@ export function readPhoenixUpdateSnapshot(root: string = runtimeRoot()): Phoenix
     // activation/restart immediately. There is a short window where STATE_FILE
     // still says ready while RESTART_REQUEST_FILE already proves activation is
     // in flight. Never expose an actionable Ready button during that window.
+    const events = readPhoenixUpdateEvents(controlDir, snapshot.target)
+    const running = ['preparing', 'restarting', 'applying', 'rolling-back'].includes(snapshot.status)
+    const phaseSince = Date.parse(snapshot.at ?? '')
+    const from = Math.max(Date.now() - 30 * 60_000, Number.isFinite(phaseSince) ? phaseSince - 3000 : 0)
+    const consoleLines = running ? readPhoenixUpdateConsole(controlDir, snapshot.target, from) : []
+    const extra = {
+      ...(events.length > 0 ? { events } : {}),
+      ...(consoleLines.length > 0 ? { console: consoleLines } : {}),
+    }
     if (
       snapshot.status === 'ready'
       && snapshot.target !== undefined
       && queuedRestartTarget(controlDir) === snapshot.target
     ) {
-      return { ...snapshot, status: 'restarting', phase: 'restart' }
+      return { ...snapshot, status: 'restarting', phase: 'restart', ...extra }
     }
-    return snapshot
+    return { ...snapshot, ...extra }
   } catch {
     return { status: 'error', detail: 'PHOENIX update state could not be read.' }
   }

@@ -1,6 +1,9 @@
 /** Platform-neutral assembly of generated Host Remote contributions. */
 
 import type { Context } from '@phoenix-ai/cordis'
+import agentTeamsRemote from '@phoenix-ai/dsh-agent-team/remote'
+export type {} from '@phoenix-ai/dsh-agent-team/remote'
+export type {} from '@phoenix-ai/dsh-agent-team/chat-types'
 import commandsRemote from '@phoenix-ai/dsh-commands/remote'
 import goalsRemote from '@phoenix-ai/dsh-goal/remote'
 import dynamicRemote from '@phoenix-ai/dsh-cordis-host-runner/remote'
@@ -13,10 +16,22 @@ import type { TypertClientRemote } from '@phoenix-ai/dsh-typert-protocol'
 
 export type { TypertClientRemote as ClientRemote } from '@phoenix-ai/dsh-typert-protocol'
 export type {
+  BusinessLibraryProduct,
+  BusinessLibrarySnapshot,
   ChatGptWebSnapshot,
   PhoenixUpdateRestartReceipt,
   PhoenixUpdateSnapshot,
+  TokenTelemetrySnapshot,
+  TokenTelemetryRecord,
   PluginInventorySnapshot,
+  PluginBulkActivationReceipt,
+  PluginEnableRequest,
+  OpenClawProbeState,
+  OpenClawRuntimeSnapshot,
+  OpenClawRoutedTool, OpenClawRoutingSnapshot, OpenClawRoutingRequest,
+  OpenClawGatewayCredentialState, OpenClawGatewayCredentialRequest,
+  ClawHubCatalogRequest, ClawHubCatalogItem, ClawHubCatalogSnapshot,
+  ClawHubFamily, ClawHubState, ClawHubInstallRequest, ClawHubInstallReceipt,
 } from '@phoenix-ai/dsh-host-plugin-inventory/types'
 export type {} from '@phoenix-ai/dsh-commands/remote'
 export type {} from '@phoenix-ai/dsh-file-reference/remote'
@@ -104,6 +119,11 @@ export type { SessionReferenceMentionCandidate } from '@phoenix-ai/dsh-session-r
 export type {
   VoiceConversationCancelReceipt,
   VoiceConversationCancelRequest,
+  VoiceConversationRealtimeStartReceipt,
+  VoiceConversationRealtimeStartRequest,
+  VoiceConversationRealtimeStatus,
+  VoiceConversationRealtimeStopReceipt,
+  VoiceConversationRealtimeStopRequest,
   VoiceConversationSpeakReceipt,
   VoiceConversationSpeakRequest,
   VoiceConversationStatus,
@@ -129,7 +149,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   try {
     for (const contribution of [
       commandsRemote, goalsRemote, dynamicRemote, fileReferencesRemote,
-      pluginInventoryRemote, messageFeedbackRemote, sessionReferencesRemote, voiceRemote,
+      agentTeamsRemote, pluginInventoryRemote, messageFeedbackRemote, sessionReferencesRemote, voiceRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))
     }

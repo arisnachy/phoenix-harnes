@@ -20,9 +20,9 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
   }
 }
 
-function mountWith(owner: 'subagent' | 'cordis') {
+function mountWith(owner: 'subagent' | 'cordis', cordisSide: 'left' | 'right' = 'right') {
   const instance = createLayoutStore().create()
-  if (owner === 'cordis') instance.actions.setWorkspaceOccupant('cordis', true)
+  if (owner === 'cordis') instance.actions.setWorkspaceOccupant('cordis', true, cordisSide)
   const useSessions = ((selector: (state: SessionListState) => unknown) => selector({
     ids: [],
     byId: {},
@@ -34,7 +34,7 @@ function mountWith(owner: 'subagent' | 'cordis') {
   } as unknown as SessionListState)) as never
   const renderSlot = ((key: string, _owner: object) => {
     if (key === 'shell.workspace') {
-      if (owner === 'cordis') return <div data-cordis-workspace />
+      if (owner === 'cordis') return <div data-cordis-workspace data-cordis-dock={cordisSide} />
       if (owner === 'subagent') return <div data-kira-teams data-kira-layout="floating-live" />
       return null
     }
@@ -63,16 +63,27 @@ afterEach(() => {
 })
 
 describe('AppFrame visual workspace', () => {
-  it('mounts Cordis in the in-flow workspace rail, never in shell.overlay, and restores shell geometry', () => {
-    const { instance, frame } = mountWith('cordis')
+  it('mounts right Cordis in a structural rail without stealing the left navigation track', () => {
+    const { instance, frame } = mountWith('cordis', 'right')
 
-    expect(frame.style.gridTemplateColumns).toBe('56px minmax(0, 1fr) 0px')
+    expect(frame.style.gridTemplateColumns).toBe('280px minmax(0, 1fr) 0px')
+    expect(frame.getAttribute('data-cordis-side')).toBe('right')
     const workspace = frame.querySelector('[data-shell-workspace]')
     const cordis = frame.querySelector('[data-cordis-workspace]')
     expect(workspace).toBeTruthy()
     expect(cordis).toBeTruthy()
     expect(workspace?.contains(cordis)).toBe(true)
     expect(frame.querySelector('[data-shell-overlay]')?.contains(cordis)).toBe(false)
+
+    act(() => { instance.actions.setWorkspaceOccupant('cordis', false) })
+    expect(frame.style.gridTemplateColumns).toBe('280px minmax(0, 1fr) 0px')
+  })
+
+  it('gives left Cordis the full physical edge by collapsing the sidebar track to 0px', () => {
+    const { instance, frame } = mountWith('cordis', 'left')
+
+    expect(frame.style.gridTemplateColumns).toBe('0px minmax(0, 1fr) 0px')
+    expect(frame.getAttribute('data-cordis-side')).toBe('left')
 
     act(() => { instance.actions.setWorkspaceOccupant('cordis', false) })
     expect(frame.style.gridTemplateColumns).toBe('280px minmax(0, 1fr) 0px')

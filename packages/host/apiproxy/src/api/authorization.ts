@@ -5,7 +5,7 @@
  */
 
 import type {
-  AuthorizationNotice, AuthorizationPromptOption, AuthorizationTelemetry,
+  AuthorizationConnectorTelemetry, AuthorizationNotice, AuthorizationPromptOption, AuthorizationTelemetry,
 } from '@phoenix-ai/dsh-authorization/types'
 import type { RpcRequest, RpcResponse } from './rpc.ts'
 
@@ -41,6 +41,8 @@ export interface AuthorizationEntryView {
   label: string
   methods: AuthorizationMethodView[]
   inFlight: boolean
+  /** Static secret-free connector capabilities this flow can unlock. */
+  connectors?: readonly AuthorizationConnectorTelemetry[]
   /** True only when the owning provider implements protocol-specific teardown. */
   disconnectable?: true
   /** The credential record behind the flow, when one is stored. */

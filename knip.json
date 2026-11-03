@@ -8,6 +8,7 @@
     "codex",
     "icacls",
     "musl-gcc",
+    "powershell.exe",
     "python3",
     "sandbox-exec",
     "tar",
@@ -146,10 +147,6 @@
       "project": [
         "src/**/*.ts",
         "src/**/*.tsx"
-      ],
-      "ignoreDependencies": [
-        "@types/react",
-        "react"
       ]
     },
     "packages/client/ui-directory-picker-browse": {
@@ -213,6 +210,15 @@
         "cytoscape-cose-bilkent",
         "dayjs",
         "debug"
+      ]
+    },
+    "packages/core/tool-business": {
+      "entry": [
+        "tests/**/*.test.mjs"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "tests/**/*.mjs"
       ]
     },
     "packages/*/*": {
@@ -687,6 +693,15 @@
     "packages/voice/voice": {
       "ignoreDependencies": [
         "zod"
+      ]
+    },
+    "packages/core/tool-sports": {
+      "entry": [
+        "tests/**/*.test.mjs"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "tests/**/*.mjs"
       ]
     }
   }

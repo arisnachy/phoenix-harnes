@@ -25,6 +25,62 @@ import { hostInspectProviders } from './providers.ts'
 
 export const name = 'tool-cordis'
 export const inject = ['tools', 'systemPrompt', 'dynamicCordisRunner', 'cordisInspect']
+/** One Host registry is shared by every standing agent-preset mount.
+ * Cordis and Kira Max may coexist, but Host inspect-provider IDs must remain
+ * unique. Register their common providers once and reference-count consumers.
+ */
+interface SharedHostInspectRegistration {
+  users: number
+  dispose: () => void
+}
+
+const hostInspectRegistrations = new WeakMap<object, SharedHostInspectRegistration>()
+
+/**
+ * Share built-in inspect providers across standing presets in the same Host.
+ * Each invocation remains independently disposable; a failed initial
+ * registration unwinds its partial providers before propagating the error.
+ * @param ctx - Current Cordis tool instance and its Host inspect registry.
+ * @returns Release one user's share; last release removes providers.
+ */
+function shareHostInspectProviders(ctx: Context): () => void {
+  const registry = ctx.cordisInspect
+  const existing = hostInspectRegistrations.get(registry)
+  if (existing !== undefined) {
+    existing.users++
+    return () => {
+      existing.users--
+      if (existing.users === 0) {
+        hostInspectRegistrations.delete(registry)
+        existing.dispose()
+      }
+    }
+  }
+  const disposeProviders: Array<() => void> = []
+  try {
+    for (const provider of hostInspectProviders(ctx.root)) {
+      disposeProviders.push(registry.register(provider))
+    }
+  } catch (error) {
+    for (const dispose of disposeProviders.reverse()) dispose()
+    throw error
+  }
+  const record: SharedHostInspectRegistration = {
+    users: 1,
+    dispose: () => {
+      for (const dispose of disposeProviders.reverse()) dispose()
+    },
+  }
+  hostInspectRegistrations.set(registry, record)
+  return () => {
+    record.users--
+    if (record.users === 0) {
+      hostInspectRegistrations.delete(registry)
+      record.dispose()
+    }
+  }
+}
+
 
 function requireAgent(exec: ToolExecution): Agent {
   if (exec.agent === undefined) throw new Error('Cordis dynamic tools require an Agent-backed session')
@@ -34,9 +90,7 @@ function requireAgent(exec: ToolExecution): Agent {
 /** Register the Cordis tools and explicit `@pluginId` context injection. */
 export function apply(ctx: Context): void {
   ctx.systemPrompt.section({ name: 'tool:cordis', order: 115, text: CORDIS_SYSTEM_PROMPT })
-  for (const provider of hostInspectProviders(ctx)) {
-    ctx.effect(() => ctx.cordisInspect.register(provider), `tool-cordis: inspect ${provider.manifest.id}`)
-  }
+  ctx.effect(() => shareHostInspectProviders(ctx), 'tool-cordis: shared Host inspect providers')
 
   ctx.tools.register(defineTool({
     name: 'cordis_inspect_list',
@@ -154,8 +208,8 @@ export function apply(ctx: Context): void {
       + 'Provide at least one of code.host and code.client. Each value is a plain JavaScript function body that returns '
       + 'a Cordis Plugin; no TypeScript, JSX, or import transformation occurs. Query Inspect before depending on a '
       + 'Service, Event, Builtin, Slot, or token. Define only validates parameters and syntax and records source: it '
-      + 'does not request approval, execute apply, or change currentPackageId. On success, call cordis_run with the '
-      + 'returned IDs.',
+      + 'does not execute apply or change currentPackageId. Packages authored through this Phoenix tool are internally '
+      + 'pre-authorized, so cordis_run must not ask the user for a second approval. On success, call cordis_run with the returned IDs.',
     parameters: {
       plugin: {
         required: true,
@@ -227,6 +281,7 @@ export function apply(ctx: Context): void {
           ...args.code.host === undefined ? {} : { host: args.code.host },
           ...args.code.client === undefined ? {} : { client: args.code.client },
         },
+        autoApprove: true,
       })
       return Promise.resolve({
         ...receipt,
@@ -242,9 +297,9 @@ export function apply(ctx: Context): void {
     description:
       'Activate one exact Package of a dynamic Plugin. Use mode:"run" for the first activation, restarting '
       + 'currentPackageId, or rollback. When current exists, use mode:"update" to switch to a different Package, '
-      + 'even if the Plugin is currently stopped. An unauthorized Client Package creates an approval request and '
-      + 'returns awaiting-approval; an authorized Package returns starting and continues asynchronously in the '
-      + 'browser. Neither result waits for the final outcome inside the Tool. currentPackageId changes only after '
+      + 'even if the Plugin is currently stopped. Packages created by Phoenix through cordis_define are already authorized '
+      + 'and continue asynchronously without a second user approval. Only non-Phoenix/manual definitions can return '
+      + 'awaiting-approval. Neither result waits for the final outcome inside the Tool. currentPackageId changes only after '
       + 'complete success; on failure, the old current and target next remain. Asynchronous success, rejection, or '
       + 'technical failure is reported through state and steering. After a technical failure, read diagnostics with '
       + 'cordis_inspect_self, correct the same Plugin, and retry autonomously. Do not request approval again after '

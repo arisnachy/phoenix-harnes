@@ -5,6 +5,21 @@ export const NS = 'kira-teams'
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
+  'skill.verification': '验证 / 证据',
+  'chat.addReaction': '添加表情',
+  'chat.historical': '此消息属于原始团队；在该会话中互动',
+  'chat.reply': '回复',
+  'chat.replyingTo': '回复 {name}',
+  'chat.cancelReply': '取消回复',
+  'chat.searchEmoji': '搜索表情',
+  'chat.user': '用户',
+  'chat.internal': '内部团队',
+  'chat.forRecipient': '致{name}',
+  'chat.forYou': '对你说',
+  'chat.userRole': '团队协作成员',
+
+  'chat.pendingDelivery': '等待发送，重新连接后重试',
+
   'dock.title': 'KIRA · 活跃团队',
   'dock.expand': '展开团队面板',
   'dock.collapse': '收起团队面板',
@@ -19,6 +34,7 @@ export const zh = {
   'status.verifying': '验证中',
   'status.waiting': '等待回应',
   'status.done': '已结束',
+  'status.failed': '失败',
   'status.idle': '已结束',
   'role.judge': '质量评审',
   'role.supervisor': '监督员',
@@ -87,6 +103,21 @@ export type KiraTeamsKey = keyof typeof zh
 
 /** English dictionary, key-identical to the Chinese source of truth. */
 export const en: Record<KiraTeamsKey, string> = {
+  'skill.verification': 'Verification',
+  'chat.addReaction': 'Add reaction',
+  'chat.historical': 'This message belongs to the original team; interact in that session',
+  'chat.reply': 'Reply',
+  'chat.replyingTo': 'Replying to {name}',
+  'chat.cancelReply': 'Cancel reply',
+  'chat.searchEmoji': 'Search emoji',
+  'chat.user': 'User',
+  'chat.internal': 'Internal team',
+  'chat.forRecipient': 'To {name}',
+  'chat.forYou': 'For you',
+  'chat.userRole': 'Team collaborator',
+
+  'chat.pendingDelivery': 'Delivery pending; retry on reconnect',
+
   'dock.title': 'KIRA · Active team',
   'dock.expand': 'Expand the teams dock',
   'dock.collapse': 'Collapse the teams dock',
@@ -101,6 +132,7 @@ export const en: Record<KiraTeamsKey, string> = {
   'status.verifying': 'verifying',
   'status.waiting': 'waiting for response',
   'status.done': 'done',
+  'status.failed': 'failed',
   'status.idle': 'done',
   'role.judge': 'Judge / reviewer',
   'role.supervisor': 'Supervisor',
@@ -166,6 +198,21 @@ export const en: Record<KiraTeamsKey, string> = {
 
 /** Spanish dictionary, key-identical to the Chinese source of truth. */
 export const es: Record<KiraTeamsKey, string> = {
+  'skill.verification': 'Verificación',
+  'chat.addReaction': 'Añadir reacción',
+  'chat.historical': 'Este mensaje pertenece al equipo original; interactúa en esa sesión',
+  'chat.reply': 'Responder',
+  'chat.replyingTo': 'Respondiendo a {name}',
+  'chat.cancelReply': 'Cancelar respuesta',
+  'chat.searchEmoji': 'Buscar emoji',
+  'chat.user': 'Usuario',
+  'chat.internal': 'Equipo interno',
+  'chat.forRecipient': 'Para {name}',
+  'chat.forYou': 'Para ti',
+  'chat.userRole': 'Parte del equipo',
+
+  'chat.pendingDelivery': 'Entrega pendiente; se reintentará al reconectar',
+
   'dock.title': 'KIRA · Equipo activo',
   'dock.expand': 'Desplegar el panel de equipos',
   'dock.collapse': 'Plegar el panel de equipos',
@@ -180,6 +227,7 @@ export const es: Record<KiraTeamsKey, string> = {
   'status.verifying': 'verificando',
   'status.waiting': 'esperando respuesta',
   'status.done': 'terminó',
+  'status.failed': 'falló',
   'status.idle': 'terminó',
   'role.judge': 'Juez / revisor',
   'role.supervisor': 'Supervisor',

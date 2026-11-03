@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-11-codex-realtime-override-quoting.md
+2026-10-11-codex-realtime-override-quoting.md: 4c5347bd0eebbefd80e9fc3cb4eeac41c8a1a97d
+2026-10-11-codex-realtime-override-quoting.zh.md: 65d2ea2511def47f648df3c5ce13e0288802e871

@@ -1,5 +1,5 @@
 /**
- * Receive updates from the official Codex plugin and OpenClaw skill sources.
+ * Receive updates from the official Codex plugin, OpenClaw skill, and Superpowers sources.
  *
  * Each update is staged in a private DSH_HOME, verified through the native
  * bridge commands, and activated as one filesystem transaction. A failed
@@ -13,6 +13,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -46,6 +47,17 @@ const PROVIDERS = {
     bridgeArgs: ['openclaw-skills', 'sync'],
     verifyArgs: ['openclaw-skills', 'verify'],
     managedField: 'managedSkills',
+  },
+  superpowers: {
+    label: 'Superpowers skills',
+    sourceRepository: 'https://github.com/obra/superpowers.git',
+    sourceBranch: 'main',
+    rootRelative: 'superpowers',
+    stateRelative: join('superpowers', 'arsenal.json'),
+    bridgeArgs: ['superpowers', 'sync'],
+    verifyArgs: ['superpowers', 'verify'],
+    managedField: 'managedSkills',
+    bootstrap: true,
   },
 }
 
@@ -136,6 +148,44 @@ function transactionJournalPath(home) {
   return join(home, 'phoenix-upstream-transaction.json')
 }
 
+function transactionBackupBase(home) {
+  return join(home, '.phoenix-upstream-updates')
+}
+
+const TERMINAL_TRANSACTION_STATES = new Set(['completed', 'rolled-back'])
+
+/**
+ * Delete update backups that no recovery journal can still consume.
+ *
+ * Older PHOENIX builds retained a complete provider/skill backup after every
+ * successful Codex/OpenClaw intake transaction. Those immutable backups are
+ * derived update data, not user data, and could grow DSH_HOME by many GB.
+ * Keep only the transaction named by a non-terminal journal; every other
+ * namespaced transaction directory is unreachable by recovery and safe to
+ * remove.
+ */
+export function pruneObsoleteTransactionBackups(home) {
+  const base = transactionBackupBase(home)
+  if (!existsSync(base)) return { removed: 0 }
+  const journal = readJson(transactionJournalPath(home))
+  const protectedId = journal !== undefined
+    && typeof journal.id === 'string'
+    && !TERMINAL_TRANSACTION_STATES.has(journal.status)
+    ? journal.id
+    : undefined
+  let removed = 0
+  for (const entry of readdirSync(base, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^[a-z0-9]+-[0-9a-f]{8}$/iu.test(entry.name)) continue
+    if (entry.name === protectedId) continue
+    rmSync(join(base, entry.name), { recursive: true, force: true, maxRetries: 3, retryDelay: 250 })
+    removed += 1
+  }
+  if (removed > 0) {
+    console.error(`[PHOENIX UPSTREAM UPDATE] removed ${String(removed)} obsolete transaction backup(s) from DSH_HOME.`)
+  }
+  return { removed }
+}
+
 function writeJson(path, value) {
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
@@ -187,7 +237,13 @@ function inspect(home) {
   for (const key of Object.keys(PROVIDERS)) {
     const local = readProviderState(home, key)
     if (local.status === 'not-configured') {
-      providers[key] = { status: 'not-configured' }
+      if (PROVIDERS[key].bootstrap === true) {
+        const latestCommit = fetchHead(PROVIDERS[key])
+        providers[key] = { status: 'available', latestCommit, bootstrap: true }
+        initialized += 1
+      } else {
+        providers[key] = { status: 'not-configured' }
+      }
       continue
     }
     initialized += 1
@@ -289,8 +345,15 @@ export function buildActivationPlan(home, stageHome, backupRoot, changed) {
     const skillBackups = []
     const skillActivations = []
     for (const name of all) {
-      const prefix = item.key === 'codex' ? 'codex-' : 'openclaw-'
-      if (!new RegExp(`^${prefix}[a-z0-9-]+(?:\\.md)?$`).test(name)) throw new Error(`unsafe managed skill path ${JSON.stringify(name)}`)
+      const prefixes = {
+        codex: 'codex-',
+        openclaw: 'openclaw-',
+        superpowers: 'superpowers-',
+      }
+      const prefix = prefixes[item.key]
+      if (prefix === undefined || !new RegExp(`^${prefix}[a-z0-9-]+(?:\\.md)?$`).test(name)) {
+        throw new Error(`unsafe managed skill path ${JSON.stringify(name)}`)
+      }
       const live = join(home, 'skills', name)
       const candidate = join(stageHome, 'skills', name)
       const backup = join(backupRoot, 'skills', item.key, name)
@@ -376,6 +439,7 @@ async function activate(home, stageHome, changed, id) {
     journal.status = 'completed'
     journal.completedAt = new Date().toISOString()
     writeJournal(journalPath, journal)
+    pruneObsoleteTransactionBackups(home)
     rmSync(stageHome, { recursive: true, force: true })
   } catch (error) {
     journal.status = 'rolling-back'
@@ -386,6 +450,7 @@ async function activate(home, stageHome, changed, id) {
       journal.status = 'rolled-back'
       journal.rolledBackAt = new Date().toISOString()
       writeJournal(journalPath, journal)
+      pruneObsoleteTransactionBackups(home)
     } catch (rollbackError) {
       journal.status = 'recovery-required'
       journal.rollbackError = redact(rollbackError instanceof Error ? rollbackError.message : String(rollbackError))
@@ -404,19 +469,28 @@ function outputInspection(inspection, quiet) {
   if (quiet && inspection.status !== 'available') return
   for (const [key, provider] of Object.entries(inspection.providers)) {
     const label = PROVIDERS[key].label
-    if (provider.status === 'not-configured') process.stdout.write(`INFO ${label}: not configured; automatic intake is idle.\n`)
-    else process.stdout.write(`${provider.status === 'available' ? 'UPDATE' : 'PASS'} ${label}: ${provider.currentCommit.slice(0, 12)}${provider.latestCommit ? ` -> ${provider.latestCommit.slice(0, 12)}` : ''}\n`)
+    if (provider.status === 'not-configured') {
+      process.stdout.write(`INFO ${label}: not configured; automatic intake is idle.\n`)
+    } else if (provider.bootstrap === true) {
+      process.stdout.write(`INSTALL ${label}: not installed -> ${provider.latestCommit.slice(0, 12)}\n`)
+    } else {
+      process.stdout.write(`${provider.status === 'available' ? 'UPDATE' : 'PASS'} ${label}: ${provider.currentCommit.slice(0, 12)}${provider.latestCommit ? ` -> ${provider.latestCommit.slice(0, 12)}` : ''}\n`)
+    }
   }
 }
 
 async function cycle(home, mode, options = {}) {
   const quiet = options.quiet === true
+  // Storage maintenance is independent from network/update policy. Turning
+  // upstream intake off must not preserve already-terminal backup snapshots.
+  pruneObsoleteTransactionBackups(home)
   if (mode === 'off') {
     saveState(home, { mode, status: 'off', providers: {} })
     return 0
   }
   try {
     await recoverTransaction(home)
+    pruneObsoleteTransactionBackups(home)
     const inspection = inspect(home)
     outputInspection(inspection, quiet)
     if (inspection.status !== 'available') {
@@ -443,6 +517,7 @@ async function localDoctor(home, mode) {
   let failures = 0
   try {
     await recoverTransaction(home)
+    pruneObsoleteTransactionBackups(home)
     for (const key of Object.keys(PROVIDERS)) {
       const state = readProviderState(home, key)
       if (state.status === 'not-configured') process.stdout.write(`INFO ${PROVIDERS[key].label}: not configured\n`)
@@ -475,15 +550,22 @@ function sleep(ms) {
   return new Promise(resolvePromise => setTimeout(resolvePromise, ms))
 }
 
+async function waitForPollOrParentExit(parentPid, waitMs) {
+  const deadline = Date.now() + waitMs
+  while (parentAlive(parentPid) && Date.now() < deadline) {
+    await sleep(Math.min(1_000, Math.max(0, deadline - Date.now())))
+  }
+}
+
 async function watch(home, mode, parentPid) {
   while (parentAlive(parentPid)) {
     await cycle(home, mode, { apply: mode === 'auto', quiet: true })
-    await sleep(pollInterval())
+    await waitForPollOrParentExit(parentPid, pollInterval())
   }
 }
 
 function printHelp() {
-  process.stdout.write('PHOENIX upstream update intake\n\nCommands:\n  dsh upstream-update --check\n  dsh upstream-update --apply\n  dsh upstream-update --doctor\n\nEnvironment:\n  PHOENIX_UPSTREAM_UPDATE_MODE=auto|notify|off\n  PHOENIX_UPSTREAM_UPDATE_POLL_MS=milliseconds (minimum 30000)\n\nUpdates are fetched from official Codex plugins and OpenClaw skills sources, staged, verified, and activated transactionally.\n')
+  process.stdout.write('PHOENIX upstream update intake\n\nCommands:\n  dsh upstream-update --check\n  dsh upstream-update --apply\n  dsh upstream-update --doctor\n\nEnvironment:\n  PHOENIX_UPSTREAM_UPDATE_MODE=auto|notify|off\n  PHOENIX_UPSTREAM_UPDATE_POLL_MS=milliseconds (minimum 30000)\n\nUpdates are fetched from official Codex plugins, OpenClaw skills, and obra/superpowers sources, staged, verified, and activated transactionally.\n')
 }
 
 async function main() {

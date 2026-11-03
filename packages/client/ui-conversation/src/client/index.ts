@@ -9,6 +9,7 @@ export type {} from './conversation-nodes/compaction.ts'
 export type {} from './conversation-nodes/fallback.ts'
 export type {} from './conversation-nodes/hardness-artifact.ts'
 export type {} from './conversation-nodes/message.ts'
+export type {} from './conversation-nodes/kira-team-message.ts'
 export type {} from './conversation-nodes/retry.ts'
 export type {} from './conversation-nodes/tool.ts'
 export type {} from './conversation-nodes/turn-error.ts'
@@ -20,13 +21,16 @@ export { ConversationController } from './service.ts'
 export type { IConversation } from './service.ts'
 export type { DraftAttachmentId } from './input/contract.ts'
 export type { HardnessArtifactChatData, HardnessArtifactValue } from './conversation-nodes/hardness-artifact.ts'
+export { Scene3DView, parseScene3D } from './chat/Scene3DView.tsx'
+export { exportSceneGLTF, exportSceneGLB, importSceneGLTF } from './chat/scene3d-formats.ts'
+export type { Scene3D, Scene3DNode, Scene3DMaterial } from './chat/Scene3DView.tsx'
 
 export type {
   CallId, ChatStoreState, SelectionTarget, ViewTab,
 } from './contract/views.ts'
 export type { ConversationKey } from './locales.ts'
 export type {
-  AssistantChatData, ChatNode, ChatNodeDataMap, ChatNodeKind, ManualCompactionChatData,
+  AssistantChatData, ChatNode, ChatNodeDataMap, ChatNodeKind, KiraTeamMessageChatData, KiraTeamReactionChatData, ManualCompactionChatData,
   RetryChatData, ToolChatData, TurnTailChatData,
 } from './contract/chat-nodes.ts'
 export type {
@@ -41,6 +45,9 @@ export type {
 // Export discipline: packages/client/AGENTS.md.
 
 declare module '@phoenix-ai/cordis' {
+  interface Events {
+    'conversation/addressed-submit'(request: { sessionId: import('@phoenix-ai/dsh-client-runtime/client').SessionId; text: string; hasImages: boolean; signal: AbortSignal }): Promise<import('@phoenix-ai/dsh-client-ui-input-trigger/client').SubmitOutcome | undefined> | undefined
+  }
   interface Context {
     /** The outward face only; the concrete service stays inside this plugin. */
     conversation: import('./service.ts').IConversation

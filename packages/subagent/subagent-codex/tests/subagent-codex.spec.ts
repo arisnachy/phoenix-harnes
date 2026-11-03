@@ -360,7 +360,7 @@ function expectedFailureDiagnostic(
 }
 
 describe('task admission and package contracts', () => {
-  it('ships one independently installable provider-only Bundle patch', () => {
+  it('ships independently installable safe and auto-review provider rows without model-facing tools', () => {
     const root = fileURLToPath(new URL('..', import.meta.url))
     const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>
@@ -432,12 +432,22 @@ describe('task admission and package contracts', () => {
 
     const parsed = yaml.load(readFileSync(resolve(root, manifest.dsh!.bundle!.patch!), 'utf8'))
     const rows = Array.isArray(parsed)
-      ? (parsed as Array<{ insert?: Array<{ id?: string; name?: string }> }>).flatMap(entry => entry.insert ?? [])
+      ? (parsed as Array<{ insert?: Array<{ id?: string; name?: string; config?: Record<string, string> }> }>).flatMap(entry => entry.insert ?? [])
       : []
-    expect(rows).toEqual([{
-      id: 'subagent-codex',
-      name: '@phoenix-ai/dsh-subagent-codex',
-    }])
+    expect(rows).toEqual([
+      {
+        id: 'subagent-codex',
+        name: '@phoenix-ai/dsh-subagent-codex',
+      },
+      {
+        id: 'subagent-codex-auto-review',
+        name: '@phoenix-ai/dsh-subagent-codex',
+        config: {
+          providerName: 'codex-auto-review',
+          permissionMode: 'approve-for-me',
+        },
+      },
+    ])
     expect(JSON.stringify(rows)).not.toContain('tool-subagent')
   })
 
@@ -686,6 +696,31 @@ describe('task admission and package contracts', () => {
     child.peer.respond(threadStart, { thread: { id: 'thread-1', ephemeral: true } })
     await starting
     wire.close()
+  })
+
+  it('keeps the native auto-review provider gated to OpenAI Codex parents', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SubagentRuntime)
+    await ctx.plugin(LocalSubprocessRuntime)
+    const spawn = vi.spyOn(ctx.subprocess, 'spawn')
+    await ctx.plugin(codex, {
+      providerName: 'codex-auto-review',
+      permissionMode: 'approve-for-me',
+    })
+
+    await expect(ctx.subagents.start('codex-auto-review', {
+      prompt: [{ type: 'text', text: 'task' }],
+      parent: {
+        id: 'non-codex-parent',
+        options: { provider: 'deepseek', model: 'deepseek-v4-pro' },
+        session: { header: { cwd: process.cwd() } },
+      } as unknown as Agent,
+      signal: new AbortController().signal,
+    })).rejects.toThrow(
+      'native auto-review is available only while the parent provider is openai-codex',
+    )
+    expect(spawn).not.toHaveBeenCalled()
+    await ctx.fiber.dispose()
   })
 
   it('requires a parent session cwd without suggesting unsupported config', async () => {

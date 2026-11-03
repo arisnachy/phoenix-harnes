@@ -55,6 +55,8 @@ export interface AskUserQuestionItem {
   options?: AskUserQuestionOption[]
   /** Whether more than one option may be selected. Defaults to single-select. */
   multiSelect?: boolean
+  /** Personal/sensitive question: expiration must never supply a fabricated answer or approval. */
+  sensitive?: boolean
   /** Optional presentation intent for capable UIs; absent asks for the generic option list. */
   intent?: AskUserQuestionIntent
 }
@@ -108,6 +110,7 @@ function recommendedOption(question: AskUserQuestionItem): AskUserQuestionOption
  * @returns The structured answer for the expired question.
  */
 export function automaticAnswerForQuestion(question: AskUserQuestionItem): AskUserQuestionAnswerItem {
+  if (question.sensitive === true) return { id: question.id, selected: [] }
   if (question.multiSelect === true) {
     const selected = (question.options ?? [])
       .filter(option => option.recommended === true || RECOMMENDED_SUFFIX.test(option.label))

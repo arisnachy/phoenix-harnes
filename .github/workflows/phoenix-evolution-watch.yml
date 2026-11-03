@@ -20,23 +20,49 @@ env:
 jobs:
   observe-contracts:
     runs-on: ubuntu-latest
+    outputs:
+      refresh_ready: ${{ steps.refresh.outputs.ready }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: phoenix/evolution-inbox
           fetch-depth: 0
       - name: Refresh inbox with stable main
+        id: refresh
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git fetch origin main "+refs/heads/${INBOX_BRANCH}:refs/remotes/origin/${INBOX_BRANCH}"
+          git fetch origin main "+refs/heads/$INBOX_BRANCH:refs/remotes/origin/$INBOX_BRANCH"
           git config user.name "phoenix-evolution-bot"
           git config user.email "phoenix-evolution-bot@users.noreply.github.com"
-          git merge --no-edit origin/main
-          if [[ "$(git rev-list --count "origin/${INBOX_BRANCH}..HEAD")" -gt 0 ]]; then
-            git push origin "HEAD:${INBOX_BRANCH}"
+          if ! git merge --no-edit origin/main; then
+            count=$(git diff --name-only --diff-filter=U | wc -l | tr -d ' ')
+            conflicts=$(git diff --name-only --diff-filter=U | sed -n '1,40p')
+            inbox_sha=$(git rev-parse HEAD)
+            main_sha=$(git rev-parse origin/main)
+            git merge --abort || { echo "Failed to restore inbox after conflict"; exit 1; }
+            if [[ "$count" -eq 0 ]]; then
+              echo "Inbox synchronization failed without merge conflicts; not suppressing an operational error."
+              exit 1
+            fi
+            marker="evolution-inbox-reconciliation"
+            existing=$(gh issue list --state open --search "$marker in:title" --json number --jq '.[0].number // empty')
+            if [[ -z "$existing" ]]; then
+              body=$(printf 'The scheduled inbox refresh could not merge main without conflicts.\n\nInbox: %s\nMain: %s\nConflicted files: %s (first 40 listed)\n\n%s\n\nThe merge was aborted. No branches were force-updated; main and stable were not changed. Review the divergent inbox history and reconcile in a dedicated branch before resuming the evolution pipeline.' "$inbox_sha" "$main_sha" "$count" "$conflicts")
+              gh issue create --title "[Evolution] $marker: inbox requires manual reconciliation" --body "$body"
+            fi
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Evolution inbox merge has $count conflicts; progression paused without overwriting any branch."
+            exit 0
           fi
+          if [[ "$(git rev-list --count "origin/$INBOX_BRANCH..HEAD")" -gt 0 ]]; then
+            git push origin "HEAD:$INBOX_BRANCH"
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
       - name: Observe official upstream heads
+        if: steps.refresh.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -54,6 +80,7 @@ jobs:
           }
           EOF
       - name: Publish observation only when source heads changed
+        if: steps.refresh.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -64,6 +91,7 @@ jobs:
 
   deepseek-source-candidate:
     needs: observe-contracts
+    if: needs.observe-contracts.outputs.refresh_ready == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

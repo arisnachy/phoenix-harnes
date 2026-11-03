@@ -1,0 +1,51 @@
+name: Phoenix Microsoft and X connectors
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/phoenix-microsoft-personal-mcp.mjs'
+      - 'scripts/phoenix-microsoft-*.test.mjs'
+      - 'packages/host/plugin-inventory/**'
+      - 'packages/mcp/mcp-client/**'
+      - 'packages/client/ui-settings-models/**'
+      - 'packages/hardness/adapters/src/connector-install-tool.ts'
+      - 'packages/hardness/adapters/tests/connector-install-tool.spec.ts'
+      - '.github/workflows/phoenix-microsoft-x-connectors.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  microsoft-scopes:
+    name: Scoped Graph / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install immutable dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check Microsoft Graph device-code MCP isolation and compatibility
+        run: node --test scripts/phoenix-microsoft-personal-mcp.test.mjs scripts/phoenix-microsoft-scoped-mcp.test.mjs
+      - name: Check Host, launcher and installer contracts
+        run: >-
+          pnpm exec vitest run
+          packages/host/plugin-inventory/tests/mcp-managed.spec.ts
+          packages/mcp/mcp-client/tests/microsoft-scoped-transport.spec.ts
+          packages/hardness/adapters/tests/connector-install-tool.spec.ts
+      - name: Check focused Microsoft and X interface regressions
+        run: >-
+          pnpm exec vitest run
+          packages/client/ui-settings-models/tests/connectors-section.client.spec.tsx
+          -t 'shows six independent Graph|offers .* through an independent scoped curated installer|restarts an already-installed X bridge'

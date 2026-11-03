@@ -537,7 +537,8 @@ export class ClientModuleRegistry extends Service {
       return
     }
     /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server requests. */
-    const pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname)
+    const requestUrl = new URL(req.url ?? '/', 'http://x')
+    const pathname = decodeURIComponent(requestUrl.pathname)
     // The id may contain a scope slash. Anything else under /plugins (including
     // /plugins/events when the HMR row is absent) is an unknown resource.
     const prefix = '/plugins/'
@@ -545,11 +546,17 @@ export class ClientModuleRegistry extends Service {
     const bundleSuffix = '/client.js'
     const isSourceMap = pathname.startsWith(prefix) && pathname.endsWith(mapSuffix)
     const suffix = isSourceMap ? mapSuffix : bundleSuffix
-    const clientPath = pathname.startsWith(prefix) && pathname.endsWith(suffix)
-      ? this.clientPath(pathname.slice(prefix.length, -suffix.length))
+    const bundleId = pathname.startsWith(prefix) && pathname.endsWith(suffix)
+      ? pathname.slice(prefix.length, -suffix.length)
       : undefined
+    const clientPath = bundleId === undefined ? undefined : this.clientPath(bundleId)
     const path = clientPath === undefined ? undefined : `${clientPath}${isSourceMap ? '.map' : ''}`
-    if (path === undefined) {
+    const requestedRev = requestUrl.searchParams.get('rev')
+    const currentRev = bundleId === undefined ? undefined : this.table.get(bundleId)?.entry.rev
+    // A rev in the URL is a content hash: serve immutable content only when it
+    // still matches this Host's graph. Old HMR/release URLs must never return
+    // the new code under an old long-lived cache key.
+    if (path === undefined || (requestedRev !== null && requestedRev !== currentRev)) {
       res.writeHead(404)
       res.end()
       return
@@ -558,7 +565,7 @@ export class ClientModuleRegistry extends Service {
       const body = await readFile(path)
       res.writeHead(200, {
         'content-type': isSourceMap ? 'application/json; charset=utf-8' : 'text/javascript; charset=utf-8',
-        'cache-control': 'no-cache',
+        'cache-control': requestedRev === null ? 'no-cache' : 'public, max-age=31536000, immutable',
       })
       res.end(body)
     } catch {

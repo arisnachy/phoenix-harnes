@@ -34,6 +34,8 @@ export const zh = {
   'task.recurrence.yearly': '每年',
   'task.recurrence.years': '每 {count} 年',
   'task.recurrence.days': '每 {count} 天',
+  'task.recurrence.weeks': '每 {count} 周',
+  'task.recurrence.months': '每 {count} 个月',
   'task.recurrence.hours': '每 {count} 小时',
   'task.recurrence.minutes': '每 {count} 分钟',
 } as const
@@ -69,6 +71,8 @@ export const en: Record<JobKey, string> = {
   'task.recurrence.yearly': 'yearly',
   'task.recurrence.years': 'every {count}y',
   'task.recurrence.days': 'every {count}d',
+  'task.recurrence.weeks': 'every {count}w',
+  'task.recurrence.months': 'every {count}mo',
   'task.recurrence.hours': 'every {count}h',
   'task.recurrence.minutes': 'every {count}m',
 }
@@ -108,6 +112,8 @@ export const es: Record<JobKey, string> = {
   'task.recurrence.yearly': 'cada año',
   'task.recurrence.years': 'cada {count} años',
   'task.recurrence.days': 'cada {count} días',
+  'task.recurrence.weeks': 'cada {count} semanas',
+  'task.recurrence.months': 'cada {count} meses',
   'task.recurrence.hours': 'cada {count} horas',
   'task.recurrence.minutes': 'cada {count} minutos',
 }

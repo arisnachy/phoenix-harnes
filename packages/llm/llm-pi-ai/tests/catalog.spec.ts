@@ -13,6 +13,8 @@ import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { createModels, getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import type { Api, Model, OpenAICompletionsCompat, Provider } from '@earendil-works/pi-ai'
 import { resolveProfiles } from '../src/config.ts'
+import { catalogModels, documentedOpenRouterContextWindow } from '../src/catalog.ts'
+import { fitGenerateOptionsToContext } from '../src/context.ts'
 import { buildProvider, supportedProtocols } from '../src/provider.ts'
 import { assemble } from './assemble.ts'
 import { memoryAuth } from './auth-double.ts'
@@ -74,6 +76,50 @@ async function harness(config: LlmPiAi.Config): Promise<Context> {
   await ctx.plugin(LlmPiAi, config)
   return ctx
 }
+
+describe('OpenRouter Nemotron context capacity', () => {
+  const model = 'nvidia/nemotron-3-nano-30b-a3b'
+
+  it('corrects only the inherited stale 128K capacity, preserving user overrides and other routes', () => {
+    expect(documentedOpenRouterContextWindow('openrouter', 'https://openrouter.ai/api/v1', model, 131_072))
+      .toBe(262_144)
+    expect(documentedOpenRouterContextWindow('openrouter', 'https://openrouter.ai/api/v1', model, 262_144))
+      .toBe(262_144)
+    expect(documentedOpenRouterContextWindow('openrouter', 'https://openrouter.ai/api/v1', model, 131_072, 98_304))
+      .toBe(98_304)
+    expect(documentedOpenRouterContextWindow('openrouter', 'https://gateway.example/v1', model, 131_072))
+      .toBe(131_072)
+    expect(documentedOpenRouterContextWindow('deepseek', 'https://openrouter.ai/api/v1', model, 131_072))
+      .toBe(131_072)
+  })
+
+  it('admits the actual 187,208 input-token request on the corrected model route', () => {
+    const profile = resolveProfiles({ openrouter: {} }).get('openrouter')
+    const catalogModel = profile?.piProvider.getModels().find(value => value.id === model)
+    expect(catalogModel?.contextWindow).toBe(262_144)
+    const input = 'a'.repeat(187_208 * 4)
+    const request = {
+      provider: 'openrouter', model,
+      system: 'important instruction', messages: [createUserMessage({
+        content: [{ type: 'text' as const, text: input }],
+        source: { kind: 'user' as const },
+      })],
+    }
+    const fitted = fitGenerateOptionsToContext(request, catalogModel!.contextWindow, 4096)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.inputBudgetTokens).toBe(253_952)
+    const previouslyConstrained = fitGenerateOptionsToContext(request, 131_072, 4096)
+    expect(previouslyConstrained.estimatedTokens).toBeGreaterThan(previouslyConstrained.inputBudgetTokens)
+  })
+
+  it('does not increase a user-configured Nemotron context limit', () => {
+    const profile = resolveProfiles({ openrouter: { models: [{
+      id: model,
+      contextWindow: 131_072,
+    }] } }).get('openrouter')
+    expect(profile?.piProvider.getModels().find(value => value.id === model)?.contextWindow).toBe(131_072)
+  })
+})
 
 describe('hand-declared providers', () => {
   it('serves a route pi-ai has never heard of from its own declaration', async () => {
@@ -282,7 +328,7 @@ describe('hand-declared providers', () => {
       },
     })
     expect(resolved.get('acme-gateway')?.piProvider.getModels()[0]?.input).toEqual(['text'])
-    expect(resolved.get('deepseek')?.piProvider.getModels()[0]?.input).toEqual(catalogModel.input)
+    expect(resolved.get('deepseek')?.piProvider.getModels()[0]?.input).toEqual(['text', 'image'])
 
     // Nothing sits below the route value, so its empty list states no answer
     // anything could take, and is refused where it is written.
@@ -416,13 +462,14 @@ describe('catalog routes with per-model configuration', () => {
     expect(resolved?.piProvider.getModels().some(model => model.id === 'openrouter/free')).toBe(true)
   })
 
-  it('serves the installed catalog untouched when the profile lists no models', async () => {
+  it('serves the vendor catalog with the canonical Phoenix Flash route when no models are configured', async () => {
     const server = await mockServer([])
     const ctx = await harness({ providers: { deepseek: { baseURL: server.url } } })
 
     const listed = await ctx.llm.listModels('deepseek')
     expect(listed.map(model => model.id).sort())
-      .toEqual(getBuiltinModels('deepseek').map(model => model.id).sort())
+      .toEqual([...catalogModels('deepseek').keys()].sort())
+    expect(listed.some(model => model.id === 'deepseek-flash')).toBe(true)
   })
 
   it('overrides one catalog model field and defaults the rest from the catalog', async () => {
@@ -498,6 +545,32 @@ describe('catalog routes with per-model configuration', () => {
 
     expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'UNKNOWN_MODEL' } })
     expect(server.requests).toHaveLength(0)
+  })
+
+  it('exposes the current NVIDIA MiniMax Flash free endpoint without silently substituting old M3', () => {
+    const current = catalogModels('nvidia').get('minimaxai/minimax-m3.1-flash')
+    expect(current).toMatchObject({
+      id: 'minimaxai/minimax-m3.1-flash',
+      provider: 'nvidia',
+      api: 'openai-completions',
+      baseUrl: 'https://integrate.api.nvidia.com/v1',
+      contextWindow: 262_144,
+      maxTokens: 65_536,
+      input: ['text', 'image'],
+    })
+
+    const provider = resolveProfiles({ nvidia: {} }).get('nvidia')?.piProvider
+    expect(provider?.getModels().some(model => model.id === 'minimaxai/minimax-m3.1-flash')).toBe(true)
+
+    // An explicit list is the user's choice: never redirect old M3 to M3.1.
+    const selected = resolveProfiles({
+      nvidia: {
+        api: 'openai-completions',
+        baseURL: 'https://integrate.api.nvidia.com/v1',
+        models: [{ id: 'minimaxai/minimax-m3' }],
+      },
+    }).get('nvidia')?.piProvider.getModels()
+    expect(selected?.map(model => model.id)).toEqual(['minimaxai/minimax-m3'])
   })
 
   it('preserves catalog-only model metadata the profile cannot express', () => {
@@ -625,12 +698,9 @@ describe('catalog routes with per-model configuration', () => {
     expect(auth?.auth.apiKey).toBe('codex-token')
   })
 
-  it('leaves an OAuth-only catalog route unconfigured when its profile names no key', () => {
-    // Nothing to add: this adapter resolves credentials through its own seam
-    // and holds no OAuth store, so declaring the provider configured would
-    // trade a truthful refusal for an endpoint's 401.
+  it('uses native Codex account resolution when its profile names no API key', () => {
     const resolved = resolveProfiles({ 'openai-codex': {} })
-    expect(resolved.get('openai-codex')?.piProvider.auth.apiKey).toBeUndefined()
+    expect(resolved.get('openai-codex')?.piProvider.auth.apiKey?.name).toBe('Codex native ChatGPT session')
   })
 })
 
@@ -646,6 +716,17 @@ describe('per-model reasoning efforts', () => {
     if (model === undefined) throw new Error(`route "${route}" resolved no models`)
     return model
   }
+
+  it('exposes reasoning for a Codex model entered manually before the bundled catalog knows its id', () => {
+    const model = modelOf({
+      'openai-codex': { models: [{ id: 'gpt-future-sol' }] },
+    }, 'openai-codex')
+
+    expect(model.reasoning).toBe(true)
+    expect(new Set(getSupportedThinkingLevels(model))).toEqual(new Set([
+      'low', 'medium', 'high', 'xhigh', 'max',
+    ]))
+  })
 
   it('declares selectable levels with their wire spellings on a hand-declared model', () => {
     const model = modelOf(declared([{
@@ -740,7 +821,7 @@ describe('modelOverrides', () => {
   }
 
   it('reshapes one catalog model while the rest of the catalog keeps serving', () => {
-    const catalogSize = getBuiltinModels('deepseek').length
+    const catalogSize = catalogModels('deepseek').size
     const target = deepseekModel()
     const resolved = resolveProfiles({
       deepseek: {
@@ -766,7 +847,7 @@ describe('modelOverrides', () => {
     // default exactly as a models entry's would.
     expect(resolved.get('deepseek')?.configuredMaxTokens.get(target.id)).toBe(4096)
     // A sibling the overrides do not name is byte-identical to the catalog.
-    const sibling = models.find(model => model.id !== target.id)
+    const sibling = models.find(model => model.id !== target.id && model.id !== 'deepseek-flash')
     expect(sibling?.maxTokens).toBe(getBuiltinModels('deepseek').find(model => model.id === sibling?.id)?.maxTokens)
   })
 
@@ -1222,6 +1303,7 @@ describe('configurable-provider directory', () => {
     // carries a durable credential store and a login flow writes into it, so
     // the route has a posture that works rather than only one that fails.
     expect(offered).toContain('openai-codex')
+    expect(ctx.llm.listConfigurableProviders().find(entry => entry.provider === 'openai-codex')?.displayName).toBe('OpenAI Codex')
     expect(offered).toContain('anthropic')
     expect(offered).toContain('openai')
   })
@@ -1233,7 +1315,7 @@ describe('configurable-provider directory', () => {
 
     expect(ctx.llm.listConfigurableProviders()).toContainEqual({
       provider: 'openai-codex',
-      displayName: 'openai-codex',
+      displayName: 'OpenAI Codex',
       settingsNs: 'llm-pi-ai',
       settingsPath: ['providers', 'openai-codex'],
       declared: false,

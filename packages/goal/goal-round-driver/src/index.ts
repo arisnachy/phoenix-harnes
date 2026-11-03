@@ -12,13 +12,15 @@ import { createUserMessage, isHarnessError, QUOTA_EXCEEDED_CODE } from '@phoenix
 import type { ContentBlock, MessageId, MessageSource } from '@phoenix-ai/dsh-llm'
 import type { Session, SessionEvent, TurnEndCancelCause, UserMessage } from '@phoenix-ai/dsh-session'
 import { renderGoalRoundPrompt } from './prompt.ts'
+import { goalBlockedByClosedUniversalMission } from './mission-fence.ts'
 import { recordGoalSupervisor, replayGoalSupervisor, type GoalSupervisorState } from './supervisor.ts'
-import { measureGoalVerificationProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
+import { measureGoalVerificationProgress, measureGoalWorkProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
 
 export { renderGoalRoundPrompt } from './prompt.ts'
+export { goalBlockedByClosedUniversalMission, unfinishedTodoRecoveryObjective, unfinishedStructuredWorkRecoveryObjective, unfinishedToolFailureRecoveryObjective } from './mission-fence.ts'
 export { recordGoalSupervisor, replayGoalSupervisor } from './supervisor.ts'
 export type { GoalSupervisorState } from './supervisor.ts'
-export { GOAL_STRATEGIES, measureGoalVerificationProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
+export { GOAL_STRATEGIES, measureGoalVerificationProgress, measureGoalWorkProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
 export type { GoalStrategyId } from './strategy.ts'
 
 export const name = 'goal-round-driver'
@@ -45,6 +47,7 @@ interface RoundAttempt extends RoundIdentity {
 interface DriverState {
   readonly agent: Agent
   attempt: RoundAttempt | undefined
+  pendingWakeMessageId: MessageId | undefined
   competingQueued: boolean
   needsCheckpoint: boolean
   requested: boolean
@@ -116,6 +119,7 @@ export function apply(ctx: Context): void {
     const state: DriverState = {
       agent,
       attempt: undefined,
+      pendingWakeMessageId: undefined,
       competingQueued: false,
       needsCheckpoint: false,
       requested: false,
@@ -188,6 +192,7 @@ export function apply(ctx: Context): void {
     return ctx.fiber.state === FiberState.ACTIVE
       && !state.stopping
       && ctx.agents.get(state.agent.id) === state.agent
+      && !goalBlockedByClosedUniversalMission(state.agent.session)
       && state.agent.status === 'idle'
       && !state.competingQueued
   }
@@ -209,8 +214,7 @@ export function apply(ctx: Context): void {
 
   /** Preserve claimed step context when this driver drops only its own round. */
   function restoreOtherClaimed(agent: Agent, messages: UserMessage[], messageId: MessageId): void {
-    const retained = messages.filter(message => message.id !== messageId
-      && !(message.source.kind === 'goal' && message.source.round === 0))
+    const retained = retainOtherClaimed(messages, messageId)
     for (const message of retained.toReversed()) {
       if (agent.inbox.nextStep.some(candidate => candidate.id === message.id)
         || agent.inbox.nextTurn.some(candidate => candidate.id === message.id)) continue
@@ -218,7 +222,61 @@ export function apply(ctx: Context): void {
     }
   }
 
+  /** Drop only the stale automatic prompt while keeping claimed context live. */
+  function retainOtherClaimed(messages: UserMessage[], messageId: MessageId): UserMessage[] {
+    return messages.filter(message => message.id !== messageId
+      && !(message.source.kind === 'goal' && message.source.round === 0))
+  }
+
+  /** Consume pending copies of context intentionally returned by a hook. */
+  function takeRetained(agent: Agent, messages: UserMessage[], messageId: MessageId): UserMessage[] {
+    const retained = retainOtherClaimed(messages, messageId)
+    for (const message of retained) agent.inbox.remove(message.id)
+    return retained
+  }
+
+  /** Re-arm one competing message that arrived while the stale turn was running. */
+  function wakePendingAfterStale(state: DriverState): void {
+    const { agent } = state
+    if (state.pendingWakeMessageId !== undefined) return
+    const canWake = (message: UserMessage): boolean => message.source.kind === 'user'
+      || !goalBlockedByClosedUniversalMission(agent.session)
+    const pendingTurn = agent.inbox.nextTurn.find(message => message.source.kind !== 'goal' && canWake(message))
+    const pending = pendingTurn ?? agent.inbox.nextStep.find(message => message.source.kind !== 'goal' && canWake(message))
+    if (pending === undefined) return
+    const target = pendingTurn === undefined ? 'next-step' : 'next-turn'
+    state.pendingWakeMessageId = pending.id
+    void agent.whenIdle().then(() => {
+      if (state.pendingWakeMessageId !== pending.id) return
+      state.pendingWakeMessageId = undefined
+      if (state.stopping || ctx.agents.get(agent.id) !== agent || agent.status !== 'idle'
+        || (pending.source.kind !== 'user' && goalBlockedByClosedUniversalMission(agent.session))) return
+      if (!agent.inbox.remove(pending.id)) return
+      try {
+        agent.followup(pending)
+      } catch (error: unknown) {
+        if (!agent.inbox.nextTurn.some(candidate => candidate.id === pending.id)
+          && !agent.inbox.nextStep.some(candidate => candidate.id === pending.id)) {
+          try {
+            agent.inbox.prepend(target, pending)
+          } catch (restoreError: unknown) {
+            ctx.logger.warn(`goal-round-driver: could not restore pending work for agent "${agent.id}": ${renderThrown(restoreError)}`)
+          }
+        }
+        ctx.logger.warn(`goal-round-driver: could not wake pending work for agent "${agent.id}": ${renderThrown(error)}`)
+      }
+    }, (error: unknown) => {
+      state.pendingWakeMessageId = undefined
+      ctx.logger.warn(`goal-round-driver: pending wake failed for agent "${agent.id}": ${renderThrown(error)}`)
+    })
+  }
+
   /** Process admitted work at quiescence, then reserve at most one next round. */
+  // After five complete no-progress Goal rounds, repeating the same approach
+  // only burns quota. The goal remains durably blocked (NOT completed) until a
+  // real human changes the route/inputs and resumes it.
+  const MAX_NO_PROGRESS_ROUNDS = 5
+
   async function drive(state: DriverState): Promise<void> {
     const { agent } = state
     if (!readyToDrive(state)) return
@@ -246,7 +304,23 @@ export function apply(ctx: Context): void {
     }
 
     const goal = currentGoal(state)
-    if (goal === undefined || goal.phase !== 'active' || goal.activation !== 'armed') return
+    // A normal task, failed tool or unfinished turn is not permission to
+    // create a persistent Goal. The user must explicitly opt in via create_goal.
+    if (goal === undefined) return
+    if (goal.phase !== 'active' || goal.activation !== 'armed') return
+    const work = measureGoalWorkProgress(agent.session.events, goal.id)
+    if (work.stagnantRounds >= MAX_NO_PROGRESS_ROUNDS) {
+      const repeated = work.repeatedOperations.length === 0
+        ? 'no distinct successful tool or completion evidence'
+        : `repeated operations: ${work.repeatedOperations.join(', ')}`
+      const reason = `Automatic recovery reached ${work.stagnantRounds} consecutive rounds without new operational evidence (${repeated}). No delivery is verified. Change the failing tool/capability or provide the missing dependency, then explicitly resume; the existing work is preserved.`
+      checkpoint(state, goal, 'blocked', 'blocked', reason)
+      ctx.goals.block(agent, goalRef(goal), {
+        code: 'no-progress',
+        message: reason,
+      })
+      return
+    }
     checkpoint(state, goal, 'active', 'continue')
     if (goal.roundsStarted >= goal.maxGoalRounds) {
       // The cap bounds one execution window, never the mission. Rotate the
@@ -260,19 +334,27 @@ export function apply(ctx: Context): void {
 
     const round = goal.roundsStarted + 1
     const progress = measureGoalVerificationProgress(state.agent.session.events, goal.id, goal.revision)
-    const strategy = selectNextStrategy(latestStrategy(state, goal)?.strategy, progress.stagnantRounds)
+    // Do not spend more Sol/planning turns if the model has made no observable
+    // progress. Escalate from the old route to an alternate tool and then the
+    // smallest executable repair before the bounded no-progress fence.
+    const strategy = work.stagnantRounds >= 3 ? 'minimal-change'
+      : work.stagnantRounds >= 2 ? 'alternate-tool'
+        : selectNextStrategy(latestStrategy(state, goal)?.strategy, progress.stagnantRounds)
     recordGoalStrategy(state.agent.session, {
       goalId: goal.id,
       revision: goal.revision,
       round,
       strategy,
-      reason: latestJudge(state, goal) === undefined
-        ? 'continue the active mission with a bounded strategy'
+      reason: work.stagnantRounds >= 2
+        ? `no new operational evidence for ${work.stagnantRounds} rounds; change tool or method`
+        : latestJudge(state, goal) === undefined
+          ? 'continue the active mission with a bounded strategy'
         : progress.stagnantRounds > 0
           ? `verification stalled for ${progress.stagnantRounds} gate round(s); rotate strategy`
           : `verification evidence is still increasing (${progress.verifiedCriteria} criteria, ${progress.passedChecks} checks); keep the productive strategy`,
     })
-    const content = renderGoalRoundPrompt(goal, round, latestJudge(state, goal), strategy)
+    const content = renderGoalRoundPrompt(goal, round, latestJudge(state, goal), strategy,
+      work.stagnantRounds)
     const message = createUserMessage({
       content,
       source: { kind: 'goal', goalId: goal.id, revision: goal.revision, round },
@@ -321,6 +403,12 @@ export function apply(ctx: Context): void {
           } catch (error: unknown) {
             ctx.logger.warn(`goal-round-driver: driver failed for agent "${state.agent.id}": ${renderThrown(error)}`)
             disarm(state)
+          }
+          // A synchronous provider failure can request the next bounded
+          // recovery round before this turn yields. Let cancellation and
+          // teardown timers run before processing that request.
+          if (state.requested && !state.stopping) {
+            await new Promise<void>((resolve) => { setTimeout(resolve, 0) })
           }
         }
       })
@@ -382,15 +470,19 @@ export function apply(ctx: Context): void {
     ctx.on('agent/session-start', ({ agent }) => {
       const state = stateFor(agent)
       state.attempt = undefined
+      state.pendingWakeMessageId = undefined
       state.competingQueued = false
       state.needsCheckpoint = false
       state.supervisor = replayGoalSupervisor(agent.session.events, currentGoal(state)?.id ?? '')
       // A durable ACTIVE goal survives a process restart. Re-arm only the
       // process-local continuation authority; blocked goals remain waiting for
       // their external condition or an explicit human resume.
-      if (currentGoal(state)?.phase === 'active') {
+      if (currentGoal(state)?.phase === 'active'
+        && !goalBlockedByClosedUniversalMission(agent.session)) {
         ctx.goals.activate(agent)
         requestDrive(state)
+      } else if (goalBlockedByClosedUniversalMission(agent.session)) {
+        disarm(state)
       }
     })
     ctx.on('agent/status', ({ agent, status }) => {
@@ -469,6 +561,15 @@ export function apply(ctx: Context): void {
       const agent = ctx.agents.get(session.id)
       if (agent === undefined || agent.session !== session) return
       const state = stateFor(agent)
+      if ((event.type as string) === 'team/mission'
+        && goalBlockedByClosedUniversalMission(session)) {
+        // Durable terminal Team state wins over Goal recovery, including
+        // queued rounds and callbacks replayed after a Host restart.
+        state.attempt = undefined
+        state.requested = false
+        disarm(state)
+        return
+      }
       switch (event.type) {
         case 'user/message':
           if (state.attempt !== undefined && event.data.id === state.attempt.messageId) {
@@ -531,7 +632,8 @@ export function apply(ctx: Context): void {
       const attempt = state.attempt
       const goal = currentGoal(state)
       return ctx.fiber.state === FiberState.ACTIVE
-        && !state.stopping && attempt !== undefined && attempt.phase === 'claimed'
+        && !state.stopping && !goalBlockedByClosedUniversalMission(state.agent.session)
+        && attempt !== undefined && attempt.phase === 'claimed'
       && !attempt.stale && sameQueued(content, source, attempt)
       && goal !== undefined && goal.id === source.goalId && goal.revision === source.revision
       && goal.phase === 'active' && goal.activation === 'armed'
@@ -558,6 +660,7 @@ export function apply(ctx: Context): void {
           state.attempt = undefined
         }
         restoreOtherClaimed(agent, messages, submitted.id)
+        wakePendingAfterStale(state)
         requestDrive(state)
         return { kind: 'reject' }
       }
@@ -598,7 +701,12 @@ export function apply(ctx: Context): void {
       }
       if (!valid) {
         state.attempt = undefined
+        if (decision.kind === 'enter') {
+          const retained = takeRetained(agent, decision.messages, submitted.id)
+          if (retained.length > 0) return { kind: 'enter', messages: retained }
+        }
         restoreOtherClaimed(agent, decision.messages, submitted.id)
+        wakePendingAfterStale(state)
         requestDrive(state)
         return { kind: 'reject' }
       }

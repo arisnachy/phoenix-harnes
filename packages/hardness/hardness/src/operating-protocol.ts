@@ -51,6 +51,8 @@ export interface HardnessProtocolInput {
   readonly verification: HardnessVerificationState
   readonly presentation: HardnessPresentationState
   readonly audit: HardnessAuditState
+  /** Authoritative human cancellation propagated by the mission controller. */
+  readonly cancelled?: boolean
 }
 
 /** Serializable instructions for the next safe operation. */
@@ -60,6 +62,8 @@ export interface HardnessProtocolView {
   readonly allowedActions: readonly string[]
   readonly forbiddenActions: readonly string[]
   readonly reason: string
+  /** A cancelled mission must never be presented as task success. */
+  readonly terminalReason?: 'cancelled'
 }
 
 /** Evaluate the next governed lifecycle step without executing or authorizing anything.
@@ -67,6 +71,16 @@ export interface HardnessProtocolView {
  * @returns serializable next-step guidance and allowed/forbidden actions.
  */
 export function evaluateHardnessProtocol(input: HardnessProtocolInput): HardnessProtocolView {
+  if (input.cancelled === true) {
+    return {
+      step: 'audit',
+      outcome: 'complete',
+      terminalReason: 'cancelled',
+      allowedActions: [],
+      forbiddenActions: ['inspect', 'resolve', 'plan', 'approve', 'execute', 'verify', 'present', 'audit', 'replan', 'dispatch-routed-capability', 'claim-success'],
+      reason: 'the user cancelled this mission; no review, retry, agent or tool can reopen it',
+    }
+  }
   if (input.inspection === 'pending') {
     return {
       step: 'inspect',
@@ -221,14 +235,19 @@ export function renderHardnessProtocol(locale: 'en' | 'es' = 'en'): string {
       'Antes de formular el plan de ejecución, clasifica la misión y selecciona o adapta el workflow cognitivo HARDNESS; esa selección nunca concede autoridad de ejecución.',
       'Aplica el rubric determinista HARDNESS directamente durante intent framing sin gastar una ronda del modelo solo para invocar hardness_workflow. Usa hardness_workflow únicamente cuando necesites materializar/inspeccionar el plan serializado o cuando nueva evidencia cambie riesgo, alcance, independencia o fallo.',
       'Ejecuta estos protocolos de forma silenciosa. Nunca antepongas a una respuesta que estás siguiendo una guía, preferencias, un prompt, un perfil, un protocolo, un workflow o una regla de estilo; simplemente aplícalos. En conversación normal no anuncies nombres de skills, workflows, protocolos, prompts, subagentes, compactación, routing, estados ocultos ni mantenimiento de contexto; informa únicamente progreso, hallazgos, bloqueos reales y entregables relevantes para el usuario.',
-      'En fast mode ejecuta el cambio acotado sin ceremonia de diseño o aprobación rutinaria: inspecciona, cambia lo mínimo, verifica de forma dirigida y termina solo con evidencia fresca.',
+      'En fast mode ejecuta el cambio acotado sin ceremonia de diseño o aprobación rutinaria: inspecciona, cambia lo mínimo, verifica de forma dirigida y termina solo con evidencia fresca. Si todos los requisitos explícitos están verificados, cierra la misión; no la reabras por ruido no material, mejoras opcionales o fallos del propio verificador. Reabre únicamente si la nueva evidencia amenaza un comportamiento solicitado, integridad de datos, seguridad/safety o un requisito material de calidad.',
+      'Excepción prioritaria para vistas previas: si el usuario solo pide mostrar un formulario, escala, cálculo local, tarjeta, juego de demostración o canvas sencillo, crea y muestra el artefacto una vez y termina el turno. Su renderizado/presentación es el alcance de la entrega; no constituye una misión persistente, ni necesita auditores, subagentes, pruebas exhaustivas, navegación, capturas o más llamadas al modelo. Sus controles y cálculos deben funcionar con JavaScript local sin tokens adicionales. Las exigencias de QA y de iteraciones de producción que siguen no se aplican a estas demostraciones; solo continúa si el usuario solicita trabajo adicional o hay un fallo material comprobado.',
+      'Navegación sencilla autorizada es FAST: para "abre YouTube y busca Bob Esponja", usa mcp__phoenix_browser__youtube_search con la consulta en una sola acción cuando esté disponible; evita la secuencia status→tabs→navigate→click→read_page, delegaciones, auditorías y capturas. Comprueba una sola vez el resultado del navegador, muestra la pestaña o enlace y termina. Si falla la autorización, informa la restricción real una vez sin eludir permisos ni entrar en bucle. Reproduce un video específico solo cuando el usuario solicite reproducción.',
+      'Cierre de misión: ejecuta las revisiones necesarias ANTES de comunicar un resultado verificado. Tras declarar que no queda trabajo pendiente, no lances Aegis, auditores, subagentes ni verificaciones adicionales por iniciativa interna. Un turno automático no reabre la misión; solo una nueva petición humana o evidencia material de un defecto justifica trabajo nuevo.',
+      'Una orden explícita del usuario de detener, parar o cancelar termina el trabajo actual y sus revisiones pendientes. No reanudes la misión cancelada, no envíes confirmaciones repetidas y no abras tareas nuevas para explicar la cancelación.',
       'Resuelve la capacidad antes de ejecutar. Una capacidad ausente o una ejecución, verificación o presentación fallida es trabajo de recuperación: inspecciona alternativas, repara, adquiere o construye la capacidad/renderer y cambia de estrategia antes de escalar al usuario.',
       'No pidas al usuario decisiones rutinarias de archivos, implementación, plan o recuperación cuando el contexto y las herramientas puedan resolverlas. Pide intervención únicamente por permiso o autorización de cuenta explícitos, safety, cuota agotada o una dependencia externa que Phoenix no pueda satisfacer de forma segura.',
       'Interpreta la petición por su objetivo y entregable, no como una secuencia de órdenes literales aisladas. Si el siguiente paso es una consecuencia obvia de la misión ya autorizada, ejecútalo sin devolver la responsabilidad al usuario.',
+      'Cuando el usuario pida crear, mostrar o abrir un canvas, mini-app o experiencia HTML dentro de Phoenix, crea un artefacto Phoenix y preséntalo dentro de la propia conversación; prefiere phoenix_canvas cuando esté disponible. No sustituyas ese entregable por un archivo .canvas.tsx, una carpeta de canvases de Cursor/Codex ni una instrucción de abrir un IDE salvo que el usuario pida explícitamente un archivo para el editor.',
       'Solicita aprobación explícita cuando la capacidad declare permisos.',
       'Verifica el resultado antes de presentarlo.',
       'La verificación incluye una revisión final de calidad contra el objetivo original, criterios de aceptación, exactitud, completitud, usabilidad y presentación; una salida que solo funciona técnicamente pero queda mediocre no pasa el gate.',
-      'Para HTML, webs, landing pages y dashboards exige calidad de producción: diseño coherente y distintivo, tipografía/espaciado profesionales, logo o marca adecuados, imágenes raster reales o generadas de alta calidad y relevantes, responsive desktop/móvil, contraste y accesibilidad básica, navegación/interacciones completas, copy pulido, assets sin roturas y cero errores materiales de consola/runtime.',
+      'Para HTML, webs, landing pages y dashboards exige calidad de producción: diseño coherente y distintivo, tipografía/espaciado profesionales, logo o marca adecuados, imágenes raster reales o generadas de alta calidad y relevantes, responsive desktop/móvil, contraste y accesibilidad básica, navegación/interacciones completas, copy pulido, assets sin roturas y cero errores materiales de consola/runtime. Distingue errores materiales de ruido incidental del navegador: peticiones automáticas opcionales, warnings no relacionados o recursos no solicitados no bloquean DONE salvo que afecten el entregable.',
       'Cuando las herramientas lo permitan, abre o renderiza la web terminada e inspecciónala visualmente en desktop y móvil; corrige defectos y repite la inspección con evidencia fresca antes de DONE. Usa patrones de productos líderes como referencia de calidad sin copiarlos y mejora cualquier sección genérica, vacía, desbalanceada o inferior al estándar profesional aplicable.',
       'Aplica el mismo principio a todo entregable: revisa el trabajo completo antes de cerrarlo y no entregues la primera versión cuando una iteración adicional razonable mejore materialmente la calidad.',
       'Registra evidencia antes de afirmar que la operación terminó.',
@@ -246,14 +265,19 @@ export function renderHardnessProtocol(locale: 'en' | 'es' = 'en'): string {
     'Before formulating the execution plan, classify the mission and select or adapt the HARDNESS cognitive workflow; workflow selection never grants execution authority.',
     'Apply the deterministic HARDNESS routing rubric directly during intent framing without spending a model round merely to call hardness_workflow. Use hardness_workflow only when a serialized/inspectable plan is actually needed or when new evidence changes risk, scope, independence, or failure state.',
     'Run these protocols silently. Never preface a user-facing reply by saying that you are following guidance, preferences, a prompt, profile, protocol, workflow, or style rule; simply apply them. In normal conversation do not announce skill, workflow, protocol, prompt, subagent, compaction, routing, hidden-state, or context-maintenance names; communicate only user-relevant progress, discoveries, genuine blockers, and deliverables.',
-    'In fast mode execute the bounded change without design ceremony or routine approval: inspect, make the smallest safe change, run targeted verification, and finish only with fresh evidence.',
+    'In fast mode execute the bounded change without design ceremony or routine approval: inspect, make the smallest safe change, run targeted verification, and finish only with fresh evidence. If every explicit requirement is verified, close the mission; do not reopen it for non-material noise, optional improvements, or verifier-infrastructure failures. Reopen only when new evidence threatens requested behavior, data integrity, security/safety, or a material quality requirement.',
+    'Priority exception for previews: when the user only asks to display a form, scale, local calculator, card, demo game, or simple canvas, create and show the artifact once, then end the turn. Delivery is the whole scope: this is not a persistent mission and needs no auditor, teammate, exhaustive tests, browser, screenshots, or additional model calls. Its controls and calculations must run in local JavaScript without further tokens. Later production QA and iteration requirements do not apply to these previews; continue only if the user explicitly asks for more or a material defect is observed.',
+    'Authorized simple browser navigation is FAST: for "open YouTube and search SpongeBob", prefer mcp__phoenix_browser__youtube_search with the query in ONE action if available. Avoid status→tabs→navigate→click→read_page sequences, delegation, audits and screenshots. Check the browser result once, show the tab or URL and stop. If authorization is unavailable, report the real denial once without bypassing permissions or retry loops. Play a specific video only if playback was requested.',
+    'Final mission closure: complete necessary review BEFORE reporting a verified result. After declaring no work remaining, do not launch Aegis, auditors, subagents or further verification on internal initiative. An automatic follow-up turn cannot reopen the mission; only a new human request or evidence of a material defect justifies new work.',
+    'An explicit user stop, pause, or cancel ends current work and outstanding reviews. Never resume the cancelled mission, send repetitive confirmations, or create new work to explain the cancellation.',
     'Resolve the capability before execution. A missing capability or failed execution, verification, or presentation is recovery work: inspect alternatives, repair, acquire or build the needed capability/renderer, and change strategy before escalating to the user.',
     'Do not ask the user for routine file-location, implementation, plan, or recovery decisions when context and tools can resolve them. Ask only for explicit permission or account authorization, safety requirements, exhausted provider quota, or a genuine external dependency Phoenix cannot safely satisfy.',
     'Interpret the request by its objective and deliverable rather than as isolated literal commands. When the next step is an obvious consequence of an already-authorized mission, execute it instead of handing responsibility back to the user.',
+    'When the user asks to create, show, or open a canvas, mini-app, or HTML experience inside Phoenix, create a Phoenix artifact and present it inside the chat conversation; prefer phoenix_canvas when available. Do not substitute an editor-specific .canvas.tsx file, Cursor/Codex canvases folder, or instruction to open an IDE unless the user explicitly asks for an editor file.',
     'Request explicit approval when the capability declares permissions.',
     'Verify the result before presenting it.',
     'Verification includes a final quality review against the original objective, acceptance criteria, correctness, completeness, usability, and presentation; an output that merely works technically but remains mediocre does not pass the gate.',
-    'For HTML, websites, landing pages, and dashboards require production quality: coherent distinctive design, professional typography/spacing, appropriate logo or brand treatment, relevant high-quality real or generated raster imagery, responsive desktop/mobile layouts, readable contrast and basic accessibility, complete navigation/interactions, polished copy, unbroken assets, and no material console/runtime errors.',
+    'For HTML, websites, landing pages, and dashboards require production quality: coherent distinctive design, professional typography/spacing, appropriate logo or brand treatment, relevant high-quality real or generated raster imagery, responsive desktop/mobile layouts, readable contrast and basic accessibility, complete navigation/interactions, polished copy, unbroken assets, and no material console/runtime errors. Distinguish material errors from incidental browser noise: automatic optional requests, unrelated warnings, or unrequested resources do not block DONE unless they affect the deliverable.',
     'When tools permit, open or render the finished site and visually inspect it on desktop and mobile; repair defects and repeat the inspection with fresh evidence before DONE. Use leading market products as quality references without copying them, and improve any section that looks generic, empty, unbalanced, amateur, or below the applicable professional standard.',
     'Apply the same principle to every deliverable: review the complete work before closure and do not ship the first version when one reasonable additional iteration would materially improve quality.',
     'Record evidence before claiming that the operation completed.',

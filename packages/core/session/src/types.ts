@@ -251,7 +251,12 @@ export interface SessionEventMap {
    */
   'turn/end': { turn: number; reason: TurnEndReason }
   /** Opens step `step` of turn `turn` — one model call plus the tool executions it requested. */
-  'step/start': { turn: number; step: number }
+  'step/start': {
+    turn: number
+    step: number
+    /** Deterministic model-history selection; absent means complete derived history. */
+    historyProjection?: { kind: 'conversational-tail'; maxMessages: number; maxChars: number }
+  }
   /** Closes step `step` of turn `turn`. */
   'step/end': { turn: number; step: number }
   /**

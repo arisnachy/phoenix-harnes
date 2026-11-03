@@ -11,11 +11,11 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
-import { basename, extname, join, resolve } from 'node:path'
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
-import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
+import type { AttachmentStore, ImageAttachmentRef, ImageMediaType, StoredImageAttachment } from '@phoenix-ai/dsh-attachment'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 
@@ -72,6 +72,12 @@ interface ImageExecutionContext {
     readonly options: {
       readonly provider?: string
     }
+    readonly session?: {
+      readonly header: {
+        readonly cwd?: string
+      }
+      readonly events?: readonly { readonly type: string; readonly data: unknown }[]
+    }
   }
 }
 
@@ -123,6 +129,60 @@ interface ImageGenerationValue {
 }
 
 /**
+ * Materialize a generated raster where this session's ordinary shell and file
+ * tools can open it. The source directory may be outside their sandbox (Codex
+ * ephemeral images) or disappear after the worker exits. The content-addressed
+ * attachment is the authority: NEVER re-read the provider's temporary path.
+ *
+ * Keep the copy under the session workspace's ignored .artifacts directory,
+ * not a disposable runtime/staging checkout. Reject symlinked staging
+ * directories so host-side image persistence cannot redirect writes outside
+ * the selected workspace. A failed export is never treated as a provider
+ * failure and must not initiate another charged generation.
+ *
+ * @param attachments - persistent store that already committed the image.
+ * @param result - image and its durable attachment reference.
+ * @param cwd - exact current session workspace root (never a model argument).
+ * @param signal - cancellation for attachment reads.
+ * @returns same result with a stable path usable in subsequent session steps.
+ */
+export async function materializeGeneratedImageInWorkspace(
+  attachments: Pick<AttachmentStore, 'readImage'>,
+  result: ImageGenerationValue,
+  cwd: string | undefined,
+  signal?: AbortSignal,
+): Promise<ImageGenerationValue> {
+  if (cwd === undefined) return result
+  signal?.throwIfAborted()
+  // Match the regular filesystem tool's cwd resolution, including deployments
+  // whose session header still holds a relative workspace path.
+  const workspacePath = resolve(cwd)
+  const workspace = await stat(workspacePath)
+  if (!workspace.isDirectory()) throw new Error('image_generation: session workspace is not a directory')
+  const artifactRoot = join(workspacePath, '.artifacts')
+  const generatedRoot = join(artifactRoot, 'generated-images')
+  await mkdir(artifactRoot, { recursive: true })
+  const parentInfo = await lstat(artifactRoot)
+  if (!parentInfo.isDirectory() || parentInfo.isSymbolicLink()) {
+    throw new Error('image_generation: workspace asset directory must not be a symlink')
+  }
+  await mkdir(generatedRoot, { recursive: true })
+  const assetInfo = await lstat(generatedRoot)
+  if (!assetInfo.isDirectory() || assetInfo.isSymbolicLink()) {
+    throw new Error('image_generation: generated image directory must not be a symlink')
+  }
+  signal?.throwIfAborted()
+  // Reading by attachment id survives Codex cache cleanup and avoids assuming
+  // any OS-level read permission on the original worker's temporary folder.
+  const stored = await attachments.readImage(result.attachment, signal)
+  signal?.throwIfAborted()
+  const suffix = imageExtension(stored.ref.mediaType)
+  const path = join(generatedRoot, `image-${Date.now()}-${randomUUID()}${suffix}`)
+  await writeFile(path, stored.data, { flag: 'wx' })
+  return { ...result, path }
+}
+
+/**
  * Model-facing policy. Keeping the routing rule in the schema description makes
  * the capability visible to every model that sees the normal tool catalog.
  */
@@ -132,10 +192,12 @@ export const imageGenerationToolDescription =
   + 'For game work, use it for production sprites, character sheets, tiles, backgrounds, portraits, textures, and other raster assets when appropriate; prefer transparent backgrounds for sprite/character assets when supported, then inspect the generated local path with read_image before shipping or importing it. '
   + 'Normally use backend=auto. Auto is independent of the active text-model provider: it tries the locally authenticated OpenAI Codex/ChatGPT built-in image generator first, then a configured local image endpoint with no hosted quota, then configured allocation-backed providers: Cloudflare Workers AI first and Hugging Face free credits second. '
   + 'Do not claim that only an external connector such as Higgsfield is available until image_generation itself has actually been attempted. Do not silently switch to a separately billed OpenAI API. '
+  + 'When the user explicitly opted in to use their original profile photograph, auto attempts genuine image-to-image via Codex, then a configured local loopback /images/edits endpoint. Never use text-only free providers to invent the user\'s face. '
   + 'If a real raster backend is unavailable, fail loudly instead of fabricating a vector/HTML substitute. '
   + 'For a webpage, landing page, dashboard, report, or similar visual deliverable, generate type-appropriate imagery when it materially improves the requested result and wire the generated attachment into the final artifact when the format permits it; keep data charts and tables on structured visualization surfaces rather than inventing them as image content. '
   + 'For ordinary real-world subjects, prefer natural, professional, coherent imagery and do not turn objects into living characters or mascots unless the user asks for that. '
-  + 'The successful result includes both a durable attachment and an absolute local path; reuse that path with read_image when the image must be inspected or embedded later. '
+  + 'The successful result includes a durable attachment and, when the session has a workspace, an exported image under <workspace>/.artifacts/generated-images/; use that stable path in subsequent read_image, shell, webpage and game-building steps rather than the Codex temporary cache path. '
+  + 'When generating the user in a scene, use the currently attached opted-in original profile photo as real Codex image input, not as a text description. Style Kira means cinematic futuristic sci-fi key art, not a painted portrait. '
   + 'Pass the complete visual request in prompt. Governed HARDNESS recovery may supply the same request as brief or objective. Generate one distinct final visual per call.'
 
 /**
@@ -258,6 +320,26 @@ const MAX_FREE_IMAGE_BYTES = 32 * 1024 * 1024
 export const freeImageProviderOrder = ['cloudflare', 'huggingface'] as const
 
 /**
+ * Private likeness references require a genuine image-editing endpoint.
+ * Text-to-image providers cannot preserve a photographed person's face.
+ * @param requested - The requested backend, or auto for Codex then local edits.
+ * @returns Backends capable of receiving the actual photograph as image input.
+ */
+export function profileImageBackendOrder(
+  requested: ImageGenerationBackend | undefined,
+): readonly ('codex' | 'local')[] {
+  if (requested === 'free') {
+    throw new Error(
+      'image_generation: los proveedores gratuitos configurados solo generan desde texto; '
+      + 'no admiten la fotografía real como referencia. Configura un editor local '
+      + '/images/edits o Codex con image_gen habilitado.',
+    )
+  }
+  if (requested === 'codex' || requested === 'local') return [requested]
+  return ['codex', 'local']
+}
+
+/**
  * Resolve the backend attempt order without coupling image generation to the text route.
  * @param requested - Explicit image backend preference, when configured.
  * @param _activeProvider - Active text provider, retained for routing compatibility.
@@ -319,6 +401,31 @@ function imageMediaTypeFromBytes(data: Buffer): ImageMediaType | undefined {
   if (data.length >= 12 && data.toString('ascii', 0, 4) === 'RIFF' && data.toString('ascii', 8, 12) === 'WEBP') return 'image/webp'
   if (data.length >= 6 && (data.toString('ascii', 0, 6) === 'GIF87a' || data.toString('ascii', 0, 6) === 'GIF89a')) return 'image/gif'
   return undefined
+}
+
+/**
+ * The attachment store may re-encode WebP uploads into PNG/JPEG after admission.
+ * Always use the verified stored raster and its true extension, never the upload filename.
+ * @param photo - Verified attachment bytes and metadata.
+ * @returns Extension matching the actual stored raster bytes.
+ */
+export function codexProfileReferenceExtension(photo: StoredImageAttachment): '.png' | '.jpg' | '.webp' {
+  if (photo.data.byteLength === 0 || photo.data.byteLength > 8 * 1024 * 1024) {
+    throw new Error('La fotografía de perfil supera el límite permitido de 8 MB o está vacía.')
+  }
+  // This store returns verified normalized content; independently check the raster signature
+  // to avoid handing the Codex worker a mislabeled or corrupted binary payload.
+  const actual = imageMediaTypeFromBytes(Buffer.from(photo.data))
+  if (actual === undefined || !['image/png', 'image/jpeg', 'image/webp'].includes(actual)
+    || actual !== photo.ref.mediaType || photo.ref.bytes !== photo.data.byteLength) {
+    throw new Error('La fotografía normalizada no coincide con el formato de imagen almacenado.')
+  }
+  switch (actual) {
+    case 'image/png': return '.png'
+    case 'image/jpeg': return '.jpg'
+    case 'image/webp': return '.webp'
+    default: throw new Error('Formato de fotografía de perfil no admitido.')
+  }
 }
 
 function imageExtension(mediaType: ImageMediaType): string {
@@ -394,31 +501,80 @@ async function generatedImageBytesFromOpenAiShape(
   throw new Error('image_generation: local image endpoint returned neither b64_json nor url')
 }
 
+async function persistProviderRaster(
+  ctx: Context,
+  data: Buffer,
+  mediaType: ImageMediaType,
+  prefix: string,
+): Promise<{ path: string; attachment: ImageAttachmentRef }> {
+  const generatedRoot = join(homedir(), '.dsh', 'generated_images')
+  await mkdir(generatedRoot, { recursive: true })
+  const path = join(generatedRoot, `${prefix}-${Date.now()}-${randomUUID()}${imageExtension(mediaType)}`)
+  await writeFile(path, data, { flag: 'wx' })
+  const attachment = await servicesOf(ctx).attachments.saveImage({
+    data,
+    mediaType,
+    name: basename(path),
+  })
+  return { path, attachment }
+}
+
 async function generateWithLocalProvider(
   ctx: Context,
   args: ImageGenerationArgs,
   prompt: string,
   signal: AbortSignal,
+  reference?: StoredImageAttachment,
 ): Promise<ImageGenerationValue> {
   const endpoint = localImageEndpoint()
   if (endpoint === undefined) {
     throw new Error(
-      'image_generation: local image backend is not configured; set PHOENIX_IMAGE_LOCAL_BASE_URL and optionally PHOENIX_IMAGE_LOCAL_MODEL',
+      'image_generation: local backend is not configured; set PHOENIX_IMAGE_LOCAL_BASE_URL '
+      + 'and optionally PHOENIX_IMAGE_LOCAL_MODEL. For profile photos the local editor '
+      + 'must implement /images/edits.',
     )
   }
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  // A private profile photo may only reach a loopback image editor. The ordinary
+  // text-to-image route can continue to use a configured remote backend.
+  if (reference !== undefined) {
+    const url = new URL(endpoint.baseURL)
+    if (url.protocol !== 'http:' || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+      || url.username || url.password || url.search || url.hash) {
+      throw new Error(
+        'image_generation: la foto privada solo puede enviarse a un editor local HTTP '
+        + '(localhost/127.0.0.1); no se enviará a un servidor externo.',
+      )
+    }
+  }
+  const headers: Record<string, string> = reference === undefined ? { 'Content-Type': 'application/json' } : {}
   if (endpoint.apiKey !== undefined) headers.Authorization = `Bearer ${endpoint.apiKey}`
-  const response = await fetch(`${endpoint.baseURL}/images/generations`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
+  const body = reference === undefined
+    ? JSON.stringify({
       model: endpoint.model,
       prompt: highQualityPrompt(prompt),
       n: 1,
       response_format: 'b64_json',
       ...(args.size === undefined || args.size === 'auto' ? {} : { size: args.size }),
-    }),
+    })
+    : (() => {
+      const extension = codexProfileReferenceExtension(reference)
+      const form = new FormData()
+      form.append('model', endpoint.model)
+      form.append('prompt', highQualityPrompt(prompt))
+      form.append('n', '1')
+      form.append('response_format', 'b64_json')
+      if (args.size !== undefined && args.size !== 'auto') form.append('size', args.size)
+      form.append('image', new Blob([Buffer.from(reference.data)], { type: reference.ref.mediaType }), 'profile-original' + extension)
+      return form
+    })()
+  const response = await fetch(`${endpoint.baseURL}/images/${reference === undefined ? 'generations' : 'edits'}`, {
+    method: 'POST',
+    headers,
+    body,
     signal,
+    // Never forward a private profile photograph across HTTP redirects.
+    // Node fetch otherwise replays 307/308 multipart POSTs to arbitrary hosts.
+    redirect: reference === undefined ? 'follow' : 'error',
   })
   if (!response.ok) {
     const diagnostic = (await response.text()).trim().slice(0, 1600)
@@ -430,15 +586,7 @@ async function generateWithLocalProvider(
   if (data.length > MAX_FREE_IMAGE_BYTES) {
     throw new Error(`image_generation: local backend returned ${data.length} bytes, exceeding the ${MAX_FREE_IMAGE_BYTES}-byte safety bound`)
   }
-  const generatedRoot = join(homedir(), '.dsh', 'generated_images')
-  await mkdir(generatedRoot, { recursive: true })
-  const path = join(generatedRoot, `local-${Date.now()}-${randomUUID()}${imageExtension(mediaType)}`)
-  await writeFile(path, data, { flag: 'wx' })
-  const attachment = await servicesOf(ctx).attachments.saveImage({
-    data,
-    mediaType,
-    name: basename(path),
-  })
+  const { path, attachment } = await persistProviderRaster(ctx, data, mediaType, 'local')
   return {
     provider: 'local',
     model: endpoint.model,
@@ -526,15 +674,7 @@ async function generateWithCloudflareProvider(
     throw new Error('image_generation: Cloudflare Workers AI returned an unsupported non-raster payload')
   }
 
-  const generatedRoot = join(homedir(), '.dsh', 'generated_images')
-  await mkdir(generatedRoot, { recursive: true })
-  const path = join(generatedRoot, `cf-${Date.now()}-${randomUUID()}${imageExtension(mediaType)}`)
-  await writeFile(path, data, { flag: 'wx' })
-  const attachment = await servicesOf(ctx).attachments.saveImage({
-    data,
-    mediaType,
-    name: basename(path),
-  })
+  const { path, attachment } = await persistProviderRaster(ctx, data, mediaType, 'cf')
   return {
     provider: 'cloudflare',
     model,
@@ -590,13 +730,16 @@ async function generateWithHuggingFaceProvider(
   if (!response.ok) {
     const diagnostic = (await response.text()).trim().slice(0, 1600)
     const suffix = diagnostic.length === 0 ? '' : `: ${diagnostic}`
-    if (response.status === 401 || response.status === 403) {
-      throw new Error(`image_generation: Hugging Face rejected HF_TOKEN; store a token with Inference Providers permission and retry${suffix}`)
+    switch (response.status) {
+      case 401:
+      case 403:
+        throw new Error(`image_generation: Hugging Face rejected HF_TOKEN; store a token with Inference Providers permission and retry${suffix}`)
+      case 402:
+      case 429:
+        throw new Error(`image_generation: Hugging Face free-tier credits/rate limit are unavailable. No paid OpenAI fallback was attempted${suffix}`)
+      default:
+        throw new Error(`image_generation: Hugging Face image generation failed with HTTP ${response.status}${suffix}`)
     }
-    if (response.status === 402 || response.status === 429) {
-      throw new Error(`image_generation: Hugging Face free-tier credits/rate limit are unavailable. No paid OpenAI fallback was attempted${suffix}`)
-    }
-    throw new Error(`image_generation: Hugging Face image generation failed with HTTP ${response.status}${suffix}`)
   }
 
   const data = Buffer.from(await response.arrayBuffer())
@@ -607,15 +750,7 @@ async function generateWithHuggingFaceProvider(
   const mediaType = imageMediaTypeFromHeader(response.headers.get('content-type')) ?? imageMediaTypeFromBytes(data)
   if (mediaType === undefined) throw new Error('image_generation: Hugging Face returned an unsupported non-raster payload')
 
-  const generatedRoot = join(homedir(), '.dsh', 'generated_images')
-  await mkdir(generatedRoot, { recursive: true })
-  const path = join(generatedRoot, `hf-${Date.now()}-${randomUUID()}${imageExtension(mediaType)}`)
-  await writeFile(path, data, { flag: 'wx' })
-  const attachment = await servicesOf(ctx).attachments.saveImage({
-    data,
-    mediaType,
-    name: basename(path),
-  })
+  const { path, attachment } = await persistProviderRaster(ctx, data, mediaType, 'hf')
   return {
     provider: 'huggingface',
     model,
@@ -677,11 +812,80 @@ function servicesOf(ctx: Context): ImageRuntimeContext {
   return ctx as unknown as ImageRuntimeContext
 }
 
+/**
+ * Windows package managers can resolve Codex to a .cmd/.bat launcher.
+ * Node spawn without a shell cannot execute it (EINVAL). Invoke cmd only
+ * for scripts, using a fixed ASCII argv allowlist, with the prompt on stdin.
+ * Native .exe and POSIX binaries always use direct process execution.
+ * @param executable - Resolved Codex launcher path.
+ * @param argvTail - Static Codex arguments; visual request is sent through stdin.
+ * @param platform - OS platform, injectable for Windows-specific tests.
+ * @returns Safe executable-and-arguments array for subprocess.spawn.
+ */
+export function codexImageInvocation(
+  executable: string,
+  argvTail: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+): readonly string[] {
+  if (platform !== 'win32' || !/\.(cmd|bat)$/i.test(executable)) return [executable, ...argvTail]
+  // cmd expands %, ! and ^ even in quoted paths. Do not interpret these.
+  if (/[\r\n"%!^]/.test(executable) || argvTail.some(arg => !/^[a-z0-9._/:=-]+$/i.test(arg))) {
+    throw new Error(
+      'image_generation: unsafe Windows Codex launcher; use codex.exe via CODEX_CLI_PATH',
+    )
+  }
+  // /s strips the outer quotes and keeps the quoted launcher path intact.
+  const commandLine = '"' + executable + '" ' + argvTail.join(' ')
+  return [process.env.ComSpec?.trim() || 'cmd.exe', '/d', '/s', '/c', '"' + commandLine + '"']
+}
+/**
+ * Prefer the native executable shipped by the official @openai/codex
+ * platform package over npm/pnpm .cmd wrappers on Windows. Node starts the
+ * native binary without a shell and cannot mistake the wrapper for an exe.
+ * The package is optional: if missing, the existing cmd shim route remains.
+ * @param shim - The previously resolved Codex executable or command shim.
+ * @param platform - Injectable platform for portable tests.
+ * @param architecture - Injectable architecture for portable tests.
+ * @returns An existing native executable path, or the original resolution.
+ */
+export async function resolveNativeCodexImageLauncher(
+  shim: string,
+  platform: NodeJS.Platform = process.platform,
+  architecture: NodeJS.Architecture = process.arch,
+): Promise<string> {
+  if (platform !== 'win32' || !/\.(cmd|bat)$/i.test(shim)) return shim
+  const folder = dirname(shim)
+  const packageRoots = [
+    join(folder, 'node_modules', '@openai', 'codex'),
+    join(folder, 'global', '5', 'node_modules', '@openai', 'codex'),
+    join(folder, 'global', '6', 'node_modules', '@openai', 'codex'),
+    join(folder, '..', '@openai', 'codex'),
+    join(folder, '..', 'node_modules', '@openai', 'codex'),
+    join(folder, '..', 'global', '5', 'node_modules', '@openai', 'codex'),
+  ]
+  const arch = architecture === 'arm64' ? 'aarch64-pc-windows-msvc' : 'x86_64-pc-windows-msvc'
+  const packageName = architecture === 'arm64' ? 'codex-win32-arm64' : 'codex-win32-x64'
+  for (const root of packageRoots) {
+    const candidates = [
+      join(root, 'node_modules', '@openai', packageName, 'vendor', arch, 'bin', 'codex.exe'),
+      join(root, 'node_modules', '@openai', packageName, 'vendor', arch, 'codex.exe'),
+      join(root, 'vendor', arch, 'bin', 'codex.exe'),
+      join(root, 'vendor', arch, 'codex.exe'),
+    ]
+    for (const candidate of candidates) {
+      try {
+        if ((await stat(candidate)).isFile()) return candidate
+      } catch { /* Optional native platform package was not installed here. */ }
+    }
+  }
+  return shim
+}
 async function runCodex(
   ctx: Context,
   argvTail: readonly string[],
   stdin: string | undefined,
   signal: AbortSignal,
+  cwd = process.cwd(),
 ): Promise<ProcessResult> {
   const subprocess = servicesOf(ctx).subprocess
   const home = codexHome()
@@ -690,9 +894,10 @@ async function runCodex(
     CODEX_HOME: home,
     CODEX_SQLITE_HOME: sqliteHome,
   }, signal)
+  const nativeOrShim = await resolveNativeCodexImageLauncher(executable)
   const handle = subprocess.spawn({
-    argv: [executable, ...argvTail],
-    cwd: process.cwd(),
+    argv: codexImageInvocation(nativeOrShim, argvTail),
+    cwd,
     stdio: {
       stdin: stdin === undefined ? 'ignore' : { data: stdin },
       stdout: { maxBytes: 512 * 1024 },
@@ -723,14 +928,76 @@ async function probeCodexImagePosture(ctx: Context, signal: AbortSignal): Promis
   }
 }
 
+
+/** Kira reference is cinematic futuristic concept art rather than a paint-over portrait. */
+export const KIRA_TEAM_STYLE = [
+  'Kira team visual direction: richly detailed cinematic science-fiction ensemble concept art.',
+  'A monumental futuristic city at night, rain-slick architecture, luminous blue and violet holograms,',
+  'black tactical techwear with small amber indicator lights, blue holographic accents, beautiful moody depth.',
+  'High-budget movie-poster composition, natural expressive recognizable faces, believable dimensional lighting.',
+  'For one-person profile avatars create a single protagonist in the same cinematic universe, not a group.',
+  'This must NOT be a warm amber professional headshot, watercolor, business photograph or paint-over filter.',
+].join(' ')
+
+/**
+ * The profile image must belong to the CURRENT human turn; never reuse historic photographs.
+ * @param events - Current session events, searched only as far back as the current turn.
+ * @returns Original authorized photo attachment for this turn, if present.
+ */
+export function latestProfileReference(events: readonly { type: string; data: unknown }[]): ImageAttachmentRef | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i]
+    if (event?.type === 'turn/start') return undefined
+    if (event?.type !== 'user/message') continue
+    if (typeof event.data !== 'object' || event.data === null) return undefined
+    const msg = event.data as { source?: { kind?: string }; content?: readonly ContentBlock[] }
+    if (msg.source?.kind !== 'user') continue
+    const content: unknown = msg.content
+    if (!Array.isArray(content)) return undefined
+    const blocks = content as readonly ContentBlock[]
+    const block = blocks.find(item =>
+      item.type === 'image' && item.attachment.name === 'referencia-original-del-usuario.webp')
+    return block?.type === 'image' ? block.attachment : undefined
+  }
+  return undefined
+}
+function latestUserText(events: readonly { type: string; data: unknown }[]): string {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i]
+    if (event?.type === 'turn/start') return ''
+    if (event?.type !== 'user/message') continue
+    if (typeof event.data !== 'object' || event.data === null) return ''
+    const msg = event.data as { source?: { kind?: string }; content?: readonly ContentBlock[] }
+    if (msg.source?.kind !== 'user') continue
+    const content: unknown = msg.content
+    if (!Array.isArray(content)) return ''
+    const blocks = content as readonly ContentBlock[]
+    return blocks.flatMap(item => item.type === 'text' ? [item.text] : []).join(' ')
+  }
+  return ''
+}
+/**
+ * Recognize a request for the user's own likeness, not an unrelated object.
+ * @param text - Current user request.
+ * @returns Whether the request explicitly seeks the user's likeness.
+ */
+export function requestsProfileLikeness(text: string): boolean {
+  const normalized = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, '')
+  const firstPerson = /\b(?:mia|mio|conmigo|de mi (?:cara|rostro|persona|en|como)|yo en|salga yo|aparezca yo|mi cara|mi rostro)\b/u
+  const englishFirstPerson = /\b(?:of me|myself|my face)\b/u
+  return /\b(?:foto|imagen|retrato|selfie|photograph|image|portrait)\b/u.test(normalized)
+    && (firstPerson.test(normalized) || englishFirstPerson.test(normalized))
+}
 function generationPrompt(
   prompt: string,
   size: string,
   quality: string,
   background: string,
+  referencePath?: string,
 ): string {
   return [
     'You are the PHOENIX image worker.',
+    'Use the installed $imagegen skill and its default built-in image_gen tool for this image request.',
     'Use the built-in image_gen tool exactly once and generate a real raster image.',
     'Do not use the API/CLI image fallback and do not request OPENAI_API_KEY.',
     'Do not create SVG, HTML, CSS, canvas code, a placeholder, or a text-only substitute.',
@@ -740,6 +1007,13 @@ function generationPrompt(
     `Requested quality guidance: ${quality}.`,
     `Requested background guidance: ${background}.`,
     `Image request: ${highQualityPrompt(prompt)}`,
+    ...(referencePath === undefined ? [] : [
+      `MANDATORY source photograph is ATTACHED VISUALLY via Codex --image: ${basename(referencePath)}`,
+      'Use the already attached photograph as input to the built-in image_gen tool, preserving facial identity.',
+      'This is IMAGE-TO-IMAGE. Include the source pixels as input to image_gen, preserving actual likeness; never invent a different face.',
+      'Transform the wardrobe, pose and entire setting. Do not apply a simple paint filter to the original headshot.',
+      'If you cannot read the source or provide it to the image tool, STOP; never fabricate a matching face.',
+    ]),
     'After the image tool finishes, end the task.',
   ].join('\n')
 }
@@ -837,6 +1111,7 @@ async function generateWithCodexProvider(
   args: ImageGenerationArgs,
   prompt: string,
   signal: AbortSignal,
+  referencePath?: string,
 ): Promise<ImageGenerationValue> {
   await probeCodexImagePosture(ctx, signal)
   const generatedRoot = join(codexHome(), 'generated_images')
@@ -854,13 +1129,15 @@ async function generateWithCodexProvider(
       'image_generation',
       '-s',
       'read-only',
+      ...(referencePath === undefined ? [] : ['--image', basename(referencePath)]),
       '-',
     ], generationPrompt(
       prompt,
       args.size ?? 'auto',
       args.quality ?? 'auto',
       args.background ?? 'auto',
-    ), signal)
+      referencePath,
+    ), signal, referencePath === undefined ? process.cwd() : dirname(referencePath))
   } catch (error) {
     signal.throwIfAborted()
     throw new Error(`image_generation: Codex CLI/image worker is not available: ${error instanceof Error ? error.message : String(error)}`)
@@ -892,6 +1169,77 @@ async function generateWithCodexProvider(
     path: generated.path,
     attachment,
   }
+}
+
+/** Narrow Host connection boundary: do not import the full Connection module graph. */
+interface AvatarHostRpc {
+  handle(
+    channel: string,
+    handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>,
+    options: { authority: 'loopback' },
+  ): () => Promise<void>
+}
+
+/**
+ * Bound, same-origin RPC for a private, user-initiated profile portrait edit.
+ * @param ctx - PHOENIX host context providing the loopback RPC boundary.
+ */
+export function installCodexAvatarTransform(ctx: Context): void {
+  const connection = (ctx as unknown as { connection: { rpc: AvatarHostRpc } }).connection
+  connection.rpc.handle('/avatar', async (endpoint, payload, signal) => {
+    if (endpoint !== 'transform') {
+      return { ok: false, error: { code: 'bad-request', message: 'Unknown avatar operation', details: { issues: [] } } }
+    }
+    if (typeof payload !== 'object' || payload === null || !('image' in payload)
+      || typeof payload.image !== 'string') {
+      return { ok: false, error: { code: 'bad-request', message: 'A saved original photo is required', details: { issues: [] } } }
+    }
+    const encoded = payload.image
+    // 8 MiB normalized input limit; validation happens BEFORE allocating a file or calling Codex.
+    if (encoded.length === 0 || encoded.length > Math.ceil(8 * 1024 * 1024 * 4 / 3) + 4
+      || !/^[a-zA-Z0-9+/]+={0,2}$/u.test(encoded)) {
+      return { ok: false, error: { code: 'bad-request', message: 'Invalid portrait encoding or size', details: { issues: [] } } }
+    }
+    const data = Buffer.from(encoded, 'base64')
+    if (data.length === 0 || data.length > 8 * 1024 * 1024 || imageMediaTypeFromBytes(data) !== 'image/webp') {
+      return { ok: false, error: { code: 'bad-request', message: 'Expected one normalized WebP photo', details: { issues: [] } } }
+    }
+    const directory = await mkdtemp(join(tmpdir(), 'phoenix-codex-avatar-'))
+    try {
+      const source = join(directory, 'user-original.webp')
+      await writeFile(source, data, { flag: 'wx' })
+      const prompt = [
+        'Produce an original PHOENIX Kira team PROFILE AVATAR, not a paint filter over the original photograph.',
+        'Keep the exact recognizable face, expression, skin tone, age, hairstyle and facial hair of the input.',
+        'Make the face large and centered, showing head and only a little of the shoulders: portrait-first composition.',
+        'Dress this same person in sophisticated futuristic techwear with refined cyan and amber highlights.',
+        'IMPORTANT: use a LIGHT soft ivory/pearl-gray studio background (#f5f3ef), not a nighttime cityscape.',
+        'Modern cinematic science-fiction character art with dimensional detail, but a bright uncluttered backdrop.',
+        'Do not include other people, dark scenery, business suits, text, badges, watermarks or logos.',
+      ].join(' ')
+      const result = await generateWithCodexProvider(
+        ctx, { prompt, size: '1024x1024', quality: 'high' }, prompt, signal, source,
+      )
+      const stored = await servicesOf(ctx).attachments.readImage(result.attachment, signal)
+      if (stored.data.length === 0 || stored.data.length > 15 * 1024 * 1024) {
+        throw new Error('El editor de Codex devolvió un retrato demasiado grande.')
+      }
+      return {
+        ok: true,
+        value: {
+          provider: 'codex',
+          image: Buffer.from(stored.data).toString('base64'),
+          mediaType: stored.ref.mediaType,
+        },
+      }
+    } catch (cause) {
+      signal.throwIfAborted()
+      const diagnostic = cause instanceof Error ? cause.message : 'Error al transformar el retrato'
+      return { ok: false, error: { code: 'internal', message: diagnostic.slice(0,900), details: {} } }
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  }, { authority: 'loopback' })
 }
 
 /**
@@ -987,21 +1335,59 @@ export function installCodexImageGeneration(ctx: Context): void {
       if (prompt.length === 0) throw new Error('image_generation: prompt must not be empty')
       if (prompt.length > 32_000) throw new Error('image_generation: prompt exceeds the 32,000-character safety bound')
 
+      const events = exec.agent?.session?.events
+      const reference = events === undefined ? undefined : latestProfileReference(events)
+      const requestText = events === undefined ? '' : latestUserText(events)
+      if (requestsProfileLikeness(requestText) && reference === undefined) {
+        throw new Error('Para hacer una imagen tuya, activa la referencia de foto en Perfil y vuelve a pedirla.')
+      }
       const requestedBackend = args.backend ?? 'auto'
+      // Validate private reference and routing before invoking any paid or remote
+      // provider. The same verified normalized bytes are used for all attempts.
+      const backends = reference === undefined
+        ? imageGenerationBackendOrder(requestedBackend, exec.agent?.options.provider)
+        : profileImageBackendOrder(requestedBackend)
+      const photo = reference === undefined
+        ? undefined
+        : await servicesOf(ctx).attachments.readImage(reference, exec.signal)
+      if (photo !== undefined) codexProfileReferenceExtension(photo)
+      const wantsKira = /\b(?:tipo|estilo|como)\s+(?:(?:de|del|al)\s+)?(?:equipo\s+)?kira\b/iu.test(
+        requestText.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, ''),
+      ) || /\b(?:tipo|estilo)\s+(?:(?:de|del|al)\s+)?(?:equipo\s+)?kira\b/iu.test(prompt)
+      const styledPrompt = wantsKira ? prompt + '\n' + KIRA_TEAM_STYLE : prompt
       const failures: string[] = []
-      for (const backend of imageGenerationBackendOrder(requestedBackend, exec.agent?.options.provider)) {
+      for (const backend of backends) {
+        let image: ImageGenerationValue
         try {
-          if (backend === 'codex') return await generateWithCodexProvider(ctx, args, prompt, exec.signal)
-          if (backend === 'local') return await generateWithLocalProvider(ctx, args, prompt, exec.signal)
-          return await generateWithFreeProvider(ctx, args, prompt, exec.signal)
+          if (backend === 'codex' && photo !== undefined) {
+            const extension = codexProfileReferenceExtension(photo)
+            const dir = await mkdtemp(join(tmpdir(), 'phoenix-user-photo-'))
+            try {
+              const source = join(dir, 'profile-original' + extension)
+              await writeFile(source, photo.data, { flag: 'wx' })
+              image = await generateWithCodexProvider(ctx, args, styledPrompt, exec.signal, source)
+            } finally {
+              await rm(dir, { recursive: true, force: true })
+            }
+          } else if (backend === 'codex') image = await generateWithCodexProvider(ctx, args, styledPrompt, exec.signal)
+          else if (backend === 'local') image = await generateWithLocalProvider(ctx, args, styledPrompt, exec.signal, photo)
+          else image = await generateWithFreeProvider(ctx, args, styledPrompt, exec.signal)
         } catch (error) {
           exec.signal.throwIfAborted()
           if (requestedBackend !== 'auto') throw error
           failures.push(`${backend}: ${error instanceof Error ? error.message : String(error)}`)
+          continue
         }
+        // Only provider-generation failures qualify for an alternative backend.
+        // A persistence failure MUST NOT create additional images/charges.
+        return await materializeGeneratedImageInWorkspace(
+          servicesOf(ctx).attachments, image, exec.agent?.session?.header.cwd, exec.signal,
+        )
       }
       throw new Error(
-        `image_generation: no real raster backend succeeded. ${failures.join(' | ')}`,
+        'image_generation: no real raster backend succeeded'
+        + (photo === undefined ? '' : ' for the verified profile photograph')
+        + '. ' + failures.join(' | '),
       )
     },
   })

@@ -234,12 +234,69 @@ describe('the shipped Web composition', () => {
     }
   })
 
-  it('supplies both shipped presets, and only those, from the system root', async () => {
+  it('supplies all five shipped presets from the system root', async () => {
     const listed = await ctx.agentPresets.list()
 
-    expect(listed.map(preset => preset.id).sort()).toEqual(['code', 'cordis', 'minimal', 'standard'])
+    expect(listed.map(preset => preset.id).sort()).toEqual(['code', 'cordis', 'kira-max', 'minimal', 'standard'])
     expect(listed.every(preset => preset.trust === 'system')).toBe(true)
     expect(ctx.agentPresets.defaultId).toBe('standard')
+  })
+
+  it('keeps Windows Computer Use enabled in every full shipped preset', async () => {
+    for (const preset of ['standard', 'code', 'cordis', 'kira-max']) {
+      const composition = await readFile(join(CONFIG_DIR, 'agent-presets', preset, 'agent.cordis.yml'), 'utf8')
+      // oxlint-disable-next-line @stylistic/max-len -- Keep the Windows composition matcher as one auditable regex.
+      expect(composition).toMatch(/- id: tool-pwsh\n\s+name: '@phoenix-ai\/dsh-tool-pwsh'\n\s+disabled: !!js process\.platform !== 'win32'\n\s+config:\n\s+enableComputerUse: true/u)
+    }
+  })
+
+  it('composes Kira Max with the full production tool catalog plus Cordis authoring', async () => {
+    const handle = await ctx.agents.create({
+      sessionId: SessionId('preset-kira-max'),
+      setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'kira-max').then(() => undefined),
+    })
+    try {
+      const tools = toolNames(ctx, handle.agent)
+      expect(tools).toEqual(expect.arrayContaining(FULL_AGENT_TOOLS))
+      expect(tools).toEqual(expect.arrayContaining(['hardness_workflow', 'spawn_teammate', 'followup_task', 'memory_search']))
+      expect(tools.some(name => name.startsWith('cordis_'))).toBe(true)
+      const assembly = await ctx.systemPrompt.assemble({ scope: handle.agent })
+      const persona = assembly.sections.find(section => section.name === 'deployment:persona')?.text ?? ''
+      expect(persona).toContain('<kira_execution_contract>')
+      const executionContract = persona.match(/<kira_execution_contract>[\s\S]*?<\/kira_execution_contract>/u)?.[0]
+      expect(executionContract?.replace(/\s+/gu, ' ')).toMatchSnapshot('Kira Max bounded execution contract')
+      expect(persona).toContain('<mission_completion_contract>')
+      expect(assembly.sections.find(section => section.name === 'hardness:operating-protocol')?.text)
+        .toContain('<phoenix_cognitive_workflows>')
+      expect(assembly.sections.some(section => section.name === 'tool:session-learning')).toBe(true)
+    } finally {
+      await handle.dispose()
+    }
+  })
+
+  it('mounts Creator and Kira Max together without duplicate Host inspect providers', async () => {
+    const creator = await ctx.agents.create({
+      sessionId: SessionId('preset-creator-coexists'),
+      setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'cordis').then(() => undefined),
+    })
+    try {
+      const maximum = await ctx.agents.create({
+        sessionId: SessionId('preset-maximum-coexists'),
+        setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'kira-max').then(() => undefined),
+      })
+      try {
+        const providers = ctx.cordisInspect.list().filter(entry => entry.platform === 'host')
+        expect(providers.map(entry => entry.id).sort())
+          .toEqual(['Builtin', 'Event', 'Service', 'Tool'])
+        expect(toolNames(ctx, creator.agent)).toContain('cordis_inspect_list')
+        expect(toolNames(ctx, maximum.agent)).toContain('cordis_inspect_list')
+        expect(toolNames(ctx, maximum.agent)).toEqual(expect.arrayContaining(FULL_AGENT_TOOLS))
+      } finally {
+        await maximum.dispose()
+      }
+    } finally {
+      await creator.dispose()
+    }
   })
 
   it('composes the full agent from `standard`', async () => {
@@ -279,9 +336,9 @@ describe('the shipped Web composition', () => {
 
     expect(contracts).toMatchInlineSnapshot(`
       {
-        "code": "<mission_completion_contract> A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure. Do not label a response final or emit a completion report while any mandatory deliverable, acceptance criterion, integration, or verification remains. Continue with root-cause analysis and a materially different strategy. If an external dependency requires a physical or human action that cannot be bypassed safely, persist WAITING_EXTERNAL with the exact missing condition, keep testing safe alternatives, and resume automatically when that condition changes; ask only for the minimal required action. Only close the mission after the independent judge returns PASS with evidence, or after the user explicitly cancels it. </mission_completion_contract>",
-        "cordis": "<mission_completion_contract> A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure. Do not label a response final or emit a completion report while any mandatory deliverable, acceptance criterion, integration, or verification remains. Continue with root-cause analysis and a materially different strategy. If an external dependency requires a physical or human action that cannot be bypassed safely, persist WAITING_EXTERNAL with the exact missing condition, keep testing safe alternatives, and resume automatically when that condition changes; ask only for the minimal required action. Only close the mission after the independent judge returns PASS with evidence, or after the user explicitly cancels it. </mission_completion_contract>",
-        "standard": "<mission_completion_contract> A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure. Do not label a response final or emit a completion report while any mandatory deliverable, acceptance criterion, integration, or verification remains. Continue with root-cause analysis and a materially different strategy. If an external dependency requires a physical or human action that cannot be bypassed safely, persist WAITING_EXTERNAL with the exact missing condition, keep testing safe alternatives, and resume automatically when that condition changes; ask only for the minimal required action. Only close the mission after the independent judge returns PASS with evidence, or after the user explicitly cancels it. </mission_completion_contract>",
+        "code": "<mission_completion_contract> A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure. Do not label a response final or emit a completion report while any mandatory deliverable, acceptance criterion, integration, or verification remains. Continue with root-cause analysis and a materially different strategy. If an external dependency requires a physical or human action that cannot be bypassed safely, persist WAITING_EXTERNAL with the exact missing condition, keep testing safe alternatives, and resume automatically when that condition changes; ask only for the minimal required action. Routine low-risk requests are completed directly by Kira with proportional verification; do not spawn teammates or judges for a routine image, translation, short answer or small edit, and do not create a formal mission merely to demand a review. Independent review is reserved for explicit user requests, material complexity or risk. Formal HARDNESS missions retain their independent judge gate. Before closing an ordinary task, perform the requested actions, check the actual result and deliver the accessible artifact or answer with a brief factual outcome. Assignments, plans and internal task updates are not delivery. Never silently finalize: report what is done, what remains and the concrete blocker when blocked. Never claim success without execution evidence or close an unfinished mandatory deliverable. </mission_completion_contract>",
+        "cordis": "<mission_completion_contract> A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure. Do not label a response final or emit a completion report while any mandatory deliverable, acceptance criterion, integration, or verification remains. Continue with root-cause analysis and a materially different strategy. If an external dependency requires a physical or human action that cannot be bypassed safely, persist WAITING_EXTERNAL with the exact missing condition, keep testing safe alternatives, and resume automatically when that condition changes; ask only for the minimal required action. Routine low-risk requests are completed directly by Kira with proportional verification; do not spawn teammates or judges for a routine image, translation, short answer or small edit, and do not create a formal mission merely to demand a review. Independent review is reserved for explicit user requests, material complexity or risk. Formal HARDNESS missions retain their independent judge gate. Before closing an ordinary task, perform the requested actions, check the actual result and deliver the accessible artifact or answer with a brief factual outcome. Assignments, plans and internal task updates are not delivery. Never silently finalize: report what is done, what remains and the concrete blocker when blocked. Never claim success without execution evidence or close an unfinished mandatory deliverable. </mission_completion_contract>",
+        "standard": "<mission_completion_contract> A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure. Do not label a response final or emit a completion report while any mandatory deliverable, acceptance criterion, integration, or verification remains. Continue with root-cause analysis and a materially different strategy. If an external dependency requires a physical or human action that cannot be bypassed safely, persist WAITING_EXTERNAL with the exact missing condition, keep testing safe alternatives, and resume automatically when that condition changes; ask only for the minimal required action. Routine low-risk requests are completed directly by Kira with proportional verification; do not spawn teammates or judges for a routine image, translation, short answer or small edit, and do not create a formal mission merely to demand a review. Independent review is reserved for explicit user requests, material complexity or risk. Formal HARDNESS missions retain their independent judge gate. Before closing an ordinary task, perform the requested actions, check the actual result and deliver the accessible artifact or answer with a brief factual outcome. Assignments, plans and internal task updates are not delivery. Never silently finalize: report what is done, what remains and the concrete blocker when blocked. Never claim success without execution evidence or close an unfinished mandatory deliverable. </mission_completion_contract>",
       }
     `)
   })
@@ -888,6 +945,26 @@ describe('authoring a preset on the shipped composition', () => {
  * that the id the setting names is the one a session composes from.
  */
 describe('the default preset as a user setting', () => {
+  it('creates an unnamed agent successfully after selecting Kira Max as the durable default', async () => {
+    await ctx.settings.update(settingsNamespace(SETTINGS_NAMESPACE), { default: 'kira-max' })
+    try {
+      expect(ctx.agentPresets.defaultId).toBe('kira-max')
+      const handle = await ctx.agents.create({
+        sessionId: SessionId('preset-kira-selected-from-settings'),
+        setup: agentCtx => ctx.agentPresets.mount(agentCtx).then(() => undefined),
+      })
+      try {
+        expect(ctx.agentPresets.composedPreset(handle.agent.ctx)).toBe('kira-max')
+        expect(toolNames(ctx, handle.agent)).toEqual(expect.arrayContaining(FULL_AGENT_TOOLS))
+        expect(toolNames(ctx, handle.agent).some(name => name.startsWith('cordis_'))).toBe(true)
+      } finally {
+        await handle.dispose()
+      }
+    } finally {
+      await ctx.settings.replace(settingsNamespace(SETTINGS_NAMESPACE), {})
+    }
+  })
+
   it('composes an unnamed session from the stored default, not the composed one', async () => {
     expect(ctx.agentPresets.defaultId).toBe('standard')
 

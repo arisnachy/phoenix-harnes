@@ -35,6 +35,8 @@ async function loadComposition(): Promise<Context> {
   const distIndex = join(dist, 'index.html')
   await writeFile(distIndex, '<head></head><body>shell</body>')
   await writeFile(join(dist, 'app.js'), 'export {}')
+  await mkdir(join(dist, 'assets'))
+  await writeFile(join(dist, 'assets', 'bundle-abc123DEF.js'), 'export const cached = true')
   await writeFile(join(dist, 'blob.bin'), 'BLOB')
   await writeFile(join(dist, 'manifest.webmanifest'), '{}')
   await mkdir(join(dist, 'empty'))
@@ -108,6 +110,16 @@ describe('real Loader composition', () => {
     })
     await writeFile(join(root!, 'dist', 'app.js'), 'export const rebuilt = true')
     expect(await request(port, '/app.js')).toMatchObject({ status: 200, body: 'export const rebuilt = true' })
+
+    // Production content hashes permit safe browser reuse; mutable files must
+    // revalidate and the injected HTML never uses browser cache.
+    const hashed = await fetch(`http://127.0.0.1:${String(port)}/assets/bundle-abc123DEF.js`)
+    expect(hashed.status).toBe(200)
+    expect(hashed.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+    await hashed.arrayBuffer()
+    const mutable = await fetch(`http://127.0.0.1:${String(port)}/app.js`)
+    expect(mutable.headers.get('cache-control')).toBe('no-cache')
+    await mutable.arrayBuffer()
 
     // Unknown extension ships as octet-stream.
     expect(await request(port, '/blob.bin')).toMatchObject({ status: 200, type: 'application/octet-stream', body: 'BLOB' })

@@ -7,7 +7,7 @@ import { Tooltip } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SidebarFooterActionOwnerProps } from '@phoenix-ai/dsh-client-ui-sidebar/client'
 import type { InjectFace, PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { PluginInventoryLocaleKey } from './locales.ts'
-import { isHiddenUpdaterPause } from './update-presentation.ts'
+import { activationNeedsVerification, isHiddenUpdaterPause, recentlyUpdated, updateStepLabelKey } from './update-presentation.ts'
 import css from './UpdateFooterAction.module.css'
 
 /** Poll cadence for the repository-local updater state while Web is open. */
@@ -72,10 +72,14 @@ export function updateLabelKey(snapshot: PhoenixUpdateSnapshot): PluginInventory
     || snapshot.detail?.startsWith('Automatic updates are disabled on branch ') === true
   switch (snapshot.status) {
     case 'idle':
-    case 'current':
-    case 'updated':
     case 'off':
       return undefined
+    case 'current': return recentlyUpdated(snapshot.events) ? 'updateUpdated' : undefined
+    case 'updated':
+      return recentlyUpdated(snapshot.events)
+        || (snapshot.at !== undefined && Date.now() - Date.parse(snapshot.at) >= 0
+          && Date.now() - Date.parse(snapshot.at) < 10 * 60_000)
+        ? 'updateUpdated' : undefined
     case 'paused': return protectedPause ? undefined : 'updatePaused'
     case 'checking': return undefined
     case 'available': return 'updateAvailable'
@@ -115,16 +119,16 @@ function updateProgress(snapshot: PhoenixUpdateSnapshot): number {
         case 'smoke': return 86
         default: return 42
       }
-    case 'ready': return 100
-    case 'restarting': return 100
-    case 'applying': return 92
+    case 'ready': return 88
+    case 'restarting': return 92
+    case 'applying': return 96
+    case 'updated': return 100
+    case 'current': return recentlyUpdated(snapshot.events) ? 100 : 0
     case 'rolling-back': return 60
     case 'rolled-back': return 100
     case 'error':
     case 'rollback-failed': return 0
     case 'idle':
-    case 'current':
-    case 'updated':
     case 'paused':
     case 'off': return 0
     /* v8 ignore next 2 -- compile-time exhaustiveness guard for future statuses. */
@@ -168,18 +172,41 @@ export function UpdateFooterAction({
 }: UpdateFooterActionProps) {
   const [snapshot, setSnapshot] = useState<PhoenixUpdateSnapshot>({ status: 'idle' })
   const [requesting, setRequesting] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [connectionLost, setConnectionLost] = useState(false)
   const requestInFlight = useRef(false)
+  const autoOpenedTarget = useRef<string | undefined>(undefined)
+  const consoleRef = useRef<HTMLDivElement | null>(null)
 
   const acceptDurableSnapshot = useCallback((next: PhoenixUpdateSnapshot) => {
     // A successful RPC proves the Host is reachable again. From this point the
     // durable updater state, including a real error, is authoritative.
     clearRestartReconnectGrace()
+    setConnectionLost(false)
     setSnapshot(next)
+    if (next.status === 'updated' || next.status === 'current' || next.status === 'idle') {
+      setDetailsOpen(false)
+      autoOpenedTarget.current = undefined
+    } else if (next.status === 'error' || next.status === 'rollback-failed') {
+      setDetailsOpen(true)
+    } else if (next.target !== undefined && next.target !== autoOpenedTarget.current
+      && ['preparing', 'restarting', 'applying', 'rolling-back'].includes(next.status)) {
+      autoOpenedTarget.current = next.target
+      setDetailsOpen(true)
+    }
   }, [])
 
+  // Follow incoming console output as commands print new lines. The log has a
+  // fixed visual height, so a long build cannot take over the chat/sidebar.
+  useEffect(() => {
+    const view = consoleRef.current
+    if (view !== null) view.scrollTop = view.scrollHeight
+  }, [snapshot.console])
+
   const reportReadFailure = useCallback((_error: unknown) => {
-    // The Host intentionally disappears during an accepted restart. Treat that
-    // transport gap as part of the restart instead of inventing an updater error.
+    // The Host intentionally disappears during an accepted restart. Do not
+    // replace its durable state with a fabricated success or failure.
+    setConnectionLost(true)
     if (restartReconnectGraceActive()) return
     // A transient RPC/network failure is not evidence that an update failed.
     // Keep the last durable snapshot rendered until a later poll can replace
@@ -236,6 +263,9 @@ export function UpdateFooterAction({
 
   useEffect(() => {
     if (snapshot.status !== 'error' && snapshot.status !== 'rollback-failed') return
+    // A missing/blocked supervisor requires an explicit retry, not a browser
+    // timer that silently creates another restart request every few minutes.
+    if (snapshot.phase === 'supervisor-timeout') return
     let active = true
     let attempt = 0
     let timer: number | undefined
@@ -260,13 +290,14 @@ export function UpdateFooterAction({
   if (labelKey === undefined) return null
 
   const ready = snapshot.status === 'ready'
-  const busy = requesting || isBusy(snapshot)
-  const label = t(labelKey)
+  const unverifiedActivation = activationNeedsVerification(snapshot)
+  const busy = requesting || (!unverifiedActivation && isBusy(snapshot))
+  const label = unverifiedActivation ? t('updateRestartUnverified') : t(labelKey)
   const actionLabel = ready ? t('updateRestart') : label
   const errorState = snapshot.status === 'error' || snapshot.status === 'rollback-failed'
   const tone = ready
     ? css.ready
-    : errorState
+    : errorState || unverifiedActivation
       ? css.error
       : busy
         ? css.busy
@@ -309,18 +340,35 @@ export function UpdateFooterAction({
   }
 
   const progress = updateProgress(snapshot)
+  const consoleLines = snapshot.console ?? []
+  const liveConsoleText = consoleLines.map(line =>
+    `[${new Date(line.at).toLocaleTimeString()}] [${line.stream}] ${line.line}`).join('\n')
+  const events = snapshot.events?.slice(-20).reverse() ?? []
   const target = snapshot.target?.slice(0, 12)
   const retryable = errorState || snapshot.status === 'paused'
-  const detail = retryable
-    ? snapshot.detail ?? t(snapshot.status === 'paused' ? 'updatePausedHint' : 'updateErrorHint')
+  const detail = unverifiedActivation
+    ? t('updateRestartUnverifiedHint')
+    : retryable
+      ? snapshot.detail ?? t(snapshot.status === 'paused' ? 'updatePausedHint' : 'updateErrorHint')
+      : snapshot.detail
+  // The supervisor records both the specific failed command and a wrapper
+  // activation failure. Prefer the actionable command and its exit code.
+  // Do not display a previous failed attempt while a new build is running.
+  const lastDiagnostic = errorState
+    ? events.find(event => event.result === 'failed' && event.diagnostic !== undefined)
+    : undefined
+  const lastFailedStep = errorState
+    ? events.find(event => event.result === 'failed'
+      && event.step !== 'runtime-activation' && event.step !== 'error' && event.step !== 'rollback-failed')
+      ?? events.find(event => event.result === 'failed' && event.step === 'runtime-activation')
+      ?? events.find(event => event.result === 'failed')
     : undefined
   const content = (
     <>
       <UpdateGlyph spinning={busy} />
       {wide && (
-        <span className={css.copy} title={detail}>
+        <span className={css.copy} title={detail ?? target}>
           <span className={css.title}>{label}</span>
-          {target !== undefined && <code className={css.target}>{target}</code>}
           {ready ? <span className={css.detail}>{t('updateRestart')}</span> : null}
           {retryable ? (
             <button
@@ -333,12 +381,101 @@ export function UpdateFooterAction({
               {t('retry')}
             </button>
           ) : null}
-          {busy && progress > 0 ? (
-            <span className={css.progressTrack} aria-hidden="true">
-              <span className={css.progressValue} style={{ width: `${String(progress)}%` }} />
-            </span>
-          ) : null}
         </span>
+      )}
+      {wide && !ready && (
+        <button
+          type="button"
+          className={css.expander}
+          aria-label={t(detailsOpen ? 'updateHideDetails' : 'updateShowDetails')}
+          aria-expanded={detailsOpen}
+          onClick={() => { setDetailsOpen(open => !open) }}
+        >
+          {detailsOpen ? '⌃' : '⌄'}
+        </button>
+      )}
+      {wide && detailsOpen && !ready && (
+        <div className={css.expandedDetails}>
+          <div className={css.phaseInfo}>
+            {target === undefined ? null : <code>{target}</code>}
+            <span>{detail ?? label}</span>
+          </div>
+          {busy && progress > 0 ? (
+            <div className={css.progressTrack} aria-label={label}>
+              <div className={css.progressValue} style={{ width: `${String(progress)}%` }} />
+            </div>
+          ) : null}
+          {errorState && (
+            <p className={css.failureNotice} role="alert">
+              {lastFailedStep === undefined
+                ? detail ?? t('updateErrorHint')
+                : <>
+                  {t('updateFailedAt')}: {t(updateStepLabelKey(lastFailedStep.step) ?? 'updateError')}
+                  {lastFailedStep.exitCode === undefined ? null : ` · ${t('updateExitCode')}: ${String(lastFailedStep.exitCode)}`}
+                </>}
+            </p>
+          )}
+          {(['preparing', 'restarting', 'applying', 'rolling-back'].includes(snapshot.status)) && (
+            <section className={css.diagnosticPanel} aria-label={t('updateLiveConsole')}>
+              <div className={css.diagnosticHeader}>
+                <strong>{t('updateLiveConsole')}</strong>
+                {consoleLines.length > 0 && <button
+                  type="button"
+                  className={css.diagnosticCopy}
+                  onClick={() => { void navigator.clipboard?.writeText(liveConsoleText) }}
+                >
+                  {t('updateLiveCopy')}
+                </button>}
+              </div>
+              <div className={css.liveConsole} ref={consoleRef} data-testid="phoenix-update-live-console" role="log" aria-live="off">
+                {consoleLines.length === 0
+                  ? <span className={css.liveWaiting}>{t('updateLiveWaiting')}</span>
+                  : consoleLines.map((line, index) => (
+                    <div key={line.at + line.step + String(index)} className={css.liveLine} data-stream={line.stream}>
+                      <time dateTime={line.at}>{new Date(line.at).toLocaleTimeString()}</time>
+                      <span>{line.line}</span>
+                    </div>
+                  ))}
+              </div>
+            </section>
+          )}
+          {lastDiagnostic?.diagnostic !== undefined && (
+            <section className={css.diagnosticPanel} aria-label={t('updateDiagnosticTitle')}>
+              <div className={css.diagnosticHeader}>
+                <strong>{t('updateDiagnosticTitle')}</strong>
+                <button
+                  type="button"
+                  className={css.diagnosticCopy}
+                  onClick={() => { void navigator.clipboard?.writeText(lastDiagnostic.diagnostic ?? '') }}
+                >
+                  {t('updateDiagnosticCopy')}
+                </button>
+              </div>
+              <pre className={css.diagnosticText} data-testid="phoenix-update-diagnostic">{lastDiagnostic.diagnostic}</pre>
+            </section>
+          )}
+          {connectionLost && <p className={css.reconnecting}>{t('updateReconnect')}</p>}
+          <div className={css.journalHeader}>{t('updateJournalTitle')}</div>
+          {events.length === 0
+            ? <p className={css.journalEmpty}>{t('updateJournalEmpty')}</p>
+            : <ol className={css.journal} aria-label={t('updateJournalTitle')} data-testid="phoenix-update-journal">
+              {events.map((event, index) => {
+                const stepLabel = updateStepLabelKey(event.step)
+                const stateLabel = event.result === 'started' ? t('updateEventStarted')
+                  : event.result === 'ok' ? t('updateEventOk')
+                    : event.result === 'failed' ? t('updateEventFailed') : t('updateEventInfo')
+                return (
+                  <li key={event.at + event.step + String(index)} data-result={event.result}>
+                    <time dateTime={event.at}>{new Date(event.at).toLocaleTimeString()}</time>
+                    <span className={css.eventStep}>{stepLabel === undefined ? event.step : t(stepLabel)}</span>
+                    <span className={css.eventOutcome}>{stateLabel}{event.exitCode === undefined ? ''
+                      : ` · ${t('updateExitCode')}: ${String(event.exitCode)}`}</span>
+                  </li>
+                )
+              })}
+            </ol>}
+          <p className={css.journalPrivacy}>{t('updateJournalPrivacy')}</p>
+        </div>
       )}
     </>
   )
@@ -361,7 +498,8 @@ export function UpdateFooterAction({
             role="progressbar"
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-valuenow={progress}
+            aria-valuenow={unverifiedActivation ? undefined : progress}
+            aria-valuetext={unverifiedActivation ? label : undefined}
             aria-label={label}
           />
           {content}
@@ -386,7 +524,8 @@ export function UpdateFooterAction({
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-valuenow={progress}
+          aria-valuenow={unverifiedActivation ? undefined : progress}
+          aria-valuetext={unverifiedActivation ? label : undefined}
           aria-label={label}
         />
         {content}

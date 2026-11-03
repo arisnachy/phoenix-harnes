@@ -6,10 +6,12 @@ import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 // Type-only: supplies the sidebar.footer.action SlotMap declaration.
 import type {} from '@phoenix-ai/dsh-client-ui-sidebar/client'
 import { PluginInventorySettingsTab, type PluginInventorySettingsTabInjected } from './PluginInventorySettingsTab.tsx'
+import { BusinessLibrarySettingsTab, type BusinessLibraryInjected } from './BusinessLibrarySettingsTab.tsx'
 import { UpdateFooterAction, type UpdateFooterActionInjected } from './UpdateFooterAction.tsx'
 import { en, es, zh, type PluginInventoryLocaleKey } from './locales.ts'
 
 export type { PluginInventorySettingsTabInjected, PluginInventorySettingsTabProps } from './PluginInventorySettingsTab.tsx'
+export type { BusinessLibraryInjected, BusinessLibrarySettingsTabProps } from './BusinessLibrarySettingsTab.tsx'
 export type { UpdateFooterActionInjected, UpdateFooterActionProps } from './UpdateFooterAction.tsx'
 export type { PluginInventoryLocaleKey } from './locales.ts'
 
@@ -38,7 +40,27 @@ export function apply(ctx: ClientContext): void {
     }
     return result.value
   }
-  const inventoryInjected = (): PluginInventorySettingsTabInjected => ({ list })
+  const setPluginEnabled: NonNullable<PluginInventorySettingsTabInjected['setPluginEnabled']> = async request => {
+    const result = await ctx.remote.pluginInventory.setPluginEnabled(request)
+    if (!result.ok) throw new Error(result.error.message || 'Plugin enablement failed')
+    return result.value
+  }
+  const activateAvailablePlugins: NonNullable<PluginInventorySettingsTabInjected['activateAvailablePlugins']> = async () => {
+    const result = await ctx.remote.pluginInventory.activateAvailablePlugins()
+    if (!result.ok) throw new Error(result.error.message || 'Bulk plugin activation failed')
+    return result.value
+  }
+  const inventoryInjected = (): PluginInventorySettingsTabInjected =>
+    ({ list, setPluginEnabled, activateAvailablePlugins })
+
+  const readBusinessLibrary: BusinessLibraryInjected['readBusinessLibrary'] = async () => {
+    const result = await ctx.remote.pluginInventory.businessLibrary()
+    if (!result.ok) {
+      throw new Error(`pluginInventory.businessLibrary failed: ${result.error.code}: ${result.error.message}`)
+    }
+    return result.value
+  }
+  const businessInjected = (): BusinessLibraryInjected => ({ readBusinessLibrary })
 
   const readUpdateState: UpdateFooterActionInjected['readUpdateState'] = async () => {
     const result = await ctx.remote.pluginInventory.updateState()
@@ -71,6 +93,15 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: inventoryInjected,
   }, PluginInventorySettingsTab))
+
+  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
+    name: 'settings.plugins.tab',
+    id: 'business-library',
+    order: 20,
+    label: () => t('businessTab'),
+    locale: NS,
+    inject: businessInjected,
+  }, BusinessLibrarySettingsTab))
 
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action',

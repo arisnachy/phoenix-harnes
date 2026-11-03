@@ -12,9 +12,9 @@
 import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import type { LlmModelReasoningInfo } from '@phoenix-ai/dsh-llm'
 import { deepEqualJson } from '@phoenix-ai/dsh-settings'
-import { catalogModels, THINKING_LEVELS } from './catalog.ts'
+import { catalogModels, documentedVendorInput, THINKING_LEVELS } from './catalog.ts'
 import type { PiAiModelProfile, PiAiProviderProfile, PiAiReasoningEfforts } from './config.ts'
-import { codexModelListTransport } from './codex-discovery.ts'
+import { codexModelListTransport, codexRuntimeSignature } from './codex-discovery.ts'
 import type { CodexDiscoveredModel, CodexModelListTransport } from './codex-discovery.ts'
 
 /** Provider route whose account-scoped catalog is owned by Codex app-server. */
@@ -22,6 +22,8 @@ export const CODEX_PROVIDER = 'openai-codex'
 
 /** Avoid repeatedly spawning Codex while keeping selector data reasonably fresh. */
 export const CODEX_MODEL_REFRESH_INTERVAL_MS = 60_000
+/** A disconnected Codex catalog must not spawn another 45-second probe every minute. */
+export const CODEX_MODEL_FAILURE_COOLDOWN_MS = 5 * 60_000
 
 const SUPPORTED_THINKING_LEVELS = new Set<string>(THINKING_LEVELS)
 
@@ -71,11 +73,15 @@ export function codexModelsToProfiles(models: readonly CodexDiscoveredModel[]): 
       }
     }
 
+    const documentedInput = documentedVendorInput(CODEX_PROVIDER, model.id)
     return {
       id: model.id,
       ...model.name === undefined ? {} : { name: model.name },
       ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
       ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
+      ...documentedInput !== undefined
+        ? { input: [...documentedInput] }
+        : model.inputModalities === undefined ? {} : { input: [...model.inputModalities] },
       ...hasThinking ? { reasoningEfforts } : {},
     }
   })
@@ -108,6 +114,10 @@ export interface CodexLiveCatalogOptions {
   now?: () => number
   /** Freshness/failure cooldown. */
   refreshIntervalMs?: number
+  /** Failure retry cooldown; defaults to five minutes for production. */
+  failureCooldownMs?: number
+  /** Optional runtime fingerprint; a Codex CLI upgrade invalidates the live-catalog TTL. */
+  runtimeSignature?: () => string
   /** Installed route ids retained in the dispatch superset. */
   installedModelIds?: () => readonly string[]
   /** Optional Phoenix-compatible diagnostic sink. */
@@ -135,6 +145,9 @@ export class CodexLiveCatalog {
   private readonly transport: CodexModelListTransport
   private readonly now: () => number
   private readonly refreshIntervalMs: number
+  private readonly failureCooldownMs: number
+  private lastRuntimeSignature: string | undefined
+  private readonly runtimeSignature: () => string
   private readonly installedModelIds: () => readonly string[]
   private readonly logger: { warn(value: unknown): void } | undefined
   /** Monotonic catalog generation used to invalidate provider-profile memoization. */
@@ -144,6 +157,9 @@ export class CodexLiveCatalog {
     this.transport = options.transport ?? codexModelListTransport
     this.now = options.now ?? Date.now
     this.refreshIntervalMs = options.refreshIntervalMs ?? CODEX_MODEL_REFRESH_INTERVAL_MS
+    this.failureCooldownMs = options.failureCooldownMs ?? (options.refreshIntervalMs === undefined
+      ? CODEX_MODEL_FAILURE_COOLDOWN_MS : options.refreshIntervalMs)
+    this.runtimeSignature = options.runtimeSignature ?? codexRuntimeSignature
     this.installedModelIds = options.installedModelIds
       ?? (() => [...catalogModels(CODEX_PROVIDER).keys()])
     this.logger = options.logger
@@ -186,10 +202,10 @@ export class CodexLiveCatalog {
    * model list.
    *
    * Automatic routes receive the full dispatch superset exactly as before.
-   * A non-empty configured list remains the visibility/filter authority, but
-   * each retained id is enriched from Codex's last-good profile so a model
-   * adopted from Settings does not lose capabilities merely because it became
-   * pinned. Explicit `reasoningEfforts: false` still wins as the supported
+   * Configured Codex models retain precedence and explicit overrides.
+   * Account-visible new models are appended for exact-route dispatch even when
+   * a saved list predates their release; the user-facing Eclipse picker obtains
+   * its own account catalog directly from Codex model/list. Explicit `reasoningEfforts: false` still wins as the supported
    * opt-out; otherwise Codex's live reasoning declaration is authoritative.
    *
    * @param providers - Raw provider settings before live Codex augmentation.
@@ -226,6 +242,17 @@ export class CodexLiveCatalog {
             : { reasoningEfforts: { ...live.reasoningEfforts } },
       }
     })
+    // A pinned Codex list controls saved preferences and listing order, not
+    // whether a newly account-visible model selected in Eclipse can execute.
+    // Keep overrides for configured IDs and add only genuinely live IDs;
+    // previously retired dispatch models remain available to old sessions.
+    const pinnedIds = new Set(enriched.map(model => model.id))
+    for (const live of this.visible ?? []) {
+      if (!pinnedIds.has(live.id)) {
+        enriched.push(live)
+        pinnedIds.add(live.id)
+      }
+    }
 
     return {
       ...providers,
@@ -236,11 +263,14 @@ export class CodexLiveCatalog {
     }
   }
 
-  /** Model ids the adapter should advertise for this profile after a refresh. */
+  /** Model ids the chat selector should advertise after a Codex refresh.
+   * A pinned model list is a dispatch/preferences override, not a replacement
+   * for the account-visible catalog. Only use it when live discovery has never
+   * succeeded, preserving the existing offline last-good behavior.
+   */
   private advertisedIds(profile: PiAiProviderProfile): readonly string[] | undefined {
-    return codexCatalogIsAutomatic(profile)
-      ? this.visibleIds()
-      : profile.models?.map(model => model.id)
+    return this.visibleIds()
+      ?? (codexCatalogIsAutomatic(profile) ? undefined : profile.models?.map(model => model.id))
   }
 
   /**
@@ -263,6 +293,10 @@ export class CodexLiveCatalog {
   ): Promise<readonly string[] | undefined> {
     if (provider !== CODEX_PROVIDER || profile === undefined) return undefined
 
+    const currentRuntime = this.runtimeSignature()
+    const runtimeChanged = this.lastRuntimeSignature !== undefined && currentRuntime !== this.lastRuntimeSignature
+    this.lastRuntimeSignature = currentRuntime
+
     const automatic = codexCatalogIsAutomatic(profile)
     const pinnedModelKey = automatic
       ? undefined
@@ -272,18 +306,23 @@ export class CodexLiveCatalog {
 
     if (this.inFlight !== undefined) {
       await this.inFlight
+      // The updater can activate a new CLI while the prior probe is running.
+      // A second lookup then uses the new runtime instead of adopting old data.
+      if (runtimeChanged) return await this.refresh(provider, profile, true)
       return this.advertisedIds(profile)
     }
 
     const now = this.now()
     // A model newly adopted from Settings must be enriched immediately even
     // when the previous live catalog is still inside its normal 60s TTL.
-    if (!pinnedModelsChanged && this.visible !== undefined && now - this.lastSuccessAt < this.refreshIntervalMs) {
+    if (!runtimeChanged && !pinnedModelsChanged && this.visible !== undefined && now - this.lastSuccessAt < this.refreshIntervalMs) {
       return this.advertisedIds(profile)
     }
     // After that one pin-change attempt, failures still respect the cooldown
     // so an unavailable Codex process cannot be hammered by UI re-renders.
-    if (!force && !pinnedModelsChanged && now - this.lastAttemptAt < this.refreshIntervalMs) {
+    const lastAttemptFailed = this.lastSuccessAt < this.lastAttemptAt
+    const cooldown = lastAttemptFailed ? this.failureCooldownMs : this.refreshIntervalMs
+    if (!force && !runtimeChanged && !pinnedModelsChanged && now - this.lastAttemptAt < cooldown) {
       return this.advertisedIds(profile)
     }
 

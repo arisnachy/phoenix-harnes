@@ -98,6 +98,45 @@ describe('CodexQuotaRemaining', () => {
     expect(view.container.querySelector('[data-quota-meter]')?.getAttribute('style')).toContain('--quota-progress: 100%')
   })
 
+  it('adopts refreshed Codex quota promptly after the provider snapshot changes', async () => {
+    vi.useFakeTimers()
+    const d = directory('openai-codex')
+    let usedPercent = 20
+    const auth = {
+      list: vi.fn(() => Promise.resolve({
+        rpcId: 'authorization-list-refresh' as never,
+        result: {
+          ok: true as const,
+          value: {
+            entries: [{
+              key: 'subagent-codex/account',
+              label: 'ChatGPT / Codex',
+              telemetry: {
+                kind: 'account' as const,
+                provider: 'Codex',
+                primaryLimit: { usedPercent, windowDurationMins: 300 },
+              },
+            }],
+          },
+        },
+      })),
+    }
+
+    render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} />)
+    await act(async () => { await Promise.resolve() })
+    expect(screen.getByText('80%')).toBeTruthy()
+
+    usedPercent = 27
+    await act(async () => {
+      vi.advanceTimersByTime(5_000)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('73%')).toBeTruthy()
+    expect(auth.list).toHaveBeenCalledTimes(2)
+  })
+
   it('shows both the five-hour and weekly Codex quota windows with reset countdowns', async () => {
     const d = directory('openai-codex')
     const nowMs = Date.parse('2026-08-27T12:00:00.000Z')

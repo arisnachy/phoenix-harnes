@@ -8,6 +8,8 @@ import { isAgentLoopRequest, type GenerateOptions } from '@phoenix-ai/dsh-llm'
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import { foldRequestHeader } from '@phoenix-ai/dsh-session'
 
+import { projectRequestHistory } from './request-history.ts'
+
 const PACKAGE_NAME = '@phoenix-ai/dsh-agent-loop'
 
 /** Cordis companion plugin name. */
@@ -36,7 +38,10 @@ const install: InvariantInstaller = Object.assign((ctx: Context, fail: Invariant
     if (header === undefined) {
       return fail('a loop-built request with no request/header event in its session log')
     }
-    const expected = session.deriveMessages()
+    const expected = projectRequestHistory(
+      session.deriveMessages(),
+      events.findLast(event => event.type === 'step/start')?.data.historyProjection,
+    )
     if (JSON.stringify(options.messages) !== JSON.stringify(expected)) {
       fail(`llm request for session "${String(session.id)}" diverges from the dispatch-time durable derivation (log-reconstruction desync)`)
     }

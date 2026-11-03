@@ -256,8 +256,8 @@ export function apply(ctx: Context, config: Config = {}): void {
       + 'On Windows a killed process settles as `[exit code: 1]` without a signal marker; treat a bare exit 1 after an interruption as a termination, not a command failure. '
       + 'For browser work, use the registered PHOENIX Chrome/Edge connector as the primary route. '
       + (computerEnabled
-        ? 'Phoenix Desktop Computer is enabled as an experimental fallback; use it only when the browser connector cannot complete the task.'
-        : 'Phoenix Desktop Computer is experimental and disabled in this deployment; do not attempt to repair or depend on it.'),
+        ? 'Phoenix Desktop Computer is enabled. Use computer for Windows desktop/window control and screenshots; keep the Chrome/Edge connector as the primary route for ordinary web-only work.'
+        : 'Phoenix Desktop Computer is disabled in this deployment; do not claim desktop control is available.'),
   })
 
   ctx.tools.register(defineTool({

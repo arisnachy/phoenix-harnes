@@ -71,7 +71,7 @@ function clientNativeInput(id = REQUESTING_PACKAGE): { external?: unknown; plugi
 
 describe('client bundle build faces', () => {
   it('watches source in development and consumes emitted JavaScript in the Client build', () => {
-    const bundle = clientBundle('@phoenix-ai/dsh-client-test', ['lib/types/index.js'])
+    const bundle = clientBundle(REQUESTING_PACKAGE, ['lib/types/index.js'])
     const development = bundle({ env: {} }).find(config => config.platform === 'browser')
     const artifact = bundle({ env: { DSH_BUILD_FACE: 'client' } })
       .find(config => config.platform === 'browser')

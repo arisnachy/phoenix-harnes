@@ -136,6 +136,57 @@ describe('adversarial completion tester', () => {
     expect(result.verificationIncidents?.join(' ')).toMatch(/goal-adversarial-test-design:start-TransportError/)
   })
 
+  it('recovers from one transient verifier startup failure without reopening a finished artifact', async () => {
+    const objective = 'Ship a verified artifact.'
+    let designAttempts = 0
+    const start = vi.fn(async (_name: string, request: Record<string, unknown>) => {
+      if (request.label === 'goal-adversarial-test-design') {
+        designAttempts += 1
+        if (designAttempts === 1) {
+          const error = new Error('transient verifier transport failure')
+          error.name = 'TransportError'
+          throw error
+        }
+        return {
+          result: Promise.resolve({
+            output: [],
+            stopReason: 'completed' as const,
+            structured: { cases: [{ name: 'retry-case', purpose: 'Verify retry recovery.' }] },
+          }),
+          dispose: async () => {},
+        }
+      }
+      return {
+        result: Promise.resolve({
+          output: [],
+          stopReason: 'completed' as const,
+          structured: structuredPass(objective),
+        }),
+        dispose: async () => {},
+      }
+    })
+
+    const result = await runAdversarialCompletionGate({
+      subagents: {
+        getProvider: () => provider() as never,
+        list: () => ['spawn'],
+        start: start as never,
+      },
+      provider: 'spawn',
+      parent: {
+        id: SessionId('tester-transient-launch'),
+        options: { provider: 'anthropic', model: 'claude-opus' },
+      } as never,
+      objective,
+      round: 1,
+      signal: new AbortController().signal,
+    })
+
+    expect(result.checks).toEqual(passingChecks)
+    expect(designAttempts).toBe(2)
+    expect(result.verificationIncidents).toContain('goal-adversarial-test-design:start-TransportError')
+  })
+
   it('locks literal requirements before workspace inspection and verifies edge obligations', async () => {
     const objective = 'Ship a regex CLI using argparse. It must report the exact error position.'
     const { result, starts } = await runWithStructured(objective, structuredPass(objective))

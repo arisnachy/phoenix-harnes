@@ -1,5 +1,12 @@
-# Optional Profile Bundle: register the Codex provider on the Host plane only.
-# Agent Presets grant the model-facing tool independently.
+# Optional Profile Bundle: register Codex providers on the Host plane only.
+# Agent Presets grant model-facing tools independently. The default provider
+# remains fail-closed; the named sibling opts into Codex native Auto-review.
 - insert:
     - id: subagent-codex
       name: '@phoenix-ai/dsh-subagent-codex'
+
+    - id: subagent-codex-auto-review
+      name: '@phoenix-ai/dsh-subagent-codex'
+      config:
+        providerName: codex-auto-review
+        permissionMode: approve-for-me

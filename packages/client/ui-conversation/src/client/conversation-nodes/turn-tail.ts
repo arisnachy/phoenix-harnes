@@ -139,6 +139,7 @@ function tailData(context: ConversationNodeContext<TurnTailState>): TurnTailChat
   const metrics = deriveTurnMetrics(finalized.map(candidate => candidate.finalNode)).get(end.event.data.turn)
   return {
     turn: end.event.data.turn,
+    reason: end.event.data.reason,
     seq: end.event.seq,
     time: end.event.time,
     closing,

@@ -25,7 +25,7 @@ const mission = (patch: Partial<CognitiveMissionProfile> = {}): CognitiveMission
 
 describe('HARDNESS cognitive workflow catalog', () => {
   it('ships a closed first-party catalog with valid prerequisites', () => {
-    expect(COGNITIVE_FLOW_CATALOG).toHaveLength(26)
+    expect(COGNITIVE_FLOW_CATALOG).toHaveLength(27)
 
     const ids = COGNITIVE_FLOW_CATALOG.map(flow => flow.id)
     expect(new Set(ids).size).toBe(ids.length)
@@ -46,6 +46,7 @@ describe('HARDNESS cognitive workflow catalog', () => {
       'verification-gate',
       'outcome-evaluation',
     ])
+    expect(plan.selected).not.toContain('solution-space-audit')
     expect(plan.selected).not.toContain('brainstorming')
     expect(plan.selected).not.toContain('systematic-debugging')
     expect(plan.selected).not.toContain('autonomous-follow-up')
@@ -67,7 +68,19 @@ describe('HARDNESS cognitive workflow catalog', () => {
 
     expect(plan.executionMode).toBe('standard')
     expect(plan.measurements.evidenceScore).toBe(3)
-    expect(plan.budget).toEqual({ maxAttempts: 2, maxRecoveryAttempts: 2, maxExternalSources: 3, maxParallelSubtasks: 4, maxReviewPasses: 1 })
+    expect(plan.budget).toEqual({ maxAttempts: 2, maxRecoveryAttempts: 2, maxExternalSources: 3, maxParallelSubtasks: 2, maxReviewPasses: 1 })
+  })
+
+  it('audits the solution space in non-trivial missions across domains', () => {
+    for (const profile of [
+      mission({ kind: 'operational', complexity: 'medium', persistent: true }),
+      mission({ kind: 'research', requiresExternalEvidence: true }),
+      mission({ kind: 'build', complexity: 'high', requiresCodeChange: true }),
+    ]) {
+      const plan = selectCognitiveWorkflow(profile)
+      expect(plan.selected).toContain('solution-space-audit')
+      expect(plan.qualityGates).toContain('solution-space-covered')
+    }
   })
 
   it('uses deep thresholds and budget for high-risk failed work', () => {
@@ -75,7 +88,7 @@ describe('HARDNESS cognitive workflow catalog', () => {
 
     expect(plan.executionMode).toBe('deep')
     expect(plan.measurements).toEqual({ complexityScore: 3, riskScore: 3, noveltyScore: 1, evidenceScore: 2 })
-    expect(plan.budget).toEqual({ maxAttempts: 3, maxRecoveryAttempts: 3, maxExternalSources: 8, maxParallelSubtasks: 8, maxReviewPasses: 2 })
+    expect(plan.budget).toEqual({ maxAttempts: 3, maxRecoveryAttempts: 3, maxExternalSources: 8, maxParallelSubtasks: 3, maxReviewPasses: 2 })
   })
 
   it('selects design, planning, proof, critique, and simulation for complex code builds', () => {
