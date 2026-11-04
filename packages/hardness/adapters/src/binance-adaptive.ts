@@ -1,5 +1,6 @@
 import type { BinanceCandle, BinancePaperAccount, BinancePaperBroker, BinancePaperTrade } from './binance-paper.ts'
 import { binanceKnownAssetRisk } from './binance-asset-risk.ts'
+import type { BinanceKronosForecast } from './binance-kronos.ts'
 
 /** Supported closed-candle market regimes for adaptive paper trading. */
 export type BinanceMarketRegime = 'uptrend' | 'downtrend' | 'range'
@@ -34,6 +35,8 @@ export interface BinanceAdaptiveCycle {
   readonly rationale: string
   readonly trade?: BinancePaperTrade
   readonly account: BinancePaperAccount
+  readonly forecast?: BinanceKronosForecast
+  readonly forecastStatus?: 'accepted' | 'rejected' | 'unavailable'
 }
 
 /** Bounded configuration for one deterministic scan. */
@@ -41,6 +44,7 @@ export interface BinanceAdaptiveRequest {
   readonly symbols: readonly string[]
   readonly interval?: BinanceAdaptiveCycle['interval']
   readonly mode?: BinanceAdaptiveCycle['mode']
+  readonly predictor?: (symbol: string, candles: readonly BinanceCandle[], interval: BinanceAdaptiveCycle['interval']) => Promise<BinanceKronosForecast>
 }
 
 /** Minimal paper-only broker dependency; no real-account connector is accessible. */
@@ -230,15 +234,15 @@ export async function runBinanceAdaptiveCycle(
     const sorted = [...signals].sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
     // Enforce registered exit plans using fresh broker marks even when
     // today's watchlist no longer contains an existing open position.
-    const exits = account.positions.flatMap(position => {
+    const exits = account.positions.flatMap((position) => {
       const plan = position.exitPlan
       const mark = position.marketPriceUsdt
       if (plan === undefined) return []
       const crossed = binanceKnownAssetRisk(position.symbol) ? 'binance-asset-risk'
-        : mark <= plan.stopLossPrice ? 'paper-stop-loss'
-        : mark >= plan.tp2Price ? 'paper-tp2'
-          : !plan.tp1Taken && mark >= plan.tp1Price ? 'paper-tp1'
-            : undefined
+          : mark <= plan.stopLossPrice ? 'paper-stop-loss'
+            : mark >= plan.tp2Price ? 'paper-tp2'
+              : !plan.tp1Taken && mark >= plan.tp1Price ? 'paper-tp1'
+                : undefined
       return crossed === undefined ? [] : [{
         position, reason: crossed,
         quantity: crossed === 'paper-tp1' ? position.quantity * plan.tp1Fraction : position.quantity,
@@ -258,7 +262,7 @@ export async function runBinanceAdaptiveCycle(
     const executionFor = (
       decision: 'buy' | 'sell' | 'hold',
       trade?: BinancePaperTrade,
-    ): BinanceSignalExecution[] => sorted.map(signal => {
+    ): BinanceSignalExecution[] => sorted.map((signal) => {
       if (trade?.symbol === signal.symbol) return {
         symbol: signal.symbol, status: 'executed' as const,
         explanation: trade.side === 'buy'
@@ -277,8 +281,7 @@ export async function runBinanceAdaptiveCycle(
       }
       if (signal.score < MIN_AUTONOMOUS_SCORE) return {
         symbol: signal.symbol, status: 'watch' as const,
-        explanation: 'Puntuación ' + signal.score + '/100 inferior al mínimo autónomo de '
-          + MIN_AUTONOMOUS_SCORE + '/100',
+        explanation: `Puntuación ${signal.score}/100 inferior al mínimo autónomo de ${MIN_AUTONOMOUS_SCORE}/100`,
       }
       if (mode === 'scan') return {
         symbol: signal.symbol, status: 'scan-only' as const,
@@ -294,7 +297,7 @@ export async function runBinanceAdaptiveCycle(
       }
       if (account.positions.length >= MAX_OPEN_POSITIONS) return {
         symbol: signal.symbol, status: 'blocked' as const,
-        explanation: 'Límite de ' + MAX_OPEN_POSITIONS + ' posiciones simultáneas',
+        explanation: `Límite de ${MAX_OPEN_POSITIONS} posiciones simultáneas`,
       }
       if (budget < 10) return {
         symbol: signal.symbol, status: 'blocked' as const,
@@ -330,13 +333,52 @@ export async function runBinanceAdaptiveCycle(
     const defensive = sorted.find(signal => signal.action === 'sell'
       && account.positions.some(position => position.symbol === signal.symbol))
     if (defensive !== undefined) {
-      const position = account.positions.find(item => item.symbol === defensive.symbol)!
+      const position = account.positions.find(item => item.symbol === defensive.symbol)
+      if (position === undefined) throw new Error('Defensive position could not be verified')
       const result = await broker.order({
         symbol: position.symbol, side: 'sell', quantity: position.quantity,
         strategyId: 'adaptive-defensive-v1', reason: defensive.reason,
       })
       return { mode, interval, signals: sorted, execution: executionFor('sell', result.trade), decision: 'sell',
         rationale: 'Confirmed bearish defensive exit', trade: result.trade, account: result.account }
+    }
+    // Forecasting is entry-only. Every existing stop/take-profit and the
+    // technical defensive exit were processed before reaching this gate.
+    let forecast: BinanceKronosForecast | undefined
+    if (candidate !== undefined && request.predictor !== undefined && budget >= 10
+      && account.positions.length < MAX_OPEN_POSITIONS && account.maxDrawdownPct < 5) {
+      const rejectForecast = (rationale: string, status: 'rejected' | 'unavailable'): BinanceAdaptiveCycle => ({
+        mode, interval, signals: sorted,
+        execution: executionFor('hold').map(row => row.symbol === candidate.symbol
+          ? { ...row, status: 'blocked' as const, explanation: rationale } : row),
+        decision: 'hold', rationale, account,
+        ...(forecast === undefined ? {} : { forecast }),
+        forecastStatus: status,
+      })
+      try {
+        const history = (await broker.candles(candidate.symbol, interval, 80))
+          .filter(candle => candle.closeTime <= now)
+        const last = history.at(-1)
+        if (history.length < 48 || !last || now - last.closeTime > intervalMs * MAX_MARKET_DATA_AGE) {
+          return rejectForecast('Kronos: faltan velas cerradas y recientes; entrada omitida', 'unavailable')
+        }
+        forecast = await request.predictor(candidate.symbol, history, interval)
+        if (forecast.symbol !== candidate.symbol
+          || forecast.interval !== interval || forecast.forecastAt !== last.closeTime
+          || !Number.isFinite(forecast.projectedReturnPct) || !Number.isFinite(forecast.maxDownsidePct)
+          || !Number.isFinite(forecast.baseClose) || forecast.baseClose <= 0
+          || Math.abs(forecast.baseClose / last.close - 1) > 0.001) {
+          return rejectForecast('Kronos: proyección inválida o desactualizada; entrada omitida', 'unavailable')
+        }
+        const estimatedNetReturn = forecast.projectedReturnPct / 100 - 2 * account.feeRate - 0.003
+        // 30 bps round-trip slippage allowance plus 30 bps minimum expected net
+        // edge. These are conservative heuristics, not a win probability.
+        if (estimatedNetReturn < 0.003 || forecast.maxDownsidePct < -2.5) {
+          return rejectForecast('Kronos: sin ventaja neta proyectada tras comisiones, deslizamiento y riesgo', 'rejected')
+        }
+      } catch {
+        return rejectForecast('Kronos: predicción no disponible; la entrada queda bloqueada', 'unavailable')
+      }
     }
     if (candidate !== undefined && budget >= 10
       && account.positions.length < MAX_OPEN_POSITIONS
@@ -346,16 +388,17 @@ export async function runBinanceAdaptiveCycle(
         side: 'buy',
         quoteAmountUsdt: Math.floor(budget * 100) / 100,
         strategyId: 'adaptive-' + candidate.strategy + '-v1',
-        reason: candidate.reason,
+        reason: candidate.reason + (forecast === undefined ? '' : '; Kronos entry gate approved'),
       })
       return { mode, interval, signals: sorted, execution: executionFor('buy', result.trade), decision: 'buy',
         rationale: 'Highest scored eligible virtual entry within portfolio limits',
+        ...(forecast === undefined ? {} : { forecast, forecastStatus: 'accepted' as const }),
         trade: result.trade, account: result.account }
     }
     const why = candidate === undefined
-      ? 'Ninguna señal de compra supera el mínimo de ' + MIN_AUTONOMOUS_SCORE + '/100 sin posición existente'
+      ? `Ninguna señal de compra supera el mínimo de ${MIN_AUTONOMOUS_SCORE}/100 sin posición existente`
       : account.positions.length >= MAX_OPEN_POSITIONS
-        ? 'Bloqueada: ya hay ' + MAX_OPEN_POSITIONS + ' posiciones abiertas'
+        ? `Bloqueada: ya hay ${MAX_OPEN_POSITIONS} posiciones abiertas`
         : account.maxDrawdownPct >= 5
           ? 'Bloqueada: drawdown máximo de 5% alcanzado'
           : budget < 10

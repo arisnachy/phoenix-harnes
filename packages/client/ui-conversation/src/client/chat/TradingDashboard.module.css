@@ -193,3 +193,24 @@
 .autoDiscovery input { accent-color: #e65b29; margin: 3px 0 0; flex: none; }
 .autoDiscovery input:focus-visible { outline: 2px solid #e65b29; outline-offset: 2px; }
 .autoDiscovery input:disabled { opacity: .6; }
+
+/* Compact light-mode predictive layer: forecast evidence, not a fabricated trade. */
+.predictivePanel { display:grid; gap:10px; padding:14px; background:#fff; border:1px solid #e1e6ed; border-radius:13px; color:#243347 }
+.predictiveHeading { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:9px }
+.predictiveHeading>div { display:grid; gap:4px }
+.predictiveHeading strong { font-size:14px; color:#263243 }
+.predictiveHeading small,.predictivePanel p,.predictiveControls small,.forecastSummary small { font-size:11px; color:#657487; line-height:1.5 }
+.predictivePanel p { margin:0 }
+.predictiveState { border:1px solid #dce3ec; background:#f5f7fa; padding:5px 10px; border-radius:99px; font-size:11px; color:#556375 }
+.predictiveState[data-kronos-state=ready] { color:#096c53; background:#edf9f3; border-color:#bfe2d2 }
+.predictiveState[data-kronos-state=installing],.predictiveState[data-kronos-state=loading] { color:#92541e; background:#fff8e9 }
+.predictiveState[data-kronos-state=error] { color:#a43f46; background:#fff0f0 }
+.predictiveControls { display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap }
+.predictiveControls label { display:flex; gap:8px; align-items:center; font-size:12px; font-weight:600; cursor:pointer }
+.predictiveControls button { font:inherit; border:1px solid #d0dfec; color:#235a90; background:#f2f8ff; border-radius:9px; padding:8px 11px; font-size:12px; cursor:pointer }
+.predictiveControls button:disabled { opacity:.55; cursor:not-allowed }
+.forecastSummary { display:flex; flex-wrap:wrap; align-items:center; gap:10px 15px; background:#f5f8fc; border:1px solid #e1e8f0; border-radius:10px; padding:10px }
+.forecastSummary strong { color:#253449; font-size:12px }
+.forecastSummary span { color:#4b6078; font-size:12px }
+.forecastSummary small { flex-basis:100% }
+@media (max-width:700px) { .predictiveHeading,.predictiveControls { align-items:flex-start; flex-direction:column } }
