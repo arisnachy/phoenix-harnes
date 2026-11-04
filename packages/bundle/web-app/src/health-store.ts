@@ -520,14 +520,14 @@ export class HealthClinicStore {
       fail('Borrador clínico demasiado grande')
     const values:Record<string,string|boolean>={}
     for(const [key,value] of Object.entries(incoming)){
-      if(!/^[a-z][a-z0-9_-]{0,70}$/u.test(key)||key.includes('pass')||key.startsWith('kira-')
+      if(!/^[a-z][A-Za-z0-9_-]{0,70}$/u.test(key)||key.includes('pass')||key.startsWith('kira-')
         ||typeof value!=='string'&&typeof value!=='boolean'
         ||typeof value==='string'&&(value.length>4000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(value)))
         fail('Campo de borrador inválido')
       values[key]=value
     }
     if(!Array.isArray(body.expanded)||body.expanded.length>30||
-      body.expanded.some(v=>typeof v!=='string'||!/^[a-z][a-z0-9_-]{0,70}$/u.test(v)))
+      body.expanded.some(v=>typeof v!=='string'||!/^[a-z][A-Za-z0-9_-]{0,70}$/u.test(v)))
       fail('Secciones del borrador inválidas')
     const expanded=body.expanded as string[],savedAt=new Date().toISOString()
     this.db.exec('BEGIN IMMEDIATE')
