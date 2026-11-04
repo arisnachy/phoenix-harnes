@@ -87,3 +87,27 @@ test('Kira local clinical command surface opens protected cards and approved det
   assert.ok(code)
   assert.doesNotThrow(()=>new Script(code,{filename:'kira-clinic-inline.js'}))
 })
+
+
+test('fast clinical navigation keeps a stable shell and encrypted draft restore',()=>{
+ const html=renderHealthPage('durable-workspace-nonce')
+ for(const snippet of ['clinical-draft/','snapshotView','persistView','restoreView',
+   'queueDraftSave','Promise.all([','loadSequence','draft-patient-id']){
+  assert.ok(html.includes(snippet),'expected durable workflow: '+snippet)
+ }
+ const script=/<script nonce="durable-workspace-nonce">([\s\S]+?)<\/script>/u.exec(html)?.[1]
+ assert.ok(script)
+ assert.doesNotThrow(()=>new Script(script,{filename:'durable-health-workspace.js'}))
+})
+
+test('patient registration and history include comprehensive clinical fields and confirmed writes',()=>{
+ const html=renderHealthPage('patient-save-nonce')
+ for(const snippet of ['Guardar paciente en el expediente','Comprobar si ya existe',
+   'customFields:Object.fromEntries','patient-extra-','patientCheckIdentity',
+   'hospitalizations','reviewOfSystems','geriatricFunction',
+   'No se ha confirmado la recuperación del paciente creado']){
+  assert.ok(html.includes(snippet),'missing save-safe clinical input '+snippet)
+ }
+ const script=/<script nonce="patient-save-nonce">([\s\S]+?)<\/script>/u.exec(html)?.[1]
+ assert.doesNotThrow(()=>new Script(script,{filename:'patient-save.js'}))
+})
