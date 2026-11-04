@@ -14,7 +14,7 @@ describe('CI workflow', () => {
       throw new TypeError('PHOENIX main guard must define triggers and compiled-main')
     }
     expect(Object.keys(workflow.on).sort()).toEqual(['pull_request', 'push', 'workflow_dispatch'])
-    expect(workflow.on.pull_request).toMatchObject({ branches: ['main'] })
+    expect(workflow.on.pull_request).toMatchObject({ branches: ['main', 'stable'] })
     expect(workflow.on.push).toMatchObject({ branches: ['main'] })
     expect(workflow.concurrency).toMatchObject({
       group: 'phoenix-main-guard-${{ github.ref }}',
