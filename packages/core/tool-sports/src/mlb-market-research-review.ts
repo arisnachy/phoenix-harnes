@@ -40,6 +40,14 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     return new Set(hitters.map(p=>p.id)).size>=9&&
       hitters.every(p=>p.teamId===d.fixture[side].id)
   }
+  // Recheck timestamps at review time: a cached dossier may outlive its quotes.
+  const checkedMs=Date.parse(d.checkedAt)
+  const quoteIsCurrent=(q:{updatedAt:string})=>{
+    const quoteMs=Date.parse(q.updatedAt)
+    return Number.isFinite(checkedMs)&&Number.isFinite(quoteMs)&&
+      quoteMs<=checkedMs&&checkedMs-quoteMs<=60*60*1000
+  }
+  const currentOffers=d.odds.filter(quoteIsCurrent)
   const gates={
     scheduledFuture:Number.isFinite(Date.parse(d.fixture.date))&&
       Number.isFinite(Date.parse(d.checkedAt))&&
@@ -72,7 +80,7 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     roofConstructionKnown:d.venue.roofType!=='unknown',
     gameRoofPositionVerified:false,
     weatherForecastAvailable:!!d.weather, // A forecast is not a game-time measurement
-    realOffersVerified:d.odds.length>0,
+    realOffersVerified:currentOffers.length>0,
     specificExpertPicksVerified:false,
     bookmakerRulesVerified:false,
     probabilitiesValidated:false,
@@ -111,6 +119,7 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     ]
     const missing=[
       ...(!gates.scheduledFuture?['Partido no programado en el futuro o estado prepartido inválido']:[]),
+      ...(!quoteIsCurrent(q)?['Cotización vencida, futura o sin fecha verificable respecto al corte de investigación']:[]),
       ...(!gates.lineupsConfirmed?['Alineación confirmada de ambos clubes']:[]),
       ...(!gates.rosterMatchupsReviewed?['Matriz completa de nueve bateadores contra abridor y relevistas rivales']:[]),
       ...(!gates.starterStatsVerified?['Estadísticas comprobadas de ambos abridores']:[]),
@@ -129,7 +138,7 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
       contradictoryEvidence:opposingFacts,missingEvidence:missing,researchQuestions}
   })
   const comparisonGroups=new Map<string,MlbMarketComparison>()
-  for(const q of d.odds.slice(0,40)){
+  for(const q of currentOffers.slice(0,40)){
     const key=JSON.stringify([q.bookmaker,q.market])
     const group=comparisonGroups.get(key)??{
       bookmaker:q.bookmaker,market:q.market,offers:[],
@@ -143,7 +152,7 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
   // Cross-book prices are comparable only for the exact same market,
   // selection and line. Never collapse Over/Under or different run lines.
   const crossBookGroups=new Map<string,MlbCrossBookComparison>()
-  for(const q of d.odds.slice(0,40)){
+  for(const q of currentOffers.slice(0,40)){
     const line=q.point??null
     const key=JSON.stringify([q.market.trim().toLowerCase(),
       q.selection.trim().toLowerCase(),line])
