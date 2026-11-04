@@ -47,6 +47,7 @@ export interface UserProfileSettings {
   tone?: string
   family?: UserProfileFamilyMember[]
   countryCode?: string
+  momentsRegion?: string
   momentsTimeZone?: string
   specialDates?: PersonalMoment[]
   consent: UserProfileConsent
@@ -78,6 +79,7 @@ export interface UserProfileRowState {
   tone: UserProfileFieldState
   family: UserProfileFieldState
   countryCode: UserProfileFieldState
+  momentsRegion: UserProfileFieldState
   momentsTimeZone: UserProfileFieldState
   specialDates: UserProfileFieldState
   assistantName: UserProfileFieldState

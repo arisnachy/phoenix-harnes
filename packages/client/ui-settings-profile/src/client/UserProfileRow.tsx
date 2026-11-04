@@ -120,6 +120,7 @@ export function UserProfileRow(props: UserProfileRowProps) {
         <h3 className={css.groupTitle}>{t('momentsSection')}</h3>
         <p className={css.hint}>{t('momentsHint')}</p>
         <ProfileInput id="profile-country" label={t('countryCode')} hint={t('countryHint')} value={state.countryCode.text} invalid={state.countryCode.invalid} disabled={disabled} onChange={(value) => { props.edit('countryCode', value.toUpperCase()) }} />
+        <ProfileInput id="profile-moments-region" label={t('momentsRegion')} hint={t('momentsRegionHint')} value={state.momentsRegion.text} invalid={state.momentsRegion.invalid} disabled={disabled} onChange={(value) => { props.edit('momentsRegion', value.toUpperCase()) }} />
         <ProfileInput id="profile-moments-zone" label={t('momentsZone')} hint={t('momentsZoneHint')} value={state.momentsTimeZone.text} invalid={state.momentsTimeZone.invalid} disabled={disabled} onChange={(value) => { props.edit('momentsTimeZone', value) }} />
         <label className={css.label} htmlFor="profile-moments-dates">{t('specialDates')}</label>
         <textarea id="profile-moments-dates" className={state.specialDates.invalid ? css.inputInvalid : css.textarea} value={state.specialDates.text} disabled={disabled} onChange={(event) => { props.edit('specialDates', event.target.value) }} />
