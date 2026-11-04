@@ -111,7 +111,9 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
     ...(!gates.bookmakerRulesVerified?['Las reglas oficiales de liquidación de la casa no están verificadas']:[]),
     ...(!gates.probabilitiesValidated?['Sin probabilidad contrastada fuera de muestra no puede afirmarse ventaja sobre el precio']:[]),
   ]
-  const reviewedMarkets=d.odds.slice(0,40).map(q=>{
+  // Prefer currently actionable quotes when the review display is capped; stale
+  // entries remain auditable only after the current offers.
+  const reviewedMarkets=[...currentOffers,...d.odds.filter(q=>!quoteIsCurrent(q))].slice(0,40).map(q=>{
     const market=q.market.toLowerCase()
     const line=q.point??null
     const total=/total|over|under/u.test(market+' '+q.selection)
