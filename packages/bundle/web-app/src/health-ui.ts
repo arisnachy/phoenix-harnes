@@ -331,9 +331,9 @@ function renderWorkspace(){
   '<p class="muted">No hay pacientes asignados. Puedes registrar al primero aquí.</p>';
  const inputs=(patientForm.fields||[]).map(f=>{
   const id="ws-extra-"+f.id;
-  return '<div>'+field(id,f.label,f.kind==="select"?"text":f.kind,f.required)+'</div>';
+  return '<div>'+patientField(f,"ws-extra-")+'</div>';
  }).join("");
- const editor='<details><summary class="ws-summary">Personalizar formulario · agregar o quitar campos</summary>'+
+ const editor='<details id="ws-template-editor"><summary class="ws-summary">Personalizar formulario · agregar o quitar campos</summary>'+
   '<p class="muted">Campos del consultorio, no códigos ejecutables. No envía datos del paciente a Kira. Los registros anteriores no se borran.</p>'+
   field("ws-new-label","Nuevo campo","text",false,"Ej.: ARS / Seguro")+
   '<label for="ws-new-type">Tipo</label><select id="ws-new-type">'+
@@ -464,8 +464,25 @@ function render(){
  const d=tab==="backups"?(data.backups||[]).map(fileName=>({fileName})):data[tab]||[],patients=tab==="invoices"&&actor.role==="billing"?(data["patient-options"]||[]):data.patients||data["patient-options"]||[];
  const p=pick("patientId","Paciente",patients,x=>x.name+(x.dateOfBirth?" · "+x.dateOfBirth:""));
  let form="";
- if(tab==="patients"&&["admin","clinician","reception"].includes(actor.role))form=field("name","Nombre completo")+field("dateOfBirth","Nacimiento","date")+field("email","Correo","email",false)+field("phone","Teléfono","tel",false)+
- '<p class="muted">El consentimiento se registra después de verificarlo, con responsable y referencia de evidencia.</p>'+button("create","Registrar paciente");
+ if(tab==="patients"&&["admin","clinician","reception"].includes(actor.role)){
+  form='<div class="ws-grid"><div>'+field("name","Nombre completo")+'</div>'+
+   '<div>'+field("dateOfBirth","Fecha de nacimiento","date")+'</div>'+
+   '<div>'+field("phone","Teléfono","tel",false)+'</div>'+
+   '<div>'+field("email","Correo electrónico","email",false)+'</div>'+
+   '<div><label for="documentType">Tipo de documento</label><select id="documentType">'+
+    '<option value="cedula">Cédula</option><option value="passport">Pasaporte</option>'+
+    '<option value="other">Otro</option></select></div>'+
+   '<div>'+field("documentNumber","Número de documento","text",false)+'</div></div>'+
+   '<h3>Información complementaria y administrativa</h3>'+
+   '<p class="muted">La plantilla se conserva para futuras altas. Los campos se guardan cifrados junto al expediente, no en el chat.</p>'+
+   '<div class="ws-grid">'+patientForm.fields.map(f=>'<div>'+patientField(f,"patient-extra-")+'</div>').join("")+'</div>'+
+   '<div id="patient-matches" aria-live="polite"></div>'+
+   '<p>'+button("patientCheckIdentity","Comprobar si ya existe","secondary")+'</p>'+
+   '<label><input id="patient-distinct" type="checkbox" style="width:auto;display:inline"> He confirmado que es otra persona pese a una coincidencia</label>'+
+   field("patient-distinct-reason","Justificación documentada","text",false)+
+   '<p class="muted">Guardar crea un expediente persistente identificado por ID y versión. Los datos no se envían a Kira.</p>'+
+   button("create","Guardar paciente en el expediente");
+ }
  if(tab==="encounters"&&["clinician","psychologist"].includes(actor.role))form=p+field("specialty","Especialidad", "text", true,"Medicina familiar")+
  field("complaint","Motivo de consulta")+
  '<label>Modalidad Kira</label><select id="mode"><option value="kira">Kira interroga</option><option value="mixed">Mixto</option><option value="manual">Profesional</option></select>'+button("create","Abrir consulta")+
@@ -574,7 +591,7 @@ async function execute(action,id){
  }
  if(action==="workspaceAddField"){
   const label=val("ws-new-label").trim();
-  if(!label||label.length>80||patientForm.fields.length>=12)throw Error("Etiqueta inválida o límite de campos alcanzado");
+  if(!label||label.length>80||patientForm.fields.length>=64)throw Error("Etiqueta inválida o límite de campos alcanzado");
   let slug=label.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase()
     .replace(/[^a-z0-9_]+/g,"_").replace(/^_+|_+$/g,"").slice(0,22);
   if(!/^[a-z]/.test(slug))slug="dato_"+slug.slice(0,15);
@@ -583,6 +600,7 @@ async function execute(action,id){
   const fields=[...patientForm.fields,{id:key,label,kind:val("ws-new-type"),
     required:document.getElementById("ws-new-required")?.checked===true}];
   rememberPatientDraft();
+  await persistView();
   patientForm=(await api("patient-intake-template","PATCH",
     {version:1,expectedRevision:patientForm.revision,fields})).template;
   notice("Campo agregado a la plantilla.");return load();
@@ -592,6 +610,7 @@ async function execute(action,id){
   if(fields.length===patientForm.fields.length)throw Error("Campo inexistente");
   if(!confirm("¿Retirar este campo de futuros registros? Los datos antiguos se conservan."))return;
   rememberPatientDraft();
+  await persistView();
   patientForm=(await api("patient-intake-template","PATCH",
     {version:1,expectedRevision:patientForm.revision,fields})).template;
   notice("Campo retirado.");return load();
@@ -739,10 +758,26 @@ async function execute(action,id){
   const sections=[
     ["pastMedical","Antecedentes personales patológicos"],
     ["pastSurgical","Antecedentes quirúrgicos"],
-    ["familyHistory","Antecedentes familiares"],
-    ["currentMedications","Medicación habitual"],
+    ["hospitalizations","Hospitalizaciones previas"],
+    ["transfusions","Transfusiones y reacciones"],
+    ["trauma","Traumatismos relevantes"],
+    ["familyHistory","Antecedentes familiares, genéticos y hereditarios"],
+    ["currentMedications","Medicación habitual, dosis y conciliación"],
     ["vaccinations","Vacunación documentada"],
-    ["habits","Hábitos y contexto"],
+    ["habits","Hábitos y contexto social"],
+    ["tobacco","Tabaco y exposiciones"],
+    ["alcohol","Alcohol y otras sustancias"],
+    ["sleep","Sueño y descanso"],
+    ["nutrition","Alimentación y nutrición"],
+    ["physicalActivity","Actividad física"],
+    ["occupation","Ocupación y situación laboral"],
+    ["exposures","Exposiciones laborales, ambientales y viajes"],
+    ["housing","Vivienda, saneamiento y red de apoyo"],
+    ["gynecologicObstetric","Antecedentes ginecológicos y obstétricos, si aplican"],
+    ["pediatricDevelopment","Desarrollo, crecimiento y educación, si aplican"],
+    ["geriatricFunction","Funcionalidad, caídas y cognición, si aplican"],
+    ["mentalHealthHistory","Antecedentes de salud mental, si proceden"],
+    ["reviewOfSystems","Revisión de sistemas: positivos, negativos expresos y no evaluados"],
     ["problems","Problemas activos confirmados"],
   ];
   const fields=sections.map(([key,label])=>
@@ -758,7 +793,10 @@ async function execute(action,id){
   if(actor.role!=="clinician"||current?.kind!=="medicalHistory")throw Error("Editor no autorizado");
   const patient=data.patients?.find(x=>x.id===current.patientId);
   if(!patient)throw Error("Paciente no disponible");
-  const keys=["pastMedical","pastSurgical","familyHistory","currentMedications","vaccinations","habits","problems"];
+  const keys=["pastMedical","pastSurgical","familyHistory","currentMedications","vaccinations","habits","problems",
+   "hospitalizations","transfusions","trauma","tobacco","alcohol","sleep","nutrition","physicalActivity",
+   "occupation","exposures","housing","gynecologicObstetric","pediatricDevelopment",
+   "geriatricFunction","mentalHealthHistory","reviewOfSystems"];
   const record=Object.fromEntries(keys.map(key=>[key,val("history-"+key)]));
   if(!confirm("¿Confirma que verificó estos antecedentes con las fuentes disponibles?"))return;
   await api("patients/"+patient.id,"PATCH",{version:patient.version,action:"history",record});
@@ -807,7 +845,11 @@ async function execute(action,id){
  }
  if(action==="create"){
   const v={
-   patients:{name:val("name"),dateOfBirth:val("dateOfBirth"),email:val("email"),phone:val("phone")},
+   patients:{name:val("name"),dateOfBirth:val("dateOfBirth"),email:val("email"),phone:val("phone"),
+    documentType:val("documentType"),documentNumber:val("documentNumber"),
+    customFields:Object.fromEntries(patientForm.fields.map(f=>[f.id,val("patient-extra-"+f.id)])),
+    confirmDistinct:document.getElementById("patient-distinct")?.checked===true,
+    distinctReason:val("patient-distinct-reason")},
    encounters:{patientId:val("patientId"),specialty:val("specialty"),complaint:val("complaint"),mode:val("mode")},
    appointments:{patientId:val("patientId"),practitioner:val("practitioner"),startsAt:val("startsAt"),reason:val("reason")},
    orders:{encounterId:val("encounterId"),modality:val("modality"),description:val("description")},
@@ -816,7 +858,15 @@ async function execute(action,id){
    followups:{patientId:val("patientId"),assignedTo:val("assignedTo"),dueAt:val("dueAt"),description:val("description")},
    staff:{username:val("username"),password:val("password"),role:val("role")},
   };
-  await api(tab,"POST",v[tab]);notice("Operación guardada en el expediente cifrado.");return load()
+  const result=await api(tab,"POST",v[tab]);
+  if(tab==="patients"){
+   const records=(await api("patients")).items;
+   if(!records.some(x=>x.id===result.record?.id))
+    throw Error("El servidor no confirmó la recuperación del paciente creado");
+   await forgetDraft("patients");
+   notice("Paciente guardado y recuperado del expediente · versión "+result.record.version);
+  }else notice("Operación guardada en el expediente cifrado.");
+  return load()
  }
  if(action==="dispense"){
   const rx=data.prescriptions?.find(x=>x.id===id);
