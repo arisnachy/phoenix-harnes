@@ -23,6 +23,18 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{border-bottom:1px
 .tag{font-size:11px;border-radius:12px;background:#eef4f8;padding:4px 8px;color:#3e5971}
 #flash{display:none;position:fixed;bottom:16px;right:16px;max-width:90vw;background:#1d557e;color:#fff;border-radius:10px;padding:14px;z-index:20}
 
+.kira-panel{background:linear-gradient(130deg,#f1f7ff,#ffffff 56%);border:1px solid #d9e5f3;border-radius:16px;padding:18px;margin-bottom:14px}
+.kira-title{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}
+.kira-title h3{font-size:16px;margin:0;color:#25486a}
+.kira-command{display:flex;align-items:stretch;gap:9px;margin-top:12px}
+.kira-command input{flex:1;min-width:80px;margin:0}
+.kira-command button{margin:0;white-space:nowrap}
+.kira-chips{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0}
+.kira-chips button{border-radius:20px;padding:8px 11px;margin:2px;font-size:12px}
+.kira-output{margin-top:8px;padding:11px 13px;background:#fff;border-radius:11px;border:1px solid #d9e6f2;min-height:44px}
+.kira-tool-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.kira-tool-result{border-left:3px solid #2b8d75;padding:13px;background:#eff9f4;border-radius:9px;margin-top:10px}
+@media(max-width:700px){.kira-command{flex-direction:column}.kira-tool-fields{grid-template-columns:1fr}}
 .ws-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}
 .ws-heading h2{margin:0 0 3px}.ws-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .ws-summary{font-size:15px;font-weight:700;cursor:pointer;color:#155b9d}
@@ -48,6 +60,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{border-bottom:1px
 const root=document.getElementById("app"),account=document.getElementById("account"),flash=document.getElementById("flash");
 let actor=null,csrf="",tab="workspace",data={},current=null,selectedPatientId="",previewUrl=null;
 let patientForm={version:1,revision:0,fields:[]},patientDraft=null;
+let clinicalTools=[],selectedClinicalTool=null;
 const modules=[["workspace","Mi consulta"],["patients","Pacientes"],["encounters","Consultas"],["appointments","Agenda"],["orders","Laboratorio e imágenes"],["prescriptions","Recetas"],["inventory","Farmacia"],["invoices","Administración"],["followups","Seguimiento"],["staff","Personal"],["assignments","Equipo asistencial"],["backups","Respaldos"],["audit","Auditoría"]];
 const safe=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=id=>document.getElementById(id)?.value??"";
@@ -142,6 +155,88 @@ function actionFor(o){
  return actions.map(a=>'<button class="secondary" data-act="'+a[0]+'" data-id="'+safe(tab==="assignments"?o.patientId+"|"+o.staffId:o.id)+'">'+a[1]+'</button>').join("");
 }
 
+
+// Protected local clinical command surface. No user input is sent to an LLM, a connector or a log.
+function kiraNotice(message){
+ const output=document.getElementById("kira-output");
+ if(!output)return;
+ output.replaceChildren(document.createTextNode(message));
+}
+function kiraScroll(id){
+ const element=document.getElementById(id);
+ if(!element){kiraNotice("No hay una sección disponible para esta tarea.");return}
+ if(element.tagName==="DETAILS")element.open=true;
+ element.scrollIntoView({behavior:"smooth",block:"start"});
+}
+function renderClinicalToolMenu(){
+ const target=document.getElementById("kira-output");if(!target)return;
+ target.innerHTML='<strong>Herramientas clínicas disponibles</strong>'+
+  '<p class="muted">Motor determinista versionado. No emite diagnóstico ni receta, no guarda en el expediente y no envía datos al modelo.</p>'+
+  clinicalTools.map(t=>'<div class="ws-item"><div><strong>'+safe(t.title)+'</strong>'+
+    '<p class="muted">'+safe(t.description)+'</p></div>'+
+    '<button class="secondary" data-act="kiraSelectTool" data-id="'+safe(t.id)+'">Abrir</button></div>').join("");
+}
+function renderClinicalToolForm(tool){
+ const output=document.getElementById("kira-output");if(!output)return;
+ selectedClinicalTool=tool.id;
+ output.innerHTML='<strong>'+safe(tool.title)+'</strong>'+
+  '<p class="muted">'+safe(tool.description)+'</p>'+
+  '<div class="kira-tool-fields">'+tool.fields.map(f=>
+    '<div>'+field("kira-field-"+f.id,f.label+(f.unit?" ("+f.unit+")":""),f.kind)+'</div>').join("")+'</div>'+
+  '<p>'+button("kiraCalculate","Calcular · para revisión")+'</p>'+
+  '<p class="muted">No se guarda en el expediente ni se convierte en indicación automáticamente.</p>';
+}
+async function clinicalIntent(input){
+ const normalized=String(input||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+   .toLowerCase().trim().slice(0,160);
+ if(!normalized){kiraNotice("Elige una acción rápida o escribe una tarea como «nuevo paciente», «antecedentes», «IMC» o «receta».");return}
+ if(/(calcul|imc|masa corporal|presion media|gestaci|fum|fpp)/.test(normalized)){
+  if(!clinicalTools.length){clinicalTools=(await api("clinical-tool-catalog")).tools}
+  const kind=/imc|masa corporal/.test(normalized)?"bmi_adult":
+    /presion media|arterial media/.test(normalized)?"mean_arterial_pressure":
+    /gestaci|fum|fpp/.test(normalized)?"lmp_estimate":null;
+  if(kind){const tool=clinicalTools.find(item=>item.id===kind);if(tool)renderClinicalToolForm(tool);
+    else kiraNotice("Esta calculadora no está disponible en la versión autorizada.")}
+  else renderClinicalToolMenu();
+  return;
+ }
+ if(/(nuevo paciente|crear paciente|registrar paciente|alta de paciente|registro)/.test(normalized)){
+  kiraNotice("Abre el registro protegido. Antes de guardar, comprueba coincidencias para evitar duplicados.");
+  kiraScroll("ws-registration");return;
+ }
+ if(/(anteced|historia familiar|patolog|habitos)/.test(normalized)){
+  if(!selectedPatientId){kiraNotice("Selecciona o registra primero al paciente.");return}
+  await execute("openMedicalHistory",selectedPatientId);return;
+ }
+ if(/(vital|laborator|analitica|imagen|estudio|prueba|resultado)/.test(normalized)){
+  kiraNotice("Aquí puedes archivar documentos y registrar cifras transcritas como pendientes de verificación.");
+  kiraScroll("ws-clinical-results");return;
+ }
+ if(/(recet|prescrip|medicament|farmacia)/.test(normalized)){
+  kiraNotice("Abriendo el módulo de prescripción profesional; requiere revisión y firma.");
+  tab="prescriptions";return load();
+ }
+ if(/(seguim|pendiente|proxima|cita|agenda)/.test(normalized)){
+  kiraNotice("Consulta los seguimientos pendientes; para citas abre la agenda.");
+  tab=/cita|agenda/.test(normalized)?"appointments":"followups";return load();
+ }
+ if(/(document|archivo|foto|subir|pdf|biblioteca)/.test(normalized)){
+  kiraNotice("Los informes y fotos se conservan cifrados en el expediente seleccionado. No se envían por correo ni al modelo.");
+  kiraScroll("ws-clinical-files");return;
+ }
+ if(/(consult|soap|evolucion|exploracion)/.test(normalized)){
+  const draft=(data.encounters||[]).find(item=>item.status!=="signed"&&item.practitioner===actor.username);
+  if(draft){await execute("document",draft.id);return}
+  kiraNotice("No hay una consulta activa. Abre una desde la tarjeta «Atender en consulta».");
+  kiraScroll("ws-current-visit");return;
+ }
+ if(/(certific|imprimir|auditori|seguro|ars|uci|hospitaliza|cirugia)/.test(normalized)){
+  kiraNotice("Esta operación todavía no cuenta con un módulo clínico validado. Su diseño figura en el roadmap, pero no se generará un documento ni un envío ficticio.");
+  return;
+ }
+ kiraNotice("Puedo abrir registro, antecedentes, consulta, estudios, archivos, recetas, citas y calculadoras clínicas. Para texto libre de un paciente, utiliza la nota clínica protegida, no este campo de órdenes.");
+}
+
 function renderWorkspace(){
  const patients=data.patients||[],patient=data.patientContext?.patient,id=patient?.id||"";
  const visits=(data.encounters||[]).filter(x=>x.patientId===id).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -176,7 +271,7 @@ function renderWorkspace(){
     ' <button class="secondary" data-act="workspaceRemoveField" data-id="'+safe(f.id)+'">Quitar</button></div>').join("")+
   '<p class="muted">En una siguiente integración podrás configurar estas reglas conversando con Kira; '+
   'el guardado de datos personales permanece en el expediente protegido.</p></details>';
- const registration='<details class="card"><summary class="ws-summary">+ Paciente nuevo sin cuenta ni página web</summary>'+
+ const registration='<details class="card" id="ws-registration"><summary class="ws-summary">+ Paciente nuevo sin cuenta ni página web</summary>'+
   '<div class="ws-grid"><div>'+field("ws-name","Nombre completo")+'</div><div>'+field("ws-dob","Nacimiento","date")+'</div>'+
   '<div>'+field("ws-phone","Teléfono (opcional)","tel",false)+'</div><div>'+field("ws-email","Correo (opcional)","email",false)+'</div>'+
   '<div><label for="ws-doc-type">Identificación</label><select id="ws-doc-type">'+
@@ -200,6 +295,7 @@ function renderWorkspace(){
    '<p><strong>Problemas:</strong> '+safe(patient.medicalHistory?.problems||"No documentados")+'</p>'+
    '<button class="secondary" data-act="openMedicalHistory" data-id="'+safe(id)+'">Revisar antecedentes</button> '+
    '<button class="secondary" data-act="allergyReview" data-id="'+safe(id)+'">Verificar alergias</button>');
+  panel+='<div id="ws-current-visit">';
   panel+=box("Atender en consulta",
    '<div class="ws-grid"><div>'+field("ws-specialty","Especialidad","text",true,"Medicina familiar")+
    '</div><div>'+field("ws-complaint","Motivo actual")+'</div></div>'+
@@ -213,6 +309,7 @@ function renderWorkspace(){
    '<div class="ws-note"><strong>Qué sigue:</strong> '+(followups.some(x=>x.status==="pending")?
     followups.filter(x=>x.status==="pending").map(x=>'<p>'+safe(x.description)+' · '+safe(x.dueAt||"Sin fecha")+'</p>').join(""):
     "No existen tareas de seguimiento registradas")+'</div>');
+  panel+='</div><div id="ws-clinical-files">';
   panel+=box("Analíticas, imágenes y documentos aportados",
    '<p class="muted">Selecciona una foto o PDF del equipo del médico. Se archiva cifrado; no se envía por correo y no se interpreta automáticamente.</p>'+
    '<label for="ws-file">Archivo · PDF, JPG, PNG o WebP (máximo 5 MB)</label>'+
@@ -225,6 +322,7 @@ function renderWorkspace(){
     '</div></div><button class="secondary" data-act="workspaceViewFile" data-id="'+safe(x.id)+'">Ver</button>'+
     (x.reviewStatus==="pending"?'<button class="secondary" data-act="workspaceReviewFile" data-id="'+safe(x.id)+'">Marcar revisado</button>':"")+'</div>'
    ).join(""):'<p class="muted">Aún no hay archivos adjuntos.</p>')+'</div><div id="ws-preview" aria-live="polite"></div>');
+  panel+='</div><div id="ws-clinical-results">';
   panel+=box("Analíticas y signos vitales",
     '<p class="muted">Captura datos numéricos con su fuente, unidad y fecha. No aparecen como verificados hasta que el médico los confirme.</p>'+
     '<details><summary class="ws-summary">+ Registrar resultado numérico</summary>'+
@@ -258,19 +356,35 @@ function renderWorkspace(){
           return '<p>'+safe(series[0].display)+' · '+safe(series[0].unit)+': '+
             series.slice(-5).map(x=>safe(x.value)+' ('+safe(String(x.effectiveAt).slice(0,10))+')').join(' → ')+'</p>';
         }).join("")+'</div>':""));
+  panel+="</div>";
   panel+=box("Línea de tiempo longitudinal",
    timeline.length?timeline.slice(0,80).map(x=>
     '<div class="ws-timeline"><div><strong>'+safe(x.title)+'</strong><span class="tag">'+safe(x.status||"Registrado")+'</span></div>'+
     '<p>'+safe(x.detail)+'</p><small>'+safe(x.date?new Date(x.date).toLocaleDateString("es-DO"):"Sin fecha")+'</small></div>'
    ).join(""):'<p class="muted">Aquí aparecerán consultas, indicaciones, resultados y documentos previos.</p>');
  }
+ const kiraCard='<article class="kira-panel" aria-label="Kira clínica local">'+
+  '<div class="kira-title"><h3>✧ Kira · Asistente de consulta</h3>'+
+  '<span class="tag">Privado · Sin envío a IA externa</span></div>'+
+  '<p class="muted">Dime la tarea: abriré el formulario o herramienta adecuada. Los datos clínicos permanecen en esta sesión protegida.</p>'+
+  '<div class="kira-command"><input id="kira-command" type="text" maxlength="160" autocomplete="off" '+
+  'placeholder="Ej.: nuevo paciente, antecedentes, calcular IMC…" aria-label="Instrucción clínica local">'+
+  button("kiraTalk","Abrir herramienta")+'</div>'+
+  '<div class="kira-chips">'+[
+    ["nuevo paciente","Nuevo paciente"],["antecedentes","Antecedentes"],
+    ["consulta","Consulta"],["analíticas","Estudios"],["receta","Receta"],
+    ["calculadoras","Calculadoras"],["archivos","Archivos"]
+  ].map(item=>'<button class="secondary" data-act="kiraQuick" data-id="'+safe(item[0])+'">'+safe(item[1])+'</button>').join("")+'</div>'+
+  '<div class="kira-output" id="kira-output" aria-live="polite">Estoy lista para abrir el siguiente paso del trabajo clínico. Selecciona una acción.</div>'+
+  '</article>';
+
  document.getElementById("view").innerHTML=
   '<div class="ws-heading"><div><h2>Mi consulta</h2><p class="muted">El paciente está contigo · Consulta y expediente sin salir de esta pantalla</p></div>'+
   '<span class="tag">Local · Cifrado</span></div>'+
   (patient?'<div class="ws-metrics"><div><strong>'+pending.orders+'</strong><small>Órdenes por revisar</small></div>'+
     '<div><strong>'+pending.followups+'</strong><small>Seguimientos pendientes</small></div>'+
     '<div><strong>'+pending.attachments+'</strong><small>Archivos por revisar</small></div></div>':"")+
-  '<div class="card">'+lookup+'</div>'+registration+panel;
+  kiraCard+'<div class="card">'+lookup+'</div>'+registration+panel;
 }
 function render(){
  if(tab==="workspace")return renderWorkspace();
@@ -327,6 +441,37 @@ function render(){
  box("Registros",genericRows(d,cols))+(tab==="prescriptions"?'<p class="notice warning">Las recetas no se envían por correo desde esta versión. La firma clínica exige revisión profesional.</p>':'');
 }
 async function execute(action,id){
+ if(action==="kiraTalk"){
+  // This input accepts only task commands. No raw note is logged, sent to models or saved.
+  const command=val("kira-command");return clinicalIntent(command);
+ }
+ if(action==="kiraQuick"){return clinicalIntent(id)}
+ if(action==="kiraSelectTool"){
+  const tool=clinicalTools.find(item=>item.id===id);
+  if(!tool)throw Error("Herramienta no autorizada");
+  renderClinicalToolForm(tool);return;
+ }
+ if(action==="kiraCalculate"){
+  const tool=clinicalTools.find(item=>item.id===selectedClinicalTool);
+  if(!tool)throw Error("Seleccione primero una herramienta");
+  const values=Object.fromEntries(tool.fields.map(f=>{
+   const raw=val("kira-field-"+f.id);
+   if(!raw.trim())throw Error("Falta el dato: "+f.label);
+   return [f.id,f.kind==="number"?Number(raw):raw];
+  }));
+  const result=(await api("clinical-tool-run","POST",{toolId:tool.id,values})).result;
+  const output=document.getElementById("kira-output");if(!output)return;
+  const rows=Object.entries(result.output||{}).map(([key,value])=>
+    '<div class="ws-item"><strong>'+safe(key)+'</strong><strong>'+safe(value)+'</strong></div>').join("");
+  output.innerHTML='<div class="kira-tool-result"><strong>'+safe(tool.title)+'</strong>'+
+    '<p class="muted">Versión '+safe(result.version)+' · '+safe(result.reference)+'</p>'+
+    rows+'<p>'+safe(result.notice)+'</p>'+
+    '<p class="muted">Cálculo pendiente de revisión médica. No se ha guardado en la historia ni generado receta.</p>'+
+    button("kiraToolList","Ver otras herramientas","secondary")+'</div>';
+  return;
+ }
+ if(action==="kiraToolList"){renderClinicalToolMenu();return}
+
 
 
  if(action==="workspaceAddObservation"){
@@ -456,7 +601,7 @@ async function execute(action,id){
  }
 
  if(action==="openCriticalFollowups"){tab="followups";return load()}
- if(action==="logout"){await api("logout","POST",{});actor=null;csrf="";data={};tab="patients";return splash()}
+ if(action==="logout"){await api("logout","POST",{});actor=null;csrf="";data={};patientDraft=null;clinicalTools=[];selectedClinicalTool=null;tab="patients";return splash()}
  if(action==="setup"){await api("setup","POST",{username:val("user"),password:val("pass"),organization:val("org")});notice("Clínica configurada. Inicia sesión.");return splash()}
  if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;data={};tab="workspace";return load()}
  if(action==="openAskCopilot"){
