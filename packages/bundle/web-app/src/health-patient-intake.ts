@@ -41,7 +41,7 @@ export const DEFAULT_PATIENT_INTAKE: PatientIntakeTemplate = Object.freeze({
     { id: 'custom_contacto_emergencia', label: 'Contacto de emergencia y parentesco', kind: 'text', required: false },
     { id: 'custom_telefono_emergencia', label: 'Teléfono de emergencia', kind: 'tel', required: false },
     { id: 'custom_datos_adicionales', label: 'Otros datos de admisión', kind: 'text', required: false },
-  ]),
+  ] as const),
 })
 const KINDS = new Set<PatientInputKind>(['text', 'number', 'date', 'email', 'tel', 'select'])
 const MAX_FIELDS = 64
