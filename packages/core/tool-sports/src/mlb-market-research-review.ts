@@ -17,6 +17,7 @@ export type MlbMarketComparison={
 }
 export type MlbCrossBookComparison={
   market:string;selection:string;line:number|null;
+  settlementComparable:false;
   quotes:Array<{bookmaker:string;price:number;updatedAt:string}>;
   note:string;
 }
@@ -90,6 +91,7 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
     realOffersVerified:currentOffers.length>0,
     specificExpertPicksVerified:false,
     bookmakerRulesVerified:false,
+    crossBookSettlementComparable:false,
     probabilitiesValidated:false,
   }
   const opponentBvP=count(d.matchups.filter(m=>m.bvp&&Number(m.bvp.atBats??0)>=10))
@@ -136,6 +138,7 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
     ...(!gates.gameRoofPositionVerified?['Estado del techo al inicio del encuentro sin verificar']:[]),
       ...(!gates.reliefUsageObserved?['Uso reciente del bullpen y disponibilidad de relevistas']:[]),
       ...(!gates.bookmakerRulesVerified?['Reglas verificadas para este mercado y período']:[]),
+      ...(!gates.crossBookSettlementComparable?['No se ha demostrado equivalencia del período ni liquidación entre casas']:[]),
       ...(!gates.probabilitiesValidated?['Evaluación probabilística validada para respaldar EV']:[]),
       ...(strikeouts?['Identidad del pitcher del prop y proyección contrastada de ponches']:[]),
     ]
@@ -164,7 +167,7 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
     const key=JSON.stringify([q.market.trim().toLowerCase(),
       q.selection.trim().toLowerCase(),line])
     const group=crossBookGroups.get(key)??{market:q.market,selection:q.selection,
-      line,quotes:[],note:'Precios observados para el mismo mercado, selección y línea; verificar período y reglas de cada casa.'}
+      line,settlementComparable:false,quotes:[],note:'Coincidencia textual de mercado, selección y línea; NO comparable para arbitraje ni elección de precio hasta verificar período, entradas mínimas y reglas de liquidación de cada casa.'}
     group.quotes.push({bookmaker:q.bookmaker,price:q.price,updatedAt:q.updatedAt})
     crossBookGroups.set(key,group)
   }
