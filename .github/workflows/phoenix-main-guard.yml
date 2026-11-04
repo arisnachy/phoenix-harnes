@@ -2,7 +2,8 @@ name: PHOENIX main guard
 
 on:
   pull_request:
-    branches: [main]
+    # Stable requires the same named check; run it for both integration targets.
+    branches: [main, stable]
   push:
     branches: [main]
   workflow_dispatch:
