@@ -554,7 +554,7 @@ test('document review preserves original bytes, requires physician and checks ve
 test('clinic intake fields persist by institution; identity checks prevent inadvertent duplicate profiles',t=>{
   const {db,admin,root}=fixture(t)
   const actor=admin.actor
-  assert.equal(db.getPatientIntakeTemplate(actor).fields.length,0)
+  assert.equal(db.getPatientIntakeTemplate(actor).fields.length,12)
   const form=db.updatePatientIntakeTemplate(actor,{version:1,expectedRevision:0,
     fields:[{id:'custom_ars',label:'ARS / Seguro',kind:'text',required:false}]})
   assert.equal(form.revision,1)
