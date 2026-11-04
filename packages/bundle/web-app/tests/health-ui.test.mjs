@@ -74,3 +74,16 @@ test('customizable clinical registration includes private duplicate matching and
   assert.equal(typeof script,'string')
   assert.doesNotThrow(()=>new Script(script,{filename:'health-intake-ui.js'}))
 })
+
+test('Kira local clinical command surface opens protected cards and approved deterministic tools',()=>{
+  const html=renderHealthPage('kira-clinic-nonce')
+  for(const snippet of ['Kira · Asistente de consulta','kiraTalk','kiraQuick',
+      'clinical-tool-catalog','clinical-tool-run','ws-registration',
+      'ws-current-visit','ws-clinical-files','ws-clinical-results',
+      'Sin envío a IA externa','No se ha guardado en la historia']){
+    assert.match(html,new RegExp(snippet))
+  }
+  const code=/<script nonce="kira-clinic-nonce">([\s\S]+?)<\/script>/u.exec(html)?.[1]
+  assert.ok(code)
+  assert.doesNotThrow(()=>new Script(code,{filename:'kira-clinic-inline.js'}))
+})
