@@ -543,3 +543,29 @@ test('cached pregame dossier abstains when reviewed after scheduled first pitch'
   assert.equal(later.decision,'abstain')
   assert.equal(later.eligibleForTicket,false)
 })
+
+
+test('capped MLB review prioritizes current offers over forty expired quotes',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const quote={eventId:'book-4',bookmaker:'Verified House',market:'totals',
+    selection:'Over',point:8,price:1.91,home:'Home Giants',away:'Away Bears',
+    timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z',
+    sportKey:'baseball_mlb'}
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[quote])
+  const live=d.odds[0]
+  d.odds=[
+    ...Array.from({length:40},(_,i)=>({...live,bookmaker:'Expired '+i,
+      updatedAt:'2026-07-01T09:00:00Z'})),
+    live,
+  ]
+  const review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.realOffersVerified,true)
+  assert.equal(review.reviewedMarkets.length,40)
+  assert.equal(review.reviewedMarkets[0].bookmaker,'Verified House')
+  assert.equal(review.reviewedMarkets[0].status,'blocked')
+  assert.ok(review.reviewedMarkets[0].missingEvidence.every(x=>
+    !x.includes('Cotización vencida')))
+  assert.deepEqual(review.marketComparisons.map(x=>x.bookmaker),['Verified House'])
+  assert.deepEqual(review.crossBookComparisons[0].quotes.map(x=>x.bookmaker),['Verified House'])
+  assert.equal(review.eligibleForTicket,false)
+})
