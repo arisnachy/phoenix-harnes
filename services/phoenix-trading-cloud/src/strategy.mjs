@@ -6,7 +6,7 @@ import {spotAssetRisk} from './asset-risk.mjs';
 
 export const MAX_UNIVERSE = 1000;
 export const MAX_PER_TICK = 4;
-export const MAX_POSITIONS = 2;
+export const MAX_POSITIONS = 4;
 export const FEE_RATE = 0.001;
 export const SIMULATED_SLIPPAGE = 0.001;
 export const MAX_POSITION_FRACTION = 0.05;
@@ -81,8 +81,11 @@ export function analyze(symbol, bars) {
   const rangeLow = Math.min(...bars.slice(-21, -1).map(b => b.low));
   const baseline = avg(closes, 20);
   const z = (latest - baseline) / Math.max(stdev(closes.slice(-20)), latest * 1e-7);
-  const trend = fast > slow * 1.004 && slow > long ? 'uptrend'
-    : fast < slow * .996 && slow < long ? 'downtrend' : 'range';
+  // Intraday 15m EMA spreads near 0.2%-0.4% can be genuine trends.
+  // Keep the long EMA alignment, price/volume and RSI checks as separate
+  // entry conditions instead of mislabelling every moderate trend as range.
+  const trend = fast > slow * 1.002 && slow > long ? 'uptrend'
+    : fast < slow * .998 && slow < long ? 'downtrend' : 'range';
   const base = { price: latest, atr: vol, rsi: strength, volatility, volumeRatio: vRatio };
   if (!safe(volatility) || volatility > .12 || volatility < .00001)
     return result(symbol, trend, 'volatility-filter', 'hold', 0, 'Unacceptable market volatility', base);
@@ -141,7 +144,8 @@ export function riskBudget(state, signal, prices) {
   if (state.dayLoss >= state.dayStartEquity * MAX_DAILY_LOSS_FRACTION) return 0;
   const existing = exposure(state,prices);
   const cap=Math.min(state.equity * MAX_POSITION_FRACTION,
-    state.equity * MAX_EXPOSURE_FRACTION-existing, state.cash / (1+FEE_RATE));
+    Math.max(0,state.equity * MAX_EXPOSURE_FRACTION-existing) /
+      (1+FEE_RATE*MAX_EXPOSURE_FRACTION), state.cash / (1+FEE_RATE));
   return Number.isFinite(cap) && cap >= 10 ? Math.floor(cap*100)/100 : 0;
 }
 
