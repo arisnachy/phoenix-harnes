@@ -61,6 +61,7 @@ const root=document.getElementById("app"),account=document.getElementById("accou
 let actor=null,csrf="",tab="workspace",data={},current=null,selectedPatientId="",previewUrl=null;
 let patientForm={version:1,revision:0,fields:[]},patientDraft=null;
 let clinicalTools=[],selectedClinicalTool=null;
+let viewDrafts=Object.create(null),draftTimer=null,loadSequence=0,draftSaveQueue=Promise.resolve();
 const modules=[["workspace","Mi consulta"],["patients","Pacientes"],["encounters","Consultas"],["appointments","Agenda"],["orders","Laboratorio e imágenes"],["prescriptions","Recetas"],["inventory","Farmacia"],["invoices","Administración"],["followups","Seguimiento"],["staff","Personal"],["assignments","Equipo asistencial"],["backups","Respaldos"],["audit","Auditoría"]];
 const safe=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=id=>document.getElementById(id)?.value??"";
@@ -68,15 +69,70 @@ const box=(title,content)=>'<article class="card"><h2>'+safe(title)+'</h2>'+cont
 const field=(id,label,type="text",required=true,place="")=>'<label for="'+id+'">'+safe(label)+'</label><input id="'+id+'" type="'+type+'" placeholder="'+safe(place)+'" '+(required?'required':'')+'>';
 const area=(id,label)=>'<label for="'+id+'">'+safe(label)+'</label><textarea id="'+id+'"></textarea>';
 const pick=(id,label,items,selector)=>'<label for="'+id+'">'+safe(label)+'</label><select id="'+id+'">'+items.map(x=>'<option value="'+safe(x.id)+'">'+safe(selector(x))+'</option>').join('')+'</select>';
+const patientField=(f,prefix)=>{
+ const id=prefix+f.id;
+ return f.kind==="select"?
+  '<label for="'+id+'">'+safe(f.label)+'</label><select id="'+id+'">'+
+   (f.choices||[]).map(x=>'<option value="'+safe(x)+'">'+safe(x)+'</option>').join("")+'</select>':
+  field(id,f.label,f.kind,f.required);
+};
 const button=(action,title,cls="primary")=>'<button type="button" class="'+cls+'" data-act="'+action+'">'+safe(title)+'</button>';
 const rows=(items,cols)=>items.length?'<div style="overflow:auto"><table><thead><tr>'+cols.map(c=>'<th>'+safe(c[0])+'</th>').join('')+'<th>Acciones</th></tr></thead><tbody>'+items.map(o=>'<tr>'+cols.map(c=>'<td>'+safe(o[c[1]])+'</td>').join('')+'<td>'+actionFor(o)+'</td></tr>').join('')+'</tbody></table></div>':'<p class="muted">No hay registros.</p>';
 let columnAction=null;
 function notice(msg){flash.textContent=msg;flash.style.display="block";setTimeout(()=>flash.style.display="none",5200)}
-// Transient drafts stay only in the authenticated page memory, never in LLM context or browser storage.
+// Working drafts remain in RAM and the separately encrypted clinic database,
+// never in browser storage or the general Kira conversation.
+function snapshotView(){
+ const view=document.getElementById("view");if(!view)return null;
+ const values={};
+ for(const el of view.querySelectorAll("input[id],select[id],textarea[id]")){
+  if(el.type==="password"||el.type==="file"||el.id.startsWith("kira-")||
+     el.id==="ask-instructions"||el.id.length>70)continue;
+  const value=el.type==="checkbox"?el.checked:el.value;
+  if(typeof value==="boolean"||typeof value==="string"&&value.length<=4000)values[el.id]=value;
+ }
+ return {values,expanded:[...view.querySelectorAll("details[id]")].filter(el=>el.open).map(el=>el.id)};
+}
+function rememberView(){
+ const draft=snapshotView();if(draft&&actor)viewDrafts[tab]=draft;
+ return draft;
+}
+function restoreView(){
+ const draft=viewDrafts[tab];if(!draft)return;
+ for(const [id,value] of Object.entries(draft.values||{})){
+  const el=document.getElementById(id);if(!el||el.type==="file"||el.type==="password")continue;
+  if(el.type==="checkbox"&&typeof value==="boolean")el.checked=value;
+  else if(typeof value==="string")el.value=value;
+ }
+ for(const id of draft.expanded||[]){
+  const el=document.getElementById(id);if(el&&el.tagName==="DETAILS")el.open=true;
+ }
+}
+async function persistView(scope=tab){
+ const draft=rememberView();if(!draft||!actor)return;
+ draftSaveQueue=draftSaveQueue.catch(()=>{}).then(()=>api("clinical-draft/"+scope,"PATCH",draft));
+ return draftSaveQueue;
+}
+function queueDraftSave(){
+ if(!actor)return;
+ clearTimeout(draftTimer);
+ const scope=tab;
+ draftTimer=setTimeout(()=>{
+  if(scope!==tab)return;
+  persistView(scope).catch(error=>notice("No se pudo conservar el borrador: "+error.message));
+ },1000);
+}
+async function forgetDraft(scope){
+ await draftSaveQueue.catch(()=>{});
+ viewDrafts[scope]={values:{},expanded:[]};
+ await api("clinical-draft/"+scope,"POST",{action:"clear"});
+}
+
 function rememberPatientDraft(){
  if(tab!=="workspace")return;
  const ids=["ws-name","ws-dob","ws-phone","ws-email","ws-doc-type","ws-document",
    "ws-complaint-new","ws-distinct-reason",...patientForm.fields.map(f=>"ws-extra-"+f.id)];
+ rememberView();
  patientDraft={values:Object.fromEntries(ids.map(id=>[id,val(id)])),
    distinct:document.getElementById("ws-distinct")?.checked===true};
 }
@@ -94,7 +150,7 @@ async function api(path,method="GET",body){
  const x=await r.json();if(!r.ok)throw Error(x.error||"Solicitud rechazada");return x;
 }
 async function refresh(){
- try{const x=await api("session");actor=x.actor;csrf=x.csrf;data={};await load()}catch{actor=null;csrf="";await splash()}
+ try{const x=await api("session");actor=x.actor;csrf=x.csrf;data={};await load()}catch{actor=null;csrf="";viewDrafts=Object.create(null);await splash()}
 }
 async function splash(){
  patientDraft=null;
@@ -107,6 +163,7 @@ async function splash(){
  button(status.initialized?"login":"setup",status.initialized?"Iniciar sesión":"Crear clínica y administrador"))+'</section>';
 }
 async function load(){
+ const sequence=++loadSequence;
  account.innerHTML='<span class="tag">'+safe(actor.username)+" · "+safe(actor.role)+'</span> '+button("logout","Salir","secondary");
  const menu={admin:["patients","appointments","inventory","invoices","followups","assignments","staff","backups","audit"],
  clinician:["workspace","patients","encounters","appointments","orders","prescriptions","followups"],
@@ -116,21 +173,37 @@ async function load(){
  pharmacy:["prescriptions","inventory"],billing:["invoices"]};
  const resources=modules.filter(m=>(menu[actor.role]||[]).includes(m[0]));
  if(!resources.some(x=>x[0]===tab))tab=resources[0]?.[0]||"patients";
- root.innerHTML='<main><aside>'+resources.map(x=>'<button data-tab="'+x[0]+'" class="'+(x[0]===tab?'active':'')+'">'+x[1]+'</button>').join('')+
- '</aside><section><div id="view"><div class="card">Cargando…</div></div></section></main>';
+ const activeTab=tab;
+ if(!document.getElementById("view")){
+  root.innerHTML='<main><aside>'+resources.map(x=>'<button data-tab="'+x[0]+'">'+x[1]+'</button>').join('')+
+  '</aside><section><div id="view"><div class="card">Abriendo consulta…</div></div></section></main>';
+ }
+ for(const btn of root.querySelectorAll("[data-tab]"))btn.classList.toggle("active",btn.dataset.tab===tab);
  const ids=tab==="workspace"?["patients"]:tab==="assignments"?["assignments","patients"]:tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters","inventory"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patient-options"]:tab==="followups"?["followups","patients"]:["patients",tab];
- if((actor.role==="clinician"||actor.role==="admin")&&!ids.includes("followups"))
-  ids.push("followups");
- for(const id of new Set(ids)){try{data[id]=(await api(id)).items}catch{data[id]=[]}}
- if(tab==="workspace"||tab==="patients")patientForm=(await api("patient-intake-template")).template;
+ if((actor.role==="clinician"||actor.role==="admin")&&!ids.includes("followups")&&tab!=="workspace")ids.push("followups");
+ const kinds=[...new Set(ids)],needsTemplate=tab==="workspace"||tab==="patients";
+ const [records,templateResult,draftResult]=await Promise.all([
+  Promise.all(kinds.map(id=>api(id).then(x=>x.items).catch(error=>{
+   if(id==="patients")throw error;
+   return [];
+  }))),
+  needsTemplate?api("patient-intake-template"):Promise.resolve(null),
+  viewDrafts[tab]?Promise.resolve(null):api("clinical-draft/"+tab),
+ ]);
+ if(sequence!==loadSequence||activeTab!==tab)return;
+ for(let i=0;i<kinds.length;i++)data[kinds[i]]=records[i];
+ if(templateResult)patientForm=templateResult.template;
+ if(draftResult?.draft)viewDrafts[tab]=draftResult.draft;
  if(tab==="workspace"){
   if(!data.patients.some(x=>x.id===selectedPatientId))selectedPatientId=data.patients[0]?.id||"";
-  const context=selectedPatientId?(await api("patient-context/"+selectedPatientId)).context:null;
-  data.patientContext=context;
+  data.patientContext=selectedPatientId?(await api("patient-context/"+selectedPatientId)).context:null;
+  if(sequence!==loadSequence||activeTab!==tab)return;
   for(const kind of ["encounters","orders","prescriptions","followups","appointments","observations","attachments"])
-    data[kind]=context?.[kind]||[];
+   data[kind]=data.patientContext?.[kind]||[];
  }
- render();if(tab==="workspace")restorePatientDraft()
+ render();
+ if(tab==="workspace")restorePatientDraft();
+ restoreView();
 }
 function actionFor(o){
  let actions=[];
