@@ -487,3 +487,22 @@ test('confirmed MLB lineup requires nine distinct batting-order slots from 1 thr
   assert.equal(review.evidenceGates.lineupsConfirmed,false)
   assert.equal(review.eligibleForTicket,false)
 })
+
+
+test('review rechecks cached odds freshness and excludes stale quotes from comparisons',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const quote={eventId:'book-4',bookmaker:'Verified House',market:'totals',
+    selection:'Over',point:8,price:1.91,home:'Home Giants',away:'Away Bears',
+    timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z',
+    sportKey:'baseball_mlb'}
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[quote])
+  assert.equal(reviewMlbResearch(d).evidenceGates.realOffersVerified,true)
+  d.checkedAt='2026-07-01T14:00:00Z'
+  const review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.realOffersVerified,false)
+  assert.equal(review.decision,'abstain')
+  assert.equal(review.marketComparisons.length,0)
+  assert.equal(review.crossBookComparisons.length,0)
+  assert.ok(review.reviewedMarkets[0].missingEvidence.some(x=>x.includes('Cotización vencida')))
+  assert.equal(review.eligibleForTicket,false)
+})
