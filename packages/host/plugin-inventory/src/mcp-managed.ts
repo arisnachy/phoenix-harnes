@@ -164,7 +164,7 @@ export interface ManagedMcpLoader {
    * production Loader supports it; alternate embeddings may omit it and will
    * still persist the corrected dependency list for the next Host start.
    */
-  update?(id: string, options: { inject: readonly string[] }): Promise<void>
+  update?(id: string, options: { inject: readonly string[]; config?: ManagedMcpConfig }): Promise<void>
   remove(id: string): Promise<void>
 }
 
@@ -301,13 +301,15 @@ function localNpxMcpConfig(
 export const BLENDER_LAB_MCP_SOURCE = 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.2#subdirectory=mcp'
 /** Accept only this exact legacy pinned source for backwards-compatible reads. */
 const BLENDER_LAB_LEGACY_MCP_SOURCE = 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp'
+/** PHOENIX-owned, fixed launcher: reuses the user's synced local venv before uvx. */
+export const BLENDER_LAB_MCP_LAUNCHER = 'scripts/phoenix-blender-mcp.mjs'
 function blenderLabMcpConfig(): ManagedStdioMcpConfig {
   return {
     transport: 'stdio',
     serverName: 'blender',
-    command: 'uvx',
-    args: ['--from', BLENDER_LAB_MCP_SOURCE, 'blender-mcp'],
-    env: { BLENDER_MCP_HOST: 'localhost', BLENDER_MCP_PORT: '9876' },
+    command: 'node',
+    args: [BLENDER_LAB_MCP_LAUNCHER],
+    env: { BLENDER_MCP_HOST: '127.0.0.1', BLENDER_MCP_PORT: '9876' },
     envCredentialRefs: {},
     cwd: '',
     toolCallTimeoutMs: 120_000,
@@ -315,6 +317,19 @@ function blenderLabMcpConfig(): ManagedStdioMcpConfig {
     failOnStartupError: false,
     reconnect: { enabled: true, initialDelayMs: 1_000, maxDelayMs: 30_000, maxAttempts: 60 },
   }
+}
+/** Only the exact previous official launchers are accepted for migration. */
+function previousBlenderMcpConfig(source: string): ManagedStdioMcpConfig {
+  return {
+    ...blenderLabMcpConfig(),
+    command: 'uvx',
+    args: ['--from', source, 'blender-mcp'],
+    env: { BLENDER_MCP_HOST: 'localhost', BLENDER_MCP_PORT: '9876' },
+  }
+}
+function isPreviousBlenderMcpConfig(config: ManagedMcpConfig): boolean {
+  return exactJson(config, previousBlenderMcpConfig(BLENDER_LAB_MCP_SOURCE))
+    || exactJson(config, previousBlenderMcpConfig(BLENDER_LAB_LEGACY_MCP_SOURCE))
 }
 function fetchMcpConfig(): ManagedStdioMcpConfig {
   return {
@@ -623,13 +638,10 @@ function validHttpConfig(value: Record<string, unknown>): boolean {
 
 function validCuratedStdioConfig(value: Record<string, unknown>): boolean {
   const specs = Object.values(CURATED_MCP_SPECS).map(spec => spec.config())
-  // Legacy Blender installations must not be quarantined at startup just
-  // because PHOENIX updated its official pinned server version.
-  const blender = blenderLabMcpConfig()
-  const previousBlender = { ...blender,
-    args: ['--from', BLENDER_LAB_LEGACY_MCP_SOURCE, 'blender-mcp'] }
+  // Preserve strict allowlisting while accepting the two official, previously
+  // persisted uvx launchers long enough to migrate them in place.
   return specs.some(config => config.transport === 'stdio' && exactJson(value, config))
-    || exactJson(value, previousBlender)
+    || isPreviousBlenderMcpConfig(value as ManagedMcpConfig)
 }
 
 function validConfig(value: unknown): value is ManagedMcpConfig {
@@ -865,13 +877,26 @@ export class ManagedMcpController {
     const upgraded: ManagedMcpRow[] = []
 
     for (const row of rows) {
-      if (hasManagedInject(row)) {
+      // An old Blender registration keeps attempting a Git fetch on every
+      // reconnect, even after the user installed a working local server. Move
+      // that already-opted-in connector to PHOENIX's offline-first launcher
+      // without asking the user to uninstall a stuck MCP process.
+      const upgradeBlender = row.config.serverName === 'blender'
+        && isPreviousBlenderMcpConfig(row.config)
+      if (hasManagedInject(row) && !upgradeBlender) {
         upgraded.push(row)
         continue
       }
       try {
-        await this.loader.update?.(row.id, { inject: [...MANAGED_MCP_INJECT] })
-        upgraded.push({ ...row, inject: [...MANAGED_MCP_INJECT] })
+        if (upgradeBlender && this.loader.update === undefined) {
+          throw new Error('live Loader update is unavailable; restart with a current PHOENIX Host')
+        }
+        const config = upgradeBlender ? blenderLabMcpConfig() : row.config
+        await this.loader.update?.(row.id, {
+          inject: [...MANAGED_MCP_INJECT],
+          ...(upgradeBlender ? { config } : {}),
+        })
+        upgraded.push({ ...row, inject: [...MANAGED_MCP_INJECT], config })
         changed = true
       } catch (error) {
         upgraded.push(row)
@@ -952,10 +977,21 @@ export class ManagedMcpController {
       await writeManagedRows(this.path, rows.filter(row => !matches(row)))
       let liveUnloaded = true
       for (const row of removed) {
+        let timeout: ReturnType<typeof setTimeout> | undefined
         try {
-          await this.loader.remove(row.id)
+          // A crashed MCP subprocess must not hold the uninstall RPC forever.
+          // The persistent row is already removed; the Host restart can finish
+          // disposing of an unresponsive live instance.
+          await Promise.race([
+            this.loader.remove(row.id),
+            new Promise<never>((_resolve, reject) => {
+              timeout = setTimeout(() => reject(new Error('MCP live unload timed out')), 10_000)
+            }),
+          ])
         } catch {
           liveUnloaded = false
+        } finally {
+          if (timeout !== undefined) clearTimeout(timeout)
         }
       }
       return { removed: true, liveUnloaded }
