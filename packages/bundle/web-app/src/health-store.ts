@@ -502,9 +502,9 @@ export class HealthClinicStore {
   }
   /** A clinician's work-in-progress stays encrypted and outside the general chat. */
   private draftKey(actor:Actor,scope:string):string {
-    if(!/^(workspace|patients|encounters|appointments|orders|prescriptions|inventory|invoices|followups|assignments)$/u.test(scope))
+    if(!/^(workspace|patients|encounters|appointments|orders|prescriptions|inventory|invoices|followups|assignments|staff|backups|audit)$/u.test(scope))
       fail('Sección de borrador no permitida')
-    return createHash('sha256').update(actor.org+'\\0'+actor.username+'\\0'+scope).digest('hex')
+    return createHash('sha256').update(actor.org+'\0'+actor.username+'\0'+scope).digest('hex')
   }
   getClinicalDraft(actor:Actor,scope:string):RecordData|null {
     const id=this.draftKey(actor,scope)
