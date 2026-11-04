@@ -4,17 +4,36 @@
 
 # PHOENIX
 
-English | [中文](README.zh.md)
+English | [Español](README.es.md) | [中文](README.zh.md)
 
-**PHOENIX is a universal, provider-agnostic AI agent harness for local-first and bring-your-own-provider workflows.**
+**PHOENIX is a local-first cognitive AI workspace: one environment to think, coordinate, act, verify, and recover across models, tools, and projects.**
 
-It is being built around intelligent model selection, durable continuity, repository intelligence, tools, multi-agent execution, recovery, evaluation, and bounded self-improvement. Capabilities land incrementally and are not presented as complete until their repository gates are green.
+**Kira** is the orchestration experience at its center. PHOENIX is designed to connect a user's goals with specialized agents and capabilities, while preserving context, showing evidence of real work, and keeping the human in control. It is **not defined by any single model, provider, or earlier project**.
+
+> **One mission. The right intelligence. Verifiable execution.**
+
+## What makes PHOENIX different
+
+| Pillar | What it means |
+| --- | --- |
+| **Kira and coordinated agents** | A primary assistant can organize work, route tasks to specialists, and keep user-facing updates distinct from internal team coordination. |
+| **Freedom to choose models** | Provider-agnostic adapters and model selection, with OpenRouter and an optional native ChatGPT / Codex connection documented below. |
+| **Continuity by design** | Local session history, replayable events, and checkpoints underpin work that can resume and be audited; broader cognitive memory is an evolving capability. |
+| **Real tools, real receipts** | Tools, browser and filesystem integrations, permissions, and result evidence are part of the workflow—not a simulated list of actions. |
+| **A workspace, not only a chat** | A Web UI, Windows launch paths, IDE integration, and a composable plugin architecture bring capabilities together. |
+| **Failure-aware execution** | Guarded releases, isolated preflight checks, recovery points, and rollback aim to keep updates from destroying a working installation. |
+
+## Specialized workspaces
+
+PHOENIX is being extended for **scientific research and publishing**, **clinical copilot workflows**, **market analysis and trading**, **sports intelligence**, **business operations**, and **scheduled automation**. These are development tracks—not a promise that every feature is installed, production-ready, autonomous, or authorized for real-world actions. Each integration must pass its own operational and safety checks.
 
 ## Development status
 
-PHOENIX is under active development. Its product identity is PHOENIX across the repository presentation, Web UI, PWA metadata, browser title, and visual system.
+PHOENIX is an actively developed product with its **own identity, architecture, roadmap, and direction**. Features are shipped incrementally, and a design document or open pull request is not evidence that a capability works in `main` or `stable`.
 
-Some internal package and CLI identifiers are intentionally retained for compatibility with the upstream runtime while PHOENIX evolves through isolated, testable downstream layers. Those implementation details do not define the product identity.
+Some internal package names and CLI identifiers remain for runtime compatibility. They are implementation details, not PHOENIX branding; changes to them must preserve existing installations and workflows.
+
+For the implementation model and evidence boundaries, read the [architecture](docs/architecture.md), [development guide](docs/development.md), and [capability interfaces](docs/capability-seams.md).
 
 ## Run
 
@@ -86,11 +105,11 @@ Windows installation, IDE packaging, native sandbox boundaries, and continuity s
 
 For agents, follow [AGENTS.md](AGENTS.md).
 
-## Upstream foundation and attribution
+## Open-source components and attribution
 
-PHOENIX is a downstream evolution built on [DeepSeek Harness](https://github.com/arisnachy/phoenix-harnes), the MIT-licensed open-source agent harness developed by [DeepSeek AI](https://deepseek.com). Its plugin architecture is powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper).
+PHOENIX has its own product identity and development direction. The repository also includes open-source components authored by other projects. Their authorship, license notices, vendored source origins, and local changes remain documented in [LICENSE](LICENSE), [vendored package provenance](vendor/README.md), and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-PHOENIX does not claim authorship of upstream code. Upstream attribution and license notices are preserved while PHOENIX-specific work remains clearly separated as downstream evolution.
+Acknowledging code provenance does **not** make PHOENIX a rebrand or an evolution of another product.
 
 ## License
 
