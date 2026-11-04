@@ -434,6 +434,10 @@ test('cross-book prices compare only identical market, selection and run line',a
     x.selection==='Over'&&x.line===8)
   assert.deepEqual(over8.quotes.map(x=>[x.bookmaker,x.price]),
     [['Book A',1.91],['Book B',1.96]])
+  assert.equal(over8.settlementComparable,false)
+  assert.equal(review.evidenceGates.crossBookSettlementComparable,false)
+  assert.match(over8.note,/NO comparable/)
+  assert.ok(review.reviewedMarkets.every(m=>m.missingEvidence.some(x=>x.includes('equivalencia del período'))))
   assert.ok(!over8.quotes.some(x=>x.price===2.08||x.price===1.84))
   assert.equal(review.probabilitiesEstimated,false)
   assert.equal(review.eligibleForTicket,false)
