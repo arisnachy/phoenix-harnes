@@ -33,7 +33,7 @@ export type MlbResearchReview={
 const count=(v:unknown)=>Array.isArray(v)?v.length:0
 const readyStat=(p:MlbAthlete|null,field:string)=>p?.season[field]!==undefined
 /** Every market is checked against the verified evidence in the SAME dossier. */
-export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
+export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbResearchReview{
   const h=d.starters.home,a=d.starters.away
   const nineVerified=(side:'home'|'away')=>{
     const hitters=d.rosters[side].filter(p=>p.role==='batter')
@@ -41,11 +41,16 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
       hitters.every(p=>p.teamId===d.fixture[side].id)
   }
   // Recheck timestamps at review time: a cached dossier may outlive its quotes.
+  // Explicit as-of time supports live re-review without corrupting historical replay.
+  // A quote must be fresh at BOTH collection and review, and review cannot precede collection.
   const checkedMs=Date.parse(d.checkedAt)
+  const reviewMs=Date.parse(reviewAt)
+  const reviewTimeValid=Number.isFinite(reviewMs)&&Number.isFinite(checkedMs)&&reviewMs>=checkedMs
   const quoteIsCurrent=(q:{updatedAt:string})=>{
     const quoteMs=Date.parse(q.updatedAt)
-    return Number.isFinite(checkedMs)&&Number.isFinite(quoteMs)&&
-      quoteMs<=checkedMs&&checkedMs-quoteMs<=60*60*1000
+    return reviewTimeValid&&Number.isFinite(quoteMs)&&
+      quoteMs<=checkedMs&&checkedMs-quoteMs<=60*60*1000&&
+      reviewMs-quoteMs<=60*60*1000
   }
   const currentOffers=d.odds.filter(quoteIsCurrent)
   const gates={
@@ -80,6 +85,7 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     roofConstructionKnown:d.venue.roofType!=='unknown',
     gameRoofPositionVerified:false,
     weatherForecastAvailable:!!d.weather, // A forecast is not a game-time measurement
+    reviewTimestampValid:reviewTimeValid,
     realOffersVerified:currentOffers.length>0,
     specificExpertPicksVerified:false,
     bookmakerRulesVerified:false,
@@ -119,7 +125,7 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
     ]
     const missing=[
       ...(!gates.scheduledFuture?['Partido no programado en el futuro o estado prepartido inválido']:[]),
-      ...(!quoteIsCurrent(q)?['Cotización vencida, futura o sin fecha verificable respecto al corte de investigación']:[]),
+      ...(!quoteIsCurrent(q)?['Cotización vencida, futura o sin fecha verificable respecto al corte de investigación y revisión']:[]),
       ...(!gates.lineupsConfirmed?['Alineación confirmada de ambos clubes']:[]),
       ...(!gates.rosterMatchupsReviewed?['Matriz completa de nueve bateadores contra abridor y relevistas rivales']:[]),
       ...(!gates.starterStatsVerified?['Estadísticas comprobadas de ambos abridores']:[]),
@@ -163,7 +169,7 @@ export function reviewMlbResearch(d:MlbCase):MlbResearchReview{
   }
   const crossBookComparisons=[...crossBookGroups.values()]
   const basic=Object.entries(gates).filter(([key])=>
-    ['scheduledFuture','startersVerified','teamRecordsVerified','recentTeamFormVerified',
+    ['reviewTimestampValid','scheduledFuture','startersVerified','teamRecordsVerified','recentTeamFormVerified',
       'bothRostersVerified','lineupsConfirmed','rosterMatchupsReviewed'].includes(key))
   const insufficient=basic.some(([,value])=>!value)
   return{version:1,eventId:String(d.fixture.gamePk),sport:'baseball',league:'mlb',
