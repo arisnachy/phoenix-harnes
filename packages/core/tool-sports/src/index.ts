@@ -49,12 +49,15 @@ import {nflSlate,investigateNfl} from './nfl-evidence-research.ts'
 
 import {tennisSlate,investigateTennis,type TennisTour} from './tennis-evidence-research.ts'
 
+import {collegeSlate,collegeInvestigate,type CollegeLeague} from './college-evidence-research.ts'
+
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 /** Resolves credentials fresh per tool invocation and never changes process.env. */
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'NCAA COLLEGE SPORTS INTELLIGENCE: para fútbol americano universitario usa sports_chat_ncaa_slate y sports_chat_ncaa_investigate con league=college-football; para baloncesto universitario masculino league=mens-college-basketball. Confirma equipos, rosters y titulares por ID, NCAA football usa 11 ofensivos y 11 defensivos por club y NCAA basketball 5 por club. No heredar reglamentos, OT, equipos, estadísticas ni cuotas de NFL/NBA. Investiga lesiones, transfer portal, fuerza de rivales, torneos y clima con fuentes; no inventar ventaja matemática, props o jugadores. ',
   'TENNIS INTELLIGENCE ATP/WTA: investiga con sports_chat_tennis_slate(tour=atp|wta,date) y sports_chat_tennis_investigate(tour,date,matchId) tras cotejar matchId y participantes exactos, superficie y formato oficial. Valorar primer y segundo servicio vs devolución, break points, fatigue, H2H por superficie, indoor/outdoor y cambios de calendario solo cuando se dispone de fuentes; jamás declarar ranking, H2H, best-of-5, lesiones, cuota o resultado sintético. ATP/WTA son circuitos diferentes; distinguir singles/doubles, retiro, walkover y match-tiebreak en mercados. Si no hay datos suficientes, abstenerse. ',
   'NFL AMERICAN FOOTBALL INTELLIGENCE: consulta sports_chat_nfl_slate para fecha/eventId real y sports_chat_nfl_investigate para investigar quarterback, roster completo de ambos clubes, ofensiva, defensiva, OL vs pass rush, WR/TE vs CB/LB, RB vs front seven, descanso, lesiones, clima, cuartos y cotizaciones auténticas. Los 11 titulares ofensivos y los 11 defensivos de CADA club se confirman por IDs explícitos y unidad; no infieras titularidad del roster o profundidad. NFL no es fútbol soccer ni NCAA. No inventes QB titular, rutas, snaps, EPA, probabilidades, prices ni props; confirma evento/casa/mercado/período y abstente si falta evidencia. ',
   'INVESTIGACIÓN MLB POR PARTIDO: usa sports_chat_mlb_investigate para obtener primero la cartelera por fecha y luego el expediente mediante gamePk de MLB Stats API (no confundir con eventId ESPN). Investiga las estadísticas de cada jugador y la matriz bateador×abridor/bullpen, localía, parque, meteorología, últimas salidas y precios cotejados. El expediente marca como PENDIENTES los enfrentamientos BvP, fatiga, lesiones, alineaciones y expertos que no estén confirmados; no interpretes una fila de roster como un bateador titular ni inventes simulaciones probabilísticas. La conclusión se fundamenta en evidencia favorable Y contradictoria y en escenarios por entradas; si matchupNextOffset no es null hay cruces adicionales consultables. No vendas el expediente como una apuesta aprobada. ',
@@ -1579,6 +1582,68 @@ export function apply(ctx: Context): void {
         instruction:'Kira debe comparar primer y segundo saque contra devolución rival, superficie, sets, descanso y evidencia contradictoria. Perfil sin statistics no es 0; ranking ausente no es sin ranking. La oferta debe coincidir ambos atletas, circuito, fecha, bookmaker y ruleset para retiro/walkover/super-tiebreak. No declarar ticket ganador ni P(win) inventada.'})
     },
     presentCall:()=>({card:'generic',title:'Investigar ATP/WTA · servicio y devolución',kind:'read' as const}),
+  }))
+
+  ctx.tools.register(defineTool({
+    name:'sports_chat_ncaa_slate',
+    description:'Cartelera específica NCAA Football o NCAA Basketball masculino, IDs y horarios reales de ESPN.',
+    parameters:{
+      league:{type:'string',required:true,description:'college-football o mens-college-basketball'},
+      date:{type:'string',required:true,description:'Fecha AAAA-MM-DD de competición'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      if(args.league!=='college-football'&&args.league!=='mens-college-basketball')
+        throw Error('Liga universitaria no admitida')
+      const now=Date.now()
+      const r=await collegeSlate(args.league,args.date,fetch,now,await sportsEnv(ctx))
+      const uiBlock={component:'sports_espn_dashboard',version:1,props:{
+        view:'event',title:'PHOENIX NCAA · '+args.league,
+        subtitle:r.games.length+' encuentros',
+        source:'ESPN College',checkedAt:new Date(now).toISOString(),
+        sections:[{heading:'Cartelera verificada',kind:'list',
+          items:r.games.slice(0,25).map(g=>({
+            label:g.away.name+' vs '+g.home.name,
+            value:g.start+' · '+g.status,detail:'eventId '+g.eventId}))}],
+        note:'Investigar roster y titulares mediante sports_chat_ncaa_investigate antes de comparar mercados.'}}
+      return JSON.stringify({...r,uiBlock,
+        instruction:'No confundir NCAA Football con NFL ni NCAA Basketball con NBA. Una cartelera no verifica titulares.'})
+    },
+    presentCall:()=>({card:'generic',title:'Consultar NCAA Football y Basketball',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_ncaa_investigate',
+    description:'Investiga NCAA Football o NCAA Basketball: rosters vigentes, starters exactos, stats observadas, lesiones atribuibles y cuotas por competencia.',
+    parameters:{
+      league:{type:'string',required:true,description:'college-football o mens-college-basketball'},
+      date:{type:'string',required:true,description:'Fecha AAAA-MM-DD'},
+      eventId:{type:'string',required:true,description:'ID oficial ESPN de juego de esa liga y fecha'},
+      includeOdds:{type:'boolean',description:'Consultar cuotas reales de NCAA, defecto sí'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      if(args.league!=='college-football'&&args.league!=='mens-college-basketball')
+        throw Error('Liga NCAA inválida')
+      const league:CollegeLeague=args.league,now=Date.now(),env=await sportsEnv(ctx)
+      let quotes:Awaited<ReturnType<typeof marketOddsDetailed>>['quotes']=[]
+      let oddsSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
+      if(args.includeOdds!==false){
+        try{
+          const k=league==='college-football'?'americanfootball_ncaaf':'basketball_ncaab'
+          const odds=await marketOddsDetailed(k,'h2h,spreads,totals',env,fetch,now)
+          quotes=odds.quotes;oddsSources=odds.sources
+        }catch{/* No fabricated prices. */}
+      }
+      const d=await collegeInvestigate(league,args.date,args.eventId,fetch,now,env,quotes)
+      return JSON.stringify({...d,sources:undefined,
+        sourceStatus:{ok:d.sources.filter(s=>s.status==='observed').length,
+          failed:d.sources.filter(s=>s.status==='error').slice(0,15)},
+        oddsSources,
+        instruction:'Separar reglas NCAA Football y NCAA Basketball de NFL/NBA. Roster y depthchart nunca aseguran 11+11 ni quinteto. Lesiones/transfer portal, fatiga, ratings y bookmaker rules requieren prueba independiente. Sin probabilidad calibrada ni ticket aprobado.'})
+    },
+    presentCall:()=>({card:'generic',title:'Investigar NCAA · equipos y titulares',kind:'read' as const}),
   }))
 
 }
