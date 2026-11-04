@@ -91,6 +91,7 @@ function snapshotView(){
   const value=el.type==="checkbox"?el.checked:el.value;
   if(typeof value==="boolean"||typeof value==="string"&&value.length<=4000)values[el.id]=value;
  }
+ if(tab==="workspace")values["draft-patient-id"]=selectedPatientId;
  return {values,expanded:[...view.querySelectorAll("details[id]")].filter(el=>el.open).map(el=>el.id)};
 }
 function rememberView(){
@@ -99,7 +100,10 @@ function rememberView(){
 }
 function restoreView(){
  const draft=viewDrafts[tab];if(!draft)return;
+ const isSamePatient=tab!=="workspace"||draft.values?.["draft-patient-id"]===selectedPatientId;
  for(const [id,value] of Object.entries(draft.values||{})){
+  // Never restore clinical input from another patient's workspace.
+  if(!isSamePatient&&!/^(ws-(name|dob|phone|email|doc-type|document|complaint-new|distinct|new-|extra-))/.test(id))continue;
   const el=document.getElementById(id);if(!el||el.type==="file"||el.type==="password")continue;
   if(el.type==="checkbox"&&typeof value==="boolean")el.checked=value;
   else if(typeof value==="string")el.value=value;
@@ -181,7 +185,7 @@ async function load(){
  for(const btn of root.querySelectorAll("[data-tab]"))btn.classList.toggle("active",btn.dataset.tab===tab);
  const ids=tab==="workspace"?["patients"]:tab==="assignments"?["assignments","patients"]:tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters","inventory"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patient-options"]:tab==="followups"?["followups","patients"]:["patients",tab];
  if((actor.role==="clinician"||actor.role==="admin")&&!ids.includes("followups")&&tab!=="workspace")ids.push("followups");
- const kinds=[...new Set(ids)],needsTemplate=tab==="workspace"||tab==="patients";
+ const kinds=[...new Set(ids)],needsTemplate=tab==="workspace"||tab==="patients"&&["admin","clinician","reception"].includes(actor.role);
  const [records,templateResult,draftResult]=await Promise.all([
   Promise.all(kinds.map(id=>api(id).then(x=>x.items).catch(error=>{
    if(id==="patients")throw error;
