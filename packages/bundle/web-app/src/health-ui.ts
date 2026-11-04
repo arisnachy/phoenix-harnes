@@ -47,7 +47,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{border-bottom:1px
 "use strict";
 const root=document.getElementById("app"),account=document.getElementById("account"),flash=document.getElementById("flash");
 let actor=null,csrf="",tab="workspace",data={},current=null,selectedPatientId="",previewUrl=null;
-let patientForm={version:1,revision:0,fields:[]};
+let patientForm={version:1,revision:0,fields:[]},patientDraft=null;
 const modules=[["workspace","Mi consulta"],["patients","Pacientes"],["encounters","Consultas"],["appointments","Agenda"],["orders","Laboratorio e imágenes"],["prescriptions","Recetas"],["inventory","Farmacia"],["invoices","Administración"],["followups","Seguimiento"],["staff","Personal"],["assignments","Equipo asistencial"],["backups","Respaldos"],["audit","Auditoría"]];
 const safe=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=id=>document.getElementById(id)?.value??"";
@@ -59,6 +59,21 @@ const button=(action,title,cls="primary")=>'<button type="button" class="'+cls+'
 const rows=(items,cols)=>items.length?'<div style="overflow:auto"><table><thead><tr>'+cols.map(c=>'<th>'+safe(c[0])+'</th>').join('')+'<th>Acciones</th></tr></thead><tbody>'+items.map(o=>'<tr>'+cols.map(c=>'<td>'+safe(o[c[1]])+'</td>').join('')+'<td>'+actionFor(o)+'</td></tr>').join('')+'</tbody></table></div>':'<p class="muted">No hay registros.</p>';
 let columnAction=null;
 function notice(msg){flash.textContent=msg;flash.style.display="block";setTimeout(()=>flash.style.display="none",5200)}
+// Transient drafts stay only in the authenticated page memory, never in LLM context or browser storage.
+function rememberPatientDraft(){
+ if(tab!=="workspace")return;
+ const ids=["ws-name","ws-dob","ws-phone","ws-email","ws-doc-type","ws-document",
+   "ws-complaint-new","ws-distinct-reason",...patientForm.fields.map(f=>"ws-extra-"+f.id)];
+ patientDraft={values:Object.fromEntries(ids.map(id=>[id,val(id)])),
+   distinct:document.getElementById("ws-distinct")?.checked===true};
+}
+function restorePatientDraft(){
+ if(!patientDraft)return;
+ for(const [id,value] of Object.entries(patientDraft.values)){
+  const el=document.getElementById(id);if(el&&typeof value==="string")el.value=value;
+ }
+ const toggle=document.getElementById("ws-distinct");if(toggle)toggle.checked=patientDraft.distinct;
+}
 async function api(path,method="GET",body){
  const r=await fetch("/health/api/"+path,{method,credentials:"same-origin",cache:"no-store",headers:{
   "content-type":"application/json","x-phoenix-health":"1",...(csrf?{"x-phoenix-csrf":csrf}:{}),
@@ -69,6 +84,7 @@ async function refresh(){
  try{const x=await api("session");actor=x.actor;csrf=x.csrf;data={};await load()}catch{actor=null;csrf="";await splash()}
 }
 async function splash(){
+ patientDraft=null;
  let status=await api("status");
  account.textContent="Clínica protegida";
  root.innerHTML='<section style="max-width:570px">'+box(status.initialized?"Acceso profesional":"Configurar clínica",
@@ -101,7 +117,7 @@ async function load(){
   for(const kind of ["encounters","orders","prescriptions","followups","appointments","observations","attachments"])
     data[kind]=context?.[kind]||[];
  }
- render()
+ render();if(tab==="workspace")restorePatientDraft()
 }
 function actionFor(o){
  let actions=[];
@@ -348,6 +364,7 @@ async function execute(action,id){
   while(patientForm.fields.some(f=>f.id===key)){key=prefix.slice(0,27)+"_"+n++;if(n>100)throw Error("Cambie la etiqueta")}
   const fields=[...patientForm.fields,{id:key,label,kind:val("ws-new-type"),
     required:document.getElementById("ws-new-required")?.checked===true}];
+  rememberPatientDraft();
   patientForm=(await api("patient-intake-template","PATCH",
     {version:1,expectedRevision:patientForm.revision,fields})).template;
   notice("Campo agregado a la plantilla.");return load();
@@ -356,13 +373,14 @@ async function execute(action,id){
   const fields=patientForm.fields.filter(f=>f.id!==id);
   if(fields.length===patientForm.fields.length)throw Error("Campo inexistente");
   if(!confirm("¿Retirar este campo de futuros registros? Los datos antiguos se conservan."))return;
+  rememberPatientDraft();
   patientForm=(await api("patient-intake-template","PATCH",
     {version:1,expectedRevision:patientForm.revision,fields})).template;
   notice("Campo retirado.");return load();
  }
  if(action==="workspaceChooseExisting"){
   if(!data.patients.some(p=>p.id===id))throw Error("Paciente no asignado");
-  selectedPatientId=id;notice("Ficha existente seleccionada: no se creó un duplicado.");return load();
+  selectedPatientId=id;patientDraft=null;notice("Ficha existente seleccionada: no se creó un duplicado.");return load();
  }
  if(action==="workspaceCheckIdentity"){
   const input={name:val("ws-name").trim(),dateOfBirth:val("ws-dob"),
@@ -392,7 +410,7 @@ async function execute(action,id){
     email:val("ws-email"),documentType:val("ws-doc-type"),
     documentNumber:val("ws-document"),customFields,
     confirmDistinct:distinct,distinctReason:val("ws-distinct-reason")});
-  selectedPatientId=created.record.id;
+  selectedPatientId=created.record.id;patientDraft=null;
   try{
    await api("encounters","POST",{patientId:selectedPatientId,specialty:"Medicina general",complaint,mode:"mixed"});
    notice("Paciente y consulta guardados.");
