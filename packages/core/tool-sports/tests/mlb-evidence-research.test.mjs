@@ -526,3 +526,16 @@ test('explicit review time invalidates cached offers without rewriting historica
   assert.equal(reviewMlbResearch(d).evidenceGates.realOffersVerified,true)
   assert.equal(stale.eligibleForTicket,false)
 })
+
+test('cached pregame dossier abstains when reviewed after scheduled first pitch',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  const original=reviewMlbResearch(d)
+  assert.equal(original.evidenceGates.scheduledFuture,true)
+  const later=reviewMlbResearch(d,'2026-07-02T22:01:00Z')
+  assert.equal(later.evidenceGates.reviewTimestampValid,true)
+  assert.equal(later.evidenceGates.scheduledFuture,false)
+  assert.equal(later.eligibility,'insufficient')
+  assert.equal(later.decision,'abstain')
+  assert.equal(later.eligibleForTicket,false)
+})
