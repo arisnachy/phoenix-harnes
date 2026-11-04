@@ -522,7 +522,7 @@ export class HealthClinicStore {
     for(const [key,value] of Object.entries(incoming)){
       if(!/^[a-z][a-z0-9-]{0,70}$/u.test(key)||key.includes('pass')||key.startsWith('kira-')
         ||typeof value!=='string'&&typeof value!=='boolean'
-        ||typeof value==='string'&&(value.length>4000||/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]/u.test(value)))
+        ||typeof value==='string'&&(value.length>4000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(value)))
         fail('Campo de borrador inválido')
       values[key]=value
     }
