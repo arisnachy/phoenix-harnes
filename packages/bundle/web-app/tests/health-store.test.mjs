@@ -551,3 +551,37 @@ test('document review preserves original bytes, requires physician and checks ve
   assert.throws(()=>db.reviewAttachment(doctor,added.id,1),/Conflicto/)
   assert(db.audits(admin.actor).some(x=>x.action==='attachment.reviewed'))
 })
+test('clinic intake fields persist by institution; identity checks prevent inadvertent duplicate profiles',t=>{
+  const {db,admin,root}=fixture(t)
+  const actor=admin.actor
+  assert.equal(db.getPatientIntakeTemplate(actor).fields.length,0)
+  const form=db.updatePatientIntakeTemplate(actor,{version:1,expectedRevision:0,
+    fields:[{id:'custom_ars',label:'ARS / Seguro',kind:'text',required:false}]})
+  assert.equal(form.revision,1)
+  assert.throws(()=>db.updatePatientIntakeTemplate(actor,{version:1,expectedRevision:0,fields:[]}),/recargar/)
+  const p=db.create(actor,'patients',{name:'Paciente ficticio uno',dateOfBirth:'1982-02-20',
+    documentType:'cedula',documentNumber:'001-0000000-1',
+    phone:'809-555-1212',customFields:{custom_ars:'Plan de prueba'}})
+  assert.equal(p.customFields.custom_ars,'Plan de prueba')
+  assert(!readFileSync(join(root,'clinic.sqlite')).includes(Buffer.from('Plan de prueba')))
+  const found=db.findPatientCandidates(actor,{documentType:'cedula',documentNumber:'00100000001'})
+  assert.equal(found.matches[0].id,p.id)
+  assert.equal(found.matches[0].reason,'document')
+  assert.throws(()=>db.create(actor,'patients',{name:'Otro nombre',dateOfBirth:'1990-01-01',
+    documentType:'cedula',documentNumber:'001-0000000-1'}),/documento/i)
+  assert.throws(()=>db.create(actor,'patients',{name:'Paciente ficticio uno',
+    dateOfBirth:'1982-02-20'}),/Posible duplicado/)
+  assert.throws(()=>db.create(actor,'patients',{name:'Paciente ficticio uno',
+    dateOfBirth:'1982-02-20',confirmDistinct:true,distinctReason:'corto'}),/Explique/)
+  const distinct=db.create(actor,'patients',{name:'Paciente ficticio uno',
+    dateOfBirth:'1982-02-20',confirmDistinct:true,
+    distinctReason:'Verificada identidad diferente con documentación de prueba'})
+  assert.notEqual(distinct.id,p.id)
+  assert.throws(()=>db.create(actor,'patients',{name:'Paciente nuevo',dateOfBirth:'1987-01-01',
+    customFields:{custom_secret:'no permitido'}}),/no autorizado/)
+  assert.equal(db.getPatientIntakeTemplate({...actor,org:'Segunda clínica'}).fields.length,0)
+  assert.throws(()=>db.findPatientCandidates({...actor,role:'billing'},{
+    name:'Paciente ficticio uno',dateOfBirth:'1982-02-20'}),/Permiso/)
+  assert(db.audits(actor).some(x=>x.action==='patient.identity.lookup'))
+  assert(db.audits(actor).some(x=>x.action==='patient.intake.configure'))
+})
