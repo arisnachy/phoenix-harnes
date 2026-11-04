@@ -506,3 +506,23 @@ test('review rechecks cached odds freshness and excludes stale quotes from compa
   assert.ok(review.reviewedMarkets[0].missingEvidence.some(x=>x.includes('Cotización vencida')))
   assert.equal(review.eligibleForTicket,false)
 })
+
+
+test('explicit review time invalidates cached offers without rewriting historical dossier',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const quote={eventId:'book-4',bookmaker:'Verified House',market:'totals',
+    selection:'Over',point:8,price:1.91,home:'Home Giants',away:'Away Bears',
+    timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z',
+    sportKey:'baseball_mlb'}
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[quote])
+  assert.equal(reviewMlbResearch(d,'2026-07-01T12:05:00Z').evidenceGates.realOffersVerified,true)
+  const stale=reviewMlbResearch(d,'2026-07-01T13:05:00Z')
+  assert.equal(stale.evidenceGates.realOffersVerified,false)
+  assert.equal(stale.decision,'abstain')
+  assert.equal(stale.crossBookComparisons.length,0)
+  assert.ok(stale.reviewedMarkets[0].missingEvidence.some(x=>x.includes('Cotización vencida')))
+  assert.equal(reviewMlbResearch(d,'invalid').evidenceGates.reviewTimestampValid,false)
+  assert.equal(reviewMlbResearch(d,'2026-07-01T11:00:00Z').decision,'abstain')
+  assert.equal(reviewMlbResearch(d).evidenceGates.realOffersVerified,true)
+  assert.equal(stale.eligibleForTicket,false)
+})
