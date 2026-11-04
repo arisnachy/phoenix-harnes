@@ -57,6 +57,7 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
     scheduledFuture:Number.isFinite(Date.parse(d.fixture.date))&&
       Number.isFinite(Date.parse(d.checkedAt))&&
       Date.parse(d.fixture.date)>Date.parse(d.checkedAt)&&
+      reviewTimeValid&&Date.parse(d.fixture.date)>reviewMs&&
       ['Preview','Pre-Game','Scheduled'].includes(d.fixture.status),
     startersVerified:!!h&&!!a,
     teamRecordsVerified:!!d.seasonRecord.home&&!!d.seasonRecord.away,
