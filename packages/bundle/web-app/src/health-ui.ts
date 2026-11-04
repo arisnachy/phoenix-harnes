@@ -127,6 +127,7 @@ function queueDraftSave(){
  },1000);
 }
 async function forgetDraft(scope){
+ clearTimeout(draftTimer);
  await draftSaveQueue.catch(()=>{});
  viewDrafts[scope]={values:{},expanded:[]};
  await api("clinical-draft/"+scope,"POST",{action:"clear"});
