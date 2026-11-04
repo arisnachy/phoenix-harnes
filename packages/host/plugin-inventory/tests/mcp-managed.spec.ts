@@ -6,6 +6,7 @@ import {
   ManagedMcpController,
   MANAGED_MCP_INJECT,
   BLENDER_LAB_MCP_SOURCE,
+  BLENDER_LAB_MCP_LAUNCHER,
   managedMcpPatchPath,
   type ManagedMcpLoader,
   type ManagedMcpRegistrySearch,
@@ -407,8 +408,9 @@ describe('ManagedMcpController', () => {
     })
     expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
       config: expect.objectContaining({
-        command: 'uvx',
-        args: ['--from', BLENDER_LAB_MCP_SOURCE, 'blender-mcp'],
+        command: 'node',
+        args: [BLENDER_LAB_MCP_LAUNCHER],
+        env: { BLENDER_MCP_HOST: '127.0.0.1', BLENDER_MCP_PORT: '9876' },
       }),
     }))
     const saved = JSON.parse(readFileSync(patchPath, 'utf8')) as { insert: unknown[] }[]
@@ -416,24 +418,68 @@ describe('ManagedMcpController', () => {
     expect(await controller.installCuratedMcp('blender')).toMatchObject({ status: 'already-installed' })
   })
 
-  it('retains existing official Blender v1.0.0 registration during the v1.0.2 migration', async()=>{
-    const patchPath=tempPatch()
-    const live=loader()
-    const controller=new ManagedMcpController(live,{patchPath,registrySearch:registry([])})
+  it.each([
+    ['v1.0.2', BLENDER_LAB_MCP_SOURCE],
+    ['v1.0.0', 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp'],
+  ])('upgrades a persisted Blender %s uvx connector without uninstalling it', async (_version, source) => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
     await controller.installCuratedMcp('blender')
-    const raw=readFileSync(patchPath,'utf8')
-    const legacy='git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp'
-    writeFileSync(patchPath,raw.replace(BLENDER_LAB_MCP_SOURCE,legacy))
+    const stored = JSON.parse(readFileSync(patchPath, 'utf8')) as Array<{
+      insert: Array<{ config: Record<string, unknown> }>
+    }>
+    const row = stored[0]?.insert[0]
+    if (row === undefined) throw new Error('test fixture missing Blender row')
+    row.config = {
+      ...row.config,
+      command: 'uvx',
+      args: ['--from', source, 'blender-mcp'],
+      env: { BLENDER_MCP_HOST: 'localhost', BLENDER_MCP_PORT: '9876' },
+    }
+    writeFileSync(patchPath, JSON.stringify(stored))
     await expect(controller.snapshot()).resolves.toMatchObject([{
-      serverName:'blender',source:{kind:'curated',connectorId:'blender'},
+      serverName: 'blender', source: { kind: 'curated', connectorId: 'blender' },
     }])
-    await expect(controller.installCuratedMcp('blender')).resolves.toMatchObject({
-      status:'already-installed',connector:{serverName:'blender'},
+    await controller.ensureCoreMcpPack({ installMissing: false })
+    expect(live.update).toHaveBeenCalledWith('live-entry-id', expect.objectContaining({
+      config: expect.objectContaining({ command: 'node', args: [BLENDER_LAB_MCP_LAUNCHER] }),
+    }))
+    expect(live.remove).not.toHaveBeenCalled()
+    expect(live.create).toHaveBeenCalledTimes(1)
+    const updated = JSON.parse(readFileSync(patchPath, 'utf8')) as Array<{
+      insert: Array<{ config: { command: string; args: string[] } }>
+    }>
+    expect(updated[0]?.insert[0]?.config).toMatchObject({
+      command: 'node', args: [BLENDER_LAB_MCP_LAUNCHER],
     })
-    const recovered=await controller.recoverInvalidOverlay()
+    const recovered = await controller.recoverInvalidOverlay()
     expect(recovered.quarantined).toBe(0)
     expect(recovered.backupCreated).toBe(false)
-    expect(live.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the old Blender launcher persisted when a live upgrade fails', async () => {
+    const patchPath = tempPatch()
+    const live = loader({ updateError: new Error('live update failed') })
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await controller.installCuratedMcp('blender')
+    const stored = JSON.parse(readFileSync(patchPath, 'utf8')) as Array<{insert: Array<{
+      config: Record<string, unknown>
+    }>}>
+    const row = stored[0]?.insert[0]
+    if (row === undefined) throw new Error('test fixture missing Blender row')
+    row.config = {
+      ...row.config,
+      command: 'uvx',
+      args: ['--from', BLENDER_LAB_MCP_SOURCE, 'blender-mcp'],
+      env: { BLENDER_MCP_HOST: 'localhost', BLENDER_MCP_PORT: '9876' },
+    }
+    writeFileSync(patchPath, JSON.stringify(stored))
+    await controller.ensureCoreMcpPack({ installMissing: false })
+    const remaining = JSON.parse(readFileSync(patchPath, 'utf8')) as Array<{
+      insert: Array<{ config: { command: string } }>
+    }>
+    expect(remaining[0]?.insert[0]?.config.command).toBe('uvx')
   })
 
   it('migrates a legacy installed OAuth MCP to wait for authorization services', async () => {
