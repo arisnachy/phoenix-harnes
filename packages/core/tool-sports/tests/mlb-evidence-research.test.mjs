@@ -569,3 +569,30 @@ test('capped MLB review prioritizes current offers over forty expired quotes',as
   assert.deepEqual(review.crossBookComparisons[0].quotes.map(x=>x.bookmaker),['Verified House'])
   assert.equal(review.eligibleForTicket,false)
 })
+
+test('MLB comparisons retain every fresh quote beyond the forty-row review display cap',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const quote={eventId:'book-4',bookmaker:'Verified House',market:'totals',
+    selection:'Over',point:8,price:1.91,home:'Home Giants',away:'Away Bears',
+    timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z',
+    sportKey:'baseball_mlb'}
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[quote])
+  const live=d.odds[0]
+  d.odds=[
+    ...Array.from({length:40},(_,i)=>({...live,bookmaker:'Book '+i})),
+    {...live,bookmaker:'Book 40',price:2.05},
+  ]
+  const review=reviewMlbResearch(d)
+  assert.equal(review.reviewedMarkets.length,40)
+  assert.equal(review.reviewedMarkets.some(x=>x.bookmaker==='Book 40'),false)
+  assert.equal(review.evidenceGates.realOffersVerified,true)
+  assert.equal(review.marketComparisons.length,41)
+  assert.ok(review.marketComparisons.some(x=>x.bookmaker==='Book 40'&&
+    x.offers[0].price===2.05))
+  const over8=review.crossBookComparisons.find(x=>x.market==='totals'&&
+    x.selection==='Over'&&x.line===8)
+  assert.equal(over8.quotes.length,41)
+  assert.ok(over8.quotes.some(x=>x.bookmaker==='Book 40'&&x.price===2.05))
+  assert.equal(over8.settlementComparable,false)
+  assert.equal(review.eligibleForTicket,false)
+})
