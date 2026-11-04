@@ -5,6 +5,7 @@
  */
 export type ClinicalToolId = 'bmi_adult' | 'mean_arterial_pressure' | 'lmp_estimate'
 
+/** Metadata for a reviewed deterministic clinical tool and its input fields. */
 export interface ClinicalToolDefinition {
   readonly id: ClinicalToolId
   readonly version: string
@@ -14,6 +15,7 @@ export interface ClinicalToolDefinition {
   readonly reference: string
   readonly notice: string
 }
+/** Built-in, versioned catalog. Custom executable AI code is not accepted here. */
 export const HEALTH_CLINICAL_TOOLS:readonly ClinicalToolDefinition[]=[
   {
     id:'bmi_adult',version:'1.0.0',title:'IMC del adulto',
@@ -64,6 +66,11 @@ function checkKeys(input:Record<string,unknown>,allowed:string[]):void{
   if(Object.keys(input).some(key=>!allowed.includes(key)))throw new Error('El cálculo contiene campos no autorizados')
 }
 
+/** Execute a bounded clinical calculation locally; never create a diagnosis or prescription.
+ * @param id - Stable tool identifier from the authorized catalog.
+ * @param raw - Exact numerical/date inputs without patient identifiers or free-text PHI.
+ * @returns Deterministic result with version, reference and review-required status.
+ */
 export function runHealthClinicalTool(id:string,raw:unknown):{
   id:ClinicalToolId;version:string;output:Record<string,number|string>;reference:string;notice:string;status:'review-required'
 }{
