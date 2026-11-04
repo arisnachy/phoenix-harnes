@@ -531,7 +531,9 @@ describe('chat tool activity grouping', () => {
       align: 'start',
     }))
   })
-})describe('HealthIA transcript cards are independent of model prose',()=>{
+})
+
+describe('HealthIA transcript cards are independent of model prose',()=>{
   it('displays an actual activation receipt as an interactive clinical surface',()=>{
     const node={
       ...settledTool('healthia-activation-1'),
