@@ -287,11 +287,11 @@ async function clinicalIntent(input){
  }
  if(/(recet|prescrip|medicament|farmacia)/.test(normalized)){
   kiraNotice("Abriendo el módulo de prescripción profesional; requiere revisión y firma.");
-  tab="prescriptions";return load();
+  await persistView();tab="prescriptions";return load();
  }
  if(/(seguim|pendiente|proxima|cita|agenda)/.test(normalized)){
   kiraNotice("Consulta los seguimientos pendientes; para citas abre la agenda.");
-  tab=/cita|agenda/.test(normalized)?"appointments":"followups";return load();
+  await persistView();tab=/cita|agenda/.test(normalized)?"appointments":"followups";return load();
  }
  if(/(document|archivo|foto|subir|pdf|biblioteca)/.test(normalized)){
   kiraNotice("Los informes y fotos se conservan cifrados en el expediente seleccionado. No se envían por correo ni al modelo.");
@@ -617,7 +617,7 @@ async function execute(action,id){
  }
  if(action==="workspaceChooseExisting"){
   if(!data.patients.some(p=>p.id===id))throw Error("Paciente no asignado");
-  selectedPatientId=id;patientDraft=null;notice("Ficha existente seleccionada: no se creó un duplicado.");return load();
+  selectedPatientId=id;patientDraft=null;await forgetDraft("workspace");notice("Ficha existente seleccionada: no se creó un duplicado.");return load();
  }
  if(action==="workspaceCheckIdentity"){
   const input={name:val("ws-name").trim(),dateOfBirth:val("ws-dob"),
@@ -648,11 +648,27 @@ async function execute(action,id){
     documentNumber:val("ws-document"),customFields,
     confirmDistinct:distinct,distinctReason:val("ws-distinct-reason")});
   selectedPatientId=created.record.id;patientDraft=null;
+  if(!(await api("patients")).items.some(p=>p.id===selectedPatientId))
+   throw Error("No se ha confirmado la recuperación del paciente creado");
+  await forgetDraft("workspace");
   try{
    await api("encounters","POST",{patientId:selectedPatientId,specialty:"Medicina general",complaint,mode:"mixed"});
    notice("Paciente y consulta guardados.");
   }catch(error){notice("Paciente creado, pero no se abrió la consulta: "+error.message)}
   return load();
+ }
+ if(action==="patientCheckIdentity"){
+  const result=(await api("patient-identity-match","POST",{
+   name:val("name").trim(),dateOfBirth:val("dateOfBirth"),documentType:val("documentType"),
+   documentNumber:val("documentNumber"),phone:val("phone"),email:val("email"),
+  })).result;
+  const target=document.getElementById("patient-matches");
+  if(target)target.innerHTML=result.matches.length||result.restrictedCount?
+   '<p class="notice warning">Posibles coincidencias: revise la identidad antes de guardar.</p>'+
+   result.matches.map(p=>'<div class="ws-item">'+safe(p.name)+' · '+safe(p.dateOfBirth)+' · '+safe(p.reason)+'</div>').join("")+
+   (result.restrictedCount?'<p>Existen fichas restringidas; consulte a admisión.</p>':''):
+   '<p class="notice">No se encontraron coincidencias en el directorio.</p>';
+  return;
  }
  if(action==="workspaceVisit"){
   if(!selectedPatientId)throw Error("Selecciona un paciente");
@@ -693,9 +709,9 @@ async function execute(action,id){
  }
 
  if(action==="openCriticalFollowups"){tab="followups";return load()}
- if(action==="logout"){await api("logout","POST",{});actor=null;csrf="";data={};patientDraft=null;clinicalTools=[];selectedClinicalTool=null;tab="patients";return splash()}
+ if(action==="logout"){clearTimeout(draftTimer);await api("logout","POST",{});actor=null;csrf="";data={};viewDrafts=Object.create(null);patientDraft=null;clinicalTools=[];selectedClinicalTool=null;tab="patients";return splash()}
  if(action==="setup"){await api("setup","POST",{username:val("user"),password:val("pass"),organization:val("org")});notice("Clínica configurada. Inicia sesión.");return splash()}
- if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;data={};tab="workspace";return load()}
+ if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;data={};viewDrafts=Object.create(null);tab="workspace";return load()}
  if(action==="openAskCopilot"){
   // The chat's genuine ASK provider belongs to PHOENIX, not the clinical HTTP session.
   // Never transfer an encounter ID, a patient name or the protected encounter contents.
@@ -787,7 +803,7 @@ async function execute(action,id){
     box("Historia longitudinal · "+safe(patient.name),
       '<p class="notice">Solo el médico asignado puede revisar y actualizar estos antecedentes. Un campo vacío significa no documentado, nunca ausencia de patología.</p>'+
       fields+button("saveMedicalHistory","Guardar antecedentes revisados")));
-  return;
+  restoreView();return;
  }
  if(action==="saveMedicalHistory"){
   if(actor.role!=="clinician"||current?.kind!=="medicalHistory")throw Error("Editor no autorizado");
@@ -894,7 +910,7 @@ async function execute(action,id){
     section("assessment","A · Evaluación y razonamiento clínico",encounter.assessment)+
     section("plan","P · Plan diagnóstico y terapéutico",encounter.plan)+
     '<button class="primary" data-act="saveDocument" data-id="'+safe(id)+'">Guardar borrador cifrado</button>'));
-  return;
+  restoreView();return;
  }
  if(action==="saveDocument"){
   const encounter=data.encounters?.find(x=>x.id===id);
@@ -930,15 +946,21 @@ async function execute(action,id){
  if(action==="finishFollowup"){patch.status="done"}
  await api(tab+"/"+id,"PATCH",patch);notice("Registro actualizado; cambio auditado.");return load()
 }
+document.addEventListener("input",e=>{
+ if(e.target.closest("#view")){rememberView();queueDraftSave()}
+});
 document.addEventListener("change",async e=>{
+ if(e.target.closest("#view")){rememberView();queueDraftSave()}
+
  if(e.target.id==="ws-patient"){
+  clearTimeout(draftTimer);await persistView();
   selectedPatientId=e.target.value;
   if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null}
   try{await load()}catch(error){notice(error.message)}
  }
 });
 document.addEventListener("click",async e=>{
- const tabButton=e.target.closest("[data-tab]");if(tabButton){tab=tabButton.dataset.tab;try{await load()}catch(err){notice(err.message)}return}
+ const tabButton=e.target.closest("[data-tab]");if(tabButton){try{clearTimeout(draftTimer);await persistView();tab=tabButton.dataset.tab;await load()}catch(err){notice(err.message)}return}
  const action=e.target.closest("[data-act]");if(action){
   action.disabled=true;try{await execute(action.dataset.act,action.dataset.id)}catch(err){notice(err.message)}finally{action.disabled=false}
  }
