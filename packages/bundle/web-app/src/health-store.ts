@@ -18,7 +18,7 @@ type Actor = { username:string; role:Role; org:string }
 /** Authenticated clinical principal with organization and professional role. */
 export type ClinicActor = Readonly<Actor>
 type RecordData = Record<string,unknown>
-type Row = { id:string; org:string; kind:Kind|'attachment'; version:number; iv:string; tag:string; payload:string; created_at:string; updated_at:string }
+type Row = { id:string; org:string; kind:Kind|'attachment'|'draft'; version:number; iv:string; tag:string; payload:string; created_at:string; updated_at:string }
 type AttachmentRow = Omit<Row,'kind'|'updated_at'> & { patient_id:string; encounter_id:string|null; uploaded_by:string }
 type Staff = { username:string; org:string; role:Role; salt:string; digest:string }
 type Session = { actor:Actor; expires:number; csrf:string }
@@ -92,7 +92,8 @@ export class HealthClinicStore {
       'CREATE TABLE IF NOT EXISTS health_reminders (appointment_id TEXT PRIMARY KEY, org TEXT NOT NULL, status TEXT NOT NULL, sender TEXT NOT NULL, provider_id TEXT, started TEXT NOT NULL);'+
       'CREATE TABLE IF NOT EXISTS health_patient_access (org TEXT NOT NULL, patient_id TEXT NOT NULL, staff_id TEXT NOT NULL, purpose TEXT NOT NULL, granted_by TEXT NOT NULL, granted_at TEXT NOT NULL, PRIMARY KEY(org,patient_id,staff_id));'+
       'CREATE TABLE IF NOT EXISTS health_attachments (id TEXT PRIMARY KEY, org TEXT NOT NULL, patient_id TEXT NOT NULL, encounter_id TEXT, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, uploaded_by TEXT NOT NULL);'+
-      'CREATE INDEX IF NOT EXISTS health_attachments_patient ON health_attachments(org,patient_id,created_at);',
+      'CREATE INDEX IF NOT EXISTS health_attachments_patient ON health_attachments(org,patient_id,created_at);'+
+      'CREATE TABLE IF NOT EXISTS health_drafts (id TEXT PRIMARY KEY, org TEXT NOT NULL, username TEXT NOT NULL, scope TEXT NOT NULL, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);',
     )
   }
   /**
@@ -204,7 +205,7 @@ export class HealthClinicStore {
     }catch(error){this.db.exec('ROLLBACK');throw error}
   }
   private encryptionKey():Buffer {if(!this.key)fail('Expediente clínico bloqueado');return this.key}
-  private seal(id:string,org:string,kind:Kind|'attachment',version:number,data:RecordData):{ iv:string;tag:string;payload:string } {
+  private seal(id:string,org:string,kind:Kind|'attachment'|'draft',version:number,data:RecordData):{ iv:string;tag:string;payload:string } {
     const iv=randomBytes(12),key=this.encryptionKey(),cipher=createCipheriv('aes-256-gcm',key,iv)
     cipher.setAAD(Buffer.from([id,org,kind,String(version)].join(':')))
     const raw=Buffer.from(JSON.stringify(data),'utf8')
@@ -499,6 +500,53 @@ export class HealthClinicStore {
       return { id,version,createdAt:row.created_at,updatedAt:now,...next }
     }catch(e){this.db.exec('ROLLBACK');throw e}
   }
+  /** A clinician's work-in-progress stays encrypted and outside the general chat. */
+  private draftKey(actor:Actor,scope:string):string {
+    if(!/^(workspace|patients|encounters|appointments|orders|prescriptions|inventory|invoices|followups|assignments|staff|backups|audit)$/u.test(scope))
+      fail('Sección de borrador no permitida')
+    return createHash('sha256').update(actor.org+'\0'+actor.username+'\0'+scope).digest('hex')
+  }
+  getClinicalDraft(actor:Actor,scope:string):RecordData|null {
+    const id=this.draftKey(actor,scope)
+    const row=this.db.prepare('SELECT id,org,version,iv,tag,payload,updated_at FROM health_drafts WHERE id=? AND org=? AND username=? AND scope=?')
+      .get(id,actor.org,actor.username,scope) as Omit<Row,'kind'|'created_at'>|undefined
+    if(!row)return null
+    const draft=this.open({...row,kind:'draft',created_at:row.updated_at})
+    return {values:draft.values,expanded:draft.expanded,updatedAt:row.updated_at}
+  }
+  saveClinicalDraft(actor:Actor,scope: string,input:unknown):{savedAt:string} {
+    const id=this.draftKey(actor,scope),body=obj(input),incoming=obj(body.values)
+    if(Object.keys(incoming).length>100||JSON.stringify(body).length>60_000)
+      fail('Borrador clínico demasiado grande')
+    const values:Record<string,string|boolean>={}
+    for(const [key,value] of Object.entries(incoming)){
+      if(!/^[a-z][a-z0-9_-]{0,70}$/u.test(key)||key.includes('pass')||key.startsWith('kira-')
+        ||typeof value!=='string'&&typeof value!=='boolean'
+        ||typeof value==='string'&&(value.length>4000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(value)))
+        fail('Campo de borrador inválido')
+      values[key]=value
+    }
+    if(!Array.isArray(body.expanded)||body.expanded.length>30||
+      body.expanded.some(v=>typeof v!=='string'||!/^[a-z][a-z0-9_-]{0,70}$/u.test(v)))
+      fail('Secciones del borrador inválidas')
+    const expanded=body.expanded as string[],savedAt=new Date().toISOString()
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const old=this.db.prepare('SELECT version FROM health_drafts WHERE id=?').get(id) as {version:number}|undefined
+      const version=(old?.version??0)+1
+      const sealed=this.seal(id,actor.org,'draft',version,{values,expanded})
+      this.db.prepare('INSERT INTO health_drafts(id,org,username,scope,version,iv,tag,payload,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,iv=excluded.iv,tag=excluded.tag,payload=excluded.payload,updated_at=excluded.updated_at')
+        .run(id,actor.org,actor.username,scope,version,sealed.iv,sealed.tag,sealed.payload,savedAt)
+      this.db.exec('COMMIT')
+      return {savedAt}
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+  }
+  clearClinicalDraft(actor:Actor,scope:string):void {
+    const id=this.draftKey(actor,scope)
+    this.db.prepare('DELETE FROM health_drafts WHERE id=? AND org=? AND username=? AND scope=?')
+      .run(id,actor.org,actor.username,scope)
+  }
+
   /** Read only the institution's non-PHI intake configuration. */
   getPatientIntakeTemplate(actor:Actor):PatientIntakeTemplate {
     if(!['admin','clinician','reception'].includes(actor.role))fail('Acceso al formulario no autorizado')
@@ -971,12 +1019,16 @@ export class HealthClinicStore {
         const target=this.find(actor,'patients',id)
         if(target.row.version!==version)fail('Conflicto de edición: recarga el registro')
         const details=obj(x.record)
-        const fields=['pastMedical','pastSurgical','familyHistory','currentMedications','vaccinations','habits','problems'] as const
+        const fields=['pastMedical','pastSurgical','familyHistory','currentMedications','vaccinations','habits','problems',
+          'hospitalizations','transfusions','trauma','tobacco','alcohol','sleep','nutrition',
+          'physicalActivity','occupation','exposures','housing','gynecologicObstetric',
+          'pediatricDevelopment','geriatricFunction','mentalHealthHistory','reviewOfSystems'] as const
         if(Object.keys(details).some(key=>!fields.includes(key as typeof fields[number])))
           fail('Campo de historia longitudinal no autorizado')
         const medicalHistory:RecordData={}
         for(const field of fields){
-          const value=details[field]
+          const oldHistory=target.data.medicalHistory as RecordData|undefined
+          const value=details[field]??oldHistory?.[field]??''
           if(typeof value!=='string'||value.length>4000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(value))
             fail('Dato de historia longitudinal inválido')
           // An empty value means 'unrecorded', never a negative clinical finding.
