@@ -568,7 +568,7 @@ test('clinic intake fields persist by institution; identity checks prevent inadv
   assert.equal(found.matches[0].id,p.id)
   assert.equal(found.matches[0].reason,'document')
   assert.throws(()=>db.create(actor,'patients',{name:'Otro nombre',dateOfBirth:'1990-01-01',
-    documentType:'cedula',documentNumber:'001-0000000-1'}),/Documento/)
+    documentType:'cedula',documentNumber:'001-0000000-1'}),/documento/i)
   assert.throws(()=>db.create(actor,'patients',{name:'Paciente ficticio uno',
     dateOfBirth:'1982-02-20'}),/Posible duplicado/)
   assert.throws(()=>db.create(actor,'patients',{name:'Paciente ficticio uno',
