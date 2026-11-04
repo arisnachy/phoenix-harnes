@@ -327,7 +327,7 @@ function previousBlenderMcpConfig(source: string): ManagedStdioMcpConfig {
     env: { BLENDER_MCP_HOST: 'localhost', BLENDER_MCP_PORT: '9876' },
   }
 }
-function isPreviousBlenderMcpConfig(config: ManagedMcpConfig): boolean {
+function isPreviousBlenderMcpConfig(config: unknown): boolean {
   return exactJson(config, previousBlenderMcpConfig(BLENDER_LAB_MCP_SOURCE))
     || exactJson(config, previousBlenderMcpConfig(BLENDER_LAB_LEGACY_MCP_SOURCE))
 }
@@ -641,7 +641,7 @@ function validCuratedStdioConfig(value: Record<string, unknown>): boolean {
   // Preserve strict allowlisting while accepting the two official, previously
   // persisted uvx launchers long enough to migrate them in place.
   return specs.some(config => config.transport === 'stdio' && exactJson(value, config))
-    || isPreviousBlenderMcpConfig(value as ManagedMcpConfig)
+    || isPreviousBlenderMcpConfig(value)
 }
 
 function validConfig(value: unknown): value is ManagedMcpConfig {
