@@ -25,7 +25,10 @@ test('editable schema is bounded, versioned and accepts only data fields',()=>{
   assert.throws(()=>parsePatientIntakeTemplate({version:1,fields:[
     {id:'custom_ars',label:'ARS',kind:'text',required:false,onclick:'evil()'},
   ]},1),/desconocida/)
-  assert.equal(DEFAULT_PATIENT_INTAKE.fields.length,0)
+  assert.equal(DEFAULT_PATIENT_INTAKE.fields.length,12)
+  assert.ok(DEFAULT_PATIENT_INTAKE.fields.some(field=>field.id==='custom_contacto_emergencia'))
+  assert.ok(DEFAULT_PATIENT_INTAKE.fields.some(field=>field.id==='custom_ars'))
+  assert.doesNotThrow(()=>parsePatientIntakeTemplate({version:1,fields:Array.from({length:64},(_,i)=>({id:'custom_field_'+i,label:'Campo '+i,kind:'text',required:false}))},1))
 })
 
 test('document format does not masquerade as JCE identity confirmation',()=>{
