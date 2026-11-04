@@ -531,4 +531,31 @@ describe('chat tool activity grouping', () => {
       align: 'start',
     }))
   })
+})describe('HealthIA transcript cards are independent of model prose',()=>{
+  it('displays an actual activation receipt as an interactive clinical surface',()=>{
+    const node={
+      ...settledTool('healthia-activation-1'),
+      call:{name:'healthia_activate',argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({
+        active:true,alreadyActive:false,patients:[],
+      })}],
+    }
+    renderChat([user(1,'Activa HealthIA para una prueba'),node])
+    expect(screen.getByText('HealthIA · Pacientes')).toBeTruthy()
+    expect(screen.getByRole('region',{name:'Tarjeta clínica de HealthIA'})).toBeTruthy()
+    expect(screen.getByRole('button',{name:'Preparar registro'})).toBeTruthy()
+    // A collapsed technical disclosure does not conceal the native card.
+    expect(screen.getByRole('button',{name:'Tools'}).getAttribute('aria-expanded')).toBe('false')
+  })
+  it('does not manufacture a saved patient card from an unverified assistant claim',()=>{
+    renderChat([user(1,'Crear paciente'),{
+      ...settledTool('healthia-failed'),
+      call:{name:'health_patient_create',argsRaw:'{}'},
+      isError:true,
+      content:[{type:'text',text:JSON.stringify({
+        patient:{id:'patient_7cd697bd-2bcd-4f20-a739-51a71eb95f8b',displayName:'Falso'},
+      })}],
+    }])
+    expect(screen.queryByText('HealthIA · Perfil creado')).toBeNull()
+  })
 })
