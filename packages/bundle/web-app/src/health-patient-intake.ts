@@ -28,10 +28,23 @@ export type IdentityMatch = 'document' | 'name-and-birth' | 'contact-and-birth' 
 
 export const DEFAULT_PATIENT_INTAKE: PatientIntakeTemplate = Object.freeze({
   version: 1, revision: 0,
-  fields: Object.freeze([]),
+  fields: Object.freeze([
+    { id: 'custom_sexo_registrado', label: 'Sexo registrado al nacimiento', kind: 'text', required: false },
+    { id: 'custom_nacionalidad', label: 'Nacionalidad', kind: 'text', required: false },
+    { id: 'custom_direccion', label: 'Dirección y referencia de domicilio', kind: 'text', required: false },
+    { id: 'custom_municipio', label: 'Municipio / localidad', kind: 'text', required: false },
+    { id: 'custom_provincia', label: 'Provincia', kind: 'text', required: false },
+    { id: 'custom_ocupacion', label: 'Ocupación', kind: 'text', required: false },
+    { id: 'custom_estado_civil', label: 'Estado civil', kind: 'text', required: false },
+    { id: 'custom_ars', label: 'ARS / Seguro', kind: 'text', required: false },
+    { id: 'custom_numero_poliza', label: 'Número de póliza o afiliación', kind: 'text', required: false },
+    { id: 'custom_contacto_emergencia', label: 'Contacto de emergencia y parentesco', kind: 'text', required: false },
+    { id: 'custom_telefono_emergencia', label: 'Teléfono de emergencia', kind: 'tel', required: false },
+    { id: 'custom_datos_adicionales', label: 'Otros datos de admisión', kind: 'text', required: false },
+  ] as const),
 })
 const KINDS = new Set<PatientInputKind>(['text', 'number', 'date', 'email', 'tel', 'select'])
-const MAX_FIELDS = 12
+const MAX_FIELDS = 64
 const clean = (value: string): string =>
   value.trim().normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
 const nameKey = (value: unknown): string =>

@@ -164,6 +164,20 @@ export function registerHealthRoutes(ctx:Context):void {
       const valid=store.session(cookie(req),typeof req.headers['x-phoenix-csrf']==='string'?req.headers['x-phoenix-csrf']:undefined,method!=='GET')
       const actor:ClinicActor=valid.actor
       if(operation==='session'&&method==='GET'){reply(res,200,{ actor,csrf:valid.csrf });return}
+      // Persist only authorized per-user UI drafts in the encrypted clinical store.
+      if(operation==='clinical-draft'&&id!==undefined){
+        if(method==='GET'){reply(res,200,{draft:store.getClinicalDraft(actor,id)});return}
+        if(method==='PATCH'){
+          const draft=store.saveClinicalDraft(actor,id,await readBody(req))
+          reply(res,200,draft);return
+        }
+        if(method==='POST'){
+          const body=await readBody(req)
+          if(body.action!=='clear')throw new Error('Operación de borrador no autorizada')
+          store.clearClinicalDraft(actor,id)
+          reply(res,200,{cleared:true});return
+        }
+      }
       // First-party, local-only tool catalog: contains no patient data and no arbitrary code.
       if(operation==='clinical-tool-catalog'&&id===undefined&&method==='GET'){
         if(actor.role!=='clinician')throw new Error('Permiso clínico insuficiente')
