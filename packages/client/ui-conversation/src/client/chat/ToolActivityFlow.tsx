@@ -1166,6 +1166,8 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
             ? <TradingMarketChart symbols={[item.selection.symbol]} initialInterval={item.selection.interval} trades={[]} />
             : item.kind === 'sports'
             ? <SportsEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
+            : item.kind === 'healthia'
+            ? <HealthiaEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
             : item.kind === 'desktop'
             ? <DesktopLive sessionId={sessionId} active={item.key === latestDesktopKey} />
             : item.kind === 'browser-workspace'
