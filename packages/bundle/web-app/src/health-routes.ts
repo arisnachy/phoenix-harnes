@@ -8,6 +8,7 @@ import type {} from '@phoenix-ai/dsh-host-webserver'
 import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 import { HealthClinicStore, healthKinds, type ClinicActor } from './health-store.ts'
 import { renderHealthPage } from './health-ui.ts'
+import { HEALTH_CLINICAL_TOOLS, runHealthClinicalTool } from './health-clinical-tools.ts'
 
 type Kind = Parameters<HealthClinicStore['list']>[1]
 const jsonHeaders:Record<string,string> = {
@@ -163,6 +164,18 @@ export function registerHealthRoutes(ctx:Context):void {
       const valid=store.session(cookie(req),typeof req.headers['x-phoenix-csrf']==='string'?req.headers['x-phoenix-csrf']:undefined,method!=='GET')
       const actor:ClinicActor=valid.actor
       if(operation==='session'&&method==='GET'){reply(res,200,{ actor,csrf:valid.csrf });return}
+      // First-party, local-only tool catalog: contains no patient data and no arbitrary code.
+      if(operation==='clinical-tool-catalog'&&id===undefined&&method==='GET'){
+        if(actor.role!=='clinician')throw new Error('Permiso clínico insuficiente')
+        reply(res,200,{tools:HEALTH_CLINICAL_TOOLS});return
+      }
+      if(operation==='clinical-tool-run'&&id===undefined&&method==='POST'){
+        if(actor.role!=='clinician')throw new Error('Permiso clínico insuficiente')
+        const input=await readBody(req)
+        if(typeof input.toolId!=='string')throw new Error('Identificador de herramienta requerido')
+        // Calculations cannot write into the EHR, issue prescriptions, or access LLMs.
+        reply(res,200,{result:runHealthClinicalTool(input.toolId,input.values)});return
+      }
       if(operation==='patient-intake-template'&&id===undefined){
         if(method==='GET'){reply(res,200,{template:store.getPatientIntakeTemplate(actor)});return}
         if(method==='PATCH'){
