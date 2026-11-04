@@ -579,9 +579,38 @@ test('clinic intake fields persist by institution; identity checks prevent inadv
   assert.notEqual(distinct.id,p.id)
   assert.throws(()=>db.create(actor,'patients',{name:'Paciente nuevo',dateOfBirth:'1987-01-01',
     customFields:{custom_secret:'no permitido'}}),/no autorizado/)
-  assert.equal(db.getPatientIntakeTemplate({...actor,org:'Segunda clínica'}).fields.length,0)
+  assert.equal(db.getPatientIntakeTemplate({...actor,org:'Segunda clínica'}).fields.length,12)
   assert.throws(()=>db.findPatientCandidates({...actor,role:'billing'},{
     name:'Paciente ficticio uno',dateOfBirth:'1982-02-20'}),/Permiso/)
   assert(db.audits(actor).some(x=>x.action==='patient.identity.lookup'))
   assert(db.audits(actor).some(x=>x.action==='patient.intake.configure'))
+})
+
+
+test('encrypted clinical drafts survive restart, remain user-scoped, and never enter plaintext storage',t=>{
+  const {db,admin,root}=fixture(t)
+  const actor=admin.actor
+  db.createStaff(actor,{username:'doctor_drafts',password:'another-secure-password-2026',role:'clinician'})
+  const clinician=db.login('doctor_drafts','another-secure-password-2026').actor
+  assert.equal(db.getClinicalDraft(clinician,'patients'),null)
+  const saved=db.saveClinicalDraft(clinician,'patients',{values:{
+    name:'Nombre ficticio reservado para recuperación',dateOfBirth:'1982-02-20',
+    'patient-extra-custom_ars':'ARS de prueba',
+  },expanded:[]})
+  assert.equal(typeof saved.savedAt,'string')
+  assert.equal(db.getClinicalDraft(clinician,'patients').values.name,'Nombre ficticio reservado para recuperación')
+  assert.equal(db.getClinicalDraft(actor,'patients'),null)
+  assert.throws(()=>db.getClinicalDraft(clinician,'../patients'),/no permitida/)
+  assert.throws(()=>db.saveClinicalDraft(clinician,'patients',{values:{pass:'secreto'},expanded:[]}),/inválido/)
+  assert.throws(()=>db.saveClinicalDraft(clinician,'patients',{values:{name:'ok'},expanded:['<script>']}),/inválidas/)
+  const path=join(root,'clinic.sqlite')
+  assert(!readFileSync(path).includes(Buffer.from('Nombre ficticio reservado para recuperación')))
+  db.close()
+  const reopened=new HealthClinicStore(path)
+  t.after(()=>{try{reopened.close()}catch{}})
+  reopened.login('clinicaladmin',PASSWORD)
+  const restored=reopened.login('doctor_drafts','another-secure-password-2026').actor
+  assert.equal(reopened.getClinicalDraft(restored,'patients').values.name,'Nombre ficticio reservado para recuperación')
+  reopened.clearClinicalDraft(restored,'patients')
+  assert.equal(reopened.getClinicalDraft(restored,'patients'),null)
 })
