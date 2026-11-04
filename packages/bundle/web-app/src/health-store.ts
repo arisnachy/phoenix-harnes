@@ -6,7 +6,9 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { localInterviewPlan, type ClinicalInterviewGuide } from './health-interview.ts'
-import { createCipheriv, createDecipheriv, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
+import { DEFAULT_PATIENT_INTAKE, parsePatientIntakeTemplate, patientIntakeValues, patientIdentityMatch, validatePatientDocument } from './health-patient-intake.ts'
+import type { CandidateIdentity, PatientIntakeTemplate } from './health-patient-intake.ts'
 import { mkdirSync, chmodSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
@@ -497,6 +499,82 @@ export class HealthClinicStore {
       return { id,version,createdAt:row.created_at,updatedAt:now,...next }
     }catch(e){this.db.exec('ROLLBACK');throw e}
   }
+  /** Read only the institution's non-PHI intake configuration. */
+  getPatientIntakeTemplate(actor:Actor):PatientIntakeTemplate {
+    if(!['admin','clinician','reception'].includes(actor.role))fail('Acceso al formulario no autorizado')
+    const key='patient-intake:'+createHash('sha256').update(actor.org).digest('hex')
+    const saved=this.meta(key)
+    if(!saved)return DEFAULT_PATIENT_INTAKE
+    const decoded=JSON.parse(saved) as PatientIntakeTemplate
+    return parsePatientIntakeTemplate(decoded,decoded.revision)
+  }
+
+  /** Versioned operator-only updates; arbitrary code and provider lookups are forbidden. */
+  updatePatientIntakeTemplate(actor:Actor,input:unknown):PatientIntakeTemplate {
+    if(!['admin','clinician'].includes(actor.role))fail('Solo un profesional o administrador configura el formulario')
+    const body=obj(input)
+    const current=this.getPatientIntakeTemplate(actor)
+    if(body.expectedRevision!==current.revision)fail('Formulario modificado por otro usuario: recargar')
+    const next=parsePatientIntakeTemplate(body,current.revision+1)
+    const key='patient-intake:'+createHash('sha256').update(actor.org).digest('hex')
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.db.prepare('INSERT INTO health_meta(name,value) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value')
+        .run(key,JSON.stringify(next))
+      this.audit(actor,'patient.intake.configure','template')
+      this.db.exec('COMMIT')
+      return next
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+  }
+
+  /** No raw identifier is ever written to search logs or tool telemetry. */
+  private scanPatientIdentity(actor:Actor,input:CandidateIdentity):{
+    matches:Array<{id:string;name:string;dateOfBirth:string;reason:string}>;restrictedCount:number;
+    documentExists:boolean;probableExists:boolean
+  } {
+    const rows=this.db.prepare("SELECT * FROM health_records WHERE org=? AND kind='patients'")
+      .all(actor.org) as Row[]
+    const matches:Array<{id:string;name:string;dateOfBirth:string;reason:string}>=[]
+    let restrictedCount=0,documentExists=false,probableExists=false
+    for(const row of rows){
+      const other=this.open(row)
+      const reason=patientIdentityMatch(input,other)
+      if(!reason)continue
+      if(reason==='document')documentExists=true
+      else probableExists=true
+      if(!this.hasPatient(actor,row.id)){
+        restrictedCount++
+        continue
+      }
+      if(matches.length<8){
+        matches.push({id:row.id,name:String(other.name).slice(0,160),
+          dateOfBirth:String(other.dateOfBirth||''),reason})
+      }
+    }
+    return {matches,restrictedCount,documentExists,probableExists}
+  }
+
+  /** Local authenticated, organization-scoped duplicate inspection before registration. */
+  findPatientCandidates(actor:Actor,value:unknown):{
+    matches:Array<{id:string;name:string;dateOfBirth:string;reason:string}>;restrictedCount:number
+  } {
+    this.access(actor,'patients')
+    const x=obj(value)
+    const name=typeof x.name==='string'?x.name.slice(0,160):''
+    const dob=typeof x.dateOfBirth==='string'?x.dateOfBirth.slice(0,24):''
+    const doc=validatePatientDocument(x.documentType,x.documentNumber)
+    const phone=typeof x.phone==='string'?x.phone.slice(0,35):''
+    const email=typeof x.email==='string'?x.email.slice(0,254):''
+    if(!doc && !name && !phone && !email)fail('Indique al menos un criterio de búsqueda')
+    if((name&&!dob) || (!name && dob))fail('Para buscar por nombre, indique también fecha de nacimiento')
+    const matches=this.scanPatientIdentity(actor,{
+      name,dateOfBirth:dob,documentType:doc?.documentType,
+      documentNumber:doc?.documentNumber,phone,email,
+    })
+    this.audit(actor,'patient.identity.lookup','directory')
+    return {matches:matches.matches,restrictedCount:matches.restrictedCount}
+  }
+
   /**
    * Perform create within the isolated clinical workflow.
    * @param actor - Validated actor input for this clinical operation.
@@ -512,8 +590,25 @@ export class HealthClinicStore {
       if(!/^\d{4}-\d{2}-\d{2}$/u.test(dob)||!Number.isFinite(Date.parse(dob))||Date.parse(dob)>Date.now())fail('Fecha de nacimiento inválida')
       const email=typeof x.email==='string'?x.email.trim():''
       if(email&&!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/u.test(email))fail('Correo de paciente inválido')
-      const patient=this.insert(actor,kind,{ name:str(x.name,'Nombre',160),dateOfBirth:dob,
-        email:email.slice(0,254),phone:typeof x.phone==='string'?x.phone.trim().slice(0,35):'',
+      const name=str(x.name,'Nombre',160)
+      const doc=validatePatientDocument(x.documentType,x.documentNumber)
+      const phone=typeof x.phone==='string'?x.phone.trim().slice(0,35):''
+      const identity=this.scanPatientIdentity(actor,{
+        name,dateOfBirth:dob,documentType:doc?.documentType,documentNumber:doc?.documentNumber,
+        phone,email,
+      })
+      if(identity.documentExists)fail('Este documento ya corresponde a un paciente registrado: busque la ficha existente')
+      if(identity.probableExists && x.confirmDistinct!==true)
+        fail('Posible duplicado por nombre y nacimiento o contacto: busque la ficha existente antes de crear otra')
+      const override=identity.probableExists?str(x.distinctReason,'Motivo de identidad diferente',300):null
+      if(override!==null && override.length<12)fail('Explique por qué se trata de una persona diferente')
+      const template=this.getPatientIntakeTemplate(actor)
+      const customFields=patientIntakeValues(template,x.customFields)
+      const patient=this.insert(actor,kind,{ name,dateOfBirth:dob,
+        ...(doc===null?{}:doc),customFields,intakeTemplateRevision:template.revision,
+        ...(override===null?{}:{identityReview:{reason:override,reviewedBy:actor.username,
+          reviewedAt:new Date().toISOString()}}),
+        email:email.slice(0,254),phone,
         notes:typeof x.notes==='string'?x.notes.slice(0,4000):'',
         medicalHistory:{ pastMedical:'',pastSurgical:'',familyHistory:'',currentMedications:'',vaccinations:'',habits:'',problems:'' },
         medicalHistoryReview:null,emailConsent:false,

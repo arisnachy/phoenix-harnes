@@ -47,6 +47,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{border-bottom:1px
 "use strict";
 const root=document.getElementById("app"),account=document.getElementById("account"),flash=document.getElementById("flash");
 let actor=null,csrf="",tab="workspace",data={},current=null,selectedPatientId="",previewUrl=null;
+let patientForm={version:1,revision:0,fields:[]};
 const modules=[["workspace","Mi consulta"],["patients","Pacientes"],["encounters","Consultas"],["appointments","Agenda"],["orders","Laboratorio e imágenes"],["prescriptions","Recetas"],["inventory","Farmacia"],["invoices","Administración"],["followups","Seguimiento"],["staff","Personal"],["assignments","Equipo asistencial"],["backups","Respaldos"],["audit","Auditoría"]];
 const safe=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=id=>document.getElementById(id)?.value??"";
@@ -92,6 +93,7 @@ async function load(){
  if((actor.role==="clinician"||actor.role==="admin")&&!ids.includes("followups"))
   ids.push("followups");
  for(const id of new Set(ids)){try{data[id]=(await api(id)).items}catch{data[id]=[]}}
+ if(tab==="workspace"||tab==="patients")patientForm=(await api("patient-intake-template")).template;
  if(tab==="workspace"){
   if(!data.patients.some(x=>x.id===selectedPatientId))selectedPatientId=data.patients[0]?.id||"";
   const context=selectedPatientId?(await api("patient-context/"+selectedPatientId)).context:null;
@@ -143,12 +145,36 @@ function renderWorkspace(){
  const lookup=patients.length?'<label for="ws-patient">Paciente activo</label><select id="ws-patient">'+
   patients.map(x=>'<option value="'+safe(x.id)+'" '+(x.id===id?"selected":"")+'>'+safe(x.name)+' · '+safe(x.dateOfBirth||"Fecha desconocida")+'</option>').join("")+'</select>':
   '<p class="muted">No hay pacientes asignados. Puedes registrar al primero aquí.</p>';
+ const inputs=(patientForm.fields||[]).map(f=>{
+  const id="ws-extra-"+f.id;
+  return '<div>'+field(id,f.label,f.kind==="select"?"text":f.kind,f.required)+'</div>';
+ }).join("");
+ const editor='<details><summary class="ws-summary">Personalizar formulario · agregar o quitar campos</summary>'+
+  '<p class="muted">Campos del consultorio, no códigos ejecutables. No envía datos del paciente a Kira. Los registros anteriores no se borran.</p>'+
+  field("ws-new-label","Nuevo campo","text",false,"Ej.: ARS / Seguro")+
+  '<label for="ws-new-type">Tipo</label><select id="ws-new-type">'+
+  ["text","number","date","email","tel"].map(x=>'<option>'+x+'</option>').join("")+'</select>'+
+  '<label><input id="ws-new-required" type="checkbox" style="width:auto;display:inline"> Obligatorio</label>'+
+  button("workspaceAddField","Agregar campo","secondary")+
+  (patientForm.fields||[]).map(f=>'<div class="ws-item">'+safe(f.label)+
+    ' <button class="secondary" data-act="workspaceRemoveField" data-id="'+safe(f.id)+'">Quitar</button></div>').join("")+
+  '<p class="muted">En una siguiente integración podrás configurar estas reglas conversando con Kira; '+
+  'el guardado de datos personales permanece en el expediente protegido.</p></details>';
  const registration='<details class="card"><summary class="ws-summary">+ Paciente nuevo sin cuenta ni página web</summary>'+
   '<div class="ws-grid"><div>'+field("ws-name","Nombre completo")+'</div><div>'+field("ws-dob","Nacimiento","date")+'</div>'+
-  '<div>'+field("ws-phone","Teléfono (opcional)","tel",false)+'</div><div>'+field("ws-email","Correo (opcional)","email",false)+'</div></div>'+
+  '<div>'+field("ws-phone","Teléfono (opcional)","tel",false)+'</div><div>'+field("ws-email","Correo (opcional)","email",false)+'</div>'+
+  '<div><label for="ws-doc-type">Identificación</label><select id="ws-doc-type">'+
+  '<option value="cedula">Cédula</option><option value="passport">Pasaporte</option>'+
+  '<option value="other">Otro</option></select></div><div>'+
+  field("ws-document","Número de documento (opcional)","text",false)+'</div>'+inputs+'</div>'+
+  '<p class="muted">El número de cédula se valida solo por formato; no confirma identidad con la JCE.</p>'+
+  '<div id="ws-matches" aria-live="polite"></div>'+
+  button("workspaceCheckIdentity","Buscar posibles duplicados","secondary")+
+  '<label><input id="ws-distinct" type="checkbox" style="width:auto;display:inline"> '+
+  'Confirmo que se trata de una persona distinta aunque haya coincidencias</label>'+
+  field("ws-distinct-reason","Motivo comprobado de identidad distinta","text",false)+
   field("ws-complaint-new","Motivo de la consulta","text",true,"Consulta presencial")+
-  '<p class="muted">Verifica identidad y posibles duplicados antes del registro. No requiere contraseña ni correo.</p>'+
-  button("workspaceCreate","Registrar y abrir consulta")+'</details>';
+  button("workspaceCreate","Registrar y abrir consulta")+editor+'</details>';
  let panel="";
  if(patient){
   panel+=box("Expediente · "+safe(patient.name),
@@ -312,11 +338,60 @@ async function execute(action,id){
   await api("attachment-review/"+id,"PATCH",{version:item.version});
   notice("Revisión del archivo registrada.");return load();
  }
+ if(action==="workspaceAddField"){
+  const label=val("ws-new-label").trim();
+  if(!label||label.length>80||patientForm.fields.length>=12)throw Error("Etiqueta inválida o límite de campos alcanzado");
+  let slug=label.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase()
+    .replace(/[^a-z0-9_]+/g,"_").replace(/^_+|_+$/g,"").slice(0,22);
+  if(!/^[a-z]/.test(slug))slug="dato_"+slug.slice(0,15);
+  const prefix="custom_"+slug;let key=prefix,n=2;
+  while(patientForm.fields.some(f=>f.id===key)){key=prefix.slice(0,27)+"_"+n++;if(n>100)throw Error("Cambie la etiqueta")}
+  const fields=[...patientForm.fields,{id:key,label,kind:val("ws-new-type"),
+    required:document.getElementById("ws-new-required")?.checked===true}];
+  patientForm=(await api("patient-intake-template","PATCH",
+    {version:1,expectedRevision:patientForm.revision,fields})).template;
+  notice("Campo agregado a la plantilla.");return load();
+ }
+ if(action==="workspaceRemoveField"){
+  const fields=patientForm.fields.filter(f=>f.id!==id);
+  if(fields.length===patientForm.fields.length)throw Error("Campo inexistente");
+  if(!confirm("¿Retirar este campo de futuros registros? Los datos antiguos se conservan."))return;
+  patientForm=(await api("patient-intake-template","PATCH",
+    {version:1,expectedRevision:patientForm.revision,fields})).template;
+  notice("Campo retirado.");return load();
+ }
+ if(action==="workspaceChooseExisting"){
+  if(!data.patients.some(p=>p.id===id))throw Error("Paciente no asignado");
+  selectedPatientId=id;notice("Ficha existente seleccionada: no se creó un duplicado.");return load();
+ }
+ if(action==="workspaceCheckIdentity"){
+  const input={name:val("ws-name").trim(),dateOfBirth:val("ws-dob"),
+    documentType:val("ws-doc-type"),documentNumber:val("ws-document"),
+    phone:val("ws-phone"),email:val("ws-email")};
+  const result=(await api("patient-identity-match","POST",input)).result;
+  const view=document.getElementById("ws-matches");
+  if(view)view.innerHTML=result.matches.length||result.restrictedCount
+    ?'<p class="notice warning">Coincidencias posibles: revise antes de registrar.</p>'+
+      result.matches.map(p=>'<div class="ws-item">'+safe(p.name)+' · '+safe(p.dateOfBirth)+
+        ' · '+safe(p.reason)+' <button class="secondary" data-act="workspaceChooseExisting" data-id="'+safe(p.id)+'">Abrir ficha</button></div>').join("")+
+      (result.restrictedCount?'<p class="muted">Hay coincidencias restringidas. Consulte a recepción o administración.</p>':'')
+    :'<p class="notice">Sin coincidencias detectadas entre las fichas del consultorio.</p>';
+  return result;
+ }
  if(action==="workspaceCreate"){
   const name=val("ws-name").trim(),dateOfBirth=val("ws-dob"),complaint=val("ws-complaint-new").trim();
   if(!name||!dateOfBirth||!complaint)throw Error("Completa nombre, nacimiento y motivo");
-  if(!confirm("¿Confirmaste identidad y verificaste que no existe otra ficha?"))return;
-  const created=await api("patients","POST",{name,dateOfBirth,phone:val("ws-phone"),email:val("ws-email")});
+  const duplicates=await execute("workspaceCheckIdentity");
+  if(duplicates.matches.some(p=>p.reason==="document"))throw Error("Documento ya registrado: abra la ficha existente");
+  if(duplicates.restrictedCount)throw Error("Posible ficha de otro profesional: confirme con administración");
+  const distinct=document.getElementById("ws-distinct")?.checked===true;
+  if(duplicates.matches.length&&!distinct)throw Error("Seleccione el paciente existente o confirme que es otra persona");
+  if(!confirm("¿Comprobaste identidad y exactitud de los datos?"))return;
+  const customFields=Object.fromEntries(patientForm.fields.map(f=>[f.id,val("ws-extra-"+f.id)]));
+  const created=await api("patients","POST",{name,dateOfBirth,phone:val("ws-phone"),
+    email:val("ws-email"),documentType:val("ws-doc-type"),
+    documentNumber:val("ws-document"),customFields,
+    confirmDistinct:distinct,distinctReason:val("ws-distinct-reason")});
   selectedPatientId=created.record.id;
   try{
    await api("encounters","POST",{patientId:selectedPatientId,specialty:"Medicina general",complaint,mode:"mixed"});

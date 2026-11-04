@@ -60,3 +60,17 @@ test('unified clinician context, reviewed attachments and manually verified resu
  assert.ok(script)
  assert.doesNotThrow(()=>new Script(script,{filename:'clinical-continuity-inline.js'}))
 })
+test('customizable clinical registration includes private duplicate matching and documented identity limits',()=>{
+  const html=renderHealthPage('intake-nonce')
+  assert.match(html,/patient-intake-template/)
+  assert.match(html,/patient-identity-match/)
+  assert.match(html,/workspaceAddField/)
+  assert.match(html,/workspaceRemoveField/)
+  assert.match(html,/workspaceCheckIdentity/)
+  assert.match(html,/workspaceChooseExisting/)
+  assert.match(html,/No envía datos del paciente a Kira/)
+  assert.match(html,/no confirma identidad con la JCE/)
+  const script=/<script nonce="intake-nonce">([\s\S]+?)<\/script>/u.exec(html)?.[1]
+  assert.equal(typeof script,'string')
+  assert.doesNotThrow(()=>new Script(script,{filename:'health-intake-ui.js'}))
+})

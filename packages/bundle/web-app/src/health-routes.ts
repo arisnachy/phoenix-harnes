@@ -163,6 +163,15 @@ export function registerHealthRoutes(ctx:Context):void {
       const valid=store.session(cookie(req),typeof req.headers['x-phoenix-csrf']==='string'?req.headers['x-phoenix-csrf']:undefined,method!=='GET')
       const actor:ClinicActor=valid.actor
       if(operation==='session'&&method==='GET'){reply(res,200,{ actor,csrf:valid.csrf });return}
+      if(operation==='patient-intake-template'&&id===undefined){
+        if(method==='GET'){reply(res,200,{template:store.getPatientIntakeTemplate(actor)});return}
+        if(method==='PATCH'){
+          reply(res,200,{template:store.updatePatientIntakeTemplate(actor,await readBody(req))});return
+        }
+      }
+      if(operation==='patient-identity-match'&&id===undefined&&method==='POST'){
+        reply(res,200,{result:store.findPatientCandidates(actor,await readBody(req))});return
+      }
       if(operation==='staff'){
         if(method==='GET'){reply(res,200,{ items:store.staff(actor) });return}
         if(method==='POST'){store.createStaff(actor,await readBody(req));reply(res,201,{ ok:true });return}
