@@ -149,8 +149,10 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
       favorableEvidence:coreEvidence,
       contradictoryEvidence:opposingFacts,missingEvidence:missing,researchQuestions}
   })
+  // The 40-row cap applies only to the detailed review display. Never omit
+  // valid current quotes from bookmaker and cross-book research comparisons.
   const comparisonGroups=new Map<string,MlbMarketComparison>()
-  for(const q of currentOffers.slice(0,40)){
+  for(const q of currentOffers){
     const key=JSON.stringify([q.bookmaker,q.market])
     const group=comparisonGroups.get(key)??{
       bookmaker:q.bookmaker,market:q.market,offers:[],
@@ -164,7 +166,7 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
   // Cross-book prices are comparable only for the exact same market,
   // selection and line. Never collapse Over/Under or different run lines.
   const crossBookGroups=new Map<string,MlbCrossBookComparison>()
-  for(const q of currentOffers.slice(0,40)){
+  for(const q of currentOffers){
     const line=q.point??null
     const key=JSON.stringify([q.market.trim().toLowerCase(),
       q.selection.trim().toLowerCase(),line])
