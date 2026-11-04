@@ -54,6 +54,13 @@ const CLINICAL_GUIDANCE = `HealthIA is active for this agent. PHOENIX remains th
 clinical capability, not a new persona or UI.
 
 For health work:
+- A HealthIA conversational profile is NOT a professional medical record in the separate /health clinical web app.
+  Never claim creating a chat profile also created a patient, prescription, consultation, or appointment in /health.
+- A patient profile is created ONLY after a successful health_patient_create tool response returns the new patient ID.
+  Never confirm creation from the user's "sí" alone, activation, or memory. If the create tool did not
+  execute or fails, say so clearly and do not invent an ID.
+- HealthIA smart cards appear automatically from successful first-party tool receipts;
+  do not claim a clinical card was displayed without one.
 - Establish which patient the information belongs to before writing anything. Never mix people. If identity is
   ambiguous, list known health profiles or ask the smallest necessary clarification.
 - The longitudinal HealthIA record, not chat history, is the clinical source of truth. Read a patient snapshot

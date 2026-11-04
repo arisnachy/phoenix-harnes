@@ -75,3 +75,27 @@ capability set has changed. Non-health agents preserve their prior prefix.
   the same patient record.
 - **No prescription authority** — tools record and retrieve evidence; they do
   not grant autonomous medication-change or definitive diagnostic authority.
+
+## Native HealthIA chat cards
+
+First-party tool receipts from `healthia_activate`, `health_patient_list`,
+`health_patient_create` and `health_patient_snapshot` can be presented as
+schema-validated `ui_canvas` cards by the PHOENIX conversation renderer.
+The cards do **not** depend on Kira authoring JSON in a text response:
+
+- activation/list: bounded patient selection and a field to draft a new demo
+  patient request through the existing chat composer;
+- successful create: a confirmed profile with follow-up actions;
+- snapshot: profile identity and counts without dumping sensitive clinical
+  observations in the card.
+
+No card claims a patient was saved without a successful first-party creation
+receipt with a validated patient identifier. A failed or foreign tool result
+cannot publish a HealthIA card. Buttons only draft follow-up instructions in
+the chat composer and do not bypass model tools, server validation or consent.
+
+**Important:** Conversational HealthIA uses its owner-local health-data
+provider. This is separate from the authenticated clinician workstation
+`/health`; a chat profile is **not** a signed EHR patient or consultation.
+We must not synchronize identities by labels or imply that the two stores
+are already unified. Test only with fictional profiles.
