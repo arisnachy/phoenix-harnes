@@ -19,9 +19,9 @@ const PRIVATE_KIND=/(?:\bcv\b|curricul|personnel.?file|expediente.?personal|pati
 const PRIVATE_LINE=/(?:\b(?:c[eé]dula|dni|ssn|pasaporte|n[uú]mero.?de.?historia.?cl[ií]nica|password|contrase[nñ]a|api.?key|access.?token)\s*[:=#]\s*\S+|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+?\d[\d\s\-().]{8,}\d))/iu
 const HEADINGS=/^(?:#{1,5}\s*|[-*]\s*)?(Área|Departamento|Unidad|Servicio|Software|Sistema|Aplicación|Programa|Comité|Procedimiento|Proceso|Informe|Reporte|Sede|Edificio|Planta|Camas|Consultorios|Estaciones de trabajo|Computadoras|Ordenadores|Servidores)\s*[:：\-]\s*(.+?)\s*$/iu
 const MAP={
-  área:'unit',departamento:'unit',unidad:'unit',servicio:'unit',
-  software:'system',sistema:'system',aplicación:'system',programa:'system',
-  comité:'committee',procedimiento:'procedure',proceso:'procedure',
+  area:'unit',departamento:'unit',unidad:'unit',servicio:'unit',
+  software:'system',sistema:'system',aplicacion:'system',programa:'system',
+  comite:'committee',procedimiento:'procedure',proceso:'procedure',
   informe:'report',reporte:'report',sede:'site',edificio:'space',planta:'space',
   camas:'capacity',consultorios:'capacity','estaciones de trabajo':'capacity',
   computadoras:'capacity',ordenadores:'capacity',servidores:'capacity'
@@ -132,6 +132,7 @@ function propose(text){
     const match=HEADINGS.exec(line)
     if(!match)continue
     const category=MAP[normalize(match[1])]
+    if(!category)continue
     const value=match[2].trim().replace(/\s+/gu,' ')
     if(!value||value.length>120||/[<>{}\u0000-\u001f]/u.test(value)||PRIVATE_LINE.test(value))
       continue
