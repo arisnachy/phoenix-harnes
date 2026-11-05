@@ -9,6 +9,7 @@ import { dirname } from 'node:path'
 import { createHash } from 'node:crypto'
 import { GenesisInstitutionalRegistry } from './phoenix-genesis-institutional-registry.mjs'
 import { planGenesisFabric } from './phoenix-genesis-fabric.mjs'
+import { suggestGenesisStructure } from './phoenix-genesis-sector-packs.mjs'
 
 const ID=/^[a-z][a-z0-9._-]{0,63}$/u
 const CATEGORY=new Set(['institution','facility','staffing','operations','finance','procurement','compliance',
@@ -288,6 +289,13 @@ export class GenesisWorkbench {
       status:'proposal-only',credentials:'never-in-plan',
       installation:'not-executed',liveConnections:'not-verified'
     }
+  }
+  recommendations(org,siteId=null){
+    const id=ident(org,'Organización'),profile=this._org(id)
+    const site=siteId??profile.workstations[0]?.siteId
+    if(!profile.workstations.some(x=>x.siteId===site))throw Error('Sede inexistente')
+    return suggestGenesisStructure(profile.organization.industry,site,
+      this.q.units.all(id).map(x=>({unitId:x.unit_id})))
   }
   close(){this.db.close();this.registry.close()}
 }
