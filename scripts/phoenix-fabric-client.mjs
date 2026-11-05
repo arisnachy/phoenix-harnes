@@ -81,8 +81,8 @@ export async function runFabricCommand(argv){
     const [nodeId,organizationId,siteId,caps,senders]=values
     return fabricRequest('/v1/admin/nodes',{admin:true,method:'POST',
       data:{nodeId,organizationId,siteId,
-        capabilities:caps?caps.split(','):[],
-        receivesFrom:senders?senders.split(','):[]}})
+        capabilities:caps&&caps!=='-'?caps.split(','):[],
+        receivesFrom:senders&&senders!=='-'?senders.split(','):[]}})
   }
   if(action==='revoke'){
     args(1,values)
