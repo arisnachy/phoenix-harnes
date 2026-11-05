@@ -51,3 +51,38 @@ describe('free official API and challenge cooldown', () => {
     expect(fetcher).toHaveBeenCalledTimes(3)
   })
 })
+
+describe('free-search defensive recovery from real anti-bot responses', () => {
+  it('drops HTTP 200 challenge pages and falls back to an alternative source', async () => {
+    const html = '<html><title>Just a moment...</title><div class="cf-chl-widget">Checking browser</div></html>'
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(html, { status: 200 }))
+      .mockResolvedValueOnce(new Response(duckHtml, { status: 200 }))
+    const provider = new FreeSearchProvider({ fetcher, engines: ['bing', 'duckduckgo'] })
+    const result = await provider.search({ query: 'phoenix' })
+    expect(result.sources).toHaveLength(1)
+    expect(result.sources[0]?.url).toBe('https://example.com/b')
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects false positive movie It results when searching Artemis II', async () => {
+    const movie = '<li class="b_algo"><h2><a href="https://example.com/it-film">It 2017 film</a></h2><p>Trailer</p></li>'
+    const nasa = '<a class="result__a" href="https://www.nasa.gov/artemis-ii/">Artemis II NASA launch</a>'
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(movie, { status: 200 }))
+      .mockResolvedValueOnce(new Response(nasa, { status: 200 }))
+    const provider = new FreeSearchProvider({ fetcher, engines: ['bing', 'duckduckgo'] })
+    const result = await provider.search({ query: 'Artemis II NASA 2026 official launch date' })
+    expect(result.sources).toHaveLength(1)
+    expect(result.sources[0]?.url).toBe('https://www.nasa.gov/artemis-ii/')
+  })
+
+  it('decodes numeric HTML entities in snippets and titles without fabricating data', async () => {
+    const html = '<li class="b_algo"><h2><a href="https://example.com/dengue">Epidemiolog&#237;a</a></h2><p>Informaci&#243;n sobre dengue</p></li>'
+    const fetcher = vi.fn(async () => new Response(html, { status: 200 }))
+    const provider = new FreeSearchProvider({ fetcher, engines: ['bing'] })
+    const result = await provider.search({ query: 'dengue epidemiologia 2026' })
+    expect(result.sources[0]?.title).toBe('Epidemiología')
+    expect(result.sources[0]?.snippet).toBe('Información sobre dengue')
+  })
+})

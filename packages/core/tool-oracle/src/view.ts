@@ -30,6 +30,10 @@ export function oracleVisual(result:OracleResult|OracleResearch,question?:string
     if(result.sources.length){
       children.push({type:'table',columns:['Fuente','Referencia'],rows:result.sources.slice(0,8).map(s=>[clean(s.title,140),clean(s.url,300)])})
     }
+    if(result.offTopicDropped > 0 || result.failedQueries.length > 0)children.push({
+      type:'alert',status:'warning',
+      message:clean(`Descartadas por irrelevancia o bloqueo: ${result.offTopicDropped}. Consultas fallidas: ${result.failedQueries.length}.`,300),
+    })
     if(result.candidateDatasets.length>0)children.push(
       metric('Series CSV descubiertas',String(result.candidateDatasets.length)),
       {type:'button',label:'Investigar datos numéricos',action:'draft',
@@ -37,7 +41,7 @@ export function oracleVisual(result:OracleResult|OracleResearch,question?:string
     )
     children.push({type:'group',layout:'grid',children:[
       metric('Área científica',clean(result.plan.domain,80)),
-      metric('Método disponible',clean(result.plan.route,80)),
+      metric('Fase actual',clean(result.plan.route,80)),
     ]})
     children.push({type:'tabs',tabs:[
       {label:'Evidencia necesaria',children:result.plan.evidenceNeeded.slice(0,8).map(t=>({type:'text',text:clean(t,480)}))},
