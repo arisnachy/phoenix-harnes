@@ -75,6 +75,8 @@ export function createGenesisConsole({dbPath,adminToken,port=0,host='127.0.0.1'}
       const organizationId=target.searchParams.get('organizationId')
       if(path==='/v1/dashboard'&&req.method==='GET')
         return send(res,200,workbench.dashboard(organizationId))
+      if(path==='/v1/recommendations'&&req.method==='GET')
+        return send(res,200,workbench.recommendations(organizationId,target.searchParams.get('siteId')))
       if(path==='/v1/deployment'&&req.method==='GET')
         return send(res,200,workbench.deployment(organizationId))
       if(path==='/v1/poa'&&req.method==='GET')
