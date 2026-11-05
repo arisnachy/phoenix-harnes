@@ -119,7 +119,6 @@ test('POA conserva indicadores con fuente, metas y ausencias sin inventar',()=>{
     assert.equal(poa.entries[1].actual,null)
     assert.equal(poa.entries[1].approval,'pending-human-approval')
     assert.equal(store.dashboard(org).audit.length>2,true)
-    store.close()
     const persisted=new GenesisWorkbench(path)
     try{
       assert.equal(persisted.poa({organizationId:org,period:'2026-11'}).entries[0].actual,12)
