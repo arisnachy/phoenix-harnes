@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { appendFile, mkdir, readFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { OracleResult } from './engine.ts'
+import { calibrationReport, type OracleCalibration } from './scientific-intelligence.ts'
 type Prediction = {kind:'prediction';id:string;createdAt:string;result:OracleResult}
 type Outcome = {kind:'outcome';id:string;recordedAt:string;observedAt:string;observedValue:number;source:string;absoluteError:number;brierError?:number;verification:'unverified_report'}
 async function records(path:string):Promise<(Prediction|Outcome)[]> {
@@ -45,4 +46,27 @@ export async function oracleSummary(path:string):Promise<{total:number;settled:n
   return {total:pred.length,settled:outcomes.length,binarySettled:binary.length,
     meanAbsoluteError:outcomes.length?outcomes.reduce((s,x)=>s+x.absoluteError,0)/outcomes.length:null,
     meanBrierScore:binary.length?binary.reduce((s,x)=>s+x.brierError!,0)/binary.length:null,verifiedByHost:0}
+}
+
+
+/** Evaluate only forecasts frozen before their target date; results remain user-reported until independently authenticated. */
+export async function oracleCalibrationLedger(path:string):Promise<OracleCalibration & {retrospectiveExcluded:number}>{
+  const all=await records(path)
+  const predictions=new Map(all.filter((r):r is Prediction=>r.kind==='prediction').map(r=>[r.id,r]))
+  const scores:{predicted:number;observed:boolean}[]=[]
+  let retrospectiveExcluded=0
+  for(const row of all){
+    if(row.kind!=='outcome'||row.brierError===undefined)continue
+    const prediction=predictions.get(row.id)
+    const p=prediction?.result.probabilityPercent
+    if(!prediction||p===undefined||!Number.isFinite(p)||p<0||p>100)continue
+    const target=prediction.result.targetAt
+    if(!target||Date.parse(prediction.createdAt)>=Date.parse(target)){
+      retrospectiveExcluded++
+      continue
+    }
+    if(Date.parse(row.observedAt)<Date.parse(target))continue
+    scores.push({predicted:p/100,observed:row.observedValue===1})
+  }
+  return {...calibrationReport(scores),retrospectiveExcluded}
 }
