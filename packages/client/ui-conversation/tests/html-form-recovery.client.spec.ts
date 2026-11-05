@@ -62,6 +62,24 @@ describe('HTML smart form recovery', () => {
     expect(recoverHtmlForm(html,'IMC').kind).toBe('html')
   })
 
+  it('recovers blocked-script BMI without overriding the sandbox permission', () => {
+    const html = legacyBmi + '<script>function calculate(){}</script>'
+    const recovered = recoverHtmlForm(html, 'IMC', false)
+    expect(recovered.kind).toBe('native')
+    if (recovered.kind !== 'native') return
+    expect(calculateSmartForm(recovered.spec, { peso:70, talla:168 }).outputs[0]?.value)
+      .toBeCloseTo(24.801587,4)
+    const other = '<h1>Calculadora</h1><form><input type="number">'
+      + '<button>Calcular</button></form><script>function calculate(){}</script>'
+    expect(recoverHtmlForm(other,'Calculadora',false).kind).toBe('inert')
+  })
+
+  it('restores BMI calculations from numeric text inputs too', () => {
+    const html = legacyBmi.replaceAll('type="number"', 'type="text" inputmode="decimal"')
+    const recovered = recoverHtmlForm(html,'IMC')
+    expect(recovered.kind).toBe('native')
+  })
+
   it('rejects malformed or malicious formula metadata rather than executing it', () => {
     const html = '<form><input type="number"><button>Calcular</button></form>'
       + '<script type="application/vnd.phoenix.smart-form+json">'
