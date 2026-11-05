@@ -26,7 +26,7 @@ describe('ORÁCULO primera parte UI segura',()=>{
   })
   it('descarta tarjetas malformadas',()=>{
     const broken=tool('oracle_scientific_forecast')
-    broken.content[0].text=JSON.stringify({uiBlock:{component:'ui_canvas',version:1,props:{title:'x',children:[{type:'html',html:'<script>alert(1)</script>'}]}}})
+    broken.content=[{type:'text',text:JSON.stringify({uiBlock:{component:'ui_canvas',version:1,props:{title:'x',children:[{type:'html',html:'<script>alert(1)</script>'}]}}})}]
     expect(oracleCardsFromToolResult(broken)).toHaveLength(0)
   })
 })
