@@ -27,6 +27,7 @@ export class FreeSearchProvider implements WebSearchProvider {
   private readonly timeoutMs: number
   private readonly fetcher: FreeSearchFetcher
   private readonly engineCooldown = new Map<FreeSearchEngine, number>()
+  private readonly queryCache = new Map<string, { expires: number; result: WebSearchResult }>()
 
   constructor(options: FreeSearchProviderOptions = {}) {
     this.engines = options.engines ?? DEFAULT_ENGINES
@@ -41,6 +42,9 @@ export class FreeSearchProvider implements WebSearchProvider {
   async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
     if (!this.available()) throw new WebError('no free search engine is configured', 'WEB_PROVIDER_UNAVAILABLE')
     if (signal?.aborted === true) throw signal.reason ?? new WebError('web search was aborted', 'WEB_SEARCH_ABORTED')
+    const cacheKey = JSON.stringify([request.query, request.maxResults])
+    const cached = this.queryCache.get(cacheKey)
+    if (cached !== undefined && cached.expires > Date.now()) return cached.result
 
     for (const engine of this.engines) {
       if ((this.engineCooldown.get(engine) ?? 0) > Date.now()) continue
@@ -50,13 +54,22 @@ export class FreeSearchProvider implements WebSearchProvider {
         continue
       }
       if (!response.ok) continue
-      const sources = engine === 'wikipedia' ? parseWikipedia(await response.json())
-        : engine === 'bing' ? parseBing(await response.text()) : parseDuckDuckGo(await response.text())
+      let sources: WebSearchSource[]
+      try {
+        sources = engine === 'wikipedia' ? parseWikipedia(await response.json())
+          : engine === 'bing' ? parseBing(await response.text()) : parseDuckDuckGo(await response.text())
+      } catch {
+        // API changes or malformed upstream payloads are recoverable via the next free source.
+        continue
+      }
       if (sources.length > 0) {
-        return {
+        const result = {
           sources: capSources(sources, request.maxResults),
           truncated: request.maxResults !== undefined && sources.length > request.maxResults,
         }
+        this.queryCache.set(cacheKey, { expires: Date.now() + 30_000, result })
+        if (this.queryCache.size > 128) this.queryCache.delete(this.queryCache.keys().next().value ?? cacheKey)
+        return result
       }
     }
     throw new WebError('no free search engine returned results', 'WEB_PROVIDER_TRANSIENT')

@@ -116,6 +116,13 @@ export class HttpFetchProvider implements WebFetchProvider {
       const response = await this.requestOnce(currentUrl, signal)
       if (response.status === 429 || response.status === 403 || response.status === 503) {
         this.noteBlocked(currentUrl.origin, response)
+        await response.body?.cancel()
+        return {
+          url: currentUrl.toString(),
+          statusCode: response.status,
+          body: { kind: 'text', content: `PHOENIX: HTTP ${response.status}; el sitio restringió el acceso. No repetir CAPTCHA; consultar otra fuente autorizada o solicitar acceso.` },
+          truncated: false,
+        }
       }
 
       if (isRedirectStatus(response.status)) {

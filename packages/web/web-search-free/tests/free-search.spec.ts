@@ -48,6 +48,6 @@ describe('free official API and challenge cooldown', () => {
     expect(result.sources[0]?.snippet).toBe('Estudio de salud')
     expect(fetcher).toHaveBeenCalledTimes(3)
     await provider.search({ query: 'salud' })
-    expect(fetcher).toHaveBeenCalledTimes(4)
+    expect(fetcher).toHaveBeenCalledTimes(3)
   })
 })
