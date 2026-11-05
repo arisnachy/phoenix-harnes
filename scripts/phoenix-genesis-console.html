@@ -28,6 +28,7 @@
 <button data-tab="models">Modelos IA</button><button data-tab="fabric">Red PHOENIX</button>
 <button data-tab="planning">Planificación</button>
 <button data-tab="evidence">Evidencias</button>
+<button data-tab="documents">Documentos 360°</button>
 <button data-tab="deployment">Despliegue</button>
 </nav>
 <div>
@@ -243,6 +244,41 @@
 </article>
 <article class="card"><h2>Documentos registrados</h2><ul id="evidence-list"></ul></article></section>
 
+<section data-panel="documents" class="panel" hidden>
+<article class="card"><h2>Genesis · Lectura de documentos institucionales</h2>
+<p>Selecciona un documento sin datos personales, registrado y validado previamente en Evidencias. Genesis identifica únicamente declaraciones explícitas: áreas, sistemas, comités, procedimientos, informes, sedes y capacidades.</p>
+<div class="grid">
+<div><label for="doc-id">Identificador documental</label><input id="doc-id" required placeholder="manual_servicios_2026"></div>
+<div><label for="doc-evidence">ID de evidencia validada</label><input id="doc-evidence" required placeholder="ev_..."></div>
+<div><label for="doc-path">Ruta absoluta del documento autorizado</label><input id="doc-path" required placeholder="C:\Documentos\organigrama.docx"></div>
+<div><label for="doc-kind">Clase de documento</label><select id="doc-kind">
+<option value="org_chart">Organigrama</option>
+<option value="manual">Manual / procedimiento</option>
+<option value="facilities">Planos y espacios (texto)</option>
+<option value="technology">Inventario tecnológico</option>
+<option value="reports">Informes y reportes</option>
+<option value="finance">Documento financiero agregado</option>
+<option value="governance">Actas y gobierno institucional</option>
+<option value="other">Otro documento institucional</option>
+</select></div>
+</div>
+<div class="row"><button id="doc-preview" type="button" class="secondary">Analizar sin guardar</button>
+<button id="doc-index" type="button">Guardar propuestas para revisión</button></div>
+<label><input id="doc-approve" type="checkbox">Confirmo autorización y que el documento no contiene pacientes, CV, nóminas ni secretos</label>
+<pre id="doc-results">No se ha analizado ningún documento.</pre>
+<p class="hint">DOCX y TXT/MD se leen localmente. PDF requiere pdftotext; los planos escaneados, CAD/BIM y el OCR especializado necesitan un extractor aparte. Ningún documento se envía a un proveedor de IA.</p>
+</article>
+<article class="card"><h2>Revisión de hallazgos</h2>
+<p>Para registrar una unidad o software, indica un ID, su sede y la función si corresponde. Los demás hallazgos pueden aprobarse solo como referencia, nunca como informe oficial.</p>
+<div class="grid">
+<div><label for="doc-find-id">Hallazgo</label><select id="doc-find-id"></select></div>
+<div><label for="doc-decision">Decisión</label><select id="doc-decision"><option value="accept">Aceptar</option><option value="reject">Descartar</option></select></div>
+<div><label for="doc-record-id">ID nuevo de unidad o software</label><input id="doc-record-id" placeholder="farmacia"></div>
+<div><label for="doc-site-id">ID sede de la unidad</label><input id="doc-site-id" placeholder="principal"></div>
+<div><label for="doc-role">Función de unidad</label><input id="doc-role" value="general"></div>
+</div><button id="doc-decide" type="button">Registrar decisión autorizada</button>
+<pre id="doc-decision-result">Ningún hallazgo aprobado.</pre>
+</article></section>
 <section data-panel="deployment" class="panel" hidden><article class="card"><h2>Arquitectura propuesta</h2>
 <p>Separa estaciones, instancias lógicas, sedes y conectividad. No instala agentes ni concede permisos automáticamente.</p>
 <button id="get-deployment">Calcular propuesta</button>
