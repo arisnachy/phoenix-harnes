@@ -32,10 +32,10 @@ describe('universal artifact surface', () => {
       id:'html-bmi',title:'Calculadora de IMC',mime:'text/html',data:legacyHtml,
     })} onStop={() => {}} />)
     expect(screen.getByText('Resultados calculados')).toBeTruthy()
-    expect(screen.getByText(/24\\.8 kg\\/m²/)).toBeTruthy()
+    expect(screen.getByText(/24[.]8 kg[/]m²/)).toBeTruthy()
     fireEvent.change(screen.getByLabelText(/Peso/), { target: { value:'72' } })
     fireEvent.change(screen.getByLabelText(/Estatura/), { target: { value:'180' } })
-    expect(screen.getByText(/22\\.2 kg\\/m²/)).toBeTruthy()
+    expect(screen.getByText(/22[.]2 kg[/]m²/)).toBeTruthy()
     expect(screen.queryByRole('button', { name:'Calcular IMC' })).toBeNull()
   })
 
