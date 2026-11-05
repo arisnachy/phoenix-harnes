@@ -187,7 +187,10 @@ document.getElementById("login").addEventListener("click",async()=>{
   }catch(error){secret="";message(error.message,true);}
 });
 document.querySelectorAll(".nav button").forEach(b=>
-  b.addEventListener("click",()=>show(b.dataset.tab)));
+  b.addEventListener("click",()=>{
+    show(b.dataset.tab);
+    if(b.dataset.tab==="catalog")void loadCatalogSummary().catch(e=>message(e.message,true));
+  }));
 document.getElementById("organization").addEventListener("change",async e=>{
   current=e.target.value;
   if(current)await refresh();
@@ -217,6 +220,55 @@ document.getElementById("form-enroll").addEventListener("submit",async event=>{
     message("Nodo registrado en el broker. El token se muestra una sola vez; guárdalo de forma segura.");
   }catch(error){message(error.message,true);}
 });
+
+async function loadCatalogSummary(){
+  const pick=document.getElementById("catalog-category");
+  const note=document.getElementById("catalog-note");
+  if(!current){note.textContent="Selecciona una organización.";return}
+  const result=await api("/v1/catalog/summary?organizationId="+encodeURIComponent(current));
+  pick.replaceChildren();
+  if(!result.available){
+    note.textContent=result.note;
+    document.getElementById("catalog-results").replaceChildren();
+    return;
+  }
+  for(const c of result.catalogs){
+    const option=el("option","",c.label+" ("+c.count+")");
+    option.value=c.id;pick.append(option);
+  }
+  note.textContent="Referencia hospitalaria: "+result.catalogs.map(c=>c.count).reduce((a,b)=>a+b,0)+
+    " plantillas. Deben verificarse localmente.";
+  await loadCatalog();
+}
+async function loadCatalog(){
+  if(!current)return;
+  const pick=document.getElementById("catalog-category");
+  if(!pick.value)return;
+  const qs=new URLSearchParams({organizationId:current,
+    category:pick.value,query:val("catalog-search"),limit:"40",offset:"0"});
+  const result=await api("/v1/catalog?"+qs);
+  const box=document.getElementById("catalog-results");
+  box.replaceChildren();
+  if(!result.available){
+    document.getElementById("catalog-note").textContent=result.note;
+    return;
+  }
+  document.getElementById("catalog-note").textContent=
+    result.label+": "+result.total+" coincidencias (máximo 40 visibles). Datos de referencia sin verificar.";
+  const table=el("table");
+  const thead=el("thead"),header=el("tr");
+  for(const label of result.fields)header.append(el("th","",label));
+  thead.append(header);table.append(thead);
+  const tbody=el("tbody");
+  for(const row of result.rows){
+    const tr=el("tr");
+    for(const item of row)tr.append(el("td","",item));
+    tbody.append(tr);
+  }
+  table.append(tbody);box.append(table);
+}
+
+document.getElementById('get-catalog').addEventListener('click',()=>{void loadCatalog().catch(e=>message(e.message,true));});
 document.getElementById("get-poa").addEventListener("click",async()=>{
   try{
     const query=new URLSearchParams({organizationId:current,period:val("poa-period")});
