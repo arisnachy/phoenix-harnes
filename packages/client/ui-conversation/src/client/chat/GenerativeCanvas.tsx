@@ -30,7 +30,7 @@ type CanvasNode =
   | { type: 'timeline'; title?: string; items: Array<{ date: string; title: string; description?: string }> }
   | { type: 'table'; columns: string[]; rows: string[][] }
   | { type: 'chart'; title?: string; points: Array<{ label: string; value: number }> }
-  | { type: 'forecast_chart'; title: string; unit: string; points: Array<{ label: string; observed?: number; forecast?: number; lower?: number; upper?: number }> }
+  | { type: 'forecast_chart'; title: string; unit: string; axis?: 'date' | 'category'; points: Array<{ label: string; observed?: number; forecast?: number; lower?: number; upper?: number }> }
   | { type: 'input'; id: string; label: string; placeholder?: string; value?: string }
   | { type: 'select'; id: string; label: string; options: Array<{ label: string; value: string }>; value?: string }
   | { type: 'toggle'; id: string; label: string; value?: boolean }
@@ -129,7 +129,8 @@ function validateNode(value: unknown, depth: number, count: { n: number }, ids: 
         && value.points.every(point => isObject(point) && keys(point, ['label','value'])
           && text(point.label) && finite(point.value) && point.value >= 0 && point.value <= 1e12)
     case 'forecast_chart':
-      return keys(value, ['type','title','unit','points']) && text(value.title, 180) && text(value.unit, 60)
+      return keys(value, ['type','title','unit','axis','points']) && text(value.title, 180) && text(value.unit, 60)
+        && (value.axis === undefined || value.axis === 'date' || value.axis === 'category')
         && Array.isArray(value.points) && value.points.length >= 2 && value.points.length <= 80
         && value.points.every(p => isObject(p) && keys(p, ['label','observed','forecast','lower','upper'])
           && text(p.label, 60) && (finite(p.observed)||finite(p.forecast))
@@ -358,7 +359,7 @@ function Node({ node, values, setValue, onAction, onFilter, filters }: RendererP
       </div>
     }
     case 'forecast_chart':
-      return <ForecastFanChart title={node.title} unit={node.unit} points={node.points} />
+      return <ForecastFanChart title={node.title} unit={node.unit} points={node.points} axis={node.axis} />
     case 'input':
       return <label className={css.field}>{node.label}<input type="text" maxLength={500}
         placeholder={node.placeholder} value={String(values[node.id] ?? '')}
