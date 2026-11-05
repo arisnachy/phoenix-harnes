@@ -81,8 +81,14 @@ function relevantExcerpt(content: string, question: string): string {
   // accent removal and HTML entity decoding change character positions.
   for (let start = 0; start < content.length; start += 700) {
     const text = normalizeResearchText(content.slice(start, start + 1450))
-    const score = terms.filter(term => text.includes(term)).length
-    if (score > bestScore) { bestScore = score; bestStart = start }
+    const found = terms.filter(term => text.includes(term))
+    const score = found.length * 10
+      + found.reduce((sum, term) => sum + Math.min(5, text.split(term).length - 1), 0)
+    if (score > bestScore) {
+      bestScore = score
+      const first = Math.min(text.length, ...found.map(term => text.indexOf(term)).filter(index => index >= 0))
+      bestStart = Math.max(0, start + first - 70)
+    }
   }
   return content.slice(bestStart, bestStart + 1450)
 }
