@@ -123,7 +123,7 @@ export function scaleProtocolWarnings(spec: ScaleFormSpec): string[] {
   if (scoring && (scoring.min !== minimum || scoring.max !== maximum)) {
     warnings.push('El rango declarado no corresponde a las puntuaciones de las respuestas.')
   }
-  const isMiniCog = /\\bmini[ -]?cog\\b/iu.test(spec.props.title)
+  const isMiniCog = /\bmini[ -]?cog\b/iu.test(spec.props.title)
   if (!isMiniCog) return warnings
   const steps = spec.props.administration ?? []
   const all = steps.map(step => step.title + ' ' + step.instruction).join(' ').toLowerCase()
