@@ -22,6 +22,7 @@
 <button data-tab="create">Nueva institución</button>
 <button data-tab="interview">Entrevista</button>
 <button data-tab="units">Organización</button>
+<button data-tab="catalog">Catálogo 360°</button>
 <button data-tab="systems">Tecnología</button>
 <button data-tab="finance">Finanzas</button>
 <button data-tab="models">Modelos IA</button><button data-tab="fabric">Red PHOENIX</button>
@@ -89,6 +90,17 @@
 <article class="card"><h2>Estructura declarada</h2><ul id="units-list"></ul></article>
 <article class="card"><h2>Estructura sugerida (no confirmada)</h2><p>Genesis sugiere áreas según el sector, pero no inventa que existan.</p><button id="get-suggestions">Proponer estructura</button><ul id="suggestions-list"></ul></article></section>
 
+<section data-panel="catalog" class="panel" hidden>
+<article class="card"><h2>Catálogo institucional 360°</h2>
+<p>Referencias para descubrir, comparar y planificar la organización. Ninguna unidad, informe o indicador se declara existente, obligatorio o autorizado por aparecer en este catálogo.</p>
+<div class="grid">
+<div><label for="catalog-category">Tipo de catálogo</label><select id="catalog-category"></select></div>
+<div><label for="catalog-search">Buscar en la referencia</label><input id="catalog-search" placeholder="Enfermería, gastos, camas, POA, informes..."></div>
+</div><button id="get-catalog" type="button">Consultar catálogo</button>
+<p id="catalog-note" role="status" class="hint"></p>
+<div id="catalog-results" class="table-wrap"></div>
+<p class="hint">Los resultados son referencias genéricas, no datos del hospital. La incorporación al inventario requiere validación y un responsable.</p>
+</article></section>
 <section data-panel="systems" class="panel" hidden><article class="card"><h2>Software tradicional y conectores</h2>
 <p>Registrar un programa NO equivale a conectarlo. Genesis conserva la fuente de autoridad hasta una migración comprobada.</p>
 <form id="form-system"><div class="grid">
