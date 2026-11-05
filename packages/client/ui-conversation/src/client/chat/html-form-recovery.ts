@@ -63,11 +63,16 @@ function bmiFallback(doc: Document, title: string): SmartFormSpec | undefined {
   if (!weight || !height || weight === height) return undefined
   const starter = starterForms.find(form => form.props.id === 'calculadora_imc')
   if (starter === undefined) return undefined
+  const weightContext = labelFor(doc, weight)
+  const heightContext = labelFor(doc, height)
+  if (!/\bkg\b|kilogramos?|kilograms?/iu.test(weightContext)) return undefined
+  const inCentimetres = /\bcm\b|cent[ií]metr|centimeter/iu.test(heightContext)
+  const inMetres = !inCentimetres
+    && /\b(?:metros?|metres?|meters?)\b|\(m\)/iu.test(heightContext)
+  // Never convert inches, feet or unlabelled height units by guessing.
+  if (!inCentimetres && !inMetres) return undefined
   const weightValue = Number(weight.value)
   const heightValue = Number(height.value)
-  const heightContext = labelFor(doc, height)
-  const inMetres = /\b(?:metros?|metres?|meters?)\b|\(m\)/iu.test(heightContext)
-    && !/\bcm\b|cent[ií]metr/iu.test(heightContext)
   const heightCm = inMetres ? heightValue * 100 : heightValue
   const fields = starter.props.fields.map(field => {
     const value = field.id === 'peso' ? weightValue : heightCm
