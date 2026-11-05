@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { PhoenixStatusPill, PhoenixUiIcon, type PhoenixUiIconName } from '@phoenix-ai/dsh-client-ui-primitives'
 import css from './GenerativeCanvas.module.css'
+import { ForecastFanChart } from './ForecastFanChart.tsx'
 // Actual ready-made React components from the MIT-licensed react-generative-ui library.
 // Imported from the upstream shadcn-style vendor copies, not rewritten templates.
 import { StatCard } from './prebuilt/stat-card/StatCard.tsx'
@@ -29,6 +30,7 @@ type CanvasNode =
   | { type: 'timeline'; title?: string; items: Array<{ date: string; title: string; description?: string }> }
   | { type: 'table'; columns: string[]; rows: string[][] }
   | { type: 'chart'; title?: string; points: Array<{ label: string; value: number }> }
+  | { type: 'forecast_chart'; title: string; unit: string; axis?: 'date' | 'category'; points: Array<{ label: string; observed?: number; forecast?: number; lower?: number; upper?: number }> }
   | { type: 'input'; id: string; label: string; placeholder?: string; value?: string }
   | { type: 'select'; id: string; label: string; options: Array<{ label: string; value: string }>; value?: string }
   | { type: 'toggle'; id: string; label: string; value?: boolean }
@@ -126,6 +128,15 @@ function validateNode(value: unknown, depth: number, count: { n: number }, ids: 
         && Array.isArray(value.points) && value.points.length > 0 && value.points.length <= 20
         && value.points.every(point => isObject(point) && keys(point, ['label','value'])
           && text(point.label) && finite(point.value) && point.value >= 0 && point.value <= 1e12)
+    case 'forecast_chart':
+      return keys(value, ['type','title','unit','axis','points']) && text(value.title, 180) && text(value.unit, 60)
+        && (value.axis === undefined || value.axis === 'date' || value.axis === 'category')
+        && Array.isArray(value.points) && value.points.length >= 2 && value.points.length <= 80
+        && value.points.every(p => isObject(p) && keys(p, ['label','observed','forecast','lower','upper'])
+          && text(p.label, 60) && (finite(p.observed)||finite(p.forecast))
+          && [p.observed,p.forecast,p.lower,p.upper].every(v => v === undefined || (finite(v) && Math.abs(v) <= 1e12))
+          && ((p.lower === undefined && p.upper === undefined) ||
+            (finite(p.lower) && finite(p.upper) && finite(p.forecast) && p.lower <= p.forecast && p.forecast <= p.upper)))
     case 'input':
       if (!keys(value, ['type','id','label','placeholder','value']) || !id(value.id)
         || ids.has(value.id) || !text(value.label) || !optionalText(value.placeholder)
@@ -347,6 +358,8 @@ function Node({ node, values, setValue, onAction, onFilter, filters }: RendererP
         </div>)}
       </div>
     }
+    case 'forecast_chart':
+      return <ForecastFanChart title={node.title} unit={node.unit} points={node.points} {...(node.axis === undefined ? {} : { axis: node.axis })} />
     case 'input':
       return <label className={css.field}>{node.label}<input type="text" maxLength={500}
         placeholder={node.placeholder} value={String(values[node.id] ?? '')}

@@ -2,6 +2,7 @@
  * Retrieval does not authenticate claims, derive base rates, or fabricate probabilities.
  */
 import type { WebRuntime, WebSearchSource } from '@phoenix-ai/dsh-web'
+import { oraclePlan, type OraclePlan } from './scientific-intelligence.ts'
 export interface OracleResearchSource {
   url: string
   title: string
@@ -14,6 +15,8 @@ export interface OracleResearch {
   question: string
   targetAt: string
   category: string
+  plan: OraclePlan
+  riskFlags: string[]
   researchedAt: string
   searches: string[]
   sources: OracleResearchSource[]
@@ -46,6 +49,7 @@ export async function researchOracle(
   if(typeof question!=='string'||question.trim().length<8||question.length>400)throw new Error('Pregunta específica entre 8 y 400 caracteres.')
   const target=futureDate(targetAt)
   const topic=classifyOracleTopic(question)
+  const plan=oraclePlan(question,target)
   const searches=[
     question.trim()+' datos observados pronóstico evidencia',
     question.trim()+' estudio histórico tasa base fuente oficial '+topic,
@@ -68,9 +72,18 @@ export async function researchOracle(
   }
   const domains=new Set(sources.map(s=>{try{return new URL(s.url).hostname}catch{return ''}}).filter(Boolean))
   const sufficient=domains.size>=2
+  const dated=sources.filter(x=>x.publishedAt&&Number.isFinite(Date.parse(x.publishedAt)))
+  const older=dated.filter(x=>Date.parse(x.publishedAt!)<Date.now()-365*86400_000)
+  const riskFlags=[
+    'Las búsquedas descubren referencias pero no autentican sus afirmaciones.',
+    ...(domains.size<2?['Diversidad insuficiente: menos de dos dominios fuente.']:[]),
+    ...(dated.length===0?['Ningún resultado anuncia una fecha de publicación verificable.']:[]),
+    ...(older.length>0?['Algunas fuentes tienen más de un año: verificar vigencia para esta disciplina.']:[]),
+    ...(sources.some(x=>/\.csv(?:\?|$)/iu.test(x.url))?[]:['Sin conjunto CSV identificado automáticamente: revisar APIs, tablas y documentos primarios.']),
+  ]
   return {
     kind:'oracle_research',status:sufficient?'researched':'insufficient',
-    question:question.trim(),targetAt:target,category:topic,researchedAt:new Date().toISOString(),
+    question:question.trim(),targetAt:target,category:topic,plan,riskFlags,researchedAt:new Date().toISOString(),
     searches,sources:sources.slice(0,12),
     candidateDatasets:sources.filter(s=>/\.csv(?:\?|$)/iu.test(s.url)).map(s=>s.url).slice(0,8),
     evidenceStatus:'search_results_unverified',
