@@ -58,7 +58,7 @@ describe('universal assessment engine: instrument protocol and scoring', () => {
     const selects=screen.getAllByRole('combobox')
     fireEvent.change(selects[0]!,{target:{value:'3'}})
     expect(screen.getByText('—')).toBeTruthy()
-    fireEvent.change(selects[1]!,{target:{value:'1'}})
+    fireEvent.change(selects[1]!,{target:{value:'2'}})
     expect(screen.getByText('5')).toBeTruthy()
     expect(screen.getByText('Rango: 0–5')).toBeTruthy()
     fireEvent.click(screen.getByRole('button',{name:/Reiniciar/}))
