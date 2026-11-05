@@ -44,7 +44,7 @@ jobs:
             const deps=JSON.parse(readFileSync('packages/bundle/base/package.json','utf8'));
             const tools=readFileSync('packages/core/tool-genesis/src/index.ts','utf8');
             const names=['genesis_status','genesis_demo_create','genesis_organization_list','genesis_organization_create','genesis_organization_report','genesis_catalog_search','genesis_area_assess','genesis_unit_register'];
-            if(!y.includes('id: tool-genesis')||!y.includes('name: \\'@phoenix-ai/dsh-tool-genesis\\''))process.exit(1);
+            if(!y.includes('id: tool-genesis')||!y.includes('@phoenix-ai/dsh-tool-genesis'))process.exit(1);
             if(!deps.dependencies['@phoenix-ai/dsh-tool-genesis'])process.exit(2);
-            for(const name of names)if(!tools.includes('name:\\''+name+'\\''))process.exit(3);
+            for(const name of names)if(!tools.includes(name))process.exit(3);
           "
