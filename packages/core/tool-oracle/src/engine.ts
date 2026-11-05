@@ -146,7 +146,7 @@ function causal(v: Value, source: string): OracleResult {
   }
   const baseline=calc(false),counterfactual=iId===undefined?baseline:calc(true)
   return {status:'scenario',method:'declared-linear-structural-equations-v1',
-    targetAt:v.targetAt===undefined?undefined:date(v.targetAt,'targetAt'),
+    ...(v.targetAt===undefined?{}:{targetAt:date(v.targetAt,'targetAt')}),
     predictedValue:counterfactual,predictedUnit:short(v.unit,'unit'),baseline,counterfactual,delta:counterfactual-baseline,
     assumptions:[
       'Cada ecuación y cada coeficiente fueron aportados externamente; PHOENIX NO los descubrió ni los validó.',
