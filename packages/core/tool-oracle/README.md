@@ -24,3 +24,13 @@ Model-supplied sources are **not verified**; do not pass personal health records
 ## Checks
 
 node --experimental-strip-types --test packages/core/tool-oracle/tests/*.mjs
+
+
+## Investigación universal y porcentaje fundamentado
+- `oracle_research_forecast(question,targetAt)` usa el proveedor web real de PHOENIX para investigar cualquier pregunta sobre un acontecimiento futuro: aporta fuentes, fechas y tareas de verificación. No autentica fuentes ni inventa probabilidades.
+- `oracle_scientific_forecast` ahora admite `mode=binary-event`: evento falsable con `question`, `targetAt`, `currentSignal`, `source` y al menos 80 casos históricos (cada uno con `id`, `observedAt`, `signal`, `happened`). Entrenamiento cronológico 70 %, prueba futura 30 %, suavizado binomial, contraste contra tasa base y Brier; se abstiene si faltan subgrupos, hay fuga temporal o no supera la referencia.
+- El intervalo Wilson del 80 % mide incertidumbre de muestreo, no predicción perfecta. Todo porcentaje depende de los datos aportados, todavía **no autenticados por el motor**.
+- `oracle_audit_prediction` permite evaluar resultados binarios 0/1 después del horizonte y guarda Brier en registro local inmutable. Los resultados externos siguen sin verificar.
+- Tarjetas visuales nativas de GenerativeCanvas muestran porcentaje, horizonte, incertidumbre, Brier, fuentes y controles de reinvestigación. Solo resultados de herramientas oficiales generan tarjetas; no se ejecuta HTML de fuentes externas.
+
+**Límite actual:** la búsqueda es descubrimiento de fuentes, no un modelo universal entrenado de meteorología, salud, economía u otros campos. Se requieren datos primarios validados y predictores especializados antes de publicar porcentajes fiables sobre eventos del mundo real.
