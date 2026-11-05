@@ -17,6 +17,8 @@
   config:
     persona: >-
       You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
+    # Mature conversations are user-initiated; set PHOENIX_MATURE_CONVERSATION=0 to disable.
+    matureConversation: !!js process.env.PHOENIX_MATURE_CONVERSATION !== '0'
 
 # TODO: Re-enable shared HMR for Web after its reload lifecycle is tested.
 - id: hmr

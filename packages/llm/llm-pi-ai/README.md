@@ -10,6 +10,8 @@ The configurable-provider directory also includes the optional `chatgpt-web` rou
 
 The `image_generation` tool persists each successful Codex raster in the durable attachment store and returns its absolute local path as well as the attachment reference. The model can pass that path to `read_image` on a later step when it needs to inspect or embed the generated asset in another deliverable; the path is local host metadata, not a bearer URL.
 
+The `image_generation` tool description explicitly admits eligible, user-initiated adult-oriented artwork and nude studies instead of applying a blanket PHOENIX-level rejection. It does not override the configured raster provider's content requirements or permit sexualized minors or non-consensual intimate depictions of identifiable people.
+
 ## Config
 
 Configure credentials, the model catalog, and deployment-specific transport settings per provider, keyed by the provider route itself. Each profile may set a `retryPolicy`; omission uses normal mode with two retries. `apiKeyEnv` is a credential *reference* resolved per request, so no secret enters this file. Omitting it leaves the route unauthenticated, which for an installed catalog route means pi-ai's provider-native ambient discovery; a configured reference that resolves to nothing fails the request with `MISSING_CREDENTIAL` instead, because falling through would authenticate with whatever unrelated key the environment happens to hold. One credential serves every model on its route.
