@@ -5,6 +5,7 @@
 import { createHash } from 'node:crypto'
 import type { WebRuntime } from '@phoenix-ai/dsh-web'
 import { forecastOracle, type OracleResult } from './engine.ts'
+import { ensembleForecast, type EnsembleForecast } from './forecast-ensemble.ts'
 
 export interface PublicCsvRequest {
   url: string
@@ -17,6 +18,7 @@ export interface PublicCsvRequest {
 
 export interface CsvForecast {
   result: OracleResult
+  analytics?: EnsembleForecast
   evidence: {
     url: string
     retrievedAt: string
@@ -133,7 +135,9 @@ export async function forecastPublicCsv(
     unit:input.unit,
   })
   result.evidenceStatus='retrieved_unverified'
-  return {result,evidence:{
+  const analytics=ensembleForecast({values:dated.map(d=>d.number),horizonSteps:input.horizonSteps,
+    stepHours:input.stepHours,lastObservedAt:new Date(last.date).toISOString(),unit:input.unit})
+  return {result,analytics,evidence:{
     url:finalUrl,
     retrievedAt:new Date().toISOString(),
     sha256:createHash('sha256').update(response.body.content,'utf8').digest('hex'),
