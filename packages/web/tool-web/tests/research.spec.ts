@@ -34,8 +34,8 @@ describe('Phoenix universal research routing', () => {
       return {
         truncated: false,
         sources: [
-          { url: 'https://example.org/study?utm_source=one', title: 'Evidence' },
-          { url: 'https://example.org/study?utm_source=two', title: 'Duplicate' },
+          { url: 'https://example.org/study?utm_source=one', title: 'Dólar República Dominicana tasa oficial' },
+          { url: 'https://example.org/study?utm_source=two', title: 'Dólar República Dominicana duplicado' },
         ],
       }
     })
@@ -44,7 +44,7 @@ describe('Phoenix universal research routing', () => {
     expect(result.status).toBe('partial')
     expect(result.failedQueries).toHaveLength(1)
     expect(result.sources).toHaveLength(1)
-    expect(result.sources[0]?.title).toBe('Evidence')
+    expect(result.sources[0]?.title).toBe('Dólar República Dominicana tasa oficial')
     expect(search).toHaveBeenCalledTimes(3)
   })
 
@@ -64,7 +64,7 @@ describe('Phoenix universal research routing', () => {
   it('caps merged sources and reports truncation', async () => {
     const ctx = { web: { search: async () => ({
       truncated: false,
-      sources: [{ url: 'https://a.test/' }, { url: 'https://b.test/' }, { url: 'https://c.test/' }],
+      sources: [{ url: 'https://a.test/', title: 'General topic A' }, { url: 'https://b.test/', title: 'General topic B' }, { url: 'https://c.test/', title: 'General topic C' }],
     }) } } as unknown as Pick<Context, 'web'>
     const outcome = await executeResearch(ctx, planResearch('general topic', 'general'), 2, signal)
     expect(outcome.sources).toHaveLength(2)
@@ -129,5 +129,20 @@ describe('Dengue research route is not confused with HealthIA patient records', 
     const outcome = await executeResearch(ctx, plan, 6, signal)
     expect(outcome.sources).toHaveLength(1)
     expect(outcome.sources[0]?.url).toContain('epidemiologia.gob.do')
+  })
+})
+
+describe('Universal source screening protects every research domain',()=>{
+  it('rejects movie It search hits in general space research even when many hosts return them',async()=>{
+    const plan=planResearch('Artemis II mission NASA launch 2026','general')
+    const ctx={web:{search:async()=>({truncated:false,sources:[
+      {url:'https://example.com/it-film',title:'It (2017 film) trailer'},
+      {url:'https://example.edu/it-film',title:'Stephen King It horror movie'},
+      {url:'https://www.nasa.gov/artemis-ii/',title:'Artemis II NASA mission launch'},
+    ]})}} as unknown as Pick<Context,'web'>
+    const out=await executeResearch(ctx,plan,8,signal)
+    expect(out.sources).toHaveLength(1)
+    expect(out.sources[0]?.url).toContain('nasa.gov')
+    expect(out.offTopicDropped).toBe(2)
   })
 })

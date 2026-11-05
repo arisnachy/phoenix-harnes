@@ -12,6 +12,7 @@ import type {} from '@phoenix-ai/dsh-web'
 import { applyWebSearchTool, WEB_SEARCH_MAX_QUERIES, WEB_SEARCH_MAX_RESULTS } from './search.ts'
 import { applyWebFetchTool } from './fetch.ts'
 import { applyResearchTools } from './research.ts'
+import { applyResearchInvestigation } from './investigate.ts'
 import { createScholarlySearchTool } from './scholarly.ts'
 import { createWorldBankHealthSeriesTool } from './health-series.ts'
 
@@ -20,6 +21,8 @@ export type { WebSearchMeta } from './search.ts'
 export { applyWebFetchTool, formatFetchOutput, parseFetchArgs, presentFetchCall, presentFetchResult, fetchMetaFromValue, fetchMetaFromResult } from './fetch.ts'
 export type { WebFetchMeta } from './fetch.ts'
 export { RESEARCH_SOURCES, planResearch, executeResearch, applyResearchTools } from './research.ts'
+export { investigateEvidence, planEvidenceQueries, researchFocus, scoreResearchLead, applyResearchInvestigation } from './investigate.ts'
+export type { EvidenceInvestigation } from './investigate.ts'
 export type { ResearchSource, ResearchPlan, ResearchOutcome } from './research.ts'
 export { searchEuropePmc, projectEuropePmcRecords, createScholarlySearchTool } from './scholarly.ts'
 export type { ScholarlyRecord } from './scholarly.ts'
@@ -99,6 +102,7 @@ export function apply(ctx: Context, config: Config): void {
   if (resolved.search) {
     applyWebSearchTool(ctx, resolved.searchMaxResults, resolved.searchMaxQueries, resolved.searchTimeoutMs, resolved.fetch)
     applyResearchTools(ctx, resolved.searchMaxResults, resolved.searchTimeoutMs)
+    if (resolved.fetch) applyResearchInvestigation(ctx, resolved.searchTimeoutMs)
     ctx.tools.register(createScholarlySearchTool())
     ctx.tools.register(createWorldBankHealthSeriesTool())
   }
