@@ -161,11 +161,16 @@ export function scaleProtocolWarnings(spec: ScaleFormSpec): string[] {
     || !/reloj|clock/iu.test(all) || !/evocaci[oó]n|recall/iu.test(all)) {
     warnings.push('Mini-Cog: falta el procedimiento de registro, reloj y evocación diferida.')
   }
-  const options = spec.props.items.map(item =>
-    item.options.map(option => option.score).sort((a,b) => a-b).join(','))
-  if (options.length !== 2 || !options.includes('0,1,2,3') || !options.includes('0,2')
+  const recall = spec.props.items.find(item =>
+    /recuerd|evocaci[oó]n|palabras|recall|words/iu.test(item.question))
+  const clock = spec.props.items.find(item =>
+    /reloj|clock/iu.test(item.question))
+  const scores = (item: ScaleItem | undefined): string =>
+    item?.options.map(option => option.score).sort((a,b) => a-b).join(',') ?? ''
+  if (spec.props.items.length !== 2 || recall === clock
+    || scores(recall) !== '0,1,2,3' || scores(clock) !== '0,2'
     || minimum !== 0 || maximum !== 5) {
-    warnings.push('Mini-Cog: requiere recuerdo 0–3, reloj 0 o 2 y total 0–5.')
+    warnings.push('Mini-Cog: recuerdo 0–3 y reloj 0 o 2, con total 0–5.')
   }
   if (!spec.props.source || !spec.props.version) {
     warnings.push('Mini-Cog: especifica fuente y versión del protocolo autorizado.')
