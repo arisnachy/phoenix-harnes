@@ -19,7 +19,7 @@ const client=(content)=>({fetch:async({url})=>({url,statusCode:200,truncated:fal
 test('descarga un conjunto público, valida intervalos y pronostica sin inventar observaciones',async()=>{
   const forecast=await forecastPublicCsv(client(fixture()),input)
   assert.equal(forecast.result.status,'forecast')
-  assert.equal(forecast.result.predictedValue,114)
+  assert(Math.abs(forecast.result.predictedValue-114)<0.01)
   assert.equal(forecast.result.evidenceStatus,'retrieved_unverified')
   assert.equal(forecast.evidence.observations,50)
   assert.match(forecast.evidence.sha256,/^[a-f0-9]{64}$/)

@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { appendFile, mkdir, readFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { OracleResult } from './engine.ts'
-type Prediction = {kind:'prediction';id:string;createdAt:string;result:OracleResult}
+import { calibrationReport, type OracleCalibration } from './scientific-intelligence.ts'
+type Prediction = {kind:'prediction';id:string;createdAt:string;result:OracleResult;supersedes?:string}
 type Outcome = {kind:'outcome';id:string;recordedAt:string;observedAt:string;observedValue:number;source:string;absoluteError:number;brierError?:number;verification:'unverified_report'}
 async function records(path:string):Promise<(Prediction|Outcome)[]> {
   try {
@@ -45,4 +46,75 @@ export async function oracleSummary(path:string):Promise<{total:number;settled:n
   return {total:pred.length,settled:outcomes.length,binarySettled:binary.length,
     meanAbsoluteError:outcomes.length?outcomes.reduce((s,x)=>s+x.absoluteError,0)/outcomes.length:null,
     meanBrierScore:binary.length?binary.reduce((s,x)=>s+x.brierError!,0)/binary.length:null,verifiedByHost:0}
+}
+
+
+/** Evaluate only forecasts frozen before their target date; results remain user-reported until independently authenticated. */
+export async function oracleCalibrationLedger(path:string):Promise<OracleCalibration & {retrospectiveExcluded:number}>{
+  const all=await records(path)
+  const predictions=new Map(all.filter((r):r is Prediction=>r.kind==='prediction').map(r=>[r.id,r]))
+  const scores:{predicted:number;observed:boolean}[]=[]
+  let retrospectiveExcluded=0
+  for(const row of all){
+    if(row.kind!=='outcome'||row.brierError===undefined)continue
+    const prediction=predictions.get(row.id)
+    const p=prediction?.result.probabilityPercent
+    if(!prediction||p===undefined||!Number.isFinite(p)||p<0||p>100)continue
+    const target=prediction.result.targetAt
+    if(!target||Date.parse(prediction.createdAt)>=Date.parse(target)){
+      retrospectiveExcluded++
+      continue
+    }
+    if(Date.parse(row.observedAt)<Date.parse(target))continue
+    scores.push({predicted:p/100,observed:row.observedValue===1})
+  }
+  return {...calibrationReport(scores),retrospectiveExcluded}
+}
+
+
+
+/** A bounded non-sensitive view of frozen forecast versions and their reported outcomes. */
+export interface OracleHistoryRow {
+  id:string
+  createdAt:string
+  targetAt?:string
+  method:string
+  predictedValue?:number
+  probabilityPercent?:number
+  state:'awaiting-report'|'outcome-reported'
+  supersedes?:string
+}
+export async function oracleHistory(path:string,limit=20):Promise<OracleHistoryRow[]> {
+  if(!Number.isInteger(limit)||limit<1||limit>30)throw new Error('Historial máximo 30 pronósticos.')
+  const rows=await records(path)
+  const reported=new Set(rows.filter((r):r is Outcome=>r.kind==='outcome').map(r=>r.id))
+  return rows.filter((r):r is Prediction=>r.kind==='prediction').slice(-limit).reverse().map(r=>({
+    id:r.id,createdAt:r.createdAt,
+    ...(r.result.targetAt===undefined?{}:{targetAt:r.result.targetAt}),
+    method:r.result.method,
+    ...(r.result.predictedValue===undefined?{}:{predictedValue:r.result.predictedValue}),
+    ...(r.result.probabilityPercent===undefined?{}:{probabilityPercent:r.result.probabilityPercent}),
+    state:reported.has(r.id)?'outcome-reported' as const:'awaiting-report' as const,
+    ...(r.supersedes?{supersedes:r.supersedes}:{}),
+  }))
+}
+/** Add a new frozen version; never edit the previous entry or its outcome. */
+export async function reviseOracle(path:string,previousId:string,result:OracleResult):Promise<Prediction>{
+  if(!/^[a-f0-9-]{36}$/i.test(previousId))throw new Error('ID anterior inválido.')
+  if(result.status!=='forecast'&&result.status!=='scenario')throw new Error('No registrar abstención como actualización.')
+  const old=(await records(path)).find((r):r is Prediction=>r.kind==='prediction'&&r.id===previousId)
+  if(!old)throw new Error('Pronóstico anterior no localizado en este registro.')
+  if(result.targetAt&&Date.parse(result.targetAt)<=Date.now())throw new Error('La nueva proyección exige un horizonte futuro.')
+  const row:Prediction={kind:'prediction',id:randomUUID(),createdAt:new Date().toISOString(),result,supersedes:previousId}
+  await append(path,row)
+  return row
+}
+
+
+/** Find past-due event outcomes for independent verification; never marks them true by itself. */
+export async function oracleDuePredictions(path:string):Promise<OracleHistoryRow[]>{
+  const rows=await oracleHistory(path,30)
+  const now=Date.now()
+  return rows.filter(r=>r.state==='awaiting-report'&&r.targetAt!==undefined
+    &&Number.isFinite(Date.parse(r.targetAt))&&Date.parse(r.targetAt)<=now).slice(0,20)
 }
