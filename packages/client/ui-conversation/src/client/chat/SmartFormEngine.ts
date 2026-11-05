@@ -203,8 +203,9 @@ export function initialSmartValues(spec: SmartFormSpec): Record<string, FormValu
   }
   return values
 }
-export function fieldVisible(field: SmartField, values: Record<string, FormValue>): boolean =>
-  field.showWhen === undefined || values[field.showWhen.field] === field.showWhen.equals
+export function fieldVisible(field: SmartField, values: Record<string, FormValue>): boolean {
+  return field.showWhen === undefined || values[field.showWhen.field] === field.showWhen.equals
+}
 
 function dateMillis(x: unknown): number | null {
   if (typeof x !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(x)) return null
