@@ -117,3 +117,11 @@ test('no acepta funciones, redes o modos de adopción desconocidos',()=>{
   const b=hospital();b.adoptionMode='all-access'
   assert.throws(()=>planGenesisFabric(b),/Modo de adopción desconocido/)
 })
+
+test('impide planes de instancias descontrolados',()=>{
+  const input=hospital()
+  input.sites[0].roles=Array.from({length:11},(_,i)=>({
+    roleId:'role'+i,name:'Area '+i,instances:1000,capabilities:[]
+  }))
+  assert.throws(()=>planGenesisFabric(input),/excede 10 000 instancias/)
+})
