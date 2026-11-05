@@ -37,14 +37,15 @@ test('fuga temporal y duplicación de casos no se aceptan',()=>{
 test('la investigación usa búsquedas web reales y NO fabrica porcentaje',async()=>{
   const queries=[]
   const web={async search(input){queries.push(input.query);return{sources:[
-    {url:'https://example.edu/study',title:'Estudio A',snippet:'Cohorte observada'},
-    {url:'https://example.org/data',title:'Datos B',publishedAt:'2025-05-01'},
+    {url:'https://epidemiologia.gob.do/dengue',title:'Dengue: vigilancia epidemiológica',snippet:'Serie de dengue'},
+    {url:'https://paho.org/dengue',title:'Dengue regional',publishedAt:'2025-05-01'},
   ]}}}
   const r=await researchOracle(web,'¿Aumentará el número de casos de dengue?',now)
   assert.equal(r.status,'researched')
   assert.equal(r.probabilityPercent,null)
   assert.equal(r.sources.length,2)
-  assert.equal(queries.length,2)
+  assert.equal(queries.length,4)
+  assert(queries.some(q=>q.includes('epidemiologia.gob.do')))
   assert.equal(oracleVisual(r).component,'ui_canvas')
 })
 
@@ -52,5 +53,43 @@ test('sin fuentes independientes la investigación se abstiene',async()=>{
   const web={async search(){throw new Error('No hay proveedor web')}}
   const r=await researchOracle(web,'¿Se producirá un evento nuevo?',now)
   assert.equal(r.status,'insufficient')
+  assert.equal(r.probabilityPercent,null)
+})
+
+test('ORÁCULO descarta películas It aunque procedan de varios dominios al consultar Artemis II',async()=>{
+  const web={async search(){return{sources:[
+    {url:'https://www.justwatch.com/it',title:'It (2017) película'},
+    {url:'https://en.wikipedia.org/wiki/It_(2017_film)',title:'It (2017 film)'},
+    {url:'https://www.nasa.gov/artemis-ii/',title:'Artemis II launch schedule NASA'},
+  ]}}}
+  const r=await researchOracle(web,'¿La misión Artemis II habrá sido lanzada antes del 31 de diciembre de 2026?',now)
+  assert.equal(r.status,'insufficient')
+  assert.equal(r.sources.length,1)
+  assert(r.sources.every(s=>s.title.includes('Artemis')))
+  assert.equal(r.offTopicDropped,2)
+  assert.equal(r.probabilityPercent,null)
+})
+test('ORÁCULO rechaza dengue de otro país y conserva 2 entidades oficiales de RD',async()=>{
+  const web={async search(){return{sources:[
+    {url:'https://example.com/dengue-mexico',title:'Dengue en México 2026'},
+    {url:'https://epidemiologia.gob.do/documentos/dengue',title:'Dengue casos confirmados semana 41 2026'},
+    {url:'https://paho.org/es/dengue-dominicana',title:'Dengue República Dominicana OPS 2026'},
+    {url:'https://example.com/malaria',title:'Malaria en República Dominicana'},
+  ]}}}
+  const r=await researchOracle(web,'¿Cuál será la tendencia semanal de dengue en República Dominicana en 2027?',now)
+  assert.equal(r.status,'researched')
+  assert.equal(r.sources.length,2)
+  assert(r.sources.every(s=>/gob\.do|paho\.org/u.test(s.url)))
+  assert.equal(r.offTopicDropped,2)
+  assert.equal(r.probabilityPercent,null)
+})
+test('ORÁCULO no transforma fallos de CAPTCHA del proveedor en fuentes ni probabilidades',async()=>{
+  const web={async search(){throw new Error('WEB_PROVIDER_TRANSIENT: captcha')}}
+  const r=await researchOracle(web,'¿Dengue en República Dominicana dentro de un año?',now)
+  assert.equal(r.status,'insufficient')
+  assert.equal(r.sources.length,0)
+  assert.equal(r.failedQueries.length,2)
+  assert.equal(r.sourceDirectories.length,3)
+  assert(r.sourceDirectories[0].url.includes('epidemiologia.gob.do'))
   assert.equal(r.probabilityPercent,null)
 })
