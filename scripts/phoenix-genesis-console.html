@@ -23,6 +23,7 @@
 <button data-tab="interview">Entrevista</button>
 <button data-tab="units">Organización</button>
 <button data-tab="catalog">Catálogo 360°</button>
+<button data-tab="census">Censo hospitalario</button>
 <button data-tab="systems">Tecnología</button>
 <button data-tab="finance">Finanzas</button>
 <button data-tab="models">Modelos IA</button><button data-tab="fabric">Red PHOENIX</button>
@@ -102,6 +103,73 @@
 <div id="catalog-results" class="table-wrap"></div>
 <p class="hint">Los resultados son referencias genéricas, no datos del hospital. La incorporación al inventario requiere validación y un responsable.</p>
 </article></section>
+
+<section data-panel="census" class="panel" hidden>
+  <article class="card hero">
+    <h2>Censo institucional · 60 áreas</h2>
+    <p>Verifica cada departamento con responsables y documentos reales. Las áreas del catálogo son preguntas de investigación, no servicios que Genesis dé por existentes.</p>
+    <div class="stats" id="census-stats" aria-live="polite"></div>
+    <p id="census-notice" role="status" class="hint"></p>
+  </article>
+  <article class="card">
+    <h2>Explorar y priorizar las áreas</h2>
+    <div class="grid">
+      <div><label for="census-filter">Estado de evaluación</label>
+        <select id="census-filter">
+          <option value="all">Todas las áreas</option>
+          <option value="not-evaluated">Sin evaluar</option>
+          <option value="declared">Declaradas sin evidencia suficiente</option>
+          <option value="verified">Respaldadas por evidencia validada</option>
+          <option value="existing">Existentes</option>
+          <option value="outsourced">Tercerizadas</option>
+          <option value="not-applicable">No aplican</option>
+          <option value="unknown">Por investigar</option>
+        </select></div>
+      <div><label for="census-query">Buscar área, proceso o informe</label>
+        <input id="census-query" type="search" placeholder="Farmacia, UCI, limpieza, dirección…"></div>
+    </div>
+    <div class="table-wrap">
+      <table aria-label="Áreas hospitalarias investigadas">
+        <thead><tr><th>Área / dominio</th><th>Estado</th><th>Evidencia</th><th>Acción</th></tr></thead>
+        <tbody id="census-rows"></tbody>
+      </table>
+    </div>
+    <p id="census-count" class="hint"></p>
+  </article>
+  <article class="card">
+    <h2>Evaluar un área con su jefatura</h2>
+    <p id="census-selected" class="hint">Selecciona un área de la tabla para iniciar su evaluación.</p>
+    <form id="form-census">
+      <div class="grid">
+        <div><label for="census-area">Área de referencia</label>
+          <select id="census-area" name="areaId" required></select></div>
+        <div><label for="census-state">Situación institucional</label>
+          <select id="census-state" name="state">
+            <option value="unknown">Pendiente de investigar</option>
+            <option value="existing">Existe en el hospital</option>
+            <option value="outsourced">Servicio tercerizado</option>
+            <option value="not-applicable">No aplica al establecimiento</option>
+          </select></div>
+        <div><label for="census-review">Nivel de evidencia</label>
+          <select id="census-review" name="reviewState">
+            <option value="declared">Declarado por responsable</option>
+            <option value="verified">Respaldado por evidencia validada</option>
+          </select></div>
+        <div><label for="census-reviewer">Rol responsable de la revisión</label>
+          <input id="census-reviewer" name="reviewerRole" required placeholder="Dirección Médica, Recursos Humanos…"></div>
+        <div><label for="census-site">Sede vinculada (opcional)</label>
+          <select id="census-site" name="siteId"><option value="">Sin sede definida</option></select></div>
+        <div><label for="census-evidence">ID de evidencias validadas, separados por coma</label>
+          <input id="census-evidence" name="evidenceRefs" placeholder="ev_..."></div>
+      </div>
+      <label><input id="census-approved" type="checkbox" required>
+        Confirmo que esta evaluación institucional está autorizada y no contiene datos personales</label>
+      <button type="submit">Guardar evaluación del área</button>
+      <p class="hint">Una revisión simultánea no puede sobrescribir silenciosamente otra. Si la versión cambió, Genesis solicita recargar el censo.</p>
+    </form>
+  </article>
+</section>
+
 <section data-panel="systems" class="panel" hidden><article class="card"><h2>Software tradicional y conectores</h2>
 <p>Registrar un programa NO equivale a conectarlo. Genesis conserva la fuente de autoridad hasta una migración comprobada.</p>
 <form id="form-system"><div class="grid">
@@ -285,4 +353,4 @@
 <pre id="deployment-output"></pre></article></section>
 </div></div>
 </div>
-</main><script src="/app.js" defer></script></body></html>
+</main><script src="/app.js" defer></script><script src="/census.js" defer></script></body></html>
