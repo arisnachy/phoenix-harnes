@@ -188,6 +188,8 @@ export function oracleCalibrationVisual(result:OracleCalibration):Record<string,
       metric('Brier',result.brier===null?'Sin evaluar':result.brier.toFixed(4)),
       metric('Error de calibración',result.expectedCalibrationError===null?'Sin evaluar':(100*result.expectedCalibrationError).toFixed(1)+' %'),
     ]},
+    ...(result.bins.length>1?[{type:'forecast_chart',title:'Curva de fiabilidad · 45° ideal',unit:'%',axis:'category',
+      points:result.bins.map(b=>({label:Math.round(b.forecastPercent)+' %',observed:b.observedPercent,forecast:b.forecastPercent}))}]:[]),
     ...(result.bins.length?[{type:'table',columns:['Pronosticado','Observado','Casos'],
       rows:result.bins.map(b=>[b.forecastPercent.toFixed(1)+' %',b.observedPercent.toFixed(1)+' %',String(b.count)])}]:[
         {type:'alert',status:'warning',message:'Todavía no existen resultados evaluados que permitan medir calibración.'}]),
