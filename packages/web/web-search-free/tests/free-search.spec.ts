@@ -107,3 +107,12 @@ describe('keyless DuckDuckGo URL normalization', () => {
     await expect(provider.search({ query: 'javascript' })).rejects.toThrow(/no free search engine returned results/)
   })
 })
+
+describe('free search markup resilience', () => {
+  it('recovers a genuine Bing article when Bing omits paragraph snippets', async () => {
+    const html = '<li class="b_algo"><h2><a href="https://example.com/economy">Official economy figures</a></h2><div>new layout</div></li>'
+    const provider = new FreeSearchProvider({ engines: ['bing'], fetcher: async () => new Response(html, { status: 200 }) })
+    const value = await provider.search({ query: 'official economy figures' })
+    expect(value.sources).toEqual([{ url: 'https://example.com/economy', title: 'Official economy figures' }])
+  })
+})
