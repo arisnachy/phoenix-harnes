@@ -9,6 +9,7 @@ import { createHash,timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { GenesisWorkbench } from './phoenix-genesis-workbench.mjs'
 import { importGenesisManifest } from './phoenix-genesis-importer.mjs'
+import { fabricRequest } from './phoenix-fabric-client.mjs'
 
 const authDigest=secret=>createHash('sha256').update(secret).digest()
 const valid=secret=>typeof secret==='string'&&secret.length>=32&&secret.length<=1024
@@ -69,6 +70,50 @@ export function createGenesisConsole({dbPath,adminToken,port=0,host='127.0.0.1'}
         if(req.headers.origin!=='http://'+hostHeader)
           return problem(res,403,'Origen no autorizado')
       }
+      if(path==='/v1/fabric/status'&&req.method==='GET'){
+        const org=target.searchParams.get('organizationId')
+        workbench.dashboard(org)
+        if(!process.env.PHOENIX_FABRIC_ADMIN_TOKEN)
+          return send(res,200,{configured:false,connected:false,
+            nodes:[],reason:'Se necesita configurar el token administrativo Fabric'})
+        try{
+          const response=await fabricRequest('/v1/admin/nodes',{admin:true})
+          const active=Date.now()
+          const nodes=(response.nodes??[]).filter(n=>n.org===org).map(n=>({
+            nodeId:n.node_id,siteId:n.site,state:n.state,
+            lastSeen:n.last_seen??null,
+            connected:n.last_seen!==null&&active-Date.parse(n.last_seen)<60000,
+            capabilities:n.capabilities
+          }))
+          return send(res,200,{configured:true,connected:true,
+            brokerReachable:true,nodes,connectionSource:'verified-fabric-api',
+            caveat:'Nodos sin heartbeat reciente no se declaran conectados'})
+        }catch{
+          return send(res,200,{configured:true,connected:false,nodes:[],
+            reason:'El broker Fabric no responde o las credenciales no están autorizadas'})
+        }
+      }
+      if(path==='/v1/fabric/enroll'&&req.method==='POST'){
+        const input=await json(req)
+        if(input.approved!==true)throw Error('El administrador debe confirmar el enrolamiento')
+        const org=input.organizationId
+        const state=workbench.dashboard(org)
+        if(!state.sites.some(s=>s.siteId===input.siteId))
+          throw Error('Sede inexistente')
+        if(!state.units.some(u=>u.unitId===input.unitId&&u.siteId===input.siteId))
+          throw Error('Unidad no registrada en Genesis')
+        if(!Array.isArray(input.capabilities)||!Array.isArray(input.receivesFrom))
+          throw Error('Capacidades y emisores requeridos')
+        const result=await fabricRequest('/v1/admin/nodes',{admin:true,
+          method:'POST',data:{
+            nodeId:input.nodeId,organizationId:org,siteId:input.siteId,
+            capabilities:input.capabilities,receivesFrom:input.receivesFrom
+          }})
+        return send(res,201,{
+          ...result,oneTimeToken:true,
+          warning:'Guarde el token en un gestor de secretos; esta operación NO instala el nodo.'
+        })
+      }
       if(path==='/v1/organizations'&&req.method==='GET')
         return send(res,200,{organizations:workbench.organizations()})
       if(path==='/v1/organizations'&&req.method==='POST')
@@ -93,6 +138,7 @@ export function createGenesisConsole({dbPath,adminToken,port=0,host='127.0.0.1'}
         '/v1/obligations':x=>workbench.obligation(x),
         '/v1/evidence':x=>workbench.registry.registerEvidence(x),
         '/v1/import':x=>importGenesisManifest(workbench,x),
+        '/v1/providers':x=>workbench.provider(x),
         '/v1/indicators':x=>workbench.registry.recordIndicator(x)
       }
       if(req.method==='POST'&&operations[path])
