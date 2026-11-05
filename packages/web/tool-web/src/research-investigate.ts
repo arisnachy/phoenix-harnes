@@ -71,7 +71,9 @@ function relevantExcerpt(content: string, question: string): string {
   return content.slice(start, start + 1450)
 }
 function hasReadableSubject(question: string, url: string, excerpt: string): boolean {
-  return assessResearchRelevance(question, { url, snippet: excerpt }, 'general').relevant
+  // The URL path may contain the keyword even when the actual page is irrelevant.
+  // Validate against the READ body, using only the origin for the geography TLD.
+  return assessResearchRelevance(question, { url: new URL('/', url).toString(), snippet: excerpt }, 'general').relevant
 }
 
 /**
