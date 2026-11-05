@@ -20,7 +20,7 @@ import { oracleCardsFromToolResult } from './oracle-tool-cards.ts'
 import { TradingDashboard } from './TradingDashboard.tsx'
 import { TradingMarketChart } from './TradingMarketChart.tsx'
 import { tradingDashboardFromToolResult, tradingMarketFromToolResult, type TradingDashboardSnapshot, type TradingMarketSelection } from './trading-tool-cards.ts'
-import { imageGenerationEstimatedPercent, toolActivity, type TurnActivity, type TurnProgress } from './turn-progress.ts'
+import { toolActivity, type TurnActivity, type TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
 import css from './ToolActivityFlow.module.css'
 
@@ -829,7 +829,10 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
   readonly t: ChatViewSlotProps['t']
 }) {
   const [mountedAt] = useState(() => Date.now())
-  const anchor = startTime ?? mountedAt
+  // The image clock measures the actual tool call, not earlier model reasoning.
+  const anchor = progress.activity === 'generating-image'
+    ? (progress.startedAt ?? startTime ?? mountedAt)
+    : (startTime ?? mountedAt)
   const [elapsedMs, setElapsedMs] = useState(() => Math.max(0, Date.now() - anchor))
   useEffect(() => {
     const tick = (): void => {
@@ -865,14 +868,14 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
     : `${label} · ${progress.detail}`
   if (expiresAfterMs !== null && elapsedMs >= expiresAfterMs) return null
   if (progress.activity === 'generating-image') {
-    // No provider percent is projected by the runtime yet. Never imply a real
-    // percent or reach completion before the generated attachment arrives.
-    const percent = imageGenerationEstimatedPercent(elapsedMs)
+    // A live tool-call is observable, but the runtime has no provider-backed
+    // percent. Indeterminate progress must never masquerade as a numerical ETA.
     return (
       <div className={chatCss.imageGenerationCard}
         data-chat-flow-kind="image-generation-progress"
         data-activity="generating-image"
-        role="status" aria-label={label}>
+        data-progress-kind="indeterminate"
+        role="status" aria-label={label} aria-live="polite">
         <div className={chatCss.imageGenerationPreview} aria-hidden="true">
           <svg className={chatCss.imageGenerationPicture} viewBox="0 0 120 104" fill="none">
             <rect x="8" y="8" width="104" height="88" rx="13" stroke="currentColor" strokeWidth="2" />
@@ -886,19 +889,18 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
         <div className={chatCss.imageGenerationContent}>
           <div className={chatCss.imageGenerationHeader}>
             <strong>{label}</strong>
-            <span className={chatCss.imageGenerationPercent}>{percent}%</span>
+            <span className={chatCss.imageGenerationLive}>{t('image.progressActive')}</span>
           </div>
           <div className={chatCss.imageGenerationTrack}
-            role="progressbar" aria-label={t('image.progressEstimateLabel')}
-            aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}
-            aria-valuetext={t('image.progressRemaining', { percent: 100 - percent })}>
-            <span style={{ width: `${percent}%` }} />
+            role="progressbar" aria-label={t('image.progressLiveLabel')}
+            aria-valuetext={t('image.progressStage')}>
+            <span />
           </div>
-          <span className={chatCss.imageGenerationRemaining}>
-            {t('image.progressRemaining', { percent: 100 - percent })}
+          <span className={chatCss.imageGenerationRemaining}>{t('image.progressStage')}</span>
+          <span className={chatCss.imageGenerationNote}>{t('image.progressNoPercent')}</span>
+          <span className={chatCss.imageGenerationClock}>
+            {t('image.progressElapsed', { time: formatRunDuration(elapsedMs, t) })}
           </span>
-          <span className={chatCss.imageGenerationNote}>{t('image.progressEstimateNote')}</span>
-          {showClock && <span className={chatCss.imageGenerationClock}>{formatRunDuration(elapsedMs, t)}</span>}
         </div>
       </div>
     )
