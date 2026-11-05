@@ -6,6 +6,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import { defineTool, ToolArgsError } from '@phoenix-ai/dsh-tools'
 import type { WebSearchResult, WebSearchSource } from '@phoenix-ai/dsh-web'
+import { scoreResearchLead } from './source-relevance.ts'
 
 /** Candidate research host metadata. A listing does not grant network or API execution authority. */
 export interface ResearchSource {
@@ -167,6 +168,8 @@ const DOMAIN_PATTERNS: readonly (readonly [string, RegExp])[] = [
 
 /** Bounded federated query plan, independent of the active web-search provider. */
 export interface ResearchPlan {
+  /** Original question retained for semantic/topic screening on every domain. */
+  readonly question: string
   readonly domain: string
   readonly queries: string[]
   readonly candidates: ResearchSource[]
@@ -235,6 +238,7 @@ export function planResearch(question: string, requestedDomain?: string, batch =
   }
   const candidates = hosts.slice(batch * 2, batch * 2 + 2)
   return {
+    question: q,
     domain, batch, totalBatches, candidates,
     queries: [...(batch === 0 ? [q] : []), ...candidates.map(source => scopeQuery(q, source.host, domain))],
   }
@@ -312,12 +316,13 @@ export async function executeResearch(
   const countryFocus = plan.domain === 'public_health'
     && plan.queries.some(query => /rep[uú]blica dominicana|dominican republic|\bRD\b/iu.test(query))
   const isRelevant = (source: WebSearchSource, url: string): boolean => {
-    if (plan.domain !== 'public_health') return true
+    // Even a reputable search provider can return unrelated hits ("It" the
+    // film instead of Artemis II). Screen every discipline, not only health.
+    const score = scoreResearchLead(plan.question, { ...source, url })
+    if (score === 0) return false
+    if (!countryFocus || plan.domain !== 'public_health') return true
     const evidence = (source.title ?? '') + ' ' + (source.snippet ?? '') + ' ' + url
-    const topic = /dengue|epidemiolog|vigilancia|surveillance|arbovir|salud|health|primary care|atenci[oó]n primaria|primer nivel|cobertura|coverage|mortalidad/iu.test(evidence)
-      || /mortality|maternal|infant|\buhc\b|aseguramiento|afiliaci[oó]n|sanitari|healthcare/iu.test(evidence)
-    const country = !countryFocus || /rep[uú]blica dominicana|dominican republic|\bDOM\b|\.gob\.do/iu.test(evidence)
-    return topic && country
+    return /rep[uú]blica dominicana|dominican republic|\bDOM\b|\.gob\.do/iu.test(evidence)
   }
   const maxRanks = Math.max(0, ...successful.map(result => result.sources.length))
   outer: for (let rank = 0; rank < maxRanks; rank++) {
@@ -343,7 +348,7 @@ export async function executeResearch(
     failedQueries,
     truncated: dropped || successful.some(result => result.truncated),
     status: failedQueries.length > 0 ? 'partial' : sources.length > 0 ? 'ok' : 'empty',
-    note: 'Search hits are leads, not verified evidence. Inspect filtered titles against original documents, '
+    note: 'Topic-matched search hits are leads, not verified evidence. Inspect filtered titles against original documents, '
       + 'continue remaining source batches and topic-specific searches. Report missing years and blocked '
       + 'providers explicitly; no official API is silently installed.',
   }
