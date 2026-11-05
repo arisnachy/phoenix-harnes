@@ -22,25 +22,28 @@ const COMPLEX = /\b(?:professional|profesional|complete|completo|integral|exhaus
 
 const FIRST_PASS = '<first_pass_quality>\nBefore the first action, lock the deliverable, hard constraints, assumptions, and observable acceptance evidence. Challenge the highest-impact assumption with a credible alternative. Make the shortest tool call that yields relevant evidence; check while executing, not in a ceremonial extra round. Verify the actual requested output and never invent completion or repeat unchanged work.'
 // A question about the best option is a real decision even without "please plan".
-// oxlint-disable-next-line @stylistic/max-len -- One bounded, Unicode-aware bilingual question matcher.
+// oxlint-disable-next-line @stylistic/max-len -- Optimization questions require comparing alternatives.
 const DECISION_QUESTION = /\b(?:cu[aá]l(?:es)?|which|what)\b.{0,90}(?:mejor|[oó]ptim\p{L}*|m[aá]s\s+barat\p{L}*|m[aá]s\s+eficient\p{L}*|cheapest|best|optimal|minimum|maximum)/iu
-// oxlint-disable-next-line @stylistic/max-len -- Conjugated commands and common "solve this" requests.
-const ACTION_ADDITIONAL = /\b(?:resu[eé]lv\p{L}*|resolv\p{L}*|solucion\p{L}*|planific\p{L}*|program\p{L}*|analiz\p{L}*|investig\p{L}*|revis\p{L}*|arregl\p{L}*|corrig\p{L}*|optimiz\p{L}*|compar\p{L}*|comprob\p{L}*|verific\p{L}*|ay[uú]dame)\b/iu
-// oxlint-disable-next-line @stylistic/max-len -- Broader decision vocabulary for interrogative and applied tasks.
-const DECISION_ADDITIONAL = /\b(?:asignaci[oó]n|optimizaci[oó]n|planificaci[oó]n|turnos?|opciones?|alternativas?|soluci[oó]n|elegir|escoger|best|cheapest)\b/iu
-// oxlint-disable-next-line @stylistic/max-len -- Performance obligations must be selected, never a blanket review.
-const PERFORMANCE = /\b(?:latencia|latency|rendimiento|performance|escalabilidad|scalability|tiempo\s+de\s+ejecuci[oó]n|execution\s+time|sin\s+demoras|without\s+extra\s+calls|benchmark\p{L}*)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- A question about viability is not idle conversation.
+const FEASIBILITY_QUESTION = /\b(?:es\s+posible|se\s+puede|ser[ií]a\s+viable|is\s+it\s+possible|is\s+it\s+feasible|can\s+we)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Bilingual action conjugations avoid costly classifier calls.
+const ACTION_ADDITIONAL = /\b(?:resu[eé]lv\p{L}*|resolv\p{L}*|solucion\p{L}*|planific\p{L}*|program\p{L}*|analiz\p{L}*|investig\p{L}*|revis\p{L}*|arregl\p{L}*|corrig\p{L}*|optimiz\p{L}*|compar\p{L}*|comprob\p{L}*|verific\p{L}*|asign\p{L}*|distribu\p{L}*|repart\p{L}*|organiza\p{L}*|calcul\p{L}*|demuestr\p{L}*|demostr\p{L}*|valida\p{L}*|redact\p{L}*|ay[uú]dame)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Broad but deterministic decision vocabulary.
+const DECISION_ADDITIONAL = /\b(?:asignaci[oó]n|optimizaci[oó]n|planificaci[oó]n|turnos?|opciones?|alternativas?|soluci[oó]n|elegir|escoger|best|cheapest|cohortes?|cupos?|recursos?|itinerarios?|distribuci[oó]n)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Efficiency constraints trigger bounded checks.
+const PERFORMANCE = /\b(?:latencia|latency|rendimiento|performance|escalabilidad|scalability|tiempo\s+de\s+ejecuci[oó]n|execution\s+time|sin\s+demoras|sin\s+aumentar\s+(?:el\s+)?tiempo|without\s+extra\s+calls|benchmark\p{L}*)\b/iu
 // oxlint-disable-next-line @stylistic/max-len -- Explicit non-domain problem solving may still merit the universal contract.
 const GENERAL_PROBLEM = /\b(?:problemas?|problems?|casos?|cases?|tareas?|tasks?|resu[eé]lv\p{L}*|solucion\p{L}*)\b/iu
 
-const MAX_CHECKS = 3
+/** Each group is a single local string addition, never another model step. */
+const MAX_CHECK_GROUPS = 3
 const DOMAIN_CHECKS = {
-  decisions: 'For feasibility, impossibility, uniqueness or optimality: compare genuine options, seek a counterexample, and prove the bound with an appropriate tool or explicitly qualify the claim.',
-  quantities: 'For quantitative claims: recompute material totals, rates, units, margins and reserves from primary inputs.',
-  code: 'For implementation: identify the affected entrypoint and failure mode; make the smallest coherent change and run one focused executable check.',
-  evidence: 'For research: confirm the material source, date and contradiction risks; distinguish verified observations from inference.',
-  artifact: 'For deliverables: inspect the actual generated file or live result against requested format, content and usability.',
-  performance: 'For efficiency: choose a bounded scalable method, limit redundant calls, and test the important pathological case.',
+  decisions: 'For feasibility: separate constraints from assumptions; compare alternatives, seek a counterexample and prove the bound or qualify optimality/impossibility claims.',
+  quantities: 'For quantitative claims: recompute material totals, rates, units and reserves from stated inputs.',
+  code: 'For implementation: inspect the affected entrypoint and run one focused executable check.',
+  evidence: 'For research: verify source, date and contradictions; separate evidence from inference.',
+  artifact: 'For deliverables: inspect the actual generated file or live output for correctness, completeness and format.',
+  performance: 'For efficiency: avoid redundant calls and test one relevant worst-case input.',
 } as const
 
 /**
@@ -54,7 +57,7 @@ export function firstPassQualityGuidance(userText: string): string {
   if (text.length === 0) return ''
   const decision = DECISION.test(text) || DECISION_ADDITIONAL.test(text)
   const actionable = ACTION.test(text) || ACTION_ADDITIONAL.test(text)
-    || (decision && DECISION_QUESTION.test(text))
+    || (decision && (DECISION_QUESTION.test(text) || FEASIBILITY_QUESTION.test(text)))
   if (!actionable) return ''
   const quantities = QUANTITIES.test(text)
   const code = CODE.test(text)
@@ -64,15 +67,24 @@ export function firstPassQualityGuidance(userText: string): string {
   if (!decision && !quantities && !code && !evidence && !artifact && !performance
     && !GENERAL_PROBLEM.test(text) && !(text.length > 240 && COMPLEX.test(text))) return ''
 
-  // Prioritize constraints and numbers before optional extra reviews. A mixed
-  // domain request adds at most three checks to its single original model call.
-  const checks: string[] = []
-  if (decision) checks.push(DOMAIN_CHECKS.decisions)
-  if (quantities) checks.push(DOMAIN_CHECKS.quantities)
-  if (code) checks.push(DOMAIN_CHECKS.code)
-  if (evidence) checks.push(DOMAIN_CHECKS.evidence)
-  if (artifact) checks.push(DOMAIN_CHECKS.artifact)
-  if (performance) checks.push(DOMAIN_CHECKS.performance)
-  return FIRST_PASS + (checks.length > 0 ? '\n' + checks.slice(0, MAX_CHECKS).join(' ') : '')
+  // Group related risks instead of truncating the last requested deliverable.
+  // Six possible concerns fit in at most three bounded groups, with no extra
+  // model/tool call. The grouping preserves source and artifact checks even when
+  // planning + code + numbers occur in the same request.
+  const planning = [
+    ...(decision ? [DOMAIN_CHECKS.decisions] : []),
+    ...(quantities ? [DOMAIN_CHECKS.quantities] : []),
+  ]
+  const execution = [
+    ...(code ? [DOMAIN_CHECKS.code] : []),
+    ...(artifact ? [DOMAIN_CHECKS.artifact] : []),
+    ...(performance ? [DOMAIN_CHECKS.performance] : []),
+  ]
+  const provenance = evidence ? [DOMAIN_CHECKS.evidence] : []
+  const groups = [planning, execution, provenance]
+    .filter(group => group.length > 0)
+    .slice(0, MAX_CHECK_GROUPS)
+    .map(group => group.join(' '))
+  return FIRST_PASS + (groups.length > 0 ? '\n' + groups.join('\n') : '')
     + '\n</first_pass_quality>'
 }
