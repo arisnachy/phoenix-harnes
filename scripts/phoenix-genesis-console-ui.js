@@ -70,6 +70,11 @@ function bindForms(){
     "form-obligation":["/v1/obligations",d=>({organizationId:current,
       obligationId:d.obligationId,recipient:d.recipient,title:d.title,
       periodicity:d.periodicity,templateVersion:d.templateVersion||null})],
+    "form-import":["/v1/import",d=>{
+      const parsed=JSON.parse(d.manifest);
+      if(parsed.organizationId!==current)throw Error("La importación debe corresponder a la institución activa");
+      return parsed;
+    }],
     "form-evidence":["/v1/evidence",d=>({organizationId:current,
       filePath:d.filePath,kind:d.kind,classification:d.classification,
       validated:d.validated==="on"})]
