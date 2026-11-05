@@ -20,7 +20,7 @@
     "genesis": "node scripts/phoenix-genesis-console.mjs",
     "genesis:plan": "node scripts/phoenix-genesis-plan-cli.mjs",
     "genesis:registry": "node scripts/phoenix-genesis-registry-cli.mjs",
-    "test:genesis": "node --test scripts/phoenix-genesis-fabric.test.mjs scripts/phoenix-genesis-institutional-registry.test.mjs scripts/phoenix-genesis-workbench.test.mjs scripts/phoenix-genesis-importer.test.mjs scripts/phoenix-genesis-fabric-integration.test.mjs scripts/phoenix-genesis-legacy-csv.test.mjs scripts/phoenix-genesis-legacy-csv-http.test.mjs scripts/phoenix-genesis-healthcare-catalog.test.mjs scripts/phoenix-genesis-document-intake.test.mjs",
+    "test:genesis": "node --test scripts/phoenix-genesis-fabric.test.mjs scripts/phoenix-genesis-institutional-registry.test.mjs scripts/phoenix-genesis-workbench.test.mjs scripts/phoenix-genesis-importer.test.mjs scripts/phoenix-genesis-fabric-integration.test.mjs scripts/phoenix-genesis-legacy-csv.test.mjs scripts/phoenix-genesis-legacy-csv-http.test.mjs scripts/phoenix-genesis-healthcare-catalog.test.mjs scripts/phoenix-genesis-document-intake.test.mjs scripts/phoenix-genesis-area-census.test.mjs scripts/phoenix-genesis-area-census-http.test.mjs",
     "geo": "node scripts/phoenix-geo.mjs",
     "geo:operations": "node scripts/phoenix-geo-operations.mjs",
     "geo:db": "node scripts/phoenix-geo-db.mjs",
