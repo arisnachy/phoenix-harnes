@@ -16,6 +16,7 @@ import { SecureAsk } from './SecureAsk.tsx'
 import { GenerativeUi, type GenerativeUiBlock } from './GenerativeUi.tsx'
 import { sportsCardsFromToolResult, unrenderedSportsCards } from './sports-tool-cards.ts'
 import { healthiaCardsFromToolResult } from './healthia-tool-cards.ts'
+import { oracleCardsFromToolResult } from './oracle-tool-cards.ts'
 import { TradingDashboard } from './TradingDashboard.tsx'
 import { TradingMarketChart } from './TradingMarketChart.tsx'
 import { tradingDashboardFromToolResult, tradingMarketFromToolResult, type TradingDashboardSnapshot, type TradingMarketSelection } from './trading-tool-cards.ts'
@@ -81,6 +82,7 @@ type FlowItem =
   }
   | { readonly kind: 'sports'; readonly key: string; readonly blocks: readonly GenerativeUiBlock[] }
   | { readonly kind: 'healthia'; readonly key: string; readonly blocks: readonly GenerativeUiBlock[] }
+  | { readonly kind: 'oracle'; readonly key: string; readonly blocks: readonly GenerativeUiBlock[] }
   | { readonly kind: 'trading'; readonly key: string; readonly snapshot?: TradingDashboardSnapshot }
   | { readonly kind: 'trading-market'; readonly key: string; readonly selection: TradingMarketSelection }
 
@@ -401,6 +403,11 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
     if (isWholeActivity(node.kind)) {
       if (node.kind === 'tool-call') {
         const result = (node.data as ToolChatData).root
+        const oracleCards = oracleCardsFromToolResult(result)
+        if (oracleCards.length > 0) {
+          flush()
+          flow.push({ kind: 'oracle', key: 'oracle:' + node.key, blocks: oracleCards })
+        }
         const healthCards = healthiaCardsFromToolResult(result)
         if (healthCards.length > 0) {
           // First-party tool evidence, not a model claim or hidden activity.
@@ -693,6 +700,19 @@ function SportsEvidenceSurface({ blocks, inputActions }: {
       onAction={(prompt,mode)=>{
         inputActions.setDraft(prompt)
         if(mode==='submit')inputActions.submit()
+      }} />)}
+  </section>
+}
+
+function OracleEvidenceSurface({ blocks, inputActions }: {
+  readonly blocks: readonly GenerativeUiBlock[]
+  readonly inputActions: ChatViewSlotProps['inputActions']
+}) {
+  return <section data-chat-flow-kind="oracle-evidence" aria-label="ORÁCULO · Investigación y pronóstico científico">
+    {blocks.map((block,index)=><GenerativeUi key={index} block={block}
+      onAction={(prompt,mode)=>{
+        inputActions.setDraft(prompt)
+        if (mode === 'submit') inputActions.submit()
       }} />)}
   </section>
 }
@@ -1064,6 +1084,8 @@ function BrowserWorkspace({
                 ? <TradingMarketChart symbols={[item.selection.symbol]} initialInterval={item.selection.interval} trades={[]} />
                 : item.kind === 'sports'
                 ? <SportsEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
+                : item.kind === 'oracle'
+                ? <OracleEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
                 : item.kind === 'healthia'
                 ? <HealthiaEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
                 : item.kind === 'node'
@@ -1166,7 +1188,9 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
             ? <TradingMarketChart symbols={[item.selection.symbol]} initialInterval={item.selection.interval} trades={[]} />
             : item.kind === 'sports'
             ? <SportsEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
-            : item.kind === 'healthia'
+            : item.kind === 'oracle'
+                ? <OracleEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
+                : item.kind === 'healthia'
             ? <HealthiaEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
             : item.kind === 'desktop'
             ? <DesktopLive sessionId={sessionId} active={item.key === latestDesktopKey} />
