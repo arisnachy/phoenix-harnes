@@ -29,7 +29,7 @@ const FEASIBILITY_QUESTION = /\b(?:es\s+posible|se\s+puede|ser[ií]a\s+viable|is
 // oxlint-disable-next-line @stylistic/max-len -- Bilingual action conjugations avoid costly classifier calls.
 const ACTION_ADDITIONAL = /\b(?:resu[eé]lv\p{L}*|resolv\p{L}*|solucion\p{L}*|planific\p{L}*|program\p{L}*|analiz\p{L}*|investig\p{L}*|revis\p{L}*|arregl\p{L}*|corrig\p{L}*|optimiz\p{L}*|compar\p{L}*|comprob\p{L}*|verific\p{L}*|asign\p{L}*|distribu\p{L}*|repart\p{L}*|organiza\p{L}*|calcul\p{L}*|demuestr\p{L}*|demostr\p{L}*|valida\p{L}*|redact\p{L}*|ay[uú]dame)\b/iu
 // oxlint-disable-next-line @stylistic/max-len -- Broad but deterministic decision vocabulary.
-const DECISION_ADDITIONAL = /\b(?:asignaci[oó]n|optimizaci[oó]n|planificaci[oó]n|turnos?|opciones?|alternativas?|soluci[oó]n|elegir|escoger|best|cheapest|cohortes?|cupos?|recursos?|itinerarios?|distribuci[oó]n)\b/iu
+const DECISION_ADDITIONAL = /\b(?:plans?|planes|asignaci[oó]n|optimizaci[oó]n|planificaci[oó]n|turnos?|opciones?|alternativas?|soluci[oó]n|elegir|escoger|best|cheapest|cohortes?|cupos?|recursos?|itinerarios?|distribuci[oó]n)\b/iu
 // oxlint-disable-next-line @stylistic/max-len -- Efficiency constraints trigger bounded checks.
 const PERFORMANCE = /\b(?:latencia|latency|rendimiento|performance|escalabilidad|scalability|tiempo\s+de\s+ejecuci[oó]n|execution\s+time|sin\s+demoras|sin\s+aumentar\s+(?:el\s+)?tiempo|without\s+extra\s+calls|benchmark\p{L}*)\b/iu
 // oxlint-disable-next-line @stylistic/max-len -- Explicit non-domain problem solving may still merit the universal contract.
