@@ -1,0 +1,69 @@
+{
+  "organizationId": "hospital_ejemplo",
+  "name": "Hospital de demostración (datos ficticios)",
+  "industry": "healthcare",
+  "adoptionMode": "hybrid",
+  "network": {
+    "mode": "lan"
+  },
+  "sites": [
+    {
+      "siteId": "campus",
+      "name": "Sede ficticia",
+      "workstations": 28,
+      "reusableWorkstations": 20,
+      "roles": [
+        {
+          "roleId": "consulta",
+          "name": "Consultas externas",
+          "instances": 6,
+          "capabilities": [
+            "appointments.read",
+            "prescriptions.request"
+          ]
+        },
+        {
+          "roleId": "pharmacy",
+          "name": "Farmacia",
+          "instances": 1,
+          "capabilities": [
+            "inventory.read",
+            "prescriptions.verify"
+          ]
+        },
+        {
+          "roleId": "nursing",
+          "name": "Enfermería",
+          "instances": 2,
+          "capabilities": [
+            "beds.read",
+            "care-tasks.manage"
+          ]
+        }
+      ],
+      "software": [
+        {
+          "systemId": "legacy_his",
+          "name": "HIS existente ficticio"
+        }
+      ]
+    }
+  ],
+  "costs": {
+    "workstationUsd": 650
+  },
+  "inference": {
+    "strategies": [
+      {
+        "providerId": "local_primary",
+        "execution": "local",
+        "monthlyBudgetUsd": 200
+      },
+      {
+        "providerId": "cloud_approved",
+        "execution": "external",
+        "monthlyBudgetUsd": 500
+      }
+    ]
+  }
+}
