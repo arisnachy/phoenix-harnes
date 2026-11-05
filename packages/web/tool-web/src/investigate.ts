@@ -96,8 +96,12 @@ export function scoreResearchLead(question: string, lead: WebSearchSource): numb
   const count = focus.filter(t => matchesWord(text, t)).length
   // Most substantial questions need two independent topic clues, not the words
   // "research", "study", "It", "news", "cases" or a shared year alone.
-  const minimum = focus.length >= 3 ? 2 : 1
+  // Short, accurate titles may name only the disease or product. Keep them
+  // as leads; fetched documents still have to prove the subject independently.
+  const minimum = focus.length >= 4 ? 2 : 1
   if (count < minimum) return 0
+  const mainSubject = /\b(artemis|dengue)\b/u.exec(normalizeResearchText(question))?.[1]
+  if (mainSubject !== undefined && !matchesWord(text, mainSubject)) return 0
   const official = /(?:^|\.)(?:gov|gob\.do|edu|int)$/u.test(parsed.hostname)
     || /(?:^|\.)(?:nasa\.gov|paho\.org|who\.int|epidemiologia\.gob\.do)$/u.test(parsed.hostname)
   const inTitle = focus.filter(t => matchesWord(normalizeResearchText(title),t)).length
