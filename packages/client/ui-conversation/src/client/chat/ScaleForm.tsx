@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { PhoenixStatusPill, PhoenixUiIcon, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
+import type { CanvasAction } from './GenerativeCanvas.tsx'
 import css from './InteractiveUi.module.css'
 
 type ScaleChoice = { readonly label: string; readonly score: number }
@@ -202,7 +203,7 @@ export function scoreScale(spec: ScaleFormSpec, answers: Record<string, number>)
 }
 
 /** In-chat form with answered-item count, reset and auditable scoring. */
-export function ScaleForm({ spec }: { readonly spec: ScaleFormSpec }): ReactNode {
+export function ScaleForm({ spec, onAction }: { readonly spec: ScaleFormSpec; readonly onAction?: CanvasAction | undefined }): ReactNode {
   const [selected, setSelected] = useState<Record<string, number>>({})
   // Preserve the selected label even if distinct choices share a score.
   const answers: Record<string, number> = {}
@@ -240,6 +241,14 @@ export function ScaleForm({ spec }: { readonly spec: ScaleFormSpec }): ReactNode
       <strong>Instrumento incompleto o no verificable.</strong>
       <ul>{warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
       La puntuación es solo un registro, no una aplicación clínica validada.
+      {onAction && <button type="button" onClick={() => onAction(
+        'Repara este instrumento sin inventar validez ni materiales protegidos. '
+        + 'Investiga su protocolo y versión autorizada, pasos de administración, '
+        + 'preguntas y opciones puntuadas, rango total, subescalas y límites. '
+        + 'Entrega un scale_form completo y funcional. Problemas: '
+        + warnings.join(' | ') + '. Definición: ' + JSON.stringify(spec), 'draft')}>
+        Mejorar instrumento con Kira
+      </button>}
     </div>}
     <div className={css.questions}>
       {spec.props.items.map((item, index) => <label key={item.id} className={css.question}>
