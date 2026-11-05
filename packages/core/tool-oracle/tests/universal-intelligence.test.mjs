@@ -70,3 +70,35 @@ test('el conjunto se abstiene si falta histórico y no confunde periodo futuro',
     horizonSteps:1,stepHours:24,lastObservedAt:'2020-01-01T00:00:00Z',unit:'casos'})
   assert.equal(stale.status,'insufficient')
 })
+
+
+test('calibración del ledger solo considera pronósticos congelados antes del evento',async()=>{
+  const {mkdtemp,writeFile,rm}=await import('node:fs/promises')
+  const {tmpdir}=await import('node:os')
+  const {join}=await import('node:path')
+  const {oracleCalibrationLedger}=await import('../src/ledger.ts')
+  const dir=await mkdtemp(join(tmpdir(),'oraculo-calibration-'))
+  try{
+    const path=join(dir,'scored.jsonl')
+    const make=(id,createdAt)=>({
+      kind:'prediction',id,createdAt,result:{
+        status:'forecast',method:'historical-real-data',targetAt:'2021-02-01T00:00:00Z',
+        probabilityPercent:80,source:'test fixtures',evidenceStatus:'retrieved_unverified',assumptions:[],
+      },
+    })
+    const entries=[
+      make('a','2021-01-01T00:00:00Z'),
+      {kind:'outcome',id:'a',recordedAt:'2022-01-01T00:00:00Z',observedAt:'2021-02-02T00:00:00Z',
+        observedValue:1,source:'fixture',absoluteError:.2,brierError:.04,verification:'unverified_report'},
+      make('b','2022-01-01T00:00:00Z'),
+      {kind:'outcome',id:'b',recordedAt:'2022-01-01T00:00:00Z',observedAt:'2021-02-02T00:00:00Z',
+        observedValue:1,source:'fixture',absoluteError:.2,brierError:.04,verification:'unverified_report'},
+    ]
+    await writeFile(path,entries.map(x=>JSON.stringify(x)).join('\n')+'\n','utf8')
+    const r=await oracleCalibrationLedger(path)
+    assert.equal(r.count,1)
+    assert.equal(r.retrospectiveExcluded,1)
+    assert.equal(r.verification,'user_reported_unverified')
+    assert(Math.abs(r.brier-.04)<1e-10)
+  }finally{await rm(dir,{recursive:true,force:true})}
+})
