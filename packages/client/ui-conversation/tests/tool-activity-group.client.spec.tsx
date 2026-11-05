@@ -318,6 +318,7 @@ describe('chat tool activity grouping', () => {
     expect(status.textContent).toContain('status.generatingImage')
     expect(status.textContent).toContain('image.progressNoPercent')
     expect(status.textContent).toContain('image.progressStage')
+    expect(status.textContent).toContain('image.progressElapsed')
     expect(status.textContent).not.toContain('text2im')
     expect(status.textContent).not.toMatch(/\\d+%/u)
     expect(status.getAttribute('data-progress-kind')).toBe('indeterminate')
