@@ -147,6 +147,12 @@ export function scaleProtocolWarnings(spec: ScaleFormSpec): string[] {
   if (scoring && (scoring.min !== minimum || scoring.max !== maximum)) {
     warnings.push('El rango declarado no corresponde a las puntuaciones de las respuestas.')
   }
+  const namedInstrument = /\b(?:mini[ -]?cog|phq[ -]?9|gad[ -]?7|mmse|moca|mini[ -]?mental)\b/iu
+    .test(spec.props.title)
+  if (namedInstrument && (!spec.props.source || !spec.props.version
+    || !spec.props.administration?.length)) {
+    warnings.push('Instrumento identificado: falta fuente, versión o procedimiento de administración.')
+  }
   const isMiniCog = /\bmini[ -]?cog\b/iu.test(spec.props.title)
   if (!isMiniCog) return warnings
   const steps = spec.props.administration ?? []
