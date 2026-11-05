@@ -22,6 +22,7 @@ on:
       - 'scripts/phoenix-genesis-importer.mjs'
       - 'scripts/phoenix-genesis-importer.test.mjs'
       - 'scripts/phoenix-genesis-sector-packs.mjs'
+      - 'scripts/phoenix-genesis-fabric-integration.test.mjs'
       - 'scripts/phoenix-genesis-fabric.test.mjs'
       - 'scripts/phoenix-genesis-plan-cli.mjs'
       - 'scripts/phoenix-genesis-fabric-example.json'
@@ -49,6 +50,7 @@ on:
       - 'scripts/phoenix-genesis-importer.mjs'
       - 'scripts/phoenix-genesis-importer.test.mjs'
       - 'scripts/phoenix-genesis-sector-packs.mjs'
+      - 'scripts/phoenix-genesis-fabric-integration.test.mjs'
       - 'scripts/phoenix-genesis-fabric.test.mjs'
       - 'scripts/phoenix-genesis-plan-cli.mjs'
       - 'scripts/phoenix-genesis-fabric-example.json'
@@ -78,6 +80,10 @@ jobs:
         run: node --test scripts/phoenix-genesis-workbench.test.mjs
       - name: Test safe institutional imports, site revisions and open-universe sector packs
         run: node --test scripts/phoenix-genesis-importer.test.mjs
+      - name: Test real Genesis-to-Fabric node enrollment and heartbeat
+        run: node --test scripts/phoenix-genesis-fabric-integration.test.mjs
+      - name: Verify browser console scripts parse
+        run: node --check scripts/phoenix-genesis-console-ui.js && node --check scripts/phoenix-genesis-console.mjs
       - name: Exercise the Genesis CLI with synthetic hospital input
         run: |
           node scripts/phoenix-genesis-plan-cli.mjs scripts/phoenix-genesis-fabric-example.json > genesis-demo-output.json
