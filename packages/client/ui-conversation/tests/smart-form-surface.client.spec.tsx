@@ -32,6 +32,16 @@ describe('native smart form interaction',()=>{
     expect(onAction.mock.calls[0]?.[1]).toBe('draft')
     expect(onAction.mock.calls[0]?.[0]).toContain('calculadora_imc')
   })
+  it('offers a dedicated protocol-first assessment creation action',()=>{
+    const onAction=vi.fn()
+    render(<SmartFormWorkspace onAction={onAction}/>)
+    fireEvent.click(screen.getByRole('button',{name:'Crear evaluación o escala'}))
+    expect(onAction).toHaveBeenCalledTimes(1)
+    expect(onAction.mock.calls[0]?.[1]).toBe('draft')
+    expect(onAction.mock.calls[0]?.[0]).toContain('component scale_form')
+    expect(onAction.mock.calls[0]?.[0]).toContain('administration')
+    expect(onAction.mock.calls[0]?.[0]).toContain('no inventes')
+  })
   it('opens the searchable built-in library without server calls',()=>{
     render(<SmartFormWorkspace/>)
     expect(screen.getByText('Calculadora científica')).not.toBeNull()

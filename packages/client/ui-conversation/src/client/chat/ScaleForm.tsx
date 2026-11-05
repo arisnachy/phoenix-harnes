@@ -1,9 +1,22 @@
 import { useState, type ReactNode } from 'react'
 import { PhoenixStatusPill, PhoenixUiIcon, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
+import type { CanvasAction } from './GenerativeCanvas.tsx'
 import css from './InteractiveUi.module.css'
 
 type ScaleChoice = { readonly label: string; readonly score: number }
-type ScaleItem = { readonly id: string; readonly question: string; readonly options: readonly ScaleChoice[] }
+type ScaleItem = { readonly id: string; readonly question: string; readonly options: readonly ScaleChoice[]; readonly help?: string }
+type ScaleStep = {
+  readonly id: string; readonly title: string; readonly instruction: string
+  readonly phase: 'prepare' | 'administer' | 'score'
+}
+type ScaleDomain = {
+  readonly id: string; readonly label: string; readonly items: readonly string[]
+}
+type ScaleScoring = {
+  readonly min: number; readonly max: number
+  readonly direction?: 'higher-worse' | 'higher-better' | 'descriptive'
+  readonly note?: string
+}
 type ScaleBand = { readonly max: number; readonly label: string; readonly tone?: PhoenixStatusTone }
 
 /** Declarative score form: the model may supply values, never JavaScript or callbacks. */
@@ -14,6 +27,11 @@ export interface ScaleFormSpec {
     readonly title: string
     readonly description?: string
     readonly source?: string
+    readonly version?: string
+    readonly population?: string
+    readonly administration?: readonly ScaleStep[]
+    readonly scoring?: ScaleScoring
+    readonly domains?: readonly ScaleDomain[]
     readonly items: readonly ScaleItem[]
     readonly bands?: readonly ScaleBand[]
   }
@@ -33,27 +51,70 @@ export function parseScaleForm(value: unknown): ScaleFormSpec | null {
   if (!record(value) || !allowed(value, ['component', 'version', 'props'])
     || value.component !== 'scale_form' || value.version !== 1 || !record(value.props)) return null
   const props = value.props
-  if (!allowed(props, ['title', 'description', 'source', 'items', 'bands'])
+  if (!allowed(props, ['title', 'description', 'source', 'version', 'population',
+    'administration', 'scoring', 'domains', 'items', 'bands'])
     || !text(props.title, 120)
     || (props.description !== undefined && !text(props.description, 600))
     || (props.source !== undefined && !text(props.source, 400))
+    || (props.version !== undefined && !text(props.version, 120))
+    || (props.population !== undefined && !text(props.population, 240))
     || !Array.isArray(props.items) || props.items.length < 1 || props.items.length > 60) return null
   const ids = new Set<string>()
   for (const item of props.items) {
-    if (!record(item) || !allowed(item, ['id', 'question', 'options'])
+    if (!record(item) || !allowed(item, ['id', 'question', 'options', 'help'])
       || typeof item.id !== 'string' || !/^[a-z][a-z0-9_-]{0,39}$/.test(item.id)
       || ids.has(item.id) || !text(item.question, 400)
+      || (item.help !== undefined && !text(item.help, 600))
       || !Array.isArray(item.options) || item.options.length < 2 || item.options.length > 12) return null
     ids.add(item.id)
     const labels = new Set<string>()
-    const scores = new Set<number>()
     for (const option of item.options) {
       if (!record(option) || !allowed(option, ['label', 'score']) || !text(option.label, 160)
         || typeof option.score !== 'number' || !Number.isSafeInteger(option.score)
-        || option.score < -1000 || option.score > 1000 || labels.has(option.label)
-        || scores.has(option.score)) return null
+        || option.score < -1000 || option.score > 1000 || labels.has(option.label)) return null
       labels.add(option.label)
-      scores.add(option.score)
+    }
+  }
+  if (props.administration !== undefined) {
+    if (!Array.isArray(props.administration) || props.administration.length < 1
+      || props.administration.length > 18) return null
+    const stepIds = new Set<string>()
+    for (const step of props.administration) {
+      if (!record(step) || !allowed(step, ['id','title','instruction','phase'])
+        || typeof step.id !== 'string' || !/^[a-z][a-z0-9_-]{0,39}$/.test(step.id)
+        || stepIds.has(step.id) || !text(step.title, 180)
+        || !text(step.instruction, 1500)
+        || !['prepare','administer','score'].includes(String(step.phase))) return null
+      stepIds.add(step.id)
+    }
+  }
+  if (props.scoring !== undefined) {
+    const rule = props.scoring
+    if (!record(rule) || !allowed(rule, ['min','max','direction','note'])
+      || !Number.isSafeInteger(rule.min) || !Number.isSafeInteger(rule.max)
+      || (rule.min as number) >= (rule.max as number)
+      || (rule.min as number) < -60000 || (rule.max as number) > 60000
+      || (rule.direction !== undefined
+        && !['higher-worse','higher-better','descriptive'].includes(String(rule.direction)))
+      || (rule.note !== undefined && !text(rule.note, 1000))) return null
+  }
+  if (props.domains !== undefined) {
+    if (!Array.isArray(props.domains) || props.domains.length < 1
+      || props.domains.length > 16) return null
+    const domainIds = new Set<string>()
+    for (const domain of props.domains) {
+      if (!record(domain) || !allowed(domain, ['id','label','items'])
+        || typeof domain.id !== 'string' || !/^[a-z][a-z0-9_-]{0,39}$/.test(domain.id)
+        || domainIds.has(domain.id) || !text(domain.label, 160)
+        || !Array.isArray(domain.items) || domain.items.length < 1
+        || domain.items.length > props.items.length) return null
+      const members = new Set<string>()
+      for (const itemId of domain.items) {
+        if (typeof itemId !== 'string' || !ids.has(itemId)
+          || members.has(itemId)) return null
+        members.add(itemId)
+      }
+      domainIds.add(domain.id)
     }
   }
   if (props.bands !== undefined) {
@@ -70,11 +131,62 @@ export function parseScaleForm(value: unknown): ScaleFormSpec | null {
   return value as unknown as ScaleFormSpec
 }
 
+/**
+ * Detect unsafe or incomplete instrument descriptions without silently
+ * changing their authored scoring. Other kinds of forms remain supported.
+ * @param spec - Parsed scale definition
+ * @returns Explicit reasons it cannot claim standardized assessment
+ */
+export function scaleProtocolWarnings(spec: ScaleFormSpec): string[] {
+  const warnings: string[] = []
+  const minimum = spec.props.items.reduce((s, item) =>
+    s + Math.min(...item.options.map(option => option.score)), 0)
+  const maximum = spec.props.items.reduce((s, item) =>
+    s + Math.max(...item.options.map(option => option.score)), 0)
+  const scoring = spec.props.scoring
+  if (scoring && (scoring.min !== minimum || scoring.max !== maximum)) {
+    warnings.push('El rango declarado no corresponde a las puntuaciones de las respuestas.')
+  }
+  const namedInstrument = /\b(?:mini[ -]?cog|phq[ -]?9|gad[ -]?7|mmse|moca|mini[ -]?mental)\b/iu
+    .test(spec.props.title)
+  if (namedInstrument && (!spec.props.source || !spec.props.version
+    || !spec.props.administration?.length)) {
+    warnings.push('Instrumento identificado: falta fuente, versión o procedimiento de administración.')
+  }
+  const isMiniCog = /\bmini[ -]?cog\b/iu.test(spec.props.title)
+  if (!isMiniCog) return warnings
+  const steps = spec.props.administration ?? []
+  const all = steps.map(step => step.title + ' ' + step.instruction).join(' ').toLowerCase()
+  if (steps.length < 3 || !/registro|registration|memorizar|recuerdo inicial/iu.test(all)
+    || !/reloj|clock/iu.test(all) || !/evocaci[oó]n|recall/iu.test(all)) {
+    warnings.push('Mini-Cog: falta el procedimiento de registro, reloj y evocación diferida.')
+  }
+  const recall = spec.props.items.find(item =>
+    /recuerd|evocaci[oó]n|palabras|recall|words/iu.test(item.question))
+  const clock = spec.props.items.find(item =>
+    /reloj|clock/iu.test(item.question))
+  const scores = (item: ScaleItem | undefined): string =>
+    item?.options.map(option => option.score).sort((a,b) => a-b).join(',') ?? ''
+  if (spec.props.items.length !== 2 || recall === clock
+    || scores(recall) !== '0,1,2,3' || scores(clock) !== '0,2'
+    || minimum !== 0 || maximum !== 5) {
+    warnings.push('Mini-Cog: recuerdo 0–3 y reloj 0 o 2, con total 0–5.')
+  }
+  if (!spec.props.source || !spec.props.version) {
+    warnings.push('Mini-Cog: especifica fuente y versión del protocolo autorizado.')
+  }
+  return warnings
+}
+
 /** Score locally and deterministically, without consuming model turns. */
 export function scoreScale(spec: ScaleFormSpec, answers: Record<string, number>): {
   readonly answered: number
   readonly total: number | null
   readonly band?: ScaleBand
+  readonly domains: readonly {
+    readonly id: string; readonly label: string
+    readonly value: number | null; readonly min: number; readonly max: number
+  }[]
 } {
   let answered = 0
   let total = 0
@@ -85,22 +197,52 @@ export function scoreScale(spec: ScaleFormSpec, answers: Record<string, number>)
     total += answer
     answered += 1
   }
-  if (answered !== spec.props.items.length) return { answered, total: null }
+  const domains = (spec.props.domains ?? []).map(domain => {
+    const items = domain.items.map(id => spec.props.items.find(item => item.id === id)!)
+    const min = items.reduce((s,item) => s + Math.min(...item.options.map(o => o.score)), 0)
+    const max = items.reduce((s,item) => s + Math.max(...item.options.map(o => o.score)), 0)
+    const complete = domain.items.every(id => Object.prototype.hasOwnProperty.call(answers,id)
+      && spec.props.items.find(item => item.id === id)?.options.some(o => o.score === answers[id]))
+    return {
+      id:domain.id,label:domain.label,min,max,
+      value:complete ? domain.items.reduce((s,id) => s + answers[id]!,0) : null,
+    }
+  })
+  if (answered !== spec.props.items.length) return { answered, total: null, domains }
   const band = spec.props.bands?.find(entry => total <= entry.max)
-  return band === undefined ? { answered, total } : { answered, total, band }
+  return band === undefined ? { answered, total, domains } : { answered, total, band, domains }
+}
+
+/** Keep legacy score-valued selects while disambiguating equal-score choices. */
+function choiceValue(item: ScaleItem, index: number): string {
+  const score = item.options[index]!.score
+  return item.options.filter(option => option.score === score).length > 1
+    ? 'choice:' + String(index) : String(score)
 }
 
 /** In-chat form with answered-item count, reset and auditable scoring. */
-export function ScaleForm({ spec }: { readonly spec: ScaleFormSpec }): ReactNode {
-  const [answers, setAnswers] = useState<Record<string, number>>({})
+export function ScaleForm({ spec, onAction }: { readonly spec: ScaleFormSpec; readonly onAction?: CanvasAction | undefined }): ReactNode {
+  const [selected, setSelected] = useState<Record<string, number>>({})
+  // Preserve the selected label even if distinct choices share a score.
+  const answers: Record<string, number> = {}
+  for (const item of spec.props.items) {
+    const choice = selected[item.id]
+    if (choice !== undefined && item.options[choice] !== undefined) {
+      answers[item.id] = item.options[choice]!.score
+    }
+  }
+  const warnings = scaleProtocolWarnings(spec)
   const [copied, setCopied] = useState(false)
   const scored = scoreScale(spec, answers)
   const copy = (): void => {
     if (scored.total === null || typeof navigator === 'undefined' || !navigator.clipboard) return
     const lines = [spec.props.title, ...spec.props.items.map(item =>
-      item.question + ': ' + (item.options.find(option => option.score === answers[item.id])?.label ?? 'Sin respuesta')),
-    'Total: ' + String(scored.total), 'Interpretación: ' + (scored.band?.label ?? 'No definida'),
-    'Fuente: ' + (spec.props.source ?? 'No especificada')]
+      item.question + ': ' + (item.options[selected[item.id] ?? -1]?.label ?? 'Sin respuesta')),
+    'Total: ' + String(scored.total),
+    ...scored.domains.map(domain => domain.label + ': ' + (domain.value ?? 'No completado')),
+    'Interpretación: ' + (warnings.length > 0 ? 'No verificable' : scored.band?.label ?? 'No definida'),
+    'Fuente: ' + (spec.props.source ?? 'No especificada'),
+    ...warnings.map(warning => 'Advertencia: ' + warning)]
     void navigator.clipboard.writeText(lines.join('\n')).then(() => setCopied(true)).catch(() => setCopied(false))
   }
   return <section className={css.surface} data-generative-ui="scale_form">
@@ -108,22 +250,44 @@ export function ScaleForm({ spec }: { readonly spec: ScaleFormSpec }): ReactNode
       <div><h3>{spec.props.title}</h3>
         {spec.props.description && <p>{spec.props.description}</p>}
       </div></header>
+    {spec.props.administration && <section aria-label="Protocolo de aplicación" className={css.questions}>
+      <h4>Procedimiento de administración</h4>
+      <ol>{spec.props.administration.map(step =>
+        <li key={step.id}><strong>{step.title}</strong><p>{step.instruction}</p></li>)}</ol>
+    </section>}
+    {warnings.length > 0 && <div role="alert" className={css.disclaimer}>
+      <strong>Instrumento incompleto o no verificable.</strong>
+      <ul>{warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
+      La puntuación es solo un registro, no una aplicación clínica validada.
+      {onAction && <button type="button" onClick={() => onAction(
+        'Repara este instrumento sin inventar validez ni materiales protegidos. '
+        + 'Investiga su protocolo y versión autorizada, pasos de administración, '
+        + 'preguntas y opciones puntuadas, rango total, subescalas y límites. '
+        + 'Entrega un scale_form completo y funcional. Problemas: '
+        + warnings.join(' | ') + '. Definición: ' + JSON.stringify(spec), 'draft')}>
+        Mejorar instrumento con Kira
+      </button>}
+    </div>}
     <div className={css.questions}>
       {spec.props.items.map((item, index) => <label key={item.id} className={css.question}>
         <span>{index + 1}. {item.question}</span>
-        <select value={answers[item.id] === undefined ? '' : String(answers[item.id])}
+        {item.help && <small>{item.help}</small>}
+        <select value={selected[item.id] === undefined ? '' : choiceValue(item, selected[item.id]!)}
           onChange={event => {
-            const score = event.currentTarget.value
-            setAnswers(old => {
+            const choice = event.currentTarget.value
+            setSelected(old => {
               const next = { ...old }
-              if (score === '') delete next[item.id]
-              else next[item.id] = Number(score)
+              if (choice === '') delete next[item.id]
+              else {
+                const index = item.options.findIndex((_,i) => choiceValue(item,i) === choice)
+                if (index >= 0) next[item.id] = index
+              }
               return next
             })
             setCopied(false)
           }}>
           <option value="">Seleccionar respuesta</option>
-          {item.options.map((option, i) => <option key={i} value={String(option.score)}>{option.label}</option>)}
+          {item.options.map((option, i) => <option key={i} value={choiceValue(item,i)}>{option.label}</option>)}
         </select>
       </label>)}
     </div>
@@ -131,17 +295,29 @@ export function ScaleForm({ spec }: { readonly spec: ScaleFormSpec }): ReactNode
       <span>Puntuación</span>
       <strong aria-live="polite">{scored.total === null ? '—' : scored.total}</strong>
       <span>{scored.answered} de {spec.props.items.length} respuestas</span>
-      {scored.band && <PhoenixStatusPill label={scored.band.label} tone={scored.band.tone ?? 'neutral'} />}
+      {spec.props.scoring && <span>Rango: {spec.props.scoring.min}–{spec.props.scoring.max}</span>}
+      {warnings.length === 0 && scored.band && <PhoenixStatusPill label={scored.band.label} tone={scored.band.tone ?? 'neutral'} />}
     </div>
+    {scored.domains.length > 0 && <div className={css.questions} aria-label="Resultados por dimensión">
+      <h4>Resultados por dimensión</h4>
+      {scored.domains.map(domain => <div key={domain.id} className={css.result}>
+        <span>{domain.label}</span>
+        <strong>{domain.value === null ? '—' : domain.value}</strong>
+        <span>Rango {domain.min}–{domain.max}</span>
+      </div>)}
+    </div>}
     <div className={css.actions}>
       <button type="button" onClick={copy} disabled={scored.total === null}>
         <PhoenixUiIcon name={copied ? 'check' : 'copy'} size={15} /> {copied ? 'Copiado' : 'Copiar resultado'}
       </button>
-      <button type="button" onClick={() => { setAnswers({}); setCopied(false) }}>
+      <button type="button" onClick={() => { setSelected({}); setCopied(false) }}>
         <PhoenixUiIcon name="reset" size={15} /> Reiniciar
       </button>
     </div>
     <p className={css.disclaimer}>Puntuación calculada mediante reglas declaradas.
+      {spec.props.scoring?.note ? ' ' + spec.props.scoring.note : ''}
+      {spec.props.population ? ' Población: ' + spec.props.population + '.' : ''}
+      {spec.props.version ? ' Versión: ' + spec.props.version + '.' : ''}
       {spec.props.source ? ' Fuente: ' + spec.props.source + '.' : ' Fuente y validez no verificadas.'}
       {' '}Una interpretación clínica requiere un instrumento validado y su protocolo.</p>
   </section>

@@ -2,6 +2,23 @@ import { describe, expect, it } from 'vitest'
 import { firstPassQualityGuidance } from '../src/first-pass-quality.ts'
 
 describe('first-pass quality without extra model turns', () => {
+  it('demands real administration and scoring for clinical or psychological scales', () => {
+    for (const request of [
+      'Crea una prueba con escala para medir deterioro cognitivo.',
+      'Diseña un test Mini-Cog en español.',
+      'Construye un cuestionario psicológico con puntuación.',
+      'Genera una escala Likert para recursos humanos.',
+    ]) {
+      const guidance = firstPassQualityGuidance(request)
+      expect(guidance).toContain('scale_form')
+      expect(guidance).toContain('administration steps')
+      expect(guidance).toContain('source, version, population')
+      expect(guidance).toContain('never invent clinical validity')
+    }
+    expect(firstPassQualityGuidance('Hola')).toBe('')
+  })
+
+
   it('guides generated calculators and scales toward executable native formulas', () => {
     for (const request of [
       'Crea una calculadora de IMC.',
