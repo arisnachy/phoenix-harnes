@@ -168,6 +168,13 @@
 <option value="public">Público</option></select></div>
 <div><label><input name="validated" type="checkbox">Confirmo revisión de la fuente y su autenticidad</label></div>
 </div><button type="submit">Registrar evidencia</button></form></article>
+<article class="card"><h2>Importación estructurada de información</h2>
+<p>Pega un manifiesto JSON institucional autorizado. Puede contener unidades, sistemas, costos, metas y hechos agregados; no currículos, nóminas, expedientes ni secretos. Requiere una evidencia previamente validada.</p>
+<form id="form-import">
+<label for="import-manifest">Manifiesto JSON con schemaVersion 1.0, organizationId, manifestId y evidenceId</label>
+<textarea id="import-manifest" name="manifest" required rows="8" placeholder='{"schemaVersion":"1.0","manifestId":"inventario_001","organizationId":"hospital_demo","evidenceId":"ev_...","units":[]}'></textarea>
+<button type="submit">Validar e importar de forma atómica</button>
+</form><p class="hint">Si falla un registro, se revierte la importación completa. No activa departamentos ni conecta software.</p></article>
 <article class="card"><h2>Documentos registrados</h2><ul id="evidence-list"></ul></article></section>
 
 <section data-panel="deployment" class="panel" hidden><article class="card"><h2>Arquitectura propuesta</h2>
