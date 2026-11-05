@@ -6,9 +6,8 @@
  * Discovery is side-effect free: merely asking if Genesis exists never
  * creates a database. All document ingestion must use the reviewed console.
  */
-import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join, resolve, isAbsolute } from 'node:path'
+import { existsSync, mkdirSync } from 'node:fs'
+import { join, resolve, dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 export type GenesisScope = 'institution' | 'demo'
@@ -120,6 +119,7 @@ export async function runGenesis(operation: GenesisOperation,raw: unknown = {}):
         source:'existing-demo-database',databaseExists:true
       },false)
     }
+    mkdirSync(dirname(folder),{recursive:true,mode:0o700})
     const create=m.demo.createGenesisSyntheticDemo as (path: string) => unknown
     return result(operation,scope,create(folder),true)
   }
