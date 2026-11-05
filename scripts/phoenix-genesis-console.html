@@ -28,6 +28,7 @@
 <button data-tab="finance">Finanzas</button>
 <button data-tab="models">Modelos IA</button><button data-tab="fabric">Red PHOENIX</button>
 <button data-tab="planning">Planificación</button>
+<button data-tab="readiness">Diagnóstico ejecutivo</button>
 <button data-tab="evidence">Evidencias</button>
 <button data-tab="documents">Documentos 360°</button>
 <button data-tab="deployment">Despliegue</button>
@@ -269,6 +270,23 @@
 </div><button type="submit">Registrar obligación por validar</button></form>
 <ul id="obligations-list"></ul></article></section>
 
+<section data-panel="readiness" class="panel" hidden>
+<article class="card">
+<h2>Diagnóstico ejecutivo de Genesis</h2>
+<p>Informe interno construido con los datos registrados de la institución: entrevista, censo hospitalario, sedes, unidades, sistemas, presupuesto y evidencias. No declara instalaciones ni envíos oficiales.</p>
+<div class="row"><button id="readiness-refresh" type="button">Generar diagnóstico</button>
+<button id="readiness-html" class="secondary" type="button">Exportar HTML imprimible</button>
+<button id="readiness-json" class="secondary" type="button">Exportar JSON verificable</button></div>
+<div id="readiness-stats" class="stats" aria-live="polite"></div>
+<p id="readiness-note" class="hint">Selecciona una organización y pulsa Generar diagnóstico.</p>
+</article>
+<article class="card"><h2>Prioridades para Dirección y Planificación</h2>
+<ol id="readiness-actions"></ol>
+<p class="hint">Las prioridades se derivan de datos y preguntas pendientes. No son órdenes ni decisiones administrativas aprobadas.</p></article>
+<article class="card"><h2>Presupuesto declarado por moneda y período</h2><ul id="readiness-budget"></ul>
+<p class="hint">No se convierten divisas ni se atribuyen precios no informados.</p></article>
+</section>
+
 <section data-panel="evidence" class="panel" hidden><article class="card"><h2>Documentos y evidencias</h2>
 <p>Selecciona la ruta de un archivo disponible en el servidor local. Genesis guarda su huella SHA-256 y metadatos, no copia el contenido.</p>
 <form id="form-evidence"><div class="grid">
@@ -353,4 +371,4 @@
 <pre id="deployment-output"></pre></article></section>
 </div></div>
 </div>
-</main><script src="/app.js" defer></script><script src="/census.js" defer></script></body></html>
+</main><script src="/app.js" defer></script><script src="/census.js" defer></script><script src="/readiness.js" defer></script></body></html>
