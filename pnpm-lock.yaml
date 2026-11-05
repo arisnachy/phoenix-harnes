@@ -1039,6 +1039,9 @@ importers:
 
   packages/bundle/base:
     dependencies:
+      '@phoenix-ai/dsh-tool-oracle':
+        specifier: workspace:^
+        version: link:../../core/tool-oracle
       '@phoenix-ai/dsh-tool-health':
         specifier: workspace:^
         version: link:../../core/tool-health
@@ -4109,6 +4112,24 @@ importers:
       '@phoenix-ai/dsh-tools':
         specifier: workspace:^
         version: link:../tools
+
+  packages/core/tool-oracle:
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../system-prompt
+      '@phoenix-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../tools
+      '@phoenix-ai/dsh-web':
+        specifier: workspace:^
+        version: link:../../web/web
 
   packages/core/tool-sports:
     devDependencies:
