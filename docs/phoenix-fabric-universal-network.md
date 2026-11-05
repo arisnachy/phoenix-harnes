@@ -50,6 +50,29 @@ manera explícita y se mantiene \`not-connected\` hasta comprobar identidad y
 canal reales. Los dispositivos médicos se alojan en redes segmentadas y nunca
 dependen del éxito de un LLM para sus alarmas esenciales.
 
+### 2.1 Federación con organizaciones independientes
+
+Una sede del mismo hospital pertenece a su propia organización; una farmacia
+externa, ARS, laboratorio contratado, proveedor, universidad o ministerio
+**no** adquiere esa misma identidad. Una federación externa necesita:
+
+- Identidad institucional distinta, propietario de la conexión y convenio
+  de intercambio de datos verificado.
+- Capacidades concedidas una a una, propósito, vigencia y clasificación de
+  información; todos los demás permisos permanecen denegados.
+- Transporte privado \`overlay\` o \`relay\`, huella del certificado del par,
+  autenticación mutua y prueba efectiva antes de marcar el enlace conectado.
+- Intercambio mínimo de referencias y comprobantes, con consulta autorizada
+  al registro de origen. Para reportes de gobierno usar agregados aprobados,
+  nunca una réplica masiva de expedientes identificables.
+- Revocación inmediata, auditoría bilateral, política de residencia, límites
+  de tasa y procedimientos de continuidad independientes de la IA.
+
+El planificador reconoce \`network.partners\` separados de
+\`network.peers\` y rechaza redes externas sin aprobación, convenio y
+capacidades concretas. El estado sigue siendo \`not-connected\`: **es un
+contrato de diseño, no una conexión instalada**.
+
 ## 3. Descubrimiento y enrolamiento de un nuevo PHOENIX
 
 1. Genesis registra organización, sedes, dominios de confianza y responsables.
