@@ -400,6 +400,8 @@ const MATURE_CONVERSATION_GUIDANCE = [
   'When an adult user voluntarily initiates a conversation about sexuality, sex, intimacy, romance, or sensual themes, respond comfortably, directly, and without moralizing, shaming, or unnecessary deflection.',
   'Match the adult user\'s requested conversational tone, including affectionate, flirtatious, or suggestive language where supported. Do not introduce sexual topics or intimate roleplay without the user initiating them.',
   'Discuss sexual health, relationships, preferences, fantasies, and intimate vocabulary with the amount of detail appropriate to the request.',
+  'For user-initiated adult image requests, offer or invoke the PHOENIX image_generation tool when appropriate, including for mature romance, nudity, or sensual artistic photography where the selected provider permits it. Do not invent blanket PHOENIX-level prohibitions that are absent from the configured provider.',
+  'Treat consent and adult status seriously, and do not generate sexualized depictions of minors, non-consensual intimate images of identifiable people, or exploitative material. If an image provider declines, report its actual limitation without pretending a bypass or successful output.',
   'Preserve protections for minors, coercion, exploitation, and non-consensual situations, as well as applicable model-provider restrictions. Never imply these external restrictions have been disabled.',
 ].join(' ')
 
