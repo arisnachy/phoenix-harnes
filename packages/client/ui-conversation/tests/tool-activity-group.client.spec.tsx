@@ -309,6 +309,22 @@ describe('chat tool activity grouping', () => {
     expect(screen.getByTestId('node-context')).toBeTruthy()
   })
 
+  it('shows a progress canvas only when a real image generator is running', () => {
+    renderChat([context(1, 'system')], [{ ...runningTool(), name: 'image_gen.text2im' }])
+
+    const status = screen.getByRole('status')
+    expect(status.dataset.activity).toBe('generating-image')
+    expect(status.getAttribute('data-chat-flow-kind')).toBe('image-generation-progress')
+    expect(status.textContent).toContain('status.generatingImage')
+    expect(status.textContent).toContain('image.progressEstimateNote')
+    expect(status.textContent).not.toContain('text2im')
+    const progress = screen.getByRole('progressbar')
+    const percent = Number(progress.getAttribute('aria-valuenow'))
+    expect(percent).toBeGreaterThanOrEqual(1)
+    expect(percent).toBeLessThanOrEqual(95)
+    expect(screen.getByTestId('live-tool-activity')).toBeTruthy()
+  })
+
   it('moves a finished tool out of the live row and into Tools history', () => {
     renderChat([context(1, 'system'), settledTool()])
 
@@ -340,7 +356,7 @@ describe('chat tool activity grouping', () => {
     ['read_file', 'activity.reading'],
     ['update_file', 'activity.writing'],
     ['vitest', 'activity.verifying'],
-    ['image_generation', 'activity.other'],
+    ['image_generation', 'activity.generatingImage'],
   ])('classifies a completed %s call from tool identity alone', (name, label) => {
     renderChat([context(1, 'system'), {
       ...settledTool(),

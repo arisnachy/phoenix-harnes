@@ -16,6 +16,7 @@ export type TurnActivity =
   | 'reading'
   | 'writing'
   | 'executing'
+  | 'generating-image'
   | 'running-tools'
   | 'verifying'
 
@@ -27,6 +28,20 @@ export interface TurnProgress {
   readonly detail?: string
   /** Start time of the concrete activity, when the runtime exposes one. */
   readonly startedAt?: number
+}
+
+/** Detect real creation/editing tools, not image search, read, or upload. */
+export function isImageGenerationTool(name: string): boolean {
+  const normalized = name.toLowerCase().replace(/[_.:/-]+/gu, ' ').replace(/\s+/gu, ' ').trim()
+  return /\b(?:text2im|img2img|imagegen|image2image|dall\s*e|imagen)\b/u.test(normalized)
+    || /\b(?:generate|generar|create|crear|render|edit|editar|upscale|transform|draw|dibujar)\s+(?:an?\s+)?(?:images?|photos?|pictures?|illustrations?|im[aá]genes?)\b/u.test(normalized)
+    || /\b(?:images?|photos?|pictures?|im[aá]genes?)\s+(?:gen|generation|generator|generate|generar|render|create|creation|edit|editing|upscale|transform)\b/u.test(normalized)
+}
+
+/** An explicitly labelled *visual estimate*, never provider telemetry or an ETA. */
+export function imageGenerationEstimatedPercent(elapsedMs: number): number {
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return 1
+  return Math.max(1, Math.min(95, Math.floor(95 * (1 - Math.exp(-elapsedMs / 45_000)))))
 }
 
 const TOOL_ACTIVITY_MATCHERS: readonly (readonly [TurnActivity, RegExp])[] = [
@@ -41,6 +56,7 @@ const TOOL_ACTIVITY_MATCHERS: readonly (readonly [TurnActivity, RegExp])[] = [
 
 /** Classify only the tool name; never infer activity from private arguments or output. */
 export function toolActivity(name: string): TurnActivity {
+  if (isImageGenerationTool(name)) return 'generating-image'
   const normalized = name.toLowerCase().replace(/[_.:/-]+/g, ' ').replace(/\s+/g, ' ').trim()
   return TOOL_ACTIVITY_MATCHERS.find(([, pattern]) => pattern.test(normalized))?.[0] ?? 'running-tools'
 }

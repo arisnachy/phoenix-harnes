@@ -20,7 +20,7 @@ import { oracleCardsFromToolResult } from './oracle-tool-cards.ts'
 import { TradingDashboard } from './TradingDashboard.tsx'
 import { TradingMarketChart } from './TradingMarketChart.tsx'
 import { tradingDashboardFromToolResult, tradingMarketFromToolResult, type TradingDashboardSnapshot, type TradingMarketSelection } from './trading-tool-cards.ts'
-import { toolActivity, type TurnActivity, type TurnProgress } from './turn-progress.ts'
+import { imageGenerationEstimatedPercent, toolActivity, type TurnActivity, type TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
 import css from './ToolActivityFlow.module.css'
 
@@ -751,7 +751,8 @@ function ToolActivityGroup({
         : latest?.activity === 'writing' ? 'activity.writing'
           : latest?.activity === 'executing' ? 'activity.executing'
             : latest?.activity === 'verifying' ? 'activity.verifying'
-              : 'activity.other'
+              : latest?.activity === 'generating-image' ? 'activity.generatingImage'
+                : 'activity.other'
 
   return (
     <div
@@ -838,7 +839,9 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
     const id = setInterval(tick, 1000)
     return () => { clearInterval(id) }
   }, [anchor])
-  const statusKey = progress.activity === 'searching'
+  const statusKey = progress.activity === 'generating-image'
+    ? 'status.generatingImage'
+    : progress.activity === 'searching'
     ? 'status.searching'
     : progress.activity === 'browsing'
       ? 'status.browsing'
@@ -861,6 +864,45 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
     ? label
     : `${label} · ${progress.detail}`
   if (expiresAfterMs !== null && elapsedMs >= expiresAfterMs) return null
+  if (progress.activity === 'generating-image') {
+    // No provider percent is projected by the runtime yet. Never imply a real
+    // percent or reach completion before the generated attachment arrives.
+    const percent = imageGenerationEstimatedPercent(elapsedMs)
+    return (
+      <div className={chatCss.imageGenerationCard}
+        data-chat-flow-kind="image-generation-progress"
+        data-activity="generating-image"
+        role="status" aria-label={label}>
+        <div className={chatCss.imageGenerationPreview} aria-hidden="true">
+          <svg className={chatCss.imageGenerationPicture} viewBox="0 0 120 104" fill="none">
+            <rect x="8" y="8" width="104" height="88" rx="13" stroke="currentColor" strokeWidth="2" />
+            <circle cx="86" cy="34" r="10" fill="currentColor" fillOpacity=".52" />
+            <path d="M18 79 43 51 61 67 75 53 103 83" stroke="currentColor"
+              strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M19 85H101" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          </svg>
+          <span className={chatCss.imageGenerationShimmer} />
+        </div>
+        <div className={chatCss.imageGenerationContent}>
+          <div className={chatCss.imageGenerationHeader}>
+            <strong>{label}</strong>
+            <span className={chatCss.imageGenerationPercent}>{percent}%</span>
+          </div>
+          <div className={chatCss.imageGenerationTrack}
+            role="progressbar" aria-label={t('image.progressEstimateLabel')}
+            aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}
+            aria-valuetext={t('image.progressRemaining', { percent: 100 - percent })}>
+            <span style={{ width: `${percent}%` }} />
+          </div>
+          <span className={chatCss.imageGenerationRemaining}>
+            {t('image.progressRemaining', { percent: 100 - percent })}
+          </span>
+          <span className={chatCss.imageGenerationNote}>{t('image.progressEstimateNote')}</span>
+          {showClock && <span className={chatCss.imageGenerationClock}>{formatRunDuration(elapsedMs, t)}</span>}
+        </div>
+      </div>
+    )
+  }
   return (
     <div
       className={chatCss.turnStatus}
