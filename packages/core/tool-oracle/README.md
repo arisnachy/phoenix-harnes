@@ -1,0 +1,26 @@
+# PHOENIX ORÁCULO · Scientific prediction core
+
+Model-facing, offline mathematical nucleus for bounded scientific forecasts and causal what-if scenarios. It **does not** claim to predict every possible future. Kira may invoke the tools after fetching evidence with existing research tools. No direct external API calls or autonomous observations are made by this plugin.
+
+## Model Experience
+
+- oracle_scientific_forecast receives a JSON object containing a required source and mode.
+- free-fall calculates time for an ideal body initially at rest, ignoring drag.
+- rgb-light performs explicitly linear additive RGB channel mixing, **not** pigment mixing.
+- time-series takes equispaced numeric history, an integer horizon (1–30 steps), stepHours, lastObservedAt and unit; compares persistence with linear drift using walk-forward tests and an empirical 80% nominal interval. The model selection and interval are **not an independent holdout**.
+- causal-scenario evaluates a user-supplied acyclic graph of linear structural equations and optionally a do-style intervention. Coefficients are **not** learned or causally identified.
+- oracle_audit_prediction accepts numeric observed outcomes after the target horizon; returns an absolute error, labeled as **unverified report**, never certified truth.
+- oracle_forecast_scorecard reads local append-only records.
+
+## Example
+
+Use oracle_scientific_forecast with inputJson:
+{"mode":"time-series","source":"User-supplied daily dataset, not independently verified","values":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24],"horizonSteps":2,"stepHours":24,"lastObservedAt":"2026-11-04T00:00:00Z","unit":"count"}
+
+## Security and scientific limits
+
+Model-supplied sources are **not verified**; do not pass personal health records, passwords or secrets. Registry path is in the owner-local PHOENIX home, not the disposable runtime. The current MVP has no connectors to live sources, no independent prospective track record, no calibrated event probabilities, no causal identification from observational data, and no universal world model. The observation audit is self-reported and is not an authoritative outcome until a trusted source is verified separately.
+
+## Checks
+
+node --experimental-strip-types --test packages/core/tool-oracle/tests/*.mjs
