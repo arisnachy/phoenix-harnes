@@ -126,11 +126,14 @@ export class GenesisWorkbench {
       'CREATE TABLE IF NOT EXISTS genesis_goals(org_id TEXT NOT NULL,goal_id TEXT NOT NULL,title TEXT NOT NULL,metric_id TEXT NOT NULL,period TEXT NOT NULL,target REAL NOT NULL,owner_unit TEXT,PRIMARY KEY(org_id,goal_id,period),FOREIGN KEY(org_id) REFERENCES organizations(org_id));',
       'CREATE TABLE IF NOT EXISTS genesis_obligations(org_id TEXT NOT NULL,obligation_id TEXT NOT NULL,recipient TEXT NOT NULL,title TEXT NOT NULL,periodicity TEXT NOT NULL,template_version TEXT,state TEXT NOT NULL,PRIMARY KEY(org_id,obligation_id),FOREIGN KEY(org_id) REFERENCES organizations(org_id));',
       'CREATE TABLE IF NOT EXISTS genesis_specs(org_id TEXT PRIMARY KEY,spec_json TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL,FOREIGN KEY(org_id) REFERENCES organizations(org_id));',
+      'CREATE TABLE IF NOT EXISTS genesis_providers(org_id TEXT NOT NULL,provider_id TEXT NOT NULL,model_name TEXT NOT NULL,execution TEXT NOT NULL,account_mode TEXT NOT NULL,monthly_budget_usd REAL NOT NULL,status TEXT NOT NULL,PRIMARY KEY(org_id,provider_id),FOREIGN KEY(org_id) REFERENCES organizations(org_id));',
       'CREATE TABLE IF NOT EXISTS genesis_audit(seq INTEGER PRIMARY KEY AUTOINCREMENT,org_id TEXT NOT NULL,action TEXT NOT NULL,object_id TEXT NOT NULL,created_at TEXT NOT NULL,previous_hash TEXT NOT NULL,entry_hash TEXT NOT NULL);'
     ].join('\n'))
     this.q={
       orgs:this.db.prepare('SELECT org_id FROM organizations ORDER BY org_id'),
       spec:this.db.prepare('SELECT spec_json,revision FROM genesis_specs WHERE org_id=?'),
+      providers:this.db.prepare('SELECT provider_id,model_name,execution,account_mode,monthly_budget_usd,status FROM genesis_providers WHERE org_id=? ORDER BY provider_id'),
+      setProvider:this.db.prepare('INSERT INTO genesis_providers(org_id,provider_id,model_name,execution,account_mode,monthly_budget_usd,status) VALUES(?,?,?,?,?,?,?) ON CONFLICT(org_id,provider_id) DO UPDATE SET model_name=excluded.model_name,execution=excluded.execution,account_mode=excluded.account_mode,monthly_budget_usd=excluded.monthly_budget_usd,status=excluded.status'),
       saveSpec:this.db.prepare('INSERT INTO genesis_specs(org_id,spec_json,revision,updated_at) VALUES(?,?,1,?)'),
       updateSpec:this.db.prepare('UPDATE genesis_specs SET spec_json=?,revision=revision+1,updated_at=? WHERE org_id=? AND revision=?'),
       updateOrg:this.db.prepare('UPDATE organizations SET profile=? WHERE org_id=?'),
@@ -257,6 +260,24 @@ export class GenesisWorkbench {
     this._audit(org,'cost-upsert',itemId)
     return {itemId,total:Math.round(qty*price*100)/100,currency,recurrence}
   }
+  provider(input){
+    object(input,'Proveedor')
+    if(Object.keys(input).some(key=>/token|secret|password|api.?key|credential/iu.test(key)))
+      throw Error('No se admiten claves de acceso en Genesis')
+    const {organizationId,providerId,modelName,execution,accountMode,
+      monthlyBudgetUsd}=input
+    const org=ident(organizationId,'Organización');this._org(org)
+    ident(providerId,'Proveedor')
+    if(!['local','external'].includes(execution))throw Error('Ejecución inválida')
+    if(!['organization','per-unit','per-instance'].includes(accountMode))
+      throw Error('Modo de cuentas inválido')
+    const budget=finite(monthlyBudgetUsd,'Presupuesto mensual')
+    this.q.setProvider.run(org,providerId,caption(modelName,'Modelo'),
+      execution,accountMode,budget,'pending-credential-and-capability-test')
+    this._audit(org,'model-provider-planned',providerId)
+    return {providerId,modelName,execution,accountMode,monthlyBudgetUsd:budget,
+      status:'pending-credential-and-capability-test',credentials:'never-stored'}
+  }
   goal({organizationId,goalId,title,metricId,period,target,ownerUnit=null}){
     const org=ident(organizationId,'Organización');this._org(org)
     ident(goalId,'Meta');ident(metricId,'Indicador')
@@ -299,6 +320,10 @@ export class GenesisWorkbench {
       itemId:x.item_id,label:x.label,category:x.category,quantity:x.qty,
       unitPrice:x.unit_price,currency:x.currency,recurrence:x.recurrence,
       evidenceRefs:JSON.parse(x.evidence_json),total:Math.round(x.qty*x.unit_price*100)/100}))
+    const providers=this.q.providers.all(id).map(x=>({
+      providerId:x.provider_id,modelName:x.model_name,execution:x.execution,
+      accountMode:x.account_mode,monthlyBudgetUsd:x.monthly_budget_usd,
+      status:x.status}))
     const grouped={}
     for(const c of costs){
       const key=c.currency+':'+c.recurrence
@@ -316,7 +341,7 @@ export class GenesisWorkbench {
       organization:plan.organization,planSummary:plan.summary,sites:plan.workstations,
       configurationRevision:this.q.spec.get(id)?.revision??null,network:plan.network,
       inference:plan.inference,units,systems,costs,budgetByCurrencyAndPeriod:grouped,
-      goals,obligations,facts,evidence,missingQuestions:missing,
+      goals,obligations,providers,facts,evidence,missingQuestions:missing,
       readiness:{
         discoveryCoveragePct:Math.round((QUESTIONS.length-missing.length)/QUESTIONS.length*100),
         verifiedFacts:facts.filter(x=>x.status==='verified').length,
@@ -350,6 +375,7 @@ export class GenesisWorkbench {
       inventoriedUnitWorkstations:unitCounts.workstations,
       estimatedCostByCurrencyAndRecurrence:dashboard.budgetByCurrencyAndPeriod,
       networks:dashboard.network,inference:dashboard.inference,
+      providerFleet:dashboard.providers,
       manualDecisionsRequired:dashboard.missingQuestions.map(q=>q.category+'.'+q.key),
       status:'proposal-only',credentials:'never-in-plan',
       installation:'not-executed',liveConnections:'not-verified'
