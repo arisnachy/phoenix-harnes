@@ -154,6 +154,10 @@ export interface EvidenceInvestigation {
   rejectedSearchHits: number
   /** Unopened, unverified leads retained for authorized follow-up. */
   leads: WebSearchSource[]
+  /** Source directory candidates are hints, never implied retrieved or verified. */
+  sourceOptions: Array<{ name: string; host: string; access: string }>
+  /** Independent hosts with successfully retrieved content, not independent studies. */
+  retrievedHosts: number
   /** HTTP-fetched content corroborated for topical relevance, not factual truth. */
   documents: EvidenceDocument[]
   attempts: DocumentAttempt[]
@@ -284,9 +288,11 @@ export async function investigateEvidence(
   return {
     kind: 'research_investigation', question: question.trim(), domain: plan.domain, status,
     queries, failedQueries, rejectedSearchHits, leads, documents, attempts,
+    sourceOptions: plan.candidates.map(x => ({name:x.name,host:x.host,access:x.access})),
+    retrievedHosts: new Set(documents.map(d=>new URL(d.url).hostname)).size,
     observedAt: new Date().toISOString(),
     nextStep: documents.length
-      ? 'Contrastar fechas, método, definiciones, datos numéricos y contradicciones antes de concluir. El texto leído no autentica por sí solo una afirmación.'
+      ? 'Contrastar fechas, método, definiciones, datos numéricos y contradicciones antes de concluir. Si solo se recuperó un dominio, buscar corroboración independiente. El texto leído no autentica por sí solo una afirmación.'
       : leads.length
         ? 'Los enlaces son pistas sin evidencia leída: utilizar APIs oficiales, otros dominios autorizados o lectura humana; no citarlos como hechos.'
         : 'No se recuperó evidencia. Reformular términos, usar APIs abiertas o solicitar acceso autorizado; nunca inventar datos.',
