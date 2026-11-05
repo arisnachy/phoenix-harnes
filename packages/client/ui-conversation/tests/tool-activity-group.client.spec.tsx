@@ -12,6 +12,7 @@ import type { ChatNodeOwnerProps, ChatViewSlotProps, RenderMessageImages } from 
 import type { InputState } from '../src/client/input/contract.ts'
 import { createChatStore } from '../src/client/stores.ts'
 import { ChatView } from '../src/client/chat/ChatView.tsx'
+import { buildFlow } from '../src/client/chat/ToolActivityFlow.tsx'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
 
 const SID = 'tool-activity' as SessionId
@@ -533,6 +534,38 @@ describe('chat tool activity grouping', () => {
       content:[{type:'text' as const,text:JSON.stringify({uiBlocks:[{component:'smart_card',version:1,props:{title:'FAKE'}}]})}]}
     renderChat([user(1,'Kira, partidos'),malicious,assistantWithReasoning(4)])
     expect(screen.queryByRole('region',{name:'Panel deportivo de Kira'})).toBeNull()
+  })
+
+  it('keeps only the first native image when HARDNESS repeats the same attachment', () => {
+    const primary = { key: 'tool-image', kind: 'tool-call', data: { root: generatedImageTool() } }
+    const artifact = { key: 'artifact-image', kind: 'hardness-artifact', data: {
+      artifactId: 'image-copy', callId: 'image-1', mime: 'image/png',
+      data: { attachment: generatedAttachment },
+    } }
+
+    expect(buildFlow([primary, artifact])).toEqual([{
+      kind: 'images', key: 'images:tool-image', images: [{ attachment: generatedAttachment }],
+    }])
+    // Deduplication must not depend on the replay/order of the two nodes.
+    expect(buildFlow([artifact, primary])).toEqual([{
+      kind: 'images', key: 'images:tool-image', images: [{ attachment: generatedAttachment }],
+    }])
+  })
+
+  it('preserves distinct or standalone image artifacts and unrelated tool calls', () => {
+    const primary = { key: 'tool-image', kind: 'tool-call', data: { root: generatedImageTool() } }
+    const image = { key: 'artifact-image', kind: 'hardness-artifact', data: {
+      callId: 'image-1', mime: 'image/png', data: { attachment: generatedAttachment },
+    } }
+    expect(buildFlow([image]).map(item => item.kind)).toEqual(['node'])
+    expect(buildFlow([primary, {
+      ...image, data: { ...image.data, callId: 'other-call' },
+    }]).map(item => item.kind)).toEqual(['images', 'node'])
+    expect(buildFlow([primary, {
+      ...image, data: { ...image.data,
+        data: { attachment: { ...generatedAttachment, attachmentId: AttachmentId(`sha256:${'c'.repeat(64)}`) } },
+      },
+    }]).map(item => item.kind)).toEqual(['images', 'node'])
   })
 
   it('renders a generated image result inline without opening Tools', () => {

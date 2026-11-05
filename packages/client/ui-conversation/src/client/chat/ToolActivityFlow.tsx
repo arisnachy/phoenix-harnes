@@ -366,7 +366,38 @@ function sportsVisualIdentity(card: GenerativeUiBlock): string | null {
   return null
 }
 
-function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
+/** Image artifacts accompany some tool results already shown in the native gallery. */
+function repeatedImageArtifact(
+  node: OrderedChatNode,
+  toolImageIds: ReadonlyMap<string, ReadonlySet<string>>,
+): boolean {
+  if (node.kind !== 'hardness-artifact') return false
+  const artifact = node.data as { readonly mime?: unknown; readonly callId?: unknown; readonly data?: unknown }
+  if (typeof artifact.mime !== 'string' || !artifact.mime.startsWith('image/')
+    || typeof artifact.callId !== 'string') return false
+  const payload = artifact.data
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const attachment = (payload as Record<string, unknown>).attachment
+  if (typeof attachment !== 'object' || attachment === null || Array.isArray(attachment)) return false
+  const attachmentId = (attachment as Record<string, unknown>).attachmentId
+  return typeof attachmentId === 'string' && toolImageIds.get(artifact.callId)?.has(attachmentId) === true
+}
+
+export function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
+  // A generated image is the primary UI. Keep the artifact only when it holds
+  // genuinely different media or there is no native image in that tool call.
+  // Correlating by call AND attachment prevents cross-turn/cross-tool hiding.
+  const toolImageIds = new Map<string, Set<string>>()
+  for (const candidate of nodes) {
+    if (candidate.kind !== 'tool-call') continue
+    const root = (candidate.data as ToolChatData).root
+    if (!isSettledTool(root)) continue
+    for (const { attachment } of imageActivity(candidate)) {
+      const images = toolImageIds.get(root.callId) ?? new Set<string>()
+      images.add(String(attachment.attachmentId))
+      toolImageIds.set(root.callId, images)
+    }
+  }
   const flow: FlowItem[] = []
   let pending: ActivityItem[] = []
   let pendingAnchorKey: string | undefined
@@ -392,6 +423,7 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
   }
 
   for (const node of nodes) {
+    if (repeatedImageArtifact(node, toolImageIds)) continue
     // Connector authorization is a user action, not background tool telemetry.
     // Keep its compact Connect/Reconnect card directly in the chat flow instead
     // of burying it inside the collapsed Tools disclosure.
