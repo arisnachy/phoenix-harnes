@@ -1,0 +1,34 @@
+name: PHOENIX Genesis Fabric Contracts
+
+on:
+  pull_request:
+    branches: [main, stable]
+    paths:
+      - 'scripts/phoenix-genesis-fabric.mjs'
+      - 'scripts/phoenix-genesis-fabric.test.mjs'
+      - 'docs/phoenix-genesis-fabric-master-plan-v4.md'
+      - 'docs/phoenix-fabric-universal-network.md'
+      - '.github/workflows/phoenix-genesis-fabric.yml'
+  push:
+    branches: [main, stable]
+    paths:
+      - 'scripts/phoenix-genesis-fabric.mjs'
+      - 'scripts/phoenix-genesis-fabric.test.mjs'
+      - '.github/workflows/phoenix-genesis-fabric.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  genesis-contracts:
+    name: Genesis contracts / Node 24
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate Genesis and Fabric offline contracts
+        run: node --test scripts/phoenix-genesis-fabric.test.mjs
