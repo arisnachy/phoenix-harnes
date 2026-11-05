@@ -34,6 +34,11 @@ on:
       - 'scripts/phoenix-genesis-area-census.test.mjs'
       - 'scripts/phoenix-genesis-area-census-http.test.mjs'
       - 'scripts/phoenix-genesis-census-ui.js'
+      - 'scripts/phoenix-genesis-readiness-brief.mjs'
+      - 'scripts/phoenix-genesis-readiness-ui.js'
+      - 'scripts/phoenix-genesis-demo.mjs'
+      - 'scripts/phoenix-genesis-readiness-console-demo.test.mjs'
+      - 'docs/phoenix-genesis-demo.md'
       - 'docs/phoenix-genesis-document-intake.md'
       - 'docs/phoenix-genesis-healthcare-domain-pack.md'
       - 'scripts/phoenix-genesis-fabric-integration.test.mjs'
@@ -78,6 +83,11 @@ on:
       - 'scripts/phoenix-genesis-area-census.test.mjs'
       - 'scripts/phoenix-genesis-area-census-http.test.mjs'
       - 'scripts/phoenix-genesis-census-ui.js'
+      - 'scripts/phoenix-genesis-readiness-brief.mjs'
+      - 'scripts/phoenix-genesis-readiness-ui.js'
+      - 'scripts/phoenix-genesis-demo.mjs'
+      - 'scripts/phoenix-genesis-readiness-console-demo.test.mjs'
+      - 'docs/phoenix-genesis-demo.md'
       - 'docs/phoenix-genesis-document-intake.md'
       - 'docs/phoenix-genesis-healthcare-domain-pack.md'
       - 'scripts/phoenix-genesis-fabric-integration.test.mjs'
@@ -122,8 +132,10 @@ jobs:
         run: node --test scripts/phoenix-genesis-document-intake.test.mjs
       - name: Test interactive 60-area census, migrations and race-safe approvals
         run: node --test scripts/phoenix-genesis-area-census.test.mjs scripts/phoenix-genesis-area-census-http.test.mjs
+      - name: Test executive dashboard and isolated synthetic hospital demonstration
+        run: node --test scripts/phoenix-genesis-readiness-console-demo.test.mjs
       - name: Verify browser console scripts parse
-        run: node --check scripts/phoenix-genesis-console-ui.js && node --check scripts/phoenix-genesis-census-ui.js && node --check scripts/phoenix-genesis-console.mjs
+        run: node --check scripts/phoenix-genesis-console-ui.js && node --check scripts/phoenix-genesis-census-ui.js && node --check scripts/phoenix-genesis-readiness-ui.js && node --check scripts/phoenix-genesis-console.mjs
       - name: Exercise the Genesis CLI with synthetic hospital input
         run: |
           node scripts/phoenix-genesis-plan-cli.mjs scripts/phoenix-genesis-fabric-example.json > genesis-demo-output.json
