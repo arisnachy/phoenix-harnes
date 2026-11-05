@@ -142,13 +142,20 @@ export async function investigateResearch(
 ): Promise<InvestigationReport> {
   const depth = input.depth === 'deep' ? 'deep' : 'standard'
   const initial = plan(input.question, input.domain, 0)
-  const maxBatches = depth === 'deep' ? Math.min(initial.totalBatches, 3) : 1
+  // Standard mode widens the search automatically only if the first source
+  // batch lacks coverage. Deep mode explores up to three batches.
+  const maxBatches = Math.min(initial.totalBatches, depth === 'deep' ? 3 : 2)
   const maxToRead = depth === 'deep' ? 6 : 3
   const outcomes: ResearchOutcome[] = []
   const seen = new Set<string>()
   const leads: InvestigationDocument[] = []
   for (let batch = 0; batch < maxBatches; batch++) {
     if (signal.aborted) throw signal.reason ?? new Error('Research cancelled')
+    if (batch > 0) {
+      const hosts = new Set(leads.map(lead => new URL(lead.url).hostname))
+      if (depth === 'standard' && leads.length >= 3 && hosts.size >= 2) break
+      if (depth === 'deep' && batch >= 2 && leads.length >= 8 && hosts.size >= 3) break
+    }
     const queryPlan = batch === 0 ? initial : plan(input.question, input.domain, batch)
     const outcome = await search(ctx, queryPlan, 8, signal)
     outcomes.push(outcome)
@@ -164,8 +171,8 @@ export async function investigateResearch(
         relevanceScore: check.score, status: 'not_checked',
       })
     }
-    // Deep research keeps expanding the institutional catalogue; standard stops
-    // after its first batch instead of wasting calls when it already has leads.
+    // Expansion is gated above by actual source coverage; this prevents
+    // wasting provider calls once sufficient independent candidates exist.
   }
   leads.sort((a, b) => b.relevanceScore - a.relevanceScore)
   const chosen: InvestigationDocument[] = []
@@ -188,10 +195,15 @@ export async function investigateResearch(
   const inspected = new Map(checked.map(doc => [doc.url, doc]))
   const sources = leads.slice(0, depth === 'deep' ? 16 : 10).map(lead => inspected.get(lead.url) ?? lead)
   const readRelevantCount = sources.filter(doc => doc.status === 'read_relevant').length
+  const readHosts = new Set(sources.filter(doc => doc.status === 'read_relevant')
+    .map(doc => new URL(doc.url).hostname))
   const challengesCount = sources.filter(doc => doc.status === 'challenge').length
   const failedQueries = outcomes.flatMap(outcome => outcome.failedQueries)
   const limitations = [
     ...(readRelevantCount === 0 ? ['No se recuperó texto primario pertinente; la búsqueda no demuestra los hechos investigados.'] : []),
+    ...(readRelevantCount > 0 && readHosts.size < 2
+      ? ['Solo hay evidencia legible procedente de un dominio; falta contraste con una fuente institucional independiente.']
+      : []),
     ...(challengesCount > 0 ? [`${challengesCount} páginas bloquearon lectura: no intentar eludir CAPTCHA; usar fuentes autorizadas equivalentes.`] : []),
     ...(failedQueries.length > 0 ? [`${failedQueries.length} búsquedas fallaron y se conservaron por trazabilidad.`] : []),
     ...(!sources.some(doc => doc.publishedAt) ? ['La fecha de publicación de las fuentes no se verificó; revisar vigencia.'] : []),
