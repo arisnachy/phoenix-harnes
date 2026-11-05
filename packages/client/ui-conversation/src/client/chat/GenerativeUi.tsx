@@ -699,7 +699,7 @@ const statusClass = (status: Status | undefined): string =>
 export function GenerativeUi({ block, onAction, conversationId }: { block: GenerativeUiBlock; onAction?: CanvasAction | undefined; conversationId?: string }): ReactNode {
   switch (block.component) {
     case 'ui_canvas': return <GenerativeCanvas spec={block} onAction={onAction} />
-    case 'scale_form': return <ScaleForm spec={block} />
+    case 'scale_form': return <ScaleForm spec={block} onAction={onAction} />
     case 'smart_form': return <SmartFormWorkspace initial={block} onAction={onAction} />
     case 'smart_form_library': return <SmartFormWorkspace title={block.props.title} onAction={onAction} />
     case 'spreadsheet': return <SpreadsheetSurface key={block.props.id} spec={block} />
