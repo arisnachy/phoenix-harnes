@@ -5,17 +5,15 @@
  */
 import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'
-import { dirname } from 'node:path'
-import { randomBytes,createHash,timingSafeEqual } from 'node:crypto'
+import { createHash,timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { GenesisWorkbench } from './phoenix-genesis-workbench.mjs'
 
-const here=fileURLToPath(import.meta.url)
 const authDigest=secret=>createHash('sha256').update(secret).digest()
 const valid=secret=>typeof secret==='string'&&secret.length>=32&&secret.length<=1024
 const css=readFileSync(new URL('./phoenix-genesis-console.css',import.meta.url),'utf8')
 const js=readFileSync(new URL('./phoenix-genesis-console-ui.js',import.meta.url),'utf8')
-const html='<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PHOENIX Genesis · Consola institucional</title><link rel="stylesheet" href="/style.css"></head><body><header><div><strong>✦ PHOENIX Genesis</strong><small>Arquitectura institucional · Datos verificados · Universo abierto</small></div><span>Consola local</span></header><main id="main"><section class="card"><h1>Genesis</h1><p>Conecta tu clave de administración local para trabajar con la institución.</p><label for="token">Clave administrativa</label><input id="token" type="password" autocomplete="off" placeholder="Clave de Genesis"><button id="login">Conectar</button><p id="notice" role="status"></p></section></main><script src="/app.js" defer></script></body></html>'
+const html=readFileSync(new URL('./phoenix-genesis-console.html',import.meta.url),'utf8')
 const safePath=new Set(['/','/app.js','/style.css','/healthz'])
 const send=(res,status,value,contentType='application/json; charset=utf-8')=>{
   res.writeHead(status,{
