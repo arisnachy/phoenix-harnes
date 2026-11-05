@@ -103,8 +103,8 @@ describe('universal assessment engine: instrument protocol and scoring', () => {
     expect(spec).not.toBeNull()
     if (!spec) return
     render(<ScaleForm spec={spec}/>)
-    fireEvent.change(screen.getByRole('combobox'),{target:{value:'1'}})
-    expect(screen.getByRole('combobox')).toHaveProperty('value','1')
+    fireEvent.change(screen.getByRole('combobox'),{target:{value:'choice:1'}})
+    expect(screen.getByRole('combobox')).toHaveProperty('value','choice:1')
     expect(scoreScale(spec,{trato:0}).total).toBe(0)
   })
 
