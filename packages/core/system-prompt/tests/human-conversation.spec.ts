@@ -20,6 +20,27 @@ describe('human conversational contract', () => {
     expect(prompt).toContain('never present uncertain predictions as guaranteed wins')
   })
 
+  it('keeps the mature conversation guidance opt-in at the system-prompt registry', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+
+    const assembly = await ctx.systemPrompt.assemble()
+    expect(assembly.sections.some(section => section.name === 'conversation:mature')).toBe(false)
+  })
+
+  it('enables a consent-aware, nonjudgmental adult conversational style without changing provider boundaries', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt, { matureConversation: true })
+
+    const assembly = await ctx.systemPrompt.assemble()
+    expect(assembly.sections.map(section => section.name)).toContain('conversation:mature')
+    const prompt = renderPrompt(assembly)
+    expect(prompt).toContain('without moralizing, shaming, or unnecessary deflection')
+    expect(prompt).toContain('flirtatious, or suggestive language where supported')
+    expect(prompt).toContain('Preserve protections for minors, coercion, exploitation')
+    expect(prompt).toContain('applicable model-provider restrictions')
+  })
+
   it('labels runtime context as silent background rather than conversation to recite', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
