@@ -106,3 +106,25 @@ describe('Phoenix universal research routing', () => {
   })
 
 })
+
+describe('Dengue research route is not confused with HealthIA patient records', () => {
+  it('uses DIGEPI and PAHO as the first sources without losing disease keywords', () => {
+    const plan = planResearch('Pronóstico dengue República Dominicana 2026')
+    expect(plan.domain).toBe('public_health')
+    expect(plan.candidates.map(x => x.host)).toEqual(['epidemiologia.gob.do', 'paho.org'])
+    expect(plan.queries.some(q => q.includes('site:epidemiologia.gob.do') && q.includes('dengue'))).toBe(true)
+    expect(plan.queries.some(q => q.includes('sistema de salud'))).toBe(false)
+  })
+
+  it('rejects irrelevant search results but accepts dengue-specific RD bulletin', async () => {
+    const plan = planResearch('Tendencia dengue República Dominicana 2026')
+    const ctx = { web: { search: async () => ({ sources: [
+      { url: 'https://example.com/cinema', title: 'It (2017 film)' },
+      { url: 'https://www.epidemiologia.gob.do/dengue-2026', title: 'Dengue vigilancia semana 41',
+        snippet: 'Casos notificados en República Dominicana' },
+    ], truncated: false }) } } as unknown as Pick<Context,'web'>
+    const outcome = await executeResearch(ctx, plan, 6, signal)
+    expect(outcome.sources).toHaveLength(1)
+    expect(outcome.sources[0]?.url).toContain('epidemiologia.gob.do')
+  })
+})

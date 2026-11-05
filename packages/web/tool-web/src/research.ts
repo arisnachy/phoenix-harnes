@@ -141,7 +141,7 @@ const DOMAIN_PATTERNS: readonly (readonly [string, RegExp])[] = [
   ['crypto', /\b(bitcoin|ethereum|criptomoneda|crypto|blockchain|token|btc)\b/iu],
   ['sports', /\b(partido|f[uú]tbol|football|soccer|nba|mlb|b[eé]isbol|tenis|liga|marcador|resultado deportivo|champions|real madrid)\b/iu],
   ['neuroscience', /\b(neurociencia|neuropsicolog|neuroplasticidad|neuroimagen|cognitiv|alzheimer|alzh[eé]imer)\b/iu],
-  ['public_health', /\b(aps|atenci[oó]n primaria|primer nivel|cobertura sanitaria|cobertura efectiva|salud p[uú]blica|sistema sanitario|sistema de salud|servicios de salud|mortalidad materna|mortalidad infantil|sisalril|servicio nacional de salud|ministerio de salud p[uú]blica)\b/iu],
+  ['public_health', /\b(aps|dengue|epidemiolog[ií]a|arbovirosis|brote|incidencia de enfermedad|atenci[oó]n primaria|primer nivel|cobertura sanitaria|cobertura efectiva|salud p[uú]blica|sistema sanitario|sistema de salud|servicios de salud|mortalidad materna|mortalidad infantil|sisalril|servicio nacional de salud|ministerio de salud p[uú]blica)\b/iu],
   ['medicine', /\b(medicina|clinical|cl[ií]nic|ensayo|tratamiento|paciente|salud|f[aá]rmaco|epidemiolog)\b/iu],
   ['finance', /\b(acciones|bolsa|stock|bonos|inversiones|nasdaq|s&p|sec edgar)\b/iu],
   ['economics', /\b(inflaci[oó]n|pib|gdp|desempleo|econom[ií]a|banco mundial|pol[ií]ticas p[uú]blicas)\b/iu],
@@ -185,6 +185,13 @@ function scopeQuery(question: string, host: string, domain: string): string {
     return question + ' site:' + host
   }
   const years = [...question.matchAll(/\b(?:19|20)\d{2}\b/gu)].map(match => match[0]).slice(0, 2).join(' ')
+  if (/\bdengue\b/iu.test(question)) {
+    const english = host === 'worldbank.org' || host === 'who.int' || host === 'paho.org'
+    const location = english ? 'Dominican Republic' : 'República Dominicana'
+    const focus = english ? 'dengue weekly surveillance cases epidemiological report'
+      : 'dengue boletín epidemiológico casos por semana vigilancia'
+    return [location, focus, years, 'site:' + host].filter(Boolean).join(' ')
+  }
   const focus = /mortalidad|resultados sanitarios|indicadores/iu.test(question) ? 'mortalidad indicadores'
     : /cobertura/iu.test(question) ? 'cobertura sanitaria'
       : /primer nivel|atenci[oó]n primaria|\bAPS\b/iu.test(question) ? 'atención primaria salud'
@@ -215,7 +222,13 @@ export function planResearch(question: string, requestedDomain?: string, batch =
   if (!Object.hasOwn(RESEARCH_SOURCES, domain)) {
     throw new ToolArgsError([`unknown domain: ${domain}; use research_sources to inspect supported domains`])
   }
-  const hosts = RESEARCH_SOURCES[domain] ?? []
+  const catalogue = RESEARCH_SOURCES[domain] ?? []
+  // Dengue surveillance must start with the official epidemiology portal, not
+  // a general health-services query or unrelated World Bank economic pages.
+  const hosts = domain === 'public_health' && /\bdengue\b/iu.test(q)
+    ? [{ name: 'DIGEPI Dominican Republic epidemiological bulletins',
+      host: 'epidemiologia.gob.do', access: 'public' as const }, ...catalogue]
+    : catalogue
   const totalBatches = Math.max(1, Math.ceil(hosts.length / 2))
   if (!Number.isInteger(batch) || batch < 0 || batch >= totalBatches) {
     throw new ToolArgsError(['batch must be an integer from 0 to ' + String(totalBatches - 1)])
@@ -287,7 +300,7 @@ export async function executeResearch(
   const isRelevant = (source: WebSearchSource, url: string): boolean => {
     if (plan.domain !== 'public_health') return true
     const evidence = (source.title ?? '') + ' ' + (source.snippet ?? '') + ' ' + url
-    const topic = /salud|health|primary care|atenci[oó]n primaria|primer nivel|cobertura|coverage|mortalidad/iu.test(evidence)
+    const topic = /dengue|epidemiolog|vigilancia|surveillance|arbovir|salud|health|primary care|atenci[oó]n primaria|primer nivel|cobertura|coverage|mortalidad/iu.test(evidence)
       || /mortality|maternal|infant|\buhc\b|aseguramiento|afiliaci[oó]n|sanitari|healthcare/iu.test(evidence)
     const country = !countryFocus || /rep[uú]blica dominicana|dominican republic|\bDOM\b|\.gob\.do/iu.test(evidence)
     return topic && country

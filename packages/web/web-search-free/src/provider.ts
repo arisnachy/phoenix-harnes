@@ -49,18 +49,35 @@ export class FreeSearchProvider implements WebSearchProvider {
     for (const engine of this.engines) {
       if ((this.engineCooldown.get(engine) ?? 0) > Date.now()) continue
       const response = await this.fetchEngine(engine, request.query, signal)
-      if (response.status === 202 || response.status === 403 || response.status === 429) {
-        this.engineCooldown.set(engine, Date.now() + 60_000)
+      if ([202, 403, 429, 503].includes(response.status)) {
+        this.engineCooldown.set(engine, Date.now() + 120_000)
+        await response.body?.cancel().catch(() => {})
         continue
       }
-      if (!response.ok) continue
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => {})
+        continue
+      }
       let sources: WebSearchSource[]
       try {
-        sources = engine === 'wikipedia' ? parseWikipedia(await response.json())
-          : engine === 'bing' ? parseBing(await response.text()) : parseDuckDuckGo(await response.text())
+        if (engine === 'wikipedia') sources = parseWikipedia(await response.json())
+        else {
+          const html = await response.text()
+          // Many challenges return HTTP 200 with a CAPTCHA page. Never treat
+          // those pages as search results or immediately retry the same host.
+          if (isChallengePage(html)) {
+            this.engineCooldown.set(engine, Date.now() + 120_000)
+            continue
+          }
+          sources = engine === 'bing' ? parseBing(html) : parseDuckDuckGo(html)
+        }
       } catch {
         // API changes or malformed upstream payloads are recoverable via the next free source.
         continue
+      }
+      const anchor = strongSearchAnchor(request.query)
+      if (anchor !== undefined) {
+        sources = sources.filter(s => normalizeSearchText((s.title ?? '') + ' ' + (s.snippet ?? '') + ' ' + s.url).includes(anchor))
       }
       if (sources.length > 0) {
         const result = {
@@ -94,6 +111,22 @@ export class FreeSearchProvider implements WebSearchProvider {
       clearTimeout(timer)
     }
   }
+}
+
+function normalizeSearchText(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+}
+
+function strongSearchAnchor(query: string): string | undefined {
+  const norm = normalizeSearchText(query)
+  if (/\bartemis\b/u.test(norm)) return 'artemis'
+  if (/\bdengue\b/u.test(norm)) return 'dengue'
+  return undefined
+}
+
+function isChallengePage(html: string): boolean {
+  const excerpt = html.slice(0, 16_000)
+  return /(?:<title[^>]*>\s*(?:just a moment|access denied|captcha|verify you are human)|cf-chl-|g-recaptcha|hcaptcha|data-sitekey=|verify (?:you are|that you) (?:a )?human|automated traffic|unusual traffic)/iu.test(excerpt)
 }
 
 function parseWikipedia(raw: unknown): WebSearchSource[] {
@@ -179,5 +212,8 @@ function stripHtml(value: string): string {
 }
 
 function decodeHtml(value: string): string {
-  return value.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  return value.replace(/&#(x[0-9a-f]+|\d+);/giu, (match, digits: string) => {
+    const number = digits.toLowerCase().startsWith('x') ? Number.parseInt(digits.slice(1), 16) : Number.parseInt(digits, 10)
+    return number > 0 && number <= 0x10ffff ? String.fromCodePoint(number) : match
+  }).replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
 }
