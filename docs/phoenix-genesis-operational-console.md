@@ -10,6 +10,8 @@ Esta guía complementa:
 - [Red Fabric universal, LAN, entre sedes y federación](./phoenix-fabric-universal-network.md).
 - [Catálogo hospitalario 360°: áreas, indicadores, comités y reportes](./phoenix-genesis-healthcare-domain-pack.md).
 - [Censo de 60 áreas por jefatura con evidencia y consola interactiva](./phoenix-genesis-area-census.md).
+- [Demo reproducible de hospital ficticio y diagnóstico ejecutivo desde la consola](./phoenix-genesis-demo.md).
+- [Informe ejecutivo reproducible para Dirección y Planificación](./phoenix-genesis-readiness-brief.md).
 - [Lectura local de documentos institucionales y revisión de hallazgos](./phoenix-genesis-document-intake.md).
 - [Servidor Fabric y trabajadores de capacidades](./phoenix-fabric-operational-broker.md).
 - [Puente CSV de software heredado](./phoenix-genesis-legacy-csv-bridge.md) — lectura segura con evidencia, mapeo y aprobación.
