@@ -25,6 +25,10 @@ on:
       - 'scripts/phoenix-genesis-legacy-csv.test.mjs'
       - 'scripts/phoenix-genesis-legacy-csv-http.test.mjs'
       - 'scripts/phoenix-genesis-sector-packs.mjs'
+      - 'scripts/phoenix-genesis-healthcare-catalog.json'
+      - 'scripts/phoenix-genesis-healthcare-catalog.mjs'
+      - 'scripts/phoenix-genesis-healthcare-catalog.test.mjs'
+      - 'docs/phoenix-genesis-healthcare-domain-pack.md'
       - 'scripts/phoenix-genesis-fabric-integration.test.mjs'
       - 'scripts/phoenix-genesis-paths.mjs'
       - 'docs/phoenix-genesis-operational-console.md'
@@ -58,6 +62,10 @@ on:
       - 'scripts/phoenix-genesis-legacy-csv.test.mjs'
       - 'scripts/phoenix-genesis-legacy-csv-http.test.mjs'
       - 'scripts/phoenix-genesis-sector-packs.mjs'
+      - 'scripts/phoenix-genesis-healthcare-catalog.json'
+      - 'scripts/phoenix-genesis-healthcare-catalog.mjs'
+      - 'scripts/phoenix-genesis-healthcare-catalog.test.mjs'
+      - 'docs/phoenix-genesis-healthcare-domain-pack.md'
       - 'scripts/phoenix-genesis-fabric-integration.test.mjs'
       - 'scripts/phoenix-genesis-paths.mjs'
       - 'docs/phoenix-genesis-operational-console.md'
@@ -94,6 +102,8 @@ jobs:
         run: node --test scripts/phoenix-genesis-legacy-csv.test.mjs scripts/phoenix-genesis-legacy-csv-http.test.mjs
       - name: Test real Genesis-to-Fabric node enrollment and heartbeat
         run: node --test scripts/phoenix-genesis-fabric-integration.test.mjs
+      - name: Test all institutional healthcare catalog references and UI queries
+        run: node --test scripts/phoenix-genesis-healthcare-catalog.test.mjs
       - name: Verify browser console scripts parse
         run: node --check scripts/phoenix-genesis-console-ui.js && node --check scripts/phoenix-genesis-console.mjs
       - name: Exercise the Genesis CLI with synthetic hospital input
