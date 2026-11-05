@@ -44,7 +44,7 @@ export function apply(ctx: Context, config: Config): void {
     isConcurrencySafe:()=>false,
     async execute(args,exec){
       const data=await forecastPublicCsv(ctx.web,args,exec.signal)
-      const uiBlock=oracleVisual(data.result)
+      const uiBlock=oracleVisual(data.result,undefined,data.evidence)
       if(data.result.status==='insufficient')return JSON.stringify({...data,evidence:data.evidence,uiBlock})
       const record=await recordOracle(config.path,data.result)
       return JSON.stringify({...data,result:data.result,evidence:data.evidence,predictionId:record.id,recordedAt:record.createdAt,uiBlock})
