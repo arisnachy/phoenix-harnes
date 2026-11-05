@@ -898,7 +898,9 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
           </div>
           <span className={chatCss.imageGenerationRemaining}>{t('image.progressStage')}</span>
           <span className={chatCss.imageGenerationNote}>{t('image.progressNoPercent')}</span>
-          {showClock && <span className={chatCss.imageGenerationClock}>{formatRunDuration(elapsedMs, t)}</span>}
+          <span className={chatCss.imageGenerationClock}>
+            {t('image.progressElapsed', { time: formatRunDuration(elapsedMs, t) })}
+          </span>
         </div>
       </div>
     )
