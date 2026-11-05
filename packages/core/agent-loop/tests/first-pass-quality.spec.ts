@@ -68,7 +68,7 @@ describe('first-pass quality without extra model turns', () => {
     expect(guidance).toContain('For research:')
     expect(guidance).toContain('For deliverables:')
     expect(guidance).toContain('For efficiency:')
-    expect(guidance.split('\\n').filter(line => line.startsWith('For '))).toHaveLength(3)
+    expect(guidance.split('\n').filter(line => line.startsWith('For '))).toHaveLength(3)
     expect(guidance.length).toBeLessThan(1100)
   })
 
