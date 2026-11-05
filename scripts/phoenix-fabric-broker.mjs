@@ -1,3 +1,4 @@
+import { fabricDatabasePath } from './phoenix-genesis-paths.mjs'
 /**
  * PHOENIX Fabric operational broker (Node 24+, built-in SQLite).
  * Demo tasks are reference-only. No clinical records, models, scanning or
@@ -260,7 +261,7 @@ export function createFabricBroker({dbPath,adminToken,host='127.0.0.1',port=0,tl
 if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
   const host=process.env.PHOENIX_FABRIC_HOST||'127.0.0.1'
   const port=Number(process.env.PHOENIX_FABRIC_PORT||'8765')
-  const dbPath=process.env.PHOENIX_FABRIC_DB||'./.phoenix/fabric.sqlite'
+  const dbPath=fabricDatabasePath()
   const adminToken=process.env.PHOENIX_FABRIC_ADMIN_TOKEN
   const tls=process.env.PHOENIX_FABRIC_TLS_KEY?{
     key:process.env.PHOENIX_FABRIC_TLS_KEY,
