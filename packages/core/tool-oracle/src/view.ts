@@ -57,6 +57,18 @@ export function oracleVisual(result:OracleResult|OracleResearch,question?:string
       if(result.interval80)children.push(metric('Intervalo nominal 80 %',
         result.interval80.lower.toFixed(3)+' – '+result.interval80.upper.toFixed(3)))
     }
+    if(result.status==='scenario'&&result.baseline!==undefined&&result.counterfactual!==undefined){
+      children.push({type:'group',layout:'grid',children:[
+        metric('Escenario base',result.baseline.toFixed(3)),
+        metric('Con intervención',result.counterfactual.toFixed(3)),
+        metric('Cambio hipotético',((result.delta??0)>=0?'+':'')+(result.delta??0).toFixed(3)),
+      ]})
+      if(result.baseline>=0&&result.counterfactual>=0)children.push({
+        type:'chart',title:'Comparación condicional (no calibrada)',points:[
+          {label:'Base',value:result.baseline},{label:'Intervención',value:result.counterfactual},
+        ],
+      })
+    }
     if(metadata)children.push(
       {type:'group',layout:'grid',children:[
         metric('Observaciones recuperadas',String(metadata.observations)),
