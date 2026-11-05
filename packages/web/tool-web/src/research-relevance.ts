@@ -27,7 +27,7 @@ export function normalizeResearchText(value: string): string {
     .replace(/%[0-9a-f]{2}/giu, match => {
       try { return decodeURIComponent(match) } catch { return match }
     })
-    .replace(/[_./?&+=:-]/gu, ' ').replace(/[^a-z0-9\s]/gu, ' ').replace(/\s+/gu, ' ').trim()
+    .replace(/[_./?&+=:-]/gu, ' ').replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/gu, ' ').trim()
 }
 
 /**
@@ -37,8 +37,14 @@ export function normalizeResearchText(value: string): string {
  */
 export function researchFocus(question: string): string[] {
   const normalized = normalizeResearchText(question)
-  const tokens = normalized.match(/[a-z0-9]{3,}/gu) ?? []
-  return [...new Set(tokens.filter(token => !STOP.has(token) && !/^\d{4}$/u.test(token)))].slice(0, 12)
+  const tokens = normalized.match(/[\p{L}\p{N}]{2,}/gu) ?? []
+  // Chinese text typically has no spaces; overlapping bigrams retain topical
+  // overlap without discarding the entire question as non-Latin characters.
+  const terms = tokens.flatMap(token =>
+    /[\p{Script=Han}]{3,}/u.test(token)
+      ? Array.from({ length: Math.min(10, token.length - 1) }, (_, i) => token.slice(i, i + 2))
+      : [token])
+  return [...new Set(terms.filter(token => !STOP.has(token) && !/^\d{4}$/u.test(token)))].slice(0, 12)
 }
 
 /**

@@ -120,3 +120,14 @@ describe('end-to-end autonomous investigation contract', () => {
     expect(report.readRelevantCount).toBe(0)
   })
 })
+
+describe('multilingual topic preservation', () => {
+  it('accepts Mandarin subject overlaps rather than erasing non-Latin script', () => {
+    const score = assessResearchRelevance('中国经济增速走势', {
+      url: 'https://example.org/china-economy',
+      title: '中国经济发展趋势与增长',
+    })
+    expect(score.relevant).toBe(true)
+    expect(score.score).toBeGreaterThan(0)
+  })
+})
