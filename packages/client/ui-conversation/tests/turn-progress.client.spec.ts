@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   ChatConversationViewNode, ConversationTimelineSnapshot, RunningToolCall, ToolCallBlock,
 } from '@phoenix-ai/dsh-client-runtime/client'
-import { turnProgress } from '../src/client/chat/turn-progress.ts'
+import { imageGenerationEstimatedPercent, isImageGenerationTool, turnProgress } from '../src/client/chat/turn-progress.ts'
 
 function openTimeline(turn: number): ConversationTimelineSnapshot {
   return {
@@ -114,7 +114,10 @@ describe('turnProgress', () => {
     ['update_file', 'writing', 'running-tools'],
     ['bash', 'executing', 'running-tools'],
     ['vitest', 'verifying', 'verifying'],
-    ['image_generation', 'running-tools', 'running-tools'],
+    ['image_generation', 'generating-image', 'running-tools'],
+    ['image_gen.text2im', 'generating-image', 'running-tools'],
+    ['mcp__Magnific__generate_image', 'generating-image', 'running-tools'],
+    ['image_query', 'running-tools', 'running-tools'],
   ] as const)('derives %s activity from the real running tool name', (name, activity, phase) => {
     expect(turnProgress(openTimeline(4), [toolNode(4, { running: true, name })])).toEqual({
       phase,
@@ -177,5 +180,24 @@ describe('turnProgress', () => {
 
   it('returns null when there is no open turn', () => {
     expect(turnProgress(closedTimeline(4), [])).toBeNull()
+  })
+})
+
+describe('image generation progress', () => {
+  it('detects creation, never retrieval or reading', () => {
+    for (const name of ['image_gen.text2im', 'generate_image', 'mcp__Magnific__edit_image', 'img2img']) {
+      expect(isImageGenerationTool(name)).toBe(true)
+    }
+    for (const name of ['image_query', 'image_search', 'read_image', 'create_file']) {
+      expect(isImageGenerationTool(name)).toBe(false)
+    }
+  })
+
+  it('labels time-based estimates without claiming 100% before completion', () => {
+    const values = [-200, 0, 1_000, 30_000, 60_000, 120_000, 900_000, Number.POSITIVE_INFINITY]
+      .map(imageGenerationEstimatedPercent)
+    expect(values[0]).toBe(1)
+    expect(values.every(value => Number.isInteger(value) && value >= 1 && value <= 95)).toBe(true)
+    expect(values.slice(1, 7).every((value, index) => value >= (values[index] ?? 0))).toBe(true)
   })
 })
