@@ -23,6 +23,44 @@ describe('universal artifact surface', () => {
     expect(screen.getByTitle('Edición de prueba')).toBeTruthy()
   })
 
+  it('recovers static BMI HTML into a working native calculator and updates the result', () => {
+    const legacyHtml = '<h1>Calculadora de IMC</h1><form>'
+      + '<label for="peso">Peso</label><input type="number" id="peso" value="70"><span>kg</span>'
+      + '<label for="talla">Estatura</label><input type="number" id="talla" value="168"><span>cm</span>'
+      + '<button type="button">Calcular IMC</button></form>'
+    render(<UniversalArtifactSurface artifact={normalizeHardnessArtifact({
+      id:'html-bmi',title:'Calculadora de IMC',mime:'text/html',data:legacyHtml,
+    })} onStop={() => {}} />)
+    expect(screen.getByText('Resultados calculados')).toBeTruthy()
+    expect(screen.getByText(/24\\.8 kg\\/m²/)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText(/Peso/), { target: { value:'72' } })
+    fireEvent.change(screen.getByLabelText(/Estatura/), { target: { value:'180' } })
+    expect(screen.getByText(/22\\.2 kg\\/m²/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name:'Calcular IMC' })).toBeNull()
+  })
+
+  it('shows why an HTML calculator without any formula cannot calculate', () => {
+    const html = '<h1>Calculadora de impuestos</h1><form>'
+      + '<input type="number"><button type="button">Calcular</button></form>'
+    render(<UniversalArtifactSurface artifact={normalizeHardnessArtifact({
+      id:'html-inert',title:'Calculadora de impuestos',mime:'text/html',data:html,
+    })} onStop={() => {}} />)
+    expect(screen.getByRole('alert').textContent).toContain('sin fórmula ejecutable')
+    const frame = screen.getByTitle('Calculadora de impuestos')
+    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin')
+  })
+
+  it('instruments authored HTML calculation failures while keeping the iframe isolated', () => {
+    const html = '<form><input type="number"><button onclick="missingFunction()">Calcular</button></form>'
+    render(<UniversalArtifactSurface artifact={normalizeHardnessArtifact({
+      id:'script-calculator',title:'Cálculo externo',mime:'text/html',data:html,
+    })} onStop={() => {}} />)
+    const iframe = screen.getByTitle('Cálculo externo')
+    expect(iframe.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(iframe.getAttribute('srcdoc')).toContain('data-phoenix-form-error')
+    expect(iframe.getAttribute('srcdoc')).toContain('connect-src \'none\'')
+  })
+
   it('normalizes JSON, Python, HTML, and image artifacts into one envelope', () => {
     expect(normalizeHardnessArtifact({ id: 'json', title: 'Data', mime: 'application/json', data: '{"ok":true}' })).toMatchObject({ kind: 'json', executable: false })
     expect(normalizeHardnessArtifact({ id: 'py', title: 'Model', mime: 'text/x-python', data: 'print(1)' })).toMatchObject({ kind: 'code', language: 'python', executable: true })
