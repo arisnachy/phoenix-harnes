@@ -68,6 +68,8 @@ function Field({field,value,onChange}:{
 }
 const defaultFormPrompt='Construye una interfaz nativa de PHOENIX en un bloque generative-ui JSON con component smart_form y version 1. Incluye props.id, props.title, props.kind, props.folder, props.fields y props.outputs. Campos: {id,label,type,required,min,max,step,unit,options:[{label,value}]}; tipos number,range,text,textarea,date,time,select,radio,checkbox. Salidas: {id,label,expression,precision,unit,bands:[{max,label}]}. Expresiones JSON sin JavaScript: {field:"id"}, {constant:2}, {today:true}, o {op:"add|sub|mul|div|pow|sqrt|ln|log10|sin|cos|tan|floor|round|days_between|add_days|if|eq|gt|lt",args:[...]}. Usa fórmulas documentadas, unidades explícitas y no inventes validez clínica.'
 
+const assessmentPrompt='Crea una evaluación universal completa y funcional en PHOENIX, usando generative-ui JSON con component scale_form y version 1. Incluye props.title, description, source, version, population, administration:[{id,title,instruction,phase:"prepare|administer|score"}], items:[{id,question,help,options:[{label,score}]}], scoring:{min,max,direction,note}, bands y, si hay dimensiones, domains:[{id,label,items:[ids]}]. Comprueba puntuaciones, rangos, dimensiones y procedencia antes de entregar. Si solicito una escala clínica con nombre propio, consulta su protocolo y versión lingüística autorizada; no inventes estímulos protegidos, validación ni puntos de corte. Si el procedimiento no se puede verificar, indica que es solo un registro no validado y qué falta. Para fórmulas no aditivas usa smart_form con expressions dependientes de campos. No entregues una tarjeta decorativa ni dos campos de registro como si fueran una prueba completa.'
+
 /** Model-facing component is declarative: all persistence and execution happen only in the client. */
 export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
   const [active,setActive]=useState<SmartFormSpec|undefined>(initial)
@@ -226,7 +228,8 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
           </div>
         </article>)}</div>
       <div className={css.actions}>
-        {onAction&&<><button type="button" onClick={()=>onAction(defaultFormPrompt,'draft')}>Crear otra con Kira</button>
+        {onAction&&<><button type="button" onClick={()=>onAction(defaultFormPrompt,'draft')}>Crear calculadora con Kira</button>
+          <button type="button" onClick={()=>onAction(assessmentPrompt,'draft')}>Crear evaluación o escala</button>
           <button type="button" onClick={shareIndex}>Compartir índice con Kira</button></>}
       </div>
       <p className={css.footnote}>Las carpetas organizan los formularios. La biblioteca vive en este perfil de navegador;
