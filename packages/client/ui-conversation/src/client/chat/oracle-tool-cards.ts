@@ -5,8 +5,8 @@ function object(x:unknown):x is Record<string,unknown>{
 }
 function firstParty(name:unknown):boolean{
   if(typeof name!=='string')return false
-  const canonical=name.startsWith('mcp__tool_oracle__')?name.slice(17)
-    :name.startsWith('mcp__tool-oracle__')?name.slice(17)
+  const canonical=name.startsWith('mcp__tool_oracle__')?name.slice(18)
+    :name.startsWith('mcp__tool-oracle__')?name.slice(18)
     :name.startsWith('mcp__')?'':name
   return ['oracle_research_forecast','oracle_scientific_forecast','oracle_audit_prediction','oracle_forecast_scorecard'].includes(canonical)
 }
