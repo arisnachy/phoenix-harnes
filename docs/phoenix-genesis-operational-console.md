@@ -9,6 +9,7 @@ Esta guía complementa:
 - [Plan maestro Genesis + Fabric v4](./phoenix-genesis-fabric-master-plan-v4.md).
 - [Red Fabric universal, LAN, entre sedes y federación](./phoenix-fabric-universal-network.md).
 - [Servidor Fabric y trabajadores de capacidades](./phoenix-fabric-operational-broker.md).
+- [Puente CSV de software heredado](./phoenix-genesis-legacy-csv-bridge.md) — lectura segura con evidencia, mapeo y aprobación.
 
 ## Principio de producto
 
