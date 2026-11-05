@@ -76,7 +76,7 @@ export function ForecastFanChart({ title, unit, points, axis='date' }: ForecastF
         </tr>)}</tbody>
       </table>
     </div> : <>
-      <svg className={css.figure} viewBox={'0 0 '+WIDTH+' '+HEIGHT} role="img" aria-label={title+'. {axis==='category'?'Relación de calibración': 'Serie observada, proyección e intervalo empírico.'}'}>
+      <svg className={css.figure} viewBox={'0 0 '+WIDTH+' '+HEIGHT} role="img" aria-label={title+'. '+(axis==='category'?'Relación de calibración.':'Serie observada, proyección e intervalo empírico.')}>
         {Array.from({length:5},(_,i)=>{
           const v=chart.max-(chart.max-chart.min)*i/4, y=chart.y(v)
           return <g key={i}><line x1={LEFT} y1={y} x2={WIDTH-RIGHT} y2={y} className={css.gridLine}/>
@@ -88,7 +88,7 @@ export function ForecastFanChart({ title, unit, points, axis='date' }: ForecastF
         {chart.observed&&<path d={chart.observed} className={css.observed}/>}
         {chart.forecast&&<path d={chart.forecast} className={css.forecast}/>}
         {points.map((p,i)=>(i===0||i===points.length-1||i%Math.max(1,Math.floor(points.length/6))===0)
-          ?<text key={i} x={chart.x(i)} y={HEIGHT-20} textAnchor="middle" className={css.axis}>{shortDate(p.label)}</text>:null)}
+          ?<text key={i} x={chart.x(i)} y={HEIGHT-20} textAnchor="middle" className={css.axis}>{axisLabel(p.label)}</text>:null)}
         {points.map((p,i)=>p.forecast!==undefined&&i===points.length-1
           ?<circle key={i} cx={chart.x(i)} cy={chart.y(p.forecast)} r="5" className={css.endpoint}>
             <title>{shortDate(p.label)}: {show(p.forecast)} {unit}</title>
