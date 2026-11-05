@@ -1,3 +1,4 @@
+import { genesisDatabasePath } from './phoenix-genesis-paths.mjs'
 /**
  * Genesis offline institutional register. The operator supplies only
  * authorized files. No network discovery, upload or LLM processing occurs.
@@ -30,7 +31,7 @@ export function runGenesisRegistryCli(argv,dbPath){
 if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
   try{
     const result=runGenesisRegistryCli(process.argv.slice(2),
-      process.env.PHOENIX_GENESIS_DB||'./.phoenix/genesis.sqlite')
+      genesisDatabasePath())
     process.stdout.write(JSON.stringify(result,null,2)+'\n')
   }catch(error){console.error('Genesis: '+error.message);process.exitCode=1}
 }
