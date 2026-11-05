@@ -13,7 +13,7 @@ import type { CanvasAction } from './GenerativeCanvas.tsx'
 import css from './SmartFormSurface.module.css'
 
 type Panel = 'form' | 'library' | 'history'
-interface Props { readonly initial?: SmartFormSpec; readonly onAction?: CanvasAction; readonly title?: string }
+interface Props { readonly initial?: SmartFormSpec | undefined; readonly onAction?: CanvasAction | undefined; readonly title?: string | undefined }
 function download(filename:string, contents:string):void {
   const url=URL.createObjectURL(new Blob([contents],{type:'application/json'}))
   const a=document.createElement('a')
