@@ -1,0 +1,47 @@
+name: PHOENIX ORÁCULO · Scientific Core
+on:
+  pull_request:
+    paths:
+      - 'packages/core/tool-oracle/**'
+      - 'packages/client/ui-conversation/src/client/chat/oracle-tool-cards.ts'
+      - 'packages/client/ui-conversation/src/client/chat/ToolActivityFlow.tsx'
+      - 'packages/client/ui-conversation/tests/oracle-rich-ui.client.spec.tsx'
+      - 'packages/bundle/base/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/phoenix-oracle.yml'
+  push:
+    paths:
+      - 'packages/core/tool-oracle/**'
+      - 'packages/client/ui-conversation/src/client/chat/oracle-tool-cards.ts'
+      - 'packages/client/ui-conversation/src/client/chat/ToolActivityFlow.tsx'
+      - 'packages/client/ui-conversation/tests/oracle-rich-ui.client.spec.tsx'
+      - 'packages/bundle/base/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/phoenix-oracle.yml'
+  workflow_dispatch:
+jobs:
+  science:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Scientific prediction and ledger tests
+        run: node --experimental-strip-types --test packages/core/tool-oracle/tests/*.mjs
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Oracle plugin typecheck
+        run: pnpm exec tsc -b packages/core/tool-oracle/tsconfig.json
+      - name: Intelligent chat UI tests
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/oracle-rich-ui.client.spec.tsx
