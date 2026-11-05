@@ -6,7 +6,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import { defineTool, ToolArgsError } from '@phoenix-ai/dsh-tools'
 import type { WebSearchResult, WebSearchSource } from '@phoenix-ai/dsh-web'
-import { scoreResearchLead } from './investigate.ts'
+import { scoreResearchLead } from './source-relevance.ts'
 
 /** Candidate research host metadata. A listing does not grant network or API execution authority. */
 export interface ResearchSource {
