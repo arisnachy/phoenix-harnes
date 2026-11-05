@@ -19,7 +19,7 @@ const api=async(path,method="GET",body)=>{
   return result;
 };
 function message(text,error=false){
-  const area=document.getElementById("message")||document.getElementById("notice");
+  const area=document.getElementById(document.getElementById("workspace").hidden?"notice":"message");
   if(area){area.textContent=text;area.className=error?"message error":"message";}
 }
 function lines(node,items,formatter){
