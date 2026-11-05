@@ -133,10 +133,13 @@ if ($phoenixProcesses.Count -gt 0) {
 
 $node = Get-Command node.exe -ErrorAction Stop
 $priorBackups = [Environment]::GetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', 'Process')
+$priorOfflineRepair = [Environment]::GetEnvironmentVariable('PHOENIX_OFFLINE_STORAGE_REPAIR', 'Process')
 try {
-    # Explicit offline repair may discard optional rollback copies.
-    # The supervisor still protects active-runtime markers and other checkouts.
+    # Explicit offline repair may discard optional rollback copies and the
+    # checkout's idle staging worktree, only after the process checks above.
+    # The supervisor still protects current activation and prepared markers.
     [Environment]::SetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', '0', 'Process')
+    [Environment]::SetEnvironmentVariable('PHOENIX_OFFLINE_STORAGE_REPAIR', '1', 'Process')
     Push-Location $repo
     try {
         & $node.Source $supervisor --cleanup-storage
@@ -146,6 +149,7 @@ try {
     }
 } finally {
     [Environment]::SetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', $priorBackups, 'Process')
+    [Environment]::SetEnvironmentVariable('PHOENIX_OFFLINE_STORAGE_REPAIR', $priorOfflineRepair, 'Process')
 }
 
 if ($PurgeOldWorkspaces) {
