@@ -18,7 +18,7 @@ Disabling provider moderation is not possible from the harness and would make th
 
 ## Consequences
 
-This change adjusts prompt guidance only: it cannot guarantee that a provider will generate explicit material. It does not introduce an age-verification UI or private-session storage semantics. No tool, authorization, or security enforcement changes.
+This change adjusts prompt and image-tool guidance only: it cannot guarantee that a provider will generate explicit material. Eligible user-initiated adult visual requests are forwarded to the existing raster image_generation capability, which still depends on configured backends and their content requirements. It does not introduce an age-verification UI or private-session storage semantics. No tool, authorization, or security enforcement changes.
 
 ## Verification
 
