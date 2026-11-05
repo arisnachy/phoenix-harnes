@@ -175,3 +175,63 @@ recuperación después de un reinicio del broker.
    recibos tipados que cumplan las autorizaciones clínicas reales.
 5. Desplegar UI adaptativa, conectores tradicionales, indicadores y
    reportes institucionales; después federación entre empresas.
+
+
+## Genesis: registro institucional y borradores POA operativos
+
+El módulo \`scripts/phoenix-genesis-institutional-registry.mjs\` mantiene
+en SQLite un **registro local institucional** separado del broker. Es
+un primer cimiento del Organization Graph, no una historia clínica ni un
+gestor documental completo. No interpreta PDFs automáticamente, no
+extrae currículos con IA ni registra personas sensibles.
+
+Para inicializarlo con el hospital ficticio:
+
+~~~powershell
+node scripts/phoenix-genesis-registry-cli.mjs init scripts/phoenix-genesis-fabric-example.json
+node scripts/phoenix-genesis-registry-cli.mjs snapshot hospital_ejemplo
+node scripts/phoenix-genesis-registry-cli.mjs poa scripts/phoenix-genesis-poa-example.json
+~~~
+
+La última instrucción devolverá un **POA-DRAFT** con indicadores sin
+medición, no cifras inventadas. Para agregar datos:
+
+~~~powershell
+node scripts/phoenix-genesis-registry-cli.mjs evidence hospital_ejemplo .\inventario-autorizado.csv inventory validated
+~~~
+
+Ese comando genera un identificador \`ev_...\` y guarda **solo**
+nombre, clasificación y huella SHA-256 del archivo local, no el
+documento en bruto. La validación es declaración del operador; no
+representa certificación automática. Después se pueden registrar
+recursos con evidencia y mediciones con datos de origen verificados,
+mediante JSON presentado a los comandos \`resource\` y \`measure\`.
+
+Ejemplo de medición de conteo, sustituyendo el identificador de
+evidencia generado:
+
+~~~json
+{
+  "organizationId": "hospital_ejemplo",
+  "metricId": "devices_available",
+  "period": "2026-11",
+  "numerator": 3,
+  "denominator": null,
+  "unit": "count",
+  "evidenceRefs": ["ev_REEMPLAZAR_POR_ID_REAL"]
+}
+~~~
+
+La base \`.phoenix/genesis.sqlite\` debe permanecer en un volumen local
+protegido y respaldado; los archivos que originan las evidencias se
+conservan en su repositorio institucional autorizado. Los currículos,
+salarios, documentos personales y datos clínicos quedan fuera de este
+registro preliminar. Un POA real necesita metas aprobadas, presupuesto,
+responsables, cronograma, normativa y firma; este borrador no suplanta
+nada de eso.
+
+Prueba automatizada:
+
+~~~powershell
+node --test scripts/phoenix-genesis-institutional-registry.test.mjs
+~~~
