@@ -21,7 +21,7 @@ describe('HTML smart form recovery', () => {
     const result = calculateSmartForm(recovered.spec,{peso:70,talla:168})
     expect(result.ready).toBe(true)
     expect(result.outputs[0]?.value).toBeCloseTo(24.801587,4)
-    expect(result.outputs[0]?.text).toBe('24,8')
+    expect(result.outputs[0]?.text).toBe('24.8')
   })
 
   it('also supports explicit metre units without silently mixing centimetres', () => {
