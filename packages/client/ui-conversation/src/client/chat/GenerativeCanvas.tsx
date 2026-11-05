@@ -359,7 +359,7 @@ function Node({ node, values, setValue, onAction, onFilter, filters }: RendererP
       </div>
     }
     case 'forecast_chart':
-      return <ForecastFanChart title={node.title} unit={node.unit} points={node.points} axis={node.axis} />
+      return <ForecastFanChart title={node.title} unit={node.unit} points={node.points} {...(node.axis === undefined ? {} : { axis: node.axis })} />
     case 'input':
       return <label className={css.field}>{node.label}<input type="text" maxLength={500}
         placeholder={node.placeholder} value={String(values[node.id] ?? '')}
