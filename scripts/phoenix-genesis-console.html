@@ -205,6 +205,30 @@
 <textarea id="import-manifest" name="manifest" required rows="8" placeholder='{"schemaVersion":"1.0","manifestId":"inventario_001","organizationId":"hospital_demo","evidenceId":"ev_...","units":[]}'></textarea>
 <button type="submit">Validar e importar de forma atómica</button>
 </form><p class="hint">Si falla un registro, se revierte la importación completa. No activa departamentos ni conecta software.</p></article>
+<article class="card"><h2>PHOENIX Bridge · Importar CSV de software tradicional</h2>
+<p>Usa una exportación CSV institucional, previamente revisada y registrada como evidencia. Primero observa la vista previa; después confirma la importación. No se ejecuta ninguna operación sobre el programa de origen.</p>
+<div class="grid">
+<div><label for="legacy-path">Ruta absoluta del archivo CSV</label><input id="legacy-path" placeholder="C:\Exports\unidades.csv"></div>
+<div><label for="legacy-evidence">ID de evidencia validada</label><input id="legacy-evidence" placeholder="ev_..."></div>
+<div><label for="legacy-batch">Identificador único de importación</label><input id="legacy-batch" placeholder="lote_unidades_202611"></div>
+<div><label for="legacy-kind">Tipo de datos</label><select id="legacy-kind">
+<option value="units">Unidades y departamentos</option>
+<option value="systems">Software tradicional</option>
+<option value="costs">Presupuestos y costos</option>
+<option value="facts">Hechos institucionales</option>
+<option value="goals">Metas POA</option>
+<option value="obligations">Informes y obligaciones</option></select></div>
+</div>
+<label for="legacy-mapping">Correspondencia entre campos de Genesis y columnas CSV (JSON)</label>
+<textarea id="legacy-mapping" rows="5">{"unitId":"id","siteId":"sede","name":"area","parentId":"superior","staffCount":"personal","workstations":"pc","role":"funcion"}</textarea>
+<div class="row">
+<button id="preview-legacy" type="button" class="secondary">Verificar y previsualizar CSV</button>
+<button id="apply-legacy" type="button">Importar lote autorizado</button>
+</div>
+<label><input id="approve-legacy" type="checkbox">Autorizo esta importación de datos agregados y he validado su origen</label>
+<pre id="legacy-result">No se ha leído ni importado ningún archivo.</pre>
+<p class="hint">Se rechazan archivos con columnas personales, versiones cambiadas desde la validación y lotes duplicados. El contenido no sale de la institución.</p>
+</article>
 <article class="card"><h2>Documentos registrados</h2><ul id="evidence-list"></ul></article></section>
 
 <section data-panel="deployment" class="panel" hidden><article class="card"><h2>Arquitectura propuesta</h2>
