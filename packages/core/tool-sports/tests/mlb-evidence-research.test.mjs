@@ -614,3 +614,23 @@ test('MLB dossier retains every verified quote beyond the 40-row display cap',as
     group.quotes.length===41&&group.quotes.some(q=>q.bookmaker==='House 40')))
   assert.equal(review.eligibleForTicket,false)
 })
+
+
+test('MLB dashboard paginates full matchup and market evidence without hiding rows',async()=>{
+  const mock=fakeNetwork()
+  const base={eventId:'book-mlb',bookmaker:'Verified House',market:'totals',
+    selection:'Over',point:8,price:1.91,home:'Home Giants',away:'Away Bears',
+    time:fixture.gameDate,timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z'}
+  const quotes=Array.from({length:41},(_,i)=>({...base,bookmaker:'House '+i,
+    price:1.8+i/1000}))
+  const dossier=await researchMlbCase(date,812345,mock.fetcher,at,{},quotes)
+  const markets=dossier.uiBlock.props.sections.filter(s=>s.heading.startsWith('Mercados de casas'))
+  assert.equal(markets.length,2)
+  assert.equal(markets.reduce((n,s)=>n+s.items.length,0),41)
+  assert.ok(markets.some(s=>s.items.some(i=>i.label.startsWith('House 40'))))
+  assert.ok(markets.every(s=>s.items.length<=40))
+  const matchupSections=dossier.uiBlock.props.sections.filter(s=>
+    s.heading.startsWith('Matriz roster contra abridores y bullpen'))
+  assert.equal(matchupSections.reduce((n,s)=>n+s.items.length,0),dossier.matchups.length)
+  assert.ok(matchupSections.every(s=>s.items.length<=40))
+})
