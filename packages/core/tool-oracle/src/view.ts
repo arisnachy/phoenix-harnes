@@ -27,6 +27,11 @@ export function oracleVisual(result:OracleResult|OracleResearch,question?:string
     if(result.sources.length){
       children.push({type:'table',columns:['Fuente','Referencia'],rows:result.sources.slice(0,8).map(s=>[clean(s.title,140),clean(s.url,300)])})
     }
+    if(result.candidateDatasets.length>0)children.push(
+      metric('Series CSV descubiertas',String(result.candidateDatasets.length)),
+      {type:'button',label:'Investigar datos numéricos',action:'draft',
+        prompt:'ORÁCULO: inspecciona primero las columnas, periodicidad y autenticidad de este CSV público antes de llamar oracle_forecast_public_csv. URL candidata: '+clean(result.candidateDatasets[0],1100)},
+    )
     children.push({type:'text',text:clean(result.nextStep,750)})
   }else{
     if(result.probabilityPercent!==undefined){
