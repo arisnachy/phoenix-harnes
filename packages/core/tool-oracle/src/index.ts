@@ -3,17 +3,102 @@ import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import { forecastOracle } from './engine.ts'
+import { oraclePlan, fuseSeries, type OracleSeries } from './scientific-intelligence.ts'
+import { ensembleForecast } from './forecast-ensemble.ts'
 import { researchOracle } from './research.ts'
 import { forecastPublicCsv, forecastPublicBinaryCsv } from './public-csv.ts'
-import { oracleVisual, oracleScorecardVisual } from './view.ts'
+import { oracleVisual, oracleScorecardVisual, oraclePlanVisual, oracleFusionVisual, oracleCalibrationVisual, oracleHistoryVisual, oracleDueVisual } from './view.ts'
 import type {} from '@phoenix-ai/dsh-web'
-import { auditOracle, oracleSummary, recordOracle } from './ledger.ts'
+import { auditOracle, oracleSummary, recordOracle, oracleCalibrationLedger, oracleHistory, reviseOracle, oracleDuePredictions } from './ledger.ts'
 export const name = 'tool-oracle'
 export const inject = ['tools','systemPrompt','web']
 export interface Config { path: string }
-const GUIDANCE = 'ORÁCULO UNIVERSAL: ante cualquier pregunta sobre qué podría ocurrir, define resultado observable, área geográfica y horizonte; llama oracle_research_forecast para descubrir fuentes actuales mediante el web de PHOENIX. Las búsquedas y titulares NO prueban hechos: lee/corrobora fuentes y recopila datos numéricos históricos sin fuga temporal. Selecciona el modelo disciplinar adecuado; oracle_scientific_forecast admite caída ideal, mezcla de LUZ RGB, series equiespaciadas, escenarios causales DECLARADOS y binary-event cuando hay >=80 casos independientes etiquetados con señal ANTERIOR al evento, prueba temporal y Brier aceptable. Una tasa estimada no es certeza ni autenticación de datos: la herramienta marca datos aportados SIN verificar. Si no hay calibración/observaciones suficientes, presenta factores, escenarios y "porcentaje no estimable científicamente", NUNCA fabrica 50%, 70%, 90% ni un número por intuición. Ningún dominio, ni eventos únicos, posee garantía de pronóstico. No confundas una fuente de opinión con datos validados. ORÁCULO se muestra en tarjeta visual del chat. Audita resultados reales solo tras el horizonte, con procedencia; el sistema aún no autentica resultados externos. Cuando se encuentre una fuente primaria que publique observaciones numéricas históricas en CSV, usar oracle_forecast_public_csv: recupera el archivo por el proveedor web seguro, comprueba columnas/fechas/intervalos y realiza pronóstico reproducible sin pedir copiar miles de datos. Una URL descubierta no garantiza veracidad: comprobar entidad, periodicidad, fecha y pertinencia. Si no existe serie válida para el tema, no simules datos. Para un evento recurrente con fuente CSV que tenga ID, señal previa, fecha de resolución y desenlace binario, utilizar oracle_forecast_public_event_csv; requiere >=80 episodios, purga resultados futuros y compara Brier con tasa base antes de presentar porcentaje.'
+const GUIDANCE = 'ORÁCULO UNIVERSAL: ante cualquier pregunta sobre qué podría ocurrir, traduce a hipótesis falsable, define resultado observable, área geográfica y horizonte; usa oracle_plan_research cuando falte estructura y llama oracle_research_forecast para descubrir fuentes actuales mediante el web de PHOENIX. Las búsquedas y titulares NO prueban hechos: lee/corrobora fuentes y recopila datos numéricos históricos sin fuga temporal. Selecciona el modelo disciplinar adecuado; oracle_scientific_forecast admite caída ideal, mezcla de LUZ RGB, series equiespaciadas, escenarios causales DECLARADOS y binary-event cuando hay >=80 casos independientes etiquetados con señal ANTERIOR al evento, prueba temporal y Brier aceptable. Una tasa estimada no es certeza ni autenticación de datos: la herramienta marca datos aportados SIN verificar. Si no hay calibración/observaciones suficientes, presenta factores, escenarios y "porcentaje no estimable científicamente", NUNCA fabrica 50%, 70%, 90% ni un número por intuición. Ningún dominio, ni eventos únicos, posee garantía de pronóstico. No confundas una fuente de opinión con datos validados. ORÁCULO se muestra en tarjeta visual del chat. Audita resultados reales solo tras el horizonte, con procedencia; el sistema aún no autentica resultados externos. Cuando se encuentre una fuente primaria que publique observaciones numéricas históricas en CSV, usar oracle_forecast_public_csv: recupera el archivo por el proveedor web seguro, comprueba columnas/fechas/intervalos y realiza pronóstico reproducible sin pedir copiar miles de datos. Una URL descubierta no garantiza veracidad: comprobar entidad, periodicidad, fecha y pertinencia. Si no existe serie válida para el tema, no simules datos. Para un evento recurrente con fuente CSV que tenga ID, señal previa, fecha de resolución y desenlace binario, utilizar oracle_forecast_public_event_csv; requiere >=80 episodios, purga resultados futuros y compara Brier con tasa base antes de presentar porcentaje. Para series numéricas, comparar modelo simple y ensemble con bloques cronológicos separados, y visualizar evolución y banda con fecha y unidad. Para 3-5 fuentes estructuradas, oracle_fuse_series identifica conflictos en lugar de fusionar a ciegas; oracle_calibration_report evalúa predicciones congeladas antes del desenlace. oracle_forecast_history ofrece biblioteca permanente y oracle_revision_prediction crea versiones inmutables solo después de reinvestigar, nunca sobrescribe resultados anteriores. oracle_forecast_due identifica resultados vencidos que requieren verificación, sin fingir supervisión permanente. Toda fuente no autenticada debe quedar marcada. No confundir una banda de error con probabilidad de un evento.'
 export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.section({name:'tool:oracle',order:118,text:assembly=>/predic|pron[oó]st|futuro|forecast|simula|causal/iu.test((assembly as {incomingUserText?:string}).incomingUserText??'')?GUIDANCE:''})
+  ctx.tools.register(defineTool({
+    name:'oracle_plan_research',
+    description:'Traduce cualquier pregunta sobre el futuro en un objetivo comprobable, determina dominio y evidencia necesaria, selecciona ruta científica y presenta plan visual. Nunca inventa probabilidades.',
+    parameters:{
+      question:{type:'string',required:true,description:'Pregunta libre de pronóstico.'},
+      targetAt:{type:'string',description:'Fecha ISO futura con zona horaria si existe.'},
+    },
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    async execute(args) {
+      const plan=oraclePlan(args.question,args.targetAt)
+      return JSON.stringify({...plan,uiBlock:oraclePlanVisual(plan)})
+    },
+    presentCall:()=>({card:'generic',title:'ORÁCULO · plan de investigación científica',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'oracle_fuse_series',
+    description:'Concilia tres a cinco fuentes de series históricas aportadas por usuario o herramienta, coteja fechas, intervalos, unidades y discrepancias; no inventa valores ni declara las fuentes autenticadas.',
+    parameters:{inputJson:{type:'string',required:true,description:'JSON {series:[{source,unit,stepHours,points:[{at,value}]}],relativeTolerance?} con 3-5 conjuntos fechados y procedencia.'}},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      if(args.inputJson.length>250000)throw new Error('Fusión supera el máximo de 250 KB.')
+      const v=JSON.parse(args.inputJson) as {series:OracleSeries[];relativeTolerance?:number}
+      const report=fuseSeries(v.series,v.relativeTolerance)
+      return JSON.stringify({...report,uiBlock:oracleFusionVisual(report)})
+    },
+    presentCall:()=>({card:'generic',title:'ORÁCULO · verificar y conciliar fuentes',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'oracle_forecast_history',
+    description:'Biblioteca local de pronósticos congelados, versiones, fechas y resultados reportados, sin exponer fuentes privadas y sin afirmar validación externa.',
+    parameters:{},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    async execute(){
+      const rows=await oracleHistory(config.path,20)
+      return JSON.stringify({kind:'oracle_history',rows,uiBlock:oracleHistoryVisual(rows)})
+    },
+    presentCall:()=>({card:'generic',title:'ORÁCULO · biblioteca de predicciones',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'oracle_forecast_due',
+    description:'Lista hasta 20 pronósticos vencidos sin resultado conocido para verificar su desenlace en fuentes primarias; NO determina automáticamente qué ocurrió.',
+    parameters:{},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    async execute(){
+      const rows=await oracleDuePredictions(config.path)
+      return JSON.stringify({kind:'oracle_due',rows,uiBlock:oracleDueVisual(rows)})
+    },
+    presentCall:()=>({card:'generic',title:'ORÁCULO · pronósticos por verificar',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'oracle_revision_prediction',
+    description:'Crea una NUEVA versión de un pronóstico existente con datos y modelo suministrados; jamás modifica la versión anterior. Exige volver a investigar y un horizonte futuro verificable.',
+    parameters:{
+      previousId:{type:'string',required:true,description:'UUID de un pronóstico previamente guardado.'},
+      inputJson:{type:'string',required:true,description:'Nueva solicitud científica completa y documentada; no inventar datos ni fuentes.'},
+    },
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>false,
+    async execute(args){
+      if(args.inputJson.length>100000)throw new Error('Solicitud excede 100 KB.')
+      const value=forecastOracle(JSON.parse(args.inputJson) as unknown)
+      if(value.status==='insufficient')return JSON.stringify({...value,uiBlock:oracleVisual(value)})
+      const record=await reviseOracle(config.path,args.previousId,value)
+      return JSON.stringify({...value,predictionId:record.id,supersedes:record.supersedes,recordedAt:record.createdAt,uiBlock:oracleVisual(value)})
+    },
+    presentCall:()=>({card:'generic',title:'ORÁCULO · versión de pronóstico',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'oracle_calibration_report',
+    description:'Laboratorio de calibración prospectiva del registro local: compara tasas pronosticadas con resultados reportados, muestra Brier y ECE con advertencia de procedencia no verificada.',
+    parameters:{},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    async execute(){
+      const result=await oracleCalibrationLedger(config.path)
+      return JSON.stringify({...result,uiBlock:oracleCalibrationVisual(result)})
+    },
+    presentCall:()=>({card:'generic',title:'ORÁCULO · laboratorio de calibración',kind:'read' as const}),
+  }))
   ctx.tools.register(defineTool({
     name:'oracle_research_forecast',
     description:'Investiga una pregunta futura de CUALQUIER área usando búsquedas web reales de PHOENIX; devuelve fuentes, sus fechas, horizonte y tareas de comprobación. No inventa probabilidades.',
@@ -44,7 +129,7 @@ export function apply(ctx: Context, config: Config): void {
     isConcurrencySafe:()=>false,
     async execute(args,exec){
       const data=await forecastPublicCsv(ctx.web,args,exec.signal)
-      const uiBlock=oracleVisual(data.result,undefined,data.evidence)
+      const uiBlock=oracleVisual(data.result,undefined,data.evidence,data.analytics)
       if(data.result.status==='insufficient')return JSON.stringify({...data,evidence:data.evidence,uiBlock})
       const record=await recordOracle(config.path,data.result)
       return JSON.stringify({...data,result:data.result,evidence:data.evidence,predictionId:record.id,recordedAt:record.createdAt,uiBlock})
@@ -84,11 +169,17 @@ export function apply(ctx: Context, config: Config): void {
     isConcurrencySafe:()=>false,
     async execute(args){
       if(args.inputJson.length>100000)throw new Error('Entrada superior a 100 KB.')
-      const value=forecastOracle(JSON.parse(args.inputJson) as unknown)
-      const question=typeof (JSON.parse(args.inputJson) as {question?:unknown}).question==='string'? (JSON.parse(args.inputJson) as {question:string}).question : undefined
+      const parsed=JSON.parse(args.inputJson) as Record<string,unknown>
+      const value=forecastOracle(parsed)
+      const question=typeof parsed.question==='string'?parsed.question:undefined
       if(value.status==='insufficient')return JSON.stringify({...value,uiBlock:oracleVisual(value,question)})
+      const analytics=parsed.mode==='time-series'
+        ?ensembleForecast({values:parsed.values as number[],horizonSteps:parsed.horizonSteps as number,
+          stepHours:parsed.stepHours as number,lastObservedAt:parsed.lastObservedAt as string,
+          unit:parsed.unit as string})
+        :undefined
       const record=await recordOracle(config.path,value)
-      return JSON.stringify({...value,predictionId:record.id,recordedAt:record.createdAt,uiBlock:oracleVisual(value,question)})
+      return JSON.stringify({...value,predictionId:record.id,recordedAt:record.createdAt,uiBlock:oracleVisual(value,question,undefined,analytics)})
     },
     presentCall:()=>({card:'generic',title:'ORÁCULO · pronóstico científico',kind:'read' as const}),
   }))
