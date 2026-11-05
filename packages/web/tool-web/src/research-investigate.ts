@@ -210,17 +210,20 @@ export async function investigateResearch(
 
   /** Count distinct hosts with distinct bodies; duplicated syndication is not corroboration. */
   const independent = (): { count: number; duplicates: number } => {
-    const hosts = new Set<string>()
-    const bodies = new Set<string>()
+    const countedOwners = new Set<string>()
+    const allReadBodies = new Set<string>()
     let count = 0
     let duplicates = 0
     for (const doc of inspected.values()) {
       if (doc.status !== 'read_relevant') continue
       const host = sourceOwner(doc.url)
-      if (doc.contentSha256 !== undefined && bodies.has(doc.contentSha256)) duplicates++
-      if (hosts.has(host) || (doc.contentSha256 !== undefined && bodies.has(doc.contentSha256))) continue
-      hosts.add(host)
-      if (doc.contentSha256 !== undefined) bodies.add(doc.contentSha256)
+      const duplicate = doc.contentSha256 !== undefined && allReadBodies.has(doc.contentSha256)
+      if (duplicate) duplicates++
+      // Every document fingerprint is tracked, even when its host was already
+      // counted; syndication of the second article must still be detected.
+      if (doc.contentSha256 !== undefined) allReadBodies.add(doc.contentSha256)
+      if (countedOwners.has(host) || duplicate) continue
+      countedOwners.add(host)
       count++
     }
     return { count, duplicates }
