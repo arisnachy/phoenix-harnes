@@ -2,14 +2,23 @@ import {
   parseSmartForm, type FormValue, type SmartExpr, type SmartFormSpec, type SmartResult,
 } from './SmartFormEngine.ts'
 
+/**
+ * Single persisted version of a form.
+ */
 export interface SmartFormVersion {
   readonly spec: SmartFormSpec
   readonly revision: number
   readonly savedAt: string
 }
+/**
+ * Saved form plus prior version snapshots.
+ */
 export interface SavedSmartForm extends SmartFormVersion {
   readonly history?: readonly SmartFormVersion[]
 }
+/**
+ * Result snapshot recorded with explicit user authorization.
+ */
 export interface SavedSmartRun {
   readonly id: string
   readonly formId: string
@@ -38,6 +47,10 @@ function persist(key: string, value: unknown): boolean {
     return true
   } catch { return false }
 }
+/**
+ * Read and validate locally saved definitions.
+ * @returns Current validated saved forms
+ */
 export function savedForms(): SavedSmartForm[] {
   const raw = load(FORMS_KEY)
   if (!Array.isArray(raw)) return []
@@ -56,6 +69,11 @@ export function savedForms(): SavedSmartForm[] {
     return spec ? [{ spec, revision:Number(r.revision), savedAt:r.savedAt, history }] : []
   })
 }
+/**
+ * Version and save a validated form locally.
+ * @param spec - Definition to save
+ * @returns Storage result and new revision
+ */
 export function saveSmartForm(spec: SmartFormSpec): { ok:boolean; revision:number } {
   const previous = savedForms()
   const existing = previous.find(r => r.spec.props.id === spec.props.id)
@@ -68,9 +86,18 @@ export function saveSmartForm(spec: SmartFormSpec): { ok:boolean; revision:numbe
   const others = previous.filter(r=>r.spec.props.id !== spec.props.id)
   return {ok:persist(FORMS_KEY,[updated,...others].slice(0,LIMIT)),revision}
 }
+/**
+ * Delete a stored definition by ID.
+ * @param id - Definition identifier
+ * @returns True when persistence succeeds
+ */
 export function removeSmartForm(id: string): boolean {
   return persist(FORMS_KEY,savedForms().filter(f=>f.spec.props.id!==id))
 }
+/**
+ * Read locally saved completed response sets.
+ * @returns Previously recorded form runs
+ */
 export function savedRuns(): SavedSmartRun[] {
   const raw = load(RUNS_KEY)
   if (!Array.isArray(raw)) return []
@@ -85,6 +112,13 @@ export function savedRuns(): SavedSmartRun[] {
   })
 }
 /** Runs and answers are stored only after an explicit save; never automatically. */
+/**
+ * Save a completed response only after explicit UI authorization.
+ * @param spec - Validated form
+ * @param values - User-submitted answers
+ * @param result - Calculated values
+ * @returns True when persistence succeeds
+ */
 export function saveSmartRun(
   spec: SmartFormSpec, values: Record<string,FormValue>, result: SmartResult,
 ): boolean {
@@ -97,9 +131,18 @@ export function saveSmartRun(
   }
   return persist(RUNS_KEY,[record,...savedRuns()].slice(0,RUN_LIMIT))
 }
+/**
+ * Delete one stored run by ID.
+ * @param id - Run identifier
+ * @returns True when persistence succeeds
+ */
 export function removeSmartRun(id: string): boolean {
   return persist(RUNS_KEY,savedRuns().filter(r=>r.id!==id))
 }
+/**
+ * Serialize definitions without exporting response history.
+ * @returns Versioned importable JSON
+ */
 export function exportSmartForms(): string {
   return JSON.stringify({
     format:'phoenix-smart-form-library',version:1,exportedAt:new Date().toISOString(),
@@ -107,6 +150,11 @@ export function exportSmartForms(): string {
   },null,2)
 }
 /** Import accepts definitions only, never imported results, scripts or arbitrary properties. */
+/**
+ * Validate and import a versioned definition archive atomically.
+ * @param data - Untrusted JSON archive
+ * @returns Success and imported count
+ */
 export function importSmartForms(data: string): {ok:boolean; count:number} {
   if (data.length > 2_000_000) return {ok:false,count:0}
   try {
@@ -126,6 +174,10 @@ export function importSmartForms(data: string): {ok:boolean; count:number} {
     return {ok:persist(FORMS_KEY,[...existing.values()]),count}
   } catch { return {ok:false,count:0} }
 }
+/**
+ * Build a lightweight catalog for a user-triggered model prompt.
+ * @returns Definitions index without user response data
+ */
 export function libraryIndex(): readonly {
   id:string;title:string;kind:string;folder:string;tags:readonly string[];revision:number
 }[] {
@@ -141,6 +193,9 @@ const op = (name:Exclude<SmartExpr,{constant:number|string|boolean}|{field:strin
   ...args:SmartExpr[]):SmartExpr => ({op:name,args})
 
 /** First-run catalog: illustrative entries. Published scales require review of version and licensing. */
+/**
+ * Built-in illustrative calculators and questionnaire.
+ */
 export const starterForms: readonly SmartFormSpec[] = [
   {
     component:'smart_form',version:1,

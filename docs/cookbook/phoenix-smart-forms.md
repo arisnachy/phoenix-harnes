@@ -1,62 +1,53 @@
-# PHOENIX · Formularios inteligentes y biblioteca
+# PHOENIX smart forms and local library
 
-La conversación incorpora dos contratos nativos de UI generativa: smart_form para calculadoras, cuestionarios, test, escalas y formularios; smart_form_library para explorar y recuperar plantillas y resultados.
+English | [中文](phoenix-smart-forms.zh.md)
 
-El modelo entrega JSON declarativo en un bloque Markdown etiquetado generative-ui. No se ejecuta JavaScript, HTML, scripts ni callbacks del modelo. Los valores se calculan localmente sin un nuevo turno de IA.
+Native generative UI supports smart_form for calculators, assessments and questionnaires, and smart_form_library for reusable definitions. A model emits declarative JSON inside a generative-ui Markdown fence. There is no arbitrary JavaScript evaluation or network request for local calculation.
 
-## Ejemplo de definición JSON
+## Minimal JSON definition
 
 ~~~json
 {
   "component":"smart_form","version":1,
   "props":{
-    "id":"area_rectangulo","title":"Área del rectángulo","kind":"calculator",
-    "folder":"Ciencia/Geometría","source":"Geometría elemental",
+    "id":"rectangle_area","title":"Rectangle area","kind":"calculator",
+    "folder":"Science/Geometry","source":"Elementary geometry",
     "fields":[
-      {"id":"base","label":"Base","type":"number","min":0.01,"unit":"cm"},
-      {"id":"alto","label":"Altura","type":"number","min":0.01,"unit":"cm"}
+      {"id":"width","label":"Width","type":"number","min":0.01,"unit":"cm"},
+      {"id":"height","label":"Height","type":"number","min":0.01,"unit":"cm"}
     ],
     "outputs":[{
-      "id":"area","label":"Área","unit":"cm²","precision":2,
-      "expression":{"op":"mul","args":[{"field":"base"},{"field":"alto"}]}
+      "id":"area","label":"Area","unit":"cm²","precision":2,
+      "expression":{"op":"mul","args":[{"field":"width"},{"field":"height"}]}
     }]
   }
 }
 ~~~
 
-## Capacidades y límites
+## Supported controls and expressions
 
-Categorías: calculator, scientific, test, scale, survey, form.
+- Kinds: calculator, scientific, test, scale, survey, form.
+- Inputs: number, range, text, textarea, date, time, select, radio, checkbox. Conditional display uses showWhen.
+- Arithmetic: add, sub, mul, div, pow, mod, min, max, abs, floor, ceil, round, neg.
+- Scientific: sqrt, ln, log10, exp, sin, cos, tan, pi. Trigonometric angles use radians.
+- Logic: eq, neq, gt, gte, lt, lte, and, or, not, if.
+- Calendar days: days_between, add_days.
 
-Tipos de campo: number, range, text, textarea, date, time, select, radio, checkbox. Se admiten valores predeterminados, unidades, restricciones numéricas, opciones, campos opcionales y visualización condicional con showWhen.
+Expressions are nested JSON objects with op and args, field references, constants or today. Invalid domains yield explicit errors, not Infinity or NaN. Parser bounds include 80 fields, 18 outputs, 14 levels, 350 expression nodes, and a strict key allowlist.
 
-Las expresiones JSON pueden usar constantes, referencias a campos y la fecha local actual. Los operadores admitidos son:
-- Aritmética: add, sub, mul, div, pow, mod, min, max, abs, floor, ceil, round, neg.
-- Científicos: sqrt, ln, log10, exp, sin, cos, tan, pi. Los ángulos trigonométricos se expresan en radianes.
-- Lógica: eq, neq, gt, gte, lt, lte, and, or, not, if.
-- Fechas: days_between y add_days (días calendario).
+## Library, revision history and index
 
-Las expresiones tienen la forma: {"op":"add","args":[{"field":"x"},{"constant":2}]}.
-Los casos fuera del dominio matemático producen un error visible, nunca Infinity o NaN. Se admiten hasta 80 campos, 18 salidas, 14 niveles y 350 nodos; no se aceptan claves no reconocidas.
+- Save a definition explicitly with Save template; select a logical folder such as Health/Obstetrics.
+- Search the local catalog by title, identifier, folder or tags. A definition with the same ID creates another revision, retaining up to ten previous versions.
+- Use Improve with Kira to draft a new definition from the current one. The model must retain the ID for revisions; the user explicitly saves the new version.
+- Saving answers and results requires checking the consent box. Results can be reviewed and submitted for analysis only through deliberate button clicks.
+- Export and import a versioned JSON definition library. General exports exclude answer histories.
+- Share index with Kira sends the local metadata to a user-reviewable draft; agents cannot autonomously discover browser-local templates.
 
-Un test o escala puede sumar los valores numéricos de sus opciones y declarar umbrales en outputs.bands mediante una lista ordenada de {"max":n,"label":"texto"}. La interpretación es solo la declarada y nunca equivale por sí sola a validación clínica.
+Starter examples include adult BMI, obstetric last-menstrual-period dating, scientific calculations, and a fictional Likert survey. They are illustrations, not clinical-grade instruments.
 
-## Biblioteca, carpetas, revisiones e índice
+## Persistence, privacy and future integration
 
-1. Pedir: «Kira, crea una calculadora o formulario interactivo como smart_form, con ID, campos, salidas y fuente». El modelo devuelve un bloque generative-ui.
-2. Abrir el formulario y usar Guardar plantilla. Su carpeta se puede definir como Salud/Obstetricia, Educación/Encuestas o Administración/Finanzas.
-3. Abrir la biblioteca mediante el objeto {"component":"smart_form_library","version":1,"props":{}}. Buscar por título, ID, carpeta o etiquetas.
-4. Usar Modificar con Kira o Mejorar con Kira para enviar la definición exacta a la conversación. Conservar el ID al revisar y volver a Guardar plantilla para incrementar la revisión.
-5. Cuando se completen los campos, Guardar resultado exige autorización explícita para guardar respuestas y resultados. Resultados muestra el historial y permite solicitar un análisis a Kira.
-6. Exportar e importar el JSON de la biblioteca permite hacer copias de las definiciones. El archivo exportado excluye respuestas y datos guardados de personas.
-7. Compartir índice con Kira envía los títulos y metadatos de plantillas del navegador al cuadro de diálogo; Kira puede pedir entonces la definición completa.
+Definitions, folder labels, version snapshots and optional responses are stored only in this browser profile via localStorage. This is not an operating-system directory, a secure clinical record, encrypted persistence, or cross-device synchronization. Avoid patient identifiers and sensitive clinical data.
 
-La primera implementación guarda en localStorage del perfil del navegador. Las carpetas son rutas lógicas dentro de esta biblioteca, no directorios del sistema de archivos. No existe sincronización con el Host, búsqueda automática del índice por parte del agente, cifrado, soporte multiusuario ni copias de seguridad automáticas. No hay que presentar esta versión como un repositorio clínico persistente compartido.
-
-Ejemplos iniciales: índice de masa corporal en adultos, estimación obstétrica por FUM, calculadora científica y encuesta Likert pedagógica no validada.
-
-## Seguridad y avance de la plataforma
-
-No guardar datos personales identificables ni expedientes clínicos en el almacenamiento local del navegador. Verificar la fuente, versión, licencia, idioma, población y puntos de corte de escalas clínicas antes de utilizarlas para decisiones. El IMC de adulto y la FUM son estimaciones, no diagnósticos.
-
-La siguiente etapa conectará definiciones y resultados al Host mediante herramientas del agente list/search/get/create/revise/run, con permisos por usuario/institución, cifrado, auditoría, versiones inmutables y compatibilidad opcional con FHIR Questionnaire y QuestionnaireResponse. Hasta que esa capa esté implementada, el agente solo puede conocer el índice o la definición cuando el usuario pulsa el botón correspondiente.
+A future Host-side library should expose authorized agent list/search/get/create/revise/run tools with audit trails, access control, encryption and optional FHIR Questionnaire and QuestionnaireResponse exchange. Verify the provenance, clinical version, licensing, population and cutoffs of any instrument before use.

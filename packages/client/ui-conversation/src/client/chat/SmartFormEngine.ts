@@ -2,13 +2,22 @@
  * Declarative, bounded calculation runtime for model-authored forms.
  * No eval, Function, scripts, network I/O or model round trips are involved.
  */
+/**
+ * A validated scalar or multiselect answer.
+ */
 export type FormValue = string | number | boolean | string[]
+/**
+ * Finite, bounded calculation expression tree.
+ */
 export type SmartExpr =
   | { readonly constant: number | string | boolean }
   | { readonly field: string }
   | { readonly today: true }
   | { readonly op: SmartOp; readonly args: readonly SmartExpr[] }
 
+/**
+ * Supported pure calculation operation.
+ */
 export type SmartOp =
   | 'add' | 'sub' | 'mul' | 'div' | 'pow' | 'mod' | 'min' | 'max'
   | 'abs' | 'sqrt' | 'ln' | 'log10' | 'exp' | 'sin' | 'cos' | 'tan'
@@ -17,6 +26,9 @@ export type SmartOp =
   | 'and' | 'or' | 'not' | 'if'
   | 'days_between' | 'add_days'
 
+/**
+ * Typed field definition and optional conditional visibility.
+ */
 export interface SmartField {
   readonly id: string
   readonly label: string
@@ -33,6 +45,9 @@ export interface SmartField {
   readonly showWhen?: { readonly field: string; readonly equals: string | number | boolean }
 }
 
+/**
+ * Calculated output description and interpretation bands.
+ */
 export interface SmartOutput {
   readonly id: string
   readonly label: string
@@ -43,6 +58,9 @@ export interface SmartOutput {
   readonly bands?: readonly { readonly max: number; readonly label: string }[]
 }
 
+/**
+ * Schema-validated interactive form specification.
+ */
 export interface SmartFormSpec {
   readonly component: 'smart_form'
   readonly version: 1
@@ -58,11 +76,17 @@ export interface SmartFormSpec {
     readonly outputs?: readonly SmartOutput[]
   }
 }
+/**
+ * Native request to open the local library explorer.
+ */
 export interface SmartLibrarySpec {
   readonly component: 'smart_form_library'
   readonly version: 1
   readonly props: { readonly title?: string }
 }
+/**
+ * Calculated and validated output snapshot.
+ */
 export interface SmartResult {
   readonly ready: boolean
   readonly missing: readonly string[]
@@ -144,6 +168,11 @@ function validateField(v: unknown, ids: Set<string>): v is SmartField {
 }
 
 /** The renderer accepts only this versioned allowlisted contract. */
+/**
+ * Validate an untrusted form against the native schema.
+ * @param v - Untrusted definition
+ * @returns Validated form or null
+ */
 export function parseSmartForm(v: unknown): SmartFormSpec | null {
   if (!isObject(v) || !keys(v,['component','version','props']) ||
     v.component !== 'smart_form' || v.version !== 1 || !isObject(v.props)) return null
@@ -182,6 +211,11 @@ export function parseSmartForm(v: unknown): SmartFormSpec | null {
   return v as unknown as SmartFormSpec
 }
 
+/**
+ * Validate a request for the form library explorer.
+ * @param v - Untrusted definition
+ * @returns Validated library request or null
+ */
 export function parseSmartLibrary(v: unknown): SmartLibrarySpec | null {
   return isObject(v) && keys(v,['component','version','props'])
     && v.component === 'smart_form_library' && v.version === 1
@@ -190,10 +224,20 @@ export function parseSmartLibrary(v: unknown): SmartLibrarySpec | null {
     ? v as unknown as SmartLibrarySpec : null
 }
 
+/**
+ * Return a date-only local calendar string.
+ * @param date - Local clock source
+ * @returns ISO calendar date
+ */
 export function localToday(date: Date = new Date()): string {
   const y = date.getFullYear(), m = String(date.getMonth()+1).padStart(2,'0')
   return String(y).padStart(4,'0')+'-'+m+'-'+String(date.getDate()).padStart(2,'0')
 }
+/**
+ * Build safe initial values from a definition.
+ * @param spec - Validated form
+ * @returns Default answers
+ */
 export function initialSmartValues(spec: SmartFormSpec): Record<string, FormValue> {
   const values: Record<string, FormValue> = {}
   for (const f of spec.props.fields) {
@@ -203,6 +247,12 @@ export function initialSmartValues(spec: SmartFormSpec): Record<string, FormValu
   }
   return values
 }
+/**
+ * Evaluate one declarative visibility condition.
+ * @param field - Question to check
+ * @param values - Current answers
+ * @returns Whether the question is visible
+ */
 export function fieldVisible(field: SmartField, values: Record<string, FormValue>): boolean {
   return field.showWhen === undefined || values[field.showWhen.field] === field.showWhen.equals
 }
@@ -291,6 +341,13 @@ function formatted(value: Scalar, precision?: number): string {
   if (typeof value === 'boolean') return value ? 'Sí' : 'No'
   return value
 }
+/**
+ * Calculate outputs without executing model-authored code.
+ * @param spec - Validated form
+ * @param values - Current answers
+ * @param today - Calendar date used by date formulas
+ * @returns Validation status and derived outputs
+ */
 export function calculateSmartForm(spec: SmartFormSpec, values: Record<string, FormValue>, today = localToday()): SmartResult {
   const missing = spec.props.fields.filter(field => {
     if (!fieldVisible(field,values) || field.required === false) return false
