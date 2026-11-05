@@ -24,6 +24,7 @@
 <button data-tab="units">Organización</button>
 <button data-tab="systems">Tecnología</button>
 <button data-tab="finance">Finanzas</button>
+<button data-tab="models">Modelos IA</button><button data-tab="fabric">Red PHOENIX</button>
 <button data-tab="planning">Planificación</button>
 <button data-tab="evidence">Evidencias</button>
 <button data-tab="deployment">Despliegue</button>
@@ -124,6 +125,35 @@
 <article class="card"><h2>Costos por moneda y periodicidad</h2><ul id="budget-list"></ul></article>
 <article class="card"><h2>Detalle</h2><ul id="costs-list"></ul></article></section>
 
+<section data-panel="models" class="panel" hidden>
+<article class="card"><h2>Modelos, proveedores y cuentas</h2>
+<p>Describe la estrategia de inferencia y el presupuesto por proveedor o instancia. Nunca introduzcas aquí claves API ni contraseñas.</p>
+<form id="form-provider"><div class="grid">
+<div><label>ID proveedor</label><input name="providerId" required placeholder="proveedor_local"></div>
+<div><label>Modelo</label><input name="modelName" required placeholder="modelo-autorizado"></div>
+<div><label>Ejecución</label><select name="execution"><option value="local">Local</option><option value="external">Proveedor externo autorizado</option></select></div>
+<div><label>Distribución de cuentas</label><select name="accountMode">
+<option value="organization">Cuenta institucional</option><option value="per-unit">Cuenta por departamento</option>
+<option value="per-instance">Cuenta por PHOENIX</option></select></div>
+<div><label>Presupuesto mensual (USD)</label><input name="monthlyBudgetUsd" type="number" min="0" step="any" value="0" required></div>
+</div><button type="submit">Guardar estrategia</button></form></article>
+<article class="card"><h2>Flota planificada</h2><ul id="models-list"></ul>
+<p class="hint">Todas las rutas permanecerán pendientes hasta configurar credenciales en un almacén seguro y comprobar capacidad.</p></article></section>
+<section data-panel="fabric" class="panel" hidden>
+<article class="card"><h2>Fabric · Conectividad verdadera</h2>
+<p>Comprobar el registro central es diferente de abrir una conexión o instalar un PHOENIX. Solo un heartbeat reciente confirma que el nodo está activo.</p>
+<button id="get-fabric">Comprobar conexión</button><pre id="fabric-status">Todavía no comprobado.</pre></article>
+<article class="card"><h2>Registrar una instancia autorizada</h2>
+<p>Este paso requiere un servidor Fabric configurado, el consentimiento de TI y una unidad existente en Genesis. Entrega un token una sola vez.</p>
+<form id="form-enroll"><div class="grid">
+<div><label>ID nodo</label><input name="nodeId" required placeholder="pharmacy_node1"></div>
+<div><label>ID de sede</label><input name="siteId" required placeholder="principal"></div>
+<div><label>ID de unidad</label><input name="unitId" required placeholder="farmacia"></div>
+<div><label>Capacidades (separadas por coma)</label><input name="capabilities" required placeholder="inventory.preview,fabric.ping"></div>
+<div><label>Emisores permitidos (separados por coma)</label><input name="receivesFrom" placeholder="consult_node1"></div>
+</div><label><input name="approved" type="checkbox" required>Confirmo que tengo autorización para registrar este nodo</label>
+<button type="submit">Registrar nodo en Fabric</button></form>
+<pre id="enroll-result">Todavía no se ha registrado ningún nodo desde esta consola.</pre></article></section>
 <section data-panel="planning" class="panel" hidden><article class="card"><h2>Metas operativas para POA</h2>
 <form id="form-goal"><div class="grid">
 <div><label>ID meta</label><input name="goalId" required placeholder="meta_beds"></div>
