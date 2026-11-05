@@ -793,7 +793,7 @@ export function HardnessArtifactBody({ mime, data, expanded, title, executable =
       const pageUrl = safeWebPreviewUrl(data)
       if (mime === 'application/vnd.phoenix.game+html') return <GameStudioPreview html={data} title={title} />
       if (pageUrl !== undefined && !data.includes('<')) return <WebPagePreview url={pageUrl} title={title} />
-      const recovered = recoverHtmlForm(data, title)
+      const recovered = recoverHtmlForm(data, title, executable)
       if (recovered.kind === 'native') return <SmartFormWorkspace initial={recovered.spec} />
       if (recovered.kind === 'inert') return <div className={styles.stack}>
         <p className={styles.note} role="alert">
