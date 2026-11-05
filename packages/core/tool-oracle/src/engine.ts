@@ -19,7 +19,7 @@ export type OracleResult = {
   counterfactual?: number
   delta?: number
   assumptions: string[]
-  evidenceStatus: 'user_supplied_unverified'
+  evidenceStatus: 'user_supplied_unverified' | 'retrieved_unverified'
   source: string
   reason?: string
 }
