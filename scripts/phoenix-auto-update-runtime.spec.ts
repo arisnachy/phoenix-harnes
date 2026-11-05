@@ -432,7 +432,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     const close = supervisor.indexOf('supervisorInstanceLock?.close()', finish)
     expect(finish).toBeGreaterThan(-1)
     expect(close).toBeGreaterThan(finish)
-    expect(supervisor.slice(finish, close)).toContain('cleanupObsoleteRuntimes()')
+    expect(supervisor.slice(finish, close)).toContain('reapDormantStage: shutdownRequested')
     expect(supervisor.slice(finish, close)).toContain('final storage cleanup deferred')
   })
 
@@ -649,12 +649,12 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(supervisor).toContain('/^phoenix-runtime-[0-9a-f]{10}-[0-9a-f]{12}$/iu')
     expect(supervisor).toContain('function runtimeProtectedByOwningCheckout(path)')
     expect(supervisor).toContain('const inactiveRuntimes = runtimeDirectoriesForCleanup()')
-    expect(supervisor).toContain('if (retainedInactiveRuntimes < MAX_INACTIVE_RUNTIME_BACKUPS)')
+    expect(supervisor).toContain('if (retainedInactiveRuntimes < inactiveBackupLimit)')
     expect(supervisor).not.toContain('if (managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS) continue')
     expect(supervisor).toContain('Math.min(UPDATE_STORAGE_RETENTION_MS, 6 * 60 * 60 * 1000)')
     expect(supervisor).toContain('function stageDirectoriesForCleanup()')
     expect(supervisor).toContain('/^phoenix-stage-[0-9a-f]{10}(?:-conflict-\\d+-\\d+)?$/iu')
-    expect(supervisor).toContain('if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue')
+    expect(supervisor).toContain('managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue')
     expect(supervisor).toContain('removed stale updater staging worktree')
   })
 
@@ -795,7 +795,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(loop).toContain('cleanupObsoleteRuntimes()')
     // Capacity checks and explicit offline repairs must still report EBUSY.
     expect(supervisor).toContain('cleanupObsoleteRuntimes([runtimeRoot], { reportBusy: storageAtHardCap })')
-    expect(supervisor).toContain('cleanupObsoleteRuntimes([], { reportBusy: true })')
+    expect(supervisor).toContain('reportBusy: true,\n    releaseRollback: offlineRepair,')
   })
 
   it('backs off blocked Windows storage and avoids repeating EBUSY or capacity warnings in every poll', () => {
@@ -846,6 +846,140 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(desktop).toContain('La versión vieja no se iniciará')
   })
 
+})
+
+describe('PHOENIX runtime garbage collector health and quota regression', () => {
+  it('keeps the rollback cushion during probation but discards inactive versions after verified health', () => {
+    const start = supervisor.indexOf('function cleanupObsoleteRuntimes(')
+    const end = supervisor.indexOf('\n// A busy orphan must not make', start)
+    expect(start).toBeGreaterThan(0)
+    expect(end).toBeGreaterThan(start)
+    const removed: string[] = []
+    const registered = new Set(['active', 'backup-new', 'backup-old'])
+    const { cleanupObsoleteRuntimes } = runInNewContext(
+      supervisor.slice(start, end) + '\n({ cleanupObsoleteRuntimes })',
+      {
+        runtimePathKey: (path: string) => path,
+        readActiveRuntimeRecord: () => ({ path: 'active' }),
+        runtimeRoot: 'active',
+        root: 'source',
+        process: { env: {}, platform: 'win32' },
+        registeredWorktreePaths: () => registered,
+        runtimeDirectoriesForCleanup: () => ['active', 'backup-new', 'backup-old'],
+        runtimeProtectedByOwningCheckout: () => false,
+        managedDirectoryMtimeMs: (path: string) => path === 'backup-new' ? 30 : 10,
+        MAX_INACTIVE_RUNTIME_BACKUPS: 1,
+        persistentStage: () => 'current-stage',
+        stageDirectoriesForCleanup: () => [],
+        removeManagedWorktree: (path: string) => { removed.push(path); return true },
+        spawnSync: () => ({ status: 0 }),
+        cleanupDetachedLegacyStorage: () => {},
+        console: { error: () => {} },
+      },
+    ) as { cleanupObsoleteRuntimes: (keep?: string[], opts?: {
+      releaseRollback?: boolean,
+    }) => void }
+    cleanupObsoleteRuntimes()
+    expect(removed).toEqual(['backup-old'])
+    removed.length = 0
+    cleanupObsoleteRuntimes([], { releaseRollback: true })
+    expect(removed).toEqual(['backup-new', 'backup-old'])
+    expect(removed).not.toContain('active')
+    expect(supervisor).toContain('releaseRollback: !userKeepsBackups')
+    expect(supervisor).toContain('healthyCheckpointWritten = true')
+  })
+
+  it('only removes the current stage offline/after orderly shutdown and with no lease or process', () => {
+    const start = supervisor.indexOf('function cleanupObsoleteRuntimes(')
+    const end = supervisor.indexOf('\n// A busy orphan must not make', start)
+    const removed: string[] = []
+    let stageLease = false
+    let prepared = false
+    let busy: Set<string> | undefined = new Set()
+    let preparing = false
+    const { cleanupObsoleteRuntimes } = runInNewContext(
+      supervisor.slice(start, end) + '\n({ cleanupObsoleteRuntimes })',
+      {
+        runtimePathKey: (path: string) => path,
+        readActiveRuntimeRecord: () => ({ path: 'active' }),
+        runtimeRoot: 'active',
+        root: 'source',
+        process: { env: {}, platform: 'win32' },
+        registeredWorktreePaths: () => new Set(['stage']),
+        runtimeDirectoriesForCleanup: () => ['active'],
+        runtimeProtectedByOwningCheckout: () => false,
+        managedDirectoryMtimeMs: () => 10,
+        managedDirectoryAgeMs: () => 7 * 60 * 60 * 1000,
+        MAX_INACTIVE_RUNTIME_BACKUPS: 1,
+        persistentStage: () => 'stage',
+        stageDirectoriesForCleanup: () => ['stage'],
+        sameRepository: () => true,
+        stageProtectedByOwningCheckout: () => stageLease,
+        readPreparedRecord: () => prepared ? { target: 'a'.repeat(40) } : undefined,
+        readUpdateState: () => preparing ? { status: 'preparing' } : { status: 'updated' },
+        windowsProcessReferences: () => busy,
+        removeManagedWorktree: (path: string) => { removed.push(path); return true },
+        spawnSync: () => ({ status: 0 }),
+        cleanupDetachedLegacyStorage: () => {},
+        console: { error: () => {} },
+        STAGE_STORAGE_RETENTION_MS: 60 * 60 * 1000,
+      },
+    ) as { cleanupObsoleteRuntimes: (keep?: string[], opts?: {
+      reapDormantStage?: boolean,
+    }) => void }
+    cleanupObsoleteRuntimes()
+    stageLease = true
+    cleanupObsoleteRuntimes([], { reapDormantStage: true })
+    stageLease = false
+    prepared = true
+    cleanupObsoleteRuntimes([], { reapDormantStage: true })
+    prepared = false
+    preparing = true
+    cleanupObsoleteRuntimes([], { reapDormantStage: true })
+    preparing = false
+    busy = undefined
+    cleanupObsoleteRuntimes([], { reapDormantStage: true })
+    busy = new Set(['stage'])
+    cleanupObsoleteRuntimes([], { reapDormantStage: true })
+    expect(removed).toEqual([])
+    busy = new Set()
+    cleanupObsoleteRuntimes([], { reapDormantStage: true })
+    expect(removed).toEqual(['stage'])
+    expect(storageRepair).toContain("SetEnvironmentVariable('PHOENIX_OFFLINE_STORAGE_REPAIR', '1'")
+    expect(supervisor).toContain('reapDormantStage: offlineRepair')
+  })
+
+  it('stops updater allocation at the global cap across checkout identities', () => {
+    const start = updater.indexOf('function updaterRuntimeStorageHasCapacity(root, target) {')
+    const end = updater.indexOf('\nfunction sameRepositoryWorktree(root, stage)', start)
+    expect(start).toBeGreaterThan(0)
+    expect(end).toBeGreaterThan(start)
+    const warning = vi.fn()
+    let otherIdentityRuntimes = 6
+    const { updaterRuntimeStorageHasCapacity } = runInNewContext(
+      updater.slice(start, end) + '\n({ updaterRuntimeStorageHasCapacity })',
+      {
+        stageBaseDirectory: () => 'p',
+        stageIdentity: () => 'c844c9f3ab',
+        join,
+        existsSync: () => false,
+        cleanupUpdaterRuntimeStorage: () => ({ remaining: 1 }),
+        updaterRuntimeDiskHasHeadroom: () => true,
+        allUpdaterRuntimeDirectories: () => Array.from({ length: otherIdentityRuntimes }, (_, index) => String(index)),
+        GLOBAL_RUNTIME_DIRECTORY_LIMIT: 6,
+        MAX_RUNTIME_DIRECTORIES: 3,
+        STORAGE_WARNING_INTERVAL_MS: 15 * 60 * 1000,
+        lastStorageWarningAt: Number.NEGATIVE_INFINITY,
+        Date,
+        console: { error: warning },
+      },
+    ) as { updaterRuntimeStorageHasCapacity: (root: string, target: string) => boolean }
+    expect(updaterRuntimeStorageHasCapacity('checkout', 'a'.repeat(40))).toBe(false)
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('global runtime capacity blocked'))
+    otherIdentityRuntimes = 5
+    expect(updaterRuntimeStorageHasCapacity('checkout', 'a'.repeat(40))).toBe(true)
+    expect(updater).toContain('GLOBAL_RUNTIME_DIRECTORY_LIMIT = Math.max(6, MAX_RUNTIME_DIRECTORIES)')
+  })
 })
 
 describe('cross-checkout PHOENIX disk growth prevention', () => {
