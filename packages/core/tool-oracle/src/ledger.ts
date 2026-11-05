@@ -109,3 +109,12 @@ export async function reviseOracle(path:string,previousId:string,result:OracleRe
   await append(path,row)
   return row
 }
+
+
+/** Find past-due event outcomes for independent verification; never marks them true by itself. */
+export async function oracleDuePredictions(path:string):Promise<OracleHistoryRow[]>{
+  const rows=await oracleHistory(path,30)
+  const now=Date.now()
+  return rows.filter(r=>r.state==='awaiting-report'&&r.targetAt!==undefined
+    &&Number.isFinite(Date.parse(r.targetAt))&&Date.parse(r.targetAt)<=now).slice(0,20)
+}
