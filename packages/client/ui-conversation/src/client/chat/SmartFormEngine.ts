@@ -129,6 +129,12 @@ function validExpression(
   return v.args.every(a => validExpression(a, fieldIds, budget, depth + 1))
 }
 
+/** A real score or calculator must depend on at least one user input. */
+function readsField(expression: SmartExpr): boolean {
+  if ('field' in expression) return true
+  return 'args' in expression && expression.args.some(readsField)
+}
+
 function validateField(v: unknown, ids: Set<string>): v is SmartField {
   if (!isObject(v) || !keys(v, ['id','label','type','required','description','placeholder','unit','min','max','step','default','options','showWhen'])
     || !id(v.id) || ids.has(v.id) || !bounded(v.label,200)
@@ -189,6 +195,9 @@ export function parseSmartForm(v: unknown): SmartFormSpec | null {
   const ids = new Set<string>()
   for (const field of p.fields) if (!validateField(field, ids)) return null
   const outputIds = new Set<string>()
+  const mustCalculate = ['calculator','scientific','test','scale'].includes(String(p.kind))
+  if (mustCalculate && (!Array.isArray(p.outputs) || p.outputs.length === 0)) return null
+  let readsInput = false
   let budget = {remaining: 350}
   for (const o of p.outputs ?? []) {
     if (!isObject(o) || !keys(o,['id','label','expression','unit','precision','description','bands'])
@@ -197,6 +206,7 @@ export function parseSmartForm(v: unknown): SmartFormSpec | null {
       || (o.description !== undefined && !bounded(o.description,500))
       || (o.precision !== undefined && (!Number.isInteger(o.precision) || (o.precision as number) < 0 || (o.precision as number) > 10))
       || !validExpression(o.expression,ids,budget)) return null
+    if (readsField(o.expression)) readsInput = true
     outputIds.add(o.id)
     if (o.bands !== undefined) {
       if (!Array.isArray(o.bands) || o.bands.length < 1 || o.bands.length > 20) return null
@@ -208,6 +218,7 @@ export function parseSmartForm(v: unknown): SmartFormSpec | null {
       }
     }
   }
+  if (mustCalculate && !readsInput) return null
   return v as unknown as SmartFormSpec
 }
 
