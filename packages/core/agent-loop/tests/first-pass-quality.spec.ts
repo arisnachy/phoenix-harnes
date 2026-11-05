@@ -93,6 +93,20 @@ describe('first-pass quality without extra model turns', () => {
     expect(guidance).not.toContain('expose secrets')
   })
 
+  it('retains all six checks for a complex Spanish-first request', () => {
+    const guidance = firstPassQualityGuidance(
+      'Planifica e implementa una app Python, calcula presupuesto, investiga fuentes ' +
+      'y genera un documento PDF sin aumentar el tiempo de ejecución.',
+    )
+    for (const criterion of [
+      'For feasibility:', 'For quantitative claims:', 'For implementation:',
+      'For research:', 'For deliverables:', 'For efficiency:',
+    ]) {
+      expect(guidance).toContain(criterion)
+    }
+    expect(guidance.length).toBeLessThan(1100)
+  })
+
   it('recognizes Spanish resource allocation and feasibility questions', () => {
     const allocation = firstPassQualityGuidance(
       'Distribuye los recursos entre las salas y calcula los costos para cumplir las restricciones.',
