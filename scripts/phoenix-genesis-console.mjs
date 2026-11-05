@@ -83,6 +83,7 @@ export function createGenesisConsole({dbPath,adminToken,port=0,host='127.0.0.1'}
         return send(res,200,workbench.poa({
           organizationId,period:target.searchParams.get('period')}))
       const operations={
+        '/v1/sites':x=>workbench.addSite(x),
         '/v1/answers':x=>workbench.answer(x),
         '/v1/units':x=>workbench.unit(x),
         '/v1/systems':x=>workbench.system(x),
