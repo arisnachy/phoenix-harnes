@@ -30,6 +30,10 @@ on:
       - 'scripts/phoenix-genesis-healthcare-catalog.test.mjs'
       - 'scripts/phoenix-genesis-document-intake.mjs'
       - 'scripts/phoenix-genesis-document-intake.test.mjs'
+      - 'scripts/phoenix-genesis-area-census.mjs'
+      - 'scripts/phoenix-genesis-area-census.test.mjs'
+      - 'scripts/phoenix-genesis-area-census-http.test.mjs'
+      - 'scripts/phoenix-genesis-census-ui.js'
       - 'docs/phoenix-genesis-document-intake.md'
       - 'docs/phoenix-genesis-healthcare-domain-pack.md'
       - 'scripts/phoenix-genesis-fabric-integration.test.mjs'
@@ -70,6 +74,10 @@ on:
       - 'scripts/phoenix-genesis-healthcare-catalog.test.mjs'
       - 'scripts/phoenix-genesis-document-intake.mjs'
       - 'scripts/phoenix-genesis-document-intake.test.mjs'
+      - 'scripts/phoenix-genesis-area-census.mjs'
+      - 'scripts/phoenix-genesis-area-census.test.mjs'
+      - 'scripts/phoenix-genesis-area-census-http.test.mjs'
+      - 'scripts/phoenix-genesis-census-ui.js'
       - 'docs/phoenix-genesis-document-intake.md'
       - 'docs/phoenix-genesis-healthcare-domain-pack.md'
       - 'scripts/phoenix-genesis-fabric-integration.test.mjs'
@@ -112,8 +120,10 @@ jobs:
         run: node --test scripts/phoenix-genesis-healthcare-catalog.test.mjs
       - name: Test evidence-bound TXT/DOCX/PDF document intake and human review
         run: node --test scripts/phoenix-genesis-document-intake.test.mjs
+      - name: Test interactive 60-area census, migrations and race-safe approvals
+        run: node --test scripts/phoenix-genesis-area-census.test.mjs scripts/phoenix-genesis-area-census-http.test.mjs
       - name: Verify browser console scripts parse
-        run: node --check scripts/phoenix-genesis-console-ui.js && node --check scripts/phoenix-genesis-console.mjs
+        run: node --check scripts/phoenix-genesis-console-ui.js && node --check scripts/phoenix-genesis-census-ui.js && node --check scripts/phoenix-genesis-console.mjs
       - name: Exercise the Genesis CLI with synthetic hospital input
         run: |
           node scripts/phoenix-genesis-plan-cli.mjs scripts/phoenix-genesis-fabric-example.json > genesis-demo-output.json
