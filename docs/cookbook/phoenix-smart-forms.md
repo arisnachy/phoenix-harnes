@@ -2,7 +2,10 @@
 
 English | [中文](phoenix-smart-forms.zh.md)
 
-Native generative UI supports smart_form for calculators, assessments and questionnaires, and smart_form_library for reusable definitions. A model emits declarative JSON inside a generative-ui Markdown fence. There is no arbitrary JavaScript evaluation or network request for local calculation.
+Native generative UI supports smart_form for calculators, assessments and questionnaires, and
+smart_form_library for reusable definitions. A model emits declarative JSON inside a
+generative-ui Markdown fence. There is no arbitrary JavaScript evaluation or network request for
+local calculation.
 
 ## Minimal JSON definition
 
@@ -27,27 +30,44 @@ Native generative UI supports smart_form for calculators, assessments and questi
 ## Supported controls and expressions
 
 - Kinds: calculator, scientific, test, scale, survey, form.
-- Inputs: number, range, text, textarea, date, time, select, radio, checkbox. Conditional display uses showWhen.
+- Inputs: number, range, text, textarea, date, time, select, radio, checkbox. Conditional
+  display uses showWhen.
 - Arithmetic: add, sub, mul, div, pow, mod, min, max, abs, floor, ceil, round, neg.
 - Scientific: sqrt, ln, log10, exp, sin, cos, tan, pi. Trigonometric angles use radians.
 - Logic: eq, neq, gt, gte, lt, lte, and, or, not, if.
 - Calendar days: days_between, add_days.
 
-Expressions are nested JSON objects with op and args, field references, constants or today. Invalid domains yield explicit errors, not Infinity or NaN. Parser bounds include 80 fields, 18 outputs, 14 levels, 350 expression nodes, and a strict key allowlist.
+Expressions are nested JSON objects with op and args, field references, constants or today.
+Invalid domains yield explicit errors, not Infinity or NaN. Parser bounds include 80 fields, 18
+outputs, 14 levels, 350 expression nodes, and a strict key allowlist.
 
 ## Library, revision history and index
 
-- Save a definition explicitly with Save template; select a logical folder such as Health/Obstetrics.
-- Search the local catalog by title, identifier, folder or tags. A definition with the same ID creates another revision, retaining up to ten previous versions.
-- Use Improve with Kira to draft a new definition from the current one. The model must retain the ID for revisions; the user explicitly saves the new version.
-- Saving answers and results requires checking the consent box. Results can be reviewed and submitted for analysis only through deliberate button clicks.
-- Export and import a versioned JSON definition library. General exports exclude answer histories.
-- Share index with Kira sends the local metadata to a user-reviewable draft; agents cannot autonomously discover browser-local templates.
+- Save a definition explicitly with Save template; select a logical folder such as
+  Health/Obstetrics.
+- Search the local catalog by title, identifier, folder or tags. A definition with the same ID
+  creates another revision, retaining up to ten previous versions.
+- Use Improve with Kira to draft a new definition from the current one. The model must retain
+  the ID for revisions; the user explicitly saves the new version.
+- Saving answers and results requires checking the consent box. Results can be reviewed and
+  submitted for analysis only through deliberate button clicks.
+- Export and import a versioned JSON definition library. General exports exclude answer
+  histories.
+- Share index with Kira sends the local metadata to a user-reviewable draft; agents cannot
+  autonomously discover browser-local templates.
 
-Starter examples include adult BMI, obstetric last-menstrual-period dating, scientific calculations, and a fictional Likert survey. They are illustrations, not clinical-grade instruments.
+Starter examples include adult BMI, obstetric last-menstrual-period dating, scientific
+calculations, and a fictional Likert survey. They are illustrations, not clinical-grade
+instruments.
 
 ## Persistence, privacy and future integration
 
-Definitions, folder labels, version snapshots and optional responses are stored only in this browser profile via localStorage. This is not an operating-system directory, a secure clinical record, encrypted persistence, or cross-device synchronization. Avoid patient identifiers and sensitive clinical data.
+Definitions, folder labels, version snapshots and optional responses are stored only in this
+browser profile via localStorage. This is not an operating-system directory, a secure clinical
+record, encrypted persistence, or cross-device synchronization. Avoid patient identifiers and
+sensitive clinical data.
 
-A future Host-side library should expose authorized agent list/search/get/create/revise/run tools with audit trails, access control, encryption and optional FHIR Questionnaire and QuestionnaireResponse exchange. Verify the provenance, clinical version, licensing, population and cutoffs of any instrument before use.
+A future Host-side library should expose authorized agent list/search/get/create/revise/run
+tools with audit trails, access control, encryption and optional FHIR Questionnaire and
+QuestionnaireResponse exchange. Verify the provenance, clinical version, licensing, population
+and cutoffs of any instrument before use.
