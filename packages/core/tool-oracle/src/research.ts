@@ -17,6 +17,7 @@ export interface OracleResearch {
   researchedAt: string
   searches: string[]
   sources: OracleResearchSource[]
+  candidateDatasets: string[]
   evidenceStatus: 'search_results_unverified'
   nextStep: string
   probabilityPercent: null
@@ -70,9 +71,11 @@ export async function researchOracle(
   return {
     kind:'oracle_research',status:sufficient?'researched':'insufficient',
     question:question.trim(),targetAt:target,category:topic,researchedAt:new Date().toISOString(),
-    searches,sources:sources.slice(0,12),evidenceStatus:'search_results_unverified',
+    searches,sources:sources.slice(0,12),
+    candidateDatasets:sources.filter(s=>/\.csv(?:\?|$)/iu.test(s.url)).map(s=>s.url).slice(0,8),
+    evidenceStatus:'search_results_unverified',
     nextStep:sufficient
-      ?'Abrir y contrastar fuentes primarias, extraer datos históricos anteriores al horizonte, elegir modelo por disciplina, construir evento falsable, evaluar fuera de muestra y SOLO entonces estimar un porcentaje si supera la prueba.'
+      ?'Abrir y contrastar fuentes primarias. Si existe CSV público con observaciones numéricas auténticas y fechadas, utilizar oracle_forecast_public_csv con columnas verificadas; para eventos binarios usar cohortes validadas y su evaluación temporal. No inferir porcentajes sin soporte.'
       :'Ampliar fuentes verificables y reunir datos históricos. No publicar porcentaje.',
     probabilityPercent:null,
     ...sufficient?{}:{reason:failure??'No se encontraron al menos dos dominios fuente independientes.'},
