@@ -13,6 +13,12 @@ on:
       - 'scripts/phoenix-genesis-institutional-registry.mjs'
       - 'scripts/phoenix-genesis-institutional-registry.test.mjs'
       - 'scripts/phoenix-genesis-registry-cli.mjs'
+      - 'scripts/phoenix-genesis-workbench.mjs'
+      - 'scripts/phoenix-genesis-workbench.test.mjs'
+      - 'scripts/phoenix-genesis-console.mjs'
+      - 'scripts/phoenix-genesis-console.html'
+      - 'scripts/phoenix-genesis-console-ui.js'
+      - 'scripts/phoenix-genesis-console.css'
       - 'scripts/phoenix-genesis-fabric.test.mjs'
       - 'scripts/phoenix-genesis-plan-cli.mjs'
       - 'scripts/phoenix-genesis-fabric-example.json'
@@ -31,6 +37,12 @@ on:
       - 'scripts/phoenix-genesis-institutional-registry.mjs'
       - 'scripts/phoenix-genesis-institutional-registry.test.mjs'
       - 'scripts/phoenix-genesis-registry-cli.mjs'
+      - 'scripts/phoenix-genesis-workbench.mjs'
+      - 'scripts/phoenix-genesis-workbench.test.mjs'
+      - 'scripts/phoenix-genesis-console.mjs'
+      - 'scripts/phoenix-genesis-console.html'
+      - 'scripts/phoenix-genesis-console-ui.js'
+      - 'scripts/phoenix-genesis-console.css'
       - 'scripts/phoenix-genesis-fabric.test.mjs'
       - 'scripts/phoenix-genesis-plan-cli.mjs'
       - 'scripts/phoenix-genesis-fabric-example.json'
@@ -56,6 +68,8 @@ jobs:
         run: node --test scripts/phoenix-fabric-broker.test.mjs scripts/phoenix-fabric-worker.test.mjs
       - name: Test durable Genesis evidence registry and traceable POA
         run: node --test scripts/phoenix-genesis-institutional-registry.test.mjs
+      - name: Test Genesis organizational workbench and local console
+        run: node --test scripts/phoenix-genesis-workbench.test.mjs
       - name: Exercise the Genesis CLI with synthetic hospital input
         run: |
           node scripts/phoenix-genesis-plan-cli.mjs scripts/phoenix-genesis-fabric-example.json > genesis-demo-output.json
