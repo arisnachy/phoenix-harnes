@@ -211,3 +211,42 @@ describe('adaptive evidence acquisition rather than fixed top-three fetches', ()
     expect(report.readRelevantCount).toBeGreaterThan(0)
   })
 })
+
+describe('independence and excerpt accuracy', () => {
+  it('does not treat two institutional subdomains as independent owners', async () => {
+    const fetcher = vi.fn(async ({ url }: { url: string }) => ({
+      url, statusCode: 200, body: { kind: 'text' as const,
+        content: url.includes('/report')
+          ? 'Artemis II mission technical launch schedule and crew assignment report. '.repeat(7)
+          : 'Artemis II astronauts are preparing for their launch date. '.repeat(8) },
+      truncated: false,
+    }))
+    const ctx = { web: {
+      search: async () => ({ truncated: false, sources: [
+        { url: 'https://www.nasa.gov/artemis-ii/report', title: 'Artemis II NASA mission report' },
+        { url: 'https://science.nasa.gov/artemis-ii', title: 'Artemis II NASA science update' },
+      ] }),
+      fetch: fetcher,
+    } } as unknown as Pick<Context,'web'>
+    const result = await investigateResearch(ctx, { question: 'Artemis II launch schedule 2026' },
+      signal, planResearch, executeResearch)
+    expect(result.readRelevantCount).toBe(2)
+    expect(result.independentReadCount).toBe(1)
+    expect(result.duplicateContentCount).toBe(0)
+    expect(result.limitations.some(line => line.includes('independientes'))).toBe(true)
+  })
+
+  it('selects a quote from the most relevant body window, not an irrelevant navigation prefix', async () => {
+    const body = 'Artemis II navigation menu. ' + 'Menu pages and site information. '.repeat(75)
+      + 'Artemis II mission launch schedule 2026 includes astronaut details and flight timeline. '.repeat(5)
+    const { ctx } = webFixture([
+      { url: 'https://www.nasa.gov/artemis-ii', title: 'NASA Artemis II schedule' },
+    ], async url => ({ url, statusCode: 200, body: { kind: 'text', content: body }, truncated: false }))
+    const result = await investigateResearch(ctx, { question: 'Artemis II mission launch schedule 2026' },
+      signal, planResearch, executeResearch)
+    const quote = result.sources[0]?.quote ?? ''
+    expect(result.readRelevantCount).toBe(1)
+    expect(quote).toContain('launch schedule')
+    expect(body).toContain(quote)
+  })
+})
