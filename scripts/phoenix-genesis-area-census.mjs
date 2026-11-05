@@ -33,7 +33,11 @@ function truth(workbench,organizationId){
   }))}
 }
 function ensure(db){
-  db.exec('CREATE TABLE IF NOT EXISTS genesis_area_census (org_id TEXT NOT NULL,area_id TEXT NOT NULL,state TEXT NOT NULL,review_state TEXT NOT NULL,reviewer_role TEXT NOT NULL,site_id TEXT,evidence_json TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(org_id,area_id),FOREIGN KEY(org_id) REFERENCES organizations(org_id))')
+  db.exec('CREATE TABLE IF NOT EXISTS genesis_area_census (org_id TEXT NOT NULL,area_id TEXT NOT NULL,state TEXT NOT NULL,review_state TEXT NOT NULL,reviewer_role TEXT NOT NULL,site_id TEXT,evidence_json TEXT NOT NULL,updated_at TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(org_id,area_id),FOREIGN KEY(org_id) REFERENCES organizations(org_id))')
+  // Existing institution databases are upgraded without losing assessments.
+  if(!db.prepare("PRAGMA table_info(genesis_area_census)").all()
+    .some(row=>row.name==='revision'))
+    db.exec('ALTER TABLE genesis_area_census ADD COLUMN revision INTEGER NOT NULL DEFAULT 1')
 }
 export function listGenesisAreaCensus(workbench,organizationId){
   const template=truth(workbench,organizationId)
@@ -41,7 +45,7 @@ export function listGenesisAreaCensus(workbench,organizationId){
     total:0,areas:[],summary:{reviewed:0,verified:0,notEvaluated:0},
     note:'Este sector no utiliza el censo hospitalario; Genesis Core sigue siendo universal'}
   ensure(workbench.db)
-  const rows=workbench.db.prepare('SELECT area_id,state,review_state,reviewer_role,site_id,evidence_json,updated_at FROM genesis_area_census WHERE org_id=?').all(template.org)
+  const rows=workbench.db.prepare('SELECT area_id,state,review_state,reviewer_role,site_id,evidence_json,updated_at,revision FROM genesis_area_census WHERE org_id=?').all(template.org)
   const byId=new Map(rows.map(x=>[x.area_id,x]))
   const entries=template.areas.map(area=>{
     const row=byId.get(area.areaId)
@@ -52,6 +56,7 @@ export function listGenesisAreaCensus(workbench,organizationId){
       siteId:row?.site_id??null,
       evidenceRefs:row?JSON.parse(row.evidence_json):[],
       updatedAt:row?.updated_at??null,
+      revision:row?.revision??0,
       source:'reference-catalog-v4',
       affectsRealInventory:false}
   })
@@ -65,7 +70,7 @@ export function listGenesisAreaCensus(workbench,organizationId){
 }
 export function assessGenesisArea(workbench,input){
   if(!input||typeof input!=='object'||Array.isArray(input))throw Error('Evaluación inválida')
-  const allowed=new Set(['organizationId','areaId','state','reviewState','reviewerRole','siteId','evidenceRefs'])
+  const allowed=new Set(['organizationId','areaId','state','reviewState','reviewerRole','siteId','evidenceRefs','expectedRevision'])
   for(const k of Object.keys(input))if(!allowed.has(k))throw Error('Campo no permitido: '+k)
   const template=truth(workbench,input.organizationId)
   if(!template.available)throw Error('No corresponde aplicar el censo hospitalario a este sector')
@@ -90,14 +95,30 @@ export function assessGenesisArea(workbench,input){
   ensure(workbench.db)
   const now=new Date().toISOString(),org=template.org
   const db=workbench.db
+  let revision
   db.exec('BEGIN IMMEDIATE')
   try{
-    db.prepare('INSERT INTO genesis_area_census(org_id,area_id,state,review_state,reviewer_role,site_id,evidence_json,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(org_id,area_id) DO UPDATE SET state=excluded.state,review_state=excluded.review_state,reviewer_role=excluded.reviewer_role,site_id=excluded.site_id,evidence_json=excluded.evidence_json,updated_at=excluded.updated_at')
-      .run(org,areaId,input.state,reviewState,reviewerRole,siteId,JSON.stringify(evidence),now)
+    const previous=db.prepare('SELECT revision FROM genesis_area_census WHERE org_id=? AND area_id=?')
+      .get(org,areaId)
+    if(previous){
+      if(input.expectedRevision!==previous.revision)
+        throw Error('Conflicto de versión: el censo cambió; recárgalo antes de guardar')
+      revision=previous.revision+1
+      db.prepare('UPDATE genesis_area_census SET state=?,review_state=?,reviewer_role=?,site_id=?,evidence_json=?,updated_at=?,revision=? WHERE org_id=? AND area_id=?')
+        .run(input.state,reviewState,reviewerRole,siteId,JSON.stringify(evidence),
+          now,revision,org,areaId)
+    }else{
+      if(input.expectedRevision!==undefined&&input.expectedRevision!==0&&input.expectedRevision!==null)
+        throw Error('Conflicto de versión: la evaluación aún no existe')
+      revision=1
+      db.prepare('INSERT INTO genesis_area_census(org_id,area_id,state,review_state,reviewer_role,site_id,evidence_json,updated_at,revision) VALUES(?,?,?,?,?,?,?,?,?)')
+        .run(org,areaId,input.state,reviewState,reviewerRole,siteId,
+          JSON.stringify(evidence),now,revision)
+    }
     workbench._audit(org,'area-assessed',areaId)
     db.exec('COMMIT')
   }catch(e){db.exec('ROLLBACK');throw e}
   return {organizationId:org,areaId,state:input.state,reviewState,evidenceRefs:evidence,
-    siteId,updatedAt:now,status:'recorded-for-organizational-review',
+    siteId,updatedAt:now,revision,status:'recorded-for-organizational-review',
     installed:false,linkedPhoenixInstances:0}
 }
