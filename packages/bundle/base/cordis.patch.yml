@@ -85,6 +85,12 @@
     - id: tool-sports
       name: '@phoenix-ai/dsh-tool-sports'
 
+    # ORÁCULO scientific prediction and research; owner-local forecast ledger.
+    - id: tool-oracle
+      name: '@phoenix-ai/dsh-tool-oracle'
+      config:
+        path: !!js dshHomePath('memory', 'oracle-predictions.jsonl')
+
     # Clinical workflow planning only; no PHI persistence or real email sends.
     - id: tool-health
       name: '@phoenix-ai/dsh-tool-health'
