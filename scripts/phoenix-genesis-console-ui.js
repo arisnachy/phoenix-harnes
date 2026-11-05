@@ -332,5 +332,60 @@ document.getElementById("apply-legacy").addEventListener("click",async()=>{
   }catch(error){message(error.message,true);}
 });
 
+
+function docInput(){
+  if(!current)throw Error("Selecciona una organización");
+  return {organizationId:current,documentId:val("doc-id"),
+    evidenceId:val("doc-evidence"),filePath:val("doc-path"),
+    documentKind:val("doc-kind")};
+}
+async function loadDocumentFindings(){
+  const qs=new URLSearchParams({organizationId:current,documentId:val("doc-id")});
+  const data=await api("/v1/documents/findings?"+qs);
+  const pick=document.getElementById("doc-find-id");
+  pick.replaceChildren();
+  for(const item of data.findings){
+    if(item.status!=="proposed-unverified")continue;
+    const option=el("option","",item.findingId+" · "+item.category+" · "+item.value);
+    option.value=item.findingId;pick.append(option);
+  }
+  return data;
+}
+document.getElementById("doc-preview").addEventListener("click",async()=>{
+  try{
+    const result=await api("/v1/documents/preview","POST",docInput());
+    document.getElementById("doc-results").textContent=JSON.stringify(result.result,null,2);
+    message("Extracción revisable: no se ha escrito ningún registro.");
+  }catch(error){message(error.message,true);}
+});
+document.getElementById("doc-index").addEventListener("click",async()=>{
+  try{
+    if(!document.getElementById("doc-approve").checked)
+      throw Error("Confirma la autorización y la ausencia de datos personales");
+    const result=await api("/v1/documents/inspect","POST",{...docInput(),approved:true});
+    document.getElementById("doc-results").textContent=JSON.stringify(result.result,null,2);
+    await loadDocumentFindings();
+    message("Propuestas guardadas con evidencia. Aún no se han creado unidades o sistemas.");
+  }catch(error){message(error.message,true);}
+});
+document.getElementById("doc-decide").addEventListener("click",async()=>{
+  try{
+    if(!current)throw Error("Selecciona una organización");
+    const payload={organizationId:current,documentId:val("doc-id"),
+      findingId:val("doc-find-id"),decision:val("doc-decision")};
+    if(payload.decision==="accept"){
+      if(val("doc-record-id"))payload.recordId=val("doc-record-id");
+      if(val("doc-site-id"))payload.siteId=val("doc-site-id");
+      if(val("doc-role"))payload.role=val("doc-role");
+    }
+    const result=await api("/v1/documents/decide","POST",payload);
+    document.getElementById("doc-decision-result").textContent=JSON.stringify(result.result,null,2);
+    await loadDocumentFindings();
+    await refresh();
+    message(result.result.status.startsWith("registered-")?
+      "Registro institucional creado con autorización; verificar sus datos antes del uso.":"Decisión registrada, sin acciones operativas.");
+  }catch(error){message(error.message,true);}
+});
+
 bindForms();
 show("overview");
