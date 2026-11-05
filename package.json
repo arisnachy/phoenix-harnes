@@ -17,6 +17,10 @@
     "website"
   ],
   "scripts": {
+    "genesis": "node scripts/phoenix-genesis-console.mjs",
+    "genesis:plan": "node scripts/phoenix-genesis-plan-cli.mjs",
+    "genesis:registry": "node scripts/phoenix-genesis-registry-cli.mjs",
+    "test:genesis": "node --test scripts/phoenix-genesis-fabric.test.mjs scripts/phoenix-genesis-institutional-registry.test.mjs scripts/phoenix-genesis-workbench.test.mjs",
     "geo": "node scripts/phoenix-geo.mjs",
     "geo:operations": "node scripts/phoenix-geo-operations.mjs",
     "geo:db": "node scripts/phoenix-geo-db.mjs",
