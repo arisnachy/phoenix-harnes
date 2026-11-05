@@ -14,6 +14,8 @@ import { Agent } from 'undici'
 import { WebError } from '@phoenix-ai/dsh-web'
 import type { WebFetchBody, WebFetchProvider, WebFetchRequest, WebFetchResult } from '@phoenix-ai/dsh-web'
 import { deadline, timeoutOf } from '@phoenix-ai/dsh-timeout'
+import { parseRobots, robotsAllows, type RobotsPolicy } from './robots.ts'
+import type { PhoenixWebBotSigner } from './web-bot-auth.ts'
 import {
   assertPublicFetchTarget, classifyContentType, decoderForCharset, isSameOrigin,
   parseCharset, selectPublicDialAddress, validateFetchUrl,
@@ -35,6 +37,10 @@ export interface HttpFetchLimits {
   userAgent: string
   /** Test-only escape hatch for an explicitly local fixture server. */
   allowPrivateNetworks: boolean
+  /** Honor site robots.txt directives; defaults to true on public networks. */
+  respectRobots?: boolean
+  /** Optional Ed25519 identity, enabled only after local secret configuration. */
+  signer?: PhoenixWebBotSigner
 }
 
 /** Stable id this provider registers under. */
@@ -45,6 +51,10 @@ export class HttpFetchProvider implements WebFetchProvider {
   readonly id = LOCAL_FETCH_PROVIDER_ID
 
   private readonly publicDispatcher: Agent | undefined
+  private readonly robotsCache = new Map<string, { expires: number; policy?: RobotsPolicy; denied: boolean }>()
+  private readonly robotsPending = new Map<string, Promise<{ expires: number; policy?: RobotsPolicy; denied: boolean }>>()
+  private readonly nextRequestAt = new Map<string, number>()
+  private readonly blockedUntil = new Map<string, number>()
 
   constructor(private readonly limits: HttpFetchLimits) {
     this.publicDispatcher = limits.allowPrivateNetworks ? undefined : new Agent({
@@ -98,8 +108,15 @@ export class HttpFetchProvider implements WebFetchProvider {
     let redirectsFollowed = 0
 
     for (;;) {
-      if (!this.limits.allowPrivateNetworks) await assertPublicFetchTarget(currentUrl)
+      if (!this.limits.allowPrivateNetworks) {
+        await assertPublicFetchTarget(currentUrl)
+        if (this.limits.respectRobots !== false) await this.enforceRobots(currentUrl, signal)
+        await this.throttle(currentUrl.origin, signal)
+      }
       const response = await this.requestOnce(currentUrl, signal)
+      if (response.status === 429 || response.status === 403 || response.status === 503) {
+        this.noteBlocked(currentUrl.origin, response)
+      }
 
       if (isRedirectStatus(response.status)) {
         // Enforce the redirect budget before resolving or validating the next hop.
@@ -141,12 +158,115 @@ export class HttpFetchProvider implements WebFetchProvider {
     }
   }
 
+  /** Cache robots per origin and coalesce simultaneous preflights. An unavailable robots
+   * endpoint fails closed rather than treating a security page as permission. */
+  private async enforceRobots(url: URL, signal: AbortSignal): Promise<void> {
+    const origin = url.origin
+    let record = this.robotsCache.get(origin)
+    if (record === undefined || record.expires <= Date.now()) {
+      let pending = this.robotsPending.get(origin)
+      if (pending === undefined) {
+        pending = this.loadRobots(url, signal)
+        this.robotsPending.set(origin, pending)
+      }
+      try {
+        record = await pending
+        this.robotsCache.set(origin, record)
+      } finally {
+        if (this.robotsPending.get(origin) === pending) this.robotsPending.delete(origin)
+      }
+    }
+    if (record.denied) throw new WebError(`robots.txt unavailable or restrictive at ${origin}; use another authorized source`, 'WEB_ROBOTS_UNAVAILABLE')
+    if (record.policy !== undefined && !robotsAllows(url, record.policy)) {
+      throw new WebError(`PHOENIX-ResearchBot is disallowed by robots.txt at ${origin}`, 'WEB_ROBOTS_DISALLOWED')
+    }
+  }
+
+  private async loadRobots(url: URL, signal: AbortSignal): Promise<{ expires: number; policy?: RobotsPolicy; denied: boolean }> {
+    const robotsUrl = new URL('/robots.txt', url.origin)
+    await assertPublicFetchTarget(robotsUrl)
+    let response: Response
+    try {
+      response = await this.requestOnce(robotsUrl, signal)
+    } catch (error) {
+      if (signal.aborted) throw error
+      return { denied: true, expires: Date.now() + 60_000 }
+    }
+    if (response.status === 404 || response.status === 410) {
+      await response.body?.cancel()
+      return { denied: false, expires: Date.now() + 3_600_000 }
+    }
+    if (response.status < 200 || response.status >= 300) {
+      await response.body?.cancel()
+      return { denied: true, expires: Date.now() + 60_000 }
+    }
+    // Do not allocate arbitrarily large robots.txt files supplied by untrusted origins.
+    const chunks: Uint8Array[] = []
+    let length = 0
+    const reader = response.body?.getReader()
+    if (reader !== undefined) {
+      try {
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          const remaining = 128_000 - length
+          if (remaining <= 0) break
+          const accepted = value.subarray(0, remaining)
+          chunks.push(accepted)
+          length += accepted.byteLength
+          if (accepted.byteLength < value.byteLength) break
+        }
+      } finally {
+        await reader.cancel().catch(() => {})
+      }
+    }
+    const policy = parseRobots(new TextDecoder().decode(Buffer.concat(chunks)), 'PHOENIX-ResearchBot')
+    return { denied: false, policy, expires: Date.now() + 3_600_000 }
+  }
+
+  /** Per-origin cooperative throttle. Honor Crawl-delay, but never stall a tool call for minutes. */
+  private async throttle(origin: string, signal: AbortSignal): Promise<void> {
+    const cooldown = this.blockedUntil.get(origin) ?? 0
+    if (cooldown > Date.now()) throw new WebError(
+      `web origin ${origin} has requested a pause; use another source`, 'WEB_PROVIDER_RATE_LIMIT',
+    )
+    const delay = Math.max(1_000, this.robotsCache.get(origin)?.policy?.crawlDelayMs ?? 0)
+    const now = Date.now()
+    const slot = Math.max(now, this.nextRequestAt.get(origin) ?? 0)
+    if (slot - now > 4_000) {
+      throw new WebError(`crawl-delay at ${origin} exceeds the active web-fetch budget`, 'WEB_PROVIDER_RATE_LIMIT')
+    }
+    this.nextRequestAt.set(origin, slot + delay)
+    if (slot <= now) return
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => { clearTimeout(timer); reject(new WebError('web fetch aborted', 'WEB_ABORTED')) }
+      const timer = setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve() }, slot - now)
+      signal.addEventListener('abort', onAbort, { once: true })
+      if (signal.aborted) { clearTimeout(timer); signal.removeEventListener('abort', onAbort); reject(new WebError('web fetch aborted', 'WEB_ABORTED')) }
+    })
+  }
+
+  /** A real block is never brute-forced: remember the host and honor Retry-After. */
+  private noteBlocked(origin: string, response: Response): void {
+    const raw = response.headers.get('retry-after')
+    const seconds = raw === null ? NaN : Number(raw)
+    const fromHeader = Number.isFinite(seconds) ? seconds * 1000 : raw === null ? NaN : Date.parse(raw) - Date.now()
+    const fallback = response.status === 403 ? 120_000 : 60_000
+    const delay = Number.isFinite(fromHeader) ? Math.min(900_000, Math.max(5_000, fromHeader)) : fallback
+    this.blockedUntil.set(origin, Math.max(this.blockedUntil.get(origin) ?? 0, Date.now() + delay))
+  }
+
   private async requestOnce(url: URL, signal: AbortSignal): Promise<Response> {
     try {
       const options: RequestInit & { dispatcher?: Agent } = {
         method: 'GET',
         redirect: 'manual',
-        headers: { 'user-agent': this.limits.userAgent, 'accept': 'text/html,application/xhtml+xml,text/*;q=0.9,application/json;q=0.8' },
+        headers: {
+          'user-agent': this.limits.userAgent,
+          'accept': 'text/html,application/xhtml+xml,text/*;q=0.9,application/json;q=0.8',
+          ...(this.limits.signer !== undefined && url.protocol === 'https:'
+            ? this.limits.signer.signRequest(url) : {}),
+        },
         signal,
         ...(this.publicDispatcher === undefined ? {} : { dispatcher: this.publicDispatcher }),
       }

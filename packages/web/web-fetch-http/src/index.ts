@@ -11,6 +11,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type {} from '@phoenix-ai/dsh-web'
 import { HttpFetchProvider } from './provider.ts'
+import { signerFromEnvironment } from './web-bot-auth.ts'
 import type { HttpFetchLimits } from './provider.ts'
 
 const MAX_NODE_TIMER_DELAY_MS = 2_147_483_647
@@ -22,7 +23,7 @@ export {
 export type { HttpFetchLimits } from './provider.ts'
 
 /** Default `User-Agent`: an explicit product agent, never a browser disguise. */
-export const DEFAULT_USER_AGENT = 'deepseek-harness/0.0.1 (+https://github.com/deepseek-ai)'
+export const DEFAULT_USER_AGENT = 'PHOENIX-ResearchBot/1.0 (+https://github.com/arisnachy/phoenix-harnes)'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'web-fetch-http'
@@ -46,6 +47,8 @@ export interface Config {
   userAgent?: string
   /** Only for isolated local fixtures; never enable for untrusted requests. */
   allowPrivateNetworks?: boolean
+  /** Respect public-site robots.txt directives by default. */
+  respectRobots?: boolean
 }
 
 export const Config: z<Config> = z.object({
@@ -56,6 +59,7 @@ export const Config: z<Config> = z.object({
   maxRedirects: z.number().default(5),
   userAgent: z.string().default(DEFAULT_USER_AGENT),
   allowPrivateNetworks: z.boolean().default(false),
+  respectRobots: z.boolean().default(true),
 })
 
 /** Complete config after schemastery applies every field default. */
@@ -100,6 +104,8 @@ export function apply(ctx: Context, config: Config): void {
     maxRedirects: resolved.maxRedirects,
     userAgent: resolved.userAgent,
     allowPrivateNetworks: resolved.allowPrivateNetworks,
+    respectRobots: resolved.respectRobots,
+    ...(signerFromEnvironment() === undefined ? {} : { signer: signerFromEnvironment() }),
   }
   ctx.web.registerFetchProvider(new HttpFetchProvider(limits))
 }
