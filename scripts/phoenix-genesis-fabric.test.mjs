@@ -125,3 +125,20 @@ test('impide planes de instancias descontrolados',()=>{
   }))
   assert.throws(()=>planGenesisFabric(input),/excede 10 000 instancias/)
 })
+
+test('federación externa entre organizaciones: denegada sin convenio y autenticación',()=>{
+  const input=hospital()
+  input.network={mode:'lan',partners:[{partnerOrganizationId:'laboratorio_externo',
+    approved:true,dataAgreementVerified:true,
+    peerFingerprint:'b'.repeat(64),capabilities:['lab.order-status']}]}
+  assert.throws(()=>planGenesisFabric(input),/exige overlay o relay/)
+  input.network.mode='relay'
+  input.network.partners[0].dataAgreementVerified=false
+  assert.throws(()=>planGenesisFabric(input),/convenio de datos/)
+  input.network.partners[0].dataAgreementVerified=true
+  const plan=planGenesisFabric(input)
+  assert.equal(plan.network.partners[0].connectionState,'not-connected')
+  assert.equal(plan.network.partners[0].access,
+    'deny-until-mutual-authentication-and-scoped-authorization')
+  assert.deepEqual(plan.network.partners[0].capabilities,['lab.order-status'])
+})
