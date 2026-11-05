@@ -105,6 +105,23 @@ export function planGenesisFabric(raw) {
       connectionState:'not-connected',enrollment:'pending-mutual-authentication'}
   })
   unique(peers.map(x=>x.from+'>'+x.to),'Enlace')
+  const partners=items(network.partners??[],'Organizaciones externas',100).map(link=>{
+    record(link,'Organización externa')
+    const partnerOrganizationId=id(link.partnerOrganizationId,'Organización externa')
+    if(partnerOrganizationId===organization)throw new Error('La organización externa debe ser distinta')
+    if(networkMode!=='overlay'&&networkMode!=='relay')
+      throw new Error('La federación externa exige overlay o relay')
+    if(link.approved!==true||link.dataAgreementVerified!==true)
+      throw new Error('La federación externa exige aprobación y convenio de datos verificado')
+    if(typeof link.peerFingerprint!=='string'||!/^[a-f0-9]{64}$/i.test(link.peerFingerprint))
+      throw new Error('La federación externa requiere huella SHA-256 del par')
+    const scopedCapabilities=capabilities(link.capabilities,'Organización externa')
+    if(scopedCapabilities.length===0)throw new Error('La federación externa requiere capacidades delimitadas')
+    return {partnerOrganizationId,peerFingerprint:link.peerFingerprint.toLowerCase(),
+      capabilities:scopedCapabilities,connectionState:'not-connected',
+      access:'deny-until-mutual-authentication-and-scoped-authorization'}
+  })
+  unique(partners.map(x=>x.partnerOrganizationId),'Organización externa')
   const cost=record(spec.costs??{},'Costos')
   const unitPrice=amount(cost.workstationUsd,'Precio de estación')
   const workstationTotal=workstations.reduce((sum,x)=>sum+x.toAcquire,0)
@@ -125,7 +142,7 @@ export function planGenesisFabric(raw) {
     summary:{sites:sites.length,logicalInstances:instances.length,
       workstations:workstations.reduce((sum,x)=>sum+x.required,0),
       workstationsToAcquire:workstationTotal,estimatedWorkstationCapexUsd},
-    network:{mode:networkMode,connectionState:'not-connected',peers,
+    network:{mode:networkMode,connectionState:'not-connected',peers,partners,
       transport:networkMode==='isolated'?'none':networkMode==='lan'?'private-lan-mtls':networkMode==='overlay'?'private-overlay-mtls':'outbound-relay-mtls',
       publicIngressAllowed:false,autoScanAllowed:false,
       certificateAndIdentityVerificationRequired:true},
