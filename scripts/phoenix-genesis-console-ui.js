@@ -181,6 +181,14 @@ document.getElementById("get-poa").addEventListener("click",async()=>{
     message("Borrador POA generado; no se ha remitido a ninguna autoridad.");
   }catch(e){message(e.message,true);}
 });
+document.getElementById("get-suggestions").addEventListener("click",async()=>{
+  try{
+    const result=await api("/v1/recommendations?organizationId="+encodeURIComponent(current));
+    lines(document.getElementById("suggestions-list"),result.units,
+      x=>x.name+" ("+x.role+") · pendiente de aceptación");
+    message("Sugerencias generadas; no se ha creado ningún departamento.");
+  }catch(e){message(e.message,true);}
+});
 document.getElementById("get-deployment").addEventListener("click",async()=>{
   try{
     const output=await api("/v1/deployment?organizationId="+encodeURIComponent(current));
