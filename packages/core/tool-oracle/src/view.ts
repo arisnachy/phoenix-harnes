@@ -35,6 +35,14 @@ export function oracleVisual(result:OracleResult|OracleResearch,question?:string
       {type:'button',label:'Investigar datos numéricos',action:'draft',
         prompt:'ORÁCULO: inspecciona primero las columnas, periodicidad y autenticidad de este CSV público antes de llamar oracle_forecast_public_csv. URL candidata: '+clean(result.candidateDatasets[0],1100)},
     )
+    children.push({type:'group',layout:'grid',children:[
+      metric('Área científica',clean(result.plan.domain,80)),
+      metric('Método disponible',clean(result.plan.route,80)),
+    ]})
+    children.push({type:'tabs',tabs:[
+      {label:'Evidencia necesaria',children:result.plan.evidenceNeeded.slice(0,8).map(t=>({type:'text',text:clean(t,480)}))},
+      {label:'Riesgos de datos',children:result.riskFlags.slice(0,8).map(t=>({type:'text',text:clean(t,480)}))},
+    ]})
     children.push({type:'text',text:clean(result.nextStep,750)})
   }else{
     if(result.probabilityPercent!==undefined){
