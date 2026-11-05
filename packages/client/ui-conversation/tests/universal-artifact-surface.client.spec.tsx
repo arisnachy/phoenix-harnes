@@ -50,6 +50,17 @@ describe('universal artifact surface', () => {
     expect(frame.getAttribute('sandbox')).toBe('allow-same-origin')
   })
 
+  it('instruments authored HTML calculation failures while keeping the iframe isolated', () => {
+    const html = '<form><input type="number"><button onclick="missingFunction()">Calcular</button></form>'
+    render(<UniversalArtifactSurface artifact={normalizeHardnessArtifact({
+      id:'script-calculator',title:'Cálculo externo',mime:'text/html',data:html,
+    })} onStop={() => {}} />)
+    const iframe = screen.getByTitle('Cálculo externo')
+    expect(iframe.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(iframe.getAttribute('srcdoc')).toContain('data-phoenix-form-error')
+    expect(iframe.getAttribute('srcdoc')).toContain('connect-src \'none\'')
+  })
+
   it('normalizes JSON, Python, HTML, and image artifacts into one envelope', () => {
     expect(normalizeHardnessArtifact({ id: 'json', title: 'Data', mime: 'application/json', data: '{"ok":true}' })).toMatchObject({ kind: 'json', executable: false })
     expect(normalizeHardnessArtifact({ id: 'py', title: 'Model', mime: 'text/x-python', data: 'print(1)' })).toMatchObject({ kind: 'code', language: 'python', executable: true })
