@@ -10,6 +10,7 @@ import { createHash,timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { GenesisWorkbench } from './phoenix-genesis-workbench.mjs'
 import { importGenesisManifest } from './phoenix-genesis-importer.mjs'
+import { previewGenesisLegacyCsv, importGenesisLegacyCsv } from './phoenix-genesis-legacy-csv.mjs'
 import { fabricRequest } from './phoenix-fabric-client.mjs'
 
 const authDigest=secret=>createHash('sha256').update(secret).digest()
@@ -129,6 +130,14 @@ export function createGenesisConsole({dbPath,adminToken,port=0,host='127.0.0.1'}
       if(path==='/v1/poa'&&req.method==='GET')
         return send(res,200,workbench.poa({
           organizationId,period:target.searchParams.get('period')}))
+      if(path==='/v1/legacy-csv/preview'&&req.method==='POST'){
+        const input=await json(req)
+        return send(res,200,{result:previewGenesisLegacyCsv(workbench,input)})
+      }
+      if(path==='/v1/legacy-csv/import'&&req.method==='POST'){
+        const input=await json(req)
+        return send(res,201,{result:importGenesisLegacyCsv(workbench,input)})
+      }
       const operations={
         '/v1/sites':x=>workbench.addSite(x),
         '/v1/answers':x=>workbench.answer(x),
