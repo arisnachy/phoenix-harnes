@@ -57,6 +57,8 @@ export interface InvestigationReport {
   readonly independentReadCount: number
   /** Readable sources repeating already encountered text word-for-word. */
   readonly duplicateContentCount: number
+  /** Whether the bounded execution was stopped to respect response latency. */
+  readonly budgetExhausted: boolean
   readonly challengesCount: number
   readonly evidenceStatus: 'retrieved_unverified' | 'search_results_only' | 'no_evidence'
   readonly limitations: string[]
@@ -152,6 +154,10 @@ export async function investigateResearch(
   plan: InvestigationPlanner, search: InvestigationSearcher,
 ): Promise<InvestigationReport> {
   const depth = input.depth === 'deep' ? 'deep' : 'standard'
+  // Preserve partial evidence instead of letting the outer 65-second tool
+  // timeout discard an otherwise successful investigation.
+  const budgetSignal = AbortSignal.any([signal, AbortSignal.timeout(depth === 'deep' ? 55_000 : 35_000)])
+  let budgetExhausted = false
   const initial = plan(input.question, input.domain, 0)
   const maxBatches = Math.min(initial.totalBatches, depth === 'deep' ? 3 : 2)
   const maxToRead = depth === 'deep' ? 8 : 5
@@ -205,8 +211,16 @@ export async function investigateResearch(
   // budget on a blocked SERP or six pages from the same host.
   for (let batch = 0; batch < maxBatches; batch++) {
     if (signal.aborted) throw signal.reason ?? new Error('Research cancelled')
+    if (budgetSignal.aborted) { budgetExhausted = true; break }
     const queryPlan = batch === 0 ? initial : plan(input.question, input.domain, batch)
-    const outcome = await search(ctx, queryPlan, 8, signal)
+    let outcome: ResearchOutcome
+    try {
+      outcome = await search(ctx, queryPlan, 8, budgetSignal)
+    } catch (error) {
+      if (signal.aborted) throw signal.reason ?? error
+      if (budgetSignal.aborted) { budgetExhausted = true; break }
+      throw error
+    }
     outcomes.push(outcome)
     for (const source of outcome.sources) {
       const key = sourceKey(source.url)
@@ -224,6 +238,7 @@ export async function investigateResearch(
     let readsThisBatch = 0
     while (readsThisBatch < readsPerBatch && inspected.size < maxToRead
       && independent().count < targetIndependent) {
+      if (budgetSignal.aborted) { budgetExhausted = true; break }
       const next = candidates()
       if (next.length === 0) break
       const group: InvestigationDocument[] = []
@@ -234,7 +249,14 @@ export async function investigateResearch(
         group.push(lead)
       }
       if (!group.length) break
-      const checked = await Promise.all(group.map(lead => readLead(ctx, input.question, lead, signal)))
+      let checked: InvestigationDocument[]
+      try {
+        checked = await Promise.all(group.map(lead => readLead(ctx, input.question, lead, budgetSignal)))
+      } catch (error) {
+        if (signal.aborted) throw signal.reason ?? error
+        if (budgetSignal.aborted) { budgetExhausted = true; break }
+        throw error
+      }
       readsThisBatch += checked.length
       for (const doc of checked) {
         inspected.set(doc.url, doc)
@@ -243,7 +265,7 @@ export async function investigateResearch(
         if (doc.status === 'challenge') blockedHosts.add(host)
       }
     }
-    if (independent().count >= targetIndependent || inspected.size >= maxToRead) break
+    if (budgetExhausted || independent().count >= targetIndependent || inspected.size >= maxToRead) break
   }
 
   // Include every inspected result even when its search rank was low. Unread
@@ -259,6 +281,7 @@ export async function investigateResearch(
   const challengesCount = [...inspected.values()].filter(doc => doc.status === 'challenge').length
   const failedQueries = outcomes.flatMap(outcome => outcome.failedQueries)
   const limitations = [
+    ...(budgetExhausted ? ['Se alcanzó el presupuesto de tiempo; se conservó la evidencia parcial en vez de inventar resultados.'] : []),
     ...(readRelevantCount === 0 ? ['No se recuperó texto primario pertinente; la búsqueda no demuestra los hechos investigados.'] : []),
     ...(readRelevantCount > 0 && independentEvidence.count < 2
       ? ['No hay dos fuentes legibles con dominio y contenido independientes. Falta corroboración.'] : []),
@@ -282,7 +305,7 @@ export async function investigateResearch(
     queries: outcomes.flatMap(outcome => outcome.queries), failedQueries,
     offTopicDropped: outcomes.reduce((sum, outcome) => sum + outcome.offTopicDropped, 0),
     sources, readRelevantCount, independentReadCount: independentEvidence.count,
-    duplicateContentCount: independentEvidence.duplicates, challengesCount,
+    duplicateContentCount: independentEvidence.duplicates, budgetExhausted, challengesCount,
     evidenceStatus: readRelevantCount > 0 ? 'retrieved_unverified'
       : leads.length > 0 ? 'search_results_only' : 'no_evidence',
     limitations, nextActions,
