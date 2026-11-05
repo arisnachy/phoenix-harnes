@@ -6,6 +6,8 @@ on:
     paths:
       - 'scripts/phoenix-genesis-fabric.mjs'
       - 'scripts/phoenix-genesis-fabric.test.mjs'
+      - 'scripts/phoenix-genesis-plan-cli.mjs'
+      - 'scripts/phoenix-genesis-fabric-example.json'
       - 'docs/phoenix-genesis-fabric-master-plan-v4.md'
       - 'docs/phoenix-fabric-universal-network.md'
       - '.github/workflows/phoenix-genesis-fabric.yml'
@@ -14,6 +16,8 @@ on:
     paths:
       - 'scripts/phoenix-genesis-fabric.mjs'
       - 'scripts/phoenix-genesis-fabric.test.mjs'
+      - 'scripts/phoenix-genesis-plan-cli.mjs'
+      - 'scripts/phoenix-genesis-fabric-example.json'
       - '.github/workflows/phoenix-genesis-fabric.yml'
   workflow_dispatch:
 
@@ -32,3 +36,8 @@ jobs:
           node-version: '24'
       - name: Validate Genesis and Fabric offline contracts
         run: node --test scripts/phoenix-genesis-fabric.test.mjs
+      - name: Exercise the Genesis CLI with synthetic hospital input
+        run: |
+          node scripts/phoenix-genesis-plan-cli.mjs scripts/phoenix-genesis-fabric-example.json > genesis-demo-output.json
+          node -e "const p=require('./genesis-demo-output.json');if(p.summary.logicalInstances!==9||p.network.connectionState!=='not-connected')process.exit(1)"
+          rm genesis-demo-output.json
