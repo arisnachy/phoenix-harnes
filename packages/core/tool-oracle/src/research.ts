@@ -90,6 +90,16 @@ function makeQueries(question: string, category: string): string[] {
       `dengue ${country} site:paho.org`,
     ])]
   }
+  if(category==='meteorología'){
+    const location=/santo domingo/iu.test(question)?'Santo Domingo':''
+    const yearMonth=(question.match(/\b20\d{2}\b/u)??[])[0]??year
+    return [...new Set([
+      `temperatura maxima ${location} Republica Dominicana ${yearMonth} pronostico INDOMET`,
+      `pronostico temperatura ${location} Republica Dominicana site:indomet.gov.do`,
+      `temperatura maxima diaria ${location} pronostico ${yearMonth} Open-Meteo`,
+      `weather forecast daily high ${location} Dominican Republic ${yearMonth}`,
+    ])]
+  }
   if (/\bartemis\b/iu.test(question)) {
     return [`"Artemis II" NASA launch schedule site:nasa.gov`,
       `"Artemis II" launch date ${year} NASA`,
@@ -105,7 +115,7 @@ function blockedPage(text: string, url: string): boolean {
   return /(?:captcha|just a moment|verify (?:you are|that you)|access denied|cloudflare challenge|robot verification|cf-chl-)/iu.test(text)
     || /(?:\/challenge-platform\/|\/captcha\/)/iu.test(url)
 }
-function relevance(question: string, item: WebSearchSource): number {
+export function relevance(question: string, item: WebSearchSource): number {
   const rawUrl = typeof item.url === 'string' ? item.url : ''
   const rawText = [item.title, item.snippet].filter(Boolean).join(' ')
   if (!rawUrl.startsWith('https://') || blockedPage(rawText, rawUrl)) return 0
@@ -124,7 +134,8 @@ function relevance(question: string, item: WebSearchSource): number {
   }
   if (isDominicanRepublic(question)) {
     const country = /republica dominicana|dominican republic|\bdom\b|dominicana/iu.test(haystack)
-      || /(?:^|\.)gob\.do$/iu.test(parsed.hostname)
+      || /(?:^|\.)(?:gob\.do|indomet\.gov\.do)$/iu.test(parsed.hostname)
+      || (/(?:santo domingo|santiago de los caballeros)/iu.test(question) && /(santo domingo|santiago)/iu.test(haystack) && /(?:indomet|onamet|meteorolog)/iu.test(parsed.hostname))
     if (!country) return 0
   }
   const score = focus.filter(word => haystack.includes(word)).length
@@ -138,6 +149,12 @@ function researchDirectories(question: string): Array<{ name: string; url: strin
       { name: 'DIGEPI · Boletines epidemiológicos', url: 'https://www.epidemiologia.gob.do/documentos-epidemiologicos/boletines-epidemiologicos/' },
       { name: 'OPS · Dengue', url: 'https://www.paho.org/es/temas/dengue' },
       { name: 'OpenDengue · Descargas y definiciones', url: 'https://opendengue.org/data.html' },
+    ]
+  }
+  if (/temperatura|lluvia|hurac[aá]n|tiempo atmosf[eé]rico|weather|rain|clima/iu.test(question) && isDominicanRepublic(question)){
+    return [
+      {name:'INDOMET · Pronóstico oficial',url:'https://indomet.gov.do/tiempo/'},
+      {name:'Open-Meteo · API documentada',url:'https://open-meteo.com/en/docs'},
     ]
   }
   if (/\bartemis\b/iu.test(question)) return [

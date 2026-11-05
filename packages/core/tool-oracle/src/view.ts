@@ -1,6 +1,8 @@
 /** Bounded, native PHOENIX GenerativeCanvas projection for first-party ORÁCULO receipts. */
 import type { OracleResult } from './engine.ts'
 import type { OracleResearch } from './research.ts'
+import type { OraclePublication } from './research-publication.ts'
+import type { OracleWeatherForecast } from './weather.ts'
 import type { EnsembleForecast } from './forecast-ensemble.ts'
 import type { OraclePlan, OracleFusion, OracleCalibration } from './scientific-intelligence.ts'
 import type { OracleHistoryRow } from './ledger.ts'
@@ -256,4 +258,74 @@ export function oracleDueVisual(rows:OracleHistoryRow[]):Record<string,unknown>{
       prompt:'ORÁCULO: consulta oracle_forecast_due, recupera datos primarios para los pronósticos vencidos y solo después de comprobar el desenlace utiliza oracle_audit_prediction. Señala expresamente las fuentes no verificadas.'},
   ]
   return {component:'ui_canvas',version:1,props:{title:'ORÁCULO · Vigilancia predictiva',subtitle:'Vencimientos y comprobación de resultados',children}}
+}
+
+
+/** Final research card, published ONLY after direct document retrieval. */
+export function oracleEvidenceReportVisual(report:OraclePublication):Record<string,unknown>{
+  if(report.status!=='researched'||!report.documents.length)throw new Error('No hay documentos recuperados para publicar.')
+  const children:Node[]=[
+    {type:'group',layout:'row',children:[
+      {type:'badge',text:'INVESTIGACIÓN RECUPERADA',status:'info'},
+      {type:'badge',text:'Datos aún no autenticados',status:'warning'},
+    ]},
+    {type:'heading',text:clean(report.question,240)},
+    {type:'group',layout:'grid',children:[
+      metric('Fuentes consultadas',String(report.documents.length)),
+      metric('Horizonte',clean(report.targetAt,70)),
+    ]},
+    {type:'heading',text:'Documentos recuperados'},
+    {type:'table',columns:['Documento','Fuente HTTPS'],rows:report.documents.map(d=>[
+      clean(d.title,170),clean(d.url,330),
+    ])},
+    {type:'tabs',tabs:[
+      {label:'Extractos',children:report.documents.map(d=>({
+        type:'text',text:clean(d.title+': '+d.summary,800),
+      }))},
+      {label:'Limitaciones',children:[
+        {type:'text',text:'La recuperación de páginas demuestra acceso y relevancia preliminar, no verifica matemáticamente sus cifras ni la exactitud del pronóstico.'},
+        ...report.problems.map(t=>({type:'text',text:clean(t,350)})),
+      ]},
+    ]},
+    {type:'alert',status:'info',message:'No se publica probabilidad: hacen falta datos cuantitativos o un predictor externo calibrado y contrastado.'},
+    {type:'button',label:'Ampliar investigación',action:'draft',
+      prompt:'ORÁCULO: compara la evidencia extraída de las fuentes HTTPS y utiliza datos primarios verificables para esta pregunta: '+clean(report.question,400)},
+  ]
+  return {component:'ui_canvas',version:1,props:{
+    title:'PHOENIX · ORÁCULO',subtitle:'Informe final de fuentes recuperadas',children,
+  }}
+}
+/** A weather forecast card appears only AFTER external API returns the actual target-day value. */
+export function oracleWeatherVisual(w:OracleWeatherForecast):Record<string,unknown>{
+  if(w.status!=='forecast'||w.expectedMaxC===undefined||w.daily.length<1)
+    throw new Error('No hay pronóstico meteorológico recibido para la fecha objetivo.')
+  const children:Node[]=[
+    {type:'group',layout:'row',children:[
+      {type:'badge',text:'PRONÓSTICO CONSULTADO',status:'positive'},
+      {type:'badge',text:'Modelo meteorológico · no verificado',status:'warning'},
+    ]},
+    {type:'heading',text:'Temperatura máxima · '+clean(w.place,140)},
+    {type:'group',layout:'grid',children:[
+      metric('Máxima estimada',w.expectedMaxC.toFixed(1)+' °C'),
+      metric('Fecha local',clean(w.date,20)),
+      ...(w.thresholdC===undefined?[]:[metric('Umbral',w.thresholdC.toFixed(1)+' °C')]),
+    ]},
+    ...(w.thresholdC===undefined?[]:[{type:'alert',status:'info',
+      message:w.exceedsThreshold
+        ?'El modelo consulta una temperatura superior al umbral. Esto no representa una probabilidad calibrada ni garantiza que ocurra.'
+        :'El modelo consulta una temperatura igual o inferior al umbral. Esto no garantiza que el evento sea imposible.'}]),
+    ...(w.daily.length>=2?[{type:'forecast_chart',title:'Máximas diarias previstas · Open-Meteo',unit:'°C',axis:'date',
+      points:w.daily.map(p=>({label:p.date+'T12:00:00Z',forecast:p.maxC}))}]:[]),
+    {type:'table',columns:['Origen','Dato'],rows:[
+      ['Proveedor',w.provider],['Consulta',clean(w.checkedAt,70)],['API utilizada',clean(w.source,440)],
+      ['Probabilidad del umbral','No estimada; requiere distribución y calibración de predicciones'],
+    ]},
+    {type:'alert',status:'info',message:'El dato es una salida de modelo consultada por API; no es una observación ni predicción oficial de INDOMET. Comprobar pronósticos locales y actualizar según la fecha.'},
+    {type:'button',label:'Contrastar con INDOMET',action:'draft',
+      prompt:'ORÁCULO: compara la máxima prevista para '+clean(w.place,80)+' el '+w.date+
+        ' con la predicción más reciente de INDOMET y verifica fuentes antes de concluir.'},
+  ]
+  return {component:'ui_canvas',version:1,props:{
+    title:'PHOENIX · ORÁCULO',subtitle:'Pronóstico meteorológico basado en datos externos',children:children.slice(0,24),
+  }}
 }
