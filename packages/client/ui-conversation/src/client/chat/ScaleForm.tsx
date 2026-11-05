@@ -8,6 +8,9 @@ type ScaleStep = {
   readonly id: string; readonly title: string; readonly instruction: string
   readonly phase: 'prepare' | 'administer' | 'score'
 }
+type ScaleDomain = {
+  readonly id: string; readonly label: string; readonly items: readonly string[]
+}
 type ScaleScoring = {
   readonly min: number; readonly max: number
   readonly direction?: 'higher-worse' | 'higher-better' | 'descriptive'
@@ -27,6 +30,7 @@ export interface ScaleFormSpec {
     readonly population?: string
     readonly administration?: readonly ScaleStep[]
     readonly scoring?: ScaleScoring
+    readonly domains?: readonly ScaleDomain[]
     readonly items: readonly ScaleItem[]
     readonly bands?: readonly ScaleBand[]
   }
@@ -47,7 +51,7 @@ export function parseScaleForm(value: unknown): ScaleFormSpec | null {
     || value.component !== 'scale_form' || value.version !== 1 || !record(value.props)) return null
   const props = value.props
   if (!allowed(props, ['title', 'description', 'source', 'version', 'population',
-    'administration', 'scoring', 'items', 'bands'])
+    'administration', 'scoring', 'domains', 'items', 'bands'])
     || !text(props.title, 120)
     || (props.description !== undefined && !text(props.description, 600))
     || (props.source !== undefined && !text(props.source, 400))
@@ -92,6 +96,25 @@ export function parseScaleForm(value: unknown): ScaleFormSpec | null {
       || (rule.direction !== undefined
         && !['higher-worse','higher-better','descriptive'].includes(String(rule.direction)))
       || (rule.note !== undefined && !text(rule.note, 1000))) return null
+  }
+  if (props.domains !== undefined) {
+    if (!Array.isArray(props.domains) || props.domains.length < 1
+      || props.domains.length > 16) return null
+    const domainIds = new Set<string>()
+    for (const domain of props.domains) {
+      if (!record(domain) || !allowed(domain, ['id','label','items'])
+        || typeof domain.id !== 'string' || !/^[a-z][a-z0-9_-]{0,39}$/.test(domain.id)
+        || domainIds.has(domain.id) || !text(domain.label, 160)
+        || !Array.isArray(domain.items) || domain.items.length < 1
+        || domain.items.length > props.items.length) return null
+      const members = new Set<string>()
+      for (const itemId of domain.items) {
+        if (typeof itemId !== 'string' || !ids.has(itemId)
+          || members.has(itemId)) return null
+        members.add(itemId)
+      }
+      domainIds.add(domain.id)
+    }
   }
   if (props.bands !== undefined) {
     if (!Array.isArray(props.bands) || props.bands.length < 1 || props.bands.length > 12) return null
@@ -148,6 +171,10 @@ export function scoreScale(spec: ScaleFormSpec, answers: Record<string, number>)
   readonly answered: number
   readonly total: number | null
   readonly band?: ScaleBand
+  readonly domains: readonly {
+    readonly id: string; readonly label: string
+    readonly value: number | null; readonly min: number; readonly max: number
+  }[]
 } {
   let answered = 0
   let total = 0
@@ -158,9 +185,20 @@ export function scoreScale(spec: ScaleFormSpec, answers: Record<string, number>)
     total += answer
     answered += 1
   }
-  if (answered !== spec.props.items.length) return { answered, total: null }
+  const domains = (spec.props.domains ?? []).map(domain => {
+    const items = domain.items.map(id => spec.props.items.find(item => item.id === id)!)
+    const min = items.reduce((s,item) => s + Math.min(...item.options.map(o => o.score)), 0)
+    const max = items.reduce((s,item) => s + Math.max(...item.options.map(o => o.score)), 0)
+    const complete = domain.items.every(id => Object.prototype.hasOwnProperty.call(answers,id)
+      && spec.props.items.find(item => item.id === id)?.options.some(o => o.score === answers[id]))
+    return {
+      id:domain.id,label:domain.label,min,max,
+      value:complete ? domain.items.reduce((s,id) => s + answers[id]!,0) : null,
+    }
+  })
+  if (answered !== spec.props.items.length) return { answered, total: null, domains }
   const band = spec.props.bands?.find(entry => total <= entry.max)
-  return band === undefined ? { answered, total } : { answered, total, band }
+  return band === undefined ? { answered, total, domains } : { answered, total, band, domains }
 }
 
 /** In-chat form with answered-item count, reset and auditable scoring. */
@@ -181,7 +219,9 @@ export function ScaleForm({ spec }: { readonly spec: ScaleFormSpec }): ReactNode
     if (scored.total === null || typeof navigator === 'undefined' || !navigator.clipboard) return
     const lines = [spec.props.title, ...spec.props.items.map(item =>
       item.question + ': ' + (item.options[selected[item.id] ?? -1]?.label ?? 'Sin respuesta')),
-    'Total: ' + String(scored.total), 'Interpretación: ' + (scored.band?.label ?? 'No definida'),
+    'Total: ' + String(scored.total),
+    ...scored.domains.map(domain => domain.label + ': ' + (domain.value ?? 'No completado')),
+    'Interpretación: ' + (warnings.length > 0 ? 'No verificable' : scored.band?.label ?? 'No definida'),
     'Fuente: ' + (spec.props.source ?? 'No especificada'),
     ...warnings.map(warning => 'Advertencia: ' + warning)]
     void navigator.clipboard.writeText(lines.join('\n')).then(() => setCopied(true)).catch(() => setCopied(false))
@@ -228,6 +268,14 @@ export function ScaleForm({ spec }: { readonly spec: ScaleFormSpec }): ReactNode
       {spec.props.scoring && <span>Rango: {spec.props.scoring.min}–{spec.props.scoring.max}</span>}
       {warnings.length === 0 && scored.band && <PhoenixStatusPill label={scored.band.label} tone={scored.band.tone ?? 'neutral'} />}
     </div>
+    {scored.domains.length > 0 && <div className={css.questions} aria-label="Resultados por dimensión">
+      <h4>Resultados por dimensión</h4>
+      {scored.domains.map(domain => <div key={domain.id} className={css.result}>
+        <span>{domain.label}</span>
+        <strong>{domain.value === null ? '—' : domain.value}</strong>
+        <span>Rango {domain.min}–{domain.max}</span>
+      </div>)}
+    </div>}
     <div className={css.actions}>
       <button type="button" onClick={copy} disabled={scored.total === null}>
         <PhoenixUiIcon name={copied ? 'check' : 'copy'} size={15} /> {copied ? 'Copiado' : 'Copiar resultado'}
