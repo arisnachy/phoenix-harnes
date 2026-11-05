@@ -160,6 +160,18 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
         </div>)}</div>
       </section>}
       <div className={css.formToolbar}>
+        {library.find(saved=>saved.spec.props.id===active.props.id)?.history?.length ?
+          <label className={css.folderLabel}>Versiones anteriores
+            <select value="" onChange={e=>{
+              const saved=library.find(item=>item.spec.props.id===active.props.id)
+              const previous=saved?.history?.find(v=>String(v.revision)===e.currentTarget.value)
+              if(previous){open(previous.spec);setMessage('Versión antigua abierta. Pulsa Guardar plantilla para restaurarla como nueva revisión.')}
+            }}>
+              <option value="">Elegir una versión…</option>
+              {library.find(saved=>saved.spec.props.id===active.props.id)?.history?.map(v=>
+                <option key={v.revision} value={String(v.revision)}>Revisión {v.revision}</option>)}
+            </select>
+          </label>:null}
         <label className={css.folderLabel}>Carpeta <input type="text" value={folder} maxLength={90}
           onChange={e=>setFolder(e.currentTarget.value)} placeholder="Salud/Calculadoras" /></label>
         <div className={css.actions}>
@@ -170,7 +182,7 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
             'Adapta este formulario de PHOENIX a mis necesidades, devuelve un smart_form completo y conserva el id para guardar una revisión: '+JSON.stringify(active),'draft')}>Modificar con Kira</button>}
         </div>
       </div>
-      {current?.ready&&current.outputs.length>0&&<>
+      {current?.ready&&<>
         <div className={css.privacy}>
           <label><input type="checkbox" checked={includeAnswers} onChange={e=>setIncludeAnswers(e.currentTarget.checked)}/>
             Autorizo guardar las respuestas y resultados en este navegador (sin cifrado)</label>
@@ -225,7 +237,7 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
       {runs.map(run=><article key={run.id} className={css.catalogItem}>
         <div><small>{new Date(run.savedAt).toLocaleString('es-DO')} · revisión {run.revision}</small>
           <h4>{allForms.find(f=>f.spec.props.id===run.formId)?.spec.props.title??run.formId}</h4>
-          <p>{run.outputs.map(o=>o.label+': '+o.text+(o.unit?' '+o.unit:'')).join(' · ')}</p></div>
+          <p>{run.outputs.length?run.outputs.map(o=>o.label+': '+o.text+(o.unit?' '+o.unit:'')).join(' · '):'Formulario completado sin salidas calculadas'}</p></div>
         <div className={css.smallActions}>
           {onAction&&<button type="button" onClick={()=>onAction(
             'Interpreta críticamente estos resultados guardados, sin inventar validez: '+JSON.stringify(run),'draft')}>Analizar</button>}
