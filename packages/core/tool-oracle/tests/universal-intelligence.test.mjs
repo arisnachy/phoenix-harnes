@@ -132,7 +132,7 @@ test('biblioteca inmutable conserva versiones y detecta desenlaces vencidos',asy
 
 test('holdout independiente conserva resultado negativo sin cambiar el modelo por retrospectiva',()=>{
   const values=Array.from({length:120},(_,i)=>100+2*Math.min(i,89))
-  const lastObservedAt=new Date(Date.now()-86400000).toISOString()
+  const lastObservedAt=new Date(Date.now()-43200000).toISOString()
   const forecast=ensembleForecast({values,horizonSteps:1,stepHours:24,lastObservedAt,unit:'casos'})
   assert.equal(forecast.status,'projected')
   assert.equal(forecast.selected,'ensemble')
