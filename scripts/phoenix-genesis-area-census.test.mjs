@@ -55,11 +55,17 @@ test('cada jefatura puede declarar o verificar un área sin crear instancias ni 
       filePath:path,kind:'org_chart',validated:true})
     const result=assessGenesisArea(x.store,{organizationId:'hospital_demo',
       areaId:'area_001',state:'existing',reviewerRole:'Dirección General',
-      siteId:'principal',reviewState:'verified',evidenceRefs:[evidence.evidenceId]})
+      siteId:'principal',reviewState:'verified',evidenceRefs:[evidence.evidenceId],
+      expectedRevision:record.revision})
     assert.equal(result.reviewState,'verified')
     census=listGenesisAreaCensus(x.store,'hospital_demo')
     assert.equal(census.summary.verified,1)
     assert.deepEqual(census.areas[0].evidenceRefs,[evidence.evidenceId])
+    assert.equal(census.areas[0].revision,2)
+    assert.throws(()=>assessGenesisArea(x.store,{organizationId:'hospital_demo',
+      areaId:'area_001',state:'outsourced',reviewerRole:'Dirección General',
+      expectedRevision:1}),/Conflicto de versión/)
+    assert.equal(listGenesisAreaCensus(x.store,'hospital_demo').areas[0].state,'existing')
     assert.ok(x.store.dashboard('hospital_demo').audit.some(a=>a.action==='area-assessed'))
   }finally{x.clean()}
 })

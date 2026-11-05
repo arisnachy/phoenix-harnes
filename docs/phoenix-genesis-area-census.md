@@ -53,7 +53,8 @@ sin información personal:
   "reviewState": "declared",
   "reviewerRole": "Dirección General",
   "siteId": "principal",
-  "evidenceRefs": []
+  "evidenceRefs": [],
+  "expectedRevision": 0
 }
 ~~~
 
@@ -78,10 +79,53 @@ El módulo se activa únicamente cuando el tipo de institución
 corresponde a salud, evitando imponer departamentos hospitalarios
 a restaurantes, universidades o comercios.
 
-La siguiente fase incluirá el censo dentro de la consola web y
-conectará las áreas aceptadas a la captura guiada de inventario,
-manuales, indicadores y fuentes. Cada alta de una unidad real
-seguirá requiriendo aprobación.
+## Consola gráfica de Genesis
+
+Desde la raíz del proyecto, con Node.js 24 y la clave administrativa:
+
+~~~powershell
+$env:PHOENIX_GENESIS_ADMIN_TOKEN = "<clave-segura-de-32-o-mas-caracteres>"
+pnpm genesis
+~~~
+
+Abre `http://127.0.0.1:8767/` en el mismo equipo. En **Censo
+hospitalario**, selecciona la institución y verás cuatro indicadores:
+porcentaje de áreas evaluadas, respaldadas con evidencia, declaradas
+sin verificar y pendientes. Puedes buscar por servicio o proceso,
+filtrar por estado y seleccionar una de las 60 referencias.
+
+Para guardar una evaluación indica la existencia del área, el rol
+que responde, la sede si aplica y las referencias de los documentos
+validados. Las áreas marcadas como **verificadas** requieren evidencia
+institucional registrada. El estado `declarada` no equivale a
+validación. La vista muestra claramente que ningún departamento o
+agente PHOENIX se instala con ese registro.
+
+### Protección de revisiones simultáneas
+
+Cada área lleva un número de revisión. La consola envía
+`expectedRevision` y el servidor devuelve **409** si alguien
+actualizó el censo entretanto. En ese caso recarga la información
+antes de registrar otra decisión. El esquema SQLite anterior se
+migra sin borrar las evaluaciones guardadas; el primer registro
+existente recibe revisión 1.
+
+Desde CLI, el primer registro permite `expectedRevision:0`.
+Al modificar un área ya evaluada, se exige utilizar la revisión
+actual obtenida desde `list` o la API.
+
+### API local autenticada
+
+- `GET /v1/census?organizationId=<id>` devuelve 60 áreas, estados,
+  evidencias y revisiones.
+- `POST /v1/census/assess` guarda una evaluación con su revisión
+  esperada y respuesta auditada.
+- `GET /census.js` ofrece el módulo de interfaz local; no contiene
+  credenciales ni realiza llamadas externas.
+
+**Pendiente:** vincular las áreas evaluadas a listas de manuales,
+turnos, inventario, KPI y reportes por cada jefatura. Cada alta
+de unidad real sigue requiriendo una aprobación independiente.
 
 ## Pruebas
 
