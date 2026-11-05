@@ -8,6 +8,7 @@ Esta guía complementa:
 
 - [Plan maestro Genesis + Fabric v4](./phoenix-genesis-fabric-master-plan-v4.md).
 - [Red Fabric universal, LAN, entre sedes y federación](./phoenix-fabric-universal-network.md).
+- [Catálogo hospitalario 360°: áreas, indicadores, comités y reportes](./phoenix-genesis-healthcare-domain-pack.md).
 - [Servidor Fabric y trabajadores de capacidades](./phoenix-fabric-operational-broker.md).
 
 ## Principio de producto
