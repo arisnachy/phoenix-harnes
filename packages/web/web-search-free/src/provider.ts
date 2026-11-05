@@ -173,12 +173,27 @@ function parseDuckDuckGo(html: string): WebSearchSource[] {
   )
   for (const match of html.matchAll(itemPattern)) {
     sources.push({
-      url: decodeHtml(match[1] ?? ''),
+      url: normalizeDuckDuckGoUrl(decodeHtml(match[1] ?? '')),
       title: stripHtml(match[2] ?? ''),
       ...(match[3] === undefined ? {} : { snippet: stripHtml(match[3]) }),
     })
   }
   return sources.filter(source => isHttpUrl(source.url))
+}
+
+/**
+ * Decode DuckDuckGo outbound links, which often use protocol-relative URLs
+ * and a URL-encoded uddg target. Never return the search-engine redirect as a citation.
+ */
+function normalizeDuckDuckGoUrl(raw: string): string {
+  try {
+    const url = new URL(raw, 'https://duckduckgo.com')
+    if (url.hostname === 'duckduckgo.com' || url.hostname.endsWith('.duckduckgo.com')) {
+      const destination = url.searchParams.get('uddg')
+      return destination && isHttpUrl(destination) ? destination : ''
+    }
+    return isHttpUrl(url.toString()) ? url.toString() : ''
+  } catch { return '' }
 }
 
 function normalizeBingUrl(url: string): string {
