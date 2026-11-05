@@ -70,3 +70,27 @@ describe('ORÁCULO scientific chart safety and presentation',()=>{
     expect(parseCanvasSpec(categorical)?.component).toBe('ui_canvas')
   })
 })
+
+
+describe('ORÁCULO panel SVG real de predicción',()=>{
+  it('representa observados, incertidumbre y futuras proyecciones sin HTML generado',async()=>{
+    const { createElement }=await import('react')
+    const { renderToStaticMarkup }=await import('react-dom/server')
+    const { ForecastFanChart }=await import('../src/client/chat/ForecastFanChart.tsx')
+    const html=renderToStaticMarkup(createElement(ForecastFanChart,{
+      title:'Serie histórica y futuro',unit:'casos',
+      points:[
+        {label:'2026-11-03T00:00:00Z',observed:100},
+        {label:'2026-11-04T00:00:00Z',observed:110,forecast:110},
+        {label:'2026-11-05T00:00:00Z',forecast:116,lower:108,upper:124},
+        {label:'2026-11-06T00:00:00Z',forecast:119,lower:106,upper:132},
+      ],
+    }))
+    expect(html).toContain('<svg')
+    expect(html).toContain('role="img"')
+    expect(html).toContain('<polygon')
+    expect(html).toContain('Observado')
+    expect(html).toContain('Proyección')
+    expect(html).toContain('casos')
+  })
+})
