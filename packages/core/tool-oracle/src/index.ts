@@ -170,7 +170,7 @@ export function apply(ctx: Context, config: Config): void {
     async execute(args){
       if(args.inputJson.length>100000)throw new Error('Entrada superior a 100 KB.')
       const parsed=JSON.parse(args.inputJson) as Record<string,unknown>
-      const value=forecastOracle(parsed)
+      let value=forecastOracle(parsed)
       const question=typeof parsed.question==='string'?parsed.question:undefined
       if(value.status==='insufficient')return JSON.stringify({...value,uiBlock:oracleVisual(value,question)})
       const analytics=parsed.mode==='time-series'
@@ -178,6 +178,14 @@ export function apply(ctx: Context, config: Config): void {
           stepHours:parsed.stepHours as number,lastObservedAt:parsed.lastObservedAt as string,
           unit:parsed.unit as string})
         :undefined
+      if(analytics?.status==='projected'){
+        const {evaluation:_oldBacktest,...original}=value
+        void _oldBacktest
+        value={...original,method:analytics.method,
+          ...(analytics.predictedValue===undefined?{}:{predictedValue:analytics.predictedValue}),
+          ...(analytics.interval80?{interval80:analytics.interval80}:{}),
+          assumptions:analytics.warnings}
+      }
       const record=await recordOracle(config.path,value)
       return JSON.stringify({...value,predictionId:record.id,recordedAt:record.createdAt,uiBlock:oracleVisual(value,question,undefined,analytics)})
     },

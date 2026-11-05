@@ -125,7 +125,7 @@ export async function forecastPublicCsv(
   const target=last.date+increment*input.horizonSteps
   if(last.date>Date.now()+60_000)throw new Error('La serie incluye observaciones futuras.')
   if(target<=Date.now())throw new Error('La serie es demasiado antigua: el horizonte proyectado ya pasó.')
-  const result=forecastOracle({
+  const original=forecastOracle({
     mode:'time-series',
     source:finalUrl,
     values:dated.map(d=>d.number),
@@ -134,9 +134,16 @@ export async function forecastPublicCsv(
     lastObservedAt:new Date(last.date).toISOString(),
     unit:input.unit,
   })
-  result.evidenceStatus='retrieved_unverified'
   const analytics=ensembleForecast({values:dated.map(d=>d.number),horizonSteps:input.horizonSteps,
     stepHours:input.stepHours,lastObservedAt:new Date(last.date).toISOString(),unit:input.unit})
+  const result:OracleResult=analytics.status==='projected'
+    ?{status:'forecast',method:analytics.method,
+      ...(analytics.targetAt?{targetAt:analytics.targetAt}:{}),
+      ...(analytics.predictedValue===undefined?{}:{predictedValue:analytics.predictedValue}),
+      ...(analytics.interval80?{interval80:analytics.interval80}:{}),
+      predictedUnit:input.unit,source:finalUrl,evidenceStatus:'retrieved_unverified',
+      assumptions:analytics.warnings}
+    :{...original,evidenceStatus:'retrieved_unverified'}
   return {result,analytics,evidence:{
     url:finalUrl,
     retrievedAt:new Date().toISOString(),
