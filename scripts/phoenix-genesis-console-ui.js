@@ -56,6 +56,9 @@ function bindForms(){
       staffCount:Number(d.staffCount),workstations:Number(d.workstations),role:d.role})],
     "form-system":["/v1/systems",d=>({organizationId:current,systemId:d.systemId,
       name:d.name,method:d.method,ownerUnit:d.ownerUnit||null})],
+    "form-provider":["/v1/providers",d=>({organizationId:current,
+      providerId:d.providerId,modelName:d.modelName,execution:d.execution,
+      accountMode:d.accountMode,monthlyBudgetUsd:Number(d.monthlyBudgetUsd)})],
     "form-cost":["/v1/costs",d=>({organizationId:current,itemId:d.itemId,
       label:d.label,category:d.category,quantity:Number(d.quantity),
       unitPrice:Number(d.unitPrice),currency:d.currency,recurrence:d.recurrence,
@@ -122,10 +125,15 @@ async function refresh(){
   try{
     const d=await api("/v1/dashboard?organizationId="+encodeURIComponent(current));
     snapshot=d;
+    let onlineNodes=0;
+    try{
+      const remote=await api("/v1/fabric/status?organizationId="+encodeURIComponent(current));
+      onlineNodes=(remote.nodes||[]).filter(n=>n.connected===true).length;
+    }catch{onlineNodes=0;}
     document.getElementById("stats").replaceChildren(
       stat("Descubrimiento",d.readiness.discoveryCoveragePct+"%"),
       stat("Unidades",d.units.length),stat("Evidencias",d.evidence.length),
-      stat("Conexiones probadas",d.readiness.operationalConnections)
+      stat("Nodos con heartbeat",onlineNodes)
     );
     document.getElementById("org-summary").textContent=d.organization.name+
       " · Sector: "+d.organization.industry+" · Modo: "+d.organization.adoptionMode+
@@ -151,6 +159,9 @@ async function refresh(){
       x=>x.category+"."+x.key+" = "+String(x.value)+" ["+x.status+"]");
     lines(document.getElementById("systems-list"),d.systems,
       x=>x.name+" · "+x.method+" · "+x.state);
+    lines(document.getElementById("models-list"),d.providers,
+      x=>x.providerId+" · "+x.modelName+" · "+x.execution+" · "+x.accountMode+
+        " · presupuesto mensual USD "+x.monthlyBudgetUsd+" · "+x.status);
     lines(document.getElementById("costs-list"),d.costs,
       x=>x.label+" · "+x.quantity+" × "+x.unitPrice+" = "+x.total+" "+x.currency+
         " ["+x.recurrence+"]");
@@ -182,6 +193,30 @@ document.getElementById("organization").addEventListener("change",async e=>{
   if(current)await refresh();
 });
 document.getElementById("reload").addEventListener("click",refresh);
+document.getElementById("get-fabric").addEventListener("click",async()=>{
+  try{
+    if(!current)throw Error("Selecciona una organización");
+    const result=await api("/v1/fabric/status?organizationId="+encodeURIComponent(current));
+    document.getElementById("fabric-status").textContent=JSON.stringify(result,null,2);
+    message(result.connected?"Broker Fabric verificado.":"Fabric no conectado o no configurado.");
+  }catch(error){message(error.message,true);}
+});
+document.getElementById("form-enroll").addEventListener("submit",async event=>{
+  event.preventDefault();
+  try{
+    if(!current)throw Error("Selecciona una organización");
+    const data=Object.fromEntries(new FormData(event.target));
+    if(data.approved!=="on")throw Error("Se requiere autorización explícita");
+    const result=await api("/v1/fabric/enroll","POST",{
+      organizationId:current,nodeId:data.nodeId,siteId:data.siteId,unitId:data.unitId,
+      capabilities:data.capabilities.split(",").map(x=>x.trim()).filter(Boolean),
+      receivesFrom:data.receivesFrom.split(",").map(x=>x.trim()).filter(Boolean),
+      approved:true
+    });
+    document.getElementById("enroll-result").textContent=JSON.stringify(result,null,2);
+    message("Nodo registrado en el broker. El token se muestra una sola vez; guárdalo de forma segura.");
+  }catch(error){message(error.message,true);}
+});
 document.getElementById("get-poa").addEventListener("click",async()=>{
   try{
     const query=new URLSearchParams({organizationId:current,period:val("poa-period")});
