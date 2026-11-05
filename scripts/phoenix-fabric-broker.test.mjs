@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync,rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join,dirname } from 'node:path'
 import { createFabricBroker } from './phoenix-fabric-broker.mjs'
 
 const ADMIN='e'.repeat(64)
