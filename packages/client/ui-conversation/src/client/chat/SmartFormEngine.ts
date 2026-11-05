@@ -291,11 +291,20 @@ function formatted(value: Scalar, precision?: number): string {
   return value
 }
 export function calculateSmartForm(spec: SmartFormSpec, values: Record<string, FormValue>, today = localToday()): SmartResult {
-  const missing = spec.props.fields.filter(f => fieldVisible(f,values) && f.required !== false
-    && (values[f.id] === undefined || values[f.id] === '' || (typeof values[f.id] === 'number'
-      && (!Number.isFinite(values[f.id]) || (f.min !== undefined && values[f.id] < f.min)
-        || (f.max !== undefined && values[f.id] > f.max))) || (f.type === 'date' && dateMillis(values[f.id]) === null)))
-    .map(f => f.id)
+  const missing = spec.props.fields.filter(field => {
+    if (!fieldVisible(field,values) || field.required === false) return false
+    const value = values[field.id]
+    if (value === undefined || value === '') return true
+    if (field.type === 'number' || field.type === 'range') {
+      return typeof value !== 'number' || !Number.isFinite(value)
+        || (field.min !== undefined && value < field.min)
+        || (field.max !== undefined && value > field.max)
+    }
+    if (field.type === 'date') return dateMillis(value) === null
+    if (field.type === 'select' || field.type === 'radio')
+      return !field.options?.some(option => option.value === value)
+    return false
+  }).map(field => field.id)
   const ready = missing.length === 0
   return {
     ready, missing, outputs: (spec.props.outputs ?? []).map(o => {
