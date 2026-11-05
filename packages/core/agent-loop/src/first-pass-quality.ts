@@ -39,7 +39,7 @@ const GENERAL_PROBLEM = /\b(?:problemas?|problems?|casos?|cases?|tareas?|tasks?|
 // oxlint-disable-next-line @stylistic/max-len -- Match actual interactive calculators, scales, tests and forms.
 const INTERACTIVE_FORM = /\b(?:calculadora\p{L}*|calculator\p{L}*|formulario\p{L}*|forms?|quiz(?:zes)?|cuestionario\p{L}*|escala\s+(?:cl[ií]nica|de\s+riesgo|de\s+puntuaci[oó]n)|(?:imc|bmi)\s+calculator)\b/iu
 // oxlint-disable-next-line @stylistic/max-len -- Specific requests for scored instruments in any domain.
-const ASSESSMENT_FORM = /\\b(?:mini[ -]?cog|deterioro\\s+cognitivo|cognitive\\s+(?:impairment|screening)|prueba\\s+(?:psicol[oó]gica|m[eé]dica|cognitiva)|evaluaci[oó]n\\s+(?:cognitiva|psicol[oó]gica)|assessment|tamizaje|cribado|inventario|cuestionario|escala(?:s)?|likert|psychometric|psicom[eé]tric\\p{L}*)\\b/iu
+const ASSESSMENT_FORM = /\b(?:mini[ -]?cog|deterioro\s+cognitivo|cognitive\s+(?:impairment|screening)|prueba\s+(?:psicol[oó]gica|m[eé]dica|cognitiva)|evaluaci[oó]n\s+(?:cognitiva|psicol[oó]gica)|assessment|tamizaje|cribado|inventario|cuestionario|escala(?:s)?|likert|psychometric|psicom[eé]tric\p{L}*)\b/iu
 const MAX_CHECK_GROUPS = 3
 const DOMAIN_CHECKS = {
   decisions: 'For feasibility: separate constraints from assumptions; compare alternatives, seek a counterexample and prove the bound or qualify optimality/impossibility claims.',
