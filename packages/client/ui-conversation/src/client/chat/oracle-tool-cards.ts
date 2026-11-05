@@ -8,7 +8,7 @@ function firstParty(name:unknown):boolean{
   const canonical=name.startsWith('mcp__tool_oracle__')?name.slice(18)
     :name.startsWith('mcp__tool-oracle__')?name.slice(18)
     :name.startsWith('mcp__')?'':name
-  return ['oracle_plan_research','oracle_fuse_series','oracle_calibration_report','oracle_forecast_history','oracle_revision_prediction','oracle_research_forecast','oracle_forecast_public_csv','oracle_forecast_public_event_csv','oracle_scientific_forecast','oracle_audit_prediction','oracle_forecast_scorecard'].includes(canonical)
+  return ['oracle_plan_research','oracle_fuse_series','oracle_calibration_report','oracle_forecast_history','oracle_forecast_due','oracle_revision_prediction','oracle_research_forecast','oracle_forecast_public_csv','oracle_forecast_public_event_csv','oracle_scientific_forecast','oracle_audit_prediction','oracle_forecast_scorecard'].includes(canonical)
 }
 export function oracleCardsFromToolResult(root:unknown):GenerativeUiBlock[]{
   const stack:[unknown,number][]=[[root,0]],cards:GenerativeUiBlock[]=[]
