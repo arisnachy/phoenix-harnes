@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { GenesisWorkbench } from './phoenix-genesis-workbench.mjs'
 import { genesisCatalogSummary,searchGenesisCatalog } from './phoenix-genesis-healthcare-catalog.mjs'
 import { importGenesisManifest } from './phoenix-genesis-importer.mjs'
+import { previewGenesisDocument,inspectGenesisDocument,listGenesisDocumentFindings,decideGenesisFinding } from './phoenix-genesis-document-intake.mjs'
 import { previewGenesisLegacyCsv, importGenesisLegacyCsv } from './phoenix-genesis-legacy-csv.mjs'
 import { fabricRequest } from './phoenix-fabric-client.mjs'
 
@@ -153,6 +154,15 @@ export function createGenesisConsole({dbPath,adminToken,port=0,host='127.0.0.1'}
         const input=await json(req)
         return send(res,201,{result:importGenesisLegacyCsv(workbench,input)})
       }
+      if(path==='/v1/documents/preview'&&req.method==='POST')
+        return send(res,200,{result:previewGenesisDocument(workbench,await json(req))})
+      if(path==='/v1/documents/inspect'&&req.method==='POST')
+        return send(res,201,{result:inspectGenesisDocument(workbench,await json(req))})
+      if(path==='/v1/documents/findings'&&req.method==='GET')
+        return send(res,200,listGenesisDocumentFindings(workbench,
+          target.searchParams.get('organizationId'),target.searchParams.get('documentId')))
+      if(path==='/v1/documents/decide'&&req.method==='POST')
+        return send(res,200,{result:decideGenesisFinding(workbench,await json(req))})
       const operations={
         '/v1/sites':x=>workbench.addSite(x),
         '/v1/answers':x=>workbench.answer(x),
