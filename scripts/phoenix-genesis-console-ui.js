@@ -1,0 +1,192 @@
+"use strict";
+/* Browser UI: untrusted institutional data is rendered with textContent. */
+let secret="",current="",snapshot=null,section="overview";
+const el=(tag,cls,text)=>{
+  const node=document.createElement(tag);
+  if(cls)node.className=cls;
+  if(text!==undefined)node.textContent=String(text);
+  return node;
+};
+const val=id=>document.getElementById(id)?.value?.trim()??"";
+const api=async(path,method="GET",body)=>{
+  const response=await fetch(path,{method,headers:{
+    authorization:"Bearer "+secret,
+    ...(body===undefined?{}:{"content-type":"application/json"})
+  },...(body===undefined?{}:{body:JSON.stringify(body)})});
+  let result;
+  try{result=await response.json()}catch{throw Error("Respuesta del servidor no válida")}
+  if(!response.ok)throw Error(result.error||"HTTP "+response.status);
+  return result;
+};
+function message(text,error=false){
+  const area=document.getElementById("message")||document.getElementById("notice");
+  if(area){area.textContent=text;area.className=error?"message error":"message";}
+}
+function lines(node,items,formatter){
+  node.replaceChildren();
+  if(items.length===0){node.append(el("li","muted","Sin registros todavía"));return;}
+  for(const item of items.slice(0,100))node.append(el("li","",formatter(item)));
+}
+function show(tab){
+  section=tab;
+  document.querySelectorAll(".panel").forEach(n=>{n.hidden=n.dataset.panel!==tab});
+  document.querySelectorAll(".nav button").forEach(n=>
+    n.classList.toggle("active",n.dataset.tab===tab));
+}
+function bindForms(){
+  const config={
+    "form-create":["/v1/organizations",d=>({
+      organizationId:d.organizationId,name:d.name,industry:d.industry,
+      adoptionMode:d.adoptionMode,network:{mode:d.network},
+      sites:[{siteId:d.siteId,name:d.siteName,
+        workstations:Number(d.workstations),reusableWorkstations:Number(d.reusable),
+        roles:[],software:[]}]
+    })],
+    "form-answer":["/v1/answers",d=>{
+      const [category,key]=d.question.split(":");
+      return {organizationId:current,category,key,value:d.answer,status:d.status,
+        evidenceRefs:d.evidenceRefs.split(",").map(x=>x.trim()).filter(Boolean)};
+    }],
+    "form-unit":["/v1/units",d=>({organizationId:current,unitId:d.unitId,
+      siteId:d.siteId,name:d.name,parentId:d.parentId||null,
+      staffCount:Number(d.staffCount),workstations:Number(d.workstations),role:d.role})],
+    "form-system":["/v1/systems",d=>({organizationId:current,systemId:d.systemId,
+      name:d.name,method:d.method,ownerUnit:d.ownerUnit||null})],
+    "form-cost":["/v1/costs",d=>({organizationId:current,itemId:d.itemId,
+      label:d.label,category:d.category,quantity:Number(d.quantity),
+      unitPrice:Number(d.unitPrice),currency:d.currency,recurrence:d.recurrence,
+      evidenceRefs:d.evidenceRefs.split(",").map(x=>x.trim()).filter(Boolean)})],
+    "form-goal":["/v1/goals",d=>({organizationId:current,goalId:d.goalId,
+      title:d.title,metricId:d.metricId,period:d.period,target:Number(d.target),
+      ownerUnit:d.ownerUnit||null})],
+    "form-indicator":["/v1/indicators",d=>({organizationId:current,
+      metricId:d.metricId,period:d.period,numerator:Number(d.numerator),
+      denominator:d.denominator===""?null:Number(d.denominator),unit:d.unit,
+      evidenceRefs:d.evidenceRefs.split(",").map(x=>x.trim()).filter(Boolean)})],
+    "form-obligation":["/v1/obligations",d=>({organizationId:current,
+      obligationId:d.obligationId,recipient:d.recipient,title:d.title,
+      periodicity:d.periodicity,templateVersion:d.templateVersion||null})],
+    "form-evidence":["/v1/evidence",d=>({organizationId:current,
+      filePath:d.filePath,kind:d.kind,classification:d.classification,
+      validated:d.validated==="on"})]
+  };
+  for(const [id,[path,convert]] of Object.entries(config)){
+    const form=document.getElementById(id);
+    form.addEventListener("submit",async event=>{
+      event.preventDefault();
+      try{
+        if(!current&&id!=="form-create")throw Error("Selecciona una organización primero");
+        const d=Object.fromEntries(new FormData(form));
+        const result=await api(path,"POST",convert(d));
+        if(id==="form-create")current=result.result.organization.organizationId;
+        message("Registro guardado correctamente.");
+        await listOrgs();
+        if(current)await refresh();
+      }catch(error){message(error.message,true);}
+    });
+  }
+}
+async function listOrgs(){
+  const response=await api("/v1/organizations");
+  const select=document.getElementById("organization");
+  select.replaceChildren();
+  if(response.organizations.length===0){
+    select.append(el("option","","No hay instituciones"));
+    current="";return;
+  }
+  if(!current||!response.organizations.includes(current))
+    current=response.organizations[0];
+  for(const id of response.organizations){
+    const option=el("option","",id);
+    option.value=id;
+    select.append(option);
+  }
+  select.value=current;
+}
+function stat(label,value){
+  const n=el("div","stat");
+  n.append(el("strong","",value),el("small","",label));
+  return n;
+}
+async function refresh(){
+  if(!current)return;
+  try{
+    const d=await api("/v1/dashboard?organizationId="+encodeURIComponent(current));
+    snapshot=d;
+    document.getElementById("stats").replaceChildren(
+      stat("Descubrimiento",d.readiness.discoveryCoveragePct+"%"),
+      stat("Unidades",d.units.length),stat("Evidencias",d.evidence.length),
+      stat("Conexiones probadas",d.readiness.operationalConnections)
+    );
+    document.getElementById("org-summary").textContent=d.organization.name+
+      " · Sector: "+d.organization.industry+" · Modo: "+d.organization.adoptionMode+
+      " · Conexiones en vivo: NO verificadas";
+    lines(document.getElementById("missing-summary"),d.missingQuestions.slice(0,5),
+      x=>x.question);
+    lines(document.getElementById("unit-list"),d.units,
+      x=>x.name+" · "+x.siteId+" · "+x.staffCount+" trabajadores · "+x.workstations+" PC");
+    lines(document.getElementById("units-list"),d.units,
+      x=>x.unitId+" — "+x.name+(x.parentId?" (superior: "+x.parentId+")":"")+
+        " · Función "+x.role);
+    lines(document.getElementById("audit-list"),d.audit.slice(0,10),
+      x=>x.created_at+" · "+x.action+" · "+x.object_id);
+    const q=document.getElementById("question");q.replaceChildren();
+    for(const x of d.missingQuestions){
+      const option=el("option","",x.question);
+      option.value=x.category+":"+x.key;
+      q.append(option);
+    }
+    lines(document.getElementById("questions-list"),d.missingQuestions,
+      x=>x.question);
+    lines(document.getElementById("facts-list"),d.facts,
+      x=>x.category+"."+x.key+" = "+String(x.value)+" ["+x.status+"]");
+    lines(document.getElementById("systems-list"),d.systems,
+      x=>x.name+" · "+x.method+" · "+x.state);
+    lines(document.getElementById("costs-list"),d.costs,
+      x=>x.label+" · "+x.quantity+" × "+x.unitPrice+" = "+x.total+" "+x.currency+
+        " ["+x.recurrence+"]");
+    lines(document.getElementById("budget-list"),
+      Object.entries(d.budgetByCurrencyAndPeriod),([key,value])=>key+": "+value);
+    lines(document.getElementById("obligations-list"),d.obligations,
+      x=>x.recipient+" · "+x.title+" · "+x.state);
+    lines(document.getElementById("evidence-list"),d.evidence,
+      x=>x.evidence_id+" · "+x.file_name+" · "+x.state);
+  }catch(error){message(error.message,true);}
+}
+document.getElementById("login").addEventListener("click",async()=>{
+  try{
+    secret=document.getElementById("token").value;
+    if(secret.length<32)throw Error("La clave debe tener al menos 32 caracteres");
+    await api("/v1/organizations");
+    document.getElementById("token").value="";
+    document.getElementById("login-screen").hidden=true;
+    document.getElementById("workspace").hidden=false;
+    await listOrgs();
+    if(current){await refresh();show("overview");}
+    else show("create");
+  }catch(error){secret="";message(error.message,true);}
+});
+document.querySelectorAll(".nav button").forEach(b=>
+  b.addEventListener("click",()=>show(b.dataset.tab)));
+document.getElementById("organization").addEventListener("change",async e=>{
+  current=e.target.value;
+  if(current)await refresh();
+});
+document.getElementById("reload").addEventListener("click",refresh);
+document.getElementById("get-poa").addEventListener("click",async()=>{
+  try{
+    const query=new URLSearchParams({organizationId:current,period:val("poa-period")});
+    const output=await api("/v1/poa?"+query);
+    document.getElementById("poa-output").textContent=JSON.stringify(output,null,2);
+    message("Borrador POA generado; no se ha remitido a ninguna autoridad.");
+  }catch(e){message(e.message,true);}
+});
+document.getElementById("get-deployment").addEventListener("click",async()=>{
+  try{
+    const output=await api("/v1/deployment?organizationId="+encodeURIComponent(current));
+    document.getElementById("deployment-output").textContent=JSON.stringify(output,null,2);
+    message("Propuesta calculada; ninguna instancia ha sido instalada.");
+  }catch(e){message(e.message,true);}
+});
+bindForms();
+show("overview");
