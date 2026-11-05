@@ -1,12 +1,17 @@
 /** PHOENIX ORÁCULO: explicit, inspectable scientific and empirical forecast models.
  * No claim of universal prediction, causal discovery, or verified external data.
  */
+import { eventProbability } from './probability.ts'
+
 export type OracleStatus = 'forecast' | 'scenario' | 'insufficient'
 export type OracleResult = {
   status: OracleStatus
   method: string
   targetAt?: string
   predictedValue?: number
+  probabilityPercent?: number
+  probabilityInterval80?: { lower: number; upper: number }
+  probabilityEvaluation?: { trainCount: number; holdoutCount: number; modelBrier: number; baselineBrier: number; signalClassCount: number }
   predictedUnit?: string
   interval80?: { lower: number; upper: number }
   evaluation?: { walkForwardFolds: number; baselineMae: number; selectedMae: number; chosen: string; empiricalCoverage80: number }
@@ -153,6 +158,7 @@ export function forecastOracle(request: unknown): OracleResult {
   const v=obj(request)
   const source=short(v.source,'source')
   switch(v.mode){
+    case 'binary-event': return eventProbability(v,source)
     case 'time-series': return series(v,source)
     case 'free-fall': return freeFall(v,source)
     case 'rgb-light': return light(v,source)
