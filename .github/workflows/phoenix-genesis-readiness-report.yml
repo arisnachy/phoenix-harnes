@@ -1,0 +1,36 @@
+name: PHOENIX Genesis Executive Readiness Report
+
+on:
+  pull_request:
+    branches: [main, stable]
+    paths:
+      - 'scripts/phoenix-genesis-readiness-brief.mjs'
+      - 'scripts/phoenix-genesis-readiness-cli.mjs'
+      - 'scripts/phoenix-genesis-readiness-brief.test.mjs'
+      - '.github/workflows/phoenix-genesis-readiness-report.yml'
+  push:
+    branches: [main, stable]
+    paths:
+      - 'scripts/phoenix-genesis-readiness-brief.mjs'
+      - 'scripts/phoenix-genesis-readiness-cli.mjs'
+      - 'scripts/phoenix-genesis-readiness-brief.test.mjs'
+      - '.github/workflows/phoenix-genesis-readiness-report.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  readiness:
+    name: Genesis institutional readiness / Node 24
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify executive report provenance, safety and offline export
+        run: node --test scripts/phoenix-genesis-readiness-brief.test.mjs
+      - name: Validate report generator and CLI JavaScript
+        run: node --check scripts/phoenix-genesis-readiness-brief.mjs && node --check scripts/phoenix-genesis-readiness-cli.mjs
