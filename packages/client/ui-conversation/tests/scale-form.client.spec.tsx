@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { parseScaleForm, ScaleForm, scaleProtocolWarnings, scoreScale } from '../src/client/chat/ScaleForm.tsx'
 
@@ -74,9 +74,14 @@ describe('universal assessment engine: instrument protocol and scoring', () => {
     const warnings=scaleProtocolWarnings(spec)
     expect(warnings.some(w=>w.includes('procedimiento'))).toBe(true)
     expect(warnings.some(w=>w.includes('versión'))).toBe(true)
-    render(<ScaleForm spec={spec}/>)
+    const onAction=vi.fn()
+    render(<ScaleForm spec={spec} onAction={onAction}/>)
     expect(screen.getByRole('alert')).toBeTruthy()
     expect(screen.queryByText('Procedimiento de administración')).toBeNull()
+    fireEvent.click(screen.getByRole('button',{name:'Mejorar instrumento con Kira'}))
+    expect(onAction).toHaveBeenCalledTimes(1)
+    expect(onAction.mock.calls[0]?.[1]).toBe('draft')
+    expect(onAction.mock.calls[0]?.[0]).toContain('falta el procedimiento')
   })
 
   it('rejects impossible declared score ranges instead of interpreting them', () => {
