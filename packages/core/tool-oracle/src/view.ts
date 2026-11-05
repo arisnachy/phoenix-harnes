@@ -230,3 +230,22 @@ export function oracleHistoryVisual(rows:OracleHistoryRow[]):Record<string,unkno
   ]
   return {component:'ui_canvas',version:1,props:{title:'ORÁCULO · Historial predictivo',subtitle:'Consulta, versiones y revisiones',children}}
 }
+
+
+/** Monitoring queue is a review surface, not a claim of independently retrieved outcomes. */
+export function oracleDueVisual(rows:OracleHistoryRow[]):Record<string,unknown>{
+  const children:Node[]=[
+    {type:'group',layout:'row',children:[
+      {type:'badge',text:'POR VERIFICAR',status:rows.length?'warning':'positive'},
+      {type:'badge',text:'Seguimiento manual',status:'neutral'},
+    ]},
+    metric('Pronósticos vencidos',String(rows.length)),
+    ...(rows.length?[{type:'table',columns:['Predicción','Horizonte','Método'],rows:rows.map(r=>[
+      clean(r.id.slice(0,8),60),clean((r.targetAt??'').slice(0,16),50),clean(r.method,130),
+    ])}]:[{type:'alert',status:'info',message:'No hay pronósticos vencidos sin resultado entre los registros recientes.'}]),
+    {type:'alert',status:'info',message:'ORÁCULO puede identificar desenlaces pendientes; no ha confirmado los hechos. Para resolverlos se deben consultar fuentes verificables e introducir evidencia real.'},
+    {type:'button',label:'Investigar resultados pendientes',action:'draft',
+      prompt:'ORÁCULO: consulta oracle_forecast_due, recupera datos primarios para los pronósticos vencidos y solo después de comprobar el desenlace utiliza oracle_audit_prediction. Señala expresamente las fuentes no verificadas.'},
+  ]
+  return {component:'ui_canvas',version:1,props:{title:'ORÁCULO · Vigilancia predictiva',subtitle:'Vencimientos y comprobación de resultados',children}}
+}
