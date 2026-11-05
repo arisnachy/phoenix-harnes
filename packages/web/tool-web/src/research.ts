@@ -383,10 +383,10 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
     timeoutMs: Math.max(timeoutMs, 65_000),
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      const result = await investigateResearch(ctx.web, {
+      const result = await investigateResearch(ctx, {
         question: args.question, domain: args.domain,
         depth: args.depth === 'deep' ? 'deep' : 'standard',
-      }, exec.signal)
+      }, exec.signal, planResearch, executeResearch)
       return JSON.stringify(result)
     },
   }))

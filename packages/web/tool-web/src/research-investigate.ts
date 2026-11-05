@@ -4,11 +4,16 @@
  * fabricated citation or automated claim-of-truth is introduced here.
  */
 import type { Context } from '@phoenix-ai/cordis'
-import { executeResearch, planResearch, type ResearchOutcome } from './research.ts'
+import type { ResearchOutcome, ResearchPlan } from './research.ts'
 import { assessResearchRelevance, isBlockedResearchBody, normalizeResearchText,
   readableResearchExcerpt, researchFocus } from './research-relevance.ts'
 
 /** Preserved user objective and explicit coverage request. */
+/** Dependency-injected planner keeps execution independent from tool registration. */
+export type InvestigationPlanner = (question: string, domain?: string, batch?: number) => ResearchPlan
+/** Existing search provider and its relevance gate; no duplicate HTTP implementation. */
+export type InvestigationSearcher = (ctx: Pick<Context,'web'>, plan: ResearchPlan, max: number, signal: AbortSignal) => Promise<ResearchOutcome>
+
 export interface InvestigationInput {
   readonly question: string
   readonly domain?: string
@@ -125,13 +130,16 @@ async function readLead(
  * @param ctx - Host web service, never a raw unaudited HTTP client.
  * @param input - User question, optional domain and depth.
  * @param signal - Caller cancellation.
+ * @param plan - Domain-aware existing query planner.
+ * @param search - Existing governed search executor.
  * @returns Research report containing real excerpts and explicit access gaps.
  */
 export async function investigateResearch(
   ctx: Pick<Context, 'web'>, input: InvestigationInput, signal: AbortSignal,
+  plan: InvestigationPlanner, search: InvestigationSearcher,
 ): Promise<InvestigationReport> {
   const depth = input.depth === 'deep' ? 'deep' : 'standard'
-  const initial = planResearch(input.question, input.domain, 0)
+  const initial = plan(input.question, input.domain, 0)
   const maxBatches = depth === 'deep' ? Math.min(initial.totalBatches, 3) : 1
   const maxToRead = depth === 'deep' ? 6 : 3
   const outcomes: ResearchOutcome[] = []
@@ -139,14 +147,14 @@ export async function investigateResearch(
   const leads: InvestigationDocument[] = []
   for (let batch = 0; batch < maxBatches; batch++) {
     if (signal.aborted) throw signal.reason ?? new Error('Research cancelled')
-    const plan = batch === 0 ? initial : planResearch(input.question, input.domain, batch)
-    const outcome = await executeResearch(ctx, plan, 8, signal)
+    const queryPlan = batch === 0 ? initial : plan(input.question, input.domain, batch)
+    const outcome = await search(ctx, queryPlan, 8, signal)
     outcomes.push(outcome)
     for (const source of outcome.sources) {
       const key = sourceKey(source.url)
       if (seen.has(key)) continue
       seen.add(key)
-      const check = assessResearchRelevance(input.question, source, plan.domain)
+      const check = assessResearchRelevance(input.question, source, queryPlan.domain)
       leads.push({
         url: key, title: source.title ?? new URL(key).hostname,
         ...(source.snippet === undefined ? {} : { snippet: source.snippet }),
