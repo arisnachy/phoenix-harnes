@@ -102,3 +102,29 @@ test('calibración del ledger solo considera pronósticos congelados antes del e
     assert(Math.abs(r.brier-.04)<1e-10)
   }finally{await rm(dir,{recursive:true,force:true})}
 })
+
+
+
+test('biblioteca inmutable conserva versiones y detecta desenlaces vencidos',async()=>{
+  const {mkdtemp,rm}=await import('node:fs/promises')
+  const {tmpdir}=await import('node:os')
+  const {join}=await import('node:path')
+  const {recordOracle,reviseOracle,oracleHistory,oracleDuePredictions}=await import('../src/ledger.ts')
+  const dir=await mkdtemp(join(tmpdir(),'oraculo-history-'))
+  try {
+    const path=join(dir,'predictions.jsonl')
+    const scenario={status:'scenario',method:'causal-test',
+      targetAt:'2020-01-01T00:00:00Z',predictedValue:23,
+      source:'synthetic test fixture',evidenceStatus:'user_supplied_unverified',assumptions:[]}
+    const original=await recordOracle(path,scenario)
+    const revision=await reviseOracle(path,original.id,{...scenario,predictedValue:26,targetAt:future})
+    const history=await oracleHistory(path)
+    assert.equal(history.length,2)
+    assert.equal(history[0].id,revision.id)
+    assert.equal(history[0].supersedes,original.id)
+    assert.equal(history[1].predictedValue,23)
+    const due=await oracleDuePredictions(path)
+    assert.equal(due.length,1)
+    assert.equal(due[0].id,original.id)
+  }finally{await rm(dir,{recursive:true,force:true})}
+})
