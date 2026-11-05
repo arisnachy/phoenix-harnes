@@ -16,6 +16,7 @@ function tool(name:string,error=false){
 describe('ORÁCULO primera parte UI segura',()=>{
   it('expone tarjetas nativas para herramientas oficiales',()=>{
     expect(oracleCardsFromToolResult(tool('oracle_scientific_forecast'))).toHaveLength(1)
+    expect(oracleCardsFromToolResult(tool('oracle_forecast_public_csv'))).toHaveLength(1)
   })
   it('reconoce el namespace MCP oficial',()=>{
     expect(oracleCardsFromToolResult(tool('mcp__tool_oracle__oracle_scientific_forecast'))).toHaveLength(1)
