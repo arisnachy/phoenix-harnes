@@ -2,10 +2,13 @@ import {
   parseSmartForm, type FormValue, type SmartExpr, type SmartFormSpec, type SmartResult,
 } from './SmartFormEngine.ts'
 
-export interface SavedSmartForm {
+export interface SmartFormVersion {
   readonly spec: SmartFormSpec
   readonly revision: number
   readonly savedAt: string
+}
+export interface SavedSmartForm extends SmartFormVersion {
+  readonly history?: readonly SmartFormVersion[]
 }
 export interface SavedSmartRun {
   readonly id: string
@@ -42,14 +45,26 @@ export function savedForms(): SavedSmartForm[] {
     if (!asObject(r) || !Number.isInteger(r.revision) || Number(r.revision) < 1 ||
       typeof r.savedAt !== 'string') return []
     const spec = parseSmartForm(r.spec)
-    return spec ? [{ spec, revision:Number(r.revision), savedAt:r.savedAt }] : []
+    const history: SmartFormVersion[] = Array.isArray(r.history)
+      ? r.history.slice(0,10).flatMap((v:unknown) => {
+        if (!asObject(v) || typeof v.savedAt !== 'string' ||
+          !Number.isInteger(v.revision) || Number(v.revision) < 1) return []
+        const prior = parseSmartForm(v.spec)
+        return prior && prior.props.id === spec?.props.id
+          ? [{spec:prior,revision:Number(v.revision),savedAt:v.savedAt}] : []
+      }) : []
+    return spec ? [{ spec, revision:Number(r.revision), savedAt:r.savedAt, history }] : []
   })
 }
 export function saveSmartForm(spec: SmartFormSpec): { ok:boolean; revision:number } {
   const previous = savedForms()
   const existing = previous.find(r => r.spec.props.id === spec.props.id)
   const revision = (existing?.revision ?? 0) + 1
-  const updated: SavedSmartForm = {spec,revision,savedAt:new Date().toISOString()}
+  const history = existing ? [
+    {spec:existing.spec,revision:existing.revision,savedAt:existing.savedAt},
+    ...(existing.history??[]),
+  ].slice(0,10) : []
+  const updated: SavedSmartForm = {spec,revision,savedAt:new Date().toISOString(),history}
   const others = previous.filter(r=>r.spec.props.id !== spec.props.id)
   return {ok:persist(FORMS_KEY,[updated,...others].slice(0,LIMIT)),revision}
 }
@@ -73,7 +88,7 @@ export function savedRuns(): SavedSmartRun[] {
 export function saveSmartRun(
   spec: SmartFormSpec, values: Record<string,FormValue>, result: SmartResult,
 ): boolean {
-  if (!result.ready || !result.outputs.length) return false
+  if (!result.ready) return false
   const revision = savedForms().find(f=>f.spec.props.id === spec.props.id)?.revision ?? 0
   const now = new Date().toISOString()
   const record:SavedSmartRun = {
