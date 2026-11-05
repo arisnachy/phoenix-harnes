@@ -15,7 +15,7 @@ const STOP = new Set([
   'oficial','oficiales','datos','informacion','estudio','estudios','resumen','explica',
   'comparar','comparacion','resultado','resultados','pronostico','prediccion','futuro',
   'probabilidad','proximos','proximo','proxima','tendencia','semanal','semanales','anual',
-  'anuales','mensual','mensuales','numero','duracion','cantidad','diferencia',
+  'anuales','ano','anos','mensual','mensuales','numero','duracion','cantidad','diferencia',
   'republica','dominicana','dominicano','dominican','republic','territorio',
   'entre','the','and','for','from','what','when','where','which','will','have','been',
   'with','this','that','there','about','into','official','search','research','study',
@@ -29,6 +29,8 @@ const ALIASES: Readonly<Record<string, readonly string[]>> = {
   temperatura:['temperature'],hospital:['healthcare'],salud:['health'],
   futbol:['football','soccer'],beisbol:['baseball'],lanzamiento:['launch'],
   mision:['mission'],espacial:['space'],luna:['moon'],
+  lanzada:['launch','launched'],lanzado:['launch','launched'],lanzara:['launch'],
+  aps:['atencion primaria','primary care'],
 }
 
 /** Normalized lexical form used only to screen search relevance, never authenticate truth. */
@@ -44,7 +46,7 @@ export function researchFocus(question: string): string[] {
 }
 function matchesWord(text: string, token: string): boolean {
   const words = new Set(text.match(/[\p{L}\p{N}]{3,}/gu) ?? [])
-  return words.has(token) || (ALIASES[token] ?? []).some(alias => words.has(alias))
+  return words.has(token) || (ALIASES[token] ?? []).some(alias => alias.includes(' ') ? text.includes(alias) : words.has(alias))
 }
 function rdFocus(question: string): boolean {
   return /rep[uú]blica dominicana|dominican republic|\bR\.?D\.?\b/iu.test(question)
@@ -82,7 +84,10 @@ export function scoreResearchLead(question: string, lead: WebSearchSource): numb
   const parsed = new URL(url)
   const title = lead.title ?? ''
   const snippet = lead.snippet ?? ''
-  const combined = title + ' ' + snippet + ' ' + decodeURIComponent(parsed.pathname)
+  // A malformed percent-escape in a search-result path must not crash research.
+  let pathname = parsed.pathname
+  try { pathname = decodeURIComponent(pathname) } catch { /* keep encoded path */ }
+  const combined = title + ' ' + snippet + ' ' + pathname
   if (challengeText(combined)) return 0
   if (!sourceCountryMatches(question, combined, parsed.hostname)) return 0
   const focus = researchFocus(question)
@@ -110,11 +115,16 @@ export function planEvidenceQueries(question: string, domain?: string): string[]
   const focus = researchFocus(question)
   const country = rdFocus(question) ? 'República Dominicana' : ''
   const year = (question.match(/\b(?:19|20)\d{2}\b/gu) ?? []).slice(0, 2).join(' ')
-  const compact = [focus.slice(0, 7).join(' '), country, year].filter(Boolean).join(' ').slice(0, 185) || question
-  return [...new Set([compact, ...plan.queries.slice(1).map(query => {
+  // Roman-numeral suffixes ("Artemis II", "World War II") are part of
+  // the named entity and must not be lost by token cleanup.
+  const named = question.match(/\b([A-Za-z]{4,})\s+(I{1,3}|IV|V|VI{0,3}|IX|X)\b/u)?.[0] ?? ''
+  const compact = [named, focus.slice(0, 7).join(' '), country, year].filter(Boolean).join(' ').slice(0, 185) || question
+  const scoped = plan.queries.slice(1).map(query => {
     const host = query.match(/site:([\w.-]+)/u)?.[1]
     return host ? [compact, 'site:' + host].join(' ') : query
-  })])].slice(0, 3)
+  })
+  const alternatives = scoped.length ? scoped : [compact + ' fuente primaria oficial', compact + ' official source data']
+  return [...new Set([compact, ...alternatives])].slice(0, 3)
 }
 
 type ReadStatus = 'read' | 'blocked' | 'unavailable' | 'off_topic'
@@ -224,9 +234,9 @@ export async function investigateEvidence(
   }
   const documents: EvidenceDocument[] = []
   const attempts: DocumentAttempt[] = []
-  // Three bounded fetches, in parallel across independent hosts. Each fetch
+  // Up to four bounded fetches, in parallel across independent hosts. Each fetch
   // keeps the built-in SSRF, robots, byte, redirect and timeout safeguards.
-  const results = await Promise.allSettled(chosen.slice(0, 3).map(async entry => {
+  const results = await Promise.allSettled(chosen.slice(0, 4).map(async entry => {
     const url = entry.source.url
     try {
       const fetched = await web.fetch({ url }, signal)
@@ -238,7 +248,7 @@ export async function investigateEvidence(
       }
       const content = pageText(fetched.body.content, fetched.body.kind)
       if (content.length < 120 || scoreResearchLead(question, {
-        url, title: entry.source.title, snippet: content.slice(0, 10000),
+        url, title: '', snippet: content.slice(0, 10000),
       }) === 0) {
         return { url, status: 'off_topic' as ReadStatus, reason: 'El documento recuperado no sustenta el tema solicitado' }
       }
