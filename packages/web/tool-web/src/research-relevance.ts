@@ -138,7 +138,9 @@ export function assessResearchRelevance(question: string, source: WebSearchSourc
     dengue: ['arbovirosis dengue'],
   }
   const supported = focus.filter(token =>
-    (' ' + haystack + ' ').includes(' ' + token + ' ')
+    (/[\p{Script=Han}]/u.test(token)
+      ? haystack.includes(token)
+      : (' ' + haystack + ' ').includes(' ' + token + ' '))
       || (synonyms[token] ?? []).some(alias => haystack.includes(alias))).length
   const required = focus.length === 0 ? 0 : focus.length >= 5 ? 2 : 1
   if (supported < required && !named) return { relevant: false, score: 0, reason: 'off_topic' }
