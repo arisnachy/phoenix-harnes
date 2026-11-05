@@ -21,6 +21,7 @@ import process from 'node:process'
 import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
 import { classifyStableUpdate } from './phoenix-update-policy.mjs'
 import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
+import { guardianBlockedTarget, recordGuardianIncident } from './phoenix-guardian-incidents.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
 const REMOTE = process.env.PHOENIX_UPDATE_REMOTE ?? 'origin'
@@ -218,10 +219,12 @@ function restorePrevious(root, previous, failedTarget, cause) {
       status: 'rolled-back',
       previous,
       failedTarget,
+      detail: cause instanceof Error ? cause.stack ?? cause.message : String(cause),
       at: new Date().toISOString(),
     })
     console.error('[PHOENIX STABLE] recovery succeeded; the previous checkout was restored.')
-    blockStaleStartup('new stable activation failed and rollback restored an older runtime')
+    // The recovered last-known-good runtime MUST be allowed to boot.
+    // A quarantined target may be retried only after it receives a new SHA.
     return true
   } catch (error) {
     console.error(`[PHOENIX STABLE] CRITICAL: recovery failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -229,6 +232,7 @@ function restorePrevious(root, previous, failedTarget, cause) {
       status: 'rollback-failed',
       previous,
       failedTarget,
+      detail: [cause instanceof Error ? cause.message : String(cause), error instanceof Error ? error.stack ?? error.message : String(error)].join(' | '),
       at: new Date().toISOString(),
     })
     return false
@@ -247,11 +251,33 @@ function applyStable(root, current, target, manifest, state) {
     return
   }
 
+  if (guardianBlockedTarget(target)) {
+    console.error(`[PHOENIX GUARDIAN] stable ${target.slice(0, 12)} previously failed; starting the recovered version instead of retrying it.`)
+    writeState(root, { status: 'paused', phase: 'guardian-quarantine', current, target })
+    return
+  }
+
   const replacement = state === 'ahead' || state === 'diverged'
   const action = replacement ? 'realigning managed install to stable' : 'installing stable update'
   console.error(`[PHOENIX STABLE] ${action}: ${current.slice(0, 12)} -> ${target.slice(0, 12)}`)
-  git(root, ['diff', '--check', current, target])
-  stageCandidate(root, target)
+  try {
+    git(root, ['diff', '--check', current, target])
+    stageCandidate(root, target)
+  } catch (error) {
+    // Candidate validation failed before ANY live mutation: preserve the old,
+    // functional runtime and record the exact SHA that must not auto-retry.
+    const detail = error instanceof Error ? error.stack ?? error.message : String(error)
+    recordGuardianIncident({
+      status: 'activation-failed', phase: 'preflight', previous: current,
+      failedTarget: target, diagnosis: detail,
+    })
+    writeState(root, {
+      status: 'paused', phase: 'guardian-preflight', current, target,
+      detail: 'Candidate failed isolated preflight; existing runtime preserved.',
+    })
+    console.error('[PHOENIX GUARDIAN] candidate preflight failed; keeping last-known-good PHOENIX. ' + detail)
+    return
+  }
   if (!cleanWorktree(root)) throw new Error('worktree changed during stable preflight; refusing live mutation')
 
   if (replacement) {
