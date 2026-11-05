@@ -131,3 +131,18 @@ describe('multilingual topic preservation', () => {
     expect(score.score).toBeGreaterThan(0)
   })
 })
+
+describe('multiple-entity precision in research', () => {
+  it('does not confuse Charlotte-only results with an Inter Miami vs Charlotte comparison', () => {
+    const q = 'Inter Miami vs Charlotte 2026'
+    expect(assessResearchRelevance(q, {
+      url: 'https://example.com/charlotte', title: 'Charlotte city guide',
+    }).relevant).toBe(false)
+    expect(assessResearchRelevance(q, {
+      url: 'https://mlssoccer.com/clubs/inter-miami', title: 'Inter Miami match preview',
+    }).relevant).toBe(true)
+    expect(assessResearchRelevance(q, {
+      url: 'https://example.com/matches', title: 'Inter Miami vs Charlotte match analysis',
+    }).relevant).toBe(true)
+  })
+})

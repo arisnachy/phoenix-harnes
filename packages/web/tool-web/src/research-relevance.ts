@@ -10,7 +10,7 @@ const STOP = new Set((
   + ' datos informacion informacion estudio estudios investigaciones buscar busqueda investigar'
   + ' fuente fuentes evidencia resultados pronostico tendencia semana semanal mensual anual'
   + ' ultimamente ultimo ultimos ultimas noticia noticias actual actualizacion reciente'
-  + ' los las una uno unos unas del por con sin al desde esta este estos estas esos aquellas'
+  + ' de en la el y o vs versus contra frente los las una uno unos unas del por con sin al desde esta este estos estas esos aquellas'
   + ' son fue han ha haya tener tiene tienen casos caso numero cifras cantidad reporte'
   + ' the and for from when what which why how about latest with into after before where'
   + ' study data sources report reports research updated current year years does have been'
@@ -142,7 +142,7 @@ export function assessResearchRelevance(question: string, source: WebSearchSourc
       ? haystack.includes(token)
       : (' ' + haystack + ' ').includes(' ' + token + ' '))
       || (synonyms[token] ?? []).some(alias => haystack.includes(alias))).length
-  const required = focus.length === 0 ? 0 : focus.length >= 5 ? 2 : 1
+  const required = focus.length === 0 ? 0 : focus.length >= 3 ? 2 : 1
   if (supported < required && !named) return { relevant: false, score: 0, reason: 'off_topic' }
   // If no topical words exist, we cannot establish match from a URL-only result.
   if (supported === 0 && !named) return { relevant: false, score: 0, reason: 'off_topic' }
