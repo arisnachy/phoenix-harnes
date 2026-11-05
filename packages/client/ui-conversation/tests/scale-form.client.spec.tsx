@@ -103,6 +103,36 @@ describe('universal assessment engine: instrument protocol and scoring', () => {
     expect(scoreScale(spec,{trato:0}).total).toBe(0)
   })
 
+  it('scores multiple subscales independently without adding model calls', () => {
+    const spec=parseScaleForm({component:'scale_form',version:1,props:{
+      title:'Evaluación interna de operaciones',
+      items:[
+        {id:'servicio',question:'Atención al cliente',options:[
+          {label:'Mala',score:0},{label:'Excelente',score:3}]},
+        {id:'costos',question:'Control presupuestario',options:[
+          {label:'Malo',score:0},{label:'Bueno',score:2}]},
+        {id:'personas',question:'Clima laboral',options:[
+          {label:'Bajo',score:0},{label:'Alto',score:4}]},
+      ],
+      domains:[
+        {id:'experiencia',label:'Experiencia de cliente',items:['servicio']},
+        {id:'gestion',label:'Gestión interna',items:['costos','personas']},
+      ],
+    }})
+    expect(spec).not.toBeNull()
+    if (!spec) return
+    const partial=scoreScale(spec,{servicio:3})
+    expect(partial.total).toBeNull()
+    expect(partial.domains).toMatchObject([
+      {id:'experiencia',value:3,min:0,max:3},
+      {id:'gestion',value:null,min:0,max:6},
+    ])
+    expect(scoreScale(spec,{servicio:3,costos:2,personas:4}).domains[1]?.value).toBe(6)
+    render(<ScaleForm spec={spec}/>)
+    expect(screen.getByText('Resultados por dimensión')).toBeTruthy()
+    expect(screen.getByText('Gestión interna')).toBeTruthy()
+  })
+
   it('rejects untrusted executable props in steps, duplicate IDs and score format violations', () => {
     expect(parseScaleForm({...miniCog,props:{...miniCog.props,
       administration:[{...miniCog.props.administration[0],onclick:'alert(1)'}],
