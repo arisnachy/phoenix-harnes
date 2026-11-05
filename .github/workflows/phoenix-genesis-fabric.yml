@@ -21,6 +21,9 @@ on:
       - 'scripts/phoenix-genesis-console.css'
       - 'scripts/phoenix-genesis-importer.mjs'
       - 'scripts/phoenix-genesis-importer.test.mjs'
+      - 'scripts/phoenix-genesis-legacy-csv.mjs'
+      - 'scripts/phoenix-genesis-legacy-csv.test.mjs'
+      - 'scripts/phoenix-genesis-legacy-csv-http.test.mjs'
       - 'scripts/phoenix-genesis-sector-packs.mjs'
       - 'scripts/phoenix-genesis-fabric-integration.test.mjs'
       - 'scripts/phoenix-genesis-paths.mjs'
@@ -51,6 +54,9 @@ on:
       - 'scripts/phoenix-genesis-console.css'
       - 'scripts/phoenix-genesis-importer.mjs'
       - 'scripts/phoenix-genesis-importer.test.mjs'
+      - 'scripts/phoenix-genesis-legacy-csv.mjs'
+      - 'scripts/phoenix-genesis-legacy-csv.test.mjs'
+      - 'scripts/phoenix-genesis-legacy-csv-http.test.mjs'
       - 'scripts/phoenix-genesis-sector-packs.mjs'
       - 'scripts/phoenix-genesis-fabric-integration.test.mjs'
       - 'scripts/phoenix-genesis-paths.mjs'
@@ -84,6 +90,8 @@ jobs:
         run: node --test scripts/phoenix-genesis-workbench.test.mjs
       - name: Test safe institutional imports, site revisions and open-universe sector packs
         run: node --test scripts/phoenix-genesis-importer.test.mjs
+      - name: Verify legacy-system CSV adapter, privacy, integrity and UI endpoints
+        run: node --test scripts/phoenix-genesis-legacy-csv.test.mjs scripts/phoenix-genesis-legacy-csv-http.test.mjs
       - name: Test real Genesis-to-Fabric node enrollment and heartbeat
         run: node --test scripts/phoenix-genesis-fabric-integration.test.mjs
       - name: Verify browser console scripts parse
