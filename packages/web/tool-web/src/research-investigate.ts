@@ -74,12 +74,32 @@ function sourceKey(url: string): string {
   catch { return url }
 }
 function relevantExcerpt(content: string, question: string): string {
-  const terms = researchFocus(question).slice(0, 6)
-  const normalized = normalizeResearchText(content)
-  const index = terms.map(term => normalized.indexOf(term))
-    .filter(location => location >= 0).sort((a, b) => a - b)[0]
-  const start = index === undefined ? 0 : Math.max(0, index - 120)
-  return content.slice(start, start + 1450)
+  const terms = researchFocus(question).slice(0, 8)
+  let bestStart = 0
+  let bestScore = -1
+  // Compare bounded raw-text windows, not offsets in a normalized string:
+  // accent removal and HTML entity decoding change character positions.
+  for (let start = 0; start < content.length; start += 700) {
+    const text = normalizeResearchText(content.slice(start, start + 1450))
+    const found = terms.filter(term => text.includes(term))
+    const score = found.length * 10
+      + found.reduce((sum, term) => sum + Math.min(5, text.split(term).length - 1), 0)
+    if (score > bestScore) {
+      bestScore = score
+      const first = Math.min(text.length, ...found.map(term => text.indexOf(term)).filter(index => index >= 0))
+      bestStart = Math.max(0, start + first - 70)
+    }
+  }
+  return content.slice(bestStart, bestStart + 1450)
+}
+function sourceOwner(url: string): string {
+  const host = new URL(url).hostname.toLowerCase().replace(/^www\./u, '')
+  const parts = host.split('.')
+  const compound = new Set(['gob.do', 'gov.do', 'co.uk', 'org.uk', 'gov.uk',
+    'com.mx', 'gob.mx', 'gov.co', 'com.br', 'gov.br', 'com.au', 'gov.au'])
+  const suffix = parts.slice(-2).join('.')
+  return parts.length > 2 && compound.has(suffix)
+    ? parts.slice(-3).join('.') : parts.slice(-2).join('.')
 }
 function hasReadableSubject(question: string, url: string, excerpt: string): boolean {
   // The URL path may contain the keyword even when the actual page is irrelevant.
@@ -173,14 +193,14 @@ export async function investigateResearch(
   /** Rank an unvisited result while preferring independently owned domains. */
   const candidates = (): InvestigationDocument[] => {
     const currentlyRead = new Set([...inspected.values()]
-      .filter(doc => doc.status === 'read_relevant').map(doc => new URL(doc.url).hostname))
+      .filter(doc => doc.status === 'read_relevant').map(doc => sourceOwner(doc.url)))
     return leads.filter(lead => {
-      const host = new URL(lead.url).hostname
+      const host = sourceOwner(lead.url)
       return !inspected.has(lead.url) && !blockedHosts.has(host)
         && (attemptsByHost.get(host) ?? 0) < 2
     }).sort((a, b) => {
       const rank = (doc: InvestigationDocument) => {
-        const host = new URL(doc.url).hostname
+        const host = sourceOwner(doc.url)
         return doc.relevanceScore + (currentlyRead.has(host) ? 0 : 30)
           - (attemptsByHost.get(host) ?? 0) * 25
       }
@@ -196,7 +216,7 @@ export async function investigateResearch(
     let duplicates = 0
     for (const doc of inspected.values()) {
       if (doc.status !== 'read_relevant') continue
-      const host = new URL(doc.url).hostname
+      const host = sourceOwner(doc.url)
       if (doc.contentSha256 !== undefined && bodies.has(doc.contentSha256)) duplicates++
       if (hosts.has(host) || (doc.contentSha256 !== undefined && bodies.has(doc.contentSha256))) continue
       hosts.add(host)
@@ -244,8 +264,8 @@ export async function investigateResearch(
       const group: InvestigationDocument[] = []
       for (const lead of next) {
         if (group.length >= Math.min(2, readsPerBatch - readsThisBatch, maxToRead - inspected.size)) break
-        const host = new URL(lead.url).hostname
-        if (group.some(doc => new URL(doc.url).hostname === host)) continue
+        const host = sourceOwner(lead.url)
+        if (group.some(doc => sourceOwner(doc.url) === host)) continue
         group.push(lead)
       }
       if (!group.length) break
@@ -260,7 +280,7 @@ export async function investigateResearch(
       readsThisBatch += checked.length
       for (const doc of checked) {
         inspected.set(doc.url, doc)
-        const host = new URL(doc.url).hostname
+        const host = sourceOwner(doc.url)
         attemptsByHost.set(host, (attemptsByHost.get(host) ?? 0) + 1)
         if (doc.status === 'challenge') blockedHosts.add(host)
       }
