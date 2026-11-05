@@ -5,6 +5,9 @@ on:
     branches: [main, stable]
     paths:
       - 'scripts/phoenix-genesis-fabric.mjs'
+      - 'scripts/phoenix-fabric-broker.mjs'
+      - 'scripts/phoenix-fabric-broker.test.mjs'
+      - 'scripts/phoenix-fabric-client.mjs'
       - 'scripts/phoenix-genesis-fabric.test.mjs'
       - 'scripts/phoenix-genesis-plan-cli.mjs'
       - 'scripts/phoenix-genesis-fabric-example.json'
@@ -15,6 +18,9 @@ on:
     branches: [main, stable]
     paths:
       - 'scripts/phoenix-genesis-fabric.mjs'
+      - 'scripts/phoenix-fabric-broker.mjs'
+      - 'scripts/phoenix-fabric-broker.test.mjs'
+      - 'scripts/phoenix-fabric-client.mjs'
       - 'scripts/phoenix-genesis-fabric.test.mjs'
       - 'scripts/phoenix-genesis-plan-cli.mjs'
       - 'scripts/phoenix-genesis-fabric-example.json'
@@ -36,6 +42,8 @@ jobs:
           node-version: '24'
       - name: Validate Genesis and Fabric offline contracts
         run: node --test scripts/phoenix-genesis-fabric.test.mjs
+      - name: Test real durable Fabric HTTP communication and SQLite recovery
+        run: node --test scripts/phoenix-fabric-broker.test.mjs
       - name: Exercise the Genesis CLI with synthetic hospital input
         run: |
           node scripts/phoenix-genesis-plan-cli.mjs scripts/phoenix-genesis-fabric-example.json > genesis-demo-output.json
