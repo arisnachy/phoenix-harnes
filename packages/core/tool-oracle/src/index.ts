@@ -127,11 +127,17 @@ export function apply(ctx: Context, config: Config): void {
     isConcurrencySafe:()=>false,
     async execute(args){
       if(args.inputJson.length>100000)throw new Error('Entrada superior a 100 KB.')
-      const value=forecastOracle(JSON.parse(args.inputJson) as unknown)
-      const question=typeof (JSON.parse(args.inputJson) as {question?:unknown}).question==='string'? (JSON.parse(args.inputJson) as {question:string}).question : undefined
+      const parsed=JSON.parse(args.inputJson) as Record<string,unknown>
+      const value=forecastOracle(parsed)
+      const question=typeof parsed.question==='string'?parsed.question:undefined
       if(value.status==='insufficient')return JSON.stringify({...value,uiBlock:oracleVisual(value,question)})
+      const analytics=parsed.mode==='time-series'
+        ?ensembleForecast({values:parsed.values as number[],horizonSteps:parsed.horizonSteps as number,
+          stepHours:parsed.stepHours as number,lastObservedAt:parsed.lastObservedAt as string,
+          unit:parsed.unit as string})
+        :undefined
       const record=await recordOracle(config.path,value)
-      return JSON.stringify({...value,predictionId:record.id,recordedAt:record.createdAt,uiBlock:oracleVisual(value,question)})
+      return JSON.stringify({...value,predictionId:record.id,recordedAt:record.createdAt,uiBlock:oracleVisual(value,question,undefined,analytics)})
     },
     presentCall:()=>({card:'generic',title:'ORÁCULO · pronóstico científico',kind:'read' as const}),
   }))
