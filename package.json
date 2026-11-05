@@ -18,6 +18,7 @@
   ],
   "scripts": {
     "genesis": "node scripts/phoenix-genesis-console.mjs",
+    "test:genesis:chat": "node --experimental-strip-types --test packages/core/tool-genesis/tests/native-genesis.test.mjs",
     "genesis:demo": "node scripts/phoenix-genesis-demo.mjs",
     "genesis:plan": "node scripts/phoenix-genesis-plan-cli.mjs",
     "genesis:registry": "node scripts/phoenix-genesis-registry-cli.mjs",
