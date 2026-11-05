@@ -4,7 +4,7 @@ import { appendFile, mkdir, readFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { OracleResult } from './engine.ts'
 type Prediction = {kind:'prediction';id:string;createdAt:string;result:OracleResult}
-type Outcome = {kind:'outcome';id:string;recordedAt:string;observedAt:string;observedValue:number;source:string;absoluteError:number;verification:'unverified_report'}
+type Outcome = {kind:'outcome';id:string;recordedAt:string;observedAt:string;observedValue:number;source:string;absoluteError:number;brierError?:number;verification:'unverified_report'}
 async function records(path:string):Promise<(Prediction|Outcome)[]> {
   try {
     const txt=await readFile(path,'utf8')
@@ -30,14 +30,19 @@ export async function auditOracle(path:string,input:{id:string;observedAt:string
   const rows=await records(path)
   if(rows.some(row=>row.kind==='outcome'&&row.id===input.id))throw new Error('El pronóstico ya fue evaluado; registro inmutable.')
   const pred=rows.find(row=>row.kind==='prediction'&&row.id===input.id)
-  if(pred?.kind!=='prediction'||pred.result.predictedValue===undefined)throw new Error('No existe pronóstico numérico con ese ID.')
+  if(pred?.kind!=='prediction'||(pred.result.predictedValue===undefined&&pred.result.probabilityPercent===undefined))throw new Error('No existe pronóstico numérico o probabilístico con ese ID.')
+  if(pred.result.probabilityPercent!==undefined && input.observedValue!==0 && input.observedValue!==1)throw new Error('Un evento binario solo admite observedValue 0 (no ocurrió) o 1 (ocurrió).')
   if(pred.result.targetAt&&Date.parse(input.observedAt)<Date.parse(pred.result.targetAt))throw new Error('El resultado observado no puede ser anterior al horizonte pronosticado.')
   if(Date.parse(input.observedAt)>Date.now()+60000)throw new Error('La observación no puede estar en el futuro.')
-  const entry:Outcome={kind:'outcome',id:input.id,recordedAt:new Date().toISOString(),observedAt:new Date(input.observedAt).toISOString(),observedValue:input.observedValue,source:input.source.trim(),absoluteError:Math.abs(input.observedValue-pred.result.predictedValue),verification:'unverified_report'}
+  const entry:Outcome={kind:'outcome',id:input.id,recordedAt:new Date().toISOString(),observedAt:new Date(input.observedAt).toISOString(),observedValue:input.observedValue,source:input.source.trim(),absoluteError:Math.abs(input.observedValue-(pred.result.predictedValue??pred.result.probabilityPercent!/100)),
+    ...(pred.result.probabilityPercent===undefined?{}:{brierError:(input.observedValue-pred.result.probabilityPercent/100)**2}),verification:'unverified_report'}
   await append(path,entry)
   return entry
 }
-export async function oracleSummary(path:string):Promise<{total:number;settled:number;meanAbsoluteError:number|null;verifiedByHost:0}>{
+export async function oracleSummary(path:string):Promise<{total:number;settled:number;binarySettled:number;meanAbsoluteError:number|null;meanBrierScore:number|null;verifiedByHost:0}>{
   const rows=await records(path),pred=rows.filter(row=>row.kind==='prediction'),outcomes=rows.filter((row):row is Outcome=>row.kind==='outcome')
-  return {total:pred.length,settled:outcomes.length,meanAbsoluteError:outcomes.length?outcomes.reduce((s,x)=>s+x.absoluteError,0)/outcomes.length:null,verifiedByHost:0}
+  const binary=outcomes.filter(x=>x.brierError!==undefined)
+  return {total:pred.length,settled:outcomes.length,binarySettled:binary.length,
+    meanAbsoluteError:outcomes.length?outcomes.reduce((s,x)=>s+x.absoluteError,0)/outcomes.length:null,
+    meanBrierScore:binary.length?binary.reduce((s,x)=>s+x.brierError!,0)/binary.length:null,verifiedByHost:0}
 }
