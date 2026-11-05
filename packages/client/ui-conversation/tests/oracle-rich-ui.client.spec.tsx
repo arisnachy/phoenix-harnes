@@ -19,6 +19,9 @@ describe('ORÁCULO primera parte UI segura',()=>{
     expect(oracleCardsFromToolResult(tool('oracle_scientific_forecast'))).toHaveLength(1)
     expect(oracleCardsFromToolResult(tool('oracle_forecast_public_csv'))).toHaveLength(1)
     expect(oracleCardsFromToolResult(tool('oracle_forecast_public_event_csv'))).toHaveLength(1)
+    for(const name of ['oracle_plan_research','oracle_fuse_series','oracle_calibration_report','oracle_forecast_history','oracle_forecast_due','oracle_revision_prediction']){
+      expect(oracleCardsFromToolResult(tool(name))).toHaveLength(1)
+    }
   })
   it('reconoce el namespace MCP oficial',()=>{
     expect(oracleCardsFromToolResult(tool('mcp__tool_oracle__oracle_scientific_forecast'))).toHaveLength(1)
