@@ -34,8 +34,8 @@ describe('Phoenix universal research routing', () => {
       return {
         truncated: false,
         sources: [
-          { url: 'https://example.org/study?utm_source=one', title: 'Evidence' },
-          { url: 'https://example.org/study?utm_source=two', title: 'Duplicate' },
+          { url: 'https://example.org/study?utm_source=one', title: 'Dólar USD tipo de cambio en República Dominicana' },
+          { url: 'https://example.org/study?utm_source=two', title: 'Duplicado del dólar' },
         ],
       }
     })
@@ -44,7 +44,7 @@ describe('Phoenix universal research routing', () => {
     expect(result.status).toBe('partial')
     expect(result.failedQueries).toHaveLength(1)
     expect(result.sources).toHaveLength(1)
-    expect(result.sources[0]?.title).toBe('Evidence')
+    expect(result.sources[0]?.title).toContain('Dólar USD')
     expect(search).toHaveBeenCalledTimes(3)
   })
 
@@ -64,7 +64,11 @@ describe('Phoenix universal research routing', () => {
   it('caps merged sources and reports truncation', async () => {
     const ctx = { web: { search: async () => ({
       truncated: false,
-      sources: [{ url: 'https://a.test/' }, { url: 'https://b.test/' }, { url: 'https://c.test/' }],
+      sources: [
+        { url: 'https://a.test/general-topic', title: 'General topic overview' },
+        { url: 'https://b.test/general-topic', title: 'General topic comparisons' },
+        { url: 'https://c.test/general-topic', title: 'General topic research' },
+      ],
     }) } } as unknown as Pick<Context, 'web'>
     const outcome = await executeResearch(ctx, planResearch('general topic', 'general'), 2, signal)
     expect(outcome.sources).toHaveLength(2)
@@ -129,5 +133,42 @@ describe('Dengue research route is not confused with HealthIA patient records', 
     const outcome = await executeResearch(ctx, plan, 6, signal)
     expect(outcome.sources).toHaveLength(1)
     expect(outcome.sources[0]?.url).toContain('epidemiologia.gob.do')
+  })
+})
+
+// Generic research must enforce the user's subject even outside clinical topics.
+describe('universal topic integrity and ranking', () => {
+  it('rejects film It results for Artemis II and keeps only correctly named launch evidence', async () => {
+    const plan = planResearch('¿Artemis II habrá despegado en 2026?', 'general')
+    const ctx = { web: { search: async () => ({ truncated: false, sources: [
+      { url: 'https://movies.example/it', title: 'It (2017) film' },
+      { url: 'https://www.nasa.gov/artemis-iii', title: 'Artemis III future mission' },
+      { url: 'https://www.nasa.gov/artemis-ii', title: 'NASA Artemis II launch schedule' },
+    ] }) } } as unknown as Pick<Context,'web'>
+    const answer = await executeResearch(ctx, plan, 8, signal)
+    expect(answer.sources.map(s => s.url)).toEqual(['https://www.nasa.gov/artemis-ii'])
+    expect(answer.offTopicDropped).toBe(2)
+  })
+
+  it('rejects wrong-country dengue even if a source is medically relevant', async () => {
+    const plan = planResearch('Dengue República Dominicana 2026', 'public_health')
+    const ctx = { web: { search: async () => ({ truncated: false, sources: [
+      { url: 'https://example.mx/dengue', title: 'Dengue casos en México' },
+      { url: 'https://epidemiologia.gob.do/dengue', title: 'Dengue vigilancia epidemiológica' },
+    ] }) } } as unknown as Pick<Context,'web'>
+    const report = await executeResearch(ctx, plan, 8, signal)
+    expect(report.sources).toHaveLength(1)
+    expect(report.offTopicDropped).toBe(1)
+  })
+
+  it('returns empty, not ok, when all search hits are off topic', async () => {
+    const plan = planResearch('Inter Miami vs Charlotte 2026', 'sports')
+    const ctx = { web: { search: async () => ({
+      truncated: false, sources: [{ url: 'https://example.com/pizza', title: 'Pizza recipe' }],
+    }) } } as unknown as Pick<Context,'web'>
+    const report = await executeResearch(ctx, plan, 5, signal)
+    expect(report.status).toBe('empty')
+    expect(report.sources).toEqual([])
+    expect(report.note).toContain('Ningún resultado')
   })
 })
