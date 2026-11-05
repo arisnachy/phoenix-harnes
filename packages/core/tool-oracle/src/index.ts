@@ -4,7 +4,7 @@ import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import { forecastOracle } from './engine.ts'
 import { researchOracle } from './research.ts'
-import { oracleVisual } from './view.ts'
+import { oracleVisual, oracleScorecardVisual } from './view.ts'
 import type {} from '@phoenix-ai/dsh-web'
 import { auditOracle, oracleSummary, recordOracle } from './ledger.ts'
 export const name = 'tool-oracle'
@@ -50,7 +50,7 @@ export function apply(ctx: Context, config: Config): void {
     parameters:{id:{type:'string',required:true},observedAt:{type:'string',required:true},observedValue:{type:'number',required:true},source:{type:'string',required:true}},
     output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
     isConcurrencySafe:()=>false,
-    async execute(args){const row=await auditOracle(config.path,args);return JSON.stringify({outcome:row,summary:await oracleSummary(config.path)})},
+    async execute(args){const row=await auditOracle(config.path,args);const summary=await oracleSummary(config.path);return JSON.stringify({outcome:row,summary,uiBlock:oracleScorecardVisual(summary)})},
     presentCall:()=>({card:'generic',title:'ORÁCULO · verificar resultado',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
@@ -58,7 +58,7 @@ export function apply(ctx: Context, config: Config): void {
     description:'Resumen del registro local de pronósticos, sin declarar verificados los resultados aportados.',
     parameters:{},output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
     isConcurrencySafe:()=>true,
-    async execute(){return JSON.stringify(await oracleSummary(config.path))},
+    async execute(){const summary=await oracleSummary(config.path);return JSON.stringify({...summary,uiBlock:oracleScorecardVisual(summary)})},
     presentCall:()=>({card:'generic',title:'ORÁCULO · historial de aciertos',kind:'read' as const}),
   }))
 }
