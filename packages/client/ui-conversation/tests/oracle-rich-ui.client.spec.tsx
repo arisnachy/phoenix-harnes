@@ -20,9 +20,21 @@ describe('ORÁCULO primera parte UI segura',()=>{
     expect(oracleCardsFromToolResult(tool('oracle_scientific_forecast'))).toHaveLength(1)
     expect(oracleCardsFromToolResult(tool('oracle_forecast_public_csv'))).toHaveLength(1)
     expect(oracleCardsFromToolResult(tool('oracle_forecast_public_event_csv'))).toHaveLength(1)
-    for(const name of ['oracle_plan_research','oracle_fuse_series','oracle_calibration_report','oracle_forecast_history','oracle_forecast_due','oracle_revision_prediction']){
+    for(const name of ['oracle_publish_research','oracle_weather_daily_forecast','oracle_fuse_series','oracle_calibration_report','oracle_forecast_history','oracle_forecast_due','oracle_revision_prediction']){
       expect(oracleCardsFromToolResult(tool(name))).toHaveLength(1)
     }
+  })
+  it('oculta explícitamente tarjetas prematuras de planificación, investigación con cero resultados y progreso',()=>{
+    const premature=tool('oracle_research_forecast')
+    expect(oracleCardsFromToolResult(premature)).toHaveLength(0)
+    expect(oracleCardsFromToolResult(tool('oracle_plan_research'))).toHaveLength(0)
+    const emptyDiscovery=tool('oracle_research_forecast')
+    emptyDiscovery.content=[{type:'text',text:JSON.stringify({kind:'oracle_research',status:'insufficient',sources:[],uiBlock})}]
+    expect(oracleCardsFromToolResult(emptyDiscovery)).toHaveLength(0)
+  })
+  it('la tarjeta final sí puede renderizarse después de una evidencia publicada',()=>{
+    const published=tool('oracle_publish_research')
+    expect(oracleCardsFromToolResult(published)).toHaveLength(1)
   })
   it('reconoce el namespace MCP oficial',()=>{
     expect(oracleCardsFromToolResult(tool('mcp__tool_oracle__oracle_scientific_forecast'))).toHaveLength(1)
