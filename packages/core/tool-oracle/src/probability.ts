@@ -42,12 +42,19 @@ export function eventProbability(input: Datum, source: string): OracleResult {
     seen.add(row.id)
     if(typeof row.signal!=='boolean'||typeof row.happened!=='boolean')
       throw new Error('Se requieren señal y resultado binarios; la señal debe conocerse ANTES del evento.')
-    return {at:iso(row.observedAt),signal:row.signal,happened:row.happened}
+    const at=iso(row.observedAt)
+    const resolvedAt=row.resolvedAt===undefined?undefined:iso(row.resolvedAt)
+    if(resolvedAt!==undefined && resolvedAt<=at)throw new Error('La señal debe preceder a la resolución del evento.')
+    if(resolvedAt!==undefined && resolvedAt>Date.now()+60_000)throw new Error('Un resultado histórico no puede estar en el futuro.')
+    return {at,resolvedAt,signal:row.signal,happened:row.happened}
   })
   cases.sort((a,b)=>a.at-b.at)
   if(cases.at(-1)!.at>=targetMs || cases.at(-1)!.at>Date.now())
     return {status:'insufficient',method:'abstention',source,evidenceStatus:'user_supplied_unverified',assumptions:[],reason:'Hay observaciones posteriores al horizonte o al presente; riesgo de fuga temporal.'}
-  const cut=Math.floor(cases.length*.7),train=cases.slice(0,cut),test=cases.slice(cut)
+  const cut=Math.floor(cases.length*.7),test=cases.slice(cut)
+  // Purge training labels that would not yet have been observable at the holdout origin.
+  const train=cases.slice(0,cut).filter(row=>row.resolvedAt===undefined||row.resolvedAt<test[0]!.at)
+  if(train.length<40)return {status:'insufficient',method:'abstention',source,evidenceStatus:'user_supplied_unverified',assumptions:[],reason:'Pocos casos resueltos antes del inicio de la validación temporal.'}
   if(train.at(-1)!.at>=test[0]!.at)
     return {status:'insufficient',method:'abstention',source,evidenceStatus:'user_supplied_unverified',assumptions:[],reason:'El corte temporal coincide: agrupar casos por período antes de hacer la prueba.'}
   const group=(value:boolean)=>train.filter(row=>row.signal===value)
@@ -73,7 +80,7 @@ export function eventProbability(input: Datum, source: string): OracleResult {
     probabilityEvaluation:{trainCount:train.length,holdoutCount:test.length,modelBrier:Number(error.toFixed(5)),baselineBrier:Number(baseError.toFixed(5)),signalClassCount:selected.length},
     assumptions:[
       'La hipótesis debe describir un evento binario falsable y su fecha de resolución.',
-      'La señal se observó ANTES de los resultados históricos y la comparabilidad de casos debe revisarse externamente.',
+      'Las fechas de resolución, cuando se aportan, deben ser posteriores a la señal; el entrenamiento purga resultados no disponibles al iniciar la prueba. Sin fechas de resolución no puede descartarse fuga temporal.',
       'Fuente y resultados suministrados por un agente/usuario; NO autenticados por este motor.',
       'Un único holdout temporal no demuestra calibración prospectiva ni estabilidad fuera del conjunto observado.',
       'El intervalo del 80 % resume incertidumbre binomial del subgrupo, no garantiza un resultado particular.',
