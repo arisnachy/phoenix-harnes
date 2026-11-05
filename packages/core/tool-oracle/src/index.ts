@@ -6,19 +6,21 @@ import { forecastOracle } from './engine.ts'
 import { oraclePlan, fuseSeries, type OracleSeries } from './scientific-intelligence.ts'
 import { ensembleForecast } from './forecast-ensemble.ts'
 import { researchOracle } from './research.ts'
+import { publishOracleResearch } from './research-publication.ts'
+import { forecastOracleWeather } from './weather.ts'
 import { forecastPublicCsv, forecastPublicBinaryCsv } from './public-csv.ts'
-import { oracleVisual, oracleScorecardVisual, oraclePlanVisual, oracleFusionVisual, oracleCalibrationVisual, oracleHistoryVisual, oracleDueVisual } from './view.ts'
+import { oracleVisual, oracleScorecardVisual, oracleFusionVisual, oracleCalibrationVisual, oracleHistoryVisual, oracleDueVisual, oracleEvidenceReportVisual, oracleWeatherVisual } from './view.ts'
 import type {} from '@phoenix-ai/dsh-web'
 import { auditOracle, oracleSummary, recordOracle, oracleCalibrationLedger, oracleHistory, reviseOracle, oracleDuePredictions } from './ledger.ts'
 export const name = 'tool-oracle'
 export const inject = ['tools','systemPrompt','web']
 export interface Config { path: string }
-const GUIDANCE = 'ORÁCULO UNIVERSAL: ante cualquier pregunta sobre qué podría ocurrir, traduce a hipótesis falsable, define resultado observable, área geográfica y horizonte; usa oracle_plan_research cuando falte estructura y llama oracle_research_forecast para descubrir fuentes actuales mediante el web de PHOENIX. Las búsquedas y titulares NO prueban hechos: lee/corrobora fuentes y recopila datos numéricos históricos sin fuga temporal. Selecciona el modelo disciplinar adecuado; oracle_scientific_forecast admite caída ideal, mezcla de LUZ RGB, series equiespaciadas, escenarios causales DECLARADOS y binary-event cuando hay >=80 casos independientes etiquetados con señal ANTERIOR al evento, prueba temporal y Brier aceptable. Una tasa estimada no es certeza ni autenticación de datos: la herramienta marca datos aportados SIN verificar. Si no hay calibración/observaciones suficientes, presenta factores, escenarios y "porcentaje no estimable científicamente", NUNCA fabrica 50%, 70%, 90% ni un número por intuición. Ningún dominio, ni eventos únicos, posee garantía de pronóstico. No confundas una fuente de opinión con datos validados. ORÁCULO se muestra en tarjeta visual del chat. Audita resultados reales solo tras el horizonte, con procedencia; el sistema aún no autentica resultados externos. Cuando se encuentre una fuente primaria que publique observaciones numéricas históricas en CSV, usar oracle_forecast_public_csv: recupera el archivo por el proveedor web seguro, comprueba columnas/fechas/intervalos y realiza pronóstico reproducible sin pedir copiar miles de datos. Una URL descubierta no garantiza veracidad: comprobar entidad, periodicidad, fecha y pertinencia. Si no existe serie válida para el tema, no simules datos. Para un evento recurrente con fuente CSV que tenga ID, señal previa, fecha de resolución y desenlace binario, utilizar oracle_forecast_public_event_csv; requiere >=80 episodios, purga resultados futuros y compara Brier con tasa base antes de presentar porcentaje. Para series numéricas, comparar modelo simple y ensemble con bloques cronológicos separados, y visualizar evolución y banda con fecha y unidad. Para 3-5 fuentes estructuradas, oracle_fuse_series identifica conflictos en lugar de fusionar a ciegas; oracle_calibration_report evalúa predicciones congeladas antes del desenlace. oracle_forecast_history ofrece biblioteca permanente y oracle_revision_prediction crea versiones inmutables solo después de reinvestigar, nunca sobrescribe resultados anteriores. oracle_forecast_due identifica resultados vencidos que requieren verificación, sin fingir supervisión permanente. Toda fuente no autenticada debe quedar marcada. No confundir una banda de error con probabilidad de un evento.'
+const GUIDANCE = 'ORÁCULO UNIVERSAL: ante cualquier pregunta sobre qué podría ocurrir, traduce a hipótesis falsable, define resultado observable, área geográfica y horizonte; usa oracle_plan_research cuando falte estructura y llama oracle_research_forecast para descubrir fuentes actuales mediante el web de PHOENIX. Las búsquedas y titulares NO prueban hechos: lee/corrobora fuentes y recopila datos numéricos históricos sin fuga temporal. Selecciona el modelo disciplinar adecuado; oracle_scientific_forecast admite caída ideal, mezcla de LUZ RGB, series equiespaciadas, escenarios causales DECLARADOS y binary-event cuando hay >=80 casos independientes etiquetados con señal ANTERIOR al evento, prueba temporal y Brier aceptable. Una tasa estimada no es certeza ni autenticación de datos: la herramienta marca datos aportados SIN verificar. Si no hay calibración/observaciones suficientes, presenta factores, escenarios y "porcentaje no estimable científicamente", NUNCA fabrica 50%, 70%, 90% ni un número por intuición. Ningún dominio, ni eventos únicos, posee garantía de pronóstico. No confundas una fuente de opinión con datos validados. ORÁCULO solo publica una tarjeta visual de investigación después de RECUPERAR y comprobar fuentes, no por completar una búsqueda vacía. Audita resultados reales solo tras el horizonte, con procedencia; el sistema aún no autentica resultados externos. Cuando se encuentre una fuente primaria que publique observaciones numéricas históricas en CSV, usar oracle_forecast_public_csv: recupera el archivo por el proveedor web seguro, comprueba columnas/fechas/intervalos y realiza pronóstico reproducible sin pedir copiar miles de datos. Una URL descubierta no garantiza veracidad: comprobar entidad, periodicidad, fecha y pertinencia. Si no existe serie válida para el tema, no simules datos. Para un evento recurrente con fuente CSV que tenga ID, señal previa, fecha de resolución y desenlace binario, utilizar oracle_forecast_public_event_csv; requiere >=80 episodios, purga resultados futuros y compara Brier con tasa base antes de presentar porcentaje. Para series numéricas, comparar modelo simple y ensemble con bloques cronológicos separados, y visualizar evolución y banda con fecha y unidad. Para 3-5 fuentes estructuradas, oracle_fuse_series identifica conflictos en lugar de fusionar a ciegas; oracle_calibration_report evalúa predicciones congeladas antes del desenlace. oracle_forecast_history ofrece biblioteca permanente y oracle_revision_prediction crea versiones inmutables solo después de reinvestigar, nunca sobrescribe resultados anteriores. oracle_forecast_due identifica resultados vencidos que requieren verificación, sin fingir supervisión permanente. Toda fuente no autenticada debe quedar marcada. Primero oracle_plan_research (plan silencioso) y oracle_research_forecast (descubrimiento silencioso); NO son respuestas finales ni deben mostrar tarjetas. Continúa investigando aunque haya cero fuentes. Cuando tengas URLs candidatas, llama oracle_publish_research para recuperar documentos originales y SOLO si se recuperan efectivamente mostrar informe final de investigación. Para temperatura máxima diaria en cualquier ciudad y fecha dentro del horizonte, usa oracle_weather_daily_forecast: geocodifica, consulta Open-Meteo por API y muestra la tarjeta una vez recibida la cifra. Consulta además al servicio meteorológico oficial cuando sea relevante. El resultado de un modelo determinista no es un porcentaje de probabilidad. No confundir una banda de error con probabilidad de un evento.'
 export function apply(ctx: Context, config: Config): void {
-  ctx.systemPrompt.section({name:'tool:oracle',order:118,text:assembly=>/predic|pron[oó]st|futuro|forecast|simula|causal/iu.test((assembly as {incomingUserText?:string}).incomingUserText??'')?GUIDANCE:''})
+  ctx.systemPrompt.section({name:'tool:oracle',order:118,text:assembly=>/predic|pron[oó]st|futuro|forecast|simula|causal|probabili|temperatura|meteorolog|clima|lluvia|superar[aá]|ocurrir[aá]|or[aá]culo/iu.test((assembly as {incomingUserText?:string}).incomingUserText??'')?GUIDANCE:''})
   ctx.tools.register(defineTool({
     name:'oracle_plan_research',
-    description:'Traduce cualquier pregunta sobre el futuro en un objetivo comprobable, determina dominio y evidencia necesaria, selecciona ruta científica y presenta plan visual. Nunca inventa probabilidades.',
+    description:'Paso INTERMEDIO: estructura hipótesis y evidencia necesaria; devuelve planificación sin tarjeta. Después INVESTIGA fuentes y publica solo al obtener evidencia.',
     parameters:{
       question:{type:'string',required:true,description:'Pregunta libre de pronóstico.'},
       targetAt:{type:'string',description:'Fecha ISO futura con zona horaria si existe.'},
@@ -27,7 +29,7 @@ export function apply(ctx: Context, config: Config): void {
     isConcurrencySafe:()=>true,
     async execute(args) {
       const plan=oraclePlan(args.question,args.targetAt)
-      return JSON.stringify({...plan,uiBlock:oraclePlanVisual(plan)})
+      return JSON.stringify({...plan,publicationStage:'planning',nextAction:'oracle_research_forecast'})
     },
     presentCall:()=>({card:'generic',title:'ORÁCULO · plan de investigación científica',kind:'read' as const}),
   }))
@@ -101,7 +103,7 @@ export function apply(ctx: Context, config: Config): void {
   }))
   ctx.tools.register(defineTool({
     name:'oracle_research_forecast',
-    description:'Investiga una pregunta futura de CUALQUIER área usando búsquedas web reales de PHOENIX; devuelve fuentes, sus fechas, horizonte y tareas de comprobación. No inventa probabilidades.',
+    description:'Paso INTERMEDIO: descubre fuentes relevantes sin tarjeta UI. Incluso si retorna 0 fuentes, continúa buscando por APIs, portales oficiales o web_fetch. No concluyas solo con este paso; publica después de recuperar evidencia.',
     parameters:{
       question:{type:'string',required:true,description:'Evento futuro concreto, observable, con localidad cuando sea relevante.'},
       targetAt:{type:'string',required:true,description:'Fecha ISO futura con zona horaria, p.ej. 2026-12-01T00:00:00-04:00.'},
@@ -110,9 +112,47 @@ export function apply(ctx: Context, config: Config): void {
     isConcurrencySafe:()=>true,
     async execute(args,exec) {
       const result=await researchOracle(ctx.web,args.question,args.targetAt,exec.signal)
-      return JSON.stringify({...result,uiBlock:oracleVisual(result,args.question)})
+      return JSON.stringify({...result,publicationStage:'discovery',nextAction:result.sources.length?'oracle_publish_research o consulta de API especializada':'investigar en fuentes públicas alternativas y APIs, sin publicar tarjeta'})
     },
     presentCall:()=>({card:'generic',title:'ORÁCULO · investigar futuro',kind:'search' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'oracle_publish_research',
+    description:'Publica un INFORME FINAL solo tras recuperar por HTTPS las fuentes originales y comprobar su pertinencia. No muestra UI si las páginas no se pudieron recuperar. El contenido no equivale a probabilidad.',
+    parameters:{
+      question:{type:'string',required:true,description:'Pregunta investigada y medible.'},
+      targetAt:{type:'string',required:true,description:'Horizonte ISO futuro con zona horaria.'},
+      urlsJson:{type:'string',required:true,description:'JSON array de 1 a 4 URLs HTTPS relevantes previamente encontradas; solo páginas primarias reales, sin enlaces inventados.'},
+    },
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    async execute(args,exec){
+      if(args.urlsJson.length>8000)throw new Error('Demasiadas URLs para la verificación.')
+      const urls=JSON.parse(args.urlsJson) as unknown
+      if(!Array.isArray(urls)||!urls.every(x=>typeof x==='string'))throw new Error('urlsJson debe ser array de enlaces.')
+      const report=await publishOracleResearch(ctx.web,{question:args.question,targetAt:args.targetAt,urls},exec.signal)
+      if(report.status!=='researched')return JSON.stringify({...report,publicationStage:'not-ready'})
+      return JSON.stringify({...report,publicationStage:'published',uiBlock:oracleEvidenceReportVisual(report)})
+    },
+    presentCall:()=>({card:'generic',title:'ORÁCULO · contraste de documentos',kind:'fetch' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'oracle_weather_daily_forecast',
+    description:'Para temperatura máxima diaria, investiga la ciudad con geocodificación REAL y consulta la API diaria de Open-Meteo. Solo devuelve tarjeta tras recuperar el dato de la fecha. Nunca convierte el pronóstico puntual en porcentaje de ocurrencia.',
+    parameters:{
+      location:{type:'string',required:true,description:'Ciudad, opcional país. Ejemplo: Santo Domingo, República Dominicana.'},
+      date:{type:'string',required:true,description:'Fecha LOCAL requerida YYYY-MM-DD, no usar fin de día UTC.'},
+      countryCode:{type:'string',description:'País ISO-3166 de dos letras, p. ej. DO.'},
+      thresholdC:{type:'number',description:'Umbral de temperatura máxima en °C para evaluación estricta (superará implica >).'},
+    },
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    async execute(args,exec){
+      const data=await forecastOracleWeather(ctx.web,args,exec.signal)
+      if(data.status!=='forecast')return JSON.stringify({...data,publicationStage:'not-ready'})
+      return JSON.stringify({...data,publicationStage:'published',uiBlock:oracleWeatherVisual(data)})
+    },
+    presentCall:()=>({card:'generic',title:'ORÁCULO · obtener pronóstico meteorológico',kind:'fetch' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'oracle_forecast_public_csv',
