@@ -7,6 +7,10 @@ on:
       - 'scripts/phoenix-genesis-readiness-brief.mjs'
       - 'scripts/phoenix-genesis-readiness-cli.mjs'
       - 'scripts/phoenix-genesis-readiness-brief.test.mjs'
+      - 'scripts/phoenix-genesis-readiness-ui.js'
+      - 'scripts/phoenix-genesis-demo.mjs'
+      - 'scripts/phoenix-genesis-readiness-console-demo.test.mjs'
+      - 'docs/phoenix-genesis-demo.md'
       - '.github/workflows/phoenix-genesis-readiness-report.yml'
   push:
     branches: [main, stable]
@@ -14,6 +18,10 @@ on:
       - 'scripts/phoenix-genesis-readiness-brief.mjs'
       - 'scripts/phoenix-genesis-readiness-cli.mjs'
       - 'scripts/phoenix-genesis-readiness-brief.test.mjs'
+      - 'scripts/phoenix-genesis-readiness-ui.js'
+      - 'scripts/phoenix-genesis-demo.mjs'
+      - 'scripts/phoenix-genesis-readiness-console-demo.test.mjs'
+      - 'docs/phoenix-genesis-demo.md'
       - '.github/workflows/phoenix-genesis-readiness-report.yml'
   workflow_dispatch:
 
@@ -32,5 +40,7 @@ jobs:
           node-version: '24'
       - name: Verify executive report provenance, safety and offline export
         run: node --test scripts/phoenix-genesis-readiness-brief.test.mjs
+      - name: Exercise one-command synthetic hospital and authenticated HTML/JSON endpoints
+        run: node --test scripts/phoenix-genesis-readiness-console-demo.test.mjs
       - name: Validate report generator and CLI JavaScript
-        run: node --check scripts/phoenix-genesis-readiness-brief.mjs && node --check scripts/phoenix-genesis-readiness-cli.mjs
+        run: node --check scripts/phoenix-genesis-readiness-brief.mjs && node --check scripts/phoenix-genesis-readiness-cli.mjs && node --check scripts/phoenix-genesis-demo.mjs && node --check scripts/phoenix-genesis-readiness-ui.js
