@@ -79,6 +79,38 @@ function validMonth(v){
 }
 const utc=()=>new Date().toISOString()
 const fingerprint=v=>createHash('sha256').update(v).digest('hex')
+
+function canonicalSpec(raw){
+  const x=object(raw,'Organización')
+  return {
+    organizationId:x.organizationId,name:x.name,industry:x.industry,
+    adoptionMode:x.adoptionMode,
+    network:{
+      mode:x.network?.mode,
+      peers:(x.network?.peers??[]).map(p=>({
+        from:p.from,to:p.to,approved:p.approved,peerFingerprint:p.peerFingerprint
+      })),
+      partners:(x.network?.partners??[]).map(p=>({
+        partnerOrganizationId:p.partnerOrganizationId,
+        approved:p.approved,dataAgreementVerified:p.dataAgreementVerified,
+        peerFingerprint:p.peerFingerprint,capabilities:p.capabilities
+      }))
+    },
+    sites:(x.sites??[]).map(s=>({
+      siteId:s.siteId,name:s.name,workstations:s.workstations,
+      reusableWorkstations:s.reusableWorkstations,
+      roles:(s.roles??[]).map(v=>({
+        roleId:v.roleId,name:v.name,instances:v.instances,capabilities:v.capabilities
+      })),
+      software:(s.software??[]).map(v=>({systemId:v.systemId,name:v.name}))
+    })),
+    costs:{workstationUsd:x.costs?.workstationUsd},
+    inference:{strategies:(x.inference?.strategies??[]).map(v=>({
+      providerId:v.providerId,execution:v.execution,
+      monthlyBudgetUsd:v.monthlyBudgetUsd
+    }))}
+  }
+}
 export class GenesisWorkbench {
   constructor(dbPath){
     if(typeof dbPath!=='string'||!dbPath)throw Error('Ruta SQLite obligatoria')
@@ -93,10 +125,15 @@ export class GenesisWorkbench {
       'CREATE TABLE IF NOT EXISTS genesis_costs(org_id TEXT NOT NULL,item_id TEXT NOT NULL,label TEXT NOT NULL,category TEXT NOT NULL,qty REAL NOT NULL,unit_price REAL NOT NULL,currency TEXT NOT NULL,recurrence TEXT NOT NULL,evidence_json TEXT NOT NULL,PRIMARY KEY(org_id,item_id),FOREIGN KEY(org_id) REFERENCES organizations(org_id));',
       'CREATE TABLE IF NOT EXISTS genesis_goals(org_id TEXT NOT NULL,goal_id TEXT NOT NULL,title TEXT NOT NULL,metric_id TEXT NOT NULL,period TEXT NOT NULL,target REAL NOT NULL,owner_unit TEXT,PRIMARY KEY(org_id,goal_id,period),FOREIGN KEY(org_id) REFERENCES organizations(org_id));',
       'CREATE TABLE IF NOT EXISTS genesis_obligations(org_id TEXT NOT NULL,obligation_id TEXT NOT NULL,recipient TEXT NOT NULL,title TEXT NOT NULL,periodicity TEXT NOT NULL,template_version TEXT,state TEXT NOT NULL,PRIMARY KEY(org_id,obligation_id),FOREIGN KEY(org_id) REFERENCES organizations(org_id));',
+      'CREATE TABLE IF NOT EXISTS genesis_specs(org_id TEXT PRIMARY KEY,spec_json TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL,FOREIGN KEY(org_id) REFERENCES organizations(org_id));',
       'CREATE TABLE IF NOT EXISTS genesis_audit(seq INTEGER PRIMARY KEY AUTOINCREMENT,org_id TEXT NOT NULL,action TEXT NOT NULL,object_id TEXT NOT NULL,created_at TEXT NOT NULL,previous_hash TEXT NOT NULL,entry_hash TEXT NOT NULL);'
     ].join('\n'))
     this.q={
       orgs:this.db.prepare('SELECT org_id FROM organizations ORDER BY org_id'),
+      spec:this.db.prepare('SELECT spec_json,revision FROM genesis_specs WHERE org_id=?'),
+      saveSpec:this.db.prepare('INSERT INTO genesis_specs(org_id,spec_json,revision,updated_at) VALUES(?,?,1,?)'),
+      updateSpec:this.db.prepare('UPDATE genesis_specs SET spec_json=?,revision=revision+1,updated_at=? WHERE org_id=? AND revision=?'),
+      updateOrg:this.db.prepare('UPDATE organizations SET profile=? WHERE org_id=?'),
       facts:this.db.prepare('SELECT * FROM genesis_facts WHERE org_id=? ORDER BY category,fact_key'),
       fact:this.db.prepare('SELECT * FROM genesis_facts WHERE org_id=? AND category=? AND fact_key=?'),
       setFact:this.db.prepare('INSERT INTO genesis_facts(org_id,category,fact_key,value_json,status,evidence_json,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(org_id,category,fact_key) DO UPDATE SET value_json=excluded.value_json,status=excluded.status,evidence_json=excluded.evidence_json,updated_at=excluded.updated_at'),
@@ -118,9 +155,36 @@ export class GenesisWorkbench {
   }
   organizations(){return this.q.orgs.all().map(x=>x.org_id)}
   createOrganization(spec){
-    const plan=this.registry.registerOrganization(spec)
-    this._audit(plan.organization.organizationId,'organization-created',plan.organization.organizationId)
+    const canonical=canonicalSpec(spec)
+    const plan=this.registry.registerOrganization(canonical)
+    const org=plan.organization.organizationId
+    this.q.saveSpec.run(org,JSON.stringify(canonical),utc())
+    this._audit(org,'organization-created',org)
     return plan
+  }
+  addSite({organizationId,siteId,name,workstations=0,reusableWorkstations=0,
+    expectedRevision}){
+    const org=ident(organizationId,'Organización')
+    this._org(org)
+    const record=this.q.spec.get(org)
+    if(!record)throw Error('Esta institución requiere importar su configuración original antes de editar sedes')
+    if(record.revision!==expectedRevision)throw Error('Conflicto de versión de organización')
+    const spec=JSON.parse(record.spec_json)
+    spec.sites.push({siteId:ident(siteId,'Sede'),name:caption(name),
+      workstations:integer(workstations,'Estaciones'),
+      reusableWorkstations:integer(reusableWorkstations,'Estaciones reutilizables'),
+      roles:[],software:[]})
+    const next=planGenesisFabric(spec)
+    this.db.exec('BEGIN IMMEDIATE')
+    try{
+      this.q.updateOrg.run(JSON.stringify(next),org)
+      const changed=this.q.updateSpec.run(JSON.stringify(spec),utc(),org,expectedRevision)
+      if(changed.changes!==1)throw Error('Conflicto de versión de organización')
+      this._audit(org,'site-added',siteId)
+      this.db.exec('COMMIT')
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+    return {organizationId:org,siteId,revision:expectedRevision+1,
+      planSummary:next.summary,status:'planned-not-installed'}
   }
   _org(id){return this.registry.organization(ident(id,'Organización'))}
   _audit(org,action,key){
@@ -249,7 +313,8 @@ export class GenesisWorkbench {
     const missing=this.interview(id)
     const evidence=this.registry.snapshot(id).evidence
     return {
-      organization:plan.organization,planSummary:plan.summary,network:plan.network,
+      organization:plan.organization,planSummary:plan.summary,sites:plan.workstations,
+      configurationRevision:this.q.spec.get(id)?.revision??null,network:plan.network,
       inference:plan.inference,units,systems,costs,budgetByCurrencyAndPeriod:grouped,
       goals,obligations,facts,evidence,missingQuestions:missing,
       readiness:{
