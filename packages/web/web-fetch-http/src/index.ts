@@ -96,6 +96,7 @@ export function apply(ctx: Context, config: Config): void {
   assertPositiveFinite('maxBodyChars', resolved.maxBodyChars)
   assertTimeoutMs(resolved.timeoutMs)
   assertNonNegativeInteger('maxRedirects', resolved.maxRedirects)
+  const signer = signerFromEnvironment()
   const limits: HttpFetchLimits = {
     maxUrlLength: resolved.maxUrlLength,
     maxResponseBytes: resolved.maxResponseBytes,
@@ -105,7 +106,7 @@ export function apply(ctx: Context, config: Config): void {
     userAgent: resolved.userAgent,
     allowPrivateNetworks: resolved.allowPrivateNetworks,
     respectRobots: resolved.respectRobots,
-    ...(signerFromEnvironment() === undefined ? {} : { signer: signerFromEnvironment() }),
+    ...(signer === undefined ? {} : { signer }),
   }
   ctx.web.registerFetchProvider(new HttpFetchProvider(limits))
 }
