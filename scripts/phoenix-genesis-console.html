@@ -77,6 +77,14 @@
 <div><label>Personal (cantidad agregada)</label><input name="staffCount" type="number" min="0" value="0"></div>
 <div><label>PC en la unidad</label><input name="workstations" type="number" min="0" value="0"></div>
 </div><button type="submit">Guardar unidad</button></form></article>
+<article class="card"><h2>Añadir sede sin perder el inventario</h2>
+<form id="form-site"><div class="grid">
+<div><label>ID de nueva sede</label><input name="siteId" required placeholder="sede_norte"></div>
+<div><label>Nombre de la sede</label><input name="name" required placeholder="Sede Norte"></div>
+<div><label>Estaciones previstas</label><input name="workstations" type="number" min="0" value="0" required></div>
+<div><label>Estaciones reutilizables</label><input name="reusableWorkstations" type="number" min="0" value="0" required></div>
+</div><button type="submit">Añadir sede al plan</button></form>
+<p class="hint">La sede queda planificada, no conectada ni instalada.</p></article>
 <article class="card"><h2>Estructura declarada</h2><ul id="units-list"></ul></article>
 <article class="card"><h2>Estructura sugerida (no confirmada)</h2><p>Genesis sugiere áreas según el sector, pero no inventa que existan.</p><button id="get-suggestions">Proponer estructura</button><ul id="suggestions-list"></ul></article></section>
 
