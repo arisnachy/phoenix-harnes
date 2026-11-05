@@ -12,6 +12,7 @@ export interface ForecastFanChartProps {
   title: string
   unit: string
   points: ForecastFanPoint[]
+  axis?: 'date' | 'category'
 }
 const WIDTH = 800, HEIGHT = 300, LEFT = 64, RIGHT = 24, TOP = 22, BOTTOM = 50
 const show = (number: number): string => new Intl.NumberFormat('es-DO',{maximumFractionDigits:2}).format(number)
@@ -20,8 +21,9 @@ const shortDate = (s: string): string => {
   return Number.isNaN(d.valueOf()) ? s.slice(0,12) : d.toLocaleDateString('es-DO',{day:'2-digit',month:'short',timeZone:'UTC'})
 }
 /** Chart render is pure SVG; no external scripts, data fetching, or dependency on LLM-generated HTML. */
-export function ForecastFanChart({ title, unit, points }: ForecastFanChartProps) {
+export function ForecastFanChart({ title, unit, points, axis='date' }: ForecastFanChartProps) {
   const [table, setTable] = useState(false)
+  const axisLabel = (label:string) => axis==='category'?label.slice(0,22):shortDate(label)
   const [band, setBand] = useState(true)
   const chart = useMemo(() => {
     const all = points.flatMap(p=>[p.observed,p.forecast,p.lower,p.upper]).filter((n):n is number=>typeof n==='number')
@@ -53,7 +55,7 @@ export function ForecastFanChart({ title, unit, points }: ForecastFanChartProps)
     <div className={css.heading}>
       <div>
         <strong>{title}</strong>
-        <span>Datos observados · pronóstico · intervalo empírico</span>
+        <span>{axis==='category'?'Frecuencia pronosticada vs observada':'Datos observados · pronóstico · intervalo empírico'}</span>
       </div>
       <div className={css.controls} aria-label="Opciones de visualización">
         {chart.hasBand && <button type="button" aria-pressed={band} onClick={()=>setBand(v=>!v)}>
@@ -69,12 +71,12 @@ export function ForecastFanChart({ title, unit, points }: ForecastFanChartProps)
         <caption>Observaciones, estimaciones y límites de incertidumbre en {unit}</caption>
         <thead><tr><th scope="col">Fecha</th><th scope="col">Observado</th><th scope="col">Proyección</th><th scope="col">Inferior</th><th scope="col">Superior</th></tr></thead>
         <tbody>{points.map((p,i)=><tr key={i}>
-          <th scope="row">{shortDate(p.label)}</th>
+          <th scope="row">{axisLabel(p.label)}</th>
           {[p.observed,p.forecast,p.lower,p.upper].map((v,j)=><td key={j}>{v===undefined?'—':show(v)}</td>)}
         </tr>)}</tbody>
       </table>
     </div> : <>
-      <svg className={css.figure} viewBox={'0 0 '+WIDTH+' '+HEIGHT} role="img" aria-label={title+'. Serie observada, proyección e intervalo empírico.'}>
+      <svg className={css.figure} viewBox={'0 0 '+WIDTH+' '+HEIGHT} role="img" aria-label={title+'. {axis==='category'?'Relación de calibración': 'Serie observada, proyección e intervalo empírico.'}'}>
         {Array.from({length:5},(_,i)=>{
           const v=chart.max-(chart.max-chart.min)*i/4, y=chart.y(v)
           return <g key={i}><line x1={LEFT} y1={y} x2={WIDTH-RIGHT} y2={y} className={css.gridLine}/>
@@ -98,6 +100,6 @@ export function ForecastFanChart({ title, unit, points }: ForecastFanChartProps)
         {chart.hasBand&&band&&<span><i className={css.bandKey}/> Incertidumbre nominal 80 %</span>}
       </div>
     </>}
-    <figcaption>La banda representa errores históricos estimados; no garantiza cobertura futura. Unidad: {unit}.</figcaption>
+    <figcaption>{axis==='category'?'Las frecuencias son resultados históricos reportados, no verificación independiente.':'La banda representa errores históricos estimados; no garantiza cobertura futura.'} Unidad: {unit}.</figcaption>
   </figure>
 }
