@@ -109,7 +109,7 @@ test('agregar sedes mantiene activos y controla versiones de configuración',()=
       siteId:'other',name:'Otra',expectedRevision:1}),/Conflicto de versión/)
     const suggested=store.recommendations('hospital_ejemplo','north')
     assert.equal(suggested.status,'unverified-proposals-only')
-    assert.ok(suggested.units.some(u=>u.unitId==='pharmacy'))
+    assert.ok(suggested.units.some(u=>u.unitId==='farmacia'&&u.role==='pharmacy'))
     assert.equal(store.dashboard('hospital_ejemplo').units.length,1)
   }finally{store.close();rmSync(root,{recursive:true,force:true})}
 })
