@@ -23,7 +23,8 @@ const css=readFileSync(new URL('./phoenix-genesis-console.css',import.meta.url),
 const js=readFileSync(new URL('./phoenix-genesis-console-ui.js',import.meta.url),'utf8')
 const html=readFileSync(new URL('./phoenix-genesis-console.html',import.meta.url),'utf8')
 const censusJs=readFileSync(new URL('./phoenix-genesis-census-ui.js',import.meta.url),'utf8')
-const safePath=new Set(['/','/app.js','/census.js','/style.css','/healthz'])
+const readinessJs=readFileSync(new URL('./phoenix-genesis-readiness-ui.js',import.meta.url),'utf8')
+const safePath=new Set(['/','/app.js','/census.js','/readiness.js','/style.css','/healthz'])
 const send=(res,status,value,contentType='application/json; charset=utf-8')=>{
   res.writeHead(status,{
     'content-type':contentType,
@@ -65,6 +66,7 @@ export function createGenesisConsole({dbPath,adminToken,port=0,host='127.0.0.1'}
         if(path==='/')return send(res,200,html,'text/html; charset=utf-8')
         if(path==='/app.js')return send(res,200,js,'text/javascript; charset=utf-8')
         if(path==='/census.js')return send(res,200,censusJs,'text/javascript; charset=utf-8')
+        if(path==='/readiness.js')return send(res,200,readinessJs,'text/javascript; charset=utf-8')
         if(path==='/style.css')return send(res,200,css,'text/css; charset=utf-8')
         return send(res,200,{ok:true,service:'genesis-console'})
       }
