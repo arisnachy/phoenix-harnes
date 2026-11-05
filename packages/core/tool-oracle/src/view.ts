@@ -6,8 +6,11 @@ function clean(x:unknown,max=160):string { return String(x??'').replace(/[\x00-\
 function metric(label:string,value:string,detail?:string):Node{
   return {type:'metric',label,value,...detail?{detail}:{}}
 }
+function isOracleResearch(r:OracleResult|OracleResearch):r is OracleResearch {
+  return 'kind' in r && r.kind==='oracle_research'
+}
 export function oracleVisual(result:OracleResult|OracleResearch,question?:string):Record<string,unknown>{
-  const isResearch='kind' in result&&result.kind==='oracle_research'
+  const isResearch=isOracleResearch(result)
   const headline=clean(isResearch?result.question:question??'Proyección científica',120)
   const children:Node[]=[
     {type:'group',layout:'row',children:[
