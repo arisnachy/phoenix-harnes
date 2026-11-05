@@ -232,7 +232,7 @@ function verifiedOdds(fixture:MlbFixture,quotes:MarketOutcome[],now:number):Mark
       typeof q.selection==='string'&&q.selection.trim().length>0&&
       (q.point==null||(typeof q.point==='number'&&Number.isFinite(q.point)))&&
       typeof q.price==='number'&&q.price>1&&Number.isFinite(q.price)
-  }).slice(0,40)
+  })
 }
 function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
   const sections:MlbCase['uiBlock']['props']['sections']=[]
