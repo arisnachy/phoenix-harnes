@@ -612,10 +612,10 @@
 /* Genuine tool activity; remain indeterminate until the provider reports actual telemetry. */
 .imageGenerationCard {
   display: grid;
-  grid-template-columns: 116px minmax(0, 1fr);
-  gap: 14px;
-  width: min(100%, 480px);
-  padding: 13px;
+  grid-template-columns: 94px minmax(0, 1fr);
+  gap: 12px;
+  width: min(100%, 460px);
+  padding: 12px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 18px;
   background: var(--dsw-alias-bg-layer-1);
@@ -627,14 +627,14 @@
   isolation: isolate;
   display: grid;
   place-items: center;
-  min-height: 110px;
+  min-height: 100px;
   overflow: hidden;
   border-radius: 13px;
   background: linear-gradient(135deg, #fff4e5, #ffdab2 48%, #e8dffd);
   color: #d97736;
 }
 .imageGenerationPicture {
-  width: 96px;
+  width: 78px;
   max-width: 94%;
   opacity: .88;
   animation: image-generation-breathe 2.5s ease-in-out infinite;
@@ -711,7 +711,7 @@
   50% { opacity: 1; transform: scale(1.025); }
 }
 @media (max-width: 480px) {
-  .imageGenerationCard { grid-template-columns: 82px minmax(0, 1fr); gap: 10px; padding: 10px; }
+  .imageGenerationCard { grid-template-columns: 72px minmax(0, 1fr); gap: 10px; padding: 10px; }
   .imageGenerationPreview { min-height: 96px; }
   .imageGenerationHeader { flex-wrap: wrap; }
 }
