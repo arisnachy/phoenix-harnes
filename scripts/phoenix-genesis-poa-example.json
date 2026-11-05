@@ -1,0 +1,18 @@
+{
+  "organizationId": "hospital_ejemplo",
+  "period": "2026-11",
+  "goals": [
+    {
+      "goalId": "goal_equipment",
+      "metricId": "devices_available",
+      "title": "Equipos disponibles y verificados",
+      "target": 5
+    },
+    {
+      "goalId": "goal_staff",
+      "metricId": "staff_coverage",
+      "title": "Cobertura de turnos de personal",
+      "target": 95
+    }
+  ]
+}
