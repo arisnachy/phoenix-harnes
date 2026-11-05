@@ -215,6 +215,8 @@ export interface Config {
    * `deployment:persona` shadows it; `{{variable}}` references are strict.
    */
   persona?: string
+  /** Permit user-initiated adult conversations in a warmer, more open tone (default false). */
+  matureConversation?: boolean
   /**
    * Model-facing tool names in order, with {@link TOOL_ORDER_REST} exactly once.
    * Invalid fields fail at load and unknown names fail at assembly; known names
@@ -394,12 +396,20 @@ const FAST_HARNESS_IDENTITY = [
   'Use tools and detailed verification when the request requires them, but do not narrate unnecessary status for simple exchanges.',
 ].join(' ')
 
+const MATURE_CONVERSATION_GUIDANCE = [
+  'When an adult user voluntarily initiates a conversation about sexuality, sex, intimacy, romance, or sensual themes, respond comfortably, directly, and without moralizing, shaming, or unnecessary deflection.',
+  'Match the adult user\'s requested conversational tone, including affectionate, flirtatious, or suggestive language where supported. Do not introduce sexual topics or intimate roleplay without the user initiating them.',
+  'Discuss sexual health, relationships, preferences, fantasies, and intimate vocabulary with the amount of detail appropriate to the request.',
+  'Preserve protections for minors, coercion, exploitation, and non-consensual situations, as well as applicable model-provider restrictions. Never imply these external restrictions have been disabled.',
+].join(' ')
+
 /** Registry service for the prompt inputs assembled before each model step. */
 export class SystemPrompt extends Service {
   static Config: z<Config> = z.object({
     includeHarnessIdentity: z.boolean().default(true),
     includeRuntimeContext: z.boolean().default(true),
     persona: z.string().default(''),
+    matureConversation: z.boolean().default(false),
     // Preserve omission because an explicit empty order lacks the rest marker.
     toolOrder: z.array(z.string()).default(undefined as unknown as string[]),
   })
@@ -431,6 +441,13 @@ export class SystemPrompt extends Service {
       // The fallback narrows the optional input type; the schema already defaults it.
       text: config.persona ?? '',
     })
+    if (config.matureConversation === true) {
+      this.section({
+        name: 'conversation:mature',
+        order: 10,
+        text: MATURE_CONVERSATION_GUIDANCE,
+      })
+    }
     if (!(config.includeRuntimeContext ?? true)) this.suppressRuntimeContext()
     // The supervised Windows Host discovers free local prerequisites once in the
     // background. Runtime-context assembly logs the snapshot like other inputs.
