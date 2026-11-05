@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs'
 import { createHash,timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { GenesisWorkbench } from './phoenix-genesis-workbench.mjs'
+import { genesisCatalogSummary,searchGenesisCatalog } from './phoenix-genesis-healthcare-catalog.mjs'
 import { importGenesisManifest } from './phoenix-genesis-importer.mjs'
 import { previewGenesisLegacyCsv, importGenesisLegacyCsv } from './phoenix-genesis-legacy-csv.mjs'
 import { fabricRequest } from './phoenix-fabric-client.mjs'
@@ -115,6 +116,20 @@ export function createGenesisConsole({dbPath,adminToken,port=0,host='127.0.0.1'}
           ...result,oneTimeToken:true,
           warning:'Guarde el token en un gestor de secretos; esta operación NO instala el nodo.'
         })
+      }
+      if(path==='/v1/catalog/summary'&&req.method==='GET'){
+        const org=workbench.dashboard(target.searchParams.get('organizationId'))
+        return send(res,200,genesisCatalogSummary(org.organization.industry))
+      }
+      if(path==='/v1/catalog'&&req.method==='GET'){
+        const org=workbench.dashboard(target.searchParams.get('organizationId'))
+        const limit=Number(target.searchParams.get('limit')??40)
+        const offset=Number(target.searchParams.get('offset')??0)
+        return send(res,200,searchGenesisCatalog({
+          industry:org.organization.industry,
+          category:target.searchParams.get('category'),
+          query:target.searchParams.get('query')??'',limit,offset
+        }))
       }
       if(path==='/v1/organizations'&&req.method==='GET')
         return send(res,200,{organizations:workbench.organizations()})
