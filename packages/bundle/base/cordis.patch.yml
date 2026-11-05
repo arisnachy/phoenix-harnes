@@ -664,8 +664,8 @@
     - id: web
       name: '@phoenix-ai/dsh-web'
       config:
-        searchProvider: openrouter
-        searchFallbackProviders: [free-html]
+        searchProvider: free-html
+        searchFallbackProviders: []
         fetchProvider: http
 
     - id: web-search-openrouter
@@ -692,6 +692,8 @@
         timeoutMs: 15000
         maxRedirects: 2
         allowPrivateNetworks: false
+        respectRobots: true
+        userAgent: 'PHOENIX-ResearchBot/1.0 (+https://github.com/arisnachy/phoenix-harnes)'
 
     - id: tool-web
       name: '@phoenix-ai/dsh-tool-web'

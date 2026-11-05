@@ -18,7 +18,7 @@ export interface Config {
 }
 
 export const Config: z<Config> = z.object({
-  engines: z.array(z.union(['bing', 'duckduckgo'] as const)),
+  engines: z.array(z.union(['bing', 'duckduckgo', 'wikipedia'] as const)),
   timeoutMs: z.number().step(1).min(1),
 })
 
