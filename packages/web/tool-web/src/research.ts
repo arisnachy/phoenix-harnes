@@ -238,9 +238,16 @@ export function planResearch(question: string, requestedDomain?: string, batch =
     throw new ToolArgsError(['batch must be an integer from 0 to ' + String(totalBatches - 1)])
   }
   const candidates = hosts.slice(batch * 2, batch * 2 + 2)
+  const compact = conciseResearchQuery(q)
+  const broad = batch === 0 ? [q] : []
+  // General questions have no fixed institutional host: use two contrasting
+  // constrained reformulations rather than returning after one bad SERP.
+  if (domain === 'general' && batch === 0) {
+    broad.push(compact + ' official primary source', compact + ' recent evidence')
+  }
   return {
     question: q, domain, batch, totalBatches, candidates,
-    queries: [...(batch === 0 ? [q] : []), ...candidates.map(source => scopeQuery(q, source.host, domain))],
+    queries: [...new Set([...broad, ...candidates.map(source => scopeQuery(q, source.host, domain))])],
   }
 }
 

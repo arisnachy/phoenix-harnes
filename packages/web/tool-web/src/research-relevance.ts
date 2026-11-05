@@ -17,7 +17,11 @@ const STOP = new Set((
   + ' united republic republica dominicana dominican country pais world mundo global'
 ).split(/\s+/u))
 
-/** Stable normalization for accented Spanish, English, Roman numerals, and URL slugs. */
+/**
+ * Canonicalize search text without confusing Spanish and English accents.
+ * @param value - Untrusted search text.
+ * @returns Normalized comparison string.
+ */
 export function normalizeResearchText(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
     .replace(/%[0-9a-f]{2}/giu, match => {
@@ -26,19 +30,28 @@ export function normalizeResearchText(value: string): string {
     .replace(/[_./?&+=:-]/gu, ' ').replace(/[^a-z0-9\s]/gu, ' ').replace(/\s+/gu, ' ').trim()
 }
 
-/** Non-generic terms of a request; the topic is never replaced by a different subject. */
+/**
+ * Extract meaningful words while retaining the user's specific subject.
+ * @param question - Original question.
+ * @returns Deduplicated keywords suitable for a bounded query.
+ */
 export function researchFocus(question: string): string[] {
   const normalized = normalizeResearchText(question)
   const tokens = normalized.match(/[a-z0-9]{3,}/gu) ?? []
   return [...new Set(tokens.filter(token => !STOP.has(token) && !/^\d{4}$/u.test(token)))].slice(0, 12)
 }
 
-/** Concise search terms retain the requested topic rather than full chat phrasing. */
+/**
+ * Rewrite verbose questions to short, traceable topic-preserving search terms.
+ * @param question - Original question.
+ * @returns Concise query with named subject and geography retained.
+ */
 export function conciseResearchQuery(question: string): string {
   const terms = researchFocus(question)
   const years = [...question.matchAll(/\b(?:19|20)\d{2}\b/gu)].map(match => match[0]).slice(0, 2)
   const location = detectGeography(question)
-  const words = [...terms.slice(0, 7), ...years]
+  const named = /\b[A-ZÁÉÍÓÚ][\p{L}-]{2,}\s+(?:II|III|IV|VI|VII|VIII|IX|X)\b/u.exec(question)
+  const words = [...(named ? ['"' + named[0] + '"'] : []), ...terms.slice(0, 7), ...years]
   const result = [...new Set([...words, ...(location ? [location.preferred] : [])])].join(' ').trim()
   return result || question.trim().slice(0, 180)
 }
@@ -130,13 +143,23 @@ export function assessResearchRelevance(question: string, source: WebSearchSourc
   return { relevant: true, score: Math.min(100, supported * 12 + (named ? 20 : 0) + (geo ? 12 : 0) + (authority ? 10 : 0)), reason: 'matched' }
 }
 
-/** Check body text for common challenge responses before counting it as evidence. */
+/**
+ * Detect anti-bot challenge HTML rather than pretending it contains evidence.
+ * @param body - Upstream HTML or text.
+ * @returns True for known human-verification responses.
+ */
 export function isBlockedResearchBody(body: string): boolean {
   const start = body.slice(0, 8000)
   return /(?:<title[^>]*>\s*(?:just a moment|captcha|access denied)|cf-chl|g-recaptcha|hcaptcha|verify you are human|checking your browser|unusual traffic|robot verification)/iu.test(start)
 }
 
-/** Bounded readable excerpt from a fetched source, stripped of scripts and menus. */
+/**
+ * Extract a bounded legible prefix of already-retrieved source text.
+ * @param body - Provider-bounded original text.
+ * @param kind - Web fetch content type.
+ * @param maxChars - Maximum characters returned.
+ * @returns Plain text excerpt with script, navigation and markup removed.
+ */
 export function readableResearchExcerpt(body: string, kind: 'html' | 'text', maxChars = 1600): string {
   const bounded = body.slice(0, 48_000)
   const content = kind === 'html'
@@ -144,10 +167,12 @@ export function readableResearchExcerpt(body: string, kind: 'html' | 'text', max
       .replace(/<!--[^]*?-->/gu, ' ')
       .replace(/<[^>]*>/gu, ' ')
     : bounded
+  const namedEntities: Record<string, string> = {
+    '&nbsp;': ' ', '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"',
+  }
   return content.replace(/&#(\d+);/gu, (_full, n: string) => {
     const code = Number(n)
     return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ' '
-  }).replace(/&(?:nbsp|amp|lt|gt|quot);/giu, token => ({
-    '&nbsp;': ' ', '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"',
-  })[token.toLowerCase()] ?? ' ').replace(/\s+/gu, ' ').trim().slice(0, maxChars)
+  }).replace(/&(?:nbsp|amp|lt|gt|quot);/giu, token => namedEntities[token.toLowerCase()] ?? ' ')
+    .replace(/\s+/gu, ' ').trim().slice(0, maxChars)
 }

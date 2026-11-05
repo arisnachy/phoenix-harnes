@@ -19,7 +19,7 @@ describe('Phoenix universal research routing', () => {
     expect(plan.queries[1]).toContain('site:bancentral.gov.do')
     expect(plan.queries[2]).toContain('site:ecb.europa.eu')
     expect(RESEARCH_SOURCES.fx).toHaveLength(3)
-    expect(planResearch('extraordinary custom topic', 'general').queries).toHaveLength(1)
+    expect(planResearch('extraordinary custom topic', 'general').queries).toHaveLength(3)
   })
 
   it('rejects unregistered domains and unbounded question strings', () => {
