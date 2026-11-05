@@ -320,7 +320,7 @@ describe('chat tool activity grouping', () => {
     expect(status.textContent).toContain('image.progressStage')
     expect(status.textContent).toContain('image.progressElapsed')
     expect(status.textContent).not.toContain('text2im')
-    expect(status.textContent).not.toMatch(/\\d+%/u)
+    expect(status.textContent).not.toMatch(/\d+%/u)
     expect(status.getAttribute('data-progress-kind')).toBe('indeterminate')
     const progress = screen.getByRole('progressbar')
     expect(progress.hasAttribute('aria-valuenow')).toBe(false)
