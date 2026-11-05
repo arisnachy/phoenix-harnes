@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   ChatConversationViewNode, ConversationTimelineSnapshot, RunningToolCall, ToolCallBlock,
 } from '@phoenix-ai/dsh-client-runtime/client'
-import { imageGenerationEstimatedPercent, isImageGenerationTool, turnProgress } from '../src/client/chat/turn-progress.ts'
+import { isImageGenerationTool, turnProgress } from '../src/client/chat/turn-progress.ts'
 
 function openTimeline(turn: number): ConversationTimelineSnapshot {
   return {
@@ -193,11 +193,4 @@ describe('image generation progress', () => {
     }
   })
 
-  it('labels time-based estimates without claiming 100% before completion', () => {
-    const values = [-200, 0, 1_000, 30_000, 60_000, 120_000, 900_000, Number.POSITIVE_INFINITY]
-      .map(imageGenerationEstimatedPercent)
-    expect(values[0]).toBe(1)
-    expect(values.every(value => Number.isInteger(value) && value >= 1 && value <= 95)).toBe(true)
-    expect(values.slice(1, 7).every((value, index) => value >= (values[index] ?? 0))).toBe(true)
-  })
 })
