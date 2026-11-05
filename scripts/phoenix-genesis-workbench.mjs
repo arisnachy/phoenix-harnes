@@ -136,6 +136,7 @@ export class GenesisWorkbench {
     const org=ident(organizationId,'Organización');this._org(org)
     if(!CATEGORY.has(category))throw Error('Categoría desconocida')
     ident(key,'Clave')
+    if(SENSITIVE.test(category+'.'+key))throw Error('Campo contiene datos no admitidos')
     if(!['declared','verified','inferred'].includes(status))throw Error('Estado inválido')
     if(!['string','number','boolean'].includes(typeof value))
       throw Error('Respuesta debe ser dato simple sin información privada')
