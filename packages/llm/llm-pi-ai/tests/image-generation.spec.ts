@@ -263,6 +263,7 @@ describe('Codex image generation bridge', () => {
     expect(classifyCodexImageFailure('429 rate limit exceeded')).toBe('quota')
     expect(classifyCodexImageFailure('authentication required; sign in to ChatGPT')).toBe('auth')
     expect(classifyCodexImageFailure('image_generation is disabled in this build')).toBe('capability')
+    expect(classifyCodexImageFailure('built-in image tool is not exposed in this session')).toBe('capability')
     expect(classifyCodexImageFailure('codex: command failed')).toBe('runtime')
   })
 
