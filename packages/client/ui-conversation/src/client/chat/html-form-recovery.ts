@@ -51,7 +51,10 @@ function bmiFallback(doc: Document, title: string): SmartFormSpec | undefined {
   if (!/\b(?:imc|bmi|[ií]ndice\s+de\s+masa\s+corporal)\b/iu.test(title + ' ' + (doc.body.textContent ?? '').slice(0, 2500))) {
     return undefined
   }
-  const inputs = Array.from(doc.querySelectorAll<HTMLInputElement>('input[type="number"]'))
+  const inputs = Array.from(doc.querySelectorAll<HTMLInputElement>('input'))
+    .filter(input => ['number','text','tel'].includes(input.type)
+      && (input.type === 'number' || input.inputMode === 'decimal'
+        || input.inputMode === 'numeric' || /^\\d+(?:[.,]\\d+)?$/u.test(input.value.trim())))
   // Do not silently reinterpret multi-field clinical instruments as BMI.
   if (inputs.length !== 2) return undefined
   const weight = inputs.find(input => /\b(?:peso|weight)\b/iu.test(labelFor(doc, input)))
