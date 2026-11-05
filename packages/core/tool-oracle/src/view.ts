@@ -30,9 +30,13 @@ export function oracleVisual(result:OracleResult|OracleResearch,question?:string
     if(result.sources.length){
       children.push({type:'table',columns:['Fuente','Referencia'],rows:result.sources.slice(0,8).map(s=>[clean(s.title,140),clean(s.url,300)])})
     }
-    if(result.offTopicDropped > 0 || result.failedQueries.length > 0)children.push({
+    if((result.offTopicDropped ?? 0) > 0 || (result.failedQueries?.length ?? 0) > 0)children.push({
       type:'alert',status:'warning',
-      message:clean(`Descartadas por irrelevancia o bloqueo: ${result.offTopicDropped}. Consultas fallidas: ${result.failedQueries.length}.`,300),
+      message:clean(`Descartadas por irrelevancia o bloqueo: ${result.offTopicDropped ?? 0}. Consultas fallidas: ${result.failedQueries?.length ?? 0}.`,300),
+    })
+    if(result.sourceDirectories?.length)children.push({
+      type:'table',columns:['Directorio oficial o académico (sin verificar)', 'URL'],
+      rows:result.sourceDirectories.map(s=>[clean(s.name,150),clean(s.url,330)]),
     })
     if(result.candidateDatasets.length>0)children.push(
       metric('Series CSV descubiertas',String(result.candidateDatasets.length)),

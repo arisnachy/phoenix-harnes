@@ -33,6 +33,8 @@ export interface OracleResearch {
   offTopicDropped: number
   /** Queries that failed at the configured provider, not invented empty results. */
   failedQueries: string[]
+  /** Curated public entrypoints for human/authorized browser recovery, not retrieved facts. */
+  sourceDirectories: Array<{ name: string; url: string }>
   reason?: string
 }
 
@@ -130,6 +132,19 @@ function relevance(question: string, item: WebSearchSource): number {
     || /\.gov(?:\.do)?$/iu.test(parsed.hostname) ? 8 : 0
   return Math.max(1, score) + authority
 }
+function researchDirectories(question: string): Array<{ name: string; url: string }> {
+  if (/\bdengue\b/iu.test(question) && isDominicanRepublic(question)) {
+    return [
+      { name: 'DIGEPI · Boletines epidemiológicos', url: 'https://www.epidemiologia.gob.do/documentos-epidemiologicos/boletines-epidemiologicos/' },
+      { name: 'OPS · Dengue', url: 'https://www.paho.org/es/temas/dengue' },
+      { name: 'OpenDengue · Descargas y definiciones', url: 'https://opendengue.org/data.html' },
+    ]
+  }
+  if (/\bartemis\b/iu.test(question)) return [
+    { name: 'NASA · Programa Artemis', url: 'https://www.nasa.gov/humans-in-space/artemis/' },
+  ]
+  return []
+}
 function uniqueUrl(raw: string): string | undefined {
   try {
     const url = new URL(raw)
@@ -163,10 +178,12 @@ export async function researchOracle(
   const seen = new Set<string>()
   const failedQueries: string[] = []
   let offTopicDropped = 0
+  let consecutiveFailures = 0
   for (const query of searches) {
     if (signal?.aborted) throw signal.reason ?? new Error('Investigación cancelada.')
     try {
       const result = await web.search({ query, maxResults: 8 }, signal)
+      consecutiveFailures = 0
       for (const item of result.sources as WebSearchSource[]) {
         const url = uniqueUrl(item.url)
         if (url === undefined || seen.has(url)) continue
@@ -183,6 +200,10 @@ export async function researchOracle(
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error
       failedQueries.push(query)
+      consecutiveFailures++
+      // A free provider may spend multiple seconds per challenged engine. Do not
+      // repeatedly probe it when two consecutive queries have already failed.
+      if (consecutiveFailures >= 2 && candidates.length === 0) break
     }
   }
   const sources = candidates.sort((a, b) => b.score - a.score).map(x => x.source).slice(0, 12)
@@ -191,6 +212,7 @@ export async function researchOracle(
   const dated = sources.filter(x => x.publishedAt && Number.isFinite(Date.parse(x.publishedAt)))
   const older = dated.filter(x => Date.parse(x.publishedAt!) < Date.now() - 365 * 86400_000)
   const candidateDatasets = sources.filter(s => /\.csv(?:\?|$)/iu.test(s.url)).map(s => s.url).slice(0, 8)
+  const sourceDirectories = researchDirectories(question)
   const riskFlags = [
     'Resultados pertinentes filtrados; su contenido y las cifras aún deben verificarse en el documento original.',
     ...(offTopicDropped ? [`${offTopicDropped} resultados fuera de tema, país o bloqueados fueron descartados.`] : []),
@@ -204,12 +226,14 @@ export async function researchOracle(
     kind: 'oracle_research', status: sufficient ? 'researched' : 'insufficient',
     question: question.trim(), targetAt: target, category: topic, plan,
     riskFlags, researchedAt: new Date().toISOString(), searches, sources, candidateDatasets,
-    evidenceStatus: 'search_results_unverified', offTopicDropped, failedQueries,
+    evidenceStatus: 'search_results_unverified', offTopicDropped, failedQueries, sourceDirectories,
     nextStep: sufficient
       ? 'Abrir, leer y contrastar cada fuente primaria antes de estimar. Para CSV con fechas y valores semanales, usar oracle_forecast_public_csv; no extrapolar únicamente desde dos titulares.'
-      : 'Reintentar con fuentes oficiales o APIs abiertas. No convertir páginas irrelevantes, CAPTCHA ni titulares en observaciones o porcentajes.',
+      : sourceDirectories.length
+        ? 'Abrir los directorios oficiales conocidos y reunir datos semanales verificables. No usar estos enlaces como cifras observadas hasta leer sus documentos.'
+        : 'Reintentar con fuentes oficiales o APIs abiertas. No convertir páginas irrelevantes, CAPTCHA ni titulares en observaciones o porcentajes.',
     probabilityPercent: null,
-    ...sufficient ? {} : { reason: failedQueries.length === searches.length
+    ...sufficient ? {} : { reason: failedQueries.length > 0 && candidates.length === 0
       ? 'Los proveedores de búsqueda gratuita no respondieron; usar conectores y enlaces oficiales alternativos.'
       : offTopicDropped ? 'Se rechazaron resultados sin relación verificable con la pregunta.'
         : 'No hay al menos dos dominios fuente relevantes e independientes.' },
