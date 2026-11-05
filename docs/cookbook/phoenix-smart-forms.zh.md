@@ -2,7 +2,8 @@
 
 [English](phoenix-smart-forms.md) | 中文
 
-原生生成式 UI 支持 smart_form（计算器、评估与问卷）和 smart_form_library（可重用定义）。模型在标记为 generative-ui 的 Markdown 代码块中输出声明式 JSON。计算无需执行任意 JavaScript，也无需网络请求。
+原生生成式 UI 支持 smart_form（计算器、评估与问卷）和 smart_form_library（可重用定义）。模型在标记为 generative-ui 的 Markdown
+代码块中输出声明式 JSON。计算无需执行任意 JavaScript，也无需网络请求。
 
 ## 最小 JSON 定义
 
@@ -33,7 +34,8 @@
 - 逻辑：eq、neq、gt、gte、lt、lte、and、or、not、if。
 - 日历天数：days_between、add_days。
 
-表达式通过包含 op 和 args 的嵌套 JSON 对象，以及字段引用、常量或 today 定义。无效的数学输入返回明确错误，不会输出 Infinity 或 NaN。解析限制：最多 80 个字段、18 个输出、14 层嵌套、350 个表达式节点，并严格限制允许的属性。
+表达式通过包含 op 和 args 的嵌套 JSON 对象，以及字段引用、常量或 today 定义。无效的数学输入返回明确错误，不会输出 Infinity 或 NaN。解析限制：最多 80
+个字段、18 个输出、14 层嵌套、350 个表达式节点，并严格限制允许的属性。
 
 ## 资料库、历史版本与索引
 
@@ -48,6 +50,8 @@
 
 ## 持久化、隐私与未来集成
 
-定义、目录标签、版本快照以及选择保存的答案仅通过 localStorage 保存在当前浏览器配置文件中。这不是操作系统目录、安全的临床记录、加密存储或跨设备同步。请勿存储患者身份标识或敏感医疗数据。
+定义、目录标签、版本快照以及选择保存的答案仅通过 localStorage
+保存在当前浏览器配置文件中。这不是操作系统目录、安全的临床记录、加密存储或跨设备同步。请勿存储患者身份标识或敏感医疗数据。
 
-未来 Host 端资料库应提供受授权的 list/search/get/create/revise/run 工具，具备审计、访问控制、加密及可选的 FHIR Questionnaire 和 QuestionnaireResponse 交换。临床使用任何量表前都必须验证来源、版本、许可、适用人群和阈值。
+未来 Host 端资料库应提供受授权的 list/search/get/create/revise/run 工具，具备审计、访问控制、加密及可选的 FHIR Questionnaire 和
+QuestionnaireResponse 交换。临床使用任何量表前都必须验证来源、版本、许可、适用人群和阈值。
