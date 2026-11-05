@@ -6,6 +6,8 @@
 import type { Context } from '@phoenix-ai/cordis'
 import { defineTool, ToolArgsError } from '@phoenix-ai/dsh-tools'
 import type { WebSearchResult, WebSearchSource } from '@phoenix-ai/dsh-web'
+import { assessResearchRelevance, conciseResearchQuery } from './research-relevance.ts'
+import { investigateResearch } from './research-investigate.ts'
 
 /** Candidate research host metadata. A listing does not grant network or API execution authority. */
 export interface ResearchSource {
@@ -167,6 +169,8 @@ const DOMAIN_PATTERNS: readonly (readonly [string, RegExp])[] = [
 
 /** Bounded federated query plan, independent of the active web-search provider. */
 export interface ResearchPlan {
+  /** Unmodified question: the relevance gate checks the user's actual target. */
+  readonly question: string
   readonly domain: string
   readonly queries: string[]
   readonly candidates: ResearchSource[]
@@ -182,7 +186,7 @@ export interface ResearchPlan {
  */
 function scopeQuery(question: string, host: string, domain: string): string {
   if (domain !== 'public_health' || !/rep[uú]blica dominicana|dominican republic|\bRD\b/iu.test(question)) {
-    return question + ' site:' + host
+    return conciseResearchQuery(question) + ' site:' + host
   }
   const years = [...question.matchAll(/\b(?:19|20)\d{2}\b/gu)].map(match => match[0]).slice(0, 2).join(' ')
   if (/\bdengue\b/iu.test(question)) {
@@ -234,9 +238,16 @@ export function planResearch(question: string, requestedDomain?: string, batch =
     throw new ToolArgsError(['batch must be an integer from 0 to ' + String(totalBatches - 1)])
   }
   const candidates = hosts.slice(batch * 2, batch * 2 + 2)
+  const compact = conciseResearchQuery(q)
+  const broad = batch === 0 ? [q] : []
+  // General questions have no fixed institutional host: use two contrasting
+  // constrained reformulations rather than returning after one bad SERP.
+  if (domain === 'general' && batch === 0) {
+    broad.push(compact + ' official primary source', compact + ' recent evidence')
+  }
   return {
-    domain, batch, totalBatches, candidates,
-    queries: [...(batch === 0 ? [q] : []), ...candidates.map(source => scopeQuery(q, source.host, domain))],
+    question: q, domain, batch, totalBatches, candidates,
+    queries: [...new Set([...broad, ...candidates.map(source => scopeQuery(q, source.host, domain))])],
   }
 }
 
@@ -306,32 +317,26 @@ export async function executeResearch(
       + 'No tratar CAPTCHA como datos ni inventar referencias.',
   }
   const seen = new Set<string>()
-  const sources: WebSearchSource[] = []
-  let dropped = false
+  const ranked: Array<{ source: WebSearchSource; score: number }> = []
   let offTopicDropped = 0
-  const countryFocus = plan.domain === 'public_health'
-    && plan.queries.some(query => /rep[uú]blica dominicana|dominican republic|\bRD\b/iu.test(query))
-  const isRelevant = (source: WebSearchSource, url: string): boolean => {
-    if (plan.domain !== 'public_health') return true
-    const evidence = (source.title ?? '') + ' ' + (source.snippet ?? '') + ' ' + url
-    const topic = /dengue|epidemiolog|vigilancia|surveillance|arbovir|salud|health|primary care|atenci[oó]n primaria|primer nivel|cobertura|coverage|mortalidad/iu.test(evidence)
-      || /mortality|maternal|infant|\buhc\b|aseguramiento|afiliaci[oó]n|sanitari|healthcare/iu.test(evidence)
-    const country = !countryFocus || /rep[uú]blica dominicana|dominican republic|\bDOM\b|\.gob\.do/iu.test(evidence)
-    return topic && country
-  }
   const maxRanks = Math.max(0, ...successful.map(result => result.sources.length))
-  outer: for (let rank = 0; rank < maxRanks; rank++) {
+  // Interleave before ranking so a busy provider cannot overwhelm all other
+  // institutions. Titles and snippets remain untrusted discovery metadata.
+  for (let rank = 0; rank < maxRanks; rank++) {
     for (const result of successful) {
       const source = result.sources[rank]
-      if (source === undefined) continue
+      if (!source) continue
       const url = canonicalUrl(source.url)
-      if (url === undefined || seen.has(url)) continue
+      if (!url || seen.has(url)) continue
       seen.add(url)
-      if (!isRelevant(source, url)) { offTopicDropped++; continue }
-      if (sources.length >= maxResults) { dropped = true; break outer }
-      sources.push({ ...source, url })
+      const screened = assessResearchRelevance(plan.question, { ...source, url }, plan.domain)
+      if (!screened.relevant) { offTopicDropped++; continue }
+      ranked.push({ source: { ...source, url }, score: screened.score })
     }
   }
+  ranked.sort((a, b) => b.score - a.score)
+  const sources = ranked.slice(0, maxResults).map(row => row.source)
+  const dropped = ranked.length > sources.length
   return {
     domain: plan.domain,
     queries: plan.queries,
@@ -342,10 +347,12 @@ export async function executeResearch(
     sources,
     failedQueries,
     truncated: dropped || successful.some(result => result.truncated),
-    status: failedQueries.length > 0 ? 'partial' : sources.length > 0 ? 'ok' : 'empty',
-    note: 'Search hits are leads, not verified evidence. Inspect filtered titles against original documents, '
-      + 'continue remaining source batches and topic-specific searches. Report missing years and blocked '
-      + 'providers explicitly; no official API is silently installed.',
+    status: sources.length === 0 ? 'empty' : failedQueries.length > 0 ? 'partial' : 'ok',
+    note: sources.length === 0
+      ? 'Ningún resultado supera el filtro de tema, entidad y geografía. Reformular la consulta sin cambiar el objetivo; no citar resultados descartados.'
+      : 'Resultados ordenados por pertinencia textual, aún NO contrastados con contenido original. Abrir y leer fuentes antes de citar datos; '
+        + 'usar research_investigate para lectura supervisada y verificación del tema. '
+        + 'Los resultados de búsqueda son referencias, no afirmaciones científicamente autenticadas.',
   }
 }
 
@@ -369,8 +376,28 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
   ctx.systemPrompt.section({
     name: 'tool:research_search',
     order: 112,
-    text: 'RESEARCH PROTOCOL: for theses and evidence-intensive reports, plan subtopics and institutional source batches. Use research_search with domain=public_health for health systems/APS; repeat batch=0,1,... until totalBatches is covered. Use research_scholar in several thematic queries for scientific literature. A subagent cap such as 15 references is PER BATCH, never a limit for the thesis. Accumulate and deduplicate by DOI/PMID/URL, inspect primary documents using web_fetch where available, use research_health_series for official World Bank annual data and preserve null years; cross-check official datasets and units/years, keep evidence gaps and inaccessible providers explicit. If results are off topic, shorten queries and switch primary host. Call phoenix_research_plan with input:{intent,level,citation_style,document_type,target_pages} and retry with minimum valid fields if cover validation fails. Do not claim real-time or exhaustive coverage from snippets or fill gaps with invented data.',
+    text: 'RESEARCH PROTOCOL: keep exact subject, entities, geography and dates from the user goal. For serious investigations prefer research_investigate: plan concise broad and authoritative queries, rank topical results, READ original allowed pages, compare independently sourced evidence and explicitly note unavailable/blocked pages. A search hit or two domains are not proof. If off topic, reformulate terms but never silently change the subject. For theses research_search batches and research_scholar are additional discovery tools; a batch cap is not a total bibliography cap. Preserve provenance, missing data, contradictory reports and publication dates. Only use clinical patient tools when patient records are actually requested. Use research_health_series for World Bank annual indicators; never fabricate future projections or evidence, bypass CAPTCHA, or present an unverified snippet as a conclusion.',
   })
+  ctx.tools.register(defineTool({
+    name: 'research_investigate',
+    description: 'Investigación universal integral: planifica consultas concisas, busca fuentes gratuitas o conectadas, filtra tema/geografía, abre documentos con web_fetch seguro, detecta CAPTCHA y devuelve fragmentos trazables. Profundidad standard o deep; no inventa conclusiones ni omite errores.',
+    parameters: {
+      question: { type: 'string', required: true, description: 'Pregunta EXACTA del usuario; preservar nombres, países, fechas y restricciones.' },
+      domain: { type: 'string', description: 'Opcional: sports, public_health, medicine, science, fx, economics, software, etc.' },
+      depth: { type: 'string', description: 'standard (rápida) o deep (más cobertura y lectura), ambas con presupuestos limitados.' },
+    },
+    output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
+    timeoutMs: Math.max(timeoutMs, 65_000),
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      const result = await investigateResearch(ctx, {
+        question: args.question,
+        ...(args.domain === undefined ? {} : { domain: args.domain }),
+        depth: args.depth === 'deep' ? 'deep' : 'standard',
+      }, exec.signal, planResearch, executeResearch)
+      return JSON.stringify(result)
+    },
+  }))
   ctx.tools.register(defineTool({
     name: 'research_sources',
     description: 'List candidate authoritative source hosts by research domain. This is metadata, not an API connection, credential or live availability claim.',

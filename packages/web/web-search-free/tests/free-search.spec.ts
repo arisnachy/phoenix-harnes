@@ -86,3 +86,33 @@ describe('free-search defensive recovery from real anti-bot responses', () => {
     expect(result.sources[0]?.snippet).toBe('Información sobre dengue')
   })
 })
+
+describe('keyless DuckDuckGo URL normalization', () => {
+  it('turns protocol-relative outbound links into the real source URL', async () => {
+    const target = 'https://www.nasa.gov/artemis-ii/'
+    const html = `<a class="result__a" href="//duckduckgo.com/l/?uddg=${encodeURIComponent(target)}">Artemis II NASA</a>`
+    const fetcher = vi.fn(async () => new Response(html, { status: 200 }))
+    const provider = new FreeSearchProvider({ engines: ['duckduckgo'], fetcher })
+    const answer = await provider.search({ query: 'Artemis II mission' })
+    expect(answer.sources).toHaveLength(1)
+    expect(answer.sources[0]?.url).toBe(target)
+  })
+
+  it('drops dangerous redirect protocols and does not cite search redirect URLs', async () => {
+    const html = '<a class="result__a" href="//duckduckgo.com/l/?uddg=javascript%3Aalert(1)">Injected result</a>'
+    const provider = new FreeSearchProvider({
+      engines: ['duckduckgo'],
+      fetcher: async () => new Response(html, { status: 200 }),
+    })
+    await expect(provider.search({ query: 'javascript' })).rejects.toThrow(/no free search engine returned results/)
+  })
+})
+
+describe('free search markup resilience', () => {
+  it('recovers a genuine Bing article when Bing omits paragraph snippets', async () => {
+    const html = '<li class="b_algo"><h2><a href="https://example.com/economy">Official economy figures</a></h2><div>new layout</div></li>'
+    const provider = new FreeSearchProvider({ engines: ['bing'], fetcher: async () => new Response(html, { status: 200 }) })
+    const value = await provider.search({ query: 'official economy figures' })
+    expect(value.sources).toEqual([{ url: 'https://example.com/economy', title: 'Official economy figures' }])
+  })
+})
