@@ -37,7 +37,7 @@ export function oraclePlan(question:string,targetAt?:string,available?:'series'|
   const domain=DOMAIN_RULES.find(rule=>rule.pattern.test(q))?.name??'general'
   let horizon:string|undefined
   if(targetAt!==undefined){
-    if(typeof targetAt!=='string'||!/^\\d{4}-\\d{2}-\\d{2}T/.test(targetAt)||!/(?:Z|[+-]\\d{2}:\\d{2})$/.test(targetAt)
+    if(typeof targetAt!=='string'||!/^\d{4}-\d{2}-\d{2}T/.test(targetAt)||!/(?:Z|[+-]\d{2}:\d{2})$/.test(targetAt)
       ||!Number.isFinite(Date.parse(targetAt))||Date.parse(targetAt)<=Date.now())throw new Error('Fecha de resolución futura ISO con zona obligatoria.')
     horizon=new Date(targetAt).toISOString()
   }
@@ -58,9 +58,9 @@ export function oraclePlan(question:string,targetAt?:string,available?:'series'|
     'Una fuente recuperada no equivale a autenticación ni independencia.',
     'Escenarios hipotéticos no son sucesos garantizados.',
     'Congelar la predicción antes de conocer el desenlace.']
-  const missing=[...horizon?[]:['Horizonte concreto y fecha límite de verificación'],
-    ...available?[]:['Conjunto de datos histórico o modelo disciplinar comprobable']]
-  return {question:q,...horizon?{targetAt:horizon}:{},domain,route,
+  const missing=[...(horizon?[]:['Horizonte concreto y fecha límite de verificación']),
+    ...(available?[]:['Conjunto de datos histórico o modelo disciplinar comprobable'])]
+  return {question:q,...(horizon?{targetAt:horizon}:{}),domain,route,
     measurableEvent:q,evidenceNeeded,safeguards,missing,status:horizon?'ready-to-investigate':'needs-horizon'}
 }
 export interface OracleSeries {
@@ -97,7 +97,7 @@ export function fuseSeries(raw:OracleSeries[],relativeTolerance=0.05):OracleFusi
     if(!Array.isArray(row.points)||row.points.length<20||row.points.length>5000)throw new Error('Se necesitan 20 a 5000 observaciones por fuente.')
     const points=new Map<string,number>()
     for(const p of row.points){
-      if(typeof p.at!=='string'||!/^\\d{4}-\\d{2}-\\d{2}T/.test(p.at)||!Number.isFinite(Date.parse(p.at))
+      if(typeof p.at!=='string'||!/^\d{4}-\d{2}-\d{2}T/.test(p.at)||!Number.isFinite(Date.parse(p.at))
         ||!Number.isFinite(p.value))throw new Error('Fecha o valor inválido.')
       const t=new Date(p.at).toISOString()
       if(points.has(t))throw new Error('Observación temporal repetida.')
