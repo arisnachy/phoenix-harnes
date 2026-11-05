@@ -121,13 +121,15 @@ export function fuseSeries(raw:OracleSeries[],relativeTolerance=0.05):OracleFusi
   const insufficient:OracleFusion={
     status:'insufficient',observations,sources:[...sources],unit:[...units][0]!,stepHours:[...steps][0]!,
     conflictCount:conflicts,evidenceStatus:'user_supplied_unverified',
-    reason:observations.length<20?'Hay menos de 20 fechas con datos concordantes. No corresponde una fusión predictiva.':undefined,
+    ...(observations.length<20?{reason:'Hay menos de 20 fechas con datos concordantes. No corresponde una fusión predictiva.'}:{}),
   }
   if(observations.length<20)return insufficient
   const step=[...steps][0]!*3600_000
   if(observations.slice(1).some((p,i)=>Math.abs(Date.parse(p.at)-Date.parse(observations[i]!.at)-step)>1000))
     return {...insufficient,reason:'Las observaciones concordantes tienen huecos temporales: no utilizar como serie regular.'}
-  return {...insufficient,status:'fused',reason:undefined}
+  const {reason:_reason,...valid}=insufficient
+  void _reason
+  return {...valid,status:'fused'}
 }
 export interface OracleCalibration {
   count:number
