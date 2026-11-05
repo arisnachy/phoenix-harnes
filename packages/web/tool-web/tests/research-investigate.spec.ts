@@ -146,3 +146,107 @@ describe('multiple-entity precision in research', () => {
     }).relevant).toBe(true)
   })
 })
+
+describe('adaptive evidence acquisition rather than fixed top-three fetches', () => {
+  const quote1 = 'Artemis II NASA launch planning identifies the crew mission and scheduled review process. '.repeat(6)
+  const quote2 = 'Artemis II mission launch dates are described alongside astronaut assignments and safety review. '.repeat(6)
+
+  it('replaces blocked sources without revisiting the blocked host and retrieves two independent documents', async () => {
+    const first = { url: 'https://www.nasa.gov/artemis-ii', title: 'NASA Artemis II official launch' }
+    const blockedMirror = { url: 'https://www.nasa.gov/artemis-ii/update', title: 'NASA Artemis II official update' }
+    const second = { url: 'https://www.esa.int/artemis-ii', title: 'ESA Artemis II international mission' }
+    const third = { url: 'https://science.nature.com/artemis-ii', title: 'Artemis II launch planning report' }
+    const calls: string[] = []
+    const { ctx } = webFixture([first, blockedMirror, second, third], async url => {
+      calls.push(url)
+      if (url.includes('nasa.gov')) return { url, statusCode: 403,
+        body: { kind: 'text', content: 'Forbidden' }, truncated: false }
+      return { url, statusCode: 200, body: { kind: 'text',
+        content: url.includes('esa.int') ? quote1 : quote2 }, truncated: false }
+    })
+    const report = await investigateResearch(ctx, {
+      question: 'Artemis II launch status 2026',
+    }, signal, planResearch, executeResearch)
+    expect(report.readRelevantCount).toBe(2)
+    expect(report.independentReadCount).toBe(2)
+    expect(report.challengesCount).toBe(1)
+    expect(calls.filter(url => url.includes('nasa.gov'))).toHaveLength(1)
+    expect(report.sources.filter(row => row.status === 'read_relevant').every(row =>
+      row.quote !== undefined && row.excerpt?.includes(row.quote) === true
+        && row.contentSha256?.length === 64)).toBe(true)
+  })
+
+  it('does not count word-for-word mirrored pages as two independent corroborating sources', async () => {
+    const text = 'Artemis II mission launch reviews are planned and documented by a public source. '.repeat(6)
+    const { ctx } = webFixture([
+      { url: 'https://alpha.example/artemis-ii', title: 'Artemis II source one' },
+      { url: 'https://beta.example/artemis-ii', title: 'Artemis II source two' },
+    ], async url => ({ url, statusCode: 200, body: { kind: 'text', content: text }, truncated: false }))
+    const report = await investigateResearch(ctx, { question: 'Artemis II launch plans' },
+      signal, planResearch, executeResearch)
+    expect(report.readRelevantCount).toBe(2)
+    expect(report.independentReadCount).toBe(1)
+    expect(report.duplicateContentCount).toBe(1)
+    expect(report.limitations.some(line => line.includes('independientes'))).toBe(true)
+  })
+
+  it('widens institutional batches after blocked first-batch documents rather than ending at search results', async () => {
+    const question = 'Dengue República Dominicana 2026'
+    const search = vi.fn(async ({ query }: { query: string }) => ({
+      truncated: false,
+      sources: query.includes('crossref.org')
+        ? [{ url: 'https://crossref.org/dengue-rd', title: 'Dengue en República Dominicana 2026' }]
+        : [{ url: 'https://epidemiologia.gob.do/dengue-rd', title: 'Dengue República Dominicana 2026' }],
+    }))
+    const fetch = vi.fn(async ({ url }: { url: string }) => ({
+      url, statusCode: url.includes('epidemiologia') ? 403 : 200,
+      body: { kind: 'text' as const,
+        content: 'Dengue en República Dominicana: reportes semanales de vigilancia epidemiológica. '.repeat(5) },
+      truncated: false,
+    }))
+    const ctx = { web: { search, fetch } } as unknown as Pick<Context,'web'>
+    const report = await investigateResearch(ctx, { question, depth: 'deep', domain: 'science' },
+      signal, planResearch, executeResearch)
+    expect(report.batchesSearched).toBeGreaterThan(1)
+    expect(report.readRelevantCount).toBeGreaterThan(0)
+  })
+})
+
+describe('independence and excerpt accuracy', () => {
+  it('does not treat two institutional subdomains as independent owners', async () => {
+    const fetcher = vi.fn(async ({ url }: { url: string }) => ({
+      url, statusCode: 200, body: { kind: 'text' as const,
+        content: url.includes('/report')
+          ? 'Artemis II mission technical launch schedule and crew assignment report. '.repeat(7)
+          : 'Artemis II astronauts are preparing for their launch date. '.repeat(8) },
+      truncated: false,
+    }))
+    const ctx = { web: {
+      search: async () => ({ truncated: false, sources: [
+        { url: 'https://www.nasa.gov/artemis-ii/report', title: 'Artemis II NASA mission report' },
+        { url: 'https://science.nasa.gov/artemis-ii', title: 'Artemis II NASA science update' },
+      ] }),
+      fetch: fetcher,
+    } } as unknown as Pick<Context,'web'>
+    const result = await investigateResearch(ctx, { question: 'Artemis II launch schedule 2026' },
+      signal, planResearch, executeResearch)
+    expect(result.readRelevantCount).toBe(2)
+    expect(result.independentReadCount).toBe(1)
+    expect(result.duplicateContentCount).toBe(0)
+    expect(result.limitations.some(line => line.includes('independientes'))).toBe(true)
+  })
+
+  it('selects a quote from the most relevant body window, not an irrelevant navigation prefix', async () => {
+    const body = 'Artemis II navigation menu. ' + 'Menu pages and site information. '.repeat(75)
+      + 'Artemis II mission launch schedule 2026 includes astronaut details and flight timeline. '.repeat(5)
+    const { ctx } = webFixture([
+      { url: 'https://www.nasa.gov/artemis-ii', title: 'NASA Artemis II schedule' },
+    ], async url => ({ url, statusCode: 200, body: { kind: 'text', content: body }, truncated: false }))
+    const result = await investigateResearch(ctx, { question: 'Artemis II mission launch schedule 2026' },
+      signal, planResearch, executeResearch)
+    const quote = result.sources[0]?.quote ?? ''
+    expect(result.readRelevantCount).toBe(1)
+    expect(quote).toContain('launch schedule')
+    expect(body).toContain(quote)
+  })
+})
