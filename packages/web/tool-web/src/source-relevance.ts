@@ -27,12 +27,20 @@ const ALIASES: Readonly<Record<string, readonly string[]>> = {
   aps:['atencion primaria','primary care'],
 }
 
-/** Normalized lexical form used only to screen search relevance, never authenticate truth. */
+/**
+ * Normalize text for topic screening without claiming semantic or factual verification.
+ * @param value - Original snippet, title or question.
+ * @returns Accent-normalized, lowercase searchable text.
+ */
 export function normalizeResearchText(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
 }
 
-/** Retain distinguishing subject terms while dropping conversational filler. */
+/**
+ * Extract distinguishing terms from a user question, dropping conversation filler.
+ * @param question - User's full question.
+ * @returns Bounded list of significant lexical tokens.
+ */
 export function researchFocus(question: string): string[] {
   const text = normalizeResearchText(question)
   const raw = text.match(/[\p{L}\p{N}]{3,}/gu) ?? []
@@ -52,12 +60,21 @@ function sourceCountryMatches(question: string, meta: string, hostname: string):
     || /(?:^|\.)[\w-]+\.gob\.do$/u.test(hostname)
     || /(?:^|\.)gob\.do$/u.test(hostname)
 }
-/** Detect a bot challenge returned under an otherwise successful HTTP response. */
+/**
+ * Identify challenge documents even when served with HTTP 200.
+ * @param text - Bounded page text or HTML.
+ * @returns Whether the page matches known challenge markers.
+ */
 export function challengeText(text: string): boolean {
   return /(?:<title[^>]*>\s*(?:just a moment|captcha|access denied|verify you)|cf-chl-|g-recaptcha|hcaptcha|data-sitekey=|verify you are human|unusual traffic)/iu
     .test(text.slice(0, 12000))
 }
-/** Normalize public HTTPS URLs without credentials or tracking fragments. */
+/**
+ * Normalize only publicly addressable HTTPS URLs without credentials or fragments.
+ * The actual network fetch separately enforces SSRF and DNS policies.
+ * @param raw - Candidate result URL.
+ * @returns Sanitized URL or undefined for an unsupported request.
+ */
 export function safePublicUrl(raw: string): string | undefined {
   try {
     const u = new URL(raw)

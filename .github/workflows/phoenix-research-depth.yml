@@ -6,6 +6,7 @@ on:
     paths:
       - 'packages/web/tool-web/src/research.ts'
       - 'packages/web/tool-web/src/investigate.ts'
+      - 'packages/web/tool-web/src/source-relevance.ts'
       - 'packages/web/tool-web/tests/investigate.spec.ts'
       - 'packages/web/tool-web/src/scholarly.ts'
       - 'packages/web/tool-web/src/health-series.ts'
