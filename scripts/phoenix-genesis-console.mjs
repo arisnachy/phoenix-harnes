@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs'
 import { createHash,timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { GenesisWorkbench } from './phoenix-genesis-workbench.mjs'
+import { importGenesisManifest } from './phoenix-genesis-importer.mjs'
 
 const authDigest=secret=>createHash('sha256').update(secret).digest()
 const valid=secret=>typeof secret==='string'&&secret.length>=32&&secret.length<=1024
@@ -91,6 +92,7 @@ export function createGenesisConsole({dbPath,adminToken,port=0,host='127.0.0.1'}
         '/v1/goals':x=>workbench.goal(x),
         '/v1/obligations':x=>workbench.obligation(x),
         '/v1/evidence':x=>workbench.registry.registerEvidence(x),
+        '/v1/import':x=>importGenesisManifest(workbench,x),
         '/v1/indicators':x=>workbench.registry.recordIndicator(x)
       }
       if(req.method==='POST'&&operations[path])
