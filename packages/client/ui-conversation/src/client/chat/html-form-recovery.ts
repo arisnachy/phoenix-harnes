@@ -86,9 +86,10 @@ function bmiFallback(doc: Document, title: string): SmartFormSpec | undefined {
  * are NEVER guessed. Unsupported nonfunctional calculators are flagged.
  * @param html - The HTML artifact source.
  * @param title - Human-readable artifact title.
+ * @param scriptAllowed - Whether the artifact has explicit script execution permission.
  * @returns Native form, nonfunctional-form warning, or unchanged HTML route.
  */
-export function recoverHtmlForm(html: string, title: string): HtmlFormRecovery {
+export function recoverHtmlForm(html: string, title: string, scriptAllowed = true): HtmlFormRecovery {
   if (typeof DOMParser === 'undefined' || html.length > BODY_LIMIT
     || !/<(?:form|input|select|textarea|fieldset)\b/iu.test(html)) return { kind: 'html' }
   const doc = new DOMParser().parseFromString(html, 'text/html')
@@ -101,7 +102,7 @@ export function recoverHtmlForm(html: string, title: string): HtmlFormRecovery {
       if (native !== null) return { kind: 'native', spec: native }
     } catch { /* malformed model output is not executable code */ }
   }
-  if (authoredBehavior(doc, html)) return { kind: 'html' }
+  if (scriptAllowed && authoredBehavior(doc, html)) return { kind: 'html' }
   const builtin = bmiFallback(doc, title)
   if (builtin !== undefined) return { kind: 'native', spec: builtin }
   const labels = title + ' ' + (doc.body.textContent ?? '').slice(0, 3500)
