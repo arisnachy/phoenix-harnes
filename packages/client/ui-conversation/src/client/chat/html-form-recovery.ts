@@ -29,8 +29,9 @@ function labelFor(doc: Document, input: HTMLInputElement): string {
   // two unrelated controls to be mistaken for the same semantic input.
   const wrapper = parent?.querySelectorAll('input').length === 1
     ? parent.textContent?.slice(0, 160) ?? '' : ''
-  const nextUnit = input.nextElementSibling?.tagName.toLowerCase() === 'span'
-    ? input.nextElementSibling.textContent?.slice(0, 40) ?? '' : ''
+  const sibling = input.nextElementSibling
+  const nextUnit = sibling?.tagName.toLowerCase() === 'span'
+    ? sibling.textContent?.slice(0, 40) ?? '' : ''
   return [input.id, input.name, input.getAttribute('aria-label'), own, linked, wrapper, nextUnit]
     .join(' ').toLocaleLowerCase('es')
 }
