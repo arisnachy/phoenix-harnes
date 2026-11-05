@@ -10,6 +10,8 @@ import { SceneMap, parseSceneMapSpec } from './SceneMap.tsx'
 import { DiagramSurface, parseDiagramSpec } from './DiagramSurface.tsx'
 import { auditGameHtml, readGameManifest } from './game-studio-quality.ts'
 import { hasExecutableHtmlBehavior, hasExternalImageReferences, inlineBundledImages } from './html-preview-assets.ts'
+import { recoverHtmlForm } from './html-form-recovery.ts'
+import { SmartFormWorkspace } from './SmartFormSurface.tsx'
 import {
   libraryGameId, listLibraryGames, openGameInWindow, removeLibraryGame, saveLibraryGame,
   type LibraryGame,
@@ -313,8 +315,22 @@ function sandboxDocument(html: string, executable: boolean, gameDiagnostics = fa
   const runtimeErrors = gameDiagnostics
     ? '<script>(function(){function alertGame(reason){if(!document.body)return;var p=document.createElement("p");p.setAttribute("role","alert");p.setAttribute("data-phoenix-game-error","true");p.style.cssText="padding:12px;background:#461e26;color:#fff;border:2px solid #eb7688;border-radius:8px";p.textContent="Game Studio: error al ejecutar el juego ("+String(reason).slice(0,180)+"). Revisa el script, los recursos y la consola. El manifiesto JSON no causa por sí solo este error.";document.body.insertBefore(p,document.body.firstChild)}window.addEventListener("error",function(e){alertGame(e.message||"JavaScript error")});window.addEventListener("unhandledrejection",function(e){alertGame(e.reason&&e.reason.message||"unhandled rejection")})})()<\/script>'
     : ''
+  // Failed calculation handlers must not silently masquerade as a working app.
+  // Run this only inside script-capable, isolated HTML forms (not static docs).
+  const formRuntimeErrors = themedForm && executable && !gameDiagnostics
+    ? '<script>(function(){var shown=0;function report(reason){if(shown++>2)return;'
+      + 'function display(){if(!document.body)return;var notice=document.createElement("p");'
+      + 'notice.setAttribute("role","alert");notice.setAttribute("data-phoenix-form-error","true");'
+      + 'notice.style.cssText="padding:10px;border:1px solid #bd6439;border-radius:10px";'
+      + 'notice.textContent="No se pudo ejecutar el cálculo: "+String(reason).slice(0,180);'
+      + 'document.body.prepend(notice)}'
+      + 'if(document.body)display();else document.addEventListener("DOMContentLoaded",display,{once:true})}'
+      + 'window.addEventListener("error",function(e){report(e.message||"JavaScript error")});'
+      + 'window.addEventListener("unhandledrejection",function(e){'
+      + 'report(e.reason&&e.reason.message||"unhandled rejection")})})()<\/script>'
+    : ''
   const heightReporter = '<script>(function(){function height(){var root=document.documentElement,body=document.body;return Math.max(root?root.scrollHeight:0,root?root.offsetHeight:0,body?body.scrollHeight:0,body?body.offsetHeight:0,1)}function report(){parent.postMessage({type:\'phoenix-artifact-height\',height:height()},\'*\')}if(window.ResizeObserver){var ro=new ResizeObserver(report);ro.observe(document.documentElement);if(document.body)ro.observe(document.body)}new MutationObserver(report).observe(document.documentElement,{subtree:true,childList:true,attributes:true,characterData:true});window.addEventListener(\'load\',report);window.addEventListener(\'resize\',report);report()})()<\/script>'
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;padding:0;min-height:0;height:auto;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style>${themeStyle}</head><body>${dependencyNotice}${runtimeErrors}${body}${themeBridge}${heightReporter}</body></html>`
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${formRuntimeErrors}${head}<style>html,body{margin:0;padding:0;min-height:0;height:auto;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style>${themeStyle}</head><body>${dependencyNotice}${runtimeErrors}${body}${themeBridge}${heightReporter}</body></html>`
 }
 
 interface MiniAppProps {
@@ -777,6 +793,15 @@ export function HardnessArtifactBody({ mime, data, expanded, title, executable =
       const pageUrl = safeWebPreviewUrl(data)
       if (mime === 'application/vnd.phoenix.game+html') return <GameStudioPreview html={data} title={title} />
       if (pageUrl !== undefined && !data.includes('<')) return <WebPagePreview url={pageUrl} title={title} />
+      const recovered = recoverHtmlForm(data, title)
+      if (recovered.kind === 'native') return <SmartFormWorkspace initial={recovered.spec} />
+      if (recovered.kind === 'inert') return <div className={styles.stack}>
+        <p className={styles.note} role="alert">
+          Esta interfaz HTML contiene un formulario de cálculo sin fórmula ejecutable.
+          PHOENIX no inventará un resultado: solicita una versión smart_form con campos y outputs calculados.
+        </p>
+        <MiniApp html={data} title={title} executable={false} />
+      </div>
       return <MiniApp html={data} title={title} executable={executable} />
     }
     if (mime.startsWith('image/')) {
