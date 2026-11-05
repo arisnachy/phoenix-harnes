@@ -48,6 +48,8 @@ export function createGenesisConsole({dbPath,adminToken,port=0,host='127.0.0.1'}
     try{
       if(!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress))
         return problem(res,403,'Solo acceso local')
+      const expectedHost=(host==='::1'?'[::1]':host)+':'+server.address().port
+      if(req.headers.host!==expectedHost)return problem(res,403,'Host no autorizado')
       const target=new URL(req.url??'/', 'http://genesis.invalid')
       const path=target.pathname
       if(safePath.has(path)&&req.method==='GET'){
