@@ -159,8 +159,10 @@ export function createFabricBroker({dbPath,adminToken,host='127.0.0.1',port=0,tl
       const refs=JSON.stringify(ids(x.references||[],'Referencias',32))
       const purpose=string(x.purpose,'Propósito')
       if(typeof x.requiresApproval!=='boolean')throw bad(400,'Requiere política explícita')
-      if(['payload','patient','patients','medicalRecord','credentials','secret','record']
-        .some(k=>Object.hasOwn(x,k)))throw bad(400,'Solo referencias, no registros sensibles')
+      const allowed=new Set(['targetNodeId','capability','idempotencyKey',
+        'purpose','references','requiresApproval'])
+      if(Object.keys(x).some(key=>!allowed.has(key)))
+        throw bad(400,'Solo campos declarados: referencias, nunca registros sensibles')
       const node=q.node.get(target)
       if(!node||node.state!=='active'||node.org!==sender.org||
         !JSON.parse(node.capabilities).includes(cap)||
@@ -205,7 +207,8 @@ export function createFabricBroker({dbPath,adminToken,host='127.0.0.1',port=0,tl
       const ref=x.resultRef==null?null:ident(x.resultRef,'Resultado')
       if(item.state!=='leased'||item.lease!==x.leaseToken||item.lease_until<=Date.now())
         throw bad(409,'Lease vencida o inválida')
-      q.finish.run(x.outcome,ref,time(),item.task_id,x.leaseToken)
+      const changed=q.finish.run(x.outcome,ref,time(),item.task_id,x.leaseToken)
+      if(changed.changes!==1)throw bad(409,'Lease modificada')
       return send(res,200,{task:view(q.task.get(item.task_id))})
     }
     const task=/^\/v1\/tasks\/([0-9a-f-]{36})$/u.exec(p)
