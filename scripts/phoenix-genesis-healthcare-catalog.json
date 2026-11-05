@@ -1,0 +1,4603 @@
+{
+  "schemaVersion": "1.0",
+  "domain": "healthcare",
+  "status": "templates-only",
+  "source": {
+    "title": "PHOENIX Genesis + Fabric v4 — Matrices institucionales",
+    "file": "PHOENIX_Genesis_Fabric_Matrices_v4.xlsx",
+    "caution": "Plantillas, no activos reales, obligaciones confirmadas ni datos clínicos"
+  },
+  "catalogs": {
+    "areas": {
+      "fields": [
+        "Macrodominio",
+        "Área/función",
+        "Datos a recolectar",
+        "Entregables e informes",
+        "Modalidad local",
+        "Responsable",
+        "Estado"
+      ],
+      "rows": [
+        [
+          "Gobierno y estrategia",
+          "Consejo y dirección general",
+          "Actas, resoluciones, misión, objetivos, riesgos y decisiones",
+          "PEI, POA, memoria, cuadro integral de mando",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gobierno y estrategia",
+          "Planificación y desarrollo",
+          "Diagnósticos, línea base, iniciativas, metas, responsables y evidencia",
+          "PEI, POA, evaluación trimestral, cartera de proyectos",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gobierno y estrategia",
+          "Estadística y gestión de información",
+          "Catálogo, diccionario, fuentes, cortes, versiones y validaciones",
+          "Tableros, RIESS/producción, calidad de datos",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gobierno y estrategia",
+          "Control interno y auditoría",
+          "Hallazgos, controles, acciones correctivas, evidencias y riesgos",
+          "Matriz NOBACI, auditoría, seguimiento de observaciones",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gobierno y estrategia",
+          "Asesoría jurídica y cumplimiento",
+          "Contratos, licencias, reclamaciones, normas y litigios",
+          "Mapa de obligaciones, vencimientos y exposición",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gobierno y estrategia",
+          "Calidad y seguridad del paciente",
+          "Incidentes, notificaciones, auditorías, infecciones y acciones",
+          "Informes de calidad, mejora, seguridad y acreditación",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gobierno y estrategia",
+          "Gestión de riesgos y continuidad",
+          "Amenazas, impactos, RTO/RPO, simulacros y contingencias",
+          "Planes de continuidad, seguridad hospitalaria",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gobierno y estrategia",
+          "Comunicación y atención a comunidad",
+          "Solicitudes, campañas, alianzas, comunicaciones públicas",
+          "Comunicación, educación y rendición institucional",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gobierno y estrategia",
+          "Investigación y docencia",
+          "Proyectos, protocolos, residentes, investigaciones y avales",
+          "Comités científicos, docencia, ética, indicadores académicos",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Admisión, registro y archivo clínico",
+          "Identidad, visitas, seguros, consentimientos, MPI, duplicados",
+          "Registro, acceso, denominadores asistenciales",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Consulta externa y teleconsulta",
+          "Citas, asistencia, diagnósticos, órdenes, referencias, tiempos",
+          "Producción, ausentismo, productividad, continuidad",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Emergencias y triaje",
+          "Llegada, clasificación, primera valoración, destino, reingresos",
+          "Demoras, permanencia, severidad, referencia",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Hospitalización y gestión de camas",
+          "Ingreso, censos, traslados, egresos, camas habilitadas, estancias",
+          "Ocupación, estancia, rotación, reingresos",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Enfermería y gestión de cuidados",
+          "Turnos, asignación, signos, administración real, incidentes",
+          "Cumplimiento de cuidados, cargas de trabajo",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "UCI adulto y pediátrica",
+          "Censo, gravedad, dispositivos, ventilación, eventos",
+          "Ocupación UCI, resultados ajustados, uso de equipos",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Quirófanos y anestesia",
+          "Agenda, procedimientos, tiempos, cancelaciones, seguridad",
+          "Utilización, cancelación, infecciones quirúrgicas",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Obstetricia, partos y puerperio",
+          "Embarazo, partos, cesáreas, complicaciones, egresos",
+          "Indicadores maternos, partos y cesáreas",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Neonatología y pediatría",
+          "Nacimientos, prematuridad, cuidados, unidades neonatales",
+          "Indicadores neonatales y pediátricos",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Cardiología y diagnóstico funcional",
+          "Pruebas, procedimientos, citas, resultados",
+          "Volumen, oportunidad, utilización",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Nefrología y diálisis",
+          "Sesiones, accesos, incidentes, consumo y mantenimiento",
+          "Actividad, disponibilidad y seguridad",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Oncología y hospital de día",
+          "Protocolos firmados, ciclos, agenda, reacciones, fármacos",
+          "Producción y seguimiento oncológico",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Salud mental y psicología",
+          "Consultas, planes, derivaciones, seguridad, continuidad",
+          "Acceso, seguimiento y calidad",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Rehabilitación y fisioterapia",
+          "Planes de rehabilitación, sesiones, objetivos funcionales",
+          "Producción, resultados funcionales",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Nutrición clínica y dietética",
+          "Órdenes dietéticas, evaluación, restricciones y alergias",
+          "Dietas seguras, cobertura de valoración",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Odontología",
+          "Consultas, procedimientos, odontograma y materiales",
+          "Producción, insumos y oportunidad",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Trabajo social y experiencia del paciente",
+          "Necesidades sociales, egreso complejo, quejas y satisfacción",
+          "Resolución, barreras de acceso y continuidad",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Gestión asistencial",
+          "Ambulancias y referencia/contrarreferencia",
+          "Traslados, ambulancias, tiempos, motivos, aceptación",
+          "Oportunidad y resolutividad de referencias",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Diagnóstico y terapia",
+          "Laboratorio clínico",
+          "Órdenes, muestras, resultados, críticos, reactivos y tiempos",
+          "TAT, resultados críticos, rechazos",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Diagnóstico y terapia",
+          "Anatomía patológica",
+          "Biopsias, muestras, trazabilidad, informes",
+          "Tiempo diagnóstico y calidad",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Diagnóstico y terapia",
+          "Banco de sangre y transfusión",
+          "Donantes, componentes, compatibilidad, reacciones",
+          "Trazabilidad y hemovigilancia",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Diagnóstico y terapia",
+          "Imágenes / RIS-PACS",
+          "Solicitudes, estudios, informes, dosis, equipos",
+          "TAT, utilización, rechazo y disponibilidad",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Diagnóstico y terapia",
+          "Endoscopia y procedimientos",
+          "Programación, sedación, re-procesamiento, eventos",
+          "Volumen, cancelaciones, eventos",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Diagnóstico y terapia",
+          "Esterilización central (CEyE/CSSD)",
+          "Ciclos, lotes, instrumental, pruebas, distribución",
+          "Trazabilidad, esterilización y faltantes",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Diagnóstico y terapia",
+          "Farmacia clínica y dispensación",
+          "Recetas, validación, reserva, dispensación, lote y caducidad",
+          "Disponibilidad, consumo, devoluciones, seguridad",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Diagnóstico y terapia",
+          "Central de mezclas y preparación",
+          "Preparaciones, lotes, condiciones, controles",
+          "Conformidad y trazabilidad",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Administración y finanzas",
+          "Presupuesto y tesorería",
+          "Apropiación, compromiso, devengado, pagos, ingresos y bancos",
+          "Ejecución físico-financiera, caja, desvíos",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Administración y finanzas",
+          "Contabilidad y costos",
+          "Asientos, centros de costo, activos, depreciación, costos por proceso",
+          "Estados, costeo por unidad, conciliación",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Administración y finanzas",
+          "Facturación, ARS y seguros",
+          "Prestación, tarifa, reclamación, glosas, cobros, antigüedad",
+          "Facturado, recaudado, glosas, cartera",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Administración y finanzas",
+          "Compras y contrataciones",
+          "Requisiciones, procesos, adjudicaciones, órdenes y contratos",
+          "PAC/PACC, cumplimiento, proveedores",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Administración y finanzas",
+          "Almacenes e inventarios generales",
+          "Productos, movimientos, ubicaciones, lotes, stock y roturas",
+          "Inventario, consumo, mermas, quiebres",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Administración y finanzas",
+          "Patrimonio y activos fijos",
+          "Activos, ubicación, responsable, mantenimientos, bajas",
+          "Inventario patrimonial, reposición",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Administración y finanzas",
+          "Recursos humanos y nómina",
+          "Plantilla, plazas, perfiles, turnos, permisos, pago y capacitación",
+          "Dotación, ausentismo, productividad, brechas",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Administración y finanzas",
+          "Seguridad ocupacional",
+          "Accidentes laborales, exposición, EPP, exámenes y acciones",
+          "Incidentes laborales, prevención",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Administración y finanzas",
+          "Servicio al usuario, caja y OAI",
+          "Quejas, solicitudes, tiempos, cobros, comunicaciones",
+          "Satisfacción, transparencia y respuesta",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Ingeniería clínica y biomédica",
+          "Equipos, calibración, mantenimiento, fallos y repuestos",
+          "Disponibilidad, MTTR, cumplimiento preventivo",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Mantenimiento de infraestructura",
+          "Órdenes, inspecciones, edificios, riesgos, contratos",
+          "Backlog, tiempos de reparación y costo",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Energía, climatización y gases médicos",
+          "Consumo, capacidad, alarmas, cilindros, UPS, combustible",
+          "Continuidad, consumos y fallos críticos",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Agua, saneamiento y ambiente",
+          "Calidad de agua, disponibilidad, limpieza, control ambiental",
+          "Seguridad ambiental y continuidad",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Tecnologías de la información y ciberseguridad",
+          "Dispositivos, cuentas, backups, red, incidentes y SLA",
+          "Disponibilidad, vulnerabilidades y recuperación",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Limpieza, hotelería y habitaciones",
+          "Tareas de limpieza, habitaciones listas, insumos y calidad",
+          "Tiempo de preparación y cumplimiento",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Lavandería, ropería y textiles",
+          "Ropa sucia/limpia, lotes, pérdidas, ciclo y compras",
+          "Kg por egreso, suministro y pérdidas",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Cocina, comedor y alimentación",
+          "Dietas prescritas, menú, producción, entrega, inocuidad",
+          "Raciones, puntualidad, desperdicio y costo",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Residuos biosanitarios y generales",
+          "Clasificación, peso, retiro, transporte y destino",
+          "Gestión de residuos, seguridad y costo",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Seguridad física y control de accesos",
+          "Accesos, incidentes, visitantes y rondas",
+          "Seguridad, incidentes y tiempos de respuesta",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Parqueos, movilidad y transporte",
+          "Plazas, ocupación, vehículos, ambulancias, combustible",
+          "Disponibilidad de estacionamiento y movilidad",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Recepción, orientación y señalización",
+          "Flujo peatonal, espera, accesibilidad, señalización",
+          "Orientación, tiempos y barreras",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Morgue y gestión post mortem",
+          "Custodia, notificación, documentos, traslados",
+          "Trazabilidad y oportunidad",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Comunicaciones, telefonía y call center",
+          "Llamadas, derivaciones, fallas, solicitudes y mensajería",
+          "Abandono, atención y disponibilidad",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Archivo general, mensajería y correspondencia",
+          "Documentos, expedientes, custodia, plazos y valijas",
+          "Trazabilidad y cumplimiento",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ],
+        [
+          "Operaciones e infraestructura",
+          "Jardinería, exteriores y plagas",
+          "Inspecciones, intervenciones, proveedores y áreas",
+          "Mantenimiento y eventos ambientales",
+          "Por confirmar",
+          "Pendiente",
+          "No evaluado"
+        ]
+      ]
+    },
+    "indicators": {
+      "fields": [
+        "Código",
+        "Dominio",
+        "Indicador",
+        "Fórmula/definición",
+        "Unidad",
+        "Periodicidad",
+        "Sistema fuente",
+        "Responsable",
+        "Precaución de calidad"
+      ],
+      "rows": [
+        [
+          "KPI-001",
+          "Acceso y flujo",
+          "Atenciones de consulta",
+          "Conteo de encuentros de consulta completados",
+          "número",
+          "Diaria/Mensual",
+          "EHR/agenda",
+          "Consulta",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-002",
+          "Acceso y flujo",
+          "Porcentaje de ausentismo de citas",
+          "Citas no asistidas / citas programadas elegibles × 100",
+          "%",
+          "Mensual",
+          "Agenda",
+          "Consulta",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-003",
+          "Acceso y flujo",
+          "Tiempo de espera en consulta",
+          "Mediana de hora de inicio asistencial − hora de llegada",
+          "minutos",
+          "Semanal",
+          "Agenda/EHR",
+          "Consulta",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-004",
+          "Acceso y flujo",
+          "Productividad por consulta",
+          "Consultas completadas / horas profesionales efectivas",
+          "consultas/hora",
+          "Mensual",
+          "Agenda/RRHH",
+          "Consulta",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-005",
+          "Acceso y flujo",
+          "Citas con seguimiento oportuno",
+          "Seguimientos dentro de plazo / seguimientos requeridos × 100",
+          "%",
+          "Mensual",
+          "Agenda/EHR",
+          "Consulta",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-006",
+          "Acceso y flujo",
+          "Tasa de referencia completada",
+          "Referencias con atención confirmada / referencias emitidas × 100",
+          "%",
+          "Mensual",
+          "Referencias",
+          "Consulta",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-007",
+          "Acceso y flujo",
+          "Atenciones de urgencias",
+          "Conteo de encuentros urgentes",
+          "número",
+          "Diaria/Mensual",
+          "EHR/Urgencias",
+          "Urgencias",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-008",
+          "Acceso y flujo",
+          "Tiempo triaje a primer contacto",
+          "Mediana de primer contacto − clasificación triaje",
+          "minutos",
+          "Diaria",
+          "Urgencias",
+          "Urgencias",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-009",
+          "Acceso y flujo",
+          "Permanencia en urgencias",
+          "Mediana de salida − llegada en urgencias",
+          "horas",
+          "Diaria",
+          "Urgencias",
+          "Urgencias",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-010",
+          "Acceso y flujo",
+          "Tasa de abandono en urgencias",
+          "Pacientes que salen sin valoración / entradas elegibles × 100",
+          "%",
+          "Mensual",
+          "Urgencias",
+          "Urgencias",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-011",
+          "Acceso y flujo",
+          "Reconsulta a urgencias en 72 h",
+          "Regresos no programados en 72 h / altas de urgencias elegibles × 100",
+          "%",
+          "Mensual",
+          "EHR",
+          "Urgencias",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-012",
+          "Acceso y flujo",
+          "Ingresos hospitalarios",
+          "Conteo de ingresos efectivos",
+          "número",
+          "Diaria/Mensual",
+          "ADT",
+          "Hospitalización",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-013",
+          "Acceso y flujo",
+          "Egresos hospitalarios",
+          "Conteo de egresos completados",
+          "número",
+          "Diaria/Mensual",
+          "ADT",
+          "Hospitalización",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-014",
+          "Acceso y flujo",
+          "Días-cama ocupados",
+          "Suma diaria de camas ocupadas según censo oficial",
+          "días-cama",
+          "Mensual",
+          "ADT/censo",
+          "Hospitalización",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-015",
+          "Acceso y flujo",
+          "Ocupación hospitalaria",
+          "Días-cama ocupados / días-cama habilitados disponibles × 100",
+          "%",
+          "Mensual",
+          "ADT/censo",
+          "Hospitalización",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-016",
+          "Acceso y flujo",
+          "Estancia media",
+          "Suma de días de estancia / egresos elegibles",
+          "días",
+          "Mensual",
+          "ADT",
+          "Hospitalización",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-017",
+          "Acceso y flujo",
+          "Giro de cama",
+          "Egresos / camas promedio habilitadas",
+          "egresos/cama",
+          "Mensual",
+          "ADT/censo",
+          "Hospitalización",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-018",
+          "Acceso y flujo",
+          "Demora de limpieza y habilitación de cama",
+          "Mediana de cama lista − egreso anterior",
+          "minutos",
+          "Semanal",
+          "ADT/hotelería",
+          "Hospitalización",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-019",
+          "Acceso y flujo",
+          "Reingreso no programado a 30 días",
+          "Reingresos no planificados / egresos elegibles × 100",
+          "%",
+          "Mensual",
+          "ADT/EHR",
+          "Calidad",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-020",
+          "Acceso y flujo",
+          "Traslados completados en tiempo",
+          "Traslados dentro de plazo / traslados solicitados × 100",
+          "%",
+          "Mensual",
+          "ADT",
+          "Hospitalización",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-021",
+          "Acceso y flujo",
+          "Uso de UCI",
+          "Días-cama UCI ocupados / días-cama UCI habilitados × 100",
+          "%",
+          "Mensual",
+          "UCI/ADT",
+          "UCI",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-022",
+          "Acceso y flujo",
+          "Días de ventilación invasiva",
+          "Suma diaria de pacientes con ventilación invasiva verificada",
+          "días-ventilador",
+          "Mensual",
+          "UCI",
+          "UCI",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-023",
+          "Acceso y flujo",
+          "Altas completadas antes de hora objetivo",
+          "Altas en plazo / altas programadas elegibles × 100",
+          "%",
+          "Mensual",
+          "ADT",
+          "Hospitalización",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-024",
+          "Cirugía y maternoinfantil",
+          "Cirugías realizadas",
+          "Conteo de procedimientos completados",
+          "número",
+          "Mensual",
+          "Quirófano",
+          "Cirugía",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-025",
+          "Cirugía y maternoinfantil",
+          "Cancelaciones quirúrgicas",
+          "Cirugías canceladas / cirugías programadas × 100",
+          "%",
+          "Mensual",
+          "Quirófano",
+          "Cirugía",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-026",
+          "Cirugía y maternoinfantil",
+          "Utilización de quirófanos",
+          "Minutos de sala en procedimientos / minutos ofertados × 100",
+          "%",
+          "Mensual",
+          "Quirófano",
+          "Cirugía",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-027",
+          "Cirugía y maternoinfantil",
+          "Cumplimiento lista de seguridad quirúrgica",
+          "Listas completas verificadas / cirugías elegibles × 100",
+          "%",
+          "Mensual",
+          "Quirófano",
+          "Calidad",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-028",
+          "Cirugía y maternoinfantil",
+          "Inicio quirúrgico puntual",
+          "Primeras cirugías puntuales / primeras cirugías programadas × 100",
+          "%",
+          "Mensual",
+          "Quirófano",
+          "Cirugía",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-029",
+          "Cirugía y maternoinfantil",
+          "Partos",
+          "Conteo de partos efectivos",
+          "número",
+          "Mensual",
+          "Obstetricia",
+          "Obstetricia",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-030",
+          "Cirugía y maternoinfantil",
+          "Porcentaje de cesáreas",
+          "Cesáreas / total de partos elegibles × 100",
+          "%",
+          "Mensual",
+          "Obstetricia",
+          "Obstetricia",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-031",
+          "Cirugía y maternoinfantil",
+          "Nacidos vivos",
+          "Conteo de nacidos vivos registrados",
+          "número",
+          "Mensual",
+          "Neonatología",
+          "Neonatología",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-032",
+          "Cirugía y maternoinfantil",
+          "Mortinatos",
+          "Conteo según definición nacional vigente",
+          "número",
+          "Mensual",
+          "Obstetricia",
+          "Estadística",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-033",
+          "Cirugía y maternoinfantil",
+          "Eventos maternos graves",
+          "Conteo de eventos según definición aplicable",
+          "número",
+          "Mensual",
+          "Obstetricia",
+          "Calidad",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-034",
+          "Cirugía y maternoinfantil",
+          "Mortalidad intrahospitalaria cruda",
+          "Defunciones de hospitalizados / egresos elegibles × 100",
+          "%",
+          "Mensual",
+          "ADT/EHR",
+          "Estadística",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-035",
+          "Cirugía y maternoinfantil",
+          "Transferencia neonatal",
+          "Neonatos trasladados / nacimientos elegibles × 100",
+          "%",
+          "Mensual",
+          "Neonatología",
+          "Neonatología",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-036",
+          "Diagnóstico y terapia",
+          "Estudios de laboratorio",
+          "Conteo de pruebas completadas",
+          "número",
+          "Mensual",
+          "LIS",
+          "Laboratorio",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-037",
+          "Diagnóstico y terapia",
+          "Tiempo respuesta laboratorio",
+          "Mediana de liberación resultado − recepción muestra",
+          "minutos",
+          "Mensual",
+          "LIS",
+          "Laboratorio",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-038",
+          "Diagnóstico y terapia",
+          "Muestras rechazadas",
+          "Muestras rechazadas / muestras recibidas × 100",
+          "%",
+          "Mensual",
+          "LIS",
+          "Laboratorio",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-039",
+          "Diagnóstico y terapia",
+          "Resultados críticos notificados",
+          "Críticos con acuse dentro de SLA / críticos reportados × 100",
+          "%",
+          "Mensual",
+          "LIS/EHR",
+          "Laboratorio",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-040",
+          "Diagnóstico y terapia",
+          "Estudios de imagen",
+          "Conteo de estudios completados",
+          "número",
+          "Mensual",
+          "RIS/PACS",
+          "Imágenes",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-041",
+          "Diagnóstico y terapia",
+          "Tiempo de informe radiológico",
+          "Mediana de informe validado − estudio terminado",
+          "horas",
+          "Mensual",
+          "RIS/PACS",
+          "Imágenes",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-042",
+          "Diagnóstico y terapia",
+          "Utilización de equipos de imagen",
+          "Horas equipo productivas / horas disponibles × 100",
+          "%",
+          "Mensual",
+          "RIS",
+          "Imágenes",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-043",
+          "Diagnóstico y terapia",
+          "Biopsias informadas dentro de plazo",
+          "Biopsias informadas en SLA / biopsias recibidas × 100",
+          "%",
+          "Mensual",
+          "Patología",
+          "Patología",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-044",
+          "Diagnóstico y terapia",
+          "Transfusiones trazables",
+          "Unidades con cadena completa / unidades transfundidas × 100",
+          "%",
+          "Mensual",
+          "Banco sangre",
+          "Hemoterapia",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-045",
+          "Diagnóstico y terapia",
+          "Reacciones transfusionales reportadas",
+          "Conteo de reacciones verificadas",
+          "número",
+          "Mensual",
+          "Banco sangre",
+          "Hemoterapia",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-046",
+          "Diagnóstico y terapia",
+          "Ciclos esterilización conformes",
+          "Ciclos con controles conformes / ciclos realizados × 100",
+          "%",
+          "Mensual",
+          "CSSD",
+          "Esterilización",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-047",
+          "Calidad y seguridad",
+          "Eventos adversos notificados",
+          "Conteo de eventos con clasificación y fecha",
+          "número",
+          "Mensual",
+          "Seguridad",
+          "Calidad",
+          "No interpretar baja notificación automáticamente como seguridad"
+        ],
+        [
+          "KPI-048",
+          "Calidad y seguridad",
+          "Caídas por 1000 días-cama",
+          "Caídas en hospitalización / días-cama × 1000",
+          "por 1000 días-cama",
+          "Mensual",
+          "Calidad/ADT",
+          "Enfermería",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-049",
+          "Calidad y seguridad",
+          "Lesiones por presión adquiridas",
+          "Nuevas lesiones hospitalarias / pacientes evaluados × 100",
+          "%",
+          "Mensual",
+          "Enfermería",
+          "Calidad",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-050",
+          "Calidad y seguridad",
+          "IAAS por exposición pertinente",
+          "Casos IAAS / denominador vigilancia aplicable × factor",
+          "tasa",
+          "Mensual",
+          "IPC/EHR",
+          "IPC",
+          "Usar definición y denominador del evento específico"
+        ],
+        [
+          "KPI-051",
+          "Calidad y seguridad",
+          "Higiene de manos observada",
+          "Oportunidades conformes / oportunidades observadas × 100",
+          "%",
+          "Mensual",
+          "IPC",
+          "IPC",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-052",
+          "Calidad y seguridad",
+          "Errores medicación con daño",
+          "Eventos confirmados relacionados con medicación",
+          "número",
+          "Mensual",
+          "Seguridad/Farmacia",
+          "Calidad",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-053",
+          "Calidad y seguridad",
+          "Antibióticos evaluados en plazo",
+          "Tratamientos revisados / tratamientos elegibles × 100",
+          "%",
+          "Mensual",
+          "PROA/EHR",
+          "Farmacia",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-054",
+          "Calidad y seguridad",
+          "Cumplimiento notificación brotes",
+          "Eventos notificables a tiempo / eventos detectados × 100",
+          "%",
+          "Por evento",
+          "SINAVE/IPC",
+          "Epidemiología",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-055",
+          "Calidad y seguridad",
+          "Reclamaciones pacientes resueltas",
+          "Quejas cerradas en plazo / quejas recibidas elegibles × 100",
+          "%",
+          "Mensual",
+          "Atención usuario",
+          "Usuario",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-056",
+          "Calidad y seguridad",
+          "Satisfacción encuesta validada",
+          "Respuestas favorables / respuestas válidas × 100",
+          "%",
+          "Trimestral",
+          "Encuestas",
+          "Usuario",
+          "Reportar tasa de respuesta y sesgo"
+        ],
+        [
+          "KPI-057",
+          "Calidad y seguridad",
+          "Auditorías clínicas completadas",
+          "Auditorías cerradas / auditorías planificadas × 100",
+          "%",
+          "Trimestral",
+          "Calidad",
+          "Auditoría médica",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-058",
+          "Calidad y seguridad",
+          "Acciones correctivas vencidas",
+          "Acciones abiertas con fecha vencida",
+          "número",
+          "Semanal",
+          "Comités",
+          "Calidad",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-059",
+          "Medicamentos e insumos",
+          "Disponibilidad medicamentos trazadores",
+          "Productos trazadores disponibles / trazadores requeridos × 100",
+          "%",
+          "Mensual",
+          "SUGEMI/SALMI",
+          "Farmacia",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-060",
+          "Medicamentos e insumos",
+          "Quiebre de stock medicamento crítico",
+          "Días con quiebre por referencia crítica",
+          "días",
+          "Semanal",
+          "Inventario",
+          "Farmacia",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-061",
+          "Medicamentos e insumos",
+          "Caducidad de inventario",
+          "Valor de lotes vencidos / valor del stock gestionado × 100",
+          "%",
+          "Mensual",
+          "Inventario",
+          "Farmacia",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-062",
+          "Medicamentos e insumos",
+          "Exactitud inventario",
+          "Referencias sin diferencia / referencias contadas × 100",
+          "%",
+          "Mensual",
+          "Inventario/conteo",
+          "Almacén",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-063",
+          "Medicamentos e insumos",
+          "Rotación de inventario",
+          "Costo del consumo / promedio inventario valorizado",
+          "veces",
+          "Mensual",
+          "Inventario/contabilidad",
+          "Almacén",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-064",
+          "Medicamentos e insumos",
+          "Consumo de medicamentos por egreso",
+          "Costo consumido imputado / egresos elegibles",
+          "RD$/egreso",
+          "Mensual",
+          "Farmacia/costos",
+          "Farmacia",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-065",
+          "Medicamentos e insumos",
+          "Solicitudes farmacia atendidas en plazo",
+          "Solicitudes atendidas SLA / solicitudes elegibles × 100",
+          "%",
+          "Mensual",
+          "Farmacia",
+          "Farmacia",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-066",
+          "Medicamentos e insumos",
+          "Dispensaciones con validación",
+          "Dispensaciones con validación documentada / elegibles × 100",
+          "%",
+          "Mensual",
+          "Farmacia",
+          "Farmacia",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-067",
+          "Medicamentos e insumos",
+          "Órdenes nutrición cumplidas",
+          "Raciones conformes entregadas / raciones autorizadas × 100",
+          "%",
+          "Mensual",
+          "Cocina/nutrición",
+          "Cocina",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-068",
+          "Medicamentos e insumos",
+          "Suministros críticos disponibles",
+          "Referencias críticas con stock útil / referencias críticas × 100",
+          "%",
+          "Mensual",
+          "Almacén",
+          "Almacén",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-069",
+          "Medicamentos e insumos",
+          "Devoluciones por sobreabastecimiento",
+          "Unidades devueltas / unidades distribuidas × 100",
+          "%",
+          "Mensual",
+          "Inventario",
+          "Almacén",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-070",
+          "Recursos humanos",
+          "Dotación de personal equivalente tiempo completo",
+          "Suma de fracciones de jornada de plazas activas",
+          "ETC",
+          "Mensual",
+          "RRHH/SASP",
+          "RRHH",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-071",
+          "Recursos humanos",
+          "Cobertura turnos enfermería",
+          "Turnos cubiertos / turnos planificados × 100",
+          "%",
+          "Semanal",
+          "Turnos RRHH",
+          "Enfermería",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-072",
+          "Recursos humanos",
+          "Ausentismo laboral",
+          "Horas de ausencia / horas laborales programadas × 100",
+          "%",
+          "Mensual",
+          "RRHH",
+          "RRHH",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-073",
+          "Recursos humanos",
+          "Rotación de personal",
+          "Bajas voluntarias / dotación promedio × 100",
+          "%",
+          "Trimestral",
+          "RRHH",
+          "RRHH",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-074",
+          "Recursos humanos",
+          "Horas extras ejecutadas",
+          "Suma horas extra aprobadas",
+          "horas",
+          "Mensual",
+          "RRHH/Nómina",
+          "RRHH",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-075",
+          "Recursos humanos",
+          "Brechas de cobertura de puestos críticos",
+          "Plazas críticas vacantes / plazas críticas autorizadas × 100",
+          "%",
+          "Mensual",
+          "RRHH",
+          "RRHH",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-076",
+          "Recursos humanos",
+          "Certificaciones vigentes verificadas",
+          "Profesionales con credenciales vigentes / profesionales elegibles × 100",
+          "%",
+          "Mensual",
+          "RRHH/Credenciales",
+          "RRHH",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-077",
+          "Recursos humanos",
+          "Formación obligatoria completada",
+          "Personas capacitadas / personas programadas × 100",
+          "%",
+          "Trimestral",
+          "Formación",
+          "RRHH",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-078",
+          "Recursos humanos",
+          "Accidentes ocupacionales",
+          "Eventos ocupacionales confirmados",
+          "número",
+          "Mensual",
+          "Seguridad ocupacional",
+          "RRHH",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-079",
+          "Recursos humanos",
+          "Costo remuneración por servicio",
+          "Remuneración imputada / servicio entregado elegible",
+          "RD$/unidad",
+          "Mensual",
+          "Nómina/costos",
+          "Finanzas",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-080",
+          "Recursos humanos",
+          "Evaluaciones de desempeño completadas",
+          "Evaluaciones realizadas / evaluaciones programadas × 100",
+          "%",
+          "Anual",
+          "RRHH",
+          "RRHH",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-081",
+          "Finanzas y compras",
+          "Presupuesto aprobado",
+          "Suma de apropiaciones vigentes",
+          "RD$",
+          "Mensual",
+          "SIGEF/Presupuesto",
+          "Finanzas",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-082",
+          "Finanzas y compras",
+          "Ejecución presupuestaria devengada",
+          "Gasto devengado / apropiación vigente × 100",
+          "%",
+          "Mensual",
+          "SIGEF/Presupuesto",
+          "Finanzas",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-083",
+          "Finanzas y compras",
+          "Compromisos pendientes",
+          "Compromisos vigentes − devengado asociado",
+          "RD$",
+          "Mensual",
+          "SIGEF",
+          "Finanzas",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-084",
+          "Finanzas y compras",
+          "Pagos pendientes",
+          "Cuentas devengadas y exigibles − pagos registrados",
+          "RD$",
+          "Mensual",
+          "Cuentas pagar",
+          "Tesorería",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-085",
+          "Finanzas y compras",
+          "Saldo disponible para comprometer",
+          "Apropiación autorizada − compromisos acumulados elegibles",
+          "RD$",
+          "Semanal",
+          "SIGEF",
+          "Presupuesto",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-086",
+          "Finanzas y compras",
+          "Ingresos facturados",
+          "Suma factura neta emitida en período",
+          "RD$",
+          "Mensual",
+          "Facturación",
+          "Facturación",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-087",
+          "Finanzas y compras",
+          "Ingresos cobrados",
+          "Suma cobros conciliados en período",
+          "RD$",
+          "Mensual",
+          "Bancos/Facturación",
+          "Tesorería",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-088",
+          "Finanzas y compras",
+          "Cartera de cuentas por cobrar",
+          "Suma saldos facturas pendientes",
+          "RD$",
+          "Mensual",
+          "Cartera ARS",
+          "Facturación",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-089",
+          "Finanzas y compras",
+          "Tasa de objeciones ARS",
+          "Importe objetado / importe sometido × 100",
+          "%",
+          "Mensual",
+          "ARS/Facturación",
+          "Facturación",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-090",
+          "Finanzas y compras",
+          "Tasa de recuperación de cartera",
+          "Cobros aplicados / saldo exigible en cohorte × 100",
+          "%",
+          "Mensual",
+          "Tesorería",
+          "Facturación",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-091",
+          "Finanzas y compras",
+          "Costo por consulta",
+          "Costos asignados consulta / consultas elegibles",
+          "RD$/consulta",
+          "Mensual",
+          "Contabilidad/EHR",
+          "Costos",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-092",
+          "Finanzas y compras",
+          "Costo por día-cama",
+          "Costo hospitalización / días-cama ocupados",
+          "RD$/día-cama",
+          "Mensual",
+          "Contabilidad/ADT",
+          "Costos",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-093",
+          "Finanzas y compras",
+          "Costo por procedimiento quirúrgico",
+          "Costos quirófano imputables / procedimientos elegibles",
+          "RD$/cirugía",
+          "Mensual",
+          "Contabilidad/Cirugía",
+          "Costos",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-094",
+          "Finanzas y compras",
+          "Desviación POA financiera",
+          "(Gasto ejecutado − presupuesto planificado) / presupuesto planificado × 100",
+          "%",
+          "Mensual",
+          "POA/Presupuesto",
+          "Planificación",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-095",
+          "Finanzas y compras",
+          "Gasto administrativo relativo",
+          "Gasto administrativo / gasto total elegible × 100",
+          "%",
+          "Trimestral",
+          "Contabilidad",
+          "Finanzas",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-096",
+          "Finanzas y compras",
+          "Conciliaciones bancarias oportunas",
+          "Cuentas conciliadas en plazo / cuentas activas × 100",
+          "%",
+          "Mensual",
+          "Bancos/Contabilidad",
+          "Contabilidad",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-097",
+          "Finanzas y compras",
+          "Contratos vencidos sin renovación",
+          "Contratos expirados con operación activa",
+          "número",
+          "Mensual",
+          "Compras/Legal",
+          "Jurídica",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-098",
+          "Finanzas y compras",
+          "Compras dentro del plan",
+          "Adquisiciones cubiertas por plan aprobado / adquisiciones elegibles × 100",
+          "%",
+          "Trimestral",
+          "PAC/Compras",
+          "Compras",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-099",
+          "Infraestructura y soporte",
+          "Cumplimiento mantenimiento preventivo",
+          "Órdenes preventivas completadas / programadas × 100",
+          "%",
+          "Mensual",
+          "CMMS",
+          "Mantenimiento",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-100",
+          "Infraestructura y soporte",
+          "Disponibilidad de equipos críticos",
+          "Horas equipo operativo / horas requeridas × 100",
+          "%",
+          "Mensual",
+          "CMMS",
+          "Ingeniería clínica",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-101",
+          "Infraestructura y soporte",
+          "MTTR equipos críticos",
+          "Horas de reparación / fallas resueltas",
+          "horas",
+          "Mensual",
+          "CMMS",
+          "Ingeniería clínica",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-102",
+          "Infraestructura y soporte",
+          "Consumo energía por día-cama",
+          "kWh verificados / días-cama ocupados",
+          "kWh/día-cama",
+          "Mensual",
+          "Medidores/ADT",
+          "Infraestructura",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-103",
+          "Infraestructura y soporte",
+          "Horas de interrupción eléctrica",
+          "Suma de cortes que afectaron servicio",
+          "horas",
+          "Mensual",
+          "BMS/Operaciones",
+          "Infraestructura",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-104",
+          "Infraestructura y soporte",
+          "Disponibilidad agua potable",
+          "Horas de suministro conforme / horas requeridas × 100",
+          "%",
+          "Mensual",
+          "Operaciones",
+          "Infraestructura",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-105",
+          "Infraestructura y soporte",
+          "Días de autonomía oxígeno médico",
+          "Stock útil / consumo diario de referencia",
+          "días",
+          "Diaria",
+          "Gases médicos",
+          "Infraestructura",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-106",
+          "Infraestructura y soporte",
+          "Cumplimiento pruebas generador",
+          "Pruebas conformes / pruebas programadas × 100",
+          "%",
+          "Mensual",
+          "Mantenimiento",
+          "Infraestructura",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-107",
+          "Infraestructura y soporte",
+          "Ocupación parqueos",
+          "Plazas ocupadas en período / plazas habilitadas × 100",
+          "%",
+          "Diaria",
+          "Parqueo",
+          "Operaciones",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-108",
+          "Infraestructura y soporte",
+          "Rotación parqueos",
+          "Sesiones de estacionamiento / plazas disponibles",
+          "sesiones/plaza",
+          "Mensual",
+          "Parqueo",
+          "Operaciones",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-109",
+          "Infraestructura y soporte",
+          "Habitaciones preparadas en plazo",
+          "Preparaciones en SLA / preparaciones requeridas × 100",
+          "%",
+          "Semanal",
+          "Hotelería",
+          "Hotelería",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-110",
+          "Infraestructura y soporte",
+          "Raciones servidas en plazo",
+          "Raciones puntuales / raciones programadas × 100",
+          "%",
+          "Diaria",
+          "Cocina",
+          "Cocina",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-111",
+          "Infraestructura y soporte",
+          "Costo ración alimentaria",
+          "Costo alimentos imputados / raciones servidas",
+          "RD$/ración",
+          "Mensual",
+          "Cocina/Contabilidad",
+          "Cocina",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-112",
+          "Infraestructura y soporte",
+          "Desperdicio cocina",
+          "Kg desperdicio / kg insumo apto distribuido × 100",
+          "%",
+          "Mensual",
+          "Cocina",
+          "Cocina",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-113",
+          "Infraestructura y soporte",
+          "Ropa procesada",
+          "Kilogramos de ropa procesados",
+          "kg",
+          "Mensual",
+          "Lavandería",
+          "Hotelería",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-114",
+          "Infraestructura y soporte",
+          "Pérdidas de ropa hospitalaria",
+          "Unidades perdidas / unidades en circulación × 100",
+          "%",
+          "Mensual",
+          "Lavandería",
+          "Hotelería",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-115",
+          "Infraestructura y soporte",
+          "Residuos infecciosos por día-cama",
+          "Kg residuo infeccioso / días-cama",
+          "kg/día-cama",
+          "Mensual",
+          "Residuos/ADT",
+          "Ambiente",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-116",
+          "Infraestructura y soporte",
+          "Respaldos verificados",
+          "Respaldos restaurados en prueba / respaldos seleccionados × 100",
+          "%",
+          "Mensual",
+          "TIC",
+          "TIC",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-117",
+          "Infraestructura y soporte",
+          "Disponibilidad de servicios TIC",
+          "Minutos servicio disponible / minutos comprometidos × 100",
+          "%",
+          "Mensual",
+          "Monitoreo TIC",
+          "TIC",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-118",
+          "Infraestructura y soporte",
+          "Incidentes ciberseguridad resueltos",
+          "Incidentes cerrados en SLA / incidentes elegibles × 100",
+          "%",
+          "Mensual",
+          "SOC",
+          "TIC",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-119",
+          "Infraestructura y soporte",
+          "Tiempo medio de recuperación sistema",
+          "Suma tiempos restauración / incidentes resueltos",
+          "horas",
+          "Mensual",
+          "TIC",
+          "TIC",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-120",
+          "Infraestructura y soporte",
+          "Solicitudes de mantenimiento vencidas",
+          "OT vencidas abiertas",
+          "número",
+          "Semanal",
+          "CMMS",
+          "Mantenimiento",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-121",
+          "Gobierno y transformación",
+          "Acciones POA ejecutadas",
+          "Acciones terminadas verificadas / acciones previstas × 100",
+          "%",
+          "Mensual/Trimestral",
+          "POA",
+          "Planificación",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-122",
+          "Gobierno y transformación",
+          "Metas POA cumplidas",
+          "Indicadores que alcanzan meta / indicadores evaluables × 100",
+          "%",
+          "Trimestral",
+          "POA/KPI",
+          "Planificación",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-123",
+          "Gobierno y transformación",
+          "Variación metas físicas",
+          "(Real ejecutado − meta programada) / meta programada × 100",
+          "%",
+          "Trimestral",
+          "POA/KPI",
+          "Planificación",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-124",
+          "Gobierno y transformación",
+          "Proyectos con desviación de cronograma",
+          "Proyectos atrasados / proyectos activos × 100",
+          "%",
+          "Mensual",
+          "Proyectos",
+          "Planificación",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-125",
+          "Gobierno y transformación",
+          "Acuerdos de comités vencidos",
+          "Acuerdos pendientes vencidos",
+          "número",
+          "Semanal",
+          "Actas comité",
+          "Dirección",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-126",
+          "Gobierno y transformación",
+          "Indicadores auditables",
+          "KPIs con fuente, versión, fórmula y dueño / KPIs activos × 100",
+          "%",
+          "Mensual",
+          "Catálogo KPIs",
+          "Datos",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-127",
+          "Gobierno y transformación",
+          "Registros con integridad mínima",
+          "Registros válidos según reglas / registros evaluados × 100",
+          "%",
+          "Diaria",
+          "DQA",
+          "Datos",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-128",
+          "Gobierno y transformación",
+          "Duplicados de pacientes detectados",
+          "Posibles duplicados abiertos de identificación",
+          "número",
+          "Diaria",
+          "MPI",
+          "Admisión",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-129",
+          "Gobierno y transformación",
+          "Reportes regulatorios entregados en plazo",
+          "Reportes con acuse dentro plazo / reportes exigibles × 100",
+          "%",
+          "Mensual",
+          "Registro reportes",
+          "Planificación",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-130",
+          "Gobierno y transformación",
+          "Brechas auditoría sin cerrar",
+          "Hallazgos abiertos vencidos",
+          "número",
+          "Mensual",
+          "Auditoría",
+          "Control interno",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-131",
+          "Gobierno y transformación",
+          "Servicios esenciales con continuidad probada",
+          "Servicios con simulacro validado / esenciales definidos × 100",
+          "%",
+          "Semestral",
+          "BCP/Simulacros",
+          "Riesgos",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-132",
+          "Gobierno y transformación",
+          "Riesgos críticos sin mitigación",
+          "Riesgos críticos sin control eficaz registrado",
+          "número",
+          "Mensual",
+          "Registro riesgos",
+          "Riesgos",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-133",
+          "Gobierno y transformación",
+          "PHOENIX instancias verificadas",
+          "Instancias con pruebas e identidad vigente / instancias activas × 100",
+          "%",
+          "Diaria",
+          "Fabric Registry",
+          "TIC",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-134",
+          "Gobierno y transformación",
+          "Conectores con pruebas vigentes",
+          "Conectores verificados / conectores activos × 100",
+          "%",
+          "Semanal",
+          "Bridge",
+          "TIC",
+          "Definición local y registro verificable"
+        ],
+        [
+          "KPI-135",
+          "Gobierno y transformación",
+          "Costo IA por proceso",
+          "Gasto de inferencia asignado / tareas completadas elegibles",
+          "RD$/tarea",
+          "Mensual",
+          "Model Fleet/Costos",
+          "TIC",
+          "Definición local y registro verificable"
+        ]
+      ]
+    },
+    "reports": {
+      "fields": [
+        "ID",
+        "Informe",
+        "Destinatario",
+        "Periodicidad",
+        "Variables necesarias",
+        "Dueño",
+        "Control y cautelas",
+        "Estado"
+      ],
+      "rows": [
+        [
+          "R01",
+          "Producción hospitalaria por servicio",
+          "SNS/RIESS o autoridad aplicable",
+          "Mensual/trimestral",
+          "Visitas, ingresos, egresos, cirugías, estudios, nacimientos",
+          "Estadística",
+          "Confirmar vía, plantilla y obligación según centro",
+          "Por verificar"
+        ],
+        [
+          "R02",
+          "Notificación de eventos de vigilancia epidemiológica",
+          "DIGEPI / SINAVE",
+          "Según evento normado",
+          "Casos, eventos, fechas, clasificaciones y variables requeridas",
+          "Epidemiología",
+          "No sustituir notificación clínica urgente por batch",
+          "Por verificar"
+        ],
+        [
+          "R03",
+          "Nacidos vivos y defunciones",
+          "MSP / registros correspondientes",
+          "Según normativa",
+          "Nacimiento, defunción, causa y certificación",
+          "Estadística / Registro",
+          "Validar registro, canal y oportunidad",
+          "Por verificar"
+        ],
+        [
+          "R04",
+          "Morbilidad y egresos",
+          "SNS/MSP según modalidad",
+          "Según requerimiento",
+          "Episodios, diagnósticos, egresos",
+          "Estadística",
+          "Códigos y denominadores normalizados",
+          "Por verificar"
+        ],
+        [
+          "R05",
+          "Producción y seguimiento materno infantil",
+          "SNS/MSP/SRS",
+          "Periódico",
+          "Partos, cesáreas, neonatal y seguimiento",
+          "Obstetricia / Estadística",
+          "Validar definiciones oficiales",
+          "Por verificar"
+        ],
+        [
+          "R06",
+          "Recursos humanos sanitarios",
+          "SNS/MAP/SASP donde corresponda",
+          "Según norma",
+          "Dotación, categoría, plazas, cambios",
+          "RRHH",
+          "Separar datos individuales y agregados",
+          "Por verificar"
+        ],
+        [
+          "R07",
+          "Ejecución presupuestaria físico-financiera",
+          "Autoridad financiera / SIGEF según entidad",
+          "Mensual/trimestral",
+          "Apropiado, comprometido, devengado, pagado, metas",
+          "Finanzas",
+          "Distinguir fuente oficial y reportes internos",
+          "Por verificar"
+        ],
+        [
+          "R08",
+          "POA: metas, avances y evidencias",
+          "SNS/SRS/planificación institucional",
+          "Trimestral/según calendario",
+          "Producto, indicador, meta, avance, evidencia",
+          "Planificación",
+          "Requiere validación por responsables",
+          "Por verificar"
+        ],
+        [
+          "R09",
+          "Seguimiento PEI",
+          "Dirección / SNS",
+          "Semestral/anual",
+          "Objetivos, indicadores, línea base, riesgos",
+          "Planificación",
+          "Alineación con PEI vigente",
+          "Por verificar"
+        ],
+        [
+          "R10",
+          "Plan Anual de Contrataciones (PAC)",
+          "DGCP / plataforma aplicable",
+          "Anual/actualizaciones",
+          "Necesidades, categorías, montos, cronograma",
+          "Compras",
+          "En 2026 validar marco Ley 47-25 y reglamento",
+          "Por verificar"
+        ],
+        [
+          "R11",
+          "Ejecución de contrataciones y contratos",
+          "DGCP/órganos de control",
+          "Según régimen",
+          "Adjudicaciones, contratos, proveedores, pagos",
+          "Compras",
+          "Publicar solo por canal habilitado",
+          "Por verificar"
+        ],
+        [
+          "R12",
+          "Medicamentos e insumos: SUGEMI/SALMI",
+          "SNS/SRS según aplicabilidad",
+          "Periódico",
+          "Disponibilidad, consumo, lotes, expiraciones",
+          "Farmacia",
+          "Confirmar instrumentos regionales",
+          "Por verificar"
+        ],
+        [
+          "R13",
+          "Facturación, objeciones y cobros ARS",
+          "ARS/SeNaSa / administración",
+          "Por ciclo de factura",
+          "Prestaciones, cargos, glosas, pagos",
+          "Facturación",
+          "Formato depende del contrato",
+          "Por verificar"
+        ],
+        [
+          "R14",
+          "Calidad y seguridad del paciente",
+          "Dirección/comités/regulador según norma",
+          "Mensual/trimestral",
+          "Incidentes, eventos, medidas, acciones",
+          "Calidad",
+          "Desidentificar reportes ejecutivos",
+          "Por verificar"
+        ],
+        [
+          "R15",
+          "Infecciones asociadas a atención",
+          "Vigilancia interna/autoridades",
+          "Según evento",
+          "IAAS, exposición, denominadores",
+          "IPC",
+          "Tasas requieren vigilancia y definición",
+          "Por verificar"
+        ],
+        [
+          "R16",
+          "Farmacovigilancia/tecnovigilancia",
+          "Autoridad competente",
+          "Según obligación",
+          "Evento, causalidad, lote, dispositivo",
+          "Farmacia / Ingeniería",
+          "Proteger identificación de casos",
+          "Por verificar"
+        ],
+        [
+          "R17",
+          "Evaluación de dotación y formación",
+          "Dirección / RRHH",
+          "Mensual/trimestral",
+          "Plazas, turnos, brechas, formación",
+          "RRHH",
+          "No automatizar decisiones laborales",
+          "Por verificar"
+        ],
+        [
+          "R18",
+          "Estados y conciliaciones financieras",
+          "Finanzas / control/autoridad competente",
+          "Mensual/anual",
+          "Bancos, libro mayor, cuentas y activos",
+          "Contabilidad",
+          "Sujeto a marco contable aplicable",
+          "Por verificar"
+        ],
+        [
+          "R19",
+          "Inventarios y activos fijos",
+          "Dirección / control",
+          "Mensual/anual",
+          "Movimientos, conteos, diferencias, depreciación",
+          "Almacén / Activos",
+          "Inventarios físicos periódicos",
+          "Por verificar"
+        ],
+        [
+          "R20",
+          "Servicios generales y continuidad",
+          "Dirección / comité de riesgos",
+          "Mensual",
+          "Energía, agua, gases, mantenimiento, contingencias",
+          "Operaciones",
+          "Inspecciones y datos de equipos",
+          "Por verificar"
+        ],
+        [
+          "R21",
+          "Gestión de residuos y ambiente",
+          "Autoridad ambiental/sanitaria si aplica",
+          "Según norma",
+          "Clasificación, volumen, gestión y manifiestos",
+          "Servicios generales",
+          "Comprobar licencias y operador",
+          "Por verificar"
+        ],
+        [
+          "R22",
+          "Accidentes laborales y salud ocupacional",
+          "Autoridad laboral/seguridad social si aplica",
+          "Según evento",
+          "Exposición, accidente, seguimiento",
+          "Seguridad ocupacional",
+          "Canal y plazo normativo",
+          "Por verificar"
+        ],
+        [
+          "R23",
+          "Transparencia y libre acceso",
+          "OAI / portal institucional público",
+          "Según norma",
+          "Solicitudes, respuestas, publicación",
+          "OAI",
+          "No publicar datos protegidos",
+          "Por verificar"
+        ],
+        [
+          "R24",
+          "Informes de comités",
+          "Dirección/comités",
+          "Según calendario",
+          "Actas, recomendaciones, plazos y acciones",
+          "Secretaría de comité",
+          "Evidencia de quorum y aprobación",
+          "Por verificar"
+        ],
+        [
+          "R25",
+          "Tablero ejecutivo integral",
+          "Consejo y dirección",
+          "Diario/mensual",
+          "Calidad, acceso, finanzas, RRHH, operación",
+          "BI / Dirección",
+          "Datos con fecha, meta y responsable",
+          "Por verificar"
+        ],
+        [
+          "R26",
+          "Memoria institucional y rendición anual",
+          "Consejo / SNS según entidad",
+          "Anual",
+          "Logros, indicadores, gasto, inversiones",
+          "Planificación / Dirección",
+          "Conciliar cifras interdepartamentales",
+          "Por verificar"
+        ],
+        [
+          "R27",
+          "Reclamos, quejas y satisfacción",
+          "Dirección / Atención al usuario",
+          "Mensual",
+          "Entradas, clasificación, resolución, encuesta",
+          "Usuario",
+          "No inferir satisfacción de ausencia de quejas",
+          "Por verificar"
+        ],
+        [
+          "R28",
+          "Auditoría interna y acciones correctivas",
+          "Control interno",
+          "Trimestral",
+          "Hallazgos, responsables, vencimientos",
+          "Auditoría",
+          "Pruebas de cierre verificadas",
+          "Por verificar"
+        ],
+        [
+          "R29",
+          "Costos por servicio y centro de costo",
+          "Finanzas / Dirección",
+          "Mensual",
+          "Costos directos, indirectos, actividad",
+          "Costos",
+          "Metodología estable y documentada",
+          "Por verificar"
+        ],
+        [
+          "R30",
+          "Proyectos de inversión / SNIP si aplica",
+          "Planificación / autoridad pertinente",
+          "Según proyecto",
+          "Capex, cronograma, obra, resultados",
+          "Planificación",
+          "Validar normas de inversión pública",
+          "Por verificar"
+        ],
+        [
+          "R31",
+          "Accesibilidad y atención a población vulnerable",
+          "Dirección / Calidad",
+          "Trimestral",
+          "Barrera, ajustes, tiempos, experiencia",
+          "Calidad",
+          "Agregación y privacidad",
+          "Por verificar"
+        ],
+        [
+          "R32",
+          "Formación, investigación y docencia",
+          "Dirección / academia",
+          "Semestral",
+          "Actividades, residentes, publicaciones",
+          "Docencia",
+          "Ética y acreditación vigentes",
+          "Por verificar"
+        ],
+        [
+          "R33",
+          "Protección de datos y ciberseguridad",
+          "Comité TIC / auditoría",
+          "Mensual/evento",
+          "Incidentes, accesos, respaldos, pruebas",
+          "TIC",
+          "No incluir secretos en informes",
+          "Por verificar"
+        ],
+        [
+          "R34",
+          "Indicadores por unidades y jefaturas",
+          "Jefes de departamento",
+          "Semanal/mensual",
+          "Metas locales, producción, recursos, acciones",
+          "Cada jefatura",
+          "Definición única corporativa",
+          "Por verificar"
+        ]
+      ]
+    },
+    "committees": {
+      "fields": [
+        "Comité",
+        "Unidad líder",
+        "Frecuencia propuesta",
+        "Informes/decisiones",
+        "Secretaría designada",
+        "Última acta",
+        "Acciones abiertas"
+      ],
+      "rows": [
+        [
+          "Consejo de administración y comité ejecutivo",
+          "Dirección general",
+          "Mensual",
+          "PEI, POA, presupuesto, riesgos, acuerdos",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de calidad y seguridad del paciente",
+          "Calidad",
+          "Mensual",
+          "Eventos, resultados, planes de mejora",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de infecciones y prevención y control (IAAS)",
+          "Epidemiología / IPC",
+          "Mensual y eventos",
+          "Vigilancia, brotes, adherencia, acciones",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité farmacoterapéutico",
+          "Farmacia clínica / Dirección médica",
+          "Mensual/trimestral",
+          "Formulario, disponibilidad, farmacovigilancia",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de optimización antimicrobiana (PROA/AMS)",
+          "Infectología / Farmacia",
+          "Mensual",
+          "Consumo, resistencia, adecuación",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de mortalidad y morbilidad",
+          "Dirección médica",
+          "Mensual",
+          "Auditorías de casos, causas, oportunidades",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité materno-perinatal",
+          "Obstetricia / Pediatría",
+          "Mensual",
+          "Resultados, mortalidad, cesáreas, oportunidades",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de transfusión y hemovigilancia",
+          "Banco de sangre",
+          "Trimestral",
+          "Reacciones, trazabilidad, disponibilidad",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de cirugía y seguridad quirúrgica",
+          "Quirófanos",
+          "Mensual",
+          "Cancelaciones, listas, eventos",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de ética asistencial y bioética",
+          "Ética / Dirección",
+          "Por agenda",
+          "Consultas, deliberaciones protegidas",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de investigación y docencia",
+          "Docencia",
+          "Trimestral",
+          "Protocolos, residentes, formación",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de gestión de camas y flujo",
+          "Admisión / Enfermería",
+          "Diario o semanal",
+          "Ocupación, espera, traslados",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de emergencias y desastres",
+          "Dirección / Continuidad",
+          "Trimestral y eventos",
+          "Simulacros, capacidad, fallos",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de salud y seguridad en el trabajo",
+          "RRHH / Seguridad ocupacional",
+          "Trimestral",
+          "Accidentes, riesgos, acciones",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de compras y contrataciones",
+          "Administración",
+          "Según norma y proceso",
+          "Expedientes de contratación, aprobaciones",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de presupuesto y control de gestión",
+          "Finanzas / Planificación",
+          "Mensual",
+          "Desvíos, caja, metas, proyectos",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de tecnología, datos y ciberseguridad",
+          "TIC / Datos",
+          "Mensual",
+          "Accesos, incidentes, calidad, continuidad",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de equipos e infraestructura",
+          "Ingeniería clínica",
+          "Mensual",
+          "Mantenimiento, reemplazos, incidentes",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de residuos y ambiente",
+          "Servicios generales",
+          "Trimestral",
+          "Residuos, agua, inocuidad, cumplimiento",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Comité de experiencia y derechos del paciente",
+          "Atención al usuario",
+          "Trimestral",
+          "Quejas, encuestas, acciones",
+          "Pendiente",
+          "",
+          ""
+        ]
+      ]
+    },
+    "dataEntities": {
+      "fields": [
+        "Entidad lógica",
+        "Propósito / campos fundamentales",
+        "Fuente de verdad",
+        "Custodio",
+        "Confidencialidad",
+        "Reglas de retención"
+      ],
+      "rows": [
+        [
+          "organization",
+          "Institución, forma de propiedad, órgano rector, régimen",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "site",
+          "Sede, dirección, tipo, horario",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "building",
+          "Edificio, planta, zona",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "space",
+          "Consultorio, habitación, cocina, parqueo, circulación",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "bed",
+          "Cama física/habilitada/ocupada y su disponibilidad",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "resource_asset",
+          "Mobiliario, equipos, vehículos y otros activos",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "device",
+          "Equipo biomédico, medidor, monitor y capacidad",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "employee",
+          "Persona empleada/contratista, información mínima",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "position",
+          "Plaza, puesto, jefatura y perfil",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "credential",
+          "Licencias, formación, habilitación y vigencias",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "shift",
+          "Calendario, cobertura, asignación y ausencias",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "policy_document",
+          "Manual, protocolo, plano, contrato, versión",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "sop",
+          "Procedimiento operativo estandarizado y aprobación",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "committee",
+          "Miembros, mandato, periodicidad y agenda",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "decision",
+          "Acuerdo, responsable, fecha, verificación",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "patient",
+          "Identificación y consentimientos clínicos",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "encounter",
+          "Atención, ingreso, seguimiento y alta",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "appointment",
+          "Cita y estado de asistencia",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "referral",
+          "Referencia, traslado, contrarreferencia",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "observation",
+          "Medición, procedencia, fecha y unidad",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "clinical_order",
+          "Orden clínica autorizada",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "result",
+          "Resultado, criticidad, acuse y firma",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "medication_event",
+          "Orden, validación, dispensación y administración",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "nutrition_order",
+          "Dieta y restricciones prescritas",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "procedure",
+          "Cirugía, prueba, terapia o procedimiento",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "adverse_event",
+          "Incidente, gravedad, medidas, seguimiento",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "inventory_item",
+          "Artículo, unidad, catálogo, lote, caducidad",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "stock_movement",
+          "Entrada, salida, merma, devolución, transferencia",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "vendor",
+          "Proveedor, cumplimiento, contrato y evidencia",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "purchase_request",
+          "Solicitud, aprobación y necesidad",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "procurement",
+          "Proceso contractual y orden de compra",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "invoice_claim",
+          "Factura, ARS, cargo, glosa, pago",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "budget_line",
+          "Fuente, partida, centro de costo, ejercicio",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "expense_event",
+          "Compromiso, devengado, pago, conciliación",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "revenue_event",
+          "Cobro, transferencia, facturación y ajuste",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "cost_center",
+          "Unidad responsable, reglas de costeo",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "project",
+          "PEI, POA, metas, actividades, presupuesto",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "indicator",
+          "Definición, numerador, denominador y fuente",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "report_submission",
+          "Versión de reporte, firma, envío y acuse",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "maintenance_work_order",
+          "Activo, tarea, falla, resolución",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "kitchen_order",
+          "Menú, dieta, cantidad, entrega, desperdicio",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "laundry_batch",
+          "Lote ropa, peso, ciclo, pérdidas",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "waste_manifest",
+          "Tipo residuo, peso, operador y retiro",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "parking_session",
+          "Plaza, permiso, ocupación y acceso",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "visitor_access",
+          "Entrada/salida visitantes, autorización",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "model_account",
+          "Proveedor IA, credencial referenciada, gasto",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "phoenix_instance",
+          "Identidad lógica, función, permisos y salud",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "integration_contract",
+          "Conector, versión, scopes y protocolo",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ],
+        [
+          "workflow_task",
+          "Trabajo, correlación, idempotencia, resultado",
+          "Por definir",
+          "Por definir",
+          "Según finalidad",
+          "Por definir"
+        ]
+      ]
+    },
+    "risks": {
+      "fields": [
+        "Riesgo",
+        "Severidad orientativa",
+        "Control sugerido",
+        "Propietario",
+        "Probabilidad local",
+        "Estado",
+        "Fecha revisión"
+      ],
+      "rows": [
+        [
+          "Datos clínicos mezclados entre instituciones",
+          "Crítico",
+          "Aislamiento por tenant; pruebas de autorización negativa",
+          "TIC/Seguridad",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Indicadores con fórmulas inconsistentes",
+          "Alto",
+          "Catálogo semántico versionado y reconciliación",
+          "Estadística",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Integración con escritura que modifica fuente equivocada",
+          "Crítico",
+          "Read-only inicial, simulación, rollback, reconciliación",
+          "Bridge/TIC",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Errores de IA que afectan decisiones clínicas",
+          "Crítico",
+          "Aprobación profesional y controles deterministas",
+          "Dirección Médica",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Ausencia de acuse en reportes oficiales",
+          "Alto",
+          "Registro de versión, envío, respuesta y reintento autorizado",
+          "Planificación",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Dependencia de nube durante caída de internet",
+          "Alto",
+          "Servicios esenciales locales y cola durable",
+          "TIC/Continuidad",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Planta eléctrica insuficiente",
+          "Crítico",
+          "Censo de cargas, pruebas y respaldo verificado",
+          "Infraestructura",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Oxígeno insuficiente y fallos de gases médicos",
+          "Crítico",
+          "Sensores validados, stock, protocolos y escalamiento",
+          "Ingeniería clínica",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Glosas de seguros elevadas",
+          "Alto",
+          "Validación documental, conciliación y reporte de causas",
+          "Facturación",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Medicamentos caducados o agotados",
+          "Alto",
+          "FEFO, alertas, previsión y revisión farmacéutica",
+          "Farmacia",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Pérdida de datos migrados",
+          "Crítico",
+          "Backups, hash, conciliación, muestras y reversión",
+          "TIC/Datos",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Acceso indebido a expedientes de personal",
+          "Alto",
+          "Compartimentación RRHH y logs de acceso",
+          "RRHH/Legal",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Sesgos en evaluaciones de personal",
+          "Alto",
+          "Decisiones humanas, auditoría y apelación",
+          "RRHH",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Brotes intrahospitalarios",
+          "Crítico",
+          "Vigilancia, vigilancia por exposición, control IPC",
+          "Epidemiología",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Violencia y pérdida de seguridad física",
+          "Alto",
+          "Plan de seguridad, control acceso y contingencias",
+          "Seguridad",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Interrupción agua, energía, red o cadena de frío",
+          "Crítico",
+          "Redundancia, pruebas, reservas y respuestas",
+          "Operaciones",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Planos desactualizados y activos inexistentes",
+          "Alto",
+          "Verificación de campo, fuente y fecha",
+          "Genesis",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Presupuesto subestimado",
+          "Alto",
+          "Escenarios, cotizaciones, reservas y actualización",
+          "Finanzas",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Exceso de uso de modelos de IA",
+          "Medio",
+          "Cuotas por rol, alertas, cache y rutas deterministas",
+          "Model Fleet",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ],
+        [
+          "Informes públicos que revelan PHI",
+          "Crítico",
+          "Anonimización y revisión previa a publicación",
+          "Datos/Legal",
+          "Por evaluar",
+          "Pendiente",
+          ""
+        ]
+      ]
+    },
+    "procedures": {
+      "fields": [
+        "Código",
+        "Procedimiento",
+        "Área",
+        "Puntos fundamentales",
+        "Responsable técnico",
+        "Revisión propuesta",
+        "Estado",
+        "Versión aprobada",
+        "Fecha aprobación",
+        "URL documento"
+      ],
+      "rows": [
+        [
+          "POE-001",
+          "Admisión de paciente",
+          "Admisión",
+          "Identidad, consentimiento, apertura y trazabilidad",
+          "Jefe admisión",
+          "Cada 12 meses",
+          "Pendiente de aprobación",
+          "",
+          "",
+          ""
+        ],
+        [
+          "POE-002",
+          "Recepción y conciliación de inventario",
+          "Almacén",
+          "Recepción, lote, vencimiento, conteo",
+          "Jefe almacén",
+          "Cada 12 meses",
+          "Pendiente de aprobación",
+          "",
+          "",
+          ""
+        ],
+        [
+          "POE-003",
+          "Validación y dispensación de medicamentos",
+          "Farmacia",
+          "Orden, revisión, lote, registro y firma",
+          "Farmacéutico responsable",
+          "Cada 12 meses",
+          "Pendiente de aprobación",
+          "",
+          "",
+          ""
+        ],
+        [
+          "POE-004",
+          "Gestión de cama y traslado",
+          "Hospitalización",
+          "Disponibilidad, aislamiento, asignación y traslado",
+          "Jefe enfermería",
+          "Cada 12 meses",
+          "Pendiente de aprobación",
+          "",
+          "",
+          ""
+        ],
+        [
+          "POE-005",
+          "Limpieza terminal y liberación de cama",
+          "Hotelería",
+          "Limpieza, inspección, liberación",
+          "Supervisor limpieza",
+          "Cada 12 meses",
+          "Pendiente de aprobación",
+          "",
+          "",
+          ""
+        ],
+        [
+          "POE-006",
+          "Producción y entrega de dieta autorizada",
+          "Cocina",
+          "Orden dietética, alérgenos, entrega",
+          "Responsable nutrición",
+          "Cada 12 meses",
+          "Pendiente de aprobación",
+          "",
+          "",
+          ""
+        ],
+        [
+          "POE-007",
+          "Notificación de resultado crítico",
+          "Laboratorio",
+          "Clasificación, aviso, acuse, escalamiento",
+          "Jefe laboratorio",
+          "Cada 12 meses",
+          "Pendiente de aprobación",
+          "",
+          "",
+          ""
+        ],
+        [
+          "POE-008",
+          "Notificación de evento epidemiológico",
+          "Epidemiología",
+          "Detección, clasificación, canal, tiempo",
+          "Jefe epidemiología",
+          "Cada 12 meses",
+          "Pendiente de aprobación",
+          "",
+          "",
+          ""
+        ],
+        [
+          "POE-009",
+          "Conciliación mensual y cierre",
+          "Finanzas",
+          "Asientos, conciliación, firma, archivo",
+          "Contador general",
+          "Cada 12 meses",
+          "Pendiente de aprobación",
+          "",
+          "",
+          ""
+        ],
+        [
+          "POE-010",
+          "Registro y evaluación de incidentes",
+          "Calidad",
+          "Notificación, análisis, medidas, seguimiento",
+          "Responsable calidad",
+          "Cada 12 meses",
+          "Pendiente de aprobación",
+          "",
+          "",
+          ""
+        ],
+        [
+          "POE-011",
+          "Gestión de accidente ocupacional",
+          "RRHH",
+          "Evento, asistencia, reporte, seguimiento",
+          "Salud ocupacional",
+          "Cada 12 meses",
+          "Pendiente de aprobación",
+          "",
+          "",
+          ""
+        ],
+        [
+          "POE-012",
+          "Pruebas de continuidad y recuperación",
+          "TIC",
+          "Respaldo, restauración, control de integridad",
+          "Jefe TIC",
+          "Cada 6 meses",
+          "Pendiente de aprobación",
+          "",
+          "",
+          ""
+        ]
+      ]
+    },
+    "references": {
+      "fields": [
+        "Fuente",
+        "URL",
+        "Aporte y justificación",
+        "Verificado localmente",
+        "Observaciones"
+      ],
+      "rows": [
+        [
+          "OMS RHIS datos de servicios",
+          "https://www.who.int/data/data-collection-tools/health-service-data",
+          "Marco de datos asistenciales y recursos",
+          "Pendiente",
+          ""
+        ],
+        [
+          "OMS evaluación HHFA",
+          "https://www.who.int/publications/i/item/9789240086043",
+          "Evaluación de capacidad y preparación hospitalaria",
+          "Pendiente",
+          ""
+        ],
+        [
+          "OMS indicadores núcleo",
+          "https://www.who.int/publications/m/item/core-health-facility-indicators",
+          "Diseño de indicadores y calidad",
+          "Pendiente",
+          ""
+        ],
+        [
+          "OMS uso integrado RHIS",
+          "https://www.who.int/publications/i/item/9789240060616",
+          "Análisis y dashboards",
+          "Pendiente",
+          ""
+        ],
+        [
+          "OMS seguridad del paciente",
+          "https://www.who.int/news-room/fact-sheets/detail/patient-safety/",
+          "Calidad, riesgos, notificación y aprendizaje",
+          "Pendiente",
+          ""
+        ],
+        [
+          "OMS continuidad hospitalaria",
+          "https://www.who.int/publications-detail-redirect/hospital-emergency-response-checklist",
+          "Continuidad y desastres",
+          "Pendiente",
+          ""
+        ],
+        [
+          "SNS RIESS tipos de datos",
+          "https://repositorio.sns.gob.do/acerca-del-ries/principales-tipos-de-datos-y-temas/",
+          "Producción, RRHH, finanzas",
+          "Pendiente",
+          ""
+        ],
+        [
+          "SNS RIESS fuentes",
+          "https://repositorio.sns.gob.do/acerca-del-ries/fuentes-de-informacion/",
+          "SINAVE, SIGEF, SASP, SeNaSa, SIRNAI",
+          "Pendiente",
+          ""
+        ],
+        [
+          "SNS SUGEMI",
+          "https://sns.gob.do/sugemi/",
+          "Suministro de medicamentos e insumos",
+          "Pendiente",
+          ""
+        ],
+        [
+          "SNS informes POA",
+          "https://sns.gob.do/wpfd_file/informe-poa-sns-t1-2025/",
+          "Ejemplo oficial de monitoreo trimestral",
+          "Pendiente",
+          ""
+        ],
+        [
+          "SNS datos abiertos producción",
+          "https://sns.gob.do/transparencia/datos-abiertos/",
+          "Series de producción hospitalaria",
+          "Pendiente",
+          ""
+        ],
+        [
+          "SNS organigrama hospital referencia",
+          "https://sns.gob.do/descargas/1025/resoluciones/45062/resolucion-no-004-2021-aprueba-la-estructura-del-hosp-dr-vinicio-calventi-3.pdf",
+          "Ejemplo no universal de unidades hospitalarias",
+          "Pendiente",
+          ""
+        ],
+        [
+          "DIGEPRES ciclo",
+          "https://digepres.gob.do/presupuesto-ciudadano/ciclo-presupuestario/",
+          "Presupuesto público por etapas",
+          "Pendiente",
+          ""
+        ],
+        [
+          "DIGEPRES gasto SIGEF",
+          "https://digepres.gob.do/presupuesto-ciudadano/destino-de-los-recursos-del-presupuesto/",
+          "Apropiación, compromiso, devengado y pago",
+          "Pendiente",
+          ""
+        ],
+        [
+          "DGCP legislación",
+          "https://www.dgcp.gob.do/sobre-nosotros/marco-legal/leyes-y-decretos/",
+          "Normativa y vigencia de contrataciones públicas",
+          "Pendiente",
+          ""
+        ],
+        [
+          "DGCP metodología PACC",
+          "https://www.dgcp.gob.do/sobre-nosotros/marco-legal/metodologia-pacc/",
+          "Plantillas históricas; validar actualización Ley 47-25",
+          "Pendiente",
+          ""
+        ],
+        [
+          "MSP EIS resolución",
+          "https://repositorio.msp.gob.do/handle/123456789/1461",
+          "Contexto expediente integrado de salud",
+          "Pendiente",
+          ""
+        ],
+        [
+          "OMS calidad de datos",
+          "https://www.who.int/data/data-collection-tools/health-service-data",
+          "Auditoría, calidad y completitud",
+          "Pendiente",
+          ""
+        ],
+        [
+          "OMS seguridad de hospitales",
+          "https://www.who.int/publications/i/item/9789241548984",
+          "Seguridad física y resiliencia",
+          "Pendiente",
+          ""
+        ]
+      ]
+    },
+    "integrationPatterns": {
+      "fields": [
+        "Sistema",
+        "Dominio",
+        "Proveedor / versión",
+        "Ruta posible",
+        "Privilegio inicial",
+        "Responsable",
+        "Estado",
+        "Prueba sintética",
+        "Contrato técnico",
+        "Fuente oficial"
+      ],
+      "rows": [
+        [
+          "HIS / Historia clínica",
+          "EHR",
+          "Desconocido",
+          "FHIR/REST/archivos",
+          "Solo lectura inicial",
+          "TI + Dirección Médica",
+          "Por evaluar",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Admisión / ADT",
+          "Pacientes y camas",
+          "Desconocido",
+          "HL7 v2/FHIR/API",
+          "Solo lectura inicial",
+          "TI + Admisión",
+          "Por evaluar",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "LIS laboratorio",
+          "Resultados",
+          "Desconocido",
+          "HL7 v2/FHIR/API",
+          "Solo lectura inicial",
+          "TI + Laboratorio",
+          "Por evaluar",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "RIS / PACS",
+          "Imagenología",
+          "Desconocido",
+          "DICOMweb/HL7",
+          "Solo lectura inicial",
+          "TI + Imágenes",
+          "Por evaluar",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Farmacia SUGEMI/SALMI",
+          "Suministros",
+          "Desconocido",
+          "API/Export autorizado",
+          "Solo lectura inicial",
+          "TI + Farmacia",
+          "Por evaluar",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Contabilidad / SIGEF",
+          "Finanzas",
+          "Desconocido",
+          "API/Export autorizado",
+          "Solo lectura inicial",
+          "Finanzas + TI",
+          "Por evaluar",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "RRHH / SASP",
+          "Personal",
+          "Desconocido",
+          "API/Export autorizado",
+          "Solo lectura inicial",
+          "RRHH + TI",
+          "Por evaluar",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "ARS y facturación",
+          "Pagadores",
+          "Desconocido",
+          "Contrato/API/archivos",
+          "Solo lectura inicial",
+          "Finanzas + TI",
+          "Por evaluar",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "Mantenimiento CMMS",
+          "Equipo",
+          "Desconocido",
+          "API/CSV",
+          "Solo lectura inicial",
+          "Mantenimiento + TI",
+          "Por evaluar",
+          "Pendiente",
+          "",
+          ""
+        ],
+        [
+          "BMS/equipos biomédicos",
+          "Monitoreo autorizado",
+          "Desconocido",
+          "Interfaz fabricante",
+          "Solo lectura inicial",
+          "Ingeniería clínica",
+          "Por evaluar",
+          "Pendiente",
+          "",
+          ""
+        ]
+      ]
+    },
+    "reportTransmissionTemplates": {
+      "fields": [
+        "Código reporte",
+        "Institución receptora",
+        "Periodo / corte",
+        "Plantilla versión",
+        "Fuente reconciliada",
+        "Validación técnica",
+        "Aprobador",
+        "Fecha firma",
+        "Canal verificado",
+        "Fecha envío",
+        "Acuse",
+        "Estado"
+      ],
+      "rows": [
+        [
+          "R01",
+          "SNS/RIESS o autoridad aplicable",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R02",
+          "DIGEPI / SINAVE",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R03",
+          "MSP / registros correspondientes",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R04",
+          "SNS/MSP según modalidad",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R05",
+          "SNS/MSP/SRS",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R06",
+          "SNS/MAP/SASP donde corresponda",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R07",
+          "Autoridad financiera / SIGEF según entidad",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R08",
+          "SNS/SRS/planificación institucional",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R09",
+          "Dirección / SNS",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R10",
+          "DGCP / plataforma aplicable",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R11",
+          "DGCP/órganos de control",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R12",
+          "SNS/SRS según aplicabilidad",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R13",
+          "ARS/SeNaSa / administración",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R14",
+          "Dirección/comités/regulador según norma",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R15",
+          "Vigilancia interna/autoridades",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R16",
+          "Autoridad competente",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R17",
+          "Dirección / RRHH",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R18",
+          "Finanzas / control/autoridad competente",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R19",
+          "Dirección / control",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R20",
+          "Dirección / comité de riesgos",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R21",
+          "Autoridad ambiental/sanitaria si aplica",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R22",
+          "Autoridad laboral/seguridad social si aplica",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R23",
+          "OAI / portal institucional público",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R24",
+          "Dirección/comités",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R25",
+          "Consejo y dirección",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R26",
+          "Consejo / SNS según entidad",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R27",
+          "Dirección / Atención al usuario",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R28",
+          "Control interno",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R29",
+          "Finanzas / Dirección",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R30",
+          "Planificación / autoridad pertinente",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R31",
+          "Dirección / Calidad",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R32",
+          "Dirección / academia",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R33",
+          "Comité TIC / auditoría",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ],
+        [
+          "R34",
+          "Jefes de departamento",
+          "",
+          "Por verificar",
+          "Pendiente",
+          "Pendiente",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "No enviado"
+        ]
+      ]
+    },
+    "workflows": {
+      "fields": [
+        "Código",
+        "Proceso extremo a extremo",
+        "Líder",
+        "Sistemas / instancias",
+        "Condición de seguridad",
+        "Estado",
+        "Última prueba",
+        "Acta de aceptación"
+      ],
+      "rows": [
+        [
+          "F01",
+          "Admisión → Historia clínica → Facturación",
+          "Consulta/Admisión",
+          "EHR/ADM/ARS",
+          "Identidad, episodio, cobertura",
+          "No iniciado",
+          "",
+          ""
+        ],
+        [
+          "F02",
+          "Urgencias → Diagnóstico → Destino",
+          "Urgencias",
+          "Urgencias/EHR",
+          "Triage, tiempos, destino",
+          "No iniciado",
+          "",
+          ""
+        ],
+        [
+          "F03",
+          "Consulta → Farmacia → Enfermería",
+          "Dirección Médica",
+          "Órdenes/Farmacia/MAR",
+          "Firma y validación; no dispensar automáticamente",
+          "No iniciado",
+          "",
+          ""
+        ],
+        [
+          "F04",
+          "Orden → Laboratorio/Imágenes → Resultado crítico",
+          "Laboratorio",
+          "LIS/RIS/EHR",
+          "Acuse clínico obligatorio",
+          "No iniciado",
+          "",
+          ""
+        ],
+        [
+          "F05",
+          "Ingreso → Nutrición → Cocina → Entrega",
+          "Nutrición",
+          "ADT/Order/Cocina",
+          "Alergias y dieta firmada",
+          "No iniciado",
+          "",
+          ""
+        ],
+        [
+          "F06",
+          "Alta → Limpieza → Cama disponible",
+          "Enfermería/Hotelería",
+          "ADT/Hotelería",
+          "Verificación real de cama",
+          "No iniciado",
+          "",
+          ""
+        ],
+        [
+          "F07",
+          "Cirugía → Esterilización → Recuperación",
+          "Quirófano",
+          "Cirugía/CSSD",
+          "Lista seguridad y trazabilidad",
+          "No iniciado",
+          "",
+          ""
+        ],
+        [
+          "F08",
+          "Consumo → Reposición → Contrato → Pago",
+          "Almacén/Compras",
+          "Inventario/PAC/Finanzas",
+          "No compra sin partida y aprobación",
+          "No iniciado",
+          "",
+          ""
+        ],
+        [
+          "F09",
+          "Necesidad personal → RRHH → Nómina",
+          "RRHH",
+          "Turnos/RRHH/Nómina",
+          "Segregación de funciones",
+          "No iniciado",
+          "",
+          ""
+        ],
+        [
+          "F10",
+          "Falla activo → Mantenimiento → Liberación",
+          "Ingeniería",
+          "CMMS/Activos",
+          "Equipo vuelve a servicio tras prueba",
+          "No iniciado",
+          "",
+          ""
+        ],
+        [
+          "F11",
+          "KPI → Comité → Acción → Evidencia",
+          "Calidad",
+          "BI/Actas",
+          "Seguimiento verificable",
+          "No iniciado",
+          "",
+          ""
+        ],
+        [
+          "F12",
+          "Servicio → Cargo → Factura → ARS → Cobro",
+          "Facturación",
+          "EHR/ARS/Bancos",
+          "Conciliación y glosa",
+          "No iniciado",
+          "",
+          ""
+        ],
+        [
+          "F13",
+          "Consumo → Centro costo → POA → Presupuesto",
+          "Finanzas",
+          "Inventario/Finanzas/POA",
+          "Coherencia con período y partidas",
+          "No iniciado",
+          "",
+          ""
+        ],
+        [
+          "F14",
+          "Evento epidemiológico → SINAVE",
+          "Epidemiología",
+          "EHR/SINAVE",
+          "Canal y plazo de evento verificados",
+          "No iniciado",
+          "",
+          ""
+        ],
+        [
+          "F15",
+          "Reporte → Revisión → Firma → Envío → Acuse",
+          "Planificación",
+          "BI/Report Gateway",
+          "No afirmar envío sin recibo",
+          "No iniciado",
+          "",
+          ""
+        ]
+      ]
+    },
+    "budgetTemplates": {
+      "fields": [
+        "Nº",
+        "Dominio",
+        "Concepto",
+        "Tipo",
+        "Cantidad",
+        "Costo unit. RD$",
+        "Costo inicial RD$",
+        "Costo anual RD$",
+        "Fuente/cotización",
+        "Aprobador"
+      ],
+      "rows": [
+        [
+          "1",
+          "Infraestructura",
+          "Servidor institucional",
+          "CAPEX",
+          "",
+          "",
+          "",
+          "",
+          "Pendiente de cotización",
+          ""
+        ],
+        [
+          "2",
+          "Infraestructura",
+          "PC/tabletas/periféricos",
+          "CAPEX",
+          "",
+          "",
+          "",
+          "",
+          "Pendiente de cotización",
+          ""
+        ],
+        [
+          "3",
+          "Infraestructura",
+          "Red/Wi-Fi/UPS/almacenamiento",
+          "CAPEX",
+          "",
+          "",
+          "",
+          "",
+          "Pendiente de cotización",
+          ""
+        ],
+        [
+          "4",
+          "Infraestructura",
+          "Adecuaciones y dispositivos biomédicos",
+          "CAPEX",
+          "",
+          "",
+          "",
+          "",
+          "Pendiente de cotización",
+          ""
+        ],
+        [
+          "5",
+          "Software",
+          "Implantación/adaptadores/migración",
+          "CAPEX",
+          "",
+          "",
+          "",
+          "",
+          "Pendiente de cotización",
+          ""
+        ],
+        [
+          "6",
+          "Software",
+          "Licencias/conectores de terceros",
+          "OPEX",
+          "",
+          "",
+          "",
+          "",
+          "Pendiente de cotización",
+          ""
+        ],
+        [
+          "7",
+          "IA",
+          "Proveedores API inferencia",
+          "OPEX",
+          "",
+          "",
+          "",
+          "",
+          "Pendiente de cotización",
+          ""
+        ],
+        [
+          "8",
+          "IA",
+          "Electricidad/operación modelos locales",
+          "OPEX",
+          "",
+          "",
+          "",
+          "",
+          "Pendiente de cotización",
+          ""
+        ],
+        [
+          "9",
+          "Operación",
+          "Soporte y mantenimiento",
+          "OPEX",
+          "",
+          "",
+          "",
+          "",
+          "Pendiente de cotización",
+          ""
+        ],
+        [
+          "10",
+          "Operación",
+          "Backups, monitoreo y ciberseguridad",
+          "OPEX",
+          "",
+          "",
+          "",
+          "",
+          "Pendiente de cotización",
+          ""
+        ],
+        [
+          "11",
+          "Personal",
+          "Formación y capacitación",
+          "OPEX",
+          "",
+          "",
+          "",
+          "",
+          "Pendiente de cotización",
+          ""
+        ],
+        [
+          "12",
+          "Proyecto",
+          "Consultoría y validación clínica",
+          "CAPEX",
+          "",
+          "",
+          "",
+          "",
+          "Pendiente de cotización",
+          ""
+        ],
+        [
+          "13",
+          "Proyecto",
+          "Contingencia y reservas",
+          "CAPEX",
+          "",
+          "",
+          "",
+          "",
+          "Pendiente de cotización",
+          ""
+        ]
+      ]
+    },
+    "responsibilityMatrix": {
+      "fields": [
+        "Proceso",
+        "Dirección",
+        "Jefatura área",
+        "Datos/Estadística",
+        "TI/Bridge",
+        "Finanzas",
+        "Jurídica/Control",
+        "Autoridad externa"
+      ],
+      "rows": [
+        [
+          "Captura clínica",
+          "I",
+          "A",
+          "C",
+          "C",
+          "I",
+          "I",
+          ""
+        ],
+        [
+          "Gobierno del indicador",
+          "A",
+          "C",
+          "R",
+          "C",
+          "C",
+          "I",
+          ""
+        ],
+        [
+          "POA y PEI",
+          "A",
+          "R",
+          "C",
+          "I",
+          "C",
+          "C",
+          ""
+        ],
+        [
+          "Compra y contrato",
+          "A",
+          "C",
+          "I",
+          "I",
+          "R",
+          "C",
+          ""
+        ],
+        [
+          "Integración HIS",
+          "A",
+          "C",
+          "C",
+          "R",
+          "I",
+          "C",
+          ""
+        ],
+        [
+          "Cierre reporte oficial",
+          "A",
+          "R",
+          "R",
+          "C",
+          "C",
+          "C",
+          "I"
+        ],
+        [
+          "Envío regulatorio",
+          "A",
+          "R",
+          "C",
+          "C",
+          "C",
+          "C",
+          "I"
+        ],
+        [
+          "Gestión acceso paciente",
+          "I",
+          "A",
+          "C",
+          "R",
+          "I",
+          "C",
+          ""
+        ],
+        [
+          "Incidente seguridad paciente",
+          "A",
+          "R",
+          "C",
+          "I",
+          "I",
+          "C",
+          ""
+        ],
+        [
+          "Respaldo y recuperación",
+          "A",
+          "I",
+          "C",
+          "R",
+          "C",
+          "C",
+          ""
+        ],
+        [
+          "Comités y actas",
+          "A",
+          "R",
+          "C",
+          "I",
+          "I",
+          "C",
+          ""
+        ]
+      ]
+    }
+  }
+}
