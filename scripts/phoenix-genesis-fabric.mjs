@@ -76,6 +76,7 @@ export function planGenesisFabric(raw) {
       name(role.name,'Función')
       const count=integer(role.instances??1,'Instancias de la función',1000)
       if(count<1)throw new Error('Una función activa requiere al menos una instancia')
+      if(instances.length+count>10000)throw new Error('El plan excede 10 000 instancias; divida por organización o fase')
       const scopes=capabilities(role.capabilities,'Función')
       for(let index=1;index<=count;index++)instances.push({
         instanceId:organization+'.'+site.siteId+'.'+role.roleId+'.'+index,
