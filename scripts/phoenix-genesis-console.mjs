@@ -10,6 +10,7 @@ import { createHash,timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { GenesisWorkbench } from './phoenix-genesis-workbench.mjs'
 import { genesisCatalogSummary,searchGenesisCatalog } from './phoenix-genesis-healthcare-catalog.mjs'
+import { listGenesisAreaCensus,assessGenesisArea } from './phoenix-genesis-area-census.mjs'
 import { importGenesisManifest } from './phoenix-genesis-importer.mjs'
 import { previewGenesisDocument,inspectGenesisDocument,listGenesisDocumentFindings,decideGenesisFinding } from './phoenix-genesis-document-intake.mjs'
 import { previewGenesisLegacyCsv, importGenesisLegacyCsv } from './phoenix-genesis-legacy-csv.mjs'
@@ -20,7 +21,8 @@ const valid=secret=>typeof secret==='string'&&secret.length>=32&&secret.length<=
 const css=readFileSync(new URL('./phoenix-genesis-console.css',import.meta.url),'utf8')
 const js=readFileSync(new URL('./phoenix-genesis-console-ui.js',import.meta.url),'utf8')
 const html=readFileSync(new URL('./phoenix-genesis-console.html',import.meta.url),'utf8')
-const safePath=new Set(['/','/app.js','/style.css','/healthz'])
+const censusJs=readFileSync(new URL('./phoenix-genesis-census-ui.js',import.meta.url),'utf8')
+const safePath=new Set(['/','/app.js','/census.js','/style.css','/healthz'])
 const send=(res,status,value,contentType='application/json; charset=utf-8')=>{
   res.writeHead(status,{
     'content-type':contentType,
@@ -61,6 +63,7 @@ export function createGenesisConsole({dbPath,adminToken,port=0,host='127.0.0.1'}
       if(safePath.has(path)&&req.method==='GET'){
         if(path==='/')return send(res,200,html,'text/html; charset=utf-8')
         if(path==='/app.js')return send(res,200,js,'text/javascript; charset=utf-8')
+        if(path==='/census.js')return send(res,200,censusJs,'text/javascript; charset=utf-8')
         if(path==='/style.css')return send(res,200,css,'text/css; charset=utf-8')
         return send(res,200,{ok:true,service:'genesis-console'})
       }
@@ -118,6 +121,11 @@ export function createGenesisConsole({dbPath,adminToken,port=0,host='127.0.0.1'}
           warning:'Guarde el token en un gestor de secretos; esta operación NO instala el nodo.'
         })
       }
+      if(path==='/v1/census'&&req.method==='GET')
+        return send(res,200,listGenesisAreaCensus(workbench,
+          target.searchParams.get('organizationId')))
+      if(path==='/v1/census/assess'&&req.method==='POST')
+        return send(res,201,{result:assessGenesisArea(workbench,await json(req))})
       if(path==='/v1/catalog/summary'&&req.method==='GET'){
         const org=workbench.dashboard(target.searchParams.get('organizationId'))
         return send(res,200,genesisCatalogSummary(org.organization.industry))
@@ -182,7 +190,7 @@ export function createGenesisConsole({dbPath,adminToken,port=0,host='127.0.0.1'}
     }catch(error){
       const status=Number.isInteger(error.status)?error.status:
         /inexistente|desconocido|no encontrada/iu.test(error.message)?404:
-        /duplicad|ya registrada|CONSTRAINT/iu.test(error.message)?409:400
+        /duplicad|ya registrada|CONSTRAINT|Conflicto de versión/iu.test(error.message)?409:400
       return problem(res,status,status===400?String(error.message).slice(0,260):
         status===404?'Recurso no encontrado':status===409?'Conflicto de registro':'Error')
     }

@@ -7,6 +7,10 @@ on:
       - 'scripts/phoenix-genesis-area-census.mjs'
       - 'scripts/phoenix-genesis-area-census.test.mjs'
       - 'scripts/phoenix-genesis-area-census-cli.mjs'
+      - 'scripts/phoenix-genesis-area-census-http.test.mjs'
+      - 'scripts/phoenix-genesis-census-ui.js'
+      - 'scripts/phoenix-genesis-console.html'
+      - 'scripts/phoenix-genesis-console.mjs'
       - '.github/workflows/phoenix-genesis-area-census.yml'
   push:
     branches: [main, stable]
@@ -14,6 +18,10 @@ on:
       - 'scripts/phoenix-genesis-area-census.mjs'
       - 'scripts/phoenix-genesis-area-census.test.mjs'
       - 'scripts/phoenix-genesis-area-census-cli.mjs'
+      - 'scripts/phoenix-genesis-area-census-http.test.mjs'
+      - 'scripts/phoenix-genesis-census-ui.js'
+      - 'scripts/phoenix-genesis-console.html'
+      - 'scripts/phoenix-genesis-console.mjs'
       - '.github/workflows/phoenix-genesis-area-census.yml'
   workflow_dispatch:
 
@@ -31,6 +39,6 @@ jobs:
         with:
           node-version: '24'
       - name: Test hospital department census and source-of-truth safeguards
-        run: node --test scripts/phoenix-genesis-area-census.test.mjs
+        run: node --test scripts/phoenix-genesis-area-census.test.mjs scripts/phoenix-genesis-area-census-http.test.mjs
       - name: Validate census CLI syntax
-        run: node --check scripts/phoenix-genesis-area-census-cli.mjs
+        run: node --check scripts/phoenix-genesis-area-census-cli.mjs && node --check scripts/phoenix-genesis-census-ui.js
