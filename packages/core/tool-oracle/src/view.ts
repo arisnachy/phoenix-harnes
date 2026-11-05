@@ -9,7 +9,7 @@ function metric(label:string,value:string,detail?:string):Node{
 function isOracleResearch(r:OracleResult|OracleResearch):r is OracleResearch {
   return 'kind' in r && r.kind==='oracle_research'
 }
-export function oracleVisual(result:OracleResult|OracleResearch,question?:string):Record<string,unknown>{
+export function oracleVisual(result:OracleResult|OracleResearch,question?:string,metadata?:{url:string;observations:number;lastObservedAt:string;retrievedAt:string;sha256:string}):Record<string,unknown>{
   const isResearch=isOracleResearch(result)
   const headline=clean(isResearch?result.question:question??'Proyección científica',120)
   const children:Node[]=[
@@ -50,9 +50,20 @@ export function oracleVisual(result:OracleResult|OracleResearch,question?:string
       if(result.interval80)children.push(metric('Intervalo nominal 80 %',
         result.interval80.lower.toFixed(3)+' – '+result.interval80.upper.toFixed(3)))
     }
+    if(metadata)children.push(
+      {type:'group',layout:'grid',children:[
+        metric('Observaciones recuperadas',String(metadata.observations)),
+        metric('Último dato',clean(metadata.lastObservedAt,48)),
+        metric('Consulta realizada',clean(metadata.retrievedAt,48)),
+      ]},
+      {type:'table',columns:['Procedencia','Valor'],rows:[
+        ['Datos públicos CSV',clean(metadata.url,320)],
+        ['Huella SHA-256',clean(metadata.sha256,100)],
+      ]},
+    )
     if(result.reason)children.push({type:'alert',status:'warning',message:clean(result.reason,750)})
     children.push({type:'badge',text:'Método: '+clean(result.method,110),status:'neutral'})
-    children.push({type:'alert',status:'info',message:'La procedencia suministrada no está autenticada por ORÁCULO. Una probabilidad calculada no equivale a certeza ni a validación externa.'})
+    children.push({type:'alert',status:'info',message:'La fuente y sus valores no han sido validados científicamente por ORÁCULO. Las predicciones y los intervalos no equivalen a garantía ni calibración externa.'})
     if(result.assumptions.length)children.push({type:'tabs',tabs:[
       {label:'Supuestos',children:result.assumptions.slice(0,8).map(text=>({type:'text',text:clean(text,850)}))},
       {label:'Procedencia',children:[{type:'text',text:clean(result.source,350)}]},
