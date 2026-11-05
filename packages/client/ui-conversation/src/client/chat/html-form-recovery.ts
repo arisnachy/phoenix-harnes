@@ -24,8 +24,15 @@ function labelFor(doc: Document, input: HTMLInputElement): string {
   const own = input.closest('label')?.textContent ?? ''
   const linked = Array.from(doc.querySelectorAll('label'))
     .find(label => label.getAttribute('for') === input.id && input.id !== '')?.textContent ?? ''
-  const wrapper = input.parentElement?.textContent?.slice(0, 160) ?? ''
-  return [input.id, input.name, input.getAttribute('aria-label'), own, linked, wrapper].join(' ').toLocaleLowerCase('es')
+  const parent = input.parentElement
+  // A form-level wrapper contains other field labels and must never cause
+  // two unrelated controls to be mistaken for the same semantic input.
+  const wrapper = parent?.querySelectorAll('input').length === 1
+    ? parent.textContent?.slice(0, 160) ?? '' : ''
+  const nextUnit = input.nextElementSibling?.tagName.toLowerCase() === 'span'
+    ? input.nextElementSibling.textContent?.slice(0, 40) ?? '' : ''
+  return [input.id, input.name, input.getAttribute('aria-label'), own, linked, wrapper, nextUnit]
+    .join(' ').toLocaleLowerCase('es')
 }
 
 function authoredBehavior(doc: Document, html: string): boolean {
