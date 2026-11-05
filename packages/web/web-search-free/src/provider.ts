@@ -1,8 +1,8 @@
-/** Free, keyless HTML search provider for Bing and DuckDuckGo. */
+/** Free-first source discovery. Engines may block automated search; never evade challenges. */
 import { WebError, type WebSearchProvider, type WebSearchRequest, type WebSearchResult, type WebSearchSource } from '@phoenix-ai/dsh-web'
 
 /** Public HTML search engine supported by the keyless provider. */
-export type FreeSearchEngine = 'bing' | 'duckduckgo'
+export type FreeSearchEngine = 'bing' | 'duckduckgo' | 'wikipedia'
 /** Injectable fetch boundary used by tests and host integrations. */
 export type FreeSearchFetcher = (input: string, init?: RequestInit) => Promise<Response>
 
@@ -13,7 +13,8 @@ export interface FreeSearchProviderOptions {
   readonly fetcher?: FreeSearchFetcher
 }
 
-const DEFAULT_ENGINES: readonly FreeSearchEngine[] = ['bing', 'duckduckgo']
+const DEFAULT_ENGINES: readonly FreeSearchEngine[] = ['bing', 'duckduckgo', 'wikipedia']
+const PHOENIX_USER_AGENT = 'PHOENIX-ResearchBot/1.0 (+https://github.com/arisnachy/phoenix-harnes)'
 const DEFAULT_TIMEOUT_MS = 8_000
 
 /** Stable provider id used by `ctx.web`. */
@@ -25,6 +26,8 @@ export class FreeSearchProvider implements WebSearchProvider {
   private readonly engines: readonly FreeSearchEngine[]
   private readonly timeoutMs: number
   private readonly fetcher: FreeSearchFetcher
+  private readonly engineCooldown = new Map<FreeSearchEngine, number>()
+  private readonly queryCache = new Map<string, { expires: number; result: WebSearchResult }>()
 
   constructor(options: FreeSearchProviderOptions = {}) {
     this.engines = options.engines ?? DEFAULT_ENGINES
@@ -39,29 +42,51 @@ export class FreeSearchProvider implements WebSearchProvider {
   async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
     if (!this.available()) throw new WebError('no free search engine is configured', 'WEB_PROVIDER_UNAVAILABLE')
     if (signal?.aborted === true) throw signal.reason ?? new WebError('web search was aborted', 'WEB_SEARCH_ABORTED')
+    const cacheKey = JSON.stringify([request.query, request.maxResults])
+    const cached = this.queryCache.get(cacheKey)
+    if (cached !== undefined && cached.expires > Date.now()) return cached.result
 
     for (const engine of this.engines) {
+      if ((this.engineCooldown.get(engine) ?? 0) > Date.now()) continue
       const response = await this.fetchEngine(engine, request.query, signal)
+      if (response.status === 202 || response.status === 403 || response.status === 429) {
+        this.engineCooldown.set(engine, Date.now() + 60_000)
+        continue
+      }
       if (!response.ok) continue
-      const sources = engine === 'bing' ? parseBing(await response.text()) : parseDuckDuckGo(await response.text())
+      let sources: WebSearchSource[]
+      try {
+        sources = engine === 'wikipedia' ? parseWikipedia(await response.json())
+          : engine === 'bing' ? parseBing(await response.text()) : parseDuckDuckGo(await response.text())
+      } catch {
+        // API changes or malformed upstream payloads are recoverable via the next free source.
+        continue
+      }
       if (sources.length > 0) {
-        return {
+        const result = {
           sources: capSources(sources, request.maxResults),
           truncated: request.maxResults !== undefined && sources.length > request.maxResults,
         }
+        this.queryCache.set(cacheKey, { expires: Date.now() + 30_000, result })
+        if (this.queryCache.size > 128) this.queryCache.delete(this.queryCache.keys().next().value ?? cacheKey)
+        return result
       }
     }
     throw new WebError('no free search engine returned results', 'WEB_PROVIDER_TRANSIENT')
   }
 
   private async fetchEngine(engine: FreeSearchEngine, query: string, signal?: AbortSignal): Promise<Response> {
-    const endpoint = engine === 'bing' ? 'https://www.bing.com/search' : 'https://html.duckduckgo.com/html/'
-    const url = `${endpoint}?q=${encodeURIComponent(query).replace(/%20/g, '+')}`
+    const endpoint = engine === 'bing' ? 'https://www.bing.com/search'
+      : engine === 'duckduckgo' ? 'https://html.duckduckgo.com/html/'
+      : 'https://es.wikipedia.org/w/api.php'
+    const url = engine === 'wikipedia'
+      ? `${endpoint}?action=query&list=search&format=json&srsearch=${encodeURIComponent(query)}&srlimit=10`
+      : `${endpoint}?q=${encodeURIComponent(query).replace(/%20/g, '+')}`
     const controller = new AbortController()
     const timer = setTimeout(() =>{  controller.abort(new Error('free search timeout')) }, this.timeoutMs)
     const combined = signal === undefined ? controller.signal : AbortSignal.any([signal, controller.signal])
     try {
-      return await this.fetcher(url, { signal: combined, headers: { accept: 'text/html' } })
+      return await this.fetcher(url, { signal: combined, headers: { accept: engine === 'wikipedia' ? 'application/json' : 'text/html', 'user-agent': PHOENIX_USER_AGENT } })
     } catch (error) {
       if (signal?.aborted === true) throw signal.reason ?? error
       return new Response('', { status: 599 })
@@ -69,6 +94,21 @@ export class FreeSearchProvider implements WebSearchProvider {
       clearTimeout(timer)
     }
   }
+}
+
+function parseWikipedia(raw: unknown): WebSearchSource[] {
+  if (typeof raw !== 'object' || raw === null || !('query' in raw)) return []
+  const query = (raw as { query?: { search?: unknown } }).query
+  if (!Array.isArray(query?.search)) return []
+  return query.search.flatMap((item: unknown): WebSearchSource[] => {
+    if (typeof item !== 'object' || item === null || !('title' in item) || typeof item.title !== 'string') return []
+    const entry = item as { title: string; snippet?: string }
+    return [{
+      url: `https://es.wikipedia.org/wiki/${encodeURIComponent(entry.title.replace(/ /gu, '_'))}`,
+      title: entry.title,
+      ...(entry.snippet === undefined ? {} : { snippet: stripHtml(entry.snippet) }),
+    }]
+  })
 }
 
 function parseBing(html: string): WebSearchSource[] {

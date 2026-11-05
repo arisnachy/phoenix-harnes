@@ -29,6 +29,25 @@ describe('FreeSearchProvider', () => {
     const fetcher = vi.fn(async () => new Response('', { status: 200 }))
     const provider = new FreeSearchProvider({ fetcher, engines: ['bing'] })
     await expect(provider.search({ query: 'a secret' })).rejects.toThrow(/no free search engine returned results/)
-    expect(fetcher).toHaveBeenCalledWith('https://www.bing.com/search?q=a+secret', expect.objectContaining({ headers: { accept: 'text/html' } }))
+    expect(fetcher).toHaveBeenCalledWith('https://www.bing.com/search?q=a+secret', expect.objectContaining({ headers: { accept: 'text/html', 'user-agent': 'PHOENIX-ResearchBot/1.0 (+https://github.com/arisnachy/phoenix-harnes)' } }))
+  })
+})
+
+
+describe('free official API and challenge cooldown', () => {
+  it('uses free Wikipedia JSON API after both HTML engines are challenged', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response('captcha', { status: 202 }))
+      .mockResolvedValueOnce(new Response('blocked', { status: 429 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ query: { search: [
+        { title: 'Salud pública', snippet: 'Estudio de <b>salud</b>' },
+      ] } }), { status: 200 }))
+    const provider = new FreeSearchProvider({ fetcher })
+    const result = await provider.search({ query: 'salud' })
+    expect(result.sources[0]?.url).toContain('es.wikipedia.org/wiki/')
+    expect(result.sources[0]?.snippet).toBe('Estudio de salud')
+    expect(fetcher).toHaveBeenCalledTimes(3)
+    await provider.search({ query: 'salud' })
+    expect(fetcher).toHaveBeenCalledTimes(3)
   })
 })

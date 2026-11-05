@@ -25,7 +25,7 @@ describe('production research source access', () => {
     const service = rows.find(row => row.id === 'web')
     const reader = rows.find(row => row.id === 'web-fetch-http')
     const tools = rows.find(row => row.id === 'tool-web')
-    expect(service?.config).toMatchObject({ searchProvider: 'openrouter', fetchProvider: 'http' })
+    expect(service?.config).toMatchObject({ searchProvider: 'free-html', fetchProvider: 'http' })
     expect(reader?.name).toBe('@phoenix-ai/dsh-web-fetch-http')
     expect(tools?.config).toMatchObject({ searchMaxQueries: 3, searchMaxResults: 8, fetch: true })
     expect(rows.filter(row => row.id === 'web-fetch-http')).toHaveLength(1)
@@ -37,6 +37,8 @@ describe('production research source access', () => {
     const tool = rows.find(row => row.id === 'tool-web')?.config
     expect(source).toBeDefined()
     expect(source?.allowPrivateNetworks).toBe(false)
+    expect(source?.respectRobots).toBe(true)
+    expect(source?.userAgent).toContain('PHOENIX-ResearchBot')
     expect(source?.maxRedirects).toBeLessThanOrEqual(2)
     expect(source?.maxResponseBytes).toBeLessThanOrEqual(1_500_000)
     expect(source?.maxBodyChars).toBeLessThanOrEqual(80_000)
