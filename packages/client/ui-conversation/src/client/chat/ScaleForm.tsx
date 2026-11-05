@@ -3,7 +3,16 @@ import { PhoenixStatusPill, PhoenixUiIcon, type PhoenixStatusTone } from '@phoen
 import css from './InteractiveUi.module.css'
 
 type ScaleChoice = { readonly label: string; readonly score: number }
-type ScaleItem = { readonly id: string; readonly question: string; readonly options: readonly ScaleChoice[] }
+type ScaleItem = { readonly id: string; readonly question: string; readonly options: readonly ScaleChoice[]; readonly help?: string }
+type ScaleStep = {
+  readonly id: string; readonly title: string; readonly instruction: string
+  readonly phase: 'prepare' | 'administer' | 'score'
+}
+type ScaleScoring = {
+  readonly min: number; readonly max: number
+  readonly direction?: 'higher-worse' | 'higher-better' | 'descriptive'
+  readonly note?: string
+}
 type ScaleBand = { readonly max: number; readonly label: string; readonly tone?: PhoenixStatusTone }
 
 /** Declarative score form: the model may supply values, never JavaScript or callbacks. */
@@ -14,6 +23,10 @@ export interface ScaleFormSpec {
     readonly title: string
     readonly description?: string
     readonly source?: string
+    readonly version?: string
+    readonly population?: string
+    readonly administration?: readonly ScaleStep[]
+    readonly scoring?: ScaleScoring
     readonly items: readonly ScaleItem[]
     readonly bands?: readonly ScaleBand[]
   }
@@ -33,28 +46,52 @@ export function parseScaleForm(value: unknown): ScaleFormSpec | null {
   if (!record(value) || !allowed(value, ['component', 'version', 'props'])
     || value.component !== 'scale_form' || value.version !== 1 || !record(value.props)) return null
   const props = value.props
-  if (!allowed(props, ['title', 'description', 'source', 'items', 'bands'])
+  if (!allowed(props, ['title', 'description', 'source', 'version', 'population',
+    'administration', 'scoring', 'items', 'bands'])
     || !text(props.title, 120)
     || (props.description !== undefined && !text(props.description, 600))
     || (props.source !== undefined && !text(props.source, 400))
+    || (props.version !== undefined && !text(props.version, 120))
+    || (props.population !== undefined && !text(props.population, 240))
     || !Array.isArray(props.items) || props.items.length < 1 || props.items.length > 60) return null
   const ids = new Set<string>()
   for (const item of props.items) {
-    if (!record(item) || !allowed(item, ['id', 'question', 'options'])
+    if (!record(item) || !allowed(item, ['id', 'question', 'options', 'help'])
       || typeof item.id !== 'string' || !/^[a-z][a-z0-9_-]{0,39}$/.test(item.id)
       || ids.has(item.id) || !text(item.question, 400)
+      || (item.help !== undefined && !text(item.help, 600))
       || !Array.isArray(item.options) || item.options.length < 2 || item.options.length > 12) return null
     ids.add(item.id)
     const labels = new Set<string>()
-    const scores = new Set<number>()
     for (const option of item.options) {
       if (!record(option) || !allowed(option, ['label', 'score']) || !text(option.label, 160)
         || typeof option.score !== 'number' || !Number.isSafeInteger(option.score)
-        || option.score < -1000 || option.score > 1000 || labels.has(option.label)
-        || scores.has(option.score)) return null
+        || option.score < -1000 || option.score > 1000 || labels.has(option.label)) return null
       labels.add(option.label)
-      scores.add(option.score)
     }
+  }
+  if (props.administration !== undefined) {
+    if (!Array.isArray(props.administration) || props.administration.length < 1
+      || props.administration.length > 18) return null
+    const stepIds = new Set<string>()
+    for (const step of props.administration) {
+      if (!record(step) || !allowed(step, ['id','title','instruction','phase'])
+        || typeof step.id !== 'string' || !/^[a-z][a-z0-9_-]{0,39}$/.test(step.id)
+        || stepIds.has(step.id) || !text(step.title, 180)
+        || !text(step.instruction, 1500)
+        || !['prepare','administer','score'].includes(String(step.phase))) return null
+      stepIds.add(step.id)
+    }
+  }
+  if (props.scoring !== undefined) {
+    const rule = props.scoring
+    if (!record(rule) || !allowed(rule, ['min','max','direction','note'])
+      || !Number.isSafeInteger(rule.min) || !Number.isSafeInteger(rule.max)
+      || (rule.min as number) >= (rule.max as number)
+      || (rule.min as number) < -60000 || (rule.max as number) > 60000
+      || (rule.direction !== undefined
+        && !['higher-worse','higher-better','descriptive'].includes(String(rule.direction)))
+      || (rule.note !== undefined && !text(rule.note, 1000))) return null
   }
   if (props.bands !== undefined) {
     if (!Array.isArray(props.bands) || props.bands.length < 1 || props.bands.length > 12) return null
@@ -68,6 +105,42 @@ export function parseScaleForm(value: unknown): ScaleFormSpec | null {
     }
   }
   return value as unknown as ScaleFormSpec
+}
+
+/**
+ * Detect unsafe or incomplete instrument descriptions without silently
+ * changing their authored scoring. Other kinds of forms remain supported.
+ * @param spec - Parsed scale definition
+ * @returns Explicit reasons it cannot claim standardized assessment
+ */
+export function scaleProtocolWarnings(spec: ScaleFormSpec): string[] {
+  const warnings: string[] = []
+  const minimum = spec.props.items.reduce((s, item) =>
+    s + Math.min(...item.options.map(option => option.score)), 0)
+  const maximum = spec.props.items.reduce((s, item) =>
+    s + Math.max(...item.options.map(option => option.score)), 0)
+  const scoring = spec.props.scoring
+  if (scoring && (scoring.min !== minimum || scoring.max !== maximum)) {
+    warnings.push('El rango declarado no corresponde a las puntuaciones de las respuestas.')
+  }
+  const isMiniCog = /\\bmini[ -]?cog\\b/iu.test(spec.props.title)
+  if (!isMiniCog) return warnings
+  const steps = spec.props.administration ?? []
+  const all = steps.map(step => step.title + ' ' + step.instruction).join(' ').toLowerCase()
+  if (steps.length < 3 || !/registro|registration|memorizar|recuerdo inicial/iu.test(all)
+    || !/reloj|clock/iu.test(all) || !/evocaci[oó]n|recall/iu.test(all)) {
+    warnings.push('Mini-Cog: falta el procedimiento de registro, reloj y evocación diferida.')
+  }
+  const options = spec.props.items.map(item =>
+    item.options.map(option => option.score).sort((a,b) => a-b).join(','))
+  if (options.length !== 2 || !options.includes('0,1,2,3') || !options.includes('0,2')
+    || minimum !== 0 || maximum !== 5) {
+    warnings.push('Mini-Cog: requiere recuerdo 0–3, reloj 0 o 2 y total 0–5.')
+  }
+  if (!spec.props.source || !spec.props.version) {
+    warnings.push('Mini-Cog: especifica fuente y versión del protocolo autorizado.')
+  }
+  return warnings
 }
 
 /** Score locally and deterministically, without consuming model turns. */
@@ -92,15 +165,25 @@ export function scoreScale(spec: ScaleFormSpec, answers: Record<string, number>)
 
 /** In-chat form with answered-item count, reset and auditable scoring. */
 export function ScaleForm({ spec }: { readonly spec: ScaleFormSpec }): ReactNode {
-  const [answers, setAnswers] = useState<Record<string, number>>({})
+  const [selected, setSelected] = useState<Record<string, number>>({})
+  // Preserve the selected label even if distinct choices share a score.
+  const answers: Record<string, number> = {}
+  for (const item of spec.props.items) {
+    const choice = selected[item.id]
+    if (choice !== undefined && item.options[choice] !== undefined) {
+      answers[item.id] = item.options[choice]!.score
+    }
+  }
+  const warnings = scaleProtocolWarnings(spec)
   const [copied, setCopied] = useState(false)
   const scored = scoreScale(spec, answers)
   const copy = (): void => {
     if (scored.total === null || typeof navigator === 'undefined' || !navigator.clipboard) return
     const lines = [spec.props.title, ...spec.props.items.map(item =>
-      item.question + ': ' + (item.options.find(option => option.score === answers[item.id])?.label ?? 'Sin respuesta')),
+      item.question + ': ' + (item.options[selected[item.id] ?? -1]?.label ?? 'Sin respuesta')),
     'Total: ' + String(scored.total), 'Interpretación: ' + (scored.band?.label ?? 'No definida'),
-    'Fuente: ' + (spec.props.source ?? 'No especificada')]
+    'Fuente: ' + (spec.props.source ?? 'No especificada'),
+    ...warnings.map(warning => 'Advertencia: ' + warning)]
     void navigator.clipboard.writeText(lines.join('\n')).then(() => setCopied(true)).catch(() => setCopied(false))
   }
   return <section className={css.surface} data-generative-ui="scale_form">
@@ -108,22 +191,33 @@ export function ScaleForm({ spec }: { readonly spec: ScaleFormSpec }): ReactNode
       <div><h3>{spec.props.title}</h3>
         {spec.props.description && <p>{spec.props.description}</p>}
       </div></header>
+    {spec.props.administration && <section aria-label="Protocolo de aplicación" className={css.questions}>
+      <h4>Procedimiento de administración</h4>
+      <ol>{spec.props.administration.map(step =>
+        <li key={step.id}><strong>{step.title}</strong><p>{step.instruction}</p></li>)}</ol>
+    </section>}
+    {warnings.length > 0 && <div role="alert" className={css.disclaimer}>
+      <strong>Instrumento incompleto o no verificable.</strong>
+      <ul>{warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
+      La puntuación es solo un registro, no una aplicación clínica validada.
+    </div>}
     <div className={css.questions}>
       {spec.props.items.map((item, index) => <label key={item.id} className={css.question}>
         <span>{index + 1}. {item.question}</span>
-        <select value={answers[item.id] === undefined ? '' : String(answers[item.id])}
+        {item.help && <small>{item.help}</small>}
+        <select value={selected[item.id] === undefined ? '' : String(selected[item.id])}
           onChange={event => {
-            const score = event.currentTarget.value
-            setAnswers(old => {
+            const choice = event.currentTarget.value
+            setSelected(old => {
               const next = { ...old }
-              if (score === '') delete next[item.id]
-              else next[item.id] = Number(score)
+              if (choice === '') delete next[item.id]
+              else next[item.id] = Number(choice)
               return next
             })
             setCopied(false)
           }}>
           <option value="">Seleccionar respuesta</option>
-          {item.options.map((option, i) => <option key={i} value={String(option.score)}>{option.label}</option>)}
+          {item.options.map((option, i) => <option key={i} value={String(i)}>{option.label}</option>)}
         </select>
       </label>)}
     </div>
@@ -131,17 +225,21 @@ export function ScaleForm({ spec }: { readonly spec: ScaleFormSpec }): ReactNode
       <span>Puntuación</span>
       <strong aria-live="polite">{scored.total === null ? '—' : scored.total}</strong>
       <span>{scored.answered} de {spec.props.items.length} respuestas</span>
-      {scored.band && <PhoenixStatusPill label={scored.band.label} tone={scored.band.tone ?? 'neutral'} />}
+      {spec.props.scoring && <span>Rango: {spec.props.scoring.min}–{spec.props.scoring.max}</span>}
+      {warnings.length === 0 && scored.band && <PhoenixStatusPill label={scored.band.label} tone={scored.band.tone ?? 'neutral'} />}
     </div>
     <div className={css.actions}>
       <button type="button" onClick={copy} disabled={scored.total === null}>
         <PhoenixUiIcon name={copied ? 'check' : 'copy'} size={15} /> {copied ? 'Copiado' : 'Copiar resultado'}
       </button>
-      <button type="button" onClick={() => { setAnswers({}); setCopied(false) }}>
+      <button type="button" onClick={() => { setSelected({}); setCopied(false) }}>
         <PhoenixUiIcon name="reset" size={15} /> Reiniciar
       </button>
     </div>
     <p className={css.disclaimer}>Puntuación calculada mediante reglas declaradas.
+      {spec.props.scoring?.note ? ' ' + spec.props.scoring.note : ''}
+      {spec.props.population ? ' Población: ' + spec.props.population + '.' : ''}
+      {spec.props.version ? ' Versión: ' + spec.props.version + '.' : ''}
       {spec.props.source ? ' Fuente: ' + spec.props.source + '.' : ' Fuente y validez no verificadas.'}
       {' '}Una interpretación clínica requiere un instrumento validado y su protocolo.</p>
   </section>
