@@ -3,6 +3,7 @@ import type { OracleResult } from './engine.ts'
 import type { OracleResearch } from './research.ts'
 import type { EnsembleForecast } from './forecast-ensemble.ts'
 import type { OraclePlan, OracleFusion, OracleCalibration } from './scientific-intelligence.ts'
+import type { OracleHistoryRow } from './ledger.ts'
 type Node=Record<string,unknown>
 function clean(x:unknown,max=160):string { return String(x??'').replace(/[\x00-\x1f\x7f]/gu,' ').slice(0,max).trim()||'Sin especificar' }
 function metric(label:string,value:string,detail?:string):Node{
@@ -196,4 +197,28 @@ export function oracleCalibrationVisual(result:OracleCalibration):Record<string,
     {type:'alert',status:'info',message:'La calibración es descriptiva: sin muestras suficientes, independencia y verificación externa no confirma fiabilidad prospectiva.'},
   ]
   return {component:'ui_canvas',version:1,props:{title:'ORÁCULO · Calibration Lab',subtitle:'¿Coincide el porcentaje pronosticado con la frecuencia observada?',children}}
+}
+
+
+/** Compact prediction library. Actions return a draft to the normal user-confirmed chat composer. */
+export function oracleHistoryVisual(rows:OracleHistoryRow[]):Record<string,unknown> {
+  const children:Node[]=[
+    {type:'group',layout:'row',children:[
+      {type:'badge',text:'BIBLIOTECA DE FUTUROS',status:'info'},
+      {type:'badge',text:'Registro local inmutable',status:'neutral'},
+    ]},
+    metric('Pronósticos mostrados',String(rows.length)),
+    ...(rows.length?[{type:'table',columns:['ID','Método','Horizonte','Estado'],rows:rows.slice(0,20).map(r=>[
+      clean(r.id.slice(0,8),80),clean(r.method,130),
+      clean((r.targetAt??'Sin fecha').slice(0,16),60),
+      r.state==='outcome-reported'?'Resultado declarado':'Pendiente',
+    ])}]:[{type:'alert',status:'info',message:'Todavía no existen pronósticos guardados.'}]),
+    ...(rows.length?[{type:'select',id:'pronostico',label:'Elegir pronóstico',options:rows.slice(0,20).map(r=>({
+      label:clean(r.method+' · '+(r.targetAt??r.createdAt).slice(0,10)+' · '+r.id.slice(0,8),110),
+      value:r.id,
+    }))},{type:'button',label:'Reinvestigar y crear nueva versión',action:'draft',
+      prompt:'ORÁCULO: revisa la predicción de ID {pronostico}; consulta las fuentes y las observaciones nuevas. Si existe nueva evidencia suficiente, llama oracle_revision_prediction con previousId {pronostico} para guardar una NUEVA versión, sin cambiar el registro antiguo. Si no, explica qué falta.'}]:[]),
+    {type:'alert',status:'info',message:'Las predicciones originales no se sobrescriben. Una actualización crea una nueva versión y conserva la procedencia; los resultados reportados aún no están autenticados.'},
+  ]
+  return {component:'ui_canvas',version:1,props:{title:'ORÁCULO · Historial predictivo',subtitle:'Consulta, versiones y revisiones',children}}
 }
