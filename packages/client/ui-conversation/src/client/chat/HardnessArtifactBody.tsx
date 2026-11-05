@@ -10,6 +10,8 @@ import { SceneMap, parseSceneMapSpec } from './SceneMap.tsx'
 import { DiagramSurface, parseDiagramSpec } from './DiagramSurface.tsx'
 import { auditGameHtml, readGameManifest } from './game-studio-quality.ts'
 import { hasExecutableHtmlBehavior, hasExternalImageReferences, inlineBundledImages } from './html-preview-assets.ts'
+import { recoverHtmlForm } from './html-form-recovery.ts'
+import { SmartFormWorkspace } from './SmartFormSurface.tsx'
 import {
   libraryGameId, listLibraryGames, openGameInWindow, removeLibraryGame, saveLibraryGame,
   type LibraryGame,
@@ -777,6 +779,15 @@ export function HardnessArtifactBody({ mime, data, expanded, title, executable =
       const pageUrl = safeWebPreviewUrl(data)
       if (mime === 'application/vnd.phoenix.game+html') return <GameStudioPreview html={data} title={title} />
       if (pageUrl !== undefined && !data.includes('<')) return <WebPagePreview url={pageUrl} title={title} />
+      const recovered = recoverHtmlForm(data, title)
+      if (recovered.kind === 'native') return <SmartFormWorkspace initial={recovered.spec} />
+      if (recovered.kind === 'inert') return <div className={styles.stack}>
+        <p className={styles.note} role="alert">
+          Esta interfaz HTML contiene un formulario de cálculo sin fórmula ejecutable.
+          PHOENIX no inventará un resultado: solicita una versión smart_form con campos y outputs calculados.
+        </p>
+        <MiniApp html={data} title={title} executable={false} />
+      </div>
       return <MiniApp html={data} title={title} executable={executable} />
     }
     if (mime.startsWith('image/')) {
