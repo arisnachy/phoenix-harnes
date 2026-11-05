@@ -340,7 +340,7 @@ describe('chat tool activity grouping', () => {
     ['read_file', 'activity.reading'],
     ['update_file', 'activity.writing'],
     ['vitest', 'activity.verifying'],
-    ['image_generation', 'activity.other'],
+    ['image_generation', 'activity.generatingImage'],
   ])('classifies a completed %s call from tool identity alone', (name, label) => {
     renderChat([context(1, 'system'), {
       ...settledTool(),
