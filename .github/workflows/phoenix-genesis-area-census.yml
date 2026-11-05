@@ -1,0 +1,36 @@
+name: PHOENIX Genesis Hospital Area Census
+
+on:
+  pull_request:
+    branches: [main, stable]
+    paths:
+      - 'scripts/phoenix-genesis-area-census.mjs'
+      - 'scripts/phoenix-genesis-area-census.test.mjs'
+      - 'scripts/phoenix-genesis-area-census-cli.mjs'
+      - '.github/workflows/phoenix-genesis-area-census.yml'
+  push:
+    branches: [main, stable]
+    paths:
+      - 'scripts/phoenix-genesis-area-census.mjs'
+      - 'scripts/phoenix-genesis-area-census.test.mjs'
+      - 'scripts/phoenix-genesis-area-census-cli.mjs'
+      - '.github/workflows/phoenix-genesis-area-census.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  area-census:
+    name: Genesis area assessment / Node 24
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test hospital department census and source-of-truth safeguards
+        run: node --test scripts/phoenix-genesis-area-census.test.mjs
+      - name: Validate census CLI syntax
+        run: node --check scripts/phoenix-genesis-area-census-cli.mjs
