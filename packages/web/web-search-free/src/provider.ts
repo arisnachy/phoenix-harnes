@@ -146,22 +146,23 @@ function parseWikipedia(raw: unknown): WebSearchSource[] {
 
 function parseBing(html: string): WebSearchSource[] {
   const sources: WebSearchSource[] = []
-  const itemPattern = new RegExp(
-    '<li[^>]*class=["\\\'][^"\\\']*b_algo[^"\\\']*["\\\'][\\s\\S]*?'
-      + '<h2[^>]*>\\s*<a[^>]*href=["\\\']([^"\\\']+)["\\\'][^>]*>([\\s\\S]*?)<\\/a>'
-      + '[\\s\\S]*?<p[^>]*>([\\s\\S]*?)<\\/p>',
-    'gi',
-  )
-  for (const match of html.matchAll(itemPattern)) {
+  // Bing frequently changes snippet markup; an otherwise valid h2 link must
+  // not disappear just because <p> is missing.
+  const items = /<li\b[^>]*class=["'][^"']*\bb_algo\b[^"']*["'][^>]*>([\s\S]*?)<\/li>/giu
+  for (const match of html.matchAll(items)) {
+    const chunk = match[1] ?? ''
+    const link = /<h2[^>]*>[\s\S]*?<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/iu.exec(chunk)
+    if (!link) continue
+    const url = normalizeBingUrl(decodeHtml(link[1] ?? ''))
+    if (!isHttpUrl(url)) continue
+    const snippet = /<p\b[^>]*>([\s\S]*?)<\/p>/iu.exec(chunk)?.[1]
     sources.push({
-      url: normalizeBingUrl(decodeHtml(match[1] ?? '')),
-      title: stripHtml(match[2] ?? ''),
-      snippet: stripHtml(match[3] ?? ''),
+      url, title: stripHtml(link[2] ?? ''),
+      ...(snippet === undefined ? {} : { snippet: stripHtml(snippet) }),
     })
   }
-  return sources.filter(source => isHttpUrl(source.url))
+  return sources
 }
-
 function parseDuckDuckGo(html: string): WebSearchSource[] {
   const sources: WebSearchSource[] = []
   const itemPattern = new RegExp(
@@ -173,12 +174,27 @@ function parseDuckDuckGo(html: string): WebSearchSource[] {
   )
   for (const match of html.matchAll(itemPattern)) {
     sources.push({
-      url: decodeHtml(match[1] ?? ''),
+      url: normalizeDuckDuckGoUrl(decodeHtml(match[1] ?? '')),
       title: stripHtml(match[2] ?? ''),
       ...(match[3] === undefined ? {} : { snippet: stripHtml(match[3]) }),
     })
   }
   return sources.filter(source => isHttpUrl(source.url))
+}
+
+/**
+ * Decode DuckDuckGo outbound links, which often use protocol-relative URLs
+ * and a URL-encoded uddg target. Never return the search-engine redirect as a citation.
+ */
+function normalizeDuckDuckGoUrl(raw: string): string {
+  try {
+    const url = new URL(raw, 'https://duckduckgo.com')
+    if (url.hostname === 'duckduckgo.com' || url.hostname.endsWith('.duckduckgo.com')) {
+      const destination = url.searchParams.get('uddg')
+      return destination && isHttpUrl(destination) ? destination : ''
+    }
+    return isHttpUrl(url.toString()) ? url.toString() : ''
+  } catch { return '' }
 }
 
 function normalizeBingUrl(url: string): string {
