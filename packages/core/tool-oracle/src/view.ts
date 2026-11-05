@@ -59,3 +59,25 @@ export function oracleVisual(result:OracleResult|OracleResearch,question?:string
     prompt:'ORÁCULO: vuelve a investigar esta hipótesis con fuentes recientes, reconoce la incertidumbre y verifica el horizonte: '+clean(question,350)})
   return {component:'ui_canvas',version:1,props:{title:'PHOENIX · ORÁCULO',subtitle:'Investigación, causalidad y futuros posibles',children:children.slice(0,24)}}
 }
+
+
+/** Dashboard for frozen forecasts and subsequently reported outcomes. */
+export function oracleScorecardVisual(summary:{
+  total:number;settled:number;binarySettled:number;meanAbsoluteError:number|null;meanBrierScore:number|null;verifiedByHost:0
+}):Record<string,unknown>{
+  const children:Node[]=[
+    {type:'group',layout:'row',children:[
+      {type:'badge',text:'HISTORIAL',status:'info'},
+      {type:'badge',text:'Sin verificación externa',status:'warning'},
+    ]},
+    {type:'group',layout:'grid',children:[
+      metric('Pronósticos registrados',String(summary.total)),
+      metric('Resultados declarados',String(summary.settled)),
+      metric('Eventos binarios',String(summary.binarySettled)),
+      metric('Brier medio',summary.meanBrierScore===null?'Sin datos':summary.meanBrierScore.toFixed(4)),
+    ]},
+    {type:'alert',status:'info',message:'Los resultados se registran sin alterar las predicciones antiguas. No se consideran comprobados por una fuente independiente; Brier requiere verificar las observaciones.'},
+    {type:'button',label:'Investigar próximos eventos',action:'draft',prompt:'ORÁCULO: investiga acontecimientos futuros contrastables con fuentes actuales; solo emite probabilidades científicamente justificadas.'},
+  ]
+  return {component:'ui_canvas',version:1,props:{title:'ORÁCULO · Registro predictivo',subtitle:'Evaluación, precisión y procedencia',children}}
+}
