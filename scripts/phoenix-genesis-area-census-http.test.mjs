@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createGenesisConsole } from './phoenix-genesis-console.mjs'
 import { GenesisWorkbench } from './phoenix-genesis-workbench.mjs'
+import { listGenesisAreaCensus,assessGenesisArea } from './phoenix-genesis-area-census.mjs'
 
 const ADMIN='c'.repeat(64)
 const spec=(org,industry='healthcare')=>({
@@ -91,8 +92,6 @@ test('migración SQLite preserva censos guardados antes de la columna revision',
       .run('legacy_hospital','area_001','existing','declared','Dirección',null,'[]','2026-11-05T00:00:00.000Z')
     workbench.close()
     workbench=new GenesisWorkbench(dbPath)
-    const { listGenesisAreaCensus,assessGenesisArea }=
-      await import('./phoenix-genesis-area-census.mjs')
     const before=listGenesisAreaCensus(workbench,'legacy_hospital')
     assert.equal(before.areas[0].revision,1)
     assert.equal(before.areas[0].state,'existing')
