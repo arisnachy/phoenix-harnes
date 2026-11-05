@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 import { oracleCardsFromToolResult } from '../src/client/chat/oracle-tool-cards.ts'
 import { parseCanvasSpec } from '../src/client/chat/GenerativeCanvas.tsx'
@@ -75,9 +76,9 @@ describe('ORÁCULO scientific chart safety and presentation',()=>{
 describe('ORÁCULO panel SVG real de predicción',()=>{
   it('representa observados, incertidumbre y futuras proyecciones sin HTML generado',async()=>{
     const { createElement }=await import('react')
-    const { renderToStaticMarkup }=await import('react-dom/server')
+    const { render, fireEvent }=await import('@testing-library/react')
     const { ForecastFanChart }=await import('../src/client/chat/ForecastFanChart.tsx')
-    const html=renderToStaticMarkup(createElement(ForecastFanChart,{
+    const { container, getByRole }=render(createElement(ForecastFanChart,{
       title:'Serie histórica y futuro',unit:'casos',
       points:[
         {label:'2026-11-03T00:00:00Z',observed:100},
@@ -86,11 +87,13 @@ describe('ORÁCULO panel SVG real de predicción',()=>{
         {label:'2026-11-06T00:00:00Z',forecast:119,lower:106,upper:132},
       ],
     }))
-    expect(html).toContain('<svg')
-    expect(html).toContain('role="img"')
-    expect(html).toContain('<polygon')
-    expect(html).toContain('Observado')
-    expect(html).toContain('Proyección')
-    expect(html).toContain('casos')
+    expect(container.querySelector('svg[role="img"]')).not.toBeNull()
+    expect(container.querySelector('polygon')).not.toBeNull()
+    expect(container.textContent).toContain('Observado')
+    expect(container.textContent).toContain('Proyección')
+    expect(container.textContent).toContain('casos')
+    fireEvent.click(getByRole('button',{name:'Ver tabla'}))
+    expect(getByRole('table')).toBeTruthy()
+    expect(container.textContent).toContain('119')
   })
 })
