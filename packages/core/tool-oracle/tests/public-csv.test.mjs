@@ -48,6 +48,6 @@ test('rechaza URL privada, no HTTPS y respuestas truncadas',async()=>{
 })
 
 test('el sistema no produce pronóstico futuro con una serie caducada',async()=>{
-  const stale='date,cases\n'+Array.from({length:40},(_,i)=>'2020-01-'+String(1+i).padStart(2,'0')+','+i).join('\n')
+  const stale='date,cases\n'+Array.from({length:40},(_,i)=>new Date(Date.UTC(2020,0,1+i)).toISOString().slice(0,10)+','+i).join('\n')
   await assert.rejects(forecastPublicCsv(client(stale),input),/inválida|antigua|fecha/i)
 })
