@@ -47,6 +47,10 @@ function bindForms(){
       return {organizationId:current,category,key,value:d.answer,status:d.status,
         evidenceRefs:d.evidenceRefs.split(",").map(x=>x.trim()).filter(Boolean)};
     }],
+    "form-site":["/v1/sites",d=>({organizationId:current,siteId:d.siteId,
+      name:d.name,workstations:Number(d.workstations),
+      reusableWorkstations:Number(d.reusableWorkstations),
+      expectedRevision:snapshot?.configurationRevision})],
     "form-unit":["/v1/units",d=>({organizationId:current,unitId:d.unitId,
       siteId:d.siteId,name:d.name,parentId:d.parentId||null,
       staffCount:Number(d.staffCount),workstations:Number(d.workstations),role:d.role})],
