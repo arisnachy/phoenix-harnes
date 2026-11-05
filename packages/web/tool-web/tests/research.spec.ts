@@ -54,8 +54,11 @@ describe('Phoenix universal research routing', () => {
     expect(result.status).toBe('empty')
     expect(result.sources).toEqual([])
     const broken = { web: { search: async () => { throw new Error('offline') } } } as unknown as Pick<Context, 'web'>
-    await expect(executeResearch(broken, planResearch('ordinary unanswered question'), 8, signal))
-      .rejects.toThrow('No search provider succeeded')
+    const blocked = await executeResearch(broken, planResearch('ordinary unanswered question'), 8, signal)
+    expect(blocked.status).toBe('empty')
+    expect(blocked.sources).toEqual([])
+    expect(blocked.failedQueries).toHaveLength(blocked.queries.length)
+    expect(blocked.note).toContain('CAPTCHA')
   })
 
   it('caps merged sources and reports truncation', async () => {

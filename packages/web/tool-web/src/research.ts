@@ -290,7 +290,21 @@ export async function executeResearch(
     if (outcome?.status === 'fulfilled') successful.push(outcome.value)
     else failedQueries.push(plan.queries[index] as string)
   }
-  if (successful.length === 0) throw new Error('No search provider succeeded; check provider credentials or availability.')
+  if (successful.length === 0) return {
+    domain: plan.domain,
+    queries: plan.queries,
+    candidates: plan.candidates,
+    batch: plan.batch,
+    totalBatches: plan.totalBatches,
+    offTopicDropped: 0,
+    sources: [],
+    failedQueries,
+    truncated: false,
+    status: 'empty',
+    note: 'Todos los proveedores de búsqueda fallaron. No hay evidencia recuperada: '
+      + 'usar fuentes institucionales públicas, APIs oficiales o intervención humana autorizada. '
+      + 'No tratar CAPTCHA como datos ni inventar referencias.',
+  }
   const seen = new Set<string>()
   const sources: WebSearchSource[] = []
   let dropped = false
