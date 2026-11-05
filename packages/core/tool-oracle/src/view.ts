@@ -168,9 +168,9 @@ export function oracleFusionVisual(result:OracleFusion):Record<string,unknown>{
       metric('Fechas discrepantes',String(result.conflictCount)),
       metric('Unidad',clean(result.unit,50)),
     ]},
-    {type:'table',columns:['Fecha','Mediana','Mínimo','Máximo'],rows:result.observations.slice(-12).map(p=>[
+    ...(result.observations.length?[{type:'table',columns:['Fecha','Mediana','Mínimo','Máximo'],rows:result.observations.slice(-12).map(p=>[
       clean(p.at.slice(0,10),60),p.value.toFixed(3),p.min.toFixed(3),p.max.toFixed(3),
-    ])},
+    ])}]:[]),
     ...(result.reason?[{type:'alert',status:'warning',message:clean(result.reason,800)}]:[]),
     {type:'alert',status:'info',message:'La concordancia numérica entre fuentes no prueba independencia ni autenticidad. La fusión requiere revisar unidades, definiciones de caso y método de captura.'},
   ]
