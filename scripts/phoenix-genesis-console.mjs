@@ -1,3 +1,4 @@
+import { genesisDatabasePath } from './phoenix-genesis-paths.mjs'
 /**
  * Genesis Console: authenticated, loopback-only web UI and API.
  * This is an institutional planning surface, not a clinical system or
@@ -171,7 +172,7 @@ export function createGenesisConsole({dbPath,adminToken,port=0,host='127.0.0.1'}
 if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
   const secret=process.env.PHOENIX_GENESIS_ADMIN_TOKEN
   if(!secret)throw Error('Configure PHOENIX_GENESIS_ADMIN_TOKEN (32 caracteres mínimo)')
-  const dbPath=process.env.PHOENIX_GENESIS_DB||'./.phoenix/genesis.sqlite'
+  const dbPath=genesisDatabasePath()
   const port=Number(process.env.PHOENIX_GENESIS_PORT||8767)
   const app=createGenesisConsole({dbPath,adminToken:secret,port})
   app.start().then(a=>console.log('PHOENIX Genesis Console: '+a.url))
