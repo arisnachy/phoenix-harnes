@@ -6,15 +6,20 @@
 import { createHash, createPrivateKey, createPublicKey, randomBytes, sign, type KeyObject } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 
+/** The three signed headers required by Web Bot Auth. */
 export interface WebBotAuthHeaders {
   readonly 'signature-agent': string
   readonly 'signature-input': string
   readonly signature: string
 }
 
+/** Ed25519 request signer for PHOENIX's own explicitly registered public identity. */
 export class PhoenixWebBotSigner {
+  /** RFC 7638 thumbprint of the registered public JWK. */
   readonly keyId: string
+  /** Public JWK permitted for disclosure in the signed directory. */
   readonly publicJwk: { kty: 'OKP'; crv: 'Ed25519'; x: string }
+  /** HTTPS origin serving the signed JWK directory. */
   readonly agentOrigin: string
   private readonly key: KeyObject
 
@@ -37,7 +42,12 @@ export class PhoenixWebBotSigner {
       .digest('base64url')
   }
 
-  /** Sign a fresh GET request. Headers must be regenerated for each request. */
+  /**
+   * Sign a fresh GET request. Headers must be regenerated for each request.
+   * @param url - Target HTTPS URL, used to sign the destination authority.
+   * @param now - Signature creation time as a Unix timestamp in seconds.
+   * @returns Three headers containing the PHOENIX origin and request signature.
+   */
   signRequest(url: URL, now = Math.floor(Date.now() / 1000)): WebBotAuthHeaders {
     if (url.protocol !== 'https:') throw new Error('Web Bot Auth signatures must be sent only over HTTPS')
     const agent = JSON.stringify(this.agentOrigin)
@@ -50,7 +60,10 @@ export class PhoenixWebBotSigner {
     }
   }
 
-  /** JSON Web Key Set payload for a separately hosted, signed key directory. */
+  /**
+   * Return the public key directory payload, never exposing private material.
+   * @returns JSON Web Key Set payload for an HTTPS directory service.
+   */
   publicKeyDirectory(): { keys: Array<{ kty: 'OKP'; crv: 'Ed25519'; x: string }> } {
     return { keys: [this.publicJwk] }
   }
@@ -61,8 +74,9 @@ export class PhoenixWebBotSigner {
 }
 
 /**
- * Missing BOTH env vars means ordinary openly identified HTTP access.
- * Only a fully configured identity is signed; partial config fails closed.
+ * Load the opt-in key from a local file, never from Git source.
+ * @param env - Process environment containing both key-file path and public agent origin.
+ * @returns A signer when configured, or undefined if both settings are absent.
  */
 export function signerFromEnvironment(env: NodeJS.ProcessEnv = process.env): PhoenixWebBotSigner | undefined {
   const agent = env.PHOENIX_WEB_BOT_AUTH_AGENT_URL

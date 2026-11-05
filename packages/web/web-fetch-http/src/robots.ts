@@ -2,13 +2,21 @@
  * Small, dependency-free robots.txt parser. Exact PHOENIX agent directives take
  * precedence over wildcard groups; longest matching path wins, Allow on ties.
  */
+/** One site-supplied robots allow or deny path rule. */
 export interface RobotsRule { readonly path: string; readonly allow: boolean }
+/** The resolved rules and per-agent crawl delay for a public origin. */
 export interface RobotsPolicy {
   readonly rules: readonly RobotsRule[]
   readonly crawlDelayMs: number
 }
 type Group = { agents: string[]; rules: RobotsRule[]; delay?: number }
 
+/**
+ * Parse a site's robot groups without network access.
+ * @param text - Bounded robots.txt contents.
+ * @param agent - PHOENIX public bot token to match.
+ * @returns Matching rules and crawl delay.
+ */
 export function parseRobots(text: string, agent = 'PHOENIX-ResearchBot'): RobotsPolicy {
   const groups: Group[] = []
   let current: Group = { agents: [], rules: [] }
@@ -54,6 +62,12 @@ export function parseRobots(text: string, agent = 'PHOENIX-ResearchBot'): Robots
   }
 }
 
+/**
+ * Decide whether a URL is permitted by the resolved robots rules.
+ * @param url - Requested public URL.
+ * @param policy - Parsed and selected origin policy.
+ * @returns True unless a longest-matching Disallow rule wins.
+ */
 export function robotsAllows(url: URL, policy: RobotsPolicy): boolean {
   const path = url.pathname + url.search
   let bestLength = -1
