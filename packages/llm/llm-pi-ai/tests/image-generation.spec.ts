@@ -44,6 +44,14 @@ type CapturedImageTool = {
   }
 }
 
+describe('adult-oriented image generation tool guidance', () => {
+  it('allows eligible mature visual art requests while preserving provider limits and consent', () => {
+    expect(imageGenerationToolDescription).toContain('consensual adult-oriented art')
+    expect(imageGenerationToolDescription).toContain('selected provider supports that content')
+    expect(imageGenerationToolDescription).toContain('non-consensual intimate images')
+  })
+})
+
 describe('Codex profile reference after attachment normalization', () => {
   function stored(
     type: ImageMediaType,
