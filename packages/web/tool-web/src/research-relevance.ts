@@ -109,7 +109,18 @@ export function assessResearchRelevance(question: string, source: WebSearchSourc
     return { relevant: false, score: 0, reason: 'wrong_geography' }
   const focus = researchFocus(question)
   // Never count a hostname alone as topical evidence: example.org is not a scientific answer.
-  const supported = focus.filter(token => (' ' + haystack + ' ').includes(' ' + token + ' ')).length
+  const synonyms: Record<string, readonly string[]> = {
+    aps: ['atencion primaria', 'primer nivel', 'primary health care'],
+    dolar: ['usd', 'exchange rate', 'tipo de cambio'],
+    cambio: ['exchange rate', 'divisa'],
+    alzheimer: ['alzheimer disease'],
+    futbol: ['football', 'soccer'],
+    beisbol: ['baseball', 'mlb'],
+    dengue: ['arbovirosis dengue'],
+  }
+  const supported = focus.filter(token =>
+    (' ' + haystack + ' ').includes(' ' + token + ' ')
+      || (synonyms[token] ?? []).some(alias => haystack.includes(alias))).length
   const required = focus.length === 0 ? 0 : focus.length >= 5 ? 2 : 1
   if (supported < required && !named) return { relevant: false, score: 0, reason: 'off_topic' }
   // If no topical words exist, we cannot establish match from a URL-only result.
