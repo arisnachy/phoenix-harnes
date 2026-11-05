@@ -391,7 +391,8 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
     isConcurrencySafe: () => true,
     async execute(args, exec) {
       const result = await investigateResearch(ctx, {
-        question: args.question, domain: args.domain,
+        question: args.question,
+        ...(args.domain === undefined ? {} : { domain: args.domain }),
         depth: args.depth === 'deep' ? 'deep' : 'standard',
       }, exec.signal, planResearch, executeResearch)
       return JSON.stringify(result)
