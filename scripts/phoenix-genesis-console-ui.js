@@ -240,5 +240,45 @@ document.getElementById("get-deployment").addEventListener("click",async()=>{
     message("Propuesta calculada; ninguna instancia ha sido instalada.");
   }catch(e){message(e.message,true);}
 });
+const legacyFields={
+  units:{unitId:"id",siteId:"sede",name:"area",parentId:"superior",staffCount:"personal",workstations:"pc",role:"funcion"},
+  systems:{systemId:"id",name:"nombre",method:"metodo",ownerUnit:"unidad"},
+  costs:{itemId:"id",label:"concepto",category:"categoria",quantity:"cantidad",unitPrice:"precio",currency:"moneda",recurrence:"periodicidad"},
+  facts:{category:"categoria",key:"clave",value:"valor",status:"estado"},
+  goals:{goalId:"id",title:"objetivo",metricId:"indicador",period:"periodo",target:"meta",ownerUnit:"responsable"},
+  obligations:{obligationId:"id",recipient:"destinatario",title:"informe",periodicity:"periodicidad",templateVersion:"plantilla"}
+};
+document.getElementById("legacy-kind").addEventListener("change",event=>{
+  document.getElementById("legacy-mapping").value=JSON.stringify(legacyFields[event.target.value]||{},null,2);
+  document.getElementById("legacy-result").textContent="Mapeo actualizado; revise los nombres de columnas reales.";
+});
+function legacyPayload(){
+  if(!current)throw Error("Selecciona una institución activa");
+  const mapping=JSON.parse(val("legacy-mapping"));
+  if(!mapping||typeof mapping!=="object"||Array.isArray(mapping))
+    throw Error("El mapeo debe ser un objeto JSON");
+  return {organizationId:current,batchId:val("legacy-batch"),
+    filePath:val("legacy-path"),kind:val("legacy-kind"),
+    evidenceId:val("legacy-evidence"),mapping};
+}
+document.getElementById("preview-legacy").addEventListener("click",async()=>{
+  try{
+    const result=await api("/v1/legacy-csv/preview","POST",legacyPayload());
+    document.getElementById("legacy-result").textContent=JSON.stringify(result.result,null,2);
+    message("Origen y columnas verificados; aún no se han modificado registros.");
+  }catch(error){message(error.message,true);}
+});
+document.getElementById("apply-legacy").addEventListener("click",async()=>{
+  try{
+    if(!document.getElementById("approve-legacy").checked)
+      throw Error("Confirma que la importación está autorizada");
+    const result=await api("/v1/legacy-csv/import","POST",
+      {...legacyPayload(),approved:true});
+    document.getElementById("legacy-result").textContent=JSON.stringify(result.result,null,2);
+    message("Importación guardada y auditada; pendiente de revisión institucional.");
+    await refresh();
+  }catch(error){message(error.message,true);}
+});
+
 bindForms();
 show("overview");
