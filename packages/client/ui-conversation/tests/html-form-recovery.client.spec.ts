@@ -62,6 +62,15 @@ describe('HTML smart form recovery', () => {
     expect(recoverHtmlForm(html,'IMC').kind).toBe('html')
   })
 
+  it('refuses unsafe imperial or ambiguous BMI units', () => {
+    const imperial = legacyBmi.replace('<span>kg</span>','<span>lb</span>')
+      .replace('<span>cm</span>','<span>inches</span>')
+    expect(recoverHtmlForm(imperial, 'IMC').kind).toBe('inert')
+    const ambiguous = legacyBmi.replace('<span>kg</span>', '')
+      .replace('<span>cm</span>', '')
+    expect(recoverHtmlForm(ambiguous, 'IMC').kind).toBe('inert')
+  })
+
   it('recovers blocked-script BMI without overriding the sandbox permission', () => {
     const html = legacyBmi + '<script>function calculate(){}</script>'
     const recovered = recoverHtmlForm(html, 'IMC', false)
