@@ -1,5 +1,7 @@
 # PHOENIX Fabric: agentes universales colaborativos por rol — arquitectura futura
 
+> **Actualización arquitectónica:** [Plan maestro Genesis + Fabric v4](./phoenix-genesis-fabric-master-plan-v4.md) — investigación institucional integral, 60 áreas, 135 indicadores, 20 comités y 34 informes. [Universo abierto y red LAN/entre sedes](./phoenix-fabric-universal-network.md). Ya existe un planificador offline con pruebas en `scripts/phoenix-genesis-fabric.mjs`; la federación real, la instalación remota y la orquestación clínica distribuida **aún no están implementadas**.
+
 **Estado:** visión aprobada para diseño futuro, NO implementada en esta entrega.
 **Propietario:** PHOENIX Universal Harness. **Primer motor vertical:** HealthIA.
 **Principio invariable:** cada instancia es PHOENIX completo; la función activa y las capacidades autorizadas dependen del contexto, no de un modelo distinto ni de un producto cerrado.
