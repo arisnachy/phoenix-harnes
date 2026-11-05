@@ -8,7 +8,7 @@
  */
 import { existsSync, mkdirSync } from 'node:fs'
 import { join, resolve, dirname } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export type GenesisScope = 'institution' | 'demo'
 export type GenesisOperation =
@@ -33,11 +33,16 @@ function scopeOf(input: Record<string, unknown>): GenesisScope {
   return scope
 }
 function projectRoot(): string {
-  const root = process.env.PHOENIX_GENESIS_RUNTIME_ROOT
-    ? resolve(process.env.PHOENIX_GENESIS_RUNTIME_ROOT) : process.cwd()
-  if(!existsSync(join(root,'scripts','phoenix-genesis-workbench.mjs')))
-    throw Error('Genesis no está disponible en este runtime; falta scripts/phoenix-genesis-workbench.mjs en '+root)
-  return root
+  // The desktop Host may run with a different cwd than its installed runtime.
+  // Resolve only known roots; never scan arbitrary user directories.
+  const embeddedRoot=resolve(dirname(fileURLToPath(import.meta.url)),'../../../..')
+  const candidates=process.env.PHOENIX_GENESIS_RUNTIME_ROOT
+    ? [resolve(process.env.PHOENIX_GENESIS_RUNTIME_ROOT)]
+    : [process.cwd(),embeddedRoot]
+  for(const root of candidates)
+    if(existsSync(join(root,'scripts','phoenix-genesis-workbench.mjs')))return root
+  throw Error('Genesis nativo cargado, pero faltan scripts del Workbench en el runtime. '+ 
+    'Configura PHOENIX_GENESIS_RUNTIME_ROOT con la raíz real de PHOENIX.')
 }
 async function modules(): Promise<Record<string, unknown>> {
   const base = join(projectRoot(),'scripts')
