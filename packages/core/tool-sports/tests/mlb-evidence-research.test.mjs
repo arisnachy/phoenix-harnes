@@ -596,3 +596,21 @@ test('MLB comparisons retain every fresh quote beyond the forty-row review displ
   assert.equal(over8.settlementComparable,false)
   assert.equal(review.eligibleForTicket,false)
 })
+
+test('MLB dossier retains every verified quote beyond the 40-row display cap',async()=>{
+  const mock=fakeNetwork()
+  const base={eventId:'book-mlb',bookmaker:'Verified House',market:'totals',
+    selection:'Over',point:8,price:1.91,home:'Home Giants',away:'Away Bears',
+    time:fixture.gameDate,timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z'}
+  const quotes=Array.from({length:41},(_,i)=>({...base,bookmaker:'House '+i,
+    price:1.8+i/1000}))
+  const dossier=await researchMlbCase(date,812345,mock.fetcher,at,{},quotes)
+  assert.equal(dossier.odds.length,41)
+  assert.equal(dossier.odds[40].bookmaker,'House 40')
+  const review=reviewMlbResearch(dossier)
+  assert.equal(review.reviewedMarkets.length,40)
+  assert.equal(review.marketComparisons.length,41)
+  assert.ok(review.crossBookComparisons.some(group=>
+    group.quotes.length===41&&group.quotes.some(q=>q.bookmaker==='House 40')))
+  assert.equal(review.eligibleForTicket,false)
+})
