@@ -4,7 +4,7 @@ import { appendFile, mkdir, readFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { OracleResult } from './engine.ts'
 import { calibrationReport, type OracleCalibration } from './scientific-intelligence.ts'
-type Prediction = {kind:'prediction';id:string;createdAt:string;result:OracleResult}
+type Prediction = {kind:'prediction';id:string;createdAt:string;result:OracleResult;supersedes?:string}
 type Outcome = {kind:'outcome';id:string;recordedAt:string;observedAt:string;observedValue:number;source:string;absoluteError:number;brierError?:number;verification:'unverified_report'}
 async function records(path:string):Promise<(Prediction|Outcome)[]> {
   try {
@@ -69,4 +69,43 @@ export async function oracleCalibrationLedger(path:string):Promise<OracleCalibra
     scores.push({predicted:p/100,observed:row.observedValue===1})
   }
   return {...calibrationReport(scores),retrospectiveExcluded}
+}
+
+
+
+/** A bounded non-sensitive view of frozen forecast versions and their reported outcomes. */
+export interface OracleHistoryRow {
+  id:string
+  createdAt:string
+  targetAt?:string
+  method:string
+  predictedValue?:number
+  probabilityPercent?:number
+  state:'awaiting-report'|'outcome-reported'
+  supersedes?:string
+}
+export async function oracleHistory(path:string,limit=20):Promise<OracleHistoryRow[]> {
+  if(!Number.isInteger(limit)||limit<1||limit>30)throw new Error('Historial máximo 30 pronósticos.')
+  const rows=await records(path)
+  const reported=new Set(rows.filter((r):r is Outcome=>r.kind==='outcome').map(r=>r.id))
+  return rows.filter((r):r is Prediction=>r.kind==='prediction').slice(-limit).reverse().map(r=>({
+    id:r.id,createdAt:r.createdAt,
+    ...(r.result.targetAt===undefined?{}:{targetAt:r.result.targetAt}),
+    method:r.result.method,
+    ...(r.result.predictedValue===undefined?{}:{predictedValue:r.result.predictedValue}),
+    ...(r.result.probabilityPercent===undefined?{}:{probabilityPercent:r.result.probabilityPercent}),
+    state:reported.has(r.id)?'outcome-reported' as const:'awaiting-report' as const,
+    ...(r.supersedes?{supersedes:r.supersedes}:{}),
+  }))
+}
+/** Add a new frozen version; never edit the previous entry or its outcome. */
+export async function reviseOracle(path:string,previousId:string,result:OracleResult):Promise<Prediction>{
+  if(!/^[a-f0-9-]{36}$/i.test(previousId))throw new Error('ID anterior inválido.')
+  if(result.status!=='forecast'&&result.status!=='scenario')throw new Error('No registrar abstención como actualización.')
+  const old=(await records(path)).find((r):r is Prediction=>r.kind==='prediction'&&r.id===previousId)
+  if(!old)throw new Error('Pronóstico anterior no localizado en este registro.')
+  if(result.targetAt&&Date.parse(result.targetAt)<=Date.now())throw new Error('La nueva proyección exige un horizonte futuro.')
+  const row:Prediction={kind:'prediction',id:randomUUID(),createdAt:new Date().toISOString(),result,supersedes:previousId}
+  await append(path,row)
+  return row
 }
