@@ -208,6 +208,13 @@ export function scoreScale(spec: ScaleFormSpec, answers: Record<string, number>)
   return band === undefined ? { answered, total, domains } : { answered, total, band, domains }
 }
 
+/** Keep legacy score-valued selects while disambiguating equal-score choices. */
+function choiceValue(item: ScaleItem, index: number): string {
+  const score = item.options[index]!.score
+  return item.options.filter(option => option.score === score).length > 1
+    ? 'choice:' + String(index) : String(score)
+}
+
 /** In-chat form with answered-item count, reset and auditable scoring. */
 export function ScaleForm({ spec, onAction }: { readonly spec: ScaleFormSpec; readonly onAction?: CanvasAction | undefined }): ReactNode {
   const [selected, setSelected] = useState<Record<string, number>>({})
@@ -260,19 +267,22 @@ export function ScaleForm({ spec, onAction }: { readonly spec: ScaleFormSpec; re
       {spec.props.items.map((item, index) => <label key={item.id} className={css.question}>
         <span>{index + 1}. {item.question}</span>
         {item.help && <small>{item.help}</small>}
-        <select value={selected[item.id] === undefined ? '' : String(selected[item.id])}
+        <select value={selected[item.id] === undefined ? '' : choiceValue(item, selected[item.id]!)}
           onChange={event => {
             const choice = event.currentTarget.value
             setSelected(old => {
               const next = { ...old }
               if (choice === '') delete next[item.id]
-              else next[item.id] = Number(choice)
+              else {
+                const index = item.options.findIndex((_,i) => choiceValue(item,i) === choice)
+                if (index >= 0) next[item.id] = index
+              }
               return next
             })
             setCopied(false)
           }}>
           <option value="">Seleccionar respuesta</option>
-          {item.options.map((option, i) => <option key={i} value={String(i)}>{option.label}</option>)}
+          {item.options.map((option, i) => <option key={i} value={choiceValue(item,i)}>{option.label}</option>)}
         </select>
       </label>)}
     </div>
