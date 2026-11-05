@@ -34,3 +34,11 @@ node --experimental-strip-types --test packages/core/tool-oracle/tests/*.mjs
 - Tarjetas visuales nativas de GenerativeCanvas muestran porcentaje, horizonte, incertidumbre, Brier, fuentes y controles de reinvestigación. Solo resultados de herramientas oficiales generan tarjetas; no se ejecuta HTML de fuentes externas.
 
 **Límite actual:** la búsqueda es descubrimiento de fuentes, no un modelo universal entrenado de meteorología, salud, economía u otros campos. Se requieren datos primarios validados y predictores especializados antes de publicar porcentajes fiables sobre eventos del mundo real.
+
+## Public CSV numerical forecast (live-source adapter)
+
+After oracle_research_forecast discovers a relevant primary source, Kira may call `oracle_forecast_public_csv` with the public HTTPS CSV URL, the exact date and value column names, the measurement unit, the interval in hours, and the forecast horizon (1-30 intervals). It fetches through the existing PHOENIX hardened web provider, rejects truncation, HTML, malformed CSV, uneven or missing dates, stale series that would only predict the past, non-finite data and embedded URL credentials. It then performs the numeric rolling-origin comparison and persists the calculated forecast with a SHA-256 content fingerprint and retrieval metadata shown in a native chat card. The source has been retrieved, **not authenticated**: independent data provenance, assumptions, missingness and causal validity still need inspection. An empirical numeric interval is **not** a calibrated probability for an arbitrary future event. This improves directly usable data retrieval; it does not turn ORÁCULO into a universal omniscient predictor.
+
+Example call: `oracle_forecast_public_csv(url: "https://example.org/data.csv", dateColumn: "date", valueColumn: "cases", unit: "cases", stepHours: 24, horizonSteps: 3)`.
+
+The focused CI suite exercises the actual CSV parser, source retrieval adapter, chronological checks and chat-safe presentation.
