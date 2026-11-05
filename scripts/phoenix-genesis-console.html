@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PHOENIX Genesis · Consola institucional</title>
+<link rel="stylesheet" href="/style.css"></head>
+<body>
+<header><div><strong>✦ PHOENIX Genesis</strong><small>Arquitectura institucional · Datos verificados · Universo abierto</small></div><span>Consola local</span></header>
+<main id="main">
+<section class="card" id="login-screen"><h1>Genesis</h1>
+<p>Inicia con tu clave administrativa local. Genesis no activa conexiones ni envía documentos automáticamente.</p>
+<label for="token">Clave administrativa</label><input id="token" type="password" autocomplete="off" placeholder="Clave de Genesis">
+<button id="login">Conectar</button><p id="notice" role="status"></p></section>
+<div id="workspace" hidden>
+<section class="card hero"><div class="toolbar"><div><h1>Tu organización como un sistema vivo</h1>
+<p>Descubre → verifica → planifica → integra → despliega. Nada se declara conectado sin prueba real.</p></div>
+<div><label for="organization">Organización activa</label><select id="organization"></select></div>
+<button class="secondary" id="reload">Actualizar</button></div>
+<p id="message" role="status" class="message"></p></section>
+<div class="shell">
+<nav class="nav" aria-label="Secciones de Genesis">
+<button data-tab="overview">Resumen</button>
+<button data-tab="create">Nueva institución</button>
+<button data-tab="interview">Entrevista</button>
+<button data-tab="units">Organización</button>
+<button data-tab="systems">Tecnología</button>
+<button data-tab="finance">Finanzas</button>
+<button data-tab="models">Modelos IA</button><button data-tab="fabric">Red PHOENIX</button>
+<button data-tab="planning">Planificación</button>
+<button data-tab="evidence">Evidencias</button>
+<button data-tab="deployment">Despliegue</button>
+</nav>
+<div>
+<section data-panel="overview" class="panel"><div class="stats" id="stats"></div>
+<article class="card"><h2>Estado institucional</h2><p id="org-summary"></p><ul id="missing-summary"></ul></article>
+<article class="card"><h2>Unidades</h2><ul id="unit-list"></ul></article>
+<article class="card"><h2>Auditoría reciente</h2><ul id="audit-list"></ul></article></section>
+
+<section data-panel="create" class="panel" hidden><article class="card"><h2>Crear una organización</h2>
+<p>Funciona para hospitales, comercios, universidades o cualquier otra actividad. Las demás sedes podrán añadirse mediante la configuración de Genesis.</p>
+<form id="form-create"><div class="grid">
+<div><label for="create-id">ID institucional (sin espacios)</label><input id="create-id" name="organizationId" required pattern="[a-z][a-z0-9._-]*" placeholder="hospital_ejemplo"></div>
+<div><label for="create-name">Nombre</label><input id="create-name" name="name" required placeholder="Hospital Ejemplo"></div>
+<div><label for="create-sector">Sector o industria</label><input id="create-sector" name="industry" required value="healthcare"></div>
+<div><label for="create-mode">Adopción</label><select id="create-mode" name="adoptionMode">
+<option value="hybrid">Híbrida</option><option value="existing-overlay">Sobre software existente</option>
+<option value="phoenix-native">PHOENIX integral</option><option value="progressive-migration">Migración progresiva</option></select></div>
+<div><label for="create-site-id">ID sede</label><input id="create-site-id" name="siteId" required value="principal"></div>
+<div><label for="create-site-name">Nombre sede</label><input id="create-site-name" name="siteName" required placeholder="Sede principal"></div>
+<div><label for="create-pc">Estaciones de trabajo</label><input id="create-pc" name="workstations" type="number" required min="0" value="0"></div>
+<div><label for="create-reuse">Estaciones reutilizables</label><input id="create-reuse" name="reusable" type="number" required min="0" value="0"></div>
+<div><label for="create-network">Red inicial</label><select id="create-network" name="network">
+<option value="isolated">Aislada</option><option value="lan">LAN institucional</option>
+<option value="overlay">VPN privada entre sedes</option><option value="relay">Relay saliente</option></select></div>
+</div><p class="hint">Los costos, permisos y conexiones no se presuponen. Elegir una red no establece una conexión real.</p>
+<button type="submit">Crear institución</button></form></article></section>
+
+<section data-panel="interview" class="panel" hidden><article class="card"><h2>Descubrimiento progresivo</h2>
+<p>Responde lo que sepas. Genesis distingue los datos declarados de los verificados con evidencia.</p>
+<form id="form-answer">
+<label for="question">Dato pendiente</label><select id="question" name="question" required></select>
+<label for="answer-value">Respuesta breve sin datos personales</label><input id="answer-value" name="answer" required placeholder="Dato, cifra agregada o estado">
+<label for="answer-status">Estado</label><select id="answer-status" name="status">
+<option value="declared">Declarado</option><option value="inferred">Inferido, no comprobado</option>
+<option value="verified">Verificado con evidencia</option></select>
+<label for="answer-evidence">Identificadores de evidencias validadas (separados por coma)</label>
+<input id="answer-evidence" name="evidenceRefs" placeholder="ev_...">
+<button type="submit">Guardar respuesta</button></form></article>
+<article class="card"><h2>Preguntas pendientes</h2><ul id="questions-list"></ul></article>
+<article class="card"><h2>Hechos registrados</h2><ul id="facts-list"></ul></article></section>
+
+<section data-panel="units" class="panel" hidden><article class="card"><h2>Mapa organizacional</h2>
+<form id="form-unit"><div class="grid">
+<div><label>ID unidad</label><input name="unitId" required placeholder="pharmacy"></div>
+<div><label>Nombre</label><input name="name" required placeholder="Farmacia"></div>
+<div><label>Sede</label><input name="siteId" required placeholder="principal"></div>
+<div><label>ID unidad superior (opcional)</label><input name="parentId" placeholder="clinical_direction"></div>
+<div><label>Función</label><input name="role" value="general"></div>
+<div><label>Personal (cantidad agregada)</label><input name="staffCount" type="number" min="0" value="0"></div>
+<div><label>PC en la unidad</label><input name="workstations" type="number" min="0" value="0"></div>
+</div><button type="submit">Guardar unidad</button></form></article>
+<article class="card"><h2>Añadir sede sin perder el inventario</h2>
+<form id="form-site"><div class="grid">
+<div><label>ID de nueva sede</label><input name="siteId" required placeholder="sede_norte"></div>
+<div><label>Nombre de la sede</label><input name="name" required placeholder="Sede Norte"></div>
+<div><label>Estaciones previstas</label><input name="workstations" type="number" min="0" value="0" required></div>
+<div><label>Estaciones reutilizables</label><input name="reusableWorkstations" type="number" min="0" value="0" required></div>
+</div><button type="submit">Añadir sede al plan</button></form>
+<p class="hint">La sede queda planificada, no conectada ni instalada.</p></article>
+<article class="card"><h2>Estructura declarada</h2><ul id="units-list"></ul></article>
+<article class="card"><h2>Estructura sugerida (no confirmada)</h2><p>Genesis sugiere áreas según el sector, pero no inventa que existan.</p><button id="get-suggestions">Proponer estructura</button><ul id="suggestions-list"></ul></article></section>
+
+<section data-panel="systems" class="panel" hidden><article class="card"><h2>Software tradicional y conectores</h2>
+<p>Registrar un programa NO equivale a conectarlo. Genesis conserva la fuente de autoridad hasta una migración comprobada.</p>
+<form id="form-system"><div class="grid">
+<div><label>ID sistema</label><input name="systemId" required placeholder="his_legacy"></div>
+<div><label>Nombre</label><input name="name" required placeholder="Sistema de gestión actual"></div>
+<div><label>Método disponible</label><select name="method"><option value="unknown">Por investigar</option>
+<option value="api">API oficial</option><option value="fhir">FHIR</option>
+<option value="hl7">HL7</option><option value="dicom">DICOM</option>
+<option value="files">Exportación de archivos</option>
+<option value="database-readonly">Base de datos (solo lectura)</option>
+<option value="rpa-supervised">RPA supervisado</option></select></div>
+<div><label>ID unidad responsable (opcional)</label><input name="ownerUnit"></div>
+</div><button type="submit">Registrar software</button></form></article>
+<article class="card"><h2>Integraciones</h2><ul id="systems-list"></ul></article></section>
+
+<section data-panel="finance" class="panel" hidden><article class="card"><h2>Presupuesto y partidas cotizadas</h2>
+<p>Los totales se calculan solo con importes introducidos. No se convierten monedas sin tasas verificadas.</p>
+<form id="form-cost"><div class="grid">
+<div><label>ID partida</label><input name="itemId" required placeholder="server_1"></div>
+<div><label>Concepto</label><input name="label" required placeholder="Servidor institucional"></div>
+<div><label>Categoría</label><select name="category">
+<option value="hardware">Equipamiento</option><option value="software">Software</option>
+<option value="infrastructure">Infraestructura</option><option value="staffing">Personal</option>
+<option value="services">Servicios</option><option value="training">Capacitación</option>
+<option value="maintenance">Mantenimiento</option><option value="other">Otro</option></select></div>
+<div><label>Cantidad</label><input name="quantity" type="number" min="0" step="any" value="1" required></div>
+<div><label>Precio unitario</label><input name="unitPrice" type="number" min="0" step="any" value="0" required></div>
+<div><label>Moneda</label><select name="currency"><option value="USD">USD</option><option value="DOP">DOP</option><option value="EUR">EUR</option></select></div>
+<div><label>Periodicidad</label><select name="recurrence">
+<option value="one-time">Inversión única</option><option value="monthly">Mensual</option>
+<option value="yearly">Anual</option></select></div>
+<div><label>Referencias de evidencia</label><input name="evidenceRefs"></div>
+</div><button type="submit">Guardar partida</button></form></article>
+<article class="card"><h2>Costos por moneda y periodicidad</h2><ul id="budget-list"></ul></article>
+<article class="card"><h2>Detalle</h2><ul id="costs-list"></ul></article></section>
+
+<section data-panel="models" class="panel" hidden>
+<article class="card"><h2>Modelos, proveedores y cuentas</h2>
+<p>Describe la estrategia de inferencia y el presupuesto por proveedor o instancia. Nunca introduzcas aquí claves API ni contraseñas.</p>
+<form id="form-provider"><div class="grid">
+<div><label>ID proveedor</label><input name="providerId" required placeholder="proveedor_local"></div>
+<div><label>Modelo</label><input name="modelName" required placeholder="modelo-autorizado"></div>
+<div><label>Ejecución</label><select name="execution"><option value="local">Local</option><option value="external">Proveedor externo autorizado</option></select></div>
+<div><label>Distribución de cuentas</label><select name="accountMode">
+<option value="organization">Cuenta institucional</option><option value="per-unit">Cuenta por departamento</option>
+<option value="per-instance">Cuenta por PHOENIX</option></select></div>
+<div><label>Presupuesto mensual (USD)</label><input name="monthlyBudgetUsd" type="number" min="0" step="any" value="0" required></div>
+</div><button type="submit">Guardar estrategia</button></form></article>
+<article class="card"><h2>Flota planificada</h2><ul id="models-list"></ul>
+<p class="hint">Todas las rutas permanecerán pendientes hasta configurar credenciales en un almacén seguro y comprobar capacidad.</p></article></section>
+<section data-panel="fabric" class="panel" hidden>
+<article class="card"><h2>Fabric · Conectividad verdadera</h2>
+<p>Comprobar el registro central es diferente de abrir una conexión o instalar un PHOENIX. Solo un heartbeat reciente confirma que el nodo está activo.</p>
+<button id="get-fabric">Comprobar conexión</button><pre id="fabric-status">Todavía no comprobado.</pre></article>
+<article class="card"><h2>Registrar una instancia autorizada</h2>
+<p>Este paso requiere un servidor Fabric configurado, el consentimiento de TI y una unidad existente en Genesis. Entrega un token una sola vez.</p>
+<form id="form-enroll"><div class="grid">
+<div><label>ID nodo</label><input name="nodeId" required placeholder="pharmacy_node1"></div>
+<div><label>ID de sede</label><input name="siteId" required placeholder="principal"></div>
+<div><label>ID de unidad</label><input name="unitId" required placeholder="farmacia"></div>
+<div><label>Capacidades (separadas por coma)</label><input name="capabilities" required placeholder="inventory.preview,fabric.ping"></div>
+<div><label>Emisores permitidos (separados por coma)</label><input name="receivesFrom" placeholder="consult_node1"></div>
+</div><label><input name="approved" type="checkbox" required>Confirmo que tengo autorización para registrar este nodo</label>
+<button type="submit">Registrar nodo en Fabric</button></form>
+<pre id="enroll-result">Todavía no se ha registrado ningún nodo desde esta consola.</pre></article></section>
+<section data-panel="planning" class="panel" hidden><article class="card"><h2>Metas operativas para POA</h2>
+<form id="form-goal"><div class="grid">
+<div><label>ID meta</label><input name="goalId" required placeholder="meta_beds"></div>
+<div><label>Objetivo</label><input name="title" required placeholder="Disponibilidad de camas"></div>
+<div><label>ID indicador</label><input name="metricId" required placeholder="beds_available"></div>
+<div><label>Período YYYY-MM</label><input name="period" required placeholder="2026-11"></div>
+<div><label>Meta numérica</label><input name="target" type="number" step="any" min="0" required></div>
+<div><label>Unidad responsable (opcional)</label><input name="ownerUnit"></div>
+</div><button type="submit">Guardar meta</button></form>
+<div class="line"></div><h3>Indicadores verificables</h3>
+<form id="form-indicator"><div class="grid">
+<div><label>ID indicador</label><input name="metricId" required></div>
+<div><label>Período</label><input name="period" required placeholder="2026-11"></div>
+<div><label>Numerador / valor</label><input name="numerator" type="number" step="any" required></div>
+<div><label>Denominador (opcional)</label><input name="denominator" type="number" step="any"></div>
+<div><label>Unidad</label><input name="unit" required value="count"></div>
+<div><label>Fuentes validadas (obligatorias)</label><input name="evidenceRefs" required placeholder="ev_..."></div>
+</div><button type="submit">Registrar medición</button></form></article>
+<article class="card"><h2>Borrador de POA</h2>
+<div class="row"><div><label for="poa-period">Período</label><input id="poa-period" placeholder="2026-11"></div>
+<button id="get-poa">Generar borrador</button></div>
+<pre id="poa-output">Las mediciones sin respaldo quedan pendientes.</pre></article>
+<article class="card"><h2>Obligaciones e informes externos</h2>
+<form id="form-obligation"><div class="grid">
+<div><label>ID informe</label><input name="obligationId" required></div>
+<div><label>Autoridad o destinatario</label><input name="recipient" required></div>
+<div><label>Nombre del informe</label><input name="title" required></div>
+<div><label>Periodicidad</label><select name="periodicity">
+<option value="monthly">Mensual</option><option value="quarterly">Trimestral</option>
+<option value="annual">Anual</option><option value="event-driven">Por evento</option></select></div>
+<div><label>Versión de plantilla verificada (opcional)</label><input name="templateVersion"></div>
+</div><button type="submit">Registrar obligación por validar</button></form>
+<ul id="obligations-list"></ul></article></section>
+
+<section data-panel="evidence" class="panel" hidden><article class="card"><h2>Documentos y evidencias</h2>
+<p>Selecciona la ruta de un archivo disponible en el servidor local. Genesis guarda su huella SHA-256 y metadatos, no copia el contenido.</p>
+<form id="form-evidence"><div class="grid">
+<div><label>Ruta local del documento</label><input name="filePath" required placeholder="C:\Organizacion\Inventario.csv"></div>
+<div><label>Tipo de documento</label><input name="kind" required value="inventory"></div>
+<div><label>Clasificación</label><select name="classification">
+<option value="internal">Interno</option><option value="restricted">Restringido</option>
+<option value="public">Público</option></select></div>
+<div><label><input name="validated" type="checkbox">Confirmo revisión de la fuente y su autenticidad</label></div>
+</div><button type="submit">Registrar evidencia</button></form></article>
+<article class="card"><h2>Importación estructurada de información</h2>
+<p>Pega un manifiesto JSON institucional autorizado. Puede contener unidades, sistemas, costos, metas y hechos agregados; no currículos, nóminas, expedientes ni secretos. Requiere una evidencia previamente validada.</p>
+<form id="form-import">
+<label for="import-manifest">Manifiesto JSON con schemaVersion 1.0, organizationId, manifestId y evidenceId</label>
+<textarea id="import-manifest" name="manifest" required rows="8" placeholder='{"schemaVersion":"1.0","manifestId":"inventario_001","organizationId":"hospital_demo","evidenceId":"ev_...","units":[]}'></textarea>
+<button type="submit">Validar e importar de forma atómica</button>
+</form><p class="hint">Si falla un registro, se revierte la importación completa. No activa departamentos ni conecta software.</p></article>
+<article class="card"><h2>Documentos registrados</h2><ul id="evidence-list"></ul></article></section>
+
+<section data-panel="deployment" class="panel" hidden><article class="card"><h2>Arquitectura propuesta</h2>
+<p>Separa estaciones, instancias lógicas, sedes y conectividad. No instala agentes ni concede permisos automáticamente.</p>
+<button id="get-deployment">Calcular propuesta</button>
+<pre id="deployment-output"></pre></article></section>
+</div></div>
+</div>
+</main><script src="/app.js" defer></script></body></html>

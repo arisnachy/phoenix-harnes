@@ -13,6 +13,18 @@ on:
       - 'scripts/phoenix-genesis-institutional-registry.mjs'
       - 'scripts/phoenix-genesis-institutional-registry.test.mjs'
       - 'scripts/phoenix-genesis-registry-cli.mjs'
+      - 'scripts/phoenix-genesis-workbench.mjs'
+      - 'scripts/phoenix-genesis-workbench.test.mjs'
+      - 'scripts/phoenix-genesis-console.mjs'
+      - 'scripts/phoenix-genesis-console.html'
+      - 'scripts/phoenix-genesis-console-ui.js'
+      - 'scripts/phoenix-genesis-console.css'
+      - 'scripts/phoenix-genesis-importer.mjs'
+      - 'scripts/phoenix-genesis-importer.test.mjs'
+      - 'scripts/phoenix-genesis-sector-packs.mjs'
+      - 'scripts/phoenix-genesis-fabric-integration.test.mjs'
+      - 'scripts/phoenix-genesis-paths.mjs'
+      - 'docs/phoenix-genesis-operational-console.md'
       - 'scripts/phoenix-genesis-fabric.test.mjs'
       - 'scripts/phoenix-genesis-plan-cli.mjs'
       - 'scripts/phoenix-genesis-fabric-example.json'
@@ -31,6 +43,18 @@ on:
       - 'scripts/phoenix-genesis-institutional-registry.mjs'
       - 'scripts/phoenix-genesis-institutional-registry.test.mjs'
       - 'scripts/phoenix-genesis-registry-cli.mjs'
+      - 'scripts/phoenix-genesis-workbench.mjs'
+      - 'scripts/phoenix-genesis-workbench.test.mjs'
+      - 'scripts/phoenix-genesis-console.mjs'
+      - 'scripts/phoenix-genesis-console.html'
+      - 'scripts/phoenix-genesis-console-ui.js'
+      - 'scripts/phoenix-genesis-console.css'
+      - 'scripts/phoenix-genesis-importer.mjs'
+      - 'scripts/phoenix-genesis-importer.test.mjs'
+      - 'scripts/phoenix-genesis-sector-packs.mjs'
+      - 'scripts/phoenix-genesis-fabric-integration.test.mjs'
+      - 'scripts/phoenix-genesis-paths.mjs'
+      - 'docs/phoenix-genesis-operational-console.md'
       - 'scripts/phoenix-genesis-fabric.test.mjs'
       - 'scripts/phoenix-genesis-plan-cli.mjs'
       - 'scripts/phoenix-genesis-fabric-example.json'
@@ -56,6 +80,14 @@ jobs:
         run: node --test scripts/phoenix-fabric-broker.test.mjs scripts/phoenix-fabric-worker.test.mjs
       - name: Test durable Genesis evidence registry and traceable POA
         run: node --test scripts/phoenix-genesis-institutional-registry.test.mjs
+      - name: Test Genesis organizational workbench and local console
+        run: node --test scripts/phoenix-genesis-workbench.test.mjs
+      - name: Test safe institutional imports, site revisions and open-universe sector packs
+        run: node --test scripts/phoenix-genesis-importer.test.mjs
+      - name: Test real Genesis-to-Fabric node enrollment and heartbeat
+        run: node --test scripts/phoenix-genesis-fabric-integration.test.mjs
+      - name: Verify browser console scripts parse
+        run: node --check scripts/phoenix-genesis-console-ui.js && node --check scripts/phoenix-genesis-console.mjs
       - name: Exercise the Genesis CLI with synthetic hospital input
         run: |
           node scripts/phoenix-genesis-plan-cli.mjs scripts/phoenix-genesis-fabric-example.json > genesis-demo-output.json
