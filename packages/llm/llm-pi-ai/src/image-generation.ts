@@ -248,7 +248,8 @@ export function classifyCodexImageFailure(message: string): CodexImageFailureKin
   if (
     /image_generation[^\n]*(disabled|unavailable)|image generation[^\n]*(disabled|unavailable)/i.test(message)
     || /feature[^\n]*(not enabled|disabled)|unknown (feature|tool)[^\n]*(image|image_generation)/i.test(message)
-    || /image_gen[^\n]*not available/i.test(message)
+    || /image_gen[^\n]*(not available|not exposed|missing|unavailable)/i.test(message)
+    || /built-in image[^\n]*(tool[^\n]*)?(not exposed|unavailable|missing)/i.test(message)
   ) {
     return 'capability'
   }
