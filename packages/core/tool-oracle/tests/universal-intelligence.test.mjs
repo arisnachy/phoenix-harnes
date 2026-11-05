@@ -128,3 +128,23 @@ test('biblioteca inmutable conserva versiones y detecta desenlaces vencidos',asy
     assert.equal(due[0].id,original.id)
   }finally{await rm(dir,{recursive:true,force:true})}
 })
+
+
+test('holdout independiente conserva resultado negativo sin cambiar el modelo por retrospectiva',()=>{
+  const values=Array.from({length:120},(_,i)=>100+2*Math.min(i,89)+(i>=90?i%2:0))
+  const lastObservedAt=new Date(Date.now()-43200000).toISOString()
+  const forecast=ensembleForecast({values,horizonSteps:1,stepHours:24,lastObservedAt,unit:'casos'})
+  assert.equal(forecast.status,'projected')
+  assert.equal(forecast.selected,'ensemble')
+  assert(forecast.selectedMae>forecast.baselineMae)
+  assert(forecast.skillPercent<0)
+  assert(forecast.warnings.some(w=>w.includes('ventana')))
+})
+
+test('prohibido elegir estacionalidad que necesita observar valores futuros',()=>{
+  const values=Array.from({length:120},(_,i)=>10+i%2)
+  const result=ensembleForecast({values,horizonSteps:5,stepHours:24,
+    lastObservedAt:new Date(Date.now()-86400000).toISOString(),unit:'casos',seasonSteps:2})
+  assert.equal(result.status,'projected')
+  assert(!result.models.some(model=>model.name==='seasonal'))
+})

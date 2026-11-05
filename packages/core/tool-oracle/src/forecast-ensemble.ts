@@ -80,7 +80,7 @@ export function ensembleForecast(input:{
   if(target<=Date.now())return {...basic,reason:'El horizonte final ya está en el pasado.'}
   if(last>Date.now()+60000)return {...basic,reason:'La última observación está fechada en el futuro.'}
   const models=['persistence','trend']
-  if(seasonSteps!==undefined&&n>=4*seasonSteps+h)models.push('seasonal')
+  if(seasonSteps!==undefined&&seasonSteps>h&&n>=4*seasonSteps+h)models.push('seasonal')
   const splitA=Math.max(25,Math.floor(n*.5))
   const splitB=Math.max(splitA+h+8,Math.floor(n*.75))
   if(splitB>=n-h-7)return {...basic,reason:'No hay suficientes ventanas cronológicas independientes.'}
@@ -95,8 +95,14 @@ export function ensembleForecast(input:{
   const validOrigins=folds(splitB,n-h)
   if(trainOrigins.length<8||validOrigins.length<8)return {...basic,reason:'La cantidad de orígenes temporales de prueba es insuficiente.'}
   const safe=(name:string,t:number,k:number)=>predict(values,t,k,name,seasonSteps)
+  // Choose ensemble weights and fallback BEFORE the final holdout; using
+  // the holdout to switch models makes reported test skill optimistically biased.
+  const weightCut=Math.floor(trainOrigins.length*.6)
+  const weightOrigins=trainOrigins.slice(0,weightCut)
+  const decisionOrigins=trainOrigins.slice(weightCut)
+  if(weightOrigins.length<4||decisionOrigins.length<4)return {...basic,reason:'Faltan orígenes independientes para elegir modelos.'}
   const scored=models.map(name=>{
-    const errors=trainOrigins.map(t=>values[t+h-1]!-safe(name,t,h))
+    const errors=weightOrigins.map(t=>values[t+h-1]!-safe(name,t,h))
     return {name,mae:error(errors)}
   })
   const minLoss=Math.min(...scored.map(v=>v.mae))
@@ -104,11 +110,14 @@ export function ensembleForecast(input:{
   const sum=rawWeights.reduce((a,b)=>a+b,0)
   const weights=rawWeights.map(v=>v/sum)
   const blended=(t:number,k:number)=>models.reduce((s,name,i)=>s+weights[i]!*safe(name,t,k),0)
+  const decisionNaiveMae=error(decisionOrigins.map(t=>values[t+h-1]!-safe('persistence',t,h)))
+  const decisionEnsembleMae=error(decisionOrigins.map(t=>values[t+h-1]!-blended(t,h)))
+  const useEnsemble=decisionEnsembleMae+1e-10<decisionNaiveMae
+  // The final holdout is used only for evaluation, not model selection.
   const naiveErrors=validOrigins.map(t=>values[t+h-1]!-safe('persistence',t,h))
   const ensembleErrors=validOrigins.map(t=>values[t+h-1]!-blended(t,h))
   const naiveMae=error(naiveErrors)
   const blendedMae=error(ensembleErrors)
-  const useEnsemble=blendedMae+1e-10<naiveMae
   const chosen=(t:number,k:number)=>useEnsemble?blended(t,k):safe('persistence',t,k)
   const residuals=useEnsemble?ensembleErrors:naiveErrors
   const radius=quantile(residuals.map(abs),.8)
@@ -134,9 +143,9 @@ export function ensembleForecast(input:{
     holdoutFolds:validOrigins.length,baselineMae:naiveMae,selectedMae:useEnsemble?blendedMae:naiveMae,
     skillPercent:naiveMae>0?100*(naiveMae-(useEnsemble?blendedMae:naiveMae))/naiveMae:null,
     empiricalCoverage80,warnings:[
-      'Dos períodos distintos: selección de modelos primero y evaluación final cronológica después.',
+      'Tres ventanas en orden cronológico: pesos, decisión de conjunto frente a persistencia y evaluación final independiente.',
       'La banda del 80 % proviene de errores de la prueba; la cobertura observada no es una garantía prospectiva.',
       'La selección por rendimiento puede sobreajustarse a cambios de régimen. Se requiere revalidación continua.',
-      ...(useEnsemble?[]:['El conjunto no mejoró a la persistencia fuera de muestra; se usa el método sencillo.']),
+      ...(useEnsemble?[]:['El conjunto no superó a la persistencia en la ventana de decisión; se usa el método sencillo.']),
     ]}
 }
