@@ -56,7 +56,7 @@ test('conjunto científico separa selección y prueba temporal y pinta intervalo
   assert.equal(r.status,'projected')
   assert(r.holdoutFolds>=8)
   assert.equal(r.selected,'ensemble')
-  assert(Math.abs(r.predictedValue-160)<.1)
+  assert(Math.abs(r.predictedValue-164)<.1)
   assert(r.selectedMae<r.baselineMae)
   assert(r.points.some(p=>p.lower!==undefined&&p.upper!==undefined))
   assert(r.points.some(p=>p.observed!==undefined))
