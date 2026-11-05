@@ -2,6 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { firstPassQualityGuidance } from '../src/first-pass-quality.ts'
 
 describe('first-pass quality without extra model turns', () => {
+  it('guides generated calculators and scales toward executable native formulas', () => {
+    for (const request of [
+      'Crea una calculadora de IMC.',
+      'Calculadora de IMC',
+      'Diseña un formulario con escala clínica y resultados.',
+    ]) {
+      const guidance = firstPassQualityGuidance(request)
+      expect(guidance).toContain('native smart_form')
+      expect(guidance).toContain('outputs.expression')
+      expect(guidance).toContain('never ship static HTML buttons')
+    }
+    expect(firstPassQualityGuidance('Hola')).toBe('')
+  })
+
   it('keeps greetings and short ordinary text tool-free', () => {
     expect(firstPassQualityGuidance('Hola, ¿cómo estás?')).toBe('')
     expect(firstPassQualityGuidance('Write a short poem about the moon.')).toBe('')

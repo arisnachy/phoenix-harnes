@@ -19,6 +19,17 @@ describe('universal PHOENIX smart forms', () => {
     }
     expect(parseSmartLibrary({component:'smart_form_library',version:1,props:{title:'Biblioteca'}})).not.toBeNull()
   })
+  it('refuses calculators without formulas or input-dependent outputs', () => {
+    const bmi = starterForms[0]!
+    expect(parseSmartForm({ ...bmi, props: { ...bmi.props, outputs: [] } })).toBeNull()
+    expect(parseSmartForm({ ...bmi, props: { ...bmi.props, outputs: undefined } })).toBeNull()
+    expect(parseSmartForm({ ...bmi, props: { ...bmi.props, outputs: [
+      { id:'imc',label:'IMC',expression:{constant:24.8} },
+    ] } })).toBeNull()
+    // An ordinary information-collection form may intentionally have no score.
+    expect(parseSmartForm({ ...bmi, props: { ...bmi.props, kind:'form', outputs:[] } })).not.toBeNull()
+  })
+
   it('calculates BMI without model callbacks', () => {
     const bmi=starterForms[0]!
     const result=calculateSmartForm(bmi,{peso:72,talla:180})

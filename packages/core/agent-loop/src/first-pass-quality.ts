@@ -36,6 +36,8 @@ const PERFORMANCE = /\b(?:latencia|latency|rendimiento|performance|escalabilidad
 const GENERAL_PROBLEM = /\b(?:problemas?|problems?|casos?|cases?|tareas?|tasks?|resu[eé]lv\p{L}*|solucion\p{L}*)\b/iu
 
 /** Each group is a single local string addition, never another model step. */
+// oxlint-disable-next-line @stylistic/max-len -- Match actual interactive calculators, scales, tests and forms.
+const INTERACTIVE_FORM = /\b(?:calculadora\p{L}*|calculator\p{L}*|formulario\p{L}*|forms?|quiz(?:zes)?|cuestionario\p{L}*|escala\s+(?:cl[ií]nica|de\s+riesgo|de\s+puntuaci[oó]n)|(?:imc|bmi)\s+calculator)\b/iu
 const MAX_CHECK_GROUPS = 3
 const DOMAIN_CHECKS = {
   decisions: 'For feasibility: separate constraints from assumptions; compare alternatives, seek a counterexample and prove the bound or qualify optimality/impossibility claims.',
@@ -44,6 +46,7 @@ const DOMAIN_CHECKS = {
   evidence: 'For research: verify source, date and contradictions; separate evidence from inference.',
   artifact: 'For deliverables: inspect the actual generated file or live output for correctness, completeness and format.',
   performance: 'For efficiency: avoid redundant calls and test one relevant worst-case input.',
+  interactive: 'For interactive calculators, tests and scales: emit a native smart_form with validated numeric fields and outputs.expression depending on inputs. Show real recalculated results; never ship static HTML buttons or a form without executable formulas.',
 } as const
 
 /**
@@ -56,7 +59,8 @@ export function firstPassQualityGuidance(userText: string): string {
   const text = userText.slice(0, 16_000).trim()
   if (text.length === 0) return ''
   const decision = DECISION.test(text) || DECISION_ADDITIONAL.test(text)
-  const actionable = ACTION.test(text) || ACTION_ADDITIONAL.test(text)
+  const interactive = INTERACTIVE_FORM.test(text)
+  const actionable = ACTION.test(text) || ACTION_ADDITIONAL.test(text) || interactive
     || (decision && (DECISION_QUESTION.test(text) || FEASIBILITY_QUESTION.test(text)))
   if (!actionable) return ''
   const quantities = QUANTITIES.test(text)
@@ -65,7 +69,7 @@ export function firstPassQualityGuidance(userText: string): string {
   const artifact = ARTIFACT.test(text)
   const performance = PERFORMANCE.test(text)
   if (!decision && !quantities && !code && !evidence && !artifact && !performance
-    && !GENERAL_PROBLEM.test(text) && !(text.length > 240 && COMPLEX.test(text))) return ''
+    && !interactive && !GENERAL_PROBLEM.test(text) && !(text.length > 240 && COMPLEX.test(text))) return ''
 
   // Group related risks instead of truncating the last requested deliverable.
   // Six possible concerns fit in at most three bounded groups, with no extra
@@ -76,6 +80,7 @@ export function firstPassQualityGuidance(userText: string): string {
     ...(quantities ? [DOMAIN_CHECKS.quantities] : []),
   ]
   const execution = [
+    ...(interactive ? [DOMAIN_CHECKS.interactive] : []),
     ...(code ? [DOMAIN_CHECKS.code] : []),
     ...(artifact ? [DOMAIN_CHECKS.artifact] : []),
     ...(performance ? [DOMAIN_CHECKS.performance] : []),
