@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { GenesisWorkbench } from './phoenix-genesis-workbench.mjs'
 import { genesisCatalogSummary,searchGenesisCatalog } from './phoenix-genesis-healthcare-catalog.mjs'
 import { listGenesisAreaCensus,assessGenesisArea } from './phoenix-genesis-area-census.mjs'
+import { buildGenesisReadinessBrief,renderGenesisReadinessHtml } from './phoenix-genesis-readiness-brief.mjs'
 import { importGenesisManifest } from './phoenix-genesis-importer.mjs'
 import { previewGenesisDocument,inspectGenesisDocument,listGenesisDocumentFindings,decideGenesisFinding } from './phoenix-genesis-document-intake.mjs'
 import { previewGenesisLegacyCsv, importGenesisLegacyCsv } from './phoenix-genesis-legacy-csv.mjs'
@@ -145,6 +146,11 @@ export function createGenesisConsole({dbPath,adminToken,port=0,host='127.0.0.1'}
       if(path==='/v1/organizations'&&req.method==='POST')
         return send(res,201,{result:workbench.createOrganization(await json(req))})
       const organizationId=target.searchParams.get('organizationId')
+      if(path==='/v1/readiness'&&req.method==='GET')
+        return send(res,200,buildGenesisReadinessBrief(workbench,organizationId))
+      if(path==='/v1/readiness/html'&&req.method==='GET')
+        return send(res,200,renderGenesisReadinessHtml(
+          buildGenesisReadinessBrief(workbench,organizationId)),'text/html; charset=utf-8')
       if(path==='/v1/dashboard'&&req.method==='GET')
         return send(res,200,workbench.dashboard(organizationId))
       if(path==='/v1/recommendations'&&req.method==='GET')
