@@ -237,7 +237,11 @@ function verifiedOdds(fixture:MlbFixture,quotes:MarketOutcome[],now:number):Mark
 function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
   const sections:MlbCase['uiBlock']['props']['sections']=[]
   const add=(heading:string,items:Array<{label:string;value:string;detail?:string}>)=>{
-    if(items.length)sections.push({heading,kind:'list',items:items.slice(0,40)})
+    if(items.length)for(let start=0;start<items.length;start+=40){
+      const end=Math.min(start+40,items.length)
+      sections.push({heading:items.length>40?`${heading} (${start+1}–${end} de ${items.length})`:heading,
+        kind:'list',items:items.slice(start,end)})
+    }
   }
   const home=result.fixture.home,away=result.fixture.away
   add('Clasificación de temporada',(['away','home'] as const).map(side=>({
@@ -285,7 +289,7 @@ function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
   add('Contraste editorial externo',result.externalHeadlines.map(p=>({
     label:p.headline,value:p.source+' · titular indexado',
     detail:p.published??'Sin fecha confirmada; NO es un pick validado'})))
-  add('Matriz roster contra abridores y bullpen',result.matchups.slice(0,30).map(m=>({
+  add('Matriz roster contra abridores y bullpen',result.matchups.map(m=>({
     label:m.batter+' vs '+m.pitcher,value:m.pitcherRole==='probable-starter'?'Abridor probable':'Bullpen posible',
     detail:[...m.observations.slice(0,3),...m.missing.slice(0,1)].join(' · ')})))
   add('Parque y clima',[{label:result.venue.name,
@@ -296,7 +300,7 @@ function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
       ' · distancias LF/CF/RF '+[result.venue.dimensionsFt.leftLine,
         result.venue.dimensionsFt.center,result.venue.dimensionsFt.rightLine]
         .map(trimNum).join('/')+' ft. Estado del techo el día del juego y orientación del viento SIN confirmar'}])
-  add('Mercados de casas',result.odds.slice(0,12).map(q=>({
+  add('Mercados de casas',result.odds.map(q=>({
     label:q.bookmaker+' · '+q.market+' '+q.selection,
     value:q.price.toFixed(2)+(q.point===null||q.point===undefined?'':' · línea '+q.point),
     detail:q.updatedAt+' · '+(q.source??'Proveedor cotejado')})))
