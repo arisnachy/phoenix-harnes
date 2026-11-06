@@ -1,5 +1,5 @@
 /** Public-source catalog: metadata and eligibility only, never a promise of API health or full-text access. */
-import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-tools'
+import { defineTool, ToolArgsError, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 
 export interface ResearchCatalogEntry {
   readonly id: string
@@ -1157,7 +1157,7 @@ export function createResearchCatalogTool(): ToolDefinition {
         ...selection,
         mode,
         note: 'Catálogo curado, no estado de disponibilidad. Comprobar endpoint, licencia, presupuesto, permisos y pertinencia antes de consultar. No ejecutar fuentes no verificadas.',
-      })
+      } as unknown as Record<string, JsonValue>)
     },
   })
 }
