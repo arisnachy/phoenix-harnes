@@ -208,6 +208,48 @@ export function apply(ctx: Context): void {
       const best=research.slice(0,count)
       const trustedOptions=best.filter(item=>item.status==='descriptive-support')
       const provisional=best.filter(item=>item.status!=='descriptive-support')
+      // Convert only the exact observed offer, not a predicted line, into a
+      // native priced ticket. Never substitute a different house or odds.
+      const quoted=best.flatMap(review=>{
+        const candidate=review.candidate
+        const selected=review.selectedOutcome??candidate.outcomes.find(outcome=>
+          outcome.selection===candidate.selection&&outcome.line===candidate.line)
+        if(!selected)return []
+        const raw=quotes.find(quote=>quote.eventId===candidate.bookmakerEventId&&
+          quote.bookmaker===candidate.bookmaker&&quote.market===candidate.market&&
+          quote.selection===selected.selection&&(quote.point??null)===selected.line&&
+          quote.price===selected.decimalOdds&&quote.source===candidate.source)
+        if(!raw)return []
+        return [{review,raw,market:{eventId:raw.eventId,bookmaker:raw.bookmaker,
+          market:raw.market,selection:raw.selection,point:raw.point??null}}]
+      })
+      let ticket:ReturnType<typeof pricedTicket>['card']|null=null
+      if(args.deep!==false&&quoted.length>=4){
+        try{
+          const built=pricedTicket(quoted.map(x=>x.market),quoted.map(x=>x.raw))
+          const legs=Array.isArray(built.card.props.legs)?built.card.props.legs:[]
+          ticket={...built.card,props:{...built.card.props,
+            title:'PHOENIX · Ticket investigado de '+quoted.length+' patas',
+            subtitle:'Cuotas verificadas · investigación descriptiva · sin apuesta realizada',
+            requestedLegs:count,
+            legs:legs.map((leg,index)=>({
+              ...(leg!==null&&typeof leg==='object'?leg:{}),
+              rationale:quoted[index]?.review.status==='descriptive-support'?
+                'Apoyo descriptivo ('+quoted[index]!.review.sampleGames.home+'/'+
+                quoted[index]!.review.sampleGames.away+' partidos). '+
+                quoted[index]!.review.marketDirection+
+                '. Bajas, titulares y modelo calibrado pendientes.':
+                'Candidata CONDICIONAL: no existe una señal independiente suficiente. '+
+                'Verificar lesiones, titulares y reglas antes de considerar.',
+            })),
+            note:String(built.card.props.note??'')+
+              ' Este ticket es una COTIZACIÓN DE INVESTIGACIÓN, NO una recomendación de rentabilidad. '+
+              'Patas con apoyo descriptivo: '+trustedOptions.length+'; condicionales: '+
+              provisional.length+'. Se requieren probabilidades calibradas y datos de alineación '+
+              'para afirmar ventaja real. No se realizó ninguna apuesta.',
+          }}
+        }catch{ /* Invalid ticket is not rendered as a real quoted ticket. */ }
+      }
       return JSON.stringify({
         goal:count,range:[4,6],complete:args.deep===false?pool.selected.length>=count:
           trustedOptions.length>=count,
@@ -218,13 +260,14 @@ export function apply(ctx: Context): void {
         bookmaker:pool.bookmaker,reviewed:research.length,
         researchedPicks:trustedOptions.length,conditionalPicks:provisional.length,
         selected:args.deep===false?pool.selected.slice(0,count):best,
+        ...(ticket?{uiBlock:ticket}:{status:'borrador-sin-cuatro-precios-validados'}),
         rejectedQuotes:pool.rejectedQuotes,
         date:daily.date,checkedAt:new Date(now).toISOString(),
         eventsScanned:daily.totalEligible,fixturesConsidered:daily.events.length,
         competitionsChecked:daily.coverage,sourcesChecked:attempts,
         placed:false,
         warning:'Selección orientativa y cuotas reales observadas: ni proyecciones descriptivas ni probabilidades sin margen son modelos calibrados ni garantías de ganar. La línea y el precio deben confirmarse en la casa, igual que las bajas y titulares oficiales. Para props, periodos o líneas adicionales, usar los proveedores autorizados que publiquen esos mercados; nunca inventar ofertas.',
-        instruction:'Para el ticket final, prioriza 4-6 opciones CON investigación contrastada. Muestra para cada una partido, deporte, mercado, línea, cuota, casa, fundamento a favor y riesgos. Si la evidencia favorece el lado opuesto a la selección inicial, usa selectedOutcome y su precio auténtico, no el favorito de mercado. Distingue researchedPicks de conditionalPicks y no presentes las segundas como aprobadas. Contrasta reportes oficiales de lesiones, titulares/porteros, props, reglas por periodo y noticias antes de apostar. No hay apuesta realizada.',
+        instruction:'La tarjeta nativa solo muestra precios cotejados de una misma casa. Distingue CANDIDATAS CON APOYO DESCRIPTIVO de CONDICIONALES (no equivalen a picks validados). Si la evidencia favorece el lado opuesto, usa el precio real de selectedOutcome. Verifica informes oficiales de lesiones, titulares/porteros, props, períodos y reglas antes de apostar. No hay apuesta realizada.',
       })
     },
     presentCall:()=>({card:'generic',title:'Investigar el ticket diario y los mercados reales',kind:'read' as const}),
