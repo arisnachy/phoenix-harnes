@@ -177,7 +177,7 @@ async function installSlicerHeart(p,state,fd){
 async function installViewer(p,state,fd){
   const cwd=join(p.root,'viewer')
   const modulesRoot=join(cwd,'node_modules','three')
-  const checks=['build/three.module.js','examples/jsm/loaders/GLTFLoader.js','examples/jsm/controls/OrbitControls.js']
+  const checks=['build/three.module.js','build/three.core.js','examples/jsm/loaders/GLTFLoader.js','examples/jsm/controls/OrbitControls.js','examples/jsm/utils/BufferGeometryUtils.js']
   const pkg=join(modulesRoot,'package.json')
   try{
     if(existsSync(pkg)&&checks.every(x=>existsSync(join(modulesRoot,x)))&&
