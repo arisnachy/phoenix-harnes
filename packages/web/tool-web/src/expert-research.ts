@@ -82,7 +82,7 @@ const BASIC_SECTIONS = [
 export function resolveExpertDiscipline(question: string, domain: string): ExpertDiscipline {
   if (Object.hasOwn(DOMAINS, domain)) return DOMAINS[domain] ?? 'general'
   const q = question.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, '')
-  if (/\b(neurociencia|cerebral|cerebro|hipotalamo|hipocampo|neurofisiologia)\b/u.test(q))
+  if (/\b(neurociencia|cerebral|cerebal|cerebro|hipotalamo|hipocampo|neurofisiologia)\b/u.test(q))
     return 'neuroscience'
   if (/\b(paciente|farmaco|medicamento|fisiopatologia|diagnostico)\b/u.test(q)) return 'medicine'
   if (/\b(ingenieria|estructura|hidraulica|circuito)\b/u.test(q)) return 'engineering'
