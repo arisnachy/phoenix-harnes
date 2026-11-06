@@ -432,7 +432,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     const close = supervisor.indexOf('supervisorInstanceLock?.close()', finish)
     expect(finish).toBeGreaterThan(-1)
     expect(close).toBeGreaterThan(finish)
-    expect(supervisor.slice(finish, close)).toContain('cleanupObsoleteRuntimes()')
+    expect(supervisor.slice(finish, close)).toContain('reapDormantStage: shutdownRequested')
     expect(supervisor.slice(finish, close)).toContain('final storage cleanup deferred')
   })
 
@@ -795,7 +795,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(loop).toContain('cleanupObsoleteRuntimes()')
     // Capacity checks and explicit offline repairs must still report EBUSY.
     expect(supervisor).toContain('cleanupObsoleteRuntimes([runtimeRoot], { reportBusy: storageAtHardCap })')
-    expect(supervisor).toContain('cleanupObsoleteRuntimes([], { reportBusy: true })')
+    expect(supervisor).toContain("reapDormantStage: process.env.PHOENIX_OFFLINE_STORAGE_REPAIR === '1'")
   })
 
   it('backs off blocked Windows storage and avoids repeating EBUSY or capacity warnings in every poll', () => {
