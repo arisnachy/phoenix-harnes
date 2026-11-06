@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { planAnatomicalTwin } from './anatomy-planner.ts'
 /** Optional, read-only Kira Health Engine planning tools. No EHR access. */
 import type { Context } from '@phoenix-ai/cordis'
@@ -9,11 +12,32 @@ import { planInterview, planKiraMail, type InterviewMode } from './clinical-flow
 
 export const name = 'tool-health'
 export const inject = ['tools', 'systemPrompt', 'userQuestions']
-const GUIDANCE = 'PHOENIX Health Engine: solo al solicitar una consulta o interrogatorio, usa health_interview_plan con motivo general SIN nombre, email, identificador u otros datos de paciente. Usa health_copilot_ask action=choose_mode para elegir mediante ASK entre Kira, médico o mixto. Luego action=screen_urgency antes de action=next_question. ASK solo gestiona preguntas y decisiones genéricas, sensibles y sin datos identificables; la respuesta clínica se introduce en el expediente autenticado /health. Un ASK expirado no acredita hechos, consentimiento, revisión ni registro.  El plan no es diagnóstico; recopila datos y exige evaluación del profesional para signos de alarma, examen, pruebas, tratamiento y firma. No afirmes que existe historia clínica guardada, receta firmada, correo enviado ni cita agendada. health_kira_mail_requirements solo enumera requisitos; no envía mensajes. El remitente debe ser la cuenta institucional de Kira autorizada, no una dirección inventada. No introduzcas historia clínica ni datos personales en memoria general, herramientas o logs sin un sistema clínico autorizado.'
+const GUIDANCE = 'PHOENIX Health Engine: solo al solicitar una consulta o interrogatorio, usa health_interview_plan con motivo general SIN nombre, email, identificador u otros datos de paciente. Usa health_copilot_ask action=choose_mode para elegir mediante ASK entre Kira, médico o mixto. Luego action=screen_urgency antes de action=next_question. ASK solo gestiona preguntas y decisiones genéricas, sensibles y sin datos identificables; la respuesta clínica se introduce en el expediente autenticado /health. Un ASK expirado no acredita hechos, consentimiento, revisión ni registro.  El plan no es diagnóstico; recopila datos y exige evaluación del profesional para signos de alarma, examen, pruebas, tratamiento y firma. No afirmes que existe historia clínica guardada, receta firmada, correo enviado ni cita agendada. health_kira_mail_requirements solo enumera requisitos; no envía mensajes. Para estudios volumétricos y consultas sobre gemelos anatómicos usa health_anatomy_workflow; usa health_anatomy_status para consultar dependencias locales. El plan no es una reconstrucción: la ejecución real requiere un archivo DICOM/NIfTI local y consentimiento clínico. Nunca inventes lesiones ni llames al GLB diagnóstico. El remitente debe ser la cuenta institucional de Kira autorizada, no una dirección inventada. No introduzcas historia clínica ni datos personales en memoria general, herramientas o logs sin un sistema clínico autorizado.'
 function healthRequest(text: string | undefined): boolean {
-  return typeof text === 'string' && /(?:consulta m[eé]dica|paciente|historia cl[ií]nica|interrogatorio|receta|health engine|kira.*consulta|psic[oó]log[oa]|laboratorio cl[ií]nico)/iu.test(text)
+  return typeof text === 'string' && /(?:consulta m[eé]dica|paciente|historia cl[ií]nica|interrogatorio|receta|health engine|kira.*consulta|psic[oó]log[oa]|laboratorio cl[ií]nico|gemelo anat[oó]mico|reconstrucci[oó]n 3d|dicom|tomograf[ií]a|resonancia magn[eé]tica)/iu.test(text)
 }
 export function apply(ctx: Context): void {
+  ctx.tools.register(defineTool({
+    name: 'health_anatomy_status',
+    description: 'Consulta solo el estado de la instalación local de bibliotecas anatómicas; no lee pacientes ni archivos DICOM. No confundir instalación con validación clínica.',
+    parameters: {},
+    output: {schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(){
+      const base=process.env.LOCALAPPDATA||homedir()
+      const home=process.env.PHOENIX_ANATOMY_HOME||join(base,process.env.LOCALAPPDATA?'PHOENIX':'.phoenix','anatomy')
+      let manifest: {components?: Record<string,{status?:string}>}|null=null
+      try{manifest=JSON.parse(readFileSync(join(home,'manifest.json'),'utf8')) as typeof manifest}
+      catch{/* Installation may not have run; no patient data involved. */}
+      const components=Object.fromEntries(Object.entries(manifest?.components??{}).map(([key,value])=>[key,value?.status??'unknown']))
+      return Promise.resolve(JSON.stringify({
+        installed:manifest!==null,components,clinicallyValidated:false,
+        reconstructionRunner:'scripts/phoenix-anatomy-workbench.mjs',
+        note:'Sin instalación funcional, planificar; nunca confirmar anatomía, diagnóstico o capacidad de un modelo sin imagen volumétrica.',
+      }))
+    },
+    presentCall:()=>({card:'generic',title:'Estado del motor anatómico',kind:'read' as const}),
+  }))
   ctx.tools.register(defineTool({
     name: 'health_anatomy_workflow',
     description: 'Planifica un gemelo anatómico de cualquier sistema humano según modalidad; NO abre archivos, NO crea geometrías, NO diagnostica y NO toca expedientes. Úsala para explicar al médico qué estudios permiten una reconstrucción y cuáles solo generan hipótesis.',
