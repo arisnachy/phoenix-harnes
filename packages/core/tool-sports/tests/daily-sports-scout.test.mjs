@@ -26,7 +26,7 @@ const fetcher=async url=>{
 test('one bounded daily scan covers the real leagues and diversifies sports',async()=>{
   calls.length=0
   const report=await scoutDailySports(day,5,fetcher,now)
-  assert.equal(calls.length,12)
+  assert.equal(calls.length,20)
   assert.equal(report.totalEligible,7)
   assert.equal(report.events.length,5)
   assert.equal(new Set(report.events.map(x=>x.sport)).size,4)
