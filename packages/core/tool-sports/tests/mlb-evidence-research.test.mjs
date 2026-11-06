@@ -681,3 +681,17 @@ test('MLB global evidence summary reports blockers even with zero market offers'
   assert.ok(review.missingEvidence.some(x=>x.includes('Ofertas reales vigentes')))
   assert.equal(review.eligibleForTicket,false)
 })
+
+test('MLB global evidence rejects invalid as-of review even without quotes',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const dossier=await researchMlbCase(date,812345,mock.fetcher,at)
+  dossier.odds=[]
+  for(const reviewAt of ['not-a-date','2026-07-01T11:00:00Z']){
+    const review=reviewMlbResearch(dossier,reviewAt)
+    assert.equal(review.evidenceGates.reviewTimestampValid,false)
+    assert.equal(review.eligibility,'insufficient')
+    assert.equal(review.decision,'abstain')
+    assert.ok(review.missingEvidence.some(x=>x.includes('Fecha de revisión inválida')))
+    assert.equal(review.eligibleForTicket,false)
+  }
+})
