@@ -79,6 +79,10 @@ const configuredRuntimeDirectoryLimit = Number.parseInt(
 const MAX_RUNTIME_DIRECTORIES = Number.isFinite(configuredRuntimeDirectoryLimit)
   ? Math.max(2, Math.min(6, configuredRuntimeDirectoryLimit))
   : Math.max(2, MAX_INACTIVE_RUNTIME_BACKUPS + 2)
+// Mirror the supervisor's global short-path cap. The watcher previously
+// enforced only its own identity quota and could stage a new multi-GiB
+// checkout even when other identities had exhausted the shared volume.
+const GLOBAL_RUNTIME_DIRECTORY_LIMIT = Math.max(6, MAX_RUNTIME_DIRECTORIES)
 
 // Count caps cannot protect a volume against 2-5 GiB runtime builds.
 const configuredMinFreeGiB = Number.parseInt(process.env.PHOENIX_UPDATE_MIN_FREE_GIB ?? '', 10)
@@ -556,6 +560,15 @@ function updaterRuntimeDirectories(root) {
     .map(entry => join(base, entry.name))
 }
 
+function allUpdaterRuntimeDirectories() {
+  const base = stageBaseDirectory()
+  if (!existsSync(base)) return []
+  return readdirSync(base, { withFileTypes: true })
+    .filter(entry => entry.isDirectory()
+      && /^phoenix-runtime-[0-9a-f]{10}-[0-9a-f]{12}$/iu.test(entry.name))
+    .map(entry => join(base, entry.name))
+}
+
 function updaterRuntimeMtimeMs(path) {
   try {
     return statSync(path).mtimeMs
@@ -684,6 +697,21 @@ function updaterRuntimeStorageHasCapacity(root, target) {
 
   const { remaining } = cleanupUpdaterRuntimeStorage(root, { ensureCapacity: true })
   if (!updaterRuntimeDiskHasHeadroom()) return false
+  const globalCount = allUpdaterRuntimeDirectories().length
+  if (globalCount >= GLOBAL_RUNTIME_DIRECTORY_LIMIT) {
+    const now = Date.now()
+    if (now - lastStorageWarningAt >= STORAGE_WARNING_INTERVAL_MS) {
+      console.error(
+        '[PHOENIX UPDATE] global runtime capacity blocked ('
+        + String(globalCount) + '/' + String(GLOBAL_RUNTIME_DIRECTORY_LIMIT)
+        + ' across checkout identities). No new runtime will be allocated; '
+        + 'the supervisor will retry guarded legacy cleanup. '
+        + 'Use scripts/phoenix-windows-storage-repair.ps1 for offline repair.',
+      )
+      lastStorageWarningAt = now
+    }
+    return false
+  }
   if (remaining < MAX_RUNTIME_DIRECTORIES) return true
 
   const now = Date.now()

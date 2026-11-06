@@ -903,7 +903,11 @@ function cleanupDetachedLegacyStorage(keep, reportBusy = false) {
   }
 }
 
-function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false } = {}) {
+function cleanupObsoleteRuntimes(extraKeep = [], {
+  reportBusy = false,
+  releaseRollback = false,
+  reapDormantStage = false,
+} = {}) {
   const keep = new Set(extraKeep.filter(Boolean).map(runtimePathKey))
   const active = readActiveRuntimeRecord()
   if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
@@ -924,12 +928,14 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false } = {}) {
     })
     .sort((left, right) => managedDirectoryMtimeMs(right) - managedDirectoryMtimeMs(left))
 
+  // Once a replacement Host has passed its healthy checkpoint, an optional
+  // rollback copy is no longer necessary by default. An explicit backup
+  // preference remains respected. The checkpoint caller must opt into this:
+  // pre-health and in-flight update paths always preserve the rollback cushion.
+  const inactiveBackupLimit = releaseRollback ? 0 : MAX_INACTIVE_RUNTIME_BACKUPS
   let retainedInactiveRuntimes = 0
   for (const candidate of inactiveRuntimes) {
-    // Keep at most one newest inactive runtime as a rollback cushion. Every
-    // older runtime is disposable immediately: retaining by age let frequent
-    // releases accumulate tens of gigabytes before the grace window expired.
-    if (retainedInactiveRuntimes < MAX_INACTIVE_RUNTIME_BACKUPS) {
+    if (retainedInactiveRuntimes < inactiveBackupLimit) {
       retainedInactiveRuntimes += 1
       continue
     }
@@ -942,17 +948,24 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false } = {}) {
   const currentStage = runtimePathKey(persistentStage())
   for (const candidate of stageDirectoriesForCleanup()) {
     const key = runtimePathKey(candidate)
-    // This checkout deliberately owns one persistent short-path staging
-    // worktree. The updater reuses it between candidates, so deleting it from
-    // the supervisor creates a cross-process race with reset/install/build.
-    // Keep it unconditionally; only stages belonging to other/old checkouts are
-    // eligible for age-bounded garbage collection.
-    if (key === currentStage) continue
+    // Never touch the current stage while the update watcher can reuse it.
+    // Only the normal shutdown (after the watcher stopped) or an explicitly
+    // validated offline repair can retire this expensive build cache.
+    // A still-prepared target / in-progress build is protected in all modes.
+    if (key === currentStage && !reapDormantStage) continue
     // The ordinary janitor may remove only this checkout's registered stages.
     // Detached old identities go through the age/process-checked legacy path.
     if (!sameRepository(candidate)) continue
     if (stageProtectedByOwningCheckout(candidate)) continue
-    if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue
+    if (key === currentStage) {
+      if (readPreparedRecord()?.target || readUpdateState()?.status === 'preparing') continue
+      // A different process may still hold a compiler or node_modules handle.
+      // For the current stage require a successful Windows process census.
+      if (process.platform === 'win32') {
+        const references = windowsProcessReferences([candidate])
+        if (references === undefined || references.has(key)) continue
+      }
+    } else if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue
     if (!removeManagedWorktree(candidate, registeredWorktrees, reportBusy)) continue
     removedStages += 1
     console.error(`[PHOENIX UPDATE] removed stale updater staging worktree: ${candidate}`)
@@ -2147,7 +2160,14 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint, 
 
 if (process.argv.includes('--cleanup-storage')) {
   recoverStaleStagingIndexLock()
-  cleanupObsoleteRuntimes([], { reportBusy: true })
+  // An explicit offline repair verifies there is no Phoenix/Host/watch process.
+  // Never remove the current stage in a live manual diagnostic.
+  const offlineRepair = process.env.PHOENIX_OFFLINE_STORAGE_REPAIR === '1'
+  cleanupObsoleteRuntimes([], {
+    reportBusy: true,
+    releaseRollback: offlineRepair,
+    reapDormantStage: offlineRepair,
+  })
   process.exit(0)
 }
 
@@ -2406,7 +2426,10 @@ while (true) {
       // Defer first storage sweep until after the Host has had time to start;
       // run it only when a background update isn't compiling a new runtime.
       if (readUpdateState()?.status !== 'preparing' || !watcherSupervisor?.isActive()) {
-        cleanupObsoleteRuntimes()
+        // Once a new Host is verified, free the obsolete rollback copy unless
+        // the user explicitly requested a backup retention policy.
+        const userKeepsBackups = process.env.PHOENIX_UPDATE_RUNTIME_BACKUPS?.trim() !== undefined
+        cleanupObsoleteRuntimes([], { releaseRollback: !userKeepsBackups })
       }
     } catch (error) {
       console.error(`[PHOENIX RECOVERY] warning: could not record healthy configuration checkpoint: ${error instanceof Error ? error.message : String(error)}`)
@@ -2681,7 +2704,12 @@ await stopWatcherSupervisor()
 // ownership-aware janitor here to release storage for the next boot/update.
 // It still preserves the active runtime and every other checkout's files.
 try {
-  cleanupObsoleteRuntimes()
+  // On a normal shutdown the watcher and Host are gone, so release inactive
+  // copies and idle staging. On unexpected crashes preserve rollback evidence.
+  cleanupObsoleteRuntimes([], {
+    releaseRollback: shutdownRequested,
+    reapDormantStage: shutdownRequested,
+  })
 } catch (error) {
   console.error(`[PHOENIX UPDATE] final storage cleanup deferred: ${error instanceof Error ? error.message : String(error)}`)
 }

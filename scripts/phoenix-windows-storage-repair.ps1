@@ -1,7 +1,13 @@
 # Safe, opt-in PHOENIX Windows runtime storage recovery.
 # Inspect by default; -Apply only prunes idle, disposable managed runtimes.
 [CmdletBinding()]
-param([switch]$Apply, [switch]$PurgeOldWorkspaces, [ValidateRange(1, 365)][int]$OlderThanDays = 7)
+param(
+    [switch]$Apply,
+    [switch]$PurgeOldWorkspaces,
+    [ValidateRange(1, 365)][int]$OlderThanDays = 7,
+    [ValidatePattern('^(?:phoenix|kokoro)-[A-Za-z0-9][A-Za-z0-9_.-]{0,120}$')]
+    [string[]]$WorkspaceNames = @()
+)
 
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
@@ -89,6 +95,11 @@ Write-Host '[PHOENIX STORAGE] Reclaims orphan updater worktrees after 24h and do
 # automatic janitor must never erase user-created work or previous research.
 # Explicit -PurgeOldWorkspaces is an additional destructive action, not default.
 $projectPattern = '^(?:phoenix-|kokoro-)'
+if ($WorkspaceNames.Count -gt 0) {
+    Write-Host ('[PHOENIX STORAGE] Exact workspace selection: ' + ($WorkspaceNames -join ', '))
+}
+# These folders are NOT auto-managed runtimes. User approval is required
+# via -PurgeOldWorkspaces and -Apply for any project/evidence workspace.
 $projectProtected = '(?i)(?:^phoenix-(?:runtime|stage|vault|.*backup)|^kokoro-.*backup)'
 function Get-RetiredWorkspaces {
     if (-not (Test-Path -LiteralPath $storageRoot -PathType Container)) { return @() }
@@ -96,16 +107,66 @@ function Get-RetiredWorkspaces {
     return @(Get-ChildItem -LiteralPath $storageRoot -Directory -ErrorAction Stop | Where-Object {
         $_.Name -match $projectPattern -and
         $_.Name -notmatch $projectProtected -and
+        ($WorkspaceNames.Count -eq 0 -or $WorkspaceNames -contains $_.Name) -and
+        -not [bool]($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -and
         $_.LastWriteTime -lt $cutoff -and
         -not (Test-Path -LiteralPath (Join-Path $_.FullName ".git")) -and
         -not (Test-Path -LiteralPath (Join-Path $_.FullName ".phoenix-keep"))
     })
 }
+# User-selected linked worktrees are a separate class: they are eligible
+# ONLY when exact names were supplied, Git proves they belong to this checkout,
+# status is clean, and they are not mounted/reparse/keep-protected.
+# Independent Git clones and workspaces with local changes are never deleted.
+function Get-RetiredLinkedWorkspaces {
+    if ($WorkspaceNames.Count -eq 0 -or -not (Test-Path -LiteralPath $storageRoot -PathType Container)) { return @() }
+    $registeredLines = @(& git -C $repo worktree list --porcelain)
+    if ($LASTEXITCODE -ne 0) { return @() }
+    $registered = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($line in $registeredLines) {
+        if ($line -like 'worktree *') {
+            $null = $registered.Add([System.IO.Path]::GetFullPath($line.Substring(9)))
+        }
+    }
+    $eligible = @(Get-ChildItem -LiteralPath $storageRoot -Directory -ErrorAction Stop | Where-Object {
+        $_.Name -match $projectPattern -and
+        $_.Name -notmatch $projectProtected -and
+        $WorkspaceNames -contains $_.Name -and
+        -not [bool]($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -and
+        $_.LastWriteTime -lt (Get-Date).AddDays(-$OlderThanDays) -and
+        -not (Test-Path -LiteralPath (Join-Path $_.FullName '.phoenix-keep')) -and
+        (Test-Path -LiteralPath (Join-Path $_.FullName '.git') -PathType Leaf) -and
+        $_.FullName -ine $repo
+    })
+    $result = @()
+    foreach ($candidate in $eligible) {
+        if (-not $registered.Contains([System.IO.Path]::GetFullPath($candidate.FullName))) { continue }
+        $common = @(& git -C $candidate.FullName rev-parse --git-common-dir)
+        if ($LASTEXITCODE -ne 0 -or $common.Count -ne 1) { continue }
+        $path = [string]$common[0]
+        $owner = if ([System.IO.Path]::IsPathRooted($path)) {
+            [System.IO.Path]::GetFullPath($path)
+        } else {
+            [System.IO.Path]::GetFullPath((Join-Path $candidate.FullName $path))
+        }
+        if ($owner -ine $commonPath) { continue }
+        $status = @(& git -C $candidate.FullName status --porcelain --untracked-files=all)
+        if ($LASTEXITCODE -ne 0 -or $status.Count -gt 0) { continue }
+        $result += $candidate
+    }
+    return @($result)
+}
 $retiredProjectsBefore = @(Get-RetiredWorkspaces)
-Write-Host ("[PHOENIX STORAGE] Non-Git, non-protected old workspaces (older than $OlderThanDays days): " + $retiredProjectsBefore.Count)
+Write-Host ("[PHOENIX STORAGE] Old non-Git workspaces eligible for explicit review (older than $OlderThanDays days): " + $retiredProjectsBefore.Count)
 $retiredProjectsBefore | Select-Object Name, LastWriteTime | Format-Table -AutoSize
+$retiredLinkedBefore = @(Get-RetiredLinkedWorkspaces)
+Write-Host ('[PHOENIX STORAGE] Verified clean linked worktrees selected for review: ' + $retiredLinkedBefore.Count)
+$retiredLinkedBefore | Select-Object Name, LastWriteTime | Format-Table -AutoSize
 if ($PurgeOldWorkspaces -and -not $Apply) {
     Write-Host '[PHOENIX STORAGE] -PurgeOldWorkspaces requires -Apply. Inspection only.'
+}
+if ($PurgeOldWorkspaces -and $WorkspaceNames.Count -eq 0) {
+    Write-Warning '[PHOENIX STORAGE] No -WorkspaceNames supplied: ALL eligible non-Git workspaces may be removed. Review the inventory first.'
 }
 
 
@@ -133,10 +194,12 @@ if ($phoenixProcesses.Count -gt 0) {
 
 $node = Get-Command node.exe -ErrorAction Stop
 $priorBackups = [Environment]::GetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', 'Process')
+$priorOfflineRepair = [Environment]::GetEnvironmentVariable('PHOENIX_OFFLINE_STORAGE_REPAIR', 'Process')
 try {
-    # Explicit offline repair may discard optional rollback copies.
-    # The supervisor still protects active-runtime markers and other checkouts.
+    # Offline repair may reclaim optional inactive backups and a dormant stage
+    # only after it has checked the owning Host, updater, and port.
     [Environment]::SetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', '0', 'Process')
+    [Environment]::SetEnvironmentVariable('PHOENIX_OFFLINE_STORAGE_REPAIR', '1', 'Process')
     Push-Location $repo
     try {
         & $node.Source $supervisor --cleanup-storage
@@ -146,6 +209,7 @@ try {
     }
 } finally {
     [Environment]::SetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', $priorBackups, 'Process')
+    [Environment]::SetEnvironmentVariable('PHOENIX_OFFLINE_STORAGE_REPAIR', $priorOfflineRepair, 'Process')
 }
 
 if ($PurgeOldWorkspaces) {
@@ -154,6 +218,7 @@ if ($PurgeOldWorkspaces) {
         # Re-evaluate at removal time to avoid deleting a directory newly
         # converted to a Git project, retained by its owner, or recently used.
         if (-not (Test-Path -LiteralPath $candidate.FullName -PathType Container) -or
+            [bool]((Get-Item -LiteralPath $candidate.FullName).Attributes -band [System.IO.FileAttributes]::ReparsePoint) -or
             (Test-Path -LiteralPath (Join-Path $candidate.FullName ".git")) -or
             (Test-Path -LiteralPath (Join-Path $candidate.FullName ".phoenix-keep")) -or
             (Get-Item -LiteralPath $candidate.FullName).LastWriteTime -ge (Get-Date).AddDays(-$OlderThanDays)) { continue }
@@ -165,6 +230,30 @@ if ($PurgeOldWorkspaces) {
             Write-Host ("[PHOENIX STORAGE] Removed retired non-Git workspace: " + $candidate.Name)
         } catch {
             Write-Warning ("[PHOENIX STORAGE] Could not remove " + $candidate.Name + ": " + $_.Exception.Message)
+        }
+    }
+    # An arbitrary old Git folder is NOT eligible. Only selected, clean linked
+    # worktrees registered against this exact checkout are removed via Git.
+    foreach ($candidate in @(Get-RetiredLinkedWorkspaces)) {
+        $stillEligible = @(Get-RetiredLinkedWorkspaces | Where-Object { $_.FullName -ieq $candidate.FullName })
+        if ($stillEligible.Count -eq 0) { continue }
+        try {
+            $referencing = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
+                ([string]$_.CommandLine).IndexOf($candidate.FullName, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+                ([string]$_.ExecutablePath).StartsWith($candidate.FullName + '\', [StringComparison]::OrdinalIgnoreCase)
+            })
+            if ($referencing.Count -gt 0) {
+                Write-Warning ('[PHOENIX STORAGE] Skipped active linked workspace: ' + $candidate.Name)
+                continue
+            }
+            & git -C $repo -c core.longpaths=true worktree remove --force $candidate.FullName
+            if ($LASTEXITCODE -ne 0 -or (Test-Path -LiteralPath $candidate.FullName)) {
+                throw 'Git refused removal or files remain'
+            }
+            $removed += 1
+            Write-Host ('[PHOENIX STORAGE] Removed verified retired linked workspace: ' + $candidate.Name)
+        } catch {
+            Write-Warning ('[PHOENIX STORAGE] Linked workspace preserved: ' + $candidate.Name + ': ' + $_.Exception.Message)
         }
     }
     Write-Host ("[PHOENIX STORAGE] Retired workspaces actually removed: " + $removed)

@@ -31,10 +31,24 @@ describe('PHOENIX offline Windows runtime recovery', () => {
   })
 
   it('inspects by default and never removes runtime storage without opt-in', () => {
-    expect(repair).toContain('param([switch]$Apply, [switch]$PurgeOldWorkspaces,')
+    expect(repair).toContain('[switch]$PurgeOldWorkspaces')
+    expect(repair).toContain('[string[]]$WorkspaceNames = @()')
     expect(repair).toContain('if ($PurgeOldWorkspaces -and -not $Apply) {')
     expect(repair).toContain('if (-not $Apply) {')
     expect(repair).toContain('Get-ManagedRuntimeDirectories')
+  })
+
+  it('only offers explicitly named clean Git linked worktrees and never generic clones', () => {
+    expect(repair).toContain('function Get-RetiredLinkedWorkspaces')
+    expect(repair).toContain('if ($WorkspaceNames.Count -eq 0')
+    expect(repair).toContain('$WorkspaceNames -contains $_.Name')
+    expect(repair).toContain('worktree list --porcelain')
+    expect(repair).toContain('rev-parse --git-common-dir')
+    expect(repair).toContain('if ($owner -ine $commonPath) { continue }')
+    expect(repair).toContain('status --porcelain --untracked-files=all')
+    expect(repair).toContain('Get-CimInstance Win32_Process')
+    expect(repair).toContain('worktree remove --force $candidate.FullName')
+    expect(repair).toContain('Linked workspace preserved:')
   })
 
   it('refuses cleanup while the Host or an updater may hold Windows file handles', () => {
