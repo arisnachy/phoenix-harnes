@@ -73,6 +73,8 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
           p.lineupOrder!==null&&p.lineupOrder>=1&&p.lineupOrder<=9)
     }),
     starterStatsVerified:readyStat(h,'era')&&readyStat(a,'era'),
+    recentStarterOutingsVerified:[h,a].every(p=>p!==null&&p.recentStarts.length>0),
+    injuriesDatedVerified:false, // Injured roster alone has no dated medical report or return-to-play status.
     reliefUsageObserved:(['home','away'] as const).every(side=>
       d.bullpen[side].some(p=>p.reliefUsage72h.length>0)),
     rosterMatchupsReviewed:(['home','away'] as const).every(side=>{
@@ -137,6 +139,8 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
       ...(!gates.lineupsConfirmed?['Alineación confirmada de ambos clubes']:[]),
       ...(!gates.rosterMatchupsReviewed?['Matriz completa de nueve bateadores contra abridor y relevistas rivales']:[]),
       ...(!gates.starterStatsVerified?['Estadísticas comprobadas de ambos abridores']:[]),
+      ...(!gates.recentStarterOutingsVerified?['Últimas salidas fechadas de ambos abridores']:[]),
+      ...(!gates.injuriesDatedVerified?['Partes médicos fechados y disponibilidad de jugadores sin verificar']:[]),
       ...(!gates.venueKnown?['Identidad y características del estadio verificadas']:[]),
       ...(!gates.weatherForecastAvailable?['Pronóstico meteorológico horario para el encuentro']:[]),
     ...(!gates.roofConstructionKnown?['Tipo de techo del estadio sin verificación']:[]),
@@ -201,6 +205,8 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
       ...(!gates.startersVerified?['Identidad de ambos abridores probables sin verificar']:[]),
       ...(!gates.lineupsConfirmed?['Alineación confirmada de nueve bateadores por ambos clubes']:[]),
       ...(!gates.reliefUsageObserved?['Uso reciente del bullpen de ambos equipos sin evidencia suficiente']:[]),
+      ...(!gates.recentStarterOutingsVerified?['Últimas salidas fechadas de ambos abridores']:[]),
+      ...(!gates.injuriesDatedVerified?['Partes médicos fechados y disponibilidad de jugadores sin verificar']:[]),
       ...(!gates.probabilitiesValidated?['Evaluación probabilística validada para respaldar EV']:[]),
       ...(!gates.bothRostersVerified?['Nueve bateadores identificados por equipo']:[]),
       ...(!gates.rosterMatchupsReviewed?['Matriz completa de nueve bateadores contra abridor y relevistas rivales']:[]),
