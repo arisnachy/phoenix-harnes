@@ -20,7 +20,7 @@ import { oracleCardsFromToolResult } from './oracle-tool-cards.ts'
 import { TradingDashboard } from './TradingDashboard.tsx'
 import { TradingMarketChart } from './TradingMarketChart.tsx'
 import { tradingDashboardFromToolResult, tradingMarketFromToolResult, type TradingDashboardSnapshot, type TradingMarketSelection } from './trading-tool-cards.ts'
-import { imageGenerationEstimatedPercent, toolActivity, type TurnActivity, type TurnProgress } from './turn-progress.ts'
+import { toolActivity, type TurnActivity, type TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
 import css from './ToolActivityFlow.module.css'
 
@@ -897,9 +897,9 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
     : `${label} · ${progress.detail}`
   if (expiresAfterMs !== null && elapsedMs >= expiresAfterMs) return null
   if (progress.activity === 'generating-image') {
-    // No provider percent is projected by the runtime yet. Never imply a real
-    // percent or reach completion before the generated attachment arrives.
-    const percent = imageGenerationEstimatedPercent(elapsedMs)
+    // Codex does not expose a measured completion percentage here. Use the
+    // real elapsed duration and an indeterminate track, never a fabricated ETA.
+    const duration = formatRunDuration(elapsedMs, t)
     return (
       <div className={chatCss.imageGenerationCard}
         data-chat-flow-kind="image-generation-progress"
@@ -918,19 +918,17 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
         <div className={chatCss.imageGenerationContent}>
           <div className={chatCss.imageGenerationHeader}>
             <strong>{label}</strong>
-            <span className={chatCss.imageGenerationPercent}>{percent}%</span>
+            <span className={chatCss.imageGenerationElapsed}>{duration}</span>
           </div>
           <div className={chatCss.imageGenerationTrack}
-            role="progressbar" aria-label={t('image.progressEstimateLabel')}
-            aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}
-            aria-valuetext={t('image.progressRemaining', { percent: 100 - percent })}>
-            <span style={{ width: `${percent}%` }} />
+            role="progressbar" aria-label={t('image.progressInFlight')}
+            aria-valuetext={t('image.progressInFlight')}>
+            <span aria-hidden="true" />
           </div>
           <span className={chatCss.imageGenerationRemaining}>
-            {t('image.progressRemaining', { percent: 100 - percent })}
+            {t('image.progressElapsed', { duration })}
           </span>
-          <span className={chatCss.imageGenerationNote}>{t('image.progressEstimateNote')}</span>
-          {showClock && <span className={chatCss.imageGenerationClock}>{formatRunDuration(elapsedMs, t)}</span>}
+          <span className={chatCss.imageGenerationNote}>{t('image.progressUnknown')}</span>
         </div>
       </div>
     )

@@ -25,6 +25,7 @@ import {
 } from '../src/image-generation.ts'
 
 type CapturedImageTool = {
+  readonly timeoutMs: number
   readonly execute: (args: unknown, exec: {
     readonly signal: AbortSignal
     readonly agent?: {
@@ -454,7 +455,7 @@ describe('Codex image generation bridge', () => {
     expect(imageGenerationToolDescription).toContain('brief or objective')
   })
 
-  it('attempts the real Codex image worker when doctor cannot recognize a valid newer posture and accepts a HARDNESS brief alias', async () => {
+  it('starts Codex without a serial doctor preflight and accepts a HARDNESS brief alias', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phoenix-image-generation-'))
     const previousHome = process.env.CODEX_HOME
     process.env.CODEX_HOME = root
@@ -472,19 +473,16 @@ describe('Codex image generation bridge', () => {
           async resolveExecutable() { return 'codex' },
           spawn() {
             spawns += 1
-            const doctor = spawns === 1
-            const done = doctor
-              ? Promise.resolve({ exitCode: 0 })
-              : (async () => {
-                const generated = join(root, 'generated_images')
-                await mkdir(generated, { recursive: true })
-                await writeFile(join(generated, 'fresh.png'), Buffer.from([1, 2, 3]))
-                return { exitCode: 0 }
-              })()
+            const done = (async () => {
+              const generated = join(root, 'generated_images')
+              await mkdir(generated, { recursive: true })
+              await writeFile(join(generated, 'fresh.png'), Buffer.from([1, 2, 3]))
+              return { exitCode: 0 }
+            })()
             return {
               done,
               collected: {
-                stdout: { readFrom: () => ({ text: doctor ? '{"checks":{"newer-shape":true}}' : 'image generated' }) },
+                stdout: { readFrom: () => ({ text: 'image generated' }) },
                 stderr: { readFrom: () => ({ text: '' }) },
               },
             }
@@ -509,6 +507,7 @@ describe('Codex image generation bridge', () => {
       installCodexImageGeneration(context)
       if (tool === undefined) throw new Error('image_generation tool was not registered')
 
+      expect(tool.timeoutMs).toBe(360_000)
       const result = await tool.execute(
         {
           objective: 'Generate the requested image',
@@ -531,7 +530,7 @@ describe('Codex image generation bridge', () => {
       expect(await readFile(actualPath)).toEqual(Buffer.from([1, 2, 3]))
       await rm(join(root, 'generated_images', 'fresh.png'), { force: true })
       expect(await readFile(actualPath)).toEqual(Buffer.from([1, 2, 3]))
-      expect(spawns).toBe(2)
+      expect(spawns).toBe(1)
     } finally {
       if (previousHome === undefined) delete process.env.CODEX_HOME
       else process.env.CODEX_HOME = previousHome
