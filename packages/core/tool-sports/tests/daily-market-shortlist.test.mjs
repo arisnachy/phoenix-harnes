@@ -115,3 +115,30 @@ test('unrecognized abbreviations never join a different fixture',()=>{
   assert.equal(result.selected.length,0)
   assert.equal(result.rejectedQuotes,2)
 })
+
+test('researches ten legitimate game markets before choosing the final five',()=>{
+  const extra=Array.from({length:6},(_,i)=>({
+    ...fixtures[0],eventId:String(300+i),
+    home:{id:'extra-home-'+i,name:'Extra Home '+i},
+    away:{id:'extra-away-'+i,name:'Extra Away '+i},
+  }))
+  const quotes=[
+    ...sports.flatMap((_,i)=>i===5?
+      [...pair(i),{...price(i,'Draw'),price:3.5}]:pair(i)),
+    ...extra.flatMap((game,i)=>[
+      {...price(0,game.home.name),eventId:'extra-'+i,
+        home:game.home.name,away:game.away.name,price:1.6},
+      {...price(0,game.away.name),eventId:'extra-'+i,
+        home:game.home.name,away:game.away.name,price:2.3},
+    ]),
+  ]
+  const result=shortlistDailyMarkets([...fixtures,...extra],quotes,5,now,10)
+  assert.equal(result.complete,true)
+  assert.equal(result.selected.length,10)
+  assert.equal(new Set(result.selected.map(x=>x.espnEventId)).size,10)
+  assert.equal(result.bookmaker,'Book A')
+  assert.throws(()=>shortlistDailyMarkets(fixtures,[],5,now,4),
+    /Reserva de investigación/)
+  assert.throws(()=>shortlistDailyMarkets(fixtures,[],5,now,17),
+    /Reserva de investigación/)
+})
