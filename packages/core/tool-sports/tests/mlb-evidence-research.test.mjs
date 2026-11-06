@@ -695,3 +695,25 @@ test('MLB global evidence rejects invalid as-of review even without quotes',asyn
     assert.equal(review.eligibleForTicket,false)
   }
 })
+
+test('global review exposes asymmetric bullpen and lineup gaps without quotes',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  d.odds=[]
+  assert.ok(d.bullpen.home.length>0&&d.bullpen.away.length>0)
+  d.bullpen.home[0].reliefUsage72h=[{date:'2026-06-30',opponentId:123,
+    innings:'1.0',pitches:'15',earnedRuns:'0',strikeouts:'1',walks:'0'}]
+  d.bullpen.away.forEach(p=>{p.reliefUsage72h=[]})
+  const hitter=d.rosters.home.find(p=>p.role==='batter'&&p.lineupConfirmed)
+  assert.ok(hitter)
+  hitter.lineupConfirmed=false
+  const review=reviewMlbResearch(d)
+  assert.equal(review.reviewedMarkets.length,0)
+  assert.equal(review.evidenceGates.reliefUsageObserved,false)
+  assert.equal(review.evidenceGates.lineupsConfirmed,false)
+  assert.ok(review.missingEvidence.some(x=>x.includes('bullpen de ambos equipos')))
+  assert.ok(review.missingEvidence.some(x=>x.includes('Alineación confirmada')))
+  assert.ok(review.missingEvidence.some(x=>x.includes('Evaluación probabilística')))
+  assert.equal(review.decision,'abstain')
+  assert.equal(review.eligibleForTicket,false)
+})
