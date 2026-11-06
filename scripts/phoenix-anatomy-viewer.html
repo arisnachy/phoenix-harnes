@@ -65,7 +65,7 @@ async function load(){
   const label=document.createElement('label');label.htmlFor=check.id;label.textContent=name
   const show=document.createElement('button');show.textContent='Detalles';show.onclick=()=>{
    const m=metrics.get(name)||{}
-   $('selection').textContent=name+' · '+(m.voxels??'—')+' vóxeles · '+(m.triangles??'—')+' triángulos · SIN REVISIÓN'
+   $('selection').textContent=name+' · '+(m.voxels??'—')+' vóxeles · '+(m.triangles??'—')+' triángulos · volumen estimado '+(m.volumeMl??'—')+' mL · SIN REVISIÓN'
   }
   check.onchange=paint;row.append(check,label,show);$('layers').append(row)
   rows.push({object:obj,check,name})
