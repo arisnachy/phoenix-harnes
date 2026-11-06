@@ -665,3 +665,19 @@ test('recent relief usage must be evidenced for both bullpens, not just one',asy
     x.includes('Uso reciente del bullpen'))))
   assert.equal(review.eligibleForTicket,false)
 })
+
+
+test('MLB global evidence summary reports blockers even with zero market offers',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const dossier=await researchMlbCase(date,812345,mock.fetcher,at)
+  dossier.odds=[]
+  const review=reviewMlbResearch(dossier)
+  assert.equal(review.reviewedMarkets.length,0)
+  assert.equal(review.evidenceGates.realOffersVerified,false)
+  assert.equal(review.decision,'abstain')
+  assert.ok(review.missingEvidence.some(x=>x.includes('Estado del techo')))
+  assert.ok(review.missingEvidence.some(x=>x.includes('liquidación entre casas')))
+  assert.ok(review.missingEvidence.some(x=>x.includes('Picks externos')))
+  assert.ok(review.missingEvidence.some(x=>x.includes('Ofertas reales vigentes')))
+  assert.equal(review.eligibleForTicket,false)
+})
