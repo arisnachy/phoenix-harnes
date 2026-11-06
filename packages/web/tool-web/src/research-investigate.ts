@@ -4,6 +4,7 @@
  * fabricated citation or automated claim-of-truth is introduced here.
  */
 import { createHash } from 'node:crypto'
+import { buildExpertResearchContract, type ExpertResearchContract } from './expert-research.ts'
 import type { Context } from '@phoenix-ai/cordis'
 import type { ResearchOutcome, ResearchPlan } from './research.ts'
 import { assessResearchRelevance, isBlockedResearchBody, normalizeResearchText,
@@ -18,7 +19,7 @@ export type InvestigationSearcher = (ctx: Pick<Context,'web'>, plan: ResearchPla
 export interface InvestigationInput {
   readonly question: string
   readonly domain?: string
-  readonly depth?: 'standard' | 'deep'
+  readonly depth?: 'standard' | 'deep' | 'expert'
 }
 
 /** Every candidate is classified by retrieval outcome, not by search rank alone. */
@@ -45,7 +46,7 @@ export interface InvestigationReport {
   readonly kind: 'research_investigation'
   readonly question: string
   readonly domain: string
-  readonly depth: 'standard' | 'deep'
+  readonly depth: 'standard' | 'deep' | 'expert'
   readonly searchedAt: string
   readonly batchesSearched: number
   readonly queries: string[]
@@ -63,6 +64,8 @@ export interface InvestigationReport {
   readonly evidenceStatus: 'retrieved_unverified' | 'search_results_only' | 'no_evidence'
   readonly limitations: string[]
   readonly nextActions: string[]
+  /** Requirements and actual evidence gaps for the domain-specific final answer. */
+  readonly expert: ExpertResearchContract
 }
 
 function safeDetail(error: unknown): string {
@@ -173,16 +176,16 @@ export async function investigateResearch(
   ctx: Pick<Context, 'web'>, input: InvestigationInput, signal: AbortSignal,
   plan: InvestigationPlanner, search: InvestigationSearcher,
 ): Promise<InvestigationReport> {
-  const depth = input.depth === 'deep' ? 'deep' : 'standard'
+  const depth = input.depth === 'expert' ? 'expert' : input.depth === 'deep' ? 'deep' : 'standard'
   // Preserve partial evidence instead of letting the outer 65-second tool
   // timeout discard an otherwise successful investigation.
-  const budgetSignal = AbortSignal.any([signal, AbortSignal.timeout(depth === 'deep' ? 55_000 : 35_000)])
+  const budgetSignal = AbortSignal.any([signal, AbortSignal.timeout(depth === 'expert' ? 108_000 : depth === 'deep' ? 55_000 : 35_000)])
   let budgetExhausted = false
   const initial = plan(input.question, input.domain, 0)
-  const maxBatches = Math.min(initial.totalBatches, depth === 'deep' ? 3 : 2)
-  const maxToRead = depth === 'deep' ? 8 : 5
-  const readsPerBatch = 3
-  const targetIndependent = depth === 'deep' ? 3 : 2
+  const maxBatches = Math.min(initial.totalBatches, depth === 'expert' ? 8 : depth === 'deep' ? 3 : 2)
+  const maxToRead = depth === 'expert' ? 16 : depth === 'deep' ? 8 : 5
+  const readsPerBatch = depth === 'expert' ? 4 : 3
+  const targetIndependent = depth === 'expert' ? 4 : depth === 'deep' ? 3 : 2
   const outcomes: ResearchOutcome[] = []
   const seen = new Set<string>()
   const leads: InvestigationDocument[] = []
@@ -293,7 +296,7 @@ export async function investigateResearch(
 
   // Include every inspected result even when its search rank was low. Unread
   // leads are clearly marked not_checked and cannot count as evidence.
-  const displayCap = depth === 'deep' ? 20 : 12
+  const displayCap = depth === 'expert' ? 32 : depth === 'deep' ? 20 : 12
   const ordered = [
     ...leads.filter(lead => inspected.has(lead.url)),
     ...leads.filter(lead => !inspected.has(lead.url)),
@@ -322,6 +325,11 @@ export async function investigateResearch(
       'Si una fuente indispensable exige verificación humana, solicitar acceso autorizado.']
     : ['Comparar afirmaciones concretas, fechas y cifras entre las fuentes efectivamente leídas.',
       'Documentar contradicciones, ausencias y límites del método antes de emitir conclusiones.']
+  const expert = buildExpertResearchContract({
+    question: input.question, domain: initial.domain,
+    readRelevantCount, independentReadCount: independentEvidence.count,
+    duplicateContentCount: independentEvidence.duplicates, challengesCount, budgetExhausted,
+  })
   return {
     kind: 'research_investigation', question: initial.question, domain: initial.domain, depth,
     searchedAt: new Date().toISOString(), batchesSearched: outcomes.length,
@@ -331,6 +339,6 @@ export async function investigateResearch(
     duplicateContentCount: independentEvidence.duplicates, budgetExhausted, challengesCount,
     evidenceStatus: readRelevantCount > 0 ? 'retrieved_unverified'
       : leads.length > 0 ? 'search_results_only' : 'no_evidence',
-    limitations, nextActions,
+    limitations, nextActions, expert,
   }
 }
