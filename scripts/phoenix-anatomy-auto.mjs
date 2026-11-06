@@ -5,7 +5,7 @@
  * Installed libraries are NOT a validated diagnostic imaging pipeline.
  */
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync, renameSync, rmSync, statSync, statfsSync, appendFileSync } from 'node:fs'
+import { existsSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync, renameSync, rmSync, statSync, statfsSync, appendFileSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -104,6 +104,23 @@ async function installPythonComponents(p,state,fd){
     save(p,state)
   }
 }
+function findSlicer(){
+  if(process.platform!=='win32')return null
+  const local=process.env.LOCALAPPDATA
+  if(!local)return null
+  for(const base of [join(local,'NA-MIC'),join(local,'Programs')]){
+    try{
+      const folders=readdirSync(base,{withFileTypes:true})
+      for(const entry of folders){
+        if(!entry.isDirectory()||!/^Slicer(?:[ ._-]|$)/i.test(entry.name))continue
+        const path=join(base,entry.name,'Slicer.exe')
+        if(existsSync(path))return path
+      }
+    }catch{}
+  }
+  return null
+}
+
 async function installSlicer(p,state,fd){
   if(process.platform!=='win32'){
     state.components.slicer={status:'external',reason:'Windows installer only; use official platform package'}
@@ -111,7 +128,11 @@ async function installSlicer(p,state,fd){
   }
   // Use the vendor's user-scoped installer; it validates the Slicer payload SHA512.
   // No arbitrary URLs, forced admin elevation, downloads of patient data or model weights.
-  if(state.components.slicer?.status==='installed')return
+  const existing=findSlicer()
+  if(existing){
+    state.components.slicer={status:'installed',verifiedAt:now(),executable:existing}
+    return
+  }
   try{
     const cmd="& { $ErrorActionPreference='Stop'; "+
       "$u='https://download.slicer.org/install.ps1';"+
@@ -120,9 +141,35 @@ async function installSlicer(p,state,fd){
       "& $p; if(-not $?) { exit 2 } }"
     await run('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',cmd],
       {timeout:1200000,output:fd})
-    state.components.slicer={status:'installed',note:'Official installer returned success; verify Slicer executable and SlicerHeart in app'}
+    const installed=findSlicer()
+    if(!installed)throw Error('Slicer installer finished but Slicer.exe was not located')
+    state.components.slicer={status:'installed',verifiedAt:now(),executable:installed}
   }catch(e){state.components.slicer={status:'error',reason:String(e).slice(0,250)};log(p,'slicer: '+String(e))}
 }
+async function installSlicerHeart(p,state,fd){
+  const slicerExe=findSlicer()
+  if(!slicerExe){
+    state.components.slicerheart={status:'deferred',reason:'Slicer.exe not found'}
+    return
+  }
+  const script=join(p.root,'install-slicerheart.py')
+  const content=[
+    'import slicer',
+    'em = slicer.app.extensionsManagerModel()',
+    'em.interactive = False',
+    "ok = em.isExtensionInstalled('SlicerHeart') or em.installExtensionFromServer('SlicerHeart', False)",
+    "slicer.app.exit(0 if ok else 2)",
+  ].join('\n')+'\n'
+  writeFileSync(script,content,'utf8')
+  try{
+    await run(slicerExe,['--no-splash','--python-script',script],{timeout:360000,output:fd})
+    state.components.slicerheart={status:'installed',verifiedAt:now(),note:'Slicer extension manager reported success'}
+  }catch(e){
+    state.components.slicerheart={status:'error',reason:String(e).slice(0,250)}
+    log(p,'slicerheart: '+String(e))
+  }
+}
+
 async function worker(env=process.env){
   const p=pathsFor(env)
   mkdirSync(p.root,{recursive:true})
@@ -135,7 +182,7 @@ async function worker(env=process.env){
     await installPythonComponents(p,state,fd)
     save(p,state)
     await installSlicer(p,state,fd)
-    state.components.slicerheart={status:'pending-integration',reason:'Slicer extension must be installed and verified using matching Slicer build'}
+    await installSlicerHeart(p,state,fd)
     state.components.simvascular={status:'external',reason:'Native binary requires verified vendor distribution'}
     state.components.opencarp={status:'external',reason:'Windows requires verified WSL2/Docker runtime; not a native pip package'}
     state.components.viewer={status:'pending-integration',reason:'OHIF/Cornerstone3D/Three.js/vtk.js must be built into PHOENIX web client'}
