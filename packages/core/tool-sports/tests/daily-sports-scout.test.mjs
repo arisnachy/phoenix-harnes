@@ -89,3 +89,17 @@ test('daily market search keeps as many as 36 real upcoming candidates, not only
   assert.equal(report.coverage.find(x=>x.league==='nba')?.futureEvents,24)
   assert.ok(report.events.every(x=>x.kickoff===kickoff))
 })
+
+test('the requested day is Santo Domingo local, including games after UTC midnight',async()=>{
+  const boundary=async url=>{
+    const events=String(url).includes('/basketball/nba/')?[
+      game(11,'team','2026-11-03T02:30:00Z','pre'),
+      game(12,'team','2026-11-03T05:30:00Z','pre'),
+    ]:[]
+    return new Response(JSON.stringify({events}))
+  }
+  const result=await scoutDailySports(day,5,boundary,now)
+  assert.deepEqual(result.events.map(x=>x.eventId),['11'])
+  assert.equal(result.totalEligible,1)
+  assert.equal(result.coverage.find(x=>x.league==='nba')?.futureEvents,1)
+})
