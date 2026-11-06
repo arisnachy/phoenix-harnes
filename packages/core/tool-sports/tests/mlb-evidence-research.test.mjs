@@ -649,3 +649,19 @@ test('MLB dashboard paginates full matchup and market evidence without hiding ro
   assert.equal(matchupSections.reduce((n,s)=>n+s.items.length,0),dossier.matchups.length)
   assert.ok(matchupSections.every(s=>s.items.length<=40))
 })
+
+
+test('recent relief usage must be evidenced for both bullpens, not just one',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  // Force one side to have verified usage to isolate the asymmetric gate.
+  assert.ok(d.bullpen.home.length>0&&d.bullpen.away.length>0)
+  d.bullpen.home[0].reliefUsage72h=[{date:'2026-06-30',opponentId:123,
+    innings:'1.0',pitches:'15',earnedRuns:'0',strikeouts:'1',walks:'0'}]
+  d.bullpen.away.forEach(p=>{p.reliefUsage72h=[]})
+  const review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.reliefUsageObserved,false)
+  assert.ok(review.reviewedMarkets.every(m=>m.missingEvidence.some(x=>
+    x.includes('Uso reciente del bullpen'))))
+  assert.equal(review.eligibleForTicket,false)
+})
