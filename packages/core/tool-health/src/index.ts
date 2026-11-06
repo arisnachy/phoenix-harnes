@@ -1,3 +1,4 @@
+import { planAnatomicalTwin } from './anatomy-planner.ts'
 /** Optional, read-only Kira Health Engine planning tools. No EHR access. */
 import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
@@ -13,6 +14,18 @@ function healthRequest(text: string | undefined): boolean {
   return typeof text === 'string' && /(?:consulta m[eé]dica|paciente|historia cl[ií]nica|interrogatorio|receta|health engine|kira.*consulta|psic[oó]log[oa]|laboratorio cl[ií]nico)/iu.test(text)
 }
 export function apply(ctx: Context): void {
+  ctx.tools.register(defineTool({
+    name: 'health_anatomy_workflow',
+    description: 'Planifica un gemelo anatómico de cualquier sistema humano según modalidad; NO abre archivos, NO crea geometrías, NO diagnostica y NO toca expedientes. Úsala para explicar al médico qué estudios permiten una reconstrucción y cuáles solo generan hipótesis.',
+    parameters: {
+      region: { type:'string', required:true, description:'Órgano o sistema anatómico sin identificadores del paciente; e.g. brain, heart, lungs, bones, vessels, all.' },
+      studies: { type:'string', required:true, description:'Modalidades genéricas: TC, angio-TC, RM, ecografía 3D, RX, ECG, analíticas. Nunca introducir datos identificables.' },
+    },
+    output: {schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(args) {return Promise.resolve(JSON.stringify(planAnatomicalTwin(args.region,args.studies)))},
+    presentCall:()=>({card:'generic',title:'Plan anatómico 3D · evidencia',kind:'read' as const}),
+  }))
   ctx.systemPrompt.section({ name: 'tool:health', order: 119,
     text: assembly => healthRequest((assembly as { incomingUserText?: string }).incomingUserText) ? GUIDANCE : '' })
   ctx.tools.register(defineTool({
