@@ -90,7 +90,7 @@ const configuredInactiveRuntimeBackups = Number.parseInt(
   10,
 )
 const MAX_INACTIVE_RUNTIME_BACKUPS = Number.isFinite(configuredInactiveRuntimeBackups)
-  ? Math.max(0, Math.min(2, configuredInactiveRuntimeBackups))
+  ? Math.max(0, Math.min(1, configuredInactiveRuntimeBackups))
   : 1
 // Absolute circuit breaker: even if Windows temporarily locks stale worktrees,
 // PHOENIX must never keep allocating full runtime copies until the drive fills.
@@ -2165,7 +2165,7 @@ if (process.argv.includes('--cleanup-storage')) {
   const offlineRepair = process.env.PHOENIX_OFFLINE_STORAGE_REPAIR === '1'
   cleanupObsoleteRuntimes([], {
     reportBusy: true,
-    releaseRollback: offlineRepair,
+    releaseRollback: false,
     reapDormantStage: offlineRepair,
   })
   process.exit(0)
@@ -2426,10 +2426,10 @@ while (true) {
       // Defer first storage sweep until after the Host has had time to start;
       // run it only when a background update isn't compiling a new runtime.
       if (readUpdateState()?.status !== 'preparing' || !watcherSupervisor?.isActive()) {
-        // Once a new Host is verified, free the obsolete rollback copy unless
-        // the user explicitly requested a backup retention policy.
-        const userKeepsBackups = process.env.PHOENIX_UPDATE_RUNTIME_BACKUPS?.trim() !== undefined
-        cleanupObsoleteRuntimes([], { releaseRollback: !userKeepsBackups })
+        // A healthy Host is the earliest safe checkpoint for reclaiming the
+        // consumed staging tree. Keep exactly one previous healthy runtime for
+        // rollback instead of deleting every backup after each activation.
+        cleanupObsoleteRuntimes([], { reapDormantStage: true })
       }
     } catch (error) {
       console.error(`[PHOENIX RECOVERY] warning: could not record healthy configuration checkpoint: ${error instanceof Error ? error.message : String(error)}`)
@@ -2707,7 +2707,7 @@ try {
   // On a normal shutdown the watcher and Host are gone, so release inactive
   // copies and idle staging. On unexpected crashes preserve rollback evidence.
   cleanupObsoleteRuntimes([], {
-    releaseRollback: shutdownRequested,
+    releaseRollback: false,
     reapDormantStage: shutdownRequested,
   })
 } catch (error) {
