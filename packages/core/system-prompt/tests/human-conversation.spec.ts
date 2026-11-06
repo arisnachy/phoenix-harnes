@@ -20,6 +20,17 @@ describe('human conversational contract', () => {
     expect(prompt).toContain('never present uncertain predictions as guaranteed wins')
   })
 
+  it('does not shrink informal neuroscience teaching to a brief definition or fake a diagram', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const prompt = renderPrompt(await ctx.systemPrompt.assemble())
+    expect(prompt).toContain('how stress works in the brain')
+    expect(prompt).toContain('neurotransmitters, hormones and receptors')
+    expect(prompt).toContain('fast versus slow timescales')
+    expect(prompt).toContain('image_generation is available')
+    expect(prompt).toContain('do not trigger patient records for hypothetical academic explanations')
+  })
+
   it('keeps the mature conversation guidance opt-in at the system-prompt registry', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)

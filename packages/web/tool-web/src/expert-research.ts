@@ -1,5 +1,5 @@
 /** Domain-specific professional research guidance, without claiming empirical verification. */
-export type ExpertDiscipline = 'medicine' | 'public_health' | 'science' | 'engineering'
+export type ExpertDiscipline = 'medicine' | 'neuroscience' | 'public_health' | 'science' | 'engineering'
   | 'software' | 'law' | 'economics' | 'finance' | 'sports' | 'education' | 'general'
 
 /** Evidence is read but not necessarily independently fact-checked. */
@@ -26,7 +26,7 @@ export interface ExpertResearchContract {
 }
 
 const DOMAINS: Record<string, ExpertDiscipline> = {
-  medicine: 'medicine', neuroscience: 'medicine',
+  medicine: 'medicine', neuroscience: 'neuroscience',
   public_health: 'public_health', science: 'science', patents: 'science',
   agriculture: 'science', environment: 'science',
   energy: 'engineering', transport: 'engineering', geography: 'engineering',
@@ -40,6 +40,10 @@ const TECHNICAL: Record<ExpertDiscipline, readonly string[]> = {
   medicine: ['Anatomía, fisiología y fisiopatología pertinentes',
     'Diagnóstico diferencial, pruebas, indicaciones y contraindicaciones',
     'Farmacología, dosis contextualizadas, interacciones y monitorización cuando proceda'],
+  neuroscience: ['Estructuras y circuitos cerebrales implicados y su conectividad funcional',
+    'Secuencia autonómica, simpático-adrenal y neuroendocrina con escalas temporales',
+    'Neurotransmisores, receptores, señalización intracelular y mecanismos de retroalimentación',
+    'Plasticidad, adaptación aguda versus crónica, evidencia humana/animal y límites causales'],
   public_health: ['Diseño epidemiológico, definición de población y denominadores',
     'Tasas e indicadores con fecha, unidades y fuente', 'Sesgos, alternativas y evaluación de intervenciones'],
   science: ['Pregunta investigable y metodología', 'Diseño, muestra y medición',
@@ -78,6 +82,8 @@ const BASIC_SECTIONS = [
 export function resolveExpertDiscipline(question: string, domain: string): ExpertDiscipline {
   if (Object.hasOwn(DOMAINS, domain)) return DOMAINS[domain] ?? 'general'
   const q = question.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, '')
+  if (/\b(neurociencia|cerebral|cerebal|cerebro|hipotalamo|hipocampo|neurofisiologia)\b/u.test(q))
+    return 'neuroscience'
   if (/\b(paciente|farmaco|medicamento|fisiopatologia|diagnostico)\b/u.test(q)) return 'medicine'
   if (/\b(ingenieria|estructura|hidraulica|circuito)\b/u.test(q)) return 'engineering'
   if (/\b(programacion|python|typescript|software|depurar)\b/u.test(q)) return 'software'
@@ -96,6 +102,10 @@ export function buildExpertResearchContract(input: ExpertEvidenceInput): ExpertR
   const evidenceState = input.readRelevantCount === 0
     ? 'not_read' : input.independentReadCount < 2 ? 'single_owner_unverified' : 'multiple_owners_unverified'
   const specialistChecks = [
+    ...(discipline === 'neuroscience' && /\b(estres|estress?|stress|hpa|cortisol)\b/u.test(normalized)
+      ? ['Contrastar amígdala, hipocampo, PFC, hipotálamo, locus coeruleus y eje HPA; '
+        + 'distinguir tiempos agudos/crónicos, receptores MR/GR y datos humanos frente a animales']
+      : []),
     ...(/\b(dosis|dosificacion|posologia|dose)\b/u.test(normalized) && discipline === 'medicine'
       ? ['Comprobar indicación, edad, peso, función renal/hepática, interacciones y guías antes de dosificar'] : []),
     ...(/\b(comparar|versus| vs |comparacion)\b/u.test(normalized)
@@ -118,6 +128,9 @@ export function buildExpertResearchContract(input: ExpertEvidenceInput): ExpertR
     evidenceState,
     evidenceGaps,
     visualRules: [
+      ...(discipline === 'neuroscience' ? [
+        'Diagrama causal y anatómico rotulado de estructuras y vías biológicas cuando ayude a comprender el mecanismo; generar solo con herramienta visual real y marcarlo ilustrativo.',
+      ] : []),
       'Tablas cuando permitan comparar información auténtica.',
       'Gráficas solo cuando existan datos numéricos comprobados, fuente, período y unidades.',
       'Imágenes pertinentes con procedencia y texto alternativo; preferir miniaturas en caché.',
