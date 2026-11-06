@@ -133,10 +133,12 @@ if ($phoenixProcesses.Count -gt 0) {
 
 $node = Get-Command node.exe -ErrorAction Stop
 $priorBackups = [Environment]::GetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', 'Process')
+$priorOfflineRepair = [Environment]::GetEnvironmentVariable('PHOENIX_OFFLINE_STORAGE_REPAIR', 'Process')
 try {
-    # Explicit offline repair may discard optional rollback copies.
+    # Keep one verified prior runtime; clear only surplus runtimes and idle stages.
     # The supervisor still protects active-runtime markers and other checkouts.
-    [Environment]::SetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', '0', 'Process')
+    [Environment]::SetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', '1', 'Process')
+    [Environment]::SetEnvironmentVariable('PHOENIX_OFFLINE_STORAGE_REPAIR', '1', 'Process')
     Push-Location $repo
     try {
         & $node.Source $supervisor --cleanup-storage
@@ -146,6 +148,7 @@ try {
     }
 } finally {
     [Environment]::SetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', $priorBackups, 'Process')
+    [Environment]::SetEnvironmentVariable('PHOENIX_OFFLINE_STORAGE_REPAIR', $priorOfflineRepair, 'Process')
 }
 
 if ($PurgeOldWorkspaces) {
@@ -189,7 +192,7 @@ Write-Host ('[PHOENIX STORAGE] Remaining old non-Git workspaces: ' + @(Get-Retir
 $backupCount = 1
 $backupOverride = 0
 if ([int]::TryParse($priorBackups, [ref]$backupOverride)) {
-    $backupCount = [Math]::Max(0, [Math]::Min(2, $backupOverride))
+    $backupCount = [Math]::Max(0, [Math]::Min(1, $backupOverride))
 }
 $configuredLimit = [Math]::Max(2, $backupCount + 2)
 $limitOverride = 0
