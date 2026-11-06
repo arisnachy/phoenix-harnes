@@ -17,6 +17,21 @@ export const ANATOMY_SYSTEMS = Object.freeze({
   vascular: ['arterial tree','venous tree','vascular territories'],
 } as const)
 
+const REGION_ALIASES: Record<string,string[]> = {
+  nervous: ['cerebro','encefalo','medula','nervios','sistema nervioso','neurolog','craneo'],
+  head_neck: ['cabeza','cuello','cara','rostro','ojo','oido','senos','faringe','laringe'],
+  cardiovascular: ['corazon','coronaria','cardiac','miocardio','pericardio','valvula'],
+  respiratory: ['pulmon','pulmones','torax','torac','bronquio','pleura','respiratorio'],
+  gastrointestinal: ['abdomen','abdominal','higado','pancreas','intestino','estomago','vesicula','colon'],
+  urinary: ['rinon','rinones','renal','urinario','vejiga','ureter'],
+  reproductive: ['pelvis','pelvico','utero','ovario','prostata','testiculo','reproductor'],
+  musculoskeletal: ['extremidad','extremidades','brazo','pierna','mano','pie','hueso','oseo','musculo','musculoesqueletico','tendon','ligamento','articulacion','columna'],
+  hematolymphatic: ['bazo','linfatico','ganglio','medula osea'],
+  endocrine: ['hipofisis','tiroides','suprarrenal','endocrino'],
+  integumentary: ['piel','cutaneo','herida','tejido subcutaneo'],
+  vascular: ['vascular','vasos','arteria','vena','aorta','trombosis'],
+}
+
 const MODALITIES = Object.freeze({
   ct: {label:'Tomografía computarizada',geometry:'potentially-patient-specific',engines:['3D Slicer','TotalSegmentator','MONAI','nnU-Net']},
   cta: {label:'Angio-TC',geometry:'potentially-patient-specific',engines:['3D Slicer','MONAI','SimVascular']},
@@ -54,7 +69,7 @@ export function planAnatomicalTwin(region: string, studyDescriptions: string) {
   const query=normalize(region)
   const selected=Object.entries(ANATOMY_SYSTEMS)
     .filter(([key,organs])=>query==='all'||query==='cuerpo completo'||query==='todo el cuerpo'||
-      query.includes(key.replace('_',' '))||organs.some(organ=>query.includes(organ)))
+      query.includes(key.replace('_',' '))||organs.some(organ=>query.includes(organ))||REGION_ALIASES[key]?.some(alias=>query.includes(alias)))
     .map(([key,organs])=>({system:key,structures:organs}))
   // Do not hallucinate a regional identification from arbitrary free text.
   const regions=selected.length?selected:[{system:'region-not-identified',structures:[] as readonly string[]}]
