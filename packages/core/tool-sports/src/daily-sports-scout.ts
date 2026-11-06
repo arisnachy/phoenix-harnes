@@ -15,12 +15,18 @@ const schedule:Schedule[]=[
   {sport:'tennis',league:'wta'}, {sport:'soccer',league:'eng.1'},
   {sport:'soccer',league:'esp.1'}, {sport:'soccer',league:'mex.1'},
   {sport:'soccer',league:'usa.1'}, {sport:'soccer',league:'uefa.champions'},
+  {sport:'soccer',league:'ger.1'}, {sport:'soccer',league:'ita.1'},
+  {sport:'soccer',league:'fra.1'}, {sport:'soccer',league:'por.1'},
+  {sport:'soccer',league:'ned.1'}, {sport:'soccer',league:'bra.1'},
+  {sport:'soccer',league:'arg.1'}, {sport:'soccer',league:'uefa.europa'},
 ]
 const dateValid=(s:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(s)
   &&Number.isFinite(Date.parse(s+'T00:00:00Z'))
   &&new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s
-const dayNow=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
-  year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
+const localDay=(when:Date)=>new Intl.DateTimeFormat('en-CA',{
+  timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit',
+}).format(when)
+const dayNow=()=>localDay(new Date())
 const participant=(s:Side|undefined)=>{
   const rawId=s?.team?.id??s?.athlete?.id
   const id=typeof rawId==='number'||typeof rawId==='string'?String(rawId):''
@@ -42,20 +48,20 @@ type DailySportsCoverage = {
 /**
  * Scan a limited set of known ESPN leagues cheaply before expensive matchup research.
  * @param date - Target date, YYYY-MM-DD in the ESPN request.
- * @param limit - Maximum diverse future fixtures to return, from 1 to 20.
+ * @param limit - Maximum diverse future fixtures to return, from 1 to 36.
  * @param fetcher - Injected HTTP adapter for deterministic tests.
  * @param now - Observation time; only fixtures with kickoffs after now survive.
  * @param env - Provider permissions, including ESPN opt-out.
  * @returns Timestamped, verified fixture candidates and per-league coverage.
  */
 export async function scoutDailySports(
-  date=dayNow(),limit=12,fetcher:typeof fetch=fetch,
+  date=dayNow(),limit=30,fetcher:typeof fetch=fetch,
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
 ):Promise<{date:string,checkedAt:string,events:DailySportsEvent[],
   totalEligible:number,coverage:DailySportsCoverage[],
   warning:string}>{
   if(!dateValid(date))throw Error('Fecha inválida, usar AAAA-MM-DD')
-  if(!Number.isInteger(limit)||limit<1||limit>20)throw Error('Límite de 1 a 20 eventos')
+  if(!Number.isInteger(limit)||limit<1||limit>36)throw Error('Límite de 1 a 36 eventos')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración')
   const coverage:DailySportsCoverage[]=[]
   const all:DailySportsEvent[]=[]
@@ -82,7 +88,8 @@ export async function scoutDailySports(
         if(event.status?.type?.state!=='pre')continue
         const at=Date.parse(event.date??'')
         const id=String(event.id??'')
-        if(!Number.isFinite(at)||at<=now||!/^\d{1,20}$/u.test(id))continue
+        if(!Number.isFinite(at)||at<=now||!/^\d{1,20}$/u.test(id)
+          ||localDay(new Date(at))!==date)continue
         const sides=event.competitions?.[0]?.competitors
         if(!Array.isArray(sides))continue
         const home=participant(sides.find(s=>s.homeAway==='home'))
