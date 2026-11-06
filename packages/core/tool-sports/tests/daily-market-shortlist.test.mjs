@@ -88,3 +88,30 @@ test('market pool validates supported providers and exact target range',()=>{
   assert.throws(()=>shortlistDailyMarkets(fixtures,[],3,now),/4 a 6/)
   assert.throws(()=>shortlistDailyMarkets(fixtures,[],7,now),/4 a 6/)
 })
+
+test('known sportsbook team abbreviations match uniquely to actual ESPN fixtures',()=>{
+  const nba=[{...fixtures[0],home:{id:'10',name:'Los Angeles Clippers'},
+    away:{id:'11',name:'New York Knicks'}}]
+  const two=[{...price(0,'LA Clippers'),eventId:'book-la',home:'LA Clippers',
+    away:'NY Knicks',price:1.65},
+    {...price(0,'NY Knicks'),eventId:'book-la',home:'LA Clippers',
+      away:'NY Knicks',price:2.35}]
+  const result=shortlistDailyMarkets(nba,two,4,now)
+  assert.equal(result.matchesInSlate,1)
+  assert.equal(result.selected.length,1)
+  assert.equal(result.selected[0].espnEventId,nba[0].eventId)
+  assert.equal(result.selected[0].fixture,'New York Knicks vs Los Angeles Clippers')
+})
+
+test('unrecognized abbreviations never join a different fixture',()=>{
+  const nba=[{...fixtures[0],home:{id:'10',name:'Los Angeles Clippers'},
+    away:{id:'11',name:'New York Knicks'}}]
+  const two=[{...price(0,'Clippers'),eventId:'book-la',home:'Clippers',
+    away:'NY Knicks'},
+    {...price(0,'NY Knicks'),eventId:'book-la',home:'Clippers',
+      away:'NY Knicks'}]
+  const result=shortlistDailyMarkets(nba,two,4,now)
+  assert.equal(result.matchesInSlate,0)
+  assert.equal(result.selected.length,0)
+  assert.equal(result.rejectedQuotes,2)
+})
