@@ -920,17 +920,6 @@ async function runCodex(
   }
 }
 
-async function probeCodexImagePosture(ctx: Context, signal: AbortSignal): Promise<void> {
-  try {
-    await runCodex(ctx, ['doctor', '--json'], undefined, signal)
-  } catch (_doctorProbeFailed) {
-    signal.throwIfAborted()
-    // Doctor is advisory. The real `codex exec --enable image_generation`
-    // attempt below is authoritative and can succeed across diagnostic changes.
-  }
-}
-
-
 /** Kira reference is cinematic futuristic concept art rather than a paint-over portrait. */
 export const KIRA_TEAM_STYLE = [
   'Kira team visual direction: richly detailed cinematic science-fiction ensemble concept art.',
@@ -1115,7 +1104,7 @@ async function generateWithCodexProvider(
   signal: AbortSignal,
   referencePath?: string,
 ): Promise<ImageGenerationValue> {
-  await probeCodexImagePosture(ctx, signal)
+  // Skip the advisory doctor process: the real Codex image worker is authoritative.
   const generatedRoot = join(codexHome(), 'generated_images')
   const baselineCandidates = await listGeneratedImages(generatedRoot)
   const baseline = new Map(baselineCandidates.map(candidate => [candidate.path, stamp(candidate)]))
@@ -1330,7 +1319,8 @@ export function installCodexImageGeneration(ctx: Context): void {
       },
       presentationMeta: (_args, value) => imageArtifactMeta(value),
     },
-    timeoutMs: 180_000,
+    // A complex, high-fidelity edit may legitimately exceed three minutes.
+    timeoutMs: 360_000,
     async execute(rawArgs, exec) {
       const args = imageGenerationArgs(rawArgs)
       const prompt = args.prompt.trim()
