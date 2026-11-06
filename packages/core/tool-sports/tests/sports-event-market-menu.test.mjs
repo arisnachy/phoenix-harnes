@@ -76,3 +76,58 @@ test('one failed market batch does not erase valid prior market results',async()
   assert.ok(report.errors.some(x=>x.includes('503')))
   assert.ok(report.quotes.length>0)
 })
+
+test('discover event market keys first and spend odds requests only on published options',async()=>{
+  const calls=[]
+  const dynamic=async(url)=>{
+    const u=new URL(url)
+    calls.push(u.pathname)
+    if(u.pathname.endsWith('/markets'))return new Response(JSON.stringify({
+      id:eventId,sport_key:'basketball_nba',commence_time:'2026-11-06T23:00:00Z',
+      bookmakers:[{key:'draftkings',markets:[
+        {key:'player_points',last_update:'2026-11-06T16:55:00Z'},
+        {key:'alternate_totals',last_update:'2026-11-06T16:55:00Z'},
+        {key:'not_analyzed_market',last_update:'2026-11-06T16:55:00Z'},
+      ]}],
+    }))
+    return feed(url)
+  }
+  const report=await readSportsEventMarketMenu('basketball_nba',eventId,env,dynamic,now,8)
+  assert.equal(report.discoveryStatus,'observed')
+  assert.deepEqual(report.marketsQueried,['player_points','alternate_totals'])
+  assert.ok(report.publishedMarkets.includes('not_analyzed_market'))
+  assert.equal(report.quotes.filter(x=>x.market==='player_points').length,4)
+  assert.equal(calls.length,2)
+  assert.ok(calls[0].endsWith('/markets'))
+  assert.ok(calls[1].endsWith('/odds'))
+})
+test('a real but empty event menu must not spend additional bookmaker quote calls',async()=>{
+  let calls=0
+  const noMarkets=async(url)=>{
+    calls++
+    assert.ok(String(url).includes('/markets'))
+    return new Response(JSON.stringify({
+      id:eventId,sport_key:'basketball_nba',commence_time:'2026-11-06T23:00:00Z',
+      bookmakers:[],
+    }))
+  }
+  const report=await readSportsEventMarketMenu('basketball_nba',eventId,env,noMarkets,now)
+  assert.equal(report.discoveryStatus,'empty')
+  assert.equal(report.status,'empty')
+  assert.deepEqual(report.quotes,[])
+  assert.equal(calls,1)
+})
+test('an event catalog for the wrong sport never authorizes betting quotes',async()=>{
+  let calls=0
+  const mismatch=async(url)=>{
+    calls++
+    return new Response(JSON.stringify({
+      id:eventId,sport_key:'americanfootball_nfl',
+      commence_time:'2026-11-06T23:00:00Z',bookmakers:[],
+    }))
+  }
+  const report=await readSportsEventMarketMenu('basketball_nba',eventId,env,mismatch,now,8)
+  assert.equal(report.discoveryStatus,'unavailable')
+  assert.ok(report.errors.some(x=>x.includes('no corresponde')))
+  assert.equal(report.quotes.length,0)
+})
