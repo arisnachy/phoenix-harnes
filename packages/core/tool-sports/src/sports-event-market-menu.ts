@@ -2,7 +2,6 @@
  * API responses are observations only, not calibrated model picks. No bet is placed.
  */
 import {getFeed} from './sports.ts'
-import {dailyOddsSportKey} from './daily-market-shortlist.ts'
 
 export type ExtraSportsbookOutcome={
   bookmaker:string;bookmakerKey:string;market:string;family:string;period:string
@@ -11,7 +10,9 @@ export type ExtraSportsbookOutcome={
 }
 export type ExtraMarketReport={
   sportKey:string;eventId:string;checkedAt:string;status:'observed'|'empty'|'unconfigured'|'error'
-  marketsQueried:string[];marketsObserved:string[];quotes:ExtraSportsbookOutcome[]
+  marketsQueried:string[];marketsObserved:string[];publishedMarkets:string[]
+  discoveryStatus:'observed'|'empty'|'unavailable'|'unconfigured'
+  quotes:ExtraSportsbookOutcome[]
   bookmakerCount:number;errors:string[];warning:string
 }
 const SPORT_MENUS:Readonly<Record<string,readonly string[]>>={
@@ -74,19 +75,57 @@ export async function readSportsEventMarketMenu(
   if(!allowed.length||!validEvent(eventId))throw Error('Deporte o ID de evento sin soporte para mercados ampliados')
   if(!Number.isInteger(maxMarkets)||maxMarkets<1||maxMarkets>12)
     throw Error('Se permiten entre 1 y 12 mercados por exploración')
-  const selected=allowed.slice(0,maxMarkets)
   const base={sportKey,eventId,checkedAt:new Date(now).toISOString(),
-    marketsQueried:[...selected],marketsObserved:[] as string[],
+    marketsQueried:[] as string[],marketsObserved:[] as string[],
+    publishedMarkets:[] as string[],
+    discoveryStatus:'unconfigured' as ExtraMarketReport['discoveryStatus'],
     quotes:[] as ExtraSportsbookOutcome[],bookmakerCount:0,errors:[] as string[],
     warning:'Oferta observada, NO pronóstico. Las cuotas de otra casa NO son las de Juancito. Mercados por periodo y props requieren reglas, participantes y modelo específicos. No se colocó ninguna apuesta.'}
   if(!env.THE_ODDS_API_KEY?.trim())
-    return {...base,status:'unconfigured',errors:['The Odds API v4 no tiene clave autorizada']}
+    return {...base,status:'unconfigured' as const,
+      errors:['The Odds API v4 no tiene clave autorizada']}
+
+  // The /markets endpoint reports real bookmaker markets for this particular event.
+  // Discovering first avoids spending credits on unsupported market guesses.
+  const errors:string[]=[]
+  let discovered:string[]=[]
+  let discoveryStatus:ExtraMarketReport['discoveryStatus']='unavailable'
+  try{
+    const url=new URL('https://api.the-odds-api.com/v4/sports/'+sportKey+
+      '/events/'+encodeURIComponent(eventId)+'/markets')
+    url.searchParams.set('apiKey',env.THE_ODDS_API_KEY)
+    url.searchParams.set('regions','us')
+    const response=await getFeed<{
+      id?:string;sport_key?:string;commence_time?:string
+      bookmakers?:Array<{markets?:Array<{key?:string;last_update?:string}>}>
+    }>(url.toString(),fetcher)
+    if(response.id!==eventId||response.sport_key!==sportKey
+      ||!Number.isFinite(Date.parse(response.commence_time??''))
+      ||Date.parse(response.commence_time??'')<=now)
+      throw Error('El catálogo de mercados no corresponde al evento futuro')
+    const keys=(response.bookmakers??[]).flatMap(book=>book.markets??[])
+      .filter(market=>typeof market.key==='string'&&
+        /^[a-z0-9_]{3,80}$/u.test(market.key)&&
+        Number.isFinite(Date.parse(market.last_update??''))&&
+        Date.parse(market.last_update??'')<=now&&
+        now-Date.parse(market.last_update??'')<=60*60_000)
+      .map(market=>market.key!)
+    discovered=[...new Set(keys)].slice(0,150)
+    discoveryStatus=discovered.length?'observed':'empty'
+  }catch(error){
+    errors.push('Catálogo de mercados no disponible: '+
+      String(error instanceof Error?error.message:error).slice(0,130))
+  }
+  const selected=discoveryStatus==='observed'?
+    allowed.filter(key=>discovered.includes(key)).slice(0,maxMarkets):
+    discoveryStatus==='empty'?[]:allowed.slice(0,maxMarkets)
+  if(!selected.length)return {...base,status:'empty' as const,
+    discoveryStatus,publishedMarkets:discovered,errors}
 
   // Requests in small groups reduce single-endpoint failures and API credit exposure.
   const packs:string[][]=[]
   for(let i=0;i<selected.length;i+=4)packs.push(selected.slice(i,i+4))
   const all:ExtraSportsbookOutcome[]=[]
-  const errors:string[]=[]
   for(const markets of packs){
     const url=new URL('https://api.the-odds-api.com/v4/sports/'+sportKey+'/events/'+
       encodeURIComponent(eventId)+'/odds')
@@ -141,5 +180,6 @@ export async function readSportsEventMarketMenu(
   const quotes=[...unique.values()].slice(0,400)
   const marketsObserved=[...new Set(quotes.map(q=>q.market))]
   return {...base,status:quotes.length?'observed':errors.length?'error':'empty',
+    marketsQueried:[...selected],publishedMarkets:discovered,discoveryStatus,
     marketsObserved,quotes,bookmakerCount:new Set(quotes.map(q=>q.bookmakerKey)).size,errors}
 }
