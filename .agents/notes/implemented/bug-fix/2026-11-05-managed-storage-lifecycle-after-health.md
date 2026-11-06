@@ -14,6 +14,7 @@ Windows PHOENIX isolated runtimes are full worktrees with build outputs and depe
 - An explicitly offline PowerShell repair (with confirmed no PHOENIX processes or port owner) may request stage reclamation. The supervisor still refuses a prepared or actively building stage, foreign worktrees, and a stage with unverified or live Windows process references.
 - The background updater checks the same cross-checkout global runtime directory cap as the supervisor *before* preparing another runtime. A reached cap blocks allocating additional copies; it does not justify deleting arbitrary directories.
 - Never automatically remove unrelated `phoenix-*` or `kokoro-*` project/evidence folders or persistent `.dsh` user data.
+- The offline repair audits those **separate** workspace/evidence folders and supports an exact-name `-WorkspaceNames` selector with `-PurgeOldWorkspaces -Apply` and a minimum age. Non-Git folders are rejected if kept or reparse-linked. Linked Git worktrees are eligible only when explicitly named, registered under the exact owning checkout, without uncommitted changes, and no Windows process holds their path. Other repositories/clones are never deleted.
 
 ## Alternatives considered
 
