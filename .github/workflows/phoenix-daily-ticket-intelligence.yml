@@ -1,0 +1,38 @@
+name: PHOENIX Daily Ticket Intelligence
+on:
+  pull_request:
+    paths:
+      - 'packages/core/tool-sports/src/daily-market-*.ts'
+      - 'packages/core/tool-sports/src/sports-event-market-menu.ts'
+      - 'packages/core/tool-sports/src/daily-sports-scout.ts'
+      - 'packages/core/tool-sports/src/index.ts'
+      - 'packages/core/tool-sports/tests/daily-*.test.mjs'
+      - 'packages/core/tool-sports/tests/sports-event-market-menu.test.mjs'
+      - '.github/workflows/phoenix-daily-ticket-intelligence.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  daily-ticket-integrity:
+    name: Six-sport 5/6-leg market and research contracts
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify real-match IDs, market menus, injury uncertainty, no-vig and five/six target
+        run: node --experimental-strip-types --test packages/core/tool-sports/tests/daily-sports-scout.test.mjs packages/core/tool-sports/tests/daily-market-shortlist.test.mjs packages/core/tool-sports/tests/daily-market-evidence.test.mjs packages/core/tool-sports/tests/sports-event-market-menu.test.mjs
+      - name: Strict host TypeScript validation
+        run: pnpm exec tsc -b tsconfig.host.json --pretty false
