@@ -103,8 +103,8 @@ export function buildExpertResearchContract(input: ExpertEvidenceInput): ExpertR
     ? 'not_read' : input.independentReadCount < 2 ? 'single_owner_unverified' : 'multiple_owners_unverified'
   const specialistChecks = [
     ...(discipline === 'neuroscience' && /\b(estres|estress?|stress|hpa|cortisol)\b/u.test(normalized)
-      ? ['Contrastar locus coeruleus, amígdala, hipocampo, PFC, hipotálamo y eje HPA;
-         distinguir tiempos agudos y crónicos, receptores MR/GR, datos humanos y animales']
+      ? ['Contrastar amígdala, hipocampo, PFC, hipotálamo, locus coeruleus y eje HPA; '
+        + 'distinguir tiempos agudos/crónicos, receptores MR/GR y datos humanos frente a animales']
       : []),
     ...(/\b(dosis|dosificacion|posologia|dose)\b/u.test(normalized) && discipline === 'medicine'
       ? ['Comprobar indicación, edad, peso, función renal/hepática, interacciones y guías antes de dosificar'] : []),
