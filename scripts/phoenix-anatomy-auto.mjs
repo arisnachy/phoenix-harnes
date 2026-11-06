@@ -24,6 +24,7 @@ const pathsFor=(env=process.env)=>{
 const modules=[
   {id:'dicom',imports:['pydicom','SimpleITK','nibabel'],pip:['pydicom>=3,<4','SimpleITK>=2.4,<3','nibabel>=5,<6']},
   {id:'volume3d',imports:['vtk'],pip:['vtk>=9.3,<10']},
+  {id:'meshes',imports:['trimesh','skimage'],pip:['trimesh>=4,<6','scikit-image>=0.24,<1']},
   {id:'monai',imports:['monai'],pip:['monai>=1.4,<2']},
   {id:'nnunetv2',imports:['nnunetv2'],pip:['nnunetv2>=2,<3']},
   {id:'totalsegmentator',imports:['totalsegmentator'],pip:['TotalSegmentator>=2,<3']},
