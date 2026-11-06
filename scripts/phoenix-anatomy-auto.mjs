@@ -6,6 +6,7 @@
  */
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync, renameSync, rmSync, statSync, statfsSync, appendFileSync, readdirSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 export const SCHEMA = 1
 const self=fileURLToPath(import.meta.url)
 export const rootFor=(env=process.env)=>resolve(env.PHOENIX_ANATOMY_HOME ||
-  join(env.LOCALAPPDATA||homedir(),env.LOCALAPPDATA?'PHOENIX':'/.phoenix','anatomy'))
+  join(env.LOCALAPPDATA||homedir(),env.LOCALAPPDATA?'PHOENIX':'.phoenix','anatomy'))
 const pathsFor=(env=process.env)=>{
   const root=rootFor(env)
   const bin=process.platform==='win32'?'Scripts':'bin'
@@ -44,7 +45,8 @@ export function needsInstall(manifest,at=Date.now()){
   if(!manifest||manifest.schema!==SCHEMA)return true
   if(modules.every(x=>manifest.components?.[x.id]?.status==='installed') &&
     manifest.components?.slicer?.status==='installed' &&
-    manifest.components?.slicerheart?.status==='installed')return false
+    manifest.components?.slicerheart?.status==='installed' &&
+    manifest.components?.viewer?.status==='installed')return false
   const stamp=Date.parse(manifest.updatedAt||'')
   return !Number.isFinite(stamp)||at-stamp>24*60*60*1000
 }
@@ -140,7 +142,7 @@ async function installSlicer(p,state,fd){
       "$u='https://download.slicer.org/install.ps1';"+
       "$p=Join-Path $env:TEMP 'phoenix-slicer-official-install.ps1';"+
       "Invoke-WebRequest -Uri $u -OutFile $p -UseBasicParsing;"+
-      "& $p; if(-not $?) { exit 2 } }"
+      "$env:SLICER_NONINTERACTIVE='1'; & $p; if(-not $?) { exit 2 } }"
     await run('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',cmd],
       {timeout:1200000,output:fd})
     const installed=findSlicer()
@@ -172,6 +174,31 @@ async function installSlicerHeart(p,state,fd){
   }
 }
 
+async function installViewer(p,state,fd){
+  const cwd=join(p.root,'viewer')
+  const modulesRoot=join(cwd,'node_modules','three')
+  const checks=['build/three.module.js','examples/jsm/loaders/GLTFLoader.js','examples/jsm/controls/OrbitControls.js']
+  const pkg=join(modulesRoot,'package.json')
+  try{
+    if(existsSync(pkg)&&checks.every(x=>existsSync(join(modulesRoot,x)))&&
+       JSON.parse(readFileSync(pkg,'utf8')).version==='0.181.2'){
+      state.components.viewer={status:'installed',version:'0.181.2',verifiedAt:now()}
+      return
+    }
+    mkdirSync(cwd,{recursive:true})
+    const npmCli=join(dirname(process.execPath),'node_modules','npm','bin','npm-cli.js')
+    if(!existsSync(npmCli))throw Error('No verified npm-cli.js beside Node installation; install Node with npm')
+    await run(process.execPath,[npmCli,'install','--no-save','--no-package-lock','--ignore-scripts','--no-audit','--no-fund','--prefix',cwd,'three@0.181.2'],
+      {cwd,timeout:300000,output:fd})
+    if(!existsSync(pkg)||JSON.parse(readFileSync(pkg,'utf8')).version!=='0.181.2'||
+       !checks.every(x=>existsSync(join(modulesRoot,x))))throw Error('Three.js version or module files invalid')
+    state.components.viewer={status:'installed',version:'0.181.2',verifiedAt:now()}
+  }catch(e){
+    state.components.viewer={status:'error',reason:String(e).slice(0,220)}
+    log(p,'viewer: '+String(e))
+  }
+}
+
 async function worker(env=process.env){
   const p=pathsFor(env)
   mkdirSync(p.root,{recursive:true})
@@ -187,7 +214,7 @@ async function worker(env=process.env){
     await installSlicerHeart(p,state,fd)
     state.components.simvascular={status:'external',reason:'Native binary requires verified vendor distribution'}
     state.components.opencarp={status:'external',reason:'Windows requires verified WSL2/Docker runtime; not a native pip package'}
-    state.components.viewer={status:'pending-integration',reason:'OHIF/Cornerstone3D/Three.js/vtk.js must be built into PHOENIX web client'}
+    await installViewer(p,state,fd)
     state.clinicalValidation='not-validated'
     save(p,state)
     log(p,'Bootstrap finished; review manifest and install.log for partial failures')
@@ -199,7 +226,7 @@ async function worker(env=process.env){
 export function status(env=process.env){
   const p=pathsFor(env);const v=load(p)
   return {root:p.root,manifest:p.manifest,log:p.log,initialized:!!v,
-    installed:modules.every(m=>v?.components?.[m.id]?.status==='installed'),components:v?.components||{},
+    installed:modules.every(m=>v?.components?.[m.id]?.status==='installed') && v?.components?.viewer?.status==='installed',components:v?.components||{},
     clinicallyValidated:false,notes:'Package installation alone does not reconstruct, verify or diagnose a patient.'}
 }
 export function ensure(env=process.env,launch=spawn){
