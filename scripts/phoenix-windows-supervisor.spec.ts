@@ -534,7 +534,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
 
   it('caps obsolete isolated runtimes without deleting the active runtime', () => {
     expect(source).toContain('function runtimeDirectoriesForCleanup()')
-    expect(source).toContain('function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false } = {})')
+    expect(source).toContain('function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDormantStage = false } = {})')
     expect(source).toContain('const active = readActiveRuntimeRecord()')
     expect(source).toContain('keep.add(runtimePathKey(active.path))')
     expect(source).toContain('const inheritedRuntimeRoot = process.env.PHOENIX_RUNTIME_ROOT?.trim()')
@@ -558,7 +558,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('const statePath = join(common, UPDATE_STATE_FILE)')
     expect(source).toContain('state?.status === \'preparing\'')
     expect(source).toContain('/^[0-9a-f]{40}$/iu.test(state.target)')
-    expect(source).toContain('if (key === currentStage) continue')
+    expect(source).toContain('if (key === currentStage && !reapDormantStage) continue')
     expect(source).toContain('if (stageProtectedByOwningCheckout(candidate)) continue')
     expect(source).toContain('if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue')
     expect(source).toContain('removed stale updater staging worktree')

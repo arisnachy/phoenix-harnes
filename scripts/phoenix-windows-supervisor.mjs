@@ -90,7 +90,7 @@ const configuredInactiveRuntimeBackups = Number.parseInt(
   10,
 )
 const MAX_INACTIVE_RUNTIME_BACKUPS = Number.isFinite(configuredInactiveRuntimeBackups)
-  ? Math.max(0, Math.min(2, configuredInactiveRuntimeBackups))
+  ? Math.max(0, Math.min(1, configuredInactiveRuntimeBackups))
   : 1
 // Absolute circuit breaker: even if Windows temporarily locks stale worktrees,
 // PHOENIX must never keep allocating full runtime copies until the drive fills.
@@ -903,7 +903,7 @@ function cleanupDetachedLegacyStorage(keep, reportBusy = false) {
   }
 }
 
-function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false } = {}) {
+function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDormantStage = false } = {}) {
   const keep = new Set(extraKeep.filter(Boolean).map(runtimePathKey))
   const active = readActiveRuntimeRecord()
   if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
@@ -942,17 +942,19 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false } = {}) {
   const currentStage = runtimePathKey(persistentStage())
   for (const candidate of stageDirectoriesForCleanup()) {
     const key = runtimePathKey(candidate)
-    // This checkout deliberately owns one persistent short-path staging
-    // worktree. The updater reuses it between candidates, so deleting it from
-    // the supervisor creates a cross-process race with reset/install/build.
-    // Keep it unconditionally; only stages belonging to other/old checkouts are
-    // eligible for age-bounded garbage collection.
-    if (key === currentStage) continue
-    // The ordinary janitor may remove only this checkout's registered stages.
-    // Detached old identities go through the age/process-checked legacy path.
+    // A prepared or compiling stage must survive, but once the replacement
+    // Host is verified the consumed build tree is disposable. The janitor
+    // rechecks its owning checkout and Windows processes before deletion.
+    if (key === currentStage && !reapDormantStage) continue
     if (!sameRepository(candidate)) continue
     if (stageProtectedByOwningCheckout(candidate)) continue
-    if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue
+    if (key === currentStage) {
+      if (readPreparedRecord()?.target || readUpdateState()?.status === 'preparing') continue
+      if (process.platform === 'win32') {
+        const references = windowsProcessReferences([candidate])
+        if (references === undefined || references.has(key)) continue
+      }
+    } else if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue
     if (!removeManagedWorktree(candidate, registeredWorktrees, reportBusy)) continue
     removedStages += 1
     console.error(`[PHOENIX UPDATE] removed stale updater staging worktree: ${candidate}`)
@@ -2147,7 +2149,12 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint, 
 
 if (process.argv.includes('--cleanup-storage')) {
   recoverStaleStagingIndexLock()
-  cleanupObsoleteRuntimes([], { reportBusy: true })
+  // The PowerShell repair verifies that Phoenix is stopped before allowing
+  // removal of the idle staging worktree; all active leases still win.
+  cleanupObsoleteRuntimes([], {
+    reportBusy: true,
+    reapDormantStage: process.env.PHOENIX_OFFLINE_STORAGE_REPAIR === '1',
+  })
   process.exit(0)
 }
 
@@ -2406,7 +2413,7 @@ while (true) {
       // Defer first storage sweep until after the Host has had time to start;
       // run it only when a background update isn't compiling a new runtime.
       if (readUpdateState()?.status !== 'preparing' || !watcherSupervisor?.isActive()) {
-        cleanupObsoleteRuntimes()
+        cleanupObsoleteRuntimes([], { reapDormantStage: true })
       }
     } catch (error) {
       console.error(`[PHOENIX RECOVERY] warning: could not record healthy configuration checkpoint: ${error instanceof Error ? error.message : String(error)}`)
@@ -2681,7 +2688,7 @@ await stopWatcherSupervisor()
 // ownership-aware janitor here to release storage for the next boot/update.
 // It still preserves the active runtime and every other checkout's files.
 try {
-  cleanupObsoleteRuntimes()
+  cleanupObsoleteRuntimes([], { reapDormantStage: shutdownRequested })
 } catch (error) {
   console.error(`[PHOENIX UPDATE] final storage cleanup deferred: ${error instanceof Error ? error.message : String(error)}`)
 }
