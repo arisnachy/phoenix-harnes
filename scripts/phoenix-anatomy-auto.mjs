@@ -42,7 +42,8 @@ function save(p,state){
 export function needsInstall(manifest,at=Date.now()){
   if(!manifest||manifest.schema!==SCHEMA)return true
   if(modules.every(x=>manifest.components?.[x.id]?.status==='installed') &&
-    manifest.components?.slicer?.status==='installed')return false
+    manifest.components?.slicer?.status==='installed' &&
+    manifest.components?.slicerheart?.status==='installed')return false
   const stamp=Date.parse(manifest.updatedAt||'')
   return !Number.isFinite(stamp)||at-stamp>24*60*60*1000
 }
@@ -196,7 +197,8 @@ async function worker(env=process.env){
 }
 export function status(env=process.env){
   const p=pathsFor(env);const v=load(p)
-  return {root:p.root,manifest:p.manifest,log:p.log,installed:!!v,components:v?.components||{},
+  return {root:p.root,manifest:p.manifest,log:p.log,initialized:!!v,
+    installed:modules.every(m=>v?.components?.[m.id]?.status==='installed'),components:v?.components||{},
     clinicallyValidated:false,notes:'Package installation alone does not reconstruct, verify or diagnose a patient.'}
 }
 export function ensure(env=process.env,launch=spawn){
