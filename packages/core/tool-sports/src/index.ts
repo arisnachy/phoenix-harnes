@@ -150,19 +150,29 @@ export function apply(ctx: Context): void {
       const keys=[...new Set(daily.events.map(event=>dailyOddsSportKey(event.sport,event.league))
         .filter((key):key is string=>typeof key==='string'))].slice(0,12)
       const attempts:Array<{sportKey:string;status:'observed'|'empty'|'error';count:number}>=[]
+      const providerHealth:Array<{sportKey:string;provider:string;status:string;count:number;detail:string}>=[]
       const quotes:Awaited<ReturnType<typeof marketOdds>>=[]
       // Provider quotas and response delays: no more than three league requests at once.
       for(let offset=0;offset<keys.length;offset+=3){
         const group=keys.slice(offset,offset+3)
         const results=await Promise.allSettled(group.map(key=>
-          marketOdds(key,'h2h,spreads,totals',env,fetch)))
+          marketOddsDetailed(key,'h2h,spreads,totals',env,fetch,now)))
         for(let i=0;i<group.length;i++){
           const key=group[i]!,result=results[i]
           if(result?.status==='fulfilled'){
-            attempts.push({sportKey:key,status:result.value.length?'observed':'empty',
-              count:result.value.length})
-            quotes.push(...result.value)
-          }else attempts.push({sportKey:key,status:'error',count:0})
+            attempts.push({sportKey:key,status:result.value.quotes.length?'observed':'empty',
+              count:result.value.quotes.length})
+            quotes.push(...result.value.quotes)
+            providerHealth.push(...result.value.sources.map(source=>({
+              sportKey:key,provider:source.provider,status:source.status,
+              count:source.count,detail:source.detail.slice(0,150),
+            })))
+          }else{
+            attempts.push({sportKey:key,status:'error',count:0})
+            providerHealth.push({sportKey:key,provider:'league-odds',status:'error',
+              count:0,detail:String(result?.reason instanceof Error?
+                result.reason.message:result?.reason??'unknown').slice(0,150)})
+          }
         }
       }
       // Evaluate a small extra pool rather than settling prematurely for the
@@ -266,7 +276,7 @@ export function apply(ctx: Context): void {
         date:daily.date,checkedAt:new Date(now).toISOString(),
         eventsScanned:daily.totalEligible,fixturesConsidered:daily.events.length,
         competitionsChecked:daily.coverage,sourcesChecked:attempts,
-        placed:false,
+        providerHealth,placed:false,
         warning:'Selección orientativa y cuotas reales observadas: ni proyecciones descriptivas ni probabilidades sin margen son modelos calibrados ni garantías de ganar. La línea y el precio deben confirmarse en la casa, igual que las bajas y titulares oficiales. Para props, periodos o líneas adicionales, usar los proveedores autorizados que publiquen esos mercados; nunca inventar ofertas.',
         instruction:'La tarjeta nativa solo muestra precios cotejados de una misma casa. Distingue CANDIDATAS CON APOYO DESCRIPTIVO de CONDICIONALES (no equivalen a picks validados). Si la evidencia favorece el lado opuesto, usa el precio real de selectedOutcome. Verifica informes oficiales de lesiones, titulares/porteros, props, períodos y reglas antes de apostar. No hay apuesta realizada.',
       })
