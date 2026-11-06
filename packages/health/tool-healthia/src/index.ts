@@ -382,7 +382,7 @@ export function apply(ctx: Context): void {
     description: HEALTHIA_ACTIVATE_DESCRIPTION,
     parameters: {},
     output: JSON_OBJECT_OUTPUT,
-    async execute(_args, exec) {
+    execute(_args, exec) {
       const agent = requireAgent(exec.agent)
       const alreadyActive = activeAgents.has(agent)
       if (!alreadyActive) {
@@ -394,11 +394,11 @@ export function apply(ctx: Context): void {
           throw error
         }
       }
-      return {
+      return Promise.resolve({
         active: true,
         alreadyActive,
         instruction: 'HealthIA clinical tools are available. No patient directory was opened. Call health_patient_workspace only when the user explicitly requests profile management; use health_patient_list for internal disambiguation without showing a registration form.',
-      }
+      })
     },
     presentCall: () => present('Activate HealthIA', 'other'),
   }))
