@@ -42,20 +42,20 @@ type DailySportsCoverage = {
 /**
  * Scan a limited set of known ESPN leagues cheaply before expensive matchup research.
  * @param date - Target date, YYYY-MM-DD in the ESPN request.
- * @param limit - Maximum diverse future fixtures to return, from 1 to 20.
+ * @param limit - Maximum diverse future fixtures to return, from 1 to 36.
  * @param fetcher - Injected HTTP adapter for deterministic tests.
  * @param now - Observation time; only fixtures with kickoffs after now survive.
  * @param env - Provider permissions, including ESPN opt-out.
  * @returns Timestamped, verified fixture candidates and per-league coverage.
  */
 export async function scoutDailySports(
-  date=dayNow(),limit=12,fetcher:typeof fetch=fetch,
+  date=dayNow(),limit=30,fetcher:typeof fetch=fetch,
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
 ):Promise<{date:string,checkedAt:string,events:DailySportsEvent[],
   totalEligible:number,coverage:DailySportsCoverage[],
   warning:string}>{
   if(!dateValid(date))throw Error('Fecha inválida, usar AAAA-MM-DD')
-  if(!Number.isInteger(limit)||limit<1||limit>20)throw Error('Límite de 1 a 20 eventos')
+  if(!Number.isInteger(limit)||limit<1||limit>36)throw Error('Límite de 1 a 36 eventos')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración')
   const coverage:DailySportsCoverage[]=[]
   const all:DailySportsEvent[]=[]
