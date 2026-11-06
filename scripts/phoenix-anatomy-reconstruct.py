@@ -57,7 +57,8 @@ def nifti_mask_to_mesh(mask_path):
         raise ValueError("Invalid or degenerate surface")
     mesh = trimesh.Trimesh(vertices=world, faces=faces, process=False)
     mesh.fix_normals()
-    return mesh, count
+    volume_ml = count * abs(float(np.linalg.det(img.affine[:3, :3]))) / 1000.0
+    return mesh, count, volume_ml
 
 
 def reconstruct(args):
@@ -113,9 +114,10 @@ def reconstruct(args):
     for mask in candidates:
         name = mask.name.removesuffix(".nii.gz").removesuffix(".nii")
         try:
-            mesh, voxel_count = nifti_mask_to_mesh(mask)
+            mesh, voxel_count, volume_ml = nifti_mask_to_mesh(mask)
             scene.add_geometry(mesh, geom_name=name, node_name=name)
             quality.append({"structure": name, "voxels": voxel_count, "triangles": len(mesh.faces),
+                            "volumeMl": round(volume_ml, 3),
                             "state": "unreviewed"})
         except ValueError as error:
             quality.append({"structure": name, "state": "rejected", "reason": str(error)})
