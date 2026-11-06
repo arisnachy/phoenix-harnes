@@ -33,6 +33,6 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify real-match IDs, market menus, injury uncertainty, no-vig and five/six target
-        run: node --experimental-strip-types --test packages/core/tool-sports/tests/daily-sports-scout.test.mjs packages/core/tool-sports/tests/daily-market-shortlist.test.mjs packages/core/tool-sports/tests/daily-market-evidence.test.mjs packages/core/tool-sports/tests/sports-event-market-menu.test.mjs
+        run: node --experimental-strip-types --test packages/core/tool-sports/tests/daily-sports-scout.test.mjs packages/core/tool-sports/tests/daily-market-shortlist.test.mjs packages/core/tool-sports/tests/daily-market-evidence.test.mjs packages/core/tool-sports/tests/daily-market-ranking.test.mjs packages/core/tool-sports/tests/sports-event-market-menu.test.mjs
       - name: Strict host TypeScript validation
         run: pnpm exec tsc -b tsconfig.host.json --pretty false
