@@ -1,0 +1,85 @@
+<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PHOENIX · Anatomía 3D</title>
+<style>
+*{box-sizing:border-box}body{margin:0;color:#213448;background:#f7f9fc;font:13px "Segoe UI",system-ui,sans-serif}
+header{height:60px;display:flex;justify-content:space-between;align-items:center;padding:0 22px;background:#fff;border-bottom:1px solid #e0e8f1}
+strong{font-weight:700}small{color:#63788d}.warning{padding:7px 10px;border:1px solid #e9c98b;color:#875500;border-radius:9px;background:#fff8eb}
+main{display:grid;grid-template-columns:250px minmax(0,1fr) 260px;height:calc(100vh - 60px)}
+aside{overflow:auto;background:#fff;padding:18px;border-right:1px solid #e6edf3}
+aside:last-child{border-right:0;border-left:1px solid #e6edf3}
+h2{font-size:14px;margin:0 0 13px}p{font-size:12px;color:#5c7084;line-height:1.5}
+button{padding:8px;border:1px solid #d5e0eb;border-radius:8px;background:#fff;color:#274259;cursor:pointer}
+button:hover{background:#eaf4fc}button:focus-visible,input:focus-visible{outline:2px solid #227cc4}
+.controls{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}
+#viewport{position:relative;background:#edf4fa;min-width:0;overflow:hidden}
+#scene{display:block;width:100%;height:100%;touch-action:none}
+#hint{position:absolute;bottom:13px;left:13px;padding:8px;border-radius:8px;background:#ffffffdc;color:#617388}
+.layer{border-bottom:1px solid #edf1f6;padding:8px 0;display:flex;gap:7px;align-items:center;overflow-wrap:anywhere}
+.layer label{flex:1;cursor:pointer}input[type=checkbox]{accent-color:#147dc0}
+#selection,#status{margin:10px 0;font-size:12px;color:#5c7084}
+@media(max-width:850px){main{height:auto;display:flex;flex-direction:column}#viewport{height:55vh;order:-1}aside{border:0;border-top:1px solid #e6edf3}header{height:auto;padding:12px;gap:10px}}
+</style><script type="importmap">{"imports":{"three":"./three.module.js"}}</script></head><body>
+<header><strong>PHOENIX <small>· GEMELO ANATÓMICO</small></strong><div class="warning">Investigación · Sin validación diagnóstica</div></header>
+<main>
+<aside><h2>Capas anatómicas</h2><p>Segmentación automática. Comprueba las estructuras contra los cortes originales.</p>
+<div class="controls"><button id="all">Mostrar</button><button id="none">Ocultar</button></div><div id="layers"></div>
+<p>Una estructura no visible puede deberse al estudio o al modelo; no demuestra ausencia patológica.</p></aside>
+<section id="viewport"><canvas id="scene" aria-label="Modelo 3D anatómico interactivo"></canvas><div id="hint">Arrastra para girar · Rueda para acercar · Clic derecho para mover</div></section>
+<aside><h2>Evidencia del estudio</h2><div id="metadata"></div>
+<h2>Controles</h2><div class="controls"><button id="reset">Recentrar</button><button id="wire">Ver aristas</button></div>
+<p>Opacidad</p><input id="opacity" type="range" min="0.15" max="1" step="0.05" value="0.95" style="width:100%" aria-label="Opacidad">
+<h2 style="margin-top:20px">Estructura seleccionada</h2><div id="selection">Selecciona una estructura.</div>
+<h2>Limitaciones</h2><p id="limitations">Requiere revisión de un especialista.</p><div id="status" role="status">Cargando modelo local...</div></aside>
+</main>
+<script type="module">
+import * as THREE from 'three'
+import {GLTFLoader} from './GLTFLoader.js'
+import {OrbitControls} from './OrbitControls.js'
+const $=id=>document.getElementById(id),canvas=$('scene'),container=$('viewport'),rows=[]
+const scene=new THREE.Scene();scene.background=new THREE.Color('#edf4fa')
+const camera=new THREE.PerspectiveCamera(47,1,.01,1e8)
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true})
+renderer.setPixelRatio(Math.min(2,devicePixelRatio||1))
+renderer.outputColorSpace=THREE.SRGBColorSpace
+scene.add(new THREE.HemisphereLight(0xffffff,0x859bb3,2.2))
+const light=new THREE.DirectionalLight(0xffffff,2);light.position.set(2,3,4);scene.add(light)
+const controls=new OrbitControls(camera,canvas);controls.enableDamping=true
+const view={center:new THREE.Vector3(),radius:100};let opacity=.95,wire=false
+function resize(){const w=container.clientWidth,h=container.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
+new ResizeObserver(resize).observe(container)
+function reset(){controls.target.copy(view.center);camera.position.copy(view.center).add(new THREE.Vector3(view.radius*1.6,view.radius*1.2,view.radius*2.4));camera.near=Math.max(.01,view.radius/1500);camera.far=view.radius*50;camera.updateProjectionMatrix();controls.update()}
+function paint(){for(const r of rows){r.object.visible=r.check.checked;r.object.material.opacity=opacity;r.object.material.transparent=opacity<1;r.object.material.wireframe=wire;r.object.material.depthWrite=opacity===1}}
+function info(label,value){const p=document.createElement('p');p.textContent=label+': '+String(value??'—');return p}
+async function load(){
+ const [r,glb]=await Promise.all([fetch('./anatomy-manifest.json').then(x=>x.json()),new GLTFLoader().loadAsync('./anatomy.glb')])
+ if(r.clinicalStatus!=='UNVALIDATED_RESEARCH_OUTPUT'||!r.needsExpertReview)throw Error('Resultado no acreditado')
+ const meta=$('metadata');meta.append(info('Modalidad',r.modality),info('Algoritmo',r.model),info('Estado','No validado'),info('Coordenadas',r.coordinateSystem),info('Fecha',r.generatedAt))
+ $('limitations').textContent=(r.limitations||[]).join(' ')
+ scene.add(glb.scene)
+ const metrics=new Map((r.structures||[]).map(x=>[x.structure,x]))
+ glb.scene.traverse(obj=>{
+  if(!obj.isMesh)return
+  const name=obj.name||'estructura '+(rows.length+1),hue=(rows.length*.6180339887)%1
+  obj.material=new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(hue,.4,.56),roughness:.6,side:THREE.DoubleSide})
+  const row=document.createElement('div');row.className='layer'
+  const check=document.createElement('input');check.type='checkbox';check.checked=true;check.id='l'+rows.length
+  const label=document.createElement('label');label.htmlFor=check.id;label.textContent=name
+  const show=document.createElement('button');show.textContent='Detalles';show.onclick=()=>{
+   const m=metrics.get(name)||{}
+   $('selection').textContent=name+' · '+(m.voxels??'—')+' vóxeles · '+(m.triangles??'—')+' triángulos · SIN REVISIÓN'
+  }
+  check.onchange=paint;row.append(check,label,show);$('layers').append(row)
+  rows.push({object:obj,check,name})
+ })
+ if(!rows.length)throw Error('Archivo sin mallas')
+ const b=new THREE.Box3().setFromObject(glb.scene);b.getCenter(view.center)
+ view.radius=Math.max(1,b.getSize(new THREE.Vector3()).length()/2)
+ reset();resize();paint()
+ $('status').textContent=rows.length+' estructuras cargadas. No diagnosticado.'
+}
+$('all').onclick=()=>{rows.forEach(x=>x.check.checked=true);paint()}
+$('none').onclick=()=>{rows.forEach(x=>x.check.checked=false);paint()}
+$('reset').onclick=reset;$('wire').onclick=()=>{wire=!wire;paint()}
+$('opacity').oninput=e=>{opacity=Number(e.target.value);paint()}
+renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera)})
+load().catch(e=>{$('status').textContent='Error al abrir modelo: '+e.message})
+</script></body></html>
