@@ -38,12 +38,6 @@ export function isImageGenerationTool(name: string): boolean {
     || /\b(?:images?|photos?|pictures?|im[aá]genes?)\s+(?:gen|generation|generator|generate|generar|render|create|creation|edit|editing|upscale|transform)\b/u.test(normalized)
 }
 
-/** An explicitly labelled *visual estimate*, never provider telemetry or an ETA. */
-export function imageGenerationEstimatedPercent(elapsedMs: number): number {
-  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return 1
-  return Math.max(1, Math.min(95, Math.floor(95 * (1 - Math.exp(-elapsedMs / 45_000)))))
-}
-
 const TOOL_ACTIVITY_MATCHERS: readonly (readonly [TurnActivity, RegExp])[] = [
   ['verifying', /\b(vitest|test|tests|verify|verification|validate|validation|lint|typecheck|check)\b/],
   // Search wins before generic `web`, so web_search reports searching while browser_open stays browsing.
