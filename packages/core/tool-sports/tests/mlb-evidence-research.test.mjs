@@ -717,3 +717,18 @@ test('global review exposes asymmetric bullpen and lineup gaps without quotes',a
   assert.equal(review.decision,'abstain')
   assert.equal(review.eligibleForTicket,false)
 })
+
+test('MLB review discloses undated medical reports and absent recent starter outings',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const dossier=await researchMlbCase(date,812345,mock.fetcher,at)
+  dossier.odds=[]
+  dossier.starters.home.recentStarts=[]
+  dossier.starters.away.recentStarts=[]
+  const review=reviewMlbResearch(dossier)
+  assert.equal(review.evidenceGates.recentStarterOutingsVerified,false)
+  assert.equal(review.evidenceGates.injuriesDatedVerified,false)
+  assert.ok(review.missingEvidence.some(x=>x.includes('Últimas salidas fechadas')))
+  assert.ok(review.missingEvidence.some(x=>x.includes('Partes médicos fechados')))
+  assert.equal(review.eligibleForTicket,false)
+  assert.equal(review.decision,'abstain')
+})
