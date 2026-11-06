@@ -124,7 +124,7 @@ export function shortlistDailyMarkets(
   for(const x of candidates)perBook.set(x.bookmaker,[...(perBook.get(x.bookmaker)??[]),x])
   const pick=(rows:DailyMarketCandidate[])=>{
     const sorted=[...rows].sort((a,b)=>b.marketNoVigShare-a.marketNoVigShare||
-      a.quoteUpdatedAt.localeCompare(b.quoteUpdatedAt)||
+      b.quoteUpdatedAt.localeCompare(a.quoteUpdatedAt)||
       a.fixture.localeCompare(b.fixture))
     const used=new Set<string>(),chosen:DailyMarketCandidate[]=[]
     const take=(p:DailyMarketCandidate)=>{
@@ -132,9 +132,18 @@ export function shortlistDailyMarkets(
       if(chosen.length>=goal||used.has(event))return
       chosen.push(p);used.add(event)
     }
+    // Surface real non-winner markets first so the researcher sees alternatives,
+    // but do not interpret a bookmaker share as independent model probability.
+    for(const market of ['totals','spreads'] as const){
+      const option=sorted.find(x=>x.market===market)
+      if(option)take(option)
+    }
+    // Then diversify by actual sport before adding a second match in one sport.
     const sports=[...new Set(sorted.map(x=>x.sport))]
-    for(const sport of sports)for(const x of sorted.filter(y=>y.sport===sport)){
-      if(!used.has(x.sport+'|'+x.league+'|'+x.espnEventId)){take(x);break}
+    for(const sport of sports){
+      if(chosen.some(x=>x.sport===sport))continue
+      const option=sorted.find(x=>x.sport===sport)
+      if(option)take(option)
     }
     for(const x of sorted)take(x)
     return chosen
