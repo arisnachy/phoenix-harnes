@@ -43,12 +43,12 @@ function toJson(value: unknown): JsonValue {
 }
 
 const HEALTHIA_ACTIVATE_DESCRIPTION =
-  'Activate PHOENIX HealthIA for the current conversation whenever the user presents or discusses health, '
-  + 'symptoms, illness, medications, laboratory results, medical images/documents, vital signs, prevention, '
-  + 'nutrition/exercise for a health condition, a health device/wearable, care navigation, disability/benefits, '
-  + 'or longitudinal patient follow-up. Activate before giving substantive clinical reasoning so PHOENIX can '
-  + 'identify the correct patient and use durable health history instead of treating the message as an isolated chat. '
-  + 'Do not activate for merely metaphorical uses of health words.'
+  'Activate HealthIA ONLY when the user is requesting personal patient care, longitudinal follow-up, '
+  + 'or explicit patient profile/record management. Do NOT activate solely because an academic request, '
+  + 'simulated or fictional case, clinical exam, evidence review, medical literature search, pharmacology '
+  + 'comparison, guideline analysis, or public-health research mentions a disease, symptoms, labs or doses. '
+  + 'Research is handled by ordinary PHOENIX/Research APEX without opening patient records. '
+  + 'Never infer patient identity from a vignette; the user must explicitly request record-related work.'
 
 const CLINICAL_GUIDANCE = `HealthIA is active for this agent. PHOENIX remains the same general assistant; this is an additional
 clinical capability, not a new persona or UI.
@@ -56,6 +56,10 @@ clinical capability, not a new persona or UI.
 For health work:
 - A HealthIA conversational profile is NOT a professional medical record in the separate /health clinical web app.
   Never claim creating a chat profile also created a patient, prescription, consultation, or appointment in /health.
+- For purely educational or fictional cases and evidence research, do not activate patient tools, read profiles, or open patient workspace UI.
+- healthia_activate changes tool availability only. It does not request or show the patient directory.
+- health_patient_list is a background identity-metadata read and must not show a patient-management UI.
+- Only health_patient_workspace deliberately requests an interactive patient-management UI, and only after an explicit user request to browse, create or manage profiles.
 - A patient profile is created ONLY after a successful health_patient_create tool response returns the new patient ID.
   Never confirm creation from the user's "sí" alone, activation, or memory. If the create tool did not
   execute or fails, say so clearly and do not invent an ID.
@@ -152,6 +156,17 @@ function installHealthiaScope(agentCtx: Context, healthia: HealthiaService): () 
         return { patients: toJson([...await healthia.listPatients()]) }
       },
       presentCall: () => present('List health profiles', 'read'),
+    }))
+
+    register(defineTool({
+      name: 'health_patient_workspace',
+      description: 'Show the interactive HealthIA patient management workspace ONLY when the user explicitly asks to browse, open, create, or manage patient profiles. Never use for academic clinical cases, simulated patients, research, diagnosis explanations or guideline reviews.',
+      parameters: {},
+      output: JSON_OBJECT_OUTPUT,
+      async execute() {
+        return { workspace: 'patient_management', patients: toJson([...await healthia.listPatients()]) }
+      },
+      presentCall: () => present('Open health patient workspace', 'read'),
     }))
 
     register(defineTool({
@@ -359,7 +374,7 @@ export function apply(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'healthia:activation',
     order: 117,
-    text: 'When a user presents a genuine health/medical context, call healthia_activate before substantive clinical reasoning so the longitudinal patient record and clinical tools are available.',
+    text: 'Call healthia_activate ONLY for explicitly requested personal patient care, longitudinal follow-up, or patient record management. Do not activate for simulated cases, medical exams, general clinical questions, guidelines, or academic research; use APEX research directly without patient lists or a registration UI.',
   })
 
   ctx.tools.register(defineTool({
@@ -382,8 +397,7 @@ export function apply(ctx: Context): void {
       return {
         active: true,
         alreadyActive,
-        patients: toJson([...await ctx.healthia.listPatients()]),
-        instruction: 'HealthIA clinical tools are active for this conversation. Identify the correct patient and read a snapshot before longitudinal reasoning.',
+        instruction: 'HealthIA clinical tools are available. No patient directory was opened. Call health_patient_workspace only when the user explicitly requests profile management; use health_patient_list for internal disambiguation without showing a registration form.',
       }
     },
     presentCall: () => present('Activate HealthIA', 'other'),
