@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@phoenix-ai/cordis'
-import { executeResearch, planResearch, RESEARCH_SOURCES } from '../src/research.ts'
+import { executeResearch, planResearch, researchQuestionForTool, RESEARCH_SOURCES } from '../src/research.ts'
 
 const signal = new AbortController().signal
 
@@ -10,6 +10,27 @@ describe('Phoenix universal research routing', () => {
     expect(planResearch('¿Cómo quedó el partido del Real Madrid?').domain).toBe('sports')
     expect(planResearch('Nuevos ensayos de alzhéimer en pacientes').domain).toBe('neuroscience')
     expect(planResearch('Cualquier pregunta sin palabras clave').domain).toBe('general')
+  })
+
+  it('compacts a long APEX clinical case rather than failing before searching', () => {
+    const question = [
+      'Informe clínico académico profundo de caso simulado: paciente varón de 67 años, 82 kg,',
+      'DM2, HTA, FEVI 28%, creatinina 1.8 mg/dL y tratamiento de insuficiencia cardíaca.',
+      'Comparar guías ACC/AHA/HFSA y ESC de 2022 a 2026, ensayos HFrEF ARNI SGLT2 y CKD-EPI.',
+      'Analizar evidencia, farmacología, cálculos y calidad de las fuentes originales.',
+      'No incluir datos del expediente clínico ni abrir perfiles de pacientes.',
+      'Completar bibliografía, tablas, alternativas, metodología, limitaciones.',
+    ].join(' '.repeat(1)) + ' Verificar evidencia publicada y las contraindicaciones.'.repeat(20)
+    expect(question.length).toBeGreaterThan(500)
+    const compact = researchQuestionForTool(question)
+    expect(compact.length).toBeLessThanOrEqual(500)
+    expect(compact).toContain('67')
+    expect(compact).toContain('2022')
+    expect(compact).toContain('ACC/AHA/HFSA')
+    expect(planResearch(compact, 'medicine').queries.length).toBeGreaterThan(0)
+    expect(researchQuestionForTool('Dengue República Dominicana')).toBe('Dengue República Dominicana')
+    expect(() => researchQuestionForTool('   ')).toThrow('3–500')
+    expect(() => researchQuestionForTool('x'.repeat(30_001))).toThrow('30000')
   })
 
   it('keeps a general recall query and limits authority-scoped search to two hosts', () => {
