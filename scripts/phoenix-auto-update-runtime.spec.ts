@@ -29,9 +29,9 @@ describe('real Windows disk headroom guard', () => {
         console: { error: () => {} },
       },
     ) as { assertRuntimeDiskHeadroom: () => void }
-    expect(() => guard.assertRuntimeDiskHeadroom()).toThrow(/only 5\.00 GiB free/u)
+    expect(() => { guard.assertRuntimeDiskHeadroom() }).toThrow(/only 5\.00 GiB free/u)
     gib = 12
-    expect(() => guard.assertRuntimeDiskHeadroom()).not.toThrow()
+    expect(() => { guard.assertRuntimeDiskHeadroom() }).not.toThrow()
     expect(supervisor).toContain('assertRuntimeDiskHeadroom()')
     expect(supervisor).toContain('function assertRuntimeStorageCapacity(nextRuntime)')
   })
@@ -521,7 +521,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
         join, dirname: (path: string) => resolve(path, '..'),
         readFileSync: () => JSON.stringify({ schema: 1, at: new Date(heartbeat).toISOString() }),
         SUPERVISOR_HEARTBEAT_FILE: 'phoenix-update-supervisor-heartbeat.json',
-        Date, 
+        Date,
       },
     ) as { retiredPhoenixCheckoutOwner: (path: string) => string | undefined }
     expect(retiredPhoenixCheckoutOwner(candidate)).toBe(owner)
