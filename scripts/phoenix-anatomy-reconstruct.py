@@ -44,7 +44,7 @@ def nifti_mask_to_mesh(mask_path):
         raise ValueError("3D mask required")
     if not np.isfinite(img.affine).all() or abs(float(np.linalg.det(img.affine[:3, :3]))) < 1e-9:
         raise ValueError("Invalid voxel-to-world geometry")
-    if img.header.get_xyzt_units()[0] not in ("mm", "unknown"):
+    if img.header.get_xyzt_units()[0] != "mm":
         raise ValueError("NIfTI voxel-to-world length units must be millimetres")
     voxels = np.asarray(img.dataobj) > 0
     count = int(np.count_nonzero(voxels))
