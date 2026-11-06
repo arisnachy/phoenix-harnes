@@ -58,7 +58,6 @@ def nifti_mask_to_mesh(mask_path):
 
 
 def reconstruct(args):
-    from totalsegmentator.python_api import totalsegmentator
     import trimesh
 
     source = Path(args.input).expanduser().resolve(strict=True)
@@ -76,6 +75,17 @@ def reconstruct(args):
     target.mkdir(mode=0o700, parents=True, exist_ok=True)
     masks = target / "masks"
     masks.mkdir(mode=0o700, exist_ok=True)
+
+    # TotalSegmentator defaults to anonymous usage telemetry; suppress it for
+    # locally processed medical studies before invoking its Python API.
+    # Model weights may still be fetched from the upstream model registry.
+    store = target / "totalseg-config"
+    store.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.environ["TOTALSEG_HOME_DIR"] = str(store)
+    from totalsegmentator.config import setup_totalseg, set_config_key
+    setup_totalseg()
+    set_config_key("send_usage_stats", False)
+    from totalsegmentator.python_api import totalsegmentator
 
     totalsegmentator(
         input=source, output=masks, task=SUPPORTED[args.modality],
