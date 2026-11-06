@@ -149,7 +149,8 @@ describe('on-demand HealthIA tools', () => {
     expect(metadata).not.toHaveProperty('workspace')
 
     const explicit = await ctx.tools.get('health_patient_workspace')!.execute({}, { agent } as never) as {
-      workspace: string; patients: unknown[]
+      workspace: string
+      patients: unknown[]
     }
     expect(explicit).toEqual({ workspace: 'patient_management', patients: [] })
   })
