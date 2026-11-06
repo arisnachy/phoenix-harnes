@@ -167,7 +167,8 @@ export function apply(ctx: Context): void {
       }
       // Evaluate a small extra pool rather than settling prematurely for the
       // bookmaker's cheapest outcomes as if that were an independent prediction.
-      const pool=shortlistDailyMarkets(daily.events,quotes,6,now)
+      const researchPool=Math.min(12,count+5)
+      const pool=shortlistDailyMarkets(daily.events,quotes,count,now,researchPool)
       const research=await (async()=>{
         if(args.deep===false)return []
         const candidates=pool.selected
@@ -255,7 +256,7 @@ export function apply(ctx: Context): void {
           trustedOptions.length>=count,
         discoveryComplete:pool.selected.length>=count,
         researchComplete:trustedOptions.length>=count,
-        quotedCandidates:pool.selected.length,
+        quotedCandidates:pool.selected.length,researchPool,
         marketCandidates:pool.eligibleMarkets,matchedGames:pool.matchesInSlate,
         bookmaker:pool.bookmaker,reviewed:research.length,
         researchedPicks:trustedOptions.length,conditionalPicks:provisional.length,
