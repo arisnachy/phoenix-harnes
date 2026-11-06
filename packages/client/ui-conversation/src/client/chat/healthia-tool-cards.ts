@@ -116,7 +116,12 @@ function canonicalToolName(input:unknown):string|null {
     .includes(normalized) && (!input.startsWith('mcp__') || normalized!==input) ? normalized : null
 }
 
-/** Extract bounded, schema-validated cards only from completed first-party receipts. */
+/**
+ * Extract bounded, schema-validated cards only from completed first-party receipts.
+ * Background activation and profile lookup never authorize the patient workspace.
+ * @param root - Tool result or nested first-party tool execution receipts.
+ * @returns Native HealthIA blocks for explicit workspace and confirmed patient actions.
+ */
 export function healthiaCardsFromToolResult(root:unknown):GenerativeUiBlock[] {
   const stack:[unknown,number][]=[[root,0]],cards:GenerativeUiBlock[]=[]
   let visited=0
