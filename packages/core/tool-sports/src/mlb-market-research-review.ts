@@ -77,9 +77,11 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
     rosterMatchupsReviewed:(['home','away'] as const).every(side=>{
       const opposing=side==='home'?'away':'home'
       const batters=d.rosters[side].filter(p=>p.role==='batter'&&p.lineupConfirmed)
-      const pitchers=[d.starters[opposing],...d.bullpen[opposing]].filter(
+      const starter=d.starters[opposing]
+      const relievers=d.bullpen[opposing]
+      const pitchers=[starter,...relievers].filter(
         (p):p is MlbAthlete=>p!==null)
-      return batters.length===9&&pitchers.length>0&&
+      return batters.length===9&&starter!==null&&relievers.length>0&&
         batters.every(b=>pitchers.every(p=>d.matchups.some(m=>
           m.batterId===b.id&&m.pitcherId===p.id)))
     }),
