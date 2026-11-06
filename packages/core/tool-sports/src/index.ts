@@ -80,7 +80,8 @@ const GUIDANCE = [
   'DATOS DEPORTIVOS SIN PROMPTS ADICIONALES: no basta un botón que pide a Kira volver a consultar las estadísticas del atleta. Los paneles de equipo y partido recuperan automáticamente datos ESPN Site y Common v3: temporada, gamelog y splits de jugadores que estén identificados por roster oficial ESPN, además de forma, descanso, lesiones cotejadas, condiciones del estadio y cuotas de mercados completos. Los campos no publicados se señalan no disponibles. No afirmes que una posición de lanzador, portero o quarterback demuestra que iniciará el encuentro; confirma alineación por fuente específica. Para un ticket utiliza la vista de investigación y las herramientas de cuotas reales, siempre respetando selección exacta, casa y momento.',
   'ESPN INTELLIGENCE: cuando el usuario pida un equipo específico, un jugador, su historia, splits, gamelog, tabla, líderes, noticias o búsqueda, consulta sports_chat_espn_explore con la vista apropiada y un ID real comprobado. Esa herramienta devuelve una superficie adaptable de estadísticas, noticias, plantillas, fotos y fuentes; Phoenix dibuja sports_espn_dashboard automáticamente. Para carteleras utiliza sports_chat_games y para cuotas comercializables sports_chat_odds; evita convertir probabilidades ESPN o referencias Core en cuotas actuales. Las plantillas se construyen dinámicamente a partir de secciones verificadas, sin nuevas pantallas.',
   'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_sources_repair, sports_chat_market_source_catalog, sports_chat_deep_research, sports_chat_matchup_factors, sports_chat_predict, sports_chat_calibration_audit, sports_chat_editorial_discovery, sports_chat_bet_rules, sports_chat_ticket_track, sports_chat_market_intelligence, sports_chat_espn_core, sports_chat_espn_core_catalog, sports_chat_espn_extended, sports_chat_espn_extended_catalog, sports_chat_espn_historical_odds, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
-  'Para encontrar oportunidades en varios deportes de una misma fecha, empieza por sports_chat_daily_scan con límite de 12 eventos; después investiga solo los cruces con suficiente evidencia, sin confundir preselección con favoritos ni probabilidades. ',
+  'TICKET DIARIO DE 4 A 6 PATAS: ante «prepara el ticket ganador para hoy» o petición equivalente, intenta fundamentar 5 selecciones (rango 4 a 6) investigando las seis disciplinas NBA, WNBA, MLB, NHL, NFL y Soccer mundial disponibles en la fecha. No te detengas en tres favoritos ni en moneyline: escanea la cartelera con sports_chat_daily_scan limit=30 y, si faltan candidatos, continúa con páginas de sports_chat_soccer_world_scan y fuentes habilitadas. Para cada candidato consulta estadísticas, participantes, lesiones, descanso, forma, noticias y cuotas del operador, y contrasta todos los mercados realmente publicados (h2h, spread/run line, totales, por períodos y props autorizadas). La meta de cinco selecciones NO convierte falta de fuente o cuota en apuesta verificada; distingue explícitamente las propuestas investigadas de las cotizadas y las que tienen modelo calibrado, no inventes líneas ni garantías. Si no hay 4 ofertas válidas, entrega las candidatas verificadas y el déficit concreto de cobertura, y continúa el diagnóstico de fuentes en vez de rechazar genéricamente. ',
+  'Para descubrir candidatos por fecha, usa sports_chat_daily_scan con límite hasta 36; después investiga cada cruce con suficiente evidencia antes de elegir el mercado. La preselección no equivale a una probabilidad predictiva. ',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'INVESTIGACIÓN NBA: antes de defender cualquier favorito o selección NBA, consulta sports_chat_nba_research (y sports_chat_odds cuando existan cuotas). Contrasta forma en marcadores finales, márgenes, descanso y muestra; revisa además informe oficial de lesiones, rotaciones, estadísticas avanzadas, rival, localía y movimiento de precios desde fuentes autorizadas. Lo no consultado debe permanecer explícitamente SIN VERIFICAR. No transformes la forma descriptiva en porcentajes de victoria ni cites atletas que no tengan plantilla actual confirmada. Un ticket automático se considera SOLO una preselección, nunca una investigación completa.',
   'INVESTIGAR TODOS LOS DEPORTES: llama sports_chat_research para estudiar los marcadores finales recientes del deporte y liga que el usuario pidió. Para MLB complementa con pitchers y bullpen; fútbol exige revisar goles, localía, bajas, forma y opciones 1X2/doble oportunidad; tenis requiere superficie, historial y fatiga; hockey necesita portero y estadísticas defensivas; en otros deportes usa métricas propias. Si el informe indica insuficiente, no proclames favorito respaldado. sports_chat_historical_odds agrega históricos de ambos repositorios SportsbookReview para entrenamiento/backtest, jamás cuotas actuales; y sports_chat_community_opinions observa pronósticos públicos solo como opinión separada.',
@@ -118,13 +119,13 @@ export function apply(ctx: Context): void {
     description:'Barrido barato de las ligas deportivas de hoy: NBA, WNBA, MLB, NFL, NHL, fútbol y tenis; devuelve eventos ESPN futuros confirmados, cobertura y una preselección equilibrada entre disciplinas. NO predice resultados ni cuotas.',
     parameters:{
       date:{type:'string',description:'Día local AAAA-MM-DD; defecto hoy'},
-      limit:{type:'integer',description:'Máximo 1-20 eventos para investigar, defecto 12'},
+      limit:{type:'integer',description:'Máximo 1-36 eventos para investigar; por defecto 30 para cubrir más candidatos del ticket de 4-6 patas.'},
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const report=await scoutDailySports(args.date,args.limit??12,fetch,Date.now(),process.env)
-      return JSON.stringify({...report,instruction:'Este es el primer filtro de partidos, NO un ranking predictivo. Investiga a fondo los eventos concretos con sports_chat_matchup_factors, sports_chat_deep_research y sports_chat_research. Compara H2H, bajas, clima, jugadores y cuotas reales solo para candidatos con evidencia. No inventes modelos, probabilidades ni mercados de jugador.'})
+      const report=await scoutDailySports(args.date,args.limit??30,fetch,Date.now(),process.env)
+      return JSON.stringify({...report,instruction:'Primer filtro para construir 4-6 propuestas (objetivo 5), NO ranking predictivo. Investiga a fondo estos eventos; si no alcanzan, amplía Soccer mundial por páginas. Para cada candidato compara H2H, bajas, clima, jugadores y mercados reales h2h, spreads, totales, períodos y props si la fuente los publica. No inventes cuotas, modelos ni estadísticas; las propuestas sin cotización comprobada no son apuestas aprobadas.'})
     },
     presentCall:()=>({card:'generic',title:'Escanear deportes y partidos de la jornada',kind:'read' as const}),
   }))
@@ -1047,9 +1048,9 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_evidence_priced_auto',
-    description:'Investiga 5 o 6 eventos con historial más amplio y contextualización prepartido, consulta OddsHarvester habilitado para precios reales; combina SOLO cuotas vigentes de una misma casa. No inventa cuotas, lesiones ni probabilidades.',
+    description:'Investiga de 4 a 6 eventos (objetivo diario 5) con historial y datos prepartido, cotiza solo mercados disponibles de una misma casa y separa propuestas de apuestas confirmadas. No inventa cuotas, lesiones ni probabilidades.',
     parameters:{
-      count:{type:'integer',required:true,description:'Patas deseadas: 5 o 6 (admite 1 a 6).'},
+      count:{type:'integer',required:true,description:'Patas deseadas: objetivo diario 5, rango preferente 4-6 (admite 1 a 6).'},
       date:{type:'string',description:'Fecha AAAA-MM-DD; por defecto hoy.'},
       sport:{type:'string',description:'Limita a soccer, baseball, basketball, football, hockey o tennis; omite para varios deportes.'},
       stake:{type:'number',description:'Monto de simulación; 0 por defecto. No compra apuestas.'},
@@ -1143,11 +1144,11 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket',
-    description:'Prepara un ticket con cuotas comerciales verificadas y calculadora de retorno real, pendiente de aceptación de la banca; NO coloca apuestas sin integración y confirmación.',
+    description:'Prepara un ticket de 4-6 patas con cuotas verificadas (admite 1-10) de hasta seis deportes y mercados h2h, spreads y totales reales, pendiente de aceptación; nunca coloca apuestas.',
     parameters:{
       sportKey:{ type:'string',description:'Clave deportiva de The Odds API. Para varios deportes utiliza sportKeys.' },
-      sportKeys:{ type:'array',description:'Claves para ticket multisport, máximo cuatro.',items:{ type:'string' } },
-      markets:{ type:'string',description:'h2h, totals o spreads, mismo mercado de las selecciones.' },
+      sportKeys:{ type:'array',description:'Claves deportivas para boleto multideporte, máximo seis: NBA, WNBA, MLB, NHL, NFL y Soccer.',items:{ type:'string' } },
+      markets:{ type:'string',description:'Lista de mercados h2h,spreads,totals según cuotas reales; por defecto se consultan los tres para cada liga.' },
       selections:{ type:'array',required:true,description:'Entre una y diez selecciones verificables.',
         items:{ type:'object',additionalProperties:false,properties:{
           eventId:{ type:'string',required:true },bookmaker:{ type:'string',required:true },
@@ -1161,10 +1162,10 @@ export function apply(ctx: Context): void {
     async execute(args){
       const requestedKeys = args.sportKeys?.length ? args.sportKeys : args.sportKey ? [args.sportKey] : []
       const keys = [...new Set(requestedKeys)]
-      if (keys.length < 1 || keys.length > 4) throw new Error('Indica entre 1 y 4 disciplinas para el ticket.')
+      if (keys.length < 1 || keys.length > 6) throw new Error('Indica entre 1 y 6 claves deportivas para el ticket.')
       const consultedAt=Date.now()
       const env=await sportsEnv(ctx)
-      const quotes = (await Promise.all(keys.map(key => marketOdds(key,args.markets,env)))).flat()
+      const quotes = (await Promise.all(keys.map(key => marketOdds(key,args.markets??'h2h,spreads,totals',env)))).flat()
       const current=quotes.filter(q=>{
         const at=Date.parse(q.updatedAt),kickoff=Date.parse(q.timeIso??q.time)
         return Number.isFinite(at)&&at<=consultedAt&&consultedAt-at<=3_600_000&&
