@@ -191,6 +191,18 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
       'Expediente apto para discusión crítica de mercados, pero no demuestra ventaja apostable.',
     decision:insufficient||!gates.realOffersVerified?'abstain':'investigate',
     probabilitiesEstimated:false,eligibleForTicket:false,
+    // Global blockers must remain visible even when there are zero market quotes.
+    // Otherwise a consumer reading only the dossier summary silently misses
+    // roof, weather, roster and settlement limitations.
     missingEvidence:[...new Set([...d.missingEvidence,...opposingFacts,
+      ...(!gates.bothRostersVerified?['Nueve bateadores identificados por equipo']:[]),
+      ...(!gates.rosterMatchupsReviewed?['Matriz completa de nueve bateadores contra abridor y relevistas rivales']:[]),
+      ...(!gates.starterStatsVerified?['Estadísticas comprobadas de ambos abridores']:[]),
+      ...(!gates.venueKnown?['Identidad y características del estadio verificadas']:[]),
+      ...(!gates.weatherForecastAvailable?['Pronóstico meteorológico horario para el encuentro']:[]),
+      ...(!gates.roofConstructionKnown?['Tipo de techo del estadio sin verificación']:[]),
+      ...(!gates.gameRoofPositionVerified?['Estado del techo al inicio del encuentro sin verificar']:[]),
+      ...(!gates.specificExpertPicksVerified?['Picks externos específicos sin verificación y atribución']:[]),
+      ...(!gates.crossBookSettlementComparable?['No se ha demostrado equivalencia del período ni liquidación entre casas']:[]),
       ...(!gates.realOffersVerified?['Ofertas reales vigentes de casas para el encuentro']:[])])]}
 }
