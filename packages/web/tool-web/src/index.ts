@@ -13,6 +13,8 @@ import { applyWebSearchTool, WEB_SEARCH_MAX_QUERIES, WEB_SEARCH_MAX_RESULTS } fr
 import { applyWebFetchTool } from './fetch.ts'
 import { applyResearchTools } from './research.ts'
 import { createScholarlySearchTool } from './scholarly.ts'
+import { createFederatedScholarTool } from './federated-scholar.ts'
+import { createResearchCatalogTool } from './research-source-catalog.ts'
 import { createWorldBankHealthSeriesTool } from './health-series.ts'
 
 export { WEB_SEARCH_MAX_QUERIES, WEB_SEARCH_MAX_RESULTS, applyWebSearchTool, formatSearchOutput, presentSearchCall, presentSearchResult, searchMetaFromValue, searchMetaFromResult } from './search.ts'
@@ -22,6 +24,10 @@ export type { WebFetchMeta } from './fetch.ts'
 export { RESEARCH_SOURCES, planResearch, executeResearch, applyResearchTools } from './research.ts'
 export type { ResearchSource, ResearchPlan, ResearchOutcome } from './research.ts'
 export { searchEuropePmc, projectEuropePmcRecords, createScholarlySearchTool } from './scholarly.ts'
+export { searchFederatedScholar, projectFederatedRecords, createFederatedScholarTool, FEDERATED_SOURCES } from './federated-scholar.ts'
+export type { FederatedRecord, FederatedSource, FederatedResponse } from './federated-scholar.ts'
+export { RESEARCH_API_CATALOG, listResearchCatalog, createResearchCatalogTool } from './research-source-catalog.ts'
+export type { ResearchCatalogEntry } from './research-source-catalog.ts'
 export type { ScholarlyRecord } from './scholarly.ts'
 export { fetchWorldBankHealthSeries, createWorldBankHealthSeriesTool, HEALTH_INDICATORS } from './health-series.ts'
 
@@ -100,6 +106,12 @@ export function apply(ctx: Context, config: Config): void {
     applyWebSearchTool(ctx, resolved.searchMaxResults, resolved.searchMaxQueries, resolved.searchTimeoutMs, resolved.fetch)
     applyResearchTools(ctx, resolved.searchMaxResults, resolved.searchTimeoutMs)
     ctx.tools.register(createScholarlySearchTool())
+    ctx.tools.register(createFederatedScholarTool())
+    ctx.tools.register(createResearchCatalogTool())
+    ctx.systemPrompt.section({
+      name: 'tool:research_federated', order: 113,
+      text: 'Para investigación científica de cualquier disciplina, buscar evidencia bibliográfica en research_federated (fuentes paralelas y fallos explícitos), combinar con research_catalog para datos primarios especializados y research_investigate para lectura real. Verificar DOI, texto completo, fecha, retractaciones, diseño y calidad metodológica antes de citar conclusiones. Metadatos de búsqueda no equivalen a evidencia verificada ni ofrecen acceso al texto completo.',
+    })
     ctx.tools.register(createWorldBankHealthSeriesTool())
   }
   if (resolved.fetch) applyWebFetchTool(ctx, resolved.fetchTimeoutMs, resolved.fetchMaxOutputChars)
