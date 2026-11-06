@@ -12,6 +12,7 @@ describe('Phoenix universal research routing', () => {
     expect(planResearch('puedes ayudarme a entender la fisiología del estress que ocurre a nivel cerebral').domain)
       .toBe('neuroscience')
     expect(planResearch('Fisiología del estrés y eje HPA en el cerebro').domain).toBe('neuroscience')
+    expect(planResearch('¿Qué sucede en el cerebal al estresarme?').domain).toBe('neuroscience')
     expect(planResearch('Cómo funciona el hipotálamo bajo estrés').domain).toBe('neuroscience')
     expect(planResearch('Hola ¿qué tal?').domain).toBe('general')
     const stress = planResearch('fisiología del estrés a nivel cerebral')
