@@ -107,7 +107,7 @@ describe('on-demand HealthIA tools', () => {
 
     const initialPrompt = await ctx.systemPrompt.assemble()
     expect(initialPrompt.sections.find(section => section.name === 'healthia:activation')?.text)
-      .toContain('call healthia_activate before substantive clinical reasoning')
+      .toContain('Call healthia_activate ONLY for explicitly requested personal patient care')
     expect(initialPrompt.sections.map(section => section.name)).not.toContain('healthia:clinical')
 
     const activated = await ctx.tools.get('healthia_activate')!.execute({}, { agent } as never) as {
@@ -115,11 +115,14 @@ describe('on-demand HealthIA tools', () => {
       alreadyActive: boolean
     }
     expect(activated).toMatchObject({ active: true, alreadyActive: false })
+    expect(activated).not.toHaveProperty('patients')
+    expect(activated).not.toHaveProperty('workspace')
 
     const names = ctx.tools.schemas().map(tool => tool.name)
     expect(names).toEqual(expect.arrayContaining([
       'healthia_activate',
       'health_patient_list',
+      'health_patient_workspace',
       'health_patient_create',
       'health_patient_update',
       'health_patient_snapshot',
@@ -137,6 +140,18 @@ describe('on-demand HealthIA tools', () => {
       alreadyActive: boolean
     }
     expect(second.alreadyActive).toBe(true)
+    expect(second).not.toHaveProperty('patients')
+
+    const metadata = await ctx.tools.get('health_patient_list')!.execute({}, { agent } as never) as {
+      patients: unknown[]
+    }
+    expect(metadata.patients).toEqual([])
+    expect(metadata).not.toHaveProperty('workspace')
+
+    const explicit = await ctx.tools.get('health_patient_workspace')!.execute({}, { agent } as never) as {
+      workspace: string; patients: unknown[]
+    }
+    expect(explicit).toEqual({ workspace: 'patient_management', patients: [] })
   })
 
   it('creates a patient, records a verified observation, and reconstructs a longitudinal snapshot', async () => {
