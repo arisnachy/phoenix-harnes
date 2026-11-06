@@ -49,6 +49,7 @@ import {basketballSlate,type BasketballLeague} from './basketball-research-core.
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
 
 import {nflSlate,investigateNfl} from './nfl-evidence-research.ts'
+import {nhlSlate,investigateNhl} from './nhl-evidence-research.ts'
 
 import {tennisSlate,investigateTennis,type TennisTour} from './tennis-evidence-research.ts'
 
@@ -58,6 +59,7 @@ export const inject = ['tools','systemPrompt']
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'NHL ESPECIALIZADO: para NHL consulta sports_chat_hockey_slate y sports_chat_nhl_investigate con gameId oficial NHL, no ID ESPN. Recupera rosters y estadísticas observadas de skaters/porteros; distingue portero candidato del titular confirmado y ganador a 60 minutos del ganador con OT/SO. No infieras xG/GSAx, alineaciones definitivas o probabilidades no calibradas, ni llames cuota actual a una línea sin timestamp. ',
   'TENNIS INTELLIGENCE ATP/WTA: investiga con sports_chat_tennis_slate(tour=atp|wta,date) y sports_chat_tennis_investigate(tour,date,matchId) tras cotejar matchId y participantes exactos, superficie y formato oficial. Valorar primer y segundo servicio vs devolución, break points, fatigue, H2H por superficie, indoor/outdoor y cambios de calendario solo cuando se dispone de fuentes; jamás declarar ranking, H2H, best-of-5, lesiones, cuota o resultado sintético. ATP/WTA son circuitos diferentes; distinguir singles/doubles, retiro, walkover y match-tiebreak en mercados. Si no hay datos suficientes, abstenerse. ',
   'NFL AMERICAN FOOTBALL INTELLIGENCE: consulta sports_chat_nfl_slate para fecha/eventId real y sports_chat_nfl_investigate para investigar quarterback, roster completo de ambos clubes, ofensiva, defensiva, OL vs pass rush, WR/TE vs CB/LB, RB vs front seven, descanso, lesiones, clima, cuartos y cotizaciones auténticas. Los 11 titulares ofensivos y los 11 defensivos de CADA club se confirman por IDs explícitos y unidad; no infieras titularidad del roster o profundidad. NFL no es fútbol soccer ni NCAA. No inventes QB titular, rutas, snaps, EPA, probabilidades, prices ni props; confirma evento/casa/mercado/período y abstente si falta evidencia. ',
   'INVESTIGACIÓN MLB POR PARTIDO: usa sports_chat_mlb_investigate para obtener primero la cartelera por fecha y luego el expediente mediante gamePk de MLB Stats API (no confundir con eventId ESPN). Investiga las estadísticas de cada jugador y la matriz bateador×abridor/bullpen, localía, parque, meteorología, últimas salidas y precios cotejados. El expediente marca como PENDIENTES los enfrentamientos BvP, fatiga, lesiones, alineaciones y expertos que no estén confirmados; no interpretes una fila de roster como un bateador titular ni inventes simulaciones probabilísticas. La conclusión se fundamenta en evidencia favorable Y contradictoria y en escenarios por entradas; si matchupNextOffset no es null hay cruces adicionales consultables. No vendas el expediente como una apuesta aprobada. ',
@@ -82,7 +84,7 @@ const GUIDANCE = [
   'COMPROBACIÓN DE COBERTURA ESPN: sports_chat_espn_route_audit ejecuta de verdad todos los modos del registro extendido, usando los IDs genuinos del scoreboard/roster; distingue data, ref_only, empty, error y skipped. No lo llames automáticamente en cada análisis (consume decenas de peticiones); úsalo solo para auditoría explícita o reparación de cobertura. Con stats individuales consulta el dossier integrado: no trates un HTTP 200 o un botón con prompt como evidencia de datos existentes.',
   'DATOS DEPORTIVOS SIN PROMPTS ADICIONALES: no basta un botón que pide a Kira volver a consultar las estadísticas del atleta. Los paneles de equipo y partido recuperan automáticamente datos ESPN Site y Common v3: temporada, gamelog y splits de jugadores que estén identificados por roster oficial ESPN, además de forma, descanso, lesiones cotejadas, condiciones del estadio y cuotas de mercados completos. Los campos no publicados se señalan no disponibles. No afirmes que una posición de lanzador, portero o quarterback demuestra que iniciará el encuentro; confirma alineación por fuente específica. Para un ticket utiliza la vista de investigación y las herramientas de cuotas reales, siempre respetando selección exacta, casa y momento.',
   'ESPN INTELLIGENCE: cuando el usuario pida un equipo específico, un jugador, su historia, splits, gamelog, tabla, líderes, noticias o búsqueda, consulta sports_chat_espn_explore con la vista apropiada y un ID real comprobado. Esa herramienta devuelve una superficie adaptable de estadísticas, noticias, plantillas, fotos y fuentes; Phoenix dibuja sports_espn_dashboard automáticamente. Para carteleras utiliza sports_chat_games y para cuotas comercializables sports_chat_odds; evita convertir probabilidades ESPN o referencias Core en cuotas actuales. Las plantillas se construyen dinámicamente a partir de secciones verificadas, sin nuevas pantallas.',
-  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_daily_market_shortlist, sports_chat_event_market_menu, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_sources_repair, sports_chat_market_source_catalog, sports_chat_deep_research, sports_chat_matchup_factors, sports_chat_predict, sports_chat_calibration_audit, sports_chat_editorial_discovery, sports_chat_bet_rules, sports_chat_ticket_track, sports_chat_market_intelligence, sports_chat_espn_core, sports_chat_espn_core_catalog, sports_chat_espn_extended, sports_chat_espn_extended_catalog, sports_chat_espn_historical_odds, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
+  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_daily_market_shortlist, sports_chat_event_market_menu, sports_chat_hockey_slate, sports_chat_nhl_investigate, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_sources_repair, sports_chat_market_source_catalog, sports_chat_deep_research, sports_chat_matchup_factors, sports_chat_predict, sports_chat_calibration_audit, sports_chat_editorial_discovery, sports_chat_bet_rules, sports_chat_ticket_track, sports_chat_market_intelligence, sports_chat_espn_core, sports_chat_espn_core_catalog, sports_chat_espn_extended, sports_chat_espn_extended_catalog, sports_chat_espn_historical_odds, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
   'TICKET DIARIO DE 4 A 6 PATAS: ante «prepara el ticket ganador para hoy» o petición equivalente, intenta fundamentar 5 selecciones (rango 4 a 6) investigando las seis disciplinas NBA, WNBA, MLB, NHL, NFL y Soccer mundial disponibles en la fecha. No te detengas en tres favoritos ni en moneyline: escanea la cartelera con sports_chat_daily_scan limit=30 y, si faltan candidatos, continúa con páginas de sports_chat_soccer_world_scan y fuentes habilitadas. Para cada candidato consulta estadísticas, participantes, lesiones, descanso, forma, noticias y cuotas del operador, y contrasta todos los mercados realmente publicados (h2h, spread/run line, totales, por períodos y props autorizadas). Al investigar cada juego, si la cuota procede de The Odds API v4 y el evento tiene eventId propio de ese proveedor, consulta sports_chat_event_market_menu para descubrir alternativas de línea, periodos y props; si no está configurada la clave o el libro no publica mercado, NO lo inventes. La meta de cinco selecciones NO convierte falta de fuente o cuota en apuesta verificada; distingue explícitamente las propuestas investigadas de las cotizadas y las que tienen modelo calibrado, no inventes líneas ni garantías. Si no hay 4 ofertas válidas, entrega las candidatas verificadas y el déficit concreto de cobertura, y continúa el diagnóstico de fuentes en vez de rechazar genéricamente. ',
   'Para descubrir candidatos por fecha, usa sports_chat_daily_scan con límite hasta 36 y después sports_chat_daily_market_shortlist con deep=true para cotejar las cuotas con resultados históricos, lesiones y noticias disponibles; después investiga cada cruce con suficiente evidencia antes de elegir el mercado. La preselección no equivale a una probabilidad predictiva. ',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
@@ -1754,6 +1756,61 @@ export function apply(ctx: Context): void {
         instruction:'Kira debe comparar primer y segundo saque contra devolución rival, superficie, sets, descanso y evidencia contradictoria. Perfil sin statistics no es 0; ranking ausente no es sin ranking. La oferta debe coincidir ambos atletas, circuito, fecha, bookmaker y ruleset para retiro/walkover/super-tiebreak. No declarar ticket ganador ni P(win) inventada.'})
     },
     presentCall:()=>({card:'generic',title:'Investigar ATP/WTA · servicio y devolución',kind:'read' as const}),
+  }))
+
+  ctx.tools.register(defineTool({
+    name:'sports_chat_hockey_slate',
+    description:'Cartelera NHL oficial por fecha, equipo, NHL gameId, hora y estatus; calendario sin resultados ficticios.',
+    parameters:{
+      date:{type:'string',required:true,description:'Fecha calendario AAAA-MM-DD de NHL.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const now=Date.now(),result=await nhlSlate(args.date,fetch,now)
+      const uiBlock={component:'sports_espn_dashboard',version:1,props:{
+        view:'event',title:'PHOENIX NHL · '+args.date,
+        subtitle:result.games.length+' encuentros verificados con NHL',
+        source:'NHL Web API',checkedAt:new Date(now).toISOString(),
+        sections:[{heading:'Cartelera NHL',kind:'list',
+          items:result.games.map(g=>({label:g.away.name+' vs '+g.home.name,
+            value:g.date+' · '+g.state,
+            detail:'gameId NHL '+g.id+' · '+g.venue})).slice(0,30)}],
+        note:'Una cartelera no certifica porteros, líneas, lesiones, cuotas ni favoritos. Usa el gameId en sports_chat_nhl_investigate.'}}
+      return JSON.stringify({...result,uiBlock,
+        instruction:'Elige NHL gameId oficial y consulta sports_chat_nhl_investigate. No confundas gameId NHL con eventId ESPN.'})
+    },
+    presentCall:()=>({card:'generic',title:'Consultar cartelera NHL',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_nhl_investigate',
+    description:'Investigar NHL por NHL gameId de cartelera: rosters, candidatos a portero, skaters, stats individuales, tabla, duelos posibles, períodos, cuotas y argumentos contra. No inventa starting goalie ni probabilidades.',
+    parameters:{
+      date:{type:'string',required:true,description:'Fecha del partido AAAA-MM-DD.'},
+      gameId:{type:'string',required:true,description:'NHL gameId oficial obtenido de sports_chat_hockey_slate.'},
+      maxSkaters:{type:'integer',description:'Número de forwards por equipo a investigar en detalle, entre 1 y 15; defecto 8.'},
+      includeOdds:{type:'boolean',description:'Consultar cuotas NHL observadas si proveedor disponible; por defecto sí.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const now=Date.now(),env=await sportsEnv(ctx)
+      let quotes:Awaited<ReturnType<typeof marketOddsDetailed>>['quotes']=[]
+      let oddsSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
+      if(args.includeOdds!==false){
+        try{
+          const r=await marketOddsDetailed('icehockey_nhl','h2h,spreads,totals',env,fetch,now)
+          quotes=r.quotes;oddsSources=r.sources
+        }catch{/* Source absent is not a synthetic quote. */}
+      }
+      const d=await investigateNhl(args.date,args.gameId,fetch,now,quotes,args.maxSkaters??8)
+      return JSON.stringify({...d,sources:undefined,
+        sourceAudit:{verified:d.sources.filter(s=>s.status==='verified').length,
+          failures:d.sources.filter(s=>s.status==='error').slice(0,20)},
+        oddsSources,
+        instruction:'Kira: no afirmar portero confirmado, lineup fijo, duelo real, xG/GSAx ni valor esperado sin fuente. Examina porteros y skaters versus el rival, PP/PK, descanso y lesiones pendientes. Distingue mercados 60 minutos, OT y shootout; abstenerse si falta evidencia.'})
+    },
+    presentCall:()=>({card:'generic',title:'Investigar NHL · porteros y mercados',kind:'read' as const}),
   }))
 
 }
