@@ -2,28 +2,15 @@
 
 [English](README.md) | [中文](README.zh.md)
 
-On-demand HealthIA model surface.
+On-demand HealthIA patient-scoped tools. PHOENIX keeps one small global activator; only explicitly requested personal care or patient record work should mount the clinical toolset. Simulated cases, literature reviews, academic clinical reports, and general medicine questions use research tools without opening patient records.
 
-PHOENIX keeps only one small global tool, `healthia_activate`. When the current
-request is genuinely health-related, that tool mounts the richer clinical
-toolset and its safety/continuity guidance into the calling agent's scope.
-Other conversations keep their normal tool catalog and do not pay the token
-cost of the full HealthIA surface.
+The scoped foundation tools cover patient-profile discovery/create/update, bounded longitudinal snapshots, provenance-bearing health facts, patient-scoped record queries, and clinical episodes. Patient profiles in chat are separate from signed professional /health records.
 
-The scoped foundation tools cover:
+## Native HealthIA chat cards
 
-- patient-profile discovery/create/update;
-- bounded longitudinal snapshots;
-- provenance-bearing health facts;
-- patient-scoped record queries;
-- open/update clinical episodes.
+A successful `healthia_activate` receipt changes available capabilities but does not fetch patient identities or render any patient card. A `health_patient_list` result is background metadata only and likewise produces no UI.
 
-The clinical prompt explicitly requires patient isolation, adaptive interviewing,
-red-flag prioritization, separation of fact/inference/evidence, longitudinal
-comparison, and human authority for prescription/diagnosis-sensitive decisions.
-It also tells HealthIA to use the rest of PHOENIX — evidence search, multimodal
-analysis, maps, scheduling, browser/computer, connectors and Tool Forge — when
-those capabilities are available and relevant.
+Only the explicit `health_patient_workspace` tool displays the patient-selection and new-demo-profile interface, following a request to browse, open, create or manage profiles. A verified `health_patient_create` receipt may show a created-profile confirmation, while `health_patient_snapshot` may show a bounded patient summary. Foreign, invalid and failed receipts never authorize UI. No form saves a patient without a successful first-party create operation.
 
 ## Model Experience
 
@@ -31,71 +18,32 @@ those capabilities are available and relevant.
 
 #### What the model sees
 
-One global tool schema named `healthia_activate`. Its description tells the
-model to activate HealthIA before substantive reasoning for symptoms,
-medications, labs, medical images/documents, vital signs, prevention,
-condition-specific lifestyle work, devices, care navigation and longitudinal
-follow-up.
+The global `healthia_activate` tool is for personal patient care, longitudinal follow-up or explicit patient record management only. Do not activate for academic reviews, simulated clinical cases, medical quizzes or guideline research.
 
 #### Token effect
 
-Fixed and small outside health conversations: only the activator schema.
+Fixed, small tool schema outside patient-record workflows.
 
 #### KV Cache effect
 
-Prefix-stable until HealthIA activation. Activating HealthIA changes the
-calling agent's tool set for later steps in that conversation.
+Prefix-stable until an eligible patient workflow activates HealthIA.
 
 ### Activated clinical scope
 
 #### What the model sees
 
-After activation, the calling agent receives the HealthIA clinical guidance and
-the patient/record/episode tools documented above. Parent/sibling agents do not
-receive those scoped registrations automatically.
+Patient record tools include read-only `health_patient_list`, explicitly visual `health_patient_workspace`, and patient create/update/snapshot, records and episodes. The activator does not return patient lists. Parent and sibling agents do not automatically inherit these tools.
 
 #### Token effect
 
-Conditional. The larger health schema and guidance are present only after a
-health context activates them.
+Clinical schemas and guidance are included only in the activated agent scope.
 
 #### KV Cache effect
 
-Activation intentionally changes the request prefix for that agent because its
-capability set has changed. Non-health agents preserve their prior prefix.
+Activation deliberately changes the selected agent's tool prefix; unrelated work retains the general configuration.
 
 ## Known Limitations and Deferred Work
 
-- **Model-selected activation in the foundation** — the activator is explicit
-  and cheap. A later Health Context Resolver can add deterministic/auxiliary
-  routing for ambiguous cases without changing the scoped clinical toolset.
-- **Foundation tools, not the complete HealthIA specialty** — dedicated
-  medication, evidence, imaging, device/FHIR, prevention, risk, community,
-  benefits, appointment and clinical-judge packages remain to be layered over
-  the same patient record.
-- **No prescription authority** — tools record and retrieve evidence; they do
-  not grant autonomous medication-change or definitive diagnostic authority.
-
-## Native HealthIA chat cards
-
-First-party tool receipts from `healthia_activate`, `health_patient_list`,
-`health_patient_create` and `health_patient_snapshot` can be presented as
-schema-validated `ui_canvas` cards by the PHOENIX conversation renderer.
-The cards do **not** depend on Kira authoring JSON in a text response:
-
-- activation/list: bounded patient selection and a field to draft a new demo
-  patient request through the existing chat composer;
-- successful create: a confirmed profile with follow-up actions;
-- snapshot: profile identity and counts without dumping sensitive clinical
-  observations in the card.
-
-No card claims a patient was saved without a successful first-party creation
-receipt with a validated patient identifier. A failed or foreign tool result
-cannot publish a HealthIA card. Buttons only draft follow-up instructions in
-the chat composer and do not bypass model tools, server validation or consent.
-
-**Important:** Conversational HealthIA uses its owner-local health-data
-provider. This is separate from the authenticated clinician workstation
-`/health`; a chat profile is **not** a signed EHR patient or consultation.
-We must not synchronize identities by labels or imply that the two stores
-are already unified. Test only with fictional profiles.
+- **Model-selected activation** — the foundation still depends on choosing the correct tool; an explicit separate patient workspace prevents accidental intake UI even if an activation is invoked during research.
+- **Foundation tools only** — specialist medication, evidence, imaging, devices, prevention and clinical-judge capabilities require further integration.
+- **No prescription authority** — the tools cannot independently change medication or establish a definitive diagnosis.
