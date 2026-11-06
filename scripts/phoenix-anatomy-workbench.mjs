@@ -8,7 +8,7 @@ import {rootFor,ensure,status} from './phoenix-anatomy-auto.mjs'
 import {startViewer} from './phoenix-anatomy-viewer.mjs'
 const pythonScript=fileURLToPath(new URL('./phoenix-anatomy-reconstruct.py',import.meta.url))
 const args=process.argv.slice(2),cmd=args[0],at=k=>args.includes(k),val=k=>args[args.indexOf(k)+1]
-function help(){console.log('Uso: node scripts/phoenix-anatomy-workbench.mjs doctor | install | reconstruct --input <DICOM/NIfTI> --output <carpeta> --modality ct|mr --research-only [--fast] [--structures organo1,organo2] [--view] | view --folder <carpeta> [--open]')}
+function help(){console.log('Uso: node scripts/phoenix-anatomy-workbench.mjs doctor | install | reconstruct --input <DICOM/NIfTI> --output <carpeta> --modality ct|mr --research-only [--fast] [--structures organo1,organo2] [--mask-folder carpeta-NIfTI] [--view] | view --folder <carpeta> [--open]')}
 async function main(){
  if(cmd==='doctor'){console.log(JSON.stringify(status(),null,2));return}
  if(cmd==='install'){console.log(JSON.stringify(ensure(),null,2));return}
@@ -23,6 +23,7 @@ async function main(){
   if(!existsSync(executable))throw Error('Dependencias no instaladas. Usa install y doctor')
   const task=[pythonScript,'--input',resolve(val('--input')),'--output',resolve(val('--output')),'--modality',val('--modality'),'--research-only']
   if(at('--fast'))task.push('--fast')
+  if(at('--mask-folder'))task.push('--mask-folder',resolve(val('--mask-folder')))
   if(at('--structures')){
    const names=val('--structures').split(',').map(x=>x.trim()).filter(Boolean)
    if(names.length)task.push('--structures',...names)
