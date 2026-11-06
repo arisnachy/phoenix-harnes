@@ -70,7 +70,7 @@ const configuredInactiveRuntimeBackups = Number.parseInt(
   10,
 )
 const MAX_INACTIVE_RUNTIME_BACKUPS = Number.isFinite(configuredInactiveRuntimeBackups)
-  ? Math.max(0, Math.min(2, configuredInactiveRuntimeBackups))
+  ? Math.max(0, Math.min(1, configuredInactiveRuntimeBackups))
   : 1
 const configuredRuntimeDirectoryLimit = Number.parseInt(
   process.env.PHOENIX_UPDATE_RUNTIME_LIMIT ?? '',

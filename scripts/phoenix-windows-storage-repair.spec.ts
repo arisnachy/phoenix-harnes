@@ -63,7 +63,7 @@ describe('PHOENIX offline Windows runtime recovery', () => {
 
   it('reuses protected supervised cleanup and reports the configured runtime cap', () => {
     expect(repair).toContain("Join-Path $repo 'scripts\\phoenix-windows-supervisor.mjs'")
-    expect(repair).toContain("'PHOENIX_UPDATE_RUNTIME_BACKUPS', '0', 'Process'")
+    expect(repair).toContain("'PHOENIX_UPDATE_RUNTIME_BACKUPS', '1', 'Process'")
     expect(repair).toContain('& $node.Source $supervisor --cleanup-storage')
     expect(repair).toContain("'PHOENIX_UPDATE_RUNTIME_BACKUPS', $priorBackups, 'Process'")
     expect(repair).toContain('PHOENIX_UPDATE_RUNTIME_LIMIT')
