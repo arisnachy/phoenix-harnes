@@ -42,8 +42,20 @@ const providerKeys:Readonly<Record<string,string>>={
 export const dailyOddsSportKey=(sport:string,league:string):string|null=>
   providerKeys[sport+'|'+league]??null
 
-const normal=(value:string):string=>value.normalize('NFD')
-  .replace(/[\u0300-\u036f]/gu,'').toLowerCase().replace(/[^a-z0-9]/gu,'')
+const aliases:Readonly<Record<string,string>>={
+  laclippers:'losangelesclippers',nyknicks:'newyorkknicks',
+  okcthunder:'oklahomacitythunder',gswarriors:'goldenstatewarriors',
+  lakings:'losangeleskings',nyrangers:'newyorkrangers',
+  arizonadbacks:'arizonadiamondbacks',arizonadbacksmlb:'arizonadiamondbacks',
+  mancity:'manchestercity',manutd:'manchesterunited',
+  manunited:'manchesterunited',intermilan:'internazionale',
+  psg:'parissaintgermain',parissaintgermainfc:'parissaintgermain',
+}
+const normal=(value:string):string=>{
+  const key=value.normalize('NFD')
+    .replace(/[\u0300-\u036f]/gu,'').toLowerCase().replace(/[^a-z0-9]/gu,'')
+  return aliases[key]??key
+}
 const isDraw=(name:string)=>/^(draw|empate|tie|x)$/u.test(name.toLowerCase())
 const groupKey=(fixture:Fixture,quote:MarketOutcome):string=>[
   fixture.sport,fixture.league,fixture.eventId,quote.bookmaker,quote.eventId,
