@@ -1,3 +1,25 @@
-# PHOENIX Universal Anatomy — research workbench
+# Agent Note: Local anatomical research workbench
 
-PHOENIX now offers local research-only CT/MR segmentation into GLB and a loopback viewer for visibility, opacity and 3D manipulation. The viewer uses an isolated local Three.js module and a 256-bit capability URL, with no external CDN, remote listener or arbitrary file browsing. The clinician must compare segmentations against the source DICOM; the presence or absence of a structure is not a diagnosis. An ECG or chest radiograph alone cannot create an individual volumetric patient-specific model. Segmentation models may omit nerves, microvascular anatomy or lesions beyond their training tasks; all organ systems in the planner are coverage goals, not proven model outputs. Slicer/Heart and specialty simulators are external tools with separate verification and clinical validation requirements. Patient files must remain in approved authorized storage; research output and chat history are not signed clinical records. Use `node scripts/phoenix-anatomy-workbench.mjs` to inspect commands.
+Status: implemented
+
+English | [中文](2026-11-06-anatomy-workbench.zh.md)
+
+## Problem
+
+PHOENIX can explain medical images but could not create and inspect a study-derived volumetric surface without relying on unsupported model-generated anatomy. Making all anatomical systems appear confirmed from ECG, radiography, medical history, or generic segmentations would be inaccurate.
+
+## Decision
+
+Ship an explicitly experimental CT/MR pipeline in `scripts/phoenix-anatomy-reconstruct.py` that segments volumetric images using TotalSegmentator or imports clinician-supplied NIfTI masks, exports GLB meshes, and records provenance and uncertainty. Reuse a private model-weight cache, disable optional upstream usage telemetry, and avoid copying patient image paths into general prompts. Install optional imaging tools in a user-scoped environment during the existing Windows update without blocking PHOENIX startup. Serve only explicit research output files from a loopback Node HTTP viewer with an unguessable capability URL and local pinned Three.js modules. Kira receives a metadata-only anatomical workflow planner and environment readiness tool.
+
+## Alternatives considered
+
+Rendering a photorealistic generic patient heart as a proven digital twin would invent anatomy. Sending DICOM to a hosted viewer would introduce unnecessary third-party patient-data exposure. Shipping all research engines inside the main runtime would increase update size and startup failure risk. Automatic treatment recommendation from unreviewed segmentation is not acceptable clinical evidence.
+
+## Consequences
+
+The workbench can create investigational meshes when imaging quality, available weights and local resources permit. It does not provide verified diagnosis, clinical validation, signed patient-record entry, or an integrated OHIF/DICOM slice view. The planning catalog covers organ systems beyond TotalSegmentator's trained tasks, including peripheral nerves and small vessels, but those structures require task-specific validated models or expert segmentations. SimVascular and openCARP require separately verified platform integrations; they are not silently marked installed.
+
+## Verification
+
+Node tests cover activation, installation-state decisions, viewer authorization and refusal of misleading manifests; planner tests cover Spanish anatomy, ECG uncertainty and nonvolumetric imaging. Windows installation, full DICOM segmentation, model accuracy and operational access controls require CI plus validation on supported hosts and expert-reviewed studies before clinical deployment.
