@@ -146,6 +146,12 @@ schema 校验会在执行前拒绝缺失或非数组的 `queries` 字段以及�
 
 仅追加；新可见内容位于可复用请求前缀之后，不会使现有 KV Cache 条目失效。
 
+## 联合科学研究
+
+启用搜索时，除 `research_scholar` 外还注册 `research_federated` 和 `research_catalog`。联合搜索不需要 API key，同时查询 Europe PMC、Crossref、OpenAlex、DataCite 和 Semantic Scholar，并分别报告可用、空结果或故障。执行预算为 14 秒，限制每个提供方结果数，按 DOI／PMID／标题去重，最终最多返回 45 条元数据。元数据并不代表研究结论已获验证，也不保证可取得全文。
+
+`research_catalog` 提供 100 个按研究领域和访问规则分类的来源。自动匿名查询仅考虑已记录为 `none` 或 `none_limited` 的来源；条件性、未经验证或需凭证的来源仅作为元数据列出。目录存放于 `data/research-source-catalog.json`，`src/research-source-catalog.ts` 生成面向模型的类型化视图。阅读实际文档仍由 `research_investigate` 通过受控的 web 服务执行。联合元数据查询只访问固定 HTTPS 端点、拒绝重定向，遇到限流会报告故障而不反复重试。
+
 ## 已知限制与暂缓事项
 
 - **没有覆盖整个批次的原生搜索计数器**：`searchMaxQueries` 限制 `ctx.web.search` 调用数，但提供方可以在每次调用内执行多次原生搜索。例如，配置了 `maxUses` 的模型型提供方最多可以执行 `searchMaxQueries × maxUses` 次原生搜索；`searchMaxResults` 只限制返回给调用方的组合来源。部署通过这些独立的消费方与提供方设置控制成本，因为通用 seam 不知道提供方内部的搜索计量单位。
