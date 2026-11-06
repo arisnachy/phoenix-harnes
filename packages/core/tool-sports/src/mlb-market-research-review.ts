@@ -196,6 +196,12 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
     // roof, weather, roster and settlement limitations.
     missingEvidence:[...new Set([...d.missingEvidence,...opposingFacts,
       ...(!gates.reviewTimestampValid?['Fecha de revisión inválida o anterior al corte de investigación']:[]),
+      ...(!gates.teamRecordsVerified?['Récord oficial de ambos equipos sin verificar']:[]),
+      ...(!gates.recentTeamFormVerified?['Forma reciente de ambos equipos sin verificar']:[]),
+      ...(!gates.startersVerified?['Identidad de ambos abridores probables sin verificar']:[]),
+      ...(!gates.lineupsConfirmed?['Alineación confirmada de nueve bateadores por ambos clubes']:[]),
+      ...(!gates.reliefUsageObserved?['Uso reciente del bullpen de ambos equipos sin evidencia suficiente']:[]),
+      ...(!gates.probabilitiesValidated?['Evaluación probabilística validada para respaldar EV']:[]),
       ...(!gates.bothRostersVerified?['Nueve bateadores identificados por equipo']:[]),
       ...(!gates.rosterMatchupsReviewed?['Matriz completa de nueve bateadores contra abridor y relevistas rivales']:[]),
       ...(!gates.starterStatsVerified?['Estadísticas comprobadas de ambos abridores']:[]),
