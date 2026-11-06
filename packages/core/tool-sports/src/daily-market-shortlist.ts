@@ -134,7 +134,7 @@ export function shortlistDailyMarkets(
     }
     const sports=[...new Set(sorted.map(x=>x.sport))]
     for(const sport of sports)for(const x of sorted.filter(y=>y.sport===sport)){
-      if(!used.has(x.sport+'|'+x.league+'|'+x.espnEventId')){take(x);break}
+      if(!used.has(x.sport+'|'+x.league+'|'+x.espnEventId)){take(x);break}
     }
     for(const x of sorted)take(x)
     return chosen
