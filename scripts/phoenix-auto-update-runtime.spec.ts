@@ -797,7 +797,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(loop).toContain('cleanupObsoleteRuntimes()')
     // Capacity checks and explicit offline repairs must still report EBUSY.
     expect(supervisor).toContain('cleanupObsoleteRuntimes([runtimeRoot], { reportBusy: storageAtHardCap })')
-    expect(supervisor).toContain('reportBusy: true,\n    releaseRollback: offlineRepair,')
+    expect(supervisor).toContain('reportBusy: true,\n    releaseRollback: false,')
   })
 
   it('backs off blocked Windows storage and avoids repeating EBUSY or capacity warnings in every poll', () => {
@@ -887,7 +887,7 @@ describe('PHOENIX runtime garbage collector health and quota regression', () => 
     cleanupObsoleteRuntimes([], { releaseRollback: true })
     expect(removed).toEqual(['backup-new', 'backup-old'])
     expect(removed).not.toContain('active')
-    expect(supervisor).toContain('releaseRollback: !userKeepsBackups')
+    expect(supervisor).toContain('cleanupObsoleteRuntimes([], { reapDormantStage: true })')
     expect(supervisor).toContain('healthyCheckpointWritten = true')
   })
 
