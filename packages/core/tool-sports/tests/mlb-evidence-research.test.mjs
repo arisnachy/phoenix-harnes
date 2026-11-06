@@ -476,6 +476,21 @@ test('market gate rejects a missing batter versus bullpen matchup even with nine
   assert.equal(review.eligibleForTicket,false)
 })
 
+test('roster matchup evidence abstains when either opposing bullpen is absent',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(reviewMlbResearch(d).evidenceGates.rosterMatchupsReviewed,true)
+  d.bullpen.away=[]
+  let review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.rosterMatchupsReviewed,false)
+  assert.equal(review.decision,'abstain')
+  assert.equal(review.eligibleForTicket,false)
+  d.bullpen.home=[]
+  review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.rosterMatchupsReviewed,false)
+  assert.equal(review.eligibleForTicket,false)
+})
+
 test('confirmed MLB lineup requires nine distinct batting-order slots from 1 through 9',async()=>{
   const mock=fakeNetwork({fullLineup:true})
   const d=await researchMlbCase(date,812345,mock.fetcher,at)
