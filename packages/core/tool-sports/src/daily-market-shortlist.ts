@@ -68,13 +68,16 @@ const groupKey=(fixture:Fixture,quote:MarketOutcome):string=>[
  * @param quotes - Current bookmaker quotes from the existing provider adapters.
  * @param goal - Target number of observed choices, 4 to 6.
  * @param now - Evaluation instant for freshness and future kickoffs.
+ * @param researchPool - Optional larger pool (up to 16) to investigate before choosing 5–6.
  * @returns A market shortlist only; no autonomous wager or predictive probability.
  */
 export function shortlistDailyMarkets(
   fixtures:readonly Fixture[],quotes:readonly MarketOutcome[],
-  goal=5,now=Date.now(),
+  goal=5,now=Date.now(),researchPool=goal,
 ):DailyMarketShortlist{
   if(!Number.isInteger(goal)||goal<4||goal>6)throw Error('Objetivo de 4 a 6 patas')
+  if(!Number.isInteger(researchPool)||researchPool<goal||researchPool>16)
+    throw Error('Reserva de investigación desde objetivo hasta 16 eventos')
   const groups=new Map<string,{fixture:Fixture;quotes:MarketOutcome[]}>()
   let rejectedQuotes=0
   const matchedGames=new Set<string>()
@@ -156,7 +159,7 @@ export function shortlistDailyMarkets(
     const used=new Set<string>(),chosen:DailyMarketCandidate[]=[]
     const take=(p:DailyMarketCandidate)=>{
       const event=p.sport+'|'+p.league+'|'+p.espnEventId
-      if(chosen.length>=goal||used.has(event))return
+      if(chosen.length>=researchPool||used.has(event))return
       chosen.push(p);used.add(event)
     }
     // Surface real non-winner markets first so the researcher sees alternatives,
