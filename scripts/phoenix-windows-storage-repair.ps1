@@ -235,7 +235,8 @@ if ($PurgeOldWorkspaces) {
     # An arbitrary old Git folder is NOT eligible. Only selected, clean linked
     # worktrees registered against this exact checkout are removed via Git.
     foreach ($candidate in @(Get-RetiredLinkedWorkspaces)) {
-        if (-not @(Get-RetiredLinkedWorkspaces | Where-Object { $_.FullName -ieq $candidate.FullName }).Count) { continue }
+        $stillEligible = @(Get-RetiredLinkedWorkspaces | Where-Object { $_.FullName -ieq $candidate.FullName })
+        if ($stillEligible.Count -eq 0) { continue }
         try {
             $referencing = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
                 ([string]$_.CommandLine).IndexOf($candidate.FullName, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or
