@@ -1,6 +1,6 @@
 # `@phoenix-ai/dsh-tool-healthia`
 
-[English](README.md) | [中文](README.zh.md)
+English | [中文](README.zh.md)
 
 On-demand HealthIA patient-scoped tools. PHOENIX keeps one small global activator; only explicitly requested personal care or patient record work should mount the clinical toolset. Simulated cases, literature reviews, academic clinical reports, and general medicine questions use research tools without opening patient records.
 
