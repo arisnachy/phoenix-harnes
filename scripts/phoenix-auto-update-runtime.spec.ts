@@ -951,6 +951,18 @@ describe('PHOENIX runtime garbage collector health and quota regression', () => 
     expect(supervisor).toContain('reapDormantStage: offlineRepair')
   })
 
+  it('enumerates old evidence/workspace folders separately and requires explicit named purge', () => {
+    expect(storageRepair).toContain('[string[]]$WorkspaceNames = @()')
+    expect(storageRepair).toContain('$WorkspaceNames -contains $_.Name')
+    expect(storageRepair).toContain('[System.IO.FileAttributes]::ReparsePoint')
+    expect(storageRepair).toContain('if ($PurgeOldWorkspaces)')
+    expect(storageRepair).toContain('if (-not $Apply)')
+    expect(storageRepair).toContain('Get-RetiredWorkspaces')
+    expect(storageRepair).toContain('(Join-Path $_.FullName ".git")')
+    expect(storageRepair).toContain('(Join-Path $_.FullName ".phoenix-keep")')
+    expect(storageRepair).toContain('Close Phoenix normally before -Apply')
+  })
+
   it('stops updater allocation at the global cap across checkout identities', () => {
     const start = updater.indexOf('function updaterRuntimeStorageHasCapacity(root, target) {')
     const end = updater.indexOf('\nfunction sameRepositoryWorktree(root, stage)', start)
