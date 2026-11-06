@@ -294,3 +294,8 @@ not hardcode illustrative provider IDs as universal or stable.
 
 Regression test:
 `node --experimental-strip-types --test packages/core/tool-sports/tests/espn-odds-multiroute.test.mjs`.
+## Daily 4–6-leg research shortlist
+
+When asked to prepare today's ticket, Kira targets five **research candidates** (range four to six) across available NBA, WNBA, MLB, NHL, NFL and Soccer fixtures. `sports_chat_daily_scan` retrieves up to 36 verified future events. `sports_chat_daily_market_shortlist` checks currently observed h2h, spreads and totals from authorized providers for matching league, teams, scheduled kickoff, bookmaker and market line. It rejects stale or incomplete markets and never combines different bookmakers. `sports_chat_ticket` can request six sport keys and multiple market families.
+
+The shortlist is **not a trained prediction or a priced final recommendation**: its `marketNoVigShare` is derived solely from bookmaker prices. Kira must investigate official injury and lineup reports, player and opponent performance, news, context and exact settlement rules before choosing a final market. More advanced props, period-specific lines and Soccer beyond the bounded daily scan require separate authorized coverage. If fewer than four sufficiently supported choices are available, the tool reports the shortage instead of manufacturing quotes or a guaranteed winner. No wagers are placed automatically.
