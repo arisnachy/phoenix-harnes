@@ -675,6 +675,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     const environment = {
       MAX_INACTIVE_RUNTIME_BACKUPS: 1,
       MAX_RUNTIME_DIRECTORIES: 3,
+      GLOBAL_RUNTIME_DIRECTORY_LIMIT: 6,
       STORAGE_WARNING_INTERVAL_MS: 15 * 60 * 1000,
       stageBaseDirectory: () => base,
       stageIdentity: () => 'sim',
@@ -684,6 +685,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
       readActiveRuntime: () => ({ path: active }),
       updaterRegisteredWorktrees: () => new Set(paths),
       updaterRuntimeDirectories: () => [...paths],
+      allUpdaterRuntimeDirectories: () => [...paths],
       updaterRuntimeMtimeMs: (path: string) => path === backup ? 300 : path === busy ? 100 : 400,
       removeUpdaterRuntime: (_root: string, path: string) => {
         attempts.push(path)
@@ -877,7 +879,7 @@ describe('PHOENIX runtime garbage collector health and quota regression', () => 
         console: { error: () => {} },
       },
     ) as { cleanupObsoleteRuntimes: (keep?: string[], opts?: {
-      releaseRollback?: boolean,
+      releaseRollback?: boolean
     }) => void }
     cleanupObsoleteRuntimes()
     expect(removed).toEqual(['backup-old'])
@@ -925,7 +927,7 @@ describe('PHOENIX runtime garbage collector health and quota regression', () => 
         STAGE_STORAGE_RETENTION_MS: 60 * 60 * 1000,
       },
     ) as { cleanupObsoleteRuntimes: (keep?: string[], opts?: {
-      reapDormantStage?: boolean,
+      reapDormantStage?: boolean
     }) => void }
     cleanupObsoleteRuntimes()
     stageLease = true
