@@ -40,7 +40,7 @@ const TECHNICAL: Record<ExpertDiscipline, readonly string[]> = {
   medicine: ['Anatomía, fisiología y fisiopatología pertinentes',
     'Diagnóstico diferencial, pruebas, indicaciones y contraindicaciones',
     'Farmacología, dosis contextualizadas, interacciones y monitorización cuando proceda'],
-  neuroscience: ['Redes cerebrales implicadas y su conectividad funcional',
+  neuroscience: ['Estructuras y circuitos cerebrales implicados y su conectividad funcional',
     'Secuencia autonómica, simpático-adrenal y neuroendocrina con escalas temporales',
     'Neurotransmisores, receptores, señalización intracelular y mecanismos de retroalimentación',
     'Plasticidad, adaptación aguda versus crónica, evidencia humana/animal y límites causales'],
