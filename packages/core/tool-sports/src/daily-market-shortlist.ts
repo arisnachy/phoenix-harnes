@@ -29,6 +29,15 @@ const providerKeys:Readonly<Record<string,string>>={
   'soccer|mex.1':'soccer_mexico_ligamx',
   'soccer|usa.1':'soccer_usa_mls',
   'soccer|uefa.champions':'soccer_uefa_champs_league',
+  'soccer|ger.1':'soccer_germany_bundesliga',
+  'soccer|ita.1':'soccer_italy_serie_a',
+  'soccer|fra.1':'soccer_france_ligue_one',
+  'soccer|por.1':'soccer_portugal_primeira_liga',
+  'soccer|ned.1':'soccer_netherlands_eredivisie',
+  'soccer|bra.1':'soccer_brazil_campeonato',
+  'soccer|arg.1':'soccer_argentina_primera_division',
+  'soccer|uefa.europa':'soccer_uefa_europa_league',
+  'soccer|fifa.world':'soccer_fifa_world_cup',
 }
 export const dailyOddsSportKey=(sport:string,league:string):string|null=>
   providerKeys[sport+'|'+league]??null
