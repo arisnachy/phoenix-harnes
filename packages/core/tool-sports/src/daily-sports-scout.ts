@@ -15,6 +15,10 @@ const schedule:Schedule[]=[
   {sport:'tennis',league:'wta'}, {sport:'soccer',league:'eng.1'},
   {sport:'soccer',league:'esp.1'}, {sport:'soccer',league:'mex.1'},
   {sport:'soccer',league:'usa.1'}, {sport:'soccer',league:'uefa.champions'},
+  {sport:'soccer',league:'ger.1'}, {sport:'soccer',league:'ita.1'},
+  {sport:'soccer',league:'fra.1'}, {sport:'soccer',league:'por.1'},
+  {sport:'soccer',league:'ned.1'}, {sport:'soccer',league:'bra.1'},
+  {sport:'soccer',league:'arg.1'}, {sport:'soccer',league:'uefa.europa'},
 ]
 const dateValid=(s:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(s)
   &&Number.isFinite(Date.parse(s+'T00:00:00Z'))
