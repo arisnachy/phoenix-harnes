@@ -166,7 +166,7 @@ async function installSlicerHeart(p,state,fd){
   ].join('\n')+'\n'
   writeFileSync(script,content,'utf8')
   try{
-    await run(slicerExe,['--no-splash','--python-script',script],{timeout:360000,output:fd})
+    await run(slicerExe,['--testing','--no-splash','--no-main-window','--python-script',script],{timeout:360000,output:fd})
     state.components.slicerheart={status:'installed',verifiedAt:now(),note:'Slicer extension manager reported success'}
   }catch(e){
     state.components.slicerheart={status:'error',reason:String(e).slice(0,250)}
