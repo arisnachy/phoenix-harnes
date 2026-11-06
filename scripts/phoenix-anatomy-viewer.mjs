@@ -12,9 +12,11 @@ import {rootFor} from './phoenix-anatomy-auto.mjs'
 const html=fileURLToPath(new URL('./phoenix-anatomy-viewer.html',import.meta.url))
 const maxBytes=350*1024*1024
 const vendorFiles={
- 'three.module.js':['build/three.module.js','text/javascript'],
- 'GLTFLoader.js':['examples/jsm/loaders/GLTFLoader.js','text/javascript'],
- 'OrbitControls.js':['examples/jsm/controls/OrbitControls.js','text/javascript'],
+ 'build/three.module.js':['build/three.module.js','text/javascript'],
+ 'build/three.core.js':['build/three.core.js','text/javascript'],
+ 'examples/jsm/loaders/GLTFLoader.js':['examples/jsm/loaders/GLTFLoader.js','text/javascript'],
+ 'examples/jsm/utils/BufferGeometryUtils.js':['examples/jsm/utils/BufferGeometryUtils.js','text/javascript'],
+ 'examples/jsm/controls/OrbitControls.js':['examples/jsm/controls/OrbitControls.js','text/javascript'],
 }
 function equal(a,b){const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y)}
 export function modelFiles(folder){
