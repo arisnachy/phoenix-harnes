@@ -23,8 +23,10 @@ const schedule:Schedule[]=[
 const dateValid=(s:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(s)
   &&Number.isFinite(Date.parse(s+'T00:00:00Z'))
   &&new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s
-const dayNow=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
-  year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
+const localDay=(when:Date)=>new Intl.DateTimeFormat('en-CA',{
+  timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit',
+}).format(when)
+const dayNow=()=>localDay(new Date())
 const participant=(s:Side|undefined)=>{
   const rawId=s?.team?.id??s?.athlete?.id
   const id=typeof rawId==='number'||typeof rawId==='string'?String(rawId):''
@@ -86,7 +88,8 @@ export async function scoutDailySports(
         if(event.status?.type?.state!=='pre')continue
         const at=Date.parse(event.date??'')
         const id=String(event.id??'')
-        if(!Number.isFinite(at)||at<=now||!/^\d{1,20}$/u.test(id))continue
+        if(!Number.isFinite(at)||at<=now||!/^\d{1,20}$/u.test(id)
+          ||localDay(new Date(at))!==date)continue
         const sides=event.competitions?.[0]?.competitors
         if(!Array.isArray(sides))continue
         const home=participant(sides.find(s=>s.homeAway==='home'))
