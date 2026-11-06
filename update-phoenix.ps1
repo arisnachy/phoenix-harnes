@@ -71,6 +71,19 @@ if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $sportsAuto))
   }
 }
 
+# Optional, detached, user-scoped medical imaging dependencies. Heavy model
+# packages are never downloaded synchronously during launch. Do not block
+# an otherwise healthy PHOENIX update or claim clinical validation.
+$anatomyAuto = Join-Path $root 'scripts\phoenix-anatomy-auto.mjs'
+if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $anatomyAuto)) {
+  try {
+    & node $anatomyAuto --ensure
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'Anatomy optional installer deferred.' }
+  } catch {
+    Write-Warning "Anatomy optional installer unavailable: $($_.Exception.Message)"
+  }
+}
+
 if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $shortcutRepair)) {
   try {
     & node $shortcutRepair --install
