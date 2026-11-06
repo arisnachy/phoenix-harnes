@@ -17,6 +17,7 @@ export type MarketResearchReview={
   verifiedSources:number;sourceCount:number
   injuries:number;news:number;headToHead:number
   evidenceFor:string[];warnings:string[];rankingScore:number
+  descriptiveLineDistance:number|null;relativeSignal:number|null
 }
 const round=(value:number):number=>Number(value.toFixed(2))
 const normalize=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
@@ -108,6 +109,23 @@ export function assessDailyMarketEvidence(
   if(candidate.sport==='basketball')missing.push('Informe oficial de lesiones y quintetos/minutos por confirmar')
   if(candidate.market==='totals'||candidate.market==='spreads')
     missing.push('La media descriptiva no demuestra probabilidades de cubrir este mercado ni EV')
+  let lineDistance:number|null=null
+  if(valid&&side&&diff!==null&&total!==null){
+    if(candidate.market==='totals'&&side.line!==null)
+      lineDistance=Math.abs(total-side.line)
+    else if(candidate.market==='spreads'&&side.line!==null){
+      const selectedHome=normalize(side.selection)===normalize(evidence.home.name)
+      lineDistance=Math.abs((selectedHome?diff:-diff)+side.line)
+    }else if(candidate.market==='h2h')lineDistance=Math.abs(diff)
+  }
+  // Distinguish a marginal line lean from a genuinely wide descriptive gap.
+  // This statistic only sorts candidates for review; it is NOT p(win), EV or
+  // a market-specific probability distribution.
+  const relativeSignal=lineDistance!==null&&variability!==null?
+    round(lineDistance/Math.max(1,variability)):null
+  const rankingScore=side&&valid?round(
+    4*Math.min(3,relativeSignal??0)+Math.min(verified,8)/10+
+    Math.min(h.games+a.games,20)/100):0
   const report:MarketResearchReview={
     candidate,researchedAt:evidence.checkedAt,status,
     scoreDifference:diff,projectedHome:home,projectedAway:away,projectedTotal:total,
@@ -123,8 +141,9 @@ export function assessDailyMarketEvidence(
       ...(evidence.headToHead.length?['H2H con '+evidence.headToHead.length+' partidos observados']:[]),
       ...(side?['El mercado '+candidate.market+' ofrece '+side.selection+
         (side.line===null?'':' '+side.line)+' a cuota observada '+side.decimalOdds]:[]),
-    ],warnings:missing,
-    rankingScore:side&&valid?verified+Math.min(h.games+a.games,20)/10:0,
+    ],warnings:missing,rankingScore,
+    descriptiveLineDistance:lineDistance===null?null:round(lineDistance),
+    relativeSignal,
   }
   return report
 }
@@ -142,5 +161,6 @@ export function unavailableMarketEvidence(
     variability:null,sampleGames:{home:0,away:0},selectedOutcome:null,
     originalMarketSelection:candidate.selection,marketDirection:'Sin dirección verificada',
     verifiedSources:0,sourceCount:0,injuries:0,news:0,headToHead:0,evidenceFor:[],
-    warnings:['Investigación no disponible: '+reason.slice(0,180)],rankingScore:0}
+    warnings:['Investigación no disponible: '+reason.slice(0,180)],rankingScore:0,
+    descriptiveLineDistance:null,relativeSignal:null}
 }
