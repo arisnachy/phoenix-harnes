@@ -1,5 +1,5 @@
 /**
- * HealthIA tool-backed chat cards: render only successful, first-party clinical
+ * HealthIA tool-backed chat cards: show patient-management UI only from a deliberate,
  * tool receipts, not model-authored assertions that a patient was created.
  * The owner-local conversational profiles are NOT the physician's /health EHR.
  * Only identity metadata and aggregate counts reach this UI projection.
@@ -112,11 +112,16 @@ function canonicalToolName(input:unknown):string|null {
   if (typeof input!=='string') return null
   const prefixes=['mcp__tool_healthia__','mcp__tool-healthia__']
   const normalized=prefixes.reduce((value,prefix)=>value.startsWith(prefix)?value.slice(prefix.length):value,input)
-  return ['healthia_activate','health_patient_list','health_patient_create','health_patient_snapshot']
+  return ['health_patient_workspace','health_patient_create','health_patient_snapshot']
     .includes(normalized) && (!input.startsWith('mcp__') || normalized!==input) ? normalized : null
 }
 
-/** Extract bounded, schema-validated cards only from completed first-party receipts. */
+/**
+ * Extract bounded, schema-validated cards only from completed first-party receipts.
+ * Background activation and profile lookup never authorize the patient workspace.
+ * @param root - Tool result or nested first-party tool execution receipts.
+ * @returns Native HealthIA blocks for explicit workspace and confirmed patient actions.
+ */
 export function healthiaCardsFromToolResult(root:unknown):GenerativeUiBlock[] {
   const stack:[unknown,number][]=[[root,0]],cards:GenerativeUiBlock[]=[]
   let visited=0
@@ -139,10 +144,10 @@ export function healthiaCardsFromToolResult(root:unknown):GenerativeUiBlock[] {
     try {data=record(JSON.parse(text))}catch{continue}
     if(!data)continue
     let card:GenerativeUiBlock|null=null
-    if(name==='healthia_activate' && data.active===true)
-      card=profileList(data,'Activado en la conversación')
-    else if(name==='health_patient_list')
-      card=profileList(data,'Perfiles devueltos por HealthIA')
+    // A mere activation or background identity lookup must never launch an
+    // onboarding form. Only the explicit workspace operation owns that UI.
+    if(name==='health_patient_workspace' && data.workspace==='patient_management')
+      card=profileList(data,'Gestión de perfiles solicitada')
     else if(name==='health_patient_create')
       card=profileCreated(data)
     else if(name==='health_patient_snapshot')
