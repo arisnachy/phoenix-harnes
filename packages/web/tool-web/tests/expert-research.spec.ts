@@ -5,8 +5,27 @@ describe('APEX professional research contract', () => {
   it('routes expert disciplines using the existing domain classification', () => {
     expect(resolveExpertDiscipline('Qué hacer en caso de hipotensión', 'medicine')).toBe('medicine')
     expect(resolveExpertDiscipline('Diseño de epidemiología', 'public_health')).toBe('public_health')
+    expect(resolveExpertDiscipline('fisiología del estrés que ocurre a nivel cerebral', 'neuroscience'))
+      .toBe('neuroscience')
+    expect(resolveExpertDiscipline('circuitos del hipocampo', 'general')).toBe('neuroscience')
     expect(resolveExpertDiscipline('Solucionar Python', 'software')).toBe('software')
     expect(resolveExpertDiscipline('Algo universal', 'general')).toBe('general')
+  })
+
+  it('requires circuits, temporal mechanisms and a useful diagram for stress neuroscience', () => {
+    const contract = buildExpertResearchContract({
+      question: 'puedes ayudarme a entender la fisiología del estress que ocurre a nivel cerebral',
+      domain: 'neuroscience', readRelevantCount: 0, independentReadCount: 0,
+      duplicateContentCount: 0, challengesCount: 0, budgetExhausted: false,
+    })
+    expect(contract.discipline).toBe('neuroscience')
+    expect(contract.technicalDimensions).toEqual(expect.arrayContaining([
+      expect.stringContaining('receptores'),
+      expect.stringContaining('circuitos'),
+    ]))
+    expect(contract.specialistChecks.some(item => item.includes('MR/GR'))).toBe(true)
+    expect(contract.visualRules.some(item => item.includes('Diagrama causal'))).toBe(true)
+    expect(contract.evidenceState).toBe('not_read')
   })
 
   it('asks for real clinical dose context only when it is pertinent', () => {
