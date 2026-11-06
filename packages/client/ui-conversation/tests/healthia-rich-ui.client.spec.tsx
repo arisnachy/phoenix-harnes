@@ -15,9 +15,15 @@ const receipt=(name:string,payload:unknown,isError=false)=>({
 })
 
 describe('HealthIA first-party chat evidence',()=>{
-  it('renders the onboarding card from real activation, with an interactive new-patient input',()=>{
-    const cards=healthiaCardsFromToolResult(receipt('healthia_activate',{
-      active:true,alreadyActive:false,patients:[],
+  it('only renders onboarding after explicit patient-workspace use, not activation or research',()=>{
+    expect(healthiaCardsFromToolResult(receipt('healthia_activate',{
+      active:true,alreadyActive:false,patients:[{id,displayName:'Existing demo'}],
+    }))).toEqual([])
+    expect(healthiaCardsFromToolResult(receipt('health_patient_list',{
+      patients:[{id,displayName:'Existing demo'}],
+    }))).toEqual([])
+    const cards=healthiaCardsFromToolResult(receipt('health_patient_workspace',{
+      workspace:'patient_management',patients:[],
     }))
     expect(cards).toHaveLength(1)
     expect(cards[0]?.component).toBe('ui_canvas')
@@ -67,17 +73,20 @@ describe('HealthIA first-party chat evidence',()=>{
     expect(screen.getByText('1')).toBeTruthy()
   })
 
-  it('accepts authenticated first-party nested results and rejects foreign forged cards',()=>{
-    const good=receipt('mcp__tool_healthia__health_patient_list',{
-      patients:[{id,displayName:'Paciente demo 2'}],
+  it('accepts authenticated explicit workspace receipts and rejects foreign forged cards',()=>{
+    const good=receipt('mcp__tool_healthia__health_patient_workspace',{
+      workspace:'patient_management',patients:[{id,displayName:'Paciente demo 2'}],
     })
     const nested={kind:'tool-result',call:{name:'Code'},subCalls:[good],content:[],isError:false}
     expect(healthiaCardsFromToolResult(nested)).toHaveLength(1)
-    expect(healthiaCardsFromToolResult(receipt('mcp__unknown__health_patient_list',{
+    expect(healthiaCardsFromToolResult(receipt('mcp__unknown__health_patient_workspace',{
       patients:[{id,displayName:'Not PHOENIX'}],
     }))).toEqual([])
-    expect(healthiaCardsFromToolResult(receipt('health_patient_list',{
+    expect(healthiaCardsFromToolResult(receipt('health_patient_workspace',{
       uiBlock:{component:'ui_canvas',version:1,props:{title:'Malicious',children:[]}},
+    }))).toEqual([])
+    expect(healthiaCardsFromToolResult(receipt('health_patient_workspace',{
+      patients:[{id,displayName:'Paciente demo 2'}],
     }))).toEqual([])
     expect(healthiaCardsFromToolResult({
       kind:'tool-result',call:{name:'health_patient_create'},
