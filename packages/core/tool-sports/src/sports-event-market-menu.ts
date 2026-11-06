@@ -116,9 +116,21 @@ export async function readSportsEventMarketMenu(
     errors.push('Catálogo de mercados no disponible: '+
       String(error instanceof Error?error.message:error).slice(0,130))
   }
-  const selected=discoveryStatus==='observed'?
-    allowed.filter(key=>discovered.includes(key)).slice(0,maxMarkets):
-    discoveryStatus==='empty'?[]:allowed.slice(0,maxMarkets)
+  const offered=discoveryStatus==='observed'?
+    allowed.filter(key=>discovered.includes(key)):
+    discoveryStatus==='empty'?[]:[...allowed]
+  // A menu containing many alternate spreads must not starve all player props
+  // or period markets when the user asks for all useful market families.
+  const diverse=[
+    offered.find(key=>/^(player_|pitcher_|batter_)/u.test(key)),
+    offered.find(key=>/_1st_5_innings$/u.test(key)),
+    offered.find(key=>/_(?:h[12]|q[1-4]|p[1-3])$/u.test(key)),
+    offered.find(key=>key.startsWith('alternate_spreads')),
+    offered.find(key=>key.startsWith('alternate_totals')),
+    offered.find(key=>key.startsWith('team_totals')),
+    ...offered,
+  ].filter((key):key is string=>typeof key==='string')
+  const selected=[...new Set(diverse)].slice(0,maxMarkets)
   if(!selected.length)return {...base,status:'empty' as const,
     discoveryStatus,publishedMarkets:discovered,errors}
 
