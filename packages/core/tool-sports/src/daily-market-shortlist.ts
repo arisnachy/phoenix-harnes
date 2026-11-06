@@ -9,6 +9,7 @@ export type DailyMarketCandidate={
   sport:string;league:string;espnEventId:string;bookmakerEventId:string
   fixture:string;kickoff:string;bookmaker:string;market:'h2h'|'spreads'|'totals'
   selection:string;line:number|null;decimalOdds:number;marketNoVigShare:number
+  outcomes:Array<{selection:string;line:number|null;decimalOdds:number;noVigShare:number}>
   bookmakerOverround:number;quoteUpdatedAt:string;source:string
   assessment:'quote-only-research-pending'
 }
@@ -116,6 +117,10 @@ export function shortlistDailyMarkets(
       kickoff:fixture.kickoff,bookmaker:q.bookmaker,market:market as DailyMarketCandidate['market'],
       selection:q.selection,line:q.point??null,decimalOdds:q.price,
       marketNoVigShare:Number(choice.share.toFixed(5)),
+      outcomes:rows.map((item,i)=>({
+        selection:item.selection,line:item.point??null,decimalOdds:item.price,
+        noVigShare:Number(((inverse[i]??0)/sum).toFixed(5)),
+      })),
       bookmakerOverround:Number((sum-1).toFixed(5)),
       quoteUpdatedAt:q.updatedAt,source:q.source??'',
       assessment:'quote-only-research-pending',
