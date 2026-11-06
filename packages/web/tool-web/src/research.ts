@@ -145,7 +145,7 @@ const DOMAIN_PATTERNS: readonly (readonly [string, RegExp])[] = [
   ['crypto', /\b(bitcoin|ethereum|criptomoneda|crypto|blockchain|token|btc)\b/iu],
   ['sports', /\b(partido|f[uú]tbol|football|soccer|nba|mlb|b[eé]isbol|tenis|liga|marcador|resultado deportivo|champions|real madrid)\b/iu],
   // Basic neuroscience explanations must not fall back to general web search.
-  ['neuroscience', /\b(neurociencia|neuropsicolog|neuroplasticidad|neuroimagen|cognitiv|alzheimer|alzh[eé]imer|neurobiolog[ií]a|neurofisiolog[ií]a|neuroendocrin[oa]|cerebro|cerebral(?:es)?|hipot[aá]lamo|am[ií]gdala|hipocampo|locus coeruleus|eje hpa|sistema nervioso|fisiolog[ií]a del? (?:estr[eé]s|estress?|stress))\b/iu],
+  ['neuroscience', /\b(neurociencia|neuropsicolog|neuroplasticidad|neuroimagen|cognitiv|alzheimer|alzh[eé]imer|neurobiolog[ií]a|neurofisiolog[ií]a|neuroendocrin[oa]|cerebro|cereb(?:r)?al(?:es)?|hipot[aá]lamo|am[ií]gdala|hipocampo|locus coeruleus|eje hpa|sistema nervioso|fisiolog[ií]a del? (?:estr[eé]s|estress?|stress))\b/iu],
   ['public_health', /\b(aps|dengue|epidemiolog[ií]a|arbovirosis|brote|incidencia de enfermedad|atenci[oó]n primaria|primer nivel|cobertura sanitaria|cobertura efectiva|salud p[uú]blica|sistema sanitario|sistema de salud|servicios de salud|mortalidad materna|mortalidad infantil|sisalril|servicio nacional de salud|ministerio de salud p[uú]blica)\b/iu],
   ['medicine', /\b(medicina|clinical|cl[ií]nic|ensayo|tratamiento|paciente|salud|f[aá]rmaco|epidemiolog)\b/iu],
   ['finance', /\b(acciones|bolsa|stock|bonos|inversiones|nasdaq|s&p|sec edgar)\b/iu],
