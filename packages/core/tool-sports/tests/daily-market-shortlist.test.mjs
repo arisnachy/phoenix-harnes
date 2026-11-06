@@ -82,6 +82,8 @@ test('soccer h2h requires a real draw quote and never turns 1x2 into two outcome
 test('market pool validates supported providers and exact target range',()=>{
   assert.equal(dailyOddsSportKey('hockey','nhl'),'icehockey_nhl')
   assert.equal(dailyOddsSportKey('basketball','wnba'),'basketball_wnba')
+  assert.equal(dailyOddsSportKey('soccer','ger.1'),'soccer_germany_bundesliga')
+  assert.equal(dailyOddsSportKey('soccer','bra.1'),'soccer_brazil_campeonato')
   assert.equal(dailyOddsSportKey('soccer','unknown'),null)
   assert.throws(()=>shortlistDailyMarkets(fixtures,[],3,now),/4 a 6/)
   assert.throws(()=>shortlistDailyMarkets(fixtures,[],7,now),/4 a 6/)
