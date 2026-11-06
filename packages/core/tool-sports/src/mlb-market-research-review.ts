@@ -73,7 +73,8 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
           p.lineupOrder!==null&&p.lineupOrder>=1&&p.lineupOrder<=9)
     }),
     starterStatsVerified:readyStat(h,'era')&&readyStat(a,'era'),
-    reliefUsageObserved:[...d.bullpen.home,...d.bullpen.away].some(p=>p.reliefUsage72h.length>0),
+    reliefUsageObserved:(['home','away'] as const).every(side=>
+      d.bullpen[side].some(p=>p.reliefUsage72h.length>0)),
     rosterMatchupsReviewed:(['home','away'] as const).every(side=>{
       const opposing=side==='home'?'away':'home'
       const batters=d.rosters[side].filter(p=>p.role==='batter'&&p.lineupConfirmed)
