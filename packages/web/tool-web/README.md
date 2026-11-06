@@ -146,6 +146,12 @@ Only the failing call adds these retained tokens.
 
 Append-only; newly visible content follows the reusable request prefix and does not invalidate existing KV-cache entries.
 
+## Federated scientific research
+
+The search-enabled composition registers `research_federated` and `research_catalog` alongside `research_scholar`. Federated search concurrently queries Europe PMC, Crossref, OpenAlex, DataCite and Semantic Scholar without API keys; each provider reports success, an empty result or unavailability. The 14-second budget, per-provider result cap, DOI/PMID/title deduplication, and 45-record response bound apply before the model receives metadata. Metadata does not authenticate study conclusions or guarantee full-text access.
+
+`research_catalog` exposes 100 source descriptions grouped by subject and access rules. Anonymous automatic candidates are limited to documented `none` and `none_limited` entries; conditional, unverified or credentialed sources are metadata only. The source catalog is stored at `data/research-source-catalog.json`; `src/research-source-catalog.ts` provides its model-facing typed projection. The separate `research_investigate` tool performs document reading through the governed web seam. The federated metadata provider fetches use fixed allowlisted HTTPS endpoints, reject redirects and report rate limits without retry storms.
+
 ## Known Limitations and Deferred Work
 
 - **There is no batch-wide native-search counter** — `searchMaxQueries` bounds `ctx.web.search` calls, but a provider may perform several native searches inside each call. For example, a model-backed provider configured with `maxUses` can permit up to `searchMaxQueries × maxUses` native searches; `searchMaxResults` limits only the combined sources returned to the caller. Deployments control cost through these independent consumer and provider settings because the generic seam does not know provider-internal search units.
