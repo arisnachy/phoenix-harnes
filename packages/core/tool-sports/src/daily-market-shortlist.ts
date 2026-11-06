@@ -94,8 +94,9 @@ export function shortlistDailyMarkets(
         ?rows.length===3&&rows.some(q=>isDraw(q.selection))
         :rows.length===2)
     if(market==='spreads')
-      valid=rows.length===2&&twoTeams&&rows.every(q=>typeof q.point==='number')
-        &&rows[0]!.point===-rows[1]!.point
+      valid=rows.length===2&&twoTeams
+        &&typeof rows[0]?.point==='number'&&typeof rows[1]?.point==='number'
+        &&rows[0].point===-rows[1].point
     if(market==='totals')
       valid=rows.length===2&&rows[0]!.point!==null
         &&rows[0]!.point!==undefined&&rows[0]!.point===rows[1]!.point
