@@ -195,6 +195,7 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
     // Otherwise a consumer reading only the dossier summary silently misses
     // roof, weather, roster and settlement limitations.
     missingEvidence:[...new Set([...d.missingEvidence,...opposingFacts,
+      ...(!gates.reviewTimestampValid?['Fecha de revisión inválida o anterior al corte de investigación']:[]),
       ...(!gates.bothRostersVerified?['Nueve bateadores identificados por equipo']:[]),
       ...(!gates.rosterMatchupsReviewed?['Matriz completa de nueve bateadores contra abridor y relevistas rivales']:[]),
       ...(!gates.starterStatsVerified?['Estadísticas comprobadas de ambos abridores']:[]),
