@@ -609,7 +609,7 @@
   }
 }
 
-/* Real image generation activity only. Percent is expressly a visual estimate. */
+/* Live image generation: indeterminate progress, measured elapsed time only. */
 .imageGenerationCard {
   display: grid;
   grid-template-columns: 116px minmax(0, 1fr);
@@ -663,7 +663,7 @@
   line-height: 1.4;
 }
 .imageGenerationHeader strong { min-width: 0; font-weight: 650; }
-.imageGenerationPercent {
+.imageGenerationElapsed {
   flex: none;
   color: #d96b2b;
   font-weight: 650;
@@ -679,8 +679,9 @@
   display: block;
   height: 100%;
   border-radius: inherit;
+  width: 36%;
   background: linear-gradient(90deg, #e56b27, #f2b455);
-  transition: width 650ms ease;
+  animation: image-generation-track 1.8s ease-in-out infinite alternate;
 }
 .imageGenerationRemaining {
   font-size: 12px;
@@ -692,6 +693,10 @@
   font-size: 11px;
   line-height: 1.35;
   color: var(--dsw-alias-label-secondary);
+}
+@keyframes image-generation-track {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(278%); }
 }
 @keyframes image-generation-reveal {
   0% { transform: translateX(-150%); }
@@ -707,7 +712,6 @@
   .imageGenerationHeader { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .imageGenerationPicture, .imageGenerationShimmer { animation: none; }
+  .imageGenerationPicture, .imageGenerationShimmer, .imageGenerationTrack > span { animation: none; }
   .imageGenerationShimmer { display: none; }
-  .imageGenerationTrack > span { transition: none; }
 }
