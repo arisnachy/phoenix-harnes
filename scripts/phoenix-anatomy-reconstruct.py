@@ -27,6 +27,7 @@ def parser():
     p.add_argument("--device", choices=("cpu", "gpu", "mps"), default="cpu")
     p.add_argument("--fast", action="store_true", help="Lower-resolution research segmentation")
     p.add_argument("--max-meshes", type=int, default=200, help="Upper limit for GLB meshes")
+    p.add_argument("--mask-folder", help="Optional clinician-supplied 3D NIfTI masks")
     p.add_argument("--research-only", action="store_true", required=True,
                    help="Explicit acknowledgement: experimental, not for diagnosis")
     return p
@@ -43,6 +44,8 @@ def nifti_mask_to_mesh(mask_path):
         raise ValueError("3D mask required")
     if not np.isfinite(img.affine).all() or abs(float(np.linalg.det(img.affine[:3, :3]))) < 1e-9:
         raise ValueError("Invalid voxel-to-world geometry")
+    if img.header.get_xyzt_units()[0] not in ("mm", "unknown"):
+        raise ValueError("NIfTI voxel-to-world length units must be millimetres")
     voxels = np.asarray(img.dataobj) > 0
     count = int(np.count_nonzero(voxels))
     if count < 64:
@@ -74,25 +77,32 @@ def reconstruct(args):
     os.umask(0o077)
     target.mkdir(mode=0o700, parents=True, exist_ok=True)
     masks = target / "masks"
-    masks.mkdir(mode=0o700, exist_ok=True)
-
-    # TotalSegmentator defaults to anonymous usage telemetry; suppress it for
-    # locally processed medical studies before invoking its Python API.
-    # Model weights may still be fetched from the upstream model registry.
-    store = target / "totalseg-config"
-    store.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.environ["TOTALSEG_HOME_DIR"] = str(store)
-    from totalsegmentator.config import setup_totalseg, set_config_key
-    setup_totalseg()
-    set_config_key("send_usage_stats", False)
-    from totalsegmentator.python_api import totalsegmentator
-
-    totalsegmentator(
-        input=source, output=masks, task=SUPPORTED[args.modality],
-        roi_subset=args.structures or None, fast=args.fast, device=args.device,
-        quiet=True, output_type="nifti",
-    )
-    candidates = sorted(masks.glob("*.nii.gz"))
+    external_masks = Path(args.mask_folder).expanduser().resolve(strict=True) if args.mask_folder else None
+    if external_masks is None:
+        masks.mkdir(mode=0o700, parents=True, exist_ok=True)
+        # Reuse model weights without writing patient data into the shared cache.
+        home = os.environ.get("PHOENIX_ANATOMY_HOME")
+        if not home:
+            local = os.environ.get("LOCALAPPDATA")
+            home = str(Path(local) / "PHOENIX" / "anatomy" if local
+                       else Path.home() / ".phoenix" / "anatomy")
+        store = Path(home).expanduser().resolve() / "model-cache"
+        store.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.environ["TOTALSEG_HOME_DIR"] = str(store)
+        from totalsegmentator.config import setup_totalseg, set_config_key
+        setup_totalseg()
+        set_config_key("send_usage_stats", False)
+        from totalsegmentator.python_api import totalsegmentator
+        totalsegmentator(
+            input=source, output=masks, task=SUPPORTED[args.modality],
+            roi_subset=args.structures or None, fast=args.fast, device=args.device,
+            quiet=True, output_type="nifti",
+        )
+    else:
+        if not external_masks.is_dir() or external_masks == target or target in external_masks.parents:
+            raise ValueError("Mask source must be a separate directory")
+        masks = external_masks
+    candidates = sorted(masks.glob("*.nii.gz")) + sorted(masks.glob("*.nii"))
     if not candidates:
         raise RuntimeError("No segmentation masks created")
     if len(candidates) > args.max_meshes:
@@ -101,7 +111,7 @@ def reconstruct(args):
     scene = trimesh.Scene()
     quality = []
     for mask in candidates:
-        name = mask.name.removesuffix(".nii.gz")
+        name = mask.name.removesuffix(".nii.gz").removesuffix(".nii")
         try:
             mesh, voxel_count = nifti_mask_to_mesh(mask)
             scene.add_geometry(mesh, geom_name=name, node_name=name)
@@ -118,13 +128,14 @@ def reconstruct(args):
     staging.replace(out)
     report = {
         "schema": 1, "generatedAt": datetime.now(timezone.utc).isoformat(),
-        "model": "TotalSegmentator", "task": SUPPORTED[args.modality],
+        "model": "clinician-provided masks" if external_masks else "TotalSegmentator",
+        "task": "external-masks" if external_masks else SUPPORTED[args.modality],
         "sourceType": "local volumetric imaging", "modality": args.modality,
         "coordinateSystem": "NIfTI affine world (RAS+, millimetres)",
         "geometrySource": "patient-study-derived segmentation; NOT confirmed anatomy",
         "clinicalStatus": "UNVALIDATED_RESEARCH_OUTPUT",
         "needsExpertReview": True,
-        "modelWeightsMayDownload": True,
+        "modelWeightsMayDownload": external_masks is None,
         "structures": quality,
         "limitations": [
             "Validate with source DICOM/NIfTI slices before clinical interpretation.",
