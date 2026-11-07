@@ -112,6 +112,12 @@ describe('professional assessment catalog and complete local PDF',()=>{
     expect(screen.getByText('PHQ-9 · síntomas depresivos')).toBeTruthy()
     expect(screen.getByText('GAD-7 · síntomas de ansiedad')).toBeTruthy()
     expect(screen.getByText('MoCA · evaluación cognitiva')).toBeTruthy()
+    const importInput=screen.getByLabelText('Importar instrumento autorizado')
+    expect(importInput).toHaveProperty('disabled',true)
+    fireEvent.click(screen.getByRole('checkbox',{
+      name:/Confirmo que dispongo de autorización/,
+    }))
+    expect(importInput).toHaveProperty('disabled',false)
   })
 
   it('rejects incomplete or misleading scoring definitions through native parsing',()=>{
