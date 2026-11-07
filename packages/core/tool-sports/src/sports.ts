@@ -7,7 +7,8 @@ import { belongsToLeague } from './sports-odds-coverage.ts'
 import { enrichMlbMatch } from './mlb-matchup.ts'
 import { researchMlbTrend } from './mlb-research.ts'
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
-  soccer: ['eng.1','esp.1','mex.1','usa.1','uefa.champions','fifa.world'],
+  soccer: ['eng.1','esp.1','mex.1','usa.1','uefa.champions','fifa.world',
+    'ger.1','ita.1','fra.1','por.1','ned.1','bra.1','arg.1','uefa.europa'],
   basketball: ['nba','wnba','mens-college-basketball'],
   baseball: ['mlb','dominican-winter-league','caribbean-series'],
   football: ['nfl','college-football'],
@@ -27,6 +28,14 @@ const leaguePresentation: Record<string,{league:string;country?:string}> = {
   'mex.1':{league:'Liga MX',country:'México'},
   'usa.1':{league:'MLS',country:'Estados Unidos / Canadá'},
   'uefa.champions':{league:'UEFA Champions League',country:'Europa'},
+  'ger.1':{league:'Bundesliga',country:'Alemania'},
+  'ita.1':{league:'Serie A',country:'Italia'},
+  'fra.1':{league:'Ligue 1',country:'Francia'},
+  'por.1':{league:'Primeira Liga',country:'Portugal'},
+  'ned.1':{league:'Eredivisie',country:'Países Bajos'},
+  'bra.1':{league:'Brasileirão Série A',country:'Brasil'},
+  'arg.1':{league:'Liga Profesional',country:'Argentina'},
+  'uefa.europa':{league:'UEFA Europa League',country:'Europa'},
   'fifa.world':{league:'Copa Mundial',country:'Internacional'},
   'mlb':{league:'MLB'},'nba':{league:'NBA'},'wnba':{league:'WNBA'},
   'nfl':{league:'NFL'},'nhl':{league:'NHL'},

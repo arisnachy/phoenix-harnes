@@ -26,7 +26,7 @@ const fetcher=async url=>{
 test('one bounded daily scan covers the real leagues and diversifies sports',async()=>{
   calls.length=0
   const report=await scoutDailySports(day,5,fetcher,now)
-  assert.equal(calls.length,12)
+  assert.equal(calls.length,20)
   assert.equal(report.totalEligible,7)
   assert.equal(report.events.length,5)
   assert.equal(new Set(report.events.map(x=>x.sport)).size,4)
@@ -58,7 +58,7 @@ test('unconfirmed games, started games, malformed IDs and incomplete participant
 
 test('provider permission and malformed scan controls are enforced',async()=>{
   await assert.rejects(()=>scoutDailySports('2026-02-30',5,fetcher,now),/Fecha inválida/)
-  await assert.rejects(()=>scoutDailySports(day,21,fetcher,now),/1 a 20/)
+  await assert.rejects(()=>scoutDailySports(day,37,fetcher,now),/1 a 36/)
   await assert.rejects(()=>scoutDailySports(day,5,fetcher,now,{PHOENIX_SPORTS_ESPN_DISABLED:'1'}),/ESPN deshabilitado/)
 })
 
@@ -71,4 +71,35 @@ test('one provider error cannot be promoted as an empty or verified league',asyn
   assert.equal(report.events.length,0)
   assert.equal(report.coverage.find(x=>x.league==='eng.1')?.status,'unavailable')
   assert.equal(report.coverage.find(x=>x.league==='nba')?.status,'empty')
+})
+test('daily market search keeps as many as 36 real upcoming candidates, not only 12',async()=>{
+  const large=async url=>{
+    const u=String(url)
+    const events=u.includes('/basketball/nba/')?
+      Array.from({length:24},(_,i)=>game(100+i)):
+      u.includes('/soccer/eng.1/')?
+        Array.from({length:24},(_,i)=>game(200+i)):[]
+    return new Response(JSON.stringify({events}),{status:200})
+  }
+  const report=await scoutDailySports(day,36,large,now)
+  assert.equal(report.totalEligible,48)
+  assert.equal(report.events.length,36)
+  assert.equal(new Set(report.events.map(x=>x.sport)).size,2)
+  assert.equal(new Set(report.events.map(x=>x.sport+'|'+x.league+'|'+x.eventId)).size,36)
+  assert.equal(report.coverage.find(x=>x.league==='nba')?.futureEvents,24)
+  assert.ok(report.events.every(x=>x.kickoff===kickoff))
+})
+
+test('the requested day is Santo Domingo local, including games after UTC midnight',async()=>{
+  const boundary=async url=>{
+    const events=String(url).includes('/basketball/nba/')?[
+      game(11,'team','2026-11-03T02:30:00Z','pre'),
+      game(12,'team','2026-11-03T05:30:00Z','pre'),
+    ]:[]
+    return new Response(JSON.stringify({events}))
+  }
+  const result=await scoutDailySports(day,5,boundary,now)
+  assert.deepEqual(result.events.map(x=>x.eventId),['11'])
+  assert.equal(result.totalEligible,1)
+  assert.equal(result.coverage.find(x=>x.league==='nba')?.futureEvents,1)
 })
