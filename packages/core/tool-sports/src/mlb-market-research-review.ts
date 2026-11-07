@@ -87,7 +87,7 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
     // the three preceding UTC calendar dates at both checkpoints.
     reliefUsageObserved:reviewTimeValid&&(['home','away'] as const).every(side=>
       d.bullpen[side].some(p=>p.reliefUsage72h.some(out=>{
-        if(!/^\\d{4}-\\d{2}-\\d{2}$/u.test(out.date))return false
+        if(!/^\d{4}-\d{2}-\d{2}$/u.test(out.date))return false
         const at=Date.parse(out.date)
         if(!Number.isFinite(at)||new Date(at).toISOString().slice(0,10)!==out.date)return false
         const collectedDay=new Date(checkedMs).toISOString().slice(0,10)
