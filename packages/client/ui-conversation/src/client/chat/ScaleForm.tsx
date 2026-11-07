@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { PhoenixStatusPill, PhoenixUiIcon, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { CanvasAction } from './GenerativeCanvas.tsx'
+import { generateAssessmentPdf } from './AssessmentReportPdf.ts'
+import { scaleAssessmentReport } from './AssessmentReportModel.ts'
 import css from './InteractiveUi.module.css'
 
 type ScaleChoice = { readonly label: string; readonly score: number }
@@ -221,8 +223,18 @@ function choiceValue(item: ScaleItem, index: number): string {
 }
 
 /** In-chat form with answered-item count, reset and auditable scoring. */
-export function ScaleForm({ spec, onAction }: { readonly spec: ScaleFormSpec; readonly onAction?: CanvasAction | undefined }): ReactNode {
+export function ScaleForm({ spec, onAction, verified=false }: {
+  readonly spec: ScaleFormSpec
+  readonly onAction?: CanvasAction | undefined
+  readonly verified?: boolean
+}): ReactNode {
   const [selected, setSelected] = useState<Record<string, number>>({})
+  const [participant,setParticipant]=useState('')
+  const [professional,setProfessional]=useState('')
+  const [context,setContext]=useState('')
+  const [observations,setObservations]=useState('')
+  const [recommendations,setRecommendations]=useState('')
+  const [reportError,setReportError]=useState('')
   // Preserve the selected label even if distinct choices share a score.
   const answers: Record<string, number> = {}
   for (const item of spec.props.items) {
@@ -234,6 +246,27 @@ export function ScaleForm({ spec, onAction }: { readonly spec: ScaleFormSpec; re
   const warnings = scaleProtocolWarnings(spec)
   const [copied, setCopied] = useState(false)
   const scored = scoreScale(spec, answers)
+  const exportPdf = (): void => {
+    const report=scaleAssessmentReport(spec,selected,{
+      participant,professional,context,observations,recommendations,
+    },verified)
+    if(report===null){setReportError('Completa todas las respuestas antes de generar el informe.');return}
+    try{
+      const pdf=generateAssessmentPdf(report)
+      const url=URL.createObjectURL(pdf)
+      const link=document.createElement('a')
+      link.href=url
+      link.download='PHOENIX-informe-'+(spec.props.title.toLowerCase()
+        .normalize('NFD').replace(/[\\u0300-\\u036f]/gu,'')
+        .replace(/[^a-z0-9]+/gu,'-').slice(0,45) || 'evaluacion')+'.pdf'
+      link.click()
+      URL.revokeObjectURL(url)
+      setReportError('')
+    }catch{
+      setReportError('No fue posible crear el informe PDF. Revisa las respuestas.')
+    }
+  }
+  const riskSignal=/phq[ -]?9/iu.test(spec.props.title)&&((answers.q9??0)>0)
   const copy = (): void => {
     if (scored.total === null || typeof navigator === 'undefined' || !navigator.clipboard) return
     const lines = [spec.props.title, ...spec.props.items.map(item =>
@@ -306,6 +339,44 @@ export function ScaleForm({ spec, onAction }: { readonly spec: ScaleFormSpec; re
         <span>Rango {domain.min}–{domain.max}</span>
       </div>)}
     </div>}
+    {riskSignal&&<p role="alert" className={css.disclaimer}>
+      ATENCIÓN: respuesta positiva en el ítem 9 del PHQ-9. Requiere valoración
+      clínica de seguridad y aplicación del protocolo local; no se interpreta únicamente por el total.
+    </p>}
+    <section className={css.questions} aria-label="Informe profesional PDF">
+      <h4>Informe profesional · PDF</h4>
+      <p>Exporta el registro completo, sus respuestas, puntuaciones, interpretación
+        descriptiva y fuentes. El profesional debe revisar, completar y firmar el informe.</p>
+      <label className={css.question}>Nombre o código de la persona evaluada
+        <input type="text" maxLength={120} value={participant}
+          onChange={e=>setParticipant(e.currentTarget.value)} placeholder="Opcional" />
+      </label>
+      <label className={css.question}>Profesional evaluador
+        <input type="text" maxLength={120} value={professional}
+          onChange={e=>setProfessional(e.currentTarget.value)} placeholder="Nombre y matrícula, si corresponde" />
+      </label>
+      <label className={css.question}>Motivo de evaluación y contexto
+        <textarea rows={2} maxLength={1500} value={context}
+          onChange={e=>setContext(e.currentTarget.value)} placeholder="Motivo, entorno, fecha, contexto relevante" />
+      </label>
+      <label className={css.question}>Observaciones del profesional
+        <textarea rows={3} maxLength={2500} value={observations}
+          onChange={e=>setObservations(e.currentTarget.value)} placeholder="Observaciones objetivas; no inventar hallazgos" />
+      </label>
+      <label className={css.question}>Recomendaciones y seguimiento
+        <textarea rows={3} maxLength={2500} value={recommendations}
+          onChange={e=>setRecommendations(e.currentTarget.value)} placeholder="Plan individualizado por el profesional" />
+      </label>
+      <div className={css.actions}>
+        <button type="button" disabled={scored.total===null} onClick={exportPdf}>
+          <PhoenixUiIcon name="file" size={15}/> Generar informe PDF completo
+        </button>
+      </div>
+      {reportError&&<p role="alert" className={css.disclaimer}>{reportError}</p>}
+      <p className={css.disclaimer}>Se descarga localmente al pulsar el botón.
+        No se guarda automáticamente en el expediente. La aplicación no firma informes
+        ni emite diagnósticos automáticamente.</p>
+    </section>
     <div className={css.actions}>
       <button type="button" onClick={copy} disabled={scored.total === null}>
         <PhoenixUiIcon name={copied ? 'check' : 'copy'} size={15} /> {copied ? 'Copiado' : 'Copiar resultado'}
