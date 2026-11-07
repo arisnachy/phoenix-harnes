@@ -569,3 +569,29 @@ export interface OpenClawRoutingRequest {
 
 /** Public X connector identity accepted by the Host remote boundary. */
 export type XMcpIdentity = 'user' | 'phoenix'
+
+/** Medical research packages are separate from Cordis plugin toggles. */
+export type AnatomyConnectorId='slicerheart'|'monai-nnunet'|'totalsegmentator'|
+  'ohif-cornerstone'|'simvascular'|'opencarp'|'three-vtk'
+export interface AnatomyConnectorEntry {
+  readonly id:AnatomyConnectorId
+  readonly title:string
+  readonly installed:boolean
+  readonly operational:boolean
+  readonly canInstall:boolean
+  readonly phase:'ready'|'libraries'|'installing'|'missing'|'error'|'external'
+  readonly detail:string
+  readonly docs?:string
+}
+export interface AnatomyConnectorSnapshot {
+  readonly entries:readonly AnatomyConnectorEntry[]
+  readonly running:boolean
+  readonly readyCount:number
+  readonly clinicalValidation:'not-validated'
+}
+export interface AnatomyConnectorInstallRequest {readonly id:AnatomyConnectorId}
+export interface AnatomyConnectorInstallReceipt {
+  readonly id:AnatomyConnectorId
+  readonly status:'started'|'running'|'blocked'|'error'
+  readonly detail:string
+}
