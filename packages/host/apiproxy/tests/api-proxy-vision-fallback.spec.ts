@@ -374,6 +374,7 @@ describe('Borrowed-eyes prompt admission', () => {
     expect(system).toContain('Observed findings:')
     expect(system).toContain('Reported diagnosis or impression:')
     expect(system).toContain('Visual limitations:')
+    expect(system).toContain('For other images respond with ordinary faithful description')
     expect(system).toContain('Never replace the requested source reading with generic anatomy')
     const content = eyeCalls[0]?.messages[0]?.content ?? []
     expect(content.some(block => block.type === 'text' && block.text.includes(question))).toBe(true)
