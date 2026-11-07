@@ -73,10 +73,19 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
           p.lineupOrder!==null&&p.lineupOrder>=1&&p.lineupOrder<=9)
     }),
     starterStatsVerified:readyStat(h,'era')&&readyStat(a,'era'),
-    recentStarterOutingsVerified:[h,a].every(p=>p!==null&&p.recentStarts.length>0),
+    recentStarterOutingsVerified:reviewTimeValid&&[h,a].every(p=>p!==null&&
+      p.recentStarts.some(out=>{
+        const at=Date.parse(out.date)
+        return Number.isFinite(at)&&at<=checkedMs&&
+          checkedMs-at<=45*24*60*60*1000
+      })),
     injuriesDatedVerified:false, // Injured roster alone has no dated medical report or return-to-play status.
-    reliefUsageObserved:(['home','away'] as const).every(side=>
-      d.bullpen[side].some(p=>p.reliefUsage72h.length>0)),
+    reliefUsageObserved:reviewTimeValid&&(['home','away'] as const).every(side=>
+      d.bullpen[side].some(p=>p.reliefUsage72h.some(out=>{
+        const at=Date.parse(out.date)
+        return Number.isFinite(at)&&at<=checkedMs&&
+          checkedMs-at<=72*60*60*1000
+      }))),
     rosterMatchupsReviewed:(['home','away'] as const).every(side=>{
       const opposing=side==='home'?'away':'home'
       const batters=d.rosters[side].filter(p=>p.role==='batter'&&p.lineupConfirmed)
