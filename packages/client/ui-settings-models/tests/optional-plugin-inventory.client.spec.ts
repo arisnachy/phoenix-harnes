@@ -30,7 +30,10 @@ it('keeps the Models settings surface available when pluginInventory remote is a
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
 
-  expect(slots.entries('settings.section').map(entry => entry.options.id)).toContain('models')
+  const sections = slots.entries('settings.section').map(entry => entry.options.id)
+  expect(sections).toContain('models')
+  expect(sections).toContain('connectors')
+  expect(sections).not.toContain('clawhub')
 })
 
 
