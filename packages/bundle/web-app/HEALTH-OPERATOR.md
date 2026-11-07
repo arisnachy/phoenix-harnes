@@ -116,3 +116,9 @@ interpretación automatizada de documentos siguen pendientes.
 
 El servicio `ctx.healthia` y `/health` siguen siendo repositorios distintos: no
 crear una segunda copia de paciente ni sincronizar nombres como identidades.
+
+## Modelos anatómicos 3D vinculados al expediente (investigación)
+
+El profesional clínico autorizado puede abrir **Anatomía 3D** desde /health, seleccionar un paciente asignado y archivar un archivo **GLB 2.0 autocontenido de hasta 5 MiB**. Se valida el formato, se rechazan recursos externos y extensiones que requieren decodificadores no instalados; el archivo se cifra mediante el repositorio clínico y solo se entrega al profesional autorizado. El visor 3D obtiene Three.js desde la instalación local privada de PHOENIX sin CDN. El profesional puede girar, acercar y aislar mallas. La revisión médica se documenta y audita con referencia del estudio original, concordancia (consistente, incierta o discordante) y limitaciones. **No certifica la anatomía**, ni la exactitud de la segmentación o un uso diagnóstico.
+
+La segmentación automática de CT/RM sigue siendo un proceso investigativo independiente ejecutado mediante `scripts/phoenix-anatomy-workbench.mjs`, y los modelos grandes no pueden archivarse por el límite piloto de 5 MiB. No existe todavía un puente aprobado que procese estudios DICOM del paciente desde HealthIA, ni certificación de modelos para todas las estructuras humanas. Para investigación con volúmenes mayores se requiere almacenamiento clínico seguro, control de recursos y procesos autorizados; no copie PHI al chat ordinario. El módulo anatómico general de Kira continúa limitado a planificación desidentificada y diagnóstico del entorno, no a expedientes.

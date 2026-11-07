@@ -38,3 +38,7 @@ PHOENIX Health Engine 的可选规划工具属于现有 PHOENIX Host 内的临�
 - 电话和邮件确认由已验证的工作人员声明并关联证据编号，**尚未**通过独立验证服务核实。
 - Gmail 仅发送经人工授权、无临床内容的预约提醒，并要求提供者真实资料与配置的 Kira 发件地址相符；不发送患者文档或医疗详情。
 - 已实现本地 SQLite 备份和恢复测试；异地恢复、数据保留、密钥恢复、外部审计、威胁评估和端到端临床验证仍待完成。
+
+## 解剖数字孪生研究工作台
+
+`health_anatomy_workflow` 支持规划大脑、脊髓、胸部、心脏、血管、腹部、肌骨系统、四肢及其他器官。`health_anatomy_status` 只检查可选的本地依赖状态，不读取患者记录；这两项工具不是影像诊断工具。经用户授权取得本地 DICOM/NIfTI 后，使用 `node scripts/phoenix-anatomy-workbench.mjs reconstruct --input <study> --output <private-dir> --modality ct --research-only --view`，在对应器官与模态受分割模型支持时创建未经审核的 GLB 及本地查看器。专家提供的掩膜可以指定 `--mask-folder <NIfTI-masks>`。所有研究结果都不会自动变成 HealthIA 正式签署的病历，必须另外经过身份验证、来源记录和专业审阅。
