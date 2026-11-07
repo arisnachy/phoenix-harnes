@@ -291,9 +291,10 @@ export function HeroShell({ renderSlot, preferredName, profile, children }: Hero
     '--phoenix-celebration-secondary': accent.secondary,
   } as CSSProperties
   const greeting = greetingForHour(new Date().getHours())
-  const motif = selected?.theme === 'patriotic'
-    ? selected.country === 'DO' ? '🇩🇴' : selected.country === 'US' ? '🇺🇸' : accent?.icon
-    : accent?.icon
+  const overlayId = selected === undefined ? undefined
+    : selected.source === 'curated' ? selected.id
+    : selected.source === 'personal' ? selected.id === 'birthday' ? 'birthday' : 'personal-default'
+    : `fallback-${selected.theme}`
 
   return (
     <div className={css.root}>
@@ -302,13 +303,14 @@ export function HeroShell({ renderSlot, preferredName, profile, children }: Hero
           {renderSlot('conversation.hero.brand.mark', { size: 64, className: css.fish }, {
             fallback: <PhoenixLogo size={64} {...(css.fish === undefined ? {} : { className: css.fish })} />,
           })}
-          {motif && <span className={css.celebrationMotif}>{motif}</span>}
+          {overlayId && <img src={`/assets/celebrations/${overlayId}.svg`}
+            className={css.celebrationArt} alt="" aria-hidden="true" draggable={false} />}
         </span>
         <h1 className={css.headline}>
           <span>{greeting}</span>
           {displayName === undefined ? null : (
             <>
-              <span>{',\\u00A0'}</span>
+              <span>{',\u00A0'}</span>
               <span className={css.preferredName}>{displayName}</span>
             </>
           )}
