@@ -54,6 +54,10 @@ async function load(){
  if(r.clinicalStatus!=='UNVALIDATED_RESEARCH_OUTPUT'||!r.needsExpertReview)throw Error('Resultado no acreditado')
  const meta=$('metadata');meta.append(info('Modalidad',r.modality),info('Algoritmo',r.model),info('Estado','No validado'),info('Coordenadas',r.coordinateSystem),info('Fecha',r.generatedAt))
  $('limitations').textContent=(r.limitations||[]).join(' ')
+ // Convert RAS (X right, Y anterior, Z superior) to Three.js Y-up:
+ // X right, Y superior, Z posterior. Underlying millimetre geometry remains unchanged.
+ glb.scene.rotation.x=-Math.PI/2
+ glb.scene.updateMatrixWorld(true)
  scene.add(glb.scene)
  const metrics=new Map((r.structures||[]).map(x=>[x.structure,x]))
  glb.scene.traverse(obj=>{
