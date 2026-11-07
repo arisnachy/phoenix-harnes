@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { PhoenixUiIcon } from '@phoenix-ai/dsh-client-ui-primitives'
+import { PhoenixUiIcon, choosePhoenixUiIcon } from '@phoenix-ai/dsh-client-ui-primitives'
 import {
   calculateSmartForm, fieldVisible, initialSmartValues, parseSmartForm,
   type FormValue, type SmartField, type SmartFormSpec,
@@ -137,7 +137,7 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
     'Este es el índice de formularios guardados en PHOENIX. Pídeme abrir un formulario para enviarte su definición completa: '+JSON.stringify(libraryIndex()),'draft')
   return <section className={css.surface} data-generative-ui={initial?'smart_form':'smart_form_library'}>
     <header className={css.heading}>
-      <span className={css.emblem}><PhoenixUiIcon name="calculator" size={19}/></span>
+      <span className={css.emblem}><PhoenixUiIcon name={choosePhoenixUiIcon(active?.props.title ?? title ?? "calculadora")} size={19} label={active?.props.title ?? title ?? "calculadora"}/></span>
       <div><h3>{active&&panel==='form'?active.props.title:title??'Biblioteca inteligente de PHOENIX'}</h3>
         <p>{panel==='form'?active?.props.description:'Calculadoras, pruebas, escalas y formularios reutilizables'}</p>
       </div>
@@ -177,7 +177,7 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
         <label className={css.folderLabel}>Carpeta <input type="text" value={folder} maxLength={90}
           onChange={e=>setFolder(e.currentTarget.value)} placeholder="Salud/Calculadoras" /></label>
         <div className={css.actions}>
-          <button type="button" onClick={saveDefinition}><PhoenixUiIcon name="file" size={14}/> Guardar plantilla</button>
+          <button type="button" onClick={saveDefinition}><PhoenixUiIcon name="save" size={14} tone="info"/> Guardar plantilla</button>
           <button type="button" onClick={()=>download(active.props.id+'.smart-form.json',JSON.stringify(active,null,2))}>Exportar JSON</button>
           <button type="button" onClick={()=>{setValues(initialSmartValues(active));setMessage('')}}>Reiniciar</button>
           {onAction&&<button type="button" onClick={()=>onAction(
