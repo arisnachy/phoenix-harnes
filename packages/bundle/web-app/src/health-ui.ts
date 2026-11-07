@@ -91,7 +91,7 @@ function snapshotView(){
   const value=el.type==="checkbox"?el.checked:el.value;
   if(typeof value==="boolean"||typeof value==="string"&&value.length<=4000)values[el.id]=value;
  }
- if(tab==="workspace")values["draft-patient-id"]=selectedPatientId;
+ if(tab==="workspace"||tab==="anatomy")values["draft-patient-id"]=selectedPatientId;
  return {values,expanded:[...view.querySelectorAll("details[id]")].filter(el=>el.open).map(el=>el.id)};
 }
 function rememberView(){
@@ -100,7 +100,7 @@ function rememberView(){
 }
 function restoreView(){
  const draft=viewDrafts[tab];if(!draft)return;
- const isSamePatient=tab!=="workspace"||draft.values?.["draft-patient-id"]===selectedPatientId;
+ const isSamePatient=!["workspace","anatomy"].includes(tab)||draft.values?.["draft-patient-id"]===selectedPatientId;
  for(const [id,value] of Object.entries(draft.values||{})){
   // Never restore clinical input from another patient's workspace.
   if(!isSamePatient&&!/^(ws-(name|dob|phone|email|doc-type|document|complaint-new|distinct|new-|extra-))/.test(id))continue;
