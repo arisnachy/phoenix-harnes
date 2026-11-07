@@ -66,25 +66,34 @@ export async function scoutDailySports(
   const coverage:DailySportsCoverage[]=[]
   const all:DailySportsEvent[]=[]
   const seen=new Set<string>()
-  // Four concurrent league calls; do not scrape every team and player yet.
+  // The target is a Santo Domingo calendar day (UTC-4). Late local games
+  // can fall on the following UTC date, so query both ESPN date partitions.
+  // Keep the per-league concurrency bounded and de-duplicate official IDs.
+  const nextUtcDay=new Date(Date.parse(date+'T00:00:00Z')+86_400_000)
+    .toISOString().slice(0,10).replaceAll('-','')
+  const partitions=[date.replaceAll('-',''),nextUtcDay]
   for(let offset=0;offset<schedule.length;offset+=4){
     const batch=schedule.slice(offset,offset+4)
     const reports=await Promise.allSettled(batch.map(async item=>{
       if(!sportsCatalog[item.sport]?.includes(item.league))throw Error('Liga fuera del catálogo')
-      return getFeed<Board>('https://site.api.espn.com/apis/site/v2/sports/'
-        +item.sport+'/'+item.league+'/scoreboard?dates='+date.replaceAll('-',''),fetcher)
+      return Promise.allSettled(partitions.map(day=>getFeed<Board>(
+        'https://site.api.espn.com/apis/site/v2/sports/'
+        +item.sport+'/'+item.league+'/scoreboard?dates='+day,fetcher)))
     }))
     for(let i=0;i<batch.length;i++){
       const item=batch[i]
       const report=reports[i]
       if(!item||!report)continue
-      if(report.status!=='fulfilled'||!Array.isArray(report.value.events)){
+      const partitionsRead=report.status==='fulfilled'?report.value:[]
+      const boards=partitionsRead.filter((partition):partition is PromiseFulfilledResult<Board>=>
+        partition.status==='fulfilled'&&Array.isArray(partition.value.events))
+      if(!boards.length){
         coverage.push({...item,status:'unavailable',futureEvents:0,
-          reason:'Sin cartelera verificable desde ESPN'})
+          reason:'Sin cartelera verificable desde ESPN en ambos días UTC'})
         continue
       }
       let valid=0
-      for(const event of report.value.events.slice(0,150)){
+      for(const board of boards)for(const event of (board.value.events??[]).slice(0,150)){
         if(event.status?.type?.state!=='pre')continue
         const at=Date.parse(event.date??'')
         const id=String(event.id??'')
@@ -102,8 +111,11 @@ export async function scoutDailySports(
         all.push({...item,eventId:id,kickoff:new Date(at).toISOString(),
           home,away,source:'ESPN Site API',status:'scheduled'})
       }
-      coverage.push({...item,status:valid?'available':'empty',futureEvents:valid,
-        reason:valid?'Participantes y evento futuro confirmados':'Sin futuros verificables'})
+      coverage.push({...item,status:valid?'available':boards.length===partitions.length?
+        'empty':'unavailable',futureEvents:valid,
+        reason:boards.length===partitions.length?
+          (valid?'Participantes y evento futuro confirmados':'Sin futuros verificables'):
+          'Cobertura parcial: falta una partición UTC del día solicitado'})
     }
   }
   // A high-fixture league must not displace all other disciplines.
