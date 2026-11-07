@@ -43,7 +43,8 @@ async function main(){
    const names=val('--structures').split(',').map(x=>x.trim()).filter(Boolean)
    if(names.length)task.push('--structures',...names)
   }
-  const child=spawn(executable,task,{stdio:'inherit',shell:false,windowsHide:true})
+  const child=spawn(executable,task,{stdio:'inherit',shell:false,windowsHide:true,
+    env:{...process.env,TOTALSEG_HOME_DIR:process.env.TOTALSEG_HOME_DIR||join(rootFor(),'models')}})
   const code=await new Promise((yes,no)=>{child.on('error',no);child.on('close',x=>yes(x??1))})
   if(code!==0){process.exitCode=code;return}
   if(at('--view')){const {url}=await startViewer({folder:val('--output'),open:true});console.log('Visor privado: '+url)}
