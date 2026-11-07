@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { HealthClinicStore } from '../src/health-store.ts'
 
@@ -633,6 +634,26 @@ test('encrypted patient-linked GLB is only readable by assigned clinician and re
  const glb=Buffer.concat([header,j,pad,b,Buffer.alloc(36)])
  const row=db.addAttachment(doctor,{patientId:p.id,name:'volumen-sintetico.glb',mime:'model/gltf-binary',
   base64:glb.toString('base64'),note:'Dato sintético, no corresponde a paciente'})
+ const anatomicalEvidence={
+  schema:1,modality:'ct',clinicalStatus:'UNVALIDATED_RESEARCH_OUTPUT',
+  needsExpertReview:true,glbSha256:createHash('sha256').update(glb).digest('hex'),
+  sourceRegistration:'affected-region grid matched to anatomy grid',
+  affectedRegions:1,structures:[
+   {structure:'heart',layer:'anatomy',state:'unreviewed',
+    sourceMaskSha256:'a'.repeat(64),triangles:32,volumeMl:28.3},
+   {structure:'affected_region__annotated',layer:'clinician-supplied-affected-region',
+    state:'unreviewed',sourceMaskSha256:'b'.repeat(64),triangles:12,volumeMl:1.1},
+  ],
+ }
+ const paired=db.addAttachment(doctor,{patientId:p.id,name:'evidence-paired.glb',mime:'model/gltf-binary',
+  base64:glb.toString('base64'),anatomicalEvidence})
+ assert.equal(paired.anatomicalEvidence.affectedRegions,1)
+ assert.equal(paired.anatomicalEvidence.verification,'glb-manifest-integrity-only')
+ assert.equal(db.listAttachments(doctor,p.id).find(x=>x.id===paired.id).anatomicalEvidence.affectedRegions,1)
+ assert.equal(db.readAttachment(doctor,paired.id).bytes.equals(glb),true)
+ assert.throws(()=>db.addAttachment(doctor,{patientId:p.id,name:'wrong-manifest.glb',
+  mime:'model/gltf-binary',base64:glb.toString('base64'),
+  anatomicalEvidence:{...anatomicalEvidence,glbSha256:'f'.repeat(64)}}),/huella/)
  assert.equal(row.anatomicalModel.geometryStatus,'unreviewed')
  assert.equal(db.readAttachment(doctor,row.id).bytes.equals(glb),true)
  assert.equal(db.listAttachments(doctor,p.id)[0].anatomicalModel.meshes,1)
