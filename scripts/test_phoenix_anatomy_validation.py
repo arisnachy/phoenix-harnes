@@ -122,12 +122,14 @@ class TestAffectedRegionEvidence(unittest.TestCase):
             self.assertEqual(result["sourceRegistration"],
                              "affected-region grid matched to anatomy grid")
             self.assertTrue(result["needsExpertReview"])
+            self.assertTrue(result["anatomicalMasksAligned"])
             self.assertEqual(len(result["structures"]), 2)
             affected = [r for r in result["structures"]
                         if r.get("layer") == "clinician-supplied-affected-region"][0]
             self.assertEqual(affected["state"], "unreviewed")
             self.assertRegex(affected["sourceMaskSha256"], r"^[a-f0-9]{64}$")
             self.assertGreater(affected["triangles"], 8)
+            self.assertEqual(affected["borderTruncated"], False)
             data = (base / "output" / "anatomy.glb").read_bytes()
             self.assertEqual(data[:4], b"glTF")
             self.assertNotIn(b"John Doe", data)
