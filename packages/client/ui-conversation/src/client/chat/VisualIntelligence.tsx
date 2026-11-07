@@ -34,6 +34,16 @@ function downloadPdf(spec:VisualIntelligenceSpec,snapshot?:VisualPdfSnapshot):vo
   // Browsers resolve the download asynchronously; never revoke before it starts.
   window.setTimeout(()=>URL.revokeObjectURL(url),1000)
 }
+function openPrintPdf(spec:VisualIntelligenceSpec,snapshot?:VisualPdfSnapshot):void {
+  const url=URL.createObjectURL(visualIntelligencePdfBlob(spec,snapshot===undefined?undefined:{snapshot}))
+  const anchor=document.createElement('a')
+  anchor.href=url
+  anchor.target='_blank'
+  anchor.rel='noopener noreferrer'
+  anchor.click()
+  // The PDF viewer opens independently of the chat; keep the blob readable long enough.
+  window.setTimeout(()=>URL.revokeObjectURL(url),60000)
+}
 function cellText(v: VisualCell): string { return v === null ? '' : String(v) }
 function equivalent(a: VisualCell, b: VisualCell): number {
   if (typeof a === 'number' && typeof b === 'number') return a - b
@@ -198,7 +208,7 @@ function DocumentEditor({ doc,id,onUpdate,onPdf }: {
         Guardar versión</button>
       <button type="button" disabled={versions.length<2} onClick={()=>{const old=versions[versions.length-2];if(old!==undefined){setBody(old);onUpdate(old,revision);setMessage('Versión anterior restaurada; guarda para confirmar.')}}}>Restaurar anterior</button>
       <button type="button" onClick={()=>download(id+'-v'+revision+'.md',body,'text/markdown;charset=utf-8')}>Exportar Markdown</button>
-      <button type="button" onClick={onPdf}>Descargar PDF profesional</button>
+      <button type="button" onClick={onPdf}>Abrir PDF para imprimir</button>
     </div>
     <small role="status">Edición local · revisión {revision}. {message} El PDF contiene el documento, no la conversación.</small>
   </section>
@@ -455,6 +465,7 @@ export function VisualIntelligence({spec:initial,onAction,conversationId}:Props)
         {available.map(v=><option key={v} value={v}>{v}</option>)}
       </select></label>
       <button type="button" onClick={downloadJson}>Exportar JSON</button>
+      <button type="button" onClick={()=>openPrintPdf(spec,liveSnapshot??undefined)}>Imprimir informe</button>
       <button type="button" onClick={()=>downloadPdf(spec,liveSnapshot??undefined)}>Descargar PDF profesional</button>
     </div>
     <p className={css.reportNote}>PDF maquetado desde los datos completos, sin menús, chat ni capturas de pantalla.</p>
