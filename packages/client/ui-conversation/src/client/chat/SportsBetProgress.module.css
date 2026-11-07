@@ -1,0 +1,12 @@
+.root{margin:.65rem 0;padding:.7rem .85rem;border:1px solid var(--color-border,#d7dde3);border-radius:12px;background:var(--color-background-soft,#fafafa);font-size:.9rem}
+.grades{display:grid;gap:.5rem}.pick{padding:.55rem .7rem;border-radius:9px;border-left:4px solid #9da3ab;background:var(--color-background,#fff);display:grid;gap:.2rem}
+.pick[data-bet-state="leading"],.pick[data-bet-state="won"]{border-left-color:#15803d}
+.pick[data-bet-state="trailing"],.pick[data-bet-state="lost"]{border-left-color:#c24136}
+.pick[data-bet-state="review"]{border-left-color:#a16207}
+.header{display:flex;justify-content:space-between;gap:1rem;align-items:center;flex-wrap:wrap}
+.status{font-size:.78rem;font-weight:650}
+.pick small,.edit small{display:block;color:var(--color-text-muted,#5e666d);line-height:1.45}
+.pick button{justify-self:end;border:0;background:none;text-decoration:underline;color:inherit;cursor:pointer;font-size:.8rem}
+.edit{margin-top:.5rem}.edit summary{cursor:pointer;font-weight:650}.form{display:flex;gap:.45rem;flex-wrap:wrap;margin:.7rem 0}.form label{display:grid;gap:.25rem;min-width:130px;flex:1;font-size:.78rem}
+.form input,.form select{box-sizing:border-box;width:100%;border:1px solid #abb4c0;border-radius:7px;padding:.45rem;font:inherit;background:var(--color-background,#fff);color:inherit}
+.form button{align-self:end;padding:.55rem;border:1px solid #8c9da8;border-radius:8px;font-weight:650;cursor:pointer}

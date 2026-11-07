@@ -11,6 +11,7 @@ import { GenerativeCanvas, parseCanvasSpec, type CanvasAction, type CanvasSpec }
 import css from './GenerativeUi.module.css'
 import { SportsLiveProvider,SportsLiveFacts,SportsLiveStamp } from './SportsLive.tsx'
 import { SportsGameCenter } from './SportsGameCenter.tsx'
+import { SportsBetProgress,validTrackedPick,type SportsTrackedPick } from './SportsBetProgress.tsx'
 import { SportsNewsPanel } from './SportsNewsPanel.tsx'
 
 const MAX_UI_BLOCKS = 6
@@ -98,13 +99,13 @@ type SportsGameCard = {
     pitchers?: SportsPitcher[]; lineups?: SportsLineup[]; bullpen?: SportsBullpen[]
     sport?: string; league?: string; providerLeague?:string; eventDate?:string; phase?:'pre'|'in'|'post'; country?: string; eventId?: string; broadcast?: string; research?: SportsResearch
     periods?: Array<{ label:string;away:string;home:string }>
-    note?: string; askPrompt?: string
+    note?: string; askPrompt?: string; trackedBets?: SportsTrackedPick[]
   }
 }
 /** Compact, chat-only scoreboards. Individual matches keep sports_game_card unchanged. */
 type SportsScheduleEvent = {
   eventId?:string;when:string;status?:string;phase?:'pre'|'in'|'post';venue?:string
-  away:SportsSide;home:SportsSide;featured?:string;favorite?:string;askPrompt?:string
+  away:SportsSide;home:SportsSide;featured?:string;favorite?:string;askPrompt?:string;trackedBets?:SportsTrackedPick[]
 }
 type SportsScheduleCard = {
   component:'sports_schedule_card';version:1
@@ -357,7 +358,7 @@ const sportsOdds = (v:Record<string,unknown>):v is SportsOddsCard => {
 }
 const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
-    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt','pitchers','lineups','bullpen','sport','league','providerLeague','eventDate','phase','country','eventId','broadcast','research','periods'])) return false
+    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt','pitchers','lineups','bullpen','sport','league','providerLeague','eventDate','phase','country','eventId','broadcast','research','periods','trackedBets'])) return false
   const p = value.props
   return isText(p.title) && optionalText(p.subtitle) && optionalText(p.status,60)
     && isText(p.when) && optionalText(p.venue) && sportsSide(p.home) && sportsSide(p.away)
@@ -366,6 +367,7 @@ const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => 
     && optionalText(p.eventDate,12) && (p.phase===undefined || ['pre','in','post'].includes(String(p.phase)))
     && optionalText(p.country,100)
     && optionalText(p.eventId,50) && optionalText(p.broadcast,150)
+    && (p.trackedBets===undefined || Array.isArray(p.trackedBets) && p.trackedBets.length<=12 && p.trackedBets.every(validTrackedPick))
     && (p.research===undefined || sportsResearch(p.research))
     && (p.periods===undefined || Array.isArray(p.periods) && p.periods.length<=12 && p.periods.every(x=>isRecord(x)
       && hasOnlyKeys(x,['label','away','home']) && isText(x.label,30) && isText(x.away,30) && isText(x.home,30)))
@@ -385,12 +387,13 @@ const sportsSchedule = (value:Record<string,unknown>):value is SportsScheduleCar
     && typeof p.total==='number' && Number.isInteger(p.total) && p.total>=1 && p.total<=500
     && Array.isArray(p.events) && p.events.length>=2 && p.events.length<=25 && p.events.length<=p.total
     && p.events.every(x=>isRecord(x) && hasOnlyKeys(x,
-      ['eventId','when','status','phase','venue','away','home','featured','favorite','askPrompt'])
+      ['eventId','when','status','phase','venue','away','home','featured','favorite','askPrompt','trackedBets'])
       && optionalText(x.eventId,50) && isText(x.when,80) && optionalText(x.status,60)
       && (x.phase===undefined || ['pre','in','post'].includes(String(x.phase)))
       && optionalText(x.venue,180) && sportsSide(x.away) && sportsSide(x.home)
       && optionalText(x.featured,150) && optionalText(x.favorite,170)
-      && optionalText(x.askPrompt,400))
+      && optionalText(x.askPrompt,400)
+       && (x.trackedBets===undefined || Array.isArray(x.trackedBets) && x.trackedBets.length<=12 && x.trackedBets.every(validTrackedPick)))
 }
 const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
@@ -832,6 +835,9 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                   {!hasStarted&&<span className={css.sportsSlateVs}>VS · Sin iniciar</span>}
                 </div>}
               {!pending&&<SportsLiveFacts game={live} meta={meta} sport={p.sport} compact/>}
+              {!pending&&<SportsBetProgress sport={p.sport??''} league={p.providerLeague??p.league??''}
+                date={p.date} home={e.home.label} away={e.away.label} game={live} meta={meta}
+                initialBets={e.trackedBets??[]}/>}
               {!pending&&<details className={css.sportsExtra}><summary>Detalles del juego</summary>
                 {e.venue&&<small className={css.sportsSlateVenue}>⌖ {e.venue}</small>}
                 {e.featured&&<small className={css.sportsSlateFeatured}>{e.featured}</small>}
@@ -872,6 +878,9 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
               {!hasStarted&&<span className={css.sportsSlateVs}>VS · No iniciado</span>}
             </div>
             <SportsLiveFacts game={live} meta={meta} sport={p.sport} compact/>
+            <SportsBetProgress sport={p.sport??''} league={p.providerLeague??p.league??''}
+              date={p.eventDate??''} home={p.home.label} away={p.away.label} game={live} meta={meta}
+              initialBets={p.trackedBets??[]}/>
             <SportsGameCenter sport={p.sport} league={p.providerLeague??p.league}
               eventId={live?.id??p.eventId} phase={live?.phase??p.phase} game={live}/>
             <details className={css.sportsExtra}><summary>Ver estadísticas y análisis</summary>
