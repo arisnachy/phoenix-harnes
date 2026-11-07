@@ -71,7 +71,7 @@ export function evaluateStudyEvidence(input:StudyEvidenceInput) {
   if(preliminaryInterpretation&&!observations)
     throw new Error('Toda impresión preliminar necesita hallazgos observados explícitos')
   const selected=STUDY_MODALITIES[modality]
-  const limitations=[selected.limited]
+  const limitations:string[]=[selected.limited]
   if(ORIGINAL_REQUIRED.has(modality))
     limitations.push('Debe cotejar el estudio completo y sus metadatos, no solo el adjunto parcial.')
   if(modality==='ecg')
