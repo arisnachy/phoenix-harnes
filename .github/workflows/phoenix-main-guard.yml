@@ -5,7 +5,8 @@ on:
     # Stable requires the same named check; run it for both integration targets.
     branches: [main, stable]
   push:
-    branches: [main]
+    # Verify stable's exact release SHA too; it may be an independent squash merge.
+    branches: [main, stable]
   workflow_dispatch:
 
 permissions:
