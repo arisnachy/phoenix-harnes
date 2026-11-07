@@ -83,6 +83,19 @@ describe('professional evidence-bound instrument directory',()=>{
     expect(screen.getByText(/referencias encontradas/)).toBeTruthy()
   })
 
+  it('can research professional instruments not found among offline references',()=>{
+    const onAction=vi.fn()
+    render(<SmartFormWorkspace onAction={onAction}/>)
+    fireEvent.change(screen.getByRole('searchbox'),{
+      target:{value:'Instrumento clínico no listado XYZ'},
+    })
+    fireEvent.click(screen.getByRole('button',{name:/Investigar este instrumento con Kira/}))
+    expect(onAction).toHaveBeenCalledTimes(1)
+    expect(onAction.mock.calls[0]?.[1]).toBe('submit')
+    expect(onAction.mock.calls[0]?.[0]).toContain('No inventes reactivos')
+    expect(onAction.mock.calls[0]?.[0]).toContain('Instrumento clínico no listado XYZ')
+  })
+
   it('passes the named instrument and licensing constraints to Kira',()=>{
     const onAction=vi.fn()
     render(<SmartFormWorkspace onAction={onAction}/>)
