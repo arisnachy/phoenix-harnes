@@ -183,3 +183,20 @@
   .entityOutcome { min-width:48px; }
 }
 @media (prefers-reduced-motion:reduce) { .entity { transition:none; } }
+
+/* Respond to the widget's actual width, not the browser's viewport. */
+.canvas{container:phoenix-canvas / inline-size}
+@container phoenix-canvas (max-width:520px){
+ .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .row>*{flex:1 1 100%}
+ .metric strong{font-size:20px;overflow-wrap:anywhere}
+ .barRow{grid-template-columns:minmax(65px,1fr) minmax(55px,2fr) minmax(30px,auto);gap:5px}
+ .tableScroll{overflow-x:auto;overscroll-behavior-inline:contain}
+ .action{min-height:36px}
+}
+@container phoenix-canvas (max-width:310px){
+ .grid{grid-template-columns:1fr}
+ .barRow{grid-template-columns:1fr auto}
+ .barTrack{grid-column:1 / -1;grid-row:2}
+ .metric strong{font-size:18px}
+}
