@@ -81,12 +81,21 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
           at<=reviewMs&&reviewMs-at<=45*24*60*60*1000
       })),
     injuriesDatedVerified:false, // Injured roster alone has no dated medical report or return-to-play status.
+    // MLB gameLog records calendar dates only. Do not interpret midnight UTC
+    // as a verified first-pitch time or claim an exact rolling 72-hour window.
+    // Require a completed prior calendar day at collection AND review, within
+    // the three preceding UTC calendar dates at both checkpoints.
     reliefUsageObserved:reviewTimeValid&&(['home','away'] as const).every(side=>
       d.bullpen[side].some(p=>p.reliefUsage72h.some(out=>{
+        if(!/^\\d{4}-\\d{2}-\\d{2}$/u.test(out.date))return false
         const at=Date.parse(out.date)
-        return Number.isFinite(at)&&at<=checkedMs&&
-          checkedMs-at<=72*60*60*1000&&
-          at<=reviewMs&&reviewMs-at<=72*60*60*1000
+        if(!Number.isFinite(at)||new Date(at).toISOString().slice(0,10)!==out.date)return false
+        const collectedDay=new Date(checkedMs).toISOString().slice(0,10)
+        const reviewDay=new Date(reviewMs).toISOString().slice(0,10)
+        const daysSinceCollection=Math.round((Date.parse(collectedDay)-at)/86400000)
+        const daysSinceReview=Math.round((Date.parse(reviewDay)-at)/86400000)
+        return daysSinceCollection>=1&&daysSinceCollection<=3&&
+          daysSinceReview>=1&&daysSinceReview<=3
       }))),
     rosterMatchupsReviewed:(['home','away'] as const).every(side=>{
       const opposing=side==='home'?'away':'home'
