@@ -10,7 +10,7 @@ const pythonScript=fileURLToPath(new URL('./phoenix-anatomy-reconstruct.py',impo
 const validationScript=fileURLToPath(new URL('./phoenix-anatomy-validate.py',import.meta.url))
 const modelCatalog=fileURLToPath(new URL('./phoenix-anatomy-models.json',import.meta.url))
 const args=process.argv.slice(2),cmd=args[0],at=k=>args.includes(k),val=k=>args[args.indexOf(k)+1]
-function help(){console.log('Uso: node scripts/phoenix-anatomy-workbench.mjs doctor | install | reconstruct --input <DICOM/NIfTI> --output <carpeta> --modality ct|mr --research-only [--fast] [--structures organo1,organo2] [--mask-folder carpeta-NIfTI] [--view] [--task ct_headneck_vessels] | validate --pred <mascaras> --reference <gold-standard> --output <informe.json> --research-only | models | view --folder <carpeta> [--open]')}
+function help(){console.log('Uso: node scripts/phoenix-anatomy-workbench.mjs doctor | install | reconstruct --input <DICOM/NIfTI> --output <carpeta> --modality ct|mr --research-only [--fast] [--structures organo1,organo2] [--mask-folder carpeta-NIfTI] [--lesion-mask-folder carpeta-lesiones-revisadas] [--device cpu|gpu|mps] [--view] [--task ct_headneck_vessels] | validate --pred <mascaras> --reference <gold-standard> --output <informe.json> --research-only | models | view --folder <carpeta> [--open]')}
 async function main(){
  if(cmd==='doctor'){console.log(JSON.stringify(status(),null,2));return}
  if(cmd==='install'){console.log(JSON.stringify(ensure(),null,2));return}
@@ -39,6 +39,16 @@ async function main(){
   if(at('--fast'))task.push('--fast')
   if(at('--task'))task.push('--task',val('--task'))
   if(at('--mask-folder'))task.push('--mask-folder',resolve(val('--mask-folder')))
+  if(at('--lesion-mask-folder'))task.push('--lesion-mask-folder',resolve(val('--lesion-mask-folder')))
+  if(at('--device')){
+   if(!['cpu','gpu','mps'].includes(val('--device')))throw Error('Dispositivo no admitido')
+   task.push('--device',val('--device'))
+  }
+  if(at('--max-meshes')){
+   const n=Number(val('--max-meshes'))
+   if(!Number.isInteger(n)||n<1||n>500)throw Error('Número de mallas no admitido')
+   task.push('--max-meshes',String(n))
+  }
   if(at('--structures')){
    const names=val('--structures').split(',').map(x=>x.trim()).filter(Boolean)
    if(names.length)task.push('--structures',...names)
