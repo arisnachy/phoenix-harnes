@@ -323,3 +323,26 @@ describe('semantic Lucide canvas palette', () => {
     expect(container.querySelector('[data-tone="positive"]')).not.toBeNull()
   })
 })
+
+
+describe('automatic icon placement in compact intelligent cards', () => {
+  it('renders contextual colors on KPI labels and smart-card titles', () => {
+    const metric = parseGenerativeUiBlock({
+      component:'metric_card',version:1,props:{title:'Indicadores del consultorio',
+        items:[
+          {label:'Pacientes atendidos',value:'12'},
+          {label:'Presupuesto mensual',value:'RD$ 200,000'},
+        ]},
+    })
+    const smart = parseGenerativeUiBlock({
+      component:'smart_card',version:1,props:{title:'Investigación científica',
+        fields:[{label:'Fuente',value:'Revista indexada'}]},
+    })
+    if (!metric || !smart) throw new Error('intelligent card validation failed')
+    const { container } = render(<><GenerativeUi block={metric}/><GenerativeUi block={smart}/></>)
+    expect(container.querySelectorAll('[data-tone="medical"]').length).toBeGreaterThan(0)
+    expect(container.querySelectorAll('[data-tone="finance"]').length).toBeGreaterThan(0)
+    expect(container.querySelectorAll('[data-tone="research"]').length).toBeGreaterThan(0)
+    expect(screen.getByText('Pacientes atendidos')).not.toBeNull()
+  })
+})
