@@ -235,6 +235,7 @@ export function ScaleForm({ spec, onAction, verified=false }: {
   const [observations,setObservations]=useState('')
   const [recommendations,setRecommendations]=useState('')
   const [reportError,setReportError]=useState('')
+  const [shareConsent,setShareConsent]=useState(false)
   // Preserve the selected label even if distinct choices share a score.
   const answers: Record<string, number> = {}
   for (const item of spec.props.items) {
@@ -373,6 +374,24 @@ export function ScaleForm({ spec, onAction, verified=false }: {
         </button>
       </div>
       {reportError&&<p role="alert" className={css.disclaimer}>{reportError}</p>}
+      {onAction&&<div className={css.actions}>
+        <label><input type="checkbox" checked={shareConsent}
+          onChange={e=>setShareConsent(e.currentTarget.checked)}/>
+          Autorizo compartir estas respuestas con Kira para redactar un borrador interpretativo.
+        </label>
+        <button type="button" disabled={!shareConsent||scored.total===null} onClick={()=>{
+          const data=scaleAssessmentReport(spec,selected,{
+            participant,professional,context,observations,recommendations,
+          },verified)
+          if(!data)return
+          onAction('Redacta un BORRADOR de informe profesional del instrumento, con secciones '
+            +'de método, resultados, observaciones aportadas, limitaciones, contexto, '
+            +'recomendaciones no diagnósticas y referencias. No inventes entrevista, '
+            +'normas, diagnósticos, pruebas ni hallazgos no consignados. Los datos '
+            +'han sido autorizados por el usuario para esta solicitud: '
+            +JSON.stringify(data), 'draft')
+        }}>Preparar borrador interpretativo con Kira</button>
+      </div>}
       <p className={css.disclaimer}>Se descarga localmente al pulsar el botón.
         No se guarda automáticamente en el expediente. La aplicación no firma informes
         ni emite diagnósticos automáticamente.</p>
