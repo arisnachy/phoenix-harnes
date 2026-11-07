@@ -8,14 +8,14 @@ const runnerPrivatePnpmDestination = '${{ runner.temp }}/setup-pnpm'
 const nativeWindowsPnpmDestination = '${{ runner.temp }}/setup-pnpm-js'
 
 describe('CI workflow', () => {
-  it('guards pull requests and exact main pushes with Windows typecheck and build', () => {
+  it('guards pull requests and exact main/stable pushes with Windows typecheck and build', () => {
     const workflow = loadWorkflow('.github/workflows/phoenix-main-guard.yml')
     if (!isRecord(workflow.on) || !isRecord(workflow.jobs) || !isRecord(workflow.jobs['compiled-main'])) {
       throw new TypeError('PHOENIX main guard must define triggers and compiled-main')
     }
     expect(Object.keys(workflow.on).sort()).toEqual(['pull_request', 'push', 'workflow_dispatch'])
     expect(workflow.on.pull_request).toMatchObject({ branches: ['main', 'stable'] })
-    expect(workflow.on.push).toMatchObject({ branches: ['main'] })
+    expect(workflow.on.push).toMatchObject({ branches: ['main', 'stable'] })
     expect(workflow.concurrency).toMatchObject({
       group: 'phoenix-main-guard-${{ github.ref }}',
       'cancel-in-progress': "${{ github.event_name == 'pull_request' }}",
@@ -41,7 +41,7 @@ describe('CI workflow', () => {
     }
     expect(workflow.on.push).toBeUndefined()
     expect(workflow.on.workflow_run).toMatchObject({
-      workflows: ['PHOENIX main guard'], types: ['completed'], branches: ['main'],
+      workflows: ['PHOENIX main guard'], types: ['completed'], branches: ['main', 'stable'],
     })
     const job = workflow.jobs.publish
     expect(String(job.if)).toContain("github.event.workflow_run.conclusion == 'success'")
@@ -51,7 +51,10 @@ describe('CI workflow', () => {
       isRecord(step) && typeof step.run === 'string').map(step => step.run)
     expect(commands.some(command => command.includes('head_sha=$target&status=success'))).toBe(true)
     expect(commands.some(command => command.includes('TRIGGER_SHA') && command.includes('promote=false'))).toBe(true)
-    expect(commands.some(command => command.includes('git rev-parse origin/main') && command.includes('git push origin'))).toBe(true)
+    expect(commands.some(command => command.includes('git rev-parse origin/stable') && command.includes('TRIGGER_SHA'))).toBe(true)
+    expect(commands.some(command => command.includes('git rev-parse origin/stable') && command.includes('TARGET_SHA'))).toBe(true)
+    expect(commands.some(command => command.includes('"sourceBranch": "stable"'))).toBe(true)
+    expect(commands.every(command => !command.includes('git push origin "$TARGET_SHA:refs/heads/stable"'))).toBe(true)
     for (const name of ['Verify updater contract', 'Publish stable manifest']) {
       expect(job.steps.find((step: unknown) => isRecord(step) && step.name === name))
         .toMatchObject({ if: "steps.target.outputs.promote == 'true'" })
