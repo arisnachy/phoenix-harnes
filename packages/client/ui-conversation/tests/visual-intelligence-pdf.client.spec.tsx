@@ -103,7 +103,7 @@ describe('universal, data-native professional PDF export',()=>{
     const create=vi.fn((blob:Blob)=>{created.push(blob);return 'blob:phoenix-report'})
     const revoke=vi.fn()
     const NativeURL=URL
-    vi.stubGlobal('URL',class extends NativeURL {static createObjectURL=create;static revokeObjectURL=revoke})
+    vi.stubGlobal('URL',class extends NativeURL {static override createObjectURL=create;static override revokeObjectURL=revoke})
     const print=vi.spyOn(window,'print').mockImplementation(()=>{})
     const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{})
     render(<VisualIntelligence spec={demo()}/>)
