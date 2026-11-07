@@ -109,7 +109,130 @@ const miniCog = parseScaleForm({
   },
 })
 if(!miniCog) throw Error('Mini-Cog catalog inválido')
+
+/** Clinical scores use concise source-derived component descriptors, not
+ * copied proprietary pages. A score entry is not medical advice or diagnosis.
+ */
+const apgar=parseScaleForm({
+  component:'scale_form',version:1,props:{
+    title:'Apgar · valoración neonatal',
+    version:'Apgar 1952 · componentes clínicos 0–2',
+    source:'MedlinePlus · https://medlineplus.gov/spanish/ency/article/003402.htm',
+    population:'Recién nacidos; evaluación por profesional capacitado.',
+    description:'Registrar por separado a 1 y 5 minutos. Las acciones de reanimación se deciden clínicamente, no por esperar este total.',
+    administration:[
+      {id:'prepare',phase:'prepare',title:'Definir momento de evaluación',
+        instruction:'Registrar el momento posnatal (1 o 5 minutos) en el contexto y no mezclar mediciones de momentos distintos.'},
+      {id:'observe',phase:'administer',title:'Observación neonatal',
+        instruction:'Evaluar los cinco componentes en el momento documentado según el procedimiento profesional.'},
+      {id:'sum',phase:'score',title:'Puntuación y registro',
+        instruction:'Sumar 0–2 por cada componente, total 0–10. Registrar respuestas y decisiones clínicas por separado.'},
+    ],
+    scoring:{min:0,max:10,direction:'higher-better',
+      note:'La puntuación se describe junto a edad posnatal y situación clínica; no determina por sí sola la reanimación.'},
+    items:[
+      {id:'pulso',question:'Frecuencia cardíaca',
+        options:[{label:'Sin latido (0)',score:0},{label:'Menos de 100/min (1)',score:1},
+          {label:'100/min o más (2)',score:2}]},
+      {id:'respiracion',question:'Esfuerzo respiratorio',
+        options:[{label:'Ausente (0)',score:0},{label:'Lento o irregular (1)',score:1},
+          {label:'Respiración eficaz o llanto vigoroso (2)',score:2}]},
+      {id:'tono',question:'Tono muscular',
+        options:[{label:'Flácido (0)',score:0},{label:'Algo de flexión (1)',score:1},
+          {label:'Movimientos activos (2)',score:2}]},
+      {id:'reflejos',question:'Respuesta refleja a la estimulación',
+        options:[{label:'Ausente (0)',score:0},{label:'Mueca (1)',score:1},
+          {label:'Retirada/llanto o tos/estornudo (2)',score:2}]},
+      {id:'color',question:'Color de piel',
+        options:[{label:'Palidez o cianosis generalizada (0)',score:0},
+          {label:'Tronco rosado, extremidades azuladas (1)',score:1},
+          {label:'Coloración rosada generalizada (2)',score:2}]},
+    ],
+    bands:[{max:3,label:'Puntuación baja: valorar contexto y respuesta clínica',tone:'warning'},
+      {max:6,label:'Puntuación intermedia: evaluación clínica',tone:'warning'},
+      {max:10,label:'Puntuación 7–10: registrar evolución',tone:'neutral'}],
+  },
+})
+if(!apgar)throw Error('Apgar catalog inválido')
+
+const glasgow=parseScaleForm({
+  component:'scale_form',version:1,props:{
+    title:'Glasgow · nivel de conciencia GCS',
+    version:'Glasgow Coma Scale · E(1–4) V(1–5) M(1–6)',
+    source:'Manual Merck profesional · https://www.merckmanuals.com/es-us/professional/multimedia/table/escala-de-coma-de-glasgow',
+    population:'Pacientes cuya conciencia puede evaluarse con las tres respuestas observables.',
+    description:'Registrar E, V y M por separado. Si un componente no es valorable (NT), no usar una suma total artificial.',
+    administration:[
+      {id:'prepare',phase:'prepare',title:'Verificar evaluabilidad',
+        instruction:'Identificar intubación, sedación u otras limitaciones. Un componente no evaluable exige anotación externa, no puntuación ficticia.'},
+      {id:'observe',phase:'administer',title:'Evaluar E, V y M',
+        instruction:'Registrar la mejor respuesta ocular, verbal y motora observada según el procedimiento estandarizado.'},
+      {id:'score',phase:'score',title:'Registrar componentes',
+        instruction:'Sumar los componentes evaluables (3–15), registrar E/V/M y motivo de toda limitación.'},
+    ],
+    scoring:{min:3,max:15,direction:'higher-better',
+      note:'Interpretar con el contexto neurológico y limitaciones; la escala no sustituye una evaluación neurológica.'},
+    items:[
+      {id:'ojos',question:'Respuesta ocular (E)',
+        options:[{label:'Sin apertura (1)',score:1},{label:'Ante estímulo doloroso (2)',score:2},
+          {label:'A la voz (3)',score:3},{label:'Espontánea (4)',score:4}]},
+      {id:'verbal',question:'Respuesta verbal (V)',
+        options:[{label:'Sin respuesta (1)',score:1},{label:'Sonidos incomprensibles (2)',score:2},
+          {label:'Palabras inapropiadas (3)',score:3},{label:'Confuso pero conversa (4)',score:4},
+          {label:'Orientado (5)',score:5}]},
+      {id:'motora',question:'Respuesta motora (M)',
+        options:[{label:'Sin respuesta (1)',score:1},{label:'Extensión anormal (2)',score:2},
+          {label:'Flexión anormal (3)',score:3},{label:'Retirada al dolor (4)',score:4},
+          {label:'Localiza estímulo (5)',score:5},{label:'Obedece órdenes (6)',score:6}]},
+    ],
+  },
+})
+if(!glasgow)throw Error('GCS catalog inválido')
+
+const qsofa=parseScaleForm({
+  component:'scale_form',version:1,props:{
+    title:'qSOFA · alertas ante sospecha de infección',
+    version:'Sepsis-3 2016 · evaluación rápida en adultos',
+    source:'JAMA · https://jamanetwork.com/journals/jama/fullarticle/2492881',
+    population:'Adultos con sospecha de infección; no sustituye SOFA ni evaluación de sepsis.',
+    description:'Herramienta de alerta, no prueba para descartar sepsis si el resultado es bajo.',
+    administration:[
+      {id:'prepare',phase:'prepare',title:'Contexto',
+        instruction:'Confirmar sospecha de infección, entorno clínico y fecha/hora de signos vitales.'},
+      {id:'observe',phase:'administer',title:'Medir tres variables',
+        instruction:'Registrar FR, presión arterial sistólica y estado mental con criterios qSOFA.'},
+      {id:'score',phase:'score',title:'Resultado y acción',
+        instruction:'Cada criterio presente suma 1; cualquier alarma clínica exige valoración sin depender del total.'},
+    ],
+    scoring:{min:0,max:3,direction:'higher-worse',
+      note:'qSOFA bajo no descarta sepsis; no retrasar tratamiento, valoración ni escalamiento.'},
+    items:[
+      {id:'respiratoria',question:'Frecuencia respiratoria medida',
+        options:[{label:'Menor de 22/min (0)',score:0},{label:'22/min o mayor (1)',score:1}]},
+      {id:'presion',question:'Presión arterial sistólica',
+        options:[{label:'Mayor de 100 mmHg (0)',score:0},{label:'100 mmHg o menor (1)',score:1}]},
+      {id:'estado',question:'Estado mental',
+        options:[{label:'Sin alteración nueva (0)',score:0},
+          {label:'Alteración nueva o GCS menor de 15 (1)',score:1}]},
+    ],
+    bands:[{max:1,label:'0–1: no excluye infección grave o sepsis',tone:'neutral'},
+      {max:3,label:'2–3: alerta, evaluación clínica y escalamiento',tone:'warning'}],
+  },
+})
+if(!qsofa)throw Error('qSOFA catalog inválido')
 export const assessmentCatalog:readonly AssessmentCatalogEntry[]=[
+  {id:'apgar',title:apgar.props.title,discipline:'medicina',
+    version:apgar.props.version!,language:'es',access:'reproducible',
+    sourceUrl:'https://medlineplus.gov/spanish/ency/article/003402.htm',
+    description:'5 componentes y 0–10 puntos; registro por momento posnatal.',spec:apgar},
+  {id:'glasgow',title:glasgow.props.title,discipline:'medicina',
+    version:glasgow.props.version!,language:'es',access:'reproducible',
+    sourceUrl:'https://www.merckmanuals.com/es-us/professional/multimedia/table/escala-de-coma-de-glasgow',
+    description:'E(1–4), V(1–5), M(1–6), total 3–15 si todas son evaluables.',spec:glasgow},
+  {id:'qsofa',title:qsofa.props.title,discipline:'medicina',
+    version:qsofa.props.version!,language:'es',access:'reproducible',
+    sourceUrl:'https://jamanetwork.com/journals/jama/fullarticle/2492881',
+    description:'3 criterios, 0–3 puntos; no descarta sepsis con resultado bajo.',spec:qsofa},
   {id:'phq9-es',title:phq9.props.title,discipline:'psicologia',
     version:phq9.props.version!,language:'es',access:'reproducible',
     sourceUrl:'https://edinfo.mssm.edu/PHQ9Spanish',

@@ -3,6 +3,7 @@ import { PhoenixStatusPill, PhoenixUiIcon, type PhoenixStatusTone } from '@phoen
 import type { CanvasAction } from './GenerativeCanvas.tsx'
 import { generateAssessmentPdf } from './AssessmentReportPdf.ts'
 import { scaleAssessmentReport } from './AssessmentReportModel.ts'
+import { registerAssessmentForKira, createKiraAssessmentPrompt } from './AssessmentKiraReport.tsx'
 import css from './InteractiveUi.module.css'
 
 type ScaleChoice = { readonly label: string; readonly score: number }
@@ -318,7 +319,7 @@ export function ScaleForm({ spec, onAction, verified=false }: {
               }
               return next
             })
-            setCopied(false)
+            setCopied(false);setShareConsent(false)
           }}>
           <option value="">Seleccionar respuesta</option>
           {item.options.map((option, i) => <option key={i} value={choiceValue(item,i)}>{option.label}</option>)}
@@ -370,27 +371,24 @@ export function ScaleForm({ spec, onAction, verified=false }: {
       </label>
       <div className={css.actions}>
         <button type="button" disabled={scored.total===null} onClick={exportPdf}>
-          <PhoenixUiIcon name="file" size={15}/> Generar informe PDF completo
+          <PhoenixUiIcon name="file" size={15}/> Descargar registro PDF (sin IA)
         </button>
       </div>
       {reportError&&<p role="alert" className={css.disclaimer}>{reportError}</p>}
       {onAction&&<div className={css.actions}>
         <label><input type="checkbox" checked={shareConsent}
           onChange={e=>setShareConsent(e.currentTarget.checked)}/>
-          Autorizo compartir estas respuestas con Kira para redactar un borrador interpretativo.
+          Autorizo enviar estas respuestas y datos consignados a Kira para investigar la guía y redactar un informe interpretativo.
         </label>
         <button type="button" disabled={!shareConsent||scored.total===null} onClick={()=>{
-          const data=scaleAssessmentReport(spec,selected,{
+          const report=scaleAssessmentReport(spec,selected,{
             participant,professional,context,observations,recommendations,
           },verified)
-          if(!data)return
-          onAction('Redacta un BORRADOR de informe profesional del instrumento, con secciones '
-            +'de método, resultados, observaciones aportadas, limitaciones, contexto, '
-            +'recomendaciones no diagnósticas y referencias. No inventes entrevista, '
-            +'normas, diagnósticos, pruebas ni hallazgos no consignados. Los datos '
-            +'han sido autorizados por el usuario para esta solicitud: '
-            +JSON.stringify(data), 'draft')
-        }}>Preparar borrador interpretativo con Kira</button>
+          if(!report){setReportError('No hay datos completos para el informe.');return}
+          const sessionId=registerAssessmentForKira(report)
+          onAction(createKiraAssessmentPrompt(sessionId,report),'submit')
+          setReportError('')
+        }}>Generar interpretación profesional y PDF con Kira</button>
       </div>}
       <p className={css.disclaimer}>Se descarga localmente al pulsar el botón.
         No se guarda automáticamente en el expediente. La aplicación no firma informes
@@ -400,7 +398,11 @@ export function ScaleForm({ spec, onAction, verified=false }: {
       <button type="button" onClick={copy} disabled={scored.total === null}>
         <PhoenixUiIcon name={copied ? 'check' : 'copy'} size={15} /> {copied ? 'Copiado' : 'Copiar resultado'}
       </button>
-      <button type="button" onClick={() => { setSelected({}); setCopied(false) }}>
+      <button type="button" onClick={() => {
+        setSelected({});setCopied(false);setShareConsent(false)
+        setParticipant('');setProfessional('');setContext('')
+        setObservations('');setRecommendations('');setReportError('')
+      }}>
         <PhoenixUiIcon name="reset" size={15} /> Reiniciar
       </button>
     </div>
