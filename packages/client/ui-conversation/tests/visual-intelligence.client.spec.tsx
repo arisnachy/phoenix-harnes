@@ -220,6 +220,6 @@ describe('model-authored JSON recovery and view routing', () => {
     expect(parseVisualIntelligence({...modelData,props:{...modelData.props,
       onClick:'window.location="evil.example"'}})).toBeNull()
     expect(parseVisualIntelligence({...modelData,props:{...modelData.props,
-      sources:[{title:'Evidencia',url:'https://evil.example/a',checkedAt:undefined}]}})).toBeNull()
+      sources:[{title:'Evidencia',url:'https://user:password@evil.example/a',checkedAt:undefined}]}})).toBeNull()
   })
 })
