@@ -17,8 +17,8 @@ export function isSelfImageRequest(text: string): boolean {
     || /\b(?:me\s+puedes|puedes)\s+explicar\b/u.test(normalized)
     || /\b(?:tutorial|guia)\s+(?:de\s+)?como\b/u.test(normalized)
   if (aboutGeneration) return false
-  const image = /\b(?:foto|imagen|retrato|selfie|fotografia|photo|picture|image|portrait|photograph)\b/u
-  const identity = /\b(?:mia|mio|conmigo|salga yo|aparezca yo|este yo|yo en|de mi (?:cara|rostro|persona|en|como)|of me|myself|my face)\b/u
+  const image = /\b(?:foto|imagen|iagen|imgen|retrato|selfie|fotografia|photo|picture|image|portrait|photograph)\b/u
+  const identity = /\b(?:mia|mio|mi (?:foto|imagen|retrato|selfie|fotografia)|conmigo|salga yo|aparezca yo|este yo|yo en|de mi (?:cara|rostro|persona|en|como)|of me|myself|my face)\b/u
   if (image.test(normalized) && identity.test(normalized)) return true
   return /\b(?:ponme|colocame|dibujame|retratame|fotografiame)\s+(?:en|como|con|junto)\b/u.test(normalized)
     || /\b(?:put me in|draw me as|make me appear|generate me in)\b/u.test(normalized)
