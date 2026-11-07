@@ -202,10 +202,21 @@ export function parseVisualIntelligence(input: unknown): VisualIntelligenceSpec 
 }
 /** Deterministic, inspectable UI choice. A user may override this from the view switcher. */
 export function chooseVisualView(p: VisualIntelligenceSpec['props']): Exclude<VisualMode,'auto'> {
+  const intent = (p.title + ' ' + (p.subtitle ?? '')).normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'').toLowerCase()
+  // High-structure tools take precedence over a title or generic metrics.
   if (p.form) return 'form'
   if (p.places?.length) return 'map'
   if (p.document) return 'document'
   if (p.media?.length) return p.media.length >= 4 ? 'bento' : 'gallery'
+  // Honor clear user intent only if the matching dataset is actually present.
+  if (p.rows?.length && /\b(tabla|listado|registro|filtrar|ordenar)\b/.test(intent)) return 'table'
+  if (p.rows?.length && /\b(comparar|comparacion|comparativo|versus)\b/.test(intent)) return 'comparison'
+  if (p.series?.length && /\b(grafica|grafico|tendencia|serie|evolucion)\b/.test(intent)) return 'chart'
+  if (p.metrics?.length && /\b(panel|dashboard|indicador|resumen|kpi)\b/.test(intent)) return 'dashboard'
+  // A genuine mixture of indicators and explorables should open as a dashboard,
+  // with the alternate views available from the selector, not hide the KPIs.
+  if (p.metrics?.length && (p.rows?.length || p.series?.length)) return 'dashboard'
   if (p.series?.length) return 'chart'
   if (p.rows?.length) return p.rows.length > 10 ? 'table' : 'comparison'
   return 'dashboard'
