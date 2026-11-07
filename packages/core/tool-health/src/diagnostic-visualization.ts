@@ -35,9 +35,10 @@ export function planClinicalVisualization(input:VisualStudyInput) {
   let decision:'BLOCK_NO_SOURCE'|'BLOCK_NO_FINDINGS'|'BLOCK_NO_VALIDATED_GEOMETRY'|
     'ALLOW_EDUCATIONAL_EXPLANATION'='BLOCK_NO_SOURCE'
   if(hasSource&&!hasEvidence)decision='BLOCK_NO_FINDINGS'
-  else if(hasEvidence&&input.patientSpecific===true&&(!spatialProof||!acknowledged))
-    decision='BLOCK_NO_VALIDATED_GEOMETRY'
-  else if(hasEvidence&&kind==='patient-lesion'&&!spatialProof)
+  // Boolean assertions from a language model cannot certify patient anatomy.
+  // Only the registered, source-validated DICOM/mask reconstruction workflow
+  // can authorize patient-specific GLBs; this metadata-only planner never can.
+  else if(hasEvidence&&(input.patientSpecific===true||kind==='patient-lesion'))
     decision='BLOCK_NO_VALIDATED_GEOMETRY'
   else if(hasEvidence)decision='ALLOW_EDUCATIONAL_EXPLANATION'
   return {
