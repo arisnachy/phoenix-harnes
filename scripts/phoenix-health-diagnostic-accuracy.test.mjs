@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import {readFileSync} from 'node:fs'
 import {assessPreexcitation} from '../packages/core/tool-health/src/ecg-preexcitation.ts'
 import {planClinicalVisualization} from '../packages/core/tool-health/src/diagnostic-visualization.ts'
 import {DIAGNOSTIC_INPUTS} from '../packages/core/tool-health/src/diagnostic-catalog.ts'
@@ -145,4 +146,13 @@ test('ECG image rendering refuses isolated left-axis conclusion without checking
  assert.equal(differential.decision,'ALLOW_EDUCATIONAL_EXPLANATION')
  assert.equal(differential.patientSpecificRequested,false)
  assert.equal(differential.medicalInterpretationVerifiedByThisTool,false)
+})
+
+test('medical image-only uploads always carry a clinical source-first guard',()=>{
+ const source=readFileSync(new URL('../packages/core/tool-health/src/index.ts',import.meta.url),'utf8')
+ assert.match(source,/name:'tool:health-vision-baseline'/)
+ assert.match(source,/text:\(\)=>CLINICAL_VISION_BASELINE/)
+ assert.match(source,/incluye una imagen o archivo médico/)
+ assert.match(source,/onda delta/)
+ assert.match(source,/NO ANALIZADO/)
 })
