@@ -85,7 +85,8 @@ class TestSyntheticMesh(unittest.TestCase):
             self.assertTrue(np.isfinite(mesh.vertices).all())
             self.assertGreater(float(mesh.vertices[:,0].min()),10.0)
             self.assertGreater(float(mesh.vertices[:,2].min()),45.0)
-            self.assertEqual(mesh.export(file_type="glb")[:4], b"glTF")
+            import trimesh
+            self.assertEqual(trimesh.Scene(mesh).export(file_type="glb")[:4], b"glTF")
 
 if __name__=="__main__":
     unittest.main()
