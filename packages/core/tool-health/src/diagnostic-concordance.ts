@@ -26,24 +26,6 @@ const bounded=(input:unknown,name:string,limit:number)=>{
    throw Error('Invalid '+name+' metadata')
  return input.trim()
 }
-const normalize=(text:string)=>text.normalize('NFKD').replace(/[\u0300-\u036f]/g,'')
-  .toLocaleLowerCase('en')
-function ecgPriority(observed:string,impression:string){
- const findings=normalize(observed)
- const conclusion=normalize(impression)
- // This ONLY triggers a differential review; it cannot diagnose or infer a delta wave.
- const deltaLikely=/(?:onda[s]? delta|delta wave|pre.?excitac|wpw)/u.test(findings)&&
-   !/(?:sin onda delta|no se observa onda delta|ausencia de onda delta)/u.test(findings)
- const shortPr=/(?:pr corto|short pr|pr\s*(?:de\s*)?(?:menor|inferior)|pr\s*\d{2,3}\s*ms)/u.test(findings)
- const widenedQrs=/(?:qrs ancho|qrs ensanchad|wide qrs|qrs\s*\d{3}\s*ms)/u.test(findings)
- const axisOnly=/(?:eje.*izquier|left.*axis|hemibloqueo|fascicular)/u.test(conclusion)&&
-   !/(?:wpw|pre.?excitac|onda delta)/u.test(conclusion)
- return {
-   preexcitationDifferentialRequired:deltaLikely||(shortPr&&widenedQrs),
-   axisOnlyConclusionInadequate:axisOnly&&(deltaLikely||(shortPr&&widenedQrs)),
-   photoRequiresCalibratedVerification:deltaLikely||shortPr||widenedQrs,
- }
-}
 export function auditDiagnosticConcordance(input:DiagnosticConcordanceInput){
  const entry=diagnosticInputById(input.modality)
  if(!entry)throw Error('Unsupported medical study type')
@@ -76,14 +58,6 @@ export function auditDiagnosticConcordance(input:DiagnosticConcordanceInput){
  if(!differential)warnings.push('Alternative explanations have not been considered')
  if(input.criticalFeaturesAssessed!==true)warnings.push('Critical findings not documented as assessed')
  if(!sourceComplete)warnings.push('Partial/unknown source completeness: absence of findings does not exclude disease')
- const ecg=entry.family==='ecg'?ecgPriority(evidence,impression):null
- if(ecg?.preexcitationDifferentialRequired){
-   warnings.push('Assess WPW/pre-excitation morphology before concluding axis deviation or isolated fascicular block')
-   if(source!=='waveform'||input.calibratedMeasurementsAvailable!==true)
-     warnings.push('Photo/uncalibrated ECG: no verified PR/QRS values or pathway localization')
- }
- if(ecg?.axisOnlyConclusionInadequate)
-   missing.push('Pre-excitation/WPW differential when delta/short PR and broad QRS are suggested')
  if(visualization==='patient-specific')
    missing.push('Registered patient-specific geometry authorized by separate source-validated reconstruction pipeline')
  if(visualization==='mechanism'&&!evidence)
@@ -99,16 +73,10 @@ export function auditDiagnosticConcordance(input:DiagnosticConcordanceInput){
    clinicalDiagnosisConfirmed:false,modelValidated:false,
    medicalPixelsOrSignalAnalyzedByThisTool:false,
    patientSpecificImageAuthorized:false,
-   differentialFlags:ecg?{
-     preexcitationMustBeConsidered:ecg.preexcitationDifferentialRequired,
-     leftAxisConclusionInsufficient:ecg.axisOnlyConclusionInadequate,
-     confirmQualitativePhotoOnCalibratedTrace:ecg.photoRequiresCalibratedVerification,
-   }:null,
+   differentialFlags:null,
    missing,warnings,
    sourceRequirements:family.source,
-   visualInstructions:ecg?.preexcitationDifferentialRequired?
-     'Show only a schematic of possible electrical pre-excitation via a generic accessory AV pathway, labelled PROVISIONAL. Do NOT show patient-specific anatomical pathway location, myocardial lesion, or left-axis vectors as a substitute for WPW review.':
-     'Only an educational, explicitly provisional explanation of directly observed source findings is possible; do not invent a patient lesion or pathology.',
+   visualInstructions:'Illustrate source-supported findings only. Distinguish observed evidence, proposed hypotheses and unknown features without preselecting a diagnosis or inventing patient-specific anatomy.',
    nextAction:missing.length?'Re-examine original study and reconcile overlooked differentials before any patient-facing medical visualization.':
      'Offer provisional differential with evidence and alternative explanations; require competent clinician review and modality-specific validation.',
  }
