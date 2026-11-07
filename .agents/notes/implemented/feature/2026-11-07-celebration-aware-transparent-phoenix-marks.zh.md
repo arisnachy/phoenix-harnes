@@ -2,6 +2,8 @@
 
 Status: implemented
 
+[English](2026-11-07-celebration-aware-transparent-phoenix-marks.md) | 中文
+
 ## Problem
 
 PHOENIX 首页采用经过认可的银色凤凰图像。重新绘制节日凤凰会损害原始品牌的一致性；将所有节日装入同一种圆形徽章也无法体现不同场合的意义。全球日期还需要处理国家、地区和隐私。
