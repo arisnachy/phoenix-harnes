@@ -117,9 +117,10 @@ export function hasWeightFiles(root){
   return false
 }
 
-async function installPythonComponents(p,state,fd){
+async function installPythonComponents(p,state,fd,onlyIds=null){
   await prepareVenv(p)
   for(const component of modules){
+    if(onlyIds&&!onlyIds.includes(component.id))continue
     // Always verify packages; a stale manifest cannot prove installation.
     if(await checkImports(p,component.imports)){
       state.components[component.id]={status:'installed',verifiedAt:now()}
@@ -262,25 +263,72 @@ async function installSlicerHeart(p,state,fd){
   }
 }
 
-async function installViewer(p,state,fd){
+function npmExecutable(){
+  const candidates=[
+    process.env.npm_execpath,
+    join(dirname(process.execPath),'node_modules','npm','bin','npm-cli.js'),
+    join(dirname(process.execPath),'..','lib','node_modules','npm','bin','npm-cli.js'),
+  ]
+  const found=candidates.find(x=>typeof x==='string'&&existsSync(x)&&x.endsWith('npm-cli.js'))
+  if(!found)throw Error('Cannot locate verified npm-cli.js; install Node.js with npm')
+  return found
+}
+async function installCornerstone(p,state,fd){
+  const folder=join(p.root,'imaging')
+  const names=['@cornerstonejs/core','@cornerstonejs/tools','@cornerstonejs/dicom-image-loader']
+  const complete=()=>names.every(name=>existsSync(join(folder,'node_modules',...name.split('/'),'package.json')))
+  if(complete()){
+    state.components.cornerstone={status:'installed',verifiedAt:now()}
+    state.components.ohif={status:'external',reason:'OHIF deployment and authorized DICOMweb/PACS still required'}
+    save(p,state);return
+  }
+  if(freeBytes(p)<12e9){
+    state.components.cornerstone={status:'deferred',reason:'Less than 12 GB free'}
+    save(p,state);return
+  }
+  state.components.cornerstone={status:'installing'};save(p,state)
+  try{
+    mkdirSync(folder,{recursive:true})
+    await run(process.execPath,[npmExecutable(),'install','--no-save','--no-package-lock',
+      '--ignore-scripts','--no-audit','--no-fund','--prefix',folder,...names],{
+      cwd:folder,timeout:900000,output:fd})
+    if(!complete())throw Error('Cornerstone package artifacts missing after npm')
+    state.components.cornerstone={status:'installed',verifiedAt:now()}
+    state.components.ohif={status:'external',reason:'PACS integration/deployment not configured'}
+  }catch(e){
+    state.components.cornerstone={status:'error',reason:String(e).slice(0,200)}
+    log(p,'cornerstone: '+String(e))
+  }
+  save(p,state)
+}
+async function installViewer(p,state,fd,withVtk=true){
   const cwd=join(p.root,'viewer')
   const modulesRoot=join(cwd,'node_modules','three')
   const checks=['build/three.module.js','build/three.core.js','examples/jsm/loaders/GLTFLoader.js','examples/jsm/controls/OrbitControls.js','examples/jsm/utils/BufferGeometryUtils.js']
   const pkg=join(modulesRoot,'package.json')
+  const vtk=join(cwd,'node_modules','@kitware','vtk.js','package.json')
   try{
     if(existsSync(pkg)&&checks.every(x=>existsSync(join(modulesRoot,x)))&&
-       JSON.parse(readFileSync(pkg,'utf8')).version==='0.181.2'){
+       JSON.parse(readFileSync(pkg,'utf8')).version==='0.181.2'&&
+       (!withVtk||existsSync(vtk))){
       state.components.viewer={status:'installed',version:'0.181.2',verifiedAt:now()}
-      return
+      if(withVtk)state.components.vtkjs={status:'installed',verifiedAt:now()}
+      save(p,state);return
     }
     mkdirSync(cwd,{recursive:true})
-    const npmCli=join(dirname(process.execPath),'node_modules','npm','bin','npm-cli.js')
-    if(!existsSync(npmCli))throw Error('No verified npm-cli.js beside Node installation; install Node with npm')
-    await run(process.execPath,[npmCli,'install','--no-save','--no-package-lock','--ignore-scripts','--no-audit','--no-fund','--prefix',cwd,'three@0.181.2'],
+    const npmCli=npmExecutable()
+    await run(process.execPath,[npmCli,'install','--no-save','--no-package-lock','--ignore-scripts','--no-audit','--no-fund','--prefix',cwd,'three@0.181.2',
+      ...(withVtk?['@kitware/vtk.js']:[])],
       {cwd,timeout:300000,output:fd})
     if(!existsSync(pkg)||JSON.parse(readFileSync(pkg,'utf8')).version!=='0.181.2'||
        !checks.every(x=>existsSync(join(modulesRoot,x))))throw Error('Three.js version or module files invalid')
     state.components.viewer={status:'installed',version:'0.181.2',verifiedAt:now()}
+    if(withVtk){
+      state.components.vtkjs=existsSync(vtk)?
+        {status:'installed',verifiedAt:now()}:
+        {status:'error',reason:'vtk.js package was not installed'}
+    }
+    save(p,state)
   }catch(e){
     state.components.viewer={status:'error',reason:String(e).slice(0,220)}
     log(p,'viewer: '+String(e))
@@ -312,7 +360,11 @@ async function probeResearchEngines(state){
   }
 }
 
-async function worker(env=process.env){
+export const anatomyComponents=['slicerheart','monai-nnunet','totalsegmentator',
+  'ohif-cornerstone','simvascular','opencarp','three-vtk']
+export const validAnatomyComponent=(v)=>anatomyComponents.includes(v)
+async function worker(env=process.env,selected=null){
+  if(selected&&!validAnatomyComponent(selected))throw Error('Invalid anatomy component')
   const p=pathsFor(env)
   mkdirSync(p.root,{recursive:true})
   const fd=openSync(p.log,'a')
@@ -320,19 +372,34 @@ async function worker(env=process.env){
   state.components||={}
   state.platform=process.platform
   try{
-    log(p,'Starting anatomy bootstrap; installation does not imply clinical validation')
-    await installPythonComponents(p,state,fd)
-    await installBaselineWeights(p,state,fd,env)
-    save(p,state)
-    await installSlicer(p,state,fd)
-    await installSlicerHeart(p,state,fd)
-    await probeResearchEngines(state)
-    await installViewer(p,state,fd)
+    log(p,'Starting anatomy bootstrap '+(selected||'all')+'; never implies clinical validation')
+    if(!selected){
+      await installPythonComponents(p,state,fd)
+      await installBaselineWeights(p,state,fd,env)
+      await installSlicer(p,state,fd)
+      await installSlicerHeart(p,state,fd)
+      await probeResearchEngines(state)
+      await installViewer(p,state,fd,true)
+      await installCornerstone(p,state,fd)
+    }else if(selected==='slicerheart'){
+      await installSlicer(p,state,fd)
+      await installSlicerHeart(p,state,fd)
+    }else if(selected==='monai-nnunet'){
+      await installPythonComponents(p,state,fd,['monai','nnunetv2'])
+    }else if(selected==='totalsegmentator'){
+      await installPythonComponents(p,state,fd,['totalsegmentator'])
+      await installBaselineWeights(p,state,fd,env)
+    }else if(selected==='ohif-cornerstone'){
+      await installCornerstone(p,state,fd)
+    }else if(selected==='three-vtk'){
+      await installViewer(p,state,fd,true)
+    }else if(selected==='simvascular'||selected==='opencarp'){
+      await probeResearchEngines(state)
+    }
     state.clinicalValidation='not-validated'
+    state.bootstrap={status:'finished',component:selected||'all',at:now()}
     save(p,state)
-    state.bootstrap={status:'finished',at:now()}
-    save(p,state)
-    log(p,'Bootstrap finished; review manifest and install.log for partial failures')
+    log(p,'Anatomy bootstrap finished; review status and install.log')
   }catch(e){
     state.bootstrap={status:'error',at:now(),reason:String(e).slice(0,250)}
     save(p,state)
@@ -388,8 +455,13 @@ export function ensure(env=process.env,launch=spawn){
   }
 }
 if(process.argv[1]&&resolve(process.argv[1])===self){
-  const manual=process.argv.includes('--install')
-  if(manual||process.argv.includes('--worker')){
+  const selectedAt=process.argv.indexOf('--install-component')
+  const selected=selectedAt>=0?process.argv[selectedAt+1]:null
+  const manual=process.argv.includes('--install')||selectedAt>=0
+  if(selectedAt>=0&&!validAnatomyComponent(selected)){
+    console.error('Unknown anatomy connector id')
+    process.exitCode=2
+  }else if(manual||process.argv.includes('--worker')){
     const p=pathsFor()
     if(manual){
       mkdirSync(p.root,{recursive:true})
@@ -407,11 +479,15 @@ if(process.argv[1]&&resolve(process.argv[1])===self){
         catch{console.error('Anatomy installer locked');process.exitCode=2}
       }
     }
-    if(process.exitCode!==2)worker().then(()=>{
+    if(process.exitCode!==2)worker(process.env,selected).then(()=>{
       if(manual){
         const result=status()
         console.log(JSON.stringify(result,null,2))
-        if(!result.installed)process.exitCode=3
+        if(!selected&&!result.installed)process.exitCode=3
+        else if(selected&&result.components[(selected==='monai-nnunet'?'monai':
+          selected==='three-vtk'?'vtkjs':selected==='ohif-cornerstone'?'cornerstone':
+          selected==='slicerheart'?'slicerheart':selected==='totalsegmentator'?'weights_ct':selected)]?.status!=='installed')
+          process.exitCode=3
       }
     }).catch(e=>{
       log(p,'FATAL '+String(e));try{rmSync(p.lock,{force:true})}catch{}
