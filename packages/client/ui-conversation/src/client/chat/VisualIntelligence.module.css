@@ -1,4 +1,5 @@
 .surface {
+  container:phoenix-visual / inline-size;
   display:grid;gap:14px;box-sizing:border-box;width:100%;min-width:0;max-width:100%;
   padding:clamp(14px,2.3vw,22px);border:1px solid var(--dsw-alias-border-subtle,#dae0e8);
   border-radius:17px;background:var(--dsw-alias-surface-primary,#fff);
@@ -100,4 +101,43 @@
 }
 @media print{.surface{border:0;box-shadow:none}.toolbar,.library{display:none!important}
   .scroll{max-height:none;overflow:visible}.module{break-inside:avoid}.evidence{break-inside:avoid}
+}
+
+/* Component-width responsive behavior: chat can be narrow even on wide desktops. */
+.module,.header,.toolbar,.galleryGrid,.bento,.metrics,.chartWrap,.evidence,.library{min-width:0;max-width:100%}
+.module>.table{display:block;overflow-x:auto}
+.mapFrame{max-width:100%;min-width:0;overflow:hidden;border-radius:12px}
+.reportNote{margin:0;color:var(--dsw-alias-label-secondary,#607084);font-size:11px}
+@container phoenix-visual (max-width:680px){
+  .surface{padding:12px;gap:10px}
+  .header h3{font-size:16px}
+  .toolbar{align-items:stretch}
+  .toolbar label{flex:1 1 150px}
+  .toolbar button{min-height:37px}
+  .featured{grid-template-columns:1fr}
+  .featured img{max-height:170px}
+  .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .metrics article strong{font-size:20px}
+  .table{min-width:max-content}
+  .table th,.table td{min-width:110px}
+  .chartWrap svg{min-height:155px}
+}
+@container phoenix-visual (max-width:400px){
+  .surface{padding:10px}
+  .header{gap:8px}
+  .brand{width:34px;height:34px;flex-basis:34px;border-radius:10px}
+  .header h3{font-size:15px}
+  .toolbar label{flex:1 1 100%}
+  .toolbar button{flex:1 1 auto}
+  .toolbar select{width:100%}
+  .metrics{grid-template-columns:1fr}
+  .metrics article{padding:10px}
+  .metrics article strong{font-size:19px}
+  .bento{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bento .bentoPrimary{grid-column:1 / -1;grid-row:auto;min-height:120px}
+  .galleryGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .module textarea{width:100%}
+}
+@media (prefers-reduced-motion:reduce){
+  .surface *{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
