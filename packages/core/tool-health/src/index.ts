@@ -26,10 +26,18 @@ export function apply(ctx: Context): void {
     execute(){
       const base=process.env.LOCALAPPDATA||homedir()
       const home=process.env.PHOENIX_ANATOMY_HOME||join(base,process.env.LOCALAPPDATA?'PHOENIX':'.phoenix','anatomy')
-      let manifest: {components?: Record<string,{status?:string}>}|null=null
-      try{manifest=JSON.parse(readFileSync(join(home,'manifest.json'),'utf8')) as typeof manifest}
-      catch{/* Installation may not have run; no patient data involved. */}
-      const components=Object.fromEntries(Object.entries(manifest?.components??{}).map(([key,value])=>[key,value?.status??'unknown']))
+      const manifestFile=join(home,'manifest.json')
+      const manifest=(()=>{
+        try{
+          const value: unknown=JSON.parse(readFileSync(manifestFile,'utf8'))
+          if(value!==null&&typeof value==='object'&&'components' in value){
+            return value as {components?: Record<string,{status?:string}>}
+          }
+        }catch{/* Optional installation may not be present. */}
+        return null
+      })()
+      const components=Object.fromEntries(
+        Object.entries(manifest?.components??{}).map(([key,value])=>[key,value.status??'unknown']))
       return Promise.resolve(JSON.stringify({
         installed:manifest!==null,components,clinicallyValidated:false,
         reconstructionRunner:'scripts/phoenix-anatomy-workbench.mjs',
