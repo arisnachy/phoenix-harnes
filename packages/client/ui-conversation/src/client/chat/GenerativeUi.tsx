@@ -159,6 +159,11 @@ const supportedIcons: readonly PhoenixUiIconName[] = [
   'bot', 'brain', 'code', 'check', 'alert', 'table', 'calculator',
   'copy', 'download', 'reset', 'clipboard', 'plus', 'file', 'search',
   'settings', 'calendar', 'activity', 'shield', 'chart', 'info',
+  'trophy', 'star', 'heart', 'stethoscope', 'hospital', 'pill',
+  'microscope', 'graduation-cap', 'book', 'globe', 'map-pin', 'clock',
+  'user', 'users', 'briefcase', 'wallet', 'building', 'target',
+  'trending-up', 'sparkles', 'database', 'image', 'basketball',
+  'soccer', 'baseball', 'football', 'filter', 'award',
 ]
 const supportedTones: readonly PhoenixStatusTone[] = ['positive', 'warning', 'negative', 'info', 'neutral']
 
