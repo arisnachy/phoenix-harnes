@@ -131,7 +131,6 @@
   display:grid; place-items:center; width:33px; height:33px;
   border:1px solid var(--dsw-alias-border-subtle,rgba(120,120,120,.16));
   border-radius:10px; background:var(--dsw-alias-surface-primary,rgba(255,255,255,.75));
-  color:var(--dsw-alias-label-secondary,#5e6671);
   pointer-events:none;
 }
 .prebuiltMetric[data-status="positive"] .metricIcon,

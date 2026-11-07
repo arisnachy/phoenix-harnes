@@ -2622,6 +2622,9 @@ importers:
 
   packages/client/ui-primitives:
     dependencies:
+      lucide-react:
+        specifier: 0.472.0
+        version: 0.472.0(react@18.3.1)
       '@shikijs/langs':
         specifier: ^4.3.1
         version: 4.3.1
@@ -10152,6 +10155,11 @@ importers:
 
 packages:
 
+  lucide-react@0.472.0:
+    resolution: {integrity: sha512-wdJH3xJAMuelsCgSZLBGQunk20xwFSMsuY7R4lrbLd/QsEPf/n6EmbGUnvux7+OjDJC248Kuja+5gWGpC7f3SA==}
+    peerDependencies:
+      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
   '@agentclientprotocol/sdk@0.25.1':
     resolution: {integrity: sha512-jx2rF3bdpGwZ75Q/meyEDLLbYmbtxk82Uh9hDCdxDvcEedBnNSF5hZAnL/kJR5VNz56JqwOmqnAqasC84MwwkQ==}
     peerDependencies:
@@ -15691,6 +15699,10 @@ packages:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
 snapshots:
+
+  lucide-react@0.472.0(react@18.3.1):
+    dependencies:
+      react: 18.3.1
 
   '@agentclientprotocol/sdk@0.25.1(zod@4.4.3)':
     dependencies:

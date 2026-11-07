@@ -1,5 +1,5 @@
 import { useId, useState, type ReactNode } from 'react'
-import { PhoenixStatusPill, PhoenixAgentLine, type PhoenixUiIconName, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
+import { PhoenixStatusPill, PhoenixAgentLine, isPhoenixUiIconName, type PhoenixUiIconName, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
 import { ScaleForm, parseScaleForm, type ScaleFormSpec } from './ScaleForm.tsx'
 import { parseSmartForm, parseSmartLibrary, type SmartFormSpec, type SmartLibrarySpec } from './SmartFormEngine.ts'
 import { SmartFormWorkspace } from './SmartFormSurface.tsx'
@@ -155,16 +155,6 @@ type AgentLineBlock = {
   version: 1
   props: { name: string; role: string; message: string; icon?: PhoenixUiIconName }
 }
-const supportedIcons: readonly PhoenixUiIconName[] = [
-  'bot', 'brain', 'code', 'check', 'alert', 'table', 'calculator',
-  'copy', 'download', 'reset', 'clipboard', 'plus', 'file', 'search',
-  'settings', 'calendar', 'activity', 'shield', 'chart', 'info',
-  'trophy', 'star', 'heart', 'stethoscope', 'hospital', 'pill',
-  'microscope', 'graduation-cap', 'book', 'globe', 'map-pin', 'clock',
-  'user', 'users', 'briefcase', 'wallet', 'building', 'target',
-  'trending-up', 'sparkles', 'database', 'image', 'basketball',
-  'soccer', 'baseball', 'football', 'filter', 'award',
-]
 const supportedTones: readonly PhoenixStatusTone[] = ['positive', 'warning', 'negative', 'info', 'neutral']
 
 export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | SportsGameCard | SportsScheduleCard | SportsTicketCard | SportsOddsCard | SportsEspnDashboard
@@ -458,7 +448,7 @@ export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null
       return isRecord(value.props) && hasOnlyKeys(value.props, ['name','role','message','icon'])
         && isText(value.props.name, 80) && isText(value.props.role, 100)
         && isText(value.props.message, 1200)
-        && (value.props.icon === undefined || supportedIcons.includes(value.props.icon as PhoenixUiIconName))
+        && (value.props.icon === undefined || isPhoenixUiIconName(value.props.icon))
         ? value as AgentLineBlock : null
     default: return null
   }
