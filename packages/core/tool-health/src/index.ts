@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { planAnatomicalTwin } from './anatomy-planner.ts'
@@ -10,9 +12,34 @@ import '@phoenix-ai/dsh-user-questions'
 import { buildClinicalAskStep, interpretClinicalAsk, type ClinicalAskAction, type ClinicalAskPathway } from './clinical-copilot-ask.ts'
 import { planInterview, planKiraMail, type InterviewMode } from './clinical-flow.ts'
 
+const ANATOMY_INSTALLER=fileURLToPath(new URL('../../../../scripts/phoenix-anatomy-auto.mjs',import.meta.url))
+const ANATOMY_CATALOG=fileURLToPath(new URL('../../../../scripts/phoenix-anatomy-models.json',import.meta.url))
+function prepareAnatomy():Promise<string>{
+  if(!existsSync(ANATOMY_INSTALLER))return Promise.resolve(JSON.stringify({
+    status:'unavailable',installer:ANATOMY_INSTALLER,note:'Not installed in this PHOENIX runtime'}))
+  return new Promise(resolve=>{
+    let output='',errors=''
+    const task=spawn(process.execPath,[ANATOMY_INSTALLER,'--ensure'],{
+      windowsHide:true,shell:false,env:process.env,
+      stdio:['ignore','pipe','pipe'],
+    })
+    task.stdout?.on('data',(v:Buffer)=>{output+=v.toString('utf8').slice(0,8192)})
+    task.stderr?.on('data',(v:Buffer)=>{errors+=v.toString('utf8').slice(0,2000)})
+    task.once('error',(e:Error)=>resolve(JSON.stringify({status:'error',reason:e.message})))
+    task.once('close',(code:number|null)=>{
+      if(code!==0)return resolve(JSON.stringify({status:'error',exitCode:code,
+        reason:errors.slice(0,2000)}))
+      try{
+        const receipt=JSON.parse(output) as Record<string,unknown>
+        resolve(JSON.stringify({status:receipt.status,installer:ANATOMY_INSTALLER,
+          detail:receipt,note:'started/running is not installed. Check health_anatomy_status later.'}))
+      }catch{resolve(JSON.stringify({status:'error',reason:'Installer returned invalid receipt'}))}
+    })
+  })
+}
 export const name = 'tool-health'
 export const inject = ['tools', 'systemPrompt', 'userQuestions']
-const GUIDANCE = 'PHOENIX Health Engine: solo al solicitar una consulta o interrogatorio, usa health_interview_plan con motivo general SIN nombre, email, identificador u otros datos de paciente. Usa health_copilot_ask action=choose_mode para elegir mediante ASK entre Kira, médico o mixto. Luego action=screen_urgency antes de action=next_question. ASK solo gestiona preguntas y decisiones genéricas, sensibles y sin datos identificables; la respuesta clínica se introduce en el expediente autenticado /health. Un ASK expirado no acredita hechos, consentimiento, revisión ni registro.  El plan no es diagnóstico; recopila datos y exige evaluación del profesional para signos de alarma, examen, pruebas, tratamiento y firma. No afirmes que existe historia clínica guardada, receta firmada, correo enviado ni cita agendada. health_kira_mail_requirements solo enumera requisitos; no envía mensajes. Para estudios volumétricos y consultas sobre gemelos anatómicos usa health_anatomy_workflow; usa health_anatomy_status para consultar dependencias locales. El plan no es una reconstrucción: la ejecución real requiere un archivo DICOM/NIfTI local y consentimiento clínico. Nunca inventes lesiones ni llames al GLB diagnóstico. El remitente debe ser la cuenta institucional de Kira autorizada, no una dirección inventada. No introduzcas historia clínica ni datos personales en memoria general, herramientas o logs sin un sistema clínico autorizado.'
+const GUIDANCE = 'PHOENIX Health Engine: solo al solicitar una consulta o interrogatorio, usa health_interview_plan con motivo general SIN nombre, email, identificador u otros datos de paciente. Usa health_copilot_ask action=choose_mode para elegir mediante ASK entre Kira, médico o mixto. Luego action=screen_urgency antes de action=next_question. ASK solo gestiona preguntas y decisiones genéricas, sensibles y sin datos identificables; la respuesta clínica se introduce en el expediente autenticado /health. Un ASK expirado no acredita hechos, consentimiento, revisión ni registro.  El plan no es diagnóstico; recopila datos y exige evaluación del profesional para signos de alarma, examen, pruebas, tratamiento y firma. No afirmes que existe historia clínica guardada, receta firmada, correo enviado ni cita agendada. health_kira_mail_requirements solo enumera requisitos; no envía mensajes. Para estudios volumétricos y gemelos anatómicos usa health_anatomy_workflow; usa health_anatomy_models para el catálogo y health_anatomy_status para consultar dependencias locales. Si el usuario autorizó expresamente instalar las dependencias anatómicas, puedes usar health_anatomy_prepare. Su estado started/running NO acredita instalación: confirma con health_anatomy_status y no prometas archivo GLB sin comprobarlo. El plan no es una reconstrucción: la ejecución real requiere un archivo DICOM/NIfTI local y consentimiento clínico. Nunca inventes lesiones ni llames al GLB diagnóstico. El remitente debe ser la cuenta institucional de Kira autorizada, no una dirección inventada. No introduzcas historia clínica ni datos personales en memoria general, herramientas o logs sin un sistema clínico autorizado.'
 function healthRequest(text: string | undefined): boolean {
   return typeof text === 'string' && /(?:consulta m[eé]dica|paciente|historia cl[ií]nica|interrogatorio|receta|health engine|kira.*consulta|psic[oó]log[oa]|laboratorio cl[ií]nico|gemelo anat[oó]mico|reconstrucci[oó]n 3d|dicom|tomograf[ií]a|resonancia magn[eé]tica)/iu.test(text)
 }
@@ -45,6 +72,30 @@ export function apply(ctx: Context): void {
       }))
     },
     presentCall:()=>({card:'generic',title:'Estado del motor anatómico',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'health_anatomy_prepare',
+    description:'Inicia el autoinstalador local de anatomía después de una solicitud explícita del usuario. Solo instala componentes disponibles y pesos abiertos; no autoriza licencias comerciales ni prueba un GLB. Iniciado no significa instalado.',
+    parameters:{},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>false,
+    execute(){return prepareAnatomy()},
+    presentCall:()=>({card:'generic',title:'Preparar motor anatómico local',kind:'write' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'health_anatomy_models',
+    description:'Consulta catálogo anatómico verificado por modalidad y muestra las licencias de los modelos; no significa que los pesos estén descargados ni que exista un modelo educativo GLB.',
+    parameters:{},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(){
+      try{
+        const value=JSON.parse(readFileSync(ANATOMY_CATALOG,'utf8')) as Record<string,unknown>
+        return Promise.resolve(JSON.stringify({status:'catalog-only',
+          tasks:value.tasks, gaps:value.gaps,clinicallyValidated:false}))
+      }catch{return Promise.resolve(JSON.stringify({status:'unavailable',reason:'Catalog missing in runtime'}))}
+    },
+    presentCall:()=>({card:'generic',title:'Catálogo de modelos anatómicos',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name: 'health_anatomy_workflow',
