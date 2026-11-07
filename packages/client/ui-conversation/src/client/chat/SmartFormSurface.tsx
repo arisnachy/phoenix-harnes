@@ -10,6 +10,10 @@ import {
   type SavedSmartForm, type SavedSmartRun,
 } from './SmartFormLibrary.ts'
 import type { CanvasAction } from './GenerativeCanvas.tsx'
+import { assessmentCatalog } from './AssessmentCatalog.ts'
+import { ScaleForm, parseScaleForm, type ScaleFormSpec } from './ScaleForm.tsx'
+import { generateAssessmentPdf } from './AssessmentReportPdf.ts'
+import { smartAssessmentReport } from './AssessmentReportModel.ts'
 import css from './SmartFormSurface.module.css'
 
 type Panel = 'form' | 'library' | 'history'
@@ -82,6 +86,9 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
   const [includeAnswers,setIncludeAnswers]=useState(false)
   const [message,setMessage]=useState('')
   const [confirmDelete,setConfirmDelete]=useState<string|null>(null)
+  const [assessmentId,setAssessmentId]=useState<string|null>(null)
+  const [assessments,setAssessments]=useState<ScaleFormSpec[]>([])
+  const [usageAuthorized,setUsageAuthorized]=useState(false)
   const current=useMemo(()=>active?calculateSmartForm(active,values):null,[active,values])
   const allForms=useMemo(()=>{
     const map=new Map<string,{spec:SmartFormSpec;revision:number}>()
@@ -132,6 +139,38 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
       setLibrary(savedForms())
       setMessage(result.ok?'Importadas '+result.count+' plantillas.':'Archivo no válido o biblioteca llena.')
     }catch{setMessage('No se pudo leer el archivo.')}
+  }
+  const importAssessment=async(file:File|undefined):Promise<void>=>{
+    if(!file)return
+    if(!usageAuthorized){setMessage('Confirma primero que puedes utilizar esta versión del instrumento.');return}
+    if(file.size>400_000){setMessage('La definición supera 400 KB.');return}
+    try{
+      const json=JSON.parse(await file.text()) as unknown
+      const spec=parseScaleForm(json)
+      if(!spec || !spec.props.source || !spec.props.version
+        || !spec.props.administration?.length){
+        setMessage('Instrumento inválido: exige preguntas, puntuaciones, fuente, versión y administración.')
+        return
+      }
+      setAssessments(list=>[...list.filter(x=>x.props.title!==spec.props.title),spec])
+      setAssessmentId('import:'+spec.props.title)
+      setMessage('Instrumento importado para esta sesión. Revisa su validez antes de administrarlo.')
+    }catch{setMessage('No se pudo leer la definición JSON autorizada.')}
+  }
+  const exportPdf=():void=>{
+    if(!active || !current)return
+    const report=smartAssessmentReport(active,values,current,{
+      participant:'',professional:'',context:'',observations:'',recommendations:'',
+    })
+    if(!report){setMessage('Completa las respuestas válidas antes de exportar el PDF.');return}
+    try{
+      const pdf=generateAssessmentPdf(report)
+      const url=URL.createObjectURL(pdf)
+      const a=document.createElement('a')
+      a.href=url;a.download='PHOENIX-formulario-'+active.props.id+'.pdf';a.click()
+      URL.revokeObjectURL(url)
+      setMessage('Informe PDF generado localmente, sin guardar los datos.')
+    }catch{setMessage('No fue posible generar el informe PDF.')}
   }
   const shareIndex=()=>onAction?.(
     'Este es el índice de formularios guardados en PHOENIX. Pídeme abrir un formulario para enviarte su definición completa: '+JSON.stringify(libraryIndex()),'draft')
@@ -192,6 +231,7 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
         </div>
         <div className={css.actions}>
           <button type="button" disabled={!includeAnswers} onClick={saveResult}>Guardar resultado</button>
+          <button type="button" onClick={exportPdf}>Exportar formulario completo a PDF</button>
           {onAction&&<button type="button" onClick={()=>onAction(
             'Analiza los resultados de este formulario, diferenciando cálculo de diagnóstico. Verifica límites, fuentes y datos faltantes. Plantilla: '+JSON.stringify(active)+' Respuestas: '+JSON.stringify(values)+' Resultado: '+JSON.stringify(current),'draft')}>Analizar con Kira</button>}
         </div>
@@ -210,7 +250,51 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
           <input type="file" accept=".json,application/json"
             onChange={e=>{void onImport(e.currentTarget.files?.[0]);e.currentTarget.value=''}}/></label>
       </div>
-      {filtered.length===0&&<p className={css.hint}>No hay formularios con ese término.</p>}
+      <section className={css.catalog} aria-label="Instrumentos profesionales verificados">
+        <h4>Instrumentos reales · medicina, psicología y neuropsicología</h4>
+        <div className={css.searchRow}>
+          <label className={css.privacy}>
+            <input type="checkbox" checked={usageAuthorized}
+              onChange={e=>setUsageAuthorized(e.currentTarget.checked)}/>
+            Confirmo que dispongo de autorización o derechos de uso del instrumento que importaré.
+          </label>
+          <label className={css.fileImport}>Importar instrumento autorizado (JSON)
+            <input type="file" accept=".json,application/json"
+              disabled={!usageAuthorized} aria-label="Importar instrumento autorizado"
+              onChange={e=>{void importAssessment(e.currentTarget.files?.[0]);e.currentTarget.value=''}}/>
+          </label>
+        </div>
+        <p>Los catálogos identifican preguntas disponibles, versiones y restricciones
+          de uso. Solo se reproducen instrumentos autorizados.</p>
+        {assessmentCatalog.filter(entry=>!filter.trim() ||
+          (entry.title+' '+entry.discipline).toLocaleLowerCase('es')
+            .includes(filter.toLocaleLowerCase('es'))).map(entry=>
+          <article className={css.catalogItem} key={entry.id}>
+            <div>
+              <small>{entry.discipline} · {entry.language} · {entry.access==='reproducible'
+                ?'Cuestionario reproducible':entry.access==='external-protocol'
+                  ?'Registro con protocolo externo':'Requiere licencia'}</small>
+              <h4>{entry.title}</h4><p>{entry.description}</p>
+              <small>Versión: {entry.version}</small>
+            </div>
+            <div className={css.smallActions}>
+              {entry.spec&&<button type="button" onClick={()=>setAssessmentId(old=>
+                old===entry.id?null:entry.id)}>{assessmentId===entry.id?'Cerrar':'Abrir prueba real'}</button>}
+              <a href={entry.sourceUrl} target="_blank" rel="noopener noreferrer">
+                {entry.spec?'Consultar fuente':'Consultar licencia'}</a>
+            </div>
+          </article>)}
+        {assessmentCatalog.filter(entry=>entry.id===assessmentId&&entry.spec).map(entry=>
+          <ScaleForm key={entry.id} spec={entry.spec!} onAction={onAction}
+            verified={entry.access==='reproducible'} />)}
+        {assessments.map((spec,index)=>assessmentId==='import:'+spec.props.title&&
+          <ScaleForm key={index} spec={spec} onAction={onAction} verified={false}/>)}
+        {assessments.map(spec=><button key={spec.props.title} type="button"
+          onClick={()=>setAssessmentId('import:'+spec.props.title)}>
+          Abrir importado: {spec.props.title}
+        </button>)}
+      </section>
+      {filtered.length===0&&<p className={css.hint}>No hay formularios de cálculo con ese término.</p>}
       <div className={css.catalog}>{filtered.map(({spec,revision})=>
         <article className={css.catalogItem} key={spec.props.id}>
           <div><small>{spec.props.folder??'General'} · {spec.props.kind} · {revision?'rev '+revision:'ejemplo inicial'}</small>
