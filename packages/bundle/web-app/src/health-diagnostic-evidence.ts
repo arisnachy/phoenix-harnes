@@ -5,7 +5,7 @@
  * It records the availability and provenance of evidence to prevent
  * a pretty GLB or a single screenshot from masquerading as a complete study.
  */
-import {DIAGNOSTIC_INPUTS,diagnosticInputById,diagnosticPolicyFor}
+import {DIAGNOSTIC_INPUTS,diagnosticPolicyFor}
   from './health-diagnostic-catalog.ts'
 export const STUDY_MODALITIES:Readonly<Record<string,{
   label:string;native:string;limited:string;family:string;nativeFormat:string}>>=
