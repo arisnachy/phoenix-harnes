@@ -94,6 +94,29 @@ async function prepareVenv(p){
   if(!await checkImports(p,['pip']))throw Error('Isolated Python venv incomplete')
 }
 function freeBytes(p){try{const s=statfsSync(p.root);return Number(s.bavail)*Number(s.bsize)}catch{return 0}}
+
+/** Verify actual heavyweight checkpoint files, not an empty cached directory. */
+export function hasWeightFiles(root){
+  const start=join(root,'nnunet','results')
+  if(!existsSync(start))return false
+  const stack=[{dir:start,depth:0}]
+  let checked=0
+  while(stack.length&&checked<1500){
+    const {dir,depth}=stack.pop()
+    let entries
+    try{entries=readdirSync(dir,{withFileTypes:true})}catch{continue}
+    for(const entry of entries){
+      if(++checked>1500)break
+      const file=join(dir,entry.name)
+      if(entry.isDirectory()&&depth<6)stack.push({dir:file,depth:depth+1})
+      if(entry.isFile()&&/\.(?:pth|pt|ckpt)$/iu.test(entry.name)){
+        try{if(statSync(file).size>10*1024*1024)return true}catch{}
+      }
+    }
+  }
+  return false
+}
+
 async function installPythonComponents(p,state,fd){
   await prepareVenv(p)
   for(const component of modules){
@@ -136,7 +159,7 @@ async function installBaselineWeights(p,state,fd,env=process.env){
     save(p,state);return
   }
   const root=weightsRoot(env),results=join(root,'nnunet','results')
-  if(state.components.weights_ct?.status==='installed'&&existsSync(results)&&readdirSync(results).length){
+  if(state.components.weights_ct?.status==='installed'&&hasWeightFiles(root)){
     state.components.weights_ct.verifiedAt=now()
     save(p,state);return
   }
@@ -149,7 +172,7 @@ async function installBaselineWeights(p,state,fd,env=process.env){
   try{
     await run(command,['-t',BASELINE_TASK],{cwd:p.root,output:fd,
       env:modelEnv(env),timeout:1800000})
-    if(!existsSync(results)||!readdirSync(results).length)
+    if(!hasWeightFiles(root))
       throw Error('Downloader succeeded but no model files were found')
     state.components.weights_ct={status:'installed',task:BASELINE_TASK,
       location:results,licensed:false,verifiedAt:now()}
@@ -314,7 +337,7 @@ export function status(env=process.env){
   const viewerReady=components.viewer?.status==='installed'&&
     existsSync(join(p.root,'viewer','node_modules','three','build','three.module.js'))
   const weightsReady=components.weights_ct?.status==='installed'&&
-    existsSync(join(weightsRoot(env),'nnunet','results'))
+    hasWeightFiles(weightsRoot(env))
   const missing=[...modules.map(m=>m.id),'weights_ct','viewer','slicer','slicerheart']
     .filter(id=>components[id]?.status!=='installed')
   return {root:p.root,manifest:p.manifest,log:p.log,initialized:!!v,
@@ -353,12 +376,36 @@ export function ensure(env=process.env,launch=spawn){
   }
 }
 if(process.argv[1]&&resolve(process.argv[1])===self){
-  if(process.argv.includes('--worker')||process.argv.includes('--install'))worker().then(()=>{
-    if(process.argv.includes('--install'))console.log(JSON.stringify(status(),null,2))
-  }).catch(e=>{
-    const p=pathsFor();log(p,'FATAL '+String(e));try{rmSync(p.lock,{force:true})}catch{}
-    process.exitCode=1
-  })
+  const manual=process.argv.includes('--install')
+  if(manual||process.argv.includes('--worker')){
+    const p=pathsFor()
+    if(manual){
+      mkdirSync(p.root,{recursive:true})
+      let running=false
+      try{
+        const age=Date.now()-statSync(p.lock).mtimeMs
+        if(age>=-60000&&age<60*60*1000)running=true
+        else rmSync(p.lock,{force:true})
+      }catch{}
+      if(running){
+        console.error('Anatomy installation already running; use --status')
+        process.exitCode=2
+      }else{
+        try{const fd=openSync(p.lock,'wx');closeSync(fd)}
+        catch{console.error('Anatomy installer locked');process.exitCode=2}
+      }
+    }
+    if(process.exitCode!==2)worker().then(()=>{
+      if(manual){
+        const result=status()
+        console.log(JSON.stringify(result,null,2))
+        if(!result.installed)process.exitCode=3
+      }
+    }).catch(e=>{
+      log(p,'FATAL '+String(e));try{rmSync(p.lock,{force:true})}catch{}
+      process.exitCode=1
+    })
+  }
   else if(process.argv.includes('--status'))console.log(JSON.stringify(status(),null,2))
   else console.log(JSON.stringify(ensure(),null,2))
 }
