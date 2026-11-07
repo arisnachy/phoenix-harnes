@@ -358,4 +358,27 @@ describe('Borrowed-eyes prompt admission', () => {
     expect(eyeCalls).toHaveLength(0)
     await ctx.fiber.dispose()
   })
+
+  it('asks borrowed vision to read source findings and report diagnoses before illustrating', async () => {
+    const { ctx, sessionId, eyeCalls, followup } = await harness()
+    const api = proxy(ctx, { enabled: true })
+    const question = 'Lee primero el diagnóstico y los hallazgos de esta RX; luego crea una explicación visual.'
+    const result = await api.sessions.prompt(request({
+      sessionId,
+      mode: 'queue' as const,
+      content: [IMAGE_PART, { type: 'text', text: question }],
+    }))
+    expect(result.result.ok).toBe(true)
+    expect(eyeCalls).toHaveLength(1)
+    const system = eyeCalls[0]?.system ?? ''
+    expect(system).toContain('Observed findings:')
+    expect(system).toContain('Reported diagnosis or impression:')
+    expect(system).toContain('Visual limitations:')
+    expect(system).toContain('Never replace the requested source reading with generic anatomy')
+    const content = eyeCalls[0]?.messages[0]?.content ?? []
+    expect(content.some(block => block.type === 'text' && block.text.includes(question))).toBe(true)
+    const delivered = (followup.mock.calls[0]?.[0] as UserMessage).content
+    expect(delivered.some(block => block.type === 'text' && block.text.includes('fallback vision model'))).toBe(true)
+    await ctx.fiber.dispose()
+  })
 })
