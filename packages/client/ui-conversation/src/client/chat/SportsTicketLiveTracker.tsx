@@ -53,7 +53,7 @@ const goal=(leg:TicketLeg)=>{
   return(team??'Equipo')+' gana'
 }
 function Team({name,logo,selected,score}:{
-  name:string;logo?:string;selected:boolean;score?:string|undefined
+  name:string;logo?:string|undefined;selected:boolean;score?:string|undefined
 }):ReactNode{
   const url=logo&&/^https:\/\/a\.espncdn\.com\//u.test(logo)
   return <div className={css.team} data-selected={selected?'true':'false'}>
@@ -65,13 +65,13 @@ function Team({name,logo,selected,score}:{
   </div>
 }
 function LiveLegContent({leg,index,receipt,game,meta,onGrade}:{
-  leg:TicketLeg;index:number;receipt:string;game?:PhoenixLiveGame;
+  leg:TicketLeg;index:number;receipt:string;game?:PhoenixLiveGame|undefined;
   meta:PhoenixLiveMeta;onGrade:(i:number,s:TicketState)=>void
 }):ReactNode{
   const linked=isLinked(leg,receipt)
   // ESPN matchEspnGame allows an ID fallback for MLB. Real receipts require
   // exact ESPN ID and team identities before any provisional grading.
-  const exact=linked&&game?.id===leg.eventId&&game.home===leg.homeTeam&&game.away===leg.awayTeam?game:undefined
+  const exact=linked&&game!==undefined&&game.id===leg.eventId&&game.home===leg.homeTeam&&game.away===leg.awayTeam?game:undefined
   const p=leg.trackedBet
   const grade=linked&&p?evaluateSportsPick(p,exact,leg.sport):pendingGrade
   useEffect(()=>onGrade(index,grade.state),[index,grade.state,onGrade])
@@ -113,7 +113,7 @@ function LiveLeg({leg,index,receipt,onGrade}:{
     onGrade={onGrade} meta={{enabled:false,stale:true,error:false,updatedAt:0}}/>
   return <SportsLiveProvider sport={leg.sport} league={leg.providerLeague} date={leg.eventDate}>
     {(get,meta)=><LiveLegContent leg={leg} index={index} receipt={receipt}
-      game={get({eventId:leg.eventId,home:{label:leg.homeTeam!},away:{label:leg.awayTeam!}})}
+      game={get({eventId:leg.eventId!,home:{label:leg.homeTeam!},away:{label:leg.awayTeam!}})}
       onGrade={onGrade} meta={meta}/>}
   </SportsLiveProvider>
 }
