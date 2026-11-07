@@ -732,3 +732,42 @@ test('MLB review discloses undated medical reports and absent recent starter out
   assert.equal(review.eligibleForTicket,false)
   assert.equal(review.decision,'abstain')
 })
+
+test('MLB temporal gates reject future, stale and invalid pitcher logs',async()=>{
+  const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true}).fetcher,at)
+  const log=(day)=>({date:day,opponentId:123,innings:'1.0',pitches:'15',
+    earnedRuns:'0',strikeouts:'1',walks:'0'})
+  assert.ok(d.starters.home&&d.starters.away)
+  assert.ok(d.bullpen.home.length&&d.bullpen.away.length)
+  for(const p of [d.starters.home,d.starters.away]){
+    p.recentStarts=[log('2026-07-02')]
+  }
+  for(const side of ['home','away']){
+    d.bullpen[side][0].reliefUsage72h=[log('2026-07-02')]
+  }
+  let review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.recentStarterOutingsVerified,false)
+  assert.equal(review.evidenceGates.reliefUsageObserved,false)
+  for(const p of [d.starters.home,d.starters.away]){
+    p.recentStarts=[log('2026-01-01'),log('invalid')]
+  }
+  for(const side of ['home','away']){
+    d.bullpen[side][0].reliefUsage72h=[log('2026-06-01'),log('invalid')]
+  }
+  review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.recentStarterOutingsVerified,false)
+  assert.equal(review.evidenceGates.reliefUsageObserved,false)
+  assert.ok(review.missingEvidence.some(x=>x.includes('Últimas salidas fechadas')))
+  assert.ok(review.missingEvidence.some(x=>x.includes('bullpen')))
+  assert.equal(review.eligibleForTicket,false)
+  for(const p of [d.starters.home,d.starters.away]){
+    p.recentStarts=[log('2026-06-25')]
+  }
+  for(const side of ['home','away']){
+    d.bullpen[side][0].reliefUsage72h=[log('2026-06-30')]
+  }
+  review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.recentStarterOutingsVerified,true)
+  assert.equal(review.evidenceGates.reliefUsageObserved,true)
+  assert.equal(review.eligibleForTicket,false)
+})
