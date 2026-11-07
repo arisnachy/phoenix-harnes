@@ -66,6 +66,15 @@ describe('universal, data-native professional PDF export',()=>{
     expect(content.split('INFORME PROFESIONAL').length-1).toBe(count)
     expect(content).toContain('/Type /Page /Parent')
   })
+  it('includes long metrics fully instead of cutting the last words',()=>{
+    const original=demo()
+    const extended='Valor muy largo con detalles comprobables '.repeat(3)+'ULTIMOTOKEN'
+    const spec=parseVisualIntelligence({...original,props:{...original.props,
+      metrics:[{label:'Indicador extenso',value:extended,status:'neutral'}]}})!
+    const content=asText(buildVisualIntelligencePdf(spec))
+    expect(content).toContain('ULTIMOTOKEN')
+    expect(content).toContain('Indicador extenso')
+  })
   it('prevents model values from injecting PDF commands',()=>{
     const source=demo()
     const input={...source,props:{...source.props,
