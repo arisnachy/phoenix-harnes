@@ -87,7 +87,7 @@ test('daily market search keeps as many as 36 real upcoming candidates, not only
   assert.equal(new Set(report.events.map(x=>x.sport)).size,2)
   assert.equal(new Set(report.events.map(x=>x.sport+'|'+x.league+'|'+x.eventId)).size,36)
   assert.equal(report.coverage.find(x=>x.league==='nba')?.futureEvents,24)
-  assert.ok(report.events.every(x=>x.kickoff===kickoff))
+  assert.ok(report.events.every(x=>Date.parse(x.kickoff)===Date.parse(kickoff)))
 })
 
 test('the requested day is Santo Domingo local, including games after UTC midnight',async()=>{

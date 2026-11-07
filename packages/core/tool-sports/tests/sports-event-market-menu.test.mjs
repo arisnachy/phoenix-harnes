@@ -6,7 +6,16 @@ const now=Date.parse('2026-11-06T17:00:00Z')
 const eventId='a6b7c8d9e0f11213'
 const env={THE_ODDS_API_KEY:'test-only-secret'}
 const feed=async(url)=>{
-  const u=new URL(url),markets=u.searchParams.get('markets').split(',')
+  const u=new URL(url)
+  if(u.pathname.endsWith('/markets'))return new Response(JSON.stringify({
+    id:eventId,sport_key:'basketball_nba',commence_time:'2026-11-06T23:00:00Z',
+    bookmakers:[{key:'draftkings',markets:[
+      'player_points','alternate_spreads','alternate_totals','team_totals',
+      'totals_h1','spreads_h1','totals_q1','spreads_q1',
+      'player_rebounds','player_assists','player_threes','player_points_rebounds_assists',
+    ].map(key=>({key,last_update:'2026-11-06T16:55:00Z'}))}],
+  }),{status:200})
+  const markets=(u.searchParams.get('markets')??'').split(',')
   const names=markets.includes('player_points')?['player_points']:markets.filter(m=>m.startsWith('alternate_'))
   return new Response(JSON.stringify({
     id:eventId,commence_time:'2026-11-06T23:00:00Z',
