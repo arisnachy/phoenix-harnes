@@ -1,4 +1,5 @@
 import { inspectAnatomicalGlb, verifyAnatomicalEvidence } from './health-anatomy.ts'
+import { evaluateStudyEvidence } from './health-diagnostic-evidence.ts'
 /**
  * PHOENIX Health: local encrypted record service (clinical pilot).
  * All clinical payloads encrypted with AES-256-GCM, bound to record identity/version.
@@ -19,7 +20,7 @@ type Actor = { username:string; role:Role; org:string }
 /** Authenticated clinical principal with organization and professional role. */
 export type ClinicActor = Readonly<Actor>
 type RecordData = Record<string,unknown>
-type Row = { id:string; org:string; kind:Kind|'attachment'|'draft'; version:number; iv:string; tag:string; payload:string; created_at:string; updated_at:string }
+type Row = { id:string; org:string; kind:Kind|'attachment'|'draft'|'study-interpretation'; version:number; iv:string; tag:string; payload:string; created_at:string; updated_at:string }
 type AttachmentRow = Omit<Row,'kind'|'updated_at'> & { patient_id:string; encounter_id:string|null; uploaded_by:string }
 type Staff = { username:string; org:string; role:Role; salt:string; digest:string }
 type Session = { actor:Actor; expires:number; csrf:string }
@@ -94,6 +95,8 @@ export class HealthClinicStore {
       'CREATE TABLE IF NOT EXISTS health_patient_access (org TEXT NOT NULL, patient_id TEXT NOT NULL, staff_id TEXT NOT NULL, purpose TEXT NOT NULL, granted_by TEXT NOT NULL, granted_at TEXT NOT NULL, PRIMARY KEY(org,patient_id,staff_id));'+
       'CREATE TABLE IF NOT EXISTS health_attachments (id TEXT PRIMARY KEY, org TEXT NOT NULL, patient_id TEXT NOT NULL, encounter_id TEXT, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, uploaded_by TEXT NOT NULL);'+
       'CREATE INDEX IF NOT EXISTS health_attachments_patient ON health_attachments(org,patient_id,created_at);'+
+      'CREATE TABLE IF NOT EXISTS health_study_interpretations (id TEXT PRIMARY KEY, org TEXT NOT NULL, patient_id TEXT NOT NULL, source_attachment_id TEXT NOT NULL, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, authored_by TEXT NOT NULL);'+
+      'CREATE INDEX IF NOT EXISTS health_study_interpretations_patient ON health_study_interpretations(org,patient_id,created_at);'+
       'CREATE TABLE IF NOT EXISTS health_drafts (id TEXT PRIMARY KEY, org TEXT NOT NULL, username TEXT NOT NULL, scope TEXT NOT NULL, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);',
     )
   }
@@ -206,7 +209,7 @@ export class HealthClinicStore {
     }catch(error){this.db.exec('ROLLBACK');throw error}
   }
   private encryptionKey():Buffer {if(!this.key)fail('Expediente clínico bloqueado');return this.key}
-  private seal(id:string,org:string,kind:Kind|'attachment'|'draft',version:number,data:RecordData):{ iv:string;tag:string;payload:string } {
+  private seal(id:string,org:string,kind:Kind|'attachment'|'draft'|'study-interpretation',version:number,data:RecordData):{ iv:string;tag:string;payload:string } {
     const iv=randomBytes(12),key=this.encryptionKey(),cipher=createCipheriv('aes-256-gcm',key,iv)
     cipher.setAAD(Buffer.from([id,org,kind,String(version)].join(':')))
     const raw=Buffer.from(JSON.stringify(data),'utf8')
@@ -852,10 +855,68 @@ export class HealthClinicStore {
   readAttachment(actor:Actor,id:string):{mime:string;bytes:Buffer}{
     const row=this.attachmentRow(actor,id),attachment=this.openAttachment(row)
     const mime=str(attachment.mime,'Tipo de archivo',80)
-    const encoded=str(attachment.base64,'Contenido',7_200_000)
+    const encoded=str(attachment.base64,'Contenido',33_600_000)
     return {mime,bytes:Buffer.from(encoded,'base64')}
   }
 
+
+  /** Securely archive the clinician's evidence-bound interpretation draft.
+   * A PDF, photo or GLB is NEVER itself an automated medical diagnosis.
+   */
+  createStudyInterpretation(actor:Actor,value:unknown):RecordData{
+    if(actor.role!=='clinician')fail('Solo un médico asignado puede registrar interpretaciones')
+    const x=obj(value),patientId=str(x.patientId,'Paciente',80)
+    this.find(actor,'patients',patientId)
+    const sourceAttachmentId=str(x.sourceAttachmentId,'Archivo original',80)
+    const original=this.attachmentRow(actor,sourceAttachmentId)
+    if(original.patient_id!==patientId)fail('El estudio no corresponde al paciente')
+    const source=this.openAttachment(original)
+    const evidence=evaluateStudyEvidence({
+      modality:x.modality,sourceMime:source.mime,
+      originalReviewed:x.originalReviewed,observations:x.observations,
+      preliminaryInterpretation:x.preliminaryInterpretation,
+      criticalConcern:x.criticalConcern,studyContext:x.studyContext,
+    })
+    // A suspected critical finding must not be silently archived as routine.
+    if(evidence.criticalConcern==='suspected-critical'&&x.escalationAcknowledged!==true)
+      fail('Debe reconocer que el hallazgo crítico requiere evaluación clínica inmediata')
+    const id=randomUUID(),now=new Date().toISOString()
+    const stored:RecordData={
+      patientId,sourceAttachmentId,evidence,
+      origin:'clinician-entered',aiDiagnosisPerformed:false,
+      sourceReviewedByClinician:evidence.sourceReviewedByClinician,
+      reviewStatus:'draft',recordedBy:actor.username,recordedAt:now,
+    }
+    const sealed=this.seal(id,actor.org,'study-interpretation',1,stored)
+    this.db.exec('BEGIN IMMEDIATE')
+    try{
+      this.db.prepare('INSERT INTO health_study_interpretations VALUES (?,?,?,?,?,?,?,?,?,?)')
+        .run(id,actor.org,patientId,sourceAttachmentId,1,sealed.iv,sealed.tag,
+          sealed.payload,now,actor.username)
+      this.audit(actor,'study.interpretation.draft',id)
+      this.db.exec('COMMIT')
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+    return {...stored,id,version:1}
+  }
+
+  /** Only an assigned clinician may read linked assessments; no underlying image bytes. */
+  listStudyInterpretations(actor:Actor,patientId:string):readonly RecordData[]{
+    if(actor.role!=='clinician')fail('Permiso médico requerido')
+    const id=str(patientId,'Paciente',80)
+    this.find(actor,'patients',id)
+    const rows=this.db.prepare(
+      'SELECT * FROM health_study_interpretations WHERE org=? AND patient_id=? ORDER BY created_at DESC LIMIT 100',
+    ).all(actor.org,id) as Array<{
+      id:string;org:string;patient_id:string;source_attachment_id:string;version:number;
+      iv:string;tag:string;payload:string;created_at:string;authored_by:string
+    }>
+    return rows.map(row=>({
+      ...this.open({id:row.id,org:row.org,kind:'study-interpretation',
+        version:row.version,iv:row.iv,tag:row.tag,payload:row.payload,
+        created_at:row.created_at,updated_at:row.created_at}),
+      id:row.id,version:row.version,
+    }))
+  }
 
   /** Physician attests reading the original, not that its medical claims are correct. */
   reviewAttachment(actor:Actor,id:string,expectedVersion:number):RecordData {

@@ -4,6 +4,10 @@ on:
     paths:
       - 'scripts/phoenix-anatomy-*'
       - 'scripts/phoenix-health-anatomy.test.mjs'
+      - 'scripts/phoenix-health-diagnostic.test.mjs'
+      - 'packages/bundle/web-app/src/health-diagnostic-evidence.ts'
+      - 'packages/core/tool-health/src/diagnostic-routing.ts'
+      - 'packages/core/tool-health/src/index.ts'
       - 'packages/bundle/web-app/src/health-anatomy.ts'
       - 'packages/bundle/web-app/src/health-ui.ts'
       - 'packages/bundle/web-app/src/health-store.ts'
@@ -29,6 +33,10 @@ jobs:
       - name: Authenticated HealthIA anatomy upload and CSP contracts
         run: |
           node --experimental-strip-types --test scripts/phoenix-health-anatomy.test.mjs
+      - name: Original study and diagnostic evidence safeguards
+        run: |
+          node --experimental-strip-types --test scripts/phoenix-health-diagnostic.test.mjs
+          node --experimental-strip-types --test packages/bundle/web-app/tests/health-store.test.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

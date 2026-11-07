@@ -206,6 +206,8 @@ async function load(){
   if(sequence!==loadSequence||activeTab!==tab)return;
   for(const kind of ["encounters","orders","prescriptions","followups","appointments","observations","attachments"])
    data[kind]=data.patientContext?.[kind]||[];
+  data.studyInterpretations=(actor.role==="clinician"&&selectedPatientId)
+   ?(await api("study-interpretations/"+encodeURIComponent(selectedPatientId))).items:[];
  }
  if(tab==="anatomy"){
   if(!(data.patients||[]).some(p=>p.id===selectedPatientId))selectedPatientId=data.patients?.[0]?.id||""
@@ -292,6 +294,10 @@ async function clinicalIntent(input){
   if(!selectedPatientId){kiraNotice("Selecciona o registra primero al paciente.");return}
   await execute("openMedicalHistory",selectedPatientId);return;
  }
+ if(/(diagnos|interpret|ekg|ecg|electrocard|radiograf|tomograf|resonancia|citolog|ecograf|sonograf)/.test(normalized)){
+  kiraNotice("Abriré el registro de evidencias por modalidad. Sin leer el estudio original, Kira no puede confirmar diagnósticos.");
+  kiraScroll("ws-study-assessment");return;
+ }
  if(/(vital|laborator|analitica|imagen|estudio|prueba|resultado)/.test(normalized)){
   kiraNotice("Aquí puedes archivar documentos y registrar cifras transcritas como pendientes de verificación.");
   kiraScroll("ws-clinical-results");return;
@@ -328,6 +334,7 @@ function renderWorkspace(){
  const orders=(data.orders||[]).filter(x=>x.patientId===id),prescriptions=(data.prescriptions||[]).filter(x=>x.patientId===id);
  const followups=(data.followups||[]).filter(x=>x.patientId===id),attachments=data.attachments||[];
  const observations=(data.observations||[]).filter(x=>x.patientId===id);
+ const studyInterpretations=(data.studyInterpretations||[]).filter(x=>x.patientId===id);
  const pending=data.patientContext?.pending||{orders:0,followups:0,attachments:0};
  const timeline=[
   ...visits.map(x=>({date:x.createdAt,title:"Consulta · "+x.complaint,detail:x.status==="signed"?"Plan indicado: "+(x.plan||"No documentado"):"Borrador pendiente de firma",status:x.status})),
@@ -441,6 +448,38 @@ function renderWorkspace(){
             series.slice(-5).map(x=>safe(x.value)+' ('+safe(String(x.effectiveAt).slice(0,10))+')').join(' → ')+'</p>';
         }).join("")+'</div>':""));
   panel+="</div>";
+  if(actor.role==="clinician"){
+   const studyFiles=attachments.filter(x=>["image/png","image/jpeg","image/webp","application/pdf"].includes(x.mime));
+   const studyModalities=[
+    ["ecg","ECG / EKG"],["ultrasound","Ecografía / Doppler"],
+    ["xray","Radiografía"],["ct","TC / Angio-TC"],["mri","Resonancia magnética"],
+    ["laboratory","Laboratorio"],["cytology","Citología"],
+    ["histopathology","Histopatología"],["other","Otro estudio"]].map(x=>
+      '<option value="'+x[0]+'">'+x[1]+'</option>').join("");
+   panel+='<div id="ws-study-assessment">'+box("Interpretación de estudios · Evidencia primero",
+    '<p class="notice warning">Un modelo 3D, una fotografía o un PDF no equivalen al estudio diagnóstico completo. Sin un motor validado que procese las imágenes originales, Kira NO ha analizado los píxeles ni puede confirmar una patología. Este formulario conserva solo una valoración provisional del médico.</p>'+
+    '<label for="ws-study-file">Archivo de origen</label><select id="ws-study-file"><option value="">Seleccionar archivo</option>'+
+      studyFiles.map(x=>'<option value="'+safe(x.id)+'">'+safe(x.name)+'</option>').join("")+'</select>'+
+    '<label for="ws-study-modality">Modalidad del estudio</label><select id="ws-study-modality">'+studyModalities+'</select>'+
+    field("ws-study-context","Motivo del estudio y contexto clínico","text",false)+
+    '<label><input id="ws-study-original" type="checkbox" style="width:auto;display:inline"> He revisado personalmente el documento o imagen original, no solo el modelo 3D</label>'+
+    area("ws-study-findings","Hallazgos observados directamente en el archivo seleccionado")+
+    area("ws-study-impression","Impresión preliminar y diagnósticos diferenciales; no confirmados por IA")+
+    '<label for="ws-study-critical">Valoración de hallazgos potencialmente críticos</label>'+
+    '<select id="ws-study-critical"><option value="not-assessed">No evaluado</option>'+
+     '<option value="suspected-critical">Sospecha de hallazgo crítico: requiere acción inmediata</option>'+
+     '<option value="assessed-no-critical">Profesional revisó, no identificó hallazgos críticos en este documento</option></select>'+
+    '<p>'+button("workspaceSaveStudyAssessment","Guardar valoración provisional cifrada")+'</p>'+
+    '<p class="muted">TC/RM requieren secuencias originales; ECG exige trazado calibrado; citología e histología requieren láminas completas. Una imagen aislada no permite excluir enfermedades.</p>'+
+    (studyInterpretations.length?studyInterpretations.map(x=>
+      '<div class="ws-item"><div><strong>'+safe(x.evidence?.modalityLabel||"Estudio")+
+      '</strong> · '+safe(x.evidence?.evidenceState||"Sin revisar")+
+      '<div class="muted">Fuente: '+safe(studyFiles.find(a=>a.id===x.sourceAttachmentId)?.name||"Archivo autorizado")+
+      ' · '+safe(x.evidence?.diagnosticValidation||"No validado")+
+      ' · IA no ejecutada sobre el archivo</div><p>'+safe(x.evidence?.observations||"Sin hallazgos revisados")+'</p>'+
+      '<p>'+safe(x.evidence?.preliminaryInterpretation||"Sin impresión clínica")+'</p></div></div>').join(""):
+      '<p class="muted">Todavía no hay interpretaciones provisionales registradas.</p>'))+'</div>';
+  }
   panel+=box("Línea de tiempo longitudinal",
    timeline.length?timeline.slice(0,80).map(x=>
     '<div class="ws-timeline"><div><strong>'+safe(x.title)+'</strong><span class="tag">'+safe(x.status||"Registrado")+'</span></div>'+
@@ -803,6 +842,24 @@ async function execute(action,id){
         mats.forEach(m=>m?.dispose?.())}
     });target.replaceChildren();list.replaceChildren()}
   notice("Visor del expediente abierto. Segmentación sin certificación clínica.");return
+ }
+ if(action==="workspaceSaveStudyAssessment"){
+  if(!selectedPatientId)throw Error("Selecciona un paciente autorizado");
+  const sourceAttachmentId=val("ws-study-file");
+  if(!sourceAttachmentId)throw Error("Selecciona primero una imagen o informe guardado");
+  const originalReviewed=document.getElementById("ws-study-original")?.checked===true;
+  const criticalConcern=val("ws-study-critical");
+  const escalationAcknowledged=criticalConcern==="suspected-critical"
+   ?confirm("Posible hallazgo crítico. ¿Reconoces que debes evaluarlo y actuar de inmediato según el contexto clínico?"):false;
+  if(criticalConcern==="suspected-critical"&&!escalationAcknowledged)return;
+  await api("study-interpretations","POST",{
+   patientId:selectedPatientId,sourceAttachmentId,modality:val("ws-study-modality"),
+   studyContext:val("ws-study-context"),originalReviewed,
+   observations:val("ws-study-findings"),preliminaryInterpretation:val("ws-study-impression"),
+   criticalConcern,escalationAcknowledged,
+  });
+  notice("Valoración clínica preliminar cifrada; NO se ha generado diagnóstico automático.");
+  return load();
  }
  if(action==="workspaceUpload"){
   if(!selectedPatientId)throw Error("Selecciona un paciente");
