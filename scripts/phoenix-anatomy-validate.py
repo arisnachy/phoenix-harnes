@@ -7,6 +7,7 @@ physical coordinate system. Refuse silently resampling misaligned studies.
 from __future__ import annotations
 import argparse
 import json
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -98,6 +99,7 @@ def validate(prediction_dir, reference_dir, output):
         "comparisons":rows, "unmatchedReferences":sorted(set(references)-set(pred)),
         "warning":"Dice and HD95 do not establish diagnostic safety, anatomical completeness, or regulatory approval.",
     }
+    os.umask(0o077)
     output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     if output.exists():
         raise ValueError("validation report already exists; never overwrite earlier evidence")
