@@ -21,7 +21,7 @@ const roster=(side,fullLineup=false)=>({roster:[
 function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
   unrelatedGame=false,unknownLineupId=false,pitcherLogs=false,bvpHydration=false,
   futureGameResult=false,futurePitcherLog=false,wrongVenue=false,
-  olderReliefLog=false}={}){
+  olderReliefLog=false,futureNews=false,sameDayFinal=false,duplicateGame=false}={}){
   const calls=[]
   const fetcher=async(input)=>{
     const url=String(input)
@@ -36,6 +36,12 @@ function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
         status:{abstractGameState:'Final'},teams:{
           home:{team:{id:teamId},score:6},
           away:{team:{id:teamId===101?200:201},score:2}}},
+        ...(duplicateGame?[{gamePk:709999,gameDate:'2026-06-29T22:00:00Z',
+          status:{abstractGameState:'Final'},teams:{home:{team:{id:teamId},score:6},
+            away:{team:{id:teamId===101?200:201},score:2}}}]:[]),
+        ...(sameDayFinal?[{gamePk:710002,gameDate:'2026-07-01T08:00:00Z',
+          status:{abstractGameState:'Final'},teams:{home:{team:{id:teamId},score:21},
+            away:{team:{id:779},score:0}}}]:[]),
         ...(futureGameResult?[{gamePk:710001,gameDate:'2026-07-01T23:00:00Z',
           status:{abstractGameState:'Final'},teams:{home:{team:{id:teamId},score:20},
             away:{team:{id:779},score:0}}}]:[]),
@@ -45,7 +51,7 @@ function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
     }else if(u.pathname.endsWith('/boxscore')){
       data={teams:{home:{battingOrder:fullLineup?[unknownLineupId?999999:1103,1104,...Array.from({length:7},(_,i)=>1301+i)]:[]},
         away:{battingOrder:fullLineup?[2203,2204,...Array.from({length:7},(_,i)=>2301+i)]:[]}}}
-    }else if(u.pathname.endsWith('/venues')){
+    }else if(/^\/api\/v1\/venues\/\d+$/u.test(u.pathname)){
       data={venues:[{id:wrongVenue?999:205,name:wrongVenue?'Other Park':'Test Ballpark',
         location:{defaultCoordinates:{latitude:40.1,longitude:-74.2}},
         fieldInfo:{roofType:'Retractable',turfType:'Grass',leftLine:330,center:400,rightLine:335}}]}
@@ -89,7 +95,7 @@ function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
         {team:{id:102},wins:40,losses:45}]}]}
     }else if(u.pathname.endsWith('/news')){
       data={articles:[{headline:'Home Giants prepare to face Away Bears',
-        published:'2026-07-01T10:00:00Z'}]}
+        published:futureNews?'2026-07-01T13:00:00Z':'2026-07-01T10:00:00Z'}]}
     }else throw new Error('Unexpected request '+url)
     return new Response(JSON.stringify(data),{status:200,headers:{'content-type':'application/json'}})
   }
@@ -275,6 +281,17 @@ test('research snapshot excludes future results and same-day undated pitching lo
     url.includes('date=2026-06-30')))
 })
 
+test('as-of form excludes hindsight finals from the same day and repeated gamePk',async()=>{
+  const mock=fakeNetwork({sameDayFinal:true,duplicateGame:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(d.teamForm.home.games,1)
+  assert.equal(d.teamForm.home.wins,1)
+  assert.equal(d.teamForm.home.runsFor,6)
+  assert.equal(d.teamForm.away.games,1)
+  assert.ok(d.teamForm.home.lastResults.every(g=>g.date<'2026-07-01'))
+  assert.ok(!d.teamForm.home.lastResults.some(g=>g.scored===21))
+})
+
 test('a venue mismatch cannot attach foreign park weather to the MLB fixture',async()=>{
   const mock=fakeNetwork({wrongVenue:true})
   const d=await researchMlbCase(date,812345,mock.fetcher,at)
@@ -327,7 +344,7 @@ test('official park fieldInfo distinguishes roof construction from actual roof p
   assert.equal(d.venue.turfType,'Grass')
   assert.deepEqual(d.venue.dimensionsFt,{leftLine:330,center:400,rightLine:335})
   assert.equal(d.weather.windRelativeToField,'unknown')
-  assert.ok(mock.calls.some(url=>url.includes('/venues?')&&
+  assert.ok(mock.calls.some(url=>url.includes('/venues/205?')&&
     url.includes('hydrate=location,fieldInfo')))
 })
 
@@ -376,4 +393,441 @@ test('market comparisons preserve bookmaker, selection, line, price and timestam
   assert.equal(review.reviewedMarkets.length,3)
   assert.equal(review.probabilitiesEstimated,false)
   assert.equal(review.eligibleForTicket,false)
+})
+
+
+test('MLB dossier rejects otherwise matching odds from another sport',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const quote=sportKey=>({eventId:'book-4',bookmaker:'Verified House',
+    market:'totals',selection:'Over',point:8,price:1.91,
+    home:'Home Giants',away:'Away Bears',timeIso:fixture.gameDate,
+    updatedAt:'2026-07-01T11:55:00Z',sportKey})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[
+    quote('basketball_nba'),quote('baseball_mlb'),
+  ])
+  assert.equal(d.odds.length,1)
+  assert.equal(d.odds[0].sportKey,'baseball_mlb')
+  assert.equal(reviewMlbResearch(d).reviewedMarkets.length,1)
+})
+
+test('news published after checkedAt is not treated as known pregame evidence',async()=>{
+  const mock=fakeNetwork({futureNews:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(d.news.length,0)
+  assert.ok(d.missingEvidence.some(x=>x.includes('Noticias específicas')))
+})
+
+
+test('cross-book prices compare only identical market, selection and run line',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const quote=(bookmaker,selection,point,price)=>({eventId:'book-4',bookmaker,
+    market:'totals',selection,point,price,home:'Home Giants',away:'Away Bears',
+    timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z',
+    sportKey:'baseball_mlb'})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[
+    quote('Book A','Over',8,1.91),quote('Book B','Over',8,1.96),
+    quote('Book B','Over',8.5,2.08),quote('Book A','Under',8,1.84),
+  ])
+  const review=reviewMlbResearch(d)
+  assert.equal(review.crossBookComparisons.length,3)
+  const over8=review.crossBookComparisons.find(x=>x.market==='totals'&&
+    x.selection==='Over'&&x.line===8)
+  assert.deepEqual(over8.quotes.map(x=>[x.bookmaker,x.price]),
+    [['Book A',1.91],['Book B',1.96]])
+  assert.equal(over8.settlementComparable,false)
+  assert.equal(review.evidenceGates.crossBookSettlementComparable,false)
+  assert.match(over8.note,/NO comparable/)
+  assert.ok(review.reviewedMarkets.every(m=>m.missingEvidence.some(x=>x.includes('equivalencia del período'))))
+  assert.ok(!over8.quotes.some(x=>x.price===2.08||x.price===1.84))
+  assert.equal(review.probabilitiesEstimated,false)
+  assert.equal(review.eligibleForTicket,false)
+})
+
+test('a confirmed lineup flag cannot substitute for nine distinct verified starters',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(reviewMlbResearch(d).evidenceGates.lineupsConfirmed,true)
+  const hitter=d.rosters.home.find(p=>p.role==='batter'&&p.lineupConfirmed)
+  hitter.lineupConfirmed=false
+  assert.equal(d.lineupStatus.home,'confirmed')
+  assert.equal(reviewMlbResearch(d).evidenceGates.lineupsConfirmed,false)
+  hitter.lineupConfirmed=true
+  hitter.teamId=999
+  assert.equal(reviewMlbResearch(d).evidenceGates.lineupsConfirmed,false)
+})
+
+test('market gate rejects a missing batter versus bullpen matchup even with nine confirmed hitters',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const quote={eventId:'book-4',bookmaker:'Verified House',market:'totals',selection:'Over',
+    point:8,price:1.91,home:'Home Giants',away:'Away Bears',timeIso:fixture.gameDate,
+    updatedAt:'2026-07-01T11:55:00Z',sportKey:'baseball_mlb'}
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[quote])
+  assert.equal(reviewMlbResearch(d).evidenceGates.rosterMatchupsReviewed,true)
+  const hitter=d.rosters.home.find(p=>p.role==='batter'&&p.lineupConfirmed)
+  const reliever=d.bullpen.away[0]
+  d.matchups=d.matchups.filter(m=>!(m.batterId===hitter.id&&m.pitcherId===reliever.id))
+  const review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.lineupsConfirmed,true)
+  assert.equal(review.evidenceGates.rosterMatchupsReviewed,false)
+  assert.equal(review.reviewedMarkets.length,1)
+  assert.ok(review.reviewedMarkets.every(m=>m.missingEvidence.some(x=>x.includes('Matriz completa'))))
+  assert.equal(review.eligibility,'insufficient')
+  assert.equal(review.decision,'abstain')
+  assert.equal(review.eligibleForTicket,false)
+})
+
+test('roster matchup evidence abstains when either opposing bullpen is absent',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(reviewMlbResearch(d).evidenceGates.rosterMatchupsReviewed,true)
+  d.bullpen.away=[]
+  let review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.rosterMatchupsReviewed,false)
+  assert.equal(review.decision,'abstain')
+  assert.equal(review.eligibleForTicket,false)
+  d.bullpen.home=[]
+  review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.rosterMatchupsReviewed,false)
+  assert.equal(review.eligibleForTicket,false)
+})
+
+test('confirmed MLB lineup requires nine distinct batting-order slots from 1 through 9',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(reviewMlbResearch(d).evidenceGates.lineupsConfirmed,true)
+  const hitters=d.rosters.home.filter(p=>p.role==='batter'&&p.lineupConfirmed)
+  assert.equal(hitters.length,9)
+  hitters[8].lineupOrder=hitters[0].lineupOrder
+  assert.equal(reviewMlbResearch(d).evidenceGates.lineupsConfirmed,false)
+  hitters[8].lineupOrder=9
+  assert.equal(reviewMlbResearch(d).evidenceGates.lineupsConfirmed,true)
+  hitters[8].lineupOrder=null
+  const review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.lineupsConfirmed,false)
+  assert.equal(review.eligibleForTicket,false)
+})
+
+
+test('review rechecks cached odds freshness and excludes stale quotes from comparisons',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const quote={eventId:'book-4',bookmaker:'Verified House',market:'totals',
+    selection:'Over',point:8,price:1.91,home:'Home Giants',away:'Away Bears',
+    timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z',
+    sportKey:'baseball_mlb'}
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[quote])
+  assert.equal(reviewMlbResearch(d).evidenceGates.realOffersVerified,true)
+  d.checkedAt='2026-07-01T14:00:00Z'
+  const review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.realOffersVerified,false)
+  assert.equal(review.decision,'abstain')
+  assert.equal(review.marketComparisons.length,0)
+  assert.equal(review.crossBookComparisons.length,0)
+  assert.ok(review.reviewedMarkets[0].missingEvidence.some(x=>x.includes('Cotización vencida')))
+  assert.equal(review.eligibleForTicket,false)
+})
+
+
+test('explicit review time invalidates cached offers without rewriting historical dossier',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const quote={eventId:'book-4',bookmaker:'Verified House',market:'totals',
+    selection:'Over',point:8,price:1.91,home:'Home Giants',away:'Away Bears',
+    timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z',
+    sportKey:'baseball_mlb'}
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[quote])
+  assert.equal(reviewMlbResearch(d,'2026-07-01T12:05:00Z').evidenceGates.realOffersVerified,true)
+  const stale=reviewMlbResearch(d,'2026-07-01T13:05:00Z')
+  assert.equal(stale.evidenceGates.realOffersVerified,false)
+  assert.equal(stale.decision,'abstain')
+  assert.equal(stale.crossBookComparisons.length,0)
+  assert.ok(stale.reviewedMarkets[0].missingEvidence.some(x=>x.includes('Cotización vencida')))
+  assert.equal(reviewMlbResearch(d,'invalid').evidenceGates.reviewTimestampValid,false)
+  assert.equal(reviewMlbResearch(d,'2026-07-01T11:00:00Z').decision,'abstain')
+  assert.equal(reviewMlbResearch(d).evidenceGates.realOffersVerified,true)
+  assert.equal(stale.eligibleForTicket,false)
+})
+
+test('cached pregame dossier abstains when reviewed after scheduled first pitch',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  const original=reviewMlbResearch(d)
+  assert.equal(original.evidenceGates.scheduledFuture,true)
+  const later=reviewMlbResearch(d,'2026-07-02T22:01:00Z')
+  assert.equal(later.evidenceGates.reviewTimestampValid,true)
+  assert.equal(later.evidenceGates.scheduledFuture,false)
+  assert.equal(later.eligibility,'insufficient')
+  assert.equal(later.decision,'abstain')
+  assert.equal(later.eligibleForTicket,false)
+})
+
+
+test('capped MLB review prioritizes current offers over forty expired quotes',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const quote={eventId:'book-4',bookmaker:'Verified House',market:'totals',
+    selection:'Over',point:8,price:1.91,home:'Home Giants',away:'Away Bears',
+    timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z',
+    sportKey:'baseball_mlb'}
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[quote])
+  const live=d.odds[0]
+  d.odds=[
+    ...Array.from({length:40},(_,i)=>({...live,bookmaker:'Expired '+i,
+      updatedAt:'2026-07-01T09:00:00Z'})),
+    live,
+  ]
+  const review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.realOffersVerified,true)
+  assert.equal(review.reviewedMarkets.length,40)
+  assert.equal(review.reviewedMarkets[0].bookmaker,'Verified House')
+  assert.equal(review.reviewedMarkets[0].status,'blocked')
+  assert.ok(review.reviewedMarkets[0].missingEvidence.every(x=>
+    !x.includes('Cotización vencida')))
+  assert.deepEqual(review.marketComparisons.map(x=>x.bookmaker),['Verified House'])
+  assert.deepEqual(review.crossBookComparisons[0].quotes.map(x=>x.bookmaker),['Verified House'])
+  assert.equal(review.eligibleForTicket,false)
+})
+
+test('MLB comparisons retain every fresh quote beyond the forty-row review display cap',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const quote={eventId:'book-4',bookmaker:'Verified House',market:'totals',
+    selection:'Over',point:8,price:1.91,home:'Home Giants',away:'Away Bears',
+    timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z',
+    sportKey:'baseball_mlb'}
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[quote])
+  const live=d.odds[0]
+  d.odds=[
+    ...Array.from({length:40},(_,i)=>({...live,bookmaker:'Book '+i})),
+    {...live,bookmaker:'Book 40',price:2.05},
+  ]
+  const review=reviewMlbResearch(d)
+  assert.equal(review.reviewedMarkets.length,40)
+  assert.equal(review.reviewedMarkets.some(x=>x.bookmaker==='Book 40'),false)
+  assert.equal(review.evidenceGates.realOffersVerified,true)
+  assert.equal(review.marketComparisons.length,41)
+  assert.ok(review.marketComparisons.some(x=>x.bookmaker==='Book 40'&&
+    x.offers[0].price===2.05))
+  const over8=review.crossBookComparisons.find(x=>x.market==='totals'&&
+    x.selection==='Over'&&x.line===8)
+  assert.equal(over8.quotes.length,41)
+  assert.ok(over8.quotes.some(x=>x.bookmaker==='Book 40'&&x.price===2.05))
+  assert.equal(over8.settlementComparable,false)
+  assert.equal(review.eligibleForTicket,false)
+})
+
+test('MLB dossier retains every verified quote beyond the 40-row display cap',async()=>{
+  const mock=fakeNetwork()
+  const base={eventId:'book-mlb',bookmaker:'Verified House',market:'totals',
+    selection:'Over',point:8,price:1.91,home:'Home Giants',away:'Away Bears',
+    time:fixture.gameDate,timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z'}
+  const quotes=Array.from({length:41},(_,i)=>({...base,bookmaker:'House '+i,
+    price:1.8+i/1000}))
+  const dossier=await researchMlbCase(date,812345,mock.fetcher,at,{},quotes)
+  assert.equal(dossier.odds.length,41)
+  assert.equal(dossier.odds[40].bookmaker,'House 40')
+  const review=reviewMlbResearch(dossier)
+  assert.equal(review.reviewedMarkets.length,40)
+  assert.equal(review.marketComparisons.length,41)
+  assert.ok(review.crossBookComparisons.some(group=>
+    group.quotes.length===41&&group.quotes.some(q=>q.bookmaker==='House 40')))
+  assert.equal(review.eligibleForTicket,false)
+})
+
+
+test('MLB dashboard paginates full matchup and market evidence without hiding rows',async()=>{
+  const mock=fakeNetwork()
+  const base={eventId:'book-mlb',bookmaker:'Verified House',market:'totals',
+    selection:'Over',point:8,price:1.91,home:'Home Giants',away:'Away Bears',
+    time:fixture.gameDate,timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z'}
+  const quotes=Array.from({length:41},(_,i)=>({...base,bookmaker:'House '+i,
+    price:1.8+i/1000}))
+  const dossier=await researchMlbCase(date,812345,mock.fetcher,at,{},quotes)
+  const markets=dossier.uiBlock.props.sections.filter(s=>s.heading.startsWith('Mercados de casas'))
+  assert.equal(markets.length,2)
+  assert.equal(markets.reduce((n,s)=>n+s.items.length,0),41)
+  assert.ok(markets.some(s=>s.items.some(i=>i.label.startsWith('House 40'))))
+  assert.ok(markets.every(s=>s.items.length<=40))
+  const matchupSections=dossier.uiBlock.props.sections.filter(s=>
+    s.heading.startsWith('Matriz roster contra abridores y bullpen'))
+  assert.equal(matchupSections.reduce((n,s)=>n+s.items.length,0),dossier.matchups.length)
+  assert.ok(matchupSections.every(s=>s.items.length<=40))
+})
+
+
+test('recent relief usage must be evidenced for both bullpens, not just one',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  // Force one side to have verified usage to isolate the asymmetric gate.
+  assert.ok(d.bullpen.home.length>0&&d.bullpen.away.length>0)
+  d.bullpen.home[0].reliefUsage72h=[{date:'2026-06-30',opponentId:123,
+    innings:'1.0',pitches:'15',earnedRuns:'0',strikeouts:'1',walks:'0'}]
+  d.bullpen.away.forEach(p=>{p.reliefUsage72h=[]})
+  const review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.reliefUsageObserved,false)
+  assert.ok(review.reviewedMarkets.every(m=>m.missingEvidence.some(x=>
+    x.includes('Uso reciente del bullpen'))))
+  assert.equal(review.eligibleForTicket,false)
+})
+
+
+test('MLB global evidence summary reports blockers even with zero market offers',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const dossier=await researchMlbCase(date,812345,mock.fetcher,at)
+  dossier.odds=[]
+  const review=reviewMlbResearch(dossier)
+  assert.equal(review.reviewedMarkets.length,0)
+  assert.equal(review.evidenceGates.realOffersVerified,false)
+  assert.equal(review.decision,'abstain')
+  assert.ok(review.missingEvidence.some(x=>x.includes('Estado del techo')))
+  assert.ok(review.missingEvidence.some(x=>x.includes('liquidación entre casas')))
+  assert.ok(review.missingEvidence.some(x=>x.includes('Picks externos')))
+  assert.ok(review.missingEvidence.some(x=>x.includes('Ofertas reales vigentes')))
+  assert.equal(review.eligibleForTicket,false)
+})
+
+test('MLB global evidence rejects invalid as-of review even without quotes',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const dossier=await researchMlbCase(date,812345,mock.fetcher,at)
+  dossier.odds=[]
+  for(const reviewAt of ['not-a-date','2026-07-01T11:00:00Z']){
+    const review=reviewMlbResearch(dossier,reviewAt)
+    assert.equal(review.evidenceGates.reviewTimestampValid,false)
+    assert.equal(review.eligibility,'insufficient')
+    assert.equal(review.decision,'abstain')
+    assert.ok(review.missingEvidence.some(x=>x.includes('Fecha de revisión inválida')))
+    assert.equal(review.eligibleForTicket,false)
+  }
+})
+
+test('global review exposes asymmetric bullpen and lineup gaps without quotes',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  d.odds=[]
+  assert.ok(d.bullpen.home.length>0&&d.bullpen.away.length>0)
+  d.bullpen.home[0].reliefUsage72h=[{date:'2026-06-30',opponentId:123,
+    innings:'1.0',pitches:'15',earnedRuns:'0',strikeouts:'1',walks:'0'}]
+  d.bullpen.away.forEach(p=>{p.reliefUsage72h=[]})
+  const hitter=d.rosters.home.find(p=>p.role==='batter'&&p.lineupConfirmed)
+  assert.ok(hitter)
+  hitter.lineupConfirmed=false
+  const review=reviewMlbResearch(d)
+  assert.equal(review.reviewedMarkets.length,0)
+  assert.equal(review.evidenceGates.reliefUsageObserved,false)
+  assert.equal(review.evidenceGates.lineupsConfirmed,false)
+  assert.ok(review.missingEvidence.some(x=>x.includes('bullpen de ambos equipos')))
+  assert.ok(review.missingEvidence.some(x=>x.includes('Alineación confirmada')))
+  assert.ok(review.missingEvidence.some(x=>x.includes('Evaluación probabilística')))
+  assert.equal(review.decision,'abstain')
+  assert.equal(review.eligibleForTicket,false)
+})
+
+test('MLB review discloses undated medical reports and absent recent starter outings',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const dossier=await researchMlbCase(date,812345,mock.fetcher,at)
+  dossier.odds=[]
+  dossier.starters.home.recentStarts=[]
+  dossier.starters.away.recentStarts=[]
+  const review=reviewMlbResearch(dossier)
+  assert.equal(review.evidenceGates.recentStarterOutingsVerified,false)
+  assert.equal(review.evidenceGates.injuriesDatedVerified,false)
+  assert.ok(review.missingEvidence.some(x=>x.includes('Últimas salidas fechadas')))
+  assert.ok(review.missingEvidence.some(x=>x.includes('Partes médicos fechados')))
+  assert.equal(review.eligibleForTicket,false)
+  assert.equal(review.decision,'abstain')
+})
+
+test('MLB temporal gates reject future, stale and invalid pitcher logs',async()=>{
+  const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true}).fetcher,at)
+  const log=(day)=>({date:day,opponentId:123,innings:'1.0',pitches:'15',
+    earnedRuns:'0',strikeouts:'1',walks:'0'})
+  assert.ok(d.starters.home&&d.starters.away)
+  assert.ok(d.bullpen.home.length&&d.bullpen.away.length)
+  for(const p of [d.starters.home,d.starters.away]){
+    p.recentStarts=[log('2026-07-02')]
+  }
+  for(const side of ['home','away']){
+    d.bullpen[side][0].reliefUsage72h=[log('2026-07-02')]
+  }
+  let review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.recentStarterOutingsVerified,false)
+  assert.equal(review.evidenceGates.reliefUsageObserved,false)
+  for(const p of [d.starters.home,d.starters.away]){
+    p.recentStarts=[log('2026-01-01'),log('invalid')]
+  }
+  for(const side of ['home','away']){
+    d.bullpen[side][0].reliefUsage72h=[log('2026-06-01'),log('invalid')]
+  }
+  review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.recentStarterOutingsVerified,false)
+  assert.equal(review.evidenceGates.reliefUsageObserved,false)
+  assert.ok(review.missingEvidence.some(x=>x.includes('Últimas salidas fechadas')))
+  assert.ok(review.missingEvidence.some(x=>x.includes('bullpen')))
+  assert.equal(review.eligibleForTicket,false)
+  for(const p of [d.starters.home,d.starters.away]){
+    p.recentStarts=[log('2026-06-25')]
+  }
+  for(const side of ['home','away']){
+    d.bullpen[side][0].reliefUsage72h=[log('2026-06-30')]
+  }
+  review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.recentStarterOutingsVerified,true)
+  assert.equal(review.evidenceGates.reliefUsageObserved,true)
+  assert.equal(review.eligibleForTicket,false)
+})
+
+
+test('cached pitcher evidence expires at review time even when collection was valid',async()=>{
+  const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true}).fetcher,at)
+  const log=(day)=>({date:day,opponentId:123,innings:'1.0',pitches:'15',
+    earnedRuns:'0',strikeouts:'1',walks:'0'})
+  assert.ok(d.starters.home&&d.starters.away)
+  assert.ok(d.bullpen.home.length&&d.bullpen.away.length)
+  for(const p of [d.starters.home,d.starters.away]){
+    p.recentStarts=[log('2026-05-18')]
+  }
+  for(const side of ['home','away']){
+    d.bullpen[side][0].reliefUsage72h=[log('2026-06-29')]
+    for(const p of d.bullpen[side].slice(1))p.reliefUsage72h=[]
+  }
+  const collected=reviewMlbResearch(d)
+  assert.equal(collected.evidenceGates.recentStarterOutingsVerified,true)
+  assert.equal(collected.evidenceGates.reliefUsageObserved,true)
+  const later=reviewMlbResearch(d,'2026-07-02T12:00:00Z')
+  assert.equal(later.evidenceGates.reviewTimestampValid,true)
+  assert.equal(later.evidenceGates.scheduledFuture,true)
+  assert.equal(later.evidenceGates.recentStarterOutingsVerified,false)
+  assert.equal(later.evidenceGates.reliefUsageObserved,false)
+  assert.ok(later.missingEvidence.some(x=>x.includes('Últimas salidas fechadas')))
+  assert.ok(later.missingEvidence.some(x=>x.includes('bullpen')))
+  assert.equal(later.eligibleForTicket,false)
+})
+
+test('MLB bullpen calendar dates never masquerade as exact 72-hour timestamps',async()=>{
+  const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true}).fetcher,at)
+  const log=(day)=>({date:day,opponentId:123,innings:'1.0',pitches:'15',
+    earnedRuns:'0',strikeouts:'1',walks:'0'})
+  const setBoth=(day)=>{
+    for(const side of ['home','away']){
+      for(const p of d.bullpen[side])p.reliefUsage72h=[]
+      assert.ok(d.bullpen[side].length)
+      d.bullpen[side][0].reliefUsage72h=[log(day)]
+    }
+  }
+  // A same-day log has no game completion timestamp and must not be trusted.
+  setBoth('2026-07-01')
+  assert.equal(reviewMlbResearch(d).evidenceGates.reliefUsageObserved,false)
+  // Three previous calendar dates are observable; four are stale.
+  setBoth('2026-06-28')
+  assert.equal(reviewMlbResearch(d).evidenceGates.reliefUsageObserved,true)
+  setBoth('2026-06-27')
+  assert.equal(reviewMlbResearch(d).evidenceGates.reliefUsageObserved,false)
+  // Cached dossier is rechecked against the review calendar date.
+  setBoth('2026-06-29')
+  assert.equal(reviewMlbResearch(d).evidenceGates.reliefUsageObserved,true)
+  assert.equal(reviewMlbResearch(d,'2026-07-02T12:00:00Z')
+    .evidenceGates.reliefUsageObserved,true)
+  assert.equal(reviewMlbResearch(d,'2026-07-03T12:00:00Z')
+    .evidenceGates.reliefUsageObserved,false)
+  setBoth('2026-06-30T23:59:00Z')
+  assert.equal(reviewMlbResearch(d).evidenceGates.reliefUsageObserved,false)
+  setBoth('2026-02-30')
+  assert.equal(reviewMlbResearch(d).evidenceGates.reliefUsageObserved,false)
+  assert.equal(reviewMlbResearch(d).eligibleForTicket,false)
 })
