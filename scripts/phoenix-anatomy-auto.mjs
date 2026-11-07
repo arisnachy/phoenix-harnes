@@ -34,7 +34,7 @@ const modules=[
 ]
 const now=()=>new Date().toISOString()
 const BASELINE_TASK='total'
-export const weightsRoot=(env=process.env)=>join(rootFor(env),'models')
+export const weightsRoot=(env=process.env)=>resolve(env.TOTALSEG_HOME_DIR||join(rootFor(env),'models'))
 const modelEnv=(env=process.env)=>({...env,
   TOTALSEG_HOME_DIR:env.TOTALSEG_HOME_DIR||weightsRoot(env)})
 const log=(p,line)=>{try{appendFileSync(p.log,'['+now()+'] '+line+'\n')}catch{}}
@@ -310,7 +310,7 @@ async function worker(env=process.env){
 }
 export function status(env=process.env){
   const p=pathsFor(env),v=load(p),components=v?.components||{}
-  const coreReady=modules.every(m=>components[m.id]?.status==='installed')
+  const coreReady=existsSync(p.python)&&modules.every(m=>components[m.id]?.status==='installed')
   const viewerReady=components.viewer?.status==='installed'&&
     existsSync(join(p.root,'viewer','node_modules','three','build','three.module.js'))
   const weightsReady=components.weights_ct?.status==='installed'&&
@@ -329,8 +329,11 @@ export function ensure(env=process.env,launch=spawn){
   const p=pathsFor(env)
   if(env.PHOENIX_ANATOMY_AUTO_INSTALL==='0'||env.CI==='true'||env.NODE_ENV==='test')
     return {status:'disabled',...status(env)}
-  if(!needsInstall(load(p))&&env.PHOENIX_ANATOMY_FORCE_INSTALL!=='1')
-    return {status:'up-to-date',...status(env)}
+  const current=status(env)
+  if(!needsInstall(load(p))&&env.PHOENIX_ANATOMY_FORCE_INSTALL!=='1'&&
+     existsSync(p.python)&&current.viewerReady&&
+     (current.weightsReady||current.components.weights_ct?.status==='disabled'))
+    return {status:'up-to-date',...current}
   mkdirSync(p.root,{recursive:true})
   try{
     const age=Date.now()-statSync(p.lock).mtimeMs
