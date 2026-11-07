@@ -524,3 +524,18 @@
 .headerTitleGroup :global(svg) { flex-shrink:0; }
 .metricTitle { display:flex;align-items:center;gap:6px;min-width:0; }
 .metricTitle :global(svg) { flex-shrink:0; }
+
+/* Respond to the widget's actual width, not the browser's viewport. */
+.card{container:phoenix-card / inline-size}
+@container phoenix-card (max-width:510px){
+ .eventGrid,.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .eventCenter{grid-column:1 / -1;grid-row:1}
+ .metric strong{font-size:18px;overflow-wrap:anywhere}
+ .fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .tableWrap{overscroll-behavior-inline:contain}
+}
+@container phoenix-card (max-width:295px){
+ .eventGrid,.metrics,.fields{grid-template-columns:1fr}
+ .eventCenter{grid-column:auto;grid-row:auto}
+ .header{flex-wrap:wrap}
+}

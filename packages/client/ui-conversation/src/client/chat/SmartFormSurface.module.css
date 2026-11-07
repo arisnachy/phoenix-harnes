@@ -58,3 +58,19 @@
 .visuallyHidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
 .surface button:focus-visible,.surface input:focus-visible,.surface textarea:focus-visible,.surface select:focus-visible,.fileImport:focus-within{outline:2px solid var(--dsw-alias-accent-primary,#b88939);outline-offset:2px}
 @media(max-width:520px){.surface{padding:11px;border-radius:12px}.fields{grid-template-columns:1fr}.outputGrid{grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))}.tabs button{padding:6px 8px}}
+
+/* Respond to the widget's actual width, not the browser's viewport. */
+.surface{container:phoenix-form / inline-size}
+@container phoenix-form (max-width:540px){
+ .fields{grid-template-columns:1fr}
+ .outputGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .actions button{flex:1 1 auto;justify-content:center}
+ .folderLabel{flex-wrap:wrap}
+ .tabs{max-width:100%}
+ .catalog{max-height:min(55vh,470px)}
+}
+@container phoenix-form (max-width:310px){
+ .outputGrid{grid-template-columns:1fr}
+ .actions button,.smallActions button{width:100%}
+ .searchRow>input{flex-basis:100%}
+}
