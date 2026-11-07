@@ -7,12 +7,16 @@ on:
       - 'packages/client/ui-conversation/src/client/chat/GenerativeUi.tsx'
       - 'packages/client/ui-conversation/src/client/chat/SportsLive*'
       - 'packages/client/ui-conversation/tests/sports-live.client.spec.tsx'
+      - 'packages/client/ui-conversation/src/client/chat/SportsBetProgress*'
+      - 'packages/client/ui-conversation/tests/sports-bet-progress.client.spec.tsx'
       - '.github/workflows/phoenix-sports-live.yml'
   push:
     branches: [main,stable]
     paths:
       - 'packages/client/ui-conversation/src/client/chat/SportsLive*'
       - 'packages/client/ui-conversation/tests/sports-live.client.spec.tsx'
+      - 'packages/client/ui-conversation/src/client/chat/SportsBetProgress*'
+      - 'packages/client/ui-conversation/tests/sports-bet-progress.client.spec.tsx'
       - '.github/workflows/phoenix-sports-live.yml'
 permissions:
   contents: read
@@ -29,7 +33,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Verify live MLB/NBA/provider update paths
-        run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-live.client.spec.tsx packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-live.client.spec.tsx packages/client/ui-conversation/tests/sports-bet-progress.client.spec.tsx packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts
       - name: Validate Phoenix client contract and strict TypeScript build
         run: |
           pnpm run build:lib:host
