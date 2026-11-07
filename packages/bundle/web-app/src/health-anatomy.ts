@@ -84,7 +84,7 @@ export function verifyAnatomicalEvidence(raw:unknown, bytes:Buffer) {
       }:{})}
   })
   const count=layers.filter(x=>x.layer==='clinician-supplied-affected-region').length
-  if(!Number.isSafeInteger(x.affectedRegions)||x.affectedRegions!==count||
+  if(typeof x.affectedRegions!=='number'||!Number.isSafeInteger(x.affectedRegions)||x.affectedRegions!==count||
     (count>0&&x.sourceRegistration!==registration[1]))
     throw new Error('El número o alineación de regiones afectadas no coincide')
   return {
