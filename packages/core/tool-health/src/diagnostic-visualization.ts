@@ -31,26 +31,43 @@ export function planClinicalVisualization(input:VisualStudyInput) {
   const hasSource=input.sourceReviewed===true
   const hasEvidence=observed.length>=12&&hasSource&&sourceType!=='unknown'&&sourceType!=='glb'
   const spatialProof=input.verifiedSpatialGeometry===true
-  let decision:'BLOCK_NO_SOURCE'|'BLOCK_NO_FINDINGS'|'BLOCK_NO_VALIDATED_GEOMETRY'|
-    'ALLOW_EDUCATIONAL_EXPLANATION'='BLOCK_NO_SOURCE'
+  let decision:'BLOCK_NO_SOURCE'|'BLOCK_NO_FINDINGS'|'BLOCK_ECG_INCOMPLETE_INTERPRETATION'|
+    'BLOCK_NO_VALIDATED_GEOMETRY'|'ALLOW_EDUCATIONAL_EXPLANATION'='BLOCK_NO_SOURCE'
   if(hasSource&&!hasEvidence)decision='BLOCK_NO_FINDINGS'
+  // ECG/medical illustration regression: left-axis vectors alone are not a
+  // complete ECG interpretation, particularly in the presence of preexcitation.
+  // Require explicit review of PR, initial QRS/delta and QRS duration before
+  // rendering a patient-facing electrical interpretation. No pixel recognition
+  // or numeric interval estimation is performed by this metadata-only gate.
+  const ecg=entry.family==='ecg'
+  const normalized=observed.normalize('NFKD').replace(/[\\u0300-\\u036f]/g,'')
+    .toLocaleLowerCase('en')
+  const isolatedAxis=ecg&&/(?:eje.*izquier|left.axis|fascicular|hemibloqueo)/u.test(normalized)&&
+    !/(?:onda delta|delta wave|pre.?excit|wpw|qrs|pr corto|intervalo pr)/u.test(normalized)
+  if(isolatedAxis&&hasEvidence)decision='BLOCK_ECG_INCOMPLETE_INTERPRETATION'
   // Boolean assertions from a language model cannot certify patient anatomy.
   // Only the registered, source-validated DICOM/mask reconstruction workflow
   // can authorize patient-specific GLBs; this metadata-only planner never can.
   else if(hasEvidence&&(input.patientSpecific===true||kind==='patient-lesion'))
     decision='BLOCK_NO_VALIDATED_GEOMETRY'
-  else if(hasEvidence)decision='ALLOW_EDUCATIONAL_EXPLANATION'
+  else if(hasEvidence&&!isolatedAxis)decision='ALLOW_EDUCATIONAL_EXPLANATION'
   return {
     decision,modality:entry.id,modalityLabel:entry.label,
     family:entry.family,sourceRequirements:family.source,
     sourceReviewed:hasSource,findingsEntered:hasEvidence,
     patientSpecificRequested:input.patientSpecific===true,
     spatialGeometryVerified:spatialProof,medicalInterpretationVerifiedByThisTool:false,
+    ecgIncompleteAxisOnly:isolatedAxis,
+    ecgReviewRequired:ecg?['Verify PR in calibrated tracing',
+      'Review initial QRS slope and delta waves on visible leads',
+      'Measure QRS duration and rhythm',
+      'Rule out ventricular preexcitation before attributing abnormalities solely to axis/fascicles']:[],
     illustrativeOnly:input.patientSpecific!==true,
     caveats:[
       'A generated illustration is never itself evidence of a diagnosis.',
       'For a patient-specific lesion, use registered DICOM/segmentation, source coordinates and clinician review; a generic atlas cannot show the patient lesion.',
       'Do not invent lesion shape, accessory pathway location, affected region, diagnostic probability, or measurement from incomplete sources.',
+      'If ECG shows possible preexcitation, explain a generic AV accessory pathway instead of depicting axis deviation as the primary diagnosis.',
     ],
     nextStep:decision==='ALLOW_EDUCATIONAL_EXPLANATION'?
       'May render a clearly labelled educational mechanism based solely on observed findings. Use a registered patient-specific pipeline for verified geometry.':
