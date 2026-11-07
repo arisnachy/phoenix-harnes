@@ -199,5 +199,5 @@ const events = discover(catalog)
 const names = new Set(events.map(e => e.id + '.svg'))
 for(const name of readdirSync(destination)){if(name.endsWith('.svg') && !names.has(name))unlinkSync(resolve(destination,name))}
 for(const event of events)writeFileSync(resolve(destination,event.id+'.svg'),iconSvg(event))
-writeFileSync(resolve(destination,'manifest.json'),JSON.stringify(events,null,2)+'\\n')
+writeFileSync(resolve(destination,'manifest.json'),JSON.stringify(events,null,2)+'\n')
 console.log('PHOENIX Celebrations: '+events.length+' independent transparent SVG ornaments')
