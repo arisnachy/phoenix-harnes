@@ -239,9 +239,11 @@ def reconstruct(args):
     out = target / "anatomy.glb"
     staging = target / "anatomy.glb.partial"
     staging.write_bytes(scene.export(file_type="glb"))
+    glb_digest = mask_digest(staging)
     staging.replace(out)
     report = {
         "schema": 1, "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "glbSha256": glb_digest,
         "model": "clinician-provided masks" if external_masks else "TotalSegmentator",
         "task": "external-masks" if external_masks else selected["task"],
         "catalogModelId": model_id, "modelLicense": selected["licensed"],
