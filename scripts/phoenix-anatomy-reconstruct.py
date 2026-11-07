@@ -81,8 +81,8 @@ def reconstruct(args):
     selected = next((task for task in catalog["tasks"] if task["id"] == model_id), None)
     if selected is None or selected["modality"] != args.modality:
         raise ValueError("Invalid anatomy task ID for chosen modality")
-    if selected["licensed"] != "Apache-2.0":
-        raise ValueError("Selected task requires licensing verification")
+    if selected["licensed"] not in ("Apache-2.0", "vendor-license-required"):
+        raise ValueError("Task license status is not executable")
     # PHI-adjacent geometry must never land in a world-readable output folder.
     os.umask(0o077)
     target.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -99,9 +99,15 @@ def reconstruct(args):
         store = Path(home).expanduser().resolve() / "model-cache"
         store.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.environ["TOTALSEG_HOME_DIR"] = str(store)
-        from totalsegmentator.config import setup_totalseg, set_config_key
+        from totalsegmentator.config import setup_totalseg, set_config_key, has_valid_license
         setup_totalseg()
         set_config_key("send_usage_stats", False)
+        if selected["licensed"] == "vendor-license-required":
+            # Only the vendor can validate a signed entitlement. This request
+            # sends the configured license number, never any patient images.
+            validation, _ = has_valid_license()
+            if validation != "yes":
+                raise ValueError("Official model license not valid or not configured")
         from totalsegmentator.python_api import totalsegmentator
         totalsegmentator(
             input=source, output=masks, task=selected["task"],
