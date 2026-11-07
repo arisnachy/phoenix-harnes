@@ -62,5 +62,30 @@ class ValidateResearchMasks(unittest.TestCase):
             self.assertEqual(report["comparisons"][0]["status"],"reference-missing")
             self.assertEqual(report["unmatchedReferences"],["heart"])
 
+class TestSyntheticMesh(unittest.TestCase):
+    def test_mesh_preserves_physical_nifti_affine(self):
+        reconstruction_spec = importlib.util.spec_from_file_location(
+            "phoenix_anatomy_reconstruct",
+            Path(__file__).with_name("phoenix-anatomy-reconstruct.py"))
+        reconstruction = importlib.util.module_from_spec(reconstruction_spec)
+        reconstruction_spec.loader.exec_module(reconstruction)
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "synthetic_structure.nii.gz"
+            volume = np.zeros((22, 22, 22), dtype=np.uint8)
+            volume[5:17, 6:18, 7:19] = 1
+            affine = np.array([[2.,0.,0.,10.],[0.,2.,0.,-30.],
+                               [0.,0.,3.,45.],[0.,0.,0.,1.]])
+            image=nib.Nifti1Image(volume, affine)
+            image.header.set_xyzt_units("mm")
+            nib.save(image, str(path))
+            mesh, count, ml = reconstruction.nifti_mask_to_mesh(path)
+            self.assertEqual(count,12*12*12)
+            self.assertAlmostEqual(ml,(12*12*12*2*2*3)/1000.)
+            self.assertGreater(len(mesh.faces),0)
+            self.assertTrue(np.isfinite(mesh.vertices).all())
+            self.assertGreater(float(mesh.vertices[:,0].min()),10.0)
+            self.assertGreater(float(mesh.vertices[:,2].min()),45.0)
+            self.assertEqual(mesh.export(file_type="glb")[:4], b"glTF")
+
 if __name__=="__main__":
     unittest.main()
