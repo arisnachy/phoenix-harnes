@@ -304,8 +304,12 @@ export function celebrationGreeting(event: Celebration, preferredName?: string):
   const address = name ? `, ${name}` : ''
   if (event.id === 'birthday') return `¡Feliz cumpleaños${address}!`
   if (event.tone === 'solemn') return `Hoy recordamos: ${event.label}.`
-  if (event.tone === 'recognition') return `Hoy conmemoramos ${event.label}${address}.`
-  return `¡Feliz ${event.label}${address}!`
+  if (event.tone === 'recognition') return `Hoy conmemoramos ${event.label}.`
+  // A national celebration applies to its residents; a profession-specific
+  // day applies only once the user explicitly shared that profession.
+  const personal = event.country === 'PERSONAL' || event.audience !== undefined
+    || event.theme === 'patriotic' || event.theme === 'winter' || event.theme === 'new-year'
+  return personal ? `¡Feliz ${event.label}${address}!` : `Hoy celebramos ${event.label}.`
 }
 export const CELEBRATION_ACCENTS: Record<CelebrationTheme, { icon:string; color:string; secondary:string }> = {
   patriotic:{icon:'✦',color:'#1664bc',secondary:'#d13b49'},
