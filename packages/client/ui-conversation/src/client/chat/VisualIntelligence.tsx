@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { PhoenixUiIcon, choosePhoenixUiIcon, choosePhoenixUiTone } from '@phoenix-ai/dsh-client-ui-primitives'
 import { SmartFormWorkspace } from './SmartFormSurface.tsx'
 import { GeoMap, type GeoLayer, type GeoMapSpec } from './GeoMap.tsx'
@@ -8,6 +8,7 @@ import {
   isVisualImageUrl, type VisualCell, type VisualIntelligenceSpec, type VisualMedium,
   type VisualMode, type VisualMetric, type VisualPlace, type VisualSource,
 } from './VisualIntelligenceContract.ts'
+import { visualIntelligencePdfBlob, type VisualPdfSnapshot } from './VisualIntelligencePdf.ts'
 import css from './VisualIntelligence.module.css'
 
 type Props = {
@@ -22,6 +23,26 @@ function download(name: string, text: string, mime = 'text/plain;charset=utf-8')
   element.download = name.replace(/[^a-z0-9._-]/gi, '-').slice(0, 110)
   element.click()
   URL.revokeObjectURL(url)
+}
+function downloadPdf(spec:VisualIntelligenceSpec,snapshot?:VisualPdfSnapshot):void {
+  const blob=visualIntelligencePdfBlob(spec,snapshot===undefined?undefined:{snapshot})
+  const url=URL.createObjectURL(blob)
+  const anchor=document.createElement('a')
+  anchor.href=url
+  anchor.download=('PHOENIX-informe-'+spec.props.id+'.pdf').replace(/[^a-z0-9._-]/gi,'-')
+  anchor.click()
+  // Browsers resolve the download asynchronously; never revoke before it starts.
+  window.setTimeout(()=>URL.revokeObjectURL(url),1000)
+}
+function openPrintPdf(spec:VisualIntelligenceSpec,snapshot?:VisualPdfSnapshot):void {
+  const url=URL.createObjectURL(visualIntelligencePdfBlob(spec,snapshot===undefined?undefined:{snapshot}))
+  const anchor=document.createElement('a')
+  anchor.href=url
+  anchor.target='_blank'
+  anchor.rel='noopener noreferrer'
+  anchor.click()
+  // The PDF viewer opens independently of the chat; keep the blob readable long enough.
+  window.setTimeout(()=>URL.revokeObjectURL(url),60000)
 }
 function cellText(v: VisualCell): string { return v === null ? '' : String(v) }
 function equivalent(a: VisualCell, b: VisualCell): number {
@@ -169,9 +190,10 @@ function Gallery({ items,initialBento }: {items:readonly VisualMedium[];initialB
     </div>
   </section>
 }
-function DocumentEditor({ doc,id,onUpdate }: {
+function DocumentEditor({ doc,id,onUpdate,onPdf }: {
   doc:{title:string;content:string;version?:number};id:string
   onUpdate:(content:string,version:number)=>void
+  onPdf:()=>void
 }):ReactNode {
   const [body,setBody]=useState(doc.content)
   const [versions,setVersions]=useState<string[]>([doc.content])
@@ -186,9 +208,9 @@ function DocumentEditor({ doc,id,onUpdate }: {
         Guardar versión</button>
       <button type="button" disabled={versions.length<2} onClick={()=>{const old=versions[versions.length-2];if(old!==undefined){setBody(old);onUpdate(old,revision);setMessage('Versión anterior restaurada; guarda para confirmar.')}}}>Restaurar anterior</button>
       <button type="button" onClick={()=>download(id+'-v'+revision+'.md',body,'text/markdown;charset=utf-8')}>Exportar Markdown</button>
-      <button type="button" onClick={()=>window.print()}>Imprimir / PDF</button>
+      <button type="button" onClick={onPdf}>Abrir PDF para imprimir</button>
     </div>
-    <small role="status">Edición local · revisión {revision}. {message} La impresión utiliza el diálogo del navegador.</small>
+    <small role="status">Edición local · revisión {revision}. {message} El PDF contiene el documento, no la conversación.</small>
   </section>
 }
 type RouteResult={distanceKm:number;durationMin:number;coordinates:readonly (readonly [number,number])[]}
@@ -236,7 +258,7 @@ function ConnectedMap({places,id,title,sources,onAction}:{
     finally{setBusy(false)}
   }
   return <section className={css.module}>
-    <GeoMap spec={spec} onAction={onAction}/>
+    <div className={css.mapFrame}><GeoMap spec={spec} onAction={onAction}/></div>
     <div className={css.toolbar}>
       <button type="button" disabled={busy||places.length<2} onClick={()=>{void compute()}}>Calcular ruta entre los dos primeros lugares</button>
       {route&&<strong>{route.distanceKm.toFixed(1)} km · {Math.round(route.durationMin)} min estimados</strong>}
@@ -258,7 +280,7 @@ function Evidence({sources,issues}:{sources:readonly VisualSource[];issues:reado
   </section>
 }
 type LiveState={metrics:VisualMetric[];fetchedAt:string}|null
-function LiveMetrics({endpoint,intervalSeconds}:{endpoint:string;intervalSeconds:number}):ReactNode {
+function LiveMetrics({endpoint,intervalSeconds,onSnapshot}:{endpoint:string;intervalSeconds:number;onSnapshot:(next:VisualPdfSnapshot|null)=>void}):ReactNode {
   const [data,setData]=useState<LiveState>(null)
   const [state,setState]=useState<'loading'|'ready'|'unavailable'>('loading')
   const [error,setError]=useState('')
@@ -277,13 +299,17 @@ function LiveMetrics({endpoint,intervalSeconds}:{endpoint:string;intervalSeconds
           &&typeof m.label==='string'&&m.label.length<=120
           &&typeof m.value==='string'&&m.value.length<=160).slice(0,12)
         if(!metrics.length)throw new Error('Respuesta sin métricas')
-        if(alive){setData({metrics,fetchedAt:new Date().toISOString()});setState('ready');setError('')}
-      } catch(e) {if(alive&&!controller.signal.aborted){setState('unavailable');setError(e instanceof Error?e.message:'Sin conexión')}}
+        if(alive){
+          const fetchedAt=new Date().toISOString()
+          setData({metrics,fetchedAt});onSnapshot({metrics,observedAt:fetchedAt})
+          setState('ready');setError('')
+        }
+      } catch(e) {if(alive&&!controller.signal.aborted){setState('unavailable');onSnapshot(null);setError(e instanceof Error?e.message:'Sin conexión')}}
     }
     void run()
     const timer=window.setInterval(()=>{void run()},intervalSeconds*1000)
     return ()=>{alive=false;controller.abort();window.clearInterval(timer)}
-  },[endpoint,intervalSeconds,count])
+  },[endpoint,intervalSeconds,count,onSnapshot])
   return <section className={css.module} aria-label="Indicadores en tiempo real">
     <div className={css.toolbar}><strong>Fuente conectada · {state==='ready'?'Actualizada':state==='loading'?'Conectando':'No disponible'}</strong>
       <button type="button" onClick={()=>{setState('loading');setCount(c=>c+1)}}>Actualizar ahora</button></div>
@@ -311,9 +337,9 @@ function Comparison({columns,rows}:{
         {rows.map((r,i)=><option key={i} value={i}>{cellText(r[0]??null)||'Fila '+(i+1)}</option>)}
       </select></label>
     </div>
-    <table className={css.table}><thead><tr><th>Campo</th><th>Opción A</th><th>Opción B</th></tr></thead>
+    <div className={css.scroll}><table className={css.table}><thead><tr><th>Campo</th><th>Opción A</th><th>Opción B</th></tr></thead>
       <tbody>{columns.map((c,i)=><tr key={c}><th>{c}</th><td>{cellText(rows[first]?.[i]??null)}</td>
-        <td>{cellText(rows[second]?.[i]??null)}</td></tr>)}</tbody></table>
+        <td>{cellText(rows[second]?.[i]??null)}</td></tr>)}</tbody></table></div>
   </section>
 }
 
@@ -397,6 +423,8 @@ export function VisualIntelligence({spec:initial,onAction,conversationId}:Props)
   const [spec,setSpec]=useState(initial)
   const rootRef=useRef<HTMLElement|null>(null)
   const [layoutIssues,setLayoutIssues]=useState<string[]>([])
+  const [liveSnapshot,setLiveSnapshot]=useState<VisualPdfSnapshot|null>(null)
+  const handleLiveSnapshot=useCallback((next:VisualPdfSnapshot|null)=>setLiveSnapshot(next),[])
   const p=spec.props
   const auto=chooseVisualView(p)
   const available:Exclude<VisualMode,'auto'>[]=[]
@@ -437,8 +465,10 @@ export function VisualIntelligence({spec:initial,onAction,conversationId}:Props)
         {available.map(v=><option key={v} value={v}>{v}</option>)}
       </select></label>
       <button type="button" onClick={downloadJson}>Exportar JSON</button>
-      <button type="button" onClick={()=>window.print()}>Imprimir / PDF</button>
+      <button type="button" onClick={()=>openPrintPdf(spec,liveSnapshot??undefined)}>Imprimir informe</button>
+      <button type="button" onClick={()=>downloadPdf(spec,liveSnapshot??undefined)}>Descargar PDF profesional</button>
     </div>
+    <p className={css.reportNote}>PDF maquetado desde los datos completos, sin menús, chat ni capturas de pantalla.</p>
     {resolved==='table'&&p.rows&&p.columns&&<TableExplorer id={p.id} rows={p.rows} columns={p.columns}/>}
     {resolved==='comparison'&&p.rows&&p.columns&&<Comparison rows={p.rows} columns={p.columns}/>}
     {resolved==='chart'&&p.series&&p.labels&&<ChartExplorer id={p.id} labels={p.labels} series={p.series}/>}
@@ -446,13 +476,14 @@ export function VisualIntelligence({spec:initial,onAction,conversationId}:Props)
     {resolved==='document'&&p.document&&<DocumentEditor id={p.id} doc={p.document}
       onUpdate={(content,version)=>setSpec(previous=>({...previous,props:{
         ...previous.props,document:{...previous.props.document!,content,version},
-      }}))}/>}
+      }}))}
+      onPdf={()=>downloadPdf(spec,liveSnapshot??undefined)}/>}
     {resolved==='form'&&p.form&&<SmartFormWorkspace initial={p.form} onAction={onAction}/>}
     {resolved==='map'&&p.places&&<ConnectedMap places={p.places} title={p.title}
       id={p.id} sources={p.sources} onAction={onAction}/>}
     {resolved==='dashboard'&&<div className={css.module}>
       {p.metrics&&<MetricGrid metrics={p.metrics}/>}
-      {p.live&&<LiveMetrics endpoint={p.live.endpoint} intervalSeconds={p.live.intervalSeconds??60}/>}
+      {p.live&&<LiveMetrics endpoint={p.live.endpoint} intervalSeconds={p.live.intervalSeconds??60} onSnapshot={handleLiveSnapshot}/>}
       {!p.metrics&&!p.live&&<p>Fuentes disponibles, pero sin indicadores numéricos aportados.</p>}
     </div>}
     {p.actions&&p.actions.length>0&&<div className={css.toolbar} aria-label="Acciones autorizadas">
