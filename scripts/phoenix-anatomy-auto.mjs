@@ -251,7 +251,8 @@ async function worker(env=process.env){
 export function status(env=process.env){
   const p=pathsFor(env);const v=load(p)
   return {root:p.root,manifest:p.manifest,log:p.log,initialized:!!v,
-    installed:modules.every(m=>v?.components?.[m.id]?.status==='installed') && v?.components?.viewer?.status==='installed',components:v?.components||{},
+    installed:modules.every(m=>v?.components?.[m.id]?.status==='installed') &&
+      ['viewer','slicer','slicerheart'].every(id=>v?.components?.[id]?.status==='installed'),components:v?.components||{},
     clinicallyValidated:false,notes:'Package installation alone does not reconstruct, verify or diagnose a patient.'}
 }
 export function ensure(env=process.env,launch=spawn){
