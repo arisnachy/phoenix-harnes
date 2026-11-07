@@ -27,6 +27,7 @@ const modules=[
   {id:'volume3d',imports:['vtk'],pip:['vtk>=9.3,<10']},
   {id:'meshes',imports:['trimesh','skimage'],pip:['trimesh>=4,<6','scikit-image>=0.24,<1']},
   {id:'monai',imports:['monai'],pip:['monai>=1.4,<2']},
+  {id:'svzerod',imports:['svzerod'],pip:['svzerod==3.2']},
   {id:'nnunetv2',imports:['nnunetv2'],pip:['nnunetv2>=2,<3']},
   {id:'totalsegmentator',imports:['totalsegmentator'],pip:['TotalSegmentator>=2,<3']},
 ]
@@ -199,6 +200,31 @@ async function installViewer(p,state,fd){
   }
 }
 
+async function probeResearchEngines(state){
+  const distro=process.env.PHOENIX_ANATOMY_WSL_DISTRO||'Ubuntu-24.04'
+  const windows=process.platform==='win32'
+  const openCarpArgs=windows?['--distribution',distro,'--exec','openCARP','-buildinfo']:['-buildinfo']
+  try{
+    await run(windows?'wsl.exe':(process.env.PHOENIX_OPENCARP_BIN||'openCARP'),openCarpArgs,{timeout:15000})
+    state.components.opencarp={status:'installed',mode:windows?'wsl2':'native',verifiedAt:now()}
+  }catch{
+    state.components.opencarp={status:'external',reason:'Install openCARP in Ubuntu WSL2/Linux; verify openCARP -buildinfo'}
+  }
+  const sv=process.env.PHOENIX_SIMVASCULAR_BIN
+  if(windows){
+    if(sv&&/^\/usr\/local\/sv\/simvascular\/[0-9]{4}-[0-9]{2}-[0-9]{2}\/simvascular$/.test(sv)){
+      try{
+        await run('wsl.exe',['--distribution',distro,'--exec','/usr/bin/test','-x',sv],{timeout:12000})
+        state.components.simvascular={status:'installed',mode:'wsl2',verifiedAt:now()}
+      }catch{state.components.simvascular={status:'external',reason:'Configured WSL SimVascular binary is not executable'}}
+    }else state.components.simvascular={status:'external',reason:'Set verified PHOENIX_SIMVASCULAR_BIN in WSL2'}
+  }else{
+    state.components.simvascular=sv&&existsSync(sv)?
+      {status:'installed',mode:'native',verifiedAt:now()}:
+      {status:'external',reason:'Install official SimVascular and set PHOENIX_SIMVASCULAR_BIN'}
+  }
+}
+
 async function worker(env=process.env){
   const p=pathsFor(env)
   mkdirSync(p.root,{recursive:true})
@@ -212,8 +238,7 @@ async function worker(env=process.env){
     save(p,state)
     await installSlicer(p,state,fd)
     await installSlicerHeart(p,state,fd)
-    state.components.simvascular={status:'external',reason:'Native binary requires verified vendor distribution'}
-    state.components.opencarp={status:'external',reason:'Windows requires verified WSL2/Docker runtime; not a native pip package'}
+    await probeResearchEngines(state)
     await installViewer(p,state,fd)
     state.clinicalValidation='not-validated'
     save(p,state)
