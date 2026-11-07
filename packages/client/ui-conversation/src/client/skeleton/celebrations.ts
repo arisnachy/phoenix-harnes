@@ -4,11 +4,14 @@
  * this curated offline layer covers patriotic, international and personal dates.
  * A commemoration must never be framed as a festive congratulation.
  */
+/** Design family for transparent, localized ornament assets. */
 export type CelebrationTheme =
   | 'patriotic' | 'family' | 'new-year' | 'winter' | 'spring' | 'culture'
   | 'health' | 'education' | 'science' | 'environment' | 'equality'
   | 'peace' | 'autumn' | 'birthday'
+/** Whether a date is festive, a respectful recognition or a solemn remembrance. */
 export type CelebrationTone = 'festive' | 'recognition' | 'solemn'
+/** A dated public or private observance, with a safe visual presentation. */
 export interface Celebration {
   id: string
   label: string
@@ -21,6 +24,7 @@ export interface Celebration {
   stateCodes?: readonly string[] | undefined
   priority?: number | undefined
 }
+/** Consented profile fields used to select relevant dates locally. */
 export interface CalendarProfile {
   /** Explicit preference from private user-profile settings. Never infer nationality. */
   countryOfOrigin?: string | undefined
@@ -230,11 +234,18 @@ function resolveRule(year: number, rule: Rule): string {
 function annualYear(event: Celebration, year: number): Celebration {
   return { ...event, date: `${year}${event.date.slice(4)}` }
 }
-/** Explicit country codes win; locale is a residence-only fallback. */
+/** Normalize a trusted or untrusted country value.
+ * @param value - ISO 3166-1 alpha-2 code to normalize.
+ * @returns An uppercase country code, or undefined for invalid values.
+ */
 export function normalizedCountry(value: string | undefined): string | undefined {
   const v = value?.toUpperCase().trim()
   return v && /^[A-Z]{2}$/.test(v) ? v : undefined
 }
+/** Build the curated annual event list.
+ * @param year - Gregorian calendar year.
+ * @returns Events with date-specific years, including movable holidays.
+ */
 export function annualCalendar(year: number): Celebration[] {
   if (!Number.isInteger(year) || year < 1900 || year > 2100) return []
   const fixedEvents = [...DOMINICAN, ...UNITED_STATES, ...LATIN_AMERICA, ...WORLD].map(x=>annualYear(x,year))
@@ -289,7 +300,12 @@ function personalEvents(date: string, profile: CalendarProfile): Celebration[] {
   }
   return out
 }
-/** Select contextual events, never show a national celebration from unrelated countries. */
+/** Select contextual events; never display unrelated foreign holidays.
+ * @param date - The visitor's local calendar date.
+ * @param profile - User-selected origin, residence and optional consented dates.
+ * @param external - Optional country holiday API enrichment.
+ * @returns Matching events, with the most relevant celebration first.
+ */
 export function celebrationsOn(date: Date, profile: CalendarProfile, external: readonly Celebration[] = []): Celebration[] {
   const day = iso(date)
   const events = [...personalEvents(day,profile), ...annualCalendar(date.getFullYear()), ...external]
@@ -298,6 +314,11 @@ export function celebrationsOn(date: Date, profile: CalendarProfile, external: r
     .filter(event => {const key = `${event.country}:${event.label.toLocaleLowerCase()}`; if(seen.has(key))return false;seen.add(key);return true})
     .sort((a,b)=>score(b,profile)-score(a,profile) || a.id.localeCompare(b.id))
 }
+/** Generate an appropriately toned greeting without invented personal identity.
+ * @param event - Selected local celebration.
+ * @param preferredName - Optional user-configured form of address.
+ * @returns A concise Spanish greeting or commemoration.
+ */
 export function celebrationGreeting(event: Celebration, preferredName?: string): string {
   const name = preferredName?.trim()
   const address = name ? `, ${name}` : ''
@@ -310,6 +331,7 @@ export function celebrationGreeting(event: Celebration, preferredName?: string):
     || event.theme === 'patriotic' || event.theme === 'winter' || event.theme === 'new-year'
   return personal ? `¡Feliz ${event.label}${address}!` : `Hoy celebramos ${event.label}.`
 }
+/** Fallback color and motif map for the fourteen design families. */
 export const CELEBRATION_ACCENTS: Record<CelebrationTheme, { icon:string; color:string; secondary:string }> = {
   patriotic:{icon:'✦',color:'#1664bc',secondary:'#d13b49'},
   family:{icon:'♥',color:'#d04a80',secondary:'#f6b8c9'},
@@ -333,6 +355,12 @@ export const CELEBRATION_ACCENTS: Record<CelebrationTheme, { icon:string; color:
  */
 const holidayCache = new Map<string, { at: number; events: Celebration[] }>()
 
+/** Read public country holidays without sharing personal profile data.
+ * @param year - Calendar year for the public source.
+ * @param country - ISO 3166-1 alpha-2 country code.
+ * @param signal - Optional request cancellation signal.
+ * @returns Validated public observances, cached for one day.
+ */
 export async function fetchCountryHolidays(year:number, country:string, signal?:AbortSignal):Promise<Celebration[]> {
   const code = normalizedCountry(country)
   if (!code || year < 1900 || year > 2100) return []
