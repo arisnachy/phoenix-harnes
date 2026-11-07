@@ -26,7 +26,7 @@ const fetcher=async url=>{
 test('one bounded daily scan covers the real leagues and diversifies sports',async()=>{
   calls.length=0
   const report=await scoutDailySports(day,5,fetcher,now)
-  assert.equal(calls.length,20)
+  assert.equal(calls.length,40)
   assert.equal(report.totalEligible,7)
   assert.equal(report.events.length,5)
   assert.equal(new Set(report.events.map(x=>x.sport)).size,4)
@@ -102,4 +102,30 @@ test('the requested day is Santo Domingo local, including games after UTC midnig
   assert.deepEqual(result.events.map(x=>x.eventId),['11'])
   assert.equal(result.totalEligible,1)
   assert.equal(result.coverage.find(x=>x.league==='nba')?.futureEvents,1)
+})
+
+test('late Santo Domingo kickoff is found even when ESPN returns it only in the next UTC partition',async()=>{
+  const calls=[]
+  const partitioned=async url=>{
+    const u=String(url);calls.push(u)
+    const events=u.includes('/basketball/nba/')&&u.includes('dates=20261103')?
+      [game(71,'team','2026-11-03T02:45:00Z','pre')]:[]
+    return new Response(JSON.stringify({events}))
+  }
+  const report=await scoutDailySports(day,5,partitioned,now)
+  assert.deepEqual(report.events.map(e=>e.eventId),['71'])
+  assert.equal(report.events[0].kickoff,'2026-11-03T02:45:00.000Z')
+  assert.equal(report.totalEligible,1)
+  assert.equal(calls.length,40)
+})
+test('one failed UTC partition cannot masquerade as full empty league coverage',async()=>{
+  const partial=async url=>{
+    const u=String(url)
+    if(u.includes('/basketball/nba/')&&u.includes('dates=20261103'))
+      return new Response('outage',{status:503})
+    return new Response(JSON.stringify({events:[]}))
+  }
+  const report=await scoutDailySports(day,5,partial,now)
+  assert.equal(report.coverage.find(x=>x.league==='nba')?.status,'unavailable')
+  assert.match(report.coverage.find(x=>x.league==='nba')?.reason??'',/Cobertura parcial/)
 })
