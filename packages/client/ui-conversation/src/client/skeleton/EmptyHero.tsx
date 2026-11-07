@@ -5,8 +5,8 @@
 // → composer flip); CSS positions it over this shell's glow area during the
 // hero phase.
 
-import { useId } from 'react'
-import type { ReactNode, RefObject } from 'react'
+import { useEffect, useId, useState } from 'react'
+import type { CSSProperties, ReactNode, RefObject } from 'react'
 import {
   IconChevronDownOutline14, IconChevronRightOutline14, IconFolderClose16, IconFolderOpen16,
   IconSparkle16, IconWarningOutline16, PhoenixLogo,
@@ -14,6 +14,10 @@ import {
 import { workspaceTitleOf } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps, ProactivityAttentionItem } from '../contract/slots.ts'
 import css from './HeroShell.module.css'
+import type { ConversationUserProfileState } from '../contract/slots.ts'
+import { useCalendarDay } from '../chat/use-calendar-day.ts'
+import { CELEBRATION_ACCENTS, celebrationGreeting, celebrationsOn, fetchCountryHolidays, normalizedCountry } from './celebrations.ts'
+import type { CalendarProfile, Celebration } from './celebrations.ts'
 
 /** The owner's locale seat type, passed to hero chrome as a plain prop. */
 type HeroTranslate = ConversationSlotProps['t']
@@ -228,6 +232,8 @@ export interface HeroShellProps {
   renderSlot: ConversationSlotProps['renderSlot']
   /** Durable preferred name from the current user's Profile settings. */
   preferredName?: string | undefined
+  /** Consented private profile fields already mirrored by the conversation owner. */
+  profile?: ConversationUserProfileState | undefined
   /** Overlay content after the stack (modals). */
   children?: ReactNode
 }
@@ -239,27 +245,77 @@ export interface HeroShellProps {
  * @param props - see {@link HeroShellProps}.
  * @returns the centered hero element tree.
  */
-export function HeroShell({ renderSlot, preferredName, children }: HeroShellProps) {
-  const greeting = greetingForHour(new Date().getHours())
+/** Use browser locale only to identify residence, never assume nationality. */
+function localeResidenceCountry(): string | undefined {
+  if (typeof navigator === 'undefined') return undefined
+  try {
+    const region = new Intl.Locale(navigator.language).region
+    if (region) return normalizedCountry(region)
+  } catch { /* A malformed browser locale leaves the country unknown. */ }
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  return timeZone === 'America/Santo_Domingo' ? 'DO' : undefined
+}
+
+/**
+ * Hero-only celebratory overlay. The official silver PHOENIX PNG remains intact;
+ * color rings and a tasteful motif change instead of swapping brand identity.
+ */
+export function HeroShell({ renderSlot, preferredName, profile, children }: HeroShellProps) {
+  const day = useCalendarDay()
   const displayName = preferredNameForHero(preferredName)
+  const countryOfOrigin = normalizedCountry(profile?.countryCode)
+  const countryOfResidence = localeResidenceCountry()
+  const year = new Date(day).getFullYear()
+  const [external, setExternal] = useState<Celebration[]>([])
+
+  useEffect(() => {
+    // Network enrichment is optional; the offline curated calendar paints first.
+    const countries = [...new Set([countryOfOrigin, countryOfResidence].filter((x): x is string => x !== undefined))]
+    if (countries.length === 0) { setExternal([]); return }
+    const controller = new AbortController()
+    void Promise.all(countries.map(country => fetchCountryHolidays(year, country, controller.signal).catch(() => [])))
+      .then(results => { if (!controller.signal.aborted) setExternal(results.flat()) })
+    return () => { controller.abort() }
+  }, [countryOfOrigin, countryOfResidence, year])
+
+  const calendarProfile: CalendarProfile = {
+    countryOfOrigin, countryOfResidence,
+    profession: profile?.profession,
+    dateOfBirth: profile?.dateOfBirth,
+    specialDates: profile?.specialDates,
+  }
+  const selected = celebrationsOn(new Date(day), calendarProfile, external)[0]
+  const accent = selected === undefined ? undefined : CELEBRATION_ACCENTS[selected.theme]
+  const appearance = accent === undefined ? undefined : {
+    '--phoenix-celebration-primary': accent.color,
+    '--phoenix-celebration-secondary': accent.secondary,
+  } as CSSProperties
+  const greeting = greetingForHour(new Date().getHours())
+  const motif = selected?.theme === 'patriotic'
+    ? selected.country === 'DO' ? '🇩🇴' : selected.country === 'US' ? '🇺🇸' : accent?.icon
+    : accent?.icon
 
   return (
     <div className={css.root}>
       <div className={css.stack}>
-        <span className={css.fishHitbox} aria-hidden="true">
+        <span className={css.fishHitbox} aria-hidden="true" data-celebration={selected?.theme} style={appearance}>
           {renderSlot('conversation.hero.brand.mark', { size: 64, className: css.fish }, {
             fallback: <PhoenixLogo size={64} {...(css.fish === undefined ? {} : { className: css.fish })} />,
           })}
+          {motif && <span className={css.celebrationMotif}>{motif}</span>}
         </span>
         <h1 className={css.headline}>
           <span>{greeting}</span>
           {displayName === undefined ? null : (
             <>
-              <span>{',\u00A0'}</span>
+              <span>{',\\u00A0'}</span>
               <span className={css.preferredName}>{displayName}</span>
             </>
           )}
         </h1>
+        {selected && <p className={css.celebrationGreeting} role="status">
+          {celebrationGreeting(selected, displayName)}
+        </p>}
         <p className={css.subtitle}>¿En qué podemos trabajar hoy?</p>
       </div>
       {children}
