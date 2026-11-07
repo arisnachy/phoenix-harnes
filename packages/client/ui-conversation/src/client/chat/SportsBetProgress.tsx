@@ -38,8 +38,6 @@ const signed=(n:number)=>n>0?'+'+n:String(n)
 export function evaluateSportsPick(pick:SportsTrackedPick,game:PhoenixLiveGame|undefined,sport?:string):SportsPickGrade{
   const pending=(label:string,target:string):SportsPickGrade=>({state:'pending',label,target})
   const selected=pick.side==='home'?game?.home:game?.away
-  const marketName=pick.market==='total'?'Total de puntos/goles':pick.market==='spread'?'Hándicap':
-    pick.market==='three-way'?'Ganador 1X2':'Ganador'
   const target=pick.market==='total'
     ?(pick.side==='over'?'Más de ':'Menos de ')+pick.line
     :pick.market==='spread'?(selected??'Equipo')+' '+signed(pick.line??0)
