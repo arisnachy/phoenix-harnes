@@ -111,8 +111,8 @@ export function SportsBetProgress({sport,league,date,home,away,game,meta,initial
   const availableSides=market==='total'?[
     ['over','Arriba (Over)'],['under','Abajo (Under)']]:
     market==='three-way'?[
-      ['home',home],['away',away],['draw','Empate']]:
-      [['home',home],['away',away]]
+      ['home','Local'],['away','Visitante'],['draw','Empate']]:
+      [['home','Local'],['away','Visitante']]
   const submit=()=>{
     const p:SportsTrackedPick={receipt:receipt.trim(),market,side:availableSides.some(s=>s[0]===side)?side:availableSides[0]![0] as SportsTrackedPick['side'],
       ...(needLine(market)?{line:Number(line)}:{})}
