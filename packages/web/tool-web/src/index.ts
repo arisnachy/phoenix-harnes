@@ -16,8 +16,11 @@ import { createScholarlySearchTool } from './scholarly.ts'
 import { createFederatedScholarTool } from './federated-scholar.ts'
 import { createResearchCatalogTool } from './research-source-catalog.ts'
 import { createWorldBankHealthSeriesTool } from './health-series.ts'
+import { createWebImageSearchTool } from './image-search.ts'
 
 export { WEB_SEARCH_MAX_QUERIES, WEB_SEARCH_MAX_RESULTS, applyWebSearchTool, formatSearchOutput, presentSearchCall, presentSearchResult, searchMetaFromValue, searchMetaFromResult } from './search.ts'
+export { createWebImageSearchTool, searchCommonsImages, projectCommonsImages, COMMONS_IMAGE_SEARCH_TIMEOUT_MS } from './image-search.ts'
+export type { CommonsReferenceImage } from './image-search.ts'
 export type { WebSearchMeta } from './search.ts'
 export { applyWebFetchTool, formatFetchOutput, parseFetchArgs, presentFetchCall, presentFetchResult, fetchMetaFromValue, fetchMetaFromResult } from './fetch.ts'
 export type { WebFetchMeta } from './fetch.ts'
@@ -113,6 +116,11 @@ export function apply(ctx: Context, config: Config): void {
       text: 'Para investigación científica de cualquier disciplina, buscar evidencia bibliográfica en research_federated (fuentes paralelas y fallos explícitos), combinar con research_catalog para datos primarios especializados y research_investigate para lectura real. Verificar DOI, texto completo, fecha, retractaciones, diseño y calidad metodológica antes de citar conclusiones. Metadatos de búsqueda no equivalen a evidencia verificada ni ofrecen acceso al texto completo.',
     })
     ctx.tools.register(createWorldBankHealthSeriesTool())
+    ctx.tools.register(createWebImageSearchTool())
+    ctx.systemPrompt.section({
+      name: 'tool:web_image_search', order: 114,
+      text: 'Cuando una interfaz inteligente necesita referencias visuales existentes, busca primero con web_image_search y coloca los resultados reales como nodos reference_image de ui_canvas (src, alt, sourceUrl, credit, license y licenseUrl). Mantén crédito y licencia visibles, no inventes URLs ni imágenes ni uses la búsqueda textual como si devolviera miniaturas. Esta vía tiene presupuesto de 8 segundos para consultar Wikimedia Commons; no garantiza el tiempo de descarga. Para una imagen original o modificación de una foto, usa image_generation y comunica los tiempos reales.',
+    })
   }
   if (resolved.fetch) applyWebFetchTool(ctx, resolved.fetchTimeoutMs, resolved.fetchMaxOutputChars)
 }

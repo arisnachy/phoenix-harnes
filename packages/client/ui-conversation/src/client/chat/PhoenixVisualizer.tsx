@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import css from './PhoenixVisualizer.module.css'
+import { validCommonsReferenceUrl } from './GenerativeCanvas.tsx'
 import {
   auditRenderedVisual, emitVisualQaReport, populatedVisualTableRows, preflightVisualSpec,
   projectVisualTable, repairVisualSpec,
@@ -645,6 +646,23 @@ function TimelineView({ spec }: { readonly spec: JsonRecord }) {
   )
 }
 
+function CardReferenceImage({ item }: { readonly item: JsonRecord }) {
+  const [failed, setFailed] = useState(false)
+  const src = validCommonsReferenceUrl(item.src, 'image') ? item.src as string : undefined
+  const source = validCommonsReferenceUrl(item.sourceUrl, 'source') ? item.sourceUrl as string : undefined
+  const credit = nonEmpty(item.credit)
+  const license = nonEmpty(item.license)
+  const alt = nonEmpty(item.alt) ?? nonEmpty(item.title)
+  if (src === undefined || source === undefined || credit === undefined || license === undefined || alt === undefined) return null
+  return <figure className={css.cardReference} data-phoenix-reference-image="commons">
+    {!failed
+      ? <img src={src} alt={alt} loading="lazy" decoding="async" referrerPolicy="no-referrer"
+          onError={() => setFailed(true)} />
+      : <span role="status">Imagen no disponible</span>}
+    <figcaption>{credit} · {license} · <a href={source} target="_blank" rel="noopener noreferrer">Fuente original</a></figcaption>
+  </figure>
+}
+
 function CardsView({ spec }: { readonly spec: JsonRecord }) {
   const source = Array.isArray(spec.cards) ? spec.cards : Array.isArray(spec.items) ? spec.items : Array.isArray(spec.data) ? spec.data : []
   const items = source.filter(isRecord).slice(0, 24)
@@ -655,6 +673,7 @@ function CardsView({ spec }: { readonly spec: JsonRecord }) {
       <div className={css.cards}>
         {items.map((item, index) => (
           <article className={css.infoCard} key={index}>
+            <CardReferenceImage item={item} />
             {(nonEmpty(item.eyebrow) ?? nonEmpty(item.category)) !== undefined && <span>{nonEmpty(item.eyebrow) ?? nonEmpty(item.category)}</span>}
             <strong>{nonEmpty(item.title) ?? nonEmpty(item.label) ?? 'Item'}</strong>
             {(nonEmpty(item.description) ?? nonEmpty(item.text)) !== undefined && <p>{nonEmpty(item.description) ?? nonEmpty(item.text)}</p>}

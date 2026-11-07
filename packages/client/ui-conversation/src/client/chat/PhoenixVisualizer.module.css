@@ -577,3 +577,10 @@
   }
 }
 
+
+/* Attributed real photos inside generic visual cards (not decoration or generated SVG). */
+.cardReference { display:grid; gap:5px; margin:0 0 6px; min-width:0; }
+.cardReference img { display:block; width:100%; aspect-ratio:4 / 3; max-height:220px; object-fit:contain; border-radius:10px; background:var(--dsw-alias-surface-primary,#fff); }
+.cardReference figcaption { color:color-mix(in srgb,currentColor 65%,transparent); font-size:10px; line-height:1.4; overflow-wrap:anywhere; }
+.cardReference figcaption a { color:var(--phoenix-visual-series-1,#2563eb); text-decoration:underline; }
+.cardReference [role="status"] { display:grid; place-items:center; min-height:70px; font-size:11px; }
