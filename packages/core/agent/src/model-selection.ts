@@ -627,14 +627,14 @@ export function humanImageInTurn(
 export function selectVisualAnalysisRoute(models: readonly LlmResolvedModelInfo[]): ModelSelection | undefined {
   const eligible = models.filter(model =>
     model.provider === 'openai-codex'
-    && /^gpt-\\d+(?:\\.\\d+)?-(?:terra|sol)(?:$|-)/iu.test(model.id)
+    && /^gpt-\d+(?:\.\d+)?-(?:terra|sol)(?:$|-)/iu.test(model.id)
     && model.inputModalities?.includes('image') === true
     && model.reasoning?.efforts.some(effort => effort.id === 'low') === true)
   eligible.sort((first, second) => {
     const firstTerra = /-terra(?:$|-)/iu.test(first.id)
     const secondTerra = /-terra(?:$|-)/iu.test(second.id)
     if (firstTerra !== secondTerra) return firstTerra ? -1 : 1
-    const version = (id: string): number => Number(/^gpt-(\\d+(?:\\.\\d+)?)/iu.exec(id)?.[1] ?? '0')
+    const version = (id: string): number => Number(/^gpt-(\d+(?:\.\d+)?)/iu.exec(id)?.[1] ?? '0')
     return version(second.id) - version(first.id)
   })
   const chosen = eligible[0]
@@ -653,7 +653,7 @@ async function availableVisualAnalysisRoute(ctx: Context): Promise<ModelSelectio
   try {
     const visible = await llm.listModels('openai-codex')
     const candidates = visible.filter(model =>
-      /^gpt-\\d+(?:\\.\\d+)?-(?:terra|sol)(?:$|-)/iu.test(model.id)
+      /^gpt-\d+(?:\.\d+)?-(?:terra|sol)(?:$|-)/iu.test(model.id)
       && model.inputModalities?.includes('image') === true)
     const resolved = await Promise.all(candidates.map(async model => {
       try { return await llm.resolveModelInfo('openai-codex', model.id) }
