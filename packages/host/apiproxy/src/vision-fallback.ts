@@ -63,7 +63,7 @@ const DESCRIPTION_SYSTEM_PROMPT = [
   'Potential clinical interpretation (provisional, only if supported):',
   'Visual limitations:',
   'Output only this evidence transcription, without proposing or generating an image.',
-].join('\\n')
+].join('\n')
 
 /**
  * Resolve the route that will lend its eyes, honoring explicit configuration
