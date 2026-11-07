@@ -29,7 +29,7 @@ test('rebuilds missing dist, stamps successful revision and skips repeat launch'
       mkdirSync(dirname(index),{recursive:true});writeFileSync(index,'<!doctype html>')
       const plugin=join(root,'packages/client/ui-conversation/lib/client.js')
       mkdirSync(dirname(plugin),{recursive:true})
-      writeFileSync(plugin,'sports_game_card sports_ticket_card sports-evidence Seguimiento automático del boleto')
+      writeFileSync(plugin,'sports_game_card sports_ticket_card sports_ticket_bundle_card sports-evidence Seguimiento automático del boleto')
     }
     return 0
   }})
@@ -39,14 +39,14 @@ test('rebuilds missing dist, stamps successful revision and skips repeat launch'
   assert.equal(sportsClientBundleReady(root),true)
   writeFileSync(join(root,'packages/client/ui-conversation/lib/client.js'),'obsolete')
   assert.equal(frontendIsCurrent(root,FIRST),false)
-  writeFileSync(join(root,'packages/client/ui-conversation/lib/client.js'),'sports_game_card sports_ticket_card sports-evidence Seguimiento automático del boleto')
+  writeFileSync(join(root,'packages/client/ui-conversation/lib/client.js'),'sports_game_card sports_ticket_card sports_ticket_bundle_card sports-evidence Seguimiento automático del boleto')
   writeFileSync(join(root,'packages/client/ui-conversation/lib/client.js'),
     'sports_game_card sports_ticket_card sports-evidence Registrar mi apuesta para seguir el objetivo')
   assert.equal(sportsClientBundleReady(root),false)
   assert.equal(frontendIsCurrent(root,FIRST),false,
     'legacy manual bet form must invalidate even an apparently current revision stamp')
   writeFileSync(join(root,'packages/client/ui-conversation/lib/client.js'),
-    'sports_game_card sports_ticket_card sports-evidence Seguimiento automático del boleto')
+    'sports_game_card sports_ticket_card sports_ticket_bundle_card sports-evidence Seguimiento automático del boleto')
   assert.equal(verifyFrontend({root,readRevision,build:()=>{throw Error('unexpected rebuild')}}).status,'current')
 })
 test('revision mismatch never serves obsolete frontend and restamps only after build',async t=>{

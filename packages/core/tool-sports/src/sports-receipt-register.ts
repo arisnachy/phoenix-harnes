@@ -15,7 +15,7 @@ export type ReceiptInput={
   ticketReference:string;date:string;bookmaker:string;
   stake?:number;reportedReturn?:number;legs:ReceiptLegInput[]
 }
-type ProviderTeam={homeAway?:string;team?:{displayName?:string;name?:string}}
+type ProviderTeam={homeAway?:string;team?:{displayName?:string;name?:string;logo?:string;logos?:Array<{href?:string}>}}
 type ProviderEvent={id?:string|number;date?:string;
   competitions?:Array<{competitors?:ProviderTeam[]}>}
 type Board={events?:ProviderEvent[]}
@@ -23,6 +23,11 @@ const dateOK=(s:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(s)&&
   !Number.isNaN(Date.parse(s+'T00:00:00Z'))&&new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s
 const normalize=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'').replace(/[^a-z0-9]/giu,'').toLowerCase()
 const validName=(s:unknown):s is string=>typeof s==='string'&&s.trim().length>=2&&s.length<=120
+const teamLogo=(event:ProviderEvent,side:'home'|'away')=>{
+  const row=event.competitions?.[0]?.competitors?.find(x=>x.homeAway===side)?.team
+  const logo=row?.logo??row?.logos?.[0]?.href
+  return logo&&/^https:\/\/a\.espncdn\.com\//u.test(logo)?logo:undefined
+}
 const teamName=(event:ProviderEvent,side:'home'|'away')=>{
   const row=event.competitions?.[0]?.competitors?.find(x=>x.homeAway===side)?.team
   return row?.displayName??row?.name??''
@@ -115,6 +120,8 @@ export async function registerSportsReceipt(input:ReceiptInput,fetcher:typeof fe
         (selectedSide==='home'?home:away)+(leg.market==='spread'?' '+((leg.line??0)>=0?'+':'')+leg.line:'')
     legs.push({
       event:away+' vs '+home,homeTeam:home,awayTeam:away,
+      ...(teamLogo(event,'home')?{homeLogo:teamLogo(event,'home')}:{}),
+      ...(teamLogo(event,'away')?{awayLogo:teamLogo(event,'away')}:{}),
       selection:label,price:leg.americanOdds===undefined?'No informada':
         leg.americanOdds>0?'+'+leg.americanOdds:String(leg.americanOdds),
       bookmaker:input.bookmaker,when:displayHour(event.date!),sport:leg.sport,league:leg.league,
@@ -141,6 +148,6 @@ export async function registerSportsReceipt(input:ReceiptInput,fetcher:typeof fe
     gamesVerified:true,operatorAcceptanceVerified:false,paymentVerified:false,
     uiBlock,linkedEvents:legs.map(l=>({eventId:l.eventId,sport:l.sport,league:l.league,
       date:l.eventDate,home:l.homeTeam,away:l.awayTeam,goal:l.trackedBet})),
-    instruction:'Tarjeta de recibo visible y seguimiento automático en carteleras futuras del mismo navegador. NO pedir al usuario rellenar objetivos por partido. Distinguir vínculo ESPN de aceptación por la banca. Si faltan datos fiables, explicar qué selección quedó sin vincular en lugar de inventarla.',
+    instruction:'Cada comprobante se renderiza como una tarjeta agrupada con sus cinco/seis juegos, selección destacada y estado de cada pata y del total; seguimiento ESPN automático en el navegador, también en carteleras futuras. NO mostrar una cartelera general ni pedir al usuario rellenar objetivos por partido. Distinguir vínculo ESPN de aceptación por la banca. Si faltan datos fiables, explicar qué selección quedó sin vincular en lugar de inventarla.',
   }
 }
