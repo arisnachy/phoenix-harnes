@@ -151,3 +151,75 @@ describe('rendered interactive visual intelligence',()=>{
     expect(screen.getByText(/Última actualización real:/)).not.toBeNull()
   })
 })
+
+
+describe('model-authored JSON recovery and view routing', () => {
+  const modelData = {
+    component: 'visual_intelligence', version: 1,
+    props: {
+      id: 'demo-panel-proyectos', title: 'Panel interactivo de proyectos',
+      view: 'auto',
+      metrics: [
+        { label: 'Tareas abiertas', value: 12, status: 'normal' },
+        { label: 'En riesgo', value: '2', status: 'warning' },
+        { label: 'Avance promedio', value: '68%', status: 'normal' },
+      ],
+      labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'],
+      series: [{ label: 'Tareas completadas', values: [3, 4, 2, 5, 6] }],
+      columns: ['Proyecto', 'Estado'], rows: [['A', 'Activo'], ['B', 'Pendiente']],
+    },
+  }
+  it('recovers the exact status and numeric shorthand seen in the screenshot', () => {
+    const fixed = parsed(modelData)
+    expect(fixed.props.metrics?.[0]).toMatchObject({ label: 'Tareas abiertas', value: '12', status: 'neutral' })
+    expect(fixed.props.metrics?.[2]?.status).toBe('neutral')
+    expect(chooseVisualView(fixed.props)).toBe('dashboard')
+    const delimiter = String.fromCharCode(96).repeat(3)
+    const answer = ['Aquí tienes el panel interactivo.', delimiter + 'generative-ui', JSON.stringify(modelData), delimiter, 'Ahora puedes explorarlo.'].join('\n')
+    const segments = splitGenerativeUiText(answer)
+    expect(segments.map(s => s.kind)).toEqual(['markdown', 'ui', 'markdown'])
+    expect(segments[1]).toMatchObject({ kind: 'ui', block: { component: 'visual_intelligence' } })
+    expect(segments.some(s => s.kind === 'markdown' && s.text.includes('"component"'))).toBe(false)
+  })
+  it('normalizes safe, recognized intent aliases without dropping data', () => {
+    const normalized = parsed({...modelData,props:{...modelData.props,id:'Panel General',view:'gráfica',
+      metrics:[{label:'Operaciones',value:123,status:'ÉXITO'}]}})
+    expect(normalized.props.id).toBe('panel-general')
+    expect(normalized.props.view).toBe('chart')
+    expect(normalized.props.metrics?.[0]).toMatchObject({value:'123',status:'positive'})
+  })
+  it('chooses a matching visualization when multiple datasets exist', () => {
+    const p=parsed(modelData).props
+    expect(chooseVisualView({...p,title:'Tabla de proyectos'})).toBe('table')
+    expect(chooseVisualView({...p,title:'Comparación entre proyectos'})).toBe('comparison')
+    expect(chooseVisualView({...p,title:'Evolución semanal de proyectos'})).toBe('chart')
+    expect(chooseVisualView({...p,title:'Panel ejecutivo de proyectos'})).toBe('dashboard')
+  })
+  it('turns rejected known visual JSON into a readable notice, never a code wall', () => {
+    const bad = {...modelData,props:{...modelData.props,
+      sources:[{title:'Trampa',url:'javascript:alert(1)'}]}}
+    expect(parseVisualIntelligence(bad)).toBeNull()
+    const fence = String.fromCharCode(96).repeat(3)
+    const message='Explicación.\n'+fence+'generative-ui\n'+JSON.stringify(bad)+'\n'+fence
+    const parts=splitGenerativeUiText(message)
+    expect(parts.map(x=>x.kind)).toEqual(['markdown','notice'])
+    expect(parts.some(x=>x.kind==='markdown' && x.text.includes('javascript:'))).toBe(false)
+  })
+  it('recovers bare model-authored visual JSON and hides incomplete streaming drafts', () => {
+    const bare='Vista previa\n'+JSON.stringify(modelData)+'\nFin.'
+    const parts=splitGenerativeUiText(bare)
+    expect(parts.map(x=>x.kind)).toEqual(['markdown','ui','markdown'])
+    const incomplete=bare.slice(0,bare.lastIndexOf('}'))
+    const streaming=splitGenerativeUiText(incomplete,{streaming:true})
+    expect(streaming.some(x=>x.kind==='markdown'&&x.text.includes('metrics'))).toBe(false)
+  })
+  it('does not repair unrecognized statuses or execute arbitrary model instructions', () => {
+    const invalid={...modelData,props:{...modelData.props,
+      metrics:[{label:'Tareas',value:'3',status:'__proto__'}]}}
+    expect(parseVisualIntelligence(invalid)).toBeNull()
+    expect(parseVisualIntelligence({...modelData,props:{...modelData.props,
+      onClick:'window.location="evil.example"'}})).toBeNull()
+    expect(parseVisualIntelligence({...modelData,props:{...modelData.props,
+      sources:[{title:'Evidencia',url:'https://evil.example/a',checkedAt:undefined}]}})).toBeNull()
+  })
+})
