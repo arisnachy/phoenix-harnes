@@ -26,7 +26,7 @@ export const STUDY_MODALITIES = Object.freeze({
     limited:'No validated interpreter is configured for this study type.'},
 } as const)
 export type StudyModality = keyof typeof STUDY_MODALITIES
-export type StudyEvidenceState = 'UNEXAMINED_SOURCE'|'CLINICIAN_PRELIMINARY'
+export type StudyEvidenceState = 'UNEXAMINED_SOURCE'|'SOURCE_REVIEWED_NO_OBSERVATIONS'|'CLINICIAN_PRELIMINARY'
 const ALLOWED_MIME = new Set(['image/png','image/jpeg','image/webp','application/pdf'])
 const ORIGINAL_REQUIRED = new Set<StudyModality>(['ct','mri','ultrasound','cytology','histopathology'])
 const SENSITIVE = /(?:diagn[oó]stico confirmado|certeza del 100%|validado por IA)/iu
@@ -62,8 +62,10 @@ export function evaluateStudyEvidence(input:StudyEvidenceInput) {
   const context=clean(input.studyContext,'Contexto del estudio',600)
   if(SENSITIVE.test(preliminaryInterpretation))
     throw new Error('No se puede afirmar certeza diagnóstica ni validación automática')
-  const criticalConcern=['not-assessed','suspected-critical','assessed-no-critical'].includes(String(input.criticalConcern))
-    ?String(input.criticalConcern):'not-assessed'
+  const concern=input.criticalConcern===undefined?'not-assessed':String(input.criticalConcern)
+  if(!['not-assessed','suspected-critical','assessed-no-critical'].includes(concern))
+    throw new Error('Estado crítico inválido')
+  const criticalConcern=concern
   if(input.originalReviewed!==true&&(observations||preliminaryInterpretation||criticalConcern!=='not-assessed'))
     throw new Error('No registre hallazgos o urgencia sin haber revisado el archivo original')
   if(preliminaryInterpretation&&!observations)
@@ -80,8 +82,8 @@ export function evaluateStudyEvidence(input:StudyEvidenceInput) {
     modality,modalityLabel:selected.label,sourceMime,
     sourceRequirement:selected.native,
     sourceReviewedByClinician:input.originalReviewed===true,
-    evidenceState:input.originalReviewed===true?'CLINICIAN_PRELIMINARY' as StudyEvidenceState:
-      'UNEXAMINED_SOURCE' as StudyEvidenceState,
+    evidenceState:(input.originalReviewed===false?'UNEXAMINED_SOURCE':
+      !observations?'SOURCE_REVIEWED_NO_OBSERVATIONS':'CLINICIAN_PRELIMINARY') as StudyEvidenceState,
     observations,preliminaryInterpretation,studyContext:context,
     criticalConcern:input.originalReviewed===true?criticalConcern:'not-assessed',
     aiImageInterpreted:false,aiModelId:null,automatedDiagnosis:false,
