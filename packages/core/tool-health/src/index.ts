@@ -5,7 +5,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { planAnatomicalTwin } from './anatomy-planner.ts'
 import { protocolFor } from './diagnostic-routing.ts'
-import { assessPreexcitation } from './ecg-preexcitation.ts'
+import { reviewPreexcitationRequest } from './ecg-preexcitation.ts'
 import { planClinicalVisualization } from './diagnostic-visualization.ts'
 import { auditDiagnosticConcordance } from './diagnostic-concordance.ts'
 import {DIAGNOSTIC_INPUTS,DIAGNOSTIC_INPUT_GROUPS,DIAGNOSTIC_INPUT_COUNT} from './diagnostic-catalog.ts'
@@ -117,7 +117,7 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
     isConcurrencySafe:()=>true,
     execute(args){
-      return Promise.resolve(JSON.stringify(assessPreexcitation(args)))
+      return Promise.resolve(JSON.stringify(reviewPreexcitationRequest(args)))
     },
     presentCall:()=>({card:'generic',title:'ECG · Preexcitación y WPW (evidencia)',kind:'read' as const}),
   }))
