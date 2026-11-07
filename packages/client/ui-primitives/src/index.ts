@@ -55,5 +55,6 @@ export { extractMarkdownPlainText } from './markdown/plain-text.ts'
 export type { MarkdownPlainTextMode, MarkdownPlainTextOptions } from './markdown/plain-text.ts'
 export * from './icons/index.tsx'
 
-export { PhoenixUiIcon, PhoenixStatusPill, PhoenixAgentLine } from './SmartUi.tsx'
-export type { PhoenixUiIconName, PhoenixStatusTone } from './SmartUi.tsx'
+export { PhoenixUiIcon, PhoenixStatusPill, PhoenixAgentLine, isPhoenixUiIconName, isPhoenixUiIconTone,
+  isPhoenixUiHexColor, choosePhoenixUiIcon, choosePhoenixUiTone } from './SmartUi.tsx'
+export type { PhoenixUiIconName, PhoenixUiIconTone, PhoenixStatusTone } from './SmartUi.tsx'

@@ -1,24 +1,98 @@
 import type { ReactNode } from 'react'
+import { DynamicIcon } from 'lucide-react/dynamic'
+import dynamicIconImports from 'lucide-react/dynamicIconImports'
 import css from './SmartUi.module.css'
 
-/** Small, theme-aware outline icon set for assistant-generated UI. No remote assets or icon fonts. */
-export type PhoenixUiIconName =
-  | 'bot' | 'brain' | 'code' | 'check' | 'alert' | 'table' | 'calculator'
-  | 'copy' | 'download' | 'reset' | 'clipboard' | 'plus' | 'file' | 'search'
-  | 'settings' | 'calendar' | 'activity' | 'shield' | 'chart' | 'info'
-  | 'trophy' | 'star' | 'heart' | 'stethoscope' | 'hospital' | 'pill'
-  | 'microscope' | 'graduation-cap' | 'book' | 'globe' | 'map-pin' | 'clock'
-  | 'user' | 'users' | 'briefcase' | 'wallet' | 'building' | 'target'
-  | 'trending-up' | 'sparkles' | 'database' | 'image' | 'basketball'
-  | 'soccer' | 'baseball' | 'football' | 'filter' | 'award'
+/** Local, build-time-validated Lucide registry plus legacy PHOENIX sports glyphs. */
+const LEGACY_NAMES = [
+ 'bot','brain','code','check','alert','table','calculator','copy','download','reset',
+ 'clipboard','plus','file','search','settings','calendar','activity','shield','chart',
+ 'info','trophy','star','heart','stethoscope','hospital','pill','microscope',
+ 'graduation-cap','book','globe','map-pin','clock','user','users','briefcase','wallet',
+ 'building','target','trending-up','sparkles','database','image','basketball','soccer',
+ 'baseball','football','filter','award',
+] as const
+type LegacyPhoenixUiIconName = typeof LEGACY_NAMES[number]
+const LEGACY_SET: ReadonlySet<string> = new Set(LEGACY_NAMES)
+const ALIASES: Readonly<Record<string,keyof typeof dynamicIconImports>> = {
+  microchip: 'cpu', 'soccer-ball': 'circle-dot',
+}
+export type PhoenixUiIconName = keyof typeof dynamicIconImports | LegacyPhoenixUiIconName | keyof typeof ALIASES
+export type PhoenixUiIconTone = 'auto'|'neutral'|'positive'|'warning'|'negative'|'info'
+  |'medical'|'research'|'education'|'finance'|'sports'|'technology'
+export function isPhoenixUiIconName(value: unknown): value is PhoenixUiIconName {
+ return typeof value==='string' && value.length<=64 && /^[a-z][a-z0-9-]*$/.test(value)
+   && (LEGACY_SET.has(value) || Object.prototype.hasOwnProperty.call(dynamicIconImports,value)
+      || Object.prototype.hasOwnProperty.call(ALIASES,value))
+}
+export function isPhoenixUiIconTone(value: unknown): value is PhoenixUiIconTone {
+ return typeof value==='string' && [
+  'auto','neutral','positive','warning','negative','info','medical','research',
+  'education','finance','sports','technology',
+ ].includes(value)
+}
+export function isPhoenixUiHexColor(value: unknown): value is string {
+ return typeof value==='string' && /^#[\da-f]{3}(?:[\da-f]{3})?$/i.test(value)
+}
+const normalizeLabel = (s: string): string => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
+const ICON_SEMANTICS: readonly {words:readonly string[];icon:PhoenixUiIconName;tone:PhoenixUiIconTone}[] = [
+ { words:['imc','bmi','peso','altura','calcul','formula','weight','height'],icon:'calculator',tone:'medical'},
+ { words:['corazon','cardi','heart','pulso','pulse'],icon:'heart-pulse',tone:'medical'},
+ { words:['neuro','cerebr','cognit','brain','psicol','mental','memoria'],icon:'brain',tone:'medical'},
+ { words:['pacient','medic','clinic','salud','health','hospital','diagnos','consulta','sintoma'],icon:'stethoscope',tone:'medical'},
+ { words:['farmacia','farmaco','medicamento','pharmacy','drug','pastilla','dosis'],icon:'pill',tone:'medical'},
+ { words:['laboratori','research','investiga','evidencia','estudio','science','cientif','articul','journal','paper'],icon:'microscope',tone:'research'},
+ { words:['educa','escuela','estudian','curso','docen','maestria','universidad','school','examen','evaluacion'],icon:'graduation-cap',tone:'education'},
+ { words:['presupuesto','finanz','ingreso','gasto','profit','cost','pago','precio','ganancia','venta','money','revenue','cash','credito'],icon:'wallet',tone:'finance'},
+ { words:['banco','prestamo','loan','bank'],icon:'landmark',tone:'finance'},
+ { words:['baloncesto','basket','nba','wnba'],icon:'basketball',tone:'sports'},
+ { words:['futbol','soccer','gol','mls','laliga'],icon:'soccer',tone:'sports'},
+ { words:['beisbol','baseball','mlb'],icon:'baseball',tone:'sports'},
+ { words:['deporte','partido','equipo','score','liga','tournament','trofeo','ganador'],icon:'trophy',tone:'sports'},
+ { words:['software','codigo','python','typescript','javascript','program','developer','code'],icon:'code',tone:'technology'},
+ { words:['inteligencia','automatiza','agent','agente','robot','modelo','bot'],icon:'bot',tone:'technology'},
+ { words:['datos','database','data','sql','registros'],icon:'database',tone:'technology'},
+ { words:['seguridad','privacy','privacidad','protect','seguro','security'],icon:'shield-check',tone:'info'},
+ { words:['fecha','calendario','agenda','cita','evento','date','schedule'],icon:'calendar',tone:'info'},
+ { words:['mapa','ubicacion','location','ruta','direccion','map '],icon:'map-pin',tone:'info'},
+ { words:['tiempo','hora','duration','time','latencia'],icon:'clock',tone:'info'},
+ { words:['usuario','user','persona','empleado','employee'],icon:'users',tone:'info'},
+ { words:['informe','document','archivo','reporte','report','pdf'],icon:'file-text',tone:'info'},
+ { words:['tendencia','growth','crecimiento','grafica','graph','metric','indicador','kpi','tasa','porcentaje','percent'],icon:'chart-column',tone:'info'},
+]
+const matchSemantic = (label:string) => {
+ const normalized=normalizeLabel(label)
+ return ICON_SEMANTICS.find(entry=>entry.words.some(word=>normalized.includes(word)))
+}
+/** Automatic icon selection is content-driven, not random decoration. */
+export function choosePhoenixUiIcon(label:string,status?:PhoenixStatusTone):PhoenixUiIconName {
+ const found=matchSemantic(label)
+ if(found)return found.icon
+ if(status==='positive')return 'circle-check'
+ if(status==='warning')return 'triangle-alert'
+ if(status==='negative')return 'circle-alert'
+ return 'info'
+}
+export function choosePhoenixUiTone(label:string,status?:PhoenixStatusTone):PhoenixUiIconTone {
+ if(status==='positive')return 'positive'
+ if(status==='warning')return 'warning'
+ if(status==='negative')return 'negative'
+ if(status==='info')return 'info'
+ return matchSemantic(label)?.tone??'neutral'
+}
+
+/** Theme-aware assistant UI icons; the catalogue is installed at build time, never fetched from CDNs. */
 
 /** Render an icon by a validated, fixed identifier. */
-export function PhoenixUiIcon({ name, size = 18, className }: {
+export function PhoenixUiIcon({ name, size = 18, className, tone = 'auto', color, label }: {
   name: PhoenixUiIconName
   size?: number
   className?: string
+  tone?: PhoenixUiIconTone
+  color?: string | undefined
+  label?: string | undefined
 }): ReactNode {
-  const glyphs: Record<PhoenixUiIconName, ReactNode> = {
+  const glyphs: Record<LegacyPhoenixUiIconName, ReactNode> = {
     bot: <><rect x="4" y="7" width="16" height="13" rx="4" /><path d="M12 3v4M9 3h6M4 12H2m20 0h-2" /><path d="M9 13h.01M15 13h.01" strokeWidth="3" /></>,
     brain: <><path d="M12 18V5a3 3 0 0 0-5.5-1.6A4 4 0 0 0 4 10a4 4 0 0 0 1 6.8A4 4 0 0 0 12 18Z" /><path d="M12 18V5a3 3 0 0 1 5.5-1.6A4 4 0 0 1 20 10a4 4 0 0 1-1 6.8A4 4 0 0 1 12 18ZM8 9c2 0 4 2 4 4m4-4c-2 0-4 2-4 4" /></>,
     code: <><path d="m8 8-4 4 4 4m8-8 4 4-4 4m-3-12-2 16" /></>,
@@ -69,9 +143,18 @@ export function PhoenixUiIcon({ name, size = 18, className }: {
     award: <><circle cx="12" cy="8" r="6" /><path d="m8 13-2 9 6-3 6 3-2-9" /></>,
 
   }
-  return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
-    fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
-    strokeLinejoin="round" className={className} aria-hidden="true">{glyphs[name]}</svg>
+  const validName = isPhoenixUiIconName(name) ? name : 'info'
+  const resolved = Object.prototype.hasOwnProperty.call(ALIASES,validName) ? ALIASES[validName] : validName
+  const selectedTone = tone==='auto' ? choosePhoenixUiTone(label??validName) : tone
+  const style = isPhoenixUiHexColor(color) ? { color } : undefined
+  return <span className={[css.uiIcon,className].filter(Boolean).join(' ')}
+    data-tone={selectedTone} style={style} aria-hidden="true">
+    {LEGACY_SET.has(validName)
+      ? <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+          strokeLinejoin="round" aria-hidden="true">{glyphs[validName as LegacyPhoenixUiIconName]}</svg>
+      : <DynamicIcon name={resolved as keyof typeof dynamicIconImports} size={size} strokeWidth={1.8} aria-hidden="true" />}
+  </span>
 }
 
 export type PhoenixStatusTone = 'positive' | 'warning' | 'negative' | 'info' | 'neutral'
@@ -85,14 +168,15 @@ export function PhoenixStatusPill({ label, tone = 'neutral' }: {
 }
 
 /** Compact avatar + message row for model/team activity in the transcript. */
-export function PhoenixAgentLine({ name, role, message, icon = 'bot' }: {
+export function PhoenixAgentLine({ name, role, message, icon = 'bot', iconTone = 'auto' }: {
   name: string
   role: string
   message: string
   icon?: PhoenixUiIconName
+  iconTone?: PhoenixUiIconTone
 }): ReactNode {
   return <div className={css.agentRow} data-phoenix-agent={name}>
-    <span className={css.avatar}><PhoenixUiIcon name={icon} size={19} /></span>
+    <span className={css.avatar}><PhoenixUiIcon name={icon} size={19} tone={iconTone} label={role} /></span>
     <div className={css.agentContent}>
       <div className={css.agentHeader}><strong>{name}</strong><span>{role}</span></div>
       <p>{message}</p>
