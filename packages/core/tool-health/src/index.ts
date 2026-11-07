@@ -95,7 +95,7 @@ export function apply(ctx: Context): void {
     name:'health_diagnostic_protocol',
     description:'Para cualquiera de las 243 modalidades reconocidas, identifica el archivo original y la secuencia de revisión específica a su familia. No abre archivos y no diagnostica. Usa health_diagnostic_catalog si no conoces el ID.',
     parameters:{
-      modality:{type:'string',required:true,description:'ID exacto de salud: eg ecg, eeg, ct_perfusion, bacterial_culture, genetic_exome, spirometry, whole_slide_imaging, other. Buscar primero en health_diagnostic_catalog.'},
+      modality:{type:'string',required:true,description:'ID exacto de salud: eg ecg, eeg, ct_perfusion, blood_culture, genetic_exome, spirometry, whole_slide_imaging, other. Buscar primero en health_diagnostic_catalog.'},
       sourceType:{type:'string',description:'image | pdf | dicom | waveform | numeric | glb | unknown'},
     },
     output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
