@@ -8,7 +8,7 @@ import {readFile} from 'node:fs/promises'
 import {join} from 'node:path'
 import {fileURLToPath} from 'node:url'
 const root=fileURLToPath(new URL('../',import.meta.url))
-const CONTRACTS=['sports_game_card','sports_ticket_card','sports-evidence']
+const CONTRACTS=['sports_game_card','sports_ticket_card','sports_ticket_bundle_card','sports-evidence']
 
 export async function inspectBuiltSportsFrontend(directory=root){
   const html=await readFile(join(directory,'apps/web/dist/index.html'),'utf8')
