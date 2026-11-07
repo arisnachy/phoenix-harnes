@@ -366,6 +366,19 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
           </label>
           <span>{directoryMatches.length} referencias encontradas</span>
         </div>
+        {onAction&&filter.trim().length>=3&&<div className={css.actions}>
+          <button type="button" onClick={()=>onAction(
+            'Kira: investiga en fuentes profesionales el instrumento denominado '+filter.trim()+
+            (directoryArea?' en el área '+directoryArea:'')+
+            '. No limites la búsqueda al directorio local de PHOENIX: busca la fuente original, '+ 
+            'editor/titular, guías de aplicación, versión, traducción, población, baremos, '+ 
+            'reglas de puntuación, permiso de uso y digitalización. Aporta enlaces oficiales '+ 
+            'y estado de verificación. Si la versión es reproducible legalmente y su método '+ 
+            'está verificado, propone un scale_form completo; de lo contrario explica cómo '+ 
+            'obtenerla o cómo registrar resultados administrados externamente. No inventes '+ 
+            'reactivos, estímulos, baremos ni licencias.', 'submit'
+          )}>Investigar este instrumento con Kira (catálogo ampliable)</button>
+        </div>}
         {directoryMatches.slice(0,directoryCount).map(entry=>
           <article className={css.catalogItem} key={entry.id}>
             <div>
