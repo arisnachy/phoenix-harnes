@@ -72,20 +72,22 @@ export function isVisualLiveEndpoint(v: unknown): v is string {
     && !v.includes('..') && !v.includes('//')
 }
 function validateTable(p: Record<string, unknown>): boolean {
-  if (p.columns === undefined && p.rows === undefined) return true
-  return Array.isArray(p.columns) && p.columns.length > 0 && p.columns.length <= 16
-    && p.columns.every(v => string(v, 70))
-    && new Set(p.columns).size === p.columns.length
-    && Array.isArray(p.rows) && p.rows.length > 0 && p.rows.length <= 500
-    && p.rows.every(row => Array.isArray(row) && row.length === p.columns.length && row.every(cell))
+  const columns = p.columns, rows = p.rows
+  if (columns === undefined && rows === undefined) return true
+  return Array.isArray(columns) && columns.length > 0 && columns.length <= 16
+    && columns.every(v => string(v, 70))
+    && new Set(columns).size === columns.length
+    && Array.isArray(rows) && rows.length > 0 && rows.length <= 500
+    && rows.every(row => Array.isArray(row) && row.length === columns.length && row.every(cell))
 }
 function validateChart(p: Record<string, unknown>): boolean {
-  if (p.labels === undefined && p.series === undefined) return true
-  return Array.isArray(p.labels) && p.labels.length >= 2 && p.labels.length <= 120
-    && p.labels.every(v => string(v, 75))
-    && Array.isArray(p.series) && p.series.length >= 1 && p.series.length <= 6
-    && p.series.every(s => object(s) && only(s, ['label', 'values'])
-      && string(s.label, 80) && Array.isArray(s.values) && s.values.length === p.labels.length
+  const labels = p.labels, series = p.series
+  if (labels === undefined && series === undefined) return true
+  return Array.isArray(labels) && labels.length >= 2 && labels.length <= 120
+    && labels.every(v => string(v, 75))
+    && Array.isArray(series) && series.length >= 1 && series.length <= 6
+    && series.every(s => object(s) && only(s, ['label', 'values'])
+      && string(s.label, 80) && Array.isArray(s.values) && s.values.length === labels.length
       && s.values.every(v => finite(v) && Math.abs(v) <= 1e12))
 }
 const allowedModes: readonly VisualMode[] = [
