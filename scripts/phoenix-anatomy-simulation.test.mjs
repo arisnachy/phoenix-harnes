@@ -33,3 +33,19 @@ test('real subprocess runner executes a harmless local program',async()=>{
  assert.equal(result.exitCode,0)
  assert.equal(result.stdout,'solver-smoke')
 })
+
+test('svMultiPhysics 3D only accepts project-contained XML output',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'phoenix-sv3d-'))
+ try{
+  const xml=join(dir,'solver.xml');writeFileSync(xml,'<Simulation><Mesh>prepared-by-specialist</Mesh></Simulation>')
+  assert.throws(()=>validateInput('svmultiphysics',xml,join(dir,'wrong')),/1-procs/)
+  assert.equal(validateInput('svmultiphysics',xml,join(dir,'1-procs')).source,xml)
+ }finally{rmSync(dir,{recursive:true,force:true})}
+})
+test('svMultiPhysics Windows runs XML from WSL project without invoking a shell',()=>{
+ const inv=buildInvocation('svmultiphysics','solver.xml','','win32',{
+  PHOENIX_ANATOMY_WSL_DISTRO:'Ubuntu-24.04',
+  PHOENIX_SVMULTIPHYSICS_WORKDIR:'/mnt/c/study',
+ })
+ assert.deepEqual(inv.args.slice(-5),['--cd','/mnt/c/study','--exec','svmultiphysics','solver.xml'])
+})
