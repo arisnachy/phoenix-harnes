@@ -23,6 +23,7 @@ def parser():
     p.add_argument("--input", required=True, help="Local volumetric DICOM folder or NIfTI input")
     p.add_argument("--output", required=True, help="Private output directory, separate from input")
     p.add_argument("--modality", choices=tuple(SUPPORTED), required=True)
+    p.add_argument("--task", help="Verified task ID from phoenix-anatomy-models.json")
     p.add_argument("--structures", nargs="*", help="Optional TotalSegmentator ROI class names")
     p.add_argument("--device", choices=("cpu", "gpu", "mps"), default="cpu")
     p.add_argument("--fast", action="store_true", help="Lower-resolution research segmentation")
@@ -74,6 +75,14 @@ def reconstruct(args):
         raise ValueError("--max-meshes must be 1 to 500")
     if args.structures is not None and len(args.structures) == 0:
         raise ValueError("--structures requires at least one class")
+    catalog = json.loads((Path(__file__).parent / "phoenix-anatomy-models.json").read_text(encoding="utf8"))
+    default_id = "ct_general" if args.modality == "ct" else "mr_general"
+    model_id = args.task or default_id
+    selected = next((task for task in catalog["tasks"] if task["id"] == model_id), None)
+    if selected is None or selected["modality"] != args.modality:
+        raise ValueError("Invalid anatomy task ID for chosen modality")
+    if selected["licensed"] != "Apache-2.0":
+        raise ValueError("Selected task requires licensing verification")
     # PHI-adjacent geometry must never land in a world-readable output folder.
     os.umask(0o077)
     target.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -95,7 +104,7 @@ def reconstruct(args):
         set_config_key("send_usage_stats", False)
         from totalsegmentator.python_api import totalsegmentator
         totalsegmentator(
-            input=source, output=masks, task=SUPPORTED[args.modality],
+            input=source, output=masks, task=selected["task"],
             roi_subset=args.structures or None, fast=args.fast, device=args.device,
             quiet=True, output_type="nifti",
         )
@@ -131,7 +140,8 @@ def reconstruct(args):
     report = {
         "schema": 1, "generatedAt": datetime.now(timezone.utc).isoformat(),
         "model": "clinician-provided masks" if external_masks else "TotalSegmentator",
-        "task": "external-masks" if external_masks else SUPPORTED[args.modality],
+        "task": "external-masks" if external_masks else selected["task"],
+        "catalogModelId": model_id, "modelLicense": selected["licensed"],
         "sourceType": "local volumetric imaging", "modality": args.modality,
         "coordinateSystem": "NIfTI affine world (RAS+, millimetres)",
         "geometrySource": "patient-study-derived segmentation; NOT confirmed anatomy",
