@@ -38,3 +38,7 @@ Stable tool schemas and bounded conditional guidance avoid injecting session-spe
 - Phone/email confirmation is attested by authenticated staff and associated with an evidence reference, **not independently validated** by a verification service.
 - Gmail sending is limited to manually authorized, nonclinical appointment reminders from an account whose real provider profile matches Kira's configured sender. No patient documents or medical details are sent.
 - A local SQLite backup and restoration test are present; off-device recovery, retention, key recovery, external audit, threat assessment and end-to-end clinical validation are still missing.
+
+## Anatomical twin research workbench
+
+`health_anatomy_workflow` covers planning for brain, spinal cord, thorax, heart, vessels, abdomen, musculoskeletal structures, limbs and other organ systems. `health_anatomy_status` reports optional local dependencies without opening any patient record. They are not imaging interpretation or diagnostic tools. After a user-authorized DICOM/NIfTI acquisition, the separate local CLI `node scripts/phoenix-anatomy-workbench.mjs reconstruct --input <study> --output <private-dir> --modality ct --research-only --view` creates unreviewed anatomy GLB and a loopback viewer if the required segmentation model supports that organ and modality. For clinician-provided masks use `--mask-folder <NIfTI-masks>`. Neither action automatically adds a signed clinical result to HealthIA; that requires an explicit authenticated record workflow, source provenance and specialist acceptance.

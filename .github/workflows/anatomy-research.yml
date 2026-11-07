@@ -1,0 +1,39 @@
+name: PHOENIX anatomy research contracts
+on:
+  pull_request:
+    paths:
+      - 'scripts/phoenix-anatomy-*'
+      - 'scripts/phoenix-health-anatomy.test.mjs'
+      - 'packages/bundle/web-app/src/health-anatomy.ts'
+      - 'packages/bundle/web-app/src/health-ui.ts'
+      - 'packages/bundle/web-app/src/health-store.ts'
+      - 'packages/bundle/web-app/src/health-routes.ts'
+      - 'packages/bundle/web-app/tests/health-store.test.mjs'
+      - 'scripts/test_phoenix_anatomy_validation.py'
+      - 'packages/core/tool-health/src/anatomy-planner.ts'
+      - 'packages/core/tool-health/tests/anatomy-planner.spec.ts'
+      - '.github/workflows/anatomy-research.yml'
+  workflow_dispatch:
+jobs:
+  isolated-anatomy-smoke:
+    name: anatomy synthetic validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Local tool contracts (no patient inputs)
+        run: node --test scripts/phoenix-anatomy-auto.test.mjs scripts/phoenix-anatomy-viewer.test.mjs scripts/phoenix-anatomy-models.test.mjs scripts/phoenix-anatomy-simulation.test.mjs
+      - name: Authenticated HealthIA anatomy upload and CSP contracts
+        run: |
+          node --experimental-strip-types --test scripts/phoenix-health-anatomy.test.mjs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Python interpreter and synthetic mask quality checks
+        run: |
+          python -m py_compile scripts/phoenix-anatomy-reconstruct.py scripts/phoenix-anatomy-validate.py
+          python -m pip install --disable-pip-version-check 'numpy>=1.26,<3' 'nibabel>=5,<6' 'scipy>=1.12,<2' 'scikit-image>=0.24,<1' 'trimesh>=4,<6'
+          python scripts/test_phoenix_anatomy_validation.py

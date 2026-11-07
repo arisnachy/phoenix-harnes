@@ -614,3 +614,45 @@ test('encrypted clinical drafts survive restart, remain user-scoped, and never e
   reopened.clearClinicalDraft(restored,'patients')
   assert.equal(reopened.getClinicalDraft(restored,'patients'),null)
 })
+
+test('encrypted patient-linked GLB is only readable by assigned clinician and remains unvalidated',t=>{
+ const {db,admin,root}=fixture(t)
+ const password='another-secure-password-2026'
+ db.createStaff(admin.actor,{username:'doctor1',password,role:'clinician'})
+ db.createStaff(admin.actor,{username:'doctor2',password,role:'clinician'})
+ const doctor=db.login('doctor1',password).actor
+ const other=db.login('doctor2',password).actor
+ const p=db.create(admin.actor,'patients',{name:'Paciente sintético para modelo',dateOfBirth:'1990-01-01'})
+ db.assignPatient(admin.actor,p.id,'doctor1','Revisión de imagen de prueba')
+ const info=Buffer.from(JSON.stringify({asset:{version:'2.0'},meshes:[{primitives:[{attributes:{POSITION:0}}]}]}))
+ const pad=Buffer.concat([info,Buffer.alloc((4-info.length%4)%4,0x20)])
+ const header=Buffer.alloc(12);header.write('glTF');header.writeUInt32LE(2,4)
+ header.writeUInt32LE(12+8+pad.length+8+36,8)
+ const j=Buffer.alloc(8);j.writeUInt32LE(pad.length,0);j.write('JSON',4)
+ const b=Buffer.alloc(8);b.writeUInt32LE(36,0);b.write('BIN\u0000',4)
+ const glb=Buffer.concat([header,j,pad,b,Buffer.alloc(36)])
+ const row=db.addAttachment(doctor,{patientId:p.id,name:'volumen-sintetico.glb',mime:'model/gltf-binary',
+  base64:glb.toString('base64'),note:'Dato sintético, no corresponde a paciente'})
+ assert.equal(row.anatomicalModel.geometryStatus,'unreviewed')
+ assert.equal(db.readAttachment(doctor,row.id).bytes.equals(glb),true)
+ assert.equal(db.listAttachments(doctor,p.id)[0].anatomicalModel.meshes,1)
+ assert.throws(()=>db.readAttachment(other,row.id),/no asignado/i)
+ assert.throws(()=>db.listAttachments(other,p.id),/no asignado/i)
+ assert.throws(()=>db.reviewAnatomicalAttachment(other,row.id,1,{
+  sourceReference:'original',assessment:'uncertain',limitations:'Estudio sintético',comparedWithSource:true}),/no asignado/i)
+ assert.throws(()=>db.reviewAnatomicalAttachment(doctor,row.id,1,{
+  sourceReference:'original',assessment:'consistent',limitations:'Estudio sintético',comparedWithSource:false}),/comparar/)
+ const reviewed=db.reviewAnatomicalAttachment(doctor,row.id,1,{
+  sourceReference:'source-synthetic-001',assessment:'uncertain',
+  limitations:'Máscaras de ejemplo sin comprobación médica independiente',comparedWithSource:true})
+ assert.equal(reviewed.reviewStatus,'reviewed')
+ assert.equal(reviewed.anatomicalModel.geometryStatus,'unreviewed')
+ assert.equal(reviewed.anatomicalReview.clinicalValidation,'NOT_VALIDATED')
+ assert.equal(reviewed.anatomicalReview.assessment,'uncertain')
+ assert.throws(()=>db.reviewAnatomicalAttachment(doctor,row.id,1,{
+  sourceReference:'original',assessment:'consistent',limitations:'Segunda firma',comparedWithSource:true}),/Conflicto/)
+ assert.equal(readFileSync(join(root,'clinic.sqlite')).includes(glb),false)
+ assert.equal(readFileSync(join(root,'clinic.sqlite')).includes(Buffer.from('volumen-sintetico.glb')),false)
+ assert.throws(()=>db.addAttachment(doctor,{patientId:p.id,name:'bad.glb',mime:'model/gltf-binary',
+  base64:Buffer.from('not-gltf').toString('base64')}),/GLB/)
+})
