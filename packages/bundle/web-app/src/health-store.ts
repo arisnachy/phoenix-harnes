@@ -876,6 +876,7 @@ export class HealthClinicStore {
       originalReviewed:x.originalReviewed,observations:x.observations,
       preliminaryInterpretation:x.preliminaryInterpretation,
       criticalConcern:x.criticalConcern,studyContext:x.studyContext,
+      customModality:x.customModality,
     })
     // A suspected critical finding must not be silently archived as routine.
     if(evidence.criticalConcern==='suspected-critical'&&x.escalationAcknowledged!==true)
