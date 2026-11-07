@@ -181,3 +181,11 @@ Caso de regresión: un ECG con onda delta, PR corto y QRS amplio fue inicialment
 - Estas herramientas son verificadores **de evidencia aportada**, no analizadores autónomos de píxeles ni modelos médicos certificados. Hay que conectar un motor de imagen/señal especializado antes de declarar que Kira interpreta cualquier ECG o imagen automáticamente.
 
 Prueba: `node --experimental-strip-types --test scripts/phoenix-health-diagnostic-accuracy.test.mjs`.
+
+## Control obligatorio de concordancia diagnóstica y caso WPW
+
+Kira utiliza `health_diagnostic_concordance` para revisar la consistencia de observaciones, impresión preliminar, diferenciales, urgencias y visualización solicitada. El control es **de metadatos**, no interpreta la imagen. Para cualquier modalidad no se permite una visualización **de lesión de paciente** sin pasar por el flujo específico de reconstrucción con geometría registrada y validación profesional.
+
+Caso de regresión específico: una fotografía de ECG con indicios de onda delta, PR posiblemente corto o QRS ancho **no debe despacharse como eje izquierdo o hemibloqueo aislado**. Se prioriza el diferencial de preexcitación/WPW y se distingue lo cualitativo (foto) de lo verificado (PR/QRS en milisegundos sobre trazado calibrado). La herramienta `health_ecg_preexcitation_review` acepta `photoDeltaHint=possible` y `qualitativePrHint=appears-short` para producir `PHOTO_SUGGESTS_PREEXCITATION_UNVERIFIED` sin inventar medidas ni confirmar síndrome WPW; exige confirmar con el estudio original. La representación puede mostrar solamente un mecanismo genérico de conducción por vía accesoria y rotular claramente que es una hipótesis.
+
+La verificación de concordancia NO sustituye un intérprete clínico validado de imágenes, señales o valores de laboratorio ni afirma haber leído los píxeles. Las conclusiones deben basarse en datos observables o medidos, nunca en la mera disponibilidad del catálogo. Pruebas `scripts/phoenix-health-diagnostic-accuracy.test.mjs`.
