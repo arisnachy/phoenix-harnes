@@ -251,7 +251,7 @@ async function installSlicerHeart(p,state,fd){
       'import slicer',
       "ok = slicer.app.extensionsManagerModel().isExtensionInstalled('SlicerHeart')",
       'slicer.app.exit(0 if ok else 2)',
-    ].join('\\n').replaceAll('\\n','\n')+'\n','utf8')
+    ].join('\n')+'\n','utf8')
     await run(slicerExe,['--testing','--no-splash','--no-main-window',
       '--python-script',verify],{timeout:180000,output:fd})
     state.components.slicerheart={status:'installed',verifiedAt:now(),
