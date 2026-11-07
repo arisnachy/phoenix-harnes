@@ -77,15 +77,15 @@ class VisionCatalogAdapter extends LlmAdapter {
   override listModels(): Promise<readonly LlmModelInfo[]> {
     return Promise.resolve([
       { provider: 'openai-codex', id: 'gpt-6.1-terra', name: 'Terra',
-        inputModalities: this.terraHasImage ? ['text','image'] : ['text'] },
+        inputModalities: this.terraHasImage ? ['text','image'] as const : ['text'] as const },
       { provider: 'openai-codex', id: 'gpt-6.1-sol', name: 'Sol',
-        inputModalities: ['text','image'] },
+        inputModalities: ['text','image'] as const },
     ])
   }
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
     return Promise.resolve({ provider, id: model, name: model,
       inputModalities: model === 'gpt-6.1-terra' && !this.terraHasImage
-        ? ['text'] : ['text', 'image'], reasoning: low })
+        ? ['text'] as const : ['text', 'image'] as const, reasoning: low })
   }
   override async *stream(_options: GenerateOptions): AsyncIterable<StreamChunk> {
     yield { type: 'finish', reason: { kind: 'stop' } }
