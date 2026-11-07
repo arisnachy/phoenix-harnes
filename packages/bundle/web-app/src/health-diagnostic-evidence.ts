@@ -39,6 +39,7 @@ export interface StudyEvidenceInput {
   preliminaryInterpretation?:unknown
   criticalConcern?:unknown
   studyContext?:unknown
+  customModality?:unknown
 }
 export function evaluateStudyEvidence(input:StudyEvidenceInput) {
   const modality=String(input.modality) as StudyModality
@@ -51,6 +52,7 @@ export function evaluateStudyEvidence(input:StudyEvidenceInput) {
   const observations=clean(input.observations,'Hallazgos observados',3500)
   const preliminaryInterpretation=clean(input.preliminaryInterpretation,'Impresión clínica',1600)
   const context=clean(input.studyContext,'Contexto del estudio',600)
+  const customModality=clean(input.customModality,'Estudio no catalogado',160,modality==='other')
   if(SENSITIVE.test(preliminaryInterpretation))
     throw new Error('No se puede afirmar certeza diagnóstica ni validación automática')
   const concern=input.criticalConcern===undefined?'not-assessed':String(input.criticalConcern)
@@ -72,7 +74,8 @@ export function evaluateStudyEvidence(input:StudyEvidenceInput) {
   if(selected.family==='laboratory')
     limitations.push('Antes de interpretar, verificar analito, unidad, intervalo de referencia, edad y contexto.')
   return {
-    modality,modalityLabel:selected.label,sourceMime,
+    modality,modalityLabel:customModality||selected.label,sourceMime,
+    customModality:modality==='other'?customModality:null,
     family:selected.family,nativeSourceFormat:selected.nativeFormat,
     sourceRequirement:selected.native,
     sourceModalityRecognized:true,
