@@ -93,8 +93,68 @@ function validateChart(p: Record<string, unknown>): boolean {
 const allowedModes: readonly VisualMode[] = [
   'auto','table','chart','gallery','bento','comparison','dashboard','document','form','map',
 ]
+/** Repair only known, lossless model shorthand before strict schema validation.
+ * Never strip unknown keys, untrusted URLs, tool instructions or unsupported fields.
+ * The same validated contract remains the final authorization boundary.
+ */
+export function normalizeVisualIntelligence(value: unknown): unknown {
+  if (!object(value) || value.component !== 'visual_intelligence' || value.version !== 1 || !object(value.props)) return value
+  const props = value.props
+  let changed = false
+  const statusAliases: Record<string, VisualMetric['status']> = {
+    normal: 'neutral', normalizado: 'neutral', ok: 'positive',
+    success: 'positive', exito: 'positive', correcto: 'positive',
+    alerta: 'warning', advertencia: 'warning', danger: 'negative', error: 'negative',
+    informacion: 'info',
+  }
+  const metrics = Array.isArray(props.metrics) ? props.metrics.map((metric: unknown) => {
+    if (!object(metric)) return metric
+    let next = metric
+    if (typeof metric.status === 'string') {
+      const key = metric.status.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+      const normalized = statusAliases[key] ?? (['neutral','positive','warning','negative','info'].includes(key) ? key : undefined)
+      if (normalized !== undefined && normalized !== metric.status) {
+        next = { ...next, status: normalized }
+        changed = true
+      }
+    }
+    if (typeof metric.value === 'number' && finite(metric.value) && Math.abs(metric.value) <= 1e12) {
+      next = { ...next, value: String(metric.value) }
+      changed = true
+    }
+    return next
+  }) : undefined
+  const aliases: Record<string,VisualMode> = {
+    panel: 'dashboard', indicadores: 'dashboard', grafica: 'chart', grafico: 'chart',
+    tabla: 'table', comparar: 'comparison', comparador: 'comparison',
+    galeria: 'gallery', carrusel: 'gallery', documento: 'document', formulario: 'form',
+    mapa: 'map', automatico: 'auto',
+  }
+  let view = props.view
+  if (typeof view === 'string') {
+    const key = view.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+    const normalized = aliases[key] ?? (allowedModes.includes(key as VisualMode) ? key : undefined)
+    if (normalized !== undefined && normalized !== view) { view = normalized; changed = true }
+  }
+  let identity = props.id
+  if (typeof identity === 'string' && identity.length <= 80 && identity.length > 0) {
+    const canonical = identity.toLowerCase().trim().replace(/\s+/g,'-')
+    if (/^[a-z][a-z0-9_-]{1,63}$/.test(canonical) && canonical !== identity) {
+      identity = canonical
+      changed = true
+    }
+  }
+  if (!changed) return value
+  return { ...value, props: {
+    ...props,
+    ...(metrics === undefined ? {} : { metrics }),
+    ...(view === undefined ? {} : { view }),
+    ...(identity === undefined ? {} : { id: identity }),
+  } }
+}
 /** Strict schema with bounds, provenance, guarded URLs and data-shape checks. */
-export function parseVisualIntelligence(v: unknown): VisualIntelligenceSpec | null {
+export function parseVisualIntelligence(input: unknown): VisualIntelligenceSpec | null {
+  const v = normalizeVisualIntelligence(input)
   if (!object(v) || !only(v, ['component', 'version', 'props'])
       || v.component !== 'visual_intelligence' || v.version !== 1 || !object(v.props)) return null
   const p = v.props
