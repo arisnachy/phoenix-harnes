@@ -8,6 +8,8 @@ import { GeoMap, parseGeoMapSpec, type GeoMapSpec } from './GeoMap.tsx'
 import { SceneMap, parseSceneMapSpec, type SceneMapSpec } from './SceneMap.tsx'
 import { DiagramSurface, parseDiagramSpec, type DiagramSpec } from './DiagramSurface.tsx'
 import { GenerativeCanvas, parseCanvasSpec, type CanvasAction, type CanvasSpec } from './GenerativeCanvas.tsx'
+import { VisualIntelligence } from './VisualIntelligence.tsx'
+import { parseVisualIntelligence, type VisualIntelligenceSpec } from './VisualIntelligenceContract.ts'
 import css from './GenerativeUi.module.css'
 import { SportsLiveProvider,SportsLiveFacts,SportsLiveStamp } from './SportsLive.tsx'
 import { SportsGameCenter } from './SportsGameCenter.tsx'
@@ -159,7 +161,7 @@ type AgentLineBlock = {
 const supportedTones: readonly PhoenixStatusTone[] = ['positive', 'warning', 'negative', 'info', 'neutral']
 
 export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | SportsGameCard | SportsScheduleCard | SportsTicketCard | SportsOddsCard | SportsEspnDashboard
-  | CanvasSpec | ScaleFormSpec | SmartFormSpec | SmartLibrarySpec | SpreadsheetSpec | GeoMapSpec | SceneMapSpec | DiagramSpec | StatusPillBlock | AgentLineBlock
+  | CanvasSpec | VisualIntelligenceSpec | ScaleFormSpec | SmartFormSpec | SmartLibrarySpec | SpreadsheetSpec | GeoMapSpec | SceneMapSpec | DiagramSpec | StatusPillBlock | AgentLineBlock
 
 export type GenerativeUiSegment =
   | { kind: 'markdown'; text: string }
@@ -435,6 +437,7 @@ export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null
     case 'timeline': return validateTimeline(value) ? value : null
     case 'smart_card': return validateSmartCard(value) ? value : null
     case 'ui_canvas': return parseCanvasSpec(value)
+    case 'visual_intelligence': return parseVisualIntelligence(value)
     case 'scale_form': return parseScaleForm(value)
     case 'smart_form': return parseSmartForm(value)
     case 'smart_form_library': return parseSmartLibrary(value)
@@ -711,6 +714,8 @@ const statusClass = (status: Status | undefined): string =>
 export function GenerativeUi({ block, onAction, conversationId }: { block: GenerativeUiBlock; onAction?: CanvasAction | undefined; conversationId?: string }): ReactNode {
   switch (block.component) {
     case 'ui_canvas': return <GenerativeCanvas spec={block} onAction={onAction} />
+    case 'visual_intelligence': return <VisualIntelligence key={block.props.id} spec={block}
+      onAction={onAction} conversationId={conversationId} />
     case 'scale_form': return <ScaleForm spec={block} onAction={onAction} />
     case 'smart_form': return <SmartFormWorkspace initial={block} onAction={onAction} />
     case 'smart_form_library': return <SmartFormWorkspace title={block.props.title} onAction={onAction} />
