@@ -788,7 +788,7 @@ export class HealthClinicStore {
     const pdf=bytes.subarray(0,5).toString('ascii')==='%PDF-'
     const webp=bytes.subarray(0,4).toString('ascii')==='RIFF'&&bytes.subarray(8,12).toString('ascii')==='WEBP'
     const anatomicalModel=mime==='model/gltf-binary'?inspectAnatomicalGlb(bytes):null
-    if(anatomicalModel&&!/\\.glb$/iu.test(name))fail('Archivo anatómico debe terminar en .glb')
+    if(anatomicalModel&&!/\.glb$/iu.test(name))fail('Archivo anatómico debe terminar en .glb')
     if(!((mime==='image/png'&&png)||(mime==='image/jpeg'&&jpeg)||
          (mime==='image/webp'&&webp)||(mime==='application/pdf'&&pdf)||anatomicalModel))
       fail('Solo PDF, imágenes o GLB anatómico auto-contenido están admitidos')
