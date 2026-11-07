@@ -127,3 +127,22 @@ test('all medical modalities require observed evidence and cannot authorize a pa
   assert.equal(data.patientSpecificImageAuthorized,false)
  }
 })
+
+test('ECG image rendering refuses isolated left-axis conclusion without checking PR/delta/QRS',()=>{
+ const axis=planClinicalVisualization({
+   modality:'ecg',sourceType:'image',sourceReviewed:true,
+   observedFindings:'Eje eléctrico muy desviado hacia la izquierda',
+   visualizationKind:'conceptual',patientSpecific:false,
+ })
+ assert.equal(axis.decision,'BLOCK_ECG_INCOMPLETE_INTERPRETATION')
+ assert.equal(axis.ecgIncompleteAxisOnly,true)
+ assert.equal(axis.ecgReviewRequired.length,4)
+ const differential=planClinicalVisualization({
+   modality:'ecg',sourceType:'image',sourceReviewed:true,
+   observedFindings:'Eje izquierdo con onda delta probable, PR corto a confirmar, QRS de duración desconocida',
+   visualizationKind:'conceptual',patientSpecific:false,
+ })
+ assert.equal(differential.decision,'ALLOW_EDUCATIONAL_EXPLANATION')
+ assert.equal(differential.patientSpecificRequested,false)
+ assert.equal(differential.medicalInterpretationVerifiedByThisTool,false)
+})
