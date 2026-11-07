@@ -257,7 +257,7 @@ export function ScaleForm({ spec, onAction, verified=false }: {
       const link=document.createElement('a')
       link.href=url
       link.download='PHOENIX-informe-'+(spec.props.title.toLowerCase()
-        .normalize('NFD').replace(/[\\u0300-\\u036f]/gu,'')
+        .normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
         .replace(/[^a-z0-9]+/gu,'-').slice(0,45) || 'evaluacion')+'.pdf'
       link.click()
       URL.revokeObjectURL(url)
