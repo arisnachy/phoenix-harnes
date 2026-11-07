@@ -23,7 +23,7 @@ export function scaleAssessmentReport(
     const index=selected[item.id]
     const choice=index===undefined?undefined:item.options[index]
     if(choice!==undefined)values[item.id]=choice.score
-    return {question:item.question,answer:choice?.label??'',score:choice?.score}
+    return {question:item.question,answer:choice?.label??'',...(choice?{score:choice.score}:{})}
   })
   const scored=scoreScale(spec,values)
   if(scored.total===null || rows.some(row=>!row.answer))return null
