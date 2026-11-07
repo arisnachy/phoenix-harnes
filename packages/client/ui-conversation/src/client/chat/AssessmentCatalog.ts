@@ -21,16 +21,18 @@ const common = [
   {label:'Más de la mitad de los días (2)',score:2},
   {label:'Casi todos los días (3)',score:3},
 ]
+// Wording follows the Spanish PHQ-9 presented by ISMMS; the respondent-facing
+// timeframe and response options are provided in questionnaire metadata.
 const phqItems = [
   'Tener poco interés o placer en hacer las cosas',
-  'Sentirse desanimado/a, deprimido/a o sin esperanza',
-  'Tener problemas para dormirse, mantenerse dormido/a o dormir demasiado',
+  'Sentirse desanimado/a, deprimido/a, o sin esperanza',
+  'Con problemas en dormirse o en mantenerse dormida, o en dormir demasiado',
   'Sentirse cansado/a o tener poca energía',
   'Tener poco apetito o comer en exceso',
-  'Sentirse mal consigo mismo/a, sentir que es un fracaso o que ha decepcionado a su familia',
-  'Tener dificultad para concentrarse, por ejemplo, leyendo o mirando la televisión',
-  'Moverse o hablar tan lentamente que otros lo noten, o estar mucho más inquieto/a de lo habitual',
-  'Pensar que estaría mejor muerto/a o en hacerse daño de alguna manera',
+  'Sentir falta de amor propio o que sea un fracaso o que decepcionara a sí mismo/a o a su familia',
+  'Tener dificultad para concentrarse en cosas tales como leer el periódico o mirar la televisión',
+  'Se mueve o habla tan lentamente que otra gente se podría dar cuenta, o de lo contrario, está tan agitado/a o inquieto/a que se mueve mucho más de lo acostumbrado',
+  'Se le han ocurrido pensamientos de que sería mejor estar muerta o de que se haría daño de alguna manera',
 ] as const
 const gadItems = [
   'Sentirse nervioso/a, ansioso/a o con los nervios de punta',
