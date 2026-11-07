@@ -6,7 +6,15 @@ const now=Date.parse('2026-11-06T17:00:00Z')
 const eventId='a6b7c8d9e0f11213'
 const env={THE_ODDS_API_KEY:'test-only-secret'}
 const feed=async(url)=>{
-  const u=new URL(url),markets=u.searchParams.get('markets').split(',')
+  const u=new URL(url)
+  if(u.pathname.endsWith('/markets')){
+    return new Response(JSON.stringify({
+      id:eventId,sport_key:'basketball_nba',commence_time:'2026-11-06T23:00:00Z',
+      bookmakers:[{key:'draftkings',markets:eventMarketCatalog('basketball_nba')
+        .map(key=>({key,last_update:'2026-11-06T16:55:00Z'}))}],
+    }),{status:200})
+  }
+  const markets=u.searchParams.get('markets')?.split(',')??[]
   const names=markets.includes('player_points')?['player_points']:markets.filter(m=>m.startsWith('alternate_'))
   return new Response(JSON.stringify({
     id:eventId,commence_time:'2026-11-06T23:00:00Z',
@@ -69,7 +77,9 @@ test('validates event ID and bounded credit use',async()=>{
 })
 test('one failed market batch does not erase valid prior market results',async()=>{
   let count=0
-  const partial=async(url)=>{if(++count===2)return new Response('failed',{status:503})
+  // First request is event /markets discovery, second is first odds batch,
+  // third is second odds batch: a partial outage must not erase earlier quotes.
+  const partial=async(url)=>{if(++count===3)return new Response('failed',{status:503})
     return feed(url)}
   const report=await readSportsEventMarketMenu('basketball_nba',eventId,env,partial,now,12)
   assert.equal(report.status,'observed')
