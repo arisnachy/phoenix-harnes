@@ -58,9 +58,11 @@ describe('conversation generative UI', () => {
     ])
   })
 
-  it('keeps malformed completed fences as ordinary markdown instead of executing them', () => {
+  it('rejects malformed completed UI safely without leaking its JSON or executing handlers', () => {
     const malformed = '```generative-ui\n{"component":"smart_card","version":1,"props":{"title":"X","onclick":"evil"}}\n```'
-    expect(splitGenerativeUiText(malformed)).toEqual([{ kind: 'markdown', text: malformed }])
+    const segments = splitGenerativeUiText(malformed)
+    expect(segments).toEqual([{ kind: 'notice', text: expect.stringContaining('no pudo mostrarse') }])
+    expect(JSON.stringify(segments)).not.toContain('onclick')
   })
 
   it('renders an interactive final explanation after prose without leaking JSON', () => {
