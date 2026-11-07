@@ -138,7 +138,7 @@ function pdfDocument(pages:readonly Page[]):Uint8Array<ArrayBuffer>{
  * @returns Downloadable PDF kept local to this browser.
  */
 export function buildAssessmentPdfBytes(data:AssessmentReportData):Uint8Array<ArrayBuffer>{
-  if(data.rows.length<1 || data.rows.length>200 || data.rows.some(r=>!r.answer.trim()))
+  if(data.rows.length<1 || data.rows.length>250 || data.rows.some(r=>!r.answer.trim()))
     throw Error('No se puede emitir informe con respuestas incompletas.')
   const title='INFORME DE EVALUACIÓN'
   const pages:Page[]=[]
