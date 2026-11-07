@@ -47,7 +47,7 @@ const view={center:new THREE.Vector3(),radius:100};let opacity=.95,wire=false
 function resize(){const w=container.clientWidth,h=container.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
 new ResizeObserver(resize).observe(container)
 function reset(){controls.target.copy(view.center);camera.position.copy(view.center).add(new THREE.Vector3(view.radius*1.6,view.radius*1.2,view.radius*2.4));camera.near=Math.max(.01,view.radius/1500);camera.far=view.radius*50;camera.updateProjectionMatrix();controls.update()}
-function paint(){for(const r of rows){r.object.visible=r.check.checked;r.object.material.opacity=opacity;r.object.material.transparent=opacity<1;r.object.material.wireframe=wire;r.object.material.depthWrite=opacity===1}}
+function paint(){for(const r of rows){r.object.visible=r.check.checked;const alpha=r.affected?Math.max(.85,opacity):opacity;r.object.material.opacity=alpha;r.object.material.transparent=alpha<1;r.object.material.wireframe=wire;r.object.material.depthWrite=alpha===1}}
 function info(label,value){const p=document.createElement('p');p.textContent=label+': '+String(value??'—');return p}
 async function load(){
  const [r,glb]=await Promise.all([fetch('./anatomy-manifest.json').then(x=>x.json()),new GLTFLoader().loadAsync('./anatomy.glb')])
@@ -56,6 +56,7 @@ async function load(){
  $('limitations').textContent=(r.limitations||[]).join(' ')
  // Convert RAS (X right, Y anterior, Z superior) to Three.js Y-up:
  // X right, Y superior, Z posterior. Underlying millimetre geometry remains unchanged.
+ // Affected-region layers come from clinician-supplied masks with matching grid; no diagnosis.
  glb.scene.rotation.x=-Math.PI/2
  glb.scene.updateMatrixWorld(true)
  scene.add(glb.scene)
@@ -63,22 +64,26 @@ async function load(){
  glb.scene.traverse(obj=>{
   if(!obj.isMesh)return
   const name=obj.name||'estructura '+(rows.length+1),hue=(rows.length*.6180339887)%1
-  obj.material=new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(hue,.4,.56),roughness:.6,side:THREE.DoubleSide})
+  const m=metrics.get(name)||{}
+  const marked=m.layer==='clinician-supplied-affected-region'
+  const visualColor=marked?'#ed4f43':new THREE.Color().setHSL(hue,.4,.56)
+  obj.material=new THREE.MeshStandardMaterial({color:visualColor,roughness:.6,side:THREE.DoubleSide})
   const row=document.createElement('div');row.className='layer'
   const check=document.createElement('input');check.type='checkbox';check.checked=true;check.id='l'+rows.length
-  const label=document.createElement('label');label.htmlFor=check.id;label.textContent=name
+  const label=document.createElement('label');label.htmlFor=check.id;label.textContent=marked?'Región anotada · '+(m.label||name):name
   const show=document.createElement('button');show.textContent='Detalles';show.onclick=()=>{
-   const m=metrics.get(name)||{}
-   $('selection').textContent=name+' · '+(m.voxels??'—')+' vóxeles · '+(m.triangles??'—')+' triángulos · volumen estimado '+(m.volumeMl??'—')+' mL · SIN REVISIÓN'
+   $('selection').textContent=(marked?'Anotación médica sin validación · ':'Estructura · ')+
+     (m.label||name)+' · '+(m.voxels??'—')+' vóxeles · '+(m.triangles??'—')+
+     ' triángulos · volumen aproximado '+(m.volumeMl??'—')+' mL · SIN REVISIÓN'
   }
   check.onchange=paint;row.append(check,label,show);$('layers').append(row)
-  rows.push({object:obj,check,name})
+  rows.push({object:obj,check,name,affected:marked})
  })
  if(!rows.length)throw Error('Archivo sin mallas')
  const b=new THREE.Box3().setFromObject(glb.scene);b.getCenter(view.center)
  view.radius=Math.max(1,b.getSize(new THREE.Vector3()).length()/2)
  reset();resize();paint()
- $('status').textContent=rows.length+' estructuras cargadas. No diagnosticado.'
+ $('status').textContent=rows.length+' capas cargadas · '+(r.affectedRegions||0)+' regiones anotadas (sin diagnóstico). En revisión.'
 }
 $('all').onclick=()=>{rows.forEach(x=>x.check.checked=true);paint()}
 $('none').onclick=()=>{rows.forEach(x=>x.check.checked=false);paint()}
