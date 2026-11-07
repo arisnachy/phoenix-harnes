@@ -125,7 +125,8 @@ export function registerHealthRoutes(ctx:Context):void {
     // clinical session may load the 3D renderer; never use an external CDN.
     if(path.startsWith('/health/vendor/')){
       if(method!=='GET'){reply(res,405,{error:'Método no permitido'});return}
-      store.session(cookie(req),undefined,false)
+      try{store.session(cookie(req),undefined,false)}
+      catch{reply(res,401,{error:'Sesión clínica requerida'});return}
       const entries:Record<string,string>={
         '/health/vendor/build/three.module.js':'build/three.module.js',
         '/health/vendor/build/three.core.js':'build/three.core.js',

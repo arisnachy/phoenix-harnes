@@ -716,7 +716,7 @@ async function execute(action,id){
   if(!selectedPatientId||!(data.patients||[]).some(p=>p.id===selectedPatientId))
    throw Error("Paciente no autorizado")
   const file=document.getElementById("anatomy-file")?.files?.[0]
-  if(!file||!file.size||file.size>5*1024*1024||!/\\.glb$/i.test(file.name))
+  if(!file||!file.size||file.size>5*1024*1024||!/\.glb$/i.test(file.name))
    throw Error("Seleccione un GLB autocontenido de hasta 5 MB")
   const bytes=new Uint8Array(await file.arrayBuffer())
   const parts=[]
@@ -1081,5 +1081,5 @@ document.addEventListener("click",async e=>{
 });
 refresh();
 </script></body></html>`
-  return html.replace('__NONCE__',nonce)
+  return html.replaceAll('__NONCE__',nonce)
 }
