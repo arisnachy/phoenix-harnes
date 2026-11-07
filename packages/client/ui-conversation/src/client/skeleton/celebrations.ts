@@ -224,6 +224,7 @@ function resolveRule(year: number, rule: Rule): string {
       ? utcDate(year, rule.month, day - (last.getUTCDay() - weekday + 7) % 7)
       : last
   }
+  if (rule.dayOffset) d.setUTCDate(d.getUTCDate() + rule.dayOffset)
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`
 }
 function annualYear(event: Celebration, year: number): Celebration {
@@ -286,6 +287,7 @@ function personalEvents(date: string, profile: CalendarProfile): Celebration[] {
         tone: moment.solemn ? 'solemn':'festive', label:moment.label, source:'personal' })
     }
   }
+  holidayCache.set(key, { at: Date.now(), events: out })
   return out
 }
 /** Select contextual events, never show a national celebration from unrelated countries. */
@@ -326,9 +328,14 @@ export const CELEBRATION_ACCENTS: Record<CelebrationTheme, { icon:string; color:
  * endpoint. No API key, no blocking render and no personal profile sent.
  * The external response is treated as untrusted and validated at ingress.
  */
+const holidayCache = new Map<string, { at: number; events: Celebration[] }>()
+
 export async function fetchCountryHolidays(year:number, country:string, signal?:AbortSignal):Promise<Celebration[]> {
   const code = normalizedCountry(country)
   if (!code || year < 1900 || year > 2100) return []
+  const key = `${code}/${year}`
+  const cached = holidayCache.get(key)
+  if (cached && Date.now() - cached.at < 24 * 60 * 60 * 1000) return cached.events
   const response = await fetch(`https://nagerholidays.com/api/v4/Holidays/${code}/${year}`, { signal })
   if (!response.ok) throw new Error(`Holidays API HTTP ${response.status}`)
   const raw: unknown = await response.json()
