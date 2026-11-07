@@ -6,11 +6,13 @@ import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 // Type-only: supplies the sidebar.footer.action SlotMap declaration.
 import type {} from '@phoenix-ai/dsh-client-ui-sidebar/client'
 import { PluginInventorySettingsTab, type PluginInventorySettingsTabInjected } from './PluginInventorySettingsTab.tsx'
+import { AnatomyConnectorsSettingsTab, type AnatomyConnectorsInjected } from './AnatomyConnectorsSettingsTab.tsx'
 import { BusinessLibrarySettingsTab, type BusinessLibraryInjected } from './BusinessLibrarySettingsTab.tsx'
 import { UpdateFooterAction, type UpdateFooterActionInjected } from './UpdateFooterAction.tsx'
 import { en, es, zh, type PluginInventoryLocaleKey } from './locales.ts'
 
 export type { PluginInventorySettingsTabInjected, PluginInventorySettingsTabProps } from './PluginInventorySettingsTab.tsx'
+export type { AnatomyConnectorsInjected, AnatomyConnectorsSettingsTabProps } from './AnatomyConnectorsSettingsTab.tsx'
 export type { BusinessLibraryInjected, BusinessLibrarySettingsTabProps } from './BusinessLibrarySettingsTab.tsx'
 export type { UpdateFooterActionInjected, UpdateFooterActionProps } from './UpdateFooterAction.tsx'
 export type { PluginInventoryLocaleKey } from './locales.ts'
@@ -61,6 +63,17 @@ export function apply(ctx: ClientContext): void {
     return result.value
   }
   const businessInjected = (): BusinessLibraryInjected => ({ readBusinessLibrary })
+  const listAnatomy:AnatomyConnectorsInjected['listAnatomy']=async()=>{
+    const result=await ctx.remote.pluginInventory.anatomyConnectors()
+    if(!result.ok)throw new Error(result.error.message)
+    return result.value
+  }
+  const installAnatomy:AnatomyConnectorsInjected['installAnatomy']=async id=>{
+    const result=await ctx.remote.pluginInventory.installAnatomyConnector({id})
+    if(!result.ok)throw new Error(result.error.message)
+    return result.value
+  }
+  const anatomyInjected=():AnatomyConnectorsInjected=>({listAnatomy,installAnatomy})
 
   const readUpdateState: UpdateFooterActionInjected['readUpdateState'] = async () => {
     const result = await ctx.remote.pluginInventory.updateState()
@@ -93,6 +106,15 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: inventoryInjected,
   }, PluginInventorySettingsTab))
+
+  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
+    name:'settings.plugins.tab',
+    id:'anatomy-3d',
+    order:15,
+    label:()=>t('anatomyTab'),
+    locale:NS,
+    inject:anatomyInjected,
+  }, AnatomyConnectorsSettingsTab))
 
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
     name: 'settings.plugins.tab',
