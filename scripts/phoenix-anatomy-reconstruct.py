@@ -117,6 +117,9 @@ def nifti_mask_to_mesh(mask_path, step_size=1):
     if not np.isfinite(world).all() or len(faces) < 8:
         raise ValueError("Invalid or degenerate surface")
     mesh = trimesh.Trimesh(vertices=world, faces=faces, process=False)
+    mesh.metadata["borderTruncated"] = any(
+        bool(np.any(np.take(voxels, (0, -1), axis=axis))) for axis in range(3)
+    )
     mesh.fix_normals()
     volume_ml = count * abs(float(np.linalg.det(img.affine[:3, :3]))) / 1000.0
     return mesh, count, volume_ml
@@ -184,6 +187,9 @@ def reconstruct(args):
         raise RuntimeError("No segmentation masks created")
     if len(candidates) > args.max_meshes:
         raise RuntimeError("Too many structures; select ROI or increase --max-meshes explicitly")
+    # Never combine patient masks from different studies or coordinate frames.
+    for _, other in candidates[1:]:
+        matching_grid(candidates[0][1], other)
 
     lesions = []
     if args.lesion_mask_folder:
@@ -213,6 +219,7 @@ def reconstruct(args):
                             "sourceMaskSha256": mask_digest(mask),
                             "layer": "anatomy", "reviewStatus": "unreviewed",
                             "meshResolution": "coarse" if args.fast else "full",
+                            "borderTruncated": mesh.metadata["borderTruncated"],
                             "state": "unreviewed"})
         except ValueError as error:
             quality.append({"structure": name, "state": "rejected",
@@ -232,6 +239,7 @@ def reconstruct(args):
                         "sourceMaskSha256": mask_digest(mask),
                         "layer": "clinician-supplied-affected-region", "state": "unreviewed",
                         "reviewStatus": "unreviewed", "meshResolution": "full",
+                        "borderTruncated": mesh.metadata["borderTruncated"],
                         "provenance": "external NIfTI annotation; not independently verified"})
 
     if not scene.geometry:
@@ -258,6 +266,7 @@ def reconstruct(args):
                                  if lesions else None),
         "sourceRegistration": ("affected-region grid matched to anatomy grid"
                                if lesions else "not-applicable"),
+        "anatomicalMasksAligned": True,
         "meshResolution": "coarse anatomy / full affected regions" if args.fast else "full",
         "elapsedSeconds": round(perf_counter() - started, 3),
         "structures": quality,
