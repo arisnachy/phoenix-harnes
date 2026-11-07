@@ -96,7 +96,7 @@ export function createKiraAssessmentPrompt(sessionId:string,report:AssessmentRep
       followUp:'Seguimiento, derivación o nueva evaluación según corresponda',
       references:[],sections:[],
     }}),
-    'Completa references con enlaces HTTPS solo si comprobaste la fuente; si no, utiliza [].'
+    'Completa references con enlaces HTTPS solo si comprobaste la fuente; si no, utiliza [].',
     'Al cerrar el JSON, no vuelvas a copiar datos clínicos ni emitas otra tarjeta.',
     'REGISTRO ORIGINAL PARA ANALIZAR (datos proporcionados explícitamente por el profesional):',
     JSON.stringify(report),
