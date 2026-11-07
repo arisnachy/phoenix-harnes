@@ -93,18 +93,17 @@ test('a photographed ECG can suggest delta/WPW provisionally but never create nu
   source:'partial-image',clinicianReviewed:false,photoDeltaHint:'possible',
   prMs:96,qrsMs:138}),/reviewed, calibrated/)
 })
-test('axis-only explanation must not obscure photo-observed delta and WPW differential',()=>{
+test('hypothesis audit does not impose a single pre-written diagnosis on another pattern',()=>{
  const result=auditDiagnosticConcordance({
   modality:'ecg',sourceType:'image',sourceReviewed:true,sourceCompleteness:'partial',
-  observedEvidence:'Eje izquierdo, PR corto aparente y onda delta en inicio de QRS, sin calibración confirmada.',
-  proposedImpression:'Desviación del eje eléctrico hacia la izquierda.',
-  differentialConsidered:'Bloqueo fascicular anterior',
-  intendedVisualization:'mechanism',criticalFeaturesAssessed:false,
+  observedEvidence:'Ondas R dominantes en V1-V2, eje QRS desviado y repolarización alterada.',
+  proposedImpression:'Considerar secuela de infarto posterior, trastorno de conducción u otra causa.',
+  differentialConsidered:'Infarto antiguo, alteraciones de conducción, colocación de electrodos.',
+  intendedVisualization:'mechanism',criticalFeaturesAssessed:true,
  })
- assert.equal(result.decision,'BLOCK_UNSUPPORTED_INTERPRETATION')
- assert.equal(result.differentialFlags.leftAxisConclusionInsufficient,true)
- assert.equal(result.differentialFlags.preexcitationMustBeConsidered,true)
- assert.match(result.visualInstructions,/accessory AV pathway/i)
+ assert.equal(result.decision,'ALLOW_PROVISIONAL_REVIEW_ONLY')
+ assert.equal(result.differentialFlags,null)
+ assert.doesNotMatch(result.visualInstructions,/accessory AV pathway|WPW/i)
  assert.equal(result.clinicalDiagnosisConfirmed,false)
  assert.equal(result.medicalPixelsOrSignalAnalyzedByThisTool,false)
 })
@@ -129,23 +128,17 @@ test('all medical modalities require observed evidence and cannot authorize a pa
  }
 })
 
-test('ECG image rendering refuses isolated left-axis conclusion without checking PR/delta/QRS',()=>{
+test('ECG image plan remains neutral when evidence cannot support a specific diagnosis',()=>{
  const axis=planClinicalVisualization({
    modality:'ecg',sourceType:'image',sourceReviewed:true,
-   observedFindings:'Eje eléctrico muy desviado hacia la izquierda',
+   observedFindings:'Eje del QRS desviado y alteraciones de repolarización sin causa confirmada',
    visualizationKind:'conceptual',patientSpecific:false,
  })
- assert.equal(axis.decision,'BLOCK_ECG_INCOMPLETE_INTERPRETATION')
- assert.equal(axis.ecgIncompleteAxisOnly,true)
- assert.equal(axis.ecgReviewRequired.length,4)
- const differential=planClinicalVisualization({
-   modality:'ecg',sourceType:'image',sourceReviewed:true,
-   observedFindings:'Eje izquierdo con onda delta probable, PR corto a confirmar, QRS de duración desconocida',
-   visualizationKind:'conceptual',patientSpecific:false,
- })
- assert.equal(differential.decision,'ALLOW_EDUCATIONAL_EXPLANATION')
- assert.equal(differential.patientSpecificRequested,false)
- assert.equal(differential.medicalInterpretationVerifiedByThisTool,false)
+ assert.equal(axis.decision,'ALLOW_EDUCATIONAL_EXPLANATION')
+ assert.equal(axis.ecgIncompleteAxisOnly,false)
+ assert.equal(axis.patientSpecificRequested,false)
+ assert.equal(axis.medicalInterpretationVerifiedByThisTool,false)
+ assert.doesNotMatch(axis.caveats.join(' '),/accessory pathway|WPW/i)
 })
 
 test('medical image-only uploads always carry a clinical source-first guard',()=>{
@@ -155,6 +148,7 @@ test('medical image-only uploads always carry a clinical source-first guard',()=
  assert.match(source,/tu primera tarea es LEER Y RESPONDER sobre ESA fuente/)
  assert.match(source,/diagnóstico escrito en el informe/)
  assert.match(source,/SOLO DESPUÉS de responder clínicamente/)
- assert.match(source,/onda delta/)
+ assert.match(source,/hallazgos positivos y negativos/)
+ assert.doesNotMatch(source.split('export const CLINICAL_VISION_BASELINE')[1].split('function healthRequest')[0],/WPW|preexcitaci[oó]n/i)
  assert.match(source,/NO ANALIZADO/)
 })
