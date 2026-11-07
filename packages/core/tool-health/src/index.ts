@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { planAnatomicalTwin } from './anatomy-planner.ts'
@@ -10,11 +12,54 @@ import '@phoenix-ai/dsh-user-questions'
 import { buildClinicalAskStep, interpretClinicalAsk, type ClinicalAskAction, type ClinicalAskPathway } from './clinical-copilot-ask.ts'
 import { planInterview, planKiraMail, type InterviewMode } from './clinical-flow.ts'
 
+const ANATOMY_INSTALLER=fileURLToPath(new URL('../../../../scripts/phoenix-anatomy-auto.mjs',import.meta.url))
+const ANATOMY_CATALOG=fileURLToPath(new URL('../../../../scripts/phoenix-anatomy-models.json',import.meta.url))
+const ANATOMY_CONNECTOR_IDS=['slicerheart','monai-nnunet','totalsegmentator',
+  'ohif-cornerstone','simvascular','opencarp','three-vtk'] as const
+function prepareAnatomy(component?:string):Promise<string>{
+  if(component!==undefined&&!ANATOMY_CONNECTOR_IDS.some(id=>id===component))
+    return Promise.resolve(JSON.stringify({status:'error',reason:'Invalid anatomy component'}))
+  if(component==='simvascular'||component==='opencarp')
+    return Promise.resolve(JSON.stringify({status:'external',
+      detail:'Configure official WSL2/Linux engine and validate with anatomy simulation doctor.'}))
+  if(component!==undefined){
+    if(!existsSync(ANATOMY_INSTALLER))return Promise.resolve(JSON.stringify({status:'unavailable'}))
+    try{
+      const child=spawn(process.execPath,[ANATOMY_INSTALLER,'--install-component',component],{
+        windowsHide:true,shell:false,env:process.env,detached:true,stdio:'ignore'})
+      child.on('error',()=>{})
+      child.unref()
+      return Promise.resolve(JSON.stringify({status:'started',component,
+        note:'Installation scheduled, not verified. Recheck health_anatomy_status.'}))
+    }catch{return Promise.resolve(JSON.stringify({status:'error',reason:'Cannot launch installer'}))}
+  }
+  if(!existsSync(ANATOMY_INSTALLER))return Promise.resolve(JSON.stringify({
+    status:'unavailable',installer:ANATOMY_INSTALLER,note:'Not installed in this PHOENIX runtime'}))
+  return new Promise(resolve=>{
+    let output='',errors=''
+    const task=spawn(process.execPath,[ANATOMY_INSTALLER,'--ensure'],{
+      windowsHide:true,shell:false,env:process.env,
+      stdio:['ignore','pipe','pipe'],
+    })
+    task.stdout?.on('data',(v:Buffer)=>{output+=v.toString('utf8').slice(0,8192)})
+    task.stderr?.on('data',(v:Buffer)=>{errors+=v.toString('utf8').slice(0,2000)})
+    task.once('error',(e:Error)=>resolve(JSON.stringify({status:'error',reason:e.message})))
+    task.once('close',(code:number|null)=>{
+      if(code!==0)return resolve(JSON.stringify({status:'error',exitCode:code,
+        reason:errors.slice(0,2000)}))
+      try{
+        const receipt=JSON.parse(output) as Record<string,unknown>
+        resolve(JSON.stringify({status:receipt.status,installer:ANATOMY_INSTALLER,
+          detail:receipt,note:'started/running is not installed. Check health_anatomy_status later.'}))
+      }catch{resolve(JSON.stringify({status:'error',reason:'Installer returned invalid receipt'}))}
+    })
+  })
+}
 export const name = 'tool-health'
 export const inject = ['tools', 'systemPrompt', 'userQuestions']
-const GUIDANCE = 'PHOENIX Health Engine: solo al solicitar una consulta o interrogatorio, usa health_interview_plan con motivo general SIN nombre, email, identificador u otros datos de paciente. Usa health_copilot_ask action=choose_mode para elegir mediante ASK entre Kira, médico o mixto. Luego action=screen_urgency antes de action=next_question. ASK solo gestiona preguntas y decisiones genéricas, sensibles y sin datos identificables; la respuesta clínica se introduce en el expediente autenticado /health. Un ASK expirado no acredita hechos, consentimiento, revisión ni registro.  El plan no es diagnóstico; recopila datos y exige evaluación del profesional para signos de alarma, examen, pruebas, tratamiento y firma. No afirmes que existe historia clínica guardada, receta firmada, correo enviado ni cita agendada. health_kira_mail_requirements solo enumera requisitos; no envía mensajes. Para estudios volumétricos y consultas sobre gemelos anatómicos usa health_anatomy_workflow; usa health_anatomy_status para consultar dependencias locales. El plan no es una reconstrucción: la ejecución real requiere un archivo DICOM/NIfTI local y consentimiento clínico. Nunca inventes lesiones ni llames al GLB diagnóstico. El remitente debe ser la cuenta institucional de Kira autorizada, no una dirección inventada. No introduzcas historia clínica ni datos personales en memoria general, herramientas o logs sin un sistema clínico autorizado.'
+const GUIDANCE = 'PHOENIX Health Engine: solo al solicitar una consulta o interrogatorio, usa health_interview_plan con motivo general SIN nombre, email, identificador u otros datos de paciente. Usa health_copilot_ask action=choose_mode para elegir mediante ASK entre Kira, médico o mixto. Luego action=screen_urgency antes de action=next_question. ASK solo gestiona preguntas y decisiones genéricas, sensibles y sin datos identificables; la respuesta clínica se introduce en el expediente autenticado /health. Un ASK expirado no acredita hechos, consentimiento, revisión ni registro.  El plan no es diagnóstico; recopila datos y exige evaluación del profesional para signos de alarma, examen, pruebas, tratamiento y firma. No afirmes que existe historia clínica guardada, receta firmada, correo enviado ni cita agendada. health_kira_mail_requirements solo enumera requisitos; no envía mensajes. Para estudios volumétricos y gemelos anatómicos usa health_anatomy_workflow; usa health_anatomy_models para el catálogo y health_anatomy_status para consultar dependencias locales. Si el usuario autorizó expresamente instalar dependencias anatómicas, usa health_anatomy_prepare con component=slicerheart, monai-nnunet, totalsegmentator, ohif-cornerstone o three-vtk. SimVascular y openCARP requieren instalación externa verificada; no afirmes que se autoinstalan. Su estado started/running NO acredita instalación: confirma con health_anatomy_status y no prometas archivo GLB sin comprobarlo. El plan no es una reconstrucción: la ejecución real requiere un archivo DICOM/NIfTI local y consentimiento clínico. Nunca inventes lesiones ni llames al GLB diagnóstico. El remitente debe ser la cuenta institucional de Kira autorizada, no una dirección inventada. No introduzcas historia clínica ni datos personales en memoria general, herramientas o logs sin un sistema clínico autorizado.'
 function healthRequest(text: string | undefined): boolean {
-  return typeof text === 'string' && /(?:consulta m[eé]dica|paciente|historia cl[ií]nica|interrogatorio|receta|health engine|kira.*consulta|psic[oó]log[oa]|laboratorio cl[ií]nico|gemelo anat[oó]mico|reconstrucci[oó]n 3d|dicom|tomograf[ií]a|resonancia magn[eé]tica)/iu.test(text)
+  return typeof text === 'string' && /(?:consulta m[eé]dica|paciente|historia cl[ií]nica|interrogatorio|receta|health engine|kira.*consulta|psic[oó]log[oa]|laboratorio cl[ií]nico|gemelo anat[oó]mico|reconstrucci[oó]n 3d|anatom[ií]a 3d|modelo 3d (?:del? )?(?:coraz[oó]n|cerebro|[oó]rgano)|segmentaci[oó]n anat[oó]mica|dicom|tomograf[ií]a|resonancia magn[eé]tica)/iu.test(text)
 }
 export function apply(ctx: Context): void {
   ctx.tools.register(defineTool({
@@ -24,27 +69,91 @@ export function apply(ctx: Context): void {
     output: {schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
     isConcurrencySafe:()=>true,
     execute(){
-      const base=process.env.LOCALAPPDATA||homedir()
-      const home=process.env.PHOENIX_ANATOMY_HOME||join(base,process.env.LOCALAPPDATA?'PHOENIX':'.phoenix','anatomy')
-      const manifestFile=join(home,'manifest.json')
-      const manifest=(()=>{
-        try{
-          const value: unknown=JSON.parse(readFileSync(manifestFile,'utf8'))
-          if(value!==null&&typeof value==='object'&&'components' in value){
-            return value as {components?: Record<string,{status?:string}>}
-          }
-        }catch{/* Optional installation may not be present. */}
-        return null
-      })()
-      const components=Object.fromEntries(
-        Object.entries(manifest?.components??{}).map(([key,value])=>[key,value.status??'unknown']))
-      return Promise.resolve(JSON.stringify({
-        installed:manifest!==null,components,clinicallyValidated:false,
-        reconstructionRunner:'scripts/phoenix-anatomy-workbench.mjs',
-        note:'Sin instalación funcional, planificar; nunca confirmar anatomía, diagnóstico o capacidad de un modelo sin imagen volumétrica.',
+      if(!existsSync(ANATOMY_INSTALLER))return Promise.resolve(JSON.stringify({
+        initialized:false,installed:false,coreReady:false,viewerReady:false,weightsReady:false,
+        components:{},clinicallyValidated:false,note:'Anatomy installer missing from this runtime',
       }))
+      const result=spawnSync(process.execPath,[ANATOMY_INSTALLER,'--status'],{
+        encoding:'utf8',windowsHide:true,timeout:7000,maxBuffer:384*1024,
+      })
+      if(result.status!==0||!result.stdout)return Promise.resolve(JSON.stringify({
+        initialized:false,installed:false,components:{},clinicallyValidated:false,
+        note:'Could not verify runtime package installation',
+      }))
+      try{
+        const state=JSON.parse(result.stdout) as {
+          initialized?:boolean;installed?:boolean;coreReady?:boolean;
+          viewerReady?:boolean;weightsReady?:boolean;
+          components?:Record<string,{status?:string}>}
+        const components=Object.fromEntries(Object.entries(state.components??{})
+          .map(([key,value])=>[key,value.status??'unknown']))
+        return Promise.resolve(JSON.stringify({
+          initialized:state.initialized===true,installed:state.installed===true,
+          coreReady:state.coreReady===true,viewerReady:state.viewerReady===true,
+          weightsReady:state.weightsReady===true,components,clinicallyValidated:false,
+          note:'Verified package/model files, not patient anatomy or clinical performance',
+        }))
+      }catch{return Promise.resolve(JSON.stringify({
+        initialized:false,installed:false,components:{},clinicallyValidated:false,
+        note:'Malformed anatomy installer verification output',
+      }))}
     },
     presentCall:()=>({card:'generic',title:'Estado del motor anatómico',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'health_anatomy_prepare',
+    description:'Inicia el autoinstalador local de componentes anatómicos autorizados por el usuario. Los SimVascular y openCARP externos exigen instalación oficial separada; started no significa instalado.',
+    parameters:{component:{type:'string',description:'Opcional: slicerheart | monai-nnunet | totalsegmentator | ohif-cornerstone | three-vtk'}},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>false,
+    execute(args){return prepareAnatomy(args.component)},
+    presentCall:()=>({card:'generic',title:'Preparar motor anatómico local',kind:'execute' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'health_anatomy_connectors',
+    description:'Consulta la situación local de los siete conectores anatómicos sin instalar nada ni leer pacientes.',
+    parameters:{},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(){
+      const base=process.env.LOCALAPPDATA||homedir()
+      const home=process.env.PHOENIX_ANATOMY_HOME||
+        join(base,process.env.LOCALAPPDATA?'PHOENIX':'.phoenix','anatomy')
+      let state:Record<string,{status?:string}>={}
+      try{
+        const file=JSON.parse(readFileSync(join(home,'manifest.json'),'utf8')) as {
+          schema?:number;components?:Record<string,{status?:string}>}
+        if(file.schema===2)state=file.components??{}
+      }catch{}
+      const status=(...names:string[])=>names.every(id=>state[id]?.status==='installed')
+      const entries=[
+        {id:'slicerheart',installed:status('slicer','slicerheart'),role:'cardiac imaging'},
+        {id:'monai-nnunet',installed:status('monai','nnunetv2'),role:'segmenters; pretrained task weights separate'},
+        {id:'totalsegmentator',installed:status('totalsegmentator','weights_ct'),role:'CT baseline; not clinically validated'},
+        {id:'ohif-cornerstone',installed:false,cornerstoneLibraries:status('cornerstone'),role:'Cornerstone package may exist; OHIF/PACS not deployed'},
+        {id:'simvascular',installed:status('simvascular'),role:'external scientific engine'},
+        {id:'opencarp',installed:status('opencarp'),role:'external scientific engine'},
+        {id:'three-vtk',installed:status('viewer','vtkjs'),role:'3D viewer libraries'},
+      ]
+      return Promise.resolve(JSON.stringify({entries,clinicallyValidated:false,
+        note:'Package installation does not prove a model or clinical task was completed. Verify real output.'}))
+    },
+    presentCall:()=>({card:'generic',title:'Motores anatómicos · estado',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'health_anatomy_models',
+    description:'Consulta catálogo anatómico verificado por modalidad y muestra las licencias de los modelos; no significa que los pesos estén descargados ni que exista un modelo educativo GLB.',
+    parameters:{},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(){
+      try{
+        const value=JSON.parse(readFileSync(ANATOMY_CATALOG,'utf8')) as Record<string,unknown>
+        return Promise.resolve(JSON.stringify({status:'catalog-only',
+          tasks:value.tasks, gaps:value.gaps,clinicallyValidated:false}))
+      }catch{return Promise.resolve(JSON.stringify({status:'unavailable',reason:'Catalog missing in runtime'}))}
+    },
+    presentCall:()=>({card:'generic',title:'Catálogo de modelos anatómicos',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name: 'health_anatomy_workflow',

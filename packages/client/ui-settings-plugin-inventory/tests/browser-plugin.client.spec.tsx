@@ -8,6 +8,7 @@ import { resolveSlotLabel } from '@phoenix-ai/dsh-client-ui-slots'
 import { usePinnedBrowserLanguages } from '@phoenix-ai/dsh-client-test-runtime'
 import { apply, inject, NS } from '../src/client/index.ts'
 import { PluginInventorySettingsTab } from '../src/client/PluginInventorySettingsTab.tsx'
+import { AnatomyConnectorsSettingsTab } from '../src/client/AnatomyConnectorsSettingsTab.tsx'
 import { BusinessLibrarySettingsTab, type BusinessLibraryInjected } from '../src/client/BusinessLibrarySettingsTab.tsx'
 import type { PluginInventorySettingsTabInjected } from '../src/client/PluginInventorySettingsTab.tsx'
 import { UpdateFooterAction, type UpdateFooterActionInjected } from '../src/client/UpdateFooterAction.tsx'
@@ -87,6 +88,10 @@ describe('ui-settings-plugin-inventory browser plugin', () => {
     expect(entry.locale).toBe(NS)
     expect(resolveSlotLabel(entry.options.label)).toBe('插件列表')
 
+    const anatomyTab=b.slots.entries('settings.plugins.tab').find(entry=>entry.options.id==='anatomy-3d')!
+    expect(anatomyTab.component).toBe(AnatomyConnectorsSettingsTab)
+    expect(resolveSlotLabel(anatomyTab.options.label)).toBe('三维解剖')
+
     const businessTab = b.slots.entries('settings.plugins.tab').find(entry => entry.options.id === 'business-library')!
     expect(businessTab.component).toBe(BusinessLibrarySettingsTab)
     const businessInjected = (businessTab.inject as unknown as () => BusinessLibraryInjected)()
@@ -129,7 +134,7 @@ describe('ui-settings-plugin-inventory browser plugin', () => {
     const stopSettings = declareSettings(b.slots)
     const stopFooter = declareFooter(b.slots)
     await vi.waitFor(() => {
-      expect(b.slots.entries('settings.plugins.tab')).toHaveLength(2)
+      expect(b.slots.entries('settings.plugins.tab')).toHaveLength(3)
       expect(b.slots.entries('sidebar.footer.action')).toHaveLength(1)
     })
     b.locale.setLocale('en')

@@ -78,7 +78,8 @@ $anatomyAuto = Join-Path $root 'scripts\phoenix-anatomy-auto.mjs'
 if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $anatomyAuto)) {
   try {
     & node $anatomyAuto --ensure
-    if ($LASTEXITCODE -ne 0) { Write-Warning 'Anatomy optional installer deferred.' }
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'Anatomy installer failed to start; inspect --status.' }
+    else { Write-Host 'PHOENIX Anatomy: instalación comprobándose. Estado: node scripts/phoenix-anatomy-auto.mjs --status' }
   } catch {
     Write-Warning "Anatomy optional installer unavailable: $($_.Exception.Message)"
   }
