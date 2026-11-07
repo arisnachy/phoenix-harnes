@@ -15,6 +15,9 @@ export interface ECGPreexcitationInput {
   readonly source?:unknown
   readonly leadEvidence?:unknown
   readonly rhythm?:unknown
+  readonly photoDeltaHint?:unknown
+  readonly qualitativePrHint?:unknown
+  readonly axisHint?:unknown
   readonly clinicianReviewed?:unknown
 }
 export function assessPreexcitation(input:ECGPreexcitationInput) {
@@ -26,6 +29,15 @@ export function assessPreexcitation(input:ECGPreexcitationInput) {
   const delta=String(input.deltaWave??'not-assessable') as DeltaObservation
   if(!['present','absent','not-assessable'].includes(delta))
     throw new Error('Delta wave observation must be present, absent or not-assessable')
+  const photoDeltaHint=String(input.photoDeltaHint??'not-assessable')
+  if(!['possible','not-seen','not-assessable'].includes(photoDeltaHint))
+    throw new Error('Qualitative ECG photo delta hint invalid')
+  const qualitativePrHint=String(input.qualitativePrHint??'not-assessable')
+  if(!['appears-short','not-apparently-short','not-assessable'].includes(qualitativePrHint))
+    throw new Error('Qualitative PR appearance invalid')
+  const axisHint=String(input.axisHint??'unknown')
+  if(!['left','right','normal','unknown'].includes(axisHint))
+    throw new Error('ECG axis hint invalid')
   const rhythm=String(input.rhythm??'unknown') as Rhythm
   if(!['sinus','irregular-wide-complex','other','unknown'].includes(rhythm))
     throw new Error('Unsupported rhythm category')
@@ -41,13 +53,24 @@ export function assessPreexcitation(input:ECGPreexcitationInput) {
   if(leads.length>140||/[<>{}]/.test(leads))
     throw new Error('Invalid lead evidence notation')
   const reviewerHasSource=input.clinicianReviewed===true&&source==='calibrated-12-lead'
+  if(source==='calibrated-12-lead'&&
+     (photoDeltaHint!=='not-assessable'||qualitativePrHint!=='not-assessable'))
+    throw new Error('Qualitative image hints cannot replace calibrated ECG measurements')
+  if(!['partial-image','uncalibrated'].includes(source)&&
+     (photoDeltaHint!=='not-assessable'||qualitativePrHint!=='not-assessable'))
+    throw new Error('Qualitative image hints require an image/uncalibrated source')
+  // Qualitative photo hints are reported but are NEVER treated as measured intervals.
+  const tentativeImagePattern=['partial-image','uncalibrated'].includes(source)&&
+    photoDeltaHint==='possible'
   if(!reviewerHasSource&&(prMs!==null||qrsMs!==null||delta==='present'))
     throw new Error('Measured PR/QRS or delta wave must come from a reviewed, calibrated source')
   const shortPr=prMs!==null&&prMs<120
   const widenedQrs=qrsMs!==null&&qrsMs>=120
   const suspiciousRhythm=rhythm==='irregular-wide-complex'
   let pattern:'COMPATIBLE_WPW_PREEXCITATION_PATTERN'|'POSSIBLE_PREEXCITATION'|
-     'INSUFFICIENT_ECG_EVIDENCE'|'CLASSIC_PATTERN_NOT_SHOWN'='INSUFFICIENT_ECG_EVIDENCE'
+     'INSUFFICIENT_ECG_EVIDENCE'|'CLASSIC_PATTERN_NOT_SHOWN'|
+     'PHOTO_SUGGESTS_PREEXCITATION_UNVERIFIED'='INSUFFICIENT_ECG_EVIDENCE'
+  if(tentativeImagePattern)pattern='PHOTO_SUGGESTS_PREEXCITATION_UNVERIFIED'
   if(reviewerHasSource){
     if(delta==='present'&&shortPr&&widenedQrs&&leads.length>0)
       pattern='COMPATIBLE_WPW_PREEXCITATION_PATTERN'
@@ -70,6 +93,11 @@ export function assessPreexcitation(input:ECGPreexcitationInput) {
   ]:[]
   return {
     modality:'ecg',reviewedCalibratedRecord:reviewerHasSource,
+    qualitativePhotoOnly:!reviewerHasSource,
+    photoDeltaHint,qualitativePrHint,axisHint,
+    imageSuspectedPreexcitationUnverified:tentativeImagePattern,
+    photoHintIsClinicallyVerified:false,
+    photoDoesNotPermitMeasuredPRorQRS:true,
     structuredMeasurementsAreClinicianSupplied:true,
     imagePixelsAnalysed:false,digitalWaveformAnalysed:false,
     prMs,qrsMs,deltaWave:delta,leadEvidence:leads,rhythm,
@@ -82,8 +110,17 @@ export function assessPreexcitation(input:ECGPreexcitationInput) {
       'Intermittent or minimal pre-excitation cannot be excluded from a single recording',
     ],
     missing,urgentFlags:urgencies,
+    mandatoryECGChecklist:['PR duration and calibration','Initial QRS slope/delta across leads',
+      'QRS duration and morphology','Rhythm and urgent irregular wide-complex pattern',
+      'QRS axis and fascicular mimics AFTER pre-excitation assessment'],
+    visualDecision:tentativeImagePattern?
+      'PROVISIONAL_ELECTROPHYSIOLOGY_MECHANISM_ONLY':
+      (reviewerHasSource&&
+       (pattern==='COMPATIBLE_WPW_PREEXCITATION_PATTERN'||pattern==='POSSIBLE_PREEXCITATION')?
+        'EDUCATIONAL_ELECTROPHYSIOLOGY_MECHANISM_ONLY':'NO_PATIENT_DIAGNOSIS_VISUAL'),
     electricalMechanism:pattern==='COMPATIBLE_WPW_PREEXCITATION_PATTERN'||
-      pattern==='POSSIBLE_PREEXCITATION'?{
+      pattern==='POSSIBLE_PREEXCITATION'||
+      pattern==='PHOTO_SUGGESTS_PREEXCITATION_UNVERIFIED'?{
         supportedConcept:'Generic atrioventricular accessory pathway capable of bypassing AV node delay',
         requiredLabels:['Sinoatrial node','AV node','His-Purkinje conduction',
           'Generic accessory atrioventricular pathway','Early ventricular depolarization','ECG delta wave'],
@@ -93,10 +130,11 @@ export function assessPreexcitation(input:ECGPreexcitationInput) {
         visualizationType:'educational-electrophysiology-only',
       }:null,
     visualExplanation:pattern==='COMPATIBLE_WPW_PREEXCITATION_PATTERN'||
-      pattern==='POSSIBLE_PREEXCITATION'?
+      pattern==='POSSIBLE_PREEXCITATION'||
+      pattern==='PHOTO_SUGGESTS_PREEXCITATION_UNVERIFIED'?
       'Educational electrical schematic may depict a GENERIC accessory atrioventricular pathway, never a patient-specific pathway side or lesion location.':
       'No patient-specific electrical abnormality or pathway should be drawn without additional evidence.',
-    caution:'WPW ECG pattern is not equivalent to symptomatic WPW syndrome. A leftward QRS axis alone neither diagnoses nor excludes pre-excitation.',
+    caution:'WPW ECG pattern is not equivalent to symptomatic WPW syndrome. A leftward QRS axis alone neither diagnoses nor excludes pre-excitation. A suspected delta wave from a photo must be confirmed on a calibrated 12-lead tracing; the tool does not inspect pixels.',
     aiDiagnosisPerformed:false,
   }
 }
