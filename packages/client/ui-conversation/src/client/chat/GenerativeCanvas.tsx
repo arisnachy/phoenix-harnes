@@ -22,6 +22,7 @@ type CanvasNode =
   | { type: 'group'; layout?: Layout; children: CanvasNode[] }
   | { type: 'text' | 'heading' | 'caption'; text: string }
   | { type: 'divider' }
+  | { type: 'reference_image'; src: string; alt: string; sourceUrl: string; credit: string; license: string; caption?: string; licenseUrl?: string }
   | { type: 'badge'; text: string; status?: Status }
   | { type: 'icon'; name: PhoenixUiIconName; label: string }
   | { type: 'metric'; label: string; value: string; detail?: string; status?: Status }
@@ -82,8 +83,23 @@ const statusCell = (value: unknown): ReactNode => {
 }
 const MAX_NODES = 64
 const MAX_DEPTH = 6
+const MAX_REFERENCE_IMAGES = 8
 
-function validateNode(value: unknown, depth: number, count: { n: number }, ids: Set<string>): boolean {
+/** Only externally verified Commons thumbnails with attributable file pages. */
+export function validCommonsReferenceUrl(value: unknown, kind: 'image' | 'source' | 'license'): boolean {
+  if (typeof value !== 'string' || value.length > 1800) return false
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'https:' || url.username || url.password) return false
+    if (kind === 'image') return url.hostname === 'upload.wikimedia.org'
+    if (kind === 'source') return url.hostname === 'commons.wikimedia.org' && /^\/wiki\/File:/iu.test(url.pathname)
+    return ['creativecommons.org', 'www.gnu.org', 'commons.wikimedia.org'].includes(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+function validateNode(value: unknown, depth: number, count: { n: number; images: number }, ids: Set<string>): boolean {
   if (!isObject(value) || !text(value.type, 30) || depth > MAX_DEPTH || ++count.n > MAX_NODES) return false
   switch (value.type) {
     case 'group':
@@ -97,6 +113,14 @@ function validateNode(value: unknown, depth: number, count: { n: number }, ids: 
       return keys(value, ['type','text']) && text(value.text, 1200)
     case 'divider':
       return keys(value, ['type'])
+    case 'reference_image':
+      if (++count.images > MAX_REFERENCE_IMAGES) return false
+      return keys(value, ['type','src','alt','sourceUrl','credit','license','licenseUrl','caption'])
+        && validCommonsReferenceUrl(value.src, 'image')
+        && validCommonsReferenceUrl(value.sourceUrl, 'source')
+        && text(value.alt, 180) && text(value.credit, 180) && text(value.license, 100)
+        && optionalText(value.caption, 320)
+        && (value.licenseUrl === undefined || validCommonsReferenceUrl(value.licenseUrl, 'license'))
     case 'badge':
       return keys(value, ['type','text','status']) && text(value.text) && status(value.status)
     case 'icon':
@@ -187,7 +211,7 @@ export function parseCanvasSpec(value: unknown): CanvasSpec | null {
     || !text(value.props.title) || !optionalText(value.props.subtitle)
     || !Array.isArray(value.props.children) || value.props.children.length === 0
     || value.props.children.length > 24) return null
-  const count = { n: 0 }
+  const count = { n: 0, images: 0 }
   const ids = new Set<string>()
   if (!value.props.children.every(child => validateNode(child, 0, count, ids))) return null
   // Providers sometimes emit select options as simple strings. Canonicalize
@@ -300,6 +324,23 @@ function Tabs({ tabs, values, setValue, onAction, onFilter, filters }: {
   )
 }
 
+function ReferenceImage({ node }: { node: Extract<CanvasNode, { type: 'reference_image' }> }): ReactNode {
+  const [failed, setFailed] = useState(false)
+  return <figure className={css.referenceImage} data-phoenix-reference-image="commons">
+    {failed
+      ? <div role="status" className={css.referenceUnavailable}>Imagen no disponible. Consulta la fuente original.</div>
+      : <img src={node.src} alt={node.alt} loading="lazy" decoding="async"
+        referrerPolicy="no-referrer" onError={() => setFailed(true)} />}
+    <figcaption>
+      {node.caption && <span>{node.caption}</span>}
+      <small>{node.credit} · {node.license} ·{' '}
+        <a href={node.sourceUrl} target="_blank" rel="noopener noreferrer">Fuente original</a>
+        {node.licenseUrl && <> · <a href={node.licenseUrl} target="_blank" rel="noopener noreferrer">Licencia</a></>}
+      </small>
+    </figcaption>
+  </figure>
+}
+
 function Node({ node, values, setValue, onAction, onFilter, filters }: RendererProps): ReactNode {
   switch (node.type) {
     case 'group': {
@@ -325,6 +366,7 @@ function Node({ node, values, setValue, onAction, onFilter, filters }: RendererP
     case 'text': return <p className={css.text}>{node.text}</p>
     case 'caption': return <p className={css.caption}>{node.text}</p>
     case 'divider': return <hr className={css.divider} />
+    case 'reference_image': return <ReferenceImage node={node} />
     case 'badge': return <PhoenixStatusPill label={node.text} tone={node.status ?? 'neutral'} />
     case 'icon': return <span className={css.iconLabel}><PhoenixUiIcon name={node.name} />{node.label}</span>
     case 'metric':

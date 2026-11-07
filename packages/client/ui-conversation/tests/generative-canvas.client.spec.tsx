@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { AssistantMarkdown } from '../src/client/chat/AssistantMarkdown.tsx'
 import type { ChatViewSlotProps } from '../src/client/contract/slots.ts'
-import { GenerativeCanvas, parseCanvasSpec } from '../src/client/chat/GenerativeCanvas.tsx'
+import { GenerativeCanvas, parseCanvasSpec, validCommonsReferenceUrl } from '../src/client/chat/GenerativeCanvas.tsx'
 import { GenerativeUi, parseGenerativeUiBlock, splitGenerativeUiText } from '../src/client/chat/GenerativeUi.tsx'
 
 afterEach(cleanup)
@@ -39,6 +39,59 @@ function sample() {
 }
 
 describe('Phoenix intelligent UI canvas', () => {
+  it('validates and renders licensed images found by web_image_search inside a native UI canvas', () => {
+    const original = sample()
+    const image = {
+      type: 'reference_image',
+      src: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/11/Heart.png/640px-Heart.png',
+      alt: 'Human heart diagram',
+      sourceUrl: 'https://commons.wikimedia.org/wiki/File:Human_heart_diagram.png',
+      credit: 'Anatomy Artist',
+      license: 'CC BY-SA 4.0',
+      licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/',
+      caption: 'Anatomía cardiaca',
+    }
+    const spec = parseCanvasSpec({ ...original, props: {
+      ...original.props, children: [
+        { type: 'group', layout: 'grid', children: [image] },
+        { type: 'text', text: 'Una explicación contextual debajo de la imagen.' },
+      ],
+    } })
+    if (spec === null) throw new Error('The Commons reference was rejected')
+    const { container } = render(<GenerativeCanvas spec={spec} />)
+    const img = screen.getByRole('img', { name: 'Human heart diagram' })
+    expect(img.getAttribute('loading')).toBe('lazy')
+    expect(img.getAttribute('referrerpolicy')).toBe('no-referrer')
+    expect(screen.getByRole('link', { name: 'Fuente original' }).getAttribute('href')).toBe(image.sourceUrl)
+    expect(screen.getByText(/Anatomy Artist/)).not.toBeNull()
+    fireEvent.error(img)
+    expect(screen.getByText('Imagen no disponible. Consulta la fuente original.')).not.toBeNull()
+    expect(container.querySelectorAll('[data-phoenix-reference-image]')).toHaveLength(1)
+  })
+
+  it('rejects injected/private image sources, invented metadata and excess gallery assets', () => {
+    const source = sample()
+    const image = {
+      type: 'reference_image',
+      src: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/11/Heart.png/640px-Heart.png',
+      alt: 'Heart', credit: 'Author', license: 'CC BY-SA',
+      sourceUrl: 'https://commons.wikimedia.org/wiki/File:Human_heart_diagram.png',
+    }
+    const withImage = (item: unknown) => parseCanvasSpec({ ...source, props: { ...source.props, children: [item] } })
+    expect(withImage(image)).not.toBeNull()
+    expect(withImage({ ...image, src: 'javascript:alert(1)' })).toBeNull()
+    expect(withImage({ ...image, src: 'https://127.0.0.1/secret' })).toBeNull()
+    expect(withImage({ ...image, src: 'https://upload.wikimedia.org.evil.test/a.png' })).toBeNull()
+    expect(withImage({ ...image, sourceUrl: 'https://example.org/' })).toBeNull()
+    expect(withImage({ ...image, license: undefined })).toBeNull()
+    expect(withImage({ ...image, onClick: 'bad()' })).toBeNull()
+    expect(withImage({ ...image, licenseUrl: 'http://internal.local/x' })).toBeNull()
+    expect(parseCanvasSpec({ ...source, props: { ...source.props,
+      children: [{ type: 'group', children: Array.from({ length: 9 }, () => image) }],
+    } })).toBeNull()
+    expect(validCommonsReferenceUrl(image.src, 'image')).toBe(true)
+  })
+
   it('validates a fully composable and interactive canvas', () => {
     const value = sample()
     expect(parseCanvasSpec(value)).toEqual(value)
