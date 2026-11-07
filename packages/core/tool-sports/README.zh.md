@@ -46,3 +46,5 @@ Kira 从 `sports_chat_games` 获取有来源的赛事数据和声明式 `sports_
 每日目标五腿时，研究工具现在可调查 **十场真实盘口候选**（目标六腿时最多十一场），再从中筛选，避免只考察六个热门选项。以 **America/Santo_Domingo** 的实际开赛本地日期为准；仅识别明确且无歧义的 ESPN/博彩公司球队简称。事件级盘口工具先检查供应商 **/events/{eventId}/markets** 实际发布的盘口，再消耗赔率查询配额，并列出所有已发布盘口键，同时优先跨球员特殊盘口、时段盘和变化盘口分配查询。发现失败会明确呈现，不把不支持或没有时间戳的报价当成有效赔率。
 
 每日赛程扫描同时查询两个相邻的 UTC 比赛日期，再以圣多明各当地日期筛选，因为本地晚间比赛可能属于次日 UTC。系统按 ESPN 正式事件 ID 去重，并明确报告数据源部分中断。启用 `deep=true` 且配置 The Odds API v4 授权密钥后，每日工具会自动对同一家博彩公司报价的最多五或六场候选调用 `researchDailySpecialMarkets`。返回的 `specialMarkets` 保留真实比赛、球员、时段、赔率及更新时间，但明确标为**仅供研究**（`eligibleForTicket=false`、`estimatedProbability=null`）；没有专门的预测模型就不会直接加入最终组合。如果盘口目录不可用或不合法，不会盲目发起付费盘口请求。
+
+每日候选列表会为每场已核实的 ESPN 比赛保留最多**两种其他有真实赔率的基本盘口**，而不是最初选中胜负盘后丢弃大小分及让分盘。`deep=true` 研究路径复用同一场比赛的独立调查结果比较这些盘口；`selectDailyResearchedMarkets` 再从每场比赛中选出描述性证据最强的盘口，避免重复赛事及混用博彩公司，并返回 `alternativeMarketsCompared`、`eventChoices`、`marketsReviewed`。盘口比较并不等同于已校准的胜率、正期望收益或必胜保证；证据不足的候选明确标为条件性建议，而非获批投注。
