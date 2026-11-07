@@ -52,7 +52,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{border-bottom:1px
 .ws-metrics strong{display:block;font-size:24px;color:#205079}.ws-metrics small{display:block}
 @media(max-width:700px){.ws-metrics{grid-template-columns:1fr}}
 @media(max-width:700px){main{grid-template-columns:1fr}aside{display:flex;overflow:auto;gap:5px}aside button{white-space:nowrap;width:auto}header{padding:12px}section{padding:11px}.grid{grid-template-columns:1fr}}
-</style></head><body>
+</style><script type="importmap" nonce="__NONCE__">{"imports":{"three":"/health/vendor/build/three.module.js"}}</script></head><body>
 <header><div><h1>♡ PHOENIX Health</h1><div class="muted">Sistema clínico local · Expediente cifrado · Kira Clinical Flow</div></div><div id="account"></div></header>
 <div id="app"></div><div id="flash" role="alert"></div>
 <script nonce="__NONCE__">
@@ -60,9 +60,9 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{border-bottom:1px
 const root=document.getElementById("app"),account=document.getElementById("account"),flash=document.getElementById("flash");
 let actor=null,csrf="",tab="workspace",data={},current=null,selectedPatientId="",previewUrl=null;
 let patientForm={version:1,revision:0,fields:[]},patientDraft=null;
-let clinicalTools=[],selectedClinicalTool=null;
+let clinicalTools=[],selectedClinicalTool=null,anatomyViewerCleanup=null;
 let viewDrafts=Object.create(null),draftTimer=null,loadSequence=0,draftSaveQueue=Promise.resolve();
-const modules=[["workspace","Mi consulta"],["patients","Pacientes"],["encounters","Consultas"],["appointments","Agenda"],["orders","Laboratorio e imágenes"],["prescriptions","Recetas"],["inventory","Farmacia"],["invoices","Administración"],["followups","Seguimiento"],["staff","Personal"],["assignments","Equipo asistencial"],["backups","Respaldos"],["audit","Auditoría"]];
+const modules=[["workspace","Mi consulta"],["anatomy","Anatomía 3D"],["patients","Pacientes"],["encounters","Consultas"],["appointments","Agenda"],["orders","Laboratorio e imágenes"],["prescriptions","Recetas"],["inventory","Farmacia"],["invoices","Administración"],["followups","Seguimiento"],["staff","Personal"],["assignments","Equipo asistencial"],["backups","Respaldos"],["audit","Auditoría"]];
 const safe=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=id=>document.getElementById(id)?.value??"";
 const box=(title,content)=>'<article class="card"><h2>'+safe(title)+'</h2>'+content+'</article>';
@@ -168,10 +168,11 @@ async function splash(){
  button(status.initialized?"login":"setup",status.initialized?"Iniciar sesión":"Crear clínica y administrador"))+'</section>';
 }
 async function load(){
+ if(anatomyViewerCleanup){anatomyViewerCleanup();anatomyViewerCleanup=null}
  const sequence=++loadSequence;
  account.innerHTML='<span class="tag">'+safe(actor.username)+" · "+safe(actor.role)+'</span> '+button("logout","Salir","secondary");
  const menu={admin:["patients","appointments","inventory","invoices","followups","assignments","staff","backups","audit"],
- clinician:["workspace","patients","encounters","appointments","orders","prescriptions","followups"],
+ clinician:["workspace","anatomy","patients","encounters","appointments","orders","prescriptions","followups"],
  psychologist:["patients","encounters","appointments","followups"],
  nurse:["patients","encounters","appointments","orders","followups"],
  reception:["patients","appointments","followups","assignments"],lab:["orders"],radiology:["orders"],
@@ -184,7 +185,7 @@ async function load(){
   '</aside><section><div id="view"><div class="card">Abriendo consulta…</div></div></section></main>';
  }
  for(const btn of root.querySelectorAll("[data-tab]"))btn.classList.toggle("active",btn.dataset.tab===tab);
- const ids=tab==="workspace"?["patients"]:tab==="assignments"?["assignments","patients"]:tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters","inventory"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patient-options"]:tab==="followups"?["followups","patients"]:["patients",tab];
+ const ids=tab==="anatomy"?["patients"]:tab==="workspace"?["patients"]:tab==="assignments"?["assignments","patients"]:tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters","inventory"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patient-options"]:tab==="followups"?["followups","patients"]:["patients",tab];
  if((actor.role==="clinician"||actor.role==="admin")&&!ids.includes("followups")&&tab!=="workspace")ids.push("followups");
  const kinds=[...new Set(ids)],needsTemplate=tab==="workspace"||tab==="patients"&&["admin","clinician","reception"].includes(actor.role);
  const [records,templateResult,draftResult]=await Promise.all([
@@ -205,6 +206,11 @@ async function load(){
   if(sequence!==loadSequence||activeTab!==tab)return;
   for(const kind of ["encounters","orders","prescriptions","followups","appointments","observations","attachments"])
    data[kind]=data.patientContext?.[kind]||[];
+ }
+ if(tab==="anatomy"){
+  if(!(data.patients||[]).some(p=>p.id===selectedPatientId))selectedPatientId=data.patients?.[0]?.id||""
+  data.anatomyAttachments=selectedPatientId?(await api("attachments/"+encodeURIComponent(selectedPatientId))).items:[]
+  if(sequence!==loadSequence||activeTab!==tab)return
  }
  render();
  if(tab==="workspace")restorePatientDraft();
@@ -464,7 +470,31 @@ function renderWorkspace(){
     '<div><strong>'+pending.attachments+'</strong><small>Archivos por revisar</small></div></div>':"")+
   kiraCard+'<div class="card">'+lookup+'</div>'+registration+panel;
 }
+function renderAnatomy(){
+ const patients=data.patients||[];
+ const options=patients.map(p=>'<option value="'+safe(p.id)+'"'+(p.id===selectedPatientId?' selected':'')+'>'+safe(p.name)+'</option>').join('');
+ const models=(data.anatomyAttachments||[]).filter(f=>f.mime==="model/gltf-binary");
+ document.getElementById("view").innerHTML=
+  '<div class="ws-heading"><div><h2>Gemelo anatómico · 3D</h2><p class="muted">Modelo GLB clínico experimental y protegido. No equivale a diagnóstico.</p></div><span class="tag">Local · Cifrado</span></div>'+
+  '<article class="card"><h2>Paciente autorizado</h2><label for="anatomy-patient">Paciente</label><select id="anatomy-patient">'+options+'</select>'+
+  '<p class="notice warning">Los modelos deben derivarse de estudios volumétricos y revisarse sobre las imágenes originales. Un ECG o una radiografía no determinan la anatomía 3D individual.</p>'+
+  '<label for="anatomy-file">Modelo GLB v2 autocontenido (máximo 5 MB)</label>'+
+  '<input type="file" id="anatomy-file" accept=".glb,model/gltf-binary">'+
+  field("anatomy-note","Procedencia del estudio, fecha o referencia", "text",false)+
+  button("anatomyUpload","Archivar modelo cifrado")+'</article>'+
+  '<article class="card"><h2>Modelos registrados</h2>'+
+   (models.length?models.map(x=>'<div class="ws-item"><div><strong>'+safe(x.name)+'</strong><div class="muted">'+safe(x.note||"Sin referencia")+
+    ' · '+safe(x.anatomicalModel?.meshes??"—")+' mallas · '+(x.reviewStatus==="reviewed"?"Archivo leído":"Pendiente de revisión")+
+    ' · Anatomía no validada</div></div>'+
+    button("anatomyView","Explorar 3D","secondary").replace('data-act="anatomyView"','data-act="anatomyView" data-id="'+safe(x.id)+'"')+
+    (x.reviewStatus==="pending"?button("anatomyReview","Marcar archivo leído","secondary").replace('data-act="anatomyReview"','data-act="anatomyReview" data-id="'+safe(x.id)+'"'):"")+'</div>').join(""):
+    '<p class="muted">No hay modelos 3D archivados para este paciente.</p>')+
+   '<div id="anatomy-viewport" style="position:relative;min-height:390px;overflow:hidden;border-radius:12px;background:#eaf2fa;margin-top:14px" aria-label="Visor anatómico 3D">'+
+   '<p class="muted" style="padding:20px">Seleccione un modelo para abrirlo.</p></div>'+
+   '<div id="anatomy-structure-list" class="ws-list" aria-label="Estructuras segmentadas"></div></article>';
+}
 function render(){
+ if(tab==="anatomy")return renderAnatomy();
  if(tab==="workspace")return renderWorkspace();
  const d=tab==="backups"?(data.backups||[]).map(fileName=>({fileName})):data[tab]||[],patients=tab==="invoices"&&actor.role==="billing"?(data["patient-options"]||[]):data.patients||data["patient-options"]||[];
  const p=pick("patientId","Paciente",patients,x=>x.name+(x.dateOfBirth?" · "+x.dateOfBirth:""));
@@ -681,6 +711,80 @@ async function execute(action,id){
   if(!specialty||!complaint)throw Error("Indica especialidad y motivo");
   await api("encounters","POST",{patientId:selectedPatientId,specialty,complaint,mode:"mixed"});
   notice("Consulta creada.");return load();
+ }
+ if(action==="anatomyUpload"){
+  if(!selectedPatientId||!(data.patients||[]).some(p=>p.id===selectedPatientId))
+   throw Error("Paciente no autorizado")
+  const file=document.getElementById("anatomy-file")?.files?.[0]
+  if(!file||!file.size||file.size>5*1024*1024||!/\\.glb$/i.test(file.name))
+   throw Error("Seleccione un GLB autocontenido de hasta 5 MB")
+  const bytes=new Uint8Array(await file.arrayBuffer())
+  const parts=[]
+  for(let i=0;i<bytes.length;i+=8192)parts.push(String.fromCharCode(...bytes.subarray(i,i+8192)))
+  await api("attachments","POST",{patientId:selectedPatientId,name:file.name,
+    mime:"model/gltf-binary",base64:btoa(parts.join("")),note:val("anatomy-note")})
+  notice("Modelo cifrado en HealthIA. Aún no está validado clínicamente.");return load()
+ }
+ if(action==="anatomyReview"){
+  const record=(data.anatomyAttachments||[]).find(f=>f.id===id)
+  if(!record||record.mime!=="model/gltf-binary")throw Error("Modelo no disponible")
+  if(!confirm("¿Confirma que abrió y leyó este archivo? Esto NO valida su anatomía ni sus conclusiones."))return
+  await api("attachment-review/"+encodeURIComponent(id),"PATCH",{version:record.version})
+  notice("Se registró la lectura del archivo; aún requiere validación anatómica.");return load()
+ }
+ if(action==="anatomyView"){
+  const record=(data.anatomyAttachments||[]).find(f=>f.id===id)
+  if(!record||record.mime!=="model/gltf-binary")throw Error("No existe modelo autorizado")
+  if(anatomyViewerCleanup){anatomyViewerCleanup();anatomyViewerCleanup=null}
+  const response=await fetch("/health/api/attachment/"+encodeURIComponent(id),
+    {credentials:"same-origin",cache:"no-store"})
+  if(!response.ok)throw Error("Modelo inaccesible para el profesional")
+  const bytes=await response.arrayBuffer()
+  const THREE=await import("/health/vendor/build/three.module.js")
+  const [{GLTFLoader},{OrbitControls}]=await Promise.all([
+    import("/health/vendor/examples/jsm/loaders/GLTFLoader.js"),
+    import("/health/vendor/examples/jsm/controls/OrbitControls.js"),
+  ])
+  const gltf=await new Promise((yes,no)=>new GLTFLoader().parse(bytes,"",yes,no))
+  const target=document.getElementById("anatomy-viewport")
+  if(!target||tab!=="anatomy")return
+  target.replaceChildren()
+  const scene=new THREE.Scene();scene.background=new THREE.Color("#edf4fa")
+  const root=gltf.scene;root.rotation.x=-Math.PI/2;root.updateMatrixWorld(true);scene.add(root)
+  scene.add(new THREE.HemisphereLight(0xffffff,0x9db5cc,2.5))
+  const sun=new THREE.DirectionalLight(0xffffff,2);sun.position.set(2,3,4);scene.add(sun)
+  const box=new THREE.Box3().setFromObject(root)
+  if(box.isEmpty())throw Error("Archivo sin geometría visible")
+  const mid=box.getCenter(new THREE.Vector3()),size=Math.max(1,box.getSize(new THREE.Vector3()).length())
+  const camera=new THREE.PerspectiveCamera(46,1,.001,size*100)
+  camera.position.copy(mid).add(new THREE.Vector3(size*.8,size*.65,size*1.3))
+  const renderer=new THREE.WebGLRenderer({antialias:true})
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2))
+  renderer.domElement.style.width="100%";renderer.domElement.style.height="390px"
+  renderer.domElement.style.display="block";target.append(renderer.domElement)
+  const controls=new OrbitControls(camera,renderer.domElement)
+  controls.target.copy(mid);controls.enableDamping=true;controls.update()
+  const resize=()=>{const width=Math.max(1,target.clientWidth)
+    renderer.setSize(width,390,false);camera.aspect=width/390;camera.updateProjectionMatrix()}
+  const observer=new ResizeObserver(resize);observer.observe(target);resize()
+  const list=document.getElementById("anatomy-structure-list");list.replaceChildren()
+  const meshes=[];root.traverse(x=>{if(x.isMesh)meshes.push(x)})
+  for(const mesh of meshes){
+    const label=document.createElement("label");label.style.display="flex";label.style.gap="8px"
+    const toggle=document.createElement("input");toggle.type="checkbox";toggle.checked=true
+    toggle.style.width="auto";toggle.onchange=()=>{mesh.visible=toggle.checked}
+    label.append(toggle,document.createTextNode(mesh.name||"Estructura "+(meshes.indexOf(mesh)+1)))
+    list.append(label)
+  }
+  let active=true,frameId=0
+  const frame=()=>{if(!active)return;controls.update();renderer.render(scene,camera);frameId=requestAnimationFrame(frame)}
+  frame()
+  anatomyViewerCleanup=()=>{active=false;cancelAnimationFrame(frameId);observer.disconnect()
+    controls.dispose();renderer.dispose();root.traverse(x=>{
+      if(x.isMesh){x.geometry?.dispose?.();const mats=Array.isArray(x.material)?x.material:[x.material]
+        mats.forEach(m=>m?.dispose?.())}
+    });target.replaceChildren();list.replaceChildren()}
+  notice("Visor del expediente abierto. Segmentación sin certificación clínica.");return
  }
  if(action==="workspaceUpload"){
   if(!selectedPatientId)throw Error("Selecciona un paciente");
@@ -957,6 +1061,11 @@ document.addEventListener("input",e=>{
 document.addEventListener("change",async e=>{
  if(e.target.closest("#view")){rememberView();queueDraftSave()}
 
+ if(e.target.id==="anatomy-patient"){
+  clearTimeout(draftTimer);await persistView()
+  selectedPatientId=e.target.value
+  try{await load()}catch(error){notice(error.message)}
+ }
  if(e.target.id==="ws-patient"){
   clearTimeout(draftTimer);await persistView();
   selectedPatientId=e.target.value;
