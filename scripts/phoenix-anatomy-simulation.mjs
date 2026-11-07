@@ -12,7 +12,7 @@ import {fileURLToPath} from 'node:url'
 import {rootFor} from './phoenix-anatomy-auto.mjs'
 
 const name=fileURLToPath(import.meta.url)
-const supported=['svzerod','opencarp','simvascular']
+const supported=['svzerod','opencarp','simvascular','svmultiphysics']
 const flags=process.argv.slice(2)
 const has=k=>flags.includes(k)
 const arg=k=>flags.includes(k)?flags[flags.indexOf(k)+1]:undefined
@@ -27,6 +27,11 @@ const binary=(engine)=>{
     process.platform==='win32'?'svzerodsolver.exe':'svzerodsolver')
   if(fromEnv&&isAbsolute(fromEnv)&&existsSync(fromEnv))return fromEnv
   return existsSync(defaultBin)?defaultBin:null
+ }
+ if(engine==='svmultiphysics'){
+  const fromEnv=process.env.PHOENIX_SVMULTIPHYSICS_BIN
+  return process.platform==='win32'?'svmultiphysics':
+    (fromEnv&&isAbsolute(fromEnv)&&existsSync(fromEnv)?fromEnv:'svmultiphysics')
  }
  if(engine==='opencarp'){
   if(process.platform==='win32')return 'openCARP'
@@ -52,7 +57,7 @@ export function validateInput(engine,input,output){
  const source=resolve(input),target=resolve(output)
  if(!existsSync(source)||!statSync(source).isFile())invalid('Configuration file does not exist')
  const extension=extname(source).toLowerCase()
- if((engine==='svzerod'&&extension!=='.json')||(engine==='opencarp'&&extension!=='.par'))
+ if((engine==='svzerod'&&extension!=='.json')||(engine==='opencarp'&&extension!=='.par')||(engine==='svmultiphysics'&&extension!=='.xml'))
   invalid('Engine requires a matching .json or .par configuration')
  if(engine==='simvascular')invalid('Use launch, not run, to open the SimVascular GUI')
  if(source===target||target.startsWith(source+'/')||target.startsWith(source+'\\'))
@@ -63,6 +68,11 @@ export function validateInput(engine,input,output){
   if(data===null||typeof data!=='object'||Array.isArray(data))invalid('Invalid vascular network JSON')
  }
  if(engine==='opencarp'&&readFileSync(source,'utf8').trim()==='')invalid('Empty openCARP parameter file')
+ if(engine==='svmultiphysics'){
+  if(readFileSync(source,'utf8').trim()==='')invalid('Empty svMultiPhysics XML')
+  if(target!==join(dirname(source),'1-procs'))
+   invalid('3D simulation output must be the project 1-procs directory')
+ }
  return {source,target}
 }
 export function buildInvocation(engine,config,output,platform=process.platform,env=process.env){
@@ -74,6 +84,16 @@ export function buildInvocation(engine,config,output,platform=process.platform,e
    invalid('Verified SimVascular WSL binary path is required')
   if(!wsl&&(!b||!isAbsolute(b)))invalid('Verified SimVascular binary is required')
   return wsl?{cmd:'wsl.exe',args:['--distribution',env.PHOENIX_ANATOMY_WSL_DISTRO||'Ubuntu-24.04','--exec',b]}:{cmd:b,args:[]}
+ }
+ if(engine==='svmultiphysics'){
+  const b=wsl?'svmultiphysics':env.PHOENIX_SVMULTIPHYSICS_BIN||'svmultiphysics'
+  if(wsl){
+   const dir=env.PHOENIX_SVMULTIPHYSICS_WORKDIR
+   if(!dir||!dir.startsWith('/'))invalid('WSL project workdir required')
+   return {cmd:'wsl.exe',args:['--distribution',env.PHOENIX_ANATOMY_WSL_DISTRO||'Ubuntu-24.04',
+     '--cd',dir,'--exec',b,config]}
+  }
+  return {cmd:b,args:[config]}
  }
  if(engine==='opencarp'){
   const b=wsl?'openCARP':env.PHOENIX_OPENCARP_BIN||'openCARP'
@@ -88,11 +108,11 @@ export function buildInvocation(engine,config,output,platform=process.platform,e
  }
  return {cmd:env.PHOENIX_SVZEROD_BIN||'svzerodsolver',args:[config,output]}
 }
-export async function execute(invocation,{timeoutMs=900000,limit=8192}={}){
+export async function execute(invocation,{timeoutMs=900000,limit=8192,cwd}={}){
  if(timeoutMs<minTime||timeoutMs>maxTime)invalid('Timeout outside allowed range')
  return await new Promise((yes,no)=>{
   let ended=false,output='',errorText=''
-  const child=spawn(invocation.cmd,invocation.args,{windowsHide:true,shell:false,stdio:['ignore','pipe','pipe']})
+  const child=spawn(invocation.cmd,invocation.args,{windowsHide:true,shell:false,cwd,stdio:['ignore','pipe','pipe']})
   const finish=(err,result)=>{
    if(ended)return
    ended=true;clearTimeout(timer)
@@ -130,6 +150,13 @@ export async function doctor(){
     const r=await execute(invocation,{timeoutMs:18000})
     results[engine]={status:r.exitCode===0?'ready':'unverified',buildInfoChecked:r.exitCode===0}
    }catch{results[engine]={status:'not-installed',help:'Install openCARP in WSL2 or Linux and verify openCARP -buildinfo'}}
+  }else if(engine==='svmultiphysics'){
+   try{
+    const w=process.platform==='win32'
+    const result=await execute(w?{cmd:'wsl.exe',args:['--distribution',wslDistro(),'--exec',
+      '/usr/bin/which','svmultiphysics']}:{cmd:'which',args:['svmultiphysics']},{timeoutMs:12000})
+    results[engine]={status:result.exitCode===0?'executable-detected':'not-installed'}
+   }catch{results[engine]={status:'not-installed'}}
   }else{
    results[engine]={status:b?'configured-not-launched':'not-configured',
     help:'Install supported SimVascular build under WSL Ubuntu 24.04 and set PHOENIX_SIMVASCULAR_BIN'}
@@ -145,12 +172,15 @@ export async function runSimulation({engine,input,output,timeoutMs=900000,resear
  mkdirSync(dirname(target),{recursive:true})
  const chosen=binary(engine)
  if(engine==='svzerod'&&!chosen)invalid('svZeroDSolver executable not installed')
- const c=process.platform==='win32'&&engine==='opencarp'?await toWsl(source):source
+ const wsl3d=process.platform==='win32'&&engine==='svmultiphysics'
+ const c=wsl3d?source.split(/[\\/]/).at(-1):
+   process.platform==='win32'&&engine==='opencarp'?await toWsl(source):source
  const o=process.platform==='win32'&&engine==='opencarp'?await toWsl(target):target
  const inv=buildInvocation(engine,c,o,process.platform,{
   ...process.env,PHOENIX_SVZEROD_BIN:chosen||process.env.PHOENIX_SVZEROD_BIN,
+  PHOENIX_SVMULTIPHYSICS_WORKDIR:wsl3d?await toWsl(dirname(source)):undefined,
  })
- const result=await execute(inv,{timeoutMs})
+ const result=await execute(inv,{timeoutMs,cwd:engine==='svmultiphysics'&&process.platform!=='win32'?dirname(source):undefined})
  const succeeded=result.exitCode===0&&existsSync(target)
  const sha=createHash('sha256').update(readFileSync(source)).digest('hex')
  const receipt={engine,status:succeeded?'completed-research-only':'execution-failed',exitCode:result.exitCode,
@@ -182,12 +212,12 @@ async function main(){
   return console.log(JSON.stringify(await launchSimVascular(),null,2))
  if(command==='run'){
   const engine=arg('--engine')
-  if(!allowedEngine(engine))invalid('Supply --engine svzerod or opencarp')
+  if(!allowedEngine(engine))invalid('Supply --engine svzerod, svmultiphysics or opencarp')
   const out=await runSimulation({engine,input:arg('--input'),output:arg('--output'),
    timeoutMs:timeLimit(),researchOnly:has('--research-only')})
   console.log(JSON.stringify(out,null,2));if(out.receipt.exitCode!==0)process.exitCode=2;return
  }
- invalid('Usage: doctor | run --engine svzerod|opencarp --input config --output result --research-only | launch --engine simvascular')
+ invalid('Usage: doctor | run --engine svzerod|svmultiphysics|opencarp --input config --output result --research-only | launch --engine simvascular')
 }
 if(process.argv[1]&&resolve(process.argv[1])===name)
  main().catch(e=>{console.error(JSON.stringify({status:'error',message:e.message,clinicallyValidated:false}));process.exitCode=2})
