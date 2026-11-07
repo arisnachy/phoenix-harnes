@@ -1,3 +1,5 @@
+import {DIAGNOSTIC_INPUT_GROUPS,DIAGNOSTIC_INPUTS,diagnosticPolicyFor}
+ from './health-diagnostic-catalog.ts'
 /**
  * Render the local clinical workspace without exposing clinical data to Kira's prompt.
  * @param nonce - Fresh per-response CSP nonce injected into the inline script.
@@ -450,17 +452,16 @@ function renderWorkspace(){
   panel+="</div>";
   if(actor.role==="clinician"){
    const studyFiles=attachments.filter(x=>["image/png","image/jpeg","image/webp","application/pdf"].includes(x.mime));
-   const studyModalities=[
-    ["ecg","ECG / EKG"],["ultrasound","Ecografía / Doppler"],
-    ["xray","Radiografía"],["ct","TC / Angio-TC"],["mri","Resonancia magnética"],
-    ["laboratory","Laboratorio"],["cytology","Citología"],
-    ["histopathology","Histopatología"],["other","Otro estudio"]].map(x=>
-      '<option value="'+x[0]+'">'+x[1]+'</option>').join("");
+   const studyModalities=__PHOENIX_DIAGNOSTIC_OPTIONS__;
    panel+='<div id="ws-study-assessment">'+box("Interpretación de estudios · Evidencia primero",
     '<p class="notice warning">Un modelo 3D, una fotografía o un PDF no equivalen al estudio diagnóstico completo. Sin un motor validado que procese las imágenes originales, Kira NO ha analizado los píxeles ni puede confirmar una patología. Este formulario conserva solo una valoración provisional del médico.</p>'+
     '<label for="ws-study-file">Archivo de origen</label><select id="ws-study-file"><option value="">Seleccionar archivo</option>'+
       studyFiles.map(x=>'<option value="'+safe(x.id)+'">'+safe(x.name)+'</option>').join("")+'</select>'+
-    '<label for="ws-study-modality">Modalidad del estudio</label><select id="ws-study-modality">'+studyModalities+'</select>'+
+    '<label for="ws-study-modality">Modalidad diagnóstica específica · 20 grupos</label>'+
+    '<input type="search" id="ws-study-search" placeholder="Buscar: EEG, mamografía, PET, genética, cultivo, etc." aria-label="Buscar tipo de estudio">'+
+    '<select id="ws-study-modality">'+studyModalities+'</select>'+
+    '<p id="ws-study-requirements" class="muted">Seleccione una modalidad: se mostrarán el archivo primario y las mediciones necesarias. Un PDF o foto archivada no equivale al dato original.</p>'+
+    field("ws-study-custom","Solo para Otro estudio: nombre técnico del procedimiento","text",false)+
     field("ws-study-context","Motivo del estudio y contexto clínico","text",false)+
     '<label><input id="ws-study-original" type="checkbox" style="width:auto;display:inline"> He revisado personalmente el documento o imagen original, no solo el modelo 3D</label>'+
     area("ws-study-findings","Hallazgos observados directamente en el archivo seleccionado")+
@@ -854,6 +855,7 @@ async function execute(action,id){
   if(criticalConcern==="suspected-critical"&&!escalationAcknowledged)return;
   await api("study-interpretations","POST",{
    patientId:selectedPatientId,sourceAttachmentId,modality:val("ws-study-modality"),
+   customModality:val("ws-study-custom"),
    studyContext:val("ws-study-context"),originalReviewed,
    observations:val("ws-study-findings"),preliminaryInterpretation:val("ws-study-impression"),
    criticalConcern,escalationAcknowledged,
@@ -1130,10 +1132,33 @@ async function execute(action,id){
  if(action==="finishFollowup"){patch.status="done"}
  await api(tab+"/"+id,"PATCH",patch);notice("Registro actualizado; cambio auditado.");return load()
 }
+const diagnosticSourceHints=__PHOENIX_DIAGNOSTIC_SOURCES__;
+function updateStudySourceHint(){
+ const select=document.getElementById("ws-study-modality");
+ const hint=document.getElementById("ws-study-requirements");
+ if(select&&hint){
+  const item=diagnosticSourceHints[select.value];
+  hint.textContent=item?
+    "Fuente primaria requerida: "+item+". El análisis de una foto/PDF no acredita haber examinado el estudio completo.":
+    "Modalidad no identificada: requiere revisión por especialista.";
+ }
+}
 document.addEventListener("input",e=>{
+ if(e.target.id==="ws-study-search"){
+  const q=String(e.target.value||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const select=document.getElementById("ws-study-modality");
+  if(select){
+   for(const o of select.querySelectorAll("option")){
+     o.hidden=!!q&&!o.textContent.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").includes(q);
+   }
+   const match=Array.from(select.querySelectorAll("option")).find(o=>!o.hidden&&o.value);
+   if(match&&q){select.value=match.value;updateStudySourceHint()}
+  }
+ }
  if(e.target.closest("#view")){rememberView();queueDraftSave()}
 });
 document.addEventListener("change",async e=>{
+ if(e.target.id==="ws-study-modality")updateStudySourceHint();
  if(e.target.closest("#view")){rememberView();queueDraftSave()}
 
  if(e.target.id==="anatomy-patient"){
@@ -1156,5 +1181,16 @@ document.addEventListener("click",async e=>{
 });
 refresh();
 </script></body></html>`
+  // Pre-render a strictly static catalog as JSON string literals inside the nonce-protected script.
+  // JSON is escaped against a literal closing script tag; no patient content participates.
+  const options=DIAGNOSTIC_INPUT_GROUPS.map(g=>
+    '<optgroup label="'+g.label+'">'+
+    g.items.map(x=>'<option value="'+x[0]+'">'+x[1]+'</option>').join('')+
+    '</optgroup>').join('')
+  const hints=Object.fromEntries(Object.keys(DIAGNOSTIC_INPUTS)
+    .map(id=>[id,diagnosticPolicyFor(id)?.source??'Revisar fuente original']))
+  const safeScript=(value:unknown)=>JSON.stringify(value).replace(/</g,'\\u003c')
   return html.replaceAll('__NONCE__',nonce)
+    .replace('__PHOENIX_DIAGNOSTIC_OPTIONS__',safeScript(options))
+    .replace('__PHOENIX_DIAGNOSTIC_SOURCES__',safeScript(hints))
 }

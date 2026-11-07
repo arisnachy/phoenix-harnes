@@ -2,10 +2,12 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {evaluateStudyEvidence,STUDY_MODALITIES} from '../packages/bundle/web-app/src/health-diagnostic-evidence.ts'
 import {protocolFor} from '../packages/core/tool-health/src/diagnostic-routing.ts'
+import {DIAGNOSTIC_INPUT_COUNT} from '../packages/core/tool-health/src/diagnostic-catalog.ts'
 
 const modalities=['ecg','ultrasound','xray','ct','mri','laboratory','cytology','histopathology','other']
 test('all nine study modalities are explicit; no invented universal diagnostic engine',()=>{
- assert.deepEqual(Object.keys(STUDY_MODALITIES),modalities)
+ assert.equal(Object.keys(STUDY_MODALITIES).length,DIAGNOSTIC_INPUT_COUNT)
+ for(const id of modalities)assert.ok(STUDY_MODALITIES[id],id)
  for(const m of modalities){
   const protocol=protocolFor(m,'image')
   assert.equal(protocol.modelAvailableForPatientDiagnosis,false)
@@ -62,4 +64,13 @@ test('source-specific limitations cannot be hidden by an isolated screenshot',()
    const result=evaluateStudyEvidence({modality:m,sourceMime:'image/png',originalReviewed:true})
    assert(result.limitations.some(x=>/completo/i.test(x)))
  }
+})
+
+test('uncatalogued source requires named protocol and never implies AI diagnosis',()=>{
+ const bare={modality:'other',sourceMime:'application/pdf',originalReviewed:false}
+ assert.throws(()=>evaluateStudyEvidence(bare),/obligatorio/)
+ const recorded=evaluateStudyEvidence({...bare,customModality:'Dispositivo médico experimental'})
+ assert.equal(recorded.modalityLabel,'Dispositivo médico experimental')
+ assert.equal(recorded.nativeStudyDataParsed,false)
+ assert.equal(recorded.aiImageInterpreted,false)
 })
