@@ -293,3 +293,33 @@ describe('Phoenix intelligent UI canvas', () => {
     expect(container.querySelector('[data-generative-ui="ui_canvas"]')).not.toBeNull()
   })
 })
+
+
+describe('semantic Lucide canvas palette', () => {
+  it('accepts contextual icons and tones, while rejecting injected CSS and unknown values', () => {
+    const base = sample()
+    const valid = { ...base, props: { ...base.props, children: [
+      { type: 'metric', label: 'Investigación', value: '12', icon: 'microscope', iconTone: 'research' },
+      { type: 'entity', name: 'Cardiología', icon: 'heart-pulse', iconColor: '#3388bb' },
+      { type: 'icon', name: 'brain-circuit', label: 'Neurociencias', tone: 'medical' },
+    ] } }
+    expect(parseCanvasSpec(valid)).not.toBeNull()
+    expect(parseCanvasSpec({ ...base, props: { ...base.props, children: [
+      { type: 'icon', name: 'brain-circuit', label: 'X', color: 'url(javascript:evil)' },
+    ] } })).toBeNull()
+    expect(parseCanvasSpec({ ...base, props: { ...base.props, children: [
+      { type: 'metric', label: 'Score', value: '4', iconTone: 'unknown' },
+    ] } })).toBeNull()
+  })
+  it('selects card and entity icons by meaning when omitted', () => {
+    const base = sample()
+    const spec = parseCanvasSpec({ ...base, props: { ...base.props, children: [
+      { type: 'metric', label: 'Presupuesto mensual', value: 'RD$ 120,000' },
+      { type: 'entity', name: 'Paciente clínico', value: 'Estable', status: 'positive' },
+    ] } })
+    if (!spec) throw new Error('contextual canvas spec rejected')
+    const { container } = render(<GenerativeCanvas spec={spec} />)
+    expect(container.querySelector('[data-tone="finance"]')).not.toBeNull()
+    expect(container.querySelector('[data-tone="positive"]')).not.toBeNull()
+  })
+})
