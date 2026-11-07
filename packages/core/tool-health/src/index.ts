@@ -41,7 +41,7 @@ export const name = 'tool-health'
 export const inject = ['tools', 'systemPrompt', 'userQuestions']
 const GUIDANCE = 'PHOENIX Health Engine: solo al solicitar una consulta o interrogatorio, usa health_interview_plan con motivo general SIN nombre, email, identificador u otros datos de paciente. Usa health_copilot_ask action=choose_mode para elegir mediante ASK entre Kira, médico o mixto. Luego action=screen_urgency antes de action=next_question. ASK solo gestiona preguntas y decisiones genéricas, sensibles y sin datos identificables; la respuesta clínica se introduce en el expediente autenticado /health. Un ASK expirado no acredita hechos, consentimiento, revisión ni registro.  El plan no es diagnóstico; recopila datos y exige evaluación del profesional para signos de alarma, examen, pruebas, tratamiento y firma. No afirmes que existe historia clínica guardada, receta firmada, correo enviado ni cita agendada. health_kira_mail_requirements solo enumera requisitos; no envía mensajes. Para estudios volumétricos y gemelos anatómicos usa health_anatomy_workflow; usa health_anatomy_models para el catálogo y health_anatomy_status para consultar dependencias locales. Si el usuario autorizó expresamente instalar las dependencias anatómicas, puedes usar health_anatomy_prepare. Su estado started/running NO acredita instalación: confirma con health_anatomy_status y no prometas archivo GLB sin comprobarlo. El plan no es una reconstrucción: la ejecución real requiere un archivo DICOM/NIfTI local y consentimiento clínico. Nunca inventes lesiones ni llames al GLB diagnóstico. El remitente debe ser la cuenta institucional de Kira autorizada, no una dirección inventada. No introduzcas historia clínica ni datos personales en memoria general, herramientas o logs sin un sistema clínico autorizado.'
 function healthRequest(text: string | undefined): boolean {
-  return typeof text === 'string' && /(?:consulta m[eé]dica|paciente|historia cl[ií]nica|interrogatorio|receta|health engine|kira.*consulta|psic[oó]log[oa]|laboratorio cl[ií]nico|gemelo anat[oó]mico|reconstrucci[oó]n 3d|dicom|tomograf[ií]a|resonancia magn[eé]tica)/iu.test(text)
+  return typeof text === 'string' && /(?:consulta m[eé]dica|paciente|historia cl[ií]nica|interrogatorio|receta|health engine|kira.*consulta|psic[oó]log[oa]|laboratorio cl[ií]nico|gemelo anat[oó]mico|reconstrucci[oó]n 3d|anatom[ií]a 3d|modelo 3d (?:del? )?(?:coraz[oó]n|cerebro|[oó]rgano)|segmentaci[oó]n anat[oó]mica|dicom|tomograf[ií]a|resonancia magn[eé]tica)/iu.test(text)
 }
 export function apply(ctx: Context): void {
   ctx.tools.register(defineTool({
@@ -66,7 +66,10 @@ export function apply(ctx: Context): void {
       const components=Object.fromEntries(
         Object.entries(manifest?.components??{}).map(([key,value])=>[key,value.status??'unknown']))
       return Promise.resolve(JSON.stringify({
-        installed:manifest!==null,components,clinicallyValidated:false,
+        initialized:manifest!==null,
+        installed:['dicom','volume3d','meshes','monai','svzerod','nnunetv2',
+          'totalsegmentator','viewer','weights_ct'].every(id=>components[id]==='installed'),
+        components,clinicallyValidated:false,
         reconstructionRunner:'scripts/phoenix-anatomy-workbench.mjs',
         note:'Sin instalación funcional, planificar; nunca confirmar anatomía, diagnóstico o capacidad de un modelo sin imagen volumétrica.',
       }))
