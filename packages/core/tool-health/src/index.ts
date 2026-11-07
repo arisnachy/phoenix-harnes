@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -69,28 +69,34 @@ export function apply(ctx: Context): void {
     output: {schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
     isConcurrencySafe:()=>true,
     execute(){
-      const base=process.env.LOCALAPPDATA||homedir()
-      const home=process.env.PHOENIX_ANATOMY_HOME||join(base,process.env.LOCALAPPDATA?'PHOENIX':'.phoenix','anatomy')
-      const manifestFile=join(home,'manifest.json')
-      const manifest=(()=>{
-        try{
-          const value: unknown=JSON.parse(readFileSync(manifestFile,'utf8'))
-          if(value!==null&&typeof value==='object'&&'components' in value){
-            return value as {components?: Record<string,{status?:string}>}
-          }
-        }catch{/* Optional installation may not be present. */}
-        return null
-      })()
-      const components=Object.fromEntries(
-        Object.entries(manifest?.components??{}).map(([key,value])=>[key,value.status??'unknown']))
-      return Promise.resolve(JSON.stringify({
-        initialized:manifest!==null,
-        installed:['dicom','volume3d','meshes','monai','svzerod','nnunetv2',
-          'totalsegmentator','viewer','weights_ct'].every(id=>components[id]==='installed'),
-        components,clinicallyValidated:false,
-        reconstructionRunner:'scripts/phoenix-anatomy-workbench.mjs',
-        note:'Sin instalación funcional, planificar; nunca confirmar anatomía, diagnóstico o capacidad de un modelo sin imagen volumétrica.',
+      if(!existsSync(ANATOMY_INSTALLER))return Promise.resolve(JSON.stringify({
+        initialized:false,installed:false,coreReady:false,viewerReady:false,weightsReady:false,
+        components:{},clinicallyValidated:false,note:'Anatomy installer missing from this runtime',
       }))
+      const result=spawnSync(process.execPath,[ANATOMY_INSTALLER,'--status'],{
+        encoding:'utf8',windowsHide:true,timeout:7000,maxBuffer:384*1024,
+      })
+      if(result.status!==0||!result.stdout)return Promise.resolve(JSON.stringify({
+        initialized:false,installed:false,components:{},clinicallyValidated:false,
+        note:'Could not verify runtime package installation',
+      }))
+      try{
+        const state=JSON.parse(result.stdout) as {
+          initialized?:boolean;installed?:boolean;coreReady?:boolean;
+          viewerReady?:boolean;weightsReady?:boolean;
+          components?:Record<string,{status?:string}>}
+        const components=Object.fromEntries(Object.entries(state.components??{})
+          .map(([key,value])=>[key,value.status??'unknown']))
+        return Promise.resolve(JSON.stringify({
+          initialized:state.initialized===true,installed:state.installed===true,
+          coreReady:state.coreReady===true,viewerReady:state.viewerReady===true,
+          weightsReady:state.weightsReady===true,components,clinicallyValidated:false,
+          note:'Verified package/model files, not patient anatomy or clinical performance',
+        }))
+      }catch{return Promise.resolve(JSON.stringify({
+        initialized:false,installed:false,components:{},clinicallyValidated:false,
+        note:'Malformed anatomy installer verification output',
+      }))}
     },
     presentCall:()=>({card:'generic',title:'Estado del motor anatómico',kind:'read' as const}),
   }))
@@ -124,7 +130,7 @@ export function apply(ctx: Context): void {
         {id:'slicerheart',installed:status('slicer','slicerheart'),role:'cardiac imaging'},
         {id:'monai-nnunet',installed:status('monai','nnunetv2'),role:'segmenters; pretrained task weights separate'},
         {id:'totalsegmentator',installed:status('totalsegmentator','weights_ct'),role:'CT baseline; not clinically validated'},
-        {id:'ohif-cornerstone',installed:status('cornerstone'),role:'Cornerstone library only, not OHIF/PACS deployment'},
+        {id:'ohif-cornerstone',installed:false,cornerstoneLibraries:status('cornerstone'),role:'Cornerstone package may exist; OHIF/PACS not deployed'},
         {id:'simvascular',installed:status('simvascular'),role:'external scientific engine'},
         {id:'opencarp',installed:status('opencarp'),role:'external scientific engine'},
         {id:'three-vtk',installed:status('viewer','vtkjs'),role:'3D viewer libraries'},
