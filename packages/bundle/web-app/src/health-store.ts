@@ -1,4 +1,4 @@
-import { inspectAnatomicalGlb } from './health-anatomy.ts'
+import { inspectAnatomicalGlb, verifyAnatomicalEvidence } from './health-anatomy.ts'
 /**
  * PHOENIX Health: local encrypted record service (clinical pilot).
  * All clinical payloads encrypted with AES-256-GCM, bound to record identity/version.
@@ -777,17 +777,21 @@ export class HealthClinicStore {
     const name=str(x.name,'Nombre de archivo',180)
     const note=typeof x.note==='string'&&x.note.trim()?str(x.note,'Descripción',500):''
     const mime=str(x.mime,'Tipo de archivo',80)
-    const encoded=str(x.base64,'Contenido',7_200_000)
+    const encoded=str(x.base64,'Contenido',33_600_000)
     if(encoded.length%4!==0||!/^[A-Za-z0-9+/]+={0,2}$/u.test(encoded))
       fail('Archivo codificado inválido')
     const bytes=Buffer.from(encoded,'base64')
-    if(bytes.length===0||bytes.length>5*1024*1024||bytes.toString('base64')!==encoded)
-      fail('Archivo inválido o mayor de 5 MB')
+    const cap=mime==='model/gltf-binary'?24*1024*1024:5*1024*1024
+    if(bytes.length===0||bytes.length>cap||bytes.toString('base64')!==encoded)
+      fail('Archivo inválido o supera el límite de 24 MB GLB / 5 MB documentos')
     const png=bytes.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex'))
     const jpeg=bytes.length>=3&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255
     const pdf=bytes.subarray(0,5).toString('ascii')==='%PDF-'
     const webp=bytes.subarray(0,4).toString('ascii')==='RIFF'&&bytes.subarray(8,12).toString('ascii')==='WEBP'
     const anatomicalModel=mime==='model/gltf-binary'?inspectAnatomicalGlb(bytes):null
+    if(x.anatomicalEvidence!==undefined&&!anatomicalModel)
+      fail('La evidencia anatómica solo acompaña modelos GLB')
+    const anatomicalEvidence=anatomicalModel?verifyAnatomicalEvidence(x.anatomicalEvidence,bytes):null
     if(anatomicalModel&&!/\.glb$/iu.test(name))fail('Archivo anatómico debe terminar en .glb')
     if(!((mime==='image/png'&&png)||(mime==='image/jpeg'&&jpeg)||
          (mime==='image/webp'&&webp)||(mime==='application/pdf'&&pdf)||anatomicalModel))
@@ -800,6 +804,7 @@ export class HealthClinicStore {
       patientId,encounterId,name,mime,base64:encoded,note,bytes:bytes.length,
       source:'patient-provided',reviewStatus:'pending',uploadedBy:actor.username,
       ...(anatomicalModel?{anatomicalModel}:{}),
+      ...(anatomicalEvidence?{anatomicalEvidence}:{}),
     })
     this.db.exec('BEGIN IMMEDIATE')
     try{
@@ -810,7 +815,8 @@ export class HealthClinicStore {
     }catch(error){this.db.exec('ROLLBACK');throw error}
     return {id,patientId,encounterId,name,mime,note,bytes:bytes.length,
       source:'patient-provided',reviewStatus:'pending',createdAt:now,uploadedBy:actor.username,
-      ...(anatomicalModel?{anatomicalModel}:{})}
+      ...(anatomicalModel?{anatomicalModel}:{}),
+      ...(anatomicalEvidence?{anatomicalEvidence}:{})}
   }
   private attachmentRow(actor:Actor,id:string):AttachmentRow {
     if(actor.role!=='clinician'&&actor.role!=='psychologist')fail('Permiso clínico insuficiente para adjuntos')

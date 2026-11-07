@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {inspectAnatomicalGlb} from '../packages/bundle/web-app/src/health-anatomy.ts'
+import {inspectAnatomicalGlb,verifyAnatomicalEvidence} from '../packages/bundle/web-app/src/health-anatomy.ts'
+import {createHash} from 'node:crypto'
 import {renderHealthPage} from '../packages/bundle/web-app/src/health-ui.ts'
 
 function sampleGlb(document={}){
@@ -33,4 +34,34 @@ test('HealthIA anatomy UI shares one fresh CSP nonce and has no external viewer 
  assert.match(page,/Anatomía 3D/)
  assert.match(page,/health\/vendor\/build\/three.module.js/)
  assert.equal(page.includes('cdn.jsdelivr'),false)
+})
+
+test('GLB evidence must match actual binary and cannot claim clinical validation',()=>{
+ const glb=sampleGlb()
+ const digest=createHash('sha256').update(glb).digest('hex')
+ const evidence={
+  schema:1,modality:'ct',clinicalStatus:'UNVALIDATED_RESEARCH_OUTPUT',
+  needsExpertReview:true,glbSha256:digest,
+  sourceRegistration:'affected-region grid matched to anatomy grid',
+  affectedRegions:1,structures:[
+   {structure:'heart',layer:'anatomy',state:'unreviewed',
+    sourceMaskSha256:'a'.repeat(64),triangles:16,volumeMl:12.4},
+   {structure:'affected_region__annotation1',layer:'clinician-supplied-affected-region',
+    state:'unreviewed',sourceMaskSha256:'b'.repeat(64),triangles:16,volumeMl:1.2},
+  ],
+ }
+ const verified=verifyAnatomicalEvidence(evidence,glb)
+ assert.equal(verified.affectedRegions,1)
+ assert.equal(verified.verification,'glb-manifest-integrity-only')
+ assert.equal(verified.clinicalStatus,'UNVALIDATED_RESEARCH_OUTPUT')
+ assert.throws(()=>verifyAnatomicalEvidence({...evidence,glbSha256:'c'.repeat(64)},glb),/huella/)
+ assert.throws(()=>verifyAnatomicalEvidence({...evidence,clinicalStatus:'VALIDATED'},glb),/experimental/)
+ assert.throws(()=>verifyAnatomicalEvidence({...evidence,affectedRegions:2},glb),/regiones/)
+ assert.throws(()=>verifyAnatomicalEvidence({...evidence,
+  sourceRegistration:'not-applicable'},glb),/alineación/)
+})
+test('HealthIA accepts evidence sidecar and GLB up to 24 MiB',()=>{
+ const page=renderHealthPage('test-nonce')
+ assert.match(page,/anatomy-evidence/)
+ assert.match(page,/hasta 24 MB/)
 })

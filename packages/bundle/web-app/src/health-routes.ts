@@ -252,7 +252,7 @@ export function registerHealthRoutes(ctx:Context):void {
         reply(res,200,{attachment:store.reviewAttachment(actor,id,Number(value.version))});return
       }
       if(operation==='attachments'&&method==='POST'&&id===undefined){
-        reply(res,201,{attachment:store.addAttachment(actor,await readBody(req,7_300_000))});return
+        reply(res,201,{attachment:store.addAttachment(actor,await readBody(req,33_700_000))});return
       }
       if(operation==='attachments'&&method==='GET'&&id!==undefined){
         reply(res,200,{items:store.listAttachments(actor,id)});return

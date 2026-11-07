@@ -478,13 +478,16 @@ function renderAnatomy(){
   '<div class="ws-heading"><div><h2>Gemelo anatómico · 3D</h2><p class="muted">Modelo GLB clínico experimental y protegido. No equivale a diagnóstico.</p></div><span class="tag">Local · Cifrado</span></div>'+
   '<article class="card"><h2>Paciente autorizado</h2><label for="anatomy-patient">Paciente</label><select id="anatomy-patient">'+options+'</select>'+
   '<p class="notice warning">Los modelos deben derivarse de estudios volumétricos y revisarse sobre las imágenes originales. Un ECG o una radiografía no determinan la anatomía 3D individual.</p>'+
-  '<label for="anatomy-file">Modelo GLB v2 autocontenido (máximo 5 MB)</label>'+
+  '<label for="anatomy-file">Modelo GLB v2 autocontenido (máximo 24 MB)</label>'+
   '<input type="file" id="anatomy-file" accept=".glb,model/gltf-binary">'+
+  '<label for="anatomy-evidence">Manifiesto anatomy-manifest.json (opcional, verifica correspondencia del GLB)</label>'+
+  '<input type="file" id="anatomy-evidence" accept=".json,application/json">'+
   field("anatomy-note","Procedencia del estudio, fecha o referencia", "text",false)+
   button("anatomyUpload","Archivar modelo cifrado")+'</article>'+
   '<article class="card"><h2>Modelos registrados</h2>'+
    (models.length?models.map(x=>'<div class="ws-item"><div><strong>'+safe(x.name)+'</strong><div class="muted">'+safe(x.note||"Sin referencia")+
-    ' · '+safe(x.anatomicalModel?.meshes??"—")+' mallas · '+(x.reviewStatus==="reviewed"?"Revisado por médico (no validado)":"Pendiente de revisión")+
+    ' · '+safe(x.anatomicalModel?.meshes??"—")+' mallas · '+safe(x.anatomicalEvidence?.affectedRegions??"Sin manifiesto")+
+    ' regiones anotadas · '+(x.reviewStatus==="reviewed"?"Revisado por médico (no validado)":"Pendiente de revisión")+
     ' · Anatomía no validada</div></div>'+
     button("anatomyView","Explorar 3D","secondary").replace('data-act="anatomyView"','data-act="anatomyView" data-id="'+safe(x.id)+'"')+
     (x.reviewStatus==="pending"?button("anatomyReview","Revisión médica","secondary").replace('data-act="anatomyReview"','data-act="anatomyReview" data-id="'+safe(x.id)+'"'):"")+'</div>').join(""):
@@ -716,13 +719,21 @@ async function execute(action,id){
   if(!selectedPatientId||!(data.patients||[]).some(p=>p.id===selectedPatientId))
    throw Error("Paciente no autorizado")
   const file=document.getElementById("anatomy-file")?.files?.[0]
-  if(!file||!file.size||file.size>5*1024*1024||!/\.glb$/i.test(file.name))
-   throw Error("Seleccione un GLB autocontenido de hasta 5 MB")
+  if(!file||!file.size||file.size>24*1024*1024||!/\.glb$/i.test(file.name))
+   throw Error("Seleccione un GLB autocontenido de hasta 24 MB")
+  const evidenceFile=document.getElementById("anatomy-evidence")?.files?.[0]
+  let anatomicalEvidence
+  if(evidenceFile){
+   if(evidenceFile.size>192*1024)throw Error("Manifiesto anatómico demasiado grande")
+   try{anatomicalEvidence=JSON.parse(await evidenceFile.text())}
+   catch{throw Error("Manifiesto anatómico JSON inválido")}
+  }
   const bytes=new Uint8Array(await file.arrayBuffer())
   const parts=[]
   for(let i=0;i<bytes.length;i+=8192)parts.push(String.fromCharCode(...bytes.subarray(i,i+8192)))
   await api("attachments","POST",{patientId:selectedPatientId,name:file.name,
-    mime:"model/gltf-binary",base64:btoa(parts.join("")),note:val("anatomy-note")})
+    mime:"model/gltf-binary",base64:btoa(parts.join("")),note:val("anatomy-note"),
+    ...(anatomicalEvidence?{anatomicalEvidence}:{})})
   notice("Modelo cifrado en HealthIA. Aún no está validado clínicamente.");return load()
  }
  if(action==="anatomyReview"){
