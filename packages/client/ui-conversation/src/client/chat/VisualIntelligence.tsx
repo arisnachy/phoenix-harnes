@@ -248,7 +248,7 @@ function ConnectedMap({places,id,title,sources,onAction}:{
     finally{setBusy(false)}
   }
   return <section className={css.module}>
-    <GeoMap spec={spec} onAction={onAction}/>
+    <div className={css.mapFrame}><GeoMap spec={spec} onAction={onAction}/></div>
     <div className={css.toolbar}>
       <button type="button" disabled={busy||places.length<2} onClick={()=>{void compute()}}>Calcular ruta entre los dos primeros lugares</button>
       {route&&<strong>{route.distanceKm.toFixed(1)} km · {Math.round(route.durationMin)} min estimados</strong>}
@@ -327,9 +327,9 @@ function Comparison({columns,rows}:{
         {rows.map((r,i)=><option key={i} value={i}>{cellText(r[0]??null)||'Fila '+(i+1)}</option>)}
       </select></label>
     </div>
-    <table className={css.table}><thead><tr><th>Campo</th><th>Opción A</th><th>Opción B</th></tr></thead>
+    <div className={css.scroll}><table className={css.table}><thead><tr><th>Campo</th><th>Opción A</th><th>Opción B</th></tr></thead>
       <tbody>{columns.map((c,i)=><tr key={c}><th>{c}</th><td>{cellText(rows[first]?.[i]??null)}</td>
-        <td>{cellText(rows[second]?.[i]??null)}</td></tr>)}</tbody></table>
+        <td>{cellText(rows[second]?.[i]??null)}</td></tr>)}</tbody></table></div>
   </section>
 }
 
@@ -457,6 +457,7 @@ export function VisualIntelligence({spec:initial,onAction,conversationId}:Props)
       <button type="button" onClick={downloadJson}>Exportar JSON</button>
       <button type="button" onClick={()=>downloadPdf(spec,liveSnapshot??undefined)}>Descargar PDF profesional</button>
     </div>
+    <p className={css.reportNote}>PDF maquetado desde los datos completos, sin menús, chat ni capturas de pantalla.</p>
     {resolved==='table'&&p.rows&&p.columns&&<TableExplorer id={p.id} rows={p.rows} columns={p.columns}/>}
     {resolved==='comparison'&&p.rows&&p.columns&&<Comparison rows={p.rows} columns={p.columns}/>}
     {resolved==='chart'&&p.series&&p.labels&&<ChartExplorer id={p.id} labels={p.labels} series={p.series}/>}
