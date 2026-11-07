@@ -40,7 +40,7 @@ export function planClinicalVisualization(input:VisualStudyInput) {
   // rendering a patient-facing electrical interpretation. No pixel recognition
   // or numeric interval estimation is performed by this metadata-only gate.
   const ecg=entry.family==='ecg'
-  const normalized=observed.normalize('NFKD').replace(/[\\u0300-\\u036f]/g,'')
+  const normalized=observed.normalize('NFKD').replace(/[\u0300-\u036f]/g,'')
     .toLocaleLowerCase('en')
   const isolatedAxis=ecg&&/(?:eje.*izquier|left.axis|fascicular|hemibloqueo)/u.test(normalized)&&
     !/(?:onda delta|delta wave|pre.?excit|wpw|qrs|pr corto|intervalo pr)/u.test(normalized)
