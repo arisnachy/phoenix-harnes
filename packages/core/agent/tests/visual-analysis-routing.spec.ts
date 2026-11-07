@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
-import { humanImageInTurn, selectVisualAnalysisRoute } from '../src/model-selection.ts'
+import { ReasoningEffortId, LlmAdapter } from '@phoenix-ai/dsh-llm'
+import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk } from '@phoenix-ai/dsh-llm'
+import { Context } from '@phoenix-ai/cordis'
+import LlmRuntime from '@phoenix-ai/dsh-llm'
+import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
+import { humanImageInTurn, selectVisualAnalysisRoute, installModelSelection, PHOENIX_CODEX_AUTO_MODEL } from '../src/model-selection.ts'
+import { agentEvents } from '../src/dispatch.ts'
+import type { Agent } from '../src/runtime-types.ts'
 
 const low = { efforts: [{ id: ReasoningEffortId('low'), name: 'Low' }] }
 const vision = (id: string, inputModalities: readonly ('text' | 'image')[] = ['text', 'image']) => ({
@@ -62,4 +68,68 @@ describe('Phoenix Auto image evidence routing', () => {
       { ...vision('gpt-6.1-terra'), provider: 'untrusted-model' },
     ])).toBeUndefined()
   })
+})
+
+class VisionCatalogAdapter extends LlmAdapter {
+  constructor(private readonly terraHasImage = true) { super() }
+
+  override providerInfo(provider: string) { return { id: provider, name: 'Codex' } }
+  override listModels(): Promise<readonly LlmModelInfo[]> {
+    return Promise.resolve([
+      { provider: 'openai-codex', id: 'gpt-6.1-terra', name: 'Terra',
+        inputModalities: this.terraHasImage ? ['text','image'] : ['text'] },
+      { provider: 'openai-codex', id: 'gpt-6.1-sol', name: 'Sol',
+        inputModalities: ['text','image'] },
+    ])
+  }
+  override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+    return Promise.resolve({ provider, id: model, name: model,
+      inputModalities: model === 'gpt-6.1-terra' && !this.terraHasImage
+        ? ['text'] : ['text', 'image'], reasoning: low })
+  }
+  override async *stream(_options: GenerateOptions): AsyncIterable<StreamChunk> {
+    yield { type: 'finish', reason: { kind: 'stop' } }
+  }
+}
+
+describe('live image-specialist dispatch', () => {
+  for (const [terraHasImage, expected] of [
+    [true, 'gpt-6.1-terra'], [false, 'gpt-6.1-sol'],
+  ] as const) {
+    it('routes actual uploaded images to ' + expected + ' Low without a planning-only turn', async () => {
+      const ctx = new Context()
+      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(LlmRuntime)
+      ctx.llm.registerAdapter(['openai-codex'], new VisionCatalogAdapter(terraHasImage))
+      const events: Array<{ type: string; data: unknown }> = [
+        { type: 'turn/start', data: { turn: 1 } },
+        { type: 'user/message', data: { source: { kind: 'user' }, content: [
+          { type: 'image', attachment: { attachmentId: 'ecg-source' } },
+          { type: 'text', text: 'Analiza las anormalidades de este trazado' },
+        ] } },
+      ]
+      const agent = { options: {}, session: {
+        events, header: { agentPreset: 'kira-max' },
+        append: (type: string, data: unknown) => { events.push({ type, data }) },
+      } } as unknown as Agent
+      ctx.agent = agent
+      const selection = { current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+        assembled: undefined }
+      const dispose = installModelSelection(ctx, selection)
+      try {
+        const assembled = await ctx.systemPrompt.assemble()
+        expect(assembled.sections.some(section => section.name === 'phoenix:auto-visible-handoff')).toBe(false)
+        const routed = await agentEvents(ctx, agent).waterfall(
+          'agent/request', { turn: 1, step: 1, signal: new AbortController().signal },
+          () => Promise.resolve({ provider: 'seed', model: 'seed' }),
+        )
+        expect(routed).toMatchObject({
+          provider: 'openai-codex', model: expected, reasoningEffort: ReasoningEffortId('low'),
+        })
+      } finally {
+        dispose()
+        await ctx.fiber.dispose()
+      }
+    })
+  }
 })
