@@ -81,3 +81,14 @@ test('invalid event menu is visible and never exports special-market quotes',asy
   assert.equal(result.observations[0].status,'error')
   assert.equal(result.observations[0].offers.length,0)
 })
+
+test('provider failure is visible at the aggregate level and does not fabricate offers',async()=>{
+  const unavailable=async()=>{throw Error('network down')}
+  const result=await researchDailySpecialMarkets([first],
+    {THE_ODDS_API_KEY:'test'},unavailable,now)
+  assert.equal(result.status,'error')
+  assert.equal(result.eventsChecked,1)
+  assert.equal(result.observations[0].status,'error')
+  assert.deepEqual(result.observations[0].offers,[])
+  assert.ok(!JSON.stringify(result).includes('network down'))
+})
