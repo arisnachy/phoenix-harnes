@@ -123,6 +123,7 @@ def nifti_mask_to_mesh(mask_path, step_size=1):
 
 def reconstruct(args):
     import trimesh
+    started = perf_counter()
 
     source = Path(args.input).expanduser().resolve(strict=True)
     target = Path(args.output).expanduser().resolve()
@@ -178,24 +179,60 @@ def reconstruct(args):
         if not external_masks.is_dir() or external_masks == target or target in external_masks.parents:
             raise ValueError("Mask source must be a separate directory")
         masks = external_masks
-    candidates = sorted(masks.glob("*.nii.gz")) + sorted(masks.glob("*.nii"))
+    candidates = mask_files(masks)
     if not candidates:
         raise RuntimeError("No segmentation masks created")
     if len(candidates) > args.max_meshes:
         raise RuntimeError("Too many structures; select ROI or increase --max-meshes explicitly")
 
+    lesions = []
+    if args.lesion_mask_folder:
+        lesion_dir = Path(args.lesion_mask_folder).expanduser().resolve(strict=True)
+        if not lesion_dir.is_dir() or lesion_dir == target or target in lesion_dir.parents:
+            raise ValueError("Affected-region mask folder must be separate from output")
+        if external_masks is not None and lesion_dir == external_masks:
+            raise ValueError("Affected-region annotations require a separate directory")
+        lesions = mask_files(lesion_dir)
+        if not lesions:
+            raise ValueError("Affected-region folder has no NIfTI annotations")
+        if len(lesions) + len(candidates) > args.max_meshes:
+            raise ValueError("Too many anatomy and affected-region layers")
+        # Fail closed before writing a GLB if the annotation belongs to another grid.
+        for _, lesion in lesions:
+            matching_grid(candidates[0][1], lesion)
+
     scene = trimesh.Scene()
     quality = []
-    for mask in candidates:
-        name = mask.name.removesuffix(".nii.gz").removesuffix(".nii")
+    step = 2 if args.fast else 1
+    for name, mask in candidates:
         try:
-            mesh, voxel_count, volume_ml = nifti_mask_to_mesh(mask)
+            mesh, voxel_count, volume_ml = nifti_mask_to_mesh(mask, step_size=step)
             scene.add_geometry(mesh, geom_name=name, node_name=name)
-            quality.append({"structure": name, "voxels": voxel_count, "triangles": len(mesh.faces),
-                            "volumeMl": round(volume_ml, 3),
+            quality.append({"structure": name, "voxels": voxel_count,
+                            "triangles": len(mesh.faces), "volumeMl": round(volume_ml, 3),
+                            "sourceMaskSha256": mask_digest(mask),
+                            "layer": "anatomy", "reviewStatus": "unreviewed",
+                            "meshResolution": "coarse" if args.fast else "full",
                             "state": "unreviewed"})
         except ValueError as error:
-            quality.append({"structure": name, "state": "rejected", "reason": str(error)})
+            quality.append({"structure": name, "state": "rejected",
+                            "reason": str(error), "layer": "anatomy"})
+
+    if lesions and not scene.geometry:
+        raise RuntimeError("Cannot show affected regions without an anatomical reference")
+    for name, mask in lesions:
+        # These are user-supplied delineations, not automated findings or diagnoses.
+        mesh, voxel_count, volume_ml = nifti_mask_to_mesh(mask, step_size=1)
+        mesh.visual.vertex_colors = [237, 79, 67, 255]
+        label = "affected_region__" + name
+        scene.add_geometry(mesh, geom_name=label, node_name=label)
+        quality.append({"structure": label, "label": name,
+                        "voxels": voxel_count, "triangles": len(mesh.faces),
+                        "volumeMl": round(volume_ml, 3),
+                        "sourceMaskSha256": mask_digest(mask),
+                        "layer": "clinician-supplied-affected-region", "state": "unreviewed",
+                        "reviewStatus": "unreviewed", "meshResolution": "full",
+                        "provenance": "external NIfTI annotation; not independently verified"})
 
     if not scene.geometry:
         raise RuntimeError("No valid meshes; check study resolution and segmentation")
@@ -214,9 +251,17 @@ def reconstruct(args):
         "clinicalStatus": "UNVALIDATED_RESEARCH_OUTPUT",
         "needsExpertReview": True,
         "modelWeightsMayDownload": external_masks is None,
+        "affectedRegions": len(lesions),
+        "affectedRegionSource": ("clinician-supplied annotation; not an automatic diagnosis"
+                                 if lesions else None),
+        "sourceRegistration": ("affected-region grid matched to anatomy grid"
+                               if lesions else "not-applicable"),
+        "meshResolution": "coarse anatomy / full affected regions" if args.fast else "full",
+        "elapsedSeconds": round(perf_counter() - started, 3),
         "structures": quality,
         "limitations": [
             "Validate with source DICOM/NIfTI slices before clinical interpretation.",
+            "An affected-region layer is an external annotation, not a verified patient lesion.",
             "No lesion, tumor, infarct, stenosis or nerve damage is diagnosed by this export.",
             "Some tasks/models require separate licensing; verify permitted usage.",
             "Images, masks, meshes and metadata must remain in approved clinical storage.",
@@ -227,6 +272,7 @@ def reconstruct(args):
     tmp.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf8")
     tmp.replace(summary)
     print(json.dumps({"status": "research-mesh-generated", "meshCount": len(scene.geometry),
+                      "affectedRegions": len(lesions), "elapsedSeconds": round(perf_counter() - started, 3),
                       "glb": str(out), "manifest": str(summary),
                       "clinicallyValidated": False}, ensure_ascii=False))
 
