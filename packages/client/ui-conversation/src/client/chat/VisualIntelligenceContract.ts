@@ -123,8 +123,8 @@ export function parseVisualIntelligence(v: unknown): VisualIntelligenceSpec | nu
   if (p.document !== undefined && (!object(p.document)
       || !only(p.document, ['title','content','version']) || !string(p.document.title, 150)
       || typeof p.document.content !== 'string' || p.document.content.length > 20000
-      || (p.document.version !== undefined && (!Number.isInteger(p.document.version)
-        || (p.document.version as number) < 1)))) return null
+      || (p.document.version !== undefined && (typeof p.document.version !== 'number' || !Number.isInteger(p.document.version)
+        || p.document.version < 1)))) return null
   if (p.form !== undefined && parseSmartForm(p.form) === null) return null
   if (p.actions !== undefined && (!Array.isArray(p.actions) || p.actions.length > 10
       || !p.actions.every(a => object(a) && only(a, ['label','prompt','mode'])
@@ -133,8 +133,8 @@ export function parseVisualIntelligence(v: unknown): VisualIntelligenceSpec | nu
   if (p.live !== undefined && (!object(p.live) || !only(p.live, ['endpoint','intervalSeconds'])
       || !isVisualLiveEndpoint(p.live.endpoint)
       || (p.live.intervalSeconds !== undefined
-        && (!Number.isInteger(p.live.intervalSeconds) || (p.live.intervalSeconds as number) < 20
-          || (p.live.intervalSeconds as number) > 600)))) return null
+        && (typeof p.live.intervalSeconds !== 'number' || !Number.isInteger(p.live.intervalSeconds)
+          || p.live.intervalSeconds < 20 || p.live.intervalSeconds > 600)))) return null
   if (![p.rows,p.series,p.metrics,p.media,p.sources,p.document,p.places,p.form,p.live].some(x => x !== undefined)) return null
   return v as unknown as VisualIntelligenceSpec
 }
