@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { assessmentCatalog, findAssessment } from '../src/client/chat/AssessmentCatalog.ts'
 import { buildAssessmentPdfBytes, generateAssessmentPdf } from '../src/client/chat/AssessmentReportPdf.ts'
@@ -104,6 +104,26 @@ describe('professional assessment catalog and complete local PDF',()=>{
     }
     expect(download).toHaveProperty('disabled',false)
     expect(screen.getByText('7 de 7 respuestas')).toBeTruthy()
+  })
+
+  it('requires explicit consent before sharing clinical answers for AI draft',()=>{
+    const spec=assessmentCatalog.find(x=>x.id==='phq9-es')!.spec!
+    const onAction=vi.fn()
+    render(<ScaleForm spec={spec} verified onAction={onAction}/>)
+    const draft=screen.getByRole('button',{name:'Preparar borrador interpretativo con Kira'})
+    expect(draft).toHaveProperty('disabled',true)
+    for(const select of screen.getAllByRole('combobox')){
+      fireEvent.change(select,{target:{value:'0'}})
+    }
+    expect(draft).toHaveProperty('disabled',true)
+    fireEvent.click(screen.getByRole('checkbox',{
+      name:/Autorizo compartir estas respuestas/,
+    }))
+    expect(draft).toHaveProperty('disabled',false)
+    fireEvent.click(draft)
+    expect(onAction).toHaveBeenCalledTimes(1)
+    expect(onAction.mock.calls[0]?.[1]).toBe('draft')
+    expect(onAction.mock.calls[0]?.[0]).toContain('No inventes entrevista')
   })
 
   it('exposes the real instruments in the universal form library',()=>{
