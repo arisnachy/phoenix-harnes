@@ -138,3 +138,29 @@ export function assessPreexcitation(input:ECGPreexcitationInput) {
     aiDiagnosisPerformed:false,
   }
 }
+
+/**
+ * Return a usable evidence warning when a photographed ECG is incorrectly
+ * submitted as though its intervals or delta wave had been clinically verified.
+ * Never reinterpret an invalid request as confirmed pre-excitation.
+ * @param input - User-supplied, potentially incomplete ECG metadata.
+ * @returns Source assessment or an explicit non-diagnostic evidence conflict.
+ */
+export function reviewPreexcitationRequest(input: ECGPreexcitationInput) {
+  try {
+    return assessPreexcitation(input)
+  } catch (error: unknown) {
+    if (!(error instanceof Error)
+      || error.message !== 'Measured PR/QRS or delta wave must come from a reviewed, calibrated source') throw error
+    return {
+      status: 'SOURCE_EVIDENCE_MISMATCH' as const,
+      sourceType: input.source ?? 'unknown',
+      clinicalDiagnosisValidated: false,
+      imagePixelsAnalysed: false,
+      prMs: null,
+      qrsMs: null,
+      deltaWave: 'not-assessable' as const,
+      message: 'No hay medición calibrada ni revisión profesional que permita afirmar PR/QRS o deltaWave=present. Reexaminar el ECG original antes de interpretar este patrón. No se ha realizado diagnóstico.',
+    }
+  }
+}

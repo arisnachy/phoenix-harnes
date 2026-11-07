@@ -6,7 +6,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import type { Agent } from './runtime-types.ts'
 import type { Session } from '@phoenix-ai/dsh-session'
-import { ReasoningEffortId, createUserMessage, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
+import { ReasoningEffortId, createUserMessage, type LlmCallConfig, type LlmResolvedModelInfo } from '@phoenix-ai/dsh-llm'
 
 /** Complete provider, model, and optional reasoning effort selected for one live Agent. */
 export interface ModelSelection {
@@ -597,6 +597,73 @@ function turnEvents(
     }
   }
   return events.slice(start)
+}
+
+/** A genuine user-supplied image in this turn, not a tool-generated picture or stale prior attachment.
+ * @param events - The authoritative session event log.
+ * @param turn - The human turn being routed.
+ * @returns Whether the user provided actual image content.
+ */
+export function humanImageInTurn(
+  events: readonly PhoenixAutoEvent[],
+  turn: number,
+): boolean {
+  return turnEvents({ session: { events } }, turn).some(event => {
+    if (event.type !== 'user/message') return false
+    const message = event.data as {
+      readonly source?: { readonly kind?: string }
+      readonly content?: readonly { readonly type?: string }[]
+    }
+    return message.source?.kind === 'user'
+      && message.content?.some(block => block.type === 'image') === true
+  })
+}
+
+/** Select a real vision-capable Low effort specialist for the first image-reading step.
+ * Prefer Terra, then Sol, without any diagnosis-specific task keywords or model guesses.
+ * @param models - Resolved, account-visible OpenAI Codex model capabilities.
+ * @returns An eligible specialist, or undefined if the provider cannot prove one.
+ */
+export function selectVisualAnalysisRoute(models: readonly LlmResolvedModelInfo[]): ModelSelection | undefined {
+  const eligible = models.filter(model =>
+    model.provider === 'openai-codex'
+    && /^gpt-\d+(?:\.\d+)?-(?:terra|sol)(?:$|-)/iu.test(model.id)
+    && model.inputModalities?.includes('image') === true
+    && model.reasoning?.efforts.some(effort => effort.id === 'low') === true)
+  eligible.sort((first, second) => {
+    const firstTerra = /-terra(?:$|-)/iu.test(first.id)
+    const secondTerra = /-terra(?:$|-)/iu.test(second.id)
+    if (firstTerra !== secondTerra) return firstTerra ? -1 : 1
+    const version = (id: string): number => Number(/^gpt-(\d+(?:\.\d+)?)/iu.exec(id)?.[1] ?? '0')
+    return version(second.id) - version(first.id)
+  })
+  const chosen = eligible[0]
+  return chosen === undefined ? undefined : {
+    provider: 'openai-codex', model: chosen.id, reasoningEffort: ReasoningEffortId('low'),
+  }
+}
+
+/** Inspect only registered Codex image/effort metadata; never dispatch a guessed model.
+ * @param ctx - Agent context with optional LLM provider registration.
+ * @returns Selected image analysis model, when an actual supported route exists.
+ */
+async function availableVisualAnalysisRoute(ctx: Context): Promise<ModelSelection | undefined> {
+  const llm = ctx.get('llm')
+  if (llm === undefined) return undefined
+  try {
+    const visible = await llm.listModels('openai-codex')
+    const candidates = visible.filter(model =>
+      /^gpt-\d+(?:\.\d+)?-(?:terra|sol)(?:$|-)/iu.test(model.id)
+      && model.inputModalities?.includes('image') === true)
+    const resolved = await Promise.all(candidates.map(async model => {
+      try { return await llm.resolveModelInfo('openai-codex', model.id) }
+      catch { return undefined }
+    }))
+    return selectVisualAnalysisRoute(
+      resolved.filter((model): model is LlmResolvedModelInfo => model !== undefined))
+  } catch {
+    return undefined
+  }
 }
 
 interface PhoenixAutoTeamSignal {
@@ -1325,6 +1392,8 @@ export function installModelSelection(
       : undefined
     const currentTurn = scopedAgent?.session?.events.findLast(event => event.type === 'turn/start')
     const currentTurnNumber = (currentTurn?.data as { readonly turn?: number } | undefined)?.turn
+    const humanVisual = scopedAgent !== undefined && currentTurnNumber !== undefined
+      ? humanImageInTurn(scopedAgent.session.events, currentTurnNumber) : false
     const currentRequest = scopedAgent?.session !== undefined && currentTurnNumber !== undefined
       ? directUserTextForTurn(scopedAgent, currentTurnNumber) : ''
     // Never inject a "stop after the plan" instruction into a quick-answer
@@ -1348,6 +1417,7 @@ export function installModelSelection(
     const fenixAcceptance = fenixCodingQualityBrief(currentRequest)
     const autoPolicy = strategyRescueStep ? AUTO_SOL_STRATEGY_POLICY
       : autoStep === 1
+        && !humanVisual
         && phoenixAutoTaskRequest(currentRequest)
         && !isPhoenixAutoQuickTurn(currentRequest)
         && !isPhoenixAutoBoundedImplementation(currentRequest)
@@ -1402,6 +1472,15 @@ export function installModelSelection(
       }
       const directText = directUserTextForTurn(_payload.agent, _payload.turn)
       if (isKiraCodexAutoLead(selected, scopedAgent)) {
+        // Reading the user's original image is a source-analysis step, not a
+        // Luna coordination or a model-visible Sol planning handoff.
+        if (_payload.step === 1 && humanImageInTurn(_payload.agent.session.events, _payload.turn)) {
+          const specialist = await availableVisualAnalysisRoute(agentCtx)
+          if (specialist !== undefined) {
+            const { reasoningEffort: _oldEffort, ...withoutInheritedEffort } = resolved
+            return { ...withoutInheritedEffort, ...specialist }
+          }
+        }
         const eclipseProfile = isPhoenixCodexAutoSelection(selected) ? configuredEclipse(agentCtx) : undefined
         const automatic = phoenixAutoRoute(
           _payload.agent,
@@ -1566,7 +1645,8 @@ export function installModelSelection(
     // Kira's normal final answer is terminal. Team availability is never
     // evidence of unfinished work. Only a visible, unexecuted action or the
     // explicitly visible coordinator planning handoff can request another step.
-    const plannerStoppedBeforeActing = latest.step === 1 && !latestStepHasToolActivity
+    const plannerStoppedBeforeActing = !humanImageInTurn(agent.session.events, turn)
+      && latest.step === 1 && !latestStepHasToolActivity
       && (latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
         || (isPhoenixCodexAutoSelection(effectiveSelection(agentCtx.agent))
           && latest.sourceModel === configuredEclipse(agentCtx)?.planner?.model))
