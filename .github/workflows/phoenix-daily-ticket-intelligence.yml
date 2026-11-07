@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'packages/core/tool-sports/src/daily-market-*.ts'
+      - 'packages/core/tool-sports/src/daily-special-market-research.ts'
       - 'packages/core/tool-sports/src/sports-event-market-menu.ts'
       - 'packages/core/tool-sports/src/daily-sports-scout.ts'
       - 'packages/core/tool-sports/src/index.ts'
@@ -33,6 +34,6 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify real-match IDs, market menus, injury uncertainty, no-vig and five/six target
-        run: node --experimental-strip-types --test packages/core/tool-sports/tests/daily-sports-scout.test.mjs packages/core/tool-sports/tests/daily-market-shortlist.test.mjs packages/core/tool-sports/tests/daily-market-evidence.test.mjs packages/core/tool-sports/tests/daily-market-ranking.test.mjs packages/core/tool-sports/tests/sports-event-market-menu.test.mjs
+        run: node --experimental-strip-types --test packages/core/tool-sports/tests/daily-sports-scout.test.mjs packages/core/tool-sports/tests/daily-market-shortlist.test.mjs packages/core/tool-sports/tests/daily-market-evidence.test.mjs packages/core/tool-sports/tests/daily-market-ranking.test.mjs packages/core/tool-sports/tests/daily-special-market-research.test.mjs packages/core/tool-sports/tests/sports-event-market-menu.test.mjs
       - name: Strict host TypeScript validation
         run: pnpm exec tsc -b tsconfig.host.json --pretty false

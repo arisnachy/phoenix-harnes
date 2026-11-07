@@ -11,6 +11,7 @@ import { researchNbaSlate } from './nba-research.ts'
 import {shortlistDailyMarkets,dailyOddsSportKey} from './daily-market-shortlist.ts'
 import {assessDailyMarketEvidence,unavailableMarketEvidence} from './daily-market-evidence.ts'
 import {readSportsEventMarketMenu,eventMarketCatalog} from './sports-event-market-menu.ts'
+import {researchDailySpecialMarkets} from './daily-special-market-research.ts'
 
 import { keylessOdds, keylessSports, keylessHistoricOdds } from './keyless-odds.ts'
 import { loadHistoricalOdds } from './sports-archive.ts'
@@ -219,6 +220,12 @@ export function apply(ctx: Context): void {
       research.sort((a,b)=>(rank[b.status]??0)-(rank[a.status]??0)||
         b.rankingScore-a.rankingScore||a.candidate.fixture.localeCompare(b.candidate.fixture))
       const best=research.slice(0,count)
+      // Feed the daily research with actual event-level props, periods and
+      // alternates from the SAME verified book, rather than stopping at h2h.
+      // They remain research-only until a specialist model validates each market.
+      const specialMarkets=args.deep===false?null:
+        await researchDailySpecialMarkets(best.map(x=>x.candidate),env,fetch,now,
+          Math.min(6,count))
       const trustedOptions=best.filter(item=>item.status==='descriptive-support')
       const provisional=best.filter(item=>item.status!=='descriptive-support')
       // Convert only the exact observed offer, not a predicted line, into a
@@ -278,8 +285,8 @@ export function apply(ctx: Context): void {
         date:daily.date,checkedAt:new Date(now).toISOString(),
         eventsScanned:daily.totalEligible,fixturesConsidered:daily.events.length,
         competitionsChecked:daily.coverage,sourcesChecked:attempts,
-        providerHealth,placed:false,
-        warning:'Selección orientativa y cuotas reales observadas: ni proyecciones descriptivas ni probabilidades sin margen son modelos calibrados ni garantías de ganar. La línea y el precio deben confirmarse en la casa, igual que las bajas y titulares oficiales. Para props, periodos o líneas adicionales, usar los proveedores autorizados que publiquen esos mercados; nunca inventar ofertas.',
+        providerHealth,specialMarkets,placed:false,
+        warning:'Selección orientativa y cuotas reales observadas: ni proyecciones descriptivas ni probabilidades sin margen son modelos calibrados ni garantías de ganar. La línea y el precio deben confirmarse en la casa, igual que las bajas y titulares oficiales. El campo specialMarkets investiga automáticamente props, periodos y líneas alternativas de la MISMA casa cuando el proveedor las publica; son opciones de investigación y NO patas aprobadas sin modelo específico. Nunca inventar ofertas.',
         instruction:'La tarjeta nativa solo muestra precios cotejados de una misma casa. Distingue CANDIDATAS CON APOYO DESCRIPTIVO de CONDICIONALES (no equivalen a picks validados). Si la evidencia favorece el lado opuesto, usa el precio real de selectedOutcome. Verifica informes oficiales de lesiones, titulares/porteros, props, períodos y reglas antes de apostar. No hay apuesta realizada.',
       })
     },
