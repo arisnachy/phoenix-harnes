@@ -21,6 +21,7 @@ import {
 } from './local-model/index.ts'
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import { readBlenderLocalState } from './blender-local.ts'
+import { readAnatomyConnectors, installAnatomyConnector } from './anatomy-connectors.ts'
 import { readBusinessLibrarySnapshot } from './business-library.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
 import { readOpenClawRuntimeSnapshot } from './openclaw-runtime.ts'
@@ -47,6 +48,7 @@ import {
 } from './mcp-managed.ts'
 import type {
   BlenderLocalState,
+  AnatomyConnectorSnapshot, AnatomyConnectorInstallRequest, AnatomyConnectorInstallReceipt,
   ChatGptWebSnapshot,
   BusinessLibrarySnapshot,
   CuratedMcpInstallRequest,
@@ -503,6 +505,18 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('blenderLocalState')
   async blenderLocalState(): Promise<BlenderLocalState> {
     return readBlenderLocalState()
+  }
+
+  /** Read live installed status, not configured flags. No patient data leaves Host. */
+  @Remote('anatomyConnectors')
+  anatomyConnectors():AnatomyConnectorSnapshot {
+    return readAnatomyConnectors()
+  }
+
+  /** Explicit trusted Settings action; allowlisted local installers only. */
+  @Remote('installAnatomyConnector')
+  installAnatomyConnector(request:AnatomyConnectorInstallRequest):AnatomyConnectorInstallReceipt {
+    return installAnatomyConnector(request.id)
   }
 
   @Remote('searchMcpRegistry')
