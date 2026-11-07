@@ -287,7 +287,6 @@ function personalEvents(date: string, profile: CalendarProfile): Celebration[] {
         tone: moment.solemn ? 'solemn':'festive', label:moment.label, source:'personal' })
     }
   }
-  holidayCache.set(key, { at: Date.now(), events: out })
   return out
 }
 /** Select contextual events, never show a national celebration from unrelated countries. */
@@ -340,7 +339,7 @@ export async function fetchCountryHolidays(year:number, country:string, signal?:
   const key = `${code}/${year}`
   const cached = holidayCache.get(key)
   if (cached && Date.now() - cached.at < 24 * 60 * 60 * 1000) return cached.events
-  const response = await fetch(`https://nagerholidays.com/api/v4/Holidays/${code}/${year}`, { signal })
+  const response = await fetch(`https://nagerholidays.com/api/v4/Holidays/${code}/${year}`, signal ? { signal } : {})
   if (!response.ok) throw new Error(`Holidays API HTTP ${response.status}`)
   const raw: unknown = await response.json()
   if (!Array.isArray(raw)) throw new Error('Invalid holiday response')
@@ -360,5 +359,6 @@ export async function fetchCountryHolidays(year:number, country:string, signal?:
       label:data.name.trim(),country:code,theme:'culture',tone:'recognition',source:'nager',
       ...(states.length?{stateCodes:states}:{}),priority:-25})
   }
+  holidayCache.set(key, { at: Date.now(), events: out })
   return out
 }
