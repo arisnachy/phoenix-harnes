@@ -51,7 +51,7 @@ test('a photographed ECG with deltaWave present becomes a safe validation result
  assert.equal(result.status,'SOURCE_EVIDENCE_MISMATCH')
  assert.equal(result.clinicalDiagnosisValidated,false)
  assert.equal(result.imagePixelsAnalysed,false)
- assert.match(result.message,/calibrated|calibrado/i)
+ assert.match(result.message,/calibrad/i)
 })
 
 test('tachycardia red flag is surfaced without issuing unreviewed medication instructions',()=>{
