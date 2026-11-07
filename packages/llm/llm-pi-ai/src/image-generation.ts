@@ -249,7 +249,8 @@ export function classifyCodexImageFailure(message: string): CodexImageFailureKin
   if (
     /image_generation[^\n]*(disabled|unavailable)|image generation[^\n]*(disabled|unavailable)/i.test(message)
     || /feature[^\n]*(not enabled|disabled)|unknown (feature|tool)[^\n]*(image|image_generation)/i.test(message)
-    || /image_gen[^\n]*not available/i.test(message)
+    || /image_gen[^\n]*(not available|not exposed|missing|unavailable)/i.test(message)
+    || /built-in image[^\n]*(not exposed|unavailable|missing)/i.test(message)
   ) {
     return 'capability'
   }
@@ -1009,15 +1010,21 @@ function generationPrompt(
   ].join('\n')
 }
 
+/**
+ * Codex has used both CODEX_HOME/generated_images and cwd/generated_images.
+ * Only artifacts different from the pre-run snapshot are candidates, with the
+ * isolated workspace preferred over the shared legacy cache.
+ */
 async function waitForFreshImage(
-  root: string,
-  baseline: ReadonlyMap<string, string>,
+  roots: readonly { readonly root: string; readonly baseline: ReadonlyMap<string, string> }[],
   signal: AbortSignal,
 ): Promise<GeneratedImageCandidate | undefined> {
   for (let attempt = 0; attempt < 24; attempt++) {
     signal.throwIfAborted()
-    const fresh = selectFreshGeneratedImage(baseline, await listGeneratedImages(root))
-    if (fresh !== undefined) return fresh
+    for (const { root, baseline } of roots) {
+      const fresh = selectFreshGeneratedImage(baseline, await listGeneratedImages(root))
+      if (fresh !== undefined) return fresh
+    }
     await new Promise(resolve => setTimeout(resolve, 250))
   }
   return undefined
@@ -1104,61 +1111,80 @@ async function generateWithCodexProvider(
   signal: AbortSignal,
   referencePath?: string,
 ): Promise<ImageGenerationValue> {
-  // Skip the advisory doctor process: the real Codex image worker is authoritative.
-  const generatedRoot = join(codexHome(), 'generated_images')
-  const baselineCandidates = await listGeneratedImages(generatedRoot)
-  const baseline = new Map(baselineCandidates.map(candidate => [candidate.path, stamp(candidate)]))
-
-  let run: ProcessResult
+  // A writable sandbox is needed for recent Codex builds to save generated
+  // rasters under cwd/generated_images. Never grant workspace-write over the
+  // user's project: create a dedicated temporary directory instead.
+  const ownsWorkerDirectory = referencePath === undefined
+  const workerDirectory = ownsWorkerDirectory
+    ? await mkdtemp(join(tmpdir(), 'phoenix-codex-image-'))
+    : dirname(referencePath)
+  const workspaceImages = join(workerDirectory, 'generated_images')
+  const legacyImages = join(codexHome(), 'generated_images')
   try {
-    run = await runCodex(ctx, [
-      'exec',
-      '--ignore-user-config',
-      '--ephemeral',
-      '--skip-git-repo-check',
-      '--enable',
-      'image_generation',
-      '-s',
-      'read-only',
-      ...(referencePath === undefined ? [] : ['--image', basename(referencePath)]),
-      '-',
-    ], generationPrompt(
-      prompt,
-      args.size ?? 'auto',
-      args.quality ?? 'auto',
-      args.background ?? 'auto',
-      referencePath,
-    ), signal, referencePath === undefined ? process.cwd() : dirname(referencePath))
-  } catch (error) {
-    signal.throwIfAborted()
-    throw new Error(`image_generation: Codex CLI/image worker is not available: ${error instanceof Error ? error.message : String(error)}`)
-  }
+    const workCandidates = await listGeneratedImages(workspaceImages)
+    const legacyCandidates = await listGeneratedImages(legacyImages)
+    const watched = [
+      { root: workspaceImages, baseline: new Map(workCandidates.map(candidate => [candidate.path, stamp(candidate)])) },
+      { root: legacyImages, baseline: new Map(legacyCandidates.map(candidate => [candidate.path, stamp(candidate)])) },
+    ]
 
-  const combined = `${run.stdout}\n${run.stderr}`.trim()
-  if (run.exitCode !== 0) throw imageFailureError(classifyCodexImageFailure(combined), combined)
+    let run: ProcessResult
+    try {
+      // One direct Codex launch: no serial doctor preflight and no billed API fallback.
+      run = await runCodex(ctx, [
+        'exec',
+        '--ignore-user-config',
+        '--ephemeral',
+        '--skip-git-repo-check',
+        '--enable',
+        'image_generation',
+        '-s',
+        'workspace-write',
+        ...(referencePath === undefined ? [] : ['--image', basename(referencePath)]),
+        '-',
+      ], generationPrompt(
+        prompt,
+        args.size ?? 'auto',
+        args.quality ?? 'auto',
+        args.background ?? 'auto',
+        referencePath,
+      ), signal, workerDirectory)
+    } catch (error) {
+      signal.throwIfAborted()
+      throw new Error(`image_generation: Codex CLI/image worker is not available: ${error instanceof Error ? error.message : String(error)}`)
+    }
 
-  const generated = await waitForFreshImage(generatedRoot, baseline, signal)
-  if (generated === undefined) {
-    const kind = classifyCodexImageFailure(combined)
-    if (kind !== 'runtime') throw imageFailureError(kind, combined)
-    throw new Error(
-      'image_generation: Codex exited without exposing a new generated raster. PHOENIX refuses to claim success without a verifiable image artifact.',
-    )
-  }
+    const combined = `${run.stdout}\n${run.stderr}`.trim()
+    if (run.exitCode !== 0) throw imageFailureError(classifyCodexImageFailure(combined), combined)
 
-  const mediaType = mediaTypeOf(generated.path)
-  if (mediaType === undefined) throw new Error('image_generation: generated file has an unsupported image type')
-  const data = await readFile(generated.path)
-  const attachment = await servicesOf(ctx).attachments.saveImage({
-    data,
-    mediaType,
-    name: basename(generated.path),
-  })
-  return {
-    provider: 'codex',
-    model: 'codex-integrated-image-generation',
-    path: generated.path,
-    attachment,
+    const generated = await waitForFreshImage(watched, signal)
+    if (generated === undefined) {
+      const kind = classifyCodexImageFailure(combined)
+      if (kind !== 'runtime') throw imageFailureError(kind, combined)
+      throw new Error(
+        'image_generation: Codex terminó sin exponer una imagen verificable ni en '
+        + 'cwd/generated_images ni en CODEX_HOME/generated_images. '
+        + 'Comprueba que la sesión Codex dispone de image_gen; no se fabricará una imagen.',
+      )
+    }
+
+    const mediaType = mediaTypeOf(generated.path)
+    if (mediaType === undefined) throw new Error('image_generation: generated file has an unsupported image type')
+    const data = await readFile(generated.path)
+    if (data.length === 0 || data.length > MAX_FREE_IMAGE_BYTES || imageMediaTypeFromBytes(data) !== mediaType) {
+      throw new Error('image_generation: Codex output is not a valid supported raster image')
+    }
+    // Persist verified pixels before deleting the ephemeral worker directory.
+    // A separate attachment ensures the generated image survives this cleanup.
+    const { path, attachment } = await persistProviderRaster(ctx, data, mediaType, 'codex')
+    return {
+      provider: 'codex',
+      model: 'codex-integrated-image-generation',
+      path,
+      attachment,
+    }
+  } finally {
+    if (ownsWorkerDirectory) await rm(workerDirectory, { recursive: true, force: true })
   }
 }
 
