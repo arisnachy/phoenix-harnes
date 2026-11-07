@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
-import {assessPreexcitation} from '../packages/core/tool-health/src/ecg-preexcitation.ts'
+import {assessPreexcitation, reviewPreexcitationRequest} from '../packages/core/tool-health/src/ecg-preexcitation.ts'
 import {planClinicalVisualization} from '../packages/core/tool-health/src/diagnostic-visualization.ts'
 import {DIAGNOSTIC_INPUTS} from '../packages/core/tool-health/src/diagnostic-catalog.ts'
 import {auditDiagnosticConcordance} from '../packages/core/tool-health/src/diagnostic-concordance.ts'
@@ -43,6 +43,17 @@ test('ECG screenshot and left-axis description cannot magically yield measured P
  assert.equal(missingLead.pattern,'INSUFFICIENT_ECG_EVIDENCE')
  assert(missingLead.missing.includes('lead-specific delta-wave evidence'))
 })
+test('a photographed ECG with deltaWave present becomes a safe validation result, never a failed tool',()=>{
+ const result=reviewPreexcitationRequest({
+   source:'partial-image',deltaWave:'present',clinicianReviewed:false,
+   photoDeltaHint:'possible',qualitativePrHint:'appears-short',
+ })
+ assert.equal(result.status,'SOURCE_EVIDENCE_MISMATCH')
+ assert.equal(result.clinicalDiagnosisValidated,false)
+ assert.equal(result.imagePixelsAnalysed,false)
+ assert.match(result.message,/calibrated|calibrado/i)
+})
+
 test('tachycardia red flag is surfaced without issuing unreviewed medication instructions',()=>{
  const r=assessPreexcitation({source:'calibrated-12-lead',clinicianReviewed:true,
    prMs:95,qrsMs:135,deltaWave:'present',leadEvidence:'II',rhythm:'irregular-wide-complex'})
