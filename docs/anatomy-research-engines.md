@@ -17,6 +17,8 @@ Check node scripts/phoenix-anatomy-simulation.mjs doctor and node scripts/phoeni
 
 For vascular solver: node scripts/phoenix-anatomy-simulation.mjs run --engine svzerod --input INPUT.json --output RESULTS.csv --research-only. For electrophysiology: --engine opencarp --input INPUT.par --output OUTPUT-DIRECTORY --research-only. For the GUI: set PHOENIX_SIMVASCULAR_BIN to the official executable and use launch --engine simvascular.
 
+For a fully prepared SimVascular finite-element project, run: node scripts/phoenix-anatomy-simulation.mjs run --engine svmultiphysics --input PROJECT/solver.xml --output PROJECT/1-procs --research-only. The output directory must not exist. On Windows, WSL2 executes the official svmultiphysics solver from the project's converted Linux path. Neither the XML nor boundary conditions are inferred from GLB or ECG.
+
 ## Scientific validation
 
 Reference-mask quality reports Dice, HD95, sensitivity, volume and spatial alignment. Such metrics never establish diagnosis or regulatory approval. A clinician-led validation requires a preregistered protocol, representative external data, uncertainty, subgroup review, adverse failure cases, appropriate imaging quality and signed clinical review. Physical simulations additionally require convergence analysis, patient-specific boundary conditions, dimensional units and measured-physiology comparison.
