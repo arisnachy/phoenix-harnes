@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { planAnatomicalTwin } from './anatomy-planner.ts'
 import { protocolFor } from './diagnostic-routing.ts'
+import {DIAGNOSTIC_INPUTS,DIAGNOSTIC_INPUT_GROUPS,DIAGNOSTIC_INPUT_COUNT} from './diagnostic-catalog.ts'
 /** Optional, read-only Kira Health Engine planning tools. No EHR access. */
 import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
@@ -58,16 +59,43 @@ function prepareAnatomy(component?:string):Promise<string>{
 }
 export const name = 'tool-health'
 export const inject = ['tools', 'systemPrompt', 'userQuestions']
-const GUIDANCE = 'PHOENIX Health Engine: solo al solicitar una consulta o interrogatorio, usa health_interview_plan con motivo general SIN nombre, email, identificador u otros datos de paciente. Usa health_copilot_ask action=choose_mode para elegir mediante ASK entre Kira, médico o mixto. Luego action=screen_urgency antes de action=next_question. ASK solo gestiona preguntas y decisiones genéricas, sensibles y sin datos identificables; la respuesta clínica se introduce en el expediente autenticado /health. Un ASK expirado no acredita hechos, consentimiento, revisión ni registro.  El plan no es diagnóstico; recopila datos y exige evaluación del profesional para signos de alarma, examen, pruebas, tratamiento y firma. No afirmes que existe historia clínica guardada, receta firmada, correo enviado ni cita agendada. health_kira_mail_requirements solo enumera requisitos; no envía mensajes. Para estudios volumétricos y gemelos anatómicos usa health_anatomy_workflow; usa health_anatomy_models para el catálogo y health_anatomy_status para consultar dependencias locales. Si el usuario autorizó expresamente instalar dependencias anatómicas, usa health_anatomy_prepare con component=slicerheart, monai-nnunet, totalsegmentator, ohif-cornerstone o three-vtk. SimVascular y openCARP requieren instalación externa verificada; no afirmes que se autoinstalan. Su estado started/running NO acredita instalación: confirma con health_anatomy_status y no prometas archivo GLB sin comprobarlo. El plan no es una reconstrucción: la ejecución real requiere un archivo DICOM/NIfTI local y consentimiento clínico. Nunca inventes lesiones ni llames al GLB diagnóstico. El remitente debe ser la cuenta institucional de Kira autorizada, no una dirección inventada. No introduzcas historia clínica ni datos personales en memoria general, herramientas o logs sin un sistema clínico autorizado. Para ECG/EKG, ultrasonido, RX, TC, RM, citología, histología o laboratorio, usa health_diagnostic_protocol con modalidad y tipo de fuente ANTES de comunicar conclusiones. Solo describe hallazgos de píxeles, ondas o cifras que REALMENTE hayas visto o que provengan de informes acreditados. Una captura, PDF, foto o malla 3D no implica lectura del estudio completo; nunca afirmes que interpretaste una imagen inaccesible. Distingue observación directa, reporte transcrito, hipótesis, incertidumbre y región no evaluable; no fabricas probabilidades o diagnósticos definitivos. Si no hay archivo fuente accesible o intérprete especializado validado, declara NO ANALIZADO, solicita el estudio original y su revisión profesional. Si observas posibles hallazgos críticos recomienda valoración clínica urgente, sin tranquilizar por ausencia aparente en una imagen parcial. La herramienta metadata no examina píxeles ni constituye diagnóstico.'
+const GUIDANCE = 'PHOENIX Health Engine: solo al solicitar una consulta o interrogatorio, usa health_interview_plan con motivo general SIN nombre, email, identificador u otros datos de paciente. Usa health_copilot_ask action=choose_mode para elegir mediante ASK entre Kira, médico o mixto. Luego action=screen_urgency antes de action=next_question. ASK solo gestiona preguntas y decisiones genéricas, sensibles y sin datos identificables; la respuesta clínica se introduce en el expediente autenticado /health. Un ASK expirado no acredita hechos, consentimiento, revisión ni registro.  El plan no es diagnóstico; recopila datos y exige evaluación del profesional para signos de alarma, examen, pruebas, tratamiento y firma. No afirmes que existe historia clínica guardada, receta firmada, correo enviado ni cita agendada. health_kira_mail_requirements solo enumera requisitos; no envía mensajes. Para estudios volumétricos y gemelos anatómicos usa health_anatomy_workflow; usa health_anatomy_models para el catálogo y health_anatomy_status para consultar dependencias locales. Si el usuario autorizó expresamente instalar dependencias anatómicas, usa health_anatomy_prepare con component=slicerheart, monai-nnunet, totalsegmentator, ohif-cornerstone o three-vtk. SimVascular y openCARP requieren instalación externa verificada; no afirmes que se autoinstalan. Su estado started/running NO acredita instalación: confirma con health_anatomy_status y no prometas archivo GLB sin comprobarlo. El plan no es una reconstrucción: la ejecución real requiere un archivo DICOM/NIfTI local y consentimiento clínico. Nunca inventes lesiones ni llames al GLB diagnóstico. El remitente debe ser la cuenta institucional de Kira autorizada, no una dirección inventada. No introduzcas historia clínica ni datos personales en memoria general, herramientas o logs sin un sistema clínico autorizado. Para CUALQUIER entrada diagnóstica médica (radiología, ECG, neurofisiología, ultrasonido, TC/RM, medicina nuclear, endoscopia, oftalmología, dermatología, ORL, microbiología, hematología, laboratorio, pruebas genéticas/moleculares, biopsia/citología, medicina del sueño, obstetricia, análisis funcionales y escalas clínicas) primero identifica la modalidad exacta con health_diagnostic_catalog, después consulta health_diagnostic_protocol con su id y fuente. Si no está en el catálogo, selecciona other solo como NO EVALUADO y solicita un protocolo especializado; no generalices desde otra modalidad. Solo describe hallazgos de píxeles, ondas o cifras que REALMENTE hayas visto o que provengan de informes acreditados. Una captura, PDF, foto o malla 3D no implica lectura del estudio completo; nunca afirmes que interpretaste una imagen inaccesible. Distingue observación directa, reporte transcrito, hipótesis, incertidumbre y región no evaluable; no fabricas probabilidades o diagnósticos definitivos. Si no hay archivo fuente accesible o intérprete especializado validado, declara NO ANALIZADO, solicita el estudio original y su revisión profesional. Si observas posibles hallazgos críticos recomienda valoración clínica urgente, sin tranquilizar por ausencia aparente en una imagen parcial. La herramienta metadata no examina píxeles ni constituye diagnóstico.'
 function healthRequest(text: string | undefined): boolean {
-  return typeof text === 'string' && /(?:consulta m[eé]dica|paciente|historia cl[ií]nica|interrogatorio|receta|health engine|kira.*consulta|psic[oó]log[oa]|laboratorio cl[ií]nico|gemelo anat[oó]mico|reconstrucci[oó]n 3d|anatom[ií]a 3d|modelo 3d (?:del? )?(?:coraz[oó]n|cerebro|[oó]rgano)|segmentaci[oó]n anat[oó]mica|dicom|tomograf[ií]a|resonancia magn[eé]tica|ekg|ecg|electrocardiograma|radiograf[ií]a|rayos x|ecograf[ií]a|sonograf[ií]a|citolog[ií]a|histopatolog[ií]a|an[aá]lisis de imagen|interpreta.*(?:imagen|estudio|placa)|diagn[oó]stico.*(?:imagen|ekg|rx|tac|rm))/iu.test(text)
+  return typeof text === 'string' && /(?:consulta m[eé]dica|paciente|historia cl[ií]nica|interrogatorio|receta|health engine|kira.*consulta|psic[oó]log[oa]|laboratorio cl[ií]nico|gemelo anat[oó]mico|reconstrucci[oó]n 3d|anatom[ií]a 3d|modelo 3d (?:del? )?(?:coraz[oó]n|cerebro|[oó]rgano)|segmentaci[oó]n anat[oó]mica|dicom|tomograf[ií]a|resonancia magn[eé]tica|ekg|ecg|electrocardiograma|radiograf[ií]a|rayos x|ecograf[ií]a|sonograf[ií]a|citolog[ií]a|histopatolog[ií]a|biopsia|gam[m]?agraf[ií]a|pet.?tc|spect|endoscopia|broncoscopia|colonosco|mamograf[ií]a|oftalmolog|dermatoscop|audiometr|espirometr|gasometr|cultivo|hemograma|coagulaci[oó]n|gen[eé]tica|secuenciaci[oó]n|microbiolog|polisomnograf|doppler|neurofisiolog|electromiograf|eeg|an[aá]lisis de imagen|interpreta.*(?:imagen|estudio|placa)|diagn[oó]stico.*(?:imagen|ekg|rx|tac|rm))/iu.test(text)
 }
 export function apply(ctx: Context): void {
   ctx.tools.register(defineTool({
-    name:'health_diagnostic_protocol',
-    description:'Lista la revisión sistemática y las fuentes originales necesarias para interpretar ECG, RX, TC, RM, ecografía, citología, histopatología y laboratorio. Sin leer el archivo ni identificar pacientes; el resultado NO es diagnóstico.',
+    name:'health_diagnostic_catalog',
+    description:'Consulta un catálogo de 243 tipos de estudios médicos en 20 grupos y 23 familias. Permite buscar por nombre o filtrar por grupo. Es un catálogo de entrada, NO son algoritmos diagnósticos instalados.',
     parameters:{
-      modality:{type:'string',required:true,description:'ecg | ultrasound | xray | ct | mri | laboratory | cytology | histopathology | other'},
+      query:{type:'string',description:'Palabra a buscar en nombre/código de modalidad, opcional; no introducir nombres ni datos personales.'},
+      group:{type:'string',description:'Filtrar por identificador de grupo; opcional.'},
+    },
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(args){
+      const query=(args.query??'').trim().toLocaleLowerCase().slice(0,80)
+      const group=(args.group??'').trim()
+      const matches=Object.values(DIAGNOSTIC_INPUTS).filter(x=>
+        (!group||x.group===group)&&(!query||
+          x.label.toLocaleLowerCase().includes(query)||x.id.includes(query)))
+      return Promise.resolve(JSON.stringify({
+        status:'CATALOG_ONLY_NOT_INTERPRETED',
+        totalTypes:DIAGNOSTIC_INPUT_COUNT,
+        groups:DIAGNOSTIC_INPUT_GROUPS.map(g=>({id:g.id,label:g.label,count:g.items.length})),
+        matched:matches.length,
+        entries:matches.slice(0,50),truncated:matches.length>50,
+        clinicallyValidated:false,patientFilesRead:0,automatedDiagnoses:0,
+        note:'Una modalidad reconocida NO demuestra que existan pesos especializados ni un motor aprobado. Pedir el estudio original y usar health_diagnostic_protocol.',
+      }))
+    },
+    presentCall:()=>({card:'generic',title:'Catálogo de estudios clínicos · 243 tipos',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'health_diagnostic_protocol',
+    description:'Para cualquiera de las 243 modalidades reconocidas, identifica el archivo original y la secuencia de revisión específica a su familia. No abre archivos y no diagnostica. Usa health_diagnostic_catalog si no conoces el ID.',
+    parameters:{
+      modality:{type:'string',required:true,description:'ID exacto de salud: eg ecg, eeg, ct_perfusion, bacterial_culture, genetic_exome, spirometry, whole_slide_imaging, other. Buscar primero en health_diagnostic_catalog.'},
       sourceType:{type:'string',description:'image | pdf | dicom | waveform | numeric | glb | unknown'},
     },
     output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
