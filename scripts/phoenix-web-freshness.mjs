@@ -27,7 +27,7 @@ export function sportsClientBundleReady(root){
     // A previous PHOENIX binary can contain all three generic components yet
     // still render the obsolete per-game "Registrar mi apuesta" form. A valid
     // bundle must carry the receipt-linked tracker introduced in November 2026.
-    const required=['sports_game_card','sports_ticket_card','sports-evidence',
+    const required=['sports_game_card','sports_ticket_card','sports_ticket_bundle_card','sports-evidence',
       'Seguimiento automático del boleto']
     return required.every(contract=>client.includes(contract))
       && !client.includes('Registrar mi apuesta para seguir el objetivo')

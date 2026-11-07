@@ -14,6 +14,7 @@ import css from './GenerativeUi.module.css'
 import { SportsLiveProvider,SportsLiveFacts,SportsLiveStamp } from './SportsLive.tsx'
 import { SportsGameCenter } from './SportsGameCenter.tsx'
 import { SportsBetProgress,validTrackedPick,type SportsTrackedPick } from './SportsBetProgress.tsx'
+import { SportsTicketLiveTracker } from './SportsTicketLiveTracker.tsx'
 import {importSportsReceipt,type SportsReceiptFixture} from './SportsTicketAutoLink.ts'
 import { SportsNewsPanel } from './SportsNewsPanel.tsx'
 
@@ -151,6 +152,9 @@ type SportsTicketCard = {
   }
 }
 
+type SportsTicketBundleCard = {component:'sports_ticket_bundle_card';version:1;
+  props:{title:string;source:string;tickets:SportsTicketCard['props'][]}}
+
 type StatusPillBlock = {
   component: 'status_pill'
   version: 1
@@ -163,7 +167,7 @@ type AgentLineBlock = {
 }
 const supportedTones: readonly PhoenixStatusTone[] = ['positive', 'warning', 'negative', 'info', 'neutral']
 
-export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | SportsGameCard | SportsScheduleCard | SportsTicketCard | SportsOddsCard | SportsEspnDashboard
+export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | SportsGameCard | SportsScheduleCard | SportsTicketCard | SportsTicketBundleCard | SportsOddsCard | SportsEspnDashboard
   | CanvasSpec | VisualIntelligenceSpec | ScaleFormSpec | SmartFormSpec | SmartLibrarySpec | SpreadsheetSpec | GeoMapSpec | SceneMapSpec | DiagramSpec | StatusPillBlock | AgentLineBlock
 
 export type GenerativeUiSegment =
@@ -432,6 +436,15 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
        && optionalText(x.market,70) && optionalText(x.player,140) && optionalText(x.rationale,480))
 }
 
+function sportsTicketBundle(value: Record<string,unknown>): value is SportsTicketBundleCard{
+  if(!isRecord(value.props)||!hasOnlyKeys(value.props,['title','source','tickets']))return false
+  const p=value.props
+  return isText(p.title,160)&&isText(p.source,320)&&Array.isArray(p.tickets)
+    &&p.tickets.length>0&&p.tickets.length<=5&&p.tickets.every(x=>
+      isRecord(x)&&typeof x.ticketReference==='string'
+      &&sportsTicket({component:'sports_ticket_card',version:1,props:x}))
+    &&new Set(p.tickets.map(x=>x.ticketReference)).size===p.tickets.length
+}
 export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null {
   if (!isRecord(value)
     || !hasOnlyKeys(value, ['component', 'version', 'props'])
@@ -443,6 +456,7 @@ export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null
     case 'sports_game_card': return sportsGame(value) ? value : null
     case 'sports_schedule_card': return sportsSchedule(value) ? value : null
     case 'sports_ticket_card': return sportsTicket(value) ? value : null
+    case 'sports_ticket_bundle_card': return sportsTicketBundle(value) ? value : null
     case 'sports_odds_card': return sportsOdds(value) ? value : null
     case 'event_card': return validateEventCard(value) ? value : null
     case 'metric_card': return validateMetricCard(value) ? value : null
@@ -513,9 +527,9 @@ export function splitGenerativeUiText(
       }
     }
     if (parsed === null) {
-      if (/"component"\s*:\s*"(?:sports_game_card|sports_schedule_card|sports_ticket_card)"/.test(body ?? ''))
+      if (/"component"\s*:\s*"(?:sports_game_card|sports_schedule_card|sports_ticket_card|sports_ticket_bundle_card)"/.test(body ?? ''))
         segments.push({ kind: 'notice', text: 'La tarjeta deportiva no pudo validarse. Kira debe consultar de nuevo el evento y entregar los datos verificados.' })
-      else if (/"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_odds_card)"/.test(body ?? ''))
+      else if (/"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_ticket_bundle_card|sports_odds_card)"/.test(body ?? ''))
         segments.push({ kind: 'notice', text: 'Esta interfaz no pudo mostrarse. Pide a Kira que la actualice.' })
       else appendMarkdown(segments, raw)
     }
@@ -529,7 +543,7 @@ export function splitGenerativeUiText(
   let tail = text.slice(cursor)
   if (options.streaming === true) {
     const lastJsonFence = tail.lastIndexOf('```json')
-    const relevantJson = lastJsonFence >= 0 && /"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_odds_card)"/.test(tail.slice(lastJsonFence))
+    const relevantJson = lastJsonFence >= 0 && /"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_ticket_bundle_card|sports_odds_card)"/.test(tail.slice(lastJsonFence))
       ? lastJsonFence : -1
     const unfinishedFence = Math.max(tail.lastIndexOf('```generative-ui'), relevantJson)
     if (unfinishedFence >= 0) tail = tail.slice(0, unfinishedFence)
@@ -557,7 +571,7 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
       continue
     }
     const source = segment.text
-    const startPattern = /^[ \t]*\{\s*"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_odds_card)"/gm
+    const startPattern = /^[ \t]*\{\s*"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_ticket_bundle_card|sports_odds_card)"/gm
     let cursor = 0
     for (const match of source.matchAll(startPattern)) {
       if (count >= MAX_UI_BLOCKS) break
@@ -971,12 +985,18 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         <footer className={css.sportsSourceBar}><small>{sportsDisplayText(p.note)}</small><small>Sin hora de actualización confirmada, las cuotas son referencias, no cotizaciones operables.</small></footer>
       </section>
     }
+    case 'sports_ticket_bundle_card': {
+      return <section data-generative-ui="sports_ticket_bundle_card" aria-label={block.props.title}>
+        {block.props.tickets.map(ticket=><SportsTicketLiveTracker key={ticket.ticketReference} props={ticket}/>)}
+      </section>
+    }
     case 'sports_ticket_card': {
       const p = block.props
       const requested = p.requestedLegs ?? p.legs.length
       const incomplete = p.legs.length < requested
       const unpriced = p.combinedOdds === 'No disponible'
       const receipt=Boolean(p.ticketReference)
+      if(receipt)return <SportsTicketLiveTracker props={p}/>
       // Keep only attributed competition taxonomy; do not infer unnamed leagues.
       const groups = new Map<string,typeof p.legs>()
       for (const leg of p.legs) {
