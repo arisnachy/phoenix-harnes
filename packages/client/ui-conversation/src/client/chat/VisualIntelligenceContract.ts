@@ -112,7 +112,8 @@ export function normalizeVisualIntelligence(value: unknown): unknown {
     let next = metric
     if (typeof metric.status === 'string') {
       const key = metric.status.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
-      const normalized = statusAliases[key] ?? (['neutral','positive','warning','negative','info'].includes(key) ? key : undefined)
+      const normalized = (Object.prototype.hasOwnProperty.call(statusAliases,key) ? statusAliases[key] : undefined)
+        ?? (['neutral','positive','warning','negative','info'].includes(key) ? key : undefined)
       if (normalized !== undefined && normalized !== metric.status) {
         next = { ...next, status: normalized }
         changed = true
@@ -133,7 +134,8 @@ export function normalizeVisualIntelligence(value: unknown): unknown {
   let view = props.view
   if (typeof view === 'string') {
     const key = view.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
-    const normalized = aliases[key] ?? (allowedModes.includes(key as VisualMode) ? key : undefined)
+    const normalized = (Object.prototype.hasOwnProperty.call(aliases,key) ? aliases[key] : undefined)
+      ?? (allowedModes.includes(key as VisualMode) ? key : undefined)
     if (normalized !== undefined && normalized !== view) { view = normalized; changed = true }
   }
   let identity = props.id
