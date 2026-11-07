@@ -6,6 +6,14 @@
 export interface AssessmentReportRow {
   readonly question:string;readonly answer:string;readonly score?:number
 }
+/** Kira authors prose only. The original scored data is never overwritten. */
+export interface AssessmentKiraNarrative {
+  readonly summary:string;readonly interpretation:string
+  readonly guidelineBasis:string;readonly limitations:string
+  readonly recommendations:string;readonly followUp:string
+  readonly references:readonly {readonly title:string;readonly url:string;readonly version?:string}[]
+  readonly sections?:readonly {readonly heading:string;readonly content:string}[]
+}
 export interface AssessmentReportData {
   readonly title:string;readonly discipline:string;readonly date:string
   readonly participant:string;readonly professional:string;readonly context:string
@@ -16,6 +24,7 @@ export interface AssessmentReportData {
   readonly rows:readonly AssessmentReportRow[]
   readonly observations:string;readonly recommendations:string
   readonly verified:boolean
+  readonly kiraNarrative?:AssessmentKiraNarrative
 }
 const W=612,H=792
 const navy='#14293a',teal='#147c83',ink='#253344',gray='#697884',light='#e9f2f2',line='#d5e1e4'
@@ -63,7 +72,7 @@ function newPage(pages:Page[],title:string):Page{
   page.content+=label(title.slice(0,72),PAD,729,14,true,'#ffffff')
   page.content+=fill(PAD,46,W-PAD*2,1,line)
   page.content+=label('Generado localmente - confidencial si contiene datos personales',PAD,31,8,false,gray)
-  page.content+=label('Página '+n,514,31,8,false,gray)
+  page.content+=label('Informe · '+String(n),494,31,8,false,gray)
   return page
 }
 function ensure(pages:Page[],height:number,title:string):Page{
@@ -157,8 +166,21 @@ export function buildAssessmentPdfBytes(data:AssessmentReportData):Uint8Array<Ar
   p.content+=label('TOTAL',PAD+16,p.y-7,10,true,gray)
   p.content+=label(safe(data.score,30),PAD+17,p.y-44,24,true,navy)
   p.content+=label('Rango: '+safe(data.range,60),PAD+170,p.y-12,10,true,ink)
-  p.content+=label(data.verified?'Referencia comprobable':'NO VALIDADO',PAD+170,p.y-34,10,true,teal)
-  p.y-=92
+  p.content+=label(data.verified?'Fuente declarada':'VERSIÓN NO VERIFICADA',PAD+170,p.y-34,9,true,teal)
+  // Pure vector score-position visualization, never substitutes a validated
+  // percentile or normative scale. No percentiles are inferred.
+  const bounds=data.range.match(/^\s*(-?\d+(?:[.,]\d+)?)\s*[-–]\s*(-?\d+(?:[.,]\d+)?)\s*$/u)
+  const total=Number(data.score.replace(',','.'))
+  const min=bounds?Number(bounds[1]!.replace(',','.')):NaN
+  const max=bounds?Number(bounds[2]!.replace(',','.')):NaN
+  if(Number.isFinite(total)&&Number.isFinite(min)&&Number.isFinite(max)&&max>min){
+    const fraction=Math.max(0,Math.min(1,(total-min)/(max-min)))
+    const bx=PAD+170, by=p.y-59, bw=280
+    p.content+=fill(bx,by,bw,6,'#d5e1e4')
+    p.content+=fill(bx,by,Math.max(1,bw*fraction),6,teal)
+    p.content+=label('Posición en rango teórico (no percentil)',bx,by-13,7.5,false,gray)
+  }
+  p.y-=103
   section(pages,'Interpretación del instrumento',title)
   paragraph(pages,safe(data.classification),title,{bold:true})
   paragraph(pages,'Esta clasificación describe las respuestas según la regla declarada. '
@@ -171,11 +193,37 @@ export function buildAssessmentPdfBytes(data:AssessmentReportData):Uint8Array<Ar
     section(pages,'Alertas y seguridad',title)
     for(const warning of data.warnings)paragraph(pages,'ATENCIÓN: '+safe(warning,700),title,{bold:true})
   }
+  if(data.kiraNarrative){
+    section(pages,'Síntesis interpretativa · Kira',title)
+    paragraph(pages,safe(data.kiraNarrative.summary,6000),title,{bold:true,size:10.5})
+    section(pages,'Interpretación profesional contextualizada',title)
+    paragraph(pages,safe(data.kiraNarrative.interpretation,10000),title)
+    section(pages,'Concordancia con la guía y versión aplicada',title)
+    paragraph(pages,safe(data.kiraNarrative.guidelineBasis,6000),title)
+    section(pages,'Limitaciones de la interpretación asistida',title)
+    paragraph(pages,safe(data.kiraNarrative.limitations,6000),title)
+    section(pages,'Recomendaciones propuestas por Kira',title)
+    paragraph(pages,safe(data.kiraNarrative.recommendations,6000),title)
+    section(pages,'Seguimiento y próxima evaluación',title)
+    paragraph(pages,safe(data.kiraNarrative.followUp,6000),title)
+    for(const item of data.kiraNarrative.sections??[]){
+      section(pages,safe(item.heading,85),title)
+      paragraph(pages,safe(item.content,8000),title)
+    }
+    section(pages,'Bibliografía declarada para revisión',title)
+    if(data.kiraNarrative.references.length===0)
+      paragraph(pages,'No se aportaron referencias autenticadas. No atribuir recomendaciones a guías sin corroboración.',title)
+    for(const ref of data.kiraNarrative.references.slice(0,12)){
+      paragraph(pages,safe(ref.title,250)+(ref.version?' · '+safe(ref.version,120):''),title,{bold:true})
+      paragraph(pages,safe(ref.url,900),title,{size:8.5})
+    }
+    paragraph(pages,'Interpretación asistida por IA; todas las citas, la aplicabilidad de las normas y la validez requieren revisión profesional.',title)
+  }
   section(pages,'Metodología',title)
   paragraph(pages,safe(data.method),title)
-  section(pages,'Análisis profesional y observaciones',title)
+  section(pages,'Observaciones registradas por el profesional',title)
   paragraph(pages,safe(data.observations),title)
-  section(pages,'Plan de seguimiento y recomendaciones',title)
+  section(pages,'Plan y recomendaciones del profesional',title)
   paragraph(pages,safe(data.recommendations),title)
   section(pages,'Alcance y limitaciones',title)
   for(const item of data.limitations)paragraph(pages,'- '+safe(item,700),title)
@@ -185,6 +233,7 @@ export function buildAssessmentPdfBytes(data:AssessmentReportData):Uint8Array<Ar
   paragraph(pages,'Estado: '+(data.verified?'Instrumento de referencia; verificar pertinencia cultural y uso autorizado.':
     'Puntuación de formulario no verificada; no presentar como instrumento estandarizado.'),title)
   paragraph(pages,'Revisión, firma y sello del profesional: ____________________________________',title)
+  if(data.kiraNarrative) paragraph(pages,'BORRADOR CON ASISTENCIA DE KIRA. El profesional debe revisar y firmar antes de utilizarlo clínicamente.',title,{bold:true,accent:true})
   newPage(pages,'ANEXO · FORMULARIO COMPLETADO')
   section(pages,'Respuestas originales (auditoría)',title)
   paragraph(pages,'Se transcriben todas las preguntas y las respuestas elegidas, sin resumir ni inferir. '

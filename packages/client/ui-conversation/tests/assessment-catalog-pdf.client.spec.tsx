@@ -97,7 +97,7 @@ describe('professional assessment catalog and complete local PDF',()=>{
     const spec=assessmentCatalog.find(x=>x.id==='gad7-es')!.spec!
     render(<ScaleForm spec={spec} verified />)
     expect(screen.getAllByRole('combobox')).toHaveLength(7)
-    const download=screen.getByRole('button',{name:/Generar informe PDF completo/})
+    const download=screen.getByRole('button',{name:/Descargar registro PDF/})
     expect(download).toHaveProperty('disabled',true)
     for(const select of screen.getAllByRole('combobox')){
       fireEvent.change(select,{target:{value:'0'}})
@@ -110,20 +110,20 @@ describe('professional assessment catalog and complete local PDF',()=>{
     const spec=assessmentCatalog.find(x=>x.id==='phq9-es')!.spec!
     const onAction=vi.fn()
     render(<ScaleForm spec={spec} verified onAction={onAction}/>)
-    const draft=screen.getByRole('button',{name:'Preparar borrador interpretativo con Kira'})
+    const draft=screen.getByRole('button',{name:'Generar interpretación profesional y PDF con Kira'})
     expect(draft).toHaveProperty('disabled',true)
     for(const select of screen.getAllByRole('combobox')){
       fireEvent.change(select,{target:{value:'0'}})
     }
     expect(draft).toHaveProperty('disabled',true)
     fireEvent.click(screen.getByRole('checkbox',{
-      name:/Autorizo compartir estas respuestas/,
+      name:/Autorizo enviar estas respuestas/,
     }))
     expect(draft).toHaveProperty('disabled',false)
     fireEvent.click(draft)
     expect(onAction).toHaveBeenCalledTimes(1)
-    expect(onAction.mock.calls[0]?.[1]).toBe('draft')
-    expect(onAction.mock.calls[0]?.[0]).toContain('No inventes entrevista')
+    expect(onAction.mock.calls[0]?.[1]).toBe('submit')
+    expect(onAction.mock.calls[0]?.[0]).toContain('NO inventes anamnesis')
   })
 
   it('exposes the real instruments in the universal form library',()=>{
