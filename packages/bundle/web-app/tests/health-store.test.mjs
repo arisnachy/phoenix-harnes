@@ -677,3 +677,49 @@ test('encrypted patient-linked GLB is only readable by assigned clinician and re
  assert.throws(()=>db.addAttachment(doctor,{patientId:p.id,name:'bad.glb',mime:'model/gltf-binary',
   base64:Buffer.from('not-gltf').toString('base64')}),/GLB/)
 })
+
+test('source-backed study drafts are encrypted, assigned, and cannot forge image analysis',t=>{
+ const {db,admin,root}=fixture(t)
+ const password='another-secure-password-2026'
+ db.createStaff(admin.actor,{username:'studydoctor',password,role:'clinician'})
+ db.createStaff(admin.actor,{username:'otherstudydoctor',password,role:'clinician'})
+ const doctor=db.login('studydoctor',password).actor
+ const other=db.login('otherstudydoctor',password).actor
+ const patient=db.create(admin.actor,'patients',{name:'Paciente sintético para análisis',dateOfBirth:'1978-06-02'})
+ db.assignPatient(admin.actor,patient.id,'studydoctor','Interpretación clínica de prueba')
+ const png=Buffer.from('89504e470d0a1a0a','hex')
+ const source=db.addAttachment(doctor,{patientId:patient.id,name:'radiografia-sintetica.png',
+  mime:'image/png',base64:png.toString('base64'),note:'Documento de prueba'})
+ assert.throws(()=>db.createStudyInterpretation(doctor,{
+  patientId:patient.id,sourceAttachmentId:source.id,modality:'xray',
+  originalReviewed:false,observations:'Lesión visible',
+  preliminaryInterpretation:'Hallazgo clínico'}),
+ /revisado/i)
+ const draft=db.createStudyInterpretation(doctor,{
+  patientId:patient.id,sourceAttachmentId:source.id,modality:'xray',
+  originalReviewed:false,criticalConcern:'not-assessed'})
+ assert.equal(draft.evidence.evidenceState,'UNEXAMINED_SOURCE')
+ assert.equal(draft.evidence.aiImageInterpreted,false)
+ assert.equal(draft.aiDiagnosisPerformed,false)
+ const reviewed=db.createStudyInterpretation(doctor,{
+  patientId:patient.id,sourceAttachmentId:source.id,modality:'xray',
+  originalReviewed:true,observations:'Hallazgo de prueba sin identificación de paciente',
+  preliminaryInterpretation:'Hipótesis provisional para contraste con originales',
+  criticalConcern:'not-assessed'})
+ assert.equal(reviewed.evidence.diagnosticValidation,'NOT_VALIDATED')
+ assert.equal(db.listStudyInterpretations(doctor,patient.id).length,2)
+ assert.throws(()=>db.listStudyInterpretations(other,patient.id),/asignado|acceso|permiso/i)
+ assert.throws(()=>db.createStudyInterpretation(other,{
+  patientId:patient.id,sourceAttachmentId:source.id,modality:'xray',originalReviewed:true}),/asignado|acceso|permiso/i)
+ const dbData=readFileSync(join(root,'clinic.sqlite'))
+ assert.equal(dbData.includes(Buffer.from('Hipótesis provisional para contraste con originales')),false)
+ assert.throws(()=>db.createStudyInterpretation(doctor,{
+  patientId:patient.id,sourceAttachmentId:source.id,modality:'ct',
+  originalReviewed:true,observations:'Dato sintético',criticalConcern:'suspected-critical'}),
+ /evaluación clínica inmediata/)
+ const otherPatient=db.create(admin.actor,'patients',{name:'Paciente sintético dos',dateOfBirth:'1960-01-01'})
+ db.assignPatient(admin.actor,otherPatient.id,'studydoctor','Acceso clínico de prueba')
+ assert.throws(()=>db.createStudyInterpretation(doctor,{
+  patientId:otherPatient.id,sourceAttachmentId:source.id,modality:'xray',
+  originalReviewed:true}),/no corresponde/)
+})

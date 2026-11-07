@@ -243,6 +243,12 @@ export function registerHealthRoutes(ctx:Context):void {
       if(operation==='patient-context'&&method==='GET'&&id!==undefined){
         reply(res,200,{context:store.patientContext(actor,id)});return
       }
+      if(operation==='study-interpretations'&&method==='GET'&&id!==undefined){
+        reply(res,200,{items:store.listStudyInterpretations(actor,id)});return
+      }
+      if(operation==='study-interpretations'&&method==='POST'&&id===undefined){
+        reply(res,201,{assessment:store.createStudyInterpretation(actor,await readBody(req,10000))});return
+      }
       if(operation==='anatomy-review'&&method==='PATCH'&&id!==undefined){
         const input=await readBody(req)
         reply(res,200,{attachment:store.reviewAnatomicalAttachment(actor,id,Number(input.version),input)});return
