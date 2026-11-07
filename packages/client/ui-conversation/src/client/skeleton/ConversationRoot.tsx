@@ -58,7 +58,8 @@ export function ConversationRoot({
   // A plugin this package cannot import (ui-model-selection) says this session cannot
   // send; its reason is already localized by whoever raised it.
   const composerBlock = useComposerBlock(block => block)
-  const preferredName = useUserProfile(profile => profile.preferredName)
+  const heroProfile = useUserProfile(profile => profile)
+  const preferredName = heroProfile.preferredName
   const profileInitials = preferredName?.trim().split(/\s+/).slice(0, 2).map(part => part[0] ?? '').join('').toUpperCase() || 'PX'
   const proactiveAttention = useProactivityAttention(items => items)
 
@@ -310,7 +311,7 @@ export function ConversationRoot({
   const composerBar = (
     <div className={clsx(css.composerStack, hero && css.composerHero)}>
       {hero && <HeroGlow className={css.heroGlow} />}
-      {hero && <HeroShell t={t} renderSlot={renderSlot} preferredName={preferredName} />}
+      {hero && <HeroShell t={t} renderSlot={renderSlot} preferredName={preferredName} profile={heroProfile} />}
       {hero && heroWorkspaceRow}
       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
       {inputBar}
