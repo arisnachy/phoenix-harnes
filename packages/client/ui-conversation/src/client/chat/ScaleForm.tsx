@@ -60,7 +60,7 @@ export function parseScaleForm(value: unknown): ScaleFormSpec | null {
     || (props.source !== undefined && !text(props.source, 400))
     || (props.version !== undefined && !text(props.version, 120))
     || (props.population !== undefined && !text(props.population, 240))
-    || !Array.isArray(props.items) || props.items.length < 1 || props.items.length > 60) return null
+    || !Array.isArray(props.items) || props.items.length < 1 || props.items.length > 240) return null
   const ids = new Set<string>()
   for (const item of props.items) {
     if (!record(item) || !allowed(item, ['id', 'question', 'options', 'help'])
