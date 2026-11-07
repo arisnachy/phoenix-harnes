@@ -771,3 +771,30 @@ test('MLB temporal gates reject future, stale and invalid pitcher logs',async()=
   assert.equal(review.evidenceGates.reliefUsageObserved,true)
   assert.equal(review.eligibleForTicket,false)
 })
+
+
+test('cached pitcher evidence expires at review time even when collection was valid',async()=>{
+  const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true}).fetcher,at)
+  const log=(day)=>({date:day,opponentId:123,innings:'1.0',pitches:'15',
+    earnedRuns:'0',strikeouts:'1',walks:'0'})
+  assert.ok(d.starters.home&&d.starters.away)
+  assert.ok(d.bullpen.home.length&&d.bullpen.away.length)
+  for(const p of [d.starters.home,d.starters.away]){
+    p.recentStarts=[log('2026-05-18')]
+  }
+  for(const side of ['home','away']){
+    d.bullpen[side][0].reliefUsage72h=[log('2026-06-29')]
+    for(const p of d.bullpen[side].slice(1))p.reliefUsage72h=[]
+  }
+  const collected=reviewMlbResearch(d)
+  assert.equal(collected.evidenceGates.recentStarterOutingsVerified,true)
+  assert.equal(collected.evidenceGates.reliefUsageObserved,true)
+  const later=reviewMlbResearch(d,'2026-07-02T12:00:00Z')
+  assert.equal(later.evidenceGates.reviewTimestampValid,true)
+  assert.equal(later.evidenceGates.scheduledFuture,true)
+  assert.equal(later.evidenceGates.recentStarterOutingsVerified,false)
+  assert.equal(later.evidenceGates.reliefUsageObserved,false)
+  assert.ok(later.missingEvidence.some(x=>x.includes('Últimas salidas fechadas')))
+  assert.ok(later.missingEvidence.some(x=>x.includes('bullpen')))
+  assert.equal(later.eligibleForTicket,false)
+})
