@@ -195,9 +195,15 @@ export function apply(ctx: Context): void {
   const userProfile = createSnapshotStore<ConversationUserProfileState>({})
   const syncUserProfile = (): void => {
     const snapshot = userProfileScope.getSnapshot()
-    const preferredName = snapshot.status === 'ready' ? snapshot.value?.preferredName : undefined
-    const next = typeof preferredName === 'string' ? { preferredName } : {}
-    if (userProfile.getSnapshot().preferredName !== next.preferredName) userProfile.set(next)
+    const source = snapshot.status === 'ready' ? snapshot.value : undefined
+    const next: ConversationUserProfileState = {
+      ...(typeof source?.preferredName === 'string' ? { preferredName: source.preferredName } : {}),
+      ...(source?.consent?.moments && typeof source.countryCode === 'string' ? { countryCode: source.countryCode } : {}),
+      ...(source?.consent?.profession && typeof source.profession === 'string' ? { profession: source.profession } : {}),
+      ...(source?.consent?.dateOfBirth && typeof source.dateOfBirth === 'string' ? { dateOfBirth: source.dateOfBirth } : {}),
+      ...(source?.consent?.moments && Array.isArray(source.specialDates) ? { specialDates: source.specialDates } : {}),
+    }
+    if (JSON.stringify(userProfile.getSnapshot()) !== JSON.stringify(next)) userProfile.set(next)
   }
   syncUserProfile()
   ctx.effect(
