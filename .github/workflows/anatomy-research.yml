@@ -5,6 +5,13 @@ on:
       - 'scripts/phoenix-anatomy-*'
       - 'scripts/phoenix-health-anatomy.test.mjs'
       - 'scripts/phoenix-health-diagnostic.test.mjs'
+      - 'scripts/phoenix-health-diagnostic-catalog.test.mjs'
+      - 'scripts/phoenix-health-diagnostic-accuracy.test.mjs'
+      - 'packages/core/tool-health/src/ecg-preexcitation.ts'
+      - 'packages/core/tool-health/src/diagnostic-visualization.ts'
+      - 'packages/core/tool-health/src/diagnostic-concordance.ts'
+      - 'packages/bundle/web-app/src/health-diagnostic-catalog.ts'
+      - 'packages/core/tool-health/src/diagnostic-catalog.ts'
       - 'packages/bundle/web-app/src/health-diagnostic-evidence.ts'
       - 'packages/core/tool-health/src/diagnostic-routing.ts'
       - 'packages/core/tool-health/src/index.ts'
@@ -35,7 +42,7 @@ jobs:
           node --experimental-strip-types --test scripts/phoenix-health-anatomy.test.mjs
       - name: Original study and diagnostic evidence safeguards
         run: |
-          node --experimental-strip-types --test scripts/phoenix-health-diagnostic.test.mjs
+          node --experimental-strip-types --test scripts/phoenix-health-diagnostic.test.mjs scripts/phoenix-health-diagnostic-catalog.test.mjs scripts/phoenix-health-diagnostic-accuracy.test.mjs
           node --experimental-strip-types --test packages/bundle/web-app/tests/health-store.test.mjs
       - uses: actions/setup-python@v5
         with:

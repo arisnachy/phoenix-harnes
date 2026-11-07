@@ -5,6 +5,10 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { planAnatomicalTwin } from './anatomy-planner.ts'
 import { protocolFor } from './diagnostic-routing.ts'
+import { assessPreexcitation } from './ecg-preexcitation.ts'
+import { planClinicalVisualization } from './diagnostic-visualization.ts'
+import { auditDiagnosticConcordance } from './diagnostic-concordance.ts'
+import {DIAGNOSTIC_INPUTS,DIAGNOSTIC_INPUT_GROUPS,DIAGNOSTIC_INPUT_COUNT} from './diagnostic-catalog.ts'
 /** Optional, read-only Kira Health Engine planning tools. No EHR access. */
 import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
@@ -58,16 +62,110 @@ function prepareAnatomy(component?:string):Promise<string>{
 }
 export const name = 'tool-health'
 export const inject = ['tools', 'systemPrompt', 'userQuestions']
-const GUIDANCE = 'PHOENIX Health Engine: solo al solicitar una consulta o interrogatorio, usa health_interview_plan con motivo general SIN nombre, email, identificador u otros datos de paciente. Usa health_copilot_ask action=choose_mode para elegir mediante ASK entre Kira, médico o mixto. Luego action=screen_urgency antes de action=next_question. ASK solo gestiona preguntas y decisiones genéricas, sensibles y sin datos identificables; la respuesta clínica se introduce en el expediente autenticado /health. Un ASK expirado no acredita hechos, consentimiento, revisión ni registro.  El plan no es diagnóstico; recopila datos y exige evaluación del profesional para signos de alarma, examen, pruebas, tratamiento y firma. No afirmes que existe historia clínica guardada, receta firmada, correo enviado ni cita agendada. health_kira_mail_requirements solo enumera requisitos; no envía mensajes. Para estudios volumétricos y gemelos anatómicos usa health_anatomy_workflow; usa health_anatomy_models para el catálogo y health_anatomy_status para consultar dependencias locales. Si el usuario autorizó expresamente instalar dependencias anatómicas, usa health_anatomy_prepare con component=slicerheart, monai-nnunet, totalsegmentator, ohif-cornerstone o three-vtk. SimVascular y openCARP requieren instalación externa verificada; no afirmes que se autoinstalan. Su estado started/running NO acredita instalación: confirma con health_anatomy_status y no prometas archivo GLB sin comprobarlo. El plan no es una reconstrucción: la ejecución real requiere un archivo DICOM/NIfTI local y consentimiento clínico. Nunca inventes lesiones ni llames al GLB diagnóstico. El remitente debe ser la cuenta institucional de Kira autorizada, no una dirección inventada. No introduzcas historia clínica ni datos personales en memoria general, herramientas o logs sin un sistema clínico autorizado. Para ECG/EKG, ultrasonido, RX, TC, RM, citología, histología o laboratorio, usa health_diagnostic_protocol con modalidad y tipo de fuente ANTES de comunicar conclusiones. Solo describe hallazgos de píxeles, ondas o cifras que REALMENTE hayas visto o que provengan de informes acreditados. Una captura, PDF, foto o malla 3D no implica lectura del estudio completo; nunca afirmes que interpretaste una imagen inaccesible. Distingue observación directa, reporte transcrito, hipótesis, incertidumbre y región no evaluable; no fabricas probabilidades o diagnósticos definitivos. Si no hay archivo fuente accesible o intérprete especializado validado, declara NO ANALIZADO, solicita el estudio original y su revisión profesional. Si observas posibles hallazgos críticos recomienda valoración clínica urgente, sin tranquilizar por ausencia aparente en una imagen parcial. La herramienta metadata no examina píxeles ni constituye diagnóstico.'
+const GUIDANCE = 'PHOENIX Health Engine: solo al solicitar una consulta o interrogatorio, usa health_interview_plan con motivo general SIN nombre, email, identificador u otros datos de paciente. Usa health_copilot_ask action=choose_mode para elegir mediante ASK entre Kira, médico o mixto. Luego action=screen_urgency antes de action=next_question. ASK solo gestiona preguntas y decisiones genéricas, sensibles y sin datos identificables; la respuesta clínica se introduce en el expediente autenticado /health. Un ASK expirado no acredita hechos, consentimiento, revisión ni registro.  El plan no es diagnóstico; recopila datos y exige evaluación del profesional para signos de alarma, examen, pruebas, tratamiento y firma. No afirmes que existe historia clínica guardada, receta firmada, correo enviado ni cita agendada. health_kira_mail_requirements solo enumera requisitos; no envía mensajes. Para estudios volumétricos y gemelos anatómicos usa health_anatomy_workflow; usa health_anatomy_models para el catálogo y health_anatomy_status para consultar dependencias locales. Si el usuario autorizó expresamente instalar dependencias anatómicas, usa health_anatomy_prepare con component=slicerheart, monai-nnunet, totalsegmentator, ohif-cornerstone o three-vtk. SimVascular y openCARP requieren instalación externa verificada; no afirmes que se autoinstalan. Su estado started/running NO acredita instalación: confirma con health_anatomy_status y no prometas archivo GLB sin comprobarlo. El plan no es una reconstrucción: la ejecución real requiere un archivo DICOM/NIfTI local y consentimiento clínico. Nunca inventes lesiones ni llames al GLB diagnóstico. El remitente debe ser la cuenta institucional de Kira autorizada, no una dirección inventada. No introduzcas historia clínica ni datos personales en memoria general, herramientas o logs sin un sistema clínico autorizado. Para CUALQUIER entrada diagnóstica médica (radiología, ECG, neurofisiología, ultrasonido, TC/RM, medicina nuclear, endoscopia, oftalmología, dermatología, ORL, microbiología, hematología, laboratorio, pruebas genéticas/moleculares, biopsia/citología, medicina del sueño, obstetricia, análisis funcionales y escalas clínicas) primero identifica la modalidad exacta con health_diagnostic_catalog, después consulta health_diagnostic_protocol con su id y fuente. Si no está en el catálogo, selecciona other solo como NO EVALUADO y solicita un protocolo especializado; no generalices desde otra modalidad. Solo describe hallazgos de píxeles, ondas o cifras que REALMENTE hayas visto o que provengan de informes acreditados. Una captura, PDF, foto o malla 3D no implica lectura del estudio completo; nunca afirmes que interpretaste una imagen inaccesible. Antes de presentar CUALQUIER hipótesis clínica, revisa mediante health_diagnostic_concordance la concordancia entre observaciones fuente, impresión y diferenciales; si BLOCK_UNSUPPORTED_INTERPRETATION, NO conviertas esa hipótesis en diagnóstico ni ilustración del paciente. En un ECG con indicios de PR corto, onda delta o QRS ancho no aceptes una explicación aislada de eje izquierdo sin examinar la posibilidad de preexcitación, incluso aunque la imagen final de eje haya quedado visualmente convincente. Antes de generar ilustraciones clínicas para cualquier modalidad usa health_diagnostic_visual_plan y comprueba datos fuente; si bloquea no dibujes una representación genérica que aparente ser el diagnóstico del paciente. Cuando se solicita visualizar la causa de una anomalía eléctrica, representa el MECANISMO basado en el patrón, nunca inventes la ubicación anatómica del circuito. Caso de regresión prioritario: una imagen de ECG con preexcitación/WPW puede mostrar PR corto, onda delta al inicio del QRS y complejo QRS ensanchado. Si el material es una foto sin calibración, usa photoDeltaHint y qualitativePrHint para etiquetar sospecha visual PROVISIONAL, jamás registrar PR/QRS numéricos no medidos. No considerar desviación del eje como diagnóstico suficiente, evaluar delta visible antes de ilustrar. El plan de dibujo eléctrico solo podrá ser un mecanismo genérico con vía accesoria sin ubicación atribuida al paciente. No te quedes solo en la desviación del eje izquierdo ni concluyas bloqueo fascicular por el eje. Antes de responder revisa específicamente PR en ms, inicio de QRS/onda delta en derivaciones visibles, duración QRS y calidad de calibración; usa health_ecg_preexcitation_review solo con mediciones realmente observadas en trazado calibrado por el profesional. El eje desviado NO descarta preexcitación. Distingue patrón ECG de WPW de síndrome WPW sintomático. Si el ECG no puede leerse, no inventes PR/QRS ni asegures ausencia de WPW. Si hay ritmo irregular de QRS ancho o signos de inestabilidad, señala posible urgencia y la necesidad de asistencia clínica inmediata. Distingue observación directa, reporte transcrito, hipótesis, incertidumbre y región no evaluable; no fabricas probabilidades o diagnósticos definitivos. Si no hay archivo fuente accesible o intérprete especializado validado, declara NO ANALIZADO, solicita el estudio original y su revisión profesional. Si observas posibles hallazgos críticos recomienda valoración clínica urgente, sin tranquilizar por ausencia aparente en una imagen parcial. La herramienta metadata no examina píxeles ni constituye diagnóstico.'
+/** Short, unconditional first-pass guard for medical uploads, including an
+ * image-only user message. PromptAssembly does not promise incomingUserText.
+ * This rule does not access the image, and is not a diagnostic model. */
+export const CLINICAL_VISION_BASELINE =
+  'Si el mensaje incluye una imagen o archivo médico (ECG/EKG, eco, radiografía, TC, RM, laboratorio, citología, histología o cualquier modalidad), primero identifica el tipo de estudio, qué partes y datos ves REALMENTE y qué quedó sin evaluar. No diagnostiques a partir del nombre de archivo, un GLB o una ilustración creada. Antes de generar una imagen explicativa contrasta los hallazgos con diagnósticos diferenciales relevantes y usa health_diagnostic_concordance cuando los datos generales sean suficientes. En ECG busca PR, onda delta y anchura QRS antes de atribuirlo solamente al eje: la foto puede sugerir WPW/preexcitación sin confirmarlo; no inventes milisegundos ni localices una vía accesoria en el paciente. Explica incertidumbre y signos de alarma; si los píxeles no fueron accesibles, declara NO ANALIZADO, sin ilustrar un diagnóstico supuesto.'
 function healthRequest(text: string | undefined): boolean {
-  return typeof text === 'string' && /(?:consulta m[eé]dica|paciente|historia cl[ií]nica|interrogatorio|receta|health engine|kira.*consulta|psic[oó]log[oa]|laboratorio cl[ií]nico|gemelo anat[oó]mico|reconstrucci[oó]n 3d|anatom[ií]a 3d|modelo 3d (?:del? )?(?:coraz[oó]n|cerebro|[oó]rgano)|segmentaci[oó]n anat[oó]mica|dicom|tomograf[ií]a|resonancia magn[eé]tica|ekg|ecg|electrocardiograma|radiograf[ií]a|rayos x|ecograf[ií]a|sonograf[ií]a|citolog[ií]a|histopatolog[ií]a|an[aá]lisis de imagen|interpreta.*(?:imagen|estudio|placa)|diagn[oó]stico.*(?:imagen|ekg|rx|tac|rm))/iu.test(text)
+  return typeof text === 'string' && /(?:consulta m[eé]dica|paciente|historia cl[ií]nica|interrogatorio|receta|health engine|kira.*consulta|psic[oó]log[oa]|laboratorio cl[ií]nico|gemelo anat[oó]mico|reconstrucci[oó]n 3d|anatom[ií]a 3d|modelo 3d (?:del? )?(?:coraz[oó]n|cerebro|[oó]rgano)|segmentaci[oó]n anat[oó]mica|dicom|tomograf[ií]a|resonancia magn[eé]tica|ekg|ecg|electrocardiograma|radiograf[ií]a|rayos x|ecograf[ií]a|sonograf[ií]a|citolog[ií]a|histopatolog[ií]a|biopsia|gam[m]?agraf[ií]a|pet.?tc|spect|endoscopia|broncoscopia|colonosco|mamograf[ií]a|oftalmolog|dermatoscop|audiometr|espirometr|gasometr|cultivo|hemograma|coagulaci[oó]n|gen[eé]tica|secuenciaci[oó]n|microbiolog|polisomnograf|doppler|neurofisiolog|electromiograf|eeg|an[aá]lisis de imagen|interpreta.*(?:imagen|estudio|placa)|diagn[oó]stico.*(?:imagen|ekg|rx|tac|rm))/iu.test(text)
 }
 export function apply(ctx: Context): void {
   ctx.tools.register(defineTool({
-    name:'health_diagnostic_protocol',
-    description:'Lista la revisión sistemática y las fuentes originales necesarias para interpretar ECG, RX, TC, RM, ecografía, citología, histopatología y laboratorio. Sin leer el archivo ni identificar pacientes; el resultado NO es diagnóstico.',
+    name:'health_diagnostic_catalog',
+    description:'Consulta un catálogo de 243 tipos de estudios médicos en 20 grupos y 23 familias. Permite buscar por nombre o filtrar por grupo. Es un catálogo de entrada, NO son algoritmos diagnósticos instalados.',
     parameters:{
-      modality:{type:'string',required:true,description:'ecg | ultrasound | xray | ct | mri | laboratory | cytology | histopathology | other'},
+      query:{type:'string',description:'Palabra a buscar en nombre/código de modalidad, opcional; no introducir nombres ni datos personales.'},
+      group:{type:'string',description:'Filtrar por identificador de grupo; opcional.'},
+    },
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(args){
+      const query=(args.query??'').trim().toLocaleLowerCase().slice(0,80)
+      const group=(args.group??'').trim()
+      const matches=Object.values(DIAGNOSTIC_INPUTS).filter(x=>
+        (!group||x.group===group)&&(!query||
+          x.label.toLocaleLowerCase().includes(query)||x.id.includes(query)))
+      return Promise.resolve(JSON.stringify({
+        status:'CATALOG_ONLY_NOT_INTERPRETED',
+        totalTypes:DIAGNOSTIC_INPUT_COUNT,
+        groups:DIAGNOSTIC_INPUT_GROUPS.map(g=>({id:g.id,label:g.label,count:g.items.length})),
+        matched:matches.length,
+        entries:matches.slice(0,50),truncated:matches.length>50,
+        clinicallyValidated:false,patientFilesRead:0,automatedDiagnoses:0,
+        note:'Una modalidad reconocida NO demuestra que existan pesos especializados ni un motor aprobado. Pedir el estudio original y usar health_diagnostic_protocol.',
+      }))
+    },
+    presentCall:()=>({card:'generic',title:'Catálogo de estudios clínicos · 243 tipos',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'health_ecg_preexcitation_review',
+    description:'Evalúa preexcitación/WPW con mediciones de ECG CALIBRADAS o, separadamente, indicios visuales cualitativos de una fotografía que siguen SIN VERIFICAR. No lee píxeles ni atribuye ubicación de vía accesoria; prioriza PR, onda delta y QRS antes que eje.',
+    parameters:{
+      prMs:{type:'number',description:'Duración PR medida en ms, opcional; no inventar.'},
+      qrsMs:{type:'number',description:'Duración QRS medida en ms, opcional; no inventar.'},
+      deltaWave:{type:'string',description:'present | absent | not-assessable; basado en trazado original.'},
+      source:{type:'string',description:'calibrated-12-lead | partial-image | uncalibrated | not-reviewed'},
+      leadEvidence:{type:'string',description:'Derivaciones del ECG que muestran delta; nunca introducir nombre de paciente.'},
+      rhythm:{type:'string',description:'sinus | irregular-wide-complex | other | unknown'},
+      photoDeltaHint:{type:'string',description:'possible | not-seen | not-assessable. Solo indicio cualitativo; NO implica interpretación automatizada de píxeles.'},
+      qualitativePrHint:{type:'string',description:'appears-short | not-apparently-short | not-assessable; NO es una medición PR.'},
+      axisHint:{type:'string',description:'left | right | normal | unknown; eje solo NO excluye WPW.'},
+      clinicianReviewed:{type:'boolean',required:true,description:'El médico revisó realmente el ECG original calibrado. No es cierto si Kira solo vio una fotografía.'},
+    },
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(args){
+      return Promise.resolve(JSON.stringify(assessPreexcitation(args)))
+    },
+    presentCall:()=>({card:'generic',title:'ECG · Preexcitación y WPW (evidencia)',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'health_diagnostic_concordance',
+    description:'Audita la correspondencia de hallazgos fuente, hipótesis, diferenciales, criticidad y tipo de visualización para cualquiera de las 243 entradas diagnósticas. Prioriza no omitir preexcitación/WPW ante delta+PR/QRS y nunca diagnostica por sí sola. Solo metadatos sin PHI.',
+    parameters:{
+      modality:{type:'string',required:true,description:'ID de la modalidad, p.ej. ecg, mri_brain, histopathology.'},
+      sourceType:{type:'string',description:'waveform, image, pdf, dicom, numeric o unknown.'},
+      sourceReviewed:{type:'boolean',required:true,description:'Se revisó realmente la fuente médica y no solo una imagen derivada.'},
+      sourceCompleteness:{type:'string',description:'complete | partial | unknown.'},
+      observedEvidence:{type:'string',description:'Hallazgos generales efectivamente observados; sin nombre, ID ni otro dato de paciente.'},
+      proposedImpression:{type:'string',description:'Hipótesis diagnóstica provisional; no afirmar confirmación.'},
+      differentialConsidered:{type:'string',description:'Principales diferenciales realmente contrastados, incluido WPW frente a alteraciones del eje cuando proceda.'},
+      intendedVisualization:{type:'string',description:'none | mechanism | patient-specific | educational | quantitative'},
+      criticalFeaturesAssessed:{type:'boolean',description:'Se revisaron alertas y urgencia clínica.'},
+      calibratedMeasurementsAvailable:{type:'boolean',description:'Solo verdadero si se midieron datos calibrados en el estudio fuente.'},
+    },
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(args){return Promise.resolve(JSON.stringify(auditDiagnosticConcordance(args)))},
+    presentCall:()=>({card:'generic',title:'Concordancia diagnóstica · evidencias y diferenciales',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'health_diagnostic_visual_plan',
+    description:'Evaluación previa obligatoria para cualquier imagen o visualización clínica: evita crear una ilustración genérica que aparente representar la lesión real del paciente. Solo planifica; no analiza píxeles ni genera imágenes.',
+    parameters:{
+      modality:{type:'string',required:true,description:'ID exacto del catálogo clínico.'},
+      sourceType:{type:'string',description:'image, pdf, dicom, waveform, numeric, other'},
+      sourceReviewed:{type:'boolean',required:true,description:'El estudio original realmente fue revisado (no solo reconstrucción GLB).'},
+      observedFindings:{type:'string',description:'Hallazgos observados y medidos, sin datos identificativos. No inventar.'},
+      visualizationKind:{type:'string',description:'conceptual | anatomical | quantitative | patient-lesion'},
+      patientSpecific:{type:'boolean',required:true,description:'El usuario solicita anatomía real de un paciente.'},
+      verifiedSpatialGeometry:{type:'boolean',description:'Existe prueba geométrica verificada externamente a este plan.'},
+      diagnosticUncertaintyAcknowledged:{type:'boolean',description:'Se reconocen las limitaciones.'},
+    },
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(args){
+      return Promise.resolve(JSON.stringify(planClinicalVisualization(args)))
+    },
+    presentCall:()=>({card:'generic',title:'Plan visual clínico · Evidencia primero',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'health_diagnostic_protocol',
+    description:'Para cualquiera de las 243 modalidades reconocidas, identifica el archivo original y la secuencia de revisión específica a su familia. No abre archivos y no diagnostica. Usa health_diagnostic_catalog si no conoces el ID.',
+    parameters:{
+      modality:{type:'string',required:true,description:'ID exacto de salud: eg ecg, eeg, ct_perfusion, blood_culture, genetic_exome, spirometry, whole_slide_imaging, other. Buscar primero en health_diagnostic_catalog.'},
       sourceType:{type:'string',description:'image | pdf | dicom | waveform | numeric | glb | unknown'},
     },
     output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
@@ -182,6 +280,9 @@ export function apply(ctx: Context): void {
     execute(args) {return Promise.resolve(JSON.stringify(planAnatomicalTwin(args.region,args.studies)))},
     presentCall:()=>({card:'generic',title:'Plan anatómico 3D · evidencia',kind:'read' as const}),
   }))
+  // Must apply even when the user attaches ONLY a medical image and no text.
+  ctx.systemPrompt.section({ name:'tool:health-vision-baseline', order:118,
+    text:()=>CLINICAL_VISION_BASELINE })
   ctx.systemPrompt.section({ name: 'tool:health', order: 119,
     text: assembly => healthRequest((assembly as { incomingUserText?: string }).incomingUserText) ? GUIDANCE : '' })
   ctx.tools.register(defineTool({

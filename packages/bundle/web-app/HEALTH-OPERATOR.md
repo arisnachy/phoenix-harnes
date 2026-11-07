@@ -157,3 +157,35 @@ En **HealthIA → Mi consulta → Interpretación de estudios**, el médico auto
 - Para incorporar IA diagnóstica real se necesitan motores aprobados o validados específicamente para cada indicación, entrada DICOM/ECG/WSI adecuada, pruebas externas y locales contra un estándar de referencia y revisión médica antes del uso clínico.
 
 Pruebas: `node --experimental-strip-types --test scripts/phoenix-health-diagnostic.test.mjs` y las pruebas del expediente.
+
+## Catálogo universal de entradas diagnósticas · versión inicial
+
+El catálogo de PHOENIX reconoce **243 tipos de entrada en 20 grupos y 23 familias de protocolos de evidencia**, con búsqueda jerárquica en **HealthIA → Mi consulta → Interpretación de estudios**. Kira dispone de `health_diagnostic_catalog(query, group)` y `health_diagnostic_protocol(modality, sourceType)`; el primer comando descubre el ID y el segundo indica requisitos del estudio fuente. Se incluyen RX, TC, RM, ecografía, medicina nuclear, cardiología, neurofisiología, laboratorio, hematología, microbiología, genética, citología, histología, oftalmología, endoscopia, ORL, odontología, dermatología, fisiología, sueño, obstetricia y escalas clínicas.
+
+- Cuando falta una modalidad, el profesional elige **Otro estudio** y escribe el nombre técnico. No se presume ningún motor ni interpretación automática.
+- El catálogo **no amplía los formatos aceptados en los adjuntos clínicos**: PNG/JPEG/WebP/PDF; los GLB se procesan en Anatomía 3D. Datos nativos DICOM, EDF, WSI, VCF/FASTQ, HL7/FHIR, ECG digital y vídeos requieren conectores y validación específicos, todavía no incluidos.
+- Reconocer una modalidad **no implica tener un algoritmo diagnóstico**. Los protocolos son listas de evidencia, no clasificadores médicos ni pesos entrenados; jamás afirman diagnóstico clínicamente validado.
+- Antes de registrar una interpretación, un médico autorizado debe verificar los hallazgos en el estudio fuente, indicar dudas y urgencia. La aplicación conserva el vínculo al archivo fuente dentro del expediente cifrado.
+- Futura integración de detectores: por indicación y modalidad exacta, con datos originales y controles de calidad, pesos/versiones reproducibles, calibración y validación externa contra estándar de referencia. No declarar que funcionan por tener una casilla marcada.
+
+Pruebas: `node --experimental-strip-types --test scripts/phoenix-health-diagnostic.test.mjs scripts/phoenix-health-diagnostic-catalog.test.mjs`.
+
+## Regression ECG · Preexcitación/WPW y visualización sustentada
+
+Caso de regresión: un ECG con onda delta, PR corto y QRS amplio fue inicialmente descrito como eje izquierdo, y se generó una ilustración anatómica genérica. PHOENIX no debe reemplazar la revisión del ECG con una representación vistosa.
+
+- Kira ofrece `health_ecg_preexcitation_review` para **mediciones PR/QRS y onda delta extraídas de un trazado calibrado revisado por médico**. El resultado solo identifica **compatibilidad con el patrón electrocardiográfico**, no síndrome WPW confirmado ni posición anatómica real de la vía accesoria.
+- Una captura sin escala/derivaciones suficientes debe producir `INSUFFICIENT_ECG_EVIDENCE`. Un eje izquierdo no confirma ni descarta WPW.
+- Si hay taquicardia irregular de QRS ancho y sospecha de preexcitación se destaca la urgencia clínica. En FA preexcitada los fármacos bloqueadores del nodo AV pueden ser perjudiciales (guías ACC/AHA/ACCP/HRS 2023).
+- La herramienta `health_diagnostic_visual_plan` se aplica al universo de modalidades catalogadas: sin estudio revisado y hallazgos medidos **no dibuja** una imagen que simule el diagnóstico; para geometría individual, solo el pipeline DICOM/máscaras registrado y validado podrá producir un modelo propio del paciente.
+- Estas herramientas son verificadores **de evidencia aportada**, no analizadores autónomos de píxeles ni modelos médicos certificados. Hay que conectar un motor de imagen/señal especializado antes de declarar que Kira interpreta cualquier ECG o imagen automáticamente.
+
+Prueba: `node --experimental-strip-types --test scripts/phoenix-health-diagnostic-accuracy.test.mjs`.
+
+## Control obligatorio de concordancia diagnóstica y caso WPW
+
+Kira utiliza `health_diagnostic_concordance` para revisar la consistencia de observaciones, impresión preliminar, diferenciales, urgencias y visualización solicitada. El control es **de metadatos**, no interpreta la imagen. Para cualquier modalidad no se permite una visualización **de lesión de paciente** sin pasar por el flujo específico de reconstrucción con geometría registrada y validación profesional.
+
+Caso de regresión específico: una fotografía de ECG con indicios de onda delta, PR posiblemente corto o QRS ancho **no debe despacharse como eje izquierdo o hemibloqueo aislado**. Se prioriza el diferencial de preexcitación/WPW y se distingue lo cualitativo (foto) de lo verificado (PR/QRS en milisegundos sobre trazado calibrado). La herramienta `health_ecg_preexcitation_review` acepta `photoDeltaHint=possible` y `qualitativePrHint=appears-short` para producir `PHOTO_SUGGESTS_PREEXCITATION_UNVERIFIED` sin inventar medidas ni confirmar síndrome WPW; exige confirmar con el estudio original. La representación puede mostrar solamente un mecanismo genérico de conducción por vía accesoria y rotular claramente que es una hipótesis.
+
+La verificación de concordancia NO sustituye un intérprete clínico validado de imágenes, señales o valores de laboratorio ni afirma haber leído los píxeles. Las conclusiones deben basarse en datos observables o medidos, nunca en la mera disponibilidad del catálogo. Pruebas `scripts/phoenix-health-diagnostic-accuracy.test.mjs`.

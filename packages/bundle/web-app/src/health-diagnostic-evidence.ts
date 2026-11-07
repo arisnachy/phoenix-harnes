@@ -5,30 +5,21 @@
  * It records the availability and provenance of evidence to prevent
  * a pretty GLB or a single screenshot from masquerading as a complete study.
  */
-export const STUDY_MODALITIES = Object.freeze({
-  ecg: {label:'ECG / EKG',native:'ECG waveform or original twelve-lead recording',
-    limited:'A photograph/PDF does not establish signal calibration or complete rhythm review.'},
-  ultrasound: {label:'Ecografía / Doppler',native:'Original DICOM images, measurements and clips',
-    limited:'A still image alone does not provide cine loops, Doppler waveforms or complete acoustic windows.'},
-  xray: {label:'Radiografía',native:'Original DICOM study, projection and clinical context',
-    limited:'A screenshot can lose projection, contrast, resolution and DICOM context.'},
-  ct: {label:'TC / Angio-TC',native:'Complete DICOM series with slices, reconstruction and contrast phase',
-    limited:'A rendered GLB or one axial screenshot cannot evaluate the full CT volume.'},
-  mri: {label:'RM',native:'Complete DICOM sequences and acquisition parameters',
-    limited:'A single MRI sequence or screenshot is insufficient for many diagnoses.'},
-  laboratory: {label:'Laboratorio',native:'Individual measured values with units and local reference ranges',
-    limited:'A screenshot or transcription must be verified against the authenticated original report.'},
-  cytology: {label:'Citología',native:'Original microscopy slides and stain/magnification metadata',
-    limited:'A single low-resolution photomicrograph cannot exclude findings outside the field.'},
-  histopathology: {label:'Histopatología',native:'Original whole-slide imaging with stain and scale',
-    limited:'A selected image field cannot establish the complete specimen diagnosis.'},
-  other: {label:'Otro estudio clínico',native:'Authenticated source and modality-specific interpretation method',
-    limited:'No validated interpreter is configured for this study type.'},
-} as const)
-export type StudyModality = keyof typeof STUDY_MODALITIES
+import {DIAGNOSTIC_INPUTS,diagnosticPolicyFor}
+  from './health-diagnostic-catalog.ts'
+export const STUDY_MODALITIES:Readonly<Record<string,{
+  label:string;native:string;limited:string;family:string;nativeFormat:string}>>=
+ Object.freeze(Object.fromEntries(Object.values(DIAGNOSTIC_INPUTS).map(entry=>{
+   const policy=diagnosticPolicyFor(entry.id)
+   if(!policy)throw new Error('Missing evidence family policy: '+entry.id)
+   return [entry.id,{label:entry.label,native:policy.source,limited:policy.avoid,
+     family:entry.family,nativeFormat:policy.nativeFormat}]
+ })))
+export type StudyModality=string
 export type StudyEvidenceState = 'UNEXAMINED_SOURCE'|'SOURCE_REVIEWED_NO_OBSERVATIONS'|'CLINICIAN_PRELIMINARY'
 const ALLOWED_MIME = new Set(['image/png','image/jpeg','image/webp','application/pdf'])
-const ORIGINAL_REQUIRED = new Set<StudyModality>(['ct','mri','ultrasound','cytology','histopathology'])
+const ORIGINAL_REQUIRED=new Set<StudyModality>(Object.keys(STUDY_MODALITIES)
+  .filter(id=>diagnosticPolicyFor(id)?.requiresNative===true))
 const SENSITIVE = /(?:diagn[oó]stico confirmado|certeza del 100%|validado por IA)/iu
 const noControl = (s:string)=>!/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(s)
 const clean=(x:unknown,field:string,max:number,required=false)=>{
@@ -48,6 +39,7 @@ export interface StudyEvidenceInput {
   preliminaryInterpretation?:unknown
   criticalConcern?:unknown
   studyContext?:unknown
+  customModality?:unknown
 }
 export function evaluateStudyEvidence(input:StudyEvidenceInput) {
   const modality=String(input.modality) as StudyModality
@@ -60,6 +52,7 @@ export function evaluateStudyEvidence(input:StudyEvidenceInput) {
   const observations=clean(input.observations,'Hallazgos observados',3500)
   const preliminaryInterpretation=clean(input.preliminaryInterpretation,'Impresión clínica',1600)
   const context=clean(input.studyContext,'Contexto del estudio',600)
+  const customModality=clean(input.customModality,'Estudio no catalogado',160,modality==='other')
   if(SENSITIVE.test(preliminaryInterpretation))
     throw new Error('No se puede afirmar certeza diagnóstica ni validación automática')
   const concern=input.criticalConcern===undefined?'not-assessed':String(input.criticalConcern)
@@ -71,16 +64,22 @@ export function evaluateStudyEvidence(input:StudyEvidenceInput) {
   if(preliminaryInterpretation&&!observations)
     throw new Error('Toda impresión preliminar necesita hallazgos observados explícitos')
   const selected=STUDY_MODALITIES[modality]
+  const policy=diagnosticPolicyFor(modality)
+  if(!selected||!policy)throw new Error('Modalidad diagnóstica sin protocolo')
   const limitations:string[]=[selected.limited]
   if(ORIGINAL_REQUIRED.has(modality))
     limitations.push('Debe cotejar el estudio completo y sus metadatos, no solo el adjunto parcial.')
-  if(modality==='ecg')
+  if(selected.family==='ecg')
     limitations.push('Confirmar velocidad, calibración, derivaciones, ritmo y medidas sobre el trazado original.')
-  if(modality==='laboratory')
+  if(selected.family==='laboratory')
     limitations.push('Antes de interpretar, verificar analito, unidad, intervalo de referencia, edad y contexto.')
   return {
-    modality,modalityLabel:selected.label,sourceMime,
+    modality,modalityLabel:customModality||selected.label,sourceMime,
+    customModality:modality==='other'?customModality:null,
+    family:selected.family,nativeSourceFormat:selected.nativeFormat,
     sourceRequirement:selected.native,
+    sourceModalityRecognized:true,
+    nativeStudyDataParsed:false,sourceFileMayBeIncomplete:true,
     sourceReviewedByClinician:input.originalReviewed===true,
     evidenceState:(input.originalReviewed===false?'UNEXAMINED_SOURCE':
       !observations?'SOURCE_REVIEWED_NO_OBSERVATIONS':'CLINICIAN_PRELIMINARY') as StudyEvidenceState,
