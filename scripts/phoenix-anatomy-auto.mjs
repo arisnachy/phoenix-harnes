@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Optional PHOENIX anatomy dependency bootstrap. No patient data, no privileged
- * system modifications, no automatic model downloads. Runs DETACHED on update.
+ * privileged system modifications. Preloads an open CT model when resources allow.
+ * Can run detached on update and directly with --install for diagnostics.
  * Installed libraries are NOT a validated diagnostic imaging pipeline.
  */
 import { spawn } from 'node:child_process'
@@ -11,7 +12,7 @@ import { homedir } from 'node:os'
 import { resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const SCHEMA = 1
+export const SCHEMA = 2
 const self=fileURLToPath(import.meta.url)
 export const rootFor=(env=process.env)=>resolve(env.PHOENIX_ANATOMY_HOME ||
   join(env.LOCALAPPDATA||homedir(),env.LOCALAPPDATA?'PHOENIX':'.phoenix','anatomy'))
@@ -32,6 +33,10 @@ const modules=[
   {id:'totalsegmentator',imports:['totalsegmentator'],pip:['TotalSegmentator>=2,<3']},
 ]
 const now=()=>new Date().toISOString()
+const BASELINE_TASK='total'
+export const weightsRoot=(env=process.env)=>resolve(env.TOTALSEG_HOME_DIR||join(rootFor(env),'models'))
+const modelEnv=(env=process.env)=>({...env,
+  TOTALSEG_HOME_DIR:env.TOTALSEG_HOME_DIR||weightsRoot(env)})
 const log=(p,line)=>{try{appendFileSync(p.log,'['+now()+'] '+line+'\n')}catch{}}
 function load(p){
   try{const x=JSON.parse(readFileSync(p.manifest,'utf8'));return x.schema===SCHEMA?x:null}catch{return null}
@@ -47,14 +52,15 @@ export function needsInstall(manifest,at=Date.now()){
   if(modules.every(x=>manifest.components?.[x.id]?.status==='installed') &&
     manifest.components?.slicer?.status==='installed' &&
     manifest.components?.slicerheart?.status==='installed' &&
-    manifest.components?.viewer?.status==='installed')return false
+    manifest.components?.viewer?.status==='installed' &&
+    ['installed','disabled'].includes(manifest.components?.weights_ct?.status))return false
   const stamp=Date.parse(manifest.updatedAt||'')
   return !Number.isFinite(stamp)||at-stamp>24*60*60*1000
 }
-async function run(bin,args,{cwd,timeout=900000,output}={}){
+async function run(bin,args,{cwd,timeout=900000,output,env}={}){
   return new Promise((resolveRun,reject)=>{
     let finished=false
-    const child=spawn(bin,args,{cwd,windowsHide:true,shell:false,
+    const child=spawn(bin,args,{cwd,windowsHide:true,shell:false,env:env??process.env,
       stdio:['ignore',output??'ignore',output??'ignore']})
     const timer=setTimeout(()=>{child.kill();if(!finished){finished=true;reject(Error('Timeout: '+bin))}},timeout)
     child.once('error',e=>{if(!finished){finished=true;clearTimeout(timer);reject(e)}})
@@ -88,11 +94,38 @@ async function prepareVenv(p){
   if(!await checkImports(p,['pip']))throw Error('Isolated Python venv incomplete')
 }
 function freeBytes(p){try{const s=statfsSync(p.root);return Number(s.bavail)*Number(s.bsize)}catch{return 0}}
-async function installPythonComponents(p,state,fd){
+
+/** Verify actual heavyweight checkpoint files, not an empty cached directory. */
+export function hasWeightFiles(root){
+  const start=join(root,'nnunet','results')
+  if(!existsSync(start))return false
+  const stack=[{dir:start,depth:0}]
+  let checked=0
+  while(stack.length&&checked<1500){
+    const {dir,depth}=stack.pop()
+    let entries
+    try{entries=readdirSync(dir,{withFileTypes:true})}catch{continue}
+    for(const entry of entries){
+      if(++checked>1500)break
+      const file=join(dir,entry.name)
+      if(entry.isDirectory()&&depth<6)stack.push({dir:file,depth:depth+1})
+      if(entry.isFile()&&/\.(?:pth|pt|ckpt)$/iu.test(entry.name)){
+        try{if(statSync(file).size>10*1024*1024)return true}catch{}
+      }
+    }
+  }
+  return false
+}
+
+async function installPythonComponents(p,state,fd,onlyIds=null){
   await prepareVenv(p)
   for(const component of modules){
-    const previous=state.components[component.id]
-    if(previous?.status==='installed'&&await checkImports(p,component.imports))continue
+    if(onlyIds&&!onlyIds.includes(component.id))continue
+    // Always verify packages; a stale manifest cannot prove installation.
+    if(await checkImports(p,component.imports)){
+      state.components[component.id]={status:'installed',verifiedAt:now()}
+      save(p,state);continue
+    }
     if(component.id!=='dicom'&&freeBytes(p)<12e9){
       state.components[component.id]={status:'deferred',reason:'less than 12 GB available'}
       save(p,state);continue
@@ -109,6 +142,49 @@ async function installPythonComponents(p,state,fd){
     save(p,state)
   }
 }
+
+/** Download only the open baseline CT task. Vendor-licensed tasks are excluded. */
+async function installBaselineWeights(p,state,fd,env=process.env){
+  if(env.PHOENIX_ANATOMY_PRELOAD_WEIGHTS==='0'){
+    state.components.weights_ct={status:'disabled',reason:'Operator opted out'}
+    save(p,state);return
+  }
+  if(state.components.totalsegmentator?.status!=='installed'){
+    state.components.weights_ct={status:'deferred',reason:'Install TotalSegmentator first'}
+    save(p,state);return
+  }
+  const command=join(p.venv,process.platform==='win32'?'Scripts':'bin',
+    process.platform==='win32'?'totalseg_download_weights.exe':'totalseg_download_weights')
+  if(!existsSync(command)){
+    state.components.weights_ct={status:'error',reason:'Official totalseg_download_weights executable missing'}
+    save(p,state);return
+  }
+  const root=weightsRoot(env),results=join(root,'nnunet','results')
+  if(state.components.weights_ct?.status==='installed'&&hasWeightFiles(root)){
+    state.components.weights_ct.verifiedAt=now()
+    save(p,state);return
+  }
+  if(freeBytes(p)<12e9){
+    state.components.weights_ct={status:'deferred',reason:'Less than 12 GB free; skipping model download'}
+    save(p,state);return
+  }
+  mkdirSync(root,{recursive:true,mode:0o700})
+  state.components.weights_ct={status:'installing',task:BASELINE_TASK};save(p,state)
+  try{
+    await run(command,['-t',BASELINE_TASK],{cwd:p.root,output:fd,
+      env:modelEnv(env),timeout:1800000})
+    if(!hasWeightFiles(root))
+      throw Error('Downloader succeeded but no model files were found')
+    state.components.weights_ct={status:'installed',task:BASELINE_TASK,
+      location:results,licensed:false,verifiedAt:now()}
+    log(p,'Open baseline CT weights downloaded to '+results)
+  }catch(e){
+    state.components.weights_ct={status:'error',task:BASELINE_TASK,
+      reason:String(e).slice(0,250)}
+    log(p,'weights_ct: '+String(e))
+  }
+  save(p,state)
+}
 function findSlicer(){
   if(process.platform!=='win32')return null
   const local=process.env.LOCALAPPDATA
@@ -117,7 +193,7 @@ function findSlicer(){
     try{
       const folders=readdirSync(base,{withFileTypes:true})
       for(const entry of folders){
-        if(!entry.isDirectory()||!/^Slicer(?:[ ._-]|$)/i.test(entry.name))continue
+        if(!entry.isDirectory()||!/^Slicer(?:[ ._-]|\d|$)/i.test(entry.name))continue
         const path=join(base,entry.name,'Slicer.exe')
         if(existsSync(path))return path
       }
@@ -131,25 +207,27 @@ async function installSlicer(p,state,fd){
     state.components.slicer={status:'external',reason:'Windows installer only; use official platform package'}
     return
   }
-  // Use the vendor's user-scoped installer; it validates the Slicer payload SHA512.
-  // No arbitrary URLs, forced admin elevation, downloads of patient data or model weights.
+  // Microsoft's WinGet manifest pins the vendor package and validates its
+  // installer hash. Never execute an unverified downloaded PowerShell script.
   const existing=findSlicer()
   if(existing){
     state.components.slicer={status:'installed',verifiedAt:now(),executable:existing}
     return
   }
   try{
-    const cmd="& { $ErrorActionPreference='Stop'; "+
-      "$u='https://download.slicer.org/install.ps1';"+
-      "$p=Join-Path $env:TEMP 'phoenix-slicer-official-install.ps1';"+
-      "Invoke-WebRequest -Uri $u -OutFile $p -UseBasicParsing;"+
-      "$env:SLICER_NONINTERACTIVE='1'; & $p; if(-not $?) { exit 2 } }"
-    await run('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',cmd],
-      {timeout:1200000,output:fd})
+    await run('winget',['install','--id','Kitware.Slicer','--exact',
+      '--scope','user','--silent','--accept-package-agreements',
+      '--accept-source-agreements','--disable-interactivity'],{
+      timeout:1200000,output:fd})
     const installed=findSlicer()
-    if(!installed)throw Error('Slicer installer finished but Slicer.exe was not located')
-    state.components.slicer={status:'installed',verifiedAt:now(),executable:installed}
-  }catch(e){state.components.slicer={status:'error',reason:String(e).slice(0,250)};log(p,'slicer: '+String(e))}
+    if(!installed)throw Error('WinGet completed but Slicer.exe was not located')
+    state.components.slicer={status:'installed',verifiedAt:now(),executable:installed,
+      source:'winget:Kitware.Slicer'}
+  }catch(e){
+    state.components.slicer={status:'error',reason:String(e).slice(0,250),
+      repair:'Install Kitware.Slicer using WinGet, then rerun --ensure'}
+    log(p,'slicer: '+String(e))
+  }
 }
 async function installSlicerHeart(p,state,fd){
   const slicerExe=findSlicer()
@@ -168,32 +246,89 @@ async function installSlicerHeart(p,state,fd){
   writeFileSync(script,content,'utf8')
   try{
     await run(slicerExe,['--testing','--no-splash','--no-main-window','--python-script',script],{timeout:360000,output:fd})
-    state.components.slicerheart={status:'installed',verifiedAt:now(),note:'Slicer extension manager reported success'}
+    // A download request alone does not guarantee extension activation.
+    const verify=join(p.root,'verify-slicerheart.py')
+    writeFileSync(verify,[
+      'import slicer',
+      "ok = slicer.app.extensionsManagerModel().isExtensionInstalled('SlicerHeart')",
+      'slicer.app.exit(0 if ok else 2)',
+    ].join('\n')+'\n','utf8')
+    await run(slicerExe,['--testing','--no-splash','--no-main-window',
+      '--python-script',verify],{timeout:180000,output:fd})
+    state.components.slicerheart={status:'installed',verifiedAt:now(),
+      note:'SlicerHeart verified in a new Slicer process'}
   }catch(e){
     state.components.slicerheart={status:'error',reason:String(e).slice(0,250)}
     log(p,'slicerheart: '+String(e))
   }
 }
 
-async function installViewer(p,state,fd){
+function npmExecutable(){
+  const candidates=[
+    process.env.npm_execpath,
+    join(dirname(process.execPath),'node_modules','npm','bin','npm-cli.js'),
+    join(dirname(process.execPath),'..','lib','node_modules','npm','bin','npm-cli.js'),
+  ]
+  const found=candidates.find(x=>typeof x==='string'&&existsSync(x)&&x.endsWith('npm-cli.js'))
+  if(!found)throw Error('Cannot locate verified npm-cli.js; install Node.js with npm')
+  return found
+}
+async function installCornerstone(p,state,fd){
+  const folder=join(p.root,'imaging')
+  const names=['@cornerstonejs/core','@cornerstonejs/tools','@cornerstonejs/dicom-image-loader']
+  const complete=()=>names.every(name=>existsSync(join(folder,'node_modules',...name.split('/'),'package.json')))
+  if(complete()){
+    state.components.cornerstone={status:'installed',verifiedAt:now()}
+    state.components.ohif={status:'external',reason:'OHIF deployment and authorized DICOMweb/PACS still required'}
+    save(p,state);return
+  }
+  if(freeBytes(p)<12e9){
+    state.components.cornerstone={status:'deferred',reason:'Less than 12 GB free'}
+    save(p,state);return
+  }
+  state.components.cornerstone={status:'installing'};save(p,state)
+  try{
+    mkdirSync(folder,{recursive:true})
+    await run(process.execPath,[npmExecutable(),'install','--no-save','--no-package-lock',
+      '--ignore-scripts','--no-audit','--no-fund','--prefix',folder,...names],{
+      cwd:folder,timeout:900000,output:fd})
+    if(!complete())throw Error('Cornerstone package artifacts missing after npm')
+    state.components.cornerstone={status:'installed',verifiedAt:now()}
+    state.components.ohif={status:'external',reason:'PACS integration/deployment not configured'}
+  }catch(e){
+    state.components.cornerstone={status:'error',reason:String(e).slice(0,200)}
+    log(p,'cornerstone: '+String(e))
+  }
+  save(p,state)
+}
+async function installViewer(p,state,fd,withVtk=true){
   const cwd=join(p.root,'viewer')
   const modulesRoot=join(cwd,'node_modules','three')
   const checks=['build/three.module.js','build/three.core.js','examples/jsm/loaders/GLTFLoader.js','examples/jsm/controls/OrbitControls.js','examples/jsm/utils/BufferGeometryUtils.js']
   const pkg=join(modulesRoot,'package.json')
+  const vtk=join(cwd,'node_modules','@kitware','vtk.js','package.json')
   try{
     if(existsSync(pkg)&&checks.every(x=>existsSync(join(modulesRoot,x)))&&
-       JSON.parse(readFileSync(pkg,'utf8')).version==='0.181.2'){
+       JSON.parse(readFileSync(pkg,'utf8')).version==='0.181.2'&&
+       (!withVtk||existsSync(vtk))){
       state.components.viewer={status:'installed',version:'0.181.2',verifiedAt:now()}
-      return
+      if(withVtk)state.components.vtkjs={status:'installed',verifiedAt:now()}
+      save(p,state);return
     }
     mkdirSync(cwd,{recursive:true})
-    const npmCli=join(dirname(process.execPath),'node_modules','npm','bin','npm-cli.js')
-    if(!existsSync(npmCli))throw Error('No verified npm-cli.js beside Node installation; install Node with npm')
-    await run(process.execPath,[npmCli,'install','--no-save','--no-package-lock','--ignore-scripts','--no-audit','--no-fund','--prefix',cwd,'three@0.181.2'],
+    const npmCli=npmExecutable()
+    await run(process.execPath,[npmCli,'install','--no-save','--no-package-lock','--ignore-scripts','--no-audit','--no-fund','--prefix',cwd,'three@0.181.2',
+      ...(withVtk?['@kitware/vtk.js']:[])],
       {cwd,timeout:300000,output:fd})
     if(!existsSync(pkg)||JSON.parse(readFileSync(pkg,'utf8')).version!=='0.181.2'||
        !checks.every(x=>existsSync(join(modulesRoot,x))))throw Error('Three.js version or module files invalid')
     state.components.viewer={status:'installed',version:'0.181.2',verifiedAt:now()}
+    if(withVtk){
+      state.components.vtkjs=existsSync(vtk)?
+        {status:'installed',verifiedAt:now()}:
+        {status:'error',reason:'vtk.js package was not installed'}
+    }
+    save(p,state)
   }catch(e){
     state.components.viewer={status:'error',reason:String(e).slice(0,220)}
     log(p,'viewer: '+String(e))
@@ -225,7 +360,11 @@ async function probeResearchEngines(state){
   }
 }
 
-async function worker(env=process.env){
+export const anatomyComponents=['slicerheart','monai-nnunet','totalsegmentator',
+  'ohif-cornerstone','simvascular','opencarp','three-vtk']
+export const validAnatomyComponent=(v)=>anatomyComponents.includes(v)
+async function worker(env=process.env,selected=null){
+  if(selected&&!validAnatomyComponent(selected))throw Error('Invalid anatomy component')
   const p=pathsFor(env)
   mkdirSync(p.root,{recursive:true})
   const fd=openSync(p.log,'a')
@@ -233,33 +372,70 @@ async function worker(env=process.env){
   state.components||={}
   state.platform=process.platform
   try{
-    log(p,'Starting anatomy bootstrap; installation does not imply clinical validation')
-    await installPythonComponents(p,state,fd)
-    save(p,state)
-    await installSlicer(p,state,fd)
-    await installSlicerHeart(p,state,fd)
-    await probeResearchEngines(state)
-    await installViewer(p,state,fd)
+    log(p,'Starting anatomy bootstrap '+(selected||'all')+'; never implies clinical validation')
+    if(!selected){
+      await installPythonComponents(p,state,fd)
+      await installBaselineWeights(p,state,fd,env)
+      await installSlicer(p,state,fd)
+      await installSlicerHeart(p,state,fd)
+      await probeResearchEngines(state)
+      await installViewer(p,state,fd,true)
+      await installCornerstone(p,state,fd)
+    }else if(selected==='slicerheart'){
+      await installSlicer(p,state,fd)
+      await installSlicerHeart(p,state,fd)
+    }else if(selected==='monai-nnunet'){
+      await installPythonComponents(p,state,fd,['monai','nnunetv2'])
+    }else if(selected==='totalsegmentator'){
+      await installPythonComponents(p,state,fd,['totalsegmentator'])
+      await installBaselineWeights(p,state,fd,env)
+    }else if(selected==='ohif-cornerstone'){
+      await installCornerstone(p,state,fd)
+    }else if(selected==='three-vtk'){
+      await installViewer(p,state,fd,true)
+    }else if(selected==='simvascular'||selected==='opencarp'){
+      await probeResearchEngines(state)
+    }
     state.clinicalValidation='not-validated'
+    state.bootstrap={status:'finished',component:selected||'all',at:now()}
     save(p,state)
-    log(p,'Bootstrap finished; review manifest and install.log for partial failures')
+    log(p,'Anatomy bootstrap finished; review status and install.log')
+  }catch(e){
+    state.bootstrap={status:'error',at:now(),reason:String(e).slice(0,250)}
+    save(p,state)
+    log(p,'Bootstrap fatal: '+String(e))
+    throw e
   }finally{
     closeSync(fd)
     try{rmSync(p.lock,{force:true})}catch{}
   }
 }
 export function status(env=process.env){
-  const p=pathsFor(env);const v=load(p)
+  const p=pathsFor(env),v=load(p),components=v?.components||{}
+  const coreReady=existsSync(p.python)&&modules.every(m=>components[m.id]?.status==='installed')
+  const viewerReady=components.viewer?.status==='installed'&&
+    existsSync(join(p.root,'viewer','node_modules','three','build','three.module.js'))
+  const weightsReady=components.weights_ct?.status==='installed'&&
+    hasWeightFiles(weightsRoot(env))
+  const missing=[...modules.map(m=>m.id),'weights_ct','viewer','slicer','slicerheart']
+    .filter(id=>components[id]?.status!=='installed')
   return {root:p.root,manifest:p.manifest,log:p.log,initialized:!!v,
-    installed:modules.every(m=>v?.components?.[m.id]?.status==='installed') &&
-      ['viewer','slicer','slicerheart'].every(id=>v?.components?.[id]?.status==='installed'),components:v?.components||{},
-    clinicallyValidated:false,notes:'Package installation alone does not reconstruct, verify or diagnose a patient.'}
+    installed:coreReady&&viewerReady&&weightsReady&&
+      components.slicer?.status==='installed'&&components.slicerheart?.status==='installed',
+    coreReady,viewerReady,weightsReady,missing,
+    backgroundInstallRunning:existsSync(p.lock),bootstrap:v?.bootstrap??null,
+    components,clinicallyValidated:false,
+    notes:'Package installation does not imply every atlas, a verified patient model or clinical validation.'}
 }
 export function ensure(env=process.env,launch=spawn){
   const p=pathsFor(env)
   if(env.PHOENIX_ANATOMY_AUTO_INSTALL==='0'||env.CI==='true'||env.NODE_ENV==='test')
     return {status:'disabled',...status(env)}
-  if(!needsInstall(load(p)))return {status:'up-to-date',...status(env)}
+  const current=status(env)
+  if(!needsInstall(load(p))&&env.PHOENIX_ANATOMY_FORCE_INSTALL!=='1'&&
+     existsSync(p.python)&&current.viewerReady&&
+     (current.weightsReady||current.components.weights_ct?.status==='disabled'))
+    return {status:'up-to-date',...current}
   mkdirSync(p.root,{recursive:true})
   try{
     const age=Date.now()-statSync(p.lock).mtimeMs
@@ -279,10 +455,45 @@ export function ensure(env=process.env,launch=spawn){
   }
 }
 if(process.argv[1]&&resolve(process.argv[1])===self){
-  if(process.argv.includes('--worker'))worker().catch(e=>{
-    const p=pathsFor();log(p,'FATAL '+String(e));try{rmSync(p.lock,{force:true})}catch{}
-    process.exitCode=1
-  })
+  const selectedAt=process.argv.indexOf('--install-component')
+  const selected=selectedAt>=0?process.argv[selectedAt+1]:null
+  const manual=process.argv.includes('--install')||selectedAt>=0
+  if(selectedAt>=0&&!validAnatomyComponent(selected)){
+    console.error('Unknown anatomy connector id')
+    process.exitCode=2
+  }else if(manual||process.argv.includes('--worker')){
+    const p=pathsFor()
+    if(manual){
+      mkdirSync(p.root,{recursive:true})
+      let running=false
+      try{
+        const age=Date.now()-statSync(p.lock).mtimeMs
+        if(age>=-60000&&age<60*60*1000)running=true
+        else rmSync(p.lock,{force:true})
+      }catch{}
+      if(running){
+        console.error('Anatomy installation already running; use --status')
+        process.exitCode=2
+      }else{
+        try{const fd=openSync(p.lock,'wx');closeSync(fd)}
+        catch{console.error('Anatomy installer locked');process.exitCode=2}
+      }
+    }
+    if(process.exitCode!==2)worker(process.env,selected).then(()=>{
+      if(manual){
+        const result=status()
+        console.log(JSON.stringify(result,null,2))
+        if(!selected&&!result.installed)process.exitCode=3
+        else if(selected&&result.components[(selected==='monai-nnunet'?'monai':
+          selected==='three-vtk'?'vtkjs':selected==='ohif-cornerstone'?'cornerstone':
+          selected==='slicerheart'?'slicerheart':selected==='totalsegmentator'?'weights_ct':selected)]?.status!=='installed')
+          process.exitCode=3
+      }
+    }).catch(e=>{
+      log(p,'FATAL '+String(e));try{rmSync(p.lock,{force:true})}catch{}
+      process.exitCode=1
+    })
+  }
   else if(process.argv.includes('--status'))console.log(JSON.stringify(status(),null,2))
   else console.log(JSON.stringify(ensure(),null,2))
 }

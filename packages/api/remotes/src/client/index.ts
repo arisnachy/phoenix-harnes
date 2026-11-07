@@ -24,6 +24,7 @@ export type {
   TokenTelemetrySnapshot,
   TokenTelemetryRecord,
   PluginInventorySnapshot,
+  AnatomyConnectorId, AnatomyConnectorSnapshot, AnatomyConnectorInstallReceipt,
   PluginBulkActivationReceipt,
   PluginEnableRequest,
   OpenClawProbeState,

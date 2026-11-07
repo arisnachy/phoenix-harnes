@@ -791,7 +791,7 @@ export class HealthClinicStore {
     if(anatomicalModel&&!/\.glb$/iu.test(name))fail('Archivo anatómico debe terminar en .glb')
     if(!((mime==='image/png'&&png)||(mime==='image/jpeg'&&jpeg)||
          (mime==='image/webp'&&webp)||(mime==='application/pdf'&&pdf)||anatomicalModel))
-      fail('Solo PDF, imágenes o GLB anatómico auto-contenido están admitidos')
+      fail('Solo archivos PDF e imágenes genuinos, o GLB anatómico autocontenido, están admitidos')
     const count=this.db.prepare('SELECT COUNT(*) AS total FROM health_attachments WHERE org=? AND patient_id=?')
       .get(actor.org,patientId) as {total:number}
     if(count.total>=100)fail('Límite de adjuntos del paciente alcanzado; contacte administración')
