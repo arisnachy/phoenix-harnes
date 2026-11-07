@@ -1,11 +1,26 @@
-# PHOENIX Anatomía — motores ejecutables de investigación
+# PHOENIX Anatomical Research Engines
 
-Este adaptador no convierte ECG ni GLB automáticamente en modelos fisiológicos. Exige archivos de configuración previamente preparados y un resultado que nunca se registra como diagnóstico.
+English | [中文](anatomy-research-engines.zh.md)
 
-- `svzerod`: integración ejecutable de **svZeroDSolver** (SimVascular 0D) con una red vascular JSON y salida CSV; el instalador opcional crea el ejecutable en el entorno aislado si existen ruedas compatibles.
-- `opencarp`: ejecuta `openCARP -par CONFIG -simID OUTPUT` en Linux o en **WSL2 Ubuntu 24.04** (Windows); utiliza `wslpath` para convertir rutas locales. Debe existir openCARP real y un archivo `.par` con malla y parámetros apropiados.
-- `simvascular`: permite arrancar la aplicación gráfica desde una instalación verificada en WSL. El cálculo CFD 3D requiere construir malla, condiciones de contorno y trabajo del solver específico; no se infiere a partir de un GLB.
+PHOENIX research-only anatomical simulation adapters require original medical imagery, expert-prepared geometry and physical parameters. ECG, radiographs and GLB renderings do not provide those inputs.
 
-Ejecutar: `node scripts/phoenix-anatomy-simulation.mjs doctor`. Para una simulación 0D preparada: `node scripts/phoenix-anatomy-simulation.mjs run --engine svzerod --input config.json --output result.csv --research-only`. Para openCARP: sustituye `--engine opencarp` y pasa `config.par` y una salida nueva. Para la aplicación gráfica: `PHOENIX_SIMVASCULAR_BIN=/usr/local/sv/simvascular/YYYY-MM-DD/simvascular node scripts/phoenix-anatomy-simulation.mjs launch --engine simvascular`.
+## Executable integrations
 
-En Windows se requieren WSL2, distribución Ubuntu y los ejecutables instalados conforme a los fabricantes. No se instalan WSL ni paquetes Linux con privilegios de administrador sin una autorización explícita del operador. El proceso no registra datos del paciente en el historial de chat, no sobrescribe una simulación anterior y no certifica conformidad diagnóstica.
+- SimVascular 0D: svZeroDSolver accepts clinician-prepared vascular-network JSON and produces CSV. Optional isolated svzerod==3.2 setup is attempted; 3D CFD also needs a prepared mesh, units, boundary conditions and validated solver configuration.
+- openCARP: run openCARP -par CONFIG -simID OUTPUT on Linux or WSL2 Ubuntu 24.04 with an expert-prepared mesh and parameter file. The result is research output, not clinical electrophysiology.
+- SimVascular GUI: start the installed native Linux GUI or an official WSL SimVascular binary. Neither a GUI launch nor a successful process exit confirms a valid simulation.
+- Anatomical tasks: scripts/phoenix-anatomy-models.json names vetted TotalSegmentator tasks and modalities. Small peripheral nerves, myocardial scar, cerebral tracts and coronary microvasculature need separately validated models or expert masks.
+
+## Operator commands
+
+Check node scripts/phoenix-anatomy-simulation.mjs doctor and node scripts/phoenix-anatomy-workbench.mjs doctor. List tasks with node scripts/phoenix-anatomy-workbench.mjs models. Reconstruct with: node scripts/phoenix-anatomy-workbench.mjs reconstruct --input STUDY --output PRIVATE --modality ct --task ct_general --research-only --view. Compare NIfTI labels with: node scripts/phoenix-anatomy-workbench.mjs validate --pred PRED --reference REFERENCE --output QA.json --research-only.
+
+For vascular solver: node scripts/phoenix-anatomy-simulation.mjs run --engine svzerod --input INPUT.json --output RESULTS.csv --research-only. For electrophysiology: --engine opencarp --input INPUT.par --output OUTPUT-DIRECTORY --research-only. For the GUI: set PHOENIX_SIMVASCULAR_BIN to the official executable and use launch --engine simvascular.
+
+## Scientific validation
+
+Reference-mask quality reports Dice, HD95, sensitivity, volume and spatial alignment. Such metrics never establish diagnosis or regulatory approval. A clinician-led validation requires a preregistered protocol, representative external data, uncertainty, subgroup review, adverse failure cases, appropriate imaging quality and signed clinical review. Physical simulations additionally require convergence analysis, patient-specific boundary conditions, dimensional units and measured-physiology comparison.
+
+## Platform and safety
+
+Windows execution of current SimVascular and openCARP depends on WSL2 or supported containers. Their installation is detected but not elevated or silently performed. Models and licenses vary by modality, task and intended use. Patient source imaging remains only in approved local or institutional storage; never in chat history or public repositories.
