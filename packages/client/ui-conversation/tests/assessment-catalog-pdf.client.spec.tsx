@@ -103,7 +103,7 @@ describe('professional assessment catalog and complete local PDF',()=>{
       fireEvent.change(select,{target:{value:'0'}})
     }
     expect(download).toHaveProperty('disabled',false)
-    expect(screen.getByText('0 de 7 respuestas')).toBeFalsy()
+    expect(screen.getByText('7 de 7 respuestas')).toBeTruthy()
   })
 
   it('exposes the real instruments in the universal form library',()=>{
