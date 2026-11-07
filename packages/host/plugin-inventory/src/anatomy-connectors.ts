@@ -4,7 +4,7 @@
  * No PHI, file paths, environment secrets, or subprocess logs cross the Remote.
  */
 import {spawn} from 'node:child_process'
-import {existsSync,readFileSync,statSync} from 'node:fs'
+import {existsSync,readFileSync,statSync,readdirSync} from 'node:fs'
 import {homedir} from 'node:os'
 import {join,resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
@@ -17,7 +17,7 @@ const ids=['slicerheart','monai-nnunet','totalsegmentator','ohif-cornerstone',
   'simvascular','opencarp','three-vtk'] as const satisfies readonly AnatomyConnectorId[]
 const valid=(id:string):id is AnatomyConnectorId=>(ids as readonly string[]).includes(id)
 type State={status?:string;reason?:string;verifiedAt?:string;source?:string}
-function manifest(){
+function manifest():Record<string,State>{
  try{
   const m=JSON.parse(readFileSync(join(home(),'manifest.json'),'utf8')) as {
     schema?:number;components?:Record<string,State>}
@@ -30,6 +30,26 @@ const fresh=(v:State|undefined)=>v?.status==='installed'&&
 const pyReady=()=>existsSync(join(home(),'.venv',process.platform==='win32'?'Scripts':'bin',
   process.platform==='win32'?'python.exe':'python'))
 const isInstalled=(s:Record<string,State>,name:string)=>pyReady()&&s[name]?.status==='installed'
+const hasBaselineWeights=()=>{
+ const folder=join(resolve(process.env.TOTALSEG_HOME_DIR||join(home(),'models')),'nnunet','results')
+ if(!existsSync(folder))return false
+ let count=0
+ const stack:[string,number][]=[[folder,0]]
+ while(stack.length&&count<1500){
+  const [root,depth]=stack.pop()!
+  let entries
+  try{entries=readdirSync(root,{withFileTypes:true})}catch{continue}
+  for(const e of entries){
+   if(++count>1500)break
+   const path=join(root,e.name)
+   if(e.isDirectory()&&depth<6)stack.push([path,depth+1])
+   if(e.isFile()&&/\\.(?:pth|pt|ckpt)$/iu.test(e.name)){
+     try{if(statSync(path).size>10*1024*1024)return true}catch{}
+   }
+  }
+ }
+ return false
+}
 const localPackage=(name:string,dir='viewer')=>
   existsSync(join(home(),dir,'node_modules',...name.split('/'),'package.json'))
 const lockAlive=()=>{
@@ -43,9 +63,8 @@ function entry(id:AnatomyConnectorId,title:string,installed:boolean,
  const external=keys.every(k=>s[k]?.status==='external')&&!canInstall
  const phase=installed?(operational?'ready':'libraries') : failed?'error':
    lockAlive()?'installing':external?'external':'missing'
- const reason=failed?s[failed]?.reason:''
  return {id,title,installed,operational,canInstall,phase,
-   detail:reason?'Error verificado: '+String(reason).slice(0,160):detail,
+   detail:failed?'La instalación falló; consulta install.log local para el error técnico.':detail,
    ...(docs?{docs}:{} )}
 }
 /** Recompute status from disk + worker manifest; never trust a remembered toggle. */
@@ -59,7 +78,7 @@ export function readAnatomyConnectors():AnatomyConnectorSnapshot{
    s.slicerheart?.status==='installed'&&
    (s.slicer as State&{executable?:string}).executable&&
    existsSync((s.slicer as State&{executable:string}).executable))
- const model=Boolean(isInstalled(s,'totalsegmentator')&&s.weights_ct?.status==='installed')
+ const model=Boolean(isInstalled(s,'totalsegmentator')&&s.weights_ct?.status==='installed'&&hasBaselineWeights())
  const runtimeFresh=(name:string)=>fresh(s[name])
  const entries:AnatomyConnectorEntry[]=[
   entry('slicerheart','3D Slicer + SlicerHeart',slicer,false,true,
