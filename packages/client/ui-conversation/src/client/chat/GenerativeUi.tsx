@@ -1,5 +1,5 @@
 import { useId, useState, type ReactNode } from 'react'
-import { PhoenixStatusPill, PhoenixAgentLine, isPhoenixUiIconName, type PhoenixUiIconName, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
+import { PhoenixStatusPill, PhoenixAgentLine, PhoenixUiIcon, choosePhoenixUiIcon, choosePhoenixUiTone, isPhoenixUiIconName, type PhoenixUiIconName, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
 import { ScaleForm, parseScaleForm, type ScaleFormSpec } from './ScaleForm.tsx'
 import { parseSmartForm, parseSmartLibrary, type SmartFormSpec, type SmartLibrarySpec } from './SmartFormEngine.ts'
 import { SmartFormWorkspace } from './SmartFormSurface.tsx'
@@ -676,13 +676,27 @@ type HeaderProps = {
   title: string
   subtitle?: string | undefined
   badge?: string | undefined
+  visualIcon?: boolean | undefined
 }
 
-const Header = ({ title, subtitle, badge }: HeaderProps) => (
+/** Only show an icon when a label or verified status gives it a real meaning. */
+const SemanticIcon = ({ text, status, size = 16 }: {
+  text: string
+  status?: Status | undefined
+  size?: number | undefined
+}): ReactNode => {
+  const name = choosePhoenixUiIcon(text, status)
+  return name === 'info' ? null
+    : <PhoenixUiIcon name={name} size={size} label={text} tone={choosePhoenixUiTone(text, status)} />
+}
+const Header = ({ title, subtitle, badge, visualIcon = false }: HeaderProps) => (
   <header className={css.header}>
-    <div>
-      <h3>{title}</h3>
-      {subtitle && <p>{subtitle}</p>}
+    <div className={css.headerTitleGroup}>
+      {visualIcon && <SemanticIcon text={title} size={20}/>}
+      <div>
+        <h3>{title}</h3>
+        {subtitle && <p>{subtitle}</p>}
+      </div>
     </div>
     {badge && <span className={css.badge}>{badge}</span>}
   </header>
@@ -1002,10 +1016,10 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'metric_card':
       return (
         <section className={css.card} data-generative-ui="metric_card">
-          <Header title={block.props.title} subtitle={block.props.subtitle} />
+          <Header title={block.props.title} subtitle={block.props.subtitle} visualIcon />
           <div className={css.metrics}>
             {block.props.items.map((item, index) => (
-              <div className={css.metric} key={`${item.label}-${index}`}><span>{item.label}</span><strong>{item.value}</strong>{item.detail && <small className={statusClass(item.status)}>{item.detail}</small>}</div>
+              <div className={css.metric} key={`${item.label}-${index}`}><span className={css.metricTitle}><SemanticIcon text={item.label} status={item.status} size={16}/>{item.label}</span><strong>{item.value}</strong>{item.detail && <small className={statusClass(item.status)}>{item.detail}</small>}</div>
             ))}
           </div>
         </section>
@@ -1029,7 +1043,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'smart_card':
       return (
         <section className={css.card} data-generative-ui="smart_card">
-          <Header title={block.props.title} subtitle={block.props.subtitle} badge={block.props.badge} />
+          <Header title={block.props.title} subtitle={block.props.subtitle} badge={block.props.badge} visualIcon />
           {block.props.description && <p className={css.description}>{block.props.description}</p>}
           {block.props.fields && block.props.fields.length > 0 && <dl className={css.fields}>{block.props.fields.map((field, index) => <div key={`${field.label}-${index}`}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>}
           {block.props.footer && <footer className={css.footer}>{block.props.footer}</footer>}
