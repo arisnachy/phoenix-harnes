@@ -16,7 +16,7 @@ export type DailyMarketCandidate={
 export type DailyMarketShortlist={
   goal:number;range:[number,number];complete:boolean;bookmaker:string|null
   matchesInSlate:number;eligibleMarkets:number;selected:DailyMarketCandidate[]
-  rejectedQuotes:number;warning:string
+  alternatives:DailyMarketCandidate[];rejectedQuotes:number;warning:string
 }
 const providerKeys:Readonly<Record<string,string>>={
   'basketball|nba':'basketball_nba',
@@ -185,8 +185,27 @@ export function shortlistDailyMarkets(
     a.bookmaker.localeCompare(b.bookmaker))
   const best=choices[0]
   const selected=best?.selected??[]
+  // Expose distinct verified market families for each of the chosen fixtures.
+  // Historical evidence is gathered ONCE per event before choosing a market,
+  // so the user is not restricted to the first bookmaker-favorite selection.
+  const eventKey=(p:DailyMarketCandidate)=>p.sport+'|'+p.league+'|'+p.espnEventId
+  const alternatives=selected.flatMap(chosen=>{
+    const eligible=(perBook.get(best!.bookmaker)??[])
+      .filter(x=>eventKey(x)===eventKey(chosen)&&x!==chosen)
+      .sort((a,b)=>Number(a.market===chosen.market)-Number(b.market===chosen.market)||
+        b.marketNoVigShare-a.marketNoVigShare||
+        a.market.localeCompare(b.market))
+    const markets=new Set([chosen.market])
+    const extra:DailyMarketCandidate[]=[]
+    for(const option of eligible){
+      if(markets.has(option.market))continue
+      markets.add(option.market);extra.push(option)
+      if(extra.length>=2)break
+    }
+    return extra
+  })
   return {goal,range:[4,6],complete:selected.length>=goal,
     bookmaker:best?.bookmaker??null,matchesInSlate:matchedGames.size,
-    eligibleMarkets:candidates.length,selected,rejectedQuotes,
+    eligibleMarkets:candidates.length,selected,alternatives,rejectedQuotes,
     warning:'Solo preselección del mercado: marketNoVigShare procede de cuotas, NO de un modelo de acierto ni de valor esperado. Antes de proponer un ticket final confirma alineaciones, lesiones, titulares, porteros, contexto, reglas y probabilidad calibrada cuando exista. Si hay menos de cuatro ofertas válidas, informa la falta sin fabricar patas. No se ha realizado ninguna apuesta.'}
 }
