@@ -15,6 +15,14 @@ describe('shared smart UI primitives', () => {
     expect(container.querySelectorAll('svg')).toHaveLength(1)
     expect(container.querySelector('img')).toBeNull()
   })
+  it('renders domain-specific icons without downloading external icon packs', () => {
+    const names = ['trophy', 'basketball', 'soccer', 'baseball', 'stethoscope',
+      'hospital', 'microscope', 'graduation-cap', 'database', 'wallet', 'map-pin', 'award'] as const
+    const { container } = render(<>{names.map(name => <PhoenixUiIcon key={name} name={name} />)}</>)
+    expect(container.querySelectorAll('svg')).toHaveLength(names.length)
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+    expect(container.querySelectorAll('path, circle, rect, ellipse').length).toBeGreaterThan(names.length)
+  })
   it('aligns an agent icon, name, role and message in a compact line', () => {
     const { container } = render(<PhoenixAgentLine name="Kira" role="Orquestación"
       icon="bot" message="He preparado el formulario." />)
