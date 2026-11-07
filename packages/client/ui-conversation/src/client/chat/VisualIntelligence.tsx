@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { PhoenixUiIcon, choosePhoenixUiIcon, choosePhoenixUiTone } from '@phoenix-ai/dsh-client-ui-primitives'
 import { SmartFormWorkspace } from './SmartFormSurface.tsx'
 import { GeoMap, type GeoLayer, type GeoMapSpec } from './GeoMap.tsx'
@@ -395,6 +395,8 @@ function Library({spec,onRestore}:{spec:VisualIntelligenceSpec;onRestore:(s:Visu
 }
 export function VisualIntelligence({spec:initial,onAction,conversationId}:Props):ReactNode {
   const [spec,setSpec]=useState(initial)
+  const rootRef=useRef<HTMLElement|null>(null)
+  const [layoutIssues,setLayoutIssues]=useState<string[]>([])
   const p=spec.props
   const auto=chooseVisualView(p)
   const available:Exclude<VisualMode,'auto'>[]=[]
@@ -408,8 +410,22 @@ export function VisualIntelligence({spec:initial,onAction,conversationId}:Props)
   const [view,setView]=useState<VisualMode>(initial.props.view??'auto')
   const resolved=view==='auto'||!available.includes(view)?auto:view
   const warnings=auditVisualIntelligence(spec)
+  useLayoutEffect(()=>{
+    const root=rootRef.current
+    if(!root)return
+    const inspect=()=>{
+      if(root.clientWidth>0 && root.scrollWidth>root.clientWidth+6){
+        setLayoutIssues(['La interfaz supera el ancho disponible. Revisa el diseño responsivo.'])
+      }else setLayoutIssues([])
+    }
+    inspect()
+    if(typeof ResizeObserver==='undefined')return
+    const observer=new ResizeObserver(inspect)
+    observer.observe(root)
+    return ()=>observer.disconnect()
+  },[resolved,p.id])
   const downloadJson=()=>download(p.id+'.visual.json',JSON.stringify(spec,null,2),'application/json')
-  return <section className={css.surface} data-generative-ui="visual_intelligence" data-selected-view={resolved}>
+  return <section ref={rootRef} className={css.surface} data-generative-ui="visual_intelligence" data-selected-view={resolved}>
     <header className={css.header}>
       <span className={css.brand}><PhoenixUiIcon name="brain-circuit" size={24} tone="technology"/></span>
       <div><h3>{p.title}</h3>{p.subtitle&&<p>{p.subtitle}</p>}
@@ -444,7 +460,7 @@ export function VisualIntelligence({spec:initial,onAction,conversationId}:Props)
         title={!onAction?'Esta conversación no ofrece acciones externas.':undefined}
         onClick={()=>onAction?.(a.prompt,a.mode??'draft')}>{a.label}</button>)}
     </div>}
-    <Evidence sources={p.sources??[]} issues={warnings}/>
+    <Evidence sources={p.sources??[]} issues={[...warnings,...layoutIssues]}/>
     <Library spec={spec} onRestore={next=>{setSpec(next);setView(next.props.view??'auto')}}/>
     <footer className={css.footer}>ID: {p.id} · {conversationId?'Conversación: '+conversationId+' · ':''}
       Datos locales salvo fuentes externas y acciones explícitas. Sin confirmaciones de ejecución simuladas.</footer>
