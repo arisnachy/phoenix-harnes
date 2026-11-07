@@ -151,7 +151,7 @@ describe('current-turn private photo binding for Codex image tools', () => {
 describe('Codex image generation bridge', () => {
   it('launches npm/pnpm Windows Codex shims with cmd /d /s /c and retains stdin prompt separation', () => {
     const tail = ['exec','--ignore-user-config','--ephemeral','--skip-git-repo-check',
-      '--enable','image_generation','-s','read-only','-']
+      '--enable','image_generation','-s','workspace-write','-']
     const cmd = codexImageInvocation('C:\\Program Files\\nodejs\\codex.cmd', tail, 'win32')
     expect(cmd.slice(1, 4)).toEqual(['/d', '/s', '/c'])
     expect(cmd[4]).toBe('""C:\\Program Files\\nodejs\\codex.cmd" ' + tail.join(' ') + '"')
@@ -264,6 +264,7 @@ describe('Codex image generation bridge', () => {
     expect(classifyCodexImageFailure('429 rate limit exceeded')).toBe('quota')
     expect(classifyCodexImageFailure('authentication required; sign in to ChatGPT')).toBe('auth')
     expect(classifyCodexImageFailure('image_generation is disabled in this build')).toBe('capability')
+    expect(classifyCodexImageFailure('built-in image tool is not exposed')).toBe('capability')
     expect(classifyCodexImageFailure('codex: command failed')).toBe('runtime')
   })
 
@@ -459,6 +460,10 @@ describe('Codex image generation bridge', () => {
     const root = await mkdtemp(join(tmpdir(), 'phoenix-image-generation-'))
     const previousHome = process.env.CODEX_HOME
     process.env.CODEX_HOME = root
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l0cAAAAASUVORK5CYII=',
+      'base64',
+    )
     let tool: CapturedImageTool | undefined
     let spawns = 0
     try {
@@ -476,7 +481,7 @@ describe('Codex image generation bridge', () => {
             const done = (async () => {
               const generated = join(root, 'generated_images')
               await mkdir(generated, { recursive: true })
-              await writeFile(join(generated, 'fresh.png'), Buffer.from([1, 2, 3]))
+              await writeFile(join(generated, 'fresh.png'), png)
               return { exitCode: 0 }
             })()
             return {
@@ -493,14 +498,14 @@ describe('Codex image generation bridge', () => {
             return {
               attachmentId: 'image-1',
               mediaType: 'image/png',
-              bytes: 3,
+              bytes: png.length,
               width: 1,
               height: 1,
               name: 'fresh.png',
             }
           },
           async readImage(ref: unknown) {
-            return { ref, data: Buffer.from([1, 2, 3]) }
+            return { ref, data: png }
           },
         },
       } as unknown as Context
@@ -527,10 +532,85 @@ describe('Codex image generation bridge', () => {
       })
       const actualPath = (result as { path: string }).path
       expect(actualPath).toContain(exportedPath)
-      expect(await readFile(actualPath)).toEqual(Buffer.from([1, 2, 3]))
+      expect(await readFile(actualPath)).toEqual(png)
       await rm(join(root, 'generated_images', 'fresh.png'), { force: true })
-      expect(await readFile(actualPath)).toEqual(Buffer.from([1, 2, 3]))
+      expect(await readFile(actualPath)).toEqual(png)
       expect(spawns).toBe(1)
+    } finally {
+      if (previousHome === undefined) delete process.env.CODEX_HOME
+      else process.env.CODEX_HOME = previousHome
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('recovers an image written to the isolated Codex cwd and preserves the actual raster', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-codex-cwd-test-'))
+    const previousHome = process.env.CODEX_HOME
+    process.env.CODEX_HOME = join(root, 'codex')
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l0cAAAAASUVORK5CYII=',
+      'base64',
+    )
+    let tool: CapturedImageTool | undefined
+    let workerDir = ''
+    let workerArgs: readonly string[] = []
+    let spawns = 0
+    try {
+      const context = {
+        tools: {
+          register(definition: CapturedImageTool) { tool = definition; return () => {} },
+        },
+        subprocess: {
+          async resolveExecutable() { return 'codex' },
+          spawn({ argv, cwd }: { argv: readonly string[]; cwd: string }) {
+            spawns += 1
+            workerDir = cwd
+            workerArgs = argv
+            const done = (async () => {
+              const generated = join(cwd, 'generated_images')
+              await mkdir(generated, { recursive: true })
+              await writeFile(join(generated, 'new-image.png'), png)
+              return { exitCode: 0 }
+            })()
+            return {
+              done,
+              collected: {
+                stdout: { readFrom: () => ({ text: 'real image produced' }) },
+                stderr: { readFrom: () => ({ text: '' }) },
+              },
+            }
+          },
+        },
+        attachments: {
+          async saveImage({ data }: { data: Uint8Array }) {
+            expect(Buffer.from(data)).toEqual(png)
+            return {
+              attachmentId: 'sha256:new-codex-image', mediaType: 'image/png',
+              bytes: png.length, width: 1, height: 1, name: 'new-image.png',
+            }
+          },
+          async readImage(ref: unknown) { return { ref, data: png } },
+        },
+      } as unknown as Context
+      installCodexImageGeneration(context)
+      if (tool === undefined) throw new Error('image_generation tool was not registered')
+      const result = await tool.execute({ prompt: 'A test image', backend: 'codex' }, {
+        signal: new AbortController().signal,
+        agent: { options: { provider: 'openai-codex' }, session: { header: { cwd: root } } },
+      })
+      expect(spawns).toBe(1)
+      expect(workerDir).toContain('phoenix-codex-image-')
+      expect(workerDir).not.toBe(root)
+      expect(workerArgs.slice(workerArgs.indexOf('-s'), workerArgs.indexOf('-s') + 2))
+        .toEqual(['-s', 'workspace-write'])
+      expect(result).toMatchObject({
+        provider: 'codex', attachment: { attachmentId: 'sha256:new-codex-image' },
+      })
+      const exported = (result as { path: string }).path
+      expect(exported).toContain(join(root, '.artifacts', 'generated-images'))
+      expect(await readFile(exported)).toEqual(png)
+      await expect(readFile(join(workerDir, 'generated_images', 'new-image.png')))
+        .rejects.toMatchObject({ code: 'ENOENT' })
     } finally {
       if (previousHome === undefined) delete process.env.CODEX_HOME
       else process.env.CODEX_HOME = previousHome
