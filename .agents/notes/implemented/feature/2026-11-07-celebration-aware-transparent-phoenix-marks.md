@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-11-07-celebration-aware-transparent-phoenix-marks.zh.md)
+
 ## Problem
 
 The PHOENIX welcome hero uses a recognized silver phoenix image. Changing the brand image to an AI-redrawn holiday logo damages fidelity, and a generic circular emblem makes distinct celebrations appear identical. A global calendar without jurisdiction and consent rules also risks greeting someone for an unrelated national holiday or personal identity.
