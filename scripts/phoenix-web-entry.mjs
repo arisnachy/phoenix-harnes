@@ -48,6 +48,18 @@ if (isEntry) {
       }
     }
   }
+  // 'pnpm phoenix' is a distinct entrypoint from update-phoenix.ps1.
+  // Ensure anatomy dependencies on either path without delaying Kira startup.
+  if (process.env.PHOENIX_ANATOMY_AUTO_INSTALL !== '0') {
+    try {
+      const anatomy = spawn(process.execPath, [
+        join(launch.cwd,'scripts','phoenix-anatomy-auto.mjs'),'--ensure',
+      ],{cwd:launch.cwd,env:process.env,stdio:'ignore',detached:true,
+         windowsHide:true,shell:false})
+      anatomy.on('error',()=>{})
+      anatomy.unref()
+    } catch { /* Optional setup: never prevent PHOENIX from opening. */ }
+  }
   const child = spawn(process.execPath, launch.args, {
     cwd: launch.cwd,
     env: process.env,

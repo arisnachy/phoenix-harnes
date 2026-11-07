@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Optional PHOENIX anatomy dependency bootstrap. No patient data, no privileged
- * system modifications, no automatic model downloads. Runs DETACHED on update.
+ * privileged system modifications. Preloads an open CT model when resources allow.
+ * Can run detached on update and directly with --install for diagnostics.
  * Installed libraries are NOT a validated diagnostic imaging pipeline.
  */
 import { spawn } from 'node:child_process'
@@ -11,7 +12,7 @@ import { homedir } from 'node:os'
 import { resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const SCHEMA = 1
+export const SCHEMA = 2
 const self=fileURLToPath(import.meta.url)
 export const rootFor=(env=process.env)=>resolve(env.PHOENIX_ANATOMY_HOME ||
   join(env.LOCALAPPDATA||homedir(),env.LOCALAPPDATA?'PHOENIX':'.phoenix','anatomy'))
@@ -32,6 +33,10 @@ const modules=[
   {id:'totalsegmentator',imports:['totalsegmentator'],pip:['TotalSegmentator>=2,<3']},
 ]
 const now=()=>new Date().toISOString()
+const BASELINE_TASK='total'
+export const weightsRoot=(env=process.env)=>join(rootFor(env),'models')
+const modelEnv=(env=process.env)=>({...env,
+  TOTALSEG_HOME_DIR:env.TOTALSEG_HOME_DIR||weightsRoot(env)})
 const log=(p,line)=>{try{appendFileSync(p.log,'['+now()+'] '+line+'\n')}catch{}}
 function load(p){
   try{const x=JSON.parse(readFileSync(p.manifest,'utf8'));return x.schema===SCHEMA?x:null}catch{return null}
@@ -47,14 +52,15 @@ export function needsInstall(manifest,at=Date.now()){
   if(modules.every(x=>manifest.components?.[x.id]?.status==='installed') &&
     manifest.components?.slicer?.status==='installed' &&
     manifest.components?.slicerheart?.status==='installed' &&
-    manifest.components?.viewer?.status==='installed')return false
+    manifest.components?.viewer?.status==='installed' &&
+    ['installed','disabled'].includes(manifest.components?.weights_ct?.status))return false
   const stamp=Date.parse(manifest.updatedAt||'')
   return !Number.isFinite(stamp)||at-stamp>24*60*60*1000
 }
-async function run(bin,args,{cwd,timeout=900000,output}={}){
+async function run(bin,args,{cwd,timeout=900000,output,env}={}){
   return new Promise((resolveRun,reject)=>{
     let finished=false
-    const child=spawn(bin,args,{cwd,windowsHide:true,shell:false,
+    const child=spawn(bin,args,{cwd,windowsHide:true,shell:false,env:env??process.env,
       stdio:['ignore',output??'ignore',output??'ignore']})
     const timer=setTimeout(()=>{child.kill();if(!finished){finished=true;reject(Error('Timeout: '+bin))}},timeout)
     child.once('error',e=>{if(!finished){finished=true;clearTimeout(timer);reject(e)}})
@@ -91,8 +97,11 @@ function freeBytes(p){try{const s=statfsSync(p.root);return Number(s.bavail)*Num
 async function installPythonComponents(p,state,fd){
   await prepareVenv(p)
   for(const component of modules){
-    const previous=state.components[component.id]
-    if(previous?.status==='installed'&&await checkImports(p,component.imports))continue
+    // Always verify packages; a stale manifest cannot prove installation.
+    if(await checkImports(p,component.imports)){
+      state.components[component.id]={status:'installed',verifiedAt:now()}
+      save(p,state);continue
+    }
     if(component.id!=='dicom'&&freeBytes(p)<12e9){
       state.components[component.id]={status:'deferred',reason:'less than 12 GB available'}
       save(p,state);continue
@@ -109,6 +118,49 @@ async function installPythonComponents(p,state,fd){
     save(p,state)
   }
 }
+
+/** Download only the open baseline CT task. Vendor-licensed tasks are excluded. */
+async function installBaselineWeights(p,state,fd,env=process.env){
+  if(env.PHOENIX_ANATOMY_PRELOAD_WEIGHTS==='0'){
+    state.components.weights_ct={status:'disabled',reason:'Operator opted out'}
+    save(p,state);return
+  }
+  if(state.components.totalsegmentator?.status!=='installed'){
+    state.components.weights_ct={status:'deferred',reason:'Install TotalSegmentator first'}
+    save(p,state);return
+  }
+  const command=join(p.venv,process.platform==='win32'?'Scripts':'bin',
+    process.platform==='win32'?'totalseg_download_weights.exe':'totalseg_download_weights')
+  if(!existsSync(command)){
+    state.components.weights_ct={status:'error',reason:'Official totalseg_download_weights executable missing'}
+    save(p,state);return
+  }
+  const root=weightsRoot(env),results=join(root,'nnunet','results')
+  if(state.components.weights_ct?.status==='installed'&&existsSync(results)&&readdirSync(results).length){
+    state.components.weights_ct.verifiedAt=now()
+    save(p,state);return
+  }
+  if(freeBytes(p)<12e9){
+    state.components.weights_ct={status:'deferred',reason:'Less than 12 GB free; skipping model download'}
+    save(p,state);return
+  }
+  mkdirSync(root,{recursive:true,mode:0o700})
+  state.components.weights_ct={status:'installing',task:BASELINE_TASK};save(p,state)
+  try{
+    await run(command,['-t',BASELINE_TASK],{cwd:p.root,output:fd,
+      env:modelEnv(env),timeout:1800000})
+    if(!existsSync(results)||!readdirSync(results).length)
+      throw Error('Downloader succeeded but no model files were found')
+    state.components.weights_ct={status:'installed',task:BASELINE_TASK,
+      location:results,licensed:false,verifiedAt:now()}
+    log(p,'Open baseline CT weights downloaded to '+results)
+  }catch(e){
+    state.components.weights_ct={status:'error',task:BASELINE_TASK,
+      reason:String(e).slice(0,250)}
+    log(p,'weights_ct: '+String(e))
+  }
+  save(p,state)
+}
 function findSlicer(){
   if(process.platform!=='win32')return null
   const local=process.env.LOCALAPPDATA
@@ -117,7 +169,7 @@ function findSlicer(){
     try{
       const folders=readdirSync(base,{withFileTypes:true})
       for(const entry of folders){
-        if(!entry.isDirectory()||!/^Slicer(?:[ ._-]|$)/i.test(entry.name))continue
+        if(!entry.isDirectory()||!/^Slicer(?:[ ._-]|\d|$)/i.test(entry.name))continue
         const path=join(base,entry.name,'Slicer.exe')
         if(existsSync(path))return path
       }
@@ -235,6 +287,7 @@ async function worker(env=process.env){
   try{
     log(p,'Starting anatomy bootstrap; installation does not imply clinical validation')
     await installPythonComponents(p,state,fd)
+    await installBaselineWeights(p,state,fd,env)
     save(p,state)
     await installSlicer(p,state,fd)
     await installSlicerHeart(p,state,fd)
@@ -242,24 +295,42 @@ async function worker(env=process.env){
     await installViewer(p,state,fd)
     state.clinicalValidation='not-validated'
     save(p,state)
+    state.bootstrap={status:'finished',at:now()}
+    save(p,state)
     log(p,'Bootstrap finished; review manifest and install.log for partial failures')
+  }catch(e){
+    state.bootstrap={status:'error',at:now(),reason:String(e).slice(0,250)}
+    save(p,state)
+    log(p,'Bootstrap fatal: '+String(e))
+    throw e
   }finally{
     closeSync(fd)
     try{rmSync(p.lock,{force:true})}catch{}
   }
 }
 export function status(env=process.env){
-  const p=pathsFor(env);const v=load(p)
+  const p=pathsFor(env),v=load(p),components=v?.components||{}
+  const coreReady=modules.every(m=>components[m.id]?.status==='installed')
+  const viewerReady=components.viewer?.status==='installed'&&
+    existsSync(join(p.root,'viewer','node_modules','three','build','three.module.js'))
+  const weightsReady=components.weights_ct?.status==='installed'&&
+    existsSync(join(weightsRoot(env),'nnunet','results'))
+  const missing=[...modules.map(m=>m.id),'weights_ct','viewer','slicer','slicerheart']
+    .filter(id=>components[id]?.status!=='installed')
   return {root:p.root,manifest:p.manifest,log:p.log,initialized:!!v,
-    installed:modules.every(m=>v?.components?.[m.id]?.status==='installed') &&
-      ['viewer','slicer','slicerheart'].every(id=>v?.components?.[id]?.status==='installed'),components:v?.components||{},
-    clinicallyValidated:false,notes:'Package installation alone does not reconstruct, verify or diagnose a patient.'}
+    installed:coreReady&&viewerReady&&weightsReady&&
+      components.slicer?.status==='installed'&&components.slicerheart?.status==='installed',
+    coreReady,viewerReady,weightsReady,missing,
+    backgroundInstallRunning:existsSync(p.lock),bootstrap:v?.bootstrap??null,
+    components,clinicallyValidated:false,
+    notes:'Package installation does not imply every atlas, a verified patient model or clinical validation.'}
 }
 export function ensure(env=process.env,launch=spawn){
   const p=pathsFor(env)
   if(env.PHOENIX_ANATOMY_AUTO_INSTALL==='0'||env.CI==='true'||env.NODE_ENV==='test')
     return {status:'disabled',...status(env)}
-  if(!needsInstall(load(p)))return {status:'up-to-date',...status(env)}
+  if(!needsInstall(load(p))&&env.PHOENIX_ANATOMY_FORCE_INSTALL!=='1')
+    return {status:'up-to-date',...status(env)}
   mkdirSync(p.root,{recursive:true})
   try{
     const age=Date.now()-statSync(p.lock).mtimeMs
@@ -279,7 +350,9 @@ export function ensure(env=process.env,launch=spawn){
   }
 }
 if(process.argv[1]&&resolve(process.argv[1])===self){
-  if(process.argv.includes('--worker'))worker().catch(e=>{
+  if(process.argv.includes('--worker')||process.argv.includes('--install'))worker().then(()=>{
+    if(process.argv.includes('--install'))console.log(JSON.stringify(status(),null,2))
+  }).catch(e=>{
     const p=pathsFor();log(p,'FATAL '+String(e));try{rmSync(p.lock,{force:true})}catch{}
     process.exitCode=1
   })
