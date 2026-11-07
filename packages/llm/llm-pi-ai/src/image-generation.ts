@@ -975,9 +975,9 @@ function latestUserText(events: readonly { type: string; data: unknown }[]): str
  */
 export function requestsProfileLikeness(text: string): boolean {
   const normalized = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, '')
-  const firstPerson = /\b(?:mia|mio|conmigo|de mi (?:cara|rostro|persona|en|como)|yo en|salga yo|aparezca yo|mi cara|mi rostro)\b/u
+  const firstPerson = /\b(?:mia|mio|mi (?:foto|imagen|retrato|selfie)|conmigo|de mi (?:cara|rostro|persona|en|como)|yo en|salga yo|aparezca yo|mi cara|mi rostro)\b/u
   const englishFirstPerson = /\b(?:of me|myself|my face)\b/u
-  return /\b(?:foto|imagen|retrato|selfie|photograph|image|portrait)\b/u.test(normalized)
+  return /\b(?:foto|imagen|iagen|imgen|retrato|selfie|photograph|image|portrait)\b/u.test(normalized)
     && (firstPerson.test(normalized) || englishFirstPerson.test(normalized))
 }
 function generationPrompt(
