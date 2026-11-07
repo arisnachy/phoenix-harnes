@@ -1,5 +1,6 @@
 /** Per-match user-authored bet tracking. A scoreboard is never a verified bookmaker settlement. */
 import { useEffect,useState,type ReactNode } from 'react'
+import {PHOENIX_TICKET_UPDATE,readSportsReceiptGoals} from './SportsTicketAutoLink.ts'
 import type { PhoenixLiveGame,PhoenixLiveMeta } from './SportsLive.tsx'
 import css from './SportsBetProgress.module.css'
 
@@ -80,84 +81,39 @@ export function evaluateSportsPick(pick:SportsTrackedPick,game:PhoenixLiveGame|u
   return {state:covering?'leading':'trailing',
     label:covering?'Cumpliendo por ahora · NO final':'Todavía no cumple · NO final',target:description}
 }
-function safeStoreKey(sport:string,league:string,date:string,away:string,home:string):string|null{
-  if(!/^\d{4}-\d{2}-\d{2}$/u.test(date)||!sport||!league||!away||!home)return null
-  const clean=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'').replace(/[^a-z0-9]/giu,'').toLowerCase().slice(0,80)
-  return 'phoenix:sports:tracked:v1:'+clean(sport)+':'+clean(league)+':'+date+':'+clean(away)+':'+clean(home)
-}
-function load(key:string|null):SportsTrackedPick[]{
-  if(!key||typeof localStorage==='undefined')return []
-  try{
-    const obj=JSON.parse(localStorage.getItem(key)??'[]') as unknown
-    return Array.isArray(obj)?obj.filter(validTrackedPick).slice(0,24):[]
-  }catch{return []}
-}
-export function SportsBetProgress({sport,league,date,home,away,game,meta,initialBets=[]}:{
-  sport:string;league:string;date:string;home:string;away:string
+
+/** A verified receipt automatically carries the goal; the user never fills a per-game form. */
+export function SportsBetProgress({sport,league,date,home,away,eventId,game,meta,initialBets=[]}:{
+  sport:string;league:string;date:string;home:string;away:string;eventId?:string|undefined
   game?:PhoenixLiveGame|undefined;meta:PhoenixLiveMeta;initialBets?:SportsTrackedPick[]
 }):ReactNode{
-  const key=safeStoreKey(sport,league,date,away,home)
-  const [saved,setSaved]=useState<SportsTrackedPick[]>(()=>load(key))
-  const [receipt,setReceipt]=useState('')
-  const [market,setMarket]=useState<SportsTrackedPick['market']>('moneyline')
-  const [side,setSide]=useState<SportsTrackedPick['side']>('home')
-  const [line,setLine]=useState('')
-  const [notice,setNotice]=useState('')
-  useEffect(()=>{setSaved(load(key))},[key])
-  if(!key)return null
+  const lookup={sport,league,date,home,away,eventId}
+  const [saved,setSaved]=useState<SportsTrackedPick[]>(()=>readSportsReceiptGoals(lookup))
+  useEffect(()=>{
+    const update=()=>setSaved(readSportsReceiptGoals({sport,league,date,home,away,eventId}))
+    update()
+    if(typeof window==='undefined')return
+    window.addEventListener(PHOENIX_TICKET_UPDATE,update)
+    window.addEventListener('storage',update)
+    return()=>{window.removeEventListener(PHOENIX_TICKET_UPDATE,update);window.removeEventListener('storage',update)}
+  },[sport,league,date,home,away,eventId])
   const picks=[...new Map([...initialBets.filter(validTrackedPick),...saved].map(x=>[keyOf(x),x])).values()].slice(0,24)
-  const availableSides=market==='total'?[
-    ['over','Arriba (Over)'],['under','Abajo (Under)']]:
-    market==='three-way'?[
-      ['home','Local'],['away','Visitante'],['draw','Empate']]:
-      [['home','Local'],['away','Visitante']]
-  const submit=()=>{
-    const p:SportsTrackedPick={receipt:receipt.trim(),market,side:availableSides.some(s=>s[0]===side)?side:availableSides[0]![0] as SportsTrackedPick['side'],
-      ...(needLine(market)?{line:Number(line)}:{})}
-    if(!validTrackedPick(p)||needLine(market)&&line.trim()===''){
-      setNotice('Comprueba el número de boleto, mercado y línea exacta.');return
-    }
-    const next=[...new Map([...saved,p].map(v=>[keyOf(v),v])).values()].slice(-24)
-    try{localStorage.setItem(key,JSON.stringify(next));setSaved(next);setNotice('Selección guardada en este dispositivo.')}
-    catch{setNotice('No se pudo guardar; comprueba almacenamiento privado del navegador.')}
-  }
-  const remove=(pick:SportsTrackedPick)=>{
-    const next=saved.filter(p=>keyOf(p)!==keyOf(pick))
-    try{localStorage.setItem(key,JSON.stringify(next));setSaved(next);setNotice('Selección local eliminada.')}
-    catch{setNotice('No se pudo actualizar el almacenamiento.')}
-  }
-  return <section className={css.root} aria-label="Seguimiento de mis apuestas">
-    {picks.length>0&&<div className={css.grades}>
-      {picks.map((pick)=>{
-        const grade=evaluateSportsPick(pick,game,sport)
-        return <article key={keyOf(pick)} className={css.pick} data-bet-state={grade.state}>
-          <div className={css.header}><strong>Boleto {pick.receipt}</strong><span className={css.status}>{grade.label}</span></div>
-          <b>{pick.market==='total'?(pick.side==='over'?'Arriba ':'Abajo ')+pick.line:
-              pick.market==='spread'?(pick.side==='home'?home:away)+' '+signed(pick.line??0):
-              pick.side==='draw'?'Empate':pick.side==='home'?home:away}</b>
-          <small>{grade.target}</small>
-          {meta.stale||meta.error?<small>Último marcador recibido; puede estar desactualizado.</small>:null}
-          {saved.some(p=>keyOf(p)===keyOf(pick))&&<button type="button" onClick={()=>remove(pick)}>Quitar</button>}
-        </article>
-      })}
-    </div>}
-    <details className={css.edit}>
-      <summary>{picks.length?'Añadir otra selección':'Registrar mi apuesta para seguir el objetivo'}</summary>
-      <div className={css.form}>
-        <label>Número del boleto<input value={receipt} onChange={e=>setReceipt(e.target.value.slice(0,25))} placeholder="Ej.: 12126409" inputMode="text"/></label>
-        <label>Mercado<select value={market} onChange={e=>{const m=e.target.value as SportsTrackedPick['market'];setMarket(m);setSide(m==='total'?'over':'home')}}>
-          <option value="moneyline">Ganador</option><option value="spread">Hándicap</option>
-          <option value="total">Total arriba / abajo</option><option value="three-way">Ganador 1X2 / empate</option>
-        </select></label>
-        <label>Selección<select value={availableSides.some(s=>s[0]===side)?side:availableSides[0]![0]}
-          onChange={e=>setSide(e.target.value as SportsTrackedPick['side'])}>
-          {availableSides.map(([value,label])=><option key={value} value={value}>{label}</option>)}
-        </select></label>
-        {needLine(market)&&<label>Línea exacta<input type="number" step="0.5" value={line} onChange={e=>setLine(e.target.value)} placeholder="Ej.: +1.5 o 223.5"/></label>}
-        <button type="button" onClick={submit}>Guardar selección</button>
-      </div>
-      {notice&&<small role="status">{notice}</small>}
-      <small>El registro local no programa correos ni verifica que la banca haya aceptado el boleto. Resultado provisional a partir de ESPN; confirma pago y reglas en la casa.</small>
-    </details>
+  // No betting objective without a verified linked ticket. Never force the user
+  // to retype a receipt, guess a market, or imply an unmatched game was bet.
+  if(picks.length===0)return null
+  return <section className={css.root} aria-label="Objetivos de mis boletos">
+    <strong>Seguimiento automático del boleto</strong>
+    <div className={css.grades}>{picks.map((pick)=>{
+      const grade=evaluateSportsPick(pick,game,sport)
+      return <article key={keyOf(pick)} className={css.pick} data-bet-state={grade.state}>
+        <div className={css.header}><strong>Boleto #{pick.receipt}</strong><span className={css.status}>{grade.label}</span></div>
+        <b>{pick.market==='total'?(pick.side==='over'?'Arriba ':'Abajo ')+pick.line:
+          pick.market==='spread'?(pick.side==='home'?home:away)+' '+signed(pick.line??0):
+            pick.side==='draw'?'Empate':pick.side==='home'?home:away}</b>
+        <small>{grade.target}</small>
+        {meta.stale||meta.error?<small>El último marcador puede estar desactualizado.</small>:null}
+      </article>
+    })}</div>
+    <small>Datos ESPN y objetivos de recibos aportados; solo la casa confirma liquidación, anulaciones y pagos.</small>
   </section>
 }
