@@ -798,3 +798,36 @@ test('cached pitcher evidence expires at review time even when collection was va
   assert.ok(later.missingEvidence.some(x=>x.includes('bullpen')))
   assert.equal(later.eligibleForTicket,false)
 })
+
+test('MLB bullpen calendar dates never masquerade as exact 72-hour timestamps',async()=>{
+  const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true}).fetcher,at)
+  const log=(day)=>({date:day,opponentId:123,innings:'1.0',pitches:'15',
+    earnedRuns:'0',strikeouts:'1',walks:'0'})
+  const setBoth=(day)=>{
+    for(const side of ['home','away']){
+      for(const p of d.bullpen[side])p.reliefUsage72h=[]
+      assert.ok(d.bullpen[side].length)
+      d.bullpen[side][0].reliefUsage72h=[log(day)]
+    }
+  }
+  // A same-day log has no game completion timestamp and must not be trusted.
+  setBoth('2026-07-01')
+  assert.equal(reviewMlbResearch(d).evidenceGates.reliefUsageObserved,false)
+  // Three previous calendar dates are observable; four are stale.
+  setBoth('2026-06-28')
+  assert.equal(reviewMlbResearch(d).evidenceGates.reliefUsageObserved,true)
+  setBoth('2026-06-27')
+  assert.equal(reviewMlbResearch(d).evidenceGates.reliefUsageObserved,false)
+  // Cached dossier is rechecked against the review calendar date.
+  setBoth('2026-06-29')
+  assert.equal(reviewMlbResearch(d).evidenceGates.reliefUsageObserved,true)
+  assert.equal(reviewMlbResearch(d,'2026-07-02T12:00:00Z')
+    .evidenceGates.reliefUsageObserved,true)
+  assert.equal(reviewMlbResearch(d,'2026-07-03T12:00:00Z')
+    .evidenceGates.reliefUsageObserved,false)
+  setBoth('2026-06-30T23:59:00Z')
+  assert.equal(reviewMlbResearch(d).evidenceGates.reliefUsageObserved,false)
+  setBoth('2026-02-30')
+  assert.equal(reviewMlbResearch(d).evidenceGates.reliefUsageObserved,false)
+  assert.equal(reviewMlbResearch(d).eligibleForTicket,false)
+})
