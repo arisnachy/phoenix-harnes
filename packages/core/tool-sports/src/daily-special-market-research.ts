@@ -8,7 +8,7 @@ import {readSportsEventMarketMenu,type ExtraSportsbookOutcome} from './sports-ev
 export type DailySpecialMarketObservation={
   sport:string;league:string;espnEventId:string;bookmakerEventId:string
   fixture:string;bookmaker:string;status:'observed'|'empty'|'error'|'unconfigured'|'unsupported'
-  publishedMarketCount:number;marketsObserved:string[]
+  publishedMarketCount:number;offersObserved:number;marketsObserved:string[]
   offers:Array<{
     market:string;family:string;period:string;selection:string;participant:string|null
     line:number|null;decimalOdds:number;updatedAt:string;source:'The Odds API v4'
@@ -52,7 +52,7 @@ export async function researchDailySpecialMarkets(
     if(!unique.has(eventIdentity(c)))unique.set(eventIdentity(c),c)
   }
   const eligible=[...unique.values()].slice(0,limit)
-  const warning='Ofertas especiales reales observadas, NO selecciones aprobadas. F5, props, períodos y alternativos necesitan datos y modelos específicos de ese mercado; las cuotas NO pertenecen a Juancito salvo identificación explícita. No se realiza ninguna apuesta.'
+  const warning='El resultado incluye el total de ofertas y hasta 16 ejemplos por encuentro. Ofertas especiales reales observadas, NO selecciones aprobadas. F5, props, períodos y alternativos necesitan datos y modelos específicos de ese mercado; las cuotas NO pertenecen a Juancito salvo identificación explícita. No se realiza ninguna apuesta.'
   if(!env.THE_ODDS_API_KEY?.trim()){
     return {status:'unconfigured',eventsChecked:0,observations:[],warning:
       warning+' Falta configurar la clave autorizada de The Odds API v4.'}
@@ -67,7 +67,7 @@ export async function researchDailySpecialMarkets(
       if(result.status!=='fulfilled'){
         observations.push({sport:c.sport,league:c.league,espnEventId:c.espnEventId,
           bookmakerEventId:c.bookmakerEventId,fixture:c.fixture,bookmaker:c.bookmaker,
-          status:'error',publishedMarketCount:0,marketsObserved:[],offers:[],
+          status:'error',publishedMarketCount:0,offersObserved:0,marketsObserved:[],offers:[],
           warnings:[message(result.reason)]})
         return
       }
@@ -78,8 +78,8 @@ export async function researchDailySpecialMarkets(
         bookmakerEventId:c.bookmakerEventId,fixture:c.fixture,bookmaker:c.bookmaker,
         status:matched.length?'observed':report.status==='observed'?'empty':report.status,
         publishedMarketCount:report.publishedMarkets.length,
-        marketsObserved:[...new Set(matched.map(x=>x.market))],
-        offers:matched.slice(0,36).map(offer=>({
+        offersObserved:matched.length,marketsObserved:[...new Set(matched.map(x=>x.market))],
+        offers:matched.slice(0,16).map(offer=>({
           market:offer.market,family:offer.family,period:offer.period,
           selection:offer.selection,participant:offer.participant,line:offer.point,
           decimalOdds:offer.decimalOdds,updatedAt:offer.updatedAt,source:offer.source,
