@@ -136,13 +136,20 @@ function cards(report:Report,metrics:readonly {label:string;value:string;detail?
       const x=MARGIN+i*(W+9)
       p.commands+=rectangle(x,p.y-height+6,W,height,LIGHT)
       p.commands+=rectangle(x,p.y-height+6,3,height,TEAL)
-      const names=wrap(m.label,W-20,8.8).slice(0,4)
-      names.forEach((name,j)=>p.commands+=textAt(name,x+11,p.y-17-j*11,8.8,false,MUTED))
+      const names=wrap(m.label,W-20,8.8)
+      names.slice(0,2).forEach((name,j)=>p.commands+=textAt(name,x+11,p.y-17-j*11,8.8,false,MUTED))
       const values=wrap(m.value,W-18,14)
-      values.slice(0,3).forEach((value,j)=>p.commands+=textAt(value,x+11,p.y-47-j*15,14,true,DARK))
+      values.slice(0,2).forEach((value,j)=>p.commands+=textAt(value,x+11,p.y-47-j*15,14,true,DARK))
       if(m.detail)p.commands+=textAt(wrap(m.detail,W-18,7.5)[0]??'',x+11,p.y-height+18,7.5,false,MUTED)
     })
     p.y-=height+15
+    for(const m of row){
+      // Long cards have a compact summary; print their complete contents below.
+      if(wrap(m.label,W-20,8.8).length>2 || wrap(m.value,W-18,14).length>2
+        || (m.detail && wrap(m.detail,W-18,7.5).length>1)){
+        para(report,m.label+': '+m.value+(m.detail?' | '+m.detail:''),{size:8.5})
+      }
+    }
   }
 }
 function table(report:Report,columns:readonly string[],rows:readonly (readonly VisualCell[])[]):void{
