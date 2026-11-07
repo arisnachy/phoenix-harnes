@@ -472,3 +472,62 @@
   .missionLaunchpad { gap: 6px; margin-top: 8px; }
   .missionShortcut { min-height: 32px; padding: 5px 10px; }
 }
+
+
+/* PHOENIX Celebrations: decorative overlays never replace the silver emblem.
+   At ordinary dates no themed ring, motif, or added space is rendered. */
+.fishHitbox[data-celebration]::after {
+  content: '';
+  position: absolute;
+  inset: 7%;
+  z-index: -1;
+  border-radius: 50%;
+  border: 2px solid var(--phoenix-celebration-primary, transparent);
+  box-shadow: inset 0 0 0 3px rgba(255,255,255,.48),
+    0 0 22px -8px var(--phoenix-celebration-secondary, transparent);
+  opacity: .7;
+  pointer-events: none;
+}
+
+.celebrationMotif {
+  position: absolute;
+  right: 3%;
+  bottom: 5%;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 32%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--phoenix-celebration-primary, #777) 28%, white);
+  background: var(--dsw-alias-bg-base, #fffdf9);
+  color: var(--phoenix-celebration-primary, #777);
+  box-shadow: 0 4px 15px rgba(66,51,40,.12);
+  font-size: clamp(16px, 1.7vw, 27px);
+  line-height: 1;
+  pointer-events: none;
+}
+
+.celebrationGreeting {
+  max-width: min(100%, 780px);
+  margin: 8px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: clamp(14px, 1.22vw, 17px);
+  font-weight: 500;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+
+.fishHitbox[data-celebration='peace']::after,
+.fishHitbox[data-celebration='health']::after {
+  border-style: solid;
+  opacity: .35;
+}
+
+@media (max-width: 720px) {
+  .celebrationMotif { font-size: 18px; }
+  .celebrationGreeting { margin-top: 6px; font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fishHitbox[data-celebration] * { animation: none !important; }
+}
