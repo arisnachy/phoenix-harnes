@@ -638,9 +638,19 @@ test('encrypted patient-linked GLB is only readable by assigned clinician and re
  assert.equal(db.listAttachments(doctor,p.id)[0].anatomicalModel.meshes,1)
  assert.throws(()=>db.readAttachment(other,row.id),/no asignado/i)
  assert.throws(()=>db.listAttachments(other,p.id),/no asignado/i)
- const reviewed=db.reviewAttachment(doctor,row.id,1)
+ assert.throws(()=>db.reviewAnatomicalAttachment(other,row.id,1,{
+  sourceReference:'original',assessment:'uncertain',limitations:'Estudio sintético',comparedWithSource:true}),/no asignado/i)
+ assert.throws(()=>db.reviewAnatomicalAttachment(doctor,row.id,1,{
+  sourceReference:'original',assessment:'consistent',limitations:'Estudio sintético',comparedWithSource:false}),/comparar/)
+ const reviewed=db.reviewAnatomicalAttachment(doctor,row.id,1,{
+  sourceReference:'source-synthetic-001',assessment:'uncertain',
+  limitations:'Máscaras de ejemplo sin comprobación médica independiente',comparedWithSource:true})
  assert.equal(reviewed.reviewStatus,'reviewed')
  assert.equal(reviewed.anatomicalModel.geometryStatus,'unreviewed')
+ assert.equal(reviewed.anatomicalReview.clinicalValidation,'NOT_VALIDATED')
+ assert.equal(reviewed.anatomicalReview.assessment,'uncertain')
+ assert.throws(()=>db.reviewAnatomicalAttachment(doctor,row.id,1,{
+  sourceReference:'original',assessment:'consistent',limitations:'Segunda firma',comparedWithSource:true}),/Conflicto/)
  assert.equal(readFileSync(join(root,'clinic.sqlite')).includes(glb),false)
  assert.equal(readFileSync(join(root,'clinic.sqlite')).includes(Buffer.from('volumen-sintetico.glb')),false)
  assert.throws(()=>db.addAttachment(doctor,{patientId:p.id,name:'bad.glb',mime:'model/gltf-binary',

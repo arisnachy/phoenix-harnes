@@ -877,6 +877,49 @@ export class HealthClinicStore {
     }catch(error){this.db.exec('ROLLBACK');throw error}
   }
 
+
+  /**
+   * Record a clinician's review of a research GLB against original imaging.
+   * This never grants diagnostic or regulatory validation to the segmentation.
+   * @param actor - Authenticated and patient-assigned physician.
+   * @param id - Encrypted attachment identifier.
+   * @param expectedVersion - Exact optimistic-concurrency version.
+   * @param value - Review evidence and limitations attested by the physician.
+   * @returns Encrypted clinical-record metadata, without GLB bytes.
+   */
+  reviewAnatomicalAttachment(actor:Actor,id:string,expectedVersion:number,value:unknown):RecordData {
+    if(actor.role!=='clinician')fail('Solo el médico asignado puede revisar anatomía')
+    if(!Number.isSafeInteger(expectedVersion)||expectedVersion<1)fail('Versión inválida')
+    const review=obj(value)
+    if(review.comparedWithSource!==true)fail('Debe comparar con las imágenes originales')
+    const sourceReference=str(review.sourceReference,'Referencia de imágenes originales',160)
+    const assessment=str(review.assessment,'Concordancia anatómica',32)
+    if(!['consistent','uncertain','discordant'].includes(assessment))fail('Valoración anatómica inválida')
+    const limitations=text(review.limitations,'Limitaciones del modelo',1200)
+    this.db.exec('BEGIN IMMEDIATE')
+    try{
+      const row=this.attachmentRow(actor,id)
+      if(row.version!==expectedVersion)fail('Conflicto de edición: recarga el modelo')
+      const current=this.openAttachment(row)
+      if(current.mime!=='model/gltf-binary')fail('Archivo no corresponde a un GLB anatómico')
+      if(current.anatomicalReview)fail('La revisión ya está registrada; conserve su historial')
+      const version=row.version+1
+      const next:RecordData={...current,reviewStatus:'reviewed',
+        anatomicalReview:{assessment,sourceReference,limitations,
+          comparedWithSource:true,reviewedBy:actor.username,reviewedAt:new Date().toISOString(),
+          clinicalValidation:'NOT_VALIDATED',researchOnly:true}}
+      const sealed=this.seal(row.id,actor.org,'attachment',version,next)
+      const changed=this.db.prepare(
+        'UPDATE health_attachments SET version=?,iv=?,tag=?,payload=? WHERE id=? AND org=? AND version=?',
+      ).run(version,sealed.iv,sealed.tag,sealed.payload,row.id,actor.org,expectedVersion)
+      if(Number(changed.changes)!==1)fail('Conflicto de concurrencia')
+      this.audit(actor,'anatomy.research-review',row.id)
+      this.db.exec('COMMIT')
+      const {base64:_content,...details}=next
+      return {...details,id:row.id,version,createdAt:row.created_at}
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+  }
+
   /** Atomic pharmacy dispense: only one signed prescription, matching available stock. */
   /**
    * Perform dispense within the isolated clinical workflow.
