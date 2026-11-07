@@ -169,3 +169,15 @@ El catálogo de PHOENIX reconoce **243 tipos de entrada en 20 grupos y 23 famili
 - Futura integración de detectores: por indicación y modalidad exacta, con datos originales y controles de calidad, pesos/versiones reproducibles, calibración y validación externa contra estándar de referencia. No declarar que funcionan por tener una casilla marcada.
 
 Pruebas: `node --experimental-strip-types --test scripts/phoenix-health-diagnostic.test.mjs scripts/phoenix-health-diagnostic-catalog.test.mjs`.
+
+## Regression ECG · Preexcitación/WPW y visualización sustentada
+
+Caso de regresión: un ECG con onda delta, PR corto y QRS amplio fue inicialmente descrito como eje izquierdo, y se generó una ilustración anatómica genérica. PHOENIX no debe reemplazar la revisión del ECG con una representación vistosa.
+
+- Kira ofrece `health_ecg_preexcitation_review` para **mediciones PR/QRS y onda delta extraídas de un trazado calibrado revisado por médico**. El resultado solo identifica **compatibilidad con el patrón electrocardiográfico**, no síndrome WPW confirmado ni posición anatómica real de la vía accesoria.
+- Una captura sin escala/derivaciones suficientes debe producir `INSUFFICIENT_ECG_EVIDENCE`. Un eje izquierdo no confirma ni descarta WPW.
+- Si hay taquicardia irregular de QRS ancho y sospecha de preexcitación se destaca la urgencia clínica. En FA preexcitada los fármacos bloqueadores del nodo AV pueden ser perjudiciales (guías ACC/AHA/ACCP/HRS 2023).
+- La herramienta `health_diagnostic_visual_plan` se aplica al universo de modalidades catalogadas: sin estudio revisado y hallazgos medidos **no dibuja** una imagen que simule el diagnóstico; para geometría individual, solo el pipeline DICOM/máscaras registrado y validado podrá producir un modelo propio del paciente.
+- Estas herramientas son verificadores **de evidencia aportada**, no analizadores autónomos de píxeles ni modelos médicos certificados. Hay que conectar un motor de imagen/señal especializado antes de declarar que Kira interpreta cualquier ECG o imagen automáticamente.
+
+Prueba: `node --experimental-strip-types --test scripts/phoenix-health-diagnostic-accuracy.test.mjs`.
