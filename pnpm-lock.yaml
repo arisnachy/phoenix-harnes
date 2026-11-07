@@ -10156,7 +10156,7 @@ importers:
 packages:
 
   lucide-react@0.472.0:
-    resolution: {tarball: https://registry.npmjs.org/lucide-react/-/lucide-react-0.472.0.tgz}
+    resolution: {integrity: sha512-wdJH3xJAMuelsCgSZLBGQunk20xwFSMsuY7R4lrbLd/QsEPf/n6EmbGUnvux7+OjDJC248Kuja+5gWGpC7f3SA==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
