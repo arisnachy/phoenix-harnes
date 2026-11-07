@@ -89,8 +89,8 @@ export function PhoenixUiIcon({ name, size = 18, className, tone = 'auto', color
   size?: number
   className?: string
   tone?: PhoenixUiIconTone
-  color?: string
-  label?: string
+  color?: string | undefined
+  label?: string | undefined
 }): ReactNode {
   const glyphs: Record<LegacyPhoenixUiIconName, ReactNode> = {
     bot: <><rect x="4" y="7" width="16" height="13" rx="4" /><path d="M12 3v4M9 3h6M4 12H2m20 0h-2" /><path d="M9 13h.01M15 13h.01" strokeWidth="3" /></>,
