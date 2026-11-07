@@ -22,7 +22,6 @@ import type {
   PhoenixLocalModelSnapshot,
 } from './PhoenixLocalPanel.tsx'
 import { ConnectorsSettingsSection } from './AuthorizationPanel.tsx'
-import { ClawHubConnectorStore } from './ClawHubConnectorStore.tsx'
 import type { ChatGptWebBridgeClient } from './chatgpt-web-toggle.ts'
 import type {
   ConnectorsSettingsSectionProps,
@@ -590,13 +589,6 @@ export function apply(ctx: ClientContext): void {
     label: () => connectorT('nav'),
     inject: connectorsInjected,
   }, ConnectorsSettingsSection))
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'clawhub',
-    order: 13,
-    label: () => 'OpenClaw · ClawHub',
-    inject: () => ({ registry: mcpRegistry, t: connectorT, connectedIds: [] }),
-  }, ClawHubConnectorStore))
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',
     id: 'welcome-notice',
