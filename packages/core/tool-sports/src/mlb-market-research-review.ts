@@ -77,14 +77,16 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
       p.recentStarts.some(out=>{
         const at=Date.parse(out.date)
         return Number.isFinite(at)&&at<=checkedMs&&
-          checkedMs-at<=45*24*60*60*1000
+          checkedMs-at<=45*24*60*60*1000&&
+          at<=reviewMs&&reviewMs-at<=45*24*60*60*1000
       })),
     injuriesDatedVerified:false, // Injured roster alone has no dated medical report or return-to-play status.
     reliefUsageObserved:reviewTimeValid&&(['home','away'] as const).every(side=>
       d.bullpen[side].some(p=>p.reliefUsage72h.some(out=>{
         const at=Date.parse(out.date)
         return Number.isFinite(at)&&at<=checkedMs&&
-          checkedMs-at<=72*60*60*1000
+          checkedMs-at<=72*60*60*1000&&
+          at<=reviewMs&&reviewMs-at<=72*60*60*1000
       }))),
     rosterMatchupsReviewed:(['home','away'] as const).every(side=>{
       const opposing=side==='home'?'away':'home'
