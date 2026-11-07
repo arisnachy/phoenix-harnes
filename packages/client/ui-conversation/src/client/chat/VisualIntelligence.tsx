@@ -169,19 +169,22 @@ function Gallery({ items,initialBento }: {items:readonly VisualMedium[];initialB
     </div>
   </section>
 }
-function DocumentEditor({ doc,id }: {doc:{title:string;content:string;version?:number};id:string}):ReactNode {
+function DocumentEditor({ doc,id,onUpdate }: {
+  doc:{title:string;content:string;version?:number};id:string
+  onUpdate:(content:string,version:number)=>void
+}):ReactNode {
   const [body,setBody]=useState(doc.content)
   const [versions,setVersions]=useState<string[]>([doc.content])
   const [revision,setRevision]=useState(doc.version??1)
   const [message,setMessage]=useState('')
   return <section className={css.module} aria-label="Editor de documentos">
     <label>Título<input value={doc.title} readOnly aria-label="Título de documento" /></label>
-    <textarea value={body} aria-label="Contenido editable" onChange={e=>setBody(e.target.value)}
+    <textarea value={body} aria-label="Contenido editable" onChange={e=>{setBody(e.target.value);onUpdate(e.target.value,revision)}}
       rows={Math.min(18,Math.max(6,body.split('\n').length))} maxLength={20000}/>
     <div className={css.toolbar}>
-      <button type="button" onClick={()=>{if(versions.length<50){setVersions(v=>[...v,body]);setRevision(r=>r+1);setMessage('Versión '+(revision+1)+' guardada en esta sesión.')}}}>
+      <button type="button" onClick={()=>{if(versions.length<50){setVersions(v=>[...v,body]);setRevision(r=>r+1);onUpdate(body,revision+1);setMessage('Versión '+(revision+1)+' guardada en esta sesión.')}}}>
         Guardar versión</button>
-      <button type="button" disabled={versions.length<2} onClick={()=>{const old=versions[versions.length-2];if(old!==undefined){setBody(old);setMessage('Versión anterior restaurada; guarda para confirmar.')}}}>Restaurar anterior</button>
+      <button type="button" disabled={versions.length<2} onClick={()=>{const old=versions[versions.length-2];if(old!==undefined){setBody(old);onUpdate(old,revision);setMessage('Versión anterior restaurada; guarda para confirmar.')}}}>Restaurar anterior</button>
       <button type="button" onClick={()=>download(id+'-v'+revision+'.md',body,'text/markdown;charset=utf-8')}>Exportar Markdown</button>
       <button type="button" onClick={()=>window.print()}>Imprimir / PDF</button>
     </div>
@@ -190,7 +193,7 @@ function DocumentEditor({ doc,id }: {doc:{title:string;content:string;version?:n
 }
 type RouteResult={distanceKm:number;durationMin:number;coordinates:readonly (readonly [number,number])[]}
 function ConnectedMap({places,id,title,sources,onAction}:{
-  places:readonly VisualPlace[];id:string;title:string;sources?:readonly VisualSource[];onAction?:CanvasAction
+  places:readonly VisualPlace[];id:string;title:string;sources?:readonly VisualSource[] | undefined;onAction?:CanvasAction | undefined
 }):ReactNode {
   const [route,setRoute]=useState<RouteResult|null>(null)
   const [status,setStatus]=useState('')
@@ -423,8 +426,11 @@ export function VisualIntelligence({spec:initial,onAction,conversationId}:Props)
     {resolved==='table'&&p.rows&&p.columns&&<TableExplorer id={p.id} rows={p.rows} columns={p.columns}/>}
     {resolved==='comparison'&&p.rows&&p.columns&&<Comparison rows={p.rows} columns={p.columns}/>}
     {resolved==='chart'&&p.series&&p.labels&&<ChartExplorer id={p.id} labels={p.labels} series={p.series}/>}
-    {(resolved==='gallery'||resolved==='bento')&&p.media&&<Gallery items={p.media} initialBento={resolved==='bento'}/>}
-    {resolved==='document'&&p.document&&<DocumentEditor key={p.document.version??1} id={p.id} doc={p.document}/>}
+    {(resolved==='gallery'||resolved==='bento')&&p.media&&<Gallery key={resolved} items={p.media} initialBento={resolved==='bento'}/>}
+    {resolved==='document'&&p.document&&<DocumentEditor id={p.id} doc={p.document}
+      onUpdate={(content,version)=>setSpec(previous=>({...previous,props:{
+        ...previous.props,document:{...previous.props.document!,content,version},
+      }}))}/>}
     {resolved==='form'&&p.form&&<SmartFormWorkspace initial={p.form} onAction={onAction}/>}
     {resolved==='map'&&p.places&&<ConnectedMap places={p.places} title={p.title}
       id={p.id} sources={p.sources} onAction={onAction}/>}
