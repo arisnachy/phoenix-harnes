@@ -68,9 +68,17 @@ test('validates event ID and bounded credit use',async()=>{
   await assert.rejects(()=>readSportsEventMarketMenu('basketball_nba',eventId,env,feed,now,13),/1 y 12/)
 })
 test('one failed market batch does not erase valid prior market results',async()=>{
-  let count=0
-  const partial=async(url)=>{if(++count===2)return new Response('failed',{status:503})
-    return feed(url)}
+  let oddsBatches=0
+  const partial=async(url)=>{
+    const u=new URL(url)
+    if(u.pathname.endsWith('/markets'))return new Response(JSON.stringify({
+      id:eventId,sport_key:'basketball_nba',commence_time:'2026-11-06T23:00:00Z',
+      bookmakers:[{key:'draftkings',markets:eventMarketCatalog('basketball_nba')
+        .map(key=>({key,last_update:'2026-11-06T16:55:00Z'}))}],
+    }))
+    if(++oddsBatches===2)return new Response('failed',{status:503})
+    return feed(url)
+  }
   const report=await readSportsEventMarketMenu('basketball_nba',eventId,env,partial,now,12)
   assert.equal(report.status,'observed')
   assert.ok(report.errors.some(x=>x.includes('503')))
