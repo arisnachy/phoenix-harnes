@@ -164,8 +164,16 @@ export async function launchSimVascular(){
  const b=binary('simvascular')
  if(!b)invalid('SimVascular not configured; native Windows build is not supported')
  const invocation=buildInvocation('simvascular','','',process.platform,process.env)
- const r=await execute(invocation,{timeoutMs:10000})
- return {status:r.exitCode===0?'exited':'launch-attempted',exitCode:r.exitCode,clinicalValidation:'not-validated'}
+ if(process.platform==='win32'){
+  const probe=await execute({cmd:'wsl.exe',args:['--distribution',wslDistro(),'--exec','/usr/bin/test','-x',b]},{timeoutMs:15000})
+  if(probe.exitCode!==0)invalid('SimVascular WSL executable is not accessible')
+ }
+ const child=spawn(invocation.cmd,invocation.args,{shell:false,windowsHide:true,
+  detached:true,stdio:'ignore'})
+ await new Promise((yes,no)=>{child.once('error',no);child.once('spawn',yes)})
+ child.unref()
+ return {status:'launch-issued',pid:child.pid,clinicalValidation:'not-validated',
+  note:'GUI start request is not confirmation that a CFD or patient simulation finished.'}
 }
 async function main(){
  const command=flags[0]||'doctor'
