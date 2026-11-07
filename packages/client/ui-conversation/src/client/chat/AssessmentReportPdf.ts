@@ -137,7 +137,7 @@ function pdfDocument(pages:readonly Page[]):Uint8Array<ArrayBuffer>{
  * @param data - Validated, completed scores and optional professional notes.
  * @returns Downloadable PDF kept local to this browser.
  */
-export function generateAssessmentPdf(data:AssessmentReportData):Blob{
+export function buildAssessmentPdfBytes(data:AssessmentReportData):Uint8Array<ArrayBuffer>{
   if(data.rows.length<1 || data.rows.length>200 || data.rows.some(r=>!r.answer.trim()))
     throw Error('No se puede emitir informe con respuestas incompletas.')
   const title='INFORME DE EVALUACIÓN'
@@ -195,5 +195,9 @@ export function generateAssessmentPdf(data:AssessmentReportData):Blob{
       +(answer.score===undefined?'':' | Puntaje: '+answer.score),title)
   })
   paragraph(pages,'Fin del anexo. Total de reactivos contestados: '+data.rows.length+'.',title,{bold:true})
-  return new Blob([pdfDocument(pages)],{type:'application/pdf'})
+  return pdfDocument(pages)
+}
+/** Browser download wrapper with no server and no implicit persistence. */
+export function generateAssessmentPdf(data:AssessmentReportData):Blob{
+  return new Blob([buildAssessmentPdfBytes(data)],{type:'application/pdf'})
 }
