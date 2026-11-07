@@ -136,6 +136,11 @@
     # shares. The base layer's agent-default-model service owns the default model.
     - id: api-gateway
       name: '@phoenix-ai/dsh-host-apiproxy'
+      config:
+        # Images must be read by a real vision-capable route even if Kira selects a text-only model.
+        # A later deployment patch can explicitly disable or pin the fallback.
+        visionFallback:
+          enabled: true
 
     - id: cordis-host-runner
       name: '@phoenix-ai/dsh-cordis-host-runner'
