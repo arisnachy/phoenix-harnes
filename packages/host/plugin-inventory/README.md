@@ -31,3 +31,27 @@ None; this package never assembles model input.
 - **Restart is intentionally narrow** — Web can request activation only for the updater's exact prepared `ready` target; arbitrary checkout switching and plugin mutation are outside this service.
 
 Registry installation accepts only concrete remote endpoints. URI templates with literal or percent-encoded braces are excluded from automatic installation, allowing a later concrete endpoint in the same server entry to be selected.
+
+## Anatomía 3D · Conectores
+
+**Conectores → Anatomía 3D** presenta siete capacidades locales con comprobación independiente y acciones autorizadas desde el Host. El check indica **paquete detectado**, no una integración clínicamente validada. Cada instalación es optativa, aislada en `%LOCALAPPDATA%\\PHOENIX\\anatomy` en Windows y no lee expedientes de HealthIA.
+
+- **3D Slicer + SlicerHeart:** instalador WinGet oficial y verificación de extensión.
+- **MONAI + nnU-Net:** entorno Python aislado; pesos de modelos específicos por tarea separados.
+- **TotalSegmentator:** descarga inicial del modelo abierto `total`, solo si existen los recursos necesarios; otras tareas pueden requerir licencia.
+- **Cornerstone3D + OHIF:** instala librerías Cornerstone. OHIF necesita despliegue y PACS/DICOMweb autorizado; la instalación de paquetes **no** activa un visor clínico listo.
+- **SimVascular / openCARP:** se inspeccionan binarios oficiales externos/WSL2; no se fuerzan instalaciones ni modelos fisiológicos sin configuración científica.
+- **Three.js + vtk.js:** bibliotecas 3D locales, con visor experimental GLB en PHOENIX; cortar volúmenes y validar mallas requiere etapas adicionales.
+
+El actualizador (`update-phoenix.ps1`) y el arranque con `pnpm phoenix` lanzan el bootstrap sin bloquear la interfaz. Los botones individuales usan exclusivamente IDs de componentes permitidos y su ejecución permanece sujeta a recursos locales, red y licencias.
+
+Diagnóstico desde la raíz del repositorio:
+
+```powershell
+node .\\scripts\\phoenix-anatomy-auto.mjs --status
+node .\\scripts\\phoenix-anatomy-auto.mjs --install-component totalsegmentator
+node .\\scripts\\phoenix-anatomy-simulation.mjs doctor
+Get-Content "$env:LOCALAPPDATA\\PHOENIX\\anatomy\\install.log" -Tail 50
+```
+
+Kira dispone de `health_anatomy_connectors`, `health_anatomy_status` y `health_anatomy_prepare(component)`. El inicio de instalación no equivale a éxito: comprobar la presencia real del componente y del archivo de salida GLB o de la simulación. La validación clínica, los estudios específicos, la privacidad de pacientes y los modelos docentes adicionales mantienen controles independientes.
