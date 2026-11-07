@@ -121,3 +121,12 @@
 @media (prefers-reduced-motion: reduce) {
   .barTrack > div { transition: none; }
 }
+
+/* Licensed web references stay compact, responsive, and attributed. */
+.referenceImage { margin:0; min-width:0; display:grid; gap:6px; overflow:hidden; border:1px solid var(--dsw-alias-border-subtle,rgba(120,120,120,.18)); border-radius:12px; background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.035)); }
+.referenceImage img { display:block; width:100%; max-height:320px; aspect-ratio:4 / 3; object-fit:contain; background:var(--dsw-alias-surface-primary,#fff); }
+.referenceImage figcaption { display:grid; gap:3px; padding:8px 10px; color:var(--dsw-alias-label-secondary,#666); }
+.referenceImage figcaption span { color:var(--dsw-alias-label-primary,inherit); font-size:12px; }
+.referenceImage figcaption small { font-size:11px; line-height:1.4; overflow-wrap:anywhere; }
+.referenceImage figcaption a { color:var(--phoenix-visual-series-1,#2563eb); text-decoration:underline; text-underline-offset:2px; }
+.referenceUnavailable { min-height:90px; display:grid; place-items:center; padding:12px; font-size:12px; text-align:center; }
