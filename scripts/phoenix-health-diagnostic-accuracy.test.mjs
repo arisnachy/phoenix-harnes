@@ -1,8 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import {readFileSync} from 'node:fs'
 import {assessPreexcitation} from '../packages/core/tool-health/src/ecg-preexcitation.ts'
 import {planClinicalVisualization} from '../packages/core/tool-health/src/diagnostic-visualization.ts'
 import {DIAGNOSTIC_INPUTS} from '../packages/core/tool-health/src/diagnostic-catalog.ts'
+import {auditDiagnosticConcordance} from '../packages/core/tool-health/src/diagnostic-concordance.ts'
 
 test('WPW pattern is explicitly considered when PR <120, delta and broad QRS are measured',()=>{
  const r=assessPreexcitation({source:'calibrated-12-lead',clinicianReviewed:true,
@@ -71,4 +73,86 @@ test('same evidence-first rule applies to every registered medical input modalit
     sourceType:'image',observedFindings:'no examinado',patientSpecific:false}).decision,
     'BLOCK_NO_SOURCE',modality)
  }
+})
+
+test('a photographed ECG can suggest delta/WPW provisionally but never create numeric PR or QRS',()=>{
+ const observed=assessPreexcitation({
+  source:'partial-image',clinicianReviewed:false,deltaWave:'not-assessable',
+  photoDeltaHint:'possible',qualitativePrHint:'appears-short',
+  axisHint:'left',rhythm:'unknown',leadEvidence:'derivaciones parcialmente visibles',
+ })
+ assert.equal(observed.pattern,'PHOTO_SUGGESTS_PREEXCITATION_UNVERIFIED')
+ assert.equal(observed.prMs,null)
+ assert.equal(observed.qrsMs,null)
+ assert.equal(observed.imageSuspectedPreexcitationUnverified,true)
+ assert.equal(observed.imagePixelsAnalysed,false)
+ assert.equal(observed.visualDecision,'PROVISIONAL_ELECTROPHYSIOLOGY_MECHANISM_ONLY')
+ assert.equal(observed.wpwSyndromeConfirmed,false)
+ assert.match(observed.visualExplanation,/GENERIC accessory/i)
+ assert.throws(()=>assessPreexcitation({
+  source:'partial-image',clinicianReviewed:false,photoDeltaHint:'possible',
+  prMs:96,qrsMs:138}),/reviewed, calibrated/)
+})
+test('axis-only explanation must not obscure photo-observed delta and WPW differential',()=>{
+ const result=auditDiagnosticConcordance({
+  modality:'ecg',sourceType:'image',sourceReviewed:true,sourceCompleteness:'partial',
+  observedEvidence:'Eje izquierdo, PR corto aparente y onda delta en inicio de QRS, sin calibración confirmada.',
+  proposedImpression:'Desviación del eje eléctrico hacia la izquierda.',
+  differentialConsidered:'Bloqueo fascicular anterior',
+  intendedVisualization:'mechanism',criticalFeaturesAssessed:false,
+ })
+ assert.equal(result.decision,'BLOCK_UNSUPPORTED_INTERPRETATION')
+ assert.equal(result.differentialFlags.leftAxisConclusionInsufficient,true)
+ assert.equal(result.differentialFlags.preexcitationMustBeConsidered,true)
+ assert.match(result.visualInstructions,/accessory AV pathway/i)
+ assert.equal(result.clinicalDiagnosisConfirmed,false)
+ assert.equal(result.medicalPixelsOrSignalAnalyzedByThisTool,false)
+})
+test('all medical modalities require observed evidence and cannot authorize a patient-specific pathology illustration',()=>{
+ for(const modality of Object.keys(DIAGNOSTIC_INPUTS)){
+  const missing=auditDiagnosticConcordance({
+   modality,sourceType:'image',sourceReviewed:false,
+   observedEvidence:'',proposedImpression:'Diagnóstico definitivo',
+   intendedVisualization:'patient-specific'})
+  assert.equal(missing.decision,'BLOCK_UNSUPPORTED_INTERPRETATION',modality)
+  assert.equal(missing.clinicalDiagnosisConfirmed,false,modality)
+  const data=auditDiagnosticConcordance({
+   modality,sourceType:'dicom',sourceReviewed:true,
+   sourceCompleteness:'complete',
+   observedEvidence:'Anomalía objetiva descrita en fuente médica original',
+   proposedImpression:'Hipótesis provisional a correlacionar clínicamente',
+   differentialConsidered:'Variantes normales, error de adquisición y diferencial específico',
+   intendedVisualization:'patient-specific',criticalFeaturesAssessed:true})
+  assert.equal(data.decision,'BLOCK_UNSUPPORTED_INTERPRETATION',modality)
+  assert(data.missing.some(s=>/geometry/.test(s)),modality)
+  assert.equal(data.patientSpecificImageAuthorized,false)
+ }
+})
+
+test('ECG image rendering refuses isolated left-axis conclusion without checking PR/delta/QRS',()=>{
+ const axis=planClinicalVisualization({
+   modality:'ecg',sourceType:'image',sourceReviewed:true,
+   observedFindings:'Eje eléctrico muy desviado hacia la izquierda',
+   visualizationKind:'conceptual',patientSpecific:false,
+ })
+ assert.equal(axis.decision,'BLOCK_ECG_INCOMPLETE_INTERPRETATION')
+ assert.equal(axis.ecgIncompleteAxisOnly,true)
+ assert.equal(axis.ecgReviewRequired.length,4)
+ const differential=planClinicalVisualization({
+   modality:'ecg',sourceType:'image',sourceReviewed:true,
+   observedFindings:'Eje izquierdo con onda delta probable, PR corto a confirmar, QRS de duración desconocida',
+   visualizationKind:'conceptual',patientSpecific:false,
+ })
+ assert.equal(differential.decision,'ALLOW_EDUCATIONAL_EXPLANATION')
+ assert.equal(differential.patientSpecificRequested,false)
+ assert.equal(differential.medicalInterpretationVerifiedByThisTool,false)
+})
+
+test('medical image-only uploads always carry a clinical source-first guard',()=>{
+ const source=readFileSync(new URL('../packages/core/tool-health/src/index.ts',import.meta.url),'utf8')
+ assert.match(source,/name:'tool:health-vision-baseline'/)
+ assert.match(source,/text:\(\)=>CLINICAL_VISION_BASELINE/)
+ assert.match(source,/incluye una imagen o archivo médico/)
+ assert.match(source,/onda delta/)
+ assert.match(source,/NO ANALIZADO/)
 })
