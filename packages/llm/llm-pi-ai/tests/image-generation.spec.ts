@@ -53,6 +53,14 @@ describe('adult-oriented image generation tool guidance', () => {
   })
 })
 
+describe('source-grounded clinical image generation', () => {
+  it('requires source interpretation before medical explanatory artwork', () => {
+    expect(imageGenerationToolDescription).toContain('first read the original source')
+    expect(imageGenerationToolDescription).toContain('Never substitute generic normal anatomy')
+    expect(imageGenerationToolDescription).toContain('A conceptual 3D atlas must be labelled illustrative')
+  })
+})
+
 describe('Codex profile reference after attachment normalization', () => {
   function stored(
     type: ImageMediaType,
