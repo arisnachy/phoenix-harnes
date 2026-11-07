@@ -19,3 +19,18 @@
 .agentHeader {display:flex;align-items:baseline;flex-wrap:wrap;gap:6px;font-size:14px;line-height:1.4;}
 .agentHeader span {font-size:12px;color:var(--dsw-alias-label-secondary,#777);}
 .agentContent p {font-size:13px;line-height:1.5;margin:5px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;}
+
+/* Theme-aware colors for icon-only and contextual assistant surfaces. */
+.uiIcon {display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;line-height:0;color:inherit;}
+.uiIcon svg {display:block;flex-shrink:0;}
+.uiIcon[data-tone="neutral"] {color:var(--dsw-alias-label-secondary,#62666d)}
+.uiIcon[data-tone="positive"] {color:var(--dsw-alias-state-success-primary,#087842)}
+.uiIcon[data-tone="warning"] {color:var(--dsw-alias-state-warning-primary,#a46c0b)}
+.uiIcon[data-tone="negative"] {color:var(--dsw-alias-state-error-primary,#a82838)}
+.uiIcon[data-tone="info"] {color:var(--dsw-alias-state-info-primary,#2458a1)}
+.uiIcon[data-tone="medical"] {color:var(--phoenix-ui-medical-color,var(--dsw-alias-state-info-primary,#167b94))}
+.uiIcon[data-tone="research"] {color:var(--phoenix-ui-research-color,#7852ab)}
+.uiIcon[data-tone="education"] {color:var(--phoenix-ui-education-color,#7054a3)}
+.uiIcon[data-tone="finance"] {color:var(--phoenix-ui-finance-color,var(--dsw-alias-state-success-primary,#087842))}
+.uiIcon[data-tone="sports"] {color:var(--phoenix-ui-sports-color,#ad6515)}
+.uiIcon[data-tone="technology"] {color:var(--phoenix-ui-technology-color,var(--dsw-alias-state-info-primary,#2458a1))}
