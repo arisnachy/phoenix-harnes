@@ -484,10 +484,10 @@ function renderAnatomy(){
   button("anatomyUpload","Archivar modelo cifrado")+'</article>'+
   '<article class="card"><h2>Modelos registrados</h2>'+
    (models.length?models.map(x=>'<div class="ws-item"><div><strong>'+safe(x.name)+'</strong><div class="muted">'+safe(x.note||"Sin referencia")+
-    ' · '+safe(x.anatomicalModel?.meshes??"—")+' mallas · '+(x.reviewStatus==="reviewed"?"Archivo leído":"Pendiente de revisión")+
+    ' · '+safe(x.anatomicalModel?.meshes??"—")+' mallas · '+(x.reviewStatus==="reviewed"?"Revisado por médico (no validado)":"Pendiente de revisión")+
     ' · Anatomía no validada</div></div>'+
     button("anatomyView","Explorar 3D","secondary").replace('data-act="anatomyView"','data-act="anatomyView" data-id="'+safe(x.id)+'"')+
-    (x.reviewStatus==="pending"?button("anatomyReview","Marcar archivo leído","secondary").replace('data-act="anatomyReview"','data-act="anatomyReview" data-id="'+safe(x.id)+'"'):"")+'</div>').join(""):
+    (x.reviewStatus==="pending"?button("anatomyReview","Revisión médica","secondary").replace('data-act="anatomyReview"','data-act="anatomyReview" data-id="'+safe(x.id)+'"'):"")+'</div>').join(""):
     '<p class="muted">No hay modelos 3D archivados para este paciente.</p>')+
    '<div id="anatomy-viewport" style="position:relative;min-height:390px;overflow:hidden;border-radius:12px;background:#eaf2fa;margin-top:14px" aria-label="Visor anatómico 3D">'+
    '<p class="muted" style="padding:20px">Seleccione un modelo para abrirlo.</p></div>'+
@@ -728,9 +728,16 @@ async function execute(action,id){
  if(action==="anatomyReview"){
   const record=(data.anatomyAttachments||[]).find(f=>f.id===id)
   if(!record||record.mime!=="model/gltf-binary")throw Error("Modelo no disponible")
-  if(!confirm("¿Confirma que abrió y leyó este archivo? Esto NO valida su anatomía ni sus conclusiones."))return
-  await api("attachment-review/"+encodeURIComponent(id),"PATCH",{version:record.version})
-  notice("Se registró la lectura del archivo; aún requiere validación anatómica.");return load()
+  const sourceReference=prompt("Referencia del estudio original comparado (obligatoria):")
+  if(sourceReference===null)return
+  const assessment=prompt("Concordancia: consistent, uncertain o discordant","uncertain")
+  if(assessment===null)return
+  const limitations=prompt("Limitaciones o diferencias observadas (obligatorio):")
+  if(limitations===null)return
+  if(!confirm("¿Revisó personalmente las imágenes originales y el modelo 3D? Esta revisión NO certifica validez diagnóstica."))return
+  await api("anatomy-review/"+encodeURIComponent(id),"PATCH",{
+    version:record.version,sourceReference,assessment,limitations,comparedWithSource:true})
+  notice("Revisión anatómica de investigación registrada y auditada; sin certificación.");return load()
  }
  if(action==="anatomyView"){
   const record=(data.anatomyAttachments||[]).find(f=>f.id===id)
