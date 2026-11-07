@@ -39,6 +39,47 @@ function sample() {
 }
 
 describe('Phoenix intelligent UI canvas', () => {
+  it('renders universal entity outcomes, real approved logos and contextual icon metrics', () => {
+    const logo = 'https://a.espncdn.com/i/teamlogos/nba/500/atl.png'
+    const fixture = sample()
+    const spec = parseCanvasSpec({ ...fixture, props: { ...fixture.props, children: [
+      { type: 'group', layout: 'grid', children: [
+        { type: 'metric', label: 'Aciertos', value: '6 de 6', icon: 'trophy', status: 'positive' },
+        { type: 'metric', label: 'Medicina', value: '12', icon: 'stethoscope' },
+      ] },
+      { type: 'entity', name: 'Atlanta Hawks', subtitle: 'NBA · Marcador final',
+        value: '139–132', detail: 'Washington Wizards', badge: 'Ganó',
+        status: 'positive', icon: 'basketball', image: logo, source: 'ESPN' },
+      { type: 'image', src: 'https://upload.wikimedia.org/wikipedia/commons/0/02/SVG_logo.svg',
+        alt: 'Ilustración de referencia', source: 'Wikimedia Commons', caption: 'Fuente académica' },
+    ] } })
+    if (!spec) throw new Error('universal visual spec rejected')
+    const { container } = render(<GenerativeCanvas spec={spec} />)
+    expect(screen.getByText('6 de 6')).not.toBeNull()
+    expect(screen.getByText('Atlanta Hawks')).not.toBeNull()
+    expect(screen.getByText('139–132')).not.toBeNull()
+    expect(screen.getByText('Ganó')).not.toBeNull()
+    expect(container.querySelector('[data-status="positive"] img')?.getAttribute('src')).toBe(logo)
+    expect(screen.getByAltText('Ilustración de referencia')).not.toBeNull()
+    expect(container.querySelectorAll('svg').length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('rejects untrusted image hosts, spoofed CDNs, executable schemes and missing provenance', () => {
+    const fixture = sample()
+    const validEntity = { type: 'entity', name: 'Hospital', image: 'https://upload.wikimedia.org/heart.png', source: 'Wikimedia Commons' }
+    const check = (node: unknown) => parseCanvasSpec({ ...fixture, props: { ...fixture.props, children: [node] } })
+    expect(check(validEntity)).not.toBeNull()
+    expect(check({ ...validEntity, image: 'https://upload.wikimedia.org.evil.test/image.png' })).toBeNull()
+    expect(check({ ...validEntity, image: 'javascript:alert(1)' })).toBeNull()
+    expect(check({ ...validEntity, image: 'https://127.0.0.1/secret' })).toBeNull()
+    expect(check({ ...validEntity, image: 'http://upload.wikimedia.org/image.png' })).toBeNull()
+    expect(check({ ...validEntity, image: 'https://upload.wikimedia.org/image.png', source: undefined })).toBeNull()
+    expect(check({ type: 'image', src: 'data:image/svg+xml,test', alt: 'No', source: 'Untrusted' })).toBeNull()
+    expect(check({ type: 'image', src: 'https://upload.wikimedia.org/ok.png', alt: 'OK',
+      source: 'Wikimedia Commons', onClick: 'exfiltrate()' })).toBeNull()
+    expect(check({ type: 'entity', name: 'Equipo', icon: 'script' })).toBeNull()
+  })
+
   it('validates a fully composable and interactive canvas', () => {
     const value = sample()
     expect(parseCanvasSpec(value)).toEqual(value)
