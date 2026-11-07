@@ -142,3 +142,17 @@ test('researches ten legitimate game markets before choosing the final five',()=
   assert.throws(()=>shortlistDailyMarkets(fixtures,[],5,now,17),
     /Reserva de investigación/)
 })
+
+test('one fixture keeps two different authentic markets for comparison after dossier research',()=>{
+  const quotes=[...pair(0),...pair(0,'spreads'),...pair(0,'totals'),...pair(1)]
+  const result=shortlistDailyMarkets(fixtures,quotes,4,now)
+  assert.equal(result.selected.length,2)
+  assert.equal(result.alternatives.length,2)
+  const fromGame=result.selected.find(x=>x.espnEventId===fixtures[0].eventId)
+  assert.ok(fromGame)
+  const other=result.alternatives.filter(x=>x.espnEventId===fixtures[0].eventId)
+  assert.equal(other.length,2)
+  assert.deepEqual(new Set([fromGame.market,...other.map(x=>x.market)]),
+    new Set(['h2h','spreads','totals']))
+  assert.ok(other.every(x=>x.bookmaker===result.bookmaker))
+})

@@ -36,6 +36,12 @@ test('six sports publish their supported extra market catalogs without fabricati
   assert.ok(eventMarketCatalog('americanfootball_nfl').includes('player_pass_yds'))
   assert.ok(eventMarketCatalog('icehockey_nhl').includes('player_shots_on_goal'))
   assert.ok(eventMarketCatalog('soccer_epl').includes('btts'))
+  assert.ok(eventMarketCatalog('soccer_epl').includes('alternate_totals_corners'))
+  assert.ok(eventMarketCatalog('soccer_epl').includes('player_shots_on_target'))
+  assert.ok(eventMarketCatalog('soccer_epl').includes('player_to_receive_card'))
+  assert.ok(eventMarketCatalog('icehockey_nhl').includes('player_total_saves'))
+  assert.ok(eventMarketCatalog('baseball_mlb').includes('pitcher_outs'))
+  assert.ok(eventMarketCatalog('americanfootball_nfl').includes('player_pass_tds'))
   assert.deepEqual(eventMarketCatalog('../bad'),[])
 })
 test('a missing commercial key is visible and cannot masquerade as available props',async()=>{
@@ -140,4 +146,31 @@ test('an event catalog for the wrong sport never authorizes betting quotes',asyn
   assert.equal(report.discoveryStatus,'unavailable')
   assert.ok(report.errors.some(x=>x.includes('no corresponde')))
   assert.equal(report.quotes.length,0)
+})
+
+test('soccer corners, cards and player shots are only returned when the provider publishes them',async()=>{
+  const offered=['alternate_totals_corners','alternate_totals_cards',
+    'player_shots_on_target']
+  const api=async url=>{
+    const u=new URL(url)
+    if(u.pathname.endsWith('/markets'))return new Response(JSON.stringify({
+      id:eventId,sport_key:'soccer_epl',commence_time:'2026-11-06T23:00:00Z',
+      bookmakers:[{key:'book-a',markets:offered.map(key=>({
+        key,last_update:'2026-11-06T16:55:00Z'}))}],
+    }))
+    const requested=u.searchParams.get('markets')?.split(',')??[]
+    return new Response(JSON.stringify({
+      id:eventId,commence_time:'2026-11-06T23:00:00Z',
+      bookmakers:[{key:'book-a',title:'Book A',
+        markets:requested.map(key=>({key,last_update:'2026-11-06T16:57:00Z',
+          outcomes:[{name:'Over',point:9.5,price:1.9}]}))}],
+    }))
+  }
+  const r=await readSportsEventMarketMenu('soccer_epl',eventId,env,api,now,8)
+  assert.equal(r.discoveryStatus,'observed')
+  assert.deepEqual(new Set(r.marketsQueried),new Set(offered))
+  assert.equal(r.status,'observed')
+  assert.equal(r.quotes.length,3)
+  assert.ok(r.quotes.every(x=>offered.includes(x.market)))
+  assert.ok(r.quotes.every(x=>x.bookmaker==='Book A'))
 })

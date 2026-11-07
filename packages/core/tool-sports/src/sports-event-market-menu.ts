@@ -18,20 +18,27 @@ export type ExtraMarketReport={
 const SPORT_MENUS:Readonly<Record<string,readonly string[]>>={
   basketball_nba:['alternate_spreads','alternate_totals','team_totals','totals_h1',
     'spreads_h1','totals_q1','spreads_q1','player_points','player_rebounds',
-    'player_assists','player_threes','player_points_rebounds_assists'],
+    'player_assists','player_threes','player_points_rebounds_assists',
+    'player_steals','player_blocks','player_turnovers','player_points_assists'],
   basketball_wnba:['alternate_spreads','alternate_totals','team_totals','totals_h1',
-    'spreads_h1','totals_q1','player_points','player_rebounds','player_assists','player_threes'],
+    'spreads_h1','totals_q1','player_points','player_rebounds','player_assists',
+    'player_threes','player_steals','player_blocks','player_points_rebounds_assists'],
   baseball_mlb:['h2h_1st_5_innings','spreads_1st_5_innings','totals_1st_5_innings',
     'totals_1st_3_innings','alternate_totals','team_totals','pitcher_strikeouts',
-    'batter_hits','batter_total_bases','batter_home_runs'],
+    'pitcher_outs','pitcher_walks','batter_hits','batter_total_bases','batter_home_runs',
+    'batter_rbis','batter_hits_runs_rbis','alternate_totals_1st_5_innings'],
   icehockey_nhl:['alternate_spreads','alternate_totals','team_totals','totals_p1',
-    'spreads_p1','player_shots_on_goal','player_points','player_goals','player_assists'],
+    'spreads_p1','player_shots_on_goal','player_points','player_goals','player_assists',
+    'player_total_saves','player_blocked_shots','player_goal_scorer_anytime'],
   americanfootball_nfl:['alternate_spreads','alternate_totals','team_totals','totals_h1',
-    'spreads_h1','player_pass_yds','player_rush_yds','player_reception_yds',
-    'player_receptions','player_anytime_td'],
+    'spreads_h1','player_pass_yds','player_pass_tds','player_pass_attempts',
+    'player_rush_yds','player_rush_reception_yds','player_reception_yds',
+    'player_receptions','player_anytime_td','player_pass_interceptions'],
 }
 const SOCCER_MENU=['btts','double_chance','draw_no_bet','alternate_totals',
-  'totals_h1','team_totals','spreads_h1'] as const
+  'totals_h1','team_totals','spreads_h1','alternate_totals_corners',
+  'alternate_totals_cards','alternate_spreads_corners','player_shots_on_target',
+  'player_shots','player_to_receive_card','player_goal_scorer_anytime'] as const
 const validSport=(sport:string)=>/^[a-z0-9_]{3,80}$/u.test(sport)
 const validEvent=(event:string)=>/^[a-zA-Z0-9-]{8,100}$/u.test(event)
 const period=(market:string):string=>{
@@ -43,7 +50,8 @@ const period=(market:string):string=>{
 }
 const family=(market:string):string=>{
   if(/^(player_|pitcher_|batter_)/u.test(market))return'player-prop'
-  if(market.startsWith('team_totals'))return'team-total'
+  if(market.startsWith('team_totals')||market.startsWith('alternate_team_totals'))
+    return'team-total'
   if(market.startsWith('totals')||market.startsWith('alternate_totals'))return'totals'
   if(market.startsWith('spreads')||market.startsWith('alternate_spreads'))return'handicap'
   if(market.startsWith('h2h'))return'winner'
@@ -125,9 +133,13 @@ export async function readSportsEventMarketMenu(
   // A menu containing many alternate spreads must not starve all player props
   // or period markets when the user asks for all useful market families.
   const diverse=[
-    offered.find(key=>/^(player_|pitcher_|batter_)/u.test(key)),
     offered.find(key=>/_1st_5_innings$/u.test(key)),
     offered.find(key=>/_(?:h[12]|q[1-4]|p[1-3])$/u.test(key)),
+    offered.find(key=>/^(player_|pitcher_|batter_)/u.test(key)),
+    offered.find(key=>/^(player_|pitcher_|batter_)/u.test(key)&&
+      key!==offered.find(x=>/^(player_|pitcher_|batter_)/u.test(x))),
+    offered.find(key=>/corners/u.test(key)),
+    offered.find(key=>/cards|receive_card/u.test(key)),
     offered.find(key=>key.startsWith('alternate_spreads')),
     offered.find(key=>key.startsWith('alternate_totals')),
     offered.find(key=>key.startsWith('team_totals')),

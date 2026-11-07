@@ -10,6 +10,7 @@ import { sportsPromptNeeded } from './sports-prompt.ts'
 import { researchNbaSlate } from './nba-research.ts'
 import {shortlistDailyMarkets,dailyOddsSportKey} from './daily-market-shortlist.ts'
 import {assessDailyMarketEvidence,unavailableMarketEvidence} from './daily-market-evidence.ts'
+import {selectDailyResearchedMarkets} from './daily-market-selection.ts'
 import {readSportsEventMarketMenu,eventMarketCatalog} from './sports-event-market-menu.ts'
 import {researchDailySpecialMarkets} from './daily-special-market-research.ts'
 
@@ -137,11 +138,11 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_daily_market_shortlist',
-    description:'Investiga el ticket diario de 4 a 6 mercados entre NBA, WNBA, MLB, NFL, NHL y Soccer; coteja cuotas reales de ganador, hándicap y totales con partidos ESPN, y opcionalmente investiga H2H, forma, descansos, bajas, prensa, estadio y clima. Compara las dos opciones del mercado, no solo al favorito. No promete victorias ni coloca apuestas.',
+    description:'Investiga mercados alternativos por partido ANTES de seleccionar 4 a 6 patas, entre NBA, WNBA, MLB, NFL, NHL y Soccer; coteja cuotas reales de ganador, hándicap y totales con partidos ESPN, y opcionalmente investiga H2H, forma, descansos, bajas, prensa, estadio y clima. Compara las dos opciones del mercado, no solo al favorito. No promete victorias ni coloca apuestas.',
     parameters:{
       date:{type:'string',description:'Fecha AAAA-MM-DD en Santo Domingo, defecto hoy.'},
       count:{type:'integer',description:'Objetivo de 4 a 6 candidatos; por defecto cinco.'},
-      deep:{type:'boolean',description:'Investigar también evidencias del partido de hasta seis candidatos (defecto true). false para un primer escaneo rápido de cuotas.'},
+      deep:{type:'boolean',description:'Investigar evidencias del partido y comparar varias ofertas por evento (defecto true). false para un primer escaneo rápido de cuotas.'},
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
@@ -205,21 +206,27 @@ export function apply(ctx: Context): void {
               lookbackDays:candidate.sport==='football'?28:
                 candidate.sport==='soccer'?21:14,includeOdds:false,
             },sharedFetch,now,env)
-            return assessDailyMarketEvidence(candidate,evidence)
+            const alternatives=pool.alternatives.filter(other=>
+              other.sport===candidate.sport&&other.league===candidate.league&&
+              other.espnEventId===candidate.espnEventId&&
+              other.bookmaker===candidate.bookmaker)
+            // Every market family uses the SAME evidence; no extra network
+            // fetches are required for h2h/spread/total comparisons.
+            return [candidate,...alternatives].map(market=>
+              assessDailyMarketEvidence(market,evidence))
           }))
           results.forEach((item,i)=>{
-            if(item.status==='fulfilled')checked.push(item.value)
+            if(item.status==='fulfilled')checked.push(...item.value)
             else if(batch[i])checked.push(unavailableMarketEvidence(batch[i]!,
               String(item.reason instanceof Error?item.reason.message:item.reason)))
           })
         }
         return checked
       })()
-      const rank:{[k:string]:number}={'descriptive-support':3,'uncertain':2,
-        'contraindicated':1,'unavailable':0}
-      research.sort((a,b)=>(rank[b.status]??0)-(rank[a.status]??0)||
-        b.rankingScore-a.rankingScore||a.candidate.fixture.localeCompare(b.candidate.fixture))
-      const best=research.slice(0,count)
+      // Research chooses among real winner, total and spread offers *after*
+      // auditing each game. Never add a second leg from the same game.
+      const evaluated=selectDailyResearchedMarkets(research,count)
+      const best=evaluated.selected
       // Feed the daily research with actual event-level props, periods and
       // alternates from the SAME verified book, rather than stopping at h2h.
       // They remain research-only until a specialist model validates each market.
@@ -278,6 +285,9 @@ export function apply(ctx: Context): void {
         quotedCandidates:pool.selected.length,researchPool,
         marketCandidates:pool.eligibleMarkets,matchedGames:pool.matchesInSlate,
         bookmaker:pool.bookmaker,reviewed:research.length,
+        eventChoices:evaluated.eventChoices,
+        marketsReviewed:evaluated.marketsReviewed,
+        alternativeMarketsCompared:evaluated.alternativesCompared,
         researchedPicks:trustedOptions.length,conditionalPicks:provisional.length,
         selected:args.deep===false?pool.selected.slice(0,count):best,
         ...(ticket?{uiBlock:ticket}:{status:'borrador-sin-cuatro-precios-validados'}),
