@@ -2,6 +2,7 @@
  * PHOENIX anatomical digital-twin planning (metadata only).
  * NO segmentation, image processing, diagnosis, patient identifiers or storage.
  */
+/** Regions offered for educational anatomy planning; not proof of available segmentation models. */
 export const ANATOMY_SYSTEMS = Object.freeze({
   nervous: ['brain','spinal cord','cranial nerves','peripheral nerves'],
   head_neck: ['skull','face','eyes','ears','sinuses','airway','thyroid','neck vessels'],
@@ -65,6 +66,12 @@ function detectModalities(text: string): Modality[] {
   for(const [key,re] of rules) if(re.test(s)) found.push(key)
   return found.filter((key)=>!(key==='ct'&&found.includes('cta'))&&!(key==='mri'&&found.includes('mra'))&&!(key==='us2d'&&found.includes('us3d')))
 }
+/**
+ * Return a metadata-only anatomical reconstruction workflow without reading patient records.
+ * @param region - Non-identifying organ or anatomical region.
+ * @param studyDescriptions - Generic input study modalities, without protected information.
+ * @returns Evidence-aware workflow plan. No model, lesion, or diagnosis is generated.
+ */
 export function planAnatomicalTwin(region: string, studyDescriptions: string) {
   const query=normalize(region)
   const selected=Object.entries(ANATOMY_SYSTEMS)
