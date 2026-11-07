@@ -82,6 +82,16 @@ export function assessPreexcitation(input:ECGPreexcitationInput) {
       'Intermittent or minimal pre-excitation cannot be excluded from a single recording',
     ],
     missing,urgentFlags:urgencies,
+    electricalMechanism:pattern==='COMPATIBLE_WPW_PREEXCITATION_PATTERN'||
+      pattern==='POSSIBLE_PREEXCITATION'?{
+        supportedConcept:'Generic atrioventricular accessory pathway capable of bypassing AV node delay',
+        requiredLabels:['Sinoatrial node','AV node','His-Purkinje conduction',
+          'Generic accessory atrioventricular pathway','Early ventricular depolarization','ECG delta wave'],
+        doNotDepict:['Patient-specific side/location of pathway without mapping',
+          'Necrotic tissue, infarction or structural lesion based solely on ECG',
+          'Specific atrial or ventricular anatomy reconstructed from paper ECG'],
+        visualizationType:'educational-electrophysiology-only',
+      }:null,
     visualExplanation:pattern==='COMPATIBLE_WPW_PREEXCITATION_PATTERN'||
       pattern==='POSSIBLE_PREEXCITATION'?
       'Educational electrical schematic may depict a GENERIC accessory atrioventricular pathway, never a patient-specific pathway side or lesion location.':
