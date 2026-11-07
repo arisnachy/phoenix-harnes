@@ -141,3 +141,19 @@ node .\scripts\phoenix-anatomy-workbench.mjs reconstruct --input "C:\ESTUDIO-AUT
 - El visor puede mostrar superficies pero **no sustituye** revisar la imagen de origen en cortes axial/sagital/coronal. Modelos de lesiones generados automáticamente o evaluados frente a estándares externos se integrarán únicamente cuando existan pesos, validación por tarea y autorización apropiada.
 
 Pruebas sintéticas: `python scripts/test_phoenix_anatomy_validation.py` y `node --experimental-strip-types --test scripts/phoenix-health-anatomy.test.mjs`.
+
+## Interpretación diagnóstica por modalidad: evidencia primero
+
+**Importante:** PHOENIX no dispone de un modelo universal de diagnóstico por imagen validado. La generación de una malla GLB no demuestra que la TC, RM o ecografía original se haya interpretado.
+
+En **HealthIA → Mi consulta → Interpretación de estudios**, el médico autorizado puede enlazar un JPG, PNG, WebP o PDF previamente cifrado en el expediente, declarar la modalidad original (ECG, ultrasonido/Doppler, RX, TC, RM, laboratorio, citología, histopatología u otra), registrar observaciones directas, hipótesis preliminares y riesgo crítico. Este flujo almacena solo una evaluación provisional del **profesional** y **no** ejecuta IA sobre las imágenes.
+
+- Si el archivo original no fue revisado, el sistema impide registrar hallazgos o una impresión diagnóstica. No convierte una descripción de la IA en evidencia.
+- Una imagen o PDF puede ser insuficiente: TC/RM requieren series originales y protocolo, ECG trazado calibrado, ecografía cine/Doppler, patología lámina completa, laboratorio unidades e intervalos.
+- Ningún GLB se admite como fuente de un diagnóstico clínico. La visualización anatómica es un resultado derivado, no el examen diagnóstico.
+- Cada valoración provisional se vincula al archivo original, se cifra con el expediente y queda accesible solo a médicos asignados. Los eventos quedan auditados; no se comparten imágenes con el LLM del chat por este mecanismo.
+- Las respuestas de Kira deben separar datos observados, hipótesis, elementos no evaluados y limitaciones. `health_diagnostic_protocol` ofrece criterios de revisión por modalidad pero **no lee píxeles, no emplea pesos entrenados y no puede identificar lesiones**.
+- Ante sospecha de hallazgo crítico se requiere reconocer su valoración clínica inmediata; no se registra como normal de forma silenciosa.
+- Para incorporar IA diagnóstica real se necesitan motores aprobados o validados específicamente para cada indicación, entrada DICOM/ECG/WSI adecuada, pruebas externas y locales contra un estándar de referencia y revisión médica antes del uso clínico.
+
+Pruebas: `node --experimental-strip-types --test scripts/phoenix-health-diagnostic.test.mjs` y las pruebas del expediente.
