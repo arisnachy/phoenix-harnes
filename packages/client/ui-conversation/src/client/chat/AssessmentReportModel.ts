@@ -63,7 +63,8 @@ export function smartAssessmentReport(
   if(!result.ready || result.outputs.some(output=>output.error))return null
   const rows=spec.props.fields.map(field=>{
     const value=values[field.id]
-    const answer=Array.isArray(value)?value.join(', '):String(value??'')
+    const raw=Array.isArray(value)?value.join(', '):String(value??'')
+    const answer=raw.trim() || (field.required===false?'Sin respuesta (opcional)':'')
     return {question:field.label+(field.unit?' ('+field.unit+')':''),answer}
   })
   if(rows.some(r=>!r.answer))return null
