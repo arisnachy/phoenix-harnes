@@ -122,3 +122,22 @@ crear una segunda copia de paciente ni sincronizar nombres como identidades.
 El profesional clínico autorizado puede abrir **Anatomía 3D** desde /health, seleccionar un paciente asignado y archivar un archivo **GLB 2.0 autocontenido de hasta 5 MiB**. Se valida el formato, se rechazan recursos externos y extensiones que requieren decodificadores no instalados; el archivo se cifra mediante el repositorio clínico y solo se entrega al profesional autorizado. El visor 3D obtiene Three.js desde la instalación local privada de PHOENIX sin CDN. El profesional puede girar, acercar y aislar mallas. La revisión médica se documenta y audita con referencia del estudio original, concordancia (consistente, incierta o discordante) y limitaciones. **No certifica la anatomía**, ni la exactitud de la segmentación o un uso diagnóstico.
 
 La segmentación automática de CT/RM sigue siendo un proceso investigativo independiente ejecutado mediante `scripts/phoenix-anatomy-workbench.mjs`, y los modelos grandes no pueden archivarse por el límite piloto de 5 MiB. No existe todavía un puente aprobado que procese estudios DICOM del paciente desde HealthIA, ni certificación de modelos para todas las estructuras humanas. Para investigación con volúmenes mayores se requiere almacenamiento clínico seguro, control de recursos y procesos autorizados; no copie PHI al chat ordinario. El módulo anatómico general de Kira continúa limitado a planificación desidentificada y diagnóstico del entorno, no a expedientes.
+
+## Reconstrucción de regiones afectadas — piloto de investigación
+
+El flujo de **región afectada** nunca infiere por sí solo un diagnóstico. Parte de TC/RM volumétrica y una o varias máscaras NIfTI de estructuras visibles. Para añadir una posible lesión/área de interés, un profesional debe delinear esa región en una máscara NIfTI **en exactamente la misma rejilla (shape, affine RAS/mm)** que las máscaras del órgano. Si no están registradas, el reconstructor se niega a superponerlas.
+
+Ejemplo usando un conjunto **sintético**, fuera del expediente (para datos reales, seleccionar rutas clínicas autorizadas):
+
+```powershell
+node .\scripts\phoenix-anatomy-workbench.mjs reconstruct --input "C:\ESTUDIO-AUTORIZADO\ct.nii.gz" --mask-folder "C:\ESTUDIO-AUTORIZADO\organos" --lesion-mask-folder "C:\ESTUDIO-AUTORIZADO\anotaciones-medico" --output "C:\SALIDA-CLINICA-PRIVADA\caso-001" --modality ct --fast --research-only --view
+```
+
+- `--mask-folder` no es obligatorio cuando se configura TotalSegmentator. El motor selecciona la tarea de segmentación soportada y usa el caché de pesos de `PHOENIX_ANATOMY_HOME/models`, compartido con el autoinstalador.
+- `--lesion-mask-folder` contiene anotaciones clínicas externas: **no detecta lesiones por sí solo**. Se rechazan etiquetas con nombres personales y vínculos simbólicos.
+- `--fast` puede reducir resolución de las **mallas de órganos**; las regiones anotadas conservan resolución completa. No sustituye el estudio original.
+- La salida `anatomy.glb` es interactiva, con capas de anatomía y regiones anotadas visualmente diferenciadas. `anatomy-manifest.json` registra procedencia de cada máscara, huella SHA-256, modalidad, número de anotaciones, configuración geométrica y tiempo de reconstrucción. Todos los resultados permanecen como **no validados**.
+- En **HealthIA → Anatomía 3D**, seleccionar paciente asignado, adjuntar `anatomy.glb` (hasta 24 MiB) y **opcionalmente** su `anatomy-manifest.json`. HealthIA comprueba la huella GLB antes de guardar un resumen de procedencia cifrado. Las huellas verifican correspondencia de archivos, **no** la autenticidad de una anotación ni su exactitud médica.
+- El visor puede mostrar superficies pero **no sustituye** revisar la imagen de origen en cortes axial/sagital/coronal. Modelos de lesiones generados automáticamente o evaluados frente a estándares externos se integrarán únicamente cuando existan pesos, validación por tarea y autorización apropiada.
+
+Pruebas sintéticas: `python scripts/test_phoenix_anatomy_validation.py` y `node --experimental-strip-types --test scripts/phoenix-health-anatomy.test.mjs`.

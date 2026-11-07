@@ -88,5 +88,86 @@ class TestSyntheticMesh(unittest.TestCase):
             import trimesh
             self.assertEqual(trimesh.Scene(mesh).export(file_type="glb")[:4], b"glTF")
 
+
+class TestAffectedRegionEvidence(unittest.TestCase):
+    """Synthetic geometry tests contain no patient data."""
+    def test_annotated_region_is_registered_and_included_without_diagnostic_claim(self):
+        import argparse
+        reconstruction_spec = importlib.util.spec_from_file_location(
+            "phoenix_anatomy_reconstruct",
+            Path(__file__).with_name("phoenix-anatomy-reconstruct.py"))
+        recon = importlib.util.module_from_spec(reconstruction_spec)
+        reconstruction_spec.loader.exec_module(recon)
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root)
+            organs, lesion = base / "organs", base / "annotations"
+            organs.mkdir()
+            lesion.mkdir()
+            volume = np.zeros((32, 32, 32), dtype=np.uint8)
+            volume[6:27, 5:26, 4:25] = 1
+            marked = np.zeros_like(volume)
+            marked[12:20, 13:21, 10:18] = 1
+            mask(organs / "heart.nii.gz", volume)
+            mask(lesion / "clinician_region.nii.gz", marked)
+            self.assertTrue(recon.matching_grid(organs / "heart.nii.gz",
+                                                lesion / "clinician_region.nii.gz"))
+            args = argparse.Namespace(input=str(organs / "heart.nii.gz"),
+                output=str(base / "output"), modality="ct", task=None, structures=None,
+                device="cpu", fast=True, max_meshes=200, mask_folder=str(organs),
+                lesion_mask_folder=str(lesion), research_only=True)
+            recon.reconstruct(args)
+            result = json.loads((base / "output" / "anatomy-manifest.json").read_text())
+            self.assertEqual(result["affectedRegions"], 1)
+            self.assertEqual(result["clinicalStatus"], "UNVALIDATED_RESEARCH_OUTPUT")
+            self.assertEqual(result["sourceRegistration"],
+                             "affected-region grid matched to anatomy grid")
+            self.assertTrue(result["needsExpertReview"])
+            self.assertTrue(result["anatomicalMasksAligned"])
+            self.assertEqual(len(result["structures"]), 2)
+            affected = [r for r in result["structures"]
+                        if r.get("layer") == "clinician-supplied-affected-region"][0]
+            self.assertEqual(affected["state"], "unreviewed")
+            self.assertRegex(affected["sourceMaskSha256"], r"^[a-f0-9]{64}$")
+            self.assertGreater(affected["triangles"], 8)
+            self.assertEqual(affected["borderTruncated"], False)
+            data = (base / "output" / "anatomy.glb").read_bytes()
+            self.assertEqual(data[:4], b"glTF")
+            self.assertNotIn(b"John Doe", data)
+
+    def test_misaligned_annotation_is_rejected_before_export(self):
+        recon_spec = importlib.util.spec_from_file_location(
+            "phoenix_anatomy_reconstruct",
+            Path(__file__).with_name("phoenix-anatomy-reconstruct.py"))
+        recon = importlib.util.module_from_spec(recon_spec)
+        recon_spec.loader.exec_module(recon)
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root)
+            arr = np.zeros((24, 24, 24), dtype=np.uint8)
+            arr[5:18, 5:18, 5:18] = 1
+            mask(base / "organ.nii.gz", arr)
+            mask(base / "other-study.nii.gz", arr, translation=(17, 0, 0))
+            with self.assertRaisesRegex(ValueError, "does not align"):
+                recon.matching_grid(base / "organ.nii.gz", base / "other-study.nii.gz")
+
+    def test_crop_preserves_global_geometry_and_fine_detail(self):
+        recon_spec = importlib.util.spec_from_file_location(
+            "phoenix_anatomy_reconstruct",
+            Path(__file__).with_name("phoenix-anatomy-reconstruct.py"))
+        recon = importlib.util.module_from_spec(recon_spec)
+        recon_spec.loader.exec_module(recon)
+        with tempfile.TemporaryDirectory() as root:
+            base=Path(root)
+            arr=np.zeros((80, 80, 80), dtype=np.uint8)
+            arr[31:50, 25:48, 20:51]=1
+            mask(base / "organ.nii.gz", arr, translation=(100, -50, 20))
+            fine, count, volume=recon.nifti_mask_to_mesh(base / "organ.nii.gz",step_size=1)
+            coarse, c_count, c_volume=recon.nifti_mask_to_mesh(base / "organ.nii.gz",step_size=2)
+            self.assertEqual((count, volume),(c_count, c_volume))
+            self.assertTrue(np.isfinite(fine.vertices).all())
+            self.assertTrue(np.isfinite(coarse.vertices).all())
+            self.assertGreater(float(fine.vertices[:,0].min()),100)
+            self.assertGreater(float(coarse.vertices[:,0].min()),100)
+            self.assertLessEqual(len(coarse.faces), len(fine.faces))
+
 if __name__=="__main__":
     unittest.main()
