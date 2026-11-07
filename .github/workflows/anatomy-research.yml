@@ -9,6 +9,7 @@ on:
       - 'scripts/phoenix-health-diagnostic-accuracy.test.mjs'
       - 'packages/core/tool-health/src/ecg-preexcitation.ts'
       - 'packages/core/tool-health/src/diagnostic-visualization.ts'
+      - 'packages/core/tool-health/src/diagnostic-concordance.ts'
       - 'packages/bundle/web-app/src/health-diagnostic-catalog.ts'
       - 'packages/core/tool-health/src/diagnostic-catalog.ts'
       - 'packages/bundle/web-app/src/health-diagnostic-evidence.ts'
