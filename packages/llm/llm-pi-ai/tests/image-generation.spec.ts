@@ -138,6 +138,8 @@ describe('current-turn private photo binding for Codex image tools', () => {
   it("distinguishes the user's likeness from possessions", () => {
     expect(requestsProfileLikeness('Dame una imagen mía en París')).toBe(true)
     expect(requestsProfileLikeness('Dame una imagen de mí en Nueva York')).toBe(true)
+    expect(requestsProfileLikeness('crea una iagen mia como personae anime tipo ciberpunk')).toBe(true)
+    expect(requestsProfileLikeness('Transforma mi foto en un personaje anime')).toBe(true)
     expect(requestsProfileLikeness('Dame una imagen de mi casa')).toBe(false)
     expect(requestsProfileLikeness('Dame una imagen de Kira')).toBe(false)
   })
