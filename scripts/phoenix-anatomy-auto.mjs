@@ -206,25 +206,27 @@ async function installSlicer(p,state,fd){
     state.components.slicer={status:'external',reason:'Windows installer only; use official platform package'}
     return
   }
-  // Use the vendor's user-scoped installer; it validates the Slicer payload SHA512.
-  // No arbitrary URLs, forced admin elevation, downloads of patient data or model weights.
+  // Microsoft's WinGet manifest pins the vendor package and validates its
+  // installer hash. Never execute an unverified downloaded PowerShell script.
   const existing=findSlicer()
   if(existing){
     state.components.slicer={status:'installed',verifiedAt:now(),executable:existing}
     return
   }
   try{
-    const cmd="& { $ErrorActionPreference='Stop'; "+
-      "$u='https://download.slicer.org/install.ps1';"+
-      "$p=Join-Path $env:TEMP 'phoenix-slicer-official-install.ps1';"+
-      "Invoke-WebRequest -Uri $u -OutFile $p -UseBasicParsing;"+
-      "$env:SLICER_NONINTERACTIVE='1'; & $p; if(-not $?) { exit 2 } }"
-    await run('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',cmd],
-      {timeout:1200000,output:fd})
+    await run('winget',['install','--id','Kitware.Slicer','--exact',
+      '--scope','user','--silent','--accept-package-agreements',
+      '--accept-source-agreements','--disable-interactivity'],{
+      timeout:1200000,output:fd})
     const installed=findSlicer()
-    if(!installed)throw Error('Slicer installer finished but Slicer.exe was not located')
-    state.components.slicer={status:'installed',verifiedAt:now(),executable:installed}
-  }catch(e){state.components.slicer={status:'error',reason:String(e).slice(0,250)};log(p,'slicer: '+String(e))}
+    if(!installed)throw Error('WinGet completed but Slicer.exe was not located')
+    state.components.slicer={status:'installed',verifiedAt:now(),executable:installed,
+      source:'winget:Kitware.Slicer'}
+  }catch(e){
+    state.components.slicer={status:'error',reason:String(e).slice(0,250),
+      repair:'Install Kitware.Slicer using WinGet, then rerun --ensure'}
+    log(p,'slicer: '+String(e))
+  }
 }
 async function installSlicerHeart(p,state,fd){
   const slicerExe=findSlicer()
@@ -243,7 +245,17 @@ async function installSlicerHeart(p,state,fd){
   writeFileSync(script,content,'utf8')
   try{
     await run(slicerExe,['--testing','--no-splash','--no-main-window','--python-script',script],{timeout:360000,output:fd})
-    state.components.slicerheart={status:'installed',verifiedAt:now(),note:'Slicer extension manager reported success'}
+    // A download request alone does not guarantee extension activation.
+    const verify=join(p.root,'verify-slicerheart.py')
+    writeFileSync(verify,[
+      'import slicer',
+      "ok = slicer.app.extensionsManagerModel().isExtensionInstalled('SlicerHeart')",
+      'slicer.app.exit(0 if ok else 2)',
+    ].join('\n')+'\n','utf8')
+    await run(slicerExe,['--testing','--no-splash','--no-main-window',
+      '--python-script',verify],{timeout:180000,output:fd})
+    state.components.slicerheart={status:'installed',verifiedAt:now(),
+      note:'SlicerHeart verified in a new Slicer process'}
   }catch(e){
     state.components.slicerheart={status:'error',reason:String(e).slice(0,250)}
     log(p,'slicerheart: '+String(e))
