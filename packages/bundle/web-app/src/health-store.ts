@@ -1,3 +1,4 @@
+import { inspectAnatomicalGlb } from './health-anatomy.ts'
 /**
  * PHOENIX Health: local encrypted record service (clinical pilot).
  * All clinical payloads encrypted with AES-256-GCM, bound to record identity/version.
@@ -786,9 +787,11 @@ export class HealthClinicStore {
     const jpeg=bytes.length>=3&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255
     const pdf=bytes.subarray(0,5).toString('ascii')==='%PDF-'
     const webp=bytes.subarray(0,4).toString('ascii')==='RIFF'&&bytes.subarray(8,12).toString('ascii')==='WEBP'
+    const anatomicalModel=mime==='model/gltf-binary'?inspectAnatomicalGlb(bytes):null
+    if(anatomicalModel&&!/\\.glb$/iu.test(name))fail('Archivo anatómico debe terminar en .glb')
     if(!((mime==='image/png'&&png)||(mime==='image/jpeg'&&jpeg)||
-         (mime==='image/webp'&&webp)||(mime==='application/pdf'&&pdf)))
-      fail('Solo PDF, JPEG, PNG y WebP genuinos están admitidos')
+         (mime==='image/webp'&&webp)||(mime==='application/pdf'&&pdf)||anatomicalModel))
+      fail('Solo PDF, imágenes o GLB anatómico auto-contenido están admitidos')
     const count=this.db.prepare('SELECT COUNT(*) AS total FROM health_attachments WHERE org=? AND patient_id=?')
       .get(actor.org,patientId) as {total:number}
     if(count.total>=100)fail('Límite de adjuntos del paciente alcanzado; contacte administración')
@@ -796,6 +799,7 @@ export class HealthClinicStore {
     const sealed=this.seal(id,actor.org,'attachment',1,{
       patientId,encounterId,name,mime,base64:encoded,note,bytes:bytes.length,
       source:'patient-provided',reviewStatus:'pending',uploadedBy:actor.username,
+      ...(anatomicalModel?{anatomicalModel}:{}),
     })
     this.db.exec('BEGIN IMMEDIATE')
     try{
@@ -805,7 +809,8 @@ export class HealthClinicStore {
       this.db.exec('COMMIT')
     }catch(error){this.db.exec('ROLLBACK');throw error}
     return {id,patientId,encounterId,name,mime,note,bytes:bytes.length,
-      source:'patient-provided',reviewStatus:'pending',createdAt:now,uploadedBy:actor.username}
+      source:'patient-provided',reviewStatus:'pending',createdAt:now,uploadedBy:actor.username,
+      ...(anatomicalModel?{anatomicalModel}:{})}
   }
   private attachmentRow(actor:Actor,id:string):AttachmentRow {
     if(actor.role!=='clinician'&&actor.role!=='psychologist')fail('Permiso clínico insuficiente para adjuntos')

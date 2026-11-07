@@ -2,6 +2,9 @@
  * Not model-visible: only clinicians operating the dedicated /health page can read PHI.
  */
 import { randomBytes } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-host-webserver'
@@ -118,12 +121,37 @@ export function registerHealthRoutes(ctx:Context):void {
     if(!peer(req)){reply(res,403,{ error:'Acceso local requerido' });return}
     const path=new URL(req.url??'/','http://127.0.0.1').pathname
     const method=req.method??'GET'
+    // Authenticated, exact-allowlist local JavaScript modules. Only the signed-in
+    // clinical session may load the 3D renderer; never use an external CDN.
+    if(path.startsWith('/health/vendor/')){
+      if(method!=='GET'){reply(res,405,{error:'Método no permitido'});return}
+      store.session(cookie(req),undefined,false)
+      const entries:Record<string,string>={
+        '/health/vendor/build/three.module.js':'build/three.module.js',
+        '/health/vendor/build/three.core.js':'build/three.core.js',
+        '/health/vendor/examples/jsm/loaders/GLTFLoader.js':'examples/jsm/loaders/GLTFLoader.js',
+        '/health/vendor/examples/jsm/controls/OrbitControls.js':'examples/jsm/controls/OrbitControls.js',
+        '/health/vendor/examples/jsm/utils/BufferGeometryUtils.js':'examples/jsm/utils/BufferGeometryUtils.js',
+      }
+      const entry=entries[path]
+      if(!entry){reply(res,404,{error:'Módulo no autorizado'});return}
+      const base=process.env.PHOENIX_ANATOMY_HOME||join(process.env.LOCALAPPDATA||homedir(),
+        process.env.LOCALAPPDATA?'PHOENIX':'.phoenix','anatomy')
+      try{
+        const content=readFileSync(join(base,'viewer','node_modules','three',entry))
+        if(content.length>2_000_000)throw new Error('Módulo excesivamente grande')
+        res.writeHead(200,{...jsonHeaders,'content-type':'text/javascript; charset=utf-8',
+          'content-security-policy':"default-src 'none'; sandbox"})
+        res.end(content)
+      }catch{reply(res,503,{error:'Visor 3D no instalado; ejecute el instalador de anatomía.'})}
+      return
+    }
     if(path==='/health'&&method==='GET'){
       const nonce=randomBytes(16).toString('base64')
       const content=renderHealthPage(nonce)
       res.writeHead(200,{
         'content-type':'text/html; charset=utf-8','cache-control':'no-store',
-        'content-security-policy':"default-src 'none'; script-src 'nonce-"+nonce+"'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+        'content-security-policy':"default-src 'none'; script-src 'self' 'nonce-"+nonce+"'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
         'x-frame-options':'DENY','x-content-type-options':'nosniff','referrer-policy':'no-referrer',
       })
       res.end(content);return
@@ -227,7 +255,7 @@ export function registerHealthRoutes(ctx:Context):void {
       if(operation==='attachment'&&method==='GET'&&id!==undefined){
         const file=store.readAttachment(actor,id)
         const extensions:Record<string,string>={'image/png':'png','image/jpeg':'jpg',
-          'image/webp':'webp','application/pdf':'pdf'}
+          'image/webp':'webp','application/pdf':'pdf','model/gltf-binary':'glb'}
         res.writeHead(200,{...jsonHeaders,
           'content-type':file.mime,'content-length':String(file.bytes.length),
           'content-disposition':'attachment; filename="healthia-'+id+'.'+extensions[file.mime]+'"',
