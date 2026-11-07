@@ -34,15 +34,15 @@ describe('visual intelligence contract',()=>{
   })
   it('chooses chart, gallery, map, document or dashboard deterministically',()=>{
     const p=parsed(base).props
-    expect(chooseVisualView({...p,rows:undefined,columns:undefined,
+    expect(chooseVisualView({...p,rows:[],columns:[],
       labels:['a','b'],series:[{label:'Incidencia',values:[3,8]}]})).toBe('chart')
-    expect(chooseVisualView({...p,rows:undefined,columns:undefined,
+    expect(chooseVisualView({...p,rows:[],columns:[],
       media:[{kind:'image',title:'Figura',url:'https://upload.wikimedia.org/test.png'}]})).toBe('gallery')
-    expect(chooseVisualView({...p,rows:undefined,columns:undefined,
+    expect(chooseVisualView({...p,rows:[],columns:[],
       places:[{label:'Santiago',lat:19.45,lng:-70.7}]})).toBe('map')
-    expect(chooseVisualView({...p,rows:undefined,columns:undefined,
+    expect(chooseVisualView({...p,rows:[],columns:[],
       document:{title:'Informe',content:'Resumen'}})).toBe('document')
-    expect(chooseVisualView({...p,rows:undefined,columns:undefined,
+    expect(chooseVisualView({...p,rows:[],columns:[],
       metrics:[{label:'Usuarios',value:'20'}]})).toBe('dashboard')
   })
   it('rejects scripts, extra properties, injection URLs, invalid geography and malformed series',()=>{
