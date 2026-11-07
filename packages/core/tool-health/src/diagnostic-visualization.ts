@@ -31,7 +31,6 @@ export function planClinicalVisualization(input:VisualStudyInput) {
   const hasSource=input.sourceReviewed===true
   const hasEvidence=observed.length>=12&&hasSource&&sourceType!=='unknown'&&sourceType!=='glb'
   const spatialProof=input.verifiedSpatialGeometry===true
-  const acknowledged=input.diagnosticUncertaintyAcknowledged===true
   let decision:'BLOCK_NO_SOURCE'|'BLOCK_NO_FINDINGS'|'BLOCK_NO_VALIDATED_GEOMETRY'|
     'ALLOW_EDUCATIONAL_EXPLANATION'='BLOCK_NO_SOURCE'
   if(hasSource&&!hasEvidence)decision='BLOCK_NO_FINDINGS'
