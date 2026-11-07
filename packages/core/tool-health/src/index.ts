@@ -83,7 +83,7 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
     isConcurrencySafe:()=>false,
     execute(){return prepareAnatomy()},
-    presentCall:()=>({card:'generic',title:'Preparar motor anatómico local',kind:'write' as const}),
+    presentCall:()=>({card:'generic',title:'Preparar motor anatómico local',kind:'execute' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'health_anatomy_models',
