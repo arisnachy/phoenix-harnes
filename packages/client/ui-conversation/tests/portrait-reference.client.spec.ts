@@ -14,6 +14,8 @@ describe('private user portrait reference intent', () => {
     // Regression: "como" describes the desired transformation, not a question.
     expect(isSelfImageRequest('crea una imagen mía como personaje anime tipo cyberpunk')).toBe(true)
     expect(isSelfImageRequest('Crea una imagen mia como personae anime tipo ciberpunk')).toBe(true)
+    expect(isSelfImageRequest('crea una iagen mia como personae anime tipo ciberpunk')).toBe(true)
+    expect(isSelfImageRequest('Transforma mi foto en un personaje anime cyberpunk')).toBe(true)
     expect(isSelfImageRequest('Haz una imagen de mí como comandante de una nave')).toBe(true)
     expect(isSelfImageRequest('Ponme en Marte como astronauta')).toBe(true)
   })
