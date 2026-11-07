@@ -43,7 +43,7 @@ const hasBaselineWeights=()=>{
    if(++count>1500)break
    const path=join(root,e.name)
    if(e.isDirectory()&&depth<6)stack.push([path,depth+1])
-   if(e.isFile()&&/\\.(?:pth|pt|ckpt)$/iu.test(e.name)){
+   if(e.isFile()&&/\.(?:pth|pt|ckpt)$/iu.test(e.name)){
      try{if(statSync(path).size>10*1024*1024)return true}catch{}
    }
   }
