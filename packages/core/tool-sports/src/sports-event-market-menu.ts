@@ -43,9 +43,9 @@ const period=(market:string):string=>{
 }
 const family=(market:string):string=>{
   if(/^(player_|pitcher_|batter_)/u.test(market))return'player-prop'
+  if(market.startsWith('team_totals'))return'team-total'
   if(market.startsWith('totals')||market.startsWith('alternate_totals'))return'totals'
   if(market.startsWith('spreads')||market.startsWith('alternate_spreads'))return'handicap'
-  if(market.startsWith('team_totals'))return'team-total'
   if(market.startsWith('h2h'))return'winner'
   return'special'
 }
@@ -116,9 +116,12 @@ export async function readSportsEventMarketMenu(
     errors.push('Catálogo de mercados no disponible: '+
       String(error instanceof Error?error.message:error).slice(0,130))
   }
+  // An invalid or unavailable catalog cannot authorize guessed bets or extra
+  // chargeable odds requests. Return a visible error instead of blind retries.
+  if(discoveryStatus==='unavailable')return {...base,status:'error' as const,
+    discoveryStatus,publishedMarkets:discovered,errors}
   const offered=discoveryStatus==='observed'?
-    allowed.filter(key=>discovered.includes(key)):
-    discoveryStatus==='empty'?[]:[...allowed]
+    allowed.filter(key=>discovered.includes(key)):[]
   // A menu containing many alternate spreads must not starve all player props
   // or period markets when the user asks for all useful market families.
   const diverse=[
