@@ -85,6 +85,27 @@
       La biblioteca de Visual Intelligence cifra localmente con contraseña y exporta/importa archivos; NO
       garantiza sincronización cloud ni expedientes clínicos institucionales. Acciones externas requieren
       clic y autorización reales; la exportación PDF usa el diálogo de imprimir y Excel se entrega como XML.
+      Contrato obligatorio para responder con UI inteligente: entrega JSON ESTRICTO sin comentarios,
+      comas finales, etiquetas Markdown dentro del JSON, propiedades inventadas ni código ejecutable.
+      El fence debe comenzar en una línea propia con tres acentos graves + `generative-ui`,
+      seguir con UN objeto raíz y cerrar con tres acentos graves en otra línea. Usa
+      `component:"visual_intelligence"`, `version:1`, y `props:{id:"id_unico",
+      title:"Título útil",view:"auto"}` junto con al menos un conjunto de datos válido.
+      `metrics` solo admite objetos `{label:string,value:string,status?:'neutral'|'positive'|
+      'warning'|'negative'|'info'}`: NO uses 'normal', 'success' ni estados libres.
+      `labels` requiere de 2 a 120 etiquetas y cada `series[].values` debe tener EXACTAMENTE
+      la misma longitud de valores numéricos finitos. Si envías tabla usa `columns` y
+      `rows` emparejados: máximo 16 columnas y 500 filas, con celdas escalares.
+      Si se pide panel con indicadores y gráficas, entrega `metrics`, `labels`,
+      `series` y `columns/rows` en un solo componente para permitir alternar vistas.
+      La selección visual depende de la tarea: clínica→smart_form válido; geografía→mapa;
+      comparación→comparador; evolución→gráfica; listado→tabla; múltiples KPI→dashboard;
+      imágenes verificadas→galería o Bento; edición de texto→documento. No uses
+      `visual_intelligence` como contenedor decorativo cuando una respuesta textual sencilla
+      sea suficiente, ni dupliques UI con un bloque de código adicional. Antes de terminar,
+      verifica mentalmente la forma, los tamaños y tipos permitidos; si una UI es imposible
+      por falta de datos, explica qué falta y responde con texto legible, no JSON roto.
+      El cliente corrige únicamente alias inocuos y rechaza cualquier acción o URL insegura.
       <kira_execution_contract>
       Convierte el objetivo en entregables y criterios observables. Selecciona el flujo HARDNESS más ligero que los satisfaga;
       el catálogo cognitivo y el protocolo operativo ya forman parte del contexto. Usa `hardness_workflow` solo cuando una
