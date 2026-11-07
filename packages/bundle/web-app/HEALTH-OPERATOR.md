@@ -157,3 +157,15 @@ En **HealthIA → Mi consulta → Interpretación de estudios**, el médico auto
 - Para incorporar IA diagnóstica real se necesitan motores aprobados o validados específicamente para cada indicación, entrada DICOM/ECG/WSI adecuada, pruebas externas y locales contra un estándar de referencia y revisión médica antes del uso clínico.
 
 Pruebas: `node --experimental-strip-types --test scripts/phoenix-health-diagnostic.test.mjs` y las pruebas del expediente.
+
+## Catálogo universal de entradas diagnósticas · versión inicial
+
+El catálogo de PHOENIX reconoce **243 tipos de entrada en 20 grupos y 23 familias de protocolos de evidencia**, con búsqueda jerárquica en **HealthIA → Mi consulta → Interpretación de estudios**. Kira dispone de `health_diagnostic_catalog(query, group)` y `health_diagnostic_protocol(modality, sourceType)`; el primer comando descubre el ID y el segundo indica requisitos del estudio fuente. Se incluyen RX, TC, RM, ecografía, medicina nuclear, cardiología, neurofisiología, laboratorio, hematología, microbiología, genética, citología, histología, oftalmología, endoscopia, ORL, odontología, dermatología, fisiología, sueño, obstetricia y escalas clínicas.
+
+- Cuando falta una modalidad, el profesional elige **Otro estudio** y escribe el nombre técnico. No se presume ningún motor ni interpretación automática.
+- El catálogo **no amplía los formatos aceptados en los adjuntos clínicos**: PNG/JPEG/WebP/PDF; los GLB se procesan en Anatomía 3D. Datos nativos DICOM, EDF, WSI, VCF/FASTQ, HL7/FHIR, ECG digital y vídeos requieren conectores y validación específicos, todavía no incluidos.
+- Reconocer una modalidad **no implica tener un algoritmo diagnóstico**. Los protocolos son listas de evidencia, no clasificadores médicos ni pesos entrenados; jamás afirman diagnóstico clínicamente validado.
+- Antes de registrar una interpretación, un médico autorizado debe verificar los hallazgos en el estudio fuente, indicar dudas y urgencia. La aplicación conserva el vínculo al archivo fuente dentro del expediente cifrado.
+- Futura integración de detectores: por indicación y modalidad exacta, con datos originales y controles de calidad, pesos/versiones reproducibles, calibración y validación externa contra estándar de referencia. No declarar que funcionan por tener una casilla marcada.
+
+Pruebas: `node --experimental-strip-types --test scripts/phoenix-health-diagnostic.test.mjs scripts/phoenix-health-diagnostic-catalog.test.mjs`.
