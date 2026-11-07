@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { PhoenixStatusPill, PhoenixUiIcon, type PhoenixUiIconName } from '@phoenix-ai/dsh-client-ui-primitives'
+import { PhoenixStatusPill, PhoenixUiIcon, choosePhoenixUiIcon, choosePhoenixUiTone, isPhoenixUiIconName, isPhoenixUiIconTone, isPhoenixUiHexColor, type PhoenixUiIconName, type PhoenixUiIconTone } from '@phoenix-ai/dsh-client-ui-primitives'
 import css from './GenerativeCanvas.module.css'
 import { ForecastFanChart } from './ForecastFanChart.tsx'
 // Actual ready-made React components from the MIT-licensed react-generative-ui library.
@@ -23,9 +23,9 @@ type CanvasNode =
   | { type: 'text' | 'heading' | 'caption'; text: string }
   | { type: 'divider' }
   | { type: 'badge'; text: string; status?: Status }
-  | { type: 'icon'; name: PhoenixUiIconName; label: string }
-  | { type: 'metric'; label: string; value: string; detail?: string; status?: Status; icon?: PhoenixUiIconName }
-  | { type: 'entity'; name: string; subtitle?: string; value?: string; detail?: string; badge?: string; status?: Status; icon?: PhoenixUiIconName; image?: string; source?: string }
+  | { type: 'icon'; name: PhoenixUiIconName; label: string; tone?: PhoenixUiIconTone; color?: string }
+  | { type: 'metric'; label: string; value: string; detail?: string; status?: Status; icon?: PhoenixUiIconName; iconTone?: PhoenixUiIconTone; iconColor?: string }
+  | { type: 'entity'; name: string; subtitle?: string; value?: string; detail?: string; badge?: string; status?: Status; icon?: PhoenixUiIconName; iconTone?: PhoenixUiIconTone; iconColor?: string; image?: string; source?: string }
   | { type: 'image'; src: string; alt: string; source: string; caption?: string; fit?: 'contain' | 'cover' }
   | { type: 'progress'; label: string; value: number; max?: number }
   | { type: 'alert'; title?: string; message: string; status?: Status }
@@ -66,16 +66,6 @@ const finite = (x: unknown): x is number => typeof x === 'number' && Number.isFi
 const id = (x: unknown): x is string => typeof x === 'string' && /^[a-z][a-z0-9_-]{0,39}$/.test(x)
 const labels = (x: unknown, max: number): x is string[] =>
   Array.isArray(x) && x.length > 0 && x.length <= max && x.every(item => text(item))
-const AVAILABLE_ICONS: readonly PhoenixUiIconName[] = [
-  'bot', 'brain', 'code', 'check', 'alert', 'table', 'calculator',
-  'copy', 'download', 'reset', 'clipboard', 'plus', 'file', 'search',
-  'settings', 'calendar', 'activity', 'shield', 'chart', 'info',
-  'trophy', 'star', 'heart', 'stethoscope', 'hospital', 'pill',
-  'microscope', 'graduation-cap', 'book', 'globe', 'map-pin', 'clock',
-  'user', 'users', 'briefcase', 'wallet', 'building', 'target',
-  'trending-up', 'sparkles', 'database', 'image', 'basketball',
-  'soccer', 'baseball', 'football', 'filter', 'award',
-]
 /** Approved public media CDNs only. Untrusted model-authored hosts never trigger network requests. */
 const APPROVED_IMAGE_HOSTS = new Set([
   'a.espncdn.com', 'cdn.nba.com', 'upload.wikimedia.org',
@@ -92,7 +82,9 @@ const isApprovedImage = (value: unknown): value is string => {
 const optionalImage = (value: unknown): boolean =>
   value === undefined || isApprovedImage(value)
 const optionalIcon = (value: unknown): boolean =>
-  value === undefined || AVAILABLE_ICONS.includes(value as PhoenixUiIconName)
+  value === undefined || isPhoenixUiIconName(value)
+const optionalTone = (value: unknown): boolean => value === undefined || isPhoenixUiIconTone(value)
+const optionalHexColor = (value: unknown): boolean => value === undefined || isPhoenixUiHexColor(value)
 const statusCell = (value: unknown): ReactNode => {
   const label = String(value ?? '')
   const normalized = label.trim().toLocaleLowerCase()
@@ -124,17 +116,17 @@ function validateNode(value: unknown, depth: number, count: { n: number }, ids: 
     case 'badge':
       return keys(value, ['type','text','status']) && text(value.text) && status(value.status)
     case 'icon':
-      return keys(value, ['type','name','label']) && AVAILABLE_ICONS.includes(value.name as PhoenixUiIconName)
-        && text(value.label, 120)
+      return keys(value, ['type','name','label','tone','color']) && isPhoenixUiIconName(value.name)
+        && text(value.label, 120) && optionalTone(value.tone) && optionalHexColor(value.color)
     case 'metric':
-      return keys(value, ['type','label','value','detail','status','icon'])
+      return keys(value, ['type','label','value','detail','status','icon','iconTone','iconColor'])
         && text(value.label) && text(value.value) && optionalText(value.detail)
-        && status(value.status) && optionalIcon(value.icon)
+        && status(value.status) && optionalIcon(value.icon) && optionalTone(value.iconTone) && optionalHexColor(value.iconColor)
     case 'entity':
-      return keys(value, ['type','name','subtitle','value','detail','badge','status','icon','image','source'])
+      return keys(value, ['type','name','subtitle','value','detail','badge','status','icon','iconTone','iconColor','image','source'])
         && text(value.name) && optionalText(value.subtitle) && optionalText(value.value)
         && optionalText(value.detail) && optionalText(value.badge, 80)
-        && status(value.status) && optionalIcon(value.icon) && optionalImage(value.image)
+        && status(value.status) && optionalIcon(value.icon) && optionalTone(value.iconTone) && optionalHexColor(value.iconColor) && optionalImage(value.image)
         && (value.image === undefined ? value.source === undefined : text(value.source, 180))
     case 'image':
       return keys(value, ['type','src','alt','source','caption','fit'])
@@ -362,16 +354,19 @@ function Node({ node, values, setValue, onAction, onFilter, filters }: RendererP
     case 'caption': return <p className={css.caption}>{node.text}</p>
     case 'divider': return <hr className={css.divider} />
     case 'badge': return <PhoenixStatusPill label={node.text} tone={node.status ?? 'neutral'} />
-    case 'icon': return <span className={css.iconLabel}><PhoenixUiIcon name={node.name} />{node.label}</span>
+    case 'icon': return <span className={css.iconLabel}><PhoenixUiIcon name={node.name} tone={node.tone ?? 'auto'} color={node.color} label={node.label}/>{node.label}</span>
     case 'metric':
       return <div className={css.prebuiltMetric} data-status={node.status}>
-        {node.icon && <span className={css.metricIcon}><PhoenixUiIcon name={node.icon} size={20} /></span>}
+        <span className={css.metricIcon}><PhoenixUiIcon name={node.icon ?? choosePhoenixUiIcon(node.label,node.status)}
+          size={20} tone={node.iconTone ?? choosePhoenixUiTone(node.label,node.status)}
+          color={node.iconColor} label={node.label}/></span>
         <StatCard title={node.label} value={node.value} detail={node.detail} />
       </div>
     case 'entity':
       return <div className={css.entity} data-status={node.status}>
         <span className={css.entityAvatar} aria-hidden="true">
-          <PhoenixUiIcon name={node.icon ?? 'info'} size={23} />
+          <PhoenixUiIcon name={node.icon ?? choosePhoenixUiIcon(node.name,node.status)} size={23}
+            tone={node.iconTone ?? choosePhoenixUiTone(node.name,node.status)} color={node.iconColor} label={node.name}/>
           {node.image && <img src={node.image} alt="" loading="lazy" referrerPolicy="no-referrer"
             title={node.source} onError={event => { event.currentTarget.hidden = true }} />}
         </span>

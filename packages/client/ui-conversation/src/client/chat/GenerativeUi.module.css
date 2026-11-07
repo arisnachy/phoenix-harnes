@@ -516,3 +516,11 @@
 
 /* Player headshots retain their face-first crop in compact cards. */
 .sportsPortraitPlayer img{object-fit:cover;object-position:center top}
+
+
+/* Meaningful icons are placed next to the information they describe, not as decoration. */
+.headerTitleGroup { display:flex; align-items:flex-start; gap:9px; min-width:0; }
+.headerTitleGroup > div { min-width:0; }
+.headerTitleGroup :global(svg) { flex-shrink:0; }
+.metricTitle { display:flex;align-items:center;gap:6px;min-width:0; }
+.metricTitle :global(svg) { flex-shrink:0; }
