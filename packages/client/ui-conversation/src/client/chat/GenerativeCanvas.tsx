@@ -24,7 +24,9 @@ type CanvasNode =
   | { type: 'divider' }
   | { type: 'badge'; text: string; status?: Status }
   | { type: 'icon'; name: PhoenixUiIconName; label: string }
-  | { type: 'metric'; label: string; value: string; detail?: string; status?: Status }
+  | { type: 'metric'; label: string; value: string; detail?: string; status?: Status; icon?: PhoenixUiIconName }
+  | { type: 'entity'; name: string; subtitle?: string; value?: string; detail?: string; badge?: string; status?: Status; icon?: PhoenixUiIconName; image?: string; source?: string }
+  | { type: 'image'; src: string; alt: string; source: string; caption?: string; fit?: 'contain' | 'cover' }
   | { type: 'progress'; label: string; value: number; max?: number }
   | { type: 'alert'; title?: string; message: string; status?: Status }
   | { type: 'timeline'; title?: string; items: Array<{ date: string; title: string; description?: string }> }
@@ -68,7 +70,29 @@ const AVAILABLE_ICONS: readonly PhoenixUiIconName[] = [
   'bot', 'brain', 'code', 'check', 'alert', 'table', 'calculator',
   'copy', 'download', 'reset', 'clipboard', 'plus', 'file', 'search',
   'settings', 'calendar', 'activity', 'shield', 'chart', 'info',
+  'trophy', 'star', 'heart', 'stethoscope', 'hospital', 'pill',
+  'microscope', 'graduation-cap', 'book', 'globe', 'map-pin', 'clock',
+  'user', 'users', 'briefcase', 'wallet', 'building', 'target',
+  'trending-up', 'sparkles', 'database', 'image', 'basketball',
+  'soccer', 'baseball', 'football', 'filter', 'award',
 ]
+/** Approved public media CDNs only. Untrusted model-authored hosts never trigger network requests. */
+const APPROVED_IMAGE_HOSTS = new Set([
+  'a.espncdn.com', 'cdn.nba.com', 'upload.wikimedia.org',
+  'images.unsplash.com', 'images.pexels.com', 'images.nasa.gov',
+])
+const isApprovedImage = (value: unknown): value is string => {
+  if (typeof value !== 'string' || value.length > 1000) return false
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && !url.username && !url.password && !url.port
+      && !url.hash && APPROVED_IMAGE_HOSTS.has(url.hostname.toLowerCase())
+  } catch { return false }
+}
+const optionalImage = (value: unknown): boolean =>
+  value === undefined || isApprovedImage(value)
+const optionalIcon = (value: unknown): boolean =>
+  value === undefined || AVAILABLE_ICONS.includes(value as PhoenixUiIconName)
 const statusCell = (value: unknown): ReactNode => {
   const label = String(value ?? '')
   const normalized = label.trim().toLocaleLowerCase()
@@ -103,8 +127,20 @@ function validateNode(value: unknown, depth: number, count: { n: number }, ids: 
       return keys(value, ['type','name','label']) && AVAILABLE_ICONS.includes(value.name as PhoenixUiIconName)
         && text(value.label, 120)
     case 'metric':
-      return keys(value, ['type','label','value','detail','status'])
-        && text(value.label) && text(value.value) && optionalText(value.detail) && status(value.status)
+      return keys(value, ['type','label','value','detail','status','icon'])
+        && text(value.label) && text(value.value) && optionalText(value.detail)
+        && status(value.status) && optionalIcon(value.icon)
+    case 'entity':
+      return keys(value, ['type','name','subtitle','value','detail','badge','status','icon','image','source'])
+        && text(value.name) && optionalText(value.subtitle) && optionalText(value.value)
+        && optionalText(value.detail) && optionalText(value.badge, 80)
+        && status(value.status) && optionalIcon(value.icon) && optionalImage(value.image)
+        && (value.image === undefined ? value.source === undefined : text(value.source, 180))
+    case 'image':
+      return keys(value, ['type','src','alt','source','caption','fit'])
+        && isApprovedImage(value.src) && text(value.alt, 180)
+        && text(value.source, 180) && optionalText(value.caption, 500)
+        && (value.fit === undefined || value.fit === 'cover' || value.fit === 'contain')
     case 'alert':
       return keys(value, ['type','title','message','status'])
         && optionalText(value.title) && text(value.message, 1200) && status(value.status)
@@ -329,8 +365,35 @@ function Node({ node, values, setValue, onAction, onFilter, filters }: RendererP
     case 'icon': return <span className={css.iconLabel}><PhoenixUiIcon name={node.name} />{node.label}</span>
     case 'metric':
       return <div className={css.prebuiltMetric} data-status={node.status}>
+        {node.icon && <span className={css.metricIcon}><PhoenixUiIcon name={node.icon} size={20} /></span>}
         <StatCard title={node.label} value={node.value} detail={node.detail} />
       </div>
+    case 'entity':
+      return <div className={css.entity} data-status={node.status}>
+        <span className={css.entityAvatar} aria-hidden="true">
+          <PhoenixUiIcon name={node.icon ?? 'info'} size={23} />
+          {node.image && <img src={node.image} alt="" loading="lazy" referrerPolicy="no-referrer"
+            title={node.source} onError={event => { event.currentTarget.hidden = true }} />}
+        </span>
+        <span className={css.entityCopy}>
+          <strong>{node.name}</strong>
+          {node.subtitle && <small>{node.subtitle}</small>}
+          {node.detail && <span>{node.detail}</span>}
+        </span>
+        {(node.value || node.badge) && <span className={css.entityOutcome}>
+          {node.value && <strong>{node.value}</strong>}
+          {node.badge && <PhoenixStatusPill label={node.badge} tone={node.status ?? 'neutral'} />}
+        </span>}
+      </div>
+    case 'image':
+      return <figure className={css.mediaFigure}>
+        <div className={css.mediaFrame} data-fit={node.fit ?? 'contain'}>
+          <PhoenixUiIcon name="image" size={28} />
+          <img src={node.src} alt={node.alt} loading="lazy" referrerPolicy="no-referrer"
+            onError={event => { event.currentTarget.hidden = true }} />
+        </div>
+        <figcaption>{node.caption && <span>{node.caption} · </span>}<span>Fuente: {node.source}</span></figcaption>
+      </figure>
     case 'alert':
       return <AlertBox type={node.status === 'positive' ? 'success'
         : node.status === 'negative' ? 'error'
