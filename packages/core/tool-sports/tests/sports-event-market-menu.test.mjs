@@ -78,8 +78,11 @@ test('validates event ID and bounded credit use',async()=>{
 })
 test('one failed market batch does not erase valid prior market results',async()=>{
   let count=0
-  const partial=async(url)=>{if(++count===2)return new Response('failed',{status:503})
-    return feed(url)}
+  const partial=async(url)=>{
+    const u=new URL(url)
+    if(u.pathname.endsWith('/odds')&&++count===2)return new Response('failed',{status:503})
+    return feed(url)
+  }
   const report=await readSportsEventMarketMenu('basketball_nba',eventId,env,partial,now,12)
   assert.equal(report.status,'observed')
   assert.ok(report.errors.some(x=>x.includes('503')))
