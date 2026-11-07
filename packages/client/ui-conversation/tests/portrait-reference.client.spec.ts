@@ -11,6 +11,13 @@ describe('private user portrait reference intent', () => {
     expect(isSelfImageRequest('Ponme en Marte como astronauta')).toBe(true)
     expect(isSelfImageRequest('Genera un retrato de mi rostro')).toBe(true)
     expect(isSelfImageRequest('Create a portrait of me in London')).toBe(true)
+    // Regression: "como" describes the desired transformation, not a question.
+    expect(isSelfImageRequest('crea una imagen mía como personaje anime tipo cyberpunk')).toBe(true)
+    expect(isSelfImageRequest('Crea una imagen mia como personae anime tipo ciberpunk')).toBe(true)
+    expect(isSelfImageRequest('crea una iagen mia como personae anime tipo ciberpunk')).toBe(true)
+    expect(isSelfImageRequest('Transforma mi foto en un personaje anime cyberpunk')).toBe(true)
+    expect(isSelfImageRequest('Haz una imagen de mí como comandante de una nave')).toBe(true)
+    expect(isSelfImageRequest('Ponme en Marte como astronauta')).toBe(true)
   })
   it('does not transmit a private photo for an ordinary or third-party request', () => {
     expect(isSelfImageRequest('Hola, ¿cómo estás?')).toBe(false)
@@ -23,6 +30,10 @@ describe('private user portrait reference intent', () => {
     expect(isSelfImageRequest('Dame una imagen de mi casa')).toBe(false)
     expect(isSelfImageRequest('Esa foto mía no me gusta')).toBe(false)
     expect(isSelfImageRequest('Explícame cómo generar una foto mía')).toBe(false)
+    expect(isSelfImageRequest('¿Cómo puedo generar una foto mía?')).toBe(false)
+    expect(isSelfImageRequest('Quiero saber cómo generar una imagen mía')).toBe(false)
+    expect(isSelfImageRequest('Me puedes explicar cómo crear una imagen mía')).toBe(false)
+    expect(isSelfImageRequest('Crea un tutorial de cómo generar una imagen mía')).toBe(false)
   })
   it('informs Kira of the attached real photo only after authorization', () => {
     const prompt = 'Dame una imagen mía como comandante de nave, estilo Kira'
