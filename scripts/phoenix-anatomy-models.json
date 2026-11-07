@@ -1,0 +1,228 @@
+{
+  "schema": 1,
+  "descriptor": "Evidence-scoped segmentation registry; no universal model is implied",
+  "clinicalUse": "research-only",
+  "tasks": [
+    {
+      "id": "ct_general",
+      "engine": "TotalSegmentator",
+      "task": "total",
+      "modality": "ct",
+      "regions": [
+        "torax",
+        "abdomen",
+        "columna",
+        "cerebro",
+        "huesos",
+        "musculatura parcial",
+        "vasos grandes"
+      ],
+      "licensed": "Apache-2.0",
+      "verifiedSource": "https://github.com/wasserth/TotalSegmentator",
+      "limits": "117 clases básicas; no coronarias individuales ni lesión específica"
+    },
+    {
+      "id": "mr_general",
+      "engine": "TotalSegmentator",
+      "task": "total_mr",
+      "modality": "mr",
+      "regions": [
+        "torax",
+        "abdomen",
+        "columna",
+        "cerebro",
+        "huesos",
+        "vasos grandes"
+      ],
+      "licensed": "Apache-2.0",
+      "verifiedSource": "https://github.com/wasserth/TotalSegmentator",
+      "limits": "50 clases; las regiones ausentes no se reconstruyen"
+    },
+    {
+      "id": "ct_lung_vessels",
+      "engine": "TotalSegmentator",
+      "task": "lung_vessels",
+      "modality": "ct",
+      "regions": [
+        "arterias pulmonares",
+        "venas pulmonares",
+        "bronquios"
+      ],
+      "licensed": "Apache-2.0",
+      "verifiedSource": "https://github.com/wasserth/TotalSegmentator",
+      "limits": "Comprobar protocolo y contraste para vasos pequeños"
+    },
+    {
+      "id": "ct_headneck_vessels",
+      "engine": "TotalSegmentator",
+      "task": "headneck_bones_vessels",
+      "modality": "ct",
+      "regions": [
+        "carotidas cervicales",
+        "venas yugulares",
+        "huesos faciales"
+      ],
+      "licensed": "Apache-2.0",
+      "verifiedSource": "https://github.com/wasserth/TotalSegmentator",
+      "limits": "No reemplaza angio-TC cerebral ni confirma estenosis"
+    },
+    {
+      "id": "ct_headneck_muscles",
+      "engine": "TotalSegmentator",
+      "task": "headneck_muscles",
+      "modality": "ct",
+      "regions": [
+        "musculatura cervical"
+      ],
+      "licensed": "Apache-2.0",
+      "verifiedSource": "https://github.com/wasserth/TotalSegmentator",
+      "limits": "No incluye músculos de todos los miembros"
+    },
+    {
+      "id": "ct_head_muscles",
+      "engine": "TotalSegmentator",
+      "task": "head_muscles",
+      "modality": "ct",
+      "regions": [
+        "musculos masticadores",
+        "lengua"
+      ],
+      "licensed": "Apache-2.0",
+      "verifiedSource": "https://github.com/wasserth/TotalSegmentator",
+      "limits": "Identificación limitada a regiones entrenadas"
+    },
+    {
+      "id": "ct_ventricles",
+      "engine": "TotalSegmentator",
+      "task": "ventricle_parts",
+      "modality": "ct",
+      "regions": [
+        "ventriculos cerebrales"
+      ],
+      "licensed": "Apache-2.0",
+      "verifiedSource": "https://github.com/wasserth/TotalSegmentator",
+      "limits": "No segmenta tractos neuronales"
+    },
+    {
+      "id": "ct_body_surface",
+      "engine": "TotalSegmentator",
+      "task": "body",
+      "modality": "ct",
+      "regions": [
+        "piel",
+        "contorno corporal",
+        "extremidades"
+      ],
+      "licensed": "Apache-2.0",
+      "verifiedSource": "https://github.com/wasserth/TotalSegmentator",
+      "limits": "Superficie externa no es anatomía interna detallada"
+    },
+    {
+      "id": "mr_body_surface",
+      "engine": "TotalSegmentator",
+      "task": "body_mr",
+      "modality": "mr",
+      "regions": [
+        "contorno corporal",
+        "extremidades"
+      ],
+      "licensed": "Apache-2.0",
+      "verifiedSource": "https://github.com/wasserth/TotalSegmentator",
+      "limits": "No representa articulaciones y nervios finos"
+    },
+    {
+      "id": "ct_eyemovement",
+      "engine": "TotalSegmentator",
+      "task": "oculomotor_muscles",
+      "modality": "ct",
+      "regions": [
+        "orbita",
+        "musculos extraoculares",
+        "nervio optico"
+      ],
+      "licensed": "Apache-2.0",
+      "verifiedSource": "https://github.com/wasserth/TotalSegmentator",
+      "limits": "Modelo más pequeño y menos robusto; no nervios periféricos generalizados"
+    },
+    {
+      "id": "ct_liver_segments",
+      "engine": "TotalSegmentator",
+      "task": "liver_segments",
+      "modality": "ct",
+      "regions": [
+        "segmentos hepaticos"
+      ],
+      "licensed": "Apache-2.0",
+      "verifiedSource": "https://github.com/wasserth/TotalSegmentator",
+      "limits": "Revisión hepatobiliar obligatoria"
+    },
+    {
+      "id": "mr_liver_segments",
+      "engine": "TotalSegmentator",
+      "task": "liver_segments_mr",
+      "modality": "mr",
+      "regions": [
+        "segmentos hepaticos"
+      ],
+      "licensed": "Apache-2.0",
+      "verifiedSource": "https://github.com/wasserth/TotalSegmentator",
+      "limits": "Conjunto de entrenamiento limitado"
+    },
+    {
+      "id": "ct_spine_refined",
+      "engine": "TotalSegmentator",
+      "task": "vertebrae_pp_refined",
+      "modality": "ct",
+      "regions": [
+        "cuerpos vertebrales"
+      ],
+      "licensed": "Apache-2.0",
+      "verifiedSource": "https://github.com/wasserth/TotalSegmentator",
+      "limits": "No segmenta raíces nerviosas"
+    },
+    {
+      "id": "ct_cerebral_hemorrhage",
+      "engine": "TotalSegmentator",
+      "task": "cerebral_bleed",
+      "modality": "ct",
+      "regions": [
+        "hemorragia intracerebral"
+      ],
+      "licensed": "Apache-2.0",
+      "verifiedSource": "https://github.com/wasserth/TotalSegmentator",
+      "limits": "Cribado de investigación; no excluye hemorragia"
+    }
+  ],
+  "gaps": [
+    {
+      "structure": "arterias coronarias distales y placas",
+      "status": "specialist_model_required",
+      "evidence": "Angio-TC coronaria apropiada, segmentación específica y revisión"
+    },
+    {
+      "structure": "nervios periféricos y raíces finas",
+      "status": "specialist_model_required",
+      "evidence": "Neurografía RM o protocolo adecuado, modelo validado por región"
+    },
+    {
+      "structure": "tractos cerebrales",
+      "status": "specialist_model_required",
+      "evidence": "Difusión RM y tractografía revisada"
+    },
+    {
+      "structure": "microvasculatura",
+      "status": "not_observable_at_standard_ct_resolution",
+      "evidence": "Nunca inventar redes microscópicas individuales"
+    },
+    {
+      "structure": "ligamentos/tendones pequeños",
+      "status": "specialist_model_required",
+      "evidence": "RM o ecografía especializada de la región"
+    },
+    {
+      "structure": "infarto y cicatriz miocárdica",
+      "status": "specialist_model_required",
+      "evidence": "RM con caracterización tisular o modalidad apropiada"
+    }
+  ]
+}
