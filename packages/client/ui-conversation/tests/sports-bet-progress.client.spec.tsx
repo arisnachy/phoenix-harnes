@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import {afterEach,beforeEach,describe,expect,it} from 'vitest'
-import {cleanup,fireEvent,render,screen} from '@testing-library/react'
+import {cleanup,render,screen} from '@testing-library/react'
 import {evaluateSportsPick,SportsBetProgress,validTrackedPick,type SportsTrackedPick} from '../src/client/chat/SportsBetProgress.tsx'
 import type {PhoenixLiveGame,PhoenixLiveMeta} from '../src/client/chat/SportsLive.tsx'
-import {parseGenerativeUiBlock} from '../src/client/chat/GenerativeUi.tsx'
+import {parseGenerativeUiBlock,GenerativeUi} from '../src/client/chat/GenerativeUi.tsx'
+import {importSportsReceipt,readSportsReceiptGoals} from '../src/client/chat/SportsTicketAutoLink.ts'
 
 const meta:PhoenixLiveMeta={updatedAt:Date.now(),stale:false,error:false,enabled:true}
 const hockey:PhoenixLiveGame={id:'401900001',home:'Carolina Hurricanes',away:'Chicago Blackhawks',
@@ -48,17 +49,61 @@ describe('PHOENIX user ticket goals and scoreboard evidence',()=>{
     expect(parseGenerativeUiBlock({component:'sports_game_card',version:1,props:{
       ...p,trackedBets:[{receipt:'12126409',market:'spread',side:'home'}]}})).toBeNull()
   })
-  it('saves multiple references for a shared match and reloads after remount',()=>{
+  it('receives two actual ticket goals automatically from native cards and restores them without manual inputs',()=>{
+    const make=(receipt:string)=>parseGenerativeUiBlock({component:'sports_ticket_card',version:1,props:{
+      title:'Boleto '+receipt,source:'ESPN + comprobante del usuario',
+      ticketReference:receipt,legs:[{
+        event:'Chicago Blackhawks vs Carolina Hurricanes',
+        homeTeam:'Carolina Hurricanes',awayTeam:'Chicago Blackhawks',
+        sport:'hockey',league:'nhl',providerLeague:'nhl',eventId:'401900001',
+        eventDate:'2026-11-07',selection:'Carolina Hurricanes',market:'moneyline',price:'-460',
+        bookmaker:'Juancito Sport',trackedBet:{receipt,market:'moneyline',side:'home'},
+      }],requestedLegs:1,combinedOdds:'No disponible',
+      note:'Recibo del usuario, no aceptado ni liquidado mediante API.',
+    }})
+    const cardA=make('12126409'),cardB=make('12126415')
+    if(!cardA||!cardB)throw Error('Rejected attributed receipt card')
+    const ticketA=render(<GenerativeUi block={cardA}/>)
+    const ticketB=render(<GenerativeUi block={cardB}/>)
     const props={sport:'hockey',league:'nhl',date:'2026-11-07',home:'Carolina Hurricanes',
-      away:'Chicago Blackhawks',game:hockey,meta}
-    const view=render(<SportsBetProgress {...props}/>)
-    fireEvent.click(screen.getByText('Registrar mi apuesta para seguir el objetivo'))
-    fireEvent.change(screen.getByPlaceholderText('Ej.: 12126409'),{target:{value:'12126409'}})
-    fireEvent.click(screen.getByText('Guardar selección'))
-    expect(screen.getByText('Boleto 12126409')).toBeTruthy()
-    view.unmount()
+      away:'Chicago Blackhawks',eventId:'401900001',game:hockey,meta}
+    const progress=render(<SportsBetProgress {...props}/>)
+    expect(screen.getByText('Boleto #12126409')).toBeTruthy()
+    expect(screen.getByText('Boleto #12126415')).toBeTruthy()
+    expect(screen.getAllByText(/Cumpliendo por ahora/)).toHaveLength(2)
+    expect(screen.queryByText(/Registrar mi apuesta/)).toBeNull()
+    ticketA.unmount();ticketB.unmount();progress.unmount()
     render(<SportsBetProgress {...props}/>)
-    expect(screen.getByText('Boleto 12126409')).toBeTruthy()
-    expect(screen.getByText(/Cumpliendo por ahora/)).toBeTruthy()
+    expect(screen.getByText('Boleto #12126409')).toBeTruthy()
+    expect(screen.getByText('Boleto #12126415')).toBeTruthy()
   })
+  it('never assigns a receipt to an opponent, another day, or an ESPN event ID mismatch',()=>{
+    const fixture={sport:'soccer',providerLeague:'usa.1',eventDate:'2026-11-07',
+      eventId:'401800555',homeTeam:'CF Montréal',awayTeam:'Vancouver Whitecaps',
+      trackedBet:{receipt:'12126415',market:'moneyline',side:'away'}}
+    expect(importSportsReceipt([fixture])).toBe(1)
+    expect(readSportsReceiptGoals({sport:'soccer',league:'usa.1',date:'2026-11-07',
+      home:'CF Montréal',away:'Vancouver Whitecaps',eventId:'401800555'})).toEqual([fixture.trackedBet])
+    for(const lookup of [
+      {sport:'soccer',league:'usa.1',date:'2026-11-08',home:'CF Montréal',away:'Vancouver Whitecaps'},
+      {sport:'soccer',league:'usa.1',date:'2026-11-07',home:'CF Montréal',away:'Portland Timbers'},
+      {sport:'soccer',league:'usa.1',date:'2026-11-07',home:'CF Montréal',away:'Vancouver Whitecaps',eventId:'9999'},
+    ])expect(readSportsReceiptGoals(lookup)).toEqual([])
+  })
+  it('rejects forged receipt links, malformed markets and invalid fixture IDs',()=>{
+    expect(importSportsReceipt([{sport:'hockey',providerLeague:'nhl',eventDate:'2026-11-07',
+      eventId:'other provider',homeTeam:'Carolina Hurricanes',awayTeam:'Chicago Blackhawks',
+      trackedBet:{receipt:'12126409',market:'moneyline',side:'home'}}])).toBe(0)
+    const invalid=parseGenerativeUiBlock({component:'sports_ticket_card',version:1,props:{
+      title:'Recibo',source:'ESPN',ticketReference:'12126409',
+      legs:[{event:'Match',selection:'Carolina',price:'-460',bookmaker:'Juancito Sport',
+        sport:'hockey',league:'nhl',providerLeague:'nhl',
+        eventId:'401900001',eventDate:'2026-11-07',
+        homeTeam:'Carolina Hurricanes',awayTeam:'Chicago Blackhawks',
+        trackedBet:{receipt:'WRONG',market:'moneyline',side:'home'}}],
+      requestedLegs:1,combinedOdds:'No disponible',note:'Sin liquidación',
+    }})
+    expect(invalid).toBeNull()
+  })
+
 })

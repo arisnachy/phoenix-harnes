@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react'
+import { useEffect,useId, useState, type ReactNode } from 'react'
 import { PhoenixStatusPill, PhoenixAgentLine, PhoenixUiIcon, choosePhoenixUiIcon, choosePhoenixUiTone, isPhoenixUiIconName, type PhoenixUiIconName, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
 import { ScaleForm, parseScaleForm, type ScaleFormSpec } from './ScaleForm.tsx'
 import { parseSmartForm, parseSmartLibrary, type SmartFormSpec, type SmartLibrarySpec } from './SmartFormEngine.ts'
@@ -14,6 +14,7 @@ import css from './GenerativeUi.module.css'
 import { SportsLiveProvider,SportsLiveFacts,SportsLiveStamp } from './SportsLive.tsx'
 import { SportsGameCenter } from './SportsGameCenter.tsx'
 import { SportsBetProgress,validTrackedPick,type SportsTrackedPick } from './SportsBetProgress.tsx'
+import {importSportsReceipt,type SportsReceiptFixture} from './SportsTicketAutoLink.ts'
 import { SportsNewsPanel } from './SportsNewsPanel.tsx'
 
 const MAX_UI_BLOCKS = 6
@@ -142,8 +143,10 @@ type SportsTicketCard = {
     title: string; subtitle?: string; source: string
     legs: Array<{ event: string; selection: string; price: string; bookmaker: string; when?: string; image?: string
       sport?:string;country?:string;league?:string;market?:string;player?:string;rationale?:string
-      homeLogo?:string;awayLogo?:string;homeTeam?:string;awayTeam?:string }>
+      homeLogo?:string;awayLogo?:string;homeTeam?:string;awayTeam?:string
+      eventId?:string;eventDate?:string;providerLeague?:string;trackedBet?:SportsTrackedPick }>
     requestedLegs?:number; combinedOdds: string; stake?: string; grossReturn?: string; note: string
+    ticketReference?:string
     askPrompt?: string
   }
 }
@@ -399,24 +402,34 @@ const sportsSchedule = (value:Record<string,unknown>):value is SportsScheduleCar
 }
 const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
-    ['title','subtitle','source','legs','requestedLegs','combinedOdds','stake','grossReturn','note','askPrompt'])) return false
+    ['title','subtitle','source','legs','requestedLegs','combinedOdds','stake','grossReturn','note','askPrompt','ticketReference'])) return false
   const p = value.props
   return isText(p.title) && optionalText(p.subtitle) && isText(p.source,320)
-    && isText(p.combinedOdds,40) && optionalText(p.stake,50)
+    && isText(p.combinedOdds,40) && optionalText(p.ticketReference,25)
+    && (p.ticketReference===undefined||/^[a-zA-Z0-9-]{1,25}$/u.test(p.ticketReference))
+    && optionalText(p.stake,50)
     && optionalText(p.grossReturn,50) && isText(p.note,MAX_TEXT)
     && optionalText(p.askPrompt,400) && (p.requestedLegs===undefined ||
-      (typeof p.requestedLegs==='number'&&Number.isInteger(p.requestedLegs)&&p.requestedLegs>=1&&p.requestedLegs<=6))
+      (typeof p.requestedLegs==='number'&&Number.isInteger(p.requestedLegs)&&p.requestedLegs>=1&&p.requestedLegs<=(p.ticketReference?12:6)))
     && Array.isArray(p.legs) && (p.requestedLegs===undefined||p.legs.length<=Number(p.requestedLegs))
     && (p.legs.length >= 1 || (p.requestedLegs!==undefined
       && p.combinedOdds==='No disponible' && /TICKET INCOMPLETO/u.test(String(p.note))))
     && p.legs.length <= 12 && p.legs.every(x => isRecord(x)
-      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player','rationale','homeLogo','awayLogo','homeTeam','awayTeam'])
+      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player','rationale','homeLogo','awayLogo','homeTeam','awayTeam','eventId','eventDate','providerLeague','trackedBet'])
       && isText(x.event) && isText(x.selection) && isText(x.price,32)
       && isText(x.bookmaker) && optionalText(x.when) && trustedPortrait(x.image)
       && trustedPortrait(x.homeLogo) && trustedPortrait(x.awayLogo)
       && optionalText(x.homeTeam,100) && optionalText(x.awayTeam,100)
       && optionalText(x.sport,60) && optionalText(x.country,100) && optionalText(x.league,100)
-      && optionalText(x.market,70) && optionalText(x.player,140) && optionalText(x.rationale,480))
+       && optionalText(x.eventId,20) && optionalText(x.eventDate,10) && optionalText(x.providerLeague,80)
+       && (x.trackedBet===undefined||(p.ticketReference!==undefined&&validTrackedPick(x.trackedBet)
+         && x.trackedBet.receipt===p.ticketReference
+         && typeof x.sport==='string' && /^[a-z][a-z-]{1,35}$/u.test(x.sport)
+         && typeof x.providerLeague==='string' && /^[a-z0-9][a-z0-9._-]{0,79}$/u.test(x.providerLeague)
+         && typeof x.eventDate==='string' && /^\d{4}-\d{2}-\d{2}$/u.test(x.eventDate)
+         && typeof x.eventId==='string' && /^\d{1,20}$/u.test(x.eventId)
+         && !!x.homeTeam && !!x.awayTeam))
+       && optionalText(x.market,70) && optionalText(x.player,140) && optionalText(x.rationale,480))
 }
 
 export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null {
@@ -621,6 +634,20 @@ function SportsTicketCalculator({ combinedOdds,initialStake }:{ combinedOdds:str
     <small>Recalcula al instante · incluye el importe apostado en el retorno bruto.
       No confirma aceptación, pago ni disponibilidad actual de la cuota.</small>
   </section>
+}
+/** Receipt cards feed event-bound objectives; no per-game manual form. */
+function SportsTicketAutoRegistration({props}:{props:SportsTicketCard['props']}):ReactNode{
+  useEffect(()=>{
+    if(!props.ticketReference)return
+    const linked:SportsReceiptFixture[]=props.legs.flatMap(leg=>
+      leg.trackedBet && leg.sport && leg.providerLeague && leg.eventDate && leg.eventId
+        && leg.homeTeam && leg.awayTeam
+        ?[{sport:leg.sport,providerLeague:leg.providerLeague,eventDate:leg.eventDate,
+          eventId:leg.eventId,homeTeam:leg.homeTeam,awayTeam:leg.awayTeam,trackedBet:leg.trackedBet}]
+        :[])
+    importSportsReceipt(linked)
+  },[props])
+  return null
 }
 const ticketSportEmblem=(groupHeading:string):string=>{
   const sport=groupHeading.split(' · ')[0]?.toLocaleLowerCase('es')??''
@@ -841,7 +868,8 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                 </div>}
               {!pending&&<SportsLiveFacts game={live} meta={meta} sport={p.sport} compact/>}
               {!pending&&<SportsBetProgress sport={p.sport??''} league={p.providerLeague??p.league??''}
-                date={p.date} home={e.home.label} away={e.away.label} game={live} meta={meta}
+                date={p.date} home={e.home.label} away={e.away.label}
+                eventId={live?.id??e.eventId} game={live} meta={meta}
                 initialBets={e.trackedBets??[]}/>}
               {!pending&&<details className={css.sportsExtra}><summary>Detalles del juego</summary>
                 {e.venue&&<small className={css.sportsSlateVenue}>⌖ {e.venue}</small>}
@@ -884,7 +912,8 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             </div>
             <SportsLiveFacts game={live} meta={meta} sport={p.sport} compact/>
             <SportsBetProgress sport={p.sport??''} league={p.providerLeague??p.league??''}
-              date={p.eventDate??''} home={p.home.label} away={p.away.label} game={live} meta={meta}
+              date={p.eventDate??''} home={p.home.label} away={p.away.label}
+              eventId={live?.id??p.eventId} game={live} meta={meta}
               initialBets={p.trackedBets??[]}/>
             <SportsGameCenter sport={p.sport} league={p.providerLeague??p.league}
               eventId={live?.id??p.eventId} phase={live?.phase??p.phase} game={live}/>
@@ -947,6 +976,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
       const requested = p.requestedLegs ?? p.legs.length
       const incomplete = p.legs.length < requested
       const unpriced = p.combinedOdds === 'No disponible'
+      const receipt=Boolean(p.ticketReference)
       // Keep only attributed competition taxonomy; do not infer unnamed leagues.
       const groups = new Map<string,typeof p.legs>()
       for (const leg of p.legs) {
@@ -954,10 +984,11 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         groups.set(heading,[...(groups.get(heading)??[]),leg])
       }
       return <section className={`${css.sportsCard} ${css.sportsTicketCard}`} data-generative-ui="sports_ticket_card">
+        {receipt&&<SportsTicketAutoRegistration props={p}/>}
         <header className={css.sportsTicketHeading}>
           <div className={css.sportsTicketRibbon}>
             <span className={css.sportsKicker}>PHOENIX / ANÁLISIS DEPORTIVO</span>
-            <span className={css.sportsStatus}>{incomplete?'BORRADOR INCOMPLETO':unpriced?'PRONÓSTICOS · SIN COTIZAR':'COTIZACIÓN REAL · SIN ACEPTACIÓN CONFIRMADA'}</span>
+            <span className={css.sportsStatus}>{receipt?'RECIBO APORTADO · PAGO NO CONFIRMADO':incomplete?'BORRADOR INCOMPLETO':unpriced?'PRONÓSTICOS · SIN COTIZAR':'COTIZACIÓN REAL · SIN ACEPTACIÓN CONFIRMADA'}</span>
           </div>
           <div className={css.sportsTicketIntro}>
             <div><h3>{sportsDisplayText(p.title)}</h3>{p.subtitle&&<p>{sportsDisplayText(p.subtitle)}</p>}</div>
@@ -968,7 +999,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             <span style={{ width:`${100*p.legs.length/requested}%` }}/>
           </div>
           {incomplete&&<p className={css.sportsTicketMissing}>Faltan {requested-p.legs.length} selecciones por verificar. Esto no es un ticket completo.</p>}
-          {unpriced&&<p className={css.sportsTicketMissing}>0 / {requested} selecciones con cuotas de una misma casa confirmadas. Los partidos visibles son hipótesis de investigación, no apuestas aprobadas.</p>}
+          {unpriced&&!receipt&&<p className={css.sportsTicketMissing}>0 / {requested} selecciones con cuotas de una misma casa confirmadas. Los partidos visibles son hipótesis de investigación, no apuestas aprobadas.</p>}
         </header>
         <div className={css.sportsTicketGroups}>{[...groups].map(([heading,legs])=>
           <section key={heading} className={css.sportsTicketGroup} aria-label={heading}>
@@ -991,20 +1022,24 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                 <small>{[leg.market,leg.player?'Jugador · '+leg.player:undefined,unpriced?undefined:leg.bookmaker].filter(Boolean).join(' · ')}</small>
                 {leg.rationale&&<details className={css.sportsTicketReason}><summary>Ver fundamento</summary><p>{sportsDisplayText(leg.rationale)}</p></details>}
               </div>
-              {unpriced
+              {unpriced&&!receipt
                 ? <span className={css.sportsTicketVerified} aria-label="Partido verificado">✓ Evento</span>
                 : <div className={css.sportsTicketPrice}>
-                  <small>CUOTA</small>
+                  <small>{receipt?'CUOTA DEL RECIBO':'CUOTA'}</small>
                   <b aria-label={`Cuota ${leg.price}`}>{leg.price}</b>
                 </div>}
             </article>)}</div>
           </section>)}</div>
-        {unpriced?<div className={css.sportsTicketTotal}>
+        {receipt?<div className={css.sportsTicketTotal}>
+          <div><small>Estado del boleto</small><strong>Recibo aportado · sin liquidación confirmada</strong></div>
+          {p.stake&&<div><small>Importe informado</small><strong>RD$ {p.stake}</strong></div>}
+          {p.grossReturn&&<div><small>Retorno potencial indicado</small><strong>RD$ {p.grossReturn}</strong></div>}
+        </div>:unpriced?<div className={css.sportsTicketTotal}>
           <div><small>Estado de las cuotas</small><strong>Pendientes de confirmar</strong></div>
         </div>:<SportsTicketCalculator combinedOdds={p.combinedOdds} {...(p.stake===undefined?{}:{ initialStake:p.stake })}/>}
 
         <footer className={css.sportsFoot}>
-          <strong>Ticket investigado · Aceptación de la casa sin verificar</strong>
+          <strong>{receipt?'Metas enlazadas al recibo · aceptación y pago sin verificar':'Ticket investigado · Aceptación de la casa sin verificar'}</strong>
           <span>Mercados sujetos a verificación</span>
           <details className={css.sportsTicketDisclaimer}><summary>Metodología y advertencias</summary><p>{sportsDisplayText(p.note)}</p></details>
           {onAction&&<button type="button" onClick={()=>{ onAction('Kira, muestra los marcadores y jugadas en vivo de los partidos de este ticket, agrupados por deporte y liga. Para cada encuentro usa sports_chat_games y liveOnly si ya comenzó. No supongas resultados ni partidos activos. Encuentros: '+p.legs.map(l=>[l.sport,l.league,l.event].filter(Boolean).join(' / ')).join('; '),'draft') }}>Ver juegos de mi ticket en vivo</button>}
