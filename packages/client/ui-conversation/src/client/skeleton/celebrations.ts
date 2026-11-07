@@ -31,7 +31,7 @@ export interface CalendarProfile {
   dateOfBirth?: string | undefined
   specialDates?: readonly { date: string; label: string; solemn?: boolean }[] | undefined
 }
-type Rule = { country: string; label: string; theme: CelebrationTheme; tone?: CelebrationTone; month: number; weekday?: number; nth?: number; easterOffset?: number; audience?: Celebration['audience']; id?: string }
+type Rule = { country: string; label: string; theme: CelebrationTheme; tone?: CelebrationTone; month: number; weekday?: number; nth?: number; easterOffset?: number; dayOffset?: number; audience?: Celebration['audience']; id?: string }
 const YEAR = 2026
 
 function fixed(country: string, lines: string): Celebration[] {
@@ -190,7 +190,7 @@ const MOVABLE: readonly Rule[] = [
   { country: 'US', label: 'Labor Day', theme: 'culture', month: 9, weekday: 1, nth: 1, tone: 'recognition' },
   { country: 'US', label: 'Columbus Day', theme: 'culture', month: 10, weekday: 1, nth: 2, tone: 'recognition' },
   { country: 'US', label: 'Thanksgiving Day', theme: 'family', month: 11, weekday: 4, nth: 4 },
-  { country: 'US', label: 'Black Friday', theme: 'culture', month: 11, weekday: 4, nth: 4, id: 'black-friday' },
+  { country: 'US', label: 'Black Friday', theme: 'culture', month: 11, weekday: 4, nth: 4, dayOffset: 1, id: 'black-friday' },
 ]
 function iso(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
@@ -256,6 +256,7 @@ export function annualCalendar(year: number): Celebration[] {
 }
 function inScope(event: Celebration, profile: CalendarProfile): boolean {
   if (event.country === 'WORLD' || event.country === 'PERSONAL') return true
+  if (event.stateCodes?.length && (!profile.stateCode || !event.stateCodes.includes(profile.stateCode))) return false
   const country = normalizedCountry(event.country)
   return country !== undefined && (country === normalizedCountry(profile.countryOfOrigin) || country === normalizedCountry(profile.countryOfResidence))
 }
