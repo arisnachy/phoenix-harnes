@@ -629,7 +629,7 @@ test('encrypted patient-linked GLB is only readable by assigned clinician and re
  const header=Buffer.alloc(12);header.write('glTF');header.writeUInt32LE(2,4)
  header.writeUInt32LE(12+8+pad.length+8+36,8)
  const j=Buffer.alloc(8);j.writeUInt32LE(pad.length,0);j.write('JSON',4)
- const b=Buffer.alloc(8);b.writeUInt32LE(36,0);b.write('BIN\\u0000',4)
+ const b=Buffer.alloc(8);b.writeUInt32LE(36,0);b.write('BIN\u0000',4)
  const glb=Buffer.concat([header,j,pad,b,Buffer.alloc(36)])
  const row=db.addAttachment(doctor,{patientId:p.id,name:'volumen-sintetico.glb',mime:'model/gltf-binary',
   base64:glb.toString('base64'),note:'Dato sintético, no corresponde a paciente'})
