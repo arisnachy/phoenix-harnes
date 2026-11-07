@@ -540,6 +540,12 @@ export interface ProactivityAttentionItem {
 export interface ConversationUserProfileState {
   /** User-configured preferred name; model-context consent does not gate local UI chrome. */
   preferredName?: string
+  /** Explicit country preference, never inferred from the user's name. */
+  countryCode?: string
+  profession?: string
+  dateOfBirth?: string
+  specialDates?: readonly { date: string; label: string; solemn?: boolean }[]
+  consent?: { profession?: boolean; dateOfBirth?: boolean; moments?: boolean }
 }
 
 /** Business callbacks injected into the conversation slot. */

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" fill="none" role="img" aria-label="Cumpleaños">
+<g stroke-linejoin="round" stroke-linecap="round"><g opacity=".88">
+ <path d="M76 447 Q175 407 248 446 Q321 484 436 437" fill="none" stroke="#D6A44C" stroke-width="6" stroke-linecap="round"/>
+ <path d="M91 459 Q169 432 247 462 Q334 490 414 449" fill="none" stroke="#E2B9A5" stroke-width="3" stroke-linecap="round"/>
+ </g><path d="M229 452 H280 V486 Q254 499 229 486Z" fill="#EEC898" stroke="#B88D51" stroke-width="4"/>
+  <path d="M255 452 V426" stroke="#AF7047" stroke-width="5"/><path d="M255 396 Q256.4 409.6 270 411 Q256.4 412.4 255 426 Q253.6 412.4 240 411 Q253.6 409.6 255 396Z" fill="#F2AF48" opacity=".82"/>
+  <circle cx="95" cy="417" r="25" fill="#DFB574" fill-opacity=".7"/><circle cx="411" cy="418" r="23" fill="#D49BB3" fill-opacity=".7"/><path d="M57 50 Q58.4 56.6 65 58 Q58.4 59.4 57 66 Q55.6 59.4 49 58 Q55.6 56.6 57 50Z" fill="#D6A44C" opacity=".82"/><path d="M415 65 Q416.4 70.6 422 72 Q416.4 73.4 415 79 Q413.6 73.4 408 72 Q413.6 70.6 415 65Z" fill="#E2B9A5" opacity=".82"/><path d="M82 364 Q125 349 142 378" fill="none" stroke="#D6A44C" stroke-width="2" opacity=".48"/></g></svg>

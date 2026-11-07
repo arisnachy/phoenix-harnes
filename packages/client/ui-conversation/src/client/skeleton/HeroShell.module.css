@@ -472,3 +472,34 @@
   .missionLaunchpad { gap: 6px; margin-top: 8px; }
   .missionShortcut { min-height: 32px; padding: 5px 10px; }
 }
+
+
+/* Celebration SVGs are completely transparent and contain decorations only.
+   PHOENIX's original PNG remains the unchanged base layer. */
+.celebrationArt {
+  position: absolute;
+  inset: -3%;
+  z-index: 1;
+  width: 106%;
+  height: 106%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.celebrationGreeting {
+  max-width: min(100%, 780px);
+  margin: 8px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: clamp(14px, 1.22vw, 17px);
+  font-weight: 500;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+
+@media (max-width: 720px) {
+  .celebrationGreeting { margin-top: 6px; font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .celebrationArt { animation: none !important; }
+}

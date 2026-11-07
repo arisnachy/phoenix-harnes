@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" fill="none" role="img" aria-label="birthday">
+<g stroke-linejoin="round" stroke-linecap="round"><g opacity=".88">
+ <path d="M76 447 Q175 414 248 446 Q321 477 436 437" fill="none" stroke="#D6A44C" stroke-width="6" stroke-linecap="round"/>
+ <path d="M91 459 Q169 439 247 462 Q334 483 414 449" fill="none" stroke="#E2B9A5" stroke-width="3" stroke-linecap="round"/>
+ </g><path d="M229 452 H280 V486 Q254 499 229 486Z" fill="#EEC898" stroke="#B88D51" stroke-width="4"/>
+  <path d="M255 452 V426" stroke="#AF7047" stroke-width="5"/><path d="M255 396 Q256.4 409.6 270 411 Q256.4 412.4 255 426 Q253.6 412.4 240 411 Q253.6 409.6 255 396Z" fill="#F2AF48" opacity=".82"/>
+  <circle cx="95" cy="417" r="25" fill="#DFB574" fill-opacity=".7"/><circle cx="411" cy="418" r="23" fill="#D49BB3" fill-opacity=".7"/><path d="M68 49 Q69.4 55.6 76 57 Q69.4 58.4 68 65 Q66.6 58.4 60 57 Q66.6 55.6 68 49Z" fill="#D6A44C" opacity=".82"/><path d="M424 58 Q425.4 63.6 431 65 Q425.4 66.4 424 72 Q422.6 66.4 417 65 Q422.6 63.6 424 58Z" fill="#E2B9A5" opacity=".82"/><circle cx="78" cy="381" r="3.5" fill="#D6A44C"/><circle cx="433" cy="378" r="3.5" fill="#E2B9A5"/></g></svg>

@@ -1,0 +1,1003 @@
+[
+  {
+    "id": "birthday",
+    "country": "PERSONAL",
+    "label": "Cumpleaños",
+    "theme": "birthday",
+    "tone": "festive"
+  },
+  {
+    "id": "black-friday",
+    "country": "US",
+    "label": "Black Friday",
+    "theme": "culture",
+    "tone": "festive"
+  },
+  {
+    "id": "do-01-01-0",
+    "country": "DO",
+    "label": "Año Nuevo",
+    "theme": "new-year",
+    "tone": "festive"
+  },
+  {
+    "id": "do-01-05-0",
+    "country": "DO",
+    "label": "Feriado observado por el Día de Reyes",
+    "theme": "culture",
+    "tone": "recognition"
+  },
+  {
+    "id": "do-01-06-1",
+    "country": "DO",
+    "label": "Día de los Santos Reyes",
+    "theme": "culture",
+    "tone": "festive"
+  },
+  {
+    "id": "do-01-21-2",
+    "country": "DO",
+    "label": "Nuestra Señora de la Altagracia",
+    "theme": "culture",
+    "tone": "recognition"
+  },
+  {
+    "id": "do-01-26-3",
+    "country": "DO",
+    "label": "Natalicio de Juan Pablo Duarte",
+    "theme": "patriotic",
+    "tone": "recognition"
+  },
+  {
+    "id": "do-02-27-4",
+    "country": "DO",
+    "label": "Día de la Independencia Nacional",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "do-03-08-5",
+    "country": "DO",
+    "label": "Día Internacional de la Mujer",
+    "theme": "equality",
+    "tone": "recognition"
+  },
+  {
+    "id": "do-05-01-6",
+    "country": "DO",
+    "label": "Día del Trabajo",
+    "theme": "culture",
+    "tone": "recognition"
+  },
+  {
+    "id": "do-05-04-1",
+    "country": "DO",
+    "label": "Feriado observado por el Día del Trabajo",
+    "theme": "culture",
+    "tone": "recognition"
+  },
+  {
+    "id": "do-05-30-7",
+    "country": "DO",
+    "label": "Día de la Libertad",
+    "theme": "patriotic",
+    "tone": "recognition"
+  },
+  {
+    "id": "do-06-30-8",
+    "country": "DO",
+    "label": "Día del Maestro Dominicano",
+    "theme": "education",
+    "tone": "festive"
+  },
+  {
+    "id": "do-08-16-9",
+    "country": "DO",
+    "label": "Día de la Restauración",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "do-08-18-10",
+    "country": "DO",
+    "label": "Día del Médico Dominicano",
+    "theme": "health",
+    "tone": "festive"
+  },
+  {
+    "id": "do-09-24-11",
+    "country": "DO",
+    "label": "Nuestra Señora de las Mercedes",
+    "theme": "culture",
+    "tone": "recognition"
+  },
+  {
+    "id": "do-11-06-12",
+    "country": "DO",
+    "label": "Día de la Constitución",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "do-11-09-2",
+    "country": "DO",
+    "label": "Feriado observado por el Día de la Constitución",
+    "theme": "patriotic",
+    "tone": "recognition"
+  },
+  {
+    "id": "do-12-24-13",
+    "country": "DO",
+    "label": "Nochebuena",
+    "theme": "winter",
+    "tone": "festive"
+  },
+  {
+    "id": "do-12-25-14",
+    "country": "DO",
+    "label": "Navidad",
+    "theme": "winter",
+    "tone": "festive"
+  },
+  {
+    "id": "do-12-31-15",
+    "country": "DO",
+    "label": "Nochevieja",
+    "theme": "new-year",
+    "tone": "festive"
+  },
+  {
+    "id": "external-default",
+    "country": "WORLD",
+    "label": "Conmemoración nacional",
+    "theme": "culture",
+    "tone": "recognition"
+  },
+  {
+    "id": "fallback-autumn",
+    "country": "WORLD",
+    "label": "autumn",
+    "theme": "autumn",
+    "tone": "recognition"
+  },
+  {
+    "id": "fallback-birthday",
+    "country": "WORLD",
+    "label": "birthday",
+    "theme": "birthday",
+    "tone": "recognition"
+  },
+  {
+    "id": "fallback-culture",
+    "country": "WORLD",
+    "label": "culture",
+    "theme": "culture",
+    "tone": "recognition"
+  },
+  {
+    "id": "fallback-education",
+    "country": "WORLD",
+    "label": "education",
+    "theme": "education",
+    "tone": "recognition"
+  },
+  {
+    "id": "fallback-environment",
+    "country": "WORLD",
+    "label": "environment",
+    "theme": "environment",
+    "tone": "recognition"
+  },
+  {
+    "id": "fallback-equality",
+    "country": "WORLD",
+    "label": "equality",
+    "theme": "equality",
+    "tone": "recognition"
+  },
+  {
+    "id": "fallback-family",
+    "country": "WORLD",
+    "label": "family",
+    "theme": "family",
+    "tone": "recognition"
+  },
+  {
+    "id": "fallback-health",
+    "country": "WORLD",
+    "label": "health",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "fallback-new-year",
+    "country": "WORLD",
+    "label": "new-year",
+    "theme": "new-year",
+    "tone": "recognition"
+  },
+  {
+    "id": "fallback-patriotic",
+    "country": "WORLD",
+    "label": "patriotic",
+    "theme": "patriotic",
+    "tone": "recognition"
+  },
+  {
+    "id": "fallback-peace",
+    "country": "WORLD",
+    "label": "peace",
+    "theme": "peace",
+    "tone": "recognition"
+  },
+  {
+    "id": "fallback-science",
+    "country": "WORLD",
+    "label": "science",
+    "theme": "science",
+    "tone": "recognition"
+  },
+  {
+    "id": "fallback-spring",
+    "country": "WORLD",
+    "label": "spring",
+    "theme": "spring",
+    "tone": "recognition"
+  },
+  {
+    "id": "fallback-winter",
+    "country": "WORLD",
+    "label": "winter",
+    "theme": "winter",
+    "tone": "recognition"
+  },
+  {
+    "id": "movable-DO-0",
+    "country": "DO",
+    "label": "Día de las Madres",
+    "theme": "family",
+    "tone": "festive"
+  },
+  {
+    "id": "movable-DO-1",
+    "country": "DO",
+    "label": "Día de los Padres",
+    "theme": "family",
+    "tone": "festive"
+  },
+  {
+    "id": "movable-DO-2",
+    "country": "DO",
+    "label": "Viernes Santo",
+    "theme": "culture",
+    "tone": "solemn"
+  },
+  {
+    "id": "movable-DO-3",
+    "country": "DO",
+    "label": "Corpus Christi",
+    "theme": "culture",
+    "tone": "recognition"
+  },
+  {
+    "id": "movable-US-10",
+    "country": "US",
+    "label": "Columbus Day",
+    "theme": "culture",
+    "tone": "recognition"
+  },
+  {
+    "id": "movable-US-11",
+    "country": "US",
+    "label": "Thanksgiving Day",
+    "theme": "family",
+    "tone": "festive"
+  },
+  {
+    "id": "movable-US-4",
+    "country": "US",
+    "label": "Martin Luther King Jr. Day",
+    "theme": "peace",
+    "tone": "recognition"
+  },
+  {
+    "id": "movable-US-5",
+    "country": "US",
+    "label": "Washington's Birthday",
+    "theme": "patriotic",
+    "tone": "recognition"
+  },
+  {
+    "id": "movable-US-6",
+    "country": "US",
+    "label": "Mother's Day",
+    "theme": "family",
+    "tone": "festive"
+  },
+  {
+    "id": "movable-US-7",
+    "country": "US",
+    "label": "Memorial Day",
+    "theme": "peace",
+    "tone": "solemn"
+  },
+  {
+    "id": "movable-US-8",
+    "country": "US",
+    "label": "Father's Day",
+    "theme": "family",
+    "tone": "festive"
+  },
+  {
+    "id": "movable-US-9",
+    "country": "US",
+    "label": "Labor Day",
+    "theme": "culture",
+    "tone": "recognition"
+  },
+  {
+    "id": "nation-AR-2",
+    "country": "AR",
+    "label": "Independencia de Argentina",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-BO-5",
+    "country": "BO",
+    "label": "Independencia de Bolivia",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-BR-8",
+    "country": "BR",
+    "label": "Independencia de Brasil",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-BZ-16",
+    "country": "BZ",
+    "label": "Independencia de Belice",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-CL-15",
+    "country": "CL",
+    "label": "Fiestas Patrias de Chile",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-CO-3",
+    "country": "CO",
+    "label": "Independencia de Colombia",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-CR-9",
+    "country": "CR",
+    "label": "Independencia de Costa Rica",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-CU-18",
+    "country": "CU",
+    "label": "Conmemoración de la independencia de Cuba",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-EC-6",
+    "country": "EC",
+    "label": "Primer Grito de Independencia de Ecuador",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-GT-11",
+    "country": "GT",
+    "label": "Independencia de Guatemala",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-GY-23",
+    "country": "GY",
+    "label": "Independencia de Guyana",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-HN-12",
+    "country": "HN",
+    "label": "Independencia de Honduras",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-HT-0",
+    "country": "HT",
+    "label": "Independencia de Haití",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-JM-21",
+    "country": "JM",
+    "label": "Independencia de Jamaica",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-MX-14",
+    "country": "MX",
+    "label": "Independencia de México",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-NI-13",
+    "country": "NI",
+    "label": "Independencia de Nicaragua",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-PA-19",
+    "country": "PA",
+    "label": "Separación de Panamá de Colombia",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-PA-20",
+    "country": "PA",
+    "label": "Independencia de Panamá de España",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-PE-4",
+    "country": "PE",
+    "label": "Independencia del Perú",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-PY-17",
+    "country": "PY",
+    "label": "Independencia de Paraguay",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-SR-24",
+    "country": "SR",
+    "label": "Independencia de Surinam",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-SV-10",
+    "country": "SV",
+    "label": "Independencia de El Salvador",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-TT-22",
+    "country": "TT",
+    "label": "Independencia de Trinidad y Tobago",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-UY-7",
+    "country": "UY",
+    "label": "Declaratoria de Independencia de Uruguay",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "nation-VE-1",
+    "country": "VE",
+    "label": "Independencia de Venezuela",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "personal-default",
+    "country": "PERSONAL",
+    "label": "Celebración personal",
+    "theme": "family",
+    "tone": "festive"
+  },
+  {
+    "id": "us-01-01-0",
+    "country": "US",
+    "label": "New Year's Day",
+    "theme": "new-year",
+    "tone": "festive"
+  },
+  {
+    "id": "us-02-02-1",
+    "country": "US",
+    "label": "Groundhog Day",
+    "theme": "culture",
+    "tone": "festive"
+  },
+  {
+    "id": "us-02-14-2",
+    "country": "US",
+    "label": "Valentine's Day",
+    "theme": "family",
+    "tone": "festive"
+  },
+  {
+    "id": "us-03-30-3",
+    "country": "US",
+    "label": "National Doctors' Day",
+    "theme": "health",
+    "tone": "festive"
+  },
+  {
+    "id": "us-04-22-4",
+    "country": "US",
+    "label": "Earth Day",
+    "theme": "environment",
+    "tone": "recognition"
+  },
+  {
+    "id": "us-06-14-5",
+    "country": "US",
+    "label": "Flag Day",
+    "theme": "patriotic",
+    "tone": "recognition"
+  },
+  {
+    "id": "us-06-19-6",
+    "country": "US",
+    "label": "Juneteenth National Independence Day",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "us-07-04-7",
+    "country": "US",
+    "label": "Independence Day",
+    "theme": "patriotic",
+    "tone": "festive"
+  },
+  {
+    "id": "us-09-17-8",
+    "country": "US",
+    "label": "Constitution Day",
+    "theme": "patriotic",
+    "tone": "recognition"
+  },
+  {
+    "id": "us-10-31-9",
+    "country": "US",
+    "label": "Halloween",
+    "theme": "autumn",
+    "tone": "festive"
+  },
+  {
+    "id": "us-11-11-10",
+    "country": "US",
+    "label": "Veterans Day",
+    "theme": "patriotic",
+    "tone": "recognition"
+  },
+  {
+    "id": "us-12-24-11",
+    "country": "US",
+    "label": "Christmas Eve",
+    "theme": "winter",
+    "tone": "festive"
+  },
+  {
+    "id": "us-12-25-12",
+    "country": "US",
+    "label": "Christmas Day",
+    "theme": "winter",
+    "tone": "festive"
+  },
+  {
+    "id": "us-12-31-13",
+    "country": "US",
+    "label": "New Year's Eve",
+    "theme": "new-year",
+    "tone": "festive"
+  },
+  {
+    "id": "world-01-04-0",
+    "country": "WORLD",
+    "label": "Día Mundial del Braille",
+    "theme": "education",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-01-24-1",
+    "country": "WORLD",
+    "label": "Día Internacional de la Educación",
+    "theme": "education",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-01-27-2",
+    "country": "WORLD",
+    "label": "Memoria de las Víctimas del Holocausto",
+    "theme": "peace",
+    "tone": "solemn"
+  },
+  {
+    "id": "world-02-04-3",
+    "country": "WORLD",
+    "label": "Día Mundial contra el Cáncer",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-02-11-4",
+    "country": "WORLD",
+    "label": "Mujer y Niña en la Ciencia",
+    "theme": "science",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-02-21-5",
+    "country": "WORLD",
+    "label": "Día Internacional de la Lengua Materna",
+    "theme": "culture",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-03-03-6",
+    "country": "WORLD",
+    "label": "Día Mundial de la Vida Silvestre",
+    "theme": "environment",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-03-08-7",
+    "country": "WORLD",
+    "label": "Día Internacional de la Mujer",
+    "theme": "equality",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-03-14-8",
+    "country": "WORLD",
+    "label": "Día Internacional de las Matemáticas",
+    "theme": "science",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-03-20-9",
+    "country": "WORLD",
+    "label": "Día Internacional de la Felicidad",
+    "theme": "family",
+    "tone": "festive"
+  },
+  {
+    "id": "world-03-21-10",
+    "country": "WORLD",
+    "label": "Día Mundial del Síndrome de Down",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-03-22-11",
+    "country": "WORLD",
+    "label": "Día Mundial del Agua",
+    "theme": "environment",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-03-24-12",
+    "country": "WORLD",
+    "label": "Día Mundial de la Tuberculosis",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-04-02-13",
+    "country": "WORLD",
+    "label": "Día Mundial de Concienciación sobre el Autismo",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-04-07-14",
+    "country": "WORLD",
+    "label": "Día Mundial de la Salud",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-04-22-15",
+    "country": "WORLD",
+    "label": "Día Internacional de la Madre Tierra",
+    "theme": "environment",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-04-23-16",
+    "country": "WORLD",
+    "label": "Día Mundial del Libro y del Derecho de Autor",
+    "theme": "education",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-04-25-17",
+    "country": "WORLD",
+    "label": "Día Mundial del Paludismo",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-05-03-18",
+    "country": "WORLD",
+    "label": "Día Mundial de la Libertad de Prensa",
+    "theme": "peace",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-05-15-19",
+    "country": "WORLD",
+    "label": "Día Internacional de las Familias",
+    "theme": "family",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-05-17-20",
+    "country": "WORLD",
+    "label": "Día Mundial de las Telecomunicaciones",
+    "theme": "science",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-05-22-21",
+    "country": "WORLD",
+    "label": "Día Internacional de la Diversidad Biológica",
+    "theme": "environment",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-05-31-22",
+    "country": "WORLD",
+    "label": "Día Mundial Sin Tabaco",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-06-05-23",
+    "country": "WORLD",
+    "label": "Día Mundial del Medio Ambiente",
+    "theme": "environment",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-06-08-24",
+    "country": "WORLD",
+    "label": "Día Mundial de los Océanos",
+    "theme": "environment",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-06-14-25",
+    "country": "WORLD",
+    "label": "Día Mundial del Donante de Sangre",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-06-20-26",
+    "country": "WORLD",
+    "label": "Día Mundial de los Refugiados",
+    "theme": "peace",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-06-21-27",
+    "country": "WORLD",
+    "label": "Día Internacional del Yoga",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-07-11-28",
+    "country": "WORLD",
+    "label": "Día Mundial de la Población",
+    "theme": "education",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-07-18-29",
+    "country": "WORLD",
+    "label": "Día Internacional de Nelson Mandela",
+    "theme": "peace",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-08-09-30",
+    "country": "WORLD",
+    "label": "Día Internacional de los Pueblos Indígenas",
+    "theme": "culture",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-08-12-31",
+    "country": "WORLD",
+    "label": "Día Internacional de la Juventud",
+    "theme": "family",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-08-19-32",
+    "country": "WORLD",
+    "label": "Día Mundial de la Asistencia Humanitaria",
+    "theme": "peace",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-09-08-33",
+    "country": "WORLD",
+    "label": "Día Internacional de la Alfabetización",
+    "theme": "education",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-09-10-34",
+    "country": "WORLD",
+    "label": "Día Mundial para la Prevención del Suicidio",
+    "theme": "health",
+    "tone": "solemn"
+  },
+  {
+    "id": "world-09-17-35",
+    "country": "WORLD",
+    "label": "Día Mundial de la Seguridad del Paciente",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-09-21-36",
+    "country": "WORLD",
+    "label": "Día Internacional de la Paz",
+    "theme": "peace",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-09-27-37",
+    "country": "WORLD",
+    "label": "Día Mundial del Turismo",
+    "theme": "culture",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-09-29-38",
+    "country": "WORLD",
+    "label": "Día Mundial del Corazón",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-10-01-39",
+    "country": "WORLD",
+    "label": "Día Internacional de las Personas de Edad",
+    "theme": "family",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-10-05-40",
+    "country": "WORLD",
+    "label": "Día Mundial de los Docentes",
+    "theme": "education",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-10-10-41",
+    "country": "WORLD",
+    "label": "Día Mundial de la Salud Mental",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-10-11-42",
+    "country": "WORLD",
+    "label": "Día Internacional de la Niña",
+    "theme": "equality",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-10-16-43",
+    "country": "WORLD",
+    "label": "Día Mundial de la Alimentación",
+    "theme": "environment",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-10-24-44",
+    "country": "WORLD",
+    "label": "Día de las Naciones Unidas",
+    "theme": "peace",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-11-10-45",
+    "country": "WORLD",
+    "label": "Día Mundial de la Ciencia para la Paz y el Desarrollo",
+    "theme": "science",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-11-14-46",
+    "country": "WORLD",
+    "label": "Día Mundial de la Diabetes",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-11-16-47",
+    "country": "WORLD",
+    "label": "Día Internacional de la Tolerancia",
+    "theme": "peace",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-11-20-48",
+    "country": "WORLD",
+    "label": "Día Mundial de la Infancia",
+    "theme": "family",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-11-25-49",
+    "country": "WORLD",
+    "label": "Eliminación de la Violencia contra la Mujer",
+    "theme": "equality",
+    "tone": "solemn"
+  },
+  {
+    "id": "world-12-01-50",
+    "country": "WORLD",
+    "label": "Día Mundial de la Lucha contra el Sida",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-12-03-51",
+    "country": "WORLD",
+    "label": "Día Internacional de las Personas con Discapacidad",
+    "theme": "equality",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-12-10-52",
+    "country": "WORLD",
+    "label": "Día de los Derechos Humanos",
+    "theme": "peace",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-12-12-53",
+    "country": "WORLD",
+    "label": "Día de la Cobertura Sanitaria Universal",
+    "theme": "health",
+    "tone": "recognition"
+  },
+  {
+    "id": "world-12-18-54",
+    "country": "WORLD",
+    "label": "Día Internacional del Migrante",
+    "theme": "culture",
+    "tone": "recognition"
+  }
+]

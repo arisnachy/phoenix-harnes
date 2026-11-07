@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" fill="none" role="img" aria-label="Día Mundial de la Seguridad del Paciente">
+<g stroke-linejoin="round" stroke-linecap="round"><g stroke="#238A91" fill="none" stroke-width="5" stroke-linecap="round">
+   <path d="M108 393 V435 Q107 468 143 468 Q178 468 179 438 V414"/>
+   <path d="M178 437 Q230 474 274 456"/>
+   <circle cx="295" cy="459" r="19" fill="#D9F1EC" stroke="#238A91"/>
+   <path d="M354 446 H378 l9 -20 12 42 10 -22 h35" stroke-width="4"/></g>
+   <path d="M79 430 Q80.4 438.6 89 440 Q80.4 441.4 79 450 Q77.6 441.4 69 440 Q77.6 438.6 79 430Z" fill="#78B4C1" opacity=".82"/><path d="M54 57 Q55.4 63.6 62 65 Q55.4 66.4 54 73 Q52.6 66.4 46 65 Q52.6 63.6 54 57Z" fill="#238A91" opacity=".82"/><path d="M420 64 Q421.4 69.6 427 71 Q421.4 72.4 420 78 Q418.6 72.4 413 71 Q418.6 69.6 420 64Z" fill="#78B4C1" opacity=".82"/><circle cx="78" cy="381" r="3.5" fill="#238A91"/><circle cx="433" cy="378" r="3.5" fill="#78B4C1"/></g></svg>
