@@ -1145,11 +1145,11 @@ function updateStudySourceHint(){
 }
 document.addEventListener("input",e=>{
  if(e.target.id==="ws-study-search"){
-  const q=String(e.target.value||"").trim().toLowerCase().normalize("NFD").replace(/[\\u0300-\\u036f]/g,"");
+  const q=String(e.target.value||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
   const select=document.getElementById("ws-study-modality");
   if(select){
    for(const o of select.querySelectorAll("option")){
-     o.hidden=!!q&&!o.textContent.toLowerCase().normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").includes(q);
+     o.hidden=!!q&&!o.textContent.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").includes(q);
    }
    const match=Array.from(select.querySelectorAll("option")).find(o=>!o.hidden&&o.value);
    if(match&&q){select.value=match.value;updateStudySourceHint()}
