@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: [PHOENIX main guard]
     types: [completed]
-    branches: [main]
+    branches: [main, stable]
   workflow_dispatch:
 
 permissions:
@@ -26,10 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: stable
           fetch-depth: 0
 
-      - name: Resolve verified and current main commit
+      - name: Resolve verified and current stable commit
         id: target
         shell: bash
         env:
@@ -39,48 +39,38 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin main stable --quiet
-          target="$(git rev-parse origin/main)"
+          target="$(git rev-parse origin/stable)"
           if [[ ! "$target" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Invalid main SHA" >&2
+            echo "Invalid stable SHA" >&2
             exit 1
           fi
           if [[ "$TRIGGER_EVENT" == "workflow_run" ]]; then
             if [[ "$TRIGGER_SHA" != "$target" ]]; then
-              echo "A newer main commit exists; skip superseded guard."
+              echo "A newer stable commit exists; skip superseded guard."
               echo "promote=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
           else
             successful="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/phoenix-main-guard.yml/runs?head_sha=$target&status=success&event=push&per_page=100" --jq '.workflow_runs[].head_sha')"
             if ! grep -Fxq "$target" <<< "$successful"; then
-              echo "Manual promotion requires successful exact-SHA main guard." >&2
+              echo "Manual publication requires a successful exact-SHA stable guard." >&2
               exit 1
             fi
           fi
           echo "sha=$target" >> "$GITHUB_OUTPUT"
           echo "promote=true" >> "$GITHUB_OUTPUT"
 
-      - name: Keep stable exactly aligned with main
+      # Stable may be a separately merged, fully verified commit. Never rewrite
+      # the protected stable branch from main or require unrelated branch equality.
+      - name: Confirm the guarded release is still stable HEAD
         if: steps.target.outputs.promote == 'true'
         shell: bash
         env:
           TARGET_SHA: ${{ steps.target.outputs.sha }}
         run: |
           set -euo pipefail
-          git fetch origin main stable --quiet
-          if [[ "$(git rev-parse origin/main)" != "$TARGET_SHA" ]]; then
-            echo "main advanced after guard success; refusing stale publication" >&2
-            exit 1
-          fi
-          stable_sha="$(git rev-parse origin/stable)"
-          if [[ "$stable_sha" == "$TARGET_SHA" ]]; then
-            echo "stable already matches main at $TARGET_SHA"
-            exit 0
-          fi
-          git cat-file -e "$TARGET_SHA^{commit}"
-          git merge-base --is-ancestor "$stable_sha" "$TARGET_SHA"
-          git push origin "$TARGET_SHA:refs/heads/stable" \
-            --force-with-lease="refs/heads/stable:$stable_sha"
+          git fetch origin stable --quiet
+          test "$(git rev-parse origin/stable)" = "$TARGET_SHA"
 
       - name: Verify updater contract
         if: steps.target.outputs.promote == 'true'
@@ -112,7 +102,7 @@ jobs:
             "schema": 1,
             "product": "PHOENIX",
             "channel": "stable",
-            "sourceBranch": "main",
+            "sourceBranch": "stable",
             "sourceCommit": "$TARGET_SHA",
             "publishedAt": "$PUBLISHED_AT",
             "minimumNode": "22.19.0",
@@ -139,7 +129,7 @@ jobs:
       - name: Stable channel summary
         if: steps.target.outputs.promote == 'true'
         run: |
-          echo "### PHOENIX stable synchronized" >> "$GITHUB_STEP_SUMMARY"
-          echo "- main/stable: `${{ steps.target.outputs.sha }}`" >> "$GITHUB_STEP_SUMMARY"
+          echo "### PHOENIX stable release published" >> "$GITHUB_STEP_SUMMARY"
+          echo "- stable: `${{ steps.target.outputs.sha }}`" >> "$GITHUB_STEP_SUMMARY"
           echo "- channel: `phoenix/update-channel`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- policy: stable only follows successful exact-SHA main guard" >> "$GITHUB_STEP_SUMMARY"
+          echo "- policy: publish only successful exact-SHA stable guard" >> "$GITHUB_STEP_SUMMARY"
