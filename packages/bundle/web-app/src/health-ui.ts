@@ -461,6 +461,7 @@ function renderWorkspace(){
     '<input type="search" id="ws-study-search" placeholder="Buscar: EEG, mamografía, PET, genética, cultivo, etc." aria-label="Buscar tipo de estudio">'+
     '<select id="ws-study-modality">'+studyModalities+'</select>'+
     '<p id="ws-study-requirements" class="muted">Seleccione una modalidad: se mostrarán el archivo primario y las mediciones necesarias. Un PDF o foto archivada no equivale al dato original.</p>'+
+    field("ws-study-custom","Solo para Otro estudio: nombre técnico del procedimiento","text",false)+
     field("ws-study-context","Motivo del estudio y contexto clínico","text",false)+
     '<label><input id="ws-study-original" type="checkbox" style="width:auto;display:inline"> He revisado personalmente el documento o imagen original, no solo el modelo 3D</label>'+
     area("ws-study-findings","Hallazgos observados directamente en el archivo seleccionado")+
@@ -854,6 +855,7 @@ async function execute(action,id){
   if(criticalConcern==="suspected-critical"&&!escalationAcknowledged)return;
   await api("study-interpretations","POST",{
    patientId:selectedPatientId,sourceAttachmentId,modality:val("ws-study-modality"),
+   customModality:val("ws-study-custom"),
    studyContext:val("ws-study-context"),originalReviewed,
    observations:val("ws-study-findings"),preliminaryInterpretation:val("ws-study-impression"),
    criticalConcern,escalationAcknowledged,
