@@ -2050,6 +2050,8 @@ export function apply(ctx: Context): void {
           officialMlb:env.PHOENIX_SPORTS_MLB_DISABLED!=='1',
           freeBackups:env.PHOENIX_SPORTS_FREE_BACKUPS_DISABLED!=='1',
           footballDataTokenConfigured:!!env.PHOENIX_FOOTBALL_DATA_TOKEN?.trim(),
+          apiFootballConfigured:!!env.PHOENIX_API_FOOTBALL_KEY?.trim(),
+          balldontlieConfigured:!!env.PHOENIX_BALLDONTLIE_API_KEY?.trim(),
           oddsV4Configured:!!env.THE_ODDS_API_KEY?.trim(),
           oddsSecondConfigured:!!env.THEODDSAPI_API_KEY?.trim(),
         },
