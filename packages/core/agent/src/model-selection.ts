@@ -1479,7 +1479,7 @@ export function installModelSelection(
         const uploadedImage = humanImageInTurn(_payload.agent.session.events, _payload.turn)
         const needsArtifactExecution = isToolAcquisitionRequest(directText)
           || isStandaloneVisualPreviewRequest(directText)
-          || /(?:crea|genera|dibuja|renderiza|edita|exporta|construye|create|generate|draw|render|export|build)[^\\n]{0,80}(?:imagen|foto|3d|modelo|diagrama|informe|pdf|image|model|diagram|report)/iu.test(directText)
+          || /(?:crea|genera|dibuja|renderiza|edita|exporta|construye|create|generate|draw|render|export|build)[^\n]{0,80}(?:imagen|foto|3d|modelo|diagrama|informe|pdf|image|model|diagram|report)/iu.test(directText)
         if (uploadedImage
           && (!exactUserChoice || isPhoenixCodexAutoSelection(selected))
           && (_payload.step === 1 || !needsArtifactExecution)) {
