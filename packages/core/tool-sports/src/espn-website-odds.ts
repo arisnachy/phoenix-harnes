@@ -22,6 +22,8 @@ const routes:Readonly<Record<string,readonly [string,string,string]>>={
   soccer_usa_mls:['soccer','usa.1','/soccer/odds'],
   soccer_mexico_ligamx:['soccer','mex.1','/soccer/odds'],
   soccer_uefa_champs_league:['soccer','uefa.champions','/soccer/odds'],
+  soccer_uefa_europa_league:['soccer','uefa.europa','/soccer/odds'],
+  soccer_fifa_world_cup:['soccer','fifa.world','/soccer/odds'],
   soccer_germany_bundesliga:['soccer','ger.1','/soccer/odds'],
   soccer_italy_serie_a:['soccer','ita.1','/soccer/odds'],
   soccer_france_ligue_one:['soccer','fra.1','/soccer/odds'],
