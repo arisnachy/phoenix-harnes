@@ -109,12 +109,29 @@ export async function researchTicket(
       if(!Array.isArray(board.events))throw Error('ESPN no confirmó la cartelera para '+league)
       cache.set(key,board)
     }
-    const event=board.events?.find(e=>String(e.id??'')===eventId)
+    let event=board.events?.find(e=>String(e.id??'')===eventId)
+    if(!event){
+      // Late Dominican games may appear only in the next UTC scoreboard.
+      // Never substitute another fixture: still require the exact ESPN event ID.
+      const next=new Date(Date.parse(requestedDate+'T00:00:00Z')+86_400_000)
+        .toISOString().slice(0,10).replaceAll('-','')
+      try{
+        const other=await getFeed<EspnBoard>(
+          'https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+
+          '/scoreboard?dates='+next,fetcher)
+        event=other.events?.find(e=>String(e.id??'')===eventId)
+      }catch{/* No second partition; never invent the match. */}
+    }
     if(!event)throw Error('Partido no encontrado en la cartelera verificada de '+league)
     const kickoff=new Date(event.date??'')
-    if(!Number.isFinite(kickoff.getTime())||kickoff.getTime()<=now||(event.status?.type?.state!==undefined && event.status.type.state!=='pre')){
+    if(!Number.isFinite(kickoff.getTime())||kickoff.getTime()<=now||
+      (event.status?.type?.state!==undefined&&event.status.type.state!=='pre')){
       throw Error('Encuentro iniciado o finalizado: no se incluye en un ticket previo al partido')
     }
+    const localDay=new Intl.DateTimeFormat('en-CA',{
+      timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit',
+    }).format(kickoff)
+    if(localDay!==requestedDate)throw Error('El evento no corresponde al día local solicitado')
     const teams=event.competitions?.[0]?.competitors
     const home=teams?.find(team=>team.homeAway==='home')?.team
     const away=teams?.find(team=>team.homeAway==='away')?.team
@@ -140,6 +157,7 @@ export async function researchTicket(
       league:info?.league??league,
       ...(info?.country?{ country:info.country }:{}),
       market:sport==='soccer'?'1X2 · Pronóstico':'Ganador · Pronóstico',
+      eventId,eventDate:requestedDate,providerLeague:league,
       ...(homeLogo?{homeLogo}:{}),...(awayLogo?{awayLogo}:{}),
       ...(reason?{ rationale:reason }:{}),
     })
