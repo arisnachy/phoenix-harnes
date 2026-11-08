@@ -27,7 +27,11 @@ const when=(v:unknown)=>typeof v==='string'?Date.parse(v):NaN
 const validTime=(value:unknown,now:number,future=false)=>
   Number.isFinite(when(value))&&(future
     ?when(value)>now&&when(value)<now+3*86_400_000
-    :when(value)<=now&&now-when(value)<3_600_000)
+    :when(value)<=now&&now-when(value)<7*86_400_000)
+// A sportsbook price may remain unchanged for hours even though a current
+// API snapshot proves it is still OPEN. Keep source-observed time separate
+// from bookmaker last-modified time, never invent an updatedAt value.
+const observed=(now:number)=>new Date(now).toISOString()
 const decimal=(value:unknown):number|null=>{
   if(typeof value!=='string'&&typeof value!=='number')return null
   const number=Number(value)
@@ -115,7 +119,7 @@ export async function fetchTheRundownOdds(
             const price=decimal(priceRow.price),updatedAt=name(priceRow.updated_at,80)
             if(price===null||!validTime(updatedAt,now))continue
             quotes.push({sportKey,eventId,home:homeName,away:awayName,
-              bookmaker,market:type,selection,point,price,
+              bookmaker,market:type,selection,point,price,observedAt:observed(now),
               time:start,timeIso:start,updatedAt,source:'TheRundown'})
             if(quotes.length>=500)return quotes
           }
@@ -184,7 +188,8 @@ export async function fetchSportsGameOdds(
         const bookmaker=({draftkings:'DraftKings',fanduel:'FanDuel',
           betmgm:'BetMGM',betus:'BetUS'} as Record<string,string>)[book]??book
         quotes.push({sportKey,eventId,home,away,bookmaker,market,selection,point,
-          price,time:start,timeIso:start,updatedAt,source:'SportsGameOdds'})
+          price,observedAt:observed(now),time:start,timeIso:start,updatedAt,
+          source:'SportsGameOdds'})
         if(quotes.length>=500)return quotes
       }
     }
