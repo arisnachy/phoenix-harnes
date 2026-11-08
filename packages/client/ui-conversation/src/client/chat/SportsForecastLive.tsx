@@ -95,7 +95,7 @@ const labels:Record<Grade,string>={
   won:'Acertada al final · provisional',lost:'Fallada al final · provisional',
   push:'Línea exacta · revisar',review:'Revisión necesaria',
 }
-function ForecastLiveState({leg,index,game,meta,pick}:{leg:ForecastLeg;index:number;game?:PhoenixLiveGame;
+function ForecastLiveState({leg,index,game,meta,pick}:{leg:ForecastLeg;index:number;game?:PhoenixLiveGame|undefined;
   meta:PhoenixLiveMeta;pick:SportsTrackedPick}):ReactNode{
   const store=useContext(Context)
   const exact=game&&(!leg.eventId||game.id===leg.eventId)
