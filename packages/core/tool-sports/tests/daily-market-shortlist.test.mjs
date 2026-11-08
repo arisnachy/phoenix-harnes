@@ -44,7 +44,10 @@ test('six sports can supply a five-leg same-bookmaker priced market research poo
   assert.equal(new Set(result.selected.map(x=>x.espnEventId)).size,5)
   assert.equal(new Set(result.selected.map(x=>x.sport)).size,5)
   assert.ok(result.selected.some(x=>x.market==='spreads'))
-  assert.ok(result.selected.some(x=>x.market==='totals'))
+  // The five-game discovery pool must not force totals into the ticket.
+  // A larger research reserve still explores them when genuine offers exist.
+  const expanded=shortlistDailyMarkets(fixtures,quotes,5,now,6)
+  assert.ok(expanded.selected.some(x=>x.market==='totals'))
   assert.ok(result.selected.every(x=>x.assessment==='quote-only-research-pending'))
   assert.ok(result.selected.every(x=>x.marketNoVigShare>0&&x.marketNoVigShare<1))
   assert.match(result.warning,/NO de un modelo/)
@@ -155,4 +158,18 @@ test('one fixture keeps two different authentic markets for comparison after dos
   assert.deepEqual(new Set([fromGame.market,...other.map(x=>x.market)]),
     new Set(['h2h','spreads','totals']))
   assert.ok(other.every(x=>x.bookmaker===result.bookmaker))
+})
+
+test('does not automatically choose the cheapest +1.5 or totals for an event',()=>{
+  const quotes=[...pair(0),...pair(0,'spreads').map(q=>({
+    ...q,point:q.selection.startsWith('Home')?-1.5:1.5,
+    price:q.selection.startsWith('Home')?3.2:1.37
+  })),...pair(0,'totals').map(q=>({...q,price:1.9}))]
+  const list=shortlistDailyMarkets(fixtures,quotes,4,now)
+  assert.equal(list.selected.length,1)
+  assert.equal(list.selected[0].market,'h2h')
+  assert.deepEqual(new Set(list.alternatives.map(x=>x.market)),
+    new Set(['spreads','totals']))
+  assert.ok(list.alternatives.some(x=>x.market==='spreads'&&
+    x.marketNoVigShare>.6))
 })
