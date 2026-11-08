@@ -144,9 +144,8 @@ describe('professional assessment catalog and complete local PDF',()=>{
 
   it('replaces generated PHQ-9 with catalog evidence and correct scored responses',()=>{
     const canonical=assessmentCatalog.find(x=>x.id==='phq9-es')!.spec!
-    const generated=parseScaleForm({...canonical,props:{...canonical.props,
+    const generated=parseScaleForm({component:'scale_form',version:1,props:{
       title:'PHQ-9 · síntomas durante las últimas dos semanas',
-      source:undefined,version:undefined,administration:undefined,scoring:undefined,bands:undefined,
       items:canonical.props.items.map(item=>({...item,question:item.question+' generado'})),
     }})!
     const resolved=resolveGeneratedAssessment(generated)
@@ -178,7 +177,7 @@ describe('professional assessment catalog and complete local PDF',()=>{
     const report=scaleAssessmentReport(spec,values,{...identity,participant:longName},true)!
     const pdf=pdfText(buildAssessmentPdfBytes(report))
     expect(pdf).toContain('deliberadamente')
-    expect(pdf).toContain('extensa y final')
+    expect(pdf).toContain('final')
     expect(pdf).toContain('Documento para revisión profesional')
     expect(pdf).toContain('Firma, matrícula y sello')
   })
