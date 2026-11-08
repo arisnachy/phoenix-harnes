@@ -7,6 +7,7 @@ export interface AssessmentReportIdentity {
   readonly context:string
   readonly observations:string
   readonly recommendations:string
+  readonly functionalImpact?:string
 }
 const empty='No consignado'
 const disclaimer=[
@@ -31,11 +32,24 @@ export function scaleAssessmentReport(
   const warnings=[...checks]
   if(!verified)warnings.unshift('Procedencia o versión no autenticada por el catálogo; revisar antes de uso profesional.')
   const title=spec.props.title.toLowerCase()
-  if(/phq[ -]?9/u.test(title)&& (values.q9??0)>0)
+  const isPhq9=/^phq[ -]?9\b/u.test(title)
+  const isGad7=/^gad[ -]?7\b/u.test(title)
+  if(isPhq9 && (values.q9??0)>0)
     warnings.unshift('El ítem 9 registra pensamientos autolesivos: valoración inmediata de seguridad por un profesional y protocolo local de atención.')
   const interpretation=checks.length||!verified
     ? 'Resultado descriptivo no validado: requiere comprobar la versión, el protocolo y la autorización de uso.'
     : (scored.band?.label ?? 'Puntuación registrada; sin banda interpretativa validada')
+  const clinicalGuidance:string[]=[]
+  if(verified && checks.length===0 && (isPhq9||isGad7)){
+    clinicalGuidance.push('La puntuación es una herramienta de cribado o seguimiento, no diagnostica una enfermedad por sí sola. Correlacionar con entrevista, evolución, funcionalidad, comorbilidades y contexto cultural.')
+    if(isPhq9){
+      clinicalGuidance.push('PHQ-9: clasificar la intensidad según las bandas del instrumento y comprobar criterios clínicos, duración, deterioro funcional, diagnósticos diferenciales y antecedentes antes de decidir intervenciones.')
+      if((values.q9??0)>0)clinicalGuidance.push('Ítem 9 positivo: realizar valoración directa de riesgo suicida, con actuaciones de seguridad y derivación según riesgo, independientemente de la puntuación total.')
+      else clinicalGuidance.push('Ítem 9 sin síntomas declarados: la respuesta negativa no sustituye una valoración clínica de seguridad si hay otros indicios.')
+    }else{
+      clinicalGuidance.push('GAD-7: evaluar interferencia funcional y causas alternativas, comprobar la pertinencia del instrumento y considerar reevaluación según el contexto clínico.')
+    }
+  }
   const method=spec.props.administration?.map((step,index)=>
     (index+1)+'. '+step.title+': '+step.instruction).join(' | ')
     ?? 'No se consignaron instrucciones estandarizadas de administración.'
@@ -50,7 +64,11 @@ export function scaleAssessmentReport(
     score:String(scored.total),range:spec.props.scoring
       ?spec.props.scoring.min+'–'+spec.props.scoring.max:'No declarada',
     classification:interpretation,
-    limitations:[...disclaimer,...(spec.props.scoring?.note?[spec.props.scoring.note]:[])],
+    limitations:[...disclaimer,...(spec.props.scoring?.note?[spec.props.scoring.note]:[]),
+      ...((isPhq9||isGad7)&&!identity.functionalImpact?
+        ['No se consignó la pregunta complementaria de repercusión funcional.']:[])],
+    ...(isPhq9||isGad7?{functionalImpact:identity.functionalImpact||'No consignado'}:{}),
+    clinicalGuidance,
     warnings,domains:scored.domains.map(d=>({
       label:d.label,value:d.value===null?'No completo':d.value+' ('+d.min+'–'+d.max+')',
     })),rows,verified:verified&&checks.length===0,

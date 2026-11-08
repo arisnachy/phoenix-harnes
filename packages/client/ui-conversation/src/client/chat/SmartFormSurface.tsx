@@ -89,6 +89,7 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
   const [assessmentId,setAssessmentId]=useState<string|null>(null)
   const [assessments,setAssessments]=useState<ScaleFormSpec[]>([])
   const [usageAuthorized,setUsageAuthorized]=useState(false)
+  const [reportIdentity,setReportIdentity]=useState({participant:'',professional:'',context:'',observations:'',recommendations:''})
   const current=useMemo(()=>active?calculateSmartForm(active,values):null,[active,values])
   const allForms=useMemo(()=>{
     const map=new Map<string,{spec:SmartFormSpec;revision:number}>()
@@ -106,7 +107,7 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
   },[allForms,filter])
   const open=(spec:SmartFormSpec):void=>{
     setActive(spec);setValues(initialSmartValues(spec));setFolder(spec.props.folder??'General')
-    setIncludeAnswers(false);setPanel('form');setMessage('')
+    setIncludeAnswers(false);setReportIdentity({participant:'',professional:'',context:'',observations:'',recommendations:''});setPanel('form');setMessage('')
   }
   const setValue=(id:string,v:FormValue|undefined):void=>{
     setValues(old=>{
@@ -159,9 +160,7 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
   }
   const exportPdf=():void=>{
     if(!active || !current)return
-    const report=smartAssessmentReport(active,values,current,{
-      participant:'',professional:'',context:'',observations:'',recommendations:'',
-    })
+    const report=smartAssessmentReport(active,values,current,reportIdentity)
     if(!report){setMessage('Completa las respuestas válidas antes de exportar el PDF.');return}
     try{
       const pdf=generateAssessmentPdf(report)
@@ -229,6 +228,31 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
             Autorizo guardar las respuestas y resultados en este navegador (sin cifrado)</label>
           <p>No es historia clínica. Evita identificadores y datos sensibles en equipos compartidos.</p>
         </div>
+        <details className={css.reportEditor}>
+          <summary>Datos del informe profesional PDF <span>Identificación, contexto y análisis del evaluador</span></summary>
+          <div className={css.reportEditorFields}>
+            <label>Persona evaluada / código
+              <input type="text" maxLength={120} value={reportIdentity.participant}
+                onChange={e=>setReportIdentity(old=>({...old,participant:e.currentTarget.value}))}/>
+            </label>
+            <label>Profesional responsable y matrícula
+              <input type="text" maxLength={120} value={reportIdentity.professional}
+                onChange={e=>setReportIdentity(old=>({...old,professional:e.currentTarget.value}))}/>
+            </label>
+            <label>Motivo y contexto
+              <textarea rows={2} maxLength={1500} value={reportIdentity.context}
+                onChange={e=>setReportIdentity(old=>({...old,context:e.currentTarget.value}))}/>
+            </label>
+            <label>Observaciones documentadas
+              <textarea rows={2} maxLength={2500} value={reportIdentity.observations}
+                onChange={e=>setReportIdentity(old=>({...old,observations:e.currentTarget.value}))}/>
+            </label>
+            <label>Recomendaciones del profesional
+              <textarea rows={2} maxLength={2500} value={reportIdentity.recommendations}
+                onChange={e=>setReportIdentity(old=>({...old,recommendations:e.currentTarget.value}))}/>
+            </label>
+          </div>
+        </details>
         <div className={css.actions}>
           <button type="button" disabled={!includeAnswers} onClick={saveResult}>Guardar resultado</button>
           <button type="button" onClick={exportPdf}>Exportar formulario completo a PDF</button>

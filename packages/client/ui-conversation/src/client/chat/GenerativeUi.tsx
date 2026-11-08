@@ -1,6 +1,7 @@
 import { useEffect,useId, useState, type ReactNode } from 'react'
 import { PhoenixStatusPill, PhoenixAgentLine, PhoenixUiIcon, choosePhoenixUiIcon, choosePhoenixUiTone, isPhoenixUiIconName, type PhoenixUiIconName, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
 import { ScaleForm, parseScaleForm, type ScaleFormSpec } from './ScaleForm.tsx'
+import { resolveGeneratedAssessment } from './AssessmentCatalog.ts'
 import { parseSmartForm, parseSmartLibrary, type SmartFormSpec, type SmartLibrarySpec } from './SmartFormEngine.ts'
 import { SmartFormWorkspace } from './SmartFormSurface.tsx'
 import { SpreadsheetSurface, parseSpreadsheet, type SpreadsheetSpec } from './SpreadsheetSurface.tsx'
@@ -757,7 +758,11 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'ui_canvas': return <GenerativeCanvas spec={block} onAction={onAction} />
     case 'visual_intelligence': return <VisualIntelligence key={block.props.id} spec={block}
       onAction={onAction} conversationId={conversationId} />
-    case 'scale_form': return <ScaleForm spec={block} onAction={onAction} />
+    case 'scale_form': {
+      const resolved=resolveGeneratedAssessment(block)
+      return <ScaleForm spec={resolved.spec} onAction={onAction}
+        verified={resolved.verified} restoredFromCatalog={resolved.replaced} />
+    }
     case 'smart_form': return <SmartFormWorkspace initial={block} onAction={onAction} />
     case 'smart_form_library': return <SmartFormWorkspace title={block.props.title} onAction={onAction} />
     case 'spreadsheet': return <SpreadsheetSurface key={block.props.id} spec={block} />
