@@ -847,3 +847,31 @@ test('MLB bullpen calendar dates never masquerade as exact 72-hour timestamps',a
   assert.equal(reviewMlbResearch(d).evidenceGates.reliefUsageObserved,false)
   assert.equal(reviewMlbResearch(d).eligibleForTicket,false)
 })
+
+
+test('MLB recent form requires observed dated games, not empty or future schedules',async()=>{
+  const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true}).fetcher,at)
+  assert.ok(d.teamForm.home&&d.teamForm.away)
+  const original=reviewMlbResearch(d)
+  const home=d.teamForm.home
+  const away=d.teamForm.away
+  home.games=0
+  home.lastResults=[]
+  let review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.recentTeamFormVerified,false)
+  assert.equal(review.eligibility,'insufficient')
+  assert.equal(review.decision,'abstain')
+  assert.ok(review.missingEvidence.some(x=>x.includes('Forma reciente')))
+  home.games=1
+  home.lastResults=[{date:'2026-07-02T10:00:00Z',opponentId:123,
+    scored:5,allowed:2,side:'home'}]
+  review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.recentTeamFormVerified,false)
+  home.lastResults[0].date='2026-06-30T12:00:00Z'
+  away.games=1
+  away.lastResults=[]
+  review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.recentTeamFormVerified,false)
+  assert.equal(review.eligibleForTicket,false)
+  assert.equal(typeof original.evidenceGates.recentTeamFormVerified,'boolean')
+})
