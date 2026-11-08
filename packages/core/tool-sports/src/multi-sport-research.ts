@@ -115,7 +115,7 @@ export async function researchSport(
   const upcoming=validBoards.flatMap(board=>board.events??[]).filter(e=>{
     const at=Date.parse(e.date??''),id=String(e.id??'')
     if(!Number.isFinite(at)||at<=now||localDay(at)!==date||
-      !/^\\d{1,20}$/u.test(id)||known.has(id)||
+      !/^\d{1,20}$/u.test(id)||known.has(id)||
       (e.status?.type?.state!==undefined&&e.status.type.state!=='pre'))return false
     known.add(id)
     return true
