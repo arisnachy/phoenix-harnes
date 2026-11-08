@@ -11,6 +11,8 @@ on:
       - 'packages/client/ui-conversation/tests/sports-live.client.spec.tsx'
       - 'packages/client/ui-conversation/src/client/chat/SportsBetProgress*'
       - 'packages/client/ui-conversation/src/client/chat/SportsTicketAutoLink.ts'
+      - 'packages/client/ui-conversation/src/client/chat/SportsTicketLiveTracker*'
+      - 'packages/client/ui-conversation/tests/sports-ticket-live-tracker.client.spec.tsx'
       - 'packages/client/ui-conversation/tests/sports-bet-progress.client.spec.tsx'
       - '.github/workflows/phoenix-sports-live.yml'
   push:
@@ -20,6 +22,8 @@ on:
       - 'packages/client/ui-conversation/tests/sports-live.client.spec.tsx'
       - 'packages/client/ui-conversation/src/client/chat/SportsBetProgress*'
       - 'packages/client/ui-conversation/src/client/chat/SportsTicketAutoLink.ts'
+      - 'packages/client/ui-conversation/src/client/chat/SportsTicketLiveTracker*'
+      - 'packages/client/ui-conversation/tests/sports-ticket-live-tracker.client.spec.tsx'
       - 'packages/client/ui-conversation/tests/sports-bet-progress.client.spec.tsx'
       - '.github/workflows/phoenix-sports-live.yml'
 permissions:
@@ -39,7 +43,7 @@ jobs:
       - name: Verify receipt extraction and ESPN event identity
         run: node --experimental-strip-types --test packages/core/tool-sports/tests/sports-receipt-register.test.mjs
       - name: Verify live MLB/NBA/provider update paths
-        run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-live.client.spec.tsx packages/client/ui-conversation/tests/sports-bet-progress.client.spec.tsx packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-live.client.spec.tsx packages/client/ui-conversation/tests/sports-bet-progress.client.spec.tsx packages/client/ui-conversation/tests/sports-ticket-live-tracker.client.spec.tsx packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts
       - name: Validate Phoenix client contract and strict TypeScript build
         run: |
           pnpm run build:lib:host

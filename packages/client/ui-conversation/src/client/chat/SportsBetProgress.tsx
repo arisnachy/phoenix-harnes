@@ -44,9 +44,26 @@ export function evaluateSportsPick(pick:SportsTrackedPick,game:PhoenixLiveGame|u
     :pick.market==='spread'?(selected??'Equipo')+' '+signed(pick.line??0)
       :pick.side==='draw'?'Empate':selected??'Equipo sin confirmar'
   if(!game||game.phase==='pre')return pending('Pendiente del inicio o marcador','Objetivo: '+target)
-  const home=numeric(game.homeScore),away=numeric(game.awayScore)
-  if(home===null||away===null)return pending('Marcador aún no verificable','Objetivo: '+target)
+  const finalHome=numeric(game.homeScore),finalAway=numeric(game.awayScore)
+  if(finalHome===null||finalAway===null)return pending('Marcador aún no verificable','Objetivo: '+target)
   const finished=game.phase==='post'
+  // Soccer 90-minute markets and hockey 1X2 require regulation-only scores.
+  // Never infer the period from an extra-time or shootout final.
+  const periods=game.periods??[]
+  const partial=(count:number)=>{
+    if(periods.length<count)return null
+    const rows=periods.slice(0,count).map(x=>({home:numeric(x.home),away:numeric(x.away)}))
+    if(rows.some(x=>x.home===null||x.away===null))return null
+    return {home:rows.reduce((s,x)=>s+x.home!,0),away:rows.reduce((s,x)=>s+x.away!,0)}
+  }
+  const regulation=sport==='soccer'&&periods.length===2?partial(2):
+    sport==='hockey'&&pick.market==='three-way'?partial(3):null
+  const needRegulation=sport==='soccer'||sport==='hockey'&&pick.market==='three-way'
+  if(finished&&needRegulation&&!regulation)return {
+    state:'review',label:'Finalizado · verificar marcador reglamentario',
+    target:'Resultado final '+finalAway+'–'+finalHome+'; el período del mercado no está verificado',
+  }
+  const home=regulation?.home??finalHome,away=regulation?.away??finalAway
   let diff=0,description=''
   if(pick.market==='total'){
     const total=home+away
@@ -65,9 +82,6 @@ export function evaluateSportsPick(pick:SportsTrackedPick,game:PhoenixLiveGame|u
       +(missing?' · necesita '+missing+' gol(es)/punto(s) de ventaja adicional':' · está cubriendo la línea')
       :'Marcador '+away+'–'+home+(diff>0?' · equipo adelante':diff===0?' · empate':' · necesita '+missing+' gol(es)/punto(s) para liderar')
   }
-  if(finished&&(sport==='soccer'&&['moneyline','three-way'].includes(pick.market)
-    ||sport==='hockey'&&pick.market==='three-way'))
-    return {state:'review',label:'Finalizado · verificar período de la casa',target:description}
   if(finished){
     const result=diff>0?'won':diff<0?'lost':'push'
     const state=(pick.market==='moneyline'&&diff===0||pick.market==='three-way'&&pick.side!=='draw'&&diff===0)

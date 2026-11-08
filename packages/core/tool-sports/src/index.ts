@@ -34,7 +34,7 @@ import {probeExtendedEspnCatalog} from './sports-espn-route-probe.ts'
 import { compareBettingMarkets,supportedMarketFamilies } from './sports-market-intelligence.ts'
 import { describeBettingMarkets } from './sports-bet-markets.ts'
 import { checkSportsTicket, type SportsBetLeg } from './sports-bet-settlement.ts'
-import {registerSportsReceipt,type ReceiptLegInput} from './sports-receipt-register.ts'
+import {registerSportsReceipt,type ReceiptLegInput,type ReceiptInput} from './sports-receipt-register.ts'
 import { espnCoreModes,queryEspnCore,type EspnCoreMode } from './espn-core-intelligence.ts'
 import { fetchPublicEspnOddsDetailed } from './espn-odds.ts'
 import { espnEndpointGuide,espnWorkflow } from './espn-endpoint-guide.ts'
@@ -72,6 +72,7 @@ const GUIDANCE = [
   'THE ODDS API v4 · CONECTOR: la clave del proveedor api.the-odds-api.com se configura de forma segura en Ajustes > Conectores > The Odds API y el Host la verifica mediante el catálogo gratuito /v4/sports. No pedir claves en el chat ni confundir con TheOddsAPI (api.theoddsapi.com, credencial distinta). El motor sports_chat_odds con sourcePolicy=all y sin eventId/fecha puede usar la clave guardada para obtener precios con casa, hora de actualización y cuota remanente. La clave se resuelve del vault en CADA operación, incluida la creación de tickets cotizados; cambiarla no requiere reiniciar Kira. El proveedor limita créditos según el plan; NO prometer cuotas ilimitadas ni históricos gratuitos. El endpoint de verificación de la clave es de coste cero, no consulta cuotas apostables. ',
   'ODDS REALES Y HISTORIALES: sports_chat_odds ahora consulta varias fuentes independientes y devuelve estado observado/vacío/error/no configurado por proveedor. No declares sin cuotas hasta evaluar sources y buscar fecha y mercados reales por liga. OddsHarvester v0.20.0 permite transmitir filas NDJSON para recuperar partidos cotizados incluso si otras páginas del scraping fallan; distingue precios recuperados de scraping completamente exitoso. sports_chat_historical_odds acepta fecha y clave de deporte para leer archivos públicos locales y los snapshots de cotizaciones realmente vistos por PHOENIX. Los históricos NO son precios actuales, y el archivo local solo cubre desde que se capturaron observaciones: no inventar historial ausente. The Odds API v4 y TheOddsAPI requieren sus respectivas claves; la disponibilidad histórica completa suele ser de planes pagados. No prometas que las cotizaciones son de Juancito si el bookmaker indicado es otro. ',
   'JUANCITO SPORT: utiliza como fuente PRIMARIA su reglamento oficial https://www.juancitosport.com.do/reglas/ y términos https://www.juancitosport.com.do/banca/terminos/. Las reglas verificadas incluyen 3/5/9 innings, run line, ponches, hits, medio tiempo, props, 90 minutos fútbol y overtime diferenciado. Una apuesta solo es válida al mostrar el sistema «Apuesta Confirmada» (8.4); el mínimo publicado es RD$100 (7.10). Su condición 6.6 PROHÍBE usar robots o scripts para realizar apuestas: Kira NO debe automatizar clicks ni apuestas en esa web. Puede investigar fuentes, calcular y entregar el ticket; el usuario realiza la confirmación legalmente en la banca. El sitio juancitosports.com es informativo independiente: NO atribuirle reglamentos oficiales. ',
+  'SEGUIMIENTO DE ACUMULADAS POR BOLETO: si el usuario entrega uno o más comprobantes de apuestas o pide dar seguimiento a esos tickets, usa PRIMERO sports_chat_follow_receipts cuando haya varias confirmaciones y sports_chat_register_receipt para una sola. Muestra las 5/6 patas POR CADA BOLETO en una tarjeta nativa, junto al equipo marcado, total de puntos o hándicap y estado de todas sus selecciones. NO devuelvas una cartelera global ajena a esas selecciones. Los partidos repetidos entre boletos deben aparecer en ambos tickets. Los marcadores se refrescan desde ESPN mediante la interfaz, sin que el usuario vuelva a completar formularios. No sustituir este panel por sports_chat_games de toda una liga. Si falta un dato del recibo, explica qué falta y evita adivinar IDs o cuota. ',
   'OBJETIVOS DE BOLETOS AUTOMÁTICOS: si el usuario adjunta una captura/recibo de una apuesta real o pregunta por el progreso de una apuesta de su ticket, Kira debe EXTRAEER las selecciones, referencia, fechas, equipos, mercados, signos de hándicap, líneas y casa desde la evidencia aportada y llamar sports_chat_register_receipt por cada boleto, sin obligar al usuario a rellenar formularios por partido. El motor coteja eventos reales ESPN y vincula cada pata con su cartelera; muestra automáticamente las metas al reabrirla en el mismo navegador. Si la imagen no permite leer con precisión una selección, NO adivinar ni atribuir un partido de otro día: indicar solo el dato faltante. No confundir un recibo aportado con aceptación o pago confirmados por el operador. Para seguir cada juego no repitas capturas, pregunta a sports_chat_games. ',
   'APUESTAS REALES NO FICTICIAS: si el usuario pide un ticket para apostar dinero real, NO respondas por defecto «simulado», «apuesta ficticia» o «no puedo investigar apuestas». Investiga eventos y mercados verificables, contrasta las reglas EXACTAS de la casa con sports_chat_bet_rules, obtiene precios reales por fuente con sports_chat_odds, sports_chat_odds_keyless y sports_chat_market_intelligence; si no hay ofertas auténticas no inventes cuotas. Un boleto cotizado NO equivale a una apuesta aceptada. Solo tras confirmación independiente del comprobante de la casa se puede declarar colocada; sin ella di «ticket cotizado, pendiente de aceptación». No ejecutes apuestas ni transferencias sin autorización explícita y una integración oficial operativa. Las reglas oficiales varían para extra innings, suspensiones, jugadores inactivos, pitcher listado, push, overtime y mercados por período. Prioriza mercados no limitados a ganador: spread/run line, -1.5/+1.5, totales 3/5/9 entradas, props de ponches/hits, handicaps, puntos, tiros, córners y más. Los precios solo son reales si se observan con casa, mercado exacto, línea, momento y correspondencia de evento. La calculadora del ticket se actualiza con el importe sin transferir fondos. Tras la fecha consulta sports_chat_ticket_track con IDs y recibo si lo hay para grados provisionales según marcador y jamás declares cobro/void confirmado sin liquidación oficial.',
   'FUENTES ESPN EXTENDIDAS: además de los 11 modos Core, sports_chat_espn_extended_catalog muestra rutas validadas para equipos, temporadas, jugadores, lesions, jugadas y estadísticas. Usa sports_chat_espn_extended SOLO con IDs reales de ESPN (competitionId no se deduce siempre de eventId). La presencia del endpoint en el catálogo no garantiza datos ni derechos de redistribución; informe unavailable/empty sin inventar.',
@@ -530,9 +531,53 @@ export function apply(ctx: Context): void {
         ...(args.reportedReturn===undefined?{}:{reportedReturn:args.reportedReturn}),
         legs:args.legs as ReceiptLegInput[],
       },fetch,await sportsEnv(ctx))
-      return JSON.stringify(result)
+      return JSON.stringify(result.uiBlock)
     },
     presentCall:()=>({card:'generic',title:'Vincular objetivos del boleto automáticamente',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_follow_receipts',
+    description:'Genera un ÚNICO panel universal con las tarjetas de cada boleto real y todas sus patas. Captura automáticamente las selecciones de recibos del usuario, valida partidos ESPN individualmente, y en el cliente actualiza el marcador, objetivo de la pata y total acumulado sin formularios. No registra apuestas en la banca.',
+    parameters:{
+      receipts:{type:'array',required:true,description:'Uno a cinco comprobantes del usuario, cada uno con todas sus patas y operador. No inventar datos.',
+        items:{type:'object',additionalProperties:false,properties:{
+          ticketReference:{type:'string',required:true,description:'Confirmación exacta visible en el comprobante.'},
+          date:{type:'string',required:true,description:'Fecha de las selecciones AAAA-MM-DD Santo Domingo.'},
+          bookmaker:{type:'string',required:true,description:'Casa indicada en comprobante.'},
+          stake:{type:'number',description:'Importe en DOP si aparece.'},
+          reportedReturn:{type:'number',description:'Retorno potencial en DOP, si aparece.'},
+          legs:{type:'array',required:true,description:'Patas con selección y mercado exactos, hasta doce.',
+            items:{type:'object',additionalProperties:false,properties:{
+              sport:{type:'string',required:true,description:'Identificador ESPN de deporte: hockey, soccer, basketball etc.'},
+              league:{type:'string',required:true,description:'Liga ESPN, ej. nhl, nba, usa.1.'},
+              date:{type:'string',description:'Fecha de la pata si difiere de la del boleto.'},
+              eventId:{type:'string',description:'ID ESPN solo si está verificado.'},
+              team:{type:'string',required:true,description:'Nombre exacto del equipo seleccionado o uno del partido si mercado total.'},
+              opponent:{type:'string',description:'Rival exacto, requerido en apuestas de total.'},
+              market:{type:'string',required:true,description:'moneyline | spread | total | three-way'},
+              side:{type:'string',description:'over/under del total, draw si empate; home/away se obtiene de ESPN.'},
+              line:{type:'number',description:'Línea exacta con signo para hándicap o total.'},
+              americanOdds:{type:'integer',description:'Cuota estadounidense del recibo si se lee.'},
+            }}},
+        }}},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const receipts=args.receipts as ReceiptInput[]
+      if(!Array.isArray(receipts)||receipts.length<1||receipts.length>5)
+        throw Error('Se requiere entre 1 y 5 comprobantes completos.')
+      if(new Set(receipts.map(x=>x.ticketReference)).size!==receipts.length)
+        throw Error('No se admite repetir número de confirmación.')
+      const env=await sportsEnv(ctx)
+      const verified=await Promise.all(receipts.map(x=>registerSportsReceipt(x,fetch,env)))
+      return JSON.stringify({component:'sports_ticket_bundle_card',version:1,props:{
+        title:'PHOENIX · Seguimiento automático de boletos',
+        source:'Recibos del usuario + ESPN Site API · '+new Date().toISOString(),
+        tickets:verified.map(x=>x.uiBlock.props),
+      }})
+    },
+    presentCall:()=>({card:'generic',title:'Seguir todas las patas de mis boletos',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_track',
