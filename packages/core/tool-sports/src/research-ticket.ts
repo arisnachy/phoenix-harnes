@@ -105,8 +105,14 @@ export async function researchTicket(
     let board=cache.get(key)
     if(!board){
       const url='https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+'/scoreboard?dates='+requestedDate.replaceAll('-','')
-      board=await getFeed<EspnBoard>(url,fetcher)
-      if(!Array.isArray(board.events))throw Error('ESPN no confirmó la cartelera para '+league)
+      try{
+        board=await getFeed<EspnBoard>(url,fetcher)
+        if(!Array.isArray(board.events))throw Error('Cartelera ESPN inválida')
+      }catch{
+        // Retain a chance to recover an exact fixture in the next UTC
+        // partition; never replace it with an invented matchup.
+        board={events:[]}
+      }
       cache.set(key,board)
     }
     let event=board.events?.find(e=>String(e.id??'')===eventId)
