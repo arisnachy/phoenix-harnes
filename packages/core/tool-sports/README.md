@@ -12,6 +12,21 @@ Manual de las 14 rutas, movimiento, históricos y procedimientos de Kira: [ESPN_
 
 ESPN Site/Core and MLB Stats are queried as publicly reachable read-only sources without needing an API key or a PHOENIX_SPORTS_ESPN_ALLOWED setting. Operators may opt out using PHOENIX_SPORTS_ESPN_DISABLED=1 or PHOENIX_SPORTS_MLB_DISABLED=1; public access does not grant a license to reuse data. THE_ODDS_API_KEY selects the existing `api.the-odds-api.com` v4 adapter, with its own quota and license. Separately, `THEODDSAPI_API_KEY` selects the optional `api.theoddsapi.com` adapter, which publishes a free NBA/MLB moneyline tier (registration and a key still required); **these are independent services, credentials and JSON schemas**. If both keys are present the original v4 adapter takes priority; without either, PHOENIX tries published ESPN moneylines. The free adapter uses a fixed HTTPS host, a server-only `x-api-key` header, a bounded response and a 90-second per-account cache. No provider key is written into the URL or a rendered card. If missing, ESPN Core/Site moneyline quotes are read when available, but no absent prices or missing markets are fabricated. PHOENIX_SPORTS_ESPN_IMAGES_ALLOWED=1 is an additional opt-in after media rights review. Credentials stay in the host environment and never appear in tool output. Only fixed hosts can be queried.
 
+## Free provider backups (2026-11-08)
+
+The specialist ticket gate now performs **secondary fixture corroboration**, without replacing ESPN or sports-specific investigations:
+
+- **TheSportsDB v1 (public key 123)**: `eventsday.php` for soccer, basketball, baseball, NFL, hockey and tennis. The free endpoint returns at most three matches per day/query; a missing match **is not a cancellation, an injury report or an absence of coverage**. Docs: https://www.thesportsdb.com/docs/api
+- **OpenLigaDB (no key)**: Bundesliga `getmatchdata/bl1/{seasonStart}`, only for ESPN league `ger.1`. Free, no registration; observe its published 60 requests/minute/IP limit. Docs: https://api.openligadb.de/index.html
+- **Official NBA injury report**: https://official.nba.com/nba-injury-report-2026-27-season/ — a manual verification pointer only; this implementation does **not** parse PDFs or assert that a questionable player is active/inactive.
+- **nflverse**: https://nflreadr.nflverse.com/articles/nflverse_data_schedule.html — a manual verification pointer for current roster/injury/depth-chart data; **not yet** an imported data feed. Confirm league source freshness and participation limitations before automated promotion.
+- **football-data.org** (free account/token required): https://www.football-data.org/pricing — prospective secondary soccer results/standings provider. Not wired until the operator explicitly provisions a free account; free plan has delayed scores and excludes advanced player data.
+
+Every secondary event needs BOTH normalized teams in the correct home/away positions and a kickoff within 90 minutes. Contradictions are surfaced; no-match, partial HTTP responses and provider errors never establish a missing scheduled game. Secondary evidence only confirms fixture metadata, **not** starting lineups, official injuries, bookmaker acceptance, probability calibration or betting eligibility. The original specialist gate remains fail-closed. Disable the public backups with `PHOENIX_SPORTS_FREE_BACKUPS_DISABLED=1` when needed. Live provider success and data rights remain to be validated in the deployment environment.
+
+Verification:
+`node --experimental-strip-types --test packages/core/tool-sports/tests/free-sports-source-audit.test.mjs packages/core/tool-sports/tests/ticket-specialist-gate.test.mjs`.
+
 ## NBA research (source-derived, not calibrated)
 
 `sports_chat_nba_research` reads recent NBA final scoreboards once per date (shared across the slate), computes actual wins, average margins and approximate hours since the previous game, and records archive coverage. `sports_chat_ticket_research_auto` now rejects NBA candidates that have insufficient completed-game evidence. These are descriptive trends **not** win-probability estimates or edge calculations. Official NBA injury reports, roster validation, advanced efficiency metrics and true calibrated model-based predictions remain separate integration requirements; unverified NBA player leaders are temporarily hidden.
