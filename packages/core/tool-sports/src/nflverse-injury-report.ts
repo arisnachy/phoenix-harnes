@@ -54,7 +54,9 @@ export async function nflverseInjuryReport(
   fixture:{home:string;away:string;kickoff:string;date:string},
   fetcher:typeof fetch=fetch,now=Date.now(),
   env:NodeJS.ProcessEnv=process.env):Promise<NflverseInjuryReview>{
-  const season=Number(fixture.date.slice(0,4))
+  // NFL postseason in January/February belongs to the previous fall season.
+  const season=Number(fixture.date.slice(0,4))-
+    (Number(fixture.date.slice(5,7))<=3?1:0)
   const source='https://github.com/nflverse/nflverse-data/releases/download/injuries/injuries_'+
     season+'.csv'
   const base={source,checkedAt:new Date(now).toISOString()}
