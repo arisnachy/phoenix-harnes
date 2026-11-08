@@ -24,6 +24,7 @@ describe('Anatomy Connectors Settings',()=>{
   expect(checkboxes[0]?.disabled).toBe(true)
   fireEvent.click(screen.getAllByRole('button',{name:en.anatomyInstall})[0]!)
   await waitFor(()=>expect(installAnatomy).toHaveBeenCalledWith('totalsegmentator'))
+  await waitFor(()=>expect((screen.getAllByRole('button',{name:en.anatomyInstall})[1] as HTMLButtonElement).disabled).toBe(false))
   fireEvent.click(screen.getAllByRole('button',{name:en.anatomyInstall})[1]!)
   await waitFor(()=>expect(installAnatomy).toHaveBeenCalledWith('opencarp'))
  })
