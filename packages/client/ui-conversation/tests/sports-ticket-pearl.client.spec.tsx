@@ -34,11 +34,11 @@ describe('PHOENIX Pearl Light forecast ticket',()=>{
     expect(sportsLeagueIdentity('una liga desconocida')).toBeNull()
   })
   it('never invents goals for ambiguous markets or incomplete team identities',()=>{
-    expect(forecastPick(legs[0])).toMatchObject({market:'moneyline',side:'home'})
-    expect(forecastFeed(legs[1])).toEqual({sport:'basketball',league:'nba',date:'2026-11-08'})
-    expect(forecastPick({...legs[0],selection:'Houston Texans +1.5',market:'Ganador'})).toBeNull()
-    expect(forecastPick({...legs[0],homeTeam:undefined})).toBeNull()
-    expect(forecastFeed({...legs[0],providerLeague:'nhl'})).toBeNull()
+    expect(forecastPick(legs[0]!)).toMatchObject({market:'moneyline',side:'home'})
+    expect(forecastFeed(legs[1]!)).toEqual({sport:'basketball',league:'nba',date:'2026-11-08'})
+    expect(forecastPick({...legs[0]!,selection:'Houston Texans +1.5',market:'Ganador'})).toBeNull()
+    expect(forecastPick({...legs[0]!,homeTeam:''})).toBeNull()
+    expect(forecastFeed({...legs[0]!,providerLeague:'nhl'})).toBeNull()
   })
   it('updates all matching forecast legs but never claims bookmaker settlement',async()=>{
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
