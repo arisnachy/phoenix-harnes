@@ -101,3 +101,36 @@ test('three different scoreboards per team remain insufficient for a stronger au
   assert.equal(result.complete,false)
   assert.equal(result.verifiedEvents,0)
 })
+
+
+test('automatic research escalates to backup soccer leagues when first six have no usable form',async()=>{
+  const day='2026-10-28',now=Date.parse('2026-10-28T15:00:00Z')
+  const emptyLeagues=['eng.1','esp.1','usa.1','uefa.champions','mex.1','ger.1']
+  const fallbackLeague='ita.1'
+  let fallbackHistoryCalls=0
+  const fetcher=async url=>{
+    const u=String(url),code=u.match(/\/soccer\/([^/]+)\/scoreboard/u)?.[1]
+    const d=u.match(/dates=([0-9]{8})/u)?.[1]
+    if(!code)return new Response(JSON.stringify({events:[]}))
+    if(emptyLeagues.includes(code)&&d==='20261028')
+      return new Response(JSON.stringify({events:Array.from({length:6},(_,i)=>
+        base(i+200,future,'pre',null,null))}))
+    if(code===fallbackLeague){
+      if(d==='20261028')return new Response(JSON.stringify({events:Array.from({length:5},(_,i)=>
+        base(i+500,future,'pre',null,null))}))
+      if(['20261027','20261026','20261025','20261024','20261023'].includes(d)){
+        fallbackHistoryCalls++
+        const stamp='2026-'+d.slice(4,6)+'-'+d.slice(6,8)+'T21:00:00Z'
+        return new Response(JSON.stringify({events:Array.from({length:5},(_,i)=>
+          base(i+500,stamp,'post',3,0,Number(d.slice(-2))*1000+i+500))}))
+      }
+    }
+    return new Response(JSON.stringify({events:[]}))
+  }
+  const result=await evidenceTicket(5,day,'soccer',fetcher,now)
+  assert.ok(fallbackHistoryCalls>0)
+  assert.ok(result.researchLeagues>=7)
+  assert.ok(result.candidatesEvaluated>=5)
+  assert.ok(result.events.some(e=>e.league==='ita.1'),
+    'usable backup league should be researched instead of returning empty')
+})
