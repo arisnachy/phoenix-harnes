@@ -63,6 +63,7 @@ export const inject = ['tools','systemPrompt']
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'MERCADOS DE TOTAL Y HÁNDICAP: ganar un partido no demuestra cubrir -1.5/+1.5 o una línea over/under. Antes de considerar un total o spread con sports_chat_daily_market_shortlist(deep=true), coteja la línea EXACTA contra resultados previos de AMBOS clubes, separa aciertos, fallos y pushes, y exige dirección consistente en los dos historiales. Si marketOutcomeDiagnostic.status es mixed, insufficient o adverse, etiquetar CONDICIONAL/CONTRAINDICADA y no ponerla como pata cotizada; nunca conviertas frecuencia histórica en probabilidad futura o EV. Para NHL añade portero y reglas OT/SO; para NBA pace, eficiencia y lesiones siguen pendientes si no fueron medidos. La meta de 5–6 patas no autoriza inventar una probabilidad ni rellenar selecciones sin respaldo. ',
   'NHL ESPECIALIZADO: para NHL consulta sports_chat_hockey_slate y sports_chat_nhl_investigate con gameId oficial NHL, no ID ESPN. Recupera rosters y estadísticas observadas de skaters/porteros; distingue portero candidato del titular confirmado y ganador a 60 minutos del ganador con OT/SO. No infieras xG/GSAx, alineaciones definitivas o probabilidades no calibradas, ni llames cuota actual a una línea sin timestamp. En +1.5/-1.5 evalúa el riesgo de caer por dos goles, los márgenes recientes de ambos equipos, la probabilidad de equilibrio del precio, porteros, descanso, empty-net y OT. Sin titular y modelo de cobertura calibrado, clasifica como CONDICIONAL o CONTRAINDICADA. ',
   'TENNIS INTELLIGENCE ATP/WTA: investiga con sports_chat_tennis_slate(tour=atp|wta,date) y sports_chat_tennis_investigate(tour,date,matchId) tras cotejar matchId y participantes exactos, superficie y formato oficial. Valorar primer y segundo servicio vs devolución, break points, fatigue, H2H por superficie, indoor/outdoor y cambios de calendario solo cuando se dispone de fuentes; jamás declarar ranking, H2H, best-of-5, lesiones, cuota o resultado sintético. ATP/WTA son circuitos diferentes; distinguir singles/doubles, retiro, walkover y match-tiebreak en mercados. Si no hay datos suficientes, abstenerse. ',
   'NFL AMERICAN FOOTBALL INTELLIGENCE: consulta sports_chat_nfl_slate para fecha/eventId real y sports_chat_nfl_investigate para investigar quarterback, roster completo de ambos clubes, ofensiva, defensiva, OL vs pass rush, WR/TE vs CB/LB, RB vs front seven, descanso, lesiones, clima, cuartos y cotizaciones auténticas. Los 11 titulares ofensivos y los 11 defensivos de CADA club se confirman por IDs explícitos y unidad; no infieras titularidad del roster o profundidad. NFL no es fútbol soccer ni NCAA. No inventes QB titular, rutas, snaps, EPA, probabilidades, prices ni props; confirma evento/casa/mercado/período y abstente si falta evidencia. ',
@@ -210,7 +211,8 @@ export function apply(ctx: Context): void {
               sport:candidate.sport,league:candidate.league,
               eventId:candidate.espnEventId,date:daily.date,
               lookbackDays:candidate.sport==='football'||candidate.sport==='hockey'?28:
-                candidate.sport==='soccer'?21:14,includeOdds:false,
+                candidate.sport==='soccer'||candidate.sport==='basketball'?21:14,
+              includeOdds:false,
             },sharedFetch,now,env)
             let official:DailyNhlSpecialist|null=null
             if(candidate.sport==='hockey'){
@@ -313,8 +315,17 @@ export function apply(ctx: Context): void {
                 'Apoyo descriptivo ('+quoted[index]!.review.sampleGames.home+'/'+
                 quoted[index]!.review.sampleGames.away+' partidos). '+
                 quoted[index]!.review.marketDirection+
+                '. Línea: '+(quoted[index]!.review.marketOutcomeDiagnostic?
+                  quoted[index]!.review.marketOutcomeDiagnostic!.status+
+                  ' (equipo '+quoted[index]!.review.marketOutcomeDiagnostic!.team.wins+
+                  '/'+(quoted[index]!.review.marketOutcomeDiagnostic!.team.wins+
+                    quoted[index]!.review.marketOutcomeDiagnostic!.team.losses)+
+                  ', rival '+quoted[index]!.review.marketOutcomeDiagnostic!.opponent.wins+
+                  '/'+(quoted[index]!.review.marketOutcomeDiagnostic!.opponent.wins+
+                    quoted[index]!.review.marketOutcomeDiagnostic!.opponent.losses)+')':
+                  'no evaluable como hándicap/total')+
                 '. Acierto mínimo exigido '+quoted[index]!.review.priceAudit.breakEvenPercent+
-                '%. Bajas, titulares y modelo calibrado pendientes.':
+                '%. Frecuencias históricas no son probabilidades calibradas; bajas y titulares pendientes.':
                 'Candidata CONDICIONAL: no existe una señal independiente suficiente. '+
                 'Verificar lesiones, titulares y reglas antes de considerar.',
             })),
@@ -339,6 +350,10 @@ export function apply(ctx: Context): void {
         alternativeMarketsCompared:evaluated.alternativesCompared,
         researchedPicks:trustedOptions.length,conditionalPicks:provisional.length,
         valueValidatedPicks:best.filter(r=>r.priceAudit.classification==='potential-value').length,
+        marketLineCrossChecks:research.filter(r=>r.marketOutcomeDiagnostic!==undefined).length,
+        marketLineContradictions:research.filter(r=>r.marketOutcomeDiagnostic?.status==='adverse').length,
+        marketLineUncertain:research.filter(r=>r.marketOutcomeDiagnostic?.status==='mixed'||
+          r.marketOutcomeDiagnostic?.status==='insufficient').length,
         priceAuditState:'umbrales-cotizados-sin-modelo-calibrado-por-mercado',
         selected:args.deep===false?pool.selected.slice(0,count):best,
         ...(ticket?{uiBlock:ticket}:{status:'borrador-sin-cuatro-precios-validados'}),
