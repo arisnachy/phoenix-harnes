@@ -141,6 +141,7 @@ export async function researchSport(
     if(!home||!away||!pid(home)||!pid(away)||!pname(home)||!pname(away))return []
     const kickoff=Date.parse(event.date??'')
     const homeForm=form(home,archived,kickoff),awayForm=form(away,archived,kickoff)
+    const requiredGames=sport==='football'?3:5
     // Research reports a preliminary minimum, while the automatic-ticket
     // promotion layer requires five distinct games per team (NFL: three).
     // Coverage shortfalls are recorded, but do not invalidate a sufficient
