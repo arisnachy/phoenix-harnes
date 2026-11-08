@@ -188,7 +188,7 @@ export function shortlistDailyMarkets(
     a.bookmaker.localeCompare(b.bookmaker))
   const best=choices[0]
   const selected=best?.selected??[]
-  // Expose distinct verified market families for each of the chosen fixtures.
+  // Preserve real alternate lines as well as market families for each researched fixture.
   // Historical evidence is gathered ONCE per event before choosing a market,
   // so the user is not restricted to the first bookmaker-favorite selection.
   const eventKey=(p:DailyMarketCandidate)=>p.sport+'|'+p.league+'|'+p.espnEventId
@@ -198,12 +198,13 @@ export function shortlistDailyMarkets(
       .sort((a,b)=>Number(a.market===chosen.market)-Number(b.market===chosen.market)||
         b.quoteUpdatedAt.localeCompare(a.quoteUpdatedAt)||
         a.market.localeCompare(b.market))
-    const markets=new Set([chosen.market])
+    const lines=new Set([chosen.market+'|'+String(chosen.line)])
     const extra:DailyMarketCandidate[]=[]
     for(const option of eligible){
-      if(markets.has(option.market))continue
-      markets.add(option.market);extra.push(option)
-      if(extra.length>=2)break
+      const key=option.market+'|'+String(option.line)
+      if(lines.has(key))continue
+      lines.add(key);extra.push(option)
+      if(extra.length>=4)break
     }
     return extra
   })
