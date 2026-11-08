@@ -359,3 +359,60 @@ Event-level discovery covers additional provider-documented **soccer corners, bo
 ## Daily price audit and alternate lines
 
 Every deep daily-market review now includes the exact selected outcome's break-even percentage, no-vig bookmaker share, price premium and the operator's overround. These are derived prices, **not predictions**. Expected value and independent win probability remain null unless a market-specific estimate was validated on at least 24 held-out events, matches the fixture/selection/line and precedes kickoff; the automatic daily pipeline does not currently supply such a certified model for spread and total markets. The price filter marks favorites requiring at least 80% success as uncertain without independent calibration, and NHL puck lines remain blocked without confirmed goalie and goal-quality evidence. Different real alternate lines for the same event are researched using one reused ESPN dossier. The native priced research card includes only descriptively supported sides and never implies profitability or an accepted wager.
+
+## Matriz por disciplina: API gratuitas y redundancia documentada (8-nov-2026)
+
+El catálogo de PHOENIX contiene **17 disciplinas**. WNBA es una liga de basketball, no una disciplina separada.
+`sports_chat_source_resilience` ahora expone `coverageBySport` para TODAS las disciplinas o una sola,
+separando `wired` (adaptador en código; **NO prueba acceso HTTP**),
+`configuredOptional` (clave presente), `unconfiguredOptional` y `referenceOnly`
+(web, histórico o catálogo sin automatización). Nunca anunciar una fuente de referencia como integrada.
+
+| Disciplina | Fuentes conectadas en la rama del PR | Fuentes opcionales / referencia (NO equivalen a conectores activos) |
+| --- | --- | --- |
+| Fútbol mundial (soccer) | ESPN Site/Core, TheSportsDB, OpenLigaDB Bundesliga, OpenFootball siete ligas | football-data.org y API-Football (claves opcionales, cotejo por evento), StatsBomb Open Data histórico, FPL, Understat |
+| NBA / WNBA / NCAA baloncesto | ESPN, TheSportsDB | balldontlie (clave opcional, NBA y WNBA, cotejo **solo de partidos**), NBA/WNBA Stats (restringidos/no integrados), reportes oficiales de lesiones (revisión), NCAA |
+| MLB / LIDOM / Serie Caribe | MLB StatsAPI, ESPN, TheSportsDB | LIDOM y Serie del Caribe en fuentes oficiales web, sin API pública garantizada |
+| NFL / NCAA football | ESPN, TheSportsDB, nflverse lesiones | nflverse PBP/rosters históricos, College Football Data con plan sujeto a verificación, NFL gamebooks oficiales |
+| NHL | NHL Web API, ESPN, TheSportsDB | Reporte de portero titular requiere anuncio oficial, no roster |
+| Tenis ATP / WTA | ESPN, TheSportsDB | ATP/WTA oficiales web, archivos Sackmann ATP/WTA (históricos, CC BY-NC-SA) |
+| MMA: UFC / PFL | ESPN, TheSportsDB | UFCStats y PFL (sitios web, no API estable) |
+| Automovilismo F1 / NASCAR | ESPN, TheSportsDB | Jolpica F1 y OpenF1 (catálogo, **no conectados al ticket**; OpenF1 en vivo es de pago), NASCAR oficial web |
+| Golf PGA / LPGA | ESPN, TheSportsDB | PGA TOUR y LPGA (web, sin API garantizada) |
+| Cricket | ESPN y respaldo general TheSportsDB sujeto a cobertura | Cricsheet histórico y ESPNcricinfo web |
+| Rugby unión | ESPN / TheSportsDB según liga | World Rugby web |
+| Rugby league | ESPN / TheSportsDB según liga | NRL web |
+| Fútbol australiano | ESPN / TheSportsDB según liga | AFL web |
+| Lacrosse | ESPN / TheSportsDB según liga | PLL web |
+| Voleibol | ESPN / TheSportsDB según liga | NCAA web |
+| Water polo | ESPN / TheSportsDB según liga | NCAA web |
+| Hockey de campo | ESPN / TheSportsDB según liga | NCAA web |
+
+### Endpoints verificables para la integración
+
+- MLB StatsAPI: `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=2026-11-08`; sin key, **no ilimitada ni SLA oficial**.
+- NHL: `https://api-web.nhle.com/v1/score/2026-11-08`; sin key, endpoint web sujeto a cambios.
+- ESPN: `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=20261108`; sin key, no oficial.
+- TheSportsDB: `https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d=2026-11-08&s=Basketball`; clave pública de prueba y datos del plan gratis parciales.
+- OpenLigaDB: `https://api.openligadb.de/getmatchdata/bl1/2026`; sin key (Bundesliga).
+- OpenFootball: `https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/en.1.json`; CC0, puede ser incompleto/desactualizado.
+- football-data.org: `https://api.football-data.org/v4/competitions/PL/matches?dateFrom=2026-11-08&dateTo=2026-11-08`; cabecera `X-Auth-Token`; plan gratis 10/min y ligas limitadas.
+- API-Football: `https://v3.football.api-sports.io/fixtures?league=39&season=2026&date=2026-11-08`; cabecera `x-apisports-key`; 100/día y temporadas gratuitas limitadas.
+- balldontlie: `https://api.balldontlie.io/v1/games?dates%5B%5D=2026-11-08`, WNBA: `https://api.balldontlie.io/wnba/v1/games?dates%5B%5D=2026-11-08`; cabecera `Authorization`; gratis 5/min para games/players/teams, no props/lesiones/boxscores.
+- StatsBomb Open Data: `https://github.com/hudl/open-data`; archivos históricos de competiciones seleccionadas, respetar condiciones y atribución.
+- nflverse: `https://github.com/nflverse/nflverse-data/releases`; no confundir lesiones semanales con inactivos confirmados.
+- Jolpica F1: `https://api.jolpi.ca/ergast/f1/current/last/results/`; 4/s y 500/h sin key, no comercial por licencia.
+- OpenF1: `https://api.openf1.org/v1/sessions?year=2026`; histórico gratis, **tiempo real requiere suscripción**.
+- Cricsheet: `https://cricsheet.org/` para datos históricos; no sustituye score en vivo.
+
+**Variables del servidor:** `PHOENIX_BALLDONTLIE_API_KEY`, `PHOENIX_API_FOOTBALL_KEY`,
+`PHOENIX_FOOTBALL_DATA_TOKEN`, `THE_ODDS_API_KEY`, `THEODDSAPI_API_KEY`.
+No colocar claves en navegador, URL, Markdown, tarjetas ni logs.
+El backend NO elude CAPTCHA, 403, paywalls, login, restricciones regionales, cuotas 429 ni términos del proveedor.
+Ante 403/429 clasificar `unavailable`, cambiar a otra fuente **autorizada** y cachear con TTL.
+Un marcador, informe de lesiones, JSON histórico y cotización de apuesta son evidencias distintas
+y no se pueden intercambiar. Los modelos de ganadores no deben presentarse como certeza.
+
+**Pruebas:** `node --experimental-strip-types --test packages/core/tool-sports/tests/free-sports-source-audit.test.mjs`
+e inspeccionar `sports_chat_source_resilience` por deporte; verificar accesibilidad en el despliegue,
+no únicamente en GitHub Actions, porque las reglas de red y geolocalización pueden cambiar.
