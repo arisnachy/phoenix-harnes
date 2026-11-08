@@ -1205,7 +1205,9 @@ export function apply(ctx: Context): void {
           &&Number.isFinite(kickoff)&&kickoff>observedAt
       })
       const excludedStaleOrStarted=report.quotes.length-quotes.length
-      const espnRaw=report.sources.find(x=>x.provider==='ESPN Site/Core')?.rawCount??0
+      const rawSource=report.sources.find(x=>x.provider==='ESPN Site/Core')
+      const espnRaw=rawSource&&'rawCount' in rawSource&&
+        typeof rawSource.rawCount==='number'?rawSource.rawCount:0
       const events=new Map<string,typeof quotes>()
       for(const quote of quotes.slice(0,96)){
         const rows=events.get(quote.eventId)??[]
