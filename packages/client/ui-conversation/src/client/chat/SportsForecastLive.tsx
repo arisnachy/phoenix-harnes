@@ -30,6 +30,15 @@ const leagueFeeds:Record<string,[string,string]>={
   laliga:['soccer','esp.1'],esp1:['soccer','esp.1'],
   premierleague:['soccer','eng.1'],eng1:['soccer','eng.1'],
   ligamx:['soccer','mex.1'],mex1:['soccer','mex.1'],
+  seriea:['soccer','ita.1'],ita1:['soccer','ita.1'],
+  primeiraliga:['soccer','por.1'],por1:['soccer','por.1'],
+  eredivisie:['soccer','ned.1'],ned1:['soccer','ned.1'],
+  bundesliga:['soccer','ger.1'],ger1:['soccer','ger.1'],
+  ligue1:['soccer','fra.1'],fra1:['soccer','fra.1'],
+  brasileiraoseriea:['soccer','bra.1'],bra1:['soccer','bra.1'],
+  ligaprofesional:['soccer','arg.1'],arg1:['soccer','arg.1'],
+  uefaeuropaleague:['soccer','uefa.europa'],uefaeuropa:['soccer','uefa.europa'],
+  copamundial:['soccer','fifa.world'],fifaworld:['soccer','fifa.world'],
   uefachampionsleague:['soccer','uefa.champions'],uefachampions:['soccer','uefa.champions'],
 }
 export function forecastFeed(leg:ForecastLeg):{sport:string;league:string;date:string}|null{
@@ -47,7 +56,10 @@ export function forecastPick(leg:ForecastLeg):SportsTrackedPick|null{
   const chosen=normalize(leg.selection)
   const market=normalize(leg.market)
   const selected=chosen===home?'home':chosen===away?'away':null
-  if(selected&&(!market||['ganador','moneyline','h2h','ganadorfinal','win'].includes(market)))
+  if(selected&&(!market||[
+    'ganador','ganadorpronostico','moneyline','h2h','ganadorfinal',
+    '1x2pronostico','1x2','win',
+  ].includes(market)))
     return {receipt:'forecast',market:'moneyline',side:selected}
   const over=leg.selection.match(/^(?:más de|mas de|arriba|over)\s+(\d+(?:[.,]\d+)?)\s*(?:puntos|goles|carreras)?$/iu)
   const under=leg.selection.match(/^(?:menos de|abajo|under)\s+(\d+(?:[.,]\d+)?)\s*(?:puntos|goles|carreras)?$/iu)

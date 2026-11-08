@@ -101,21 +101,51 @@ export async function researchSport(
     if(!Array.isArray(board.events))throw Error('ESPN devolvió eventos inválidos')
     return board
   }
-  const current=await retrieve(date)
-  const upcoming=current.events?.filter(e=>{
-    const at=Date.parse(e.date??'')
-    return Number.isFinite(at)&&at>now&&
-      (e.status?.type?.state===undefined||e.status.type.state==='pre')
-  }).slice(0,12)??[]
+  // A Santo Domingo late game can live on the NEXT ESPN UTC scoreboard.
+  // Tolerate one failed date partition without replacing verified fixture data.
+  const nextDay=new Date(Date.parse(date+'T00:00:00Z')+86_400_000)
+    .toISOString().slice(0,10)
+  const boards=await Promise.allSettled([retrieve(date),retrieve(nextDay)])
+  const validBoards=boards.flatMap(x=>x.status==='fulfilled'?[x.value]:[])
+  if(!validBoards.length)throw Error('ESPN no publicó una cartelera verificable en ninguna partición')
+  const localDay=(stamp:number)=>new Intl.DateTimeFormat('en-CA',{
+    timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit',
+  }).format(new Date(stamp))
+  const known=new Set<string>()
+  const upcoming=validBoards.flatMap(board=>board.events??[]).filter(e=>{
+    const at=Date.parse(e.date??''),id=String(e.id??'')
+    if(!Number.isFinite(at)||at<=now||localDay(at)!==date||
+      !/^\d{1,20}$/u.test(id)||known.has(id)||
+      (e.status?.type?.state!==undefined&&e.status.type.state!=='pre'))return false
+    known.add(id)
+    return true
+  }).slice(0,12)
   if(!upcoming.length)throw Error('No hay encuentros futuros verificables')
   const starting=Date.parse(date+'T12:00:00Z')
   const days=Array.from({length:lookbackDays},(_,i)=>{
     const stamp=new Date(starting-(i+1)*86_400_000)
     return stamp.toISOString().slice(0,10)
   })
-  const jobs=await Promise.allSettled(days.map(retrieve))
-  const archived=jobs.flatMap(job=>job.status==='fulfilled'?job.value.events??[]:[])
-  const successfulDays=jobs.filter(job=>job.status==='fulfilled').length
+  // Avoid bursting 28 parallel ESPN queries (HTTP 400/429 in restricted feeds).
+  // Keep partial, independently verified games even if some dates fail.
+  const archived:Game[]=[]
+  let successfulDays=0
+  const started=Date.now()
+  const requiredGames=sport==='football'?3:5
+  for(let offset=0;offset<days.length;offset+=7){
+    if(offset>0&&Date.now()-started>25_000)break
+    const batch=await Promise.allSettled(days.slice(offset,offset+7).map(retrieve))
+    for(const answer of batch)if(answer.status==='fulfilled'){
+      successfulDays++
+      archived.push(...(answer.value.events??[]))
+    }
+    const ready=upcoming.filter(event=>{
+      const {home,away}=sides(event),kickoff=Date.parse(event.date??'')
+      return home&&away&&form(home,archived,kickoff).completedGames>=requiredGames
+        &&form(away,archived,kickoff).completedGames>=requiredGames
+    }).length
+    if(ready>=Math.min(6,upcoming.length))break
+  }
   const matches:ResearchMatch[]=upcoming.flatMap(event=>{
     const {home,away}=sides(event)
     if(!home||!away||!pid(home)||!pid(away)||!pname(home)||!pname(away))return []
@@ -123,14 +153,17 @@ export async function researchSport(
     const homeForm=form(home,archived,kickoff),awayForm=form(away,archived,kickoff)
     // Research reports a preliminary minimum, while the automatic-ticket
     // promotion layer requires five distinct games per team (NFL: three).
-    const requiredGames=sport==='football'?3:5
-    const sufficient=successfulDays===lookbackDays&&
-      homeForm.completedGames>=requiredGames&&awayForm.completedGames>=requiredGames
+    // Coverage shortfalls are recorded, but do not invalidate a sufficient
+    // sample of DISTINCT verified matches for BOTH teams.
+    const sufficient=homeForm.completedGames>=requiredGames&&
+      awayForm.completedGames>=requiredGames
     const result:ResearchMatch={eventId:String(event.id??''),date:event.date??'',sport,league,
       home:homeForm,away:awayForm,source:'ESPN Site API',evidence:sufficient?'descriptive':'insufficient',
       coverageDays:lookbackDays,successfulDays,
       limitations:[
-        ...(!sufficient?['Historial incompleto o muestra inferior a '+requiredGames+' partidos distintos por equipo']:[]),
+        ...(!sufficient?['Muestra inferior a '+requiredGames+' partidos distintos por equipo']:[]),
+        ...(successfulDays<lookbackDays?['Cobertura parcial: '+successfulDays+'/'+lookbackDays+
+          ' fechas históricas respondieron; no imputar resultados faltantes']:[]),
         'Lesiones/ausencias y alineaciones pendientes de verificación',
         'Rendimiento ajustado por rival y métricas específicas pendientes',
         'Mercados y probabilidad calibrada no verificados',
