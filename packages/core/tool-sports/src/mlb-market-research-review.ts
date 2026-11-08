@@ -62,7 +62,13 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
       ['Preview','Pre-Game','Scheduled'].includes(d.fixture.status),
     startersVerified:!!h&&!!a,
     teamRecordsVerified:!!d.seasonRecord.home&&!!d.seasonRecord.away,
-    recentTeamFormVerified:!!d.teamForm.home?.games&&!!d.teamForm.away?.games,
+    recentTeamFormVerified:(['home','away'] as const).every(side=>{
+      const form=d.teamForm[side]
+      return form!==null&&Number.isSafeInteger(form.games)&&form.games>0&&
+        Array.isArray(form.lastResults)&&form.lastResults.length===form.games&&
+        form.lastResults.every(g=>Number.isFinite(Date.parse(g.date))&&
+          Date.parse(g.date)<checkedMs)
+    }),
     bothRostersVerified:nineVerified('home')&&nineVerified('away'),
     lineupsConfirmed:(['home','away'] as const).every(side=>{
       if(d.lineupStatus[side]!=='confirmed')return false
