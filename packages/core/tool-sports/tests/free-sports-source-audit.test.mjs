@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {crosscheckFreeFixture,freeOfficialFollowUps,freeSourceInventory}
+import {crosscheckFreeFixture,freeOfficialFollowUps,freeSourceInventory,freeSourceCoverageForSport}
   from '../src/free-sports-source-audit.ts'
 
 const game={sport:'basketball',league:'nba',eventId:'401909949',
@@ -121,4 +121,31 @@ test('source catalog distinguishes integrated providers from catalog-only and hi
   assert.ok(freeSourceInventory.some(x=>x.name==='OpenFootball'&&x.state==='integrated'))
   assert.ok(freeSourceInventory.some(x=>x.name==='Jolpica F1'&&x.state==='catalog-only'))
   assert.ok(freeSourceInventory.some(x=>x.name==='StatsBomb Open Data'&&x.state==='historical-only'))
+})
+
+test('all 17 sports have truthful source coverage, including weak/no-API disciplines',()=>{
+  const sports=['soccer','basketball','baseball','football','hockey','tennis','mma',
+    'racing','golf','cricket','rugby','lacrosse','volleyball','water-polo',
+    'field-hockey','rugby-league','australian-football']
+  for(const sport of sports){
+    const result=freeSourceCoverageForSport(sport,{})
+    assert.equal(result.supported,true)
+    assert.ok(result.wired.includes('ESPN Site/Core'),sport)
+    assert.ok(result.referenceOnly.length>0,sport)
+  }
+  const nba=freeSourceCoverageForSport('basketball',{})
+  assert.ok(nba.referenceOnly.includes('NBA Stats / LiveData'))
+  assert.ok(nba.referenceOnly.includes('WNBA Stats'))
+  assert.ok(!nba.wired.includes('NBA Stats / LiveData'))
+  const tennis=freeSourceCoverageForSport('tennis',{})
+  assert.ok(tennis.referenceOnly.includes('Sackmann ATP/WTA Archive'))
+  const football=freeSourceCoverageForSport('football',{})
+  assert.ok(football.wired.includes('nflverse'))
+  const soccer=freeSourceCoverageForSport('soccer',{})
+  assert.ok(soccer.unconfiguredOptional.includes('football-data.org'))
+  assert.ok(freeSourceCoverageForSport('soccer',{PHOENIX_FOOTBALL_DATA_TOKEN:'test'})
+    .configuredOptional.includes('football-data.org'))
+  assert.ok(!freeSourceCoverageForSport('soccer',{PHOENIX_SPORTS_ESPN_DISABLED:'1'})
+    .wired.includes('ESPN Site/Core'))
+  assert.equal(freeSourceCoverageForSport('invented',{}).supported,false)
 })
