@@ -6,10 +6,11 @@
 import {spawn} from 'node:child_process'
 import {createHash} from 'node:crypto'
 import {existsSync,statSync,readFileSync,mkdirSync,writeFileSync} from 'node:fs'
-import {resolve,join,extname,dirname,isAbsolute} from 'node:path'
+import {resolve,join,extname,dirname,basename,isAbsolute} from 'node:path'
 import {homedir} from 'node:os'
 import {fileURLToPath} from 'node:url'
 import {rootFor} from './phoenix-anatomy-auto.mjs'
+import {probeOpenCarpDocker,dockerCommand} from './phoenix-opencarp-docker.mjs'
 
 const name=fileURLToPath(import.meta.url)
 const supported=['svzerod','opencarp','simvascular','svmultiphysics']
@@ -20,6 +21,14 @@ const wslDistro=()=>process.env.PHOENIX_ANATOMY_WSL_DISTRO||'Ubuntu-24.04'
 const minTime=1000,maxTime=45*60*1000
 const timeLimit=()=>Math.min(maxTime,Math.max(minTime,Number(arg('--timeout-ms')||900000)||900000))
 const dataHome=()=>resolve(process.env.PHOENIX_ANATOMY_HOME||rootFor())
+/** Docker image is a locally verified immutable ID, never an arbitrary request string. */
+function openCarpImage(){
+ try{
+  const m=JSON.parse(readFileSync(join(dataHome(),'manifest.json'),'utf8'))
+  const v=m.components?.opencarp
+  return v?.status==='installed'&&v.mode==='docker'&&/^sha256:[a-f0-9]{64}$/i.test(v.imageId||'')?v.imageId:null
+ }catch{return null}
+}
 const binary=(engine)=>{
  if(engine==='svzerod'){
   const fromEnv=process.env.PHOENIX_SVZEROD_BIN
@@ -96,6 +105,20 @@ export function buildInvocation(engine,config,output,platform=process.platform,e
   return {cmd:b,args:[config]}
  }
  if(engine==='opencarp'){
+  const dockerImage=env.PHOENIX_OPENCARP_DOCKER_IMAGE
+  if(dockerImage){
+   if(!/^sha256:[a-f0-9]{64}$/i.test(dockerImage)||!isAbsolute(config)||!isAbsolute(output))
+    invalid('Verified openCARP Docker image and absolute paths required')
+   // Research-only local directories: model input read-only and results writable.
+   // Network is disabled; no command strings are ever passed through a shell.
+   return {cmd:'docker',args:['run','--rm','--network','none',
+     '--security-opt','no-new-privileges',
+     '--mount','type=bind,source='+dirname(config)+',target=/phoenix-input,readonly',
+     '--mount','type=bind,source='+dirname(output)+',target=/phoenix-output',
+     '--workdir','/phoenix-input','--entrypoint','openCARP',dockerImage,
+     '-par','/phoenix-input/'+basename(config),
+     '-simID','/phoenix-output/'+basename(output)]}
+  }
   const b=wsl?'openCARP':env.PHOENIX_OPENCARP_BIN||'openCARP'
   return wsl?{cmd:'wsl.exe',args:['--distribution',env.PHOENIX_ANATOMY_WSL_DISTRO||'Ubuntu-24.04',
    '--exec',b,'-par',config,'-simID',output]}:
@@ -148,8 +171,14 @@ export async function doctor(){
     const invocation=process.platform==='win32'?{cmd:'wsl.exe',args:['--distribution',wslDistro(),'--exec','openCARP','-buildinfo']}:
       {cmd:b,args:['-buildinfo']}
     const r=await execute(invocation,{timeoutMs:18000})
-    results[engine]={status:r.exitCode===0?'ready':'unverified',buildInfoChecked:r.exitCode===0}
-   }catch{results[engine]={status:'not-installed',help:'Install openCARP in WSL2 or Linux and verify openCARP -buildinfo'}}
+    if(r.exitCode!==0)throw Error('openCARP failed buildinfo verification')
+    results[engine]={status:'ready',buildInfoChecked:true,mode:process.platform==='win32'?'wsl2':'native'}
+    }catch{
+    const id=openCarpImage()
+    const verified=id?await probeOpenCarpDocker(dockerCommand,id):null
+    results[engine]=verified?{status:'ready',mode:'docker',buildInfoChecked:true}:
+      {status:'not-installed',help:'Install openCARP from PHOENIX Settings using official Docker, or WSL2/Linux'}
+   }
   }else if(engine==='svmultiphysics'){
    try{
     const w=process.platform==='win32'
@@ -173,12 +202,14 @@ export async function runSimulation({engine,input,output,timeoutMs=900000,resear
  const chosen=binary(engine)
  if(engine==='svzerod'&&!chosen)invalid('svZeroDSolver executable not installed')
  const wsl3d=process.platform==='win32'&&engine==='svmultiphysics'
+ const dockerImage=engine==='opencarp'?openCarpImage():null
  const c=wsl3d?source.split(/[\\/]/).at(-1):
-   process.platform==='win32'&&engine==='opencarp'?await toWsl(source):source
- const o=process.platform==='win32'&&engine==='opencarp'?await toWsl(target):target
+   process.platform==='win32'&&engine==='opencarp'&&!dockerImage?await toWsl(source):source
+ const o=process.platform==='win32'&&engine==='opencarp'&&!dockerImage?await toWsl(target):target
  const inv=buildInvocation(engine,c,o,process.platform,{
   ...process.env,PHOENIX_SVZEROD_BIN:chosen||process.env.PHOENIX_SVZEROD_BIN,
   PHOENIX_SVMULTIPHYSICS_WORKDIR:wsl3d?await toWsl(dirname(source)):undefined,
+  PHOENIX_OPENCARP_DOCKER_IMAGE:dockerImage||undefined,
  })
  const result=await execute(inv,{timeoutMs,cwd:engine==='svmultiphysics'&&process.platform!=='win32'?dirname(source):undefined})
  const succeeded=result.exitCode===0&&existsSync(target)

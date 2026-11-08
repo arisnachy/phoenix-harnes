@@ -65,6 +65,7 @@ function entry(id:AnatomyConnectorId,title:string,installed:boolean,
    if(/space|GB|disk|available/i.test(reason))return 'Se necesita espacio libre en disco'
    if(/npm|node|package|artifact/i.test(reason))return 'Revisa Node.js y npm local'
    if(/winget|Slicer|extension/i.test(reason))return 'Revisa WinGet, la ruta de Slicer y SlicerHeart'
+   if(/Docker|daemon|WSL2|registry/i.test(reason))return 'Instala e inicia Docker Desktop o configura WSL2; después reintenta'
    if(/Timeout|exited/i.test(reason))return 'El instalador terminó con error o agotó el tiempo'
    return 'Consulta install.log local para conocer el error exacto'
  }
@@ -106,9 +107,9 @@ export function readAnatomyConnectors():AnatomyConnectorSnapshot{
   entry('simvascular','SimVascular',runtimeFresh('simvascular'),false,false,
     'Motor externo de hemodinámica: configurar y comprobar binario oficial/WSL2 y un modelo de flujo preparado.',
     s,['simvascular'],'https://simvascular.github.io/'),
-  entry('opencarp','openCARP',runtimeFresh('opencarp'),false,false,
-    'Motor externo de electrofisiología. En Windows exige entorno Linux/WSL2 y parámetros científicamente preparados.',
-    s,['opencarp'],'https://opencarp.org/'),
+  entry('opencarp','openCARP',runtimeFresh('opencarp'),false,true,
+    'Instalación automática desde imagen oficial Docker (requiere Docker Desktop iniciado) o detección de WSL2/Linux. Simulación científica, no visualizador 3D ni diagnóstico clínico.',
+    s,['opencarp'],'https://opencarp.org/download/installation/install-docker'),
   entry('three-vtk','Three.js + vtk.js',viewer&&meshes,false,true,
     'Visor GLB local y bibliotecas vtk.js. Cortes volumétricos y simulación requieren herramientas adicionales.',
     s,['viewer','vtkjs'],'https://kitware.github.io/vtk-js/')
@@ -123,7 +124,7 @@ export function readAnatomyConnectors():AnatomyConnectorSnapshot{
 }
 export function installAnatomyConnector(id:AnatomyConnectorId|'all'):AnatomyConnectorInstallReceipt{
  if(id!=='all'&&!valid(id))throw Error('Unsupported anatomy connector')
- if(id==='simvascular'||id==='opencarp')
+ if(id==='simvascular')
   return{id,status:'blocked',detail:'Requiere instalación oficial externa y configuración en Linux/WSL2; no se instalará silenciosamente.'}
  if(!existsSync(script))return{id,status:'blocked',detail:'Este runtime no contiene el instalador anatómico.'}
  if(lockAlive())return{id,status:'running',detail:'Ya existe una instalación en ejecución. Comprueba el progreso.'}
@@ -143,7 +144,7 @@ export function installAnatomyConnector(id:AnatomyConnectorId|'all'):AnatomyConn
   worker.on('error',()=>{try{rmSync(lock,{force:true})}catch{}})
   worker.unref()
   return{id,status:'started',detail:id==='all'?
-    'Instalación secuencial iniciada en este equipo. Los motores externos solo se comprobarán.':
+    'Instalación secuencial iniciada. openCARP usará Docker oficial si hace falta; SimVascular sigue siendo externo.':
     'Instalación local iniciada. Consulta el estado para ver el resultado.'}
  }catch{
   try{rmSync(lock,{force:true})}catch{}

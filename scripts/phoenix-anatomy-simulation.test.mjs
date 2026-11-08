@@ -49,3 +49,17 @@ test('svMultiPhysics Windows runs XML from WSL project without invoking a shell'
  })
  assert.deepEqual(inv.args.slice(-5),['--cd','/mnt/c/study','--exec','svmultiphysics','solver.xml'])
 })
+
+test('builds isolated Docker execution using only immutable verified images',()=>{
+ const id='sha256:'+'a'.repeat(64)
+ const cfg='/home/research/cardiac/study.par'
+ const out='/home/research/results/run1'
+ const inv=buildInvocation('opencarp',cfg,out,'linux',{PHOENIX_OPENCARP_DOCKER_IMAGE:id})
+ assert.equal(inv.cmd,'docker')
+ assert.deepEqual(inv.args.slice(-5),[id,'-par','/phoenix-input/study.par','-simID','/phoenix-output/run1'])
+ assert.ok(inv.args.includes('none'))
+ assert.ok(inv.args.includes('type=bind,source=/home/research/cardiac,target=/phoenix-input,readonly'))
+ assert.ok(inv.args.includes('type=bind,source=/home/research/results,target=/phoenix-output'))
+ assert.throws(()=>buildInvocation('opencarp',cfg,out,'linux',
+  {PHOENIX_OPENCARP_DOCKER_IMAGE:'unverified-image:latest'}),/Verified/)
+})
