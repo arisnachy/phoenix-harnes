@@ -64,6 +64,7 @@ export const inject = ['tools','systemPrompt']
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'REGLA OBLIGATORIA PARA TICKETS GANADORES: las cotizaciones y favoritos de casas no son investigación deportiva. Si el usuario solicita un ticket ganador del día (incluido solo equipos ganadores), usa sports_chat_ticket_evidence_priced_auto con marketPreference=winner cuando corresponda, o sports_chat_daily_market_shortlist con deep=true. Cada partido requiere expediente de su especialista NFL/NBA/WNBA/NHL/MLB/Fútbol/Tenis, identidad verificada y diagnóstico de bajas, alineaciones, forma y contradicciones. Los resultados incomplete/unavailable bloquean esa pata; no uses sports_chat_ticket para reemplazarlos ni reintroduzcas el favorito por precio. Si no existen suficientes partidos investigados, entrega borrador explícitamente incompleto, nunca ticket ganador certificado. La cuota no demuestra acierto y ninguna ruta puede reportar aprobación o EV sin modelo validado. ',
   'MERCADOS DE TOTAL Y HÁNDICAP: ganar un partido no demuestra cubrir -1.5/+1.5 o una línea over/under. Antes de considerar un total o spread con sports_chat_daily_market_shortlist(deep=true), coteja la línea EXACTA contra resultados previos de AMBOS clubes, separa aciertos, fallos y pushes, y exige dirección consistente en los dos historiales. Si marketOutcomeDiagnostic.status es mixed, insufficient o adverse, etiquetar CONDICIONAL/CONTRAINDICADA y no ponerla como pata cotizada; nunca conviertas frecuencia histórica en probabilidad futura o EV. Para NHL añade portero y reglas OT/SO; para NBA pace, eficiencia y lesiones siguen pendientes si no fueron medidos. La meta de 5–6 patas no autoriza inventar una probabilidad ni rellenar selecciones sin respaldo. ',
   'NHL ESPECIALIZADO: para NHL consulta sports_chat_hockey_slate y sports_chat_nhl_investigate con gameId oficial NHL, no ID ESPN. Recupera rosters y estadísticas observadas de skaters/porteros; distingue portero candidato del titular confirmado y ganador a 60 minutos del ganador con OT/SO. No infieras xG/GSAx, alineaciones definitivas o probabilidades no calibradas, ni llames cuota actual a una línea sin timestamp. En +1.5/-1.5 evalúa el riesgo de caer por dos goles, los márgenes recientes de ambos equipos, la probabilidad de equilibrio del precio, porteros, descanso, empty-net y OT. Sin titular y modelo de cobertura calibrado, clasifica como CONDICIONAL o CONTRAINDICADA. ',
   'TENNIS INTELLIGENCE ATP/WTA: investiga con sports_chat_tennis_slate(tour=atp|wta,date) y sports_chat_tennis_investigate(tour,date,matchId) tras cotejar matchId y participantes exactos, superficie y formato oficial. Valorar primer y segundo servicio vs devolución, break points, fatigue, H2H por superficie, indoor/outdoor y cambios de calendario solo cuando se dispone de fuentes; jamás declarar ranking, H2H, best-of-5, lesiones, cuota o resultado sintético. ATP/WTA son circuitos diferentes; distinguir singles/doubles, retiro, walkover y match-tiebreak en mercados. Si no hay datos suficientes, abstenerse. ',
@@ -1508,7 +1509,7 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket',
-    description:'Prepara un ticket de 4-6 patas con cuotas verificadas (admite 1-10) de hasta seis deportes y mercados h2h, spreads y totales reales, pendiente de aceptación; nunca coloca apuestas.',
+    description:'COTIZADOR MANUAL de selecciones ya dadas por el usuario, NO generador de pronósticos: verifica 1-10 precios auténticos y una sola casa, pero NO investiga equipos, bajas, quarterbacks ni modelos. Para pedir ticket ganador usa sports_chat_ticket_evidence_priced_auto o sports_chat_daily_market_shortlist(deep=true), nunca esta vía de cotización.',
     parameters:{
       sportKey:{ type:'string',description:'Clave deportiva de The Odds API. Para varios deportes utiliza sportKeys.' },
       sportKeys:{ type:'array',description:'Claves deportivas para boleto multideporte, máximo seis: NBA, WNBA, MLB, NHL, NFL y Soccer.',items:{ type:'string' } },
@@ -1538,10 +1539,17 @@ export function apply(ctx: Context): void {
       })
       if(!current.length)throw Error('No hay mercados y cuotas actuales confirmables: se requiere fuente, hora de actualización, partido futuro y casa identificada.')
       const { card,warning }=pricedTicket(args.selections as MarketSelection[],current,args.stake)
-      return JSON.stringify({ uiBlock:card,warning,quoteVerified:true,placed:false,placementStatus:'not-confirmed',
+      const quoteCard={...card,props:{...card.props,
+        title:'PHOENIX · Cotización manual sin investigación deportiva',
+        subtitle:'Precio real observado · predicción y especialistas NO evaluados',
+        note:'SOLO COTIZACIÓN. No se ejecutaron expedientes de NFL/NBA/NHL/MLB/Fútbol/Tenis; ninguna pata está aprobada como pronóstico. '+String(card.props.note??''),
+      }}
+      return JSON.stringify({ uiBlock:quoteCard,warning,quoteVerified:true,
+        researchVerified:false,approvedForBetting:false,
+        placed:false,placementStatus:'not-confirmed',
         observedQuotes:current.length,excludedMissingOrStale:quotes.length-current.length,
         observedAt:new Date(consultedAt).toISOString(),
-        instruction:'Phoenix muestra uiBlock automáticamente en el chat. No reproduzcas su JSON ni un bloque de código. Nunca prometas que ganará. La tarjeta contiene cuotas observadas no aceptadas; confirma siempre la banca y el ticket antes de declararlo pagado.' })
+        instruction:'Esta salida es SOLAMENTE una cotización manual sin investigación especializada, NO un ticket ganador listo. No reproduzcas JSON. Para investigar, utiliza la ruta diaria con expedientes obligatorios; nunca prometas ganancias ni aceptación por la casa.' })
     },
     presentCall:()=>({ card:'generic',title:'Crear ticket visual de análisis',kind:'read' as const }),
   }))
