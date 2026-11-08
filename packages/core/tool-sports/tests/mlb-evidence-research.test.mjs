@@ -875,3 +875,21 @@ test('MLB recent form requires observed dated games, not empty or future schedul
   assert.equal(review.eligibleForTicket,false)
   assert.equal(typeof original.evidenceGates.recentTeamFormVerified,'boolean')
 })
+
+
+test('MLB starter ERA evidence rejects null, blank and nonfinite values',async()=>{
+  const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true}).fetcher,at)
+  assert.ok(d.starters.home&&d.starters.away)
+  const original=d.starters.home.season.era
+  for(const invalid of [null,undefined,'','  ',NaN,Infinity,-1]){
+    d.starters.home.season.era=invalid
+    const review=reviewMlbResearch(d)
+    assert.equal(review.evidenceGates.starterStatsVerified,false)
+    assert.ok(review.missingEvidence.some(x=>x.includes('Estadísticas comprobadas')))
+    assert.equal(review.eligibleForTicket,false)
+  }
+  d.starters.home.season.era=0
+  d.starters.away.season.era=0
+  assert.equal(reviewMlbResearch(d).evidenceGates.starterStatsVerified,true)
+  d.starters.home.season.era=original
+})
