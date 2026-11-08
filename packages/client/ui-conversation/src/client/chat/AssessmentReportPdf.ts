@@ -113,7 +113,7 @@ function row(pages:Page[],name:string,value:string,reportTitle:string):void{
 }
 /** A non-diagnostic graphic that displays the reported score on its declared range. */
 function scoreGauge(pages:Page[],score:string,range:string,title:string):void{
-  const bounds=range.match(/^(-?\\d+)\\s*[–-]\\s*(-?\\d+)$/u)
+  const bounds=range.match(/^(-?\d+)\s*[–-]\s*(-?\d+)$/u)
   const n=Number(score),low=bounds?Number(bounds[1]):NaN,high=bounds?Number(bounds[2]):NaN
   if(!Number.isFinite(n)||!Number.isFinite(low)||!Number.isFinite(high)||high<=low)return
   const p=ensure(pages,36,title)
