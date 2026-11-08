@@ -15,7 +15,7 @@ import { join } from 'node:path'
 const runFile = promisify(execFile)
 export const keylessSports = {
   football:['1x2','double_chance','btts','over_under'],
-  basketball:['moneyline','1x2','over_under'],
+  basketball:['moneyline','home_away','1x2','over_under'],
   baseball:['moneyline','over_under'],
   'american-football':['moneyline','over_under'],
   tennis:['match_winner','total_sets_over_under','total_games_over_under'],
@@ -206,7 +206,8 @@ const validDate=(day:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(day)
  */
 export function oddsHarvesterArgs(sport:KeylessSport,market:string,day:string,file:string):string[]{
   if(!sportOK(sport)||!marketOK(sport,market)||!validDate(day))throw Error('Petición no permitida')
-  const period=(sport==='ice-hockey'&&market==='home_away')?'full_including_ot':
+  const period=((sport==='ice-hockey'||sport==='basketball')&&market==='home_away')
+    ?'full_including_ot':
     ((sport==='basketball'||sport==='american-football')&&market==='1x2')?'full_time':null
   return ['upcoming','--sport',sport,'--date',day.replaceAll('-',''),
     '--market',market,...(period?['--period',period]:[]),
@@ -322,7 +323,20 @@ export async function keylessOdds(
   const running=runner===runScraper?inFlight.get(key):undefined
   if(running)return running
   const task=(async()=>{
-    const raw=await runner(sport,market,date,env)
+    let raw:unknown
+    try{
+      raw=await runner(sport,market,date,env)
+    }catch(error){
+      // Some installed OddsHarvester builds expose basketball two-way
+      // including-OT winners as home_away instead of moneyline.
+      // Retry ONLY an explicit invalid-market error; never hide 401/403,
+      // browser failures or rate-limit errors behind a different market.
+      const reason=error instanceof Error?error.message:String(error)
+      if(sport==='basketball'&&market==='moneyline'
+        &&/(?:invalid|unsupported|not.*valid|unexpected).{0,140}moneyline|moneyline.{0,140}(?:invalid|unsupported|not.*valid)/iu.test(reason))
+        raw=await runner(sport,'home_away',date,env)
+      else throw error
+    }
     const rows=normalizeOddsHarvester(raw,sport,now,3_600_000)
     if(Array.isArray(raw)&&raw.length>0&&rows.length===0)
       throw Error('OddsHarvester procesó '+raw.length+
