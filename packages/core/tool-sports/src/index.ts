@@ -286,7 +286,8 @@ export function apply(ctx: Context): void {
         const candidate=review.candidate
         // Uncertain/contraindicated/unavailable legs remain research-only.
         // Never revert silently to the book's favorite if research fails.
-        if(review.status!=='descriptive-support'||!review.selectedOutcome)return []
+        if(review.status!=='descriptive-support'||!review.selectedOutcome||
+          review.priceAudit.classification==='negative-value')return []
         const selected=review.selectedOutcome
         const raw=quotes.find(quote=>quote.eventId===candidate.bookmakerEventId&&
           quote.bookmaker===candidate.bookmaker&&quote.market===candidate.market&&
@@ -311,7 +312,8 @@ export function apply(ctx: Context): void {
                 'Apoyo descriptivo ('+quoted[index]!.review.sampleGames.home+'/'+
                 quoted[index]!.review.sampleGames.away+' partidos). '+
                 quoted[index]!.review.marketDirection+
-                '. Bajas, titulares y modelo calibrado pendientes.':
+                '. Acierto mínimo exigido '+quoted[index]!.review.priceAudit.breakEvenPercent+
+                '%. Bajas, titulares y modelo calibrado pendientes.':
                 'Candidata CONDICIONAL: no existe una señal independiente suficiente. '+
                 'Verificar lesiones, titulares y reglas antes de considerar.',
             })),
@@ -335,6 +337,8 @@ export function apply(ctx: Context): void {
         marketsReviewed:evaluated.marketsReviewed,
         alternativeMarketsCompared:evaluated.alternativesCompared,
         researchedPicks:trustedOptions.length,conditionalPicks:provisional.length,
+        valueValidatedPicks:best.filter(r=>r.priceAudit.classification==='potential-value').length,
+        priceAuditState:'umbrales-cotizados-sin-modelo-calibrado-por-mercado',
         selected:args.deep===false?pool.selected.slice(0,count):best,
         ...(ticket?{uiBlock:ticket}:{status:'borrador-sin-cuatro-precios-validados'}),
         rejectedQuotes:pool.rejectedQuotes,
@@ -343,7 +347,7 @@ export function apply(ctx: Context): void {
         competitionsChecked:daily.coverage,sourcesChecked:attempts,
         providerHealth,specialMarkets,placed:false,
         warning:'Los hándicaps NHL +1.5/-1.5 sin porteros confirmados ni modelo calibrado de cobertura se bloquean como patas cotizadas. Selección orientativa y cuotas reales observadas: ni proyecciones descriptivas ni probabilidades sin margen son modelos calibrados ni garantías de ganar. La línea y el precio deben confirmarse en la casa, igual que las bajas y titulares oficiales. El campo specialMarkets investiga automáticamente props, periodos y líneas alternativas de la MISMA casa cuando el proveedor las publica; son opciones de investigación y NO patas aprobadas sin modelo específico. Nunca inventar ofertas.',
-        instruction:'Nunca conviertas un resultado CONTRAINDICADO o INCIERTO en pata del ticket; muestra riesgo y alternativas sin inventar precios. La tarjeta nativa solo muestra precios cotejados de una misma casa. Distingue CANDIDATAS CON APOYO DESCRIPTIVO de CONDICIONALES (no equivalen a picks validados). Si la evidencia favorece el lado opuesto, usa el precio real de selectedOutcome. Verifica informes oficiales de lesiones, titulares/porteros, props, períodos y reglas antes de apostar. No hay apuesta realizada.',
+        instruction:'priceAudit.breakEvenPercent es el porcentaje exigido por la cuota y NO un pronóstico. El valor esperado queda sin verificar cuando no hay modelo calibrado para esa línea. Nunca conviertas un resultado CONTRAINDICADO o INCIERTO en pata del ticket; muestra riesgo y alternativas sin inventar precios. La tarjeta nativa solo muestra precios cotejados de una misma casa. Distingue CANDIDATAS CON APOYO DESCRIPTIVO de CONDICIONALES (no equivalen a picks validados). Si la evidencia favorece el lado opuesto, usa el precio real de selectedOutcome. Verifica informes oficiales de lesiones, titulares/porteros, props, períodos y reglas antes de apostar. No hay apuesta realizada.',
       })
     },
     presentCall:()=>({card:'generic',title:'Investigar el ticket diario y los mercados reales',kind:'read' as const}),

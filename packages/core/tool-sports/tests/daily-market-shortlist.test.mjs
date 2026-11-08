@@ -173,3 +173,14 @@ test('does not automatically choose the cheapest +1.5 or totals for an event',()
   assert.ok(list.alternatives.some(x=>x.market==='spreads'&&
     x.marketNoVigShare>.6))
 })
+
+test('research retains two different actual NBA total lines for the same game',()=>{
+  const quotes=[...pair(0),...pair(0,'totals'),
+    ...pair(0,'totals').map(q=>({...q,point:229.5})),
+    ...pair(0,'spreads')]
+  const list=shortlistDailyMarkets(fixtures,quotes,4,now)
+  assert.equal(list.selected.length,1)
+  const lines=list.alternatives.filter(x=>x.market==='totals').map(x=>x.line)
+  assert.deepEqual(lines.sort((a,b)=>a-b),[225.5,229.5])
+  assert.equal(list.alternatives.length,3)
+})
