@@ -209,7 +209,7 @@ export function apply(ctx: Context): void {
             const evidence=await auditUniversalMatchup({
               sport:candidate.sport,league:candidate.league,
               eventId:candidate.espnEventId,date:daily.date,
-              lookbackDays:candidate.sport==='football'?28:
+              lookbackDays:candidate.sport==='football'||candidate.sport==='hockey'?28:
                 candidate.sport==='soccer'?21:14,includeOdds:false,
             },sharedFetch,now,env)
             let official:DailyNhlSpecialist|null=null
