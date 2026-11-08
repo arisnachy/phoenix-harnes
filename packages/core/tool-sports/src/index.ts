@@ -11,6 +11,7 @@ import { researchNbaSlate } from './nba-research.ts'
 import {shortlistDailyMarkets,dailyOddsSportKey} from './daily-market-shortlist.ts'
 import {assessDailyMarketEvidence,unavailableMarketEvidence} from './daily-market-evidence.ts'
 import {selectDailyResearchedMarkets} from './daily-market-selection.ts'
+import {researchNhlOfficialMatch,type DailyNhlSpecialist} from './daily-nhl-specialist.ts'
 import {readSportsEventMarketMenu,eventMarketCatalog} from './sports-event-market-menu.ts'
 import {researchDailySpecialMarkets} from './daily-special-market-research.ts'
 
@@ -192,6 +193,8 @@ export function apply(ctx: Context): void {
         const checked:ReturnType<typeof assessDailyMarketEvidence>[]=[]
         // Reuse the same ESPN historical scoreboard across independent games in a league.
         const cached=new Map<string,Promise<Response>>()
+        // Bounded official NHL verification, shared between market families.
+        const nhlResearch=new Map<string,Promise<DailyNhlSpecialist>>()
         const sharedFetch:typeof fetch=((input,init)=>{
           const url=String(input)
           if(!/^https:\/\/site\.api\.espn\.com\/apis\/site\/v2\/sports\/[^/]+\/[^/]+\/scoreboard\?dates=\d{8}$/u.test(url))
@@ -209,14 +212,53 @@ export function apply(ctx: Context): void {
               lookbackDays:candidate.sport==='football'?28:
                 candidate.sport==='soccer'?21:14,includeOdds:false,
             },sharedFetch,now,env)
+            let official:DailyNhlSpecialist|null=null
+            if(candidate.sport==='hockey'){
+              const key=candidate.espnEventId
+              let pending=nhlResearch.get(key)
+              if(!pending&&nhlResearch.size<3){
+                pending=researchNhlOfficialMatch({
+                  date:daily.date,home:evidence.home.name,away:evidence.away.name,
+                  kickoff:candidate.kickoff,
+                },sharedFetch,now)
+                nhlResearch.set(key,pending)
+              }
+              if(pending)official=await pending
+            }
             const alternatives=pool.alternatives.filter(other=>
               other.sport===candidate.sport&&other.league===candidate.league&&
               other.espnEventId===candidate.espnEventId&&
               other.bookmaker===candidate.bookmaker)
             // Every market family uses the SAME evidence; no extra network
             // fetches are required for h2h/spread/total comparisons.
-            return [candidate,...alternatives].map(market=>
-              assessDailyMarketEvidence(market,evidence))
+            return [candidate,...alternatives].map(market=>{
+              const review=assessDailyMarketEvidence(market,evidence)
+              if(!official)return review
+              const warnings=[...review.warnings]
+              if(official.status==='unavailable'){
+                warnings.push('Expediente NHL oficial no disponible: '+official.reason)
+              }else{
+                warnings.push('NHL oficial: '+official.verifiedSources+'/'+
+                  official.sourceCount+' fuentes; porteros solo candidatos, no titulares.')
+                const side=review.selectedOutcome
+                if(market.market==='spreads'&&side&&typeof side.line==='number'){
+                  const norm=(name:string)=>name.normalize('NFD')
+                    .replace(/[\\u0300-\\u036f]/gu,'').toLowerCase()
+                    .replace(/[^a-z0-9]/gu,'')
+                  const betHome=norm(side.selection)===norm(evidence.home.name)
+                  const team=betHome?official.home:official.away
+                  const opposing=betHome?official.away:official.home
+                  if(team&&opposing){
+                    const miss=team.margins.filter(m=>m+side.line!<0).length
+                    const winning=opposing.margins.filter(m=>m>side.line!).length
+                    warnings.push('NHL oficial: la selección no cubriría '+miss+
+                      '/'+team.games+' juegos recientes de su equipo; rival superaría el margen en '+
+                      winning+'/'+opposing.games+' juegos. Muestras no ajustadas por rival.')
+                  }
+                }
+              }
+              return {...review,nhlOfficial:official,warnings}
+            })
           }))
           results.forEach((item,i)=>{
             if(item.status==='fulfilled')checked.push(...item.value)
