@@ -338,6 +338,13 @@ export function freeSourceCoverageForSport(sport:string,env:NodeJS.ProcessEnv=pr
       source.name==='balldontlie'?'PHOENIX_BALLDONTLIE_API_KEY':
       source.name==='The Odds API v4'?'THE_ODDS_API_KEY':
       source.name==='TheOddsAPI'?'THEODDSAPI_API_KEY':null
+    // TheSportsDB fixture crosscheck currently maps six sports only.
+    // Other sports are listed as references until an event schema is implemented.
+    if(source.name==='TheSportsDB'&&!['soccer','basketball','baseball',
+      'football','hockey','tennis'].includes(sport)){
+      referenceOnly.push(source.name+' (sin adaptador de cotejo en esta disciplina)')
+      continue
+    }
     const isPrimary=source.state==='primary'
     const isWired=source.state==='integrated'||source.state==='existing'||isPrimary
     const isOptional=source.state==='integrated-opt-in'||source.state==='existing-opt-in'
