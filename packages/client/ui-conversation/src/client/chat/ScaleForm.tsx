@@ -223,10 +223,11 @@ function choiceValue(item: ScaleItem, index: number): string {
 }
 
 /** In-chat form with answered-item count, reset and auditable scoring. */
-export function ScaleForm({ spec, onAction, verified=false }: {
+export function ScaleForm({ spec, onAction, verified=false, restoredFromCatalog=false }: {
   readonly spec: ScaleFormSpec
   readonly onAction?: CanvasAction | undefined
   readonly verified?: boolean
+  readonly restoredFromCatalog?: boolean
 }): ReactNode {
   const [selected, setSelected] = useState<Record<string, number>>({})
   const [participant,setParticipant]=useState('')
@@ -244,7 +245,8 @@ export function ScaleForm({ spec, onAction, verified=false }: {
       answers[item.id] = item.options[choice]!.score
     }
   }
-  const warnings = scaleProtocolWarnings(spec)
+  const warnings = [...scaleProtocolWarnings(spec),
+    ...(!verified ? ['La versión y procedencia no están autenticadas por el catálogo profesional.'] : [])]
   const [copied, setCopied] = useState(false)
   const scored = scoreScale(spec, answers)
   const exportPdf = (): void => {
@@ -279,11 +281,20 @@ export function ScaleForm({ spec, onAction, verified=false }: {
     ...warnings.map(warning => 'Advertencia: ' + warning)]
     void navigator.clipboard.writeText(lines.join('\n')).then(() => setCopied(true)).catch(() => setCopied(false))
   }
-  return <section className={css.surface} data-generative-ui="scale_form">
+  return <section className={css.surface+' '+css.assessmentSurface} data-generative-ui="scale_form">
     <header className={css.heading}><PhoenixUiIcon name="clipboard" />
       <div><h3>{spec.props.title}</h3>
         {spec.props.description && <p>{spec.props.description}</p>}
       </div></header>
+    <div className={css.assessmentMeta}>
+      <span>{spec.props.items.length} reactivos</span>
+      <span>{spec.props.scoring ? 'Escala '+spec.props.scoring.min+'–'+spec.props.scoring.max : 'Registro de respuestas'}</span>
+      <span>{verified ? 'Fuente de referencia documentada' : 'Pendiente de autenticación'}</span>
+    </div>
+    {restoredFromCatalog && <p className={css.catalogNotice} role="status">
+      Se ha utilizado la definición de referencia del catálogo PHOENIX, en lugar
+      de las preguntas y puntuaciones generadas por IA. Verifica idioma, versión y población.
+    </p>}
     {spec.props.administration && <section aria-label="Protocolo de aplicación" className={css.questions}>
       <h4>Procedimiento de administración</h4>
       <ol>{spec.props.administration.map(step =>
@@ -302,36 +313,37 @@ export function ScaleForm({ spec, onAction, verified=false }: {
         Mejorar instrumento con Kira
       </button>}
     </div>}
-    <div className={css.questions}>
-      {spec.props.items.map((item, index) => <label key={item.id} className={css.question}>
-        <span>{index + 1}. {item.question}</span>
-        {item.help && <small>{item.help}</small>}
-        <select value={selected[item.id] === undefined ? '' : choiceValue(item, selected[item.id]!)}
-          onChange={event => {
-            const choice = event.currentTarget.value
-            setSelected(old => {
-              const next = { ...old }
-              if (choice === '') delete next[item.id]
-              else {
-                const index = item.options.findIndex((_,i) => choiceValue(item,i) === choice)
-                if (index >= 0) next[item.id] = index
-              }
-              return next
-            })
-            setCopied(false)
-          }}>
-          <option value="">Seleccionar respuesta</option>
-          {item.options.map((option, i) => <option key={i} value={choiceValue(item,i)}>{option.label}</option>)}
-        </select>
-      </label>)}
+    <div className={css.assessmentQuestions}>
+      {spec.props.items.map((item, index) => <fieldset key={item.id} className={css.assessmentQuestion}>
+        <legend><span className={css.questionNumber}>{String(index + 1).padStart(2,'0')}</span>
+          {item.question}</legend>
+        {item.help && <p className={css.questionHelp}>{item.help}</p>}
+        <div className={css.answerGrid}>
+          {item.options.map((option, i) => <label key={i}
+            className={css.answerChoice+(selected[item.id]===i?' '+css.answerSelected:'')}>
+            <input type="radio" name={'assessment-'+index} value={choiceValue(item,i)}
+              checked={selected[item.id]===i}
+              onChange={() => { setSelected(old=>({...old,[item.id]:i})); setCopied(false) }} />
+            <span>{option.label.replace(/\\s*\\(-?\\d+\\)$/u,'')}</span>
+          </label>)}
+        </div>
+      </fieldset>)}
     </div>
-    <div className={css.result}>
+    <div className={css.result+' '+css.assessmentResult}>
       <span>Puntuación</span>
       <strong aria-live="polite">{scored.total === null ? '—' : scored.total}</strong>
       <span>{scored.answered} de {spec.props.items.length} respuestas</span>
       {spec.props.scoring && <span>Rango: {spec.props.scoring.min}–{spec.props.scoring.max}</span>}
       {warnings.length === 0 && scored.band && <PhoenixStatusPill label={scored.band.label} tone={scored.band.tone ?? 'neutral'} />}
+      {spec.props.scoring && <progress aria-label="Progreso de puntuación" min={0}
+        max={Math.max(1,spec.props.scoring.max-spec.props.scoring.min)}
+        value={scored.total===null ? 0 : scored.total-spec.props.scoring.min} />}
     </div>
+    {verified && warnings.length===0 && scored.total!==null && scored.band &&
+      <p className={css.interpretation} role="status">
+        <strong>Interpretación descriptiva:</strong> {scored.band.label}.
+        Es un resultado de cribado, no un diagnóstico clínico.
+      </p>}
     {scored.domains.length > 0 && <div className={css.questions} aria-label="Resultados por dimensión">
       <h4>Resultados por dimensión</h4>
       {scored.domains.map(domain => <div key={domain.id} className={css.result}>
@@ -344,10 +356,11 @@ export function ScaleForm({ spec, onAction, verified=false }: {
       ATENCIÓN: respuesta positiva en el ítem 9 del PHQ-9. Requiere valoración
       clínica de seguridad y aplicación del protocolo local; no se interpreta únicamente por el total.
     </p>}
-    <section className={css.questions} aria-label="Informe profesional PDF">
-      <h4>Informe profesional · PDF</h4>
-      <p>Exporta el registro completo, sus respuestas, puntuaciones, interpretación
-        descriptiva y fuentes. El profesional debe revisar, completar y firmar el informe.</p>
+    <details className={css.reportPanel}>
+      <summary>Informe profesional · PDF <span>Datos, interpretación y anexo de respuestas</span></summary>
+      <div className={css.reportContent}>
+      <p>El PDF incluye puntuación, respuestas, método, fuentes, limitaciones y
+        un espacio para el análisis del profesional. Requiere revisión y firma.</p>
       <label className={css.question}>Nombre o código de la persona evaluada
         <input type="text" maxLength={120} value={participant}
           onChange={e=>setParticipant(e.currentTarget.value)} placeholder="Opcional" />
@@ -395,7 +408,8 @@ export function ScaleForm({ spec, onAction, verified=false }: {
       <p className={css.disclaimer}>Se descarga localmente al pulsar el botón.
         No se guarda automáticamente en el expediente. La aplicación no firma informes
         ni emite diagnósticos automáticamente.</p>
-    </section>
+      </div>
+    </details>
     <div className={css.actions}>
       <button type="button" onClick={copy} disabled={scored.total === null}>
         <PhoenixUiIcon name={copied ? 'check' : 'copy'} size={15} /> {copied ? 'Copiado' : 'Copiar resultado'}
