@@ -77,7 +77,7 @@ export async function readHistoricalScoreboard(root:string,start:string,end:stri
   // will be counted later by each sport's recent-games parser.
   if(completeMonths<months.length||!results.size){
     for(const teamId of [...new Set(teamIds)].slice(0,2)){
-      if(!/^\\d{1,18}$/u.test(teamId))continue
+      if(!/^\d{1,18}$/u.test(teamId))continue
       result.scheduleQueries++
       const schedule=await load(root+'teams/'+teamId+'/schedule?limit=250')
       if(validBoard(schedule)){result.scheduleSuccesses++;take(schedule.events)}
