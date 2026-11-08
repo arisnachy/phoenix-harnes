@@ -14,7 +14,7 @@ describe('Anatomy Connectors Settings',()=>{
    entries:[{id:'totalsegmentator',title:'TotalSegmentator',installed:false,operational:false,
      canInstall:true,phase:'missing',detail:'Python packages not ready'},
      {id:'opencarp',title:'openCARP',installed:false,operational:false,
-     canInstall:false,phase:'external',detail:'WSL2 required'}],
+     canInstall:true,phase:'missing',detail:'Docker Desktop required'}],
   })
   render(<AnatomyConnectorsSettingsTab {...({t,installAnatomy,listAnatomy} as unknown as AnatomyConnectorsSettingsTabProps)}/>)
   expect(await screen.findByText('TotalSegmentator')).toBeTruthy()
@@ -22,9 +22,11 @@ describe('Anatomy Connectors Settings',()=>{
   expect(checkboxes).toHaveLength(2)
   expect(checkboxes[0]?.checked).toBe(false)
   expect(checkboxes[0]?.disabled).toBe(true)
-  fireEvent.click(screen.getByRole('button',{name:en.anatomyInstall}))
+  fireEvent.click(screen.getAllByRole('button',{name:en.anatomyInstall})[0]!)
   await waitFor(()=>expect(installAnatomy).toHaveBeenCalledWith('totalsegmentator'))
-  expect(screen.queryByRole('button',{name:'Install openCARP'})).toBeNull()
+  await waitFor(()=>expect((screen.getAllByRole('button',{name:en.anatomyInstall})[1] as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(screen.getAllByRole('button',{name:en.anatomyInstall})[1]!)
+  await waitFor(()=>expect(installAnatomy).toHaveBeenCalledWith('opencarp'))
  })
  it('launches one host-managed bulk job and shows sequential progress',async()=>{
   const installAnatomy=vi.fn().mockResolvedValue({id:'all',status:'started',detail:'queued'})
