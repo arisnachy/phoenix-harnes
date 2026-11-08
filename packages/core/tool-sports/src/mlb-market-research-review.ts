@@ -32,7 +32,13 @@ export type MlbResearchReview={
   missingEvidence:string[];
 }
 const count=(v:unknown)=>Array.isArray(v)?v.length:0
-const readyStat=(p:MlbAthlete|null,field:string)=>p?.season[field]!==undefined
+const readyStat=(p:MlbAthlete|null,field:string)=>{
+  const value=p?.season[field]
+  if(value===null||value===undefined||typeof value==='boolean')return false
+  if(typeof value==='string'&&!value.trim())return false
+  const parsed=typeof value==='number'?value:Number(value)
+  return Number.isFinite(parsed)&&parsed>=0
+}
 /** Every market is checked against the verified evidence in the SAME dossier. */
 export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbResearchReview{
   const h=d.starters.home,a=d.starters.away
