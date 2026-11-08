@@ -43,17 +43,22 @@ test('TheRundown authenticates privately and converts fresh open sportsbook odds
   assert.deepEqual(rows.map(r=>r.bookmaker),['DraftKings','DraftKings'])
   assert.deepEqual(rows.map(r=>r.price),[1.66667,2.3])
   assert.equal(rows[0].updatedAt,updated)
+  assert.equal(rows[0].observedAt,new Date(now).toISOString())
   assert.equal(rows[0].source,'TheRundown')
 })
-test('TheRundown rejects wrong period and expired offers',async()=>{
+test('TheRundown rejects wrong period but preserves verified open lines with older last change',async()=>{
   const wrong=structuredClone(rundown)
   wrong.events[0].markets[0].period_id=1
   assert.deepEqual(await fetchTheRundownOdds('basketball_nba','h2h','key',
     async()=>json(wrong),now),[])
   const old=structuredClone(rundown)
   old.events[0].markets[0].participants[0].lines[0].prices['19'].updated_at='2026-11-07T12:00:00Z'
-  assert.equal((await fetchTheRundownOdds('basketball_nba','h2h','key',
-    async()=>json(old),now)).length,1)
+  const oldRows=await fetchTheRundownOdds('basketball_nba','h2h','key',
+    async()=>json(old),now)
+  assert.equal(oldRows.length,2)
+  assert.equal(oldRows[0].updatedAt,'2026-11-07T12:00:00Z')
+  assert.equal(oldRows[0].observedAt,new Date(now).toISOString())
+  assert.ok(Date.parse(oldRows[0].updatedAt)<Date.parse(oldRows[0].observedAt))
 })
 test('SportsGameOdds uses authentic bookmaker offers only, not model fair odds',async()=>{
   const feed=async(url,init)=>{
@@ -71,8 +76,11 @@ test('SportsGameOdds refuses unavailable rows and wrong soccer settlement',async
   const wrong=structuredClone(sportsGame)
   wrong.data[0].odds['points-home-game-ml-home'].byBookmaker.fanduel.available=false
   wrong.data[0].odds['points-away-game-ml-away'].byBookmaker.fanduel.lastUpdatedAt='2026-11-07T12:00:00Z'
-  assert.deepEqual(await fetchSportsGameOdds('basketball_nba','h2h','key',
-    async()=>json(wrong),now),[])
+  const oldRows=await fetchSportsGameOdds('basketball_nba','h2h','key',
+    async()=>json(wrong),now)
+  assert.equal(oldRows.length,1)
+  assert.equal(oldRows[0].updatedAt,'2026-11-07T12:00:00Z')
+  assert.equal(oldRows[0].observedAt,new Date(now).toISOString())
   assert.deepEqual(await fetchSportsGameOdds('soccer_epl','h2h','key',
     async()=>json(sportsGame),now),[])
 })
