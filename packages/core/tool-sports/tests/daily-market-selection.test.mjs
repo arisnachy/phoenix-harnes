@@ -61,3 +61,12 @@ test('independently positive market beats negative-value descriptive favorite',(
   const result=selectDailyResearchedMarkets([overpriced,better],5)
   assert.equal(result.selected[0].candidate.market,'totals')
 })
+
+test('equally researched moneyline prioritizes stronger market favorite over raw ranking',()=>{
+  const low={...review(21,'h2h','descriptive-support',99),
+    selectedOutcome:{selection:'Home 21',line:null,decimalOdds:1.91,noVigShare:.52}}
+  const high={...review(22,'h2h','descriptive-support',1),
+    selectedOutcome:{selection:'Home 22',line:null,decimalOdds:1.19,noVigShare:.84}}
+  const r=selectDailyResearchedMarkets([low,high],5)
+  assert.equal(r.selected[0].candidate.espnEventId,'22')
+})

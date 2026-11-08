@@ -2,6 +2,7 @@
  * No combined-odds claims across different bookmakers or historical sources.
  */
 import { evidenceTicket } from './evidence-ticket.ts'
+import {auditTicketMarketRisk,quoteSideNoVig,type TicketMarketRisk} from './ticket-risk-audit.ts'
 import {investigateTicketSpecialists,type SpecialistGate} from './ticket-specialist-gate.ts'
 import { keylessEnabled,keylessOdds,type KeylessQuote } from './keyless-odds.ts'
 import { marketOddsDetailed,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome,type OddsResearchObservation } from './sports.ts'
@@ -48,7 +49,7 @@ export async function evidencePricedTicket(
   modelAudit:Array<{eventId:string;status:'support'|'contradiction'|'unavailable';
     prediction:ModelForecast|null}>;
   conditional:boolean;dossierComplete:boolean;
-  explanation:string}>{
+  explanation:string;marketRisk?:TicketMarketRisk}>{
   const research=await evidenceTicket(count,date,sport,fetcher,now,env)
   const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
     year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
@@ -311,6 +312,14 @@ export async function evidencePricedTicket(
     return{book,choices,combined:choices.reduce((acc,q)=>acc*q.price,1)}
   }).filter(x=>x.choices.length===count).sort((a,b)=>b.combined-a.combined)[0]
   if(!best)return checked
+  // Compare the winning-side price ONLY against the complete, matching
+  // opposite-side bookmaker prices. Single-sided quotes yield null.
+  const marketRisk=auditTicketMarketRisk(best.choices.map((q,index)=>({
+    eventId:research.events[index]?.eventId??q.eventId,selection:q.selection,
+    market:q.market,noVigShare:quoteSideNoVig(q,all,now),
+  })))
+  const elevatedMarketRisk=marketRisk.missingQuotes>0||
+    marketRisk.legs.some(x=>x.relativeRisk==='elevated')
   const marketQuotes:MarketOutcome[]=best.choices.map((q,index)=>({
     eventId:q.eventId,bookmaker:q.bookmaker,market:q.market,selection:q.selection,point:q.point,
     price:q.price,home:q.home,away:q.away,time:q.time,updatedAt:q.updatedAt,
@@ -331,6 +340,8 @@ export async function evidencePricedTicket(
     const pricedRow=row&&typeof row==='object'&&!Array.isArray(row)
       ?row as Record<string,unknown>:{}
     return {...pricedRow,
+      marketNoVigPercent:marketRisk.legs[index]?.noVigPercent??null,
+      marketRiskTier:marketRisk.legs[index]?.relativeRisk??'unknown',
       specialistResearch:specialistChecks[index]??null,
       researchStatus:specialistChecks[index]?.status==='researched'?'documented':'conditional',
       pendingEvidence:specialistChecks[index]?.pendingSteps.slice(0,5)??[],
@@ -345,25 +356,33 @@ export async function evidencePricedTicket(
             ' · Cobertura del empate; cuota verificada, riesgo vigente.').slice(0,480)}:{})}:{})}
   })
   const card:ChatBlock={...priced.card,props:{
-    ...priced.card.props,legs,requestedLegs:count,modelAudit,
-    subtitle:(specialistComplete?'Investigación especializada':'TICKET CONDICIONAL')+
+    ...priced.card.props,legs,requestedLegs:count,modelAudit,marketRisk,
+    subtitle:(specialistComplete&&!elevatedMarketRisk?'Investigación especializada':'TICKET CONDICIONAL')+
       ' · cuotas verificadas · '+best.book+' · forma histórica ESPN',
-    note:(specialistComplete?'COTIZACIÓN INVESTIGADA':
+    note:(specialistComplete&&!elevatedMarketRisk?'COTIZACIÓN INVESTIGADA':
       'TICKET CONDICIONAL: faltan datos especializados. Se muestran solo cuotas reales.')+
       ' NO ES APUESTA APROBADA NI GANADORA. '+(marketPreference==='double_chance'
       ?'Fútbol: la doble oportunidad cubre empate (1X/X2), NO asegura ganar. ':'')+
       'TheRundown Free informa cuotas con retraso aproximado de 5 min; observedAt es consulta del proveedor, updatedAt es último cambio de la casa. Confirmar precio actual antes de apostar. '+
       'Contradicciones de Bet Better: '+modelDisagreements+
-      ' (predicción independiente, no cuota). Formas y descanso históricos NO son probabilidades calibradas. El expediente deportivo puede señalar titulares, bajas y estadísticas PENDIENTES; confirmar la casa antes de apostar. '+priced.warning,
+      ' (predicción independiente, no cuota). '+
+      (marketRisk.weakest?'Pata mas ajustada: '+marketRisk.weakest.selection+
+        ' ('+marketRisk.weakest.noVigPercent+'% sin margen). ':'')+
+      (marketRisk.fullPercent===null?'Cuota de dos lados insuficiente para estimar el producto sin margen. ':
+        'Producto del mercado bajo independencia: '+marketRisk.fullPercent+
+        '% (NO prediccion propia). ')+
+      'Formas y descanso históricos NO son probabilidades calibradas. El expediente deportivo puede señalar titulares, bajas y estadísticas PENDIENTES; confirmar la casa antes de apostar. '+priced.warning,
     askPrompt:'Kira, comprueba lesiones, titulares, estadísticas específicas, correlación y vigencia de las '+count+' cuotas antes de recomendar este ticket.',
   }}
   return{card,priced:true,placed:false,complete:true,
-    conditional:!specialistComplete,dossierComplete:specialistComplete,
+    conditional:!specialistComplete||elevatedMarketRisk,dossierComplete:specialistComplete,
+    marketRisk,
     verifiedEvents:research.verifiedEvents,
     quotedLegs:count,missingQuotes:0,sourceAudit,approvedLegs:0,
     specialistChecks,researchedLegs,modelAudit,
     multisportSatisfied:research.multisportSatisfied,
     explanation:'Las '+count+' selecciones tienen cuota vigente y la misma casa '+best.book+
+      (elevatedMarketRisk?'. AVISO: pata con participacion de mercado inferior a 60%; considerar reducir el boleto.':'')+
       (specialistComplete?'. Expedientes especializados investigados.':
       '. TICKET CONDICIONAL: '+(count-researchedLegs)+' expedientes parciales o no disponibles; verificar datos pendientes.')+
       ' Es un ticket de investigación cotizado, NO apuesta aprobada ni predicción calibrada.'}
