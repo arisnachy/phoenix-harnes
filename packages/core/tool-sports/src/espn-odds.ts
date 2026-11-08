@@ -56,6 +56,7 @@ const slugs:Readonly<Record<string,readonly [string,string]>>={
 const americanToDecimal=(value:unknown):number|null=>{
   if(typeof value!=='string'&&typeof value!=='number')return null
   const str=String(value).trim().replace(/\u2212/gu,'-')
+  if(/^(?:EVEN|EVENS|EV)$/iu.test(str))return 2
   if(!/^[+-]?\d{2,6}$/u.test(str))return null
   const n=Number(str)
   if(!Number.isFinite(n)||Math.abs(n)<100||Math.abs(n)>100000)return null
