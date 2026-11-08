@@ -16,6 +16,8 @@ import { SportsLiveProvider,SportsLiveFacts,SportsLiveStamp } from './SportsLive
 import { SportsGameCenter } from './SportsGameCenter.tsx'
 import { SportsBetProgress,validTrackedPick,type SportsTrackedPick } from './SportsBetProgress.tsx'
 import { SportsTicketLiveTracker } from './SportsTicketLiveTracker.tsx'
+import {SportsLeagueBadge} from './SportsLeagueIdentity.tsx'
+import {ForecastTicketScope,ForecastTicketSummary,ForecastTicketLegStatus} from './SportsForecastLive.tsx'
 import {importSportsReceipt,type SportsReceiptFixture} from './SportsTicketAutoLink.ts'
 import { SportsNewsPanel } from './SportsNewsPanel.tsx'
 
@@ -1008,7 +1010,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         const heading=[leg.sport??'Deporte no clasificado',leg.country,leg.league].filter(Boolean).join(' · ')
         groups.set(heading,[...(groups.get(heading)??[]),leg])
       }
-      return <section className={`${css.sportsCard} ${css.sportsTicketCard}`} data-generative-ui="sports_ticket_card">
+      return <ForecastTicketScope legs={p.legs}><section className={`${css.sportsCard} ${css.sportsTicketCard}`} data-generative-ui="sports_ticket_card">
         {receipt&&<SportsTicketAutoRegistration props={p}/>}
         <header className={css.sportsTicketHeading}>
           <div className={css.sportsTicketRibbon}>
@@ -1023,13 +1025,17 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             aria-valuemin={0} aria-valuemax={requested} aria-valuenow={p.legs.length}>
             <span style={{ width:`${100*p.legs.length/requested}%` }}/>
           </div>
+          <ForecastTicketSummary/>
           {incomplete&&<p className={css.sportsTicketMissing}>Faltan {requested-p.legs.length} selecciones por verificar. Esto no es un ticket completo.</p>}
           {unpriced&&!receipt&&<p className={css.sportsTicketMissing}>0 / {requested} selecciones con cuotas de una misma casa confirmadas. Los partidos visibles son hipótesis de investigación, no apuestas aprobadas.</p>}
         </header>
         <div className={css.sportsTicketGroups}>{[...groups].map(([heading,legs])=>
           <section key={heading} className={css.sportsTicketGroup} aria-label={heading}>
             <h4><span className={css.sportsTicketGroupTitle}>
-              <span className={css.sportsTicketSportEmblem} aria-hidden="true">{ticketSportEmblem(heading)}</span>
+              <span className={css.sportsTicketSportEmblem} aria-hidden="true">
+                <SportsLeagueBadge league={legs[0]?.league} sport={legs[0]?.sport} compact/>
+                <span className={css.sportsTicketSportFallback}>{ticketSportEmblem(heading)}</span>
+              </span>
               <span>{heading}</span>
             </span><small>{legs.length} {legs.length===1?'pata':'patas'}</small></h4>
             <div className={css.sportsLegs}>{legs.map(leg=><article key={p.legs.indexOf(leg)} className={css.sportsLeg}>
@@ -1053,6 +1059,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                   <small>{receipt?'CUOTA DEL RECIBO':'CUOTA'}</small>
                   <b aria-label={`Cuota ${leg.price}`}>{leg.price}</b>
                 </div>}
+              <ForecastTicketLegStatus leg={leg} index={p.legs.indexOf(leg)}/>
             </article>)}</div>
           </section>)}</div>
         {receipt?<div className={css.sportsTicketTotal}>
@@ -1071,7 +1078,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           {onAction&&<button type="button" onClick={()=>{ onAction('Kira, haz seguimiento y liquidación preliminar de las selecciones reales de este ticket. Usa sports_chat_ticket_track con los IDs ESPN y mercados exactos SOLO si fueron capturados y verificados. Verifica reglas del operador y el recibo para diferenciar apuesta aceptada, resultado provisional, anulación y pago. Si faltan IDs/fecha, identifícalos antes de calcular. Selecciones: '+p.legs.map(l=>[l.event,l.selection,l.market,l.bookmaker,l.price].join(' / ')).join('; '),'draft') }}>Verificar si ganó o perdió</button>}
           {p.askPrompt&&onAction&&<button type="button" onClick={() => {if(p.askPrompt)onAction(p.askPrompt,'draft')}}>Revisar selecciones</button>}
         </footer>
-      </section>
+      </section></ForecastTicketScope>
     }
     case 'event_card': {
       const { title, subtitle, badge, left, center, right, footer } = block.props
