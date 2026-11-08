@@ -96,14 +96,16 @@ describe('professional assessment catalog and complete local PDF',()=>{
   it('renders actual instrument questions and a PDF control after completion',()=>{
     const spec=assessmentCatalog.find(x=>x.id==='gad7-es')!.spec!
     render(<ScaleForm spec={spec} verified />)
-    expect(screen.getAllByRole('combobox')).toHaveLength(7)
+    expect(screen.getByRole('table')).toBeTruthy()
+    const radios=screen.getAllByRole('radio')
+    expect(radios).toHaveLength(28)
+    expect(screen.getByRole('progressbar',{name:'Progreso de respuestas'}).getAttribute('value')).toBe('0')
     const download=screen.getByRole('button',{name:/Descargar registro PDF/})
     expect(download).toHaveProperty('disabled',true)
-    for(const select of screen.getAllByRole('combobox')){
-      fireEvent.change(select,{target:{value:'0'}})
-    }
+    for(let i=0;i<radios.length;i+=4)fireEvent.click(radios[i]!)
     expect(download).toHaveProperty('disabled',false)
-    expect(screen.getByText('7 de 7 respuestas')).toBeTruthy()
+    expect(screen.getByText('7 de 7 respuestas').textContent).toContain('7 de 7 respuestas')
+    expect(screen.getByRole('progressbar',{name:'Progreso de respuestas'}).getAttribute('value')).toBe('7')
   })
 
   it('requires explicit consent before sharing clinical answers for AI draft',()=>{
@@ -112,9 +114,9 @@ describe('professional assessment catalog and complete local PDF',()=>{
     render(<ScaleForm spec={spec} verified onAction={onAction}/>)
     const draft=screen.getByRole('button',{name:'Generar interpretación profesional y PDF con Kira'})
     expect(draft).toHaveProperty('disabled',true)
-    for(const select of screen.getAllByRole('combobox')){
-      fireEvent.change(select,{target:{value:'0'}})
-    }
+    const radios=screen.getAllByRole('radio')
+    expect(radios).toHaveLength(36)
+    for(let i=0;i<radios.length;i+=4)fireEvent.click(radios[i]!)
     expect(draft).toHaveProperty('disabled',true)
     fireEvent.click(screen.getByRole('checkbox',{
       name:/Autorizo enviar estas respuestas/,
@@ -124,6 +126,37 @@ describe('professional assessment catalog and complete local PDF',()=>{
     expect(onAction).toHaveBeenCalledTimes(1)
     expect(onAction.mock.calls[0]?.[1]).toBe('submit')
     expect(onAction.mock.calls[0]?.[0]).toContain('NO inventes anamnesis')
+  })
+
+  it('keeps independent single-choice answers in the original-style matrix',()=>{
+    const spec=assessmentCatalog.find(x=>x.id==='phq9-es')!.spec!
+    expect(spec.props.presentation).toBe('matrix')
+    render(<ScaleForm spec={spec} verified/>)
+    const radios=screen.getAllByRole('radio')
+    expect(radios).toHaveLength(36)
+    fireEvent.click(radios[0]!)
+    fireEvent.click(radios[1]!)
+    expect((radios[0] as HTMLInputElement).checked).toBe(false)
+    expect((radios[1] as HTMLInputElement).checked).toBe(true)
+    expect(screen.getByRole('progressbar',{name:'Progreso de respuestas'}).getAttribute('value')).toBe('1')
+    fireEvent.click(radios[4]!)
+    expect((radios[1] as HTMLInputElement).checked).toBe(true)
+    expect((radios[4] as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('uses accessible multiple-choice cards for instruments with different answer sets',()=>{
+    const spec=assessmentCatalog.find(x=>x.id==='glasgow')!.spec!
+    render(<ScaleForm spec={spec} verified/>)
+    expect(screen.queryByRole('table')).toBeNull()
+    const groups=screen.getAllByRole('group')
+    expect(groups).toHaveLength(3)
+    const radios=screen.getAllByRole('radio')
+    expect(radios).toHaveLength(15)
+    fireEvent.click(radios[0]!)
+    fireEvent.click(radios[4]!)
+    fireEvent.click(radios[9]!)
+    expect(screen.getByRole('progressbar',{name:'Progreso de respuestas'}).getAttribute('value')).toBe('3')
+    expect(screen.getByText('3 de 3 respuestas').textContent).toContain('3 de 3')
   })
 
   it('exposes the real instruments in the universal form library',()=>{
