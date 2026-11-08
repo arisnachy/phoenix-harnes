@@ -152,12 +152,34 @@ export async function investigateTicketSpecialist(
 export async function investigateTicketSpecialists(
   games:readonly SpecialistFixture[],fetcher:typeof fetch=fetch,
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
-  quotes:MarketOutcome[]=[],
+  quotes:MarketOutcome[]=[],deadlineMs=20_000,
 ):Promise<SpecialistGate[]>{
+  if(!Number.isInteger(deadlineMs)||deadlineMs<10||deadlineMs>90_000)
+    throw Error('Presupuesto por expediente fuera de rango')
+  const inspect=async(game:SpecialistFixture):Promise<SpecialistGate>=>{
+    const controller=new AbortController()
+    let timer:ReturnType<typeof setTimeout>|undefined
+    // Preserve the provider's own timeout AND the ticket-wide leg budget.
+    const guardedFetch:typeof fetch=(input,init)=>{
+      const signal=init?.signal?AbortSignal.any([init.signal,controller.signal]):controller.signal
+      return fetcher(input,{...init,signal})
+    }
+    try{
+      return await Promise.race([
+        investigateTicketSpecialist(game,guardedFetch,now,env,quotes),
+        new Promise<SpecialistGate>(resolve=>{
+          timer=setTimeout(()=>{
+            controller.abort()
+            resolve(errorResult(game,'Límite de investigación ('+deadlineMs+
+              ' ms) alcanzado. Expediente condicional; comprobar la fuente antes de apostar.'))
+          },deadlineMs)
+        }),
+      ])
+    }finally{if(timer!==undefined)clearTimeout(timer)}
+  }
   const audited:SpecialistGate[]=[]
   for(let offset=0;offset<games.length;offset+=2){
-    const batch=await Promise.all(games.slice(offset,offset+2).map(game=>
-      investigateTicketSpecialist(game,fetcher,now,env,quotes)))
+    const batch=await Promise.all(games.slice(offset,offset+2).map(inspect))
     audited.push(...batch)
   }
   return audited
