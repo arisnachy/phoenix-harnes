@@ -243,7 +243,7 @@ export function apply(ctx: Context): void {
                 const side=review.selectedOutcome
                 if(market.market==='spreads'&&side&&typeof side.line==='number'){
                   const norm=(name:string)=>name.normalize('NFD')
-                    .replace(/[\\u0300-\\u036f]/gu,'').toLowerCase()
+                    .replace(/[\u0300-\u036f]/gu,'').toLowerCase()
                     .replace(/[^a-z0-9]/gu,'')
                   const betHome=norm(side.selection)===norm(evidence.home.name)
                   const team=betHome?official.home:official.away
