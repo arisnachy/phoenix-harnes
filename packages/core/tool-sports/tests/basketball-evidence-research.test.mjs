@@ -34,7 +34,7 @@ function mock({league='nba',offseason=false,noRoster=false,started=false,noLineu
     let data={}
     if(u.pathname.endsWith('/scoreboard')){
       const days=u.searchParams.get('dates')??''
-      data=days.includes('-')?history(league):{events:offseason?[]:[started?
+      data=days==='202610'?history(league):{events:days.length===6?[]:offseason?[]:[started?
         {...game(league),status:{type:{state:'in'}}}:game(league)]}
     }else if(u.pathname.endsWith('/summary')){
       data={rosters:noLineup?[]:[home,away].map(tid=>({team:{id:tid},
