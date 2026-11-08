@@ -376,17 +376,17 @@ separando `wired` (adaptador en código; **NO prueba acceso HTTP**),
 | NFL / NCAA football | ESPN, TheSportsDB, nflverse lesiones | nflverse PBP/rosters históricos, College Football Data con plan sujeto a verificación, NFL gamebooks oficiales |
 | NHL | NHL Web API, ESPN, TheSportsDB | Reporte de portero titular requiere anuncio oficial, no roster |
 | Tenis ATP / WTA | ESPN, TheSportsDB | ATP/WTA oficiales web, archivos Sackmann ATP/WTA (históricos, CC BY-NC-SA) |
-| MMA: UFC / PFL | ESPN, TheSportsDB | UFCStats y PFL (sitios web, no API estable) |
-| Automovilismo F1 / NASCAR | ESPN, TheSportsDB | Jolpica F1 y OpenF1 (catálogo, **no conectados al ticket**; OpenF1 en vivo es de pago), NASCAR oficial web |
-| Golf PGA / LPGA | ESPN, TheSportsDB | PGA TOUR y LPGA (web, sin API garantizada) |
-| Cricket | ESPN y respaldo general TheSportsDB sujeto a cobertura | Cricsheet histórico y ESPNcricinfo web |
-| Rugby unión | ESPN / TheSportsDB según liga | World Rugby web |
-| Rugby league | ESPN / TheSportsDB según liga | NRL web |
-| Fútbol australiano | ESPN / TheSportsDB según liga | AFL web |
-| Lacrosse | ESPN / TheSportsDB según liga | PLL web |
-| Voleibol | ESPN / TheSportsDB según liga | NCAA web |
-| Water polo | ESPN / TheSportsDB según liga | NCAA web |
-| Hockey de campo | ESPN / TheSportsDB según liga | NCAA web |
+| MMA: UFC / PFL | ESPN | UFCStats y PFL (sitios web, no API estable) |
+| Automovilismo F1 / NASCAR | ESPN | Jolpica F1 y OpenF1 (catálogo, **no conectados al ticket**; OpenF1 en vivo es de pago), NASCAR oficial web |
+| Golf PGA / LPGA | ESPN | PGA TOUR y LPGA (web, sin API garantizada) |
+| Cricket | ESPN (si hay cobertura real por liga) | Cricsheet histórico y ESPNcricinfo web |
+| Rugby unión | ESPN (según liga) | World Rugby web |
+| Rugby league | ESPN (según liga) | NRL web |
+| Fútbol australiano | ESPN (según liga) | AFL web |
+| Lacrosse | ESPN (según liga) | PLL web |
+| Voleibol | ESPN (según liga) | NCAA web |
+| Water polo | ESPN (según liga) | NCAA web |
+| Hockey de campo | ESPN (según liga) | NCAA web |
 
 ### Endpoints verificables para la integración
 
