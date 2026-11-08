@@ -4,6 +4,20 @@ This catalog distinguishes **current sportsbook quotes**, **independent model fa
 **historical datasets** and **API directories**. A working website is not a verified
 machine-readable price feed. Never generate a parlay from a model's fairOdds.
 
+## ESPN Website odds fallback (2026-11-08)
+
+Consumer odds pages: NFL https://www.espn.com/nfl/odds ; MLB https://www.espn.com/mlb/odds ; NHL https://www.espn.com/nhl/odds ; NBA https://www.espn.com/nba/odds ; WNBA https://www.espn.com/wnba/odds ; Soccer, including MLS https://www.espn.com/soccer/odds .
+
+PHOENIX first checks ESPN public Scoreboard -> Core refs -> Summary/Pickcenter, then (if a requested market is missing) attempts a single HTTPS HTML page read on a fixed ESPN URL. Only explicit embedded JSON from application/json script tags, __NEXT_DATA__ and __ESPN_DATA__ is parsed. No arbitrary JavaScript, cookies, CAPTCHA bypass or browser impersonation is used.
+
+Each extracted offer must match the official ESPN scoreboard on real numeric event ID, both clubs, home/away and kickoff. A quote also requires bookmaker, explicit market, numeric price, future kickoff, update in the last 60 minutes, and an actual draw price for soccer three-way h2h. HTML visible to a human is NOT by itself a machine-readable live quote. Blocked, empty, stale or undated content becomes an honest diagnostic with the official page URL.
+
+marketOddsDetailed exposes the ESPN Website status as a separate provider, and sports_chat_odds and sports_chat_espn_web_odds expose that fallback to Kira. Kira may show the official ESPN URL for manual verification and continue independently configured The Odds API, TheOddsAPI, TheRundown, SportsGameOdds and OddsHarvester sources. Providers and prices are not interchangeable. Website access may fail due to JavaScript checks/CAPTCHAs; this is not circumvented.
+
+Additional ESPN Core routes now cover Bundesliga, Serie A, Ligue 1, Portugal, Netherlands, Brazil, Argentina, Europa League and World Cup sport keys, besides NFL, MLB, NHL, NBA, WNBA, MLS and major soccer.
+
+Disable website probing using PHOENIX_SPORTS_ESPN_WEB_DISABLED=1. Deterministic tests: node --experimental-strip-types --test packages/core/tool-sports/tests/espn-website-odds.test.mjs . A successful mock test never proves that ESPN's live HTML is accessible in a specific deployment.
+
 ## Connected quote adapters
 
 | Source | Access | Transport | Scope | Host configuration |
