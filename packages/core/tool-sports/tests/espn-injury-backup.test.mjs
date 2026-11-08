@@ -92,6 +92,14 @@ test('missing team never means healthy, and 403 never forges reports',async()=>{
   assert.deepEqual(forbidden.home.injuries,[])
   assert.deepEqual(forbidden.away.injuries,[])
 })
+test('freshly crawled offseason WNBA injury list is not a verified game-day report',async()=>{
+  const off={...groups(),season:{type:4,name:'Off Season'}}
+  const result=await fetchEspnInjuryBackup({
+    ...fixture,league:'wnba',eventId:undefined
+  },async()=>json(off),now)
+  assert.equal(result.status,'stale')
+  assert.ok(result.notes.some(x=>x.includes('fuera de temporada')))
+})
 test('unknown sports return unsupported without network access',async()=>{
   const response=await fetchEspnInjuryBackup({...fixture,
     sport:'soccer',league:'usa.1'},async()=>{throw Error('must not fetch')},now)
