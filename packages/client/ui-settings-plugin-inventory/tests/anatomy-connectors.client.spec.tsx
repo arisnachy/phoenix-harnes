@@ -26,4 +26,20 @@ describe('Anatomy Connectors Settings',()=>{
   await waitFor(()=>expect(installAnatomy).toHaveBeenCalledWith('totalsegmentator'))
   expect(screen.queryByRole('button',{name:'Install openCARP'})).toBeNull()
  })
+ it('launches one host-managed bulk job and shows sequential progress',async()=>{
+  const installAnatomy=vi.fn().mockResolvedValue({id:'all',status:'started',detail:'queued'})
+  const listAnatomy=vi.fn().mockResolvedValue({
+   running:false,readyCount:0,clinicalValidation:'not-validated',
+   progress:{completed:2,total:7,current:'totalsegmentator',status:'running'},
+   entries:[{id:'totalsegmentator',title:'TotalSegmentator',installed:false,operational:false,
+     canInstall:true,phase:'missing',detail:'Needs weights'}]
+  })
+  render(<AnatomyConnectorsSettingsTab {...({t,installAnatomy,listAnatomy} as unknown as AnatomyConnectorsSettingsTabProps)}/>)
+  const button=await screen.findByRole('button',{name:en.anatomyInstallAll})
+  fireEvent.click(button)
+  await waitFor(()=>expect(installAnatomy).toHaveBeenCalledTimes(1))
+  expect(installAnatomy).toHaveBeenCalledWith('all')
+  expect(screen.getByText(/2\/7/)).toBeTruthy()
+ })
+
 })
