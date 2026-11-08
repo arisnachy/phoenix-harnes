@@ -38,7 +38,7 @@ test('unmatched or stale free events never become evidence or contradiction',asy
     strAwayTeam:'Boston Celtics',strTimestamp:'2026-11-11T01:00:00Z'}]})
   const result=await crosscheckFreeFixture(game,f)
   assert.equal(result[0].status,'not-found')
-  assert.match(result[0].detail,/NO confirma ausencia/)
+  assert.match(result[0].detail,/NO prueba ausencia/)
 })
 
 test('provider 429 is unavailable and never becomes an empty observed event',async()=>{
