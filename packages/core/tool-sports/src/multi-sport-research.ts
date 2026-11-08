@@ -124,20 +124,28 @@ export async function researchSport(
     // Research reports a preliminary minimum, while the automatic-ticket
     // promotion layer requires five distinct games per team (NFL: three).
     const requiredGames=sport==='football'?3:5
-    const sufficient=successfulDays===lookbackDays&&
+    // A missing league scoreboard is not a missing game. Retain a measurable
+    // 60% lookback-coverage floor and require the complete independent five-game
+    // (NFL: three-game) sample of BOTH clubs; a single failed day never vetoes
+    // a properly observed sample. Surface the missing days in limitations.
+    const minimumCoveredDays=Math.max(requiredGames,Math.ceil(lookbackDays*0.6))
+    const sufficient=successfulDays>=minimumCoveredDays&&
       homeForm.completedGames>=requiredGames&&awayForm.completedGames>=requiredGames
     const result:ResearchMatch={eventId:String(event.id??''),date:event.date??'',sport,league,
       home:homeForm,away:awayForm,source:'ESPN Site API',evidence:sufficient?'descriptive':'insufficient',
       coverageDays:lookbackDays,successfulDays,
       limitations:[
-        ...(!sufficient?['Historial incompleto o muestra inferior a '+requiredGames+' partidos distintos por equipo']:[]),
+        ...(successfulDays<lookbackDays?['Cobertura parcial: '+successfulDays+'/'+lookbackDays+
+          ' días ESPN accesibles; '+(lookbackDays-successfulDays)+' sin respuesta']:[]),
+        ...(!sufficient?['Historial insuficiente: se requieren '+requiredGames+
+          ' partidos distintos por equipo y '+minimumCoveredDays+' días de cobertura verificada']:[]),
         'Lesiones/ausencias y alineaciones pendientes de verificación',
         'Rendimiento ajustado por rival y métricas específicas pendientes',
         'Mercados y probabilidad calibrada no verificados',
       ]}
     return[result]
   })
-  return{sport,league,date,source:'ESPN Site API · resultados completos (no predicciones)',
+  return{sport,league,date,source:'ESPN Site API · resultados recuperados (no predicciones)',
     fetchedAt:new Date(now).toISOString(),matches,failedDays:lookbackDays-successfulDays,
     note:'Son estadísticas históricas observadas, no cuotas ni probabilidades calculadas. La investigación definitiva debe añadir datos específicos de cada deporte: lesiones/rotaciones NBA; pitchers/bullpen MLB; xG/plantilla fútbol; sets/superficie tenis; portero NHL; y mercados actuales verificables.'}
 }

@@ -1,6 +1,8 @@
 /** Kira's sports-only model-facing tools. Cards belong in the existing chat. */
 import type { Context } from '@phoenix-ai/cordis'
 import { scoutDailySports } from './daily-sports-scout.ts'
+import {crosscheckFreeFixture,freeOfficialFollowUps,freeSourceInventory,freeSourceCoverageForSport} from './free-sports-source-audit.ts'
+import {nflverseInjuryReport} from './nflverse-injury-report.ts'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import { sportsCatalog, discoverEspnLeagues, hasSportsPermission, chatGames, compactSportsSchedule, marketOdds, marketOddsDetailed, pricedTicket, getFeed, type MarketSelection } from './sports.ts'
@@ -64,6 +66,7 @@ export const inject = ['tools','systemPrompt']
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'FUENTES Y REDUNDANCIA: usa sports_chat_source_resilience cuando una liga, cuota o parte médico quede sin datos, o el expediente arroje fuentes parciales. Los proveedores secundarios solo confirman la clase de dato realmente observada; OpenFootball fecha/equipos NO confirma UTC, TheSportsDB puede recortar la muestra, un enlace web NO es una lesión verificada. Amplía ligas candidatas antes de abandonar un ticket; nunca presentes como cotizada una combinada sin precios actuales compatibles de la misma casa. No declarar un ticket seguro ni aplicar scraping que viole restricciones de acceso. ',
   'REGLA OBLIGATORIA PARA TICKETS GANADORES: las cotizaciones y favoritos de casas no son investigación deportiva. Si el usuario solicita un ticket ganador del día (incluido solo equipos ganadores), usa sports_chat_ticket_evidence_priced_auto con marketPreference=winner cuando corresponda, o sports_chat_daily_market_shortlist con deep=true. Cada partido requiere expediente de su especialista NFL/NBA/WNBA/NHL/MLB/Fútbol/Tenis, identidad verificada y diagnóstico de bajas, alineaciones, forma y contradicciones. Los resultados incomplete/unavailable bloquean esa pata; no uses sports_chat_ticket para reemplazarlos ni reintroduzcas el favorito por precio. Si no existen suficientes partidos investigados, entrega borrador explícitamente incompleto, nunca ticket ganador certificado. La cuota no demuestra acierto y ninguna ruta puede reportar aprobación o EV sin modelo validado. ',
   'MERCADOS DE TOTAL Y HÁNDICAP: ganar un partido no demuestra cubrir -1.5/+1.5 o una línea over/under. Antes de considerar un total o spread con sports_chat_daily_market_shortlist(deep=true), coteja la línea EXACTA contra resultados previos de AMBOS clubes, separa aciertos, fallos y pushes, y exige dirección consistente en los dos historiales. Si marketOutcomeDiagnostic.status es mixed, insufficient o adverse, etiquetar CONDICIONAL/CONTRAINDICADA y no ponerla como pata cotizada; nunca conviertas frecuencia histórica en probabilidad futura o EV. Para NHL añade portero y reglas OT/SO; para NBA pace, eficiencia y lesiones siguen pendientes si no fueron medidos. La meta de 5–6 patas no autoriza inventar una probabilidad ni rellenar selecciones sin respaldo. ',
   'NHL ESPECIALIZADO: para NHL consulta sports_chat_hockey_slate y sports_chat_nhl_investigate con gameId oficial NHL, no ID ESPN. Recupera rosters y estadísticas observadas de skaters/porteros; distingue portero candidato del titular confirmado y ganador a 60 minutos del ganador con OT/SO. No infieras xG/GSAx, alineaciones definitivas o probabilidades no calibradas, ni llames cuota actual a una línea sin timestamp. En +1.5/-1.5 evalúa el riesgo de caer por dos goles, los márgenes recientes de ambos equipos, la probabilidad de equilibrio del precio, porteros, descanso, empty-net y OT. Sin titular y modelo de cobertura calibrado, clasifica como CONDICIONAL o CONTRAINDICADA. ',
@@ -2007,6 +2010,59 @@ export function apply(ctx: Context): void {
         instruction:'Kira: no afirmar portero confirmado, lineup fijo, duelo real, xG/GSAx ni valor esperado sin fuente. Examina porteros y skaters versus el rival, PP/PK, descanso y lesiones pendientes. Distingue mercados 60 minutos, OT y shootout; abstenerse si falta evidencia.'})
     },
     presentCall:()=>({card:'generic',title:'Investigar NHL · porteros y mercados',kind:'read' as const}),
+  }))
+
+  ctx.tools.register(defineTool({
+    name:'sports_chat_source_resilience',
+    description:'Auditoría de fuentes gratuitas y de respaldo para el ticket diario: capacidades realmente integradas frente a enlaces, estado por partido, controles de identidad y carencias de lesiones/cuotas. Sin prometer ganadores ni extraer datos restringidos.',
+    parameters:{
+      sport:{type:'string',description:'Disciplina si se desea cotejar un partido concreto.'},
+      league:{type:'string',description:'Código ESPN de liga para cotejo exacto.'},
+      eventId:{type:'string',description:'ID ESPN verificable del encuentro.'},
+      date:{type:'string',description:'Fecha AAAA-MM-DD del encuentro.'},
+      home:{type:'string',description:'Equipo local observado en cartelera principal.'},
+      away:{type:'string',description:'Equipo visitante observado en cartelera principal.'},
+      kickoff:{type:'string',description:'Hora UTC ISO8601 ya verificada en ESPN.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const env=await sportsEnv(ctx),now=Date.now()
+      const fields=[args.sport,args.league,args.eventId,args.date,
+        args.home,args.away,args.kickoff]
+      const complete=fields.every(value=>typeof value==='string'&&value.trim())
+      if(fields.some(value=>value!==undefined)&&!complete)
+        throw Error('Para verificar un partido especificar deporte, liga, eventId, fecha, local, visita y kickoff completo')
+      const fixture=complete?{
+        sport:args.sport!,league:args.league!,eventId:args.eventId!,
+        date:args.date!,home:args.home!,away:args.away!,kickoff:args.kickoff!,
+      }:null
+      const checks=fixture?await crosscheckFreeFixture(fixture,fetch,now,env):[]
+      const injury=fixture?.sport==='football'&&fixture.league==='nfl'?
+        await nflverseInjuryReport(fixture,fetch,now,env):null
+      return JSON.stringify({
+        checkedAt:new Date(now).toISOString(),
+        providers:freeSourceInventory,
+        coverageBySport:args.sport?freeSourceCoverageForSport(args.sport,env):
+          Object.keys(sportsCatalog).map(sport=>freeSourceCoverageForSport(sport,env)),
+        liveAccess:{
+          espn:env.PHOENIX_SPORTS_ESPN_DISABLED!=='1',
+          officialMlb:env.PHOENIX_SPORTS_MLB_DISABLED!=='1',
+          freeBackups:env.PHOENIX_SPORTS_FREE_BACKUPS_DISABLED!=='1',
+          footballDataTokenConfigured:!!env.PHOENIX_FOOTBALL_DATA_TOKEN?.trim(),
+          apiFootballConfigured:!!env.PHOENIX_API_FOOTBALL_KEY?.trim(),
+          balldontlieConfigured:!!env.PHOENIX_BALLDONTLIE_API_KEY?.trim(),
+          oddsV4Configured:!!env.THE_ODDS_API_KEY?.trim(),
+          oddsSecondConfigured:!!env.THEODDSAPI_API_KEY?.trim(),
+        },
+        fixture:fixture?{sport:fixture.sport,league:fixture.league,
+          eventId:fixture.eventId,date:fixture.date}:null,
+        corroboration:checks,injuryReport:injury,
+        evidenceStillPending:fixture?freeOfficialFollowUps(fixture.sport,fixture.date):[],
+        recommendation:'Si falla un proveedor, usar los disponibles y ampliar ligas/candidatos. Una fuente del catálogo no prueba respuesta real; las cuotas requieren casa, mercado, timestamp y selección exacta. Si no se completan 5/6 patas con respaldo auténtico, presentar borrador explícitamente condicionado o incompleto, no inventar precios ni titulares.'
+      })
+    },
+    presentCall:()=>({card:'generic',title:'Auditar fuentes deportivas gratuitas y respaldos',kind:'read' as const}),
   }))
 
 }
