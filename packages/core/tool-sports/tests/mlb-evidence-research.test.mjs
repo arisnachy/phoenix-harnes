@@ -893,3 +893,28 @@ test('MLB starter ERA evidence rejects null, blank and nonfinite values',async()
   assert.equal(reviewMlbResearch(d).evidenceGates.starterStatsVerified,true)
   d.starters.home.season.era=original
 })
+
+test('MLB recent form rejects contradictory win-loss, venue and run aggregates',async()=>{
+  const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true}).fetcher,at)
+  assert.ok(d.teamForm.home&&d.teamForm.away)
+  const home=d.teamForm.home
+  const baseline=structuredClone(home)
+  const check=()=>assert.equal(reviewMlbResearch(d).evidenceGates.recentTeamFormVerified,false)
+  home.wins+=1
+  check()
+  Object.assign(home,structuredClone(baseline))
+  home.home.wins+=1
+  check()
+  Object.assign(home,structuredClone(baseline))
+  home.runsFor+=1
+  check()
+  Object.assign(home,structuredClone(baseline))
+  home.lastResults[0].scored=-1
+  check()
+  Object.assign(home,structuredClone(baseline))
+  home.lastResults[0].opponentId=0
+  check()
+  Object.assign(home,structuredClone(baseline))
+  assert.equal(home.games,baseline.games)
+  assert.equal(reviewMlbResearch(d).eligibleForTicket,false)
+})
