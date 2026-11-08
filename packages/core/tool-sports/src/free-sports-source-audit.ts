@@ -6,7 +6,7 @@ import {getFeed,sportsCatalog} from './sports.ts'
 
 export type FreeFixture={sport:string;league:string;eventId:string;date:string;
   home:string;away:string;kickoff:string}
-export type BackupFinding={provider:'TheSportsDB'|'OpenLigaDB'|'OpenFootball'|'FootballData.org';
+export type BackupFinding={provider:'TheSportsDB'|'OpenLigaDB'|'OpenFootball'|'FootballData.org'|'balldontlie'|'API-Football';
   status:'verified'|'partial'|'not-found'|'unavailable'|'conflict';
   url:string;checkedAt:string;detail:string}
 type Obj=Record<string,unknown>
@@ -118,6 +118,84 @@ async function footballData(input:FreeFixture,fetcher:typeof fetch,
       'Proveedor sin acceso/mercado: '+(e instanceof Error?e.message:String(e)).slice(0,80)}
   }
 }
+
+/** Optional independent NBA/WNBA fixture corroboration.
+ * Free tier provides games, teams and players (not injuries, props or box scores).
+ * A provider key is never sent to the client or embedded in the URL.
+ */
+async function ballDontLieFixture(input:FreeFixture,fetcher:typeof fetch,now:number,
+  key:string):Promise<BackupFinding>{
+  const baseUrl=input.league==='wnba'?'https://api.balldontlie.io/wnba/v1/games':
+    'https://api.balldontlie.io/v1/games'
+  // Only one GET, without attempting to circumvent rate limits.
+  const url=baseUrl+'?dates%5B%5D='+input.date+'&per_page=100'
+  const base={provider:'balldontlie' as const,url,checkedAt:checked(now)}
+  try{
+    const response=await fetcher(url,{headers:{Authorization:key,accept:'application/json'},
+      redirect:'error',signal:AbortSignal.timeout(8000)})
+    if(!response.ok)throw Error('HTTP '+response.status)
+    if(Number(response.headers.get('content-length')||0)>3_000_000)throw Error('Respuesta superior al límite')
+    const body=await response.text()
+    if(body.length>3_000_000)throw Error('Respuesta superior al límite')
+    const root=obj(JSON.parse(body))
+    for(const item of arr(root.data).slice(0,100)){
+      const game=obj(item)
+      const home=str(obj(game.home_team).full_name)
+      const away=str(obj(game.visitor_team).full_name)
+      const status=compare(home,away,str(game.date),input)
+      if(status==='verified')return{...base,status,detail:
+        'Calendario cotejado con balldontlie; sin inferir lesión, boxscore ni cuota'}
+      if(status==='conflict')return{...base,status,detail:
+        'balldontlie contradice la localía del partido'}
+    }
+    return{...base,status:'not-found',detail:
+      'Sin coincidencia en la página gratuita recibida; no demuestra partido inexistente'}
+  }catch(e){return{...base,status:'unavailable',detail:
+    'balldontlie sin acceso: '+(e instanceof Error?e.message:String(e)).slice(0,80)}}
+}
+const apiFootballIds:Record<string,number>={
+  'eng.1':39,'esp.1':140,'ger.1':78,'ita.1':135,'fra.1':61,
+  'por.1':94,'ned.1':88,'usa.1':253,'mex.1':262,
+  'bra.1':71,'arg.1':128,'uefa.champions':2,'uefa.europa':3,
+}
+/** Optional API-Football fixture check; free plans have limited seasons,
+ * 100 requests/day and 10/min. Never substitute a paid-only response.
+ */
+async function apiFootballFixture(input:FreeFixture,fetcher:typeof fetch,now:number,
+  key:string):Promise<BackupFinding>{
+  const league=apiFootballIds[input.league]
+  const year=Number(input.date.slice(0,4))
+  const month=Number(input.date.slice(5,7))
+  const season=['usa.1','mex.1','bra.1','arg.1'].includes(input.league)?
+    year:year-(month<7?1:0)
+  const url='https://v3.football.api-sports.io/fixtures?league='+league+
+    '&season='+season+'&date='+input.date
+  const base={provider:'API-Football' as const,url,checkedAt:checked(now)}
+  try{
+    const response=await fetcher(url,{headers:{'x-apisports-key':key},
+      redirect:'error',signal:AbortSignal.timeout(8000)})
+    if(!response.ok)throw Error('HTTP '+response.status)
+    if(Number(response.headers.get('content-length')||0)>3_000_000)throw Error('Respuesta superior al límite')
+    const body=await response.text()
+    if(body.length>3_000_000)throw Error('Respuesta superior al límite')
+    const root=obj(JSON.parse(body))
+    if(Object.keys(obj(root.errors)).length>0||arr(root.errors).length>0)
+      throw Error('Plan, temporada o cuota no habilitados')
+    for(const item of arr(root.response).slice(0,300)){
+      const row=obj(item),teams=obj(row.teams)
+      const status=compare(str(obj(teams.home).name),str(obj(teams.away).name),
+        str(obj(row.fixture).date),input)
+      if(status==='verified')return{...base,status,detail:
+        'Calendario y UTC corroborados; no implica cuota o alineación confirmada'}
+      if(status==='conflict')return{...base,status,detail:
+        'API-Football contradice local/visita en esta fecha'}
+    }
+    return{...base,status:'not-found',detail:
+      'Sin cotejo en el plan/temporada consultada; no prueba ausencia del evento'}
+  }catch(e){return{...base,status:'unavailable',detail:
+    'API-Football no disponible: '+(e instanceof Error?e.message:String(e)).slice(0,80)}}
+}
+
 /** Sources are independent checks, never sources of fresh bookmaker odds.
  * A no-key football.json JSON file has local kickoff times, NOT validated UTC;
  * it can only corroborate date and teams. Optional key is server-side.
@@ -139,6 +217,9 @@ export async function crosscheckFreeFixture(input:FreeFixture,
         when:str(o.strTimestamp)||str(o.dateEvent)}
     },input,fetcher,now))
   }
+  const bdlKey=env.PHOENIX_BALLDONTLIE_API_KEY?.trim()
+  if(input.sport==='basketball'&&(input.league==='nba'||input.league==='wnba')&&bdlKey)
+    reports.push(ballDontLieFixture(input,fetcher,now,bdlKey))
   if(input.sport==='soccer'&&input.league==='ger.1'){
     const year=Number(input.date.slice(0,4))-(Number(input.date.slice(5,7))<7?1:0)
     const url='https://api.openligadb.de/getmatchdata/bl1/'+year
@@ -159,6 +240,9 @@ export async function crosscheckFreeFixture(input:FreeFixture,
         return{home:str(o.team1),away:str(o.team2),when:str(o.date)}
       },input,fetcher,now,true))
     }
+    const apiKey=env.PHOENIX_API_FOOTBALL_KEY?.trim()
+    if(apiKey&&apiFootballIds[input.league])
+      reports.push(apiFootballFixture(input,fetcher,now,apiKey))
     const token=env.PHOENIX_FOOTBALL_DATA_TOKEN?.trim()
     if(token&&footballDataCompetitions[input.league])
       reports.push(footballData(input,fetcher,now,token))
@@ -200,10 +284,10 @@ export const freeSourceInventory=[
   {name:'Jolpica F1',access:'no-key',sport:'racing',capability:'F1 results/standings',state:'catalog-only'},
   {name:'OpenF1',access:'no-key-historical',sport:'racing',capability:'F1 telemetry; live may be paid',state:'catalog-only'},
   {name:'SportScore',access:'no-key-attribution',sport:'multi',capability:'scores/stats with UI attribution required',state:'catalog-only'},
-  {name:'API-Football',access:'free-key-optional',sport:'soccer',capability:'some free league data; quota limits',state:'catalog-only'},
+  {name:'API-Football',access:'free-key-optional',sport:'soccer',capability:'fixture UTC by league where free season allows, 100/day',state:'integrated-opt-in'},
   {"name":"NBA Stats / LiveData","access":"no-key-restricted","sport":"basketball","capability":"NBA boxscores/play-by-play; bloqueo 403/timeout posible","state":"catalog-only"},
   {"name":"WNBA Stats","access":"no-key-restricted","sport":"basketball","capability":"WNBA estadísticas, LeagueID=10; acceso externo no garantizado","state":"catalog-only"},
-  {"name":"balldontlie","access":"free-key-optional","sport":"basketball","capability":"NBA/WNBA, alcance y endpoints según plan y cuota","state":"catalog-only"},
+  {"name":"balldontlie","access":"free-key-optional","sport":"basketball","capability":"NBA/WNBA juegos gratuitos con key, 5/min; no props, boxscore ni lesiones","state":"integrated-opt-in"},
   {"name":"Basketball Reference","access":"public-web","sport":"basketball","capability":"estadística histórica y comparaciones web; no API abierta oficial","state":"manual-followup"},
   {"name":"College Football Data","access":"free-key-optional","sport":"football","capability":"NCAA football histórico y analítica; cuotas/plan por verificar","state":"catalog-only"},
   {"name":"NFL Official Gamebooks","access":"public-web","sport":"football","capability":"actas, inactivos y reportes oficiales; páginas/PDF","state":"manual-followup"},
@@ -248,6 +332,8 @@ export function freeSourceCoverageForSport(sport:string,env:NodeJS.ProcessEnv=pr
     unconfiguredOptional:string[]=[],referenceOnly:string[]=[]
   for(const source of rows){
     const key=source.name==='football-data.org'?'PHOENIX_FOOTBALL_DATA_TOKEN':
+      source.name==='API-Football'?'PHOENIX_API_FOOTBALL_KEY':
+      source.name==='balldontlie'?'PHOENIX_BALLDONTLIE_API_KEY':
       source.name==='The Odds API v4'?'THE_ODDS_API_KEY':
       source.name==='TheOddsAPI'?'THEODDSAPI_API_KEY':null
     const isPrimary=source.state==='primary'
