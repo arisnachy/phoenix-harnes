@@ -918,3 +918,22 @@ test('MLB recent form rejects contradictory win-loss, venue and run aggregates',
   assert.equal(home.games,baseline.games)
   assert.equal(reviewMlbResearch(d).eligibleForTicket,false)
 })
+
+test('MLB starter outing gate rejects malformed innings and missing boxscore metrics',async()=>{
+  const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true}).fetcher,at)
+  const valid=()=>({date:'2026-06-25',opponentId:123,innings:'5.2',
+    pitches:'85',earnedRuns:'2',strikeouts:'7',walks:'1'})
+  assert.ok(d.starters.home&&d.starters.away)
+  for(const p of [d.starters.home,d.starters.away])p.recentStarts=[valid()]
+  assert.equal(reviewMlbResearch(d).evidenceGates.recentStarterOutingsVerified,true)
+  for(const [field,value] of [['innings','5.3'],['innings',''],['pitches',''],
+    ['pitches','-1'],['earnedRuns','NaN'],['strikeouts','-2'],
+    ['walks','1.5'],['opponentId',0]]){
+    d.starters.home.recentStarts=[{...valid(),[field]:value}]
+    assert.equal(reviewMlbResearch(d).evidenceGates.recentStarterOutingsVerified,false,
+      'malformed '+field+'='+value+' must not count as verified')
+  }
+  d.starters.home.recentStarts=[valid()]
+  assert.equal(reviewMlbResearch(d).evidenceGates.recentStarterOutingsVerified,true)
+  assert.equal(reviewMlbResearch(d).eligibleForTicket,false)
+})
