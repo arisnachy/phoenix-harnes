@@ -3,6 +3,7 @@
  * to describe a leg as approved. Absent/partial specialist research fails closed.
  */
 import type {MarketOutcome} from './sports.ts'
+import {fetchEspnInjuryBackup} from './espn-injury-backup.ts'
 import {investigateNfl} from './nfl-evidence-research.ts'
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
 import {investigateSoccer} from './soccer-worldwide-dossier.ts'
@@ -141,6 +142,20 @@ export async function investigateTicketSpecialist(
         'Servicio/devolución '+d.coverage.advancedStatsPlayers+'/2 jugadores']
       pending=d.missingEvidence
     }else return errorResult(game,'Sin especialista integrado para esta liga; no promover a ticket final')
+    if(['nfl','nba','wnba','nhl','mlb'].includes(game.league)){
+      // Read the public ESPN injury feed after the discipline-specific dossier;
+      // fallback failures never erase evidence already collected.
+      const injury=await fetchEspnInjuryBackup(game,fetcher,now)
+      if(injury.status==='verified'||injury.status==='partial'){
+        steps.push('ESPN lesiones '+injury.status+': local '+
+          injury.home.injuries.length+' · visitante '+injury.away.injuries.length+
+          ' · fuente '+injury.source)
+        for(const item of [...injury.home.injuries,...injury.away.injuries].slice(0,12))
+          steps.push('ESPN baja · '+item.team+' · '+item.athlete+
+            ' · '+item.status+' · '+(item.reportedAt??'sin fecha'))
+      }else pending.push('ESPN lesiones '+injury.status+': '+injury.source)
+      pending.push(...injury.notes.slice(0,4))
+    }
     return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
       checkedAt:new Date(now).toISOString()}
   }catch(error){

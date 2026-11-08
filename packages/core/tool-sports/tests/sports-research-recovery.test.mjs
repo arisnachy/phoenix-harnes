@@ -39,7 +39,7 @@ test('partial ESPN 400/503 errors do not erase six distinct verified games',asyn
   assert.equal(out.matches[0].away.completedGames,6)
   assert.equal(out.matches[0].evidence,'descriptive')
   assert.ok(out.failedDays>0)
-  assert.match(out.matches[0].limitations.join(' '),/Cobertura parcial/)
+  assert.match(out.matches[0].limitations.join(' '),/Cobertura (?:ESPN )?parcial/)
   assert.ok(requestLog.some(x=>x.includes('dates=20261109')))
 })
 test('the same local-day match can be verified from the next UTC partition',async()=>{
