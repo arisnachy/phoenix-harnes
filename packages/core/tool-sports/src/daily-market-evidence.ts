@@ -184,7 +184,7 @@ export function assessDailyMarketEvidence(
   const relativeSignal=lineDistance!==null&&variability!==null?
     round(lineDistance/Math.max(1,variability)):null
   const rankingScore=side&&valid?round(
-    4*Math.min(3,relativeSignal??0)+Math.min(verified,8)/10+
+    4*Math.min(8,relativeSignal??0)+Math.min(verified,8)/10+
     Math.min(h.games+a.games,20)/100):0
   const report:MarketResearchReview={
     candidate,researchedAt:evidence.checkedAt,status,
