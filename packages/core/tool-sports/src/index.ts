@@ -278,8 +278,9 @@ export function apply(ctx: Context): void {
       const specialMarkets=args.deep===false?null:
         await researchDailySpecialMarkets(best.map(x=>x.candidate),env,fetch,now,
           Math.min(6,count))
-      const trustedOptions=best.filter(item=>item.status==='descriptive-support')
-      const provisional=best.filter(item=>item.status!=='descriptive-support')
+      const trustedOptions=best.filter(item=>item.status==='descriptive-support'&&
+        item.priceAudit.classification!=='negative-value')
+      const provisional=best.filter(item=>!trustedOptions.includes(item))
       // Convert only the exact observed offer, not a predicted line, into a
       // native priced ticket. Never substitute a different house or odds.
       const quoted=best.flatMap(review=>{
