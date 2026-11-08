@@ -29,3 +29,159 @@
 .sheet td input:focus{box-shadow:inset 0 0 0 2px #268769;}
 .error{font-size:12px;color:#b22636;margin:10px 0;}
 @media(max-width:480px){.surface{padding:10px;border-radius:12px}.sheet td input{width:112px}.actions{gap:6px}}
+
+
+/* PHOENIX · Light professional testing workspace. Scope all new rules to scales
+   so sports, worksheets and generic forms retain their own design system. */
+.assessmentSurface{
+  --assessment-ink:#233745;--assessment-muted:#5b7180;
+  --assessment-border:#dbe6e9;--assessment-accent:#267a77;
+  color:var(--assessment-ink);background:#f9fbfc;border:1px solid #e1e9ed;
+  border-radius:20px;padding:clamp(14px,2.8vw,25px);
+  box-shadow:0 7px 28px rgba(35,66,80,.045);
+  container:assessment-form / inline-size;color-scheme:light;
+}
+.assessmentSurface *{box-sizing:border-box}
+.assessmentHeading{display:flex;gap:15px;align-items:flex-start;margin-bottom:17px}
+.assessmentSymbol{
+  width:43px;height:43px;display:grid;flex:0 0 43px;place-items:center;
+  border-radius:14px;background:#e5f3f1;color:#267a77;border:1px solid #d6eae7;
+}
+.assessmentHeadingText{min-width:0;flex:1}
+.assessmentEyebrow{font-size:10px;letter-spacing:.11em;text-transform:uppercase;
+  color:#487879;font-weight:750}
+.assessmentHeadingText h3{margin:3px 0 5px;font-size:clamp(17px,2.4vw,21px);
+  font-weight:750;letter-spacing:-.02em;line-height:1.28;color:#203945}
+.assessmentHeadingText p{margin:4px 0 9px;font-size:12px;
+  line-height:1.6;color:var(--assessment-muted)}
+.assessmentMeta{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.assessmentMeta span{font-size:10px;font-weight:650;padding:4px 9px;
+  border:1px solid #dce9eb;background:#fff;border-radius:99px;color:#50717b}
+.assessmentProgress{background:#fff;border:1px solid var(--assessment-border);
+  border-radius:13px;padding:12px 14px;margin:0 0 15px}
+.assessmentProgressCaption{display:flex;justify-content:space-between;gap:12px;
+  align-items:center;margin-bottom:8px;font-size:12px;color:var(--assessment-muted)}
+.assessmentProgressCaption strong{font-size:12px;color:var(--assessment-ink);font-variant-numeric:tabular-nums}
+.assessmentProgress progress{display:block;width:100%;height:7px;accent-color:#278b80;
+  appearance:none;border:0;border-radius:20px;overflow:hidden;background:#e8efef}
+.assessmentProgress progress::-webkit-progress-bar{background:#e8efef;border-radius:20px}
+.assessmentProgress progress::-webkit-progress-value{background:#278b80;border-radius:20px}
+.assessmentProgress progress::-moz-progress-bar{background:#278b80;border-radius:20px}
+.assessmentProtocol{background:#fff;border:1px solid var(--assessment-border);
+  border-radius:12px;margin-bottom:15px;overflow:hidden}
+.assessmentProtocol summary{padding:11px 14px;cursor:pointer;font-size:12px;font-weight:700;
+  color:#326c71;list-style-position:inside}
+.assessmentProtocol summary:hover{background:#f1f8f8}
+.assessmentProtocol>div{padding:0 15px 13px;border-top:1px solid #edf1f3;color:#455e6c}
+.assessmentProtocol ol{padding-left:22px;margin:12px 0 0}
+.assessmentProtocol li{margin:8px 0;line-height:1.5}
+.assessmentProtocol li p{margin:3px 0;font-size:12px}
+.assessmentQuestions{margin:15px 0 17px}
+.assessmentSectionHead{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:0 2px;margin-bottom:11px}
+.assessmentSectionHead h4{font-size:15px;color:#213846;margin:0 0 4px;font-weight:750}
+.assessmentSectionHead p{margin:0;font-size:12px;color:var(--assessment-muted);line-height:1.45}
+.assessmentSectionHead>span{font-weight:750;color:#247a73;
+  background:#e6f4f1;border-radius:100px;padding:5px 10px;font-size:11px;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.assessmentCardGrid{display:grid;gap:12px}
+.assessmentQuestionCard{
+  min-width:0;margin:0;border:1px solid var(--assessment-border);border-radius:15px;
+  background:#fff;padding:14px 15px 16px;transition:border-color .15s ease,box-shadow .15s ease;
+}
+.assessmentQuestionCard[data-answered=true]{border-color:#b2d8d0}
+.assessmentQuestionCard legend{float:left;width:100%;display:flex;align-items:flex-start;
+  gap:10px;padding:0;margin:0 0 12px;font-weight:700;font-size:13px;
+  line-height:1.5;color:#223c49}
+.assessmentIndex{display:inline-flex;align-items:center;justify-content:center;
+  flex:0 0 29px;height:29px;background:#eef4f6;color:#527482;border-radius:9px;
+  font-size:11px;font-weight:800;font-variant-numeric:tabular-nums}
+.assessmentQuestionCard[data-answered=true] .assessmentIndex,
+.assessmentMatrix tr[data-answered=true] .assessmentIndex{background:#def2ed;color:#217c73}
+.assessmentHelp{clear:both;margin:4px 0 12px;font-size:11px;color:var(--assessment-muted)}
+.assessmentChoices{clear:both;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:8px}
+.assessmentChoice{display:flex;align-items:center;gap:9px;min-width:0;padding:11px 12px;
+  border-radius:10px;background:#fcfdfd;border:1px solid #e0e8eb;
+  font-size:12px;font-weight:550;color:#29424d;cursor:pointer;line-height:1.4;
+  transition:background .15s ease,border-color .15s ease,box-shadow .15s ease}
+.assessmentChoice:hover,.assessmentMatrixChoice:hover{border-color:#9bc9c4;background:#f2faf8}
+.assessmentChoice[data-selected=true],.assessmentMatrixChoice[data-selected=true]{
+  border-color:#269385;background:#e7f6f1;color:#176c63;
+  box-shadow:inset 0 0 0 1px rgba(38,147,133,.13)}
+.assessmentChoice input,.assessmentMatrixChoice input{
+  appearance:auto;accent-color:#218779;width:17px;height:17px;margin:0;flex:0 0 17px;cursor:pointer}
+.assessmentChoice span{overflow-wrap:anywhere}
+.assessmentChoice:focus-within,.assessmentMatrixChoice:focus-within,
+.assessmentProtocol summary:focus-visible{outline:2px solid #267a77;outline-offset:3px}
+.assessmentMatrixScroll{max-width:100%;overflow-x:auto;border:1px solid #dce7e9;
+  border-radius:15px;background:#fff}
+.assessmentMatrix{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;
+  color:#203b48;table-layout:fixed}
+.assessmentMatrix thead th{
+  text-align:center;background:#eef5f6;color:#45636e;font-size:11px;
+  font-weight:750;line-height:1.35;padding:13px 8px;vertical-align:middle;
+  border-bottom:1px solid #dce7e9}
+.assessmentMatrix thead th:first-child{text-align:left;width:40%;padding-left:15px}
+.assessmentMatrix tbody tr:nth-child(2n){background:#fbfcfd}
+.assessmentMatrix tbody tr[data-answered=true]{background:#f8fcfa}
+.assessmentMatrix tbody th{padding:12px 12px 12px 14px;text-align:left;vertical-align:middle;
+  font-weight:650;line-height:1.5;border-bottom:1px solid #e6eef0}
+.assessmentMatrix tbody th .assessmentIndex{margin-right:9px;vertical-align:middle}
+.assessmentMatrix tbody th>span:last-child{vertical-align:middle}
+.assessmentMatrix tbody th small{display:block;font-weight:450;color:#647b85;margin-top:5px}
+.assessmentMatrix td{padding:7px 5px;border-bottom:1px solid #e6eef0;vertical-align:middle}
+.assessmentMatrix tbody tr:last-child td,.assessmentMatrix tbody tr:last-child th{border-bottom:0}
+.assessmentMatrixChoice{display:flex;justify-content:center;align-items:center;cursor:pointer;
+  min-height:44px;min-width:42px;border-radius:9px;border:1px solid transparent;
+  padding:8px;color:#506f7c}
+.assessmentMatrixChoice span{display:none}
+.assessmentScore{background:#edf8f6;border:1px solid #d5eae6;margin-top:18px;
+  border-radius:14px;gap:12px}
+.assessmentScore strong{color:#175e5f}
+.assessmentSurface .question>input,.assessmentSurface .question>textarea{
+  display:block;width:100%;min-height:39px;border:1px solid #dbe6e9;
+  padding:10px 12px;border-radius:9px;background:#fff;color:#233745;
+  font:inherit;resize:vertical;line-height:1.5}
+.assessmentSurface section[aria-label="Informe profesional PDF"]{
+  margin-top:16px;padding:16px;border:1px solid #dbe6e9;border-radius:14px;background:#fff}
+.assessmentSurface section[aria-label="Informe profesional PDF"] h4{
+  margin:0;color:#243e4a;font-size:14px}
+.assessmentSurface section[aria-label="Informe profesional PDF"]>p{
+  font-size:12px;line-height:1.55;color:#607783}
+.assessmentSurface .actions button{
+  border:1px solid #d2e3e3;background:#f4f9f8;
+  color:#236b6d;min-height:39px;padding:9px 13px;font-size:12px;font-weight:700}
+.assessmentSurface .actions button:hover:enabled{border-color:#8ac5bd;background:#e9f6f2}
+.assessmentSurface .actions button:disabled{opacity:.45}
+.assessmentSurface .disclaimer{color:#5e7380;line-height:1.6}
+@container assessment-form (max-width:650px){
+  .assessmentMatrixScroll{overflow:visible;border:0;background:transparent}
+  .assessmentMatrix,.assessmentMatrix tbody,.assessmentMatrix tr,
+  .assessmentMatrix td,.assessmentMatrix th{display:block;width:100%}
+  .assessmentMatrix thead{display:none}
+  .assessmentMatrix tbody{display:grid;gap:12px}
+  .assessmentMatrix tbody tr,.assessmentMatrix tbody tr:nth-child(2n){
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;
+    padding:12px;border:1px solid #dce7e9;border-radius:14px;background:#fff}
+  .assessmentMatrix tbody tr[data-answered=true]{border-color:#b2d8d0}
+  .assessmentMatrix tbody th{grid-column:1/-1;border:0;padding:3px 0 9px;display:flex;
+    gap:9px;align-items:flex-start}
+  .assessmentMatrix tbody th .assessmentIndex{margin:0}
+  .assessmentMatrix tbody td{padding:0;border:0}
+  .assessmentMatrixChoice{justify-content:flex-start;gap:9px;padding:10px;
+    border-color:#dce7e9;background:#fcfdfd;min-height:48px}
+  .assessmentMatrixChoice span{display:inline;font-size:11px;line-height:1.35;
+    font-weight:600;overflow-wrap:anywhere}
+  .assessmentSectionHead{align-items:flex-start}
+}
+@container assessment-form (max-width:350px){
+  .assessmentHeading{gap:9px}
+  .assessmentSymbol{width:36px;height:36px;flex-basis:36px}
+  .assessmentMatrix tbody tr{grid-template-columns:1fr}
+  .assessmentChoices{grid-template-columns:1fr}
+  .assessmentProgressCaption{flex-wrap:wrap}
+  .assessmentSurface section[aria-label="Informe profesional PDF"]{padding:11px}
+}
+@media(prefers-reduced-motion:reduce){
+  .assessmentQuestionCard,.assessmentChoice{transition:none}
+}
