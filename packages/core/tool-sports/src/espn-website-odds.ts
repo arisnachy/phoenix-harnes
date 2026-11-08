@@ -185,7 +185,7 @@ export async function fetchEspnWebsiteOdds(
       raw as Parameters<typeof normalizeEspnMarkets>[1],{now})
     for(const q of rows){
       const stamp=Date.parse(q.updatedAt)
-      if(!allowed.has(q.market)||!Number.isFinite(stamp)||
+      if(!allowed.has(q.market as 'h2h' | 'totals' | 'spreads')||!Number.isFinite(stamp)||
         stamp>now||now-stamp>LIVE_AGE||
         q.bookmaker.startsWith('ESPN proveedor #')||q.price<=1||q.price>=1000)continue
       // Soccer moneyline requires a separately published three-way DRAW price
