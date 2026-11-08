@@ -112,6 +112,22 @@ test('official MLB slate provides verified gamePk, team IDs, stadium, no invente
   const board=await mlbResearch(date,undefined,mock.fetcher,at)
   assert.equal(board.mode,'schedule')
 })
+test('blank provider scores remain missing instead of becoming zero',async()=>{
+  const fetcher=async(input)=>{
+    const url=String(input)
+    if(url.includes('/schedule'))return new Response(JSON.stringify({dates:[{games:[{
+      ...fixture,teams:{
+        home:{...fixture.teams.home,score:'   '},
+        away:{...fixture.teams.away,score:null},
+      },
+    }]}]}),{status:200})
+    throw new Error('Unexpected endpoint '+url)
+  }
+  const board=await discoverMlbDay(date,fetcher,at)
+  assert.equal(board.fixtures.length,1)
+  assert.equal(board.fixtures[0].home.score,null)
+  assert.equal(board.fixtures[0].away.score,null)
+})
 test('dossier uses current roster IDs and crosses every known batter only with opposing pitchers',async()=>{
   const mock=fakeNetwork()
   const r=await researchMlbCase(date,812345,mock.fetcher,at,{},[])
