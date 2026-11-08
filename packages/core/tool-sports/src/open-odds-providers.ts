@@ -75,6 +75,9 @@ export async function fetchTheRundownOdds(
   if(!sport)return []
   const marketIds=markets.split(',').map(m=>m==='h2h'?1:m==='spreads'?2:3).join(',')
   const url=new URL('https://therundown.io/api/v2/sports/'+sport+'/events/'+day(now))
+  // TheRundown can group events by UTC day; offset=240 keeps the fixed
+  // Dominican Republic (UTC-4) calendar date including late-night games.
+  url.searchParams.set('offset','240')
   url.searchParams.set('market_ids',marketIds)
   url.searchParams.set('affiliate_ids','19,22,23')
   url.searchParams.set('main_line','true')
