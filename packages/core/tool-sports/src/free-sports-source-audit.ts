@@ -1,66 +1,126 @@
-/** Free secondary fixture corroboration. Never converts a roster or a quote into a
- * confirmed starter, official injury, bookmaker price, or calibrated prediction.
- * Both teams, home/away, and the kickoff must agree before evidence is verified.
+/** Read-only free secondary research providers. A fixture match is NOT a
+ * betting probability, confirmed starter, medical report or bookmaker price.
+ * No-match in a small/free feed never negates a verified primary fixture.
  */
 import {getFeed} from './sports.ts'
 
 export type FreeFixture={sport:string;league:string;eventId:string;date:string;
   home:string;away:string;kickoff:string}
-export type BackupFinding={provider:'TheSportsDB'|'OpenLigaDB';
-  status:'verified'|'not-found'|'unavailable'|'conflict';
+export type BackupFinding={provider:'TheSportsDB'|'OpenLigaDB'|'OpenFootball'|'FootballData.org';
+  status:'verified'|'partial'|'not-found'|'unavailable'|'conflict';
   url:string;checkedAt:string;detail:string}
 type Obj=Record<string,unknown>
 const obj=(x:unknown):Obj=>x!==null&&typeof x==='object'&&!Array.isArray(x)?x as Obj:{}
 const arr=(x:unknown):unknown[]=>Array.isArray(x)?x:[]
 const str=(x:unknown):string=>typeof x==='string'?x.trim():''
-const norm=(x:string):string=>x.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
+const norm=(x:string)=>x.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
+const canonical=(x:string)=>norm(x.replace(/\s+(?:FC|CF|AFC|SC)$/iu,''))
 const validDate=(d:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(d)&&
   Number.isFinite(Date.parse(d+'T00:00:00Z'))&&
   new Date(d+'T00:00:00Z').toISOString().slice(0,10)===d
 const sportNames:Record<string,string>={
   soccer:'Soccer',basketball:'Basketball',baseball:'Baseball',
   football:'American Football',hockey:'Ice Hockey',tennis:'Tennis'}
-const europeanGermanLeagues=new Set(['ger.1'])
+const footballJsonLeagues:Record<string,string>={
+  'eng.1':'en.1','esp.1':'es.1','ger.1':'de.1',
+  'ita.1':'it.1','fra.1':'fr.1','ned.1':'nl.1','por.1':'pt.1'}
+const footballDataCompetitions:Record<string,string>={
+  'eng.1':'PL','esp.1':'PD','ger.1':'BL1','ita.1':'SA',
+  'fra.1':'FL1','ned.1':'DED','por.1':'PPL'}
 const checked=(now:number)=>new Date(now).toISOString()
 const inside90=(candidate:string,kickoff:string):boolean=>{
   const a=Date.parse(candidate),b=Date.parse(kickoff)
-  return Number.isFinite(a)&&Number.isFinite(b)&&
-    Math.abs(a-b)<=90*60_000
+  return Number.isFinite(a)&&Number.isFinite(b)&&Math.abs(a-b)<=90*60_000
 }
-function compare(home:string,away:string,when:string,input:FreeFixture):
-  'verified'|'not-found'|'conflict'{
-  const h=norm(home),a=norm(away),expectedH=norm(input.home),expectedA=norm(input.away)
-  if(!h||!a||!expectedH||!expectedA||!inside90(when,input.kickoff))
-    return'not-found'
-  if(h===expectedH&&a===expectedA)return'verified'
-  if(h===expectedA&&a===expectedH)return'conflict'
-  return'not-found'
+function compare(home:string,away:string,when:string,input:FreeFixture,
+  dateOnly=false):'verified'|'partial'|'not-found'|'conflict'{
+  const h=canonical(home),a=canonical(away)
+  const expectedH=canonical(input.home),expectedA=canonical(input.away)
+  if(!h||!a||!expectedH||!expectedA)return'not-found'
+  const same=h===expectedH&&a===expectedA
+  const reverse=h===expectedA&&a===expectedH
+  if(!same&&!reverse)return'not-found'
+  const timeOK=dateOnly?when.slice(0,10)===input.date:inside90(when,input.kickoff)
+  if(!timeOK)return'not-found'
+  if(reverse)return'conflict'
+  return dateOnly?'partial':'verified'
+}
+type EventRow={home:string;away:string;when:string}
+const cache=new Map<string,{until:number;value:Promise<unknown>}>()
+/** Cached only for the production transport. Unit tests with an injected fetch
+ * never share cached values. Bounded cache prevents duplicated multi-leg calls.
+ */
+async function publicJson(url:string,fetcher:typeof fetch,now:number):Promise<unknown>{
+  if(fetcher!==fetch)return getFeed<unknown>(url,fetcher)
+  const existing=cache.get(url)
+  if(existing&&existing.until>now)return existing.value
+  if(cache.size>64)cache.clear()
+  const value=getFeed<unknown>(url,fetcher).catch(err=>{cache.delete(url);throw err})
+  cache.set(url,{until:now+10*60_000,value})
+  return value
 }
 async function probe(provider:BackupFinding['provider'],url:string,
-  rows:(json:unknown)=>unknown[],interpret:(r:unknown)=>{home:string;away:string;when:string},
-  input:FreeFixture,fetcher:typeof fetch,now:number):Promise<BackupFinding>{
+  rows:(json:unknown)=>unknown[],interpret:(r:unknown)=>EventRow,
+  input:FreeFixture,fetcher:typeof fetch,now:number,dateOnly=false,
+):Promise<BackupFinding>{
   const base={provider,url,checkedAt:checked(now)}
   try{
-    const data=await getFeed<unknown>(url,fetcher)
+    const data=await publicJson(url,fetcher,now)
     const records=rows(data).slice(0,900)
     let conflict=false
     for(const raw of records){
-      const parsed=interpret(raw),status=compare(parsed.home,parsed.away,parsed.when,input)
-      if(status==='verified')return{...base,status,detail:'Dos equipos, localía y horario coinciden; solo calendario corroborado'}
+      const parsed=interpret(raw)
+      const status=compare(parsed.home,parsed.away,parsed.when,input,dateOnly)
+      if(status==='verified'||status==='partial')
+        return{...base,status,detail:status==='partial'?
+          'Equipos y fecha corresponden, pero la fuente NO aporta UTC verificable: cotejo parcial':
+          'Dos equipos, localía y horario coinciden; solo calendario corroborado'}
       if(status==='conflict')conflict=true
     }
     return{...base,status:conflict?'conflict':'not-found',
-      detail:conflict?'El proveedor invierte la localía: comprobar antes del pronóstico':
-        'No se encontró pareja exacta; un nivel gratuito incompleto NO confirma ausencia de partido'}
+      detail:conflict?'La fuente invierte la localía: investigar discrepancia':
+        'Sin coincidencia en esta fuente; su cobertura limitada NO prueba ausencia del partido'}
   }catch(e){
     return{...base,status:'unavailable',detail:'Proveedor no disponible: '+
       (e instanceof Error?e.message:String(e)).slice(0,120)}
   }
 }
-/** Bounded public endpoints. TheSportsDB free day queries may expose only 3 events;
- * failure to match there is NOT contrary evidence. No price, starters or injury
- * claims are inferred from either feed.
+async function footballData(input:FreeFixture,fetcher:typeof fetch,
+  now:number,token:string):Promise<BackupFinding>{
+  const code=footballDataCompetitions[input.league]!
+  const url='https://api.football-data.org/v4/competitions/'+code+
+    '/matches?dateFrom='+input.date+'&dateTo='+input.date
+  const base={provider:'FootballData.org' as const,url,checkedAt:checked(now)}
+  try{
+    // Credential is never embedded in a URL, cache key, card or audit detail.
+    const response=await fetcher(url,{headers:{'X-Auth-Token':token,accept:'application/json'},
+      redirect:'error',signal:AbortSignal.timeout(8000)})
+    if(!response.ok)throw Error('HTTP '+response.status)
+    if(Number(response.headers.get('content-length')||0)>3_000_000)
+      throw Error('Respuesta superior al límite')
+    const text=await response.text()
+    if(text.length>3_000_000)throw Error('Respuesta superior al límite')
+    const list=arr(obj(JSON.parse(text)).matches).slice(0,150)
+    for(const row of list){
+      const x=obj(row)
+      const home=str(obj(x.homeTeam).name),away=str(obj(x.awayTeam).name)
+      const status=compare(home,away,str(x.utcDate),input)
+      if(status==='verified')return{...base,status,detail:
+        'Competición, local/visita y hora confirmadas por FootballData.org'}
+      if(status==='conflict')return{...base,status,detail:
+        'Conflicto en local/visita con FootballData.org'}
+    }
+    return{...base,status:'not-found',detail:
+      'Sin coincidencia bajo el plan gratuito; no confirma cancelación ni inexistencia'}
+  }catch(e){
+    return{...base,status:'unavailable',detail:
+      'Proveedor sin acceso/mercado: '+(e instanceof Error?e.message:String(e)).slice(0,80)}
+  }
+}
+/** Sources are independent checks, never sources of fresh bookmaker odds.
+ * A no-key football.json JSON file has local kickoff times, NOT validated UTC;
+ * it can only corroborate date and teams. Optional key is server-side.
  */
 export async function crosscheckFreeFixture(input:FreeFixture,
   fetcher:typeof fetch=fetch,now=Date.now(),
@@ -79,7 +139,7 @@ export async function crosscheckFreeFixture(input:FreeFixture,
         when:str(o.strTimestamp)||str(o.dateEvent)}
     },input,fetcher,now))
   }
-  if(input.sport==='soccer'&&europeanGermanLeagues.has(input.league)){
+  if(input.sport==='soccer'&&input.league==='ger.1'){
     const year=Number(input.date.slice(0,4))-(Number(input.date.slice(5,7))<7?1:0)
     const url='https://api.openligadb.de/getmatchdata/bl1/'+year
     reports.push(probe('OpenLigaDB',url,arr,x=>{
@@ -88,22 +148,57 @@ export async function crosscheckFreeFixture(input:FreeFixture,
         when:str(o.matchDateTimeUTC)||str(o.matchDateTime)}
     },input,fetcher,now))
   }
+  if(input.sport==='soccer'){
+    const file=footballJsonLeagues[input.league]
+    if(file){
+      const year=Number(input.date.slice(0,4))-(Number(input.date.slice(5,7))<7?1:0)
+      const url='https://raw.githubusercontent.com/openfootball/football.json/master/'+
+        year+'-'+String(year+1).slice(-2)+'/'+file+'.json'
+      reports.push(probe('OpenFootball',url,x=>arr(obj(x).matches),x=>{
+        const o=obj(x)
+        return{home:str(o.team1),away:str(o.team2),when:str(o.date)}
+      },input,fetcher,now,true))
+    }
+    const token=env.PHOENIX_FOOTBALL_DATA_TOKEN?.trim()
+    if(token&&footballDataCompetitions[input.league])
+      reports.push(footballData(input,fetcher,now,token))
+  }
   return Promise.all(reports)
 }
-/** Review links only: the listed documents have NOT been parsed or verified for
- * the fixture. Display as missing-source follow-ups, never as injury evidence.
- */
 export function freeOfficialFollowUps(sport:string,date:string):string[]{
   if(!validDate(date))return[]
-  if(sport==='basketball'&&Number(date.slice(5,7))>=10){
-    const year=Number(date.slice(0,4))
-    return['NBA: cotejar manualmente informe oficial de lesiones '+
+  if(sport==='basketball'){
+    const year=Number(date.slice(0,4))-(Number(date.slice(5,7))<7?1:0)
+    return['NBA: informe oficial, verificar jugador, fecha/hora y estado: '+
       'https://official.nba.com/nba-injury-report-'+year+'-'+String(year+1).slice(-2)+'-season/']
   }
   if(sport==='football')return[
-    'NFL: cotejar lesionados, rosters y depth chart de nflverse '+
+    'NFL: inactivos y QB oficiales por comprobar; lesiones nflverse '+
     'https://nflreadr.nflverse.com/articles/nflverse_data_schedule.html']
   if(sport==='hockey')return[
-    'NHL: contrastar disponibilidad del portero con partes oficiales; roster no confirma titular']
+    'NHL: confirmar portero anunciado con club y reglas OT; roster no confirma titular']
   return[]
 }
+/** Auditable source inventory. A catalog entry is NEVER proof that the source
+ * worked for the specific fixture, or that its free tier covers the data.
+ */
+export const freeSourceInventory=[
+  {name:'ESPN Site/Core',access:'no-key',sport:'multi',capability:'fixtures,results,rosters',state:'primary'},
+  {name:'MLB StatsAPI',access:'no-key',sport:'baseball',capability:'fixtures,probable pitchers,stats',state:'primary'},
+  {name:'NHL Web API',access:'no-key',sport:'hockey',capability:'fixtures,rosters,stats',state:'primary'},
+  {name:'TheSportsDB',access:'public-key-123',sport:'multi',capability:'secondary fixtures,partial free',state:'integrated'},
+  {name:'OpenLigaDB',access:'no-key',sport:'soccer',capability:'Bundesliga fixtures',state:'integrated'},
+  {name:'OpenFootball',access:'no-key',sport:'soccer',capability:'multi-league calendar/historical CC0',state:'integrated'},
+  {name:'football-data.org',access:'free-key-optional',sport:'soccer',capability:'fixture matching of seven leagues',state:'integrated-opt-in'},
+  {name:'nflverse',access:'no-key',sport:'football',capability:'weekly injury CSV',state:'integrated'},
+  {name:'NBA Official Injury Report',access:'public-web',sport:'basketball',capability:'official player status',state:'manual-followup'},
+  {name:'StatsBomb Open Data',access:'no-key',sport:'soccer',capability:'licensed historical xG/events; limited seasons',state:'historical-only'},
+  {name:'The Odds API v4',access:'free-key-optional',sport:'multi',capability:'markets/prices',state:'existing-opt-in'},
+  {name:'TheOddsAPI',access:'free-key-optional',sport:'nba-mlb',capability:'moneyline',state:'existing-opt-in'},
+  {name:'OddsHarvester',access:'operator-opt-in',sport:'multi',capability:'market observation where allowed',state:'existing-opt-in'},
+  {name:'Open-Meteo',access:'no-key-noncommercial',sport:'multi',capability:'weather',state:'existing'},
+  {name:'Jolpica F1',access:'no-key',sport:'racing',capability:'F1 results/standings',state:'catalog-only'},
+  {name:'OpenF1',access:'no-key-historical',sport:'racing',capability:'F1 telemetry; live may be paid',state:'catalog-only'},
+  {name:'SportScore',access:'no-key-attribution',sport:'multi',capability:'scores/stats with UI attribution required',state:'catalog-only'},
+  {name:'API-Football',access:'free-key-optional',sport:'soccer',capability:'some free league data; quota limits',state:'catalog-only'},
+] as const
