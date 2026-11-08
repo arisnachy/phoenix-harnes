@@ -137,7 +137,7 @@ test('a total misleadingly projected under by averages cannot be sold as support
       lastGames:Array.from({length:10},()=>({scored:130,allowed:130}))},
     away:{name:'Away',form:{games:10,scoredPerGame:95,allowedPerGame:95},
       lastGames:Array.from({length:10},()=>({scored:95,allowed:95}))}}
-  const review=assessDailyMarketEvidence(market(),inconsistent)
+  const review=assessDailyMarketEvidence(market('totals','Over',245.5),inconsistent)
   assert.equal(review.selectedOutcome.selection,'Under')
   assert.equal(review.projectedTotal,225)
   assert.equal(review.marketOutcomeDiagnostic.status,'mixed')
