@@ -59,10 +59,12 @@ function newPage(pages:Page[],title:string):Page{
   const page:Page={content:'',y:703};pages.push(page)
   page.content+=fill(0,H-67,W,67,navy)
   page.content+=fill(0,H-72,W,5,teal)
-  page.content+=label('PHOENIX  |  EVALUACIONES',PAD,757,10,true,'#c8e7e6')
-  page.content+=label(title.slice(0,72),PAD,729,14,true,'#ffffff')
+  page.content+=fill(PAD,741,22,22,teal)
+  page.content+=label('P',PAD+6,747,14,true,'#ffffff')
+  page.content+=label('PHOENIX  |  CLÍNICA E INSTRUMENTOS',PAD+34,755,10,true,'#c8e7e6')
+  page.content+=label(title.slice(0,68),PAD,728,14,true,'#ffffff')
   page.content+=fill(PAD,46,W-PAD*2,1,line)
-  page.content+=label('Generado localmente - confidencial si contiene datos personales',PAD,31,8,false,gray)
+  page.content+=label('Documento para revisión profesional | datos sensibles: conservar de forma segura',PAD,31,7.7,false,gray)
   page.content+=label('Página '+n,514,31,8,false,gray)
   return page
 }
@@ -89,12 +91,38 @@ function paragraph(pages:Page[],value:string,reportTitle:string,options?:{
   }
   pages[pages.length-1]!.y-=6
 }
+/**
+ * Full-width, multi-line key/value rows. Never truncate a patient's identity,
+ * an instrument name, an evaluation field or a calculated domain result.
+ */
 function row(pages:Page[],name:string,value:string,reportTitle:string):void{
-  const p=ensure(pages,28,reportTitle)
-  p.content+=fill(PAD,p.y-8,W-PAD*2,24,(p.y%2)>1?'#f5f8f9':'#ecf3f4')
-  p.content+=label(name.slice(0,34),PAD+9,p.y,9,true,gray)
-  p.content+=label(value.slice(0,68),PAD+174,p.y,9,false,ink)
-  p.y-=29
+  const headings=wrap(name,94),values=wrap(value,94)
+  for(const heading of headings){
+    const p=ensure(pages,19,reportTitle)
+    p.content+=fill(PAD,p.y-8,W-PAD*2,19,'#edf3f4')
+    p.content+=label(heading,PAD+9,p.y,8.5,true,gray)
+    p.y-=19
+  }
+  for(const entry of values){
+    const p=ensure(pages,20,reportTitle)
+    p.content+=fill(PAD,p.y-8,W-PAD*2,20,'#f8fafb')
+    p.content+=label(entry,PAD+10,p.y,9.5,false,ink)
+    p.y-=20
+  }
+  pages[pages.length-1]!.y-=6
+}
+/** A non-diagnostic graphic that displays the reported score on its declared range. */
+function scoreGauge(pages:Page[],score:string,range:string,title:string):void{
+  const bounds=range.match(/^(-?\\d+)\\s*[–-]\\s*(-?\\d+)$/u)
+  const n=Number(score),low=bounds?Number(bounds[1]):NaN,high=bounds?Number(bounds[2]):NaN
+  if(!Number.isFinite(n)||!Number.isFinite(low)||!Number.isFinite(high)||high<=low)return
+  const p=ensure(pages,36,title)
+  const x=PAD+16,width=W-PAD*2-32
+  p.content+=fill(x,p.y-6,width,9,'#d7e3e5')
+  p.content+=fill(x,p.y-6,width*Math.min(1,Math.max(0,(n-low)/(high-low))),9,teal)
+  p.content+=label(String(low),x,p.y-21,8,false,gray)
+  p.content+=label(String(high),x+width-16,p.y-21,8,false,gray)
+  p.y-=39
 }
 function safe(value:string,max=3500):string{
   return value.trim().slice(0,max)||'No consignado'
@@ -159,6 +187,7 @@ export function buildAssessmentPdfBytes(data:AssessmentReportData):Uint8Array<Ar
   p.content+=label('Rango: '+safe(data.range,60),PAD+170,p.y-12,10,true,ink)
   p.content+=label(data.verified?'Referencia comprobable':'NO VALIDADO',PAD+170,p.y-34,10,true,teal)
   p.y-=92
+  scoreGauge(pages,data.score,data.range,title)
   section(pages,'Interpretación del instrumento',title)
   paragraph(pages,safe(data.classification),title,{bold:true})
   paragraph(pages,'Esta clasificación describe las respuestas según la regla declarada. '
@@ -184,14 +213,17 @@ export function buildAssessmentPdfBytes(data:AssessmentReportData):Uint8Array<Ar
   paragraph(pages,'Fuente: '+safe(data.source,800),title)
   paragraph(pages,'Estado: '+(data.verified?'Instrumento de referencia; verificar pertinencia cultural y uso autorizado.':
     'Puntuación de formulario no verificada; no presentar como instrumento estandarizado.'),title)
-  paragraph(pages,'Revisión, firma y sello del profesional: ____________________________________',title)
+  section(pages,'Validación profesional',title)
+  paragraph(pages,'Estado documental: borrador calculado automáticamente. No equivale a informe firmado.',title)
+  paragraph(pages,'Profesional responsable: '+safe(data.professional,120),title)
+  paragraph(pages,'Firma, matrícula y sello: ______________________________________________',title)
+  paragraph(pages,'Fecha de revisión: __________________',title)
   newPage(pages,'ANEXO · FORMULARIO COMPLETADO')
   section(pages,'Respuestas originales (auditoría)',title)
   paragraph(pages,'Se transcriben todas las preguntas y las respuestas elegidas, sin resumir ni inferir. '
     +'Las puntuaciones individuales aparecen únicamente cuando están definidas.',title)
   data.rows.forEach((answer,i)=>{
-    paragraph(pages,(i+1)+'. '+safe(answer.question,600),title,{bold:true})
-    paragraph(pages,'Respuesta: '+safe(answer.answer,450)
+    row(pages,(i+1)+'. '+safe(answer.question,600),'Respuesta: '+safe(answer.answer,450)
       +(answer.score===undefined?'':' | Puntaje: '+answer.score),title)
   })
   paragraph(pages,'Fin del anexo. Total de reactivos contestados: '+data.rows.length+'.',title,{bold:true})
