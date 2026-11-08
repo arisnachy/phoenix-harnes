@@ -2,7 +2,7 @@
  * betting probability, confirmed starter, medical report or bookmaker price.
  * No-match in a small/free feed never negates a verified primary fixture.
  */
-import {getFeed} from './sports.ts'
+import {getFeed,sportsCatalog} from './sports.ts'
 
 export type FreeFixture={sport:string;league:string;eventId:string;date:string;
   home:string;away:string;kickoff:string}
@@ -201,4 +201,72 @@ export const freeSourceInventory=[
   {name:'OpenF1',access:'no-key-historical',sport:'racing',capability:'F1 telemetry; live may be paid',state:'catalog-only'},
   {name:'SportScore',access:'no-key-attribution',sport:'multi',capability:'scores/stats with UI attribution required',state:'catalog-only'},
   {name:'API-Football',access:'free-key-optional',sport:'soccer',capability:'some free league data; quota limits',state:'catalog-only'},
+  {"name":"NBA Stats / LiveData","access":"no-key-restricted","sport":"basketball","capability":"NBA boxscores/play-by-play; bloqueo 403/timeout posible","state":"catalog-only"},
+  {"name":"WNBA Stats","access":"no-key-restricted","sport":"basketball","capability":"WNBA estadísticas, LeagueID=10; acceso externo no garantizado","state":"catalog-only"},
+  {"name":"balldontlie","access":"free-key-optional","sport":"basketball","capability":"NBA/WNBA, alcance y endpoints según plan y cuota","state":"catalog-only"},
+  {"name":"Basketball Reference","access":"public-web","sport":"basketball","capability":"estadística histórica y comparaciones web; no API abierta oficial","state":"manual-followup"},
+  {"name":"College Football Data","access":"free-key-optional","sport":"football","capability":"NCAA football histórico y analítica; cuotas/plan por verificar","state":"catalog-only"},
+  {"name":"NFL Official Gamebooks","access":"public-web","sport":"football","capability":"actas, inactivos y reportes oficiales; páginas/PDF","state":"manual-followup"},
+  {"name":"nflverse Play-by-Play","access":"public-files","sport":"football","capability":"EPA, jugadas, rosters y calendarios con frescura por dataset","state":"historical-only"},
+  {"name":"Fantasy Premier League","access":"no-key-restricted","sport":"soccer","capability":"estadística y disponibilidad Premier League; CORS/no oficial","state":"catalog-only"},
+  {"name":"Understat","access":"public-web","sport":"soccer","capability":"xG y tiros en ciertas ligas; sin API pública garantizada","state":"manual-followup"},
+  {"name":"ATPTour Official","access":"public-web","sport":"tennis","capability":"marcadores, cuadros, superficies y rankings; sin API libre estable","state":"manual-followup"},
+  {"name":"WTA Official","access":"public-web","sport":"tennis","capability":"marcadores y clasificaciones; sin API libre estable","state":"manual-followup"},
+  {"name":"Sackmann ATP/WTA Archive","access":"public-files-noncommercial","sport":"tennis","capability":"CSV histórico y rankings; atribución/licencia CC BY-NC-SA","state":"historical-only"},
+  {"name":"Official Formula 1","access":"public-web","sport":"racing","capability":"calendario y resultados; verificar licencia de datos","state":"manual-followup"},
+  {"name":"NASCAR Official Results","access":"public-web","sport":"racing","capability":"clasificaciones y resultados en web; no API pública garantizada","state":"manual-followup"},
+  {"name":"Cricsheet","access":"public-files","sport":"cricket","capability":"histórico bola por bola de competiciones cubiertas","state":"historical-only"},
+  {"name":"ESPNcricinfo","access":"public-web","sport":"cricket","capability":"marcadores y crónicas; acceso automatizado sujeto a condiciones","state":"manual-followup"},
+  {"name":"World Rugby","access":"public-web","sport":"rugby","capability":"calendario, resultados y selecciones; no API abierta garantizada","state":"manual-followup"},
+  {"name":"NRL Official","access":"public-web","sport":"rugby-league","capability":"resultados y estadísticas NRL; sin API estable publicada","state":"manual-followup"},
+  {"name":"AFL Official","access":"public-web","sport":"australian-football","capability":"resultados y estadísticas AFL; no API libre garantizada","state":"manual-followup"},
+  {"name":"PGA TOUR","access":"public-web","sport":"golf","capability":"clasificación y resultados de torneos; uso sujeto a términos","state":"manual-followup"},
+  {"name":"LPGA","access":"public-web","sport":"golf","capability":"resultados y tabla de clasificación; uso sujeto a términos","state":"manual-followup"},
+  {"name":"UFCStats","access":"public-web","sport":"mma","capability":"historial de peleas y luchadores; interfaz web no API abierta","state":"manual-followup"},
+  {"name":"PFL Official","access":"public-web","sport":"mma","capability":"calendario y resultados de artes marciales mixtas","state":"manual-followup"},
+  {"name":"PLL Official","access":"public-web","sport":"lacrosse","capability":"partidos y estadísticas de Premier Lacrosse League","state":"manual-followup"},
+  {"name":"NCAA Volleyball","access":"public-web","sport":"volleyball","capability":"resultados NCAA; no API libre documentada","state":"manual-followup"},
+  {"name":"NCAA Water Polo","access":"public-web","sport":"water-polo","capability":"calendario y resultados NCAA; no API libre documentada","state":"manual-followup"},
+  {"name":"NCAA Field Hockey","access":"public-web","sport":"field-hockey","capability":"resultados NCAA; no API libre documentada","state":"manual-followup"},
+  {"name":"LIDOM Oficial","access":"public-web","sport":"baseball","capability":"béisbol invernal RD; resultados y rosters, web, no API garantizada","state":"manual-followup"},
+  {"name":"Serie del Caribe Oficial","access":"public-web","sport":"baseball","capability":"calendario y resultados; cobertura manual","state":"manual-followup"},
+  {"name":"NCAA Basketball","access":"public-web","sport":"basketball","capability":"estadísticas y torneos NCAA; web, sin API libre estable","state":"manual-followup"},
 ] as const
+/** Discipline-aware coverage, NOT a claim of successful HTTP access.
+ * A listed reference never becomes a live adapter just by being catalogued.
+ * Respect 403/429, published limits, licensing and source provenance.
+ */
+export function freeSourceCoverageForSport(sport:string,env:NodeJS.ProcessEnv=process.env){
+  if(!Object.hasOwn(sportsCatalog,sport))return{sport,supported:false,
+    wired:[] as string[],configuredOptional:[] as string[],
+    unconfiguredOptional:[] as string[],referenceOnly:[] as string[],
+    caveats:['Disciplina fuera del catálogo ESPN de PHOENIX']}
+  const rows=freeSourceInventory.filter(p=>p.sport==='multi'||p.sport===sport||
+    (p.sport==='nba-mlb'&&(sport==='basketball'||sport==='baseball')))
+  const wired:string[]=[],configuredOptional:string[]=[],
+    unconfiguredOptional:string[]=[],referenceOnly:string[]=[]
+  for(const source of rows){
+    const key=source.name==='football-data.org'?'PHOENIX_FOOTBALL_DATA_TOKEN':
+      source.name==='The Odds API v4'?'THE_ODDS_API_KEY':
+      source.name==='TheOddsAPI'?'THEODDSAPI_API_KEY':null
+    const isPrimary=source.state==='primary'
+    const isWired=source.state==='integrated'||source.state==='existing'||isPrimary
+    const isOptional=source.state==='integrated-opt-in'||source.state==='existing-opt-in'
+    if(isPrimary&&((source.name==='ESPN Site/Core'&&env.PHOENIX_SPORTS_ESPN_DISABLED==='1')||
+      (source.name==='MLB StatsAPI'&&env.PHOENIX_SPORTS_MLB_DISABLED==='1'))){
+      unconfiguredOptional.push(source.name+' (deshabilitado por operador)')
+    }else if(source.state==='integrated'&&env.PHOENIX_SPORTS_FREE_BACKUPS_DISABLED==='1'){
+      unconfiguredOptional.push(source.name+' (respaldos deshabilitados)')
+    }else if(isWired)wired.push(source.name)
+    else if(isOptional){
+      if(key&&!!env[key]?.trim())configuredOptional.push(source.name)
+      else unconfiguredOptional.push(source.name)
+    }else referenceOnly.push(source.name)
+  }
+  return{sport,supported:true,wired,configuredOptional,unconfiguredOptional,
+    referenceOnly,caveats:[
+      'Conectado/configurado NO significa respuesta HTTP verificada para este partido.',
+      '403/429 y cuotas agotadas no autorizan evadir bloqueos ni fabricar datos.',
+      'Fuente histórica o enlace público NO confirma precio, lesión o titular del día.',
+    ]}
+}
