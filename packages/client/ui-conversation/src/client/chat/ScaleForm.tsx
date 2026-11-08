@@ -352,7 +352,7 @@ export function ScaleForm({ spec, onAction, verified=false, restoredFromCatalog=
       <span>{scored.answered} de {spec.props.items.length} respuestas</span>
       {spec.props.scoring && <span>Rango: {spec.props.scoring.min}–{spec.props.scoring.max}</span>}
       {warnings.length === 0 && scored.band && <PhoenixStatusPill label={scored.band.label} tone={scored.band.tone ?? 'neutral'} />}
-      {spec.props.scoring && <progress aria-label="Progreso de puntuación" min={0}
+      {spec.props.scoring && <progress aria-label="Progreso de puntuación"
         max={Math.max(1,spec.props.scoring.max-spec.props.scoring.min)}
         value={scored.total===null ? 0 : scored.total-spec.props.scoring.min} />}
     </div>
