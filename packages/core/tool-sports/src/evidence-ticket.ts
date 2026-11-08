@@ -56,7 +56,11 @@ export async function evidenceTicket(
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por el operador')
   const leagues=defaultLeagues.filter(([sport])=>!sportFilter||sport===sportFilter)
   if(!leagues.length)throw Error('Disciplina sin cobertura para ticket automático')
-  const slate=await Promise.allSettled(leagues.map(async([sport,league])=>{
+  // A burst of 40+ ESPN scoreboards causes rate-limit/HTTP 400 failures.
+  // Scan no more than five leagues (two UTC dates each) concurrently.
+  const slate:Array<PromiseSettledResult<{sport:string;league:string;active:number}>>=[]
+  for(let offset=0;offset<leagues.length;offset+=5){
+    const batch=await Promise.allSettled(leagues.slice(offset,offset+5).map(async([sport,league])=>{
     // Search both ESPN UTC date partitions for the requested local (RD) day.
     const next=new Date(Date.parse(date+'T00:00:00Z')+86_400_000)
       .toISOString().slice(0,10).replaceAll('-','')
@@ -74,7 +78,9 @@ export async function evidenceTicket(
         &&(e.status?.type?.state??'pre')==='pre'
     }).map(e=>String(e.id??'')).filter(id=>/^\d{1,20}$/u.test(id))).size
     return{sport,league,active}
-  }))
+    }))
+    slate.push(...batch)
+  }
   const eligible=slate.flatMap(r=>r.status==='fulfilled'&&r.value.active>0?[r.value]:[])
   eligible.sort((a,b)=>b.active-a.active||a.sport.localeCompare(b.sport))
   // Investigate in three-league batches. Do not stop at the first six leagues
@@ -82,7 +88,10 @@ export async function evidenceTicket(
   // Only verified, future ESPN event IDs can become selections.
   const shortlist=sportFilter?eligible:diversifiedSportsShortlist(eligible,eligible.length)
   const reports:Array<PromiseSettledResult<Awaited<ReturnType<typeof researchSport>>>>=[]
+  const researchStarted=Date.now()
+  let budgetExhausted=false
   for(let offset=0;offset<shortlist.length;offset+=3){
+    if(offset>0&&Date.now()-researchStarted>85_000){budgetExhausted=true;break}
     const batch=await Promise.allSettled(shortlist.slice(offset,offset+3).map(({sport,league})=>
       researchSport(sport,league,date,fetcher,now,env,
         sport==='football'?28:sport==='soccer'?28:sport==='tennis'?28:21)))
@@ -151,7 +160,8 @@ export async function evidenceTicket(
       insufficientEvidence,pregameSummariesVerified:0,injuryFeedsVerified:0,
       deepContextChecked:0,newsMatched:0,playerStatsChecked:0,
       multisportSatisfied,scannedSports,selectedSports,
-      researchStandard:'Sin candidatos con cinco partidos distintos por equipo (NFL tres) y tendencia contrastable. Deportes evaluados: '+scannedSports+'.',
+      researchStandard:'Sin candidatos con cinco partidos distintos por equipo (NFL tres) y tendencia contrastable. Deportes evaluados: '+scannedSports+'.'+
+        (budgetExhausted?' Búsqueda detenida por presupuesto de tiempo; quedan ligas sin investigar.':''),
       modelProbabilities:false,priced:false,placed:false,selections:[],
       events:[]}
   }
@@ -212,7 +222,8 @@ export async function evidenceTicket(
     insufficientEvidence,pregameSummariesVerified,injuryFeedsVerified,
     deepContextChecked,newsMatched,playerStatsChecked,
     multisportSatisfied,scannedSports,selectedSports,
-    researchStandard:'Preselección basada en 5 eventos históricos por equipo (NFL: 3). Se exploraron '+scannedSports+' deportes; seleccionados: '+(selectedSports.join(', ')||'ninguno')+'. Diversidad '+(multisportSatisfied?'cumplida':'NO cumplida')+'. Lesiones, titulares y cuotas siguen sin verificación específica.',
+    researchStandard:'Preselección basada en 5 eventos históricos por equipo (NFL: 3). Se exploraron '+scannedSports+' deportes; seleccionados: '+(selectedSports.join(', ')||'ninguno')+'. Diversidad '+(multisportSatisfied?'cumplida':'NO cumplida')+'. Lesiones, titulares y cuotas siguen sin verificación específica.'+
+      (budgetExhausted?' Búsqueda detenida por presupuesto de tiempo; quedan ligas sin investigar.':''),
     modelProbabilities:false,priced:false,placed:false,selections:documented,
     events:selected.map(x=>({eventId:x.pick.eventId,home:x.home,away:x.away,kickoff:x.kickoff,
       sport:x.pick.sport,league:x.pick.league,pick:x.pick.pick==='home'?'home' as const:'away' as const}))}
