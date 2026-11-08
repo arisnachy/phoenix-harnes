@@ -3,6 +3,7 @@
  * to describe a leg as approved. Absent/partial specialist research fails closed.
  */
 import type {MarketOutcome} from './sports.ts'
+import {crosscheckFreeFixture,freeOfficialFollowUps} from './free-sports-source-audit.ts'
 import {investigateNfl} from './nfl-evidence-research.ts'
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
 import {investigateSoccer} from './soccer-worldwide-dossier.ts'
@@ -141,6 +142,19 @@ export async function investigateTicketSpecialist(
         'Servicio/devolución '+d.coverage.advancedStatsPlayers+'/2 jugadores']
       pending=d.missingEvidence
     }else return errorResult(game,'Sin especialista integrado para esta liga; no promover a ticket final')
+    // Public secondary feeds corroborate only event identity and timing.
+    // An empty free feed or quota-limited response cannot negate an ESPN fixture.
+    // Official injury references remain pending until their contents are verified.
+    const backups=await crosscheckFreeFixture(game,fetcher,now,env)
+    for(const backup of backups){
+      if(backup.status==='verified')
+        steps.push('Fuente independiente '+backup.provider+
+          ': local, visitante y hora verificados · '+backup.url)
+      if(backup.status==='conflict')
+        pending.push('CONFLICTO DE CARTELERA '+backup.provider+': '+backup.detail+
+          ' · '+backup.url)
+    }
+    pending.push(...freeOfficialFollowUps(game.sport,game.date))
     return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
       checkedAt:new Date(now).toISOString()}
   }catch(error){
