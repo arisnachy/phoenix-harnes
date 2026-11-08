@@ -39,7 +39,8 @@ export function diagnoseMarketOutcome(input:Input):MarketOutcomeDiagnostic|null{
   if(input.market==='h2h'||!input.outcome||typeof input.outcome.line!=='number'||
     !Number.isFinite(input.outcome.line))return null
   const {market,outcome}=input
-  const line=outcome.line
+  // Guard above requires a finite numeric point; normalize for strict TS narrowing.
+  const line=Number(outcome.line)
   const home=input.homeGames.filter(valid),away=input.awayGames.filter(valid)
   let homeMargins:number[],awayMargins:number[]
   if(market==='totals'){
