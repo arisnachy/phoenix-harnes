@@ -99,7 +99,7 @@ export function readAnatomyConnectors():AnatomyConnectorSnapshot{
   entry('totalsegmentator','TotalSegmentator',model,false,true,
     'Biblioteca y pesos CT abiertos preparados. La segmentación requiere un estudio volumétrico y verificación de salida.',
     s,['totalsegmentator','weights_ct'],'https://github.com/wasserth/TotalSegmentator'),
-  {...entry('ohif-cornerstone','OHIF + Cornerstone3D',cs,false,true,
+  {...entry('ohif-cornerstone','OHIF + Cornerstone3D',false,false,!cs,
     'Bibliotecas Cornerstone3D: '+(cs?'instaladas. ':'pendientes. ')+'OHIF requiere despliegue y PACS/DICOMweb autorizado; no es un visor clínico listo.',
     s,['cornerstone'],'https://docs.ohif.org/deployment/'),
     phase:cs?'libraries' as const:'missing' as const},

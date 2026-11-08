@@ -87,7 +87,7 @@ async function pythonCommand(){
 }
 async function checkImports(p,names){
   if(!existsSync(p.python))return false
-  try{await run(p.python,['-c','import importlib,sys;sys.exit(int(not all(importlib.import_module(n) for n in '+JSON.stringify(names)+')))'],{timeout:20000});return true}catch{return false}
+  try{await run(p.python,['-c','import importlib,sys;sys.exit(int(not all(importlib.import_module(n) for n in '+JSON.stringify(names)+')))'],{timeout:60000});return true}catch{return false}
 }
 async function prepareVenv(p){
   if(await checkImports(p,['pip']))return
@@ -256,7 +256,7 @@ async function installSlicerHeart(p,state,fd){
   ].join('\n')+'\n'
   writeFileSync(script,content,'utf8')
   try{
-    await run(slicerExe,['--testing','--no-splash','--no-main-window','--python-script',script],{timeout:360000,output:fd})
+    await run(slicerExe,['--no-splash','--no-main-window','--python-script',script],{timeout:360000,output:fd})
     // A download request alone does not guarantee extension activation.
     const verify=join(p.root,'verify-slicerheart.py')
     writeFileSync(verify,[
@@ -264,7 +264,7 @@ async function installSlicerHeart(p,state,fd){
       "ok = slicer.app.extensionsManagerModel().isExtensionInstalled('SlicerHeart')",
       'slicer.app.exit(0 if ok else 2)',
     ].join('\n')+'\n','utf8')
-    await run(slicerExe,['--testing','--no-splash','--no-main-window',
+    await run(slicerExe,['--no-splash','--no-main-window',
       '--python-script',verify],{timeout:180000,output:fd})
     state.components.slicerheart={status:'installed',verifiedAt:now(),
       note:'SlicerHeart verified in a new Slicer process'}
