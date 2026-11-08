@@ -3,6 +3,7 @@
  * No-match in a small/free feed never negates a verified primary fixture.
  */
 import {getFeed,sportsCatalog} from './sports.ts'
+import {createHash} from 'node:crypto'
 
 export type FreeFixture={sport:string;league:string;eventId:string;date:string;
   home:string;away:string;kickoff:string}
@@ -86,6 +87,71 @@ async function probe(provider:BackupFinding['provider'],url:string,
       (e instanceof Error?e.message:String(e)).slice(0,120)}
   }
 }
+
+const optionalResponses=new Map<string,{until:number;value:Promise<unknown>}>()
+const optionalBudgets=new Map<string,{
+  minute:number;minuteCalls:number;day:number;dayCalls:number;cooldownUntil:number}>()
+const providerLimits={
+  'balldontlie':{perMinute:4,perDay:1000},
+  'API-Football':{perMinute:8,perDay:80},
+  'football-data.org':{perMinute:8,perDay:1000},
+} as const
+type OptionalProvider=keyof typeof providerLimits
+/** One official, bounded, credential-scoped GET. Locally caches data and
+ * respects quotas / Retry-After instead of retrying or bypassing 403/429.
+ * Injected test fetches are isolated from production cache and rate budgets.
+ */
+async function optionalJson(provider:OptionalProvider,url:string,headers:Record<string,string>,
+  secret:string,fetcher:typeof fetch,now:number):Promise<unknown>{
+  const request=async(budgetKey:string|null):Promise<unknown>=>{
+    const response=await fetcher(url,{headers,redirect:'error',signal:AbortSignal.timeout(8000)})
+    if(!response.ok){
+      if(budgetKey&&(response.status===429||response.status===503)){
+        const raw=response.headers.get('retry-after')??''
+        const seconds=Number(raw)
+        const parsed=Number.isFinite(seconds)&&seconds>=0?seconds*1000:
+          Number.isFinite(Date.parse(raw))?Date.parse(raw)-now:60_000
+        const wait=Math.max(60_000,Math.min(30*60_000,parsed))
+        const bucket=optionalBudgets.get(budgetKey)
+        if(bucket)bucket.cooldownUntil=now+wait
+      }
+      if(budgetKey&&(response.status===401||response.status===403)){
+        const bucket=optionalBudgets.get(budgetKey)
+        if(bucket)bucket.cooldownUntil=now+15*60_000
+      }
+      throw Error('HTTP '+response.status)
+    }
+    if(Number(response.headers.get('content-length')||0)>3_000_000)
+      throw Error('Respuesta superior al límite')
+    const body=await response.text()
+    if(body.length>3_000_000)throw Error('Respuesta superior al límite')
+    return JSON.parse(body) as unknown
+  }
+  if(fetcher!==fetch)return request(null)
+  const digest=createHash('sha256').update(secret).digest('hex').slice(0,20)
+  const bucketKey=provider+':'+digest
+  const cachedKey=bucketKey+':'+url
+  const cached=optionalResponses.get(cachedKey)
+  if(cached&&cached.until>now)return cached.value
+  const minute=Math.floor(now/60_000),day=Math.floor(now/86_400_000)
+  const budget=optionalBudgets.get(bucketKey)??{
+    minute,minuteCalls:0,day,dayCalls:0,cooldownUntil:0}
+  if(budget.minute!==minute){budget.minute=minute;budget.minuteCalls=0}
+  if(budget.day!==day){budget.day=day;budget.dayCalls=0}
+  if(budget.cooldownUntil>now)throw Error('Proveedor en enfriamiento por HTTP 429/403/503')
+  const limit=providerLimits[provider]
+  if(budget.minuteCalls>=limit.perMinute||budget.dayCalls>=limit.perDay)
+    throw Error('Presupuesto local de peticiones agotado; use otro proveedor autorizado')
+  budget.minuteCalls++
+  budget.dayCalls++
+  optionalBudgets.set(bucketKey,budget)
+  if(optionalResponses.size>128)optionalResponses.clear()
+  if(optionalBudgets.size>64)optionalBudgets.clear()
+  const value=request(bucketKey).catch(err=>{optionalResponses.delete(cachedKey);throw err})
+  optionalResponses.set(cachedKey,{until:now+10*60_000,value})
+  return value
+}
+
 async function footballData(input:FreeFixture,fetcher:typeof fetch,
   now:number,token:string):Promise<BackupFinding>{
   const code=footballDataCompetitions[input.league]!
@@ -94,14 +160,9 @@ async function footballData(input:FreeFixture,fetcher:typeof fetch,
   const base={provider:'FootballData.org' as const,url,checkedAt:checked(now)}
   try{
     // Credential is never embedded in a URL, cache key, card or audit detail.
-    const response=await fetcher(url,{headers:{'X-Auth-Token':token,accept:'application/json'},
-      redirect:'error',signal:AbortSignal.timeout(8000)})
-    if(!response.ok)throw Error('HTTP '+response.status)
-    if(Number(response.headers.get('content-length')||0)>3_000_000)
-      throw Error('Respuesta superior al límite')
-    const text=await response.text()
-    if(text.length>3_000_000)throw Error('Respuesta superior al límite')
-    const list=arr(obj(JSON.parse(text)).matches).slice(0,150)
+    const data=await optionalJson('football-data.org',url,
+      {'X-Auth-Token':token,accept:'application/json'},token,fetcher,now)
+    const list=arr(obj(data).matches).slice(0,150)
     for(const row of list){
       const x=obj(row)
       const home=str(obj(x.homeTeam).name),away=str(obj(x.awayTeam).name)
@@ -133,13 +194,8 @@ async function ballDontLieFixture(input:FreeFixture,fetcher:typeof fetch,now:num
   const url=baseUrl+'?'+days.map(day=>'dates%5B%5D='+day).join('&')+'&per_page=100'
   const base={provider:'balldontlie' as const,url,checkedAt:checked(now)}
   try{
-    const response=await fetcher(url,{headers:{Authorization:key,accept:'application/json'},
-      redirect:'error',signal:AbortSignal.timeout(8000)})
-    if(!response.ok)throw Error('HTTP '+response.status)
-    if(Number(response.headers.get('content-length')||0)>3_000_000)throw Error('Respuesta superior al límite')
-    const body=await response.text()
-    if(body.length>3_000_000)throw Error('Respuesta superior al límite')
-    const root=obj(JSON.parse(body))
+    const root=obj(await optionalJson('balldontlie',url,
+      {Authorization:key,accept:'application/json'},key,fetcher,now))
     for(const item of arr(root.data).slice(0,100)){
       const game=obj(item)
       const home=str(obj(game.home_team).full_name)
@@ -174,13 +230,8 @@ async function apiFootballFixture(input:FreeFixture,fetcher:typeof fetch,now:num
     '&season='+season+'&date='+input.date
   const base={provider:'API-Football' as const,url,checkedAt:checked(now)}
   try{
-    const response=await fetcher(url,{headers:{'x-apisports-key':key},
-      redirect:'error',signal:AbortSignal.timeout(8000)})
-    if(!response.ok)throw Error('HTTP '+response.status)
-    if(Number(response.headers.get('content-length')||0)>3_000_000)throw Error('Respuesta superior al límite')
-    const body=await response.text()
-    if(body.length>3_000_000)throw Error('Respuesta superior al límite')
-    const root=obj(JSON.parse(body))
+    const root=obj(await optionalJson('API-Football',url,
+      {'x-apisports-key':key},key,fetcher,now))
     if(Object.keys(obj(root.errors)).length>0||arr(root.errors).length>0)
       throw Error('Plan, temporada o cuota no habilitados')
     for(const item of arr(root.response).slice(0,300)){
