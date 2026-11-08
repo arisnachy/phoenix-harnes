@@ -3,6 +3,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import { scoutDailySports } from './daily-sports-scout.ts'
 import {crosscheckFreeFixture,freeOfficialFollowUps,freeSourceInventory,freeSourceCoverageForSport} from './free-sports-source-audit.ts'
 import {nflverseInjuryReport} from './nflverse-injury-report.ts'
+import {fetchEspnInjuryBackup,espnInjuryCatalog} from './espn-injury-backup.ts'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import { sportsCatalog, discoverEspnLeagues, hasSportsPermission, chatGames, compactSportsSchedule, marketOdds, marketOddsDetailed, pricedTicket, getFeed, type MarketSelection } from './sports.ts'
@@ -66,6 +67,7 @@ export const inject = ['tools','systemPrompt']
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'LESIONES ESPN COMO EVIDENCIA: usar sports_chat_espn_injuries cuando un expediente NBA/WNBA/NFL/NHL/MLB indique lesiones no verificadas. Consultar el JSON público ESPN por liga y equipos con fecha y fuente, no limitarse a la página espn.com.do/basquetbol/nba/lesiones. El estado reported, questionable, out, active o day-to-day es solo lo publicado; no convertirlo en quinteto, portero, QB titular ni confirmación de inactivos. Para NBA, cotejar en la página oficial de reportes antes de afirmar disponibilidad definitiva. Una fuente vacía/no actualizada no equivale a equipo sano, ni impide mostrar un ticket CONDICIONAL con cuotas reales; no inventar bajas. ',
   'RECUPERACIÓN DE DATOS: si ESPN publica estadística vacía o histórico HTTP 400, usar recuperación por mes/día y calendario de equipo; para eventos concretos consultar sports_chat_source_resilience y sus fuentes independientes. Fuentes del catálogo o enlaces no equivalen a consulta real, ni calendario equivale a lesiones, alineación o cuota. Nunca eludir 401/403/429 ni inventar resultados. ',
   'REGLA OBLIGATORIA PARA TICKETS GANADORES: las cotizaciones y favoritos de casas no son investigación deportiva. Si el usuario solicita un ticket ganador del día (incluido solo equipos ganadores), usa sports_chat_ticket_evidence_priced_auto con marketPreference=winner cuando corresponda, o sports_chat_daily_market_shortlist con deep=true. Cada partido requiere expediente de su especialista NFL/NBA/WNBA/NHL/MLB/Fútbol/Tenis, identidad verificada y diagnóstico de bajas, alineaciones, forma y contradicciones. Los resultados incomplete/unavailable de un especialista NO bloquean mostrar un ticket condicional si el evento ESPN y la cuota real están verificados y la tendencia histórica tiene apoyo descriptivo. Sí impiden presentar esa selección como investigada o aprobada. Conflictos expresos de identidad o mercados contradichos bloquean esa pata. Si faltan eventos o cuotas genuinas, entrega borrador visible sin fabricar patas, nunca ticket ganador certificado. La cuota no demuestra acierto y ninguna ruta puede reportar aprobación o EV sin modelo validado. ',
   'MERCADOS DE TOTAL Y HÁNDICAP: ganar un partido no demuestra cubrir -1.5/+1.5 o una línea over/under. Antes de considerar un total o spread con sports_chat_daily_market_shortlist(deep=true), coteja la línea EXACTA contra resultados previos de AMBOS clubes, separa aciertos, fallos y pushes, y exige dirección consistente en los dos historiales. Si marketOutcomeDiagnostic.status es mixed, insufficient o adverse, etiquetar CONDICIONAL/CONTRAINDICADA y no ponerla como pata cotizada; nunca conviertas frecuencia histórica en probabilidad futura o EV. Para NHL añade portero y reglas OT/SO; para NBA pace, eficiencia y lesiones siguen pendientes si no fueron medidos. La meta de 5–6 patas no autoriza inventar una probabilidad ni rellenar selecciones sin respaldo. ',
@@ -2021,6 +2023,38 @@ export function apply(ctx: Context): void {
     presentCall:()=>({card:'generic',title:'Investigar NHL · porteros y mercados',kind:'read' as const}),
   }))
 
+  ctx.tools.register(defineTool({
+    name:'sports_chat_espn_injuries',
+    description:'Consulta el parte público de lesiones ESPN para NBA, WNBA, NFL, NHL o MLB, cotejando local y visitante y separando reporte reciente de datos incompletos. Consulta el JSON de ESPN aunque su web en español requiera JavaScript. No confunde lesión, inactivo, lineup ni un reporte oficial definitivo.',
+    parameters:{
+      sport:{type:'string',required:true,description:'basketball, football, hockey o baseball.'},
+      league:{type:'string',required:true,description:'nba, wnba, nfl, nhl o mlb.'},
+      home:{type:'string',required:true,description:'Equipo local exacto según el scoreboard.'},
+      away:{type:'string',required:true,description:'Equipo visitante exacto según el scoreboard.'},
+      date:{type:'string',description:'Fecha AAAA-MM-DD de ESPN; permite consulta por equipo.'},
+      eventId:{type:'string',description:'ID numérico ESPN del partido, opcional para comprobar los IDs de equipos.'},
+      kickoff:{type:'string',description:'Hora ISO UTC validada del partido, opcional.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const env=await sportsEnv(ctx),now=Date.now()
+      if(env.PHOENIX_SPORTS_ESPN_DISABLED==='1')
+        return JSON.stringify({status:'disabled',source:'ESPN',
+          catalog:espnInjuryCatalog,
+          instruction:'ESPN deshabilitado por el operador. No afirmar que jugadores están sanos.'})
+      const result=await fetchEspnInjuryBackup({
+        sport:args.sport,league:args.league,home:args.home,away:args.away,
+        ...(args.eventId?{eventId:args.eventId}:{}),
+        ...(args.date?{date:args.date}:{}),
+        ...(args.kickoff?{kickoff:args.kickoff}:{}),
+      },fetch,now)
+      return JSON.stringify({...result,injuriesFound:result.home.injuries.length+
+        result.away.injuries.length,
+        instruction:'Estado verificado del FEED no confirma quinteto, QB, portero ni participación definitiva. Mostrar lesiones con jugador, equipo, estatus y fecha, destacando cualquier fuente antigua o parcial. Si falta información, mantener ticket condicional y consultar fuentes alternativas, sin inventar bajas o cuotas.'})
+    },
+    presentCall:()=>({card:'generic',title:'Contrastar lesiones ESPN y estado de jugadores',kind:'read' as const}),
+  }))
   ctx.tools.register(defineTool({
     name:'sports_chat_source_resilience',
     description:'Auditoría de fuentes gratuitas y de respaldo para el ticket diario: capacidades realmente integradas frente a enlaces, estado por partido, controles de identidad y carencias de lesiones/cuotas. Sin prometer ganadores ni extraer datos restringidos.',
