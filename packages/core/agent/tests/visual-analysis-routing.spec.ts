@@ -92,6 +92,72 @@ class VisionCatalogAdapter extends LlmAdapter {
   }
 }
 
+describe('clinical image turn continuity', () => {
+  it('keeps the evidence specialist across later steps of an ECG reading', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['openai-codex'], new VisionCatalogAdapter(true))
+    const events: Array<{ type: string; data: unknown }> = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'image', attachment: { attachmentId: 'ecg' } },
+          { type: 'text', text: 'Interpreta este electrocardiograma' }] } },
+    ]
+    const agent = { options: {}, session: { events, header: { agentPreset:'kira-max' },
+      append: (type: string, data: unknown) => { events.push({ type, data }) },
+    } } as unknown as Agent
+    ctx.agent = agent
+    const dispose = installModelSelection(ctx, {
+      current: { provider:'openai-codex', model:PHOENIX_CODEX_AUTO_MODEL }, assembled:undefined,
+    })
+    try {
+      await ctx.systemPrompt.assemble()
+      for (const step of [1,2,3]) {
+        const routed = await agentEvents(ctx, agent).waterfall(
+          'agent/request', {turn:1,step,signal:new AbortController().signal},
+          () => Promise.resolve({provider:'seed',model:'seed'}),
+        )
+        expect(routed).toMatchObject({model:'gpt-6.1-terra',
+          reasoningEffort:ReasoningEffortId('low')})
+      }
+    } finally { dispose(); await ctx.fiber.dispose() }
+  })
+
+  it('keeps an explicit Luna user selection and does not hijack code implementation', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['openai-codex'], new VisionCatalogAdapter(true))
+    const events: Array<{ type:string; data:unknown }> = [
+      { type:'turn/start', data:{turn:1} },
+      { type:'user/message', data:{source:{kind:'user'},content:[
+        {type:'image',attachment:{attachmentId:'ui-screenshot'}},
+        {type:'text',text:'Arregla el código TypeScript de esta pantalla y ejecuta pruebas.'},
+      ]} },
+      { type:'agent/model-selection', data:{
+        selection:{provider:'openai-codex',model:'gpt-6-luna'},
+        source:'explicit',
+      } },
+    ]
+    const agent = {options:{},session:{events,header:{agentPreset:'kira-max'},
+      append:(type:string,data:unknown)=>{events.push({type,data})},
+    }} as unknown as Agent
+    ctx.agent = agent
+    const dispose = installModelSelection(ctx, {
+      current:{provider:'openai-codex',model:'gpt-6-luna'},assembled:undefined,
+    })
+    try {
+      await ctx.systemPrompt.assemble()
+      const routed = await agentEvents(ctx,agent).waterfall(
+        'agent/request',{turn:1,step:2,signal:new AbortController().signal},
+        ()=>Promise.resolve({provider:'seed',model:'seed'}),
+      )
+      expect(routed.model).toBe('gpt-6-luna')
+    } finally { dispose(); await ctx.fiber.dispose() }
+  })
+})
+
 describe('live image-specialist dispatch', () => {
   for (const [terraHasImage, expected] of [
     [true, 'gpt-6.1-terra'], [false, 'gpt-6.1-sol'],
