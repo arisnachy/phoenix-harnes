@@ -4,6 +4,7 @@
  */
 import type {MarketOutcome} from './sports.ts'
 import {crosscheckFreeFixture,freeOfficialFollowUps} from './free-sports-source-audit.ts'
+import {nflverseInjuryReport} from './nflverse-injury-report.ts'
 import {investigateNfl} from './nfl-evidence-research.ts'
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
 import {investigateSoccer} from './soccer-worldwide-dossier.ts'
@@ -74,6 +75,15 @@ export async function investigateTicketSpecialist(
         'Titulares confirmados '+(d.coverage.confirmedOffense+d.coverage.confirmedDefense)+'/44',
         'Enfrentamientos individuales '+d.matchups.length]
       pending=d.missingEvidence
+      const injury=await nflverseInjuryReport(game,fetcher,now,env)
+      if(injury.status==='verified'){
+        steps.push('nflverse: reporte de lesiones reciente de ambos clubes · '+injury.source)
+        for(const player of injury.injuries.slice(0,8))
+          steps.push('nflverse · '+player.team+' · '+player.name+' · '+
+            player.status+' · '+player.injury+' ('+player.modifiedAt+')')
+      }else pending.push('nflverse sin expediente completo: '+injury.warning+
+        ' · '+injury.source)
+      pending.push('NFL: todavía se deben cotejar inactivos oficiales y QB titular al inicio')
     }else if(game.sport==='basketball'&&(game.league==='nba'||game.league==='wnba')){
       specialist='NBA/WNBA: jugadores, quintetos, eficiencia y bajas'
       const d=await researchBasketballCase(game.league,game.date,game.eventId,
