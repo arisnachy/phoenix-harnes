@@ -19,7 +19,7 @@ const normalize=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
 const routing:Record<string,{sport:string;market:string;oddsSportKey:string}>={
   soccer:{sport:'football',market:'1x2',oddsSportKey:'soccer_epl'},
-  basketball:{sport:'basketball',market:'moneyline',oddsSportKey:'basketball_nba'},
+  basketball:{sport:'basketball',market:'home_away',oddsSportKey:'basketball_nba'},
   baseball:{sport:'baseball',market:'moneyline',oddsSportKey:'baseball_mlb'},
   football:{sport:'american-football',market:'moneyline',oddsSportKey:'americanfootball_nfl'},
   hockey:{sport:'ice-hockey',market:'home_away',oddsSportKey:'icehockey_nhl'},
@@ -27,7 +27,12 @@ const routing:Record<string,{sport:string;market:string;oddsSportKey:string}>={
 }
 const leagueSportKey:Record<string,string>={
   'eng.1':'soccer_epl','esp.1':'soccer_spain_la_liga','usa.1':'soccer_usa_mls',
-  'uefa.champions':'soccer_uefa_champs_league','nba':'basketball_nba',
+  'uefa.champions':'soccer_uefa_champs_league',
+  'por.1':'soccer_portugal_primeira_liga','ita.1':'soccer_italy_serie_a',
+  'ger.1':'soccer_germany_bundesliga','ned.1':'soccer_netherlands_eredivisie',
+  'fra.1':'soccer_france_ligue_one','mex.1':'soccer_mexico_ligamx',
+  'bra.1':'soccer_brazil_serie_a','arg.1':'soccer_argentina_primera_division',
+  'uefa.europa':'soccer_uefa_europa_league','nba':'basketball_nba',
   'wnba':'basketball_wnba','mlb':'baseball_mlb','nfl':'americanfootball_nfl','nhl':'icehockey_nhl',
 }
 export async function evidencePricedTicket(
@@ -132,7 +137,8 @@ export async function evidencePricedTicket(
   const fallbackSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
   const additional=quotesProvider?[]:await Promise.allSettled(leagues.map(async event=>{
     if(event.sport==='soccer'&&marketPreference==='double_chance')return [] as KeylessQuote[]
-    const sportKey=leagueSportKey[event.league]??routing[event.sport]?.oddsSportKey
+    const sportKey=leagueSportKey[event.league]??
+      (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
     if(!sportKey)return [] as KeylessQuote[]
     const report=await marketOddsDetailed(sportKey,'h2h',env,fetcher,now)
     fallbackSources.push(...report.sources)
