@@ -110,7 +110,7 @@ test('marketOddsDetailed recovers exact real odds through ESPN Website after Cor
     if(link.includes('/scoreboard?dates=')){
       return json(link.endsWith('20261108')?score({
         ...g,competitions:[{...g.competitions[0],odds:[]}]}
-      ):score({events:[]}).events.length?{events:[]}:{events:[]})
+      ):{events:[]})
     }
     if(link.includes('/competitions/'))return json({items:[]})
     if(link.includes('/summary?'))return json({})
