@@ -20,9 +20,15 @@ const eventIdentity=(r:MarketResearchReview)=>[
 const researchRank:Readonly<Record<MarketResearchReview['status'],number>>={
   'descriptive-support':3,uncertain:2,contraindicated:1,unavailable:0,
 }
+const valueRank=(r:MarketResearchReview):number=>
+  r.priceAudit?.classification==='potential-value'?4:
+    r.priceAudit?.classification==='uncertain-value'?2:
+      r.priceAudit?.classification==='negative-value'?0:1
+const effectiveResearchRank=(r:MarketResearchReview):number=>
+  r.priceAudit?.classification==='negative-value'?0:researchRank[r.status]
 const compare=(a:MarketResearchReview,b:MarketResearchReview)=>{
-  const ra=researchRank[a.status],rb=researchRank[b.status]
-  return rb-ra||b.rankingScore-a.rankingScore||
+  const ra=effectiveResearchRank(a),rb=effectiveResearchRank(b)
+  return rb-ra||valueRank(b)-valueRank(a)||b.rankingScore-a.rankingScore||
     b.verifiedSources-a.verifiedSources||
     b.candidate.quoteUpdatedAt.localeCompare(a.candidate.quoteUpdatedAt)||
     a.candidate.market.localeCompare(b.candidate.market)||
@@ -59,7 +65,8 @@ export function selectDailyResearchedMarkets(
     remaining.splice(remaining.indexOf(chosen),1)
     selected.push(chosen)
   }
-  const supportedLegs=selected.filter(r=>r.status==='descriptive-support').length
+  const supportedLegs=selected.filter(r=>r.status==='descriptive-support'&&
+    r.priceAudit?.classification!=='negative-value').length
   return {
     selected,eventChoices:unique.size,marketsReviewed:reviews.length,
     alternativesCompared:Math.max(0,reviews.length-unique.size),
