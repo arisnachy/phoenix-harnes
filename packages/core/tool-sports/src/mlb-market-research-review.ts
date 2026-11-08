@@ -107,14 +107,14 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
     recentStarterOutingsVerified:reviewTimeValid&&[h,a].every(p=>p!==null&&
       p.recentStarts.some(out=>{
         const at=Date.parse(out.date)
-        const validCount=(value:unknown)=>{ 
+        const validCount=(value:unknown)=>{
           if(typeof value!=='string'&&typeof value!=='number')return false
           if(typeof value==='string'&&!value.trim())return false
           const n=Number(value)
           return Number.isSafeInteger(n)&&n>=0
         }
         const innings=String(out.innings)
-        const validInnings=/^\\d+\\.[012]$/u.test(innings)
+        const validInnings=/^\d+\.[012]$/u.test(innings)
         return Number.isFinite(at)&&at<=checkedMs&&
           checkedMs-at<=45*24*60*60*1000&&
           at<=reviewMs&&reviewMs-at<=45*24*60*60*1000&&
