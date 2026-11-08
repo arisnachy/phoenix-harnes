@@ -1,6 +1,7 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
 import { fetchPublicEspnOddsDetailed } from './espn-odds.ts'
 import { fetchTheOddsApi } from './free-odds.ts'
+import {fetchTheRundownOdds,fetchSportsGameOdds,rundownSupports,sportsGameSupports} from './open-odds-providers.ts'
 import { keylessEnabled, keylessOdds, type KeylessSport } from './keyless-odds.ts'
 import { saveOddsSnapshot } from './odds-snapshots.ts'
 import { belongsToLeague } from './sports-odds-coverage.ts'
@@ -321,7 +322,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
 /** Unique sportsbook selection identity without an assumed price. */
 export type MarketSelection = { eventId:string;bookmaker:string;market:string;selection:string;point?:number|null }
 /** Time-stamped sportsbook quote tied to a provider event and market. */
-export type MarketOutcome = MarketSelection & { price:number;home:string;away:string;time:string;timeIso?:string;updatedAt:string;source?:string;sportKey?:string }
+export type MarketOutcome = MarketSelection & { price:number;home:string;away:string;time:string;timeIso?:string;updatedAt:string;observedAt?:string;source?:string;sportKey?:string }
 /** Read attributed bookmaker quotes, without purchasing or placing any bet.
  * @param sportKey - Provider sports key.
  * @param markets - Approved market categories.
@@ -346,7 +347,7 @@ export async function marketOddsDetailed(
   const sources:OddsSourceAttempt[]=[]
   let espnDetail=''
   let espnRawCount=0,espnStarted=0,espnUndated=0,espnExpired=0
-  const names=['The Odds API v4','TheOddsAPI','OddsHarvester','ESPN Site/Core']
+  const names=['The Odds API v4','TheOddsAPI','TheRundown','SportsGameOdds','OddsHarvester','ESPN Site/Core']
   const configured=new Set<string>()
   if(hasSportsPermission('odds',env)){
     configured.add(names[0]!)
@@ -383,6 +384,19 @@ export async function marketOddsDetailed(
         return fetchTheOddsApi(sportKey,'h2h',env.THEODDSAPI_API_KEY!,fetcher,now)
       }
     }})
+  }
+  // Each authenticated fallback uses a fixed HTTPS host, private header key,
+  // bounded JSON, fresh per-book timestamp, and source-level diagnostics.
+  // Unconfigured free tiers do not trigger network calls or fabricated prices.
+  if(env.THERUNDOWN_API_KEY?.trim()&&rundownSupports(sportKey)){
+    configured.add('TheRundown')
+    requests.push({name:'TheRundown',run:()=>fetchTheRundownOdds(
+      sportKey,markets,env.THERUNDOWN_API_KEY!,fetcher,now)})
+  }
+  if(env.SPORTSGAMEODDS_API_KEY?.trim()&&sportsGameSupports(sportKey)){
+    configured.add('SportsGameOdds')
+    requests.push({name:'SportsGameOdds',run:()=>fetchSportsGameOdds(
+      sportKey,markets,env.SPORTSGAMEODDS_API_KEY!,fetcher,now)})
   }
   if(keylessEnabled(env)){
     const prefix=sportKey.split('_')[0]
@@ -469,7 +483,10 @@ export async function marketOddsDetailed(
   for(const name of names)if(!configured.has(name)){
     sources.push({provider:name,status:'unconfigured',count:0,
       detail:name==='OddsHarvester'?'Instalación/configuración o permiso pendiente':
-        name==='ESPN Site/Core'?'ESPN deshabilitado':'Clave no configurada'})
+        name==='ESPN Site/Core'?'ESPN deshabilitado':
+        name==='TheRundown'?'THERUNDOWN_API_KEY ausente o liga no cubierta':
+        name==='SportsGameOdds'?'SPORTSGAMEODDS_API_KEY ausente o liga no cubierta':
+        'Clave no configurada'})
   }
   if(merged.length&&fetcher===fetch){
     try{await saveOddsSnapshot(sportKey,merged,env,now)}

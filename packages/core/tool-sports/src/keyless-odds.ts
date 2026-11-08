@@ -32,6 +32,7 @@ export type KeylessQuote = {
   eventId:string;bookmaker:string;market:string;selection:string;point:number|null
   price:number;home:string;away:string;time:string;updatedAt:string
   source:string
+  observedAt?:string
   sportKey:string
   league?:string
   matchLink?:string

@@ -4,7 +4,8 @@
 import { evidenceTicket } from './evidence-ticket.ts'
 import {investigateTicketSpecialists,type SpecialistGate} from './ticket-specialist-gate.ts'
 import { keylessEnabled,keylessOdds,type KeylessQuote } from './keyless-odds.ts'
-import { marketOdds,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome } from './sports.ts'
+import { marketOddsDetailed,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome } from './sports.ts'
+import {fetchBetBetterModels,findModelOpinion,type ModelForecast} from './betbetter-model-evidence.ts'
 
 export type OddsAuditRow={
   source:string
@@ -39,6 +40,8 @@ export async function evidencePricedTicket(
   verifiedEvents:number;quotedLegs:number;missingQuotes:number;
   sourceAudit:OddsAuditRow[];approvedLegs:number;multisportSatisfied:boolean;
   specialistChecks:SpecialistGate[];researchedLegs:number;
+  modelAudit:Array<{eventId:string;status:'support'|'contradiction'|'unavailable';
+    prediction:ModelForecast|null}>;
   explanation:string}>{
   const research=await evidenceTicket(count,date,sport,fetcher,now,env)
   const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
@@ -51,15 +54,30 @@ export async function evidencePricedTicket(
   })),fetcher,now,env)
   const researchedLegs=specialistChecks.filter(x=>x.status==='researched').length
   const specialistComplete=research.events.length===count&&researchedLegs===count
+  // Independent, openly licensed probabilities are a second opinion only.
+  // They are NEVER bookmaker quotations, approval, or calibrated PHOENIX EV.
+  const modelKeys=[...new Set(research.events.map(e=>leagueSportKey[e.league]).filter(
+    (x):x is string=>Boolean(x)))]
+  const modelResults=await Promise.allSettled(modelKeys.map(key=>
+    fetchBetBetterModels(key,fetcher,now)))
+  const forecasts=modelResults.flatMap(x=>x.status==='fulfilled'?x.value:[])
+  const modelAudit=research.events.map(e=>({
+    eventId:e.eventId,...findModelOpinion(forecasts,e),
+  }))
+  const modelDisagreements=modelAudit.filter(x=>x.status==='contradiction').length
   const quoteAccess=[
     keylessEnabled(env)?'OddsHarvester habilitado (sujeto al acceso del sitio)':
       'OddsHarvester inactivo: requiere instalación y habilitación por el operador',
     env.THE_ODDS_API_KEY?.trim()?'The Odds API v4 configurada':'The Odds API v4 sin clave',
     env.THEODDSAPI_API_KEY?.trim()?'TheOddsAPI configurada':'TheOddsAPI sin clave',
+    env.THERUNDOWN_API_KEY?.trim()?'TheRundown configurado':'TheRundown sin clave',
+    env.SPORTSGAMEODDS_API_KEY?.trim()?'SportsGameOdds configurado':'SportsGameOdds sin clave',
     'ESPN: cuotas solo cuando el proveedor publique mercados con fecha',
   ].join(' · ')
   const researchCard:ChatBlock={...research.card,props:{...research.card.props,
-    note:(String(research.card.props.note??'')+' Especialistas consultados '+researchedLegs+'/'+count+'. Estado de fuentes de cuotas: '+quoteAccess+
+    note:(String(research.card.props.note??'')+' Especialistas consultados '+researchedLegs+'/'+count+
+      '. Contradicciones de modelo independiente: '+modelDisagreements+
+      '. Bet Better son probabilidades teóricas, NUNCA cuotas de bookmaker. Estado de fuentes de cuotas: '+quoteAccess+
       '. Los repositorios GitHub SportsbookReview/MLB son solo históricos.').slice(0,1000),
   }}
   const initialSources:OddsAuditRow[]=[
@@ -70,6 +88,10 @@ export async function evidencePricedTicket(
       'Clave opcional; configurar no demuestra disponibilidad de precios.'),
     audited('TheOddsAPI',env.THEODDSAPI_API_KEY?.trim()?'attempted':'not-configured',0,
       'Servicio de cuotas opcional independiente.'),
+    audited('TheRundown',env.THERUNDOWN_API_KEY?.trim()?'attempted':'not-configured',0,
+      'Gratis con clave, cuotas prepartido 5 min retrasadas y límite de datapoints.'),
+    audited('SportsGameOdds',env.SPORTSGAMEODDS_API_KEY?.trim()?'attempted':'not-configured',0,
+      'Gratis con clave y límites del plan; fuente por bookmaker.'),
     audited('ESPN Site/Core',env.PHOENIX_SPORTS_ESPN_DISABLED==='1'?'disabled':'attempted',0,
       'Solo se acepta precio identificado y con actualización verificable.'),
     audited('SportsbookReview/MLB GitHub históricos','not-applicable',0,
@@ -78,7 +100,7 @@ export async function evidencePricedTicket(
   const base={card:researchCard,priced:false as boolean,placed:false as const,
     complete:research.complete&&specialistComplete,verifiedEvents:research.verifiedEvents,
     quotedLegs:0,missingQuotes:count,sourceAudit:initialSources,
-    specialistChecks,researchedLegs,
+    specialistChecks,researchedLegs,modelAudit,
     multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
     explanation:'Preselección ESPN, cuotas todavía NO verificadas: '+quoteAccess+
       '. Los archivos históricos no ofrecen precios para apostar hoy.'}
@@ -100,16 +122,26 @@ export async function evidencePricedTicket(
   // Explicit double-chance selections are only supplied by a verified 1X/X2
   // market; do not relabel a winner moneyline as double chance.
   const leagues=[...new Map(research.events.map(e=>[e.league,e])).values()]
+  const fallbackSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
   const additional=quotesProvider?[]:await Promise.allSettled(leagues.map(async event=>{
     if(event.sport==='soccer'&&marketPreference==='double_chance')return [] as KeylessQuote[]
     const sportKey=leagueSportKey[event.league]??routing[event.sport]?.oddsSportKey
     if(!sportKey)return [] as KeylessQuote[]
-    const lines=await marketOdds(sportKey,'h2h',env,fetcher)
+    const report=await marketOddsDetailed(sportKey,'h2h',env,fetcher,now)
+    fallbackSources.push(...report.sources)
+    const lines=report.quotes
     return lines.flatMap(q=>{
       const time=q.timeIso??''
       const updated=Date.parse(q.updatedAt)
-      if(!Number.isFinite(Date.parse(time))||!Number.isFinite(updated)
-        ||updated>now||now-updated>3_600_000)return []
+      const delayedSource=q.source==='TheRundown'||q.source==='SportsGameOdds'
+      const observedAt=Date.parse(q.observedAt??'')
+      const currentSnapshot=delayedSource&&Number.isFinite(observedAt)&&
+        observedAt<=now&&now-observedAt<=15*60_000
+      const validBookTime=Number.isFinite(updated)&&updated<=now&&
+        now-updated<7*86_400_000
+      if(!Number.isFinite(Date.parse(time))||
+        !(currentSnapshot?validBookTime:
+          Number.isFinite(updated)&&updated<=now&&now-updated<=3_600_000))return []
       // Soccer 3-way victory must demonstrably include DRAW at this book.
       if(event.sport==='soccer'&&!lines.some(draw=>
         draw.eventId===q.eventId&&draw.bookmaker===q.bookmaker
@@ -119,6 +151,7 @@ export async function evidencePricedTicket(
         market:event.sport==='soccer'?'1x2':'h2h',
         selection:q.selection,point:q.point??null,price:q.price,
         home:q.home,away:q.away,time,updatedAt:q.updatedAt,
+        ...(currentSnapshot&&q.observedAt?{observedAt:q.observedAt}:{}),
         source:q.source??'Proveedor de cuotas público',sportKey,
       }] satisfies KeylessQuote[]
     })
@@ -130,9 +163,14 @@ export async function evidencePricedTicket(
     const expectedMarket=doubleChance?'double_chance':event.sport==='soccer'?'1x2':'h2h'
     return all.filter(q=>{
       const updated=Date.parse(q.updatedAt),quoteKickoff=Date.parse(q.time)
+      const source=q.source==='TheRundown'||q.source==='SportsGameOdds'
+      const observedAt=Date.parse(q.observedAt??'')
+      const snapshotValid=source&&Number.isFinite(observedAt)&&
+        now-observedAt>=0&&now-observedAt<=15*60_000
+      const quoteAge=now-updated
       return Number.isFinite(kickoff)&&Number.isFinite(updated)&&Number.isFinite(quoteKickoff)
         &&Math.abs(kickoff-quoteKickoff)<=3_600_000
-        &&now-updated>=0&&now-updated<=3_600_000
+        &&quoteAge>=0&&(snapshotValid?quoteAge<7*86_400_000:quoteAge<=3_600_000)
         &&typeof q.bookmaker==='string'&&q.bookmaker.trim().length>0
         &&typeof q.eventId==='string'&&q.eventId.length>0
         &&Number.isFinite(q.price)&&q.price>1&&q.price<1000
@@ -163,6 +201,15 @@ export async function evidencePricedTicket(
     if(offers)return{...row,status:'observed',offers,
       note:'Se observaron '+offers+' precios publicados; '+evidence+
         ' coinciden con selecciones investigadas (no son garantías).'}
+    const providerAttempts=fallbackSources.filter(x=>x.provider===row.source)
+    if(providerAttempts.length&&row.source!=='OddsHarvester'){
+      const failure=providerAttempts.find(x=>x.status==='error')
+      const attempted=providerAttempts.some(x=>x.status==='empty'||x.status==='observed')
+      return{...row,status:failure?'error':attempted?'empty':'not-configured',offers:0,
+        note:failure?'Error de proveedor: '+failure.detail.slice(0,190):
+          attempted?'Consultado, sin precio válido y coincidente.':
+          row.note+' Liga no cubierta o clave ausente.'}
+    }
     if(row.source==='OddsHarvester'&&actualKeyless)return{...row,
       status:keylessFailures?'error':'empty',offers:0,
       note:keylessFailures?'El scraper no pudo consultar los mercados; revisar CLI y acceso.':
@@ -218,7 +265,7 @@ export async function evidencePricedTicket(
   const marketQuotes:MarketOutcome[]=best.choices.map((q,index)=>({
     eventId:q.eventId,bookmaker:q.bookmaker,market:q.market,selection:q.selection,point:q.point,
     price:q.price,home:q.home,away:q.away,time:q.time,updatedAt:q.updatedAt,
-    source:q.source,sportKey:leagueSportKey[research.events[index]?.league??'']??routing[research.events[index]?.sport??'']?.oddsSportKey??'sports_keyless',
+    ...(q.observedAt?{observedAt:q.observedAt}:{}),source:q.source,sportKey:leagueSportKey[research.events[index]?.league??'']??routing[research.events[index]?.sport??'']?.oddsSportKey??'sports_keyless',
   }))
   const selections:MarketSelection[]=marketQuotes.map(q=>({
     eventId:q.eventId,bookmaker:q.bookmaker,market:q.market,selection:q.selection,point:q.point??null,
@@ -247,16 +294,18 @@ export async function evidencePricedTicket(
             ' · Cobertura del empate; cuota verificada, riesgo vigente.').slice(0,480)}:{})}:{})}
   })
   const card:ChatBlock={...priced.card,props:{
-    ...priced.card.props,legs,requestedLegs:count,
+    ...priced.card.props,legs,requestedLegs:count,modelAudit,
     subtitle:'Cuotas verificadas · '+best.book+' · análisis de forma con datos ESPN',
     note:'COTIZACIÓN DE INVESTIGACIÓN CON DOSSIER DEPORTIVO POR PATA, NO APUESTA APROBADA NI GANADORA. '+(marketPreference==='double_chance'
       ?'Fútbol: la doble oportunidad cubre empate (1X/X2), NO asegura ganar. ':'')+
-      'Formas y descanso históricos NO son probabilidades calibradas. El expediente deportivo puede señalar titulares, bajas y estadísticas PENDIENTES; confirmar la casa antes de apostar. '+priced.warning,
+      'TheRundown Free informa cuotas con retraso aproximado de 5 min; observedAt es consulta del proveedor, updatedAt es último cambio de la casa. Confirmar precio actual antes de apostar. '+
+      'Contradicciones de Bet Better: '+modelDisagreements+
+      ' (predicción independiente, no cuota). Formas y descanso históricos NO son probabilidades calibradas. El expediente deportivo puede señalar titulares, bajas y estadísticas PENDIENTES; confirmar la casa antes de apostar. '+priced.warning,
     askPrompt:'Kira, comprueba lesiones, titulares, estadísticas específicas, correlación y vigencia de las '+count+' cuotas antes de recomendar este ticket.',
   }}
   return{card,priced:true,placed:false,complete:true,verifiedEvents:research.verifiedEvents,
     quotedLegs:count,missingQuotes:0,sourceAudit,approvedLegs:0,
-    specialistChecks,researchedLegs,
+    specialistChecks,researchedLegs,modelAudit,
     multisportSatisfied:research.multisportSatisfied,
     explanation:'Las '+count+' selecciones tienen cuota vigente y la misma casa '+best.book+
       '. Cada pata pasó por su expediente deportivo; NO equivale a aprobación de apuesta ni es modelo de acierto calibrado. Validar lesiones, titulares, restricciones y precios antes de apostar.'}

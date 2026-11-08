@@ -16,13 +16,18 @@ export async function sportsEnvWithVaultKey(ctx: Context, env: NodeJS.ProcessEnv
     return env
   }
   if (vault === undefined) return env
-  try {
-    const saved = await vault.resolve('THE_ODDS_API_KEY')
-    if (typeof saved?.value === 'string' && saved.value.trim()) {
-      return { ...env, THE_ODDS_API_KEY: saved.value }
+  const resolved = {...env}
+  // Keys are kept in the Host vault and resolved on each tool invocation.
+  // No secret is persisted into the sport UI, logs, snapshots or model prompts.
+  for (const ref of ['THE_ODDS_API_KEY','THERUNDOWN_API_KEY','SPORTSGAMEODDS_API_KEY']) {
+    try {
+      const saved = await vault.resolve(ref)
+      if (typeof saved?.value === 'string' && saved.value.trim()) {
+        resolved[ref] = saved.value
+      }
+    } catch {
+      // A missing single vendor credential never disables the other sources.
     }
-  } catch {
-    // An unavailable vault must never interrupt free ESPN queries.
   }
-  return env
+  return resolved
 }

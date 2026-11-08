@@ -192,6 +192,15 @@ export async function sportsSourcesHealth(
   live.push({provider:'TheOddsAPI',purpose:'live-odds',
     status:env.THEODDSAPI_API_KEY?.trim()?'configured':'not-configured',
     note:'Proveedor opcional distinto de The Odds API v4; acceso y cuota por comprobar.'})
+  live.push({provider:'TheRundown',purpose:'live-odds',
+    status:env.THERUNDOWN_API_KEY?.trim()?'configured':'not-configured',
+    note:'Plan gratuito con clave; cuotas prepartido 5 minutos retrasadas, cupos por datapoints. La clave no prueba disponibilidad.'})
+  live.push({provider:'SportsGameOdds',purpose:'live-odds',
+    status:env.SPORTSGAMEODDS_API_KEY?.trim()?'configured':'not-configured',
+    note:'Plan Amateur gratuito con clave y limites; la autentificacion debe probarse por liga.'})
+  live.push({provider:'Bet Better Open Model',purpose:'event-data',
+    status:'configured',
+    note:'JSON publico de pronosticos CC BY 4.0. SOLO probabilidades estimadas y fairOdds; NO precios de casas.'})
   const folder=env.PHOENIX_SPORTS_HISTORY_DIR?.trim()??''
   const configured=folder!==''&&isAbsolute(folder)
   const sbr=configured?await Promise.all(['nba','nfl','nhl','mlb'].map(
