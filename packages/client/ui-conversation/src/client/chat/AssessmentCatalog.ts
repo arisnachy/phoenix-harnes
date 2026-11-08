@@ -50,6 +50,7 @@ function questionnaire(id:string,title:string,questions:readonly string[],versio
     component:'scale_form',version:1,
     props:{
       title,version,source:source+' · '+sourceUrl,
+      presentation:'matrix',
       description:'Durante las últimas 2 semanas, indique la frecuencia de los síntomas. Registro orientativo; no es un diagnóstico.',
       population:'Personas para las que el profesional considere pertinente el instrumento.',
       administration:[
