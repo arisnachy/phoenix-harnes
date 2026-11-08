@@ -44,7 +44,10 @@ test('six sports can supply a five-leg same-bookmaker priced market research poo
   assert.equal(new Set(result.selected.map(x=>x.espnEventId)).size,5)
   assert.equal(new Set(result.selected.map(x=>x.sport)).size,5)
   assert.ok(result.selected.some(x=>x.market==='spreads'))
-  assert.ok(result.selected.some(x=>x.market==='totals'))
+  // The five-game discovery pool must not force totals into the ticket.
+  // A larger research reserve still explores them when genuine offers exist.
+  const expanded=shortlistDailyMarkets(fixtures,quotes,5,now,6)
+  assert.ok(expanded.selected.some(x=>x.market==='totals'))
   assert.ok(result.selected.every(x=>x.assessment==='quote-only-research-pending'))
   assert.ok(result.selected.every(x=>x.marketNoVigShare>0&&x.marketNoVigShare<1))
   assert.match(result.warning,/NO de un modelo/)
