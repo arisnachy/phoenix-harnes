@@ -13,9 +13,15 @@ const base=(n,date,state,homeScore,awayScore,eventId=n)=>({
   ]}],
 })
 const fixture=(url,withHistory=true)=>{
-  const key=String(url).match(/dates=([0-9]{8})/u)?.[1]
+  const key=String(url).match(/dates=([0-9]{6,8})/u)?.[1]
   if(!String(url).includes('/soccer/eng.1/'))return{events:[]}
   if(key==='20261028')return{events:Array.from({length:6},(_,i)=>base(100+i,future,'pre',null,null))}
+  if(key==='202610'&&withHistory)return{events:
+    ['20261027','20261026','20261025','20261024','20261023'].flatMap(day=>{
+      const stamp='2026-'+day.slice(4,6)+'-'+day.slice(6,8)+'T21:00:00Z'
+      return Array.from({length:6},(_,i)=>base(100+i,stamp,'post',3,0,
+        100+i+Number(day.slice(-2))*1000))
+    })}
   if(withHistory&&['20261027','20261026','20261025','20261024','20261023'].includes(key)){
     const stamp='2026-'+key.slice(4,6)+'-'+key.slice(6,8)+'T21:00:00Z'
     return{events:Array.from({length:6},(_,i)=>base(100+i,stamp,'post',3,0,100+i+Number(key.slice(-2))*1000))}
