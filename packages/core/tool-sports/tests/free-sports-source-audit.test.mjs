@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {crosscheckFreeFixture,freeOfficialFollowUps}
+import {crosscheckFreeFixture,freeOfficialFollowUps,freeSourceInventory}
   from '../src/free-sports-source-audit.ts'
 
 const game={sport:'basketball',league:'nba',eventId:'401909949',
@@ -57,7 +57,7 @@ test('OpenLigaDB corroborates only Bundesliga and matches official home/away',as
       matchDateTimeUTC:'2026-11-08T18:30:00Z'}]):
     reply({events:[]})
   const result=await crosscheckFreeFixture(german,f)
-  assert.equal(result.length,2)
+  assert.equal(result.length,3)
   assert.equal(result[0].status,'not-found')
   assert.equal(result[1].status,'verified')
   assert.match(result[1].url,/getmatchdata\/bl1\/2026/)
@@ -76,4 +76,49 @@ test('injury and starter references are unverified follow-ups, never evidence',(
   assert.match(freeOfficialFollowUps('football','2026-11-08')[0],/nflverse/)
   assert.match(freeOfficialFollowUps('hockey','2026-11-08')[0],/no confirma titular/)
   assert.deepEqual(freeOfficialFollowUps('soccer','2026-11-08'),[])
+})
+
+
+test('OpenFootball corroborates soccer teams and local calendar date, but NOT UTC kickoff',async()=>{
+  const eng={sport:'soccer',league:'eng.1',eventId:'8001',
+    date:'2026-11-08',home:'Arsenal',away:'Liverpool',
+    kickoff:'2026-11-08T18:30:00Z'}
+  const f=async url=>String(url).includes('raw.githubusercontent.com')?
+    reply({matches:[{date:'2026-11-08',time:'17:30',
+      team1:'Arsenal FC',team2:'Liverpool FC'}]}):reply({events:[]})
+  const x=await crosscheckFreeFixture(eng,f)
+  assert.equal(x.length,2)
+  assert.equal(x[0].status,'not-found')
+  assert.equal(x[1].provider,'OpenFootball')
+  assert.equal(x[1].status,'partial')
+  assert.match(x[1].detail,/NO aporta UTC/)
+})
+
+test('optional football-data.org token is sent only in header and never displayed',async()=>{
+  const eng={sport:'soccer',league:'eng.1',eventId:'8001',
+    date:'2026-11-08',home:'Arsenal',away:'Liverpool',
+    kickoff:'2026-11-08T18:30:00Z'}
+  let checked=false
+  const f=async (url,init)=>{
+    if(String(url).includes('football-data.org')){
+      assert.equal(init.headers['X-Auth-Token'],'private-test-key')
+      assert.ok(!String(url).includes('private-test-key'))
+      checked=true
+      return reply({matches:[{utcDate:'2026-11-08T18:30:00Z',
+        homeTeam:{name:'Arsenal FC'},awayTeam:{name:'Liverpool FC'}}]})
+    }
+    return reply({events:[],matches:[]})
+  }
+  const x=await crosscheckFreeFixture(eng,f,Date.parse('2026-11-08T14:00:00Z'),
+    {PHOENIX_FOOTBALL_DATA_TOKEN:'private-test-key'})
+  assert.ok(checked)
+  assert.equal(x.length,3)
+  assert.equal(x[2].status,'verified')
+  assert.ok(!JSON.stringify(x).includes('private-test-key'))
+})
+
+test('source catalog distinguishes integrated providers from catalog-only and historical',()=>{
+  assert.ok(freeSourceInventory.some(x=>x.name==='OpenFootball'&&x.state==='integrated'))
+  assert.ok(freeSourceInventory.some(x=>x.name==='Jolpica F1'&&x.state==='catalog-only'))
+  assert.ok(freeSourceInventory.some(x=>x.name==='StatsBomb Open Data'&&x.state==='historical-only'))
 })
