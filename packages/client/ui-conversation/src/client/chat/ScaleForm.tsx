@@ -219,10 +219,11 @@ export function scoreScale(spec: ScaleFormSpec, answers: Record<string, number>)
 }
 
 /** Only render a questionnaire matrix when every item shares the original options.
- * Other scales preserve their distinct per-item answer sets as cards.
+ * Uniform choices use the source-style matrix automatically (unless explicitly set
+ * to cards). Other scales preserve their distinct per-item answer sets as cards.
  */
 function hasUniformOptions(spec: ScaleFormSpec): boolean {
-  if (spec.props.presentation !== 'matrix' || spec.props.items.length < 2) return false
+  if (spec.props.presentation === 'cards' || spec.props.items.length < 3) return false
   const first = spec.props.items[0]!.options
   return spec.props.items.every(item => item.options.length === first.length
     && item.options.every((option,index) => option.label === first[index]?.label
