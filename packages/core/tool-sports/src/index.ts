@@ -1165,14 +1165,10 @@ export function apply(ctx: Context): void {
       // ESPN is the primary market source. Other odds vendors are opt-in only,
       // and their unrelated event IDs must never be matched to ESPN event IDs.
       const useEspn=Boolean(args.eventId||args.date||args.sourcePolicy!=='all')
-      const report:Awaited<ReturnType<typeof marketOddsDetailed>> & {observations?:Array<{
-        eventId:string;bookmaker:string;market:string;selection:string;point:number|null;
-        price:number;home:string;away:string;time:string;timeIso:string;updatedAt:string;
-        endpointSource?:string;reason:string;source:string;sportKey:string
-      }>}=useEspn?
+      const report=useEspn?
         await (async()=>{
           if(env.PHOENIX_SPORTS_ESPN_DISABLED==='1')return{
-            quotes:[],sources:[{provider:'ESPN Site/Core',status:'unconfigured' as const,
+            quotes:[],observations:[],sources:[{provider:'ESPN Site/Core',status:'unconfigured' as const,
               count:0,detail:'ESPN deshabilitado por el operador'}],
           }
           const result=await fetchPublicEspnOddsDetailed(args.sportKey,args.markets??'h2h',
