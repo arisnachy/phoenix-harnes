@@ -1415,3 +1415,59 @@ describe('Codex Live launch regression', () => {
     expect(codexRealtimeLaunchCommand(undefined, 'linux').command).toBe('codex')
   })
 })
+
+describe('Codex Live recovery from stale updater state', () => {
+  it('probes a working authenticated app-server despite waiting-upstream metadata', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-stale-live-gate-'))
+    const folder = join(home, 'codex-cli')
+    mkdirSync(folder, { recursive: true })
+    const priorHome = process.env.DSH_HOME
+    process.env.DSH_HOME = home
+    const requested = new Date(Date.now() - 10_000).toISOString()
+    const checked = new Date(Date.now() - 5_000).toISOString()
+    writeFileSync(join(folder, 'live-repair-request.json'), JSON.stringify({
+      schema: 1, reason: 'quicksilver-v2', requestedAt: requested,
+    }))
+    writeFileSync(join(folder, 'update-state.json'), JSON.stringify({
+      schema: 1, status: 'waiting-upstream', mode: 'auto', checkedAt: checked,
+    }))
+    try {
+      const { voice } = await mountVoice()
+      const internal = voice as unknown as {
+        codexRealtimeBridge(): {
+          probe(): Promise<{available:boolean;authenticated:boolean;
+            reason?:'experimental-unavailable'|'codex-login-required';detail?:string}>
+        }
+      }
+      const probe = vi.fn(async () => ({ available: true, authenticated: true }))
+      const bridge = vi.spyOn(internal, 'codexRealtimeBridge')
+        .mockReturnValue({ probe })
+      await expect(voice.conversationRealtimeStatus()).resolves.toMatchObject({
+        enabled: true, available: true, authenticated: true, provider: 'openai-codex',
+      })
+      expect(probe).toHaveBeenCalledOnce()
+
+      bridge.mockReturnValue({ probe: vi.fn(async () => ({
+        available: false, authenticated: false,
+        reason: 'experimental-unavailable' as const, detail: 'official protocol unavailable',
+      })) })
+      await expect(voice.conversationRealtimeStatus()).resolves.toMatchObject({
+        available: false, authenticated: false, repair: 'waiting-upstream',
+        reason: 'experimental-unavailable', detail: 'official protocol unavailable',
+      })
+      bridge.mockReturnValue({ probe: vi.fn(async () => ({
+        available: true, authenticated: false, reason: 'codex-login-required' as const,
+      })) })
+      const login = await voice.conversationRealtimeStatus()
+      expect(login).toMatchObject({
+        available: true, authenticated: false, reason: 'codex-login-required',
+      })
+      expect(login).not.toHaveProperty('repair')
+      bridge.mockRestore()
+    } finally {
+      if (priorHome === undefined) delete process.env.DSH_HOME
+      else process.env.DSH_HOME = priorHome
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+})
