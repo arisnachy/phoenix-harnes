@@ -171,7 +171,8 @@ export async function doctor(){
     const invocation=process.platform==='win32'?{cmd:'wsl.exe',args:['--distribution',wslDistro(),'--exec','openCARP','-buildinfo']}:
       {cmd:b,args:['-buildinfo']}
     const r=await execute(invocation,{timeoutMs:18000})
-    results[engine]={status:r.exitCode===0?'ready':'unverified',buildInfoChecked:r.exitCode===0}
+    if(r.exitCode!==0)throw Error('openCARP failed buildinfo verification')
+    results[engine]={status:'ready',buildInfoChecked:true,mode:process.platform==='win32'?'wsl2':'native'}
     }catch{
     const id=openCarpImage()
     const verified=id?await probeOpenCarpDocker(dockerCommand,id):null
