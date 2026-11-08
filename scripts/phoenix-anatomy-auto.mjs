@@ -11,6 +11,7 @@ import { dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {installOpenCarpDocker,probeOpenCarpDocker} from './phoenix-opencarp-docker.mjs'
 
 export const SCHEMA = 2
 const self=fileURLToPath(import.meta.url)
@@ -351,30 +352,48 @@ async function installViewer(p,state,fd,withVtk=true){
 }
 
 async function probeResearchEngines(state){
-  const distro=process.env.PHOENIX_ANATOMY_WSL_DISTRO||'Ubuntu-24.04'
-  const windows=process.platform==='win32'
-  const openCarpArgs=windows?['--distribution',distro,'--exec','openCARP','-buildinfo']:['-buildinfo']
-  try{
-    await run(windows?'wsl.exe':(process.env.PHOENIX_OPENCARP_BIN||'openCARP'),openCarpArgs,{timeout:15000})
-    state.components.opencarp={status:'installed',mode:windows?'wsl2':'native',verifiedAt:now()}
-  }catch{
-    state.components.opencarp={status:'external',reason:'Install openCARP in Ubuntu WSL2/Linux; verify openCARP -buildinfo'}
-  }
-  const sv=process.env.PHOENIX_SIMVASCULAR_BIN
-  if(windows){
-    if(sv&&/^\/usr\/local\/sv\/simvascular\/[0-9]{4}-[0-9]{2}-[0-9]{2}\/simvascular$/.test(sv)){
-      try{
-        await run('wsl.exe',['--distribution',distro,'--exec','/usr/bin/test','-x',sv],{timeout:12000})
-        state.components.simvascular={status:'installed',mode:'wsl2',verifiedAt:now()}
-      }catch{state.components.simvascular={status:'external',reason:'Configured WSL SimVascular binary is not executable'}}
-    }else state.components.simvascular={status:'external',reason:'Set verified PHOENIX_SIMVASCULAR_BIN in WSL2'}
-  }else{
-    state.components.simvascular=sv&&existsSync(sv)?
-      {status:'installed',mode:'native',verifiedAt:now()}:
-      {status:'external',reason:'Install official SimVascular and set PHOENIX_SIMVASCULAR_BIN'}
-  }
+ const distro=process.env.PHOENIX_ANATOMY_WSL_DISTRO||'Ubuntu-24.04'
+ const windows=process.platform==='win32'
+ const openCarpArgs=windows?['--distribution',distro,'--exec','openCARP','-buildinfo']:['-buildinfo']
+ try{
+  await run(windows?'wsl.exe':(process.env.PHOENIX_OPENCARP_BIN||'openCARP'),
+    openCarpArgs,{timeout:15000})
+  state.components.opencarp={status:'installed',mode:windows?'wsl2':'native',verifiedAt:now()}
+ }catch{
+  const docker=await probeOpenCarpDocker()
+  state.components.opencarp=docker?{status:'installed',...docker}:
+    {status:'external',reason:'Install with the PHOENIX Docker button, or install openCARP in WSL2/Linux'}
+ }
+ const sv=process.env.PHOENIX_SIMVASCULAR_BIN
+ if(windows){
+  if(sv&&/^\\/usr\\/local\\/sv\\/simvascular\\/[0-9]{4}-[0-9]{2}-[0-9]{2}\\/simvascular$/.test(sv)){
+   try{
+    await run('wsl.exe',['--distribution',distro,'--exec','/usr/bin/test','-x',sv],{timeout:12000})
+    state.components.simvascular={status:'installed',mode:'wsl2',verifiedAt:now()}
+   }catch{state.components.simvascular={status:'external',reason:'Configured WSL SimVascular binary is not executable'}}
+  }else state.components.simvascular={status:'external',reason:'Set verified PHOENIX_SIMVASCULAR_BIN in WSL2'}
+ }else{
+  state.components.simvascular=sv&&existsSync(sv)?
+   {status:'installed',mode:'native',verifiedAt:now()}:
+   {status:'external',reason:'Install official SimVascular and set PHOENIX_SIMVASCULAR_BIN'}
+ }
 }
-
+/** Install the vendor image only after the user's explicit plugin action. */
+async function installOpenCarp(p,state){
+ // An existing WSL/Linux installation is already usable: do not pull a duplicate image.
+ await probeResearchEngines(state)
+ if(state.components.opencarp?.status==='installed'){
+  save(p,state);return
+ }
+ state.components.opencarp={status:'installing'};save(p,state)
+ const installed=await installOpenCarpDocker()
+ state.components.opencarp=installed.status==='installed'?
+  {status:'installed',mode:'docker',imageId:installed.imageId,verifiedAt:installed.verifiedAt,
+   source:'docker.opencarp.org/opencarp/opencarp:latest'}:
+  {status:installed.status,reason:installed.reason}
+ if(installed.status!=='installed')log(p,'opencarp: '+installed.reason)
+ save(p,state)
+}
 export const anatomyComponents=['slicerheart','monai-nnunet','totalsegmentator',
   'ohif-cornerstone','simvascular','opencarp','three-vtk']
 export const validAnatomyComponent=(v)=>anatomyComponents.includes(v)
@@ -397,13 +416,15 @@ async function installAllSequentially(p,state,fd,env){
         await installBaselineWeights(p,state,fd,env)
       }else if(id==='ohif-cornerstone')await installCornerstone(p,state,fd)
       else if(id==='three-vtk')await installViewer(p,state,fd,true)
+      else if(id==='opencarp')await installOpenCarp(p,state)
       else await probeResearchEngines(state)
     }catch(e){errors++;log(p,id+': '+String(e))}
     const keys=id==='slicerheart'?['slicer','slicerheart']:
       id==='monai-nnunet'?['monai','nnunetv2']:
       id==='totalsegmentator'?['totalsegmentator','weights_ct']:
       id==='ohif-cornerstone'?['cornerstone']:
-      id==='three-vtk'?['viewer','vtkjs']:[]
+      id==='three-vtk'?['viewer','vtkjs']:
+      id==='opencarp'?['opencarp']:[]
     if(keys.some(key=>state.components[key]?.status!=='installed'))errors++
     state.bootstrap={status:'running',component:'all',current:id,completed:i+1,total:steps.length,at:now()}
     save(p,state)
@@ -444,7 +465,9 @@ async function worker(env=process.env,selected=null){
       await installCornerstone(p,state,fd)
     }else if(selected==='three-vtk'){
       await installViewer(p,state,fd,true)
-    }else if(selected==='simvascular'||selected==='opencarp'){
+    }else if(selected==='opencarp'){
+      await installOpenCarp(p,state)
+    }else if(selected==='simvascular'){
       await probeResearchEngines(state)
     }
     state.clinicalValidation='not-validated'
