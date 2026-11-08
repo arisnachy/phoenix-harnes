@@ -28,15 +28,31 @@ const mkQuotes=(alternating=false)=>async()=>{
   return out
 }
 const enabled={PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'1'}
+// These deterministic fixtures supply only scoreboards. Inject verified specialist
+// dossiers explicitly in PRICE-matching tests; production never uses this stub.
+const stubSpecialists=async games=>games.map(g=>({
+  sport:g.sport,league:g.league,eventId:g.eventId,
+  specialist:'fixture specialist, test only',status:'researched',
+  verifiedSteps:['both team rosters','form and injury audit'],
+  pendingSteps:['independent model not calibrated'],approvedForBetting:false,
+  checkedAt:new Date(now).toISOString(),
+}))
+const withSpecialists=(...args)=>{
+  const [count,day,sport,stake,at,env,fetcher,quotesProvider,marketPreference]=args
+  return evidencePricedTicket(count,day,sport,stake,at,env,fetcher,
+    quotesProvider,marketPreference??'winner',stubSpecialists)
+}
 test('six-legged evidence path quotes only same bookmaker and preserves the requested stake',async()=>{
   // With five real fixtures and six requested legs, never invent the sixth.
-  const draft=await evidencePricedTicket(6,date,'soccer',100,now,enabled,feed,mkQuotes())
+  const draft=await withSpecialists(6,date,'soccer',100,now,enabled,feed,mkQuotes())
   assert.equal(draft.complete,false)
   assert.equal(draft.priced,false)
   assert.equal(draft.verifiedEvents,5)
-  const complete=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,mkQuotes())
+  const complete=await withSpecialists(5,date,'soccer',100,now,enabled,feed,mkQuotes())
   assert.equal(complete.complete,true)
   assert.equal(complete.priced,true)
+  assert.equal(complete.approvedLegs,0,'uncalibrated specialists cannot approve bets')
+  assert.equal(complete.researchedLegs,5)
   assert.equal(complete.card.props.legs.length,5)
   assert.equal(complete.card.props.stake,'100.00')
   assert.equal(complete.card.props.requestedLegs,5)
@@ -47,7 +63,7 @@ test('six-legged evidence path quotes only same bookmaker and preserves the requ
   assert.equal(complete.missingQuotes,0)
 })
 test('does not combine prices from different bookmakers even when each leg was quoted',async()=>{
-  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,mkQuotes(true))
+  const result=await withSpecialists(5,date,'soccer',100,now,enabled,feed,mkQuotes(true))
   assert.equal(result.priced,false)
   assert.equal(result.quotedLegs,5)
   assert.equal(result.missingQuotes,0)
@@ -65,7 +81,7 @@ test('1X double chance uses real matching bookmaker market, keeps branding and r
       sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
     }))
   }
-  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,quotes,'double_chance')
+  const result=await withSpecialists(5,date,'soccer',100,now,enabled,feed,quotes,'double_chance')
   assert.deepEqual(markets,[['football','double_chance']])
   assert.equal(result.complete,true)
   assert.equal(result.priced,true)
@@ -86,11 +102,11 @@ test('1X/X2 never silently falls back to a direct winner or the wrong double cha
     time:kick,updatedAt:'2026-10-28T14:30:00Z',
     sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
   }))
-  const wrongMarket=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,quotes,'double_chance')
+  const wrongMarket=await withSpecialists(5,date,'soccer',100,now,enabled,feed,quotes,'double_chance')
   assert.equal(wrongMarket.priced,false)
   assert.equal(wrongMarket.quotedLegs,0)
   assert.equal(wrongMarket.card.props.combinedOdds,'No disponible')
-  const wrongSide=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,
+  const wrongSide=await withSpecialists(5,date,'soccer',100,now,enabled,feed,
     async()=>Array.from({length:5},(_,i)=>({...{
       eventId:'oddsportal-'+i,bookmaker:'Book A',market:'double_chance',
       selection:'X2',point:null,price:1.4,home:'Home '+i,away:'Away '+i,
@@ -107,7 +123,7 @@ test('non-finite bookmaker prices are never used for a quoted ticket',async()=>{
     time:kick,updatedAt:'2026-10-28T14:30:00Z',
     sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
   }))
-  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,bad)
+  const result=await withSpecialists(5,date,'soccer',100,now,enabled,feed,bad)
   assert.equal(result.priced,false)
   assert.equal(result.quotedLegs,0)
 })
@@ -131,7 +147,7 @@ test('six priced legs are six independently verified fixtures at one bookmaker',
     time:kick,updatedAt:'2026-10-28T14:30:00Z',
     sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
   }))
-  const result=await evidencePricedTicket(6,date,'soccer',100,now,enabled,sixFeed,quotes)
+  const result=await withSpecialists(6,date,'soccer',100,now,enabled,sixFeed,quotes)
   assert.equal(result.complete,true)
   assert.equal(result.priced,true)
   assert.equal(result.verifiedEvents,6)
@@ -156,7 +172,7 @@ test('X2 quotes are accepted only when five-game form favors the away team',asyn
     time:kick,updatedAt:'2026-10-28T14:30:00Z',
     sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
   }))
-  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,awayFeed,quotes,'double_chance')
+  const result=await withSpecialists(5,date,'soccer',100,now,enabled,awayFeed,quotes,'double_chance')
   assert.equal(result.priced,true)
   assert.equal(result.card.props.legs.length,5)
   assert.equal(result.card.props.legs[0].selection,'X2 · Visita o empate')
@@ -181,7 +197,7 @@ test('automatic odds ticket uses the existing The Odds API adapter if keyless sc
     }
     return feed(url)
   }
-  const result=await evidencePricedTicket(5,date,'soccer',100,now,
+  const result=await withSpecialists(5,date,'soccer',100,now,
     {THE_ODDS_API_KEY:'mock-secret'},withApi)
   assert.equal(apiCalls,1)
   assert.equal(result.priced,true)
@@ -200,7 +216,7 @@ test('soccer two-outcome API prices cannot be mislabeled 1X2 without a draw outc
       }))))
     return feed(url)
   }
-  const result=await evidencePricedTicket(5,date,'soccer',100,now,
+  const result=await withSpecialists(5,date,'soccer',100,now,
     {THE_ODDS_API_KEY:'mock-secret'},incomplete)
   assert.equal(result.priced,false)
   assert.equal(result.quotedLegs,0)
@@ -215,7 +231,7 @@ test('stale bookmaker quotes do not receive a fresh ticket label',async()=>{
       }))))
     return feed(url)
   }
-  const result=await evidencePricedTicket(5,date,'soccer',100,now,
+  const result=await withSpecialists(5,date,'soccer',100,now,
     {THE_ODDS_API_KEY:'mock-secret'},stale)
   assert.equal(result.priced,false)
   assert.equal(result.missingQuotes,5)
@@ -238,7 +254,7 @@ test('a four-of-five slate still audits real provider prices and cannot be calle
       source:'OddsHarvester/OddsPortal (sin API key)',
     }))
   }
-  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,partialFeed,source)
+  const result=await withSpecialists(5,date,'soccer',100,now,enabled,partialFeed,source)
   assert.equal(result.complete,false)
   assert.equal(result.priced,false)
   assert.equal(result.approvedLegs,0)
@@ -254,11 +270,22 @@ test('a four-of-five slate still audits real provider prices and cannot be calle
   assert.match(result.explanation,/INCOMPLETO/)
 })
 test('disabled OddsHarvester is never described as queried with live prices',async()=>{
-  const result=await evidencePricedTicket(5,date,'soccer',100,now,{},feed)
+  const result=await withSpecialists(5,date,'soccer',100,now,{},feed)
   const source=result.sourceAudit.find(row=>row.source==='OddsHarvester')
   assert.equal(source.status,'disabled')
   assert.equal(source.offers,0)
   assert.equal(result.approvedLegs,0)
   assert.ok(!result.priced)
   assert.equal(result.card.props.combinedOdds,'No disponible')
+})
+
+
+test('real specialist gate refuses to claim complete research from scoreboard-only data',async()=>{
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,mkQuotes())
+  assert.equal(result.complete,false)
+  assert.equal(result.priced,false)
+  assert.equal(result.approvedLegs,0)
+  assert.equal(result.specialistChecks.length,5)
+  assert.ok(result.specialistChecks.some(x=>x.status!=='researched'))
+  assert.match(result.explanation,/INCOMPLETO/)
 })
