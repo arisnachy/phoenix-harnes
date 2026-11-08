@@ -12,11 +12,12 @@ const asEvent=(v:unknown):Event=>v&&typeof v==='object'&&!Array.isArray(v)?v as 
 const validBoard=(v:Scoreboard|null):v is {events:unknown[]}=>Array.isArray(v?.events)
 export type HistoryAudit={
   events:unknown[];monthlyQueries:number;monthlySuccesses:number;dailyQueries:number;
-  dailySuccesses:number;status:'verified'|'partial'|'unavailable';
+  dailySuccesses:number;scheduleQueries:number;scheduleSuccesses:number;
+  status:'verified'|'partial'|'unavailable';
   explanation:string
 }
 export async function readHistoricalScoreboard(root:string,start:string,end:string,
-  read:Reader):Promise<HistoryAudit>{
+  read:Reader,teamIds:readonly string[]=[]):Promise<HistoryAudit>{
   const begin=Date.parse(start+'T00:00:00Z'),finish=Date.parse(end+'T00:00:00Z')
   if(!/^https:\/\/site\.api\.espn\.com\/apis\/site\/v2\/sports\/[a-z-]+\/[a-z0-9._-]+\/$/u.test(root)||
     !dayValid(start)||!dayValid(end)||begin>finish||(finish-begin)>61*86_400_000)
@@ -27,7 +28,8 @@ export async function readHistoricalScoreboard(root:string,start:string,end:stri
     months.push(dt.toISOString().slice(0,7).replace('-',''))
   const results=new Map<string,unknown>()
   const result:HistoryAudit={events:[],monthlyQueries:months.length,monthlySuccesses:0,
-    dailyQueries:0,dailySuccesses:0,status:'unavailable',explanation:''}
+    dailyQueries:0,dailySuccesses:0,scheduleQueries:0,scheduleSuccesses:0,
+    status:'unavailable',explanation:''}
   const take=(items:unknown[])=>{
     for(const entry of items){
       const item=asEvent(entry),eventId=String(item.id??''),when=Date.parse(item.date??'')
@@ -70,12 +72,24 @@ export async function readHistoricalScoreboard(root:string,start:string,end:stri
     }))
     if(successes===days.length)completeMonths++
   }
+  // Independent ESPN team-schedule route after broken month/day responses.
+  // A schedule is not a boxscore; only completed events with actual scores
+  // will be counted later by each sport's recent-games parser.
+  if(completeMonths<months.length||!results.size){
+    for(const teamId of [...new Set(teamIds)].slice(0,2)){
+      if(!/^\\d{1,18}$/u.test(teamId))continue
+      result.scheduleQueries++
+      const schedule=await load(root+'teams/'+teamId+'/schedule?limit=250')
+      if(validBoard(schedule)){result.scheduleSuccesses++;take(schedule.events)}
+    }
+  }
   result.events=[...results.values()].sort((a,b)=>
     Date.parse(asEvent(a).date??'')-Date.parse(asEvent(b).date??''))
   result.status=completeMonths===months.length?'verified':
-    completeMonths||result.dailySuccesses?'partial':'unavailable'
+    completeMonths||result.dailySuccesses||result.scheduleSuccesses?'partial':'unavailable'
   result.explanation='ESPN meses '+result.monthlySuccesses+'/'+months.length+
     '; respaldo por días '+result.dailySuccesses+'/'+result.dailyQueries+
+    '; calendarios equipo '+result.scheduleSuccesses+'/'+result.scheduleQueries+
     '; eventos identificados '+result.events.length+
     (result.status!=='verified'?'; cobertura parcial/no disponible':'')
   return result
