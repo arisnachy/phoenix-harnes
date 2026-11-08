@@ -156,3 +156,17 @@ test('one fixture keeps two different authentic markets for comparison after dos
     new Set(['h2h','spreads','totals']))
   assert.ok(other.every(x=>x.bookmaker===result.bookmaker))
 })
+
+test('does not automatically choose the cheapest +1.5 or totals for an event',()=>{
+  const quotes=[...pair(0),...pair(0,'spreads').map(q=>({
+    ...q,point:q.selection.startsWith('Home')?-1.5:1.5,
+    price:q.selection.startsWith('Home')?3.2:1.37
+  })),...pair(0,'totals').map(q=>({...q,price:1.9}))]
+  const list=shortlistDailyMarkets(fixtures,quotes,4,now)
+  assert.equal(list.selected.length,1)
+  assert.equal(list.selected[0].market,'h2h')
+  assert.deepEqual(new Set(list.alternatives.map(x=>x.market)),
+    new Set(['spreads','totals']))
+  assert.ok(list.alternatives.some(x=>x.market==='spreads'&&
+    x.marketNoVigShare>.6))
+})
