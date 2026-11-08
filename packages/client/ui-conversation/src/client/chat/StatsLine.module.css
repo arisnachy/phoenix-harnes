@@ -1,25 +1,77 @@
-/* Session stats row: 12/20 tertiary text under the flow, aligned to the
-   shared message column axis (--dsh-chat-content-width). */
-
-.root {
-  /* Block, not flex: text-overflow only elides a block's inline content, so
-     an overlong line ends in … instead of a mid-glyph clip. */
-  display: block;
-  text-align: center;
-  max-width: var(--dsh-chat-content-width);
-  width: 100%;
-  margin: 0 auto;
+/* Composer telemetry: outside the input, no surrounding capsule. */
+.shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: min(1240px, calc(100% - 24px));
+  max-width: 100%;
   box-sizing: border-box;
-  padding: 4px calc(var(--dsh-composer-side-clearance) + 16px) 0px;
-  font-size: 12px;
+  margin: 0 auto;
+  padding: 3px 0 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--dsw-font-family);
+  font-size: 14px;
+  font-weight: 400;
   line-height: 20px;
-  color: var(--dsw-alias-label-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-
+.root {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  row-gap: 6px;
+}
+.metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+}
 .sep {
+  display: inline-block;
+  margin: 0 11px;
   color: var(--dsw-alias-separator-primary);
-  margin: 0 10px; /* carries the former flex gap */
+  font-weight: 300;
+}
+.visibility {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  opacity: .72;
+  cursor: pointer;
+}
+.visibility:hover, .visibility:focus-visible {
+  color: var(--dsw-alias-label-primary);
+  opacity: 1;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+.visibility:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+.shell[data-visible='false'] {
+  width: min(var(--dsh-composer-card-max-width), calc(100% - 24px));
+  justify-content: flex-end;
+}
+@media (max-width: 720px) {
+  .shell { padding-inline: 4px; row-gap: 4px; }
+  .root { row-gap: 3px; }
+  .sep { margin-inline: 6px; }
 }

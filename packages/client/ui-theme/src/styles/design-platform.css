@@ -159,7 +159,7 @@ body[data-ds-dark-theme] {
 }
 
 body {
-  --dsw-alias-bg-base: rgb(248, 247, 244);
+  --dsw-alias-bg-base: #f9f9f7;
   --dsw-alias-bg-layer-1: rgb(252, 251, 248);
   --dsw-alias-bg-layer-2: rgb(250, 249, 246);
   --dsw-alias-bg-layer-3: rgb(255, 254, 252);
