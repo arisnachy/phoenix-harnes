@@ -12,6 +12,9 @@ const defaultLeagues = [
   ['basketball','nba'],['hockey','nhl'],['baseball','mlb'],['football','nfl'],
   ['soccer','eng.1'],['soccer','esp.1'],['soccer','usa.1'],['soccer','uefa.champions'],
   ['basketball','wnba'],['tennis','atp'],['tennis','wta'],
+  ['soccer','mex.1'],['soccer','ger.1'],['soccer','ita.1'],
+  ['soccer','fra.1'],['soccer','por.1'],['soccer','ned.1'],
+  ['soccer','bra.1'],['soccer','arg.1'],['soccer','uefa.europa'],
 ] as const
 const dayNow=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
   year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
@@ -53,11 +56,31 @@ export async function evidenceTicket(
   // Only verified future event IDs can ever be promoted to ticket legs.
   const shortlist=sportFilter?eligible.slice(0,6):diversifiedSportsShortlist(eligible,6)
   const reports:Array<PromiseSettledResult<Awaited<ReturnType<typeof researchSport>>>>=[]
-  for(let offset=0;offset<shortlist.length;offset+=3){
-    const batch=await Promise.allSettled(shortlist.slice(offset,offset+3).map(({sport,league})=>
-      researchSport(sport,league,date,fetcher,now,env,
-        sport==='football'?28:sport==='soccer'?28:sport==='tennis'?28:21)))
-    reports.push(...batch)
+  const collect=async (pool:typeof shortlist)=>{
+    for(let offset=0;offset<pool.length;offset+=3){
+      const batch=await Promise.allSettled(pool.slice(offset,offset+3).map(({sport,league})=>
+        researchSport(sport,league,date,fetcher,now,env,
+          sport==='football'?28:sport==='soccer'?28:sport==='tennis'?28:21)))
+      reports.push(...batch)
+    }
+  }
+  await collect(shortlist)
+  // Adaptive redundancy: do not stop after six leagues if they provide fewer
+  // than count usable dossiers. Pay extra provider cost only when warranted.
+  const usable=(rows:typeof reports)=>rows.reduce((total,result)=>{
+    if(result.status!=='fulfilled')return total
+    return total+result.value.matches.filter(match=>
+      match.evidence==='descriptive'&&
+      match.home.completedGames>=(match.sport==='football'?3:5)&&
+      match.away.completedGames>=(match.sport==='football'?3:5)).length
+  },0)
+  if(usable(reports)<count){
+    const alternatives=eligible.filter(row=>!shortlist.some(chosen=>
+      chosen.sport===row.sport&&chosen.league===row.league))
+    const fallback=sportFilter?alternatives.slice(0,6):
+      diversifiedSportsShortlist(alternatives,6)
+    shortlist.push(...fallback)
+    await collect(fallback)
   }
   const candidateLegs:Array<{pick:ResearchTicketLeg;rank:number;home:string;away:string;kickoff:string}>=[]
   let evaluated=0
