@@ -40,6 +40,18 @@ describe('PHOENIX Pearl Light forecast ticket',()=>{
     expect(forecastPick({...legs[0]!,homeTeam:''})).toBeNull()
     expect(forecastFeed({...legs[0]!,providerLeague:'nhl'})).toBeNull()
   })
+  it('maps generated research markets and world leagues to exact tracked goals',()=>{
+    const base=legs[0]!
+    expect(forecastPick({...base,market:'Ganador · Pronóstico'})).toMatchObject({market:'moneyline',side:'home'})
+    expect(forecastPick({...base,market:'1X2 · Pronóstico'})).toMatchObject({market:'moneyline',side:'home'})
+    expect(forecastFeed({...base,league:'Primeira Liga',providerLeague:'por.1'})).toEqual({
+      sport:'soccer',league:'por.1',date:'2026-11-08',
+    })
+    expect(forecastFeed({...base,league:'Eredivisie',providerLeague:'ned.1'})).toEqual({
+      sport:'soccer',league:'ned.1',date:'2026-11-08',
+    })
+    expect(forecastPick({...base,selection:'Empate',market:'1X2 · Pronóstico'})).toBeNull()
+  })
   it('updates all matching forecast legs but never claims bookmaker settlement',async()=>{
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
       const games=url.includes('/football/nfl/')?
