@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { PhoenixStatusPill, PhoenixUiIcon, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { CanvasAction } from './GenerativeCanvas.tsx'
 import { generateAssessmentPdf } from './AssessmentReportPdf.ts'
@@ -32,6 +32,7 @@ export interface ScaleFormSpec {
     readonly source?: string
     readonly version?: string
     readonly population?: string
+    readonly presentation?: 'matrix' | 'cards'
     readonly administration?: readonly ScaleStep[]
     readonly scoring?: ScaleScoring
     readonly domains?: readonly ScaleDomain[]
@@ -55,12 +56,13 @@ export function parseScaleForm(value: unknown): ScaleFormSpec | null {
     || value.component !== 'scale_form' || value.version !== 1 || !record(value.props)) return null
   const props = value.props
   if (!allowed(props, ['title', 'description', 'source', 'version', 'population',
-    'administration', 'scoring', 'domains', 'items', 'bands'])
+    'administration', 'scoring', 'domains', 'items', 'bands', 'presentation'])
     || !text(props.title, 120)
     || (props.description !== undefined && !text(props.description, 600))
     || (props.source !== undefined && !text(props.source, 400))
     || (props.version !== undefined && !text(props.version, 120))
     || (props.population !== undefined && !text(props.population, 240))
+    || (props.presentation !== undefined && props.presentation !== 'matrix' && props.presentation !== 'cards')
     || !Array.isArray(props.items) || props.items.length < 1 || props.items.length > 240) return null
   const ids = new Set<string>()
   for (const item of props.items) {
@@ -216,11 +218,15 @@ export function scoreScale(spec: ScaleFormSpec, answers: Record<string, number>)
   return band === undefined ? { answered, total, domains } : { answered, total, band, domains }
 }
 
-/** Keep legacy score-valued selects while disambiguating equal-score choices. */
-function choiceValue(item: ScaleItem, index: number): string {
-  const score = item.options[index]!.score
-  return item.options.filter(option => option.score === score).length > 1
-    ? 'choice:' + String(index) : String(score)
+/** Only render a questionnaire matrix when every item shares the original options.
+ * Other scales preserve their distinct per-item answer sets as cards.
+ */
+function hasUniformOptions(spec: ScaleFormSpec): boolean {
+  if (spec.props.presentation !== 'matrix' || spec.props.items.length < 2) return false
+  const first = spec.props.items[0]!.options
+  return spec.props.items.every(item => item.options.length === first.length
+    && item.options.every((option,index) => option.label === first[index]?.label
+      && option.score === first[index]?.score))
 }
 
 /** In-chat form with answered-item count, reset and auditable scoring. */
@@ -229,6 +235,7 @@ export function ScaleForm({ spec, onAction, verified=false }: {
   readonly onAction?: CanvasAction | undefined
   readonly verified?: boolean
 }): ReactNode {
+  const formId=useId()
   const [selected, setSelected] = useState<Record<string, number>>({})
   const [participant,setParticipant]=useState('')
   const [professional,setProfessional]=useState('')
@@ -248,6 +255,11 @@ export function ScaleForm({ spec, onAction, verified=false }: {
   const warnings = scaleProtocolWarnings(spec)
   const [copied, setCopied] = useState(false)
   const scored = scoreScale(spec, answers)
+  const matrix=hasUniformOptions(spec)
+  const choose=(itemId:string,index:number):void=>{
+    setSelected(old=>({...old,[itemId]:index}))
+    setCopied(false);setShareConsent(false);setReportError('')
+  }
   const exportPdf = (): void => {
     const report=scaleAssessmentReport(spec,selected,{
       participant,professional,context,observations,recommendations,
@@ -280,16 +292,35 @@ export function ScaleForm({ spec, onAction, verified=false }: {
     ...warnings.map(warning => 'Advertencia: ' + warning)]
     void navigator.clipboard.writeText(lines.join('\n')).then(() => setCopied(true)).catch(() => setCopied(false))
   }
-  return <section className={css.surface} data-generative-ui="scale_form">
-    <header className={css.heading}><PhoenixUiIcon name="clipboard" />
-      <div><h3>{spec.props.title}</h3>
+  return <section className={css.surface+' '+css.assessmentSurface} data-generative-ui="scale_form">
+    <header className={css.assessmentHeading}>
+      <span className={css.assessmentSymbol}><PhoenixUiIcon name="clipboard" size={21}/></span>
+      <div className={css.assessmentHeadingText}>
+        <span className={css.assessmentEyebrow}>PHOENIX · Evaluación profesional</span>
+        <h3>{spec.props.title}</h3>
         {spec.props.description && <p>{spec.props.description}</p>}
-      </div></header>
-    {spec.props.administration && <section aria-label="Protocolo de aplicación" className={css.questions}>
-      <h4>Procedimiento de administración</h4>
-      <ol>{spec.props.administration.map(step =>
-        <li key={step.id}><strong>{step.title}</strong><p>{step.instruction}</p></li>)}</ol>
-    </section>}
+        <div className={css.assessmentMeta}>
+          <span>{spec.props.items.length} reactivos</span>
+          <span>{matrix?'Cuestionario de selección':'Opciones por criterio'}</span>
+          {spec.props.version && <span>Versión documentada</span>}
+        </div>
+      </div>
+    </header>
+    <div className={css.assessmentProgress}>
+      <div className={css.assessmentProgressCaption}>
+        <span>Progreso del cuestionario</span>
+        <strong aria-live="polite">{scored.answered} de {spec.props.items.length} respuestas</strong>
+      </div>
+      <progress aria-label="Progreso de respuestas" value={scored.answered}
+        max={spec.props.items.length}/>
+    </div>
+    {spec.props.administration && <details className={css.assessmentProtocol}>
+      <summary>Indicaciones y procedimiento de aplicación</summary>
+      <div aria-label="Protocolo de aplicación">
+        <ol>{spec.props.administration.map(step =>
+          <li key={step.id}><strong>{step.title}</strong><p>{step.instruction}</p></li>)}</ol>
+      </div>
+    </details>}
     {warnings.length > 0 && <div role="alert" className={css.disclaimer}>
       <strong>Instrumento incompleto o no verificable.</strong>
       <ul>{warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
@@ -303,30 +334,64 @@ export function ScaleForm({ spec, onAction, verified=false }: {
         Mejorar instrumento con Kira
       </button>}
     </div>}
-    <div className={css.questions}>
-      {spec.props.items.map((item, index) => <label key={item.id} className={css.question}>
-        <span>{index + 1}. {item.question}</span>
-        {item.help && <small>{item.help}</small>}
-        <select value={selected[item.id] === undefined ? '' : choiceValue(item, selected[item.id]!)}
-          onChange={event => {
-            const choice = event.currentTarget.value
-            setSelected(old => {
-              const next = { ...old }
-              if (choice === '') delete next[item.id]
-              else {
-                const index = item.options.findIndex((_,i) => choiceValue(item,i) === choice)
-                if (index >= 0) next[item.id] = index
-              }
-              return next
-            })
-            setCopied(false);setShareConsent(false)
-          }}>
-          <option value="">Seleccionar respuesta</option>
-          {item.options.map((option, i) => <option key={i} value={choiceValue(item,i)}>{option.label}</option>)}
-        </select>
-      </label>)}
-    </div>
-    <div className={css.result}>
+    <section className={css.assessmentQuestions} aria-label="Preguntas del instrumento">
+      <div className={css.assessmentSectionHead}>
+        <div>
+          <h4>Cuestionario</h4>
+          <p>Marca una respuesta para cada pregunta, según las instrucciones de esta versión.</p>
+        </div>
+        <span>{scored.answered}/{spec.props.items.length}</span>
+      </div>
+      {matrix ? <div className={css.assessmentMatrixScroll}>
+        <table className={css.assessmentMatrix}>
+          <thead><tr><th scope="col">Pregunta</th>
+            {spec.props.items[0]!.options.map((option,index)=>
+              <th key={index} scope="col">{option.label}</th>)}
+          </tr></thead>
+          <tbody>{spec.props.items.map((item,index)=>
+            <tr key={item.id} data-answered={selected[item.id]!==undefined?'true':'false'}>
+              <th scope="row">
+                <span className={css.assessmentIndex}>{String(index+1).padStart(2,'0')}</span>
+                <span>{item.question}{item.help && <small>{item.help}</small>}</span>
+              </th>
+              {item.options.map((option,choiceIndex)=>
+                <td key={choiceIndex}>
+                  <label className={css.assessmentMatrixChoice}
+                    data-selected={selected[item.id]===choiceIndex?'true':'false'}>
+                    <input type="radio" name={formId+'-'+item.id}
+                      value={String(choiceIndex)}
+                      checked={selected[item.id]===choiceIndex}
+                      onChange={()=>choose(item.id,choiceIndex)}
+                      aria-label={item.question+': '+option.label}/>
+                    <span>{option.label}</span>
+                  </label>
+                </td>)}
+            </tr>)}</tbody>
+        </table>
+      </div> : <div className={css.assessmentCardGrid}>
+        {spec.props.items.map((item,index)=>
+          <fieldset className={css.assessmentQuestionCard} key={item.id}
+            data-answered={selected[item.id]!==undefined?'true':'false'}>
+            <legend>
+              <span className={css.assessmentIndex}>{String(index+1).padStart(2,'0')}</span>
+              {item.question}
+            </legend>
+            {item.help && <p className={css.assessmentHelp}>{item.help}</p>}
+            <div className={css.assessmentChoices}>
+              {item.options.map((option,choiceIndex)=>
+                <label className={css.assessmentChoice} key={choiceIndex}
+                  data-selected={selected[item.id]===choiceIndex?'true':'false'}>
+                  <input type="radio" name={formId+'-'+item.id}
+                    value={String(choiceIndex)}
+                    checked={selected[item.id]===choiceIndex}
+                    onChange={()=>choose(item.id,choiceIndex)}/>
+                  <span>{option.label}</span>
+                </label>)}
+            </div>
+          </fieldset>)}
+      </div>}
+    </section>
+    <div className={css.result+' '+css.assessmentScore}>
       <span>Puntuación</span>
       <strong aria-live="polite">{scored.total === null ? '—' : scored.total}</strong>
       <span>{scored.answered} de {spec.props.items.length} respuestas</span>
