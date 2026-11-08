@@ -148,3 +148,56 @@ test('all 17 sports have truthful source coverage, including weak/no-API discipl
     .wired.includes('ESPN Site/Core'))
   assert.equal(freeSourceCoverageForSport('invented',{}).supported,false)
 })
+
+test('balldontlie NBA/WNBA free games are optional and do not leak the key',async()=>{
+  for(const league of ['nba','wnba']){
+    const fixture={...game,league}
+    let seen=false
+    const fetcher=async(url,options)=>{
+      if(String(url).includes('balldontlie')){
+        seen=true
+        assert.equal(options.headers.Authorization,'secret-bdl-key')
+        assert.ok(!String(url).includes('secret-bdl-key'))
+        return reply({data:[{date:'2026-11-09T01:00:00Z',
+          home_team:{full_name:'Milwaukee Bucks'},
+          visitor_team:{full_name:'Boston Celtics'}}]})
+      }
+      return reply({events:[]})
+    }
+    const x=await crosscheckFreeFixture(fixture,fetcher,Date.now(),
+      {PHOENIX_BALLDONTLIE_API_KEY:'secret-bdl-key'})
+    assert.equal(seen,true)
+    assert.equal(x.length,2)
+    assert.equal(x[1].provider,'balldontlie')
+    assert.equal(x[1].status,'verified')
+    assert.ok(!JSON.stringify(x).includes('secret-bdl-key'))
+  }
+  assert.ok(freeSourceCoverageForSport('basketball',{}).unconfiguredOptional.includes('balldontlie'))
+  assert.ok(freeSourceCoverageForSport('basketball',{PHOENIX_BALLDONTLIE_API_KEY:'any'})
+    .configuredOptional.includes('balldontlie'))
+})
+test('balldontlie 429 is unavailable and never a negative fixture',async()=>{
+  const f=async(url)=>String(url).includes('balldontlie')?reply({},429):reply({events:[]})
+  const result=await crosscheckFreeFixture(game,f,Date.now(),{PHOENIX_BALLDONTLIE_API_KEY:'key'})
+  assert.equal(result[1].status,'unavailable')
+})
+test('API-Football optional free plan corroborates an exact soccer event only',async()=>{
+  const fixture={sport:'soccer',league:'eng.1',eventId:'123',
+    date:'2026-11-08',home:'Arsenal',away:'Liverpool',
+    kickoff:'2026-11-08T18:30:00Z'}
+  const f=async(url,opts)=>{
+    if(String(url).includes('api-sports.io')){
+      assert.equal(opts.headers['x-apisports-key'],'secret-foot-key')
+      assert.match(String(url),/league=39/)
+      return reply({errors:[],response:[{fixture:{date:'2026-11-08T18:30:00Z'},
+        teams:{home:{name:'Arsenal FC'},away:{name:'Liverpool FC'}}}]})
+    }
+    return reply({events:[],matches:[]})
+  }
+  const x=await crosscheckFreeFixture(fixture,f,Date.now(),
+    {PHOENIX_API_FOOTBALL_KEY:'secret-foot-key'})
+  assert.equal(x[x.length-1].provider,'API-Football')
+  assert.equal(x[x.length-1].status,'verified')
+  assert.ok(!JSON.stringify(x).includes('secret-foot-key'))
+  assert.ok(freeSourceCoverageForSport('soccer',{}).unconfiguredOptional.includes('API-Football'))
+})
