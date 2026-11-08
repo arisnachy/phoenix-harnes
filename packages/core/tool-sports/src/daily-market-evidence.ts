@@ -3,6 +3,7 @@
  */
 import type {DailyMarketCandidate} from './daily-market-shortlist.ts'
 import {auditMarketPrice,type MarketPriceAudit} from './market-price-audit.ts'
+import {diagnoseMarketOutcome,type MarketOutcomeDiagnostic} from './market-outcome-diagnostics.ts'
 import type {DailyNhlSpecialist} from './daily-nhl-specialist.ts'
 import type {auditUniversalMatchup} from './universal-matchup-factors.ts'
 
@@ -20,6 +21,7 @@ export type MarketResearchReview={
   injuries:number;news:number;headToHead:number
   evidenceFor:string[];warnings:string[];rankingScore:number
   priceAudit:MarketPriceAudit
+  marketOutcomeDiagnostic?:MarketOutcomeDiagnostic
   descriptiveLineDistance:number|null;relativeSignal:number|null
   /** Diagnostic only; historical margins are not a calibrated NHL cover forecast. */
   nhlOfficial?:DailyNhlSpecialist
@@ -155,6 +157,27 @@ export function assessDailyMarketEvidence(
     missing.push('BLOQUEO NHL: portero titular de ambos clubes, 5v5 xG/GSAx, bajas, descanso y reglas de OT/empty-net sin validar; no recomendar este hándicap.')
     direction='Hándicap NHL en revisión: tendencia de goles y precio no bastan para aprobar'
   }
+  const marketOutcomeDiagnostic=diagnoseMarketOutcome({
+    market:candidate.market,outcome:side,homeName:evidence.home.name,
+    awayName:evidence.away.name,
+    homeGames:evidence.home.lastGames,awayGames:evidence.away.lastGames,
+  })
+  if(marketOutcomeDiagnostic){
+    const d=marketOutcomeDiagnostic
+    missing.push('Mercado '+candidate.market+' '+d.selection+' '+d.line+
+      ': histórico equipo '+d.team.wins+' ganadas / '+d.team.losses+
+      ' perdidas / '+d.team.pushes+' anuladas; rival '+d.opponent.wins+
+      ' / '+d.opponent.losses+' / '+d.opponent.pushes+
+      '. No es una probabilidad predictiva calibrada.')
+    if(status==='descriptive-support'&&d.status!=='aligned'){
+      status=d.status==='adverse'?'contraindicated':'uncertain'
+      direction=d.status==='adverse'?
+        'Señal adversa: historial de la línea contradice la proyección media':
+        'Señales mixtas o muestra insuficiente para confiar en esta línea'
+      missing.push('BLOQUEO DE MERCADO: los dos historiales no respaldan '+
+        'consistentemente el mismo hándicap/total a esta línea.')
+    }
+  }
   const priceAudit=auditMarketPrice(candidate,side)
   if(priceAudit.breakEvenPercent!==null)
     missing.push('Cuota de la selección exige '+priceAudit.breakEvenPercent+
@@ -207,6 +230,7 @@ export function assessDailyMarketEvidence(
     ],warnings:missing,rankingScore,priceAudit,
     descriptiveLineDistance:lineDistance===null?null:round(lineDistance),
     relativeSignal,...(nhlPuckLineAudit?{nhlPuckLineAudit}:{}),
+    ...(marketOutcomeDiagnostic?{marketOutcomeDiagnostic}:{}),
   }
   return report
 }
