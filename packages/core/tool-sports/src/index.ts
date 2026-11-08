@@ -13,6 +13,7 @@ import { researchNbaSlate } from './nba-research.ts'
 import {shortlistDailyMarkets,dailyOddsSportKey} from './daily-market-shortlist.ts'
 import {assessDailyMarketEvidence,unavailableMarketEvidence} from './daily-market-evidence.ts'
 import {selectDailyResearchedMarkets} from './daily-market-selection.ts'
+import {auditTicketMarketRisk} from './ticket-risk-audit.ts'
 import {researchNhlOfficialMatch,type DailyNhlSpecialist} from './daily-nhl-specialist.ts'
 import {investigateTicketSpecialists} from './ticket-specialist-gate.ts'
 import {readSportsEventMarketMenu,eventMarketCatalog} from './sports-event-market-menu.ts'
@@ -67,6 +68,7 @@ const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
   'RECUPERACIÓN DE DATOS: si ESPN publica estadística vacía o histórico HTTP 400, usar recuperación por mes/día y calendario de equipo; para eventos concretos consultar sports_chat_source_resilience y sus fuentes independientes. Fuentes del catálogo o enlaces no equivalen a consulta real, ni calendario equivale a lesiones, alineación o cuota. Nunca eludir 401/403/429 ni inventar resultados. ',
+  'AUDITORIA DE RIESGO DEL TICKET: cuando pidan solo ganadores elegir sports_chat_daily_market_shortlist con deep=true y winnerOnly=true. Verifica rivales, estado, descanso, lesiones, titulares, porteros, precio y mercado exacto. Compara la fortaleza relativa por precio no-vig en cada pata y la version de 3/4/5 con marketRisk. Estas cifras provienen de la casa y asumen independencia: NO son una prediccion propia, EV ni garantia. Identifica la pata mas fragil, nunca agregues un partido casi 50/50 solo para completar cinco. NHL: portero candidato NO significa confirmado; distingue moneyline con OT/SO de 60 minutos. Si falta un dato, mostrar CONDICIONAL y fuentes pendientes. ',
   'REGLA OBLIGATORIA PARA TICKETS GANADORES: las cotizaciones y favoritos de casas no son investigación deportiva. Si el usuario solicita un ticket ganador del día (incluido solo equipos ganadores), usa sports_chat_ticket_evidence_priced_auto con marketPreference=winner cuando corresponda, o sports_chat_daily_market_shortlist con deep=true. Cada partido requiere expediente de su especialista NFL/NBA/WNBA/NHL/MLB/Fútbol/Tenis, identidad verificada y diagnóstico de bajas, alineaciones, forma y contradicciones. Los resultados incomplete/unavailable de un especialista NO bloquean mostrar un ticket condicional si el evento ESPN y la cuota real están verificados y la tendencia histórica tiene apoyo descriptivo. Sí impiden presentar esa selección como investigada o aprobada. Conflictos expresos de identidad o mercados contradichos bloquean esa pata. Si faltan eventos o cuotas genuinas, entrega borrador visible sin fabricar patas, nunca ticket ganador certificado. La cuota no demuestra acierto y ninguna ruta puede reportar aprobación o EV sin modelo validado. ',
   'MERCADOS DE TOTAL Y HÁNDICAP: ganar un partido no demuestra cubrir -1.5/+1.5 o una línea over/under. Antes de considerar un total o spread con sports_chat_daily_market_shortlist(deep=true), coteja la línea EXACTA contra resultados previos de AMBOS clubes, separa aciertos, fallos y pushes, y exige dirección consistente en los dos historiales. Si marketOutcomeDiagnostic.status es mixed, insufficient o adverse, etiquetar CONDICIONAL/CONTRAINDICADA y no ponerla como pata cotizada; nunca conviertas frecuencia histórica en probabilidad futura o EV. Para NHL añade portero y reglas OT/SO; para NBA pace, eficiencia y lesiones siguen pendientes si no fueron medidos. La meta de 5–6 patas no autoriza inventar una probabilidad ni rellenar selecciones sin respaldo. ',
   'NHL ESPECIALIZADO: para NHL consulta sports_chat_hockey_slate y sports_chat_nhl_investigate con gameId oficial NHL, no ID ESPN. Recupera rosters y estadísticas observadas de skaters/porteros; distingue portero candidato del titular confirmado y ganador a 60 minutos del ganador con OT/SO. No infieras xG/GSAx, alineaciones definitivas o probabilidades no calibradas, ni llames cuota actual a una línea sin timestamp. En +1.5/-1.5 evalúa el riesgo de caer por dos goles, los márgenes recientes de ambos equipos, la probabilidad de equilibrio del precio, porteros, descanso, empty-net y OT. Sin titular y modelo de cobertura calibrado, clasifica como CONDICIONAL o CONTRAINDICADA. ',
@@ -154,6 +156,7 @@ export function apply(ctx: Context): void {
       date:{type:'string',description:'Fecha AAAA-MM-DD en Santo Domingo, defecto hoy.'},
       count:{type:'integer',description:'Objetivo de 4 a 6 candidatos; por defecto cinco.'},
       deep:{type:'boolean',description:'Investigar evidencias del partido y comparar varias ofertas por evento (defecto true). false para un primer escaneo rápido de cuotas.'},
+      winnerOnly:{type:'boolean',description:'true para apuestas SOLO al ganador directo h2h; sin totals ni spreads.'},
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
@@ -278,8 +281,16 @@ export function apply(ctx: Context): void {
       })()
       // Research chooses among real winner, total and spread offers *after*
       // auditing each game. Never add a second leg from the same game.
-      const evaluated=selectDailyResearchedMarkets(research,count)
+      const candidateReviews=args.winnerOnly===true?
+        research.filter(review=>review.candidate.market==='h2h'):research
+      const evaluated=selectDailyResearchedMarkets(candidateReviews,count)
       const best=evaluated.selected
+      const marketRisk=auditTicketMarketRisk(best.map(review=>({
+        eventId:review.candidate.espnEventId,
+        selection:review.selectedOutcome?.selection??null,
+        market:review.candidate.market,
+        noVigShare:review.selectedOutcome?.noVigShare??null,
+      })))
       // Mandatory specialist dossiers: do NOT convert general ESPN form or an odds
       // quotation into an approved daily ticket without each sport's investigation.
       const specialistChecks=args.deep===false?[]:await investigateTicketSpecialists(
@@ -338,7 +349,7 @@ export function apply(ctx: Context): void {
             subtitle:'Preselección con cuotas reales · '+conditionalQuoted+
               ' expedientes pendientes · sin apuesta realizada',
             requestedLegs:count,
-            specialistChecks,
+            specialistChecks,marketRisk,
             legs:legs.map((leg,index)=>({
               ...(leg!==null&&typeof leg==='object'?leg:{}),
               rationale:quoted[index]?.review.status==='descriptive-support'?
@@ -362,6 +373,11 @@ export function apply(ctx: Context): void {
                 'Verificar lesiones, titulares y reglas antes de considerar.',
             })),
             note:String(built.card.props.note??'')+
+              (marketRisk.weakest?' Riesgo mayor por precio: '+
+                marketRisk.weakest.selection+' ('+marketRisk.weakest.noVigPercent+
+                '% sin margen, no probabilidad de modelo). ':'')+
+              (marketRisk.fullPercent!==null?' Producto de mercado bajo independencia: '+
+                marketRisk.fullPercent+'%; no es pronostico calibrado. ':'')+
               ' Se intentó investigar cada pata con su especialista. Estas son CANDIDATAS, NO selecciones con ventaja calibrada ni apuestas aprobadas. '+
               'Expedientes completos con apoyo descriptivo: '+trustedOptions.length+'; condicionales: '+
               provisional.length+'. Se requieren probabilidades calibradas y datos de alineación '+
@@ -383,6 +399,7 @@ export function apply(ctx: Context): void {
         marketCandidates:pool.eligibleMarkets,matchedGames:pool.matchesInSlate,
         bookmaker:pool.bookmaker,reviewed:research.length,
         eventChoices:evaluated.eventChoices,
+        winnerOnly:args.winnerOnly===true,marketRisk,
         marketsReviewed:evaluated.marketsReviewed,
         alternativeMarketsCompared:evaluated.alternativesCompared,
         researchedPicks:trustedOptions.length,conditionalPicks:provisional.length,
@@ -400,7 +417,7 @@ export function apply(ctx: Context): void {
         competitionsChecked:daily.coverage,sourcesChecked:attempts,
         providerHealth,specialMarkets,placed:false,
         warning:'El expediente de NFL/NBA/NHL/MLB/Fútbol/Tenis se consulta siempre: una baja no publicada puede mostrarse como CONDICIONAL, nunca como investigada/comprobada ni aprobada. Los especialistas no certifican apuestas ganadoras ni EV. Los hándicaps NHL +1.5/-1.5 sin porteros confirmados ni modelo calibrado de cobertura se bloquean como patas cotizadas. Selección orientativa y cuotas reales observadas: ni proyecciones descriptivas ni probabilidades sin margen son modelos calibrados ni garantías de ganar. La línea y el precio deben confirmarse en la casa, igual que las bajas y titulares oficiales. El campo specialMarkets investiga automáticamente props, periodos y líneas alternativas de la MISMA casa cuando el proveedor las publica; son opciones de investigación y NO patas aprobadas sin modelo específico. Nunca inventar ofertas.',
-        instruction:'priceAudit.breakEvenPercent es el porcentaje exigido por la cuota y NO un pronóstico. El valor esperado queda sin verificar cuando no hay modelo calibrado para esa línea. Nunca conviertas un resultado CONTRAINDICADO o INCIERTO en pata del ticket; muestra riesgo y alternativas sin inventar precios. La tarjeta nativa solo muestra precios cotejados de una misma casa. Distingue CANDIDATAS CON APOYO DESCRIPTIVO de CONDICIONALES (no equivalen a picks validados). Si la evidencia favorece el lado opuesto, usa el precio real de selectedOutcome. Verifica informes oficiales de lesiones, titulares/porteros, props, períodos y reglas antes de apostar. No hay apuesta realizada.',
+        instruction:'Si solo piden GANADORES usa winnerOnly=true y no sustituyas con over/under o handicap. Informa la pata mas fragil y compara 3/4/5 con marketRisk, explicando que son productos de mercado y no probabilidades calibradas. priceAudit.breakEvenPercent es el porcentaje exigido por la cuota y NO un pronóstico. El valor esperado queda sin verificar cuando no hay modelo calibrado para esa línea. Nunca conviertas un resultado CONTRAINDICADO o INCIERTO en pata del ticket; muestra riesgo y alternativas sin inventar precios. La tarjeta nativa solo muestra precios cotejados de una misma casa. Distingue CANDIDATAS CON APOYO DESCRIPTIVO de CONDICIONALES (no equivalen a picks validados). Si la evidencia favorece el lado opuesto, usa el precio real de selectedOutcome. Verifica informes oficiales de lesiones, titulares/porteros, props, períodos y reglas antes de apostar. No hay apuesta realizada.',
       })
     },
     presentCall:()=>({card:'generic',title:'Investigar el ticket diario y los mercados reales',kind:'read' as const}),
