@@ -366,7 +366,213 @@ async function probeResearchEngines(state){
  }
  const sv=process.env.PHOENIX_SIMVASCULAR_BIN
  if(windows){
-  if(sv&&/^\\/usr\\/local\\/sv\\/simvascular\\/[0-9]{4}-[0-9]{2}-[0-9]{2}\\/simvascular$/.test(sv)){
+  if(sv&&new RegExp('^/usr/local/sv/simvascular/[0-9]{4}-[0-9]{2}-[0-9]{2}/simvascular
+   try{
+    await run('wsl.exe',['--distribution',distro,'--exec','/usr/bin/test','-x',sv],{timeout:12000})
+    state.components.simvascular={status:'installed',mode:'wsl2',verifiedAt:now()}
+   }catch{state.components.simvascular={status:'external',reason:'Configured WSL SimVascular binary is not executable'}}
+  }else state.components.simvascular={status:'external',reason:'Set verified PHOENIX_SIMVASCULAR_BIN in WSL2'}
+ }else{
+  state.components.simvascular=sv&&existsSync(sv)?
+   {status:'installed',mode:'native',verifiedAt:now()}:
+   {status:'external',reason:'Install official SimVascular and set PHOENIX_SIMVASCULAR_BIN'}
+ }
+}
+/** Install the vendor image only after the user's explicit plugin action. */
+async function installOpenCarp(p,state){
+ // An existing WSL/Linux installation is already usable: do not pull a duplicate image.
+ await probeResearchEngines(state)
+ if(state.components.opencarp?.status==='installed'){
+  save(p,state);return
+ }
+ state.components.opencarp={status:'installing'};save(p,state)
+ const installed=await installOpenCarpDocker()
+ state.components.opencarp=installed.status==='installed'?
+  {status:'installed',mode:'docker',imageId:installed.imageId,verifiedAt:installed.verifiedAt,
+   source:'docker.opencarp.org/opencarp/opencarp:latest'}:
+  {status:installed.status,reason:installed.reason}
+ if(installed.status!=='installed')log(p,'opencarp: '+installed.reason)
+ save(p,state)
+}
+export const anatomyComponents=['slicerheart','monai-nnunet','totalsegmentator',
+  'ohif-cornerstone','simvascular','opencarp','three-vtk']
+export const validAnatomyComponent=(v)=>anatomyComponents.includes(v)
+/** Explicit bulk action: one worker, one lock, seven sequential audited steps. */
+async function installAllSequentially(p,state,fd,env){
+  const steps=anatomyComponents
+  let errors=0
+  for(let i=0;i<steps.length;i++){
+    const id=steps[i]
+    state.bootstrap={status:'running',component:'all',current:id,completed:i,total:steps.length,at:now()}
+    save(p,state)
+    log(p,'Sequential step '+(i+1)+'/'+steps.length+': '+id)
+    try{
+      if(id==='slicerheart'){
+        await installSlicer(p,state,fd);save(p,state)
+        await installSlicerHeart(p,state,fd)
+      }else if(id==='monai-nnunet')await installPythonComponents(p,state,fd,['monai','nnunetv2'])
+      else if(id==='totalsegmentator'){
+        await installPythonComponents(p,state,fd,['totalsegmentator'])
+        await installBaselineWeights(p,state,fd,env)
+      }else if(id==='ohif-cornerstone')await installCornerstone(p,state,fd)
+      else if(id==='three-vtk')await installViewer(p,state,fd,true)
+      else if(id==='opencarp')await installOpenCarp(p,state)
+      else await probeResearchEngines(state)
+    }catch(e){errors++;log(p,id+': '+String(e))}
+    const keys=id==='slicerheart'?['slicer','slicerheart']:
+      id==='monai-nnunet'?['monai','nnunetv2']:
+      id==='totalsegmentator'?['totalsegmentator','weights_ct']:
+      id==='ohif-cornerstone'?['cornerstone']:
+      id==='three-vtk'?['viewer','vtkjs']:
+      id==='opencarp'?['opencarp']:[]
+    if(keys.some(key=>state.components[key]?.status!=='installed'))errors++
+    state.bootstrap={status:'running',component:'all',current:id,completed:i+1,total:steps.length,at:now()}
+    save(p,state)
+  }
+  state.bootstrap={status:errors?'error':'finished',component:'all',
+    completed:steps.length,total:steps.length,at:now()}
+  save(p,state)
+}
+async function worker(env=process.env,selected=null){
+  if(selected&&!validAnatomyComponent(selected))throw Error('Invalid anatomy component')
+  const p=pathsFor(env)
+  mkdirSync(p.root,{recursive:true})
+  const fd=openSync(p.log,'a')
+  const state=load(p)||{components:{}}
+  state.components||={}
+  state.platform=process.platform
+  try{
+    log(p,'Starting anatomy bootstrap '+(selected||'all')+'; never implies clinical validation')
+    if(selected==='all'){
+      await installAllSequentially(p,state,fd,env)
+    }else if(!selected){
+      await installPythonComponents(p,state,fd)
+      await installBaselineWeights(p,state,fd,env)
+      await installSlicer(p,state,fd)
+      await installSlicerHeart(p,state,fd)
+      await probeResearchEngines(state)
+      await installViewer(p,state,fd,true)
+      await installCornerstone(p,state,fd)
+    }else if(selected==='slicerheart'){
+      await installSlicer(p,state,fd)
+      await installSlicerHeart(p,state,fd)
+    }else if(selected==='monai-nnunet'){
+      await installPythonComponents(p,state,fd,['monai','nnunetv2'])
+    }else if(selected==='totalsegmentator'){
+      await installPythonComponents(p,state,fd,['totalsegmentator'])
+      await installBaselineWeights(p,state,fd,env)
+    }else if(selected==='ohif-cornerstone'){
+      await installCornerstone(p,state,fd)
+    }else if(selected==='three-vtk'){
+      await installViewer(p,state,fd,true)
+    }else if(selected==='opencarp'){
+      await installOpenCarp(p,state)
+    }else if(selected==='simvascular'){
+      await probeResearchEngines(state)
+    }
+    state.clinicalValidation='not-validated'
+    if(selected!=='all')state.bootstrap={status:'finished',component:selected||'bootstrap',at:now()}
+    save(p,state)
+    log(p,'Anatomy bootstrap finished; review status and install.log')
+  }catch(e){
+    state.bootstrap={status:'error',at:now(),reason:String(e).slice(0,250)}
+    save(p,state)
+    log(p,'Bootstrap fatal: '+String(e))
+    throw e
+  }finally{
+    closeSync(fd)
+    try{rmSync(p.lock,{force:true})}catch{}
+  }
+}
+export function status(env=process.env){
+  const p=pathsFor(env),v=load(p),components=v?.components||{}
+  const coreReady=existsSync(p.python)&&modules.every(m=>components[m.id]?.status==='installed')
+  const viewerReady=components.viewer?.status==='installed'&&
+    existsSync(join(p.root,'viewer','node_modules','three','build','three.module.js'))
+  const weightsReady=components.weights_ct?.status==='installed'&&
+    hasWeightFiles(weightsRoot(env))
+  const missing=[...modules.map(m=>m.id),'weights_ct','viewer','slicer','slicerheart']
+    .filter(id=>components[id]?.status!=='installed')
+  return {root:p.root,manifest:p.manifest,log:p.log,initialized:!!v,
+    installed:coreReady&&viewerReady&&weightsReady&&
+      components.slicer?.status==='installed'&&components.slicerheart?.status==='installed',
+    coreReady,viewerReady,weightsReady,missing,
+    backgroundInstallRunning:existsSync(p.lock),bootstrap:v?.bootstrap??null,
+    components,clinicallyValidated:false,
+    notes:'Package installation does not imply every atlas, a verified patient model or clinical validation.'}
+}
+export function ensure(env=process.env,launch=spawn){
+  const p=pathsFor(env)
+  if(env.PHOENIX_ANATOMY_AUTO_INSTALL==='0'||env.CI==='true'||env.NODE_ENV==='test')
+    return {status:'disabled',...status(env)}
+  const current=status(env)
+  if(!needsInstall(load(p))&&env.PHOENIX_ANATOMY_FORCE_INSTALL!=='1'&&
+     existsSync(p.python)&&current.viewerReady&&
+     (current.weightsReady||current.components.weights_ct?.status==='disabled'))
+    return {status:'up-to-date',...current}
+  mkdirSync(p.root,{recursive:true})
+  try{
+    const age=Date.now()-statSync(p.lock).mtimeMs
+    if(age>=-60000&&age<60*60*1000)return {status:'running',...status(env)}
+    rmSync(p.lock,{force:true})
+  }catch{}
+  try{const fd=openSync(p.lock,'wx');closeSync(fd)}catch{return {status:'running',...status(env)}}
+  try{
+    const child=launch(process.execPath,[self,'--worker'],{
+      cwd:resolve(fileURLToPath(new URL('..',import.meta.url))),detached:true,
+      windowsHide:true,shell:false,env,stdio:'ignore'})
+    child.unref()
+    return {status:'started',...status(env)}
+  }catch(e){
+    rmSync(p.lock,{force:true});log(p,'launch error '+String(e))
+    return {status:'error',error:String(e),...status(env)}
+  }
+}
+if(process.argv[1]&&resolve(process.argv[1])===self){
+  const selectedAt=process.argv.indexOf('--install-component')
+  const selected=process.argv.includes('--install-all')?'all':selectedAt>=0?process.argv[selectedAt+1]:null
+  const manual=!process.argv.includes('--worker')&&(process.argv.includes('--install')||selectedAt>=0||process.argv.includes('--install-all'))
+  if(selectedAt>=0&&!validAnatomyComponent(selected)){
+    console.error('Unknown anatomy connector id')
+    process.exitCode=2
+  }else if(manual||process.argv.includes('--worker')){
+    const p=pathsFor()
+    if(manual){
+      mkdirSync(p.root,{recursive:true})
+      let running=false
+      try{
+        const age=Date.now()-statSync(p.lock).mtimeMs
+        if(age>=-60000&&age<60*60*1000)running=true
+        else rmSync(p.lock,{force:true})
+      }catch{}
+      if(running){
+        console.error('Anatomy installation already running; use --status')
+        process.exitCode=2
+      }else{
+        try{const fd=openSync(p.lock,'wx');closeSync(fd)}
+        catch{console.error('Anatomy installer locked');process.exitCode=2}
+      }
+    }
+    if(process.exitCode!==2)worker(process.env,selected).then(()=>{
+      if(manual){
+        const result=status()
+        console.log(JSON.stringify(result,null,2))
+        if(!selected&&!result.installed)process.exitCode=3
+        else if(selected==='all'&&result.bootstrap?.status==='error')process.exitCode=3
+        else if(selected&&selected!=='all'&&result.components[(selected==='monai-nnunet'?'monai':
+          selected==='three-vtk'?'vtkjs':selected==='ohif-cornerstone'?'cornerstone':
+          selected==='slicerheart'?'slicerheart':selected==='totalsegmentator'?'weights_ct':selected)]?.status!=='installed')
+          process.exitCode=3
+      }
+    }).catch(e=>{
+      log(p,'FATAL '+String(e));try{rmSync(p.lock,{force:true})}catch{}
+      process.exitCode=1
+    })
+  }
+  else if(process.argv.includes('--status'))console.log(JSON.stringify(status(),null,2))
+  else console.log(JSON.stringify(ensure(),null,2))
+}
+).test(sv)){
    try{
     await run('wsl.exe',['--distribution',distro,'--exec','/usr/bin/test','-x',sv],{timeout:12000})
     state.components.simvascular={status:'installed',mode:'wsl2',verifiedAt:now()}
