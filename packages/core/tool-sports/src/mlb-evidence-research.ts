@@ -13,6 +13,8 @@ const word=(v:unknown,n=130):string=>(typeof v==='string'||typeof v==='number'
   ?String(v).replace(/[\u0000-\u001f]/gu,' ').trim().slice(0,n):'')
 const numeric=(v:unknown):number|null=>{
   if(typeof v!=='number'&&typeof v!=='string')return null
+  // Blank provider fields are missing evidence, never an observed zero.
+  if(typeof v==='string'&&v.trim()==='')return null
   const n=Number(v)
   return Number.isFinite(n)?n:null
 }
