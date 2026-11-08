@@ -96,7 +96,7 @@ describe('professional assessment catalog and complete local PDF',()=>{
   it('renders actual instrument questions and a PDF control after completion',()=>{
     const spec=assessmentCatalog.find(x=>x.id==='gad7-es')!.spec!
     render(<ScaleForm spec={spec} verified />)
-    expect(screen.getAllByRole('radio')).toHaveLength(28)
+    expect(screen.getAllByRole('radio')).toHaveLength(32)
     fireEvent.click(screen.getByText(/Informe profesional · PDF/))
     const download=screen.getByRole('button',{name:/Generar informe PDF completo/})
     expect(download).toHaveProperty('disabled',true)
@@ -162,7 +162,7 @@ describe('professional assessment catalog and complete local PDF',()=>{
   it('shows a clinical classification only with catalog verification',()=>{
     const spec=assessmentCatalog.find(x=>x.id==='phq9-es')!.spec!
     const {container}=render(<ScaleForm spec={spec} verified/>)
-    expect(screen.getAllByRole('radio')).toHaveLength(36)
+    expect(screen.getAllByRole('radio')).toHaveLength(40)
     for(const question of container.querySelectorAll('fieldset')){
       fireEvent.click(question.querySelector('input[type="radio"]')!)
     }
