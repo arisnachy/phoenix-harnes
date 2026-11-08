@@ -148,6 +148,12 @@ export async function fetchEspnInjuryBackup(
   const readJSON=<T>(url:string)=>publicRead(url,fetcher,now) as Promise<T>
   let groups:ParsedGroup[]=[]
   let feedUpdatedAt:string|null=null
+  let offSeason=false
+  const observeSeason=(value:unknown)=>{
+    const season=row(row(value)?.season)
+    if(season&&(str(season.name??season.displayName).toLowerCase().includes('off season')||
+      season.type===4))offSeason=true
+  }
   const ids=await officialIds(fixture,readJSON)
   if(ids){
     const prefix='https://site.api.espn.com/apis/site/v2/sports/'+
@@ -162,6 +168,7 @@ export async function fetchEspnInjuryBackup(
         continue
       }
       const payload=row(item.value)
+      observeSeason(item.value)
       const p=parseGroups(item.value,prefix+(idx===0?ids.home:ids.away)+'/injuries')
       // A team route may return an ungrouped athlete list; never infer
       // 'healthy' from an unrecognized schema.
@@ -174,6 +181,7 @@ export async function fetchEspnInjuryBackup(
     try{
       const payload=await readJSON<unknown>(base.source)
       const root=row(payload)
+      observeSeason(payload)
       feedUpdatedAt=date(root?.timestamp)??feedUpdatedAt
       const received=parseGroups(payload,base.source)
       for(const g of received)if(!groups.some(x=>same(x.name,g.name)))
@@ -190,10 +198,11 @@ export async function fetchEspnInjuryBackup(
     h&&a&&fresh?'verified':h||a?'partial':stale?'stale':'unavailable'
   // A season-level feed can be current but report only teams with injuries;
   // an absent group does NOT prove there are no injured athletes.
-  if(stale)status='stale'
+  if(stale||offSeason)status='stale'
   if(!feedUpdatedAt)notes.push('Sin fecha confiable de actualización del feed ESPN')
   if(!h||!a)notes.push('Uno o ambos equipos ausentes: NO significa plantilla sana')
   if(stale)notes.push('Reporte desactualizado; no confirmar disponibilidad para este partido')
+  if(offSeason)notes.push('Liga fuera de temporada; el reporte de lesiones NO es un parte prepartido actual')
   if(fixture.kickoff&&Date.parse(fixture.kickoff)<=now)
     notes.push('Partido iniciado: el parte NO confirma una baja prepartido actual')
   if(route.official)notes.push('NBA: cotejar estatus definitivos en '+route.official)
