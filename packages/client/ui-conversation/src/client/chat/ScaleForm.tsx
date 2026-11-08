@@ -237,6 +237,7 @@ export function ScaleForm({ spec, onAction, verified=false, restoredFromCatalog=
   const [recommendations,setRecommendations]=useState('')
   const [reportError,setReportError]=useState('')
   const [shareConsent,setShareConsent]=useState(false)
+  const [functionalImpact,setFunctionalImpact]=useState('')
   // Preserve the selected label even if distinct choices share a score.
   const answers: Record<string, number> = {}
   for (const item of spec.props.items) {
@@ -247,11 +248,12 @@ export function ScaleForm({ spec, onAction, verified=false, restoredFromCatalog=
   }
   const warnings = [...scaleProtocolWarnings(spec),
     ...(!verified ? ['La versión y procedencia no están autenticadas por el catálogo profesional.'] : [])]
+  const hasFunctionalImpact=verified && /^(?:phq[ -]?9|gad[ -]?7)\b/iu.test(spec.props.title)
   const [copied, setCopied] = useState(false)
   const scored = scoreScale(spec, answers)
   const exportPdf = (): void => {
     const report=scaleAssessmentReport(spec,selected,{
-      participant,professional,context,observations,recommendations,
+      participant,professional,context,observations,recommendations,functionalImpact,
     },verified)
     if(report===null){setReportError('Completa todas las respuestas antes de generar el informe.');return}
     try{
@@ -278,6 +280,7 @@ export function ScaleForm({ spec, onAction, verified=false, restoredFromCatalog=
     ...scored.domains.map(domain => domain.label + ': ' + (domain.value ?? 'No completado')),
     'Interpretación: ' + (warnings.length > 0 ? 'No verificable' : scored.band?.label ?? 'No definida'),
     'Fuente: ' + (spec.props.source ?? 'No especificada'),
+    ...(hasFunctionalImpact?['Repercusión funcional (no puntuada): '+(functionalImpact||'No consignada')]:[]),
     ...warnings.map(warning => 'Advertencia: ' + warning)]
     void navigator.clipboard.writeText(lines.join('\n')).then(() => setCopied(true)).catch(() => setCopied(false))
   }
@@ -329,6 +332,20 @@ export function ScaleForm({ spec, onAction, verified=false, restoredFromCatalog=
         </div>
       </fieldset>)}
     </div>
+    {hasFunctionalImpact && <fieldset className={css.assessmentQuestion+' '+css.functionalQuestion}>
+      <legend><span className={css.questionNumber}>+</span>
+        Si ha marcado algún problema, ¿cuánta dificultad le ha causado para
+        trabajar, realizar sus tareas o relacionarse con otras personas?</legend>
+      <p className={css.questionHelp}>Pregunta complementaria de funcionamiento. No modifica el total.</p>
+      <div className={css.answerGrid}>
+        {['Ninguna dificultad','Algo difícil','Muy difícil','Extremadamente difícil'].map(option=>
+          <label key={option} className={css.answerChoice+(functionalImpact===option?' '+css.answerSelected:'')}>
+            <input type="radio" name="assessment-function" checked={functionalImpact===option}
+              onChange={()=>setFunctionalImpact(option)}/>
+            <span>{option}</span>
+          </label>)}
+      </div>
+    </fieldset>}
     <div className={css.result+' '+css.assessmentResult}>
       <span>Puntuación</span>
       <strong aria-live="polite">{scored.total === null ? '—' : scored.total}</strong>
@@ -394,7 +411,7 @@ export function ScaleForm({ spec, onAction, verified=false, restoredFromCatalog=
         </label>
         <button type="button" disabled={!shareConsent||scored.total===null} onClick={()=>{
           const data=scaleAssessmentReport(spec,selected,{
-            participant,professional,context,observations,recommendations,
+            participant,professional,context,observations,recommendations,functionalImpact,
           },verified)
           if(!data)return
           onAction('Redacta un BORRADOR de informe profesional del instrumento, con secciones '
@@ -414,7 +431,7 @@ export function ScaleForm({ spec, onAction, verified=false, restoredFromCatalog=
       <button type="button" onClick={copy} disabled={scored.total === null}>
         <PhoenixUiIcon name={copied ? 'check' : 'copy'} size={15} /> {copied ? 'Copiado' : 'Copiar resultado'}
       </button>
-      <button type="button" onClick={() => { setSelected({}); setCopied(false) }}>
+      <button type="button" onClick={() => { setSelected({}); setFunctionalImpact(''); setCopied(false) }}>
         <PhoenixUiIcon name="reset" size={15} /> Reiniciar
       </button>
     </div>
