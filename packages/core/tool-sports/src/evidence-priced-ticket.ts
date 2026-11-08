@@ -2,6 +2,7 @@
  * No combined-odds claims across different bookmakers or historical sources.
  */
 import { evidenceTicket } from './evidence-ticket.ts'
+import {investigateTicketSpecialists,type SpecialistGate} from './ticket-specialist-gate.ts'
 import { keylessEnabled,keylessOdds,type KeylessQuote } from './keyless-odds.ts'
 import { marketOdds,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome } from './sports.ts'
 
@@ -33,11 +34,23 @@ export async function evidencePricedTicket(
   env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,
   quotesProvider?:(sport:string,market:string,day:string,env:NodeJS.ProcessEnv,now:number)=>Promise<KeylessQuote[]>,
   marketPreference:'winner'|'double_chance'='winner',
+  specialistResearcher:typeof investigateTicketSpecialists=investigateTicketSpecialists,
 ):Promise<{card:ChatBlock;priced:boolean;placed:false;complete:boolean;
   verifiedEvents:number;quotedLegs:number;missingQuotes:number;
   sourceAudit:OddsAuditRow[];approvedLegs:number;multisportSatisfied:boolean;
+  specialistChecks:SpecialistGate[];researchedLegs:number;
   explanation:string}>{
   const research=await evidenceTicket(count,date,sport,fetcher,now,env)
+  const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
+    year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
+  // A winner picked from records cannot bypass the discipline-specific dossier.
+  // Review each selected fixture before attaching even one bookmaker quote.
+  const specialistChecks=await specialistResearcher(research.events.map(e=>({
+    sport:e.sport,league:e.league,eventId:e.eventId,date:day,
+    home:e.home,away:e.away,kickoff:e.kickoff,
+  })),fetcher,now,env)
+  const researchedLegs=specialistChecks.filter(x=>x.status==='researched').length
+  const specialistComplete=research.events.length===count&&researchedLegs===count
   const quoteAccess=[
     keylessEnabled(env)?'OddsHarvester habilitado (sujeto al acceso del sitio)':
       'OddsHarvester inactivo: requiere instalación y habilitación por el operador',
@@ -46,7 +59,7 @@ export async function evidencePricedTicket(
     'ESPN: cuotas solo cuando el proveedor publique mercados con fecha',
   ].join(' · ')
   const researchCard:ChatBlock={...research.card,props:{...research.card.props,
-    note:(String(research.card.props.note??'')+' Estado de fuentes de cuotas: '+quoteAccess+
+    note:(String(research.card.props.note??'')+' Especialistas consultados '+researchedLegs+'/'+count+'. Estado de fuentes de cuotas: '+quoteAccess+
       '. Los repositorios GitHub SportsbookReview/MLB son solo históricos.').slice(0,1000),
   }}
   const initialSources:OddsAuditRow[]=[
@@ -63,15 +76,14 @@ export async function evidencePricedTicket(
       'NO se consultan como cuota en vivo ni permiten generar combinadas actuales.'),
   ]
   const base={card:researchCard,priced:false as boolean,placed:false as const,
-    complete:research.complete,verifiedEvents:research.verifiedEvents,
+    complete:research.complete&&specialistComplete,verifiedEvents:research.verifiedEvents,
     quotedLegs:0,missingQuotes:count,sourceAudit:initialSources,
+    specialistChecks,researchedLegs,
     multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
     explanation:'Preselección ESPN, cuotas todavía NO verificadas: '+quoteAccess+
       '. Los archivos históricos no ofrecen precios para apostar hoy.'}
   // Even an incomplete 4/5 slate must audit the four real events for quotes;
   // otherwise 'no prices available' falsely implies the sources were checked.
-  const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
-    year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
   const categories=[...new Set(research.events.map(e=>e.sport))]
   const sources=await Promise.allSettled(categories.map(async category=>{
     const route=routing[category]
@@ -175,6 +187,12 @@ export async function evidencePricedTicket(
   }}
   const checked={...base,card:auditCard,sourceAudit,quotedLegs,
     missingQuotes:count-quotedLegs}
+  if(!specialistComplete)return{...checked,complete:false,
+    explanation:'Borrador INCOMPLETO: '+researchedLegs+'/'+count+
+      ' expedientes deportivos individuales suficientemente documentados. '+
+      specialistChecks.filter(x=>x.status!=='researched').map(x=>
+        x.sport+' '+x.eventId+': '+x.pendingSteps.slice(0,2).join('; ')).join(' | ')+
+      '. No se cotiza ticket como investigación completa.'}
   if(!research.complete)return{...checked,
     explanation:'Borrador INCOMPLETO: '+research.verifiedEvents+'/'+count+
       ' partidos con tendencia histórica documentada, '+
@@ -217,6 +235,7 @@ export async function evidencePricedTicket(
     const pricedRow=row&&typeof row==='object'&&!Array.isArray(row)
       ?row as Record<string,unknown>:{}
     return {...pricedRow,
+      specialistResearch:specialistChecks[index]??null,
       ...Object.fromEntries(['homeTeam','awayTeam','homeLogo','awayLogo','sport',
         'league','country','rationale','when'].filter(k=>typeof prior[k]==='string')
         .map(k=>[k,prior[k]])),
@@ -230,14 +249,15 @@ export async function evidencePricedTicket(
   const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,
     subtitle:'Cuotas verificadas · '+best.book+' · análisis de forma con datos ESPN',
-    note:'COTIZACIÓN VERIFICADA, NO APUESTA ACEPTADA POR LA CASA. '+(marketPreference==='double_chance'
+    note:'COTIZACIÓN DE INVESTIGACIÓN CON DOSSIER DEPORTIVO POR PATA, NO APUESTA APROBADA NI GANADORA. '+(marketPreference==='double_chance'
       ?'Fútbol: la doble oportunidad cubre empate (1X/X2), NO asegura ganar. ':'')+
-      'Formas y descanso históricos NO son probabilidades calibradas. Lesiones, alineaciones y disponibilidad exacta en la banca pendientes; cuotas variables. '+priced.warning,
+      'Formas y descanso históricos NO son probabilidades calibradas. El expediente deportivo puede señalar titulares, bajas y estadísticas PENDIENTES; confirmar la casa antes de apostar. '+priced.warning,
     askPrompt:'Kira, comprueba lesiones, titulares, estadísticas específicas, correlación y vigencia de las '+count+' cuotas antes de recomendar este ticket.',
   }}
   return{card,priced:true,placed:false,complete:true,verifiedEvents:research.verifiedEvents,
-    quotedLegs:count,missingQuotes:0,sourceAudit,approvedLegs:count,
+    quotedLegs:count,missingQuotes:0,sourceAudit,approvedLegs:0,
+    specialistChecks,researchedLegs,
     multisportSatisfied:research.multisportSatisfied,
     explanation:'Las '+count+' selecciones tienen cuota vigente y la misma casa '+best.book+
-      '. El boleto conserva logos, análisis y riesgos por partido; NO es un modelo de acierto calibrado. Validar lesiones, titulares, restricciones y precios antes de apostar.'}
+      '. Cada pata pasó por su expediente deportivo; NO equivale a aprobación de apuesta ni es modelo de acierto calibrado. Validar lesiones, titulares, restricciones y precios antes de apostar.'}
 }
