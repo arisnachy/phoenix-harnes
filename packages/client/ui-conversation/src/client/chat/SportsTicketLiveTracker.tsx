@@ -95,7 +95,7 @@ function LiveLegContent({leg,index,receipt,game,meta,onGrade}:{
         selected={Boolean(linked&&p?.side==='home'&&p.market!=='total')} score={exact?.homeScore}/>
     </div>
     <div className={css.goal}>
-      <small>MERCADO SELECCIONADO · BOLETO #{receipt}</small>
+      <small>OBJETIVO DE LA PATA · BOLETO #{receipt}</small>
       <strong>{goal(leg)}</strong>
       {leg.price&&leg.price!=='No disponible'&&<span className={css.quote}>Cuota del recibo · {leg.price}</span>}
       <span className={css.grade} data-grade={grade.state}>{grade.label}</span>
