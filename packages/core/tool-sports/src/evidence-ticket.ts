@@ -11,6 +11,9 @@ import { diversifiedSportsPicks,diversifiedSportsShortlist } from './sports-dive
 const defaultLeagues = [
   ['basketball','nba'],['hockey','nhl'],['baseball','mlb'],['football','nfl'],
   ['soccer','eng.1'],['soccer','esp.1'],['soccer','usa.1'],['soccer','uefa.champions'],
+  ['soccer','por.1'],['soccer','ita.1'],['soccer','ned.1'],['soccer','ger.1'],
+  ['soccer','fra.1'],['soccer','mex.1'],['soccer','bra.1'],['soccer','arg.1'],
+  ['soccer','uefa.europa'],
   ['basketball','wnba'],['tennis','atp'],['tennis','wta'],
 ] as const
 const dayNow=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
@@ -48,15 +51,15 @@ export async function evidenceTicket(
   }))
   const eligible=slate.flatMap(r=>r.status==='fulfilled'&&r.value.active>0?[r.value]:[])
   eligible.sort((a,b)=>b.active-a.active||a.sport.localeCompare(b.sport))
-  // Scan a bounded slate of six leagues, in batches of three. NFL needs
-  // several weeks to collect three real matches; soccer typically needs 21 days.
+  // Scan up to 12 verified active leagues, in batches of three. NFL needs
+  // several weeks to collect three real matches; soccer needs up to 56 calendar days to find five actual games.
   // Only verified future event IDs can ever be promoted to ticket legs.
-  const shortlist=sportFilter?eligible.slice(0,6):diversifiedSportsShortlist(eligible,6)
+  const shortlist=sportFilter?eligible.slice(0,6):diversifiedSportsShortlist(eligible,12)
   const reports:Array<PromiseSettledResult<Awaited<ReturnType<typeof researchSport>>>>=[]
   for(let offset=0;offset<shortlist.length;offset+=3){
     const batch=await Promise.allSettled(shortlist.slice(offset,offset+3).map(({sport,league})=>
       researchSport(sport,league,date,fetcher,now,env,
-        sport==='football'?28:sport==='soccer'?28:sport==='tennis'?28:21)))
+        sport==='football'?35:sport==='soccer'?56:sport==='tennis'?42:28)))
     reports.push(...batch)
   }
   const candidateLegs:Array<{pick:ResearchTicketLeg;rank:number;home:string;away:string;kickoff:string}>=[]

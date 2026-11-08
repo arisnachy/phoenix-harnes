@@ -3,6 +3,7 @@
  */
 import {type MarketOutcome} from './sports.ts'
 import {collectDirectEspnStats,type DirectTeam} from './sports-direct-stats.ts'
+import {readHistoricalScoreboard} from './sports-historical-scoreboard.ts'
 import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
 import {basketballSlate,basketballRead,record,values,label,id,teamKey,regulationMinutes,
   type BasketballFixture,type BasketballLeague,type BasketballSource} from './basketball-research-core.ts'
@@ -212,15 +213,19 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
   const sources=board.sources
   const day0=Date.parse(date+'T12:00:00Z')
   const prior=(n:number)=>new Date(day0-n*86_400_000).toISOString().slice(0,10).replaceAll('-','')
-  const [summary,history,injuriesData,newsData,players]=await Promise.all([
+  const [summary,historyReport,injuriesData,newsData,players]=await Promise.all([
     basketballRead<unknown>(root+'summary?event='+eventId,fetcher,sources,now),
-    basketballRead<unknown>(root+'scoreboard?dates='+prior(42)+'-'+prior(1)+'&limit=250',fetcher,sources,now),
+    readHistoricalScoreboard(root,new Date(day0-42*86_400_000).toISOString().slice(0,10),
+      new Date(day0-86_400_000).toISOString().slice(0,10),
+      url=>basketballRead<{events?:unknown[]}>(url,fetcher,sources,now),
+      [fixture.home.id,fixture.away.id]),
     basketballRead<unknown>(root+'injuries',fetcher,sources,now),
     basketballRead<unknown>(root+'news?limit=30',fetcher,sources,now),
     collectDirectEspnStats('basketball',league,[
       {id:fixture.home.id,name:fixture.home.name},{id:fixture.away.id,name:fixture.away.name}
     ],fetcher,now,maxPlayers),
   ])
+  const history={events:historyReport.events}
   const build=(side:'home'|'away')=>{
     const team=fixture[side],raw=players.teams.find(t=>t.id===team.id)
     const roster=raw?resolvePlayers(raw):[]
@@ -281,6 +286,7 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
     ...(!teams.away.quintetConfirmed?['Quinteto titular visitante no confirmado']:[]),
     ...(!teams.home.roster.length?['Roster y estadísticas locales no accesibles']:[]),
     ...(!teams.away.roster.length?['Roster y estadísticas visitantes no accesibles']:[]),
+    ...(historyReport.status!=='verified'?['Cobertura ESPN histórica parcial: '+historyReport.explanation]:[]),
     ...(!teams.home.lastGames.length?['Historial reciente local no verificado']:[]),
     ...(!teams.away.lastGames.length?['Historial reciente visitante no verificado']:[]),
     ...(!injuriesData?['Estado de lesionados sin fuente verificable']:[]),
