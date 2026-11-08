@@ -222,12 +222,14 @@ const apiFootballIds:Record<string,number>={
 async function apiFootballFixture(input:FreeFixture,fetcher:typeof fetch,now:number,
   key:string):Promise<BackupFinding>{
   const league=apiFootballIds[input.league]
-  const year=Number(input.date.slice(0,4))
-  const month=Number(input.date.slice(5,7))
+  // API-Football fixture.date uses UTC; local-day labels can cross midnight.
+  const utcDay=new Date(Date.parse(input.kickoff)).toISOString().slice(0,10)
+  const year=Number(utcDay.slice(0,4))
+  const month=Number(utcDay.slice(5,7))
   const season=['usa.1','mex.1','bra.1','arg.1'].includes(input.league)?
     year:year-(month<7?1:0)
   const url='https://v3.football.api-sports.io/fixtures?league='+league+
-    '&season='+season+'&date='+input.date
+    '&season='+season+'&date='+utcDay
   const base={provider:'API-Football' as const,url,checkedAt:checked(now)}
   try{
     const root=obj(await optionalJson('API-Football',url,
