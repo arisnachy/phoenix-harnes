@@ -16,6 +16,8 @@ export interface AssessmentReportData {
   readonly rows:readonly AssessmentReportRow[]
   readonly observations:string;readonly recommendations:string
   readonly verified:boolean
+  readonly functionalImpact?:string
+  readonly clinicalGuidance?:readonly string[]
 }
 const W=612,H=792
 const navy='#14293a',teal='#147c83',ink='#253344',gray='#697884',light='#e9f2f2',line='#d5e1e4'
@@ -192,6 +194,14 @@ export function buildAssessmentPdfBytes(data:AssessmentReportData):Uint8Array<Ar
   paragraph(pages,safe(data.classification),title,{bold:true})
   paragraph(pages,'Esta clasificación describe las respuestas según la regla declarada. '
     +'No constituye por sí misma diagnóstico médico, psicológico o neuropsicológico.',title)
+  if(data.functionalImpact){
+    section(pages,'Repercusión funcional (no puntuada)',title)
+    paragraph(pages,safe(data.functionalImpact),title)
+  }
+  if(data.clinicalGuidance?.length){
+    section(pages,'Consideraciones de guía para revisión profesional',title)
+    for(const note of data.clinicalGuidance)paragraph(pages,'- '+safe(note,800),title)
+  }
   if(data.domains.length){
     section(pages,'Dimensiones evaluadas',title)
     for(const d of data.domains)row(pages,safe(d.label,50),safe(d.value,40),title)
