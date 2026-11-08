@@ -2,6 +2,7 @@
  * These scores do NOT represent calibrated probabilities or betting EV.
  */
 import type {DailyMarketCandidate} from './daily-market-shortlist.ts'
+import type {DailyNhlSpecialist} from './daily-nhl-specialist.ts'
 import type {auditUniversalMatchup} from './universal-matchup-factors.ts'
 
 export type MatchupResearch=Awaited<ReturnType<typeof auditUniversalMatchup>>
@@ -19,6 +20,7 @@ export type MarketResearchReview={
   evidenceFor:string[];warnings:string[];rankingScore:number
   descriptiveLineDistance:number|null;relativeSignal:number|null
   /** Diagnostic only; historical margins are not a calibrated NHL cover forecast. */
+  nhlOfficial?:DailyNhlSpecialist
   nhlPuckLineAudit?:{
     side:string;line:number;impliedBreakEven:number;teamGames:number
     teamMissedLine:number;teamHistoricalCoverRate:number|null
