@@ -1032,9 +1032,9 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         <div className={css.sportsTicketGroups}>{[...groups].map(([heading,legs])=>
           <section key={heading} className={css.sportsTicketGroup} aria-label={heading}>
             <h4><span className={css.sportsTicketGroupTitle}>
-              <span className={css.sportsTicketSportEmblem} aria-hidden="true">
+              <span className={css.sportsTicketSportEmblem}>
                 <SportsLeagueBadge league={legs[0]?.league} sport={legs[0]?.sport} compact/>
-                <span className={css.sportsTicketSportFallback}>{ticketSportEmblem(heading)}</span>
+                <span className={css.sportsTicketSportFallback} aria-hidden="true">{ticketSportEmblem(heading)}</span>
               </span>
               <span>{heading}</span>
             </span><small>{legs.length} {legs.length===1?'pata':'patas'}</small></h4>
