@@ -55,7 +55,8 @@ const normal=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,''
 export function quoteSideNoVig(
   offered:MarketSideOffer,quotes:readonly MarketSideOffer[],now:number,
 ):number|null{
-  const outcomes=offered.market==='h2h'?2:offered.market==='1x2'?3:0
+  const outcomes=['h2h','home_away','moneyline','match_winner'].includes(offered.market)?2:
+    offered.market==='1x2'?3:0
   if(!outcomes)return null
   const at=Date.parse(offered.updatedAt),kickoff=Date.parse(offered.time)
   if(!Number.isFinite(at)||!Number.isFinite(kickoff)||at>now||kickoff<=now)return null
