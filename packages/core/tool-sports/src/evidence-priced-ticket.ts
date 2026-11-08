@@ -133,8 +133,15 @@ export async function evidencePricedTicket(
     return lines.flatMap(q=>{
       const time=q.timeIso??''
       const updated=Date.parse(q.updatedAt)
-      if(!Number.isFinite(Date.parse(time))||!Number.isFinite(updated)
-        ||updated>now||now-updated>3_600_000)return []
+      const delayedSource=q.source==='TheRundown'||q.source==='SportsGameOdds'
+      const observedAt=Date.parse(q.observedAt??'')
+      const currentSnapshot=delayedSource&&Number.isFinite(observedAt)&&
+        observedAt<=now&&now-observedAt<=15*60_000
+      const validBookTime=Number.isFinite(updated)&&updated<=now&&
+        now-updated<7*86_400_000
+      if(!Number.isFinite(Date.parse(time))||
+        !(currentSnapshot?validBookTime:
+          Number.isFinite(updated)&&updated<=now&&now-updated<=3_600_000))return []
       // Soccer 3-way victory must demonstrably include DRAW at this book.
       if(event.sport==='soccer'&&!lines.some(draw=>
         draw.eventId===q.eventId&&draw.bookmaker===q.bookmaker
@@ -144,6 +151,7 @@ export async function evidencePricedTicket(
         market:event.sport==='soccer'?'1x2':'h2h',
         selection:q.selection,point:q.point??null,price:q.price,
         home:q.home,away:q.away,time,updatedAt:q.updatedAt,
+        observedAt:currentSnapshot?q.observedAt:undefined,
         source:q.source??'Proveedor de cuotas público',sportKey,
       }] satisfies KeylessQuote[]
     })
@@ -155,9 +163,14 @@ export async function evidencePricedTicket(
     const expectedMarket=doubleChance?'double_chance':event.sport==='soccer'?'1x2':'h2h'
     return all.filter(q=>{
       const updated=Date.parse(q.updatedAt),quoteKickoff=Date.parse(q.time)
+      const source=q.source==='TheRundown'||q.source==='SportsGameOdds'
+      const observedAt=Date.parse(q.observedAt??'')
+      const snapshotValid=source&&Number.isFinite(observedAt)&&
+        now-observedAt>=0&&now-observedAt<=15*60_000
+      const quoteAge=now-updated
       return Number.isFinite(kickoff)&&Number.isFinite(updated)&&Number.isFinite(quoteKickoff)
         &&Math.abs(kickoff-quoteKickoff)<=3_600_000
-        &&now-updated>=0&&now-updated<=3_600_000
+        &&quoteAge>=0&&(snapshotValid?quoteAge<7*86_400_000:quoteAge<=3_600_000)
         &&typeof q.bookmaker==='string'&&q.bookmaker.trim().length>0
         &&typeof q.eventId==='string'&&q.eventId.length>0
         &&Number.isFinite(q.price)&&q.price>1&&q.price<1000
@@ -252,7 +265,7 @@ export async function evidencePricedTicket(
   const marketQuotes:MarketOutcome[]=best.choices.map((q,index)=>({
     eventId:q.eventId,bookmaker:q.bookmaker,market:q.market,selection:q.selection,point:q.point,
     price:q.price,home:q.home,away:q.away,time:q.time,updatedAt:q.updatedAt,
-    source:q.source,sportKey:leagueSportKey[research.events[index]?.league??'']??routing[research.events[index]?.sport??'']?.oddsSportKey??'sports_keyless',
+    observedAt:q.observedAt,source:q.source,sportKey:leagueSportKey[research.events[index]?.league??'']??routing[research.events[index]?.sport??'']?.oddsSportKey??'sports_keyless',
   }))
   const selections:MarketSelection[]=marketQuotes.map(q=>({
     eventId:q.eventId,bookmaker:q.bookmaker,market:q.market,selection:q.selection,point:q.point??null,
@@ -285,6 +298,7 @@ export async function evidencePricedTicket(
     subtitle:'Cuotas verificadas · '+best.book+' · análisis de forma con datos ESPN',
     note:'COTIZACIÓN DE INVESTIGACIÓN CON DOSSIER DEPORTIVO POR PATA, NO APUESTA APROBADA NI GANADORA. '+(marketPreference==='double_chance'
       ?'Fútbol: la doble oportunidad cubre empate (1X/X2), NO asegura ganar. ':'')+
+      'TheRundown Free informa cuotas con retraso aproximado de 5 min; observedAt es consulta del proveedor, updatedAt es último cambio de la casa. Confirmar precio actual antes de apostar. '+
       'Contradicciones de Bet Better: '+modelDisagreements+
       ' (predicción independiente, no cuota). Formas y descanso históricos NO son probabilidades calibradas. El expediente deportivo puede señalar titulares, bajas y estadísticas PENDIENTES; confirmar la casa antes de apostar. '+priced.warning,
     askPrompt:'Kira, comprueba lesiones, titulares, estadísticas específicas, correlación y vigencia de las '+count+' cuotas antes de recomendar este ticket.',
