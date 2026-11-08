@@ -251,7 +251,7 @@ export async function evidencePricedTicket(
       normalize(q.selection)===normalize(expected)&&
       q.market==='h2h'&&q.nonCotizable&&
       Number.isFinite(Date.parse(q.timeIso??''))&&
-      Math.abs(Date.parse(q.timeIso)-Date.parse(event.kickoff))<=3_600_000 &&
+      Math.abs(Date.parse(q.timeIso??'')-Date.parse(event.kickoff))<=3_600_000 &&
       q.bookmaker.length>0&&!q.bookmaker.startsWith('ESPN proveedor #'))
     return {index,quote:candidates[0]??null}
   }).filter(x=>x.quote!==null)
