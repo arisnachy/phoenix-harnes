@@ -15,7 +15,7 @@ export interface EspnMarketQuote {
   time: string
   timeIso: string
   updatedAt: string
-  endpointSource?:'scoreboard'|'core'|'summary'
+  endpointSource?:'scoreboard'|'core'|'summary'|'website'
 }
 type QuotedPrice=number|string|{american?:string|number;decimal?:string|number;
   value?:string|number;alternateDisplayValue?:string|number}
