@@ -34,6 +34,7 @@ export async function evidencePricedTicket(
   env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,
   quotesProvider?:(sport:string,market:string,day:string,env:NodeJS.ProcessEnv,now:number)=>Promise<KeylessQuote[]>,
   marketPreference:'winner'|'double_chance'='winner',
+  specialistResearcher:typeof investigateTicketSpecialists=investigateTicketSpecialists,
 ):Promise<{card:ChatBlock;priced:boolean;placed:false;complete:boolean;
   verifiedEvents:number;quotedLegs:number;missingQuotes:number;
   sourceAudit:OddsAuditRow[];approvedLegs:number;multisportSatisfied:boolean;
@@ -44,7 +45,7 @@ export async function evidencePricedTicket(
     year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
   // A winner picked from records cannot bypass the discipline-specific dossier.
   // Review each selected fixture before attaching even one bookmaker quote.
-  const specialistChecks=await investigateTicketSpecialists(research.events.map(e=>({
+  const specialistChecks=await specialistResearcher(research.events.map(e=>({
     sport:e.sport,league:e.league,eventId:e.eventId,date:day,
     home:e.home,away:e.away,kickoff:e.kickoff,
   })),fetcher,now,env)
