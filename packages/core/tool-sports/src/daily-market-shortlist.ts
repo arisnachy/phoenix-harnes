@@ -153,22 +153,25 @@ export function shortlistDailyMarkets(
   const perBook=new Map<string,DailyMarketCandidate[]>()
   for(const x of candidates)perBook.set(x.bookmaker,[...(perBook.get(x.bookmaker)??[]),x])
   const pick=(rows:DailyMarketCandidate[])=>{
-    const sorted=[...rows].sort((a,b)=>b.marketNoVigShare-a.marketNoVigShare||
+    // Discovery must not rank a bet by implied chance (or automatically
+    // surface totals/+1.5 first). All authentic market families for an event
+    // are researched before the final choice is made.
+    const marketPriority:Record<DailyMarketCandidate['market'],number>={
+      h2h:0,totals:1,spreads:2,
+    }
+    const sorted=[...rows].sort((a,b)=>
       b.quoteUpdatedAt.localeCompare(a.quoteUpdatedAt)||
-      a.fixture.localeCompare(b.fixture))
+      a.fixture.localeCompare(b.fixture)||
+      marketPriority[a.market]-marketPriority[b.market])
     const used=new Set<string>(),chosen:DailyMarketCandidate[]=[]
     const take=(p:DailyMarketCandidate)=>{
       const event=p.sport+'|'+p.league+'|'+p.espnEventId
       if(chosen.length>=researchPool||used.has(event))return
       chosen.push(p);used.add(event)
     }
-    // Surface real non-winner markets first so the researcher sees alternatives,
-    // but do not interpret a bookmaker share as independent model probability.
-    for(const market of ['totals','spreads'] as const){
-      const option=sorted.find(x=>x.market===market)
-      if(option)take(option)
-    }
-    // Then diversify by actual sport before adding a second match in one sport.
+    // Diversify by actual sport before filling the pool; not by a bookmaker's
+    // favorite or by market type. Two opposite market sides stay in outcomes.
+    // All alternative families for each chosen fixture are compared later.
     const sports=[...new Set(sorted.map(x=>x.sport))]
     for(const sport of sports){
       if(chosen.some(x=>x.sport===sport))continue
@@ -193,7 +196,7 @@ export function shortlistDailyMarkets(
     const eligible=(perBook.get(best!.bookmaker)??[])
       .filter(x=>eventKey(x)===eventKey(chosen)&&x!==chosen)
       .sort((a,b)=>Number(a.market===chosen.market)-Number(b.market===chosen.market)||
-        b.marketNoVigShare-a.marketNoVigShare||
+        b.quoteUpdatedAt.localeCompare(a.quoteUpdatedAt)||
         a.market.localeCompare(b.market))
     const markets=new Set([chosen.market])
     const extra:DailyMarketCandidate[]=[]

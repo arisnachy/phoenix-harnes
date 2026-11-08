@@ -71,3 +71,43 @@ test('independent provider outage does not become a favorite',()=>{
   assert.equal(review.selectedOutcome,null)
   assert.match(review.warnings.join(' '),/HTTP 503/)
 })
+
+test('Toronto +1.5 NHL is rejected when two-goal risk contradicts expensive odds',()=>{
+  const basic=market('spreads','Away',1.5)
+  const choice={...basic,sport:'hockey',league:'nhl',
+    outcomes:[{selection:'Home',line:-1.5,decimalOdds:2.9,noVigShare:.32},
+      {selection:'Away',line:1.5,decimalOdds:1.40816,noVigShare:.68}]}
+  const base=evidence()
+  const matchup={...base,sport:'hockey',league:'nhl',
+    home:{name:'Home',form:{games:10,scoredPerGame:3.7,allowedPerGame:2.6},
+      lastGames:Array.from({length:10},(_,i)=>i<7?
+        {scored:4,allowed:2}:{scored:3,allowed:4})},
+    away:{name:'Away',form:{games:10,scoredPerGame:3.5,allowedPerGame:4},
+      lastGames:Array.from({length:10},(_,i)=>i<5?
+        {scored:3,allowed:5}:{scored:4,allowed:3})}}
+  const review=assessDailyMarketEvidence(choice,matchup)
+  assert.equal(review.selectedOutcome.selection,'Away')
+  assert.equal(review.status,'contraindicated')
+  assert.equal(review.nhlPuckLineAudit.teamMissedLine,5)
+  assert.equal(review.nhlPuckLineAudit.teamGames,10)
+  assert.equal(review.nhlPuckLineAudit.opponentWouldBeatLineRate,.7)
+  assert.equal(review.nhlPuckLineAudit.approved,false)
+  assert.match(review.warnings.join(' '),/BLOQUEO NHL/)
+})
+test('a favorable descriptive NHL +1.5 remains uncertain without goalie and xG verification',()=>{
+  const choice={...market('spreads','Away',1.5),sport:'hockey',league:'nhl',
+    outcomes:[{selection:'Home',line:-1.5,decimalOdds:3,noVigShare:.3},
+      {selection:'Away',line:1.5,decimalOdds:1.4,noVigShare:.7}]}
+  const base=evidence()
+  const matchup={...base,sport:'hockey',league:'nhl',
+    home:{name:'Home',form:{games:10,scoredPerGame:3.2,allowedPerGame:3},
+      lastGames:Array.from({length:10},()=>({scored:3,allowed:2}))},
+    away:{name:'Away',form:{games:10,scoredPerGame:3,allowedPerGame:3.2},
+      lastGames:Array.from({length:10},()=>({scored:3,allowed:2}))}}
+  const review=assessDailyMarketEvidence(choice,matchup)
+  assert.equal(review.selectedOutcome.selection,'Away')
+  assert.equal(review.status,'uncertain')
+  assert.equal(review.nhlPuckLineAudit.goalieConfirmed,false)
+  assert.equal(review.nhlPuckLineAudit.calibrated,false)
+  assert.equal(review.nhlPuckLineAudit.approved,false)
+})
