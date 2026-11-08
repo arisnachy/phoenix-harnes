@@ -317,3 +317,21 @@ Event-level discovery covers additional provider-documented **soccer corners, bo
 ## Daily price audit and alternate lines
 
 Every deep daily-market review now includes the exact selected outcome's break-even percentage, no-vig bookmaker share, price premium and the operator's overround. These are derived prices, **not predictions**. Expected value and independent win probability remain null unless a market-specific estimate was validated on at least 24 held-out events, matches the fixture/selection/line and precedes kickoff; the automatic daily pipeline does not currently supply such a certified model for spread and total markets. The price filter marks favorites requiring at least 80% success as uncertain without independent calibration, and NHL puck lines remain blocked without confirmed goalie and goal-quality evidence. Different real alternate lines for the same event are researched using one reused ESPN dossier. The native priced research card includes only descriptively supported sides and never implies profitability or an accepted wager.
+
+## Recuperación efectiva de fuentes · 2026-11-08
+
+**Problema reproducido**: ESPN devuelve HTTP 400 al consultar `scoreboard?dates=YYYYMMDD-YYYYMMDD` desde septiembre de 2026. Eso vaciaba historias NBA/WNBA y fútbol y dejaba expedientes sin forma, descanso ni cruces. Kira no debe convertir un error de HTTP en ausencia de partidos.
+
+**Reparación**:
+1. Consultar marcador `scoreboard?dates=YYYYMM&limit=500` por cada mes; si la fuente falla o trunca, consultar cada fecha `YYYYMMDD` con concurrencia máxima 4 y dos sondas iniciales, sin repetir el rango roto.
+2. Si el calendario mensual/diario no responde, comprobar `teams/{id}/schedule` usando únicamente IDs oficiales provenientes del partido; solo contar encuentros con fecha, ID numérico, estado final y resultado observado.
+3. Mantener trazabilidad de meses, días y calendarios consultados; una cobertura parcial se declara explícitamente. Cinco partidos reales por equipo (NFL tres) pueden sostener un expediente *descriptivo*, pero nunca por sí solos una probabilidad calibrada.
+4. El generador automático investiga hasta doce ligas activas, incluyendo por.1/ita.1/ned.1/ger.1/fra.1/mex.1/bra.1/arg.1. Fútbol utiliza 56 días de ventana histórica (no 56 consultas cuando ESPN permite filtros por mes).
+5. Consultas a jugadores adaptativas: roster completo visible, métricas profundas solo si el endpoint aporta datos o se requiere sondeo controlado; se evitan decenas de gamelogs/splits vacíos y se limita concurrencia a 3.
+6. Recuperación secundaria por TheSportsDB, OpenLigaDB, OpenFootball y nflverse. Opcionales con claves almacenadas en el servidor: `PHOENIX_BALLDONTLIE_API_KEY` (NBA/WNBA), `PHOENIX_API_FOOTBALL_KEY`, `PHOENIX_FOOTBALL_DATA_TOKEN`. Kira ejecuta `sports_chat_source_resilience` para auditar resultados reales por partido.
+7. No eludir 401/403/429, CAPTCHA, rate limits ni derechos de acceso. Si `PHOENIX_SPORTS_ESPN_DISABLED=1`, el operador debe corregir su propia configuración; no ignorar este opt-out. `THE_ODDS_API_KEY` en HTTP 401 significa credencial no válida o sin acceso; no equiparar odds históricas, análisis editorial o marcador a precios utilizables.
+
+**Pruebas** (Node 24): `node --experimental-strip-types --test packages/core/tool-sports/tests/sports-historical-scoreboard.test.mjs packages/core/tool-sports/tests/evidence-ticket.test.mjs packages/core/tool-sports/tests/sports-direct-stats.test.mjs packages/core/tool-sports/tests/free-sports-source-audit.test.mjs packages/core/tool-sports/tests/nflverse-injury-report.test.mjs`.
+Luego `pnpm exec tsc -b tsconfig.host.json --pretty false`. CI contiene esta secuencia para Linux y Windows.
+
+**Chequeo de despliegue**: Después de fusionar, PHOENIX debe actualizarse/reiniciarse para cargar el código y revisar sus variables de entorno. GitHub Actions puede comprobar tipos y pruebas simuladas, pero no garantiza acceso a proveedores externos desde la red donde se ejecuta PHOENIX.
