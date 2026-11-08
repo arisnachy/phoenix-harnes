@@ -217,7 +217,8 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
     basketballRead<unknown>(root+'summary?event='+eventId,fetcher,sources,now),
     readHistoricalScoreboard(root,new Date(day0-42*86_400_000).toISOString().slice(0,10),
       new Date(day0-86_400_000).toISOString().slice(0,10),
-      url=>basketballRead<{events?:unknown[]}>(url,fetcher,sources,now)),
+      url=>basketballRead<{events?:unknown[]}>(url,fetcher,sources,now),
+      [fixture.home.id,fixture.away.id]),
     basketballRead<unknown>(root+'injuries',fetcher,sources,now),
     basketballRead<unknown>(root+'news?limit=30',fetcher,sources,now),
     collectDirectEspnStats('basketball',league,[
