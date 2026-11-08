@@ -1,0 +1,39 @@
+name: Clinical Visual Diagnostic Integrity
+
+on:
+  pull_request:
+    branches: [main, stable]
+    paths:
+      - 'packages/core/agent/src/model-selection.ts'
+      - 'packages/core/agent/tests/visual-analysis-routing.spec.ts'
+      - 'packages/core/tool-health/src/**'
+      - 'packages/core/tool-health/tests/clinical-evidence-quality.spec.ts'
+      - '.github/workflows/clinical-visual-diagnostic-integrity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  visual-diagnostic-integrity:
+    name: Evidence-backed clinical image and route contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Prove the image route and evidence gates
+        run: |
+          pnpm exec vitest run \
+            packages/core/agent/tests/visual-analysis-routing.spec.ts \
+            packages/core/tool-health/tests/clinical-evidence-quality.spec.ts
+      - name: Confirm no unreviewed clinical claim escapes unit contracts
+        run: node --experimental-strip-types --test scripts/phoenix-health-diagnostic-accuracy.test.mjs

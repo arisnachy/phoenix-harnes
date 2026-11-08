@@ -1472,9 +1472,17 @@ export function installModelSelection(
       }
       const directText = directUserTextForTurn(_payload.agent, _payload.turn)
       if (isKiraCodexAutoLead(selected, scopedAgent)) {
-        // Reading the user's original image is a source-analysis step, not a
-        // Luna coordination or a model-visible Sol planning handoff.
-        if (_payload.step === 1 && humanImageInTurn(_payload.agent.session.events, _payload.turn)) {
+        // Keep source interpretation on the same vision-capable specialist
+        // through every step of the *same* image reading; the first step alone
+        // previously handed a follow-up clinical conclusion back to Luna.
+        // Implementation and artifact-generation steps retain Luna execution.
+        const uploadedImage = humanImageInTurn(_payload.agent.session.events, _payload.turn)
+        const needsArtifactExecution = isToolAcquisitionRequest(directText)
+          || isStandaloneVisualPreviewRequest(directText)
+          || /(?:crea|genera|dibuja|renderiza|edita|exporta|construye|create|generate|draw|render|export|build)[^\n]{0,80}(?:imagen|foto|3d|modelo|diagrama|informe|pdf|image|model|diagram|report)/iu.test(directText)
+        if (uploadedImage
+          && (!exactUserChoice || isPhoenixCodexAutoSelection(selected))
+          && (_payload.step === 1 || !needsArtifactExecution)) {
           const specialist = await availableVisualAnalysisRoute(agentCtx)
           if (specialist !== undefined) {
             const { reasoningEffort: _oldEffort, ...withoutInheritedEffort } = resolved
