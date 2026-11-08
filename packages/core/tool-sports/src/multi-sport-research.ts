@@ -3,6 +3,7 @@
  * This provides descriptive features, NOT calibrated odds or win probabilities.
  */
 import { getFeed, hasSportsPermission, sportsCatalog } from './sports.ts'
+import {readHistoricalScoreboard} from './sports-historical-scoreboard.ts'
 
 type Competitor = {
   id?:string|number;homeAway?:string;score?:number|string
@@ -91,8 +92,8 @@ export async function researchSport(
   if(!Object.hasOwn(sportsCatalog,sport)||!sportsCatalog[sport]?.includes(league))
     throw Error('Deporte/liga fuera de catálogo verificado')
   if(!valid(date))throw Error('Fecha inválida (AAAA-MM-DD)')
-  if(!Number.isInteger(lookbackDays)||lookbackDays<1||lookbackDays>28)
-    throw Error('Ventana histórica requiere entre 1 y 28 días')
+  if(!Number.isInteger(lookbackDays)||lookbackDays<1||lookbackDays>62)
+    throw Error('Ventana histórica requiere entre 1 y 62 días')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por el operador')
   const url=(day:string)=>'https://site.api.espn.com/apis/site/v2/sports/'+
     sport+'/'+league+'/scoreboard?dates='+day.replaceAll('-','')
@@ -109,13 +110,19 @@ export async function researchSport(
   }).slice(0,12)??[]
   if(!upcoming.length)throw Error('No hay encuentros futuros verificables')
   const starting=Date.parse(date+'T12:00:00Z')
-  const days=Array.from({length:lookbackDays},(_,i)=>{
-    const stamp=new Date(starting-(i+1)*86_400_000)
-    return stamp.toISOString().slice(0,10)
+  const first=new Date(starting-lookbackDays*86_400_000).toISOString().slice(0,10)
+  const last=new Date(starting-86_400_000).toISOString().slice(0,10)
+  const teamIds=upcoming.slice(0,2).flatMap(e=>{
+    const pair=sides(e)
+    return[pid(pair.home),pid(pair.away)].filter(Boolean)
   })
-  const jobs=await Promise.allSettled(days.map(retrieve))
-  const archived=jobs.flatMap(job=>job.status==='fulfilled'?job.value.events??[]:[])
-  const successfulDays=jobs.filter(job=>job.status==='fulfilled').length
+  const archive=await readHistoricalScoreboard(
+    'https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+'/',
+    first,last,async url=>{
+      try{return await getFeed<Scoreboard>(url,fetcher)}catch{return null}
+    },teamIds)
+  const archived=archive.events as Game[]
+  const successfulDays=archive.verifiedCalendarDays
   const matches:ResearchMatch[]=upcoming.flatMap(event=>{
     const {home,away}=sides(event)
     if(!home||!away||!pid(home)||!pid(away)||!pname(home)||!pname(away))return []
@@ -124,20 +131,24 @@ export async function researchSport(
     // Research reports a preliminary minimum, while the automatic-ticket
     // promotion layer requires five distinct games per team (NFL: three).
     const requiredGames=sport==='football'?3:5
-    const sufficient=successfulDays===lookbackDays&&
+    // Five distinct completed games for BOTH teams are observed evidence even
+    // if ESPN did not respond on off-days. Never equate daily API availability
+    // with number of matches played. Partial month coverage remains disclosed.
+    const sufficient=archive.status!=='unavailable'&&
       homeForm.completedGames>=requiredGames&&awayForm.completedGames>=requiredGames
     const result:ResearchMatch={eventId:String(event.id??''),date:event.date??'',sport,league,
       home:homeForm,away:awayForm,source:'ESPN Site API',evidence:sufficient?'descriptive':'insufficient',
       coverageDays:lookbackDays,successfulDays,
       limitations:[
         ...(!sufficient?['Historial incompleto o muestra inferior a '+requiredGames+' partidos distintos por equipo']:[]),
+        ...(archive.status!=='verified'?['Cobertura ESPN parcial: '+archive.explanation]:[]),
         'Lesiones/ausencias y alineaciones pendientes de verificación',
         'Rendimiento ajustado por rival y métricas específicas pendientes',
         'Mercados y probabilidad calibrada no verificados',
       ]}
     return[result]
   })
-  return{sport,league,date,source:'ESPN Site API · resultados completos (no predicciones)',
+  return{sport,league,date,source:'ESPN Site API · historial mensual/diario y calendario de equipos (no predicciones)',
     fetchedAt:new Date(now).toISOString(),matches,failedDays:lookbackDays-successfulDays,
     note:'Son estadísticas históricas observadas, no cuotas ni probabilidades calculadas. La investigación definitiva debe añadir datos específicos de cada deporte: lesiones/rotaciones NBA; pitchers/bullpen MLB; xG/plantilla fútbol; sets/superficie tenis; portero NHL; y mercados actuales verificables.'}
 }

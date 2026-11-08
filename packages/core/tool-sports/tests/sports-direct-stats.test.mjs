@@ -65,3 +65,21 @@ test('never reads attacker supplied IDs or invalid sport/leagues',async()=>{
     [{id:'5',name:'Team'}],fetcher,now,200))
   assert.equal(calls,0)
 })
+
+
+test('failed ESPN season stats do not cause 90 further empty gamelog calls',async()=>{
+  const urls=[]
+  const roster={athletes:[{items:Array.from({length:15},(_,i)=>({
+    id:String(i+100),displayName:'Athlete '+i,position:{abbreviation:'F'}}))}]}
+  const fetcher=async url=>{
+    urls.push(String(url))
+    return new Response(JSON.stringify(String(url).endsWith('/roster')?roster:{}))
+  }
+  const dossier=await collectDirectEspnStats('soccer','eng.1',
+    [{id:'5',name:'Home'},{id:'6',name:'Away'}],fetcher,Date.now(),15)
+  assert.equal(dossier.teams[0].athletes.length,15)
+  assert.equal(dossier.teams[1].athletes.length,15)
+  assert.equal(dossier.errors,0)
+  assert.ok(urls.length<50,'No lanzar 90 llamadas vacías para dos plantillas')
+  assert.ok(dossier.teams.every(t=>t.athletes.every(a=>a.status==='unavailable')))
+})
