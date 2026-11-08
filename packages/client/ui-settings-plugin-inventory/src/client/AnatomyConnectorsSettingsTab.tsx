@@ -8,7 +8,7 @@ import css from './AnatomyConnectorsSettingsTab.module.css'
 
 export interface AnatomyConnectorsInjected {
   listAnatomy:()=>Promise<AnatomyConnectorSnapshot>
-  installAnatomy:(id:AnatomyConnectorId)=>Promise<AnatomyConnectorInstallReceipt>
+  installAnatomy:(id:AnatomyConnectorId|'all')=>Promise<AnatomyConnectorInstallReceipt>
 }
 export type AnatomyConnectorsSettingsTabProps=PropsRuntime<'settings.plugins.tab'>
   &PropsLocale<'settings.pluginInventory'>&InjectFace<AnatomyConnectorsInjected>
@@ -19,7 +19,7 @@ const PHASE:Record<AnatomyConnectorSnapshot['entries'][number]['phase'],PluginIn
 }
 export function AnatomyConnectorsSettingsTab({listAnatomy,installAnatomy,t}:AnatomyConnectorsSettingsTabProps):ReactNode{
   const [state,setState]=useState<State>({phase:'loading'})
-  const [busy,setBusy]=useState<AnatomyConnectorId|null>(null)
+  const [busy,setBusy]=useState<AnatomyConnectorId|'all'|null>(null)
   const [notice,setNotice]=useState('')
   const [poll,setPoll]=useState(false)
   useEffect(()=>{
@@ -29,11 +29,14 @@ export function AnatomyConnectorsSettingsTab({listAnatomy,installAnatomy,t}:Anat
     return()=>{active=false}
   },[listAnatomy])
   useEffect(()=>{
+    if(state.phase==='ready'&&state.value.running)setPoll(true)
+  },[state])
+  useEffect(()=>{
     if(!poll)return
     let active=true
     let count=0
     const timer=setInterval(()=>{
-      if(++count>180){setPoll(false);return}
+      if(++count>720){setPoll(false);return}
       void listAnatomy().then(v=>{
         if(active){
           setState({phase:'ready',value:v})
@@ -48,7 +51,7 @@ export function AnatomyConnectorsSettingsTab({listAnatomy,installAnatomy,t}:Anat
     void listAnatomy().then(v=>setState({phase:'ready',value:v}),
       ()=>setState({phase:'error'}))
   }
-  const install=(id:AnatomyConnectorId)=>{
+  const install=(id:AnatomyConnectorId|'all')=>{
     if(busy!==null)return
     setBusy(id);setNotice('')
     void installAnatomy(id).then(receipt=>{
@@ -65,6 +68,18 @@ export function AnatomyConnectorsSettingsTab({listAnatomy,installAnatomy,t}:Anat
       <button type="button" onClick={refresh} disabled={busy!==null}>{t('anatomyRefresh')}</button>
     </header>
     <p className={css.notice}>{t('anatomyWarning')}</p>
+    {state.phase==='ready'?<div className={css.bulk}>
+      <div><strong>{t('anatomyInstallAll')}</strong><p>{t('anatomyInstallAllDescription')}</p></div>
+      <button type="button" onClick={()=>install('all')} disabled={busy!==null||state.value.running||state.value.entries.every(e=>e.installed||!e.canInstall)}>
+        {busy==='all'||state.value.running?t('anatomyInstalling'):t('anatomyInstallAll')}
+      </button>
+    </div>:null}
+    {state.phase==='ready'&&state.value.progress?<div role="status" className={css.progress}>
+      <span>{t('anatomyProgress')}: {state.value.progress.completed}/{state.value.progress.total}
+        {state.value.progress.status==='running'&&state.value.progress.current?' · '+(state.value.entries.find(e=>e.id===state.value.progress?.current)?.title||''):''}
+      </span>
+      <progress value={state.value.progress.completed} max={state.value.progress.total}/>
+    </div>:null}
     {notice?<p role="status" className={css.notice}>{notice}</p>:null}
     {state.phase==='loading'?<p role="status">{t('loading')}</p>:null}
     {state.phase==='error'?<p role="alert">{t('anatomyError')}</p>:null}

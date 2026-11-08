@@ -4,7 +4,7 @@
  * No PHI, file paths, environment secrets, or subprocess logs cross the Remote.
  */
 import {spawn} from 'node:child_process'
-import {existsSync,readFileSync,statSync,readdirSync} from 'node:fs'
+import {existsSync,readFileSync,statSync,readdirSync,mkdirSync,openSync,closeSync,rmSync} from 'node:fs'
 import {homedir} from 'node:os'
 import {join,resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
@@ -17,12 +17,10 @@ const ids=['slicerheart','monai-nnunet','totalsegmentator','ohif-cornerstone',
   'simvascular','opencarp','three-vtk'] as const satisfies readonly AnatomyConnectorId[]
 const valid=(id:string):id is AnatomyConnectorId=>(ids as readonly string[]).includes(id)
 type State={status?:string;reason?:string;verifiedAt?:string;source?:string}
-function manifest():Record<string,State>{
- try{
-  const m=JSON.parse(readFileSync(join(home(),'manifest.json'),'utf8')) as {
-    schema?:number;components?:Record<string,State>}
-  return m.schema===2?m.components||{}:{}
- }catch{return {} as Record<string,State>}
+function readManifest():{components:Record<string,State>;bootstrap?:{status?:string;component?:string;current?:string;completed?:number;total?:number}}{
+ try{const m=JSON.parse(readFileSync(join(home(),'manifest.json'),'utf8'))
+   return m.schema===2?{components:m.components||{},bootstrap:m.bootstrap}:{components:{}}
+ }catch{return {components:{}}}
 }
 const fresh=(v:State|undefined)=>v?.status==='installed'&&
   Number.isFinite(Date.parse(v.verifiedAt||''))&&
@@ -60,16 +58,27 @@ function entry(id:AnatomyConnectorId,title:string,installed:boolean,
  operational:boolean,canInstall:boolean,detail:string,
  s:Record<string,State>,keys:string[],docs?:string):AnatomyConnectorEntry{
  const failed=keys.find(k=>s[k]?.status==='error')
+ const deferred=keys.find(k=>s[k]?.status==='deferred')
+ const diagnose=(key:string)=>{
+   const reason=s[key]?.reason||''
+   if(/Python|venv|pip|Import|module/i.test(reason))return 'Revisa Python 3.11–3.13 y el entorno aislado'
+   if(/space|GB|disk|available/i.test(reason))return 'Se necesita espacio libre en disco'
+   if(/npm|node|package|artifact/i.test(reason))return 'Revisa Node.js y npm local'
+   if(/winget|Slicer|extension/i.test(reason))return 'Revisa WinGet, la ruta de Slicer y SlicerHeart'
+   if(/Timeout|exited/i.test(reason))return 'El instalador terminó con error o agotó el tiempo'
+   return 'Consulta install.log local para conocer el error exacto'
+ }
  const external=keys.every(k=>s[k]?.status==='external')&&!canInstall
  const phase=installed?(operational?'ready':'libraries') : failed?'error':
    lockAlive()?'installing':external?'external':'missing'
  return {id,title,installed,operational,canInstall,phase,
-   detail:failed?'La instalación falló; consulta install.log local para el error técnico.':detail,
+   detail:failed?`Fallo en ${failed}. ${diagnose(failed)}. Registro: install.log local.`:
+     deferred?`Pendiente: ${diagnose(deferred)}. Puedes reintentar.`:detail,
    ...(docs?{docs}:{} )}
 }
 /** Recompute status from disk + worker manifest; never trust a remembered toggle. */
 export function readAnatomyConnectors():AnatomyConnectorSnapshot{
- const s=manifest(),viewer=localPackage('three')&&
+ const m=readManifest(),s=m.components,viewer=localPackage('three')&&
    existsSync(join(home(),'viewer','node_modules','three','examples','jsm','loaders','GLTFLoader.js'))
  const meshes=localPackage('@kitware/vtk.js')
  const cs=['@cornerstonejs/core','@cornerstonejs/tools','@cornerstonejs/dicom-image-loader']
@@ -104,23 +113,40 @@ export function readAnatomyConnectors():AnatomyConnectorSnapshot{
     'Visor GLB local y bibliotecas vtk.js. Cortes volumétricos y simulación requieren herramientas adicionales.',
     s,['viewer','vtkjs'],'https://kitware.github.io/vtk-js/')
  ]
- return {entries,running:lockAlive(),readyCount:entries.filter(x=>x.operational).length,
-   clinicalValidation:'not-validated'}
+ const b=m.bootstrap
+ const progress=b?.component==='all'&&typeof b.completed==='number'&&b.total===7?
+   {completed:Math.max(0,Math.min(7,b.completed)),total:7,
+    ...(valid(b.current||'')?{current:b.current as AnatomyConnectorId}:{}),
+    status:(b.status==='running'||b.status==='error'?b.status:'finished') as 'running'|'error'|'finished'}:undefined
+ return {entries,running:lockAlive(),readyCount:entries.filter(x=>x.installed).length,
+   ...(progress?{progress}:{}),clinicalValidation:'not-validated'}
 }
-export function installAnatomyConnector(id:AnatomyConnectorId):AnatomyConnectorInstallReceipt{
- if(!valid(id))throw Error('Unsupported anatomy connector')
- if(!ids.filter(x=>!['simvascular','opencarp'].includes(x)).includes(id))
-  return{id,status:'blocked',detail:'Este motor requiere instalación externa oficial y configuración del entorno; no es seguro instalarlo silenciosamente.'}
+export function installAnatomyConnector(id:AnatomyConnectorId|'all'):AnatomyConnectorInstallReceipt{
+ if(id!=='all'&&!valid(id))throw Error('Unsupported anatomy connector')
+ if(id==='simvascular'||id==='opencarp')
+  return{id,status:'blocked',detail:'Requiere instalación oficial externa y configuración en Linux/WSL2; no se instalará silenciosamente.'}
  if(!existsSync(script))return{id,status:'blocked',detail:'Este runtime no contiene el instalador anatómico.'}
- if(lockAlive())return{id,status:'running',detail:'La instalación anatómica ya está en ejecución. Actualiza el estado.'}
+ if(lockAlive())return{id,status:'running',detail:'Ya existe una instalación en ejecución. Comprueba el progreso.'}
+ const lock=join(home(),'install.lock')
  try{
-  const worker=spawn(process.execPath,[script,'--install-component',id],{
+  mkdirSync(home(),{recursive:true})
+  // Remove only abandoned locks; ordinary simultaneous clicks still contend on O_EXCL.
+  try{if(Date.now()-statSync(lock).mtimeMs>=60*60*1000)rmSync(lock,{force:true})}catch{}
+  // Acquire the same worker lock before spawning; prevents double-click races.
+  const fd=openSync(lock,'wx');closeSync(fd)
+ }catch{return{id,status:'running',detail:'Otra instalación acaba de comenzar.'}}
+ try{
+  const args=id==='all'?['--worker','--install-all']:['--worker','--install-component',id]
+  const worker=spawn(process.execPath,[script,...args],{
    cwd:resolve(fileURLToPath(new URL('../../../../',import.meta.url))),
    detached:true,windowsHide:true,shell:false,stdio:'ignore',env:process.env})
-  worker.on('error',()=>{})
+  worker.on('error',()=>{try{rmSync(lock,{force:true})}catch{}})
   worker.unref()
-  return{id,status:'started',detail:'Solicitud lanzada en el equipo local. Actualiza hasta ver archivos y dependencias verificadas.'}
+  return{id,status:'started',detail:id==='all'?
+    'Instalación secuencial iniciada en este equipo. Los motores externos solo se comprobarán.':
+    'Instalación local iniciada. Consulta el estado para ver el resultado.'}
  }catch{
-  return{id,status:'error',detail:'El Host no pudo iniciar el proceso; revisa el diagnóstico del instalador.'}
+  try{rmSync(lock,{force:true})}catch{}
+  return{id,status:'error',detail:'No fue posible iniciar el instalador local.'}
  }
 }
