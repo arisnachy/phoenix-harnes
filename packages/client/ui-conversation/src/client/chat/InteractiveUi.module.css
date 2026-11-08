@@ -81,3 +81,5 @@
 @container assessment (max-width:660px){.answerGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @container assessment (max-width:370px){.answerGrid{grid-template-columns:1fr}.answerChoice{justify-content:flex-start;text-align:left;min-height:42px}.assessmentQuestion{padding:12px}}
 @media (prefers-reduced-motion:reduce){.answerChoice{transition:none}}
+
+.functionalQuestion{margin-top:13px;border-style:dashed}
