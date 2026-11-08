@@ -208,7 +208,8 @@ export async function investigateSoccer(date:string,league:string,eventId:string
   const [summary,historyReport,homeRoster,awayRoster,news,injuryFeed]=await Promise.all([
     sourceRead<unknown>(root+'summary?event='+eventId,fetcher,sources,now),
     readHistoricalScoreboard(root,start,end,
-      url=>sourceRead<{events?:unknown[]}>(url,fetcher,sources,now)),
+      url=>sourceRead<{events?:unknown[]}>(url,fetcher,sources,now),
+      [fixture.home.id,fixture.away.id]),
     sourceRead<unknown>(root+'teams/'+fixture.home.id+'/roster',fetcher,sources,now),
     sourceRead<unknown>(root+'teams/'+fixture.away.id+'/roster',fetcher,sources,now),
     sourceRead<unknown>(root+'news?limit=30',fetcher,sources,now),
