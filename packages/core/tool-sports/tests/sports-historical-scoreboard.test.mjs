@@ -62,3 +62,15 @@ test('invalid date interval and arbitrary host are rejected',async()=>{
   await assert.rejects(readHistoricalScoreboard(root,'2026-11-10','2026-11-01',f))
   await assert.rejects(readHistoricalScoreboard(root,'2026-01-01','2026-11-07',f))
 })
+
+
+test('team schedule is third independent path after ESPN month/day outage',async()=>{
+  const root='https://site.api.espn.com/apis/site/v2/sports/basketball/nba/'
+  const f=async url=>url.includes('/teams/5/schedule')?{
+    events:[game('511','2026-11-05T19:00:00Z')]}:null
+  const x=await readHistoricalScoreboard(root,'2026-11-01','2026-11-06',f,['5'])
+  assert.equal(x.status,'partial')
+  assert.equal(x.dailySuccesses,0)
+  assert.equal(x.scheduleSuccesses,1)
+  assert.deepEqual(x.events.map(e=>e.id),['511'])
+})
