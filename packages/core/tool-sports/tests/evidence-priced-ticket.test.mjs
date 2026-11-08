@@ -143,6 +143,21 @@ test('non-finite bookmaker prices are never used for a quoted ticket',async()=>{
 test('six priced legs are six independently verified fixtures at one bookmaker',async()=>{
   const sixFeed=async url=>{
     const data=board(url)
+    // The month archive must contain real results for the sixth club too.
+    // Adding a future fixture alone cannot establish five historical games.
+    if(String(url).includes('dates=202610')){
+      for(const day of ['20261027','20261026','20261025','20261024','20261023']){
+        data.events.push({
+          id:String(90000+Number(day.slice(-2))),
+          date:'2026-10-'+day.slice(-2)+'T21:00:00Z',
+          status:{type:{state:'post'}},
+          competitions:[{competitors:[
+            {homeAway:'home',team:{id:'51',displayName:'Home 5'},score:'3'},
+            {homeAway:'away',team:{id:'52',displayName:'Away 5'},score:'0'},
+          ]}],
+        })
+      }
+    }
     if(data.events.length){
       const added=structuredClone(data.events[4])
       added.id=String(Number(added.id)+1)
