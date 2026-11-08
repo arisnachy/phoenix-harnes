@@ -233,23 +233,23 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
           <div className={css.reportEditorFields}>
             <label>Persona evaluada / código
               <input type="text" maxLength={120} value={reportIdentity.participant}
-                onChange={e=>setReportIdentity(old=>({...old,participant:e.currentTarget.value}))}/>
+                onChange={e=>{const value=e.currentTarget.value;setReportIdentity(old=>({...old,participant:value}))}}/>
             </label>
             <label>Profesional responsable y matrícula
               <input type="text" maxLength={120} value={reportIdentity.professional}
-                onChange={e=>setReportIdentity(old=>({...old,professional:e.currentTarget.value}))}/>
+                onChange={e=>{const value=e.currentTarget.value;setReportIdentity(old=>({...old,professional:value}))}}/>
             </label>
             <label>Motivo y contexto
               <textarea rows={2} maxLength={1500} value={reportIdentity.context}
-                onChange={e=>setReportIdentity(old=>({...old,context:e.currentTarget.value}))}/>
+                onChange={e=>{const value=e.currentTarget.value;setReportIdentity(old=>({...old,context:value}))}}/>
             </label>
             <label>Observaciones documentadas
               <textarea rows={2} maxLength={2500} value={reportIdentity.observations}
-                onChange={e=>setReportIdentity(old=>({...old,observations:e.currentTarget.value}))}/>
+                onChange={e=>{const value=e.currentTarget.value;setReportIdentity(old=>({...old,observations:value}))}}/>
             </label>
             <label>Recomendaciones del profesional
               <textarea rows={2} maxLength={2500} value={reportIdentity.recommendations}
-                onChange={e=>setReportIdentity(old=>({...old,recommendations:e.currentTarget.value}))}/>
+                onChange={e=>{const value=e.currentTarget.value;setReportIdentity(old=>({...old,recommendations:value}))}}/>
             </label>
           </div>
         </details>
