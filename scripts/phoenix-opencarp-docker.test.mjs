@@ -7,7 +7,7 @@ test('uses only the official registry and verifies real local solver execution',
  const args=[]
  const run=async (argv)=>{
   args.push(argv)
-  if(argv[0]==='image')return {stdout:digest+'\\n'}
+  if(argv[0]==='image')return {stdout:digest+' '}
   return {stdout:'ok'}
  }
  const result=await installOpenCarpDocker(run)
