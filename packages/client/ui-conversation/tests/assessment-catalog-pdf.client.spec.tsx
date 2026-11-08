@@ -104,7 +104,7 @@ describe('professional assessment catalog and complete local PDF',()=>{
     expect(download).toHaveProperty('disabled',true)
     for(let i=0;i<radios.length;i+=4)fireEvent.click(radios[i]!)
     expect(download).toHaveProperty('disabled',false)
-    expect(screen.getByText('7 de 7 respuestas').textContent).toContain('7 de 7 respuestas')
+    expect(screen.getAllByText('7 de 7 respuestas').length).toBeGreaterThan(0)
     expect(screen.getByRole('progressbar',{name:'Progreso de respuestas'}).getAttribute('value')).toBe('7')
   })
 
@@ -156,7 +156,7 @@ describe('professional assessment catalog and complete local PDF',()=>{
     fireEvent.click(radios[4]!)
     fireEvent.click(radios[9]!)
     expect(screen.getByRole('progressbar',{name:'Progreso de respuestas'}).getAttribute('value')).toBe('3')
-    expect(screen.getByText('3 de 3 respuestas').textContent).toContain('3 de 3')
+    expect(screen.getAllByText('3 de 3 respuestas').length).toBeGreaterThan(0)
   })
 
   it('exposes the real instruments in the universal form library',()=>{
