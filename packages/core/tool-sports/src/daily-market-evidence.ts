@@ -2,6 +2,7 @@
  * These scores do NOT represent calibrated probabilities or betting EV.
  */
 import type {DailyMarketCandidate} from './daily-market-shortlist.ts'
+import type {DailyNhlSpecialist} from './daily-nhl-specialist.ts'
 import type {auditUniversalMatchup} from './universal-matchup-factors.ts'
 
 export type MatchupResearch=Awaited<ReturnType<typeof auditUniversalMatchup>>
@@ -18,6 +19,14 @@ export type MarketResearchReview={
   injuries:number;news:number;headToHead:number
   evidenceFor:string[];warnings:string[];rankingScore:number
   descriptiveLineDistance:number|null;relativeSignal:number|null
+  /** Diagnostic only; historical margins are not a calibrated NHL cover forecast. */
+  nhlOfficial?:DailyNhlSpecialist
+  nhlPuckLineAudit?:{
+    side:string;line:number;impliedBreakEven:number;teamGames:number
+    teamMissedLine:number;teamHistoricalCoverRate:number|null
+    opponentGames:number;opponentWouldBeatLineRate:number|null
+    goalieConfirmed:false;calibrated:false;approved:false
+  }
 }
 const round=(value:number):number=>Number(value.toFixed(2))
 const normalize=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
@@ -102,6 +111,45 @@ export function assessDailyMarketEvidence(
   const old=normalize(candidate.selection)
   if(status==='descriptive-support'&&side&&normalize(side.selection)!==old)
     missing.push('La dirección de la investigación difiere del favorito inicial por precio; selección corregida')
+  // NHL puck lines need the distribution of two-goal results, not merely an
+  // average margin. Neither ESPN's roster nor this sample confirms the starter.
+  // Do not promote a +1.5 favorite-by-price into a supported parlay leg.
+  let nhlPuckLineAudit:MarketResearchReview['nhlPuckLineAudit']
+  if(candidate.sport==='hockey'&&candidate.market==='spreads'&&side&&
+    typeof side.line==='number'){
+    const betHome=normalize(side.selection)===normalize(evidence.home.name)
+    const team=betHome?evidence.home:evidence.away
+    const opponent=betHome?evidence.away:evidence.home
+    const finite=(g:{scored:number;allowed:number})=>
+      Number.isFinite(g.scored)&&Number.isFinite(g.allowed)
+    const games=team.lastGames.filter(finite),other=opponent.lastGames.filter(finite)
+    const missed=games.filter(g=>g.scored-g.allowed+side!.line! < 0).length
+    const opposing=other.filter(g=>g.scored-g.allowed>side!.line!).length
+    const implied=1/side.decimalOdds
+    const historicalRate=games.length? (games.length-missed)/games.length:null
+    const opposingRate=other.length?opposing/other.length:null
+    nhlPuckLineAudit={
+      side:side.selection,line:side.line,impliedBreakEven:round(implied),
+      teamGames:games.length,teamMissedLine:missed,
+      teamHistoricalCoverRate:historicalRate===null?null:round(historicalRate),
+      opponentGames:other.length,
+      opponentWouldBeatLineRate:opposingRate===null?null:round(opposingRate),
+      goalieConfirmed:false,calibrated:false,approved:false,
+    }
+    const contradictory=(games.length>=6&&historicalRate!==null&&
+      historicalRate<implied-0.04)||(other.length>=6&&opposingRate!==null&&
+      opposingRate>1-implied+0.04)
+    status=contradictory?'contraindicated':'uncertain'
+    missing.push('NHL puck line '+side.selection+' '+side.line+
+      ': cobertura histórica '+(historicalRate===null?'sin muestra':
+        missed+' fallos / '+games.length+' partidos')+
+      '; rival supera la línea en '+opposing+' / '+other.length+
+      '. Cuota exige '+round(implied*100)+'%; no es probabilidad calibrada.')
+    if(contradictory)missing.push(
+      'Señales contrarias al hándicap: resultado de dos o más goles posible; no aprobar.')
+    missing.push('BLOQUEO NHL: portero titular de ambos clubes, 5v5 xG/GSAx, bajas, descanso y reglas de OT/empty-net sin validar; no recomendar este hándicap.')
+    direction='Hándicap NHL en revisión: tendencia de goles y precio no bastan para aprobar'
+  }
   if(candidate.sport==='hockey')missing.push('Portero titular debe confirmarse; SV% y xG no incluidos en esta señal')
   if(candidate.sport==='baseball')missing.push('Revisar abridores, bullpen, techo y alineaciones oficiales')
   if(candidate.sport==='football')missing.push('QB, inactivos, snap counts y clima requieren verificación final')
@@ -143,7 +191,7 @@ export function assessDailyMarketEvidence(
         (side.line===null?'':' '+side.line)+' a cuota observada '+side.decimalOdds]:[]),
     ],warnings:missing,rankingScore,
     descriptiveLineDistance:lineDistance===null?null:round(lineDistance),
-    relativeSignal,
+    relativeSignal,nhlPuckLineAudit,
   }
   return report
 }
