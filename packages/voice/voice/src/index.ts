@@ -30,7 +30,7 @@ import type {
   VoiceConversationStatus,
 } from './types.ts'
 import {
-  CodexRealtimeBridge, codexLiveCurrentCliVersion, codexLiveRepairPhase, codexRealtimeNeedsLogin,
+  CodexRealtimeBridge, codexLiveRepairPhase, codexRealtimeNeedsLogin,
   type CodexRealtimeInitialItem,
   type CodexRealtimeTranscript,
 } from './codex-realtime.ts'
@@ -478,28 +478,27 @@ export class VoiceRuntime extends TypertRemoteService {
       }
     }
     const dshHome = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
-    // An already-current CLI cannot be repaired by a new npm poll. Do not
-    // permanently block the voice button behind a stale 'waiting-upstream'
-    // request; permit the controlled, one-time app-server recovery instead.
-    const observedRepair = codexLiveRepairPhase(dshHome)
-    const repair = observedRepair === 'waiting-upstream' && codexLiveCurrentCliVersion(dshHome) !== undefined
-      ? 'idle'
-      : observedRepair
-    if (repair !== 'idle' && repair !== 'ready') {
+    // Updater metadata is not a Codex Live capability probe. A previous
+    // Quicksilver repair request can say "waiting-upstream", "blocked" or
+    // "disabled" while a healthy authenticated CLI is already installed.
+    // Only postpone a new sidecar launch during an actual update/check.
+    const repair = codexLiveRepairPhase(dshHome)
+    if (repair === 'checking' || repair === 'updating') {
       return {
         enabled: true, available: false, authenticated: false, provider: 'openai-codex',
         reason: 'experimental-unavailable',
-        detail: repair === 'waiting-upstream'
-          ? 'Codex Live espera una versión oficial compatible. Phoenix seguirá comprobando las actualizaciones.'
-          : repair === 'blocked' || repair === 'disabled'
-            ? 'La reparación automática de Codex Live no pudo continuar.'
-            : 'Phoenix está actualizando Codex CLI para recuperar Live.',
+        detail: 'Phoenix está comprobando o actualizando Codex CLI para recuperar Live.',
         repair,
       }
     }
+    // Always verify the real app-server before concluding that a stale
+    // updater marker means the account or native voice is disconnected.
     const probe = await this.codexRealtimeBridge().probe()
+    const supported = probe.available && probe.authenticated
     return {
-      ...(repair === 'ready' ? { repair } : {}),
+      ...(repair === 'ready' && !supported ? { repair } : {}),
+      ...(repair === 'waiting-upstream' && !supported
+        && probe.reason === 'experimental-unavailable' ? { repair } : {}),
       enabled: true,
       available: probe.available,
       authenticated: probe.authenticated,
