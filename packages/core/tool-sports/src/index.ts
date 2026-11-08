@@ -1,7 +1,7 @@
 /** Kira's sports-only model-facing tools. Cards belong in the existing chat. */
 import type { Context } from '@phoenix-ai/cordis'
 import { scoutDailySports } from './daily-sports-scout.ts'
-import {crosscheckFreeFixture,freeOfficialFollowUps,freeSourceInventory} from './free-sports-source-audit.ts'
+import {crosscheckFreeFixture,freeOfficialFollowUps,freeSourceInventory,freeSourceCoverageForSport} from './free-sports-source-audit.ts'
 import {nflverseInjuryReport} from './nflverse-injury-report.ts'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
@@ -2043,6 +2043,8 @@ export function apply(ctx: Context): void {
       return JSON.stringify({
         checkedAt:new Date(now).toISOString(),
         providers:freeSourceInventory,
+        coverageBySport:args.sport?freeSourceCoverageForSport(args.sport,env):
+          Object.keys(sportsCatalog).map(sport=>freeSourceCoverageForSport(sport,env)),
         liveAccess:{
           espn:env.PHOENIX_SPORTS_ESPN_DISABLED!=='1',
           officialMlb:env.PHOENIX_SPORTS_MLB_DISABLED!=='1',
