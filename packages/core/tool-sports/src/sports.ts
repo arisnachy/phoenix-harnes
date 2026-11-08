@@ -412,6 +412,7 @@ export async function marketOddsDetailed(
       const wants=markets.split(',')
       if(wants.includes('h2h')){
         const market=sport==='football'||sport==='handball'?'1x2':
+          sport==='basketball'?'home_away':
           sport==='tennis'?'match_winner':
             ['ice-hockey','volleyball','rugby-league','rugby-union','cricket'].includes(sport)?
               'home_away':'moneyline'
@@ -420,9 +421,9 @@ export async function marketOddsDetailed(
       if(wants.includes('totals')&&sport!=='cricket'&&chosen.length<2)
         chosen.push(sport==='tennis'?'total_games_over_under':
           sport==='volleyball'?'total_points_over_under':'over_under')
-      if(chosen.length)configured.add(names[2]!)
+      if(chosen.length)configured.add('OddsHarvester')
       for(const market of chosen){
-        requests.push({name:names[2]!,run:async()=>{
+        requests.push({name:'OddsHarvester',run:async()=>{
           const rows=await keylessOdds(sport,market,undefined,env,now)
           return rows.filter(q=>sportKey===sport||belongsToLeague(sportKey,q))
             .map(q=>({...q,sportKey,time:localTime(q.time),timeIso:q.time}))
@@ -431,8 +432,8 @@ export async function marketOddsDetailed(
     }
   }
   if(hasSportsPermission('espn',env)){
-    configured.add(names[3]!)
-    requests.push({name:names[3]!,run:async()=>{
+    configured.add('ESPN Site/Core')
+    requests.push({name:'ESPN Site/Core',run:async()=>{
       const {quotes,diagnostics}=await fetchPublicEspnOddsDetailed(sportKey,markets,
         <T>(url:string)=>getFeed<T>(url,fetcher),{now,cache:fetcher===fetch})
       espnRawCount=diagnostics.rawOddsEntries+diagnostics.startedOddsEntries
