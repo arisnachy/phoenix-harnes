@@ -19,13 +19,13 @@ The specialist ticket gate now performs **secondary fixture corroboration**, wit
 - **TheSportsDB v1 (public key 123)**: `eventsday.php` for soccer, basketball, baseball, NFL, hockey and tennis. The free endpoint returns at most three matches per day/query; a missing match **is not a cancellation, an injury report or an absence of coverage**. Docs: https://www.thesportsdb.com/docs/api
 - **OpenLigaDB (no key)**: Bundesliga `getmatchdata/bl1/{seasonStart}`, only for ESPN league `ger.1`. Free, no registration; observe its published 60 requests/minute/IP limit. Docs: https://api.openligadb.de/index.html
 - **Official NBA injury report**: https://official.nba.com/nba-injury-report-2026-27-season/ — a manual verification pointer only; this implementation does **not** parse PDFs or assert that a questionable player is active/inactive.
-- **nflverse**: https://nflreadr.nflverse.com/articles/nflverse_data_schedule.html — a manual verification pointer for current roster/injury/depth-chart data; **not yet** an imported data feed. Confirm league source freshness and participation limitations before automated promotion.
+- **nflverse season injury CSV**: https://github.com/nflverse/nflverse-data/releases — **integrated** as an optional, attribution-required NFL injury report, matched to both NFL clubs and the appropriate season/week, with a seven-day age bound and kickoff-week filter. Only explicit Out/Doubtful/Questionable designations are reported; it does **not** establish game-day inactives or a confirmed QB. Depth charts, snap counts and advanced player stats remain **not integrated**. Dictionary: https://nflreadr.nflverse.com/articles/dictionary_injuries.html
 - **football-data.org** (free account/token required): https://www.football-data.org/pricing — prospective secondary soccer results/standings provider. Not wired until the operator explicitly provisions a free account; free plan has delayed scores and excludes advanced player data.
 
 Every secondary event needs BOTH normalized teams in the correct home/away positions and a kickoff within 90 minutes. Contradictions are surfaced; no-match, partial HTTP responses and provider errors never establish a missing scheduled game. Secondary evidence only confirms fixture metadata, **not** starting lineups, official injuries, bookmaker acceptance, probability calibration or betting eligibility. The original specialist gate remains fail-closed. Disable the public backups with `PHOENIX_SPORTS_FREE_BACKUPS_DISABLED=1` when needed. Live provider success and data rights remain to be validated in the deployment environment.
 
 Verification:
-`node --experimental-strip-types --test packages/core/tool-sports/tests/free-sports-source-audit.test.mjs packages/core/tool-sports/tests/ticket-specialist-gate.test.mjs`.
+`node --experimental-strip-types --test packages/core/tool-sports/tests/free-sports-source-audit.test.mjs packages/core/tool-sports/tests/nflverse-injury-report.test.mjs packages/core/tool-sports/tests/ticket-specialist-gate.test.mjs`.
 
 ## NBA research (source-derived, not calibrated)
 
