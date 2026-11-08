@@ -40,9 +40,10 @@ El investigador mantiene ESPN como fuente primaria con ID verificable. La herram
 1. Para aceptar un cotejo verificable se requieren equipos, localía y horario (tolerancia 90 minutos). Las fuentes sin UTC solo respaldan fecha+clubes (estado parcial).
 2. HTTP 429, fallos, respuestas vacías o cuotas agotadas NO significan partido cancelado. No se convierte una fuente caída en una lesión, alineación o precio.
 3. Los JSON públicos idénticos se deduplican durante 10 minutos en producción. Pruebas con fetch inyectado quedan aisladas. Hosts HTTPS y tamaños están acotados.
-4. El motor investiga seis ligas primero; si la investigación no ofrece suficientes partidos con historia, investiga hasta otras seis ligas. Así aumenta cobertura sin obligar a inventar cinco ganadores.
-5. Las cuotas exigen la misma casa, selección, evento, período, mercado, fecha y línea. Una fuente de marcador nunca equivale a cuota. Fuentes históricas nunca se etiquetan como precio actual.
-6. Opt-out: PHOENIX_SPORTS_FREE_BACKUPS_DISABLED=1. Clave football-data.org solo en el servidor, en cabecera X-Auth-Token; no se publica en tarjetas ni logs.
+4. Se tolera la indisponibilidad de algunos días de archivo ESPN si se recuperan al menos el 60% de los días solicitados y ambos equipos tienen cinco partidos finalizados distintos (NFL: tres). La cobertura faltante se declara y nunca se considera un partido sin jugar.
+5. El motor investiga seis ligas primero; si la investigación no ofrece suficientes partidos con historia, investiga hasta otras seis ligas. Así aumenta cobertura sin obligar a inventar cinco ganadores.
+6. Las cuotas exigen la misma casa, selección, evento, período, mercado, fecha y línea. Una fuente de marcador nunca equivale a cuota. Fuentes históricas nunca se etiquetan como precio actual.
+7. Opt-out: PHOENIX_SPORTS_FREE_BACKUPS_DISABLED=1. Clave football-data.org solo en el servidor, en cabecera X-Auth-Token; no se publica en tarjetas ni logs.
 
 ### Enlaces y pruebas
 
