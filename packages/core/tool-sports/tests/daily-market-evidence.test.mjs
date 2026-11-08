@@ -129,3 +129,32 @@ test('expensive Carolina -460 moneyline remains uncertain without validated prob
   assert.equal(review.priceAudit.expectedValuePercent,null)
   assert.match(review.warnings.join(' '),/BLOQUEO DE PRECIO/)
 })
+
+test('a total misleadingly projected under by averages cannot be sold as supported',()=>{
+  const original=evidence()
+  const inconsistent={...original,
+    home:{name:'Home',form:{games:10,scoredPerGame:130,allowedPerGame:130},
+      lastGames:Array.from({length:10},()=>({scored:130,allowed:130}))},
+    away:{name:'Away',form:{games:10,scoredPerGame:95,allowedPerGame:95},
+      lastGames:Array.from({length:10},()=>({scored:95,allowed:95}))}}
+  const review=assessDailyMarketEvidence(market('totals','Over',245.5),inconsistent)
+  assert.equal(review.selectedOutcome.selection,'Under')
+  assert.equal(review.projectedTotal,225)
+  assert.equal(review.marketOutcomeDiagnostic.status,'mixed')
+  assert.equal(review.status,'uncertain')
+  assert.match(review.warnings.join(' '),/BLOQUEO DE MERCADO/)
+})
+test('consistent NBA over is still descriptive, with separate line audit and no EV',()=>{
+  const original=evidence()
+  const consistent={...original,
+    home:{name:'Home',form:{games:10,scoredPerGame:120,allowedPerGame:118},
+      lastGames:Array.from({length:10},()=>({scored:120,allowed:118}))},
+    away:{name:'Away',form:{games:10,scoredPerGame:117,allowedPerGame:112},
+      lastGames:Array.from({length:10},()=>({scored:117,allowed:112}))}}
+  const review=assessDailyMarketEvidence(market('totals','Over',223.5),consistent)
+  assert.equal(review.selectedOutcome.selection,'Over')
+  assert.equal(review.marketOutcomeDiagnostic.status,'aligned')
+  assert.equal(review.status,'descriptive-support')
+  assert.equal(review.marketOutcomeDiagnostic.eligibleForEV,false)
+  assert.equal(review.priceAudit.expectedValuePercent,null)
+})
