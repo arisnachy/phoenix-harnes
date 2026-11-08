@@ -107,7 +107,7 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
   },[allForms,filter])
   const open=(spec:SmartFormSpec):void=>{
     setActive(spec);setValues(initialSmartValues(spec));setFolder(spec.props.folder??'General')
-    setIncludeAnswers(false);setPanel('form');setMessage('')
+    setIncludeAnswers(false);setReportIdentity({participant:'',professional:'',context:'',observations:'',recommendations:''});setPanel('form');setMessage('')
   }
   const setValue=(id:string,v:FormValue|undefined):void=>{
     setValues(old=>{
