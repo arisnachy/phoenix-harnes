@@ -4,7 +4,7 @@
 import { evidenceTicket } from './evidence-ticket.ts'
 import {investigateTicketSpecialists,type SpecialistGate} from './ticket-specialist-gate.ts'
 import { keylessEnabled,keylessOdds,type KeylessQuote } from './keyless-odds.ts'
-import { marketOddsDetailed,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome } from './sports.ts'
+import { marketOddsDetailed,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome,type OddsResearchObservation } from './sports.ts'
 import {fetchBetBetterModels,findModelOpinion,type ModelForecast} from './betbetter-model-evidence.ts'
 
 export type OddsAuditRow={
@@ -19,7 +19,7 @@ const normalize=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
 const routing:Record<string,{sport:string;market:string;oddsSportKey:string}>={
   soccer:{sport:'football',market:'1x2',oddsSportKey:'soccer_epl'},
-  basketball:{sport:'basketball',market:'moneyline',oddsSportKey:'basketball_nba'},
+  basketball:{sport:'basketball',market:'home_away',oddsSportKey:'basketball_nba'},
   baseball:{sport:'baseball',market:'moneyline',oddsSportKey:'baseball_mlb'},
   football:{sport:'american-football',market:'moneyline',oddsSportKey:'americanfootball_nfl'},
   hockey:{sport:'ice-hockey',market:'home_away',oddsSportKey:'icehockey_nhl'},
@@ -27,7 +27,12 @@ const routing:Record<string,{sport:string;market:string;oddsSportKey:string}>={
 }
 const leagueSportKey:Record<string,string>={
   'eng.1':'soccer_epl','esp.1':'soccer_spain_la_liga','usa.1':'soccer_usa_mls',
-  'uefa.champions':'soccer_uefa_champs_league','nba':'basketball_nba',
+  'uefa.champions':'soccer_uefa_champs_league',
+  'por.1':'soccer_portugal_primeira_liga','ita.1':'soccer_italy_serie_a',
+  'ger.1':'soccer_germany_bundesliga','ned.1':'soccer_netherlands_eredivisie',
+  'fra.1':'soccer_france_ligue_one','mex.1':'soccer_mexico_ligamx',
+  'bra.1':'soccer_brazil_serie_a','arg.1':'soccer_argentina_primera_division',
+  'uefa.europa':'soccer_uefa_europa_league','nba':'basketball_nba',
   'wnba':'basketball_wnba','mlb':'baseball_mlb','nfl':'americanfootball_nfl','nhl':'icehockey_nhl',
 }
 export async function evidencePricedTicket(
@@ -130,12 +135,17 @@ export async function evidencePricedTicket(
   // market; do not relabel a winner moneyline as double chance.
   const leagues=[...new Map(research.events.map(e=>[e.league,e])).values()]
   const fallbackSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
+  const espnReferenceOdds:OddsResearchObservation[]=[]
   const additional=quotesProvider?[]:await Promise.allSettled(leagues.map(async event=>{
     if(event.sport==='soccer'&&marketPreference==='double_chance')return [] as KeylessQuote[]
-    const sportKey=leagueSportKey[event.league]??routing[event.sport]?.oddsSportKey
+    const sportKey=leagueSportKey[event.league]??
+      (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
     if(!sportKey)return [] as KeylessQuote[]
     const report=await marketOddsDetailed(sportKey,'h2h',env,fetcher,now)
     fallbackSources.push(...report.sources)
+    // Reference quotes without an updatedAt are useful for comparison,
+    // but MUST NOT be placed into the live quoted groups.
+    espnReferenceOdds.push(...report.observations)
     const lines=report.quotes
     return lines.flatMap(q=>{
       const time=q.timeIso??''
@@ -233,11 +243,44 @@ export async function evidencePricedTicket(
     return{...row,status:row.status==='attempted'?'not-applicable':row.status,
       note:row.note+' Sin cotizaciones confirmadas en este flujo.'}
   })
+  const referenceRows=research.events.map((event,index)=>{
+    const expected=event.pick==='home'?event.home:event.away
+    const candidates=espnReferenceOdds.filter(q=>
+      q.eventId===event.eventId&&
+      normalize(q.home)===normalize(event.home)&&normalize(q.away)===normalize(event.away)&&
+      normalize(q.selection)===normalize(expected)&&
+      q.market==='h2h'&&q.nonCotizable&&
+      Number.isFinite(Date.parse(q.timeIso??''))&&
+      Math.abs(Date.parse(q.timeIso)-Date.parse(event.kickoff))<=3_600_000 &&
+      q.bookmaker.length>0&&!q.bookmaker.startsWith('ESPN proveedor #'))
+    return {index,quote:candidates[0]??null}
+  }).filter(x=>x.quote!==null)
+  const reportedReferences=referenceRows.length
+  const referenceMap=new Map(referenceRows.map(x=>[x.index,x.quote!]))
+  const researchLegs=Array.isArray(researchCard.props.legs)?researchCard.props.legs:[]
+  const referenceLegs=researchLegs.map((value,index)=>{
+    const original=value&&typeof value==='object'&&!Array.isArray(value)
+      ?value as Record<string,unknown>:{}
+    const reference=referenceMap.get(index)
+    if(!reference)return original
+    const label='ESPN precio de referencia '+reference.price.toFixed(2)+' ('+
+      reference.bookmaker+', '+reference.reason+'); NO cotizable ni vigente.'
+    return {...original,referenceOdds:{
+      bookmaker:reference.bookmaker,price:reference.price,
+      reason:reference.reason,source:reference.endpointSource,nonCotizable:true},
+      rationale:(String(original.rationale??'').slice(0,300)+' · '+label).slice(0,480)}
+  })
   const auditSummary=' Cuotas cotejadas: '+quotedLegs+'/'+count+
     ' selecciones; proveedores: '+sourceAudit.map(x=>x.source+' '+x.status+
     ' ('+x.offers+' observaciones)').join('; ')+'.'
   const auditCard:ChatBlock={...researchCard,props:{...researchCard.props,
-    note:(auditSummary+' '+String(researchCard.props.note??'')).slice(0,1000),
+    legs:referenceLegs,
+    subtitle:quotedLegs!==count?'TICKET DE INVESTIGACIÓN · '+quotedLegs+'/'+count+
+      ' cuotas verificadas · '+reportedReferences+' precios ESPN de referencia':
+      researchCard.props.subtitle,
+    note:(auditSummary+' ESPN aportó '+reportedReferences+
+      ' referencias para el ganador elegido, pero no cumplen vigencia; no se suman a las cuotas cotizables. '+
+      String(researchCard.props.note??'')).slice(0,1000),
   }}
   const checked={...base,card:auditCard,sourceAudit,quotedLegs,
     missingQuotes:count-quotedLegs}
@@ -252,7 +295,9 @@ export async function evidencePricedTicket(
       'No se cotiza una combinada incompleta.'}
   if(quotedLegs!==count)return{...checked,
     explanation:'Fuentes auditadas: '+quotedLegs+'/'+count+
-      ' selecciones tienen precios verificables. No se fabrica la combinada restante.'}
+      ' selecciones tienen precios verificables; '+reportedReferences+
+      ' precios ESPN quedaron como referencias sin actualización confirmada. '+
+      'Se muestra la preselección investigada, NO una combinada cotizada ni apostada.'}
   // A realistic combined price requires the SAME bookmaker to offer all legs.
   const common=groups.reduce<Set<string>>((set,rows,index)=>{
     const names=new Set(rows.map(q=>q.bookmaker))

@@ -1,5 +1,6 @@
 /** Evidence-first soccer dossier. No fabricated scores, probabilities, players or lineups. */
 import {hasSportsPermission,type MarketOutcome} from './sports.ts'
+import {readHistoricalScoreboard} from './sports-historical-scoreboard.ts'
 import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
 import {array,clean,digits,normalize,row,soccerDailySlate,soccerDate,soccerSlug,
   sourceRead,type SoccerFixture,type SoccerSource} from './soccer-worldwide-scout.ts'
@@ -204,15 +205,17 @@ export async function investigateSoccer(date:string,league:string,eventId:string
   const sources=slate.sources,root='https://site.api.espn.com/apis/site/v2/sports/soccer/'+league+'/'
   const start=new Date(Date.parse(date+'T12:00:00Z')-55*86400000).toISOString().slice(0,10)
   const end=new Date(Date.parse(date+'T12:00:00Z')-86400000).toISOString().slice(0,10)
-  const [summary,history,homeRoster,awayRoster,news,injuryFeed]=await Promise.all([
+  const [summary,historyReport,homeRoster,awayRoster,news,injuryFeed]=await Promise.all([
     sourceRead<unknown>(root+'summary?event='+eventId,fetcher,sources,now),
-    sourceRead<{events?:unknown[]}>(root+'scoreboard?dates='+start.replaceAll('-','')+
-      '-'+end.replaceAll('-','')+'&limit=200',fetcher,sources,now),
+    readHistoricalScoreboard(root,start,end,
+      url=>sourceRead<{events?:unknown[]}>(url,fetcher,sources,now),
+      [fixture.home.id,fixture.away.id]),
     sourceRead<unknown>(root+'teams/'+fixture.home.id+'/roster',fetcher,sources,now),
     sourceRead<unknown>(root+'teams/'+fixture.away.id+'/roster',fetcher,sources,now),
     sourceRead<unknown>(root+'news?limit=30',fetcher,sources,now),
     sourceRead<unknown>(root+'injuries',fetcher,sources,now),
   ])
+  const history={events:historyReport.events}
   const homePlayers=players(homeRoster,fixture.home.id),awayPlayers=players(awayRoster,fixture.away.id)
   const hc=verifyStartingXI(summary,fixture.home.id,homePlayers)
   const ac=verifyStartingXI(summary,fixture.away.id,awayPlayers)
@@ -277,6 +280,7 @@ export async function investigateSoccer(date:string,league:string,eventId:string
     ...(!ac?['Once visitante no confirmado']:[]),
     ...(!homePlayers.length?['Roster local no disponible']:[]),
     ...(!awayPlayers.length?['Roster visitante no disponible']:[]),
+    ...(historyReport.status!=='verified'?['Historial ESPN parcial: '+historyReport.explanation]:[]),
     ...(!homeGames.length?['Resultados recientes local no disponibles']:[]),
     ...(!awayGames.length?['Resultados recientes visitante no disponibles']:[]),
     ...(!referee?['Árbitro/estadísticas de tarjetas sin verificación']:[]),

@@ -40,7 +40,15 @@ const slugs:Readonly<Record<string,readonly [string,string]>>={
   basketball_wnba:['basketball','wnba'],americanfootball_nfl:['football','nfl'],
   icehockey_nhl:['hockey','nhl'],soccer_epl:['soccer','eng.1'],
   soccer_spain_la_liga:['soccer','esp.1'],soccer_usa_mls:['soccer','usa.1'],
-  soccer_mexico_ligamx:['soccer','mex.1'],soccer_uefa_champs_league:['soccer','uefa.champions'],
+  "soccer_mexico_ligamx:['soccer','mex.1'],soccer_uefa_champs_league:['soccer','uefa.champions'],
+  soccer_portugal_primeira_liga:['soccer','por.1'],
+  soccer_italy_serie_a:['soccer','ita.1'],
+  soccer_germany_bundesliga:['soccer','ger.1'],
+  soccer_netherlands_eredivisie:['soccer','ned.1'],
+  soccer_france_ligue_one:['soccer','fra.1'],
+  soccer_brazil_serie_a:['soccer','bra.1'],
+  soccer_argentina_primera_division:['soccer','arg.1'],
+  soccer_uefa_europa_league:['soccer','uefa.europa'],
   basketball_ncaab:['basketball','mens-college-basketball'],
   americanfootball_ncaaf:['football','college-football'],
   soccer_world_cup:['soccer','fifa.world'],
@@ -48,6 +56,7 @@ const slugs:Readonly<Record<string,readonly [string,string]>>={
 const americanToDecimal=(value:unknown):number|null=>{
   if(typeof value!=='string'&&typeof value!=='number')return null
   const str=String(value).trim().replace(/\u2212/gu,'-')
+  if(/^(?:EVEN|EVENS|EV)$/iu.test(str))return 2
   if(!/^[+-]?\d{2,6}$/u.test(str))return null
   const n=Number(str)
   if(!Number.isFinite(n)||Math.abs(n)<100||Math.abs(n)>100000)return null
