@@ -322,7 +322,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
 /** Unique sportsbook selection identity without an assumed price. */
 export type MarketSelection = { eventId:string;bookmaker:string;market:string;selection:string;point?:number|null }
 /** Time-stamped sportsbook quote tied to a provider event and market. */
-export type MarketOutcome = MarketSelection & { price:number;home:string;away:string;time:string;timeIso?:string;updatedAt:string;source?:string;sportKey?:string }
+export type MarketOutcome = MarketSelection & { price:number;home:string;away:string;time:string;timeIso?:string;updatedAt:string;observedAt?:string;source?:string;sportKey?:string }
 /** Read attributed bookmaker quotes, without purchasing or placing any bet.
  * @param sportKey - Provider sports key.
  * @param markets - Approved market categories.
