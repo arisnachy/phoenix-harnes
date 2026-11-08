@@ -33,9 +33,10 @@ describe('Anatomy connector inventory',()=>{
   expect(snapshot.readyCount).toBe(0)
   expect(snapshot.clinicalValidation).toBe('not-validated')
  })
- it('blocks external engines and rejects non-allowlisted host commands',()=>{
-  expect(installAnatomyConnector('opencarp').status).toBe('blocked')
+ it('blocks unsupported engines and rejects non-allowlisted host commands',()=>{
   expect(installAnatomyConnector('simvascular').status).toBe('blocked')
+  const openCarp=readAnatomyConnectors().entries.find(e=>e.id==='opencarp')
+  expect(openCarp?.canInstall).toBe(true)
   expect(()=>installAnatomyConnector('cmd /c del' as never)).toThrow(/Unsupported/)
  })
 })
