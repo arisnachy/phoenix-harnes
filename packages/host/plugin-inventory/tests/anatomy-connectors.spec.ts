@@ -1,4 +1,4 @@
-import {mkdtempSync,rmSync} from 'node:fs'
+import {mkdtempSync,rmSync,writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {afterEach,describe,expect,it} from 'vitest'
@@ -19,6 +19,19 @@ describe('Anatomy connector inventory',()=>{
   expect(result.readyCount).toBe(0)
   expect(result.entries.every(entry=>!entry.installed)).toBe(true)
   expect(result.clinicalValidation).toBe('not-validated')
+ })
+ it('shows verified sequential progress without declaring clinical readiness',()=>{
+  const dir=mkdtempSync(join(tmpdir(),'phoenix-anatomy-sequential-'))
+  dirs.push(dir);process.env.PHOENIX_ANATOMY_HOME=dir
+  writeFileSync(join(dir,'manifest.json'),JSON.stringify({
+   schema:2,components:{monai:{status:'error',reason:'Import verification failed'}},
+   bootstrap:{status:'running',component:'all',current:'monai-nnunet',completed:1,total:7}
+  }))
+  const snapshot=readAnatomyConnectors()
+  expect(snapshot.progress).toEqual({completed:1,total:7,current:'monai-nnunet',status:'running'})
+  expect(snapshot.entries.find(x=>x.id==='monai-nnunet')?.detail).toMatch(/Python/)
+  expect(snapshot.readyCount).toBe(0)
+  expect(snapshot.clinicalValidation).toBe('not-validated')
  })
  it('blocks external engines and rejects non-allowlisted host commands',()=>{
   expect(installAnatomyConnector('opencarp').status).toBe('blocked')

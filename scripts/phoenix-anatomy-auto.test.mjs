@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { needsInstall, status, ensure, hasWeightFiles, validAnatomyComponent, SCHEMA } from './phoenix-anatomy-auto.mjs'
+import { needsInstall, status, ensure, hasWeightFiles, validAnatomyComponent, anatomyComponents, SCHEMA } from './phoenix-anatomy-auto.mjs'
 test('empty state requires install',()=>assert.equal(needsInstall(null),true))
 test('complete current state skips install',()=>{
  const components=Object.fromEntries(['dicom','volume3d','meshes','monai','nnunetv2','totalsegmentator','svzerod','slicer','slicerheart','viewer','weights_ct'].map(id=>[id,{status:'installed'}]))
@@ -48,4 +48,11 @@ test('only supported connector identifiers can request local installation',()=>{
    assert.equal(validAnatomyComponent(id),true,id)
  for(const id of ['../danger','bash -c rm -rf','',null,undefined,'all'])
    assert.equal(validAnatomyComponent(id),false,String(id))
+})
+
+test('all installer runs one explicit sequence and no arbitrary ids',()=>{
+ assert.deepEqual(anatomyComponents,[
+  'slicerheart','monai-nnunet','totalsegmentator','ohif-cornerstone',
+  'simvascular','opencarp','three-vtk'])
+ assert.equal(validAnatomyComponent('all'),false)
 })

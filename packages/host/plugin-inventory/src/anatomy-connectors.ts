@@ -22,13 +22,6 @@ function readManifest():{components:Record<string,State>;bootstrap?:{status?:str
    return m.schema===2?{components:m.components||{},bootstrap:m.bootstrap}:{components:{}}
  }catch{return {components:{}}}
 }
-function manifest():Record<string,State>{
- try{
-  const m=JSON.parse(readFileSync(join(home(),'manifest.json'),'utf8')) as {
-    schema?:number;components?:Record<string,State>}
-  return m.schema===2?m.components||{}:{}
- }catch{return {} as Record<string,State>}
-}
 const fresh=(v:State|undefined)=>v?.status==='installed'&&
   Number.isFinite(Date.parse(v.verifiedAt||''))&&
   Date.now()-Date.parse(v.verifiedAt||'')<7*24*3600*1000
@@ -137,6 +130,8 @@ export function installAnatomyConnector(id:AnatomyConnectorId|'all'):AnatomyConn
  const lock=join(home(),'install.lock')
  try{
   mkdirSync(home(),{recursive:true})
+  // Remove only abandoned locks; ordinary simultaneous clicks still contend on O_EXCL.
+  try{if(Date.now()-statSync(lock).mtimeMs>=60*60*1000)rmSync(lock,{force:true})}catch{}
   // Acquire the same worker lock before spawning; prevents double-click races.
   const fd=openSync(lock,'wx');closeSync(fd)
  }catch{return{id,status:'running',detail:'Otra instalación acaba de comenzar.'}}

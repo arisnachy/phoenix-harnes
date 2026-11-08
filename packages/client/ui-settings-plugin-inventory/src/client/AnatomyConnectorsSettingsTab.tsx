@@ -29,6 +29,9 @@ export function AnatomyConnectorsSettingsTab({listAnatomy,installAnatomy,t}:Anat
     return()=>{active=false}
   },[listAnatomy])
   useEffect(()=>{
+    if(state.phase==='ready'&&state.value.running)setPoll(true)
+  },[state])
+  useEffect(()=>{
     if(!poll)return
     let active=true
     let count=0
