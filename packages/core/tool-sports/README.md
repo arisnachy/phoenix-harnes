@@ -12,6 +12,18 @@ Manual de las 14 rutas, movimiento, históricos y procedimientos de Kira: [ESPN_
 
 ESPN Site/Core and MLB Stats are queried as publicly reachable read-only sources without needing an API key or a PHOENIX_SPORTS_ESPN_ALLOWED setting. Operators may opt out using PHOENIX_SPORTS_ESPN_DISABLED=1 or PHOENIX_SPORTS_MLB_DISABLED=1; public access does not grant a license to reuse data. THE_ODDS_API_KEY selects the existing `api.the-odds-api.com` v4 adapter, with its own quota and license. Separately, `THEODDSAPI_API_KEY` selects the optional `api.theoddsapi.com` adapter, which publishes a free NBA/MLB moneyline tier (registration and a key still required); **these are independent services, credentials and JSON schemas**. If both keys are present the original v4 adapter takes priority; without either, PHOENIX tries published ESPN moneylines. The free adapter uses a fixed HTTPS host, a server-only `x-api-key` header, a bounded response and a 90-second per-account cache. No provider key is written into the URL or a rendered card. If missing, ESPN Core/Site moneyline quotes are read when available, but no absent prices or missing markets are fabricated. PHOENIX_SPORTS_ESPN_IMAGES_ALLOWED=1 is an additional opt-in after media rights review. Credentials stay in the host environment and never appear in tool output. Only fixed hosts can be queried.
 
+## Tickets condicionados ante fuentes incompletas
+
+Una lesión no publicada, quinteto pendiente, portero por confirmar o fuente secundaria caída NO suprime automáticamente un ticket. sports_chat_ticket_evidence_priced_auto y sports_chat_daily_market_shortlist permiten construir un TICKET CONDICIONAL cuando se verificaron evento, equipos, fecha, historial suficiente, selección exacta, mercado, casa y cuota reciente. El estado del especialista y sus pendientes se muestran por pata. Un ticket visible no significa aprobación de apuesta o ventaja predictiva validada.
+
+Solo se bloquea una pata cuando hay un conflicto explícito de identidad/localía, la tendencia deportiva no respalda la selección, el mercado no coincide o la cuota es inexistente/caducada. Sin cuotas se debe renderizar un borrador de selección sin precios inventados; sin cinco partidos verificables no inventar los restantes.
+
+En la ruta cotizada, complete significa número de patas y precios auténticos presentes; dossierComplete significa investigación especialista acabada; conditional significa al menos un expediente parcialmente no verificado. Siempre approvedLegs=0 sin modelo validado. La ruta diaria publica ticketStatus conditional o researched y se separa researchComplete.
+
+### Regresión: tickets con faltantes
+
+Pruebas del contrato: evidence-priced-ticket.test.mjs valida que cinco eventos y cuotas reales puedan producir una tarjeta condicional incluso si falta el once, mientras que un conflicto de identidad bloquea su cotización.
+
 ## Redundancia de proveedores gratuitos y recuperación (2026-11-08)
 
 El investigador mantiene ESPN como fuente primaria con ID verificable. La herramienta Kira `sports_chat_source_resilience` publica un inventario de integraciones reales y, para un partido concreto, realiza auditoría fuente por fuente. Las fuentes del catálogo no se anuncian como integradas si no lo están.
