@@ -132,6 +132,7 @@ test('all 17 sports have truthful source coverage, including weak/no-API discipl
     assert.equal(result.supported,true)
     assert.ok(result.wired.includes('ESPN Site/Core'),sport)
     assert.ok(result.referenceOnly.length>0,sport)
+    if(sport==='golf')assert.ok(result.referenceOnly.some(n=>n.startsWith('TheSportsDB (sin adaptador')))
   }
   const nba=freeSourceCoverageForSport('basketball',{})
   assert.ok(nba.referenceOnly.includes('NBA Stats / LiveData'))
