@@ -83,7 +83,7 @@ export async function nflverseInjuryReport(
       const modified=Date.parse(r.date_modified)
       return Number(r.season)===season&&Number.isInteger(Number(r.week))&&
         Number(r.week)>0&&Number.isFinite(modified)&&modified<=now+60_000&&
-        modified<=kickoff&&modified>=Math.min(now,kickoff)-7*86_400_000&&
+        modified<=kickoff&&modified>=Math.max(now-7*86_400_000,kickoff-6*86_400_000)&&
         [...validTeams.values()].some(codes=>codes.has(r.team))
     })
     if(!current.length)return missing('stale','Sin reporte reciente para ambos clubes')
