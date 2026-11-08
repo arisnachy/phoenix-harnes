@@ -128,7 +128,9 @@ async function ballDontLieFixture(input:FreeFixture,fetcher:typeof fetch,now:num
   const baseUrl=input.league==='wnba'?'https://api.balldontlie.io/wnba/v1/games':
     'https://api.balldontlie.io/v1/games'
   // Only one GET, without attempting to circumvent rate limits.
-  const url=baseUrl+'?dates%5B%5D='+input.date+'&per_page=100'
+  const eventUtcDay=new Date(Date.parse(input.kickoff)).toISOString().slice(0,10)
+  const days=[...new Set([input.date,eventUtcDay])]
+  const url=baseUrl+'?'+days.map(day=>'dates%5B%5D='+day).join('&')+'&per_page=100'
   const base={provider:'balldontlie' as const,url,checkedAt:checked(now)}
   try{
     const response=await fetcher(url,{headers:{Authorization:key,accept:'application/json'},
