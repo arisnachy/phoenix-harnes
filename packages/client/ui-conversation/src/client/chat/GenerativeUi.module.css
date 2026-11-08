@@ -539,3 +539,24 @@
  .eventCenter{grid-column:auto;grid-row:auto}
  .header{flex-wrap:wrap}
 }
+
+
+/* Ticket Pearl Light: scoped to tickets, respecting original PHOENIX light/dark tokens. */
+.sportsTicketCard{border-top:3px solid var(--dsw-alias-accent-primary,#c68a39);
+  box-shadow:0 4px 17px rgba(70,50,26,.045);border-radius:17px}
+.sportsTicketCard .sportsTicketHeading{
+  background:linear-gradient(180deg,var(--dsw-alias-interactive-bg-hover,rgba(210,160,86,.06)),
+    var(--dsw-alias-bg-primary,#fff))}
+.sportsTicketSportEmblem{border:0;background:transparent;overflow:visible}
+.sportsTicketSportFallback{display:none}
+.sportsTicketGroup .sportsLeg{flex-wrap:wrap;gap:8px 11px}
+.sportsTicketLegMain{flex:1 1 205px}
+.sportsTicketCard .sportsTicketVerified{font-weight:750}
+.sportsTicketCard .sportsTicketReason summary:focus-visible,
+.sportsTicketCard .sportsTicketDisclaimer summary:focus-visible{outline:2px solid var(--dsw-alias-accent-primary,#c58c40);outline-offset:3px}
+.sportsTicketCard .sportsTicketGroup h4{color:var(--dsw-alias-label-primary,#40362d)}
+.sportsTicketCard .sportsTicketLegNumber{background:var(--dsw-alias-interactive-bg-hover,rgba(191,145,79,.055))}
+@media(max-width:550px){
+  .sportsTicketCard .sportsTicketGroup .sportsLeg{align-items:flex-start}
+  .sportsTicketCard .sportsTicketLegMain{flex-basis:calc(100% - 50px)}
+}
