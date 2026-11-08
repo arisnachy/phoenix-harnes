@@ -12,6 +12,7 @@ import {shortlistDailyMarkets,dailyOddsSportKey} from './daily-market-shortlist.
 import {assessDailyMarketEvidence,unavailableMarketEvidence} from './daily-market-evidence.ts'
 import {selectDailyResearchedMarkets} from './daily-market-selection.ts'
 import {researchNhlOfficialMatch,type DailyNhlSpecialist} from './daily-nhl-specialist.ts'
+import {investigateTicketSpecialists} from './ticket-specialist-gate.ts'
 import {readSportsEventMarketMenu,eventMarketCatalog} from './sports-event-market-menu.ts'
 import {researchDailySpecialMarkets} from './daily-special-market-research.ts'
 
@@ -274,6 +275,24 @@ export function apply(ctx: Context): void {
       // auditing each game. Never add a second leg from the same game.
       const evaluated=selectDailyResearchedMarkets(research,count)
       const best=evaluated.selected
+      // Mandatory specialist dossiers: do NOT convert general ESPN form or an odds
+      // quotation into an approved daily ticket without each sport's investigation.
+      const specialistChecks=args.deep===false?[]:await investigateTicketSpecialists(
+        best.map(review=>({
+          sport:review.candidate.sport,league:review.candidate.league,
+          eventId:review.candidate.espnEventId,date:daily.date,
+          home:daily.events.find(x=>x.eventId===review.candidate.espnEventId&&
+            x.sport===review.candidate.sport&&x.league===review.candidate.league)?.home.name??'',
+          away:daily.events.find(x=>x.eventId===review.candidate.espnEventId&&
+            x.sport===review.candidate.sport&&x.league===review.candidate.league)?.away.name??'',
+          kickoff:review.candidate.kickoff,
+        })),fetch,now,env,quotes)
+      const specialistFor=(review:(typeof best)[number])=>
+        specialistChecks.find(check=>check.sport===review.candidate.sport&&
+          check.league===review.candidate.league&&
+          check.eventId===review.candidate.espnEventId)
+      const dossierReady=(review:(typeof best)[number])=>
+        specialistFor(review)?.status==='researched'
       // Feed the daily research with actual event-level props, periods and
       // alternates from the SAME verified book, rather than stopping at h2h.
       // They remain research-only until a specialist model validates each market.
@@ -281,7 +300,7 @@ export function apply(ctx: Context): void {
         await researchDailySpecialMarkets(best.map(x=>x.candidate),env,fetch,now,
           Math.min(6,count))
       const trustedOptions=best.filter(item=>item.status==='descriptive-support'&&
-        item.priceAudit.classification!=='negative-value')
+        item.priceAudit.classification!=='negative-value'&&dossierReady(item))
       const provisional=best.filter(item=>!trustedOptions.includes(item))
       // Convert only the exact observed offer, not a predicted line, into a
       // native priced ticket. Never substitute a different house or odds.
@@ -290,7 +309,7 @@ export function apply(ctx: Context): void {
         // Uncertain/contraindicated/unavailable legs remain research-only.
         // Never revert silently to the book's favorite if research fails.
         if(review.status!=='descriptive-support'||!review.selectedOutcome||
-          review.priceAudit.classification==='negative-value')return []
+          review.priceAudit.classification==='negative-value'||!dossierReady(review))return []
         const selected=review.selectedOutcome
         const raw=quotes.find(quote=>quote.eventId===candidate.bookmakerEventId&&
           quote.bookmaker===candidate.bookmaker&&quote.market===candidate.market&&
@@ -301,7 +320,7 @@ export function apply(ctx: Context): void {
           market:raw.market,selection:raw.selection,point:raw.point??null}}]
       })
       let ticket:ReturnType<typeof pricedTicket>['card']|null=null
-      if(args.deep!==false&&quoted.length>=4){
+      if(args.deep!==false&&quoted.length>=count){
         try{
           const built=pricedTicket(quoted.map(x=>x.market),quoted.map(x=>x.raw))
           const legs=Array.isArray(built.card.props.legs)?built.card.props.legs:[]
@@ -309,6 +328,7 @@ export function apply(ctx: Context): void {
             title:'PHOENIX · Candidatas investigadas ('+quoted.length+' patas)',
             subtitle:'Preselección descriptiva · ventaja no demostrada · sin apuesta realizada',
             requestedLegs:count,
+            specialistChecks,
             legs:legs.map((leg,index)=>({
               ...(leg!==null&&typeof leg==='object'?leg:{}),
               rationale:quoted[index]?.review.status==='descriptive-support'?
@@ -324,13 +344,15 @@ export function apply(ctx: Context): void {
                   '/'+(quoted[index]!.review.marketOutcomeDiagnostic!.opponent.wins+
                     quoted[index]!.review.marketOutcomeDiagnostic!.opponent.losses)+')':
                   'no evaluable como hándicap/total')+
+                '. Expediente obligatorio: '+(specialistFor(quoted[index]!.review)?.specialist??'no disponible')+
+                '. Pendientes: '+(specialistFor(quoted[index]!.review)?.pendingSteps.slice(0,3).join('; ')??'sin evidencia')+
                 '. Acierto mínimo exigido '+quoted[index]!.review.priceAudit.breakEvenPercent+
                 '%. Frecuencias históricas no son probabilidades calibradas; bajas y titulares pendientes.':
                 'Candidata CONDICIONAL: no existe una señal independiente suficiente. '+
                 'Verificar lesiones, titulares y reglas antes de considerar.',
             })),
             note:String(built.card.props.note??'')+
-              ' Este ticket es una COTIZACIÓN DE INVESTIGACIÓN, NO una recomendación de rentabilidad. '+
+              ' Se investigó cada pata con su especialista. Estas son CANDIDATAS, NO selecciones con ventaja calibrada ni apuestas aprobadas. '+
               'Patas con apoyo descriptivo: '+trustedOptions.length+'; condicionales: '+
               provisional.length+'. Se requieren probabilidades calibradas y datos de alineación '+
               'para afirmar ventaja real. No se realizó ninguna apuesta.',
@@ -342,6 +364,9 @@ export function apply(ctx: Context): void {
           trustedOptions.length>=count,
         discoveryComplete:pool.selected.length>=count,
         researchComplete:trustedOptions.length>=count,
+        specialistChecks,specialistResearched:specialistChecks.filter(x=>x.status==='researched').length,
+        specialistIncomplete:specialistChecks.filter(x=>x.status!=='researched').length,
+        approvedForBetting:0,
         quotedCandidates:pool.selected.length,researchPool,
         marketCandidates:pool.eligibleMarkets,matchedGames:pool.matchesInSlate,
         bookmaker:pool.bookmaker,reviewed:research.length,
@@ -362,7 +387,7 @@ export function apply(ctx: Context): void {
         eventsScanned:daily.totalEligible,fixturesConsidered:daily.events.length,
         competitionsChecked:daily.coverage,sourcesChecked:attempts,
         providerHealth,specialMarkets,placed:false,
-        warning:'Los hándicaps NHL +1.5/-1.5 sin porteros confirmados ni modelo calibrado de cobertura se bloquean como patas cotizadas. Selección orientativa y cuotas reales observadas: ni proyecciones descriptivas ni probabilidades sin margen son modelos calibrados ni garantías de ganar. La línea y el precio deben confirmarse en la casa, igual que las bajas y titulares oficiales. El campo specialMarkets investiga automáticamente props, periodos y líneas alternativas de la MISMA casa cuando el proveedor las publica; son opciones de investigación y NO patas aprobadas sin modelo específico. Nunca inventar ofertas.',
+        warning:'El expediente específico de NFL/NBA/NHL/MLB/Fútbol/Tenis es obligatorio: un fallo impide cotizar esa pata como investigada. Los especialistas no certifican apuestas ganadoras ni EV. Los hándicaps NHL +1.5/-1.5 sin porteros confirmados ni modelo calibrado de cobertura se bloquean como patas cotizadas. Selección orientativa y cuotas reales observadas: ni proyecciones descriptivas ni probabilidades sin margen son modelos calibrados ni garantías de ganar. La línea y el precio deben confirmarse en la casa, igual que las bajas y titulares oficiales. El campo specialMarkets investiga automáticamente props, periodos y líneas alternativas de la MISMA casa cuando el proveedor las publica; son opciones de investigación y NO patas aprobadas sin modelo específico. Nunca inventar ofertas.',
         instruction:'priceAudit.breakEvenPercent es el porcentaje exigido por la cuota y NO un pronóstico. El valor esperado queda sin verificar cuando no hay modelo calibrado para esa línea. Nunca conviertas un resultado CONTRAINDICADO o INCIERTO en pata del ticket; muestra riesgo y alternativas sin inventar precios. La tarjeta nativa solo muestra precios cotejados de una misma casa. Distingue CANDIDATAS CON APOYO DESCRIPTIVO de CONDICIONALES (no equivalen a picks validados). Si la evidencia favorece el lado opuesto, usa el precio real de selectedOutcome. Verifica informes oficiales de lesiones, titulares/porteros, props, períodos y reglas antes de apostar. No hay apuesta realizada.',
       })
     },
