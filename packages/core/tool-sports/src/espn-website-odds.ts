@@ -135,7 +135,7 @@ function matchingFixture(embedded:Record<string,unknown>,official:Scoreboard):bo
  */
 export async function fetchEspnWebsiteOdds(
   sportKey:string,markets:string,
-  fetcher:typeof fetch=fetch,
+  fetcher:typeof fetch,
   readJSON:<T>(url:string)=>Promise<T>,
   now=Date.now(),
 ):Promise<EspnWebResult>{
