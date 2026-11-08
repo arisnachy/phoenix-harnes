@@ -2,6 +2,7 @@
  * These scores do NOT represent calibrated probabilities or betting EV.
  */
 import type {DailyMarketCandidate} from './daily-market-shortlist.ts'
+import {auditMarketPrice,type MarketPriceAudit} from './market-price-audit.ts'
 import type {DailyNhlSpecialist} from './daily-nhl-specialist.ts'
 import type {auditUniversalMatchup} from './universal-matchup-factors.ts'
 
@@ -18,6 +19,7 @@ export type MarketResearchReview={
   verifiedSources:number;sourceCount:number
   injuries:number;news:number;headToHead:number
   evidenceFor:string[];warnings:string[];rankingScore:number
+  priceAudit:MarketPriceAudit
   descriptiveLineDistance:number|null;relativeSignal:number|null
   /** Diagnostic only; historical margins are not a calibrated NHL cover forecast. */
   nhlOfficial?:DailyNhlSpecialist
@@ -76,8 +78,8 @@ export function assessDailyMarketEvidence(
     away=(a.scoredPerGame!+h.allowedPerGame!)/2
     total=round(home+away);diff=round(home-away)
     home=round(home);away=round(away)
-    const points=[...evidence.home.lastGames.map(g=>g.scored),
-      ...evidence.away.lastGames.map(g=>g.scored)]
+    const points=[...evidence.home.lastGames.map(g=>g.scored+g.allowed),
+      ...evidence.away.lastGames.map(g=>g.scored+g.allowed)]
     variability=standardDeviation(points)
     // A large difference against a bookmaker line is descriptive support only:
     // sampling uncertainty, roster changes and pricing costs remain unresolved.
@@ -150,6 +152,16 @@ export function assessDailyMarketEvidence(
     missing.push('BLOQUEO NHL: portero titular de ambos clubes, 5v5 xG/GSAx, bajas, descanso y reglas de OT/empty-net sin validar; no recomendar este hándicap.')
     direction='Hándicap NHL en revisión: tendencia de goles y precio no bastan para aprobar'
   }
+  const priceAudit=auditMarketPrice(candidate,side)
+  if(priceAudit.breakEvenPercent!==null)
+    missing.push('Cuota de la selección exige '+priceAudit.breakEvenPercent+
+      '% de acierto; EV y probabilidades independientes no calibrados.')
+  if(priceAudit.breakEvenPercent!==null&&priceAudit.breakEvenPercent>=80&&
+    priceAudit.classification==='unvalidated'&&status==='descriptive-support'){
+    status='uncertain'
+    direction='Precio exigente: la forma reciente NO valida un favorito de esta cuota'
+    missing.push('BLOQUEO DE PRECIO: no aprobar favorito caro sin probabilidad calibrada.')
+  }
   if(candidate.sport==='hockey')missing.push('Portero titular debe confirmarse; SV% y xG no incluidos en esta señal')
   if(candidate.sport==='baseball')missing.push('Revisar abridores, bullpen, techo y alineaciones oficiales')
   if(candidate.sport==='football')missing.push('QB, inactivos, snap counts y clima requieren verificación final')
@@ -189,7 +201,7 @@ export function assessDailyMarketEvidence(
       ...(evidence.headToHead.length?['H2H con '+evidence.headToHead.length+' partidos observados']:[]),
       ...(side?['El mercado '+candidate.market+' ofrece '+side.selection+
         (side.line===null?'':' '+side.line)+' a cuota observada '+side.decimalOdds]:[]),
-    ],warnings:missing,rankingScore,
+    ],warnings:missing,rankingScore,priceAudit,
     descriptiveLineDistance:lineDistance===null?null:round(lineDistance),
     relativeSignal,...(nhlPuckLineAudit?{nhlPuckLineAudit}:{}),
   }
@@ -210,5 +222,6 @@ export function unavailableMarketEvidence(
     originalMarketSelection:candidate.selection,marketDirection:'Sin dirección verificada',
     verifiedSources:0,sourceCount:0,injuries:0,news:0,headToHead:0,evidenceFor:[],
     warnings:['Investigación no disponible: '+reason.slice(0,180)],rankingScore:0,
+    priceAudit:auditMarketPrice(candidate,null),
     descriptiveLineDistance:null,relativeSignal:null}
 }
