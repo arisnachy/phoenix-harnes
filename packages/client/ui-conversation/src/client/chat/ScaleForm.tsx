@@ -324,7 +324,7 @@ export function ScaleForm({ spec, onAction, verified=false, restoredFromCatalog=
             <input type="radio" name={'assessment-'+index} value={choiceValue(item,i)}
               checked={selected[item.id]===i}
               onChange={() => { setSelected(old=>({...old,[item.id]:i})); setCopied(false) }} />
-            <span>{option.label.replace(/\\s*\\(-?\\d+\\)$/u,'')}</span>
+            <span>{option.label.replace(/\s*\(-?\d+\)$/u,'')}</span>
           </label>)}
         </div>
       </fieldset>)}
