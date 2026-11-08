@@ -28,7 +28,15 @@ const effectiveResearchRank=(r:MarketResearchReview):number=>
   r.priceAudit?.classification==='negative-value'?0:researchRank[r.status]
 const compare=(a:MarketResearchReview,b:MarketResearchReview)=>{
   const ra=effectiveResearchRank(a),rb=effectiveResearchRank(b)
-  return rb-ra||valueRank(b)-valueRank(a)||b.rankingScore-a.rankingScore||
+  // For equally evidenced moneyline picks, prefer the less fragile priced side.
+  // This is relative bookmaker confidence, not a validated predictive edge.
+  const aShare=a.selectedOutcome?.noVigShare,bShare=b.selectedOutcome?.noVigShare
+  const winnerStrength=a.candidate.market==='h2h'&&b.candidate.market==='h2h'
+    &&typeof aShare==='number'&&Number.isFinite(aShare)
+    &&typeof bShare==='number'&&Number.isFinite(bShare)
+      ?bShare-aShare:0
+  return rb-ra||valueRank(b)-valueRank(a)||winnerStrength||
+    b.rankingScore-a.rankingScore||
     b.verifiedSources-a.verifiedSources||
     b.candidate.quoteUpdatedAt.localeCompare(a.candidate.quoteUpdatedAt)||
     a.candidate.market.localeCompare(b.candidate.market)||
