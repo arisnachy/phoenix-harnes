@@ -12,6 +12,10 @@ const defaultLeagues = [
   ['basketball','nba'],['hockey','nhl'],['baseball','mlb'],['football','nfl'],
   ['soccer','eng.1'],['soccer','esp.1'],['soccer','usa.1'],['soccer','uefa.champions'],
   ['basketball','wnba'],['tennis','atp'],['tennis','wta'],
+  // Keep the ticket scout aligned with the daily world soccer slate.
+  ['soccer','mex.1'],['soccer','ger.1'],['soccer','ita.1'],['soccer','fra.1'],
+  ['soccer','por.1'],['soccer','ned.1'],['soccer','bra.1'],['soccer','arg.1'],
+  ['soccer','uefa.europa'],['soccer','fifa.world'],
 ] as const
 const dayNow=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
   year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
@@ -19,6 +23,24 @@ const validDate=(day:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(day)
   &&Number.isFinite(Date.parse(day+'T00:00:00Z'))
   &&new Date(day+'T00:00:00Z').toISOString().slice(0,10)===day
 const percent=(w:number,g:number)=>(w+1)/(g+2)
+const localDay=(stamp:number)=>new Intl.DateTimeFormat('en-CA',{
+  timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit',
+}).format(new Date(stamp))
+/** Ranks descriptive agreement only. It is NOT an outcome probability. */
+const descriptiveRank=(match:Awaited<ReturnType<typeof researchSport>>['matches'][number]):number|null=>{
+  const home=match.home,away=match.away
+  const minGames=match.sport==='football'?3:5
+  if(match.evidence!=='descriptive'||home.completedGames<minGames||away.completedGames<minGames
+    ||home.averageMargin===null||away.averageMargin===null
+    ||home.averageScored===null||away.averageScored===null)return null
+  const winDiff=percent(home.wins,home.completedGames)-percent(away.wins,away.completedGames)
+  const scale=Math.max(1,(home.averageScored+away.averageScored)/2)
+  const marginDiff=Math.max(-1,Math.min(1,(home.averageMargin-away.averageMargin)/(2*scale)))
+  const restDiff=Math.max(-1,Math.min(1,((home.restHours??0)-(away.restHours??0))/72))
+  if(Math.abs(winDiff)<0.08||Math.sign(winDiff)!==Math.sign(marginDiff))return null
+  const rank=0.55*winDiff+0.40*marginDiff+0.05*restDiff
+  return Math.abs(rank)>=0.16?rank:null
+}
 export async function evidenceTicket(
   count:number,date=dayNow(),sportFilter?:string,fetcher:typeof fetch=fetch,
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
@@ -34,30 +56,52 @@ export async function evidenceTicket(
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por el operador')
   const leagues=defaultLeagues.filter(([sport])=>!sportFilter||sport===sportFilter)
   if(!leagues.length)throw Error('Disciplina sin cobertura para ticket automático')
-  const slate=await Promise.allSettled(leagues.map(async([sport,league])=>{
-    const board=await getFeed<{events?:Array<{date?:string;status?:{type?:{state?:string}}}>}>(
-      'https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+
-      '/scoreboard?dates='+date.replaceAll('-',''),fetcher)
-    if(!Array.isArray(board.events))throw Error('Cartelera no verificada')
-    const active=board.events.filter(e=>{
+  // A burst of 40+ ESPN scoreboards causes rate-limit/HTTP 400 failures.
+  // Scan no more than five leagues (two UTC dates each) concurrently.
+  const slate:Array<PromiseSettledResult<{sport:string;league:string;active:number}>>=[]
+  for(let offset=0;offset<leagues.length;offset+=5){
+    const batch=await Promise.allSettled(leagues.slice(offset,offset+5).map(async([sport,league])=>{
+    // Search both ESPN UTC date partitions for the requested local (RD) day.
+    const next=new Date(Date.parse(date+'T00:00:00Z')+86_400_000)
+      .toISOString().slice(0,10).replaceAll('-','')
+    const partitions=await Promise.allSettled([date.replaceAll('-',''),next].map(day=>
+      getFeed<{events?:Array<{id?:string|number;date?:string;status?:{type?:{state?:string}}}>}>(
+        'https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+
+        '/scoreboard?dates='+day,fetcher)))
+    const observed=partitions.flatMap(x=>x.status==='fulfilled'&&Array.isArray(x.value.events)
+      ?x.value.events:[])
+    if(!partitions.some(x=>x.status==='fulfilled'&&Array.isArray(x.value.events)))
+      throw Error('Cartelera no verificada')
+    const active=new Set(observed.filter(e=>{
       const at=Date.parse(e.date??'')
-      return Number.isFinite(at)&&at>now&&
-        (e.status?.type?.state??'pre')==='pre'
-    }).length
+      return Number.isFinite(at)&&at>now&&localDay(at)===date
+        &&(e.status?.type?.state??'pre')==='pre'
+    }).map(e=>String(e.id??'')).filter(id=>/^\d{1,20}$/u.test(id))).size
     return{sport,league,active}
-  }))
+    }))
+    slate.push(...batch)
+  }
   const eligible=slate.flatMap(r=>r.status==='fulfilled'&&r.value.active>0?[r.value]:[])
   eligible.sort((a,b)=>b.active-a.active||a.sport.localeCompare(b.sport))
-  // Scan a bounded slate of six leagues, in batches of three. NFL needs
-  // several weeks to collect three real matches; soccer typically needs 21 days.
-  // Only verified future event IDs can ever be promoted to ticket legs.
-  const shortlist=sportFilter?eligible.slice(0,6):diversifiedSportsShortlist(eligible,6)
+  // Investigate in three-league batches. Do not stop at the first six leagues
+  // when their evidence is weak: expand into verified Portugal/Italy/etc slates.
+  // Only verified, future ESPN event IDs can become selections.
+  const shortlist=sportFilter?eligible:diversifiedSportsShortlist(eligible,eligible.length)
   const reports:Array<PromiseSettledResult<Awaited<ReturnType<typeof researchSport>>>>=[]
+  const researchStarted=Date.now()
+  let budgetExhausted=false
   for(let offset=0;offset<shortlist.length;offset+=3){
+    if(offset>0&&Date.now()-researchStarted>85_000){budgetExhausted=true;break}
     const batch=await Promise.allSettled(shortlist.slice(offset,offset+3).map(({sport,league})=>
       researchSport(sport,league,date,fetcher,now,env,
         sport==='football'?28:sport==='soccer'?28:sport==='tennis'?28:21)))
     reports.push(...batch)
+    // Stop costly expansion only after enough independently researched,
+    // directionally consistent picks are available; an HTTP error is not a vote.
+    const viable=reports.flatMap(x=>x.status==='fulfilled'?x.value.matches:[])
+      .filter(x=>descriptiveRank(x)!==null)
+    const diversified=sportFilter!==undefined||new Set(viable.map(x=>x.sport)).size>=2
+    if(offset+3>=6&&viable.length>=count&&diversified)break
   }
   const candidateLegs:Array<{pick:ResearchTicketLeg;rank:number;home:string;away:string;kickoff:string}>=[]
   let evaluated=0
@@ -69,31 +113,10 @@ export async function evidenceTicket(
       // Three different fixtures are a lower bound for descriptive research,
       // NOT enough to sell a high-confidence 5/6-leg multi-sport parlay.
       // Only NFL retains 3 because a league schedule has one match per week.
-      const minGames=match.sport==='football'?3:5
-      if(match.evidence!=='descriptive'
-        ||match.home.completedGames<minGames||match.away.completedGames<minGames){
-        insufficientEvidence++
-        continue
-      }
+      // Keep the same, testable descriptive filter during expansion and choice.
+      const rank=descriptiveRank(match)
+      if(rank===null){insufficientEvidence++;continue}
       const home=match.home,away=match.away
-      if(home.averageMargin===null||away.averageMargin===null||home.averageScored===null||away.averageScored===null)continue
-      const winDiff=percent(home.wins,home.completedGames)-percent(away.wins,away.completedGames)
-      // Scaled by sport-specific observed scoring rather than equating NBA point margins with soccer goals.
-      const scale=Math.max(1,(home.averageScored+away.averageScored)/2)
-      const marginDiff=Math.max(-1,Math.min(1,(home.averageMargin-away.averageMargin)/(2*scale)))
-      const restDiff=Math.max(-1,Math.min(1,((home.restHours??0)-(away.restHours??0))/72))
-      // Conservative descriptive ranking, not a probability model. At least
-      // five distinct, scored games on EACH side for all non-NFL disciplines.
-      // Avoid a spurious lean when the margin and win-rate contradict.
-      if(Math.abs(winDiff)<0.08||Math.sign(winDiff)!==Math.sign(marginDiff)){
-        insufficientEvidence++
-        continue
-      }
-      const rank=0.55*winDiff+0.40*marginDiff+0.05*restDiff
-      if(Math.abs(rank)<0.16){
-        insufficientEvidence++
-        continue
-      }
       const favorite=rank>0?home:away,opponent=rank>0?away:home
       const sportRisks:Record<string,string>={
         soccer:'once/lesiones y xG',basketball:'lesiones y rotaciones',
@@ -137,7 +160,8 @@ export async function evidenceTicket(
       insufficientEvidence,pregameSummariesVerified:0,injuryFeedsVerified:0,
       deepContextChecked:0,newsMatched:0,playerStatsChecked:0,
       multisportSatisfied,scannedSports,selectedSports,
-      researchStandard:'Sin candidatos con cinco partidos distintos por equipo (NFL tres) y tendencia contrastable. Deportes evaluados: '+scannedSports+'.',
+      researchStandard:'Sin candidatos con cinco partidos distintos por equipo (NFL tres) y tendencia contrastable. Deportes evaluados: '+scannedSports+'.'+
+        (budgetExhausted?' Búsqueda detenida por presupuesto de tiempo; quedan ligas sin investigar.':''),
       modelProbabilities:false,priced:false,placed:false,selections:[],
       events:[]}
   }
@@ -198,7 +222,8 @@ export async function evidenceTicket(
     insufficientEvidence,pregameSummariesVerified,injuryFeedsVerified,
     deepContextChecked,newsMatched,playerStatsChecked,
     multisportSatisfied,scannedSports,selectedSports,
-    researchStandard:'Preselección basada en 5 eventos históricos por equipo (NFL: 3). Se exploraron '+scannedSports+' deportes; seleccionados: '+(selectedSports.join(', ')||'ninguno')+'. Diversidad '+(multisportSatisfied?'cumplida':'NO cumplida')+'. Lesiones, titulares y cuotas siguen sin verificación específica.',
+    researchStandard:'Preselección basada en 5 eventos históricos por equipo (NFL: 3). Se exploraron '+scannedSports+' deportes; seleccionados: '+(selectedSports.join(', ')||'ninguno')+'. Diversidad '+(multisportSatisfied?'cumplida':'NO cumplida')+'. Lesiones, titulares y cuotas siguen sin verificación específica.'+
+      (budgetExhausted?' Búsqueda detenida por presupuesto de tiempo; quedan ligas sin investigar.':''),
     modelProbabilities:false,priced:false,placed:false,selections:documented,
     events:selected.map(x=>({eventId:x.pick.eventId,home:x.home,away:x.away,kickoff:x.kickoff,
       sport:x.pick.sport,league:x.pick.league,pick:x.pick.pick==='home'?'home' as const:'away' as const}))}
