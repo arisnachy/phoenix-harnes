@@ -131,10 +131,10 @@ export async function researchSport(
     // Research reports a preliminary minimum, while the automatic-ticket
     // promotion layer requires five distinct games per team (NFL: three).
     const requiredGames=sport==='football'?3:5
-    const sourceUsable=successfulDays>=Math.ceil(lookbackDays*0.60)||
-      (archive.scheduleSuccesses>=2&&homeForm.completedGames>=requiredGames&&
-       awayForm.completedGames>=requiredGames)
-    const sufficient=sourceUsable&&
+    // Five distinct completed games for BOTH teams are observed evidence even
+    // if ESPN did not respond on off-days. Never equate daily API availability
+    // with number of matches played. Partial month coverage remains disclosed.
+    const sufficient=archive.status!=='unavailable'&&
       homeForm.completedGames>=requiredGames&&awayForm.completedGames>=requiredGames
     const result:ResearchMatch={eventId:String(event.id??''),date:event.date??'',sport,league,
       home:homeForm,away:awayForm,source:'ESPN Site API',evidence:sufficient?'descriptive':'insufficient',
