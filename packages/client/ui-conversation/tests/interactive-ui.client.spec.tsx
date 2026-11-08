@@ -70,10 +70,10 @@ describe('interactive scales and spreadsheet', () => {
   it('updates form results without handing a model a new turn and resets all answers', () => {
     render(<ScaleForm spec={parseScaleForm(scale)!} />)
     expect(screen.getByText('0 de 2 respuestas')).not.toBeNull()
-    fireEvent.change(screen.getByLabelText('1. Concentración'), { target: { value: '3' } })
+    fireEvent.click(screen.getAllByRole('group')[0]!.querySelectorAll('input[type="radio"]')[1]!)
     expect(screen.getByText('1 de 2 respuestas')).not.toBeNull()
-    fireEvent.change(screen.getByLabelText('2. Organización'), { target: { value: '3' } })
-    expect(screen.getByText('Revisar')).not.toBeNull()
+    fireEvent.click(screen.getAllByRole('group')[1]!.querySelectorAll('input[type="radio"]')[1]!)
+    expect(screen.queryByText('Revisar')).toBeNull() // unverified scales cannot claim a clinical band
     expect(screen.getByText('6')).not.toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Reiniciar/ }))
     expect(screen.getByText('0 de 2 respuestas')).not.toBeNull()
