@@ -318,7 +318,8 @@ export async function evidencePricedTicket(
     eventId:research.events[index]?.eventId??q.eventId,selection:q.selection,
     market:q.market,noVigShare:quoteSideNoVig(q,all,now),
   })))
-  const elevatedMarketRisk=marketRisk.legs.some(x=>x.relativeRisk==='elevated')
+  const elevatedMarketRisk=marketRisk.missingQuotes>0||
+    marketRisk.legs.some(x=>x.relativeRisk==='elevated')
   const marketQuotes:MarketOutcome[]=best.choices.map((q,index)=>({
     eventId:q.eventId,bookmaker:q.bookmaker,market:q.market,selection:q.selection,point:q.point,
     price:q.price,home:q.home,away:q.away,time:q.time,updatedAt:q.updatedAt,
