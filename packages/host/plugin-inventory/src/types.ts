@@ -586,12 +586,13 @@ export interface AnatomyConnectorEntry {
 export interface AnatomyConnectorSnapshot {
   readonly entries:readonly AnatomyConnectorEntry[]
   readonly running:boolean
+  readonly progress?:{readonly completed:number;readonly total:number;readonly current?:AnatomyConnectorId;readonly status:'running'|'finished'|'error'}
   readonly readyCount:number
   readonly clinicalValidation:'not-validated'
 }
-export interface AnatomyConnectorInstallRequest {readonly id:AnatomyConnectorId}
+export interface AnatomyConnectorInstallRequest {readonly id:AnatomyConnectorId|'all'}
 export interface AnatomyConnectorInstallReceipt {
-  readonly id:AnatomyConnectorId
+  readonly id:AnatomyConnectorId|'all'
   readonly status:'started'|'running'|'blocked'|'error'
   readonly detail:string
 }
