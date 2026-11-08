@@ -1010,7 +1010,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         const heading=[leg.sport??'Deporte no clasificado',leg.country,leg.league].filter(Boolean).join(' · ')
         groups.set(heading,[...(groups.get(heading)??[]),leg])
       }
-      return <ForecastTicketScope legs={p.legs}><section className={`${css.sportsCard} ${css.sportsTicketCard}`} data-generative-ui="sports_ticket_card">
+      return <section className={`${css.sportsCard} ${css.sportsTicketCard}`} data-generative-ui="sports_ticket_card"><ForecastTicketScope legs={p.legs}>
         {receipt&&<SportsTicketAutoRegistration props={p}/>}
         <header className={css.sportsTicketHeading}>
           <div className={css.sportsTicketRibbon}>
@@ -1078,7 +1078,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           {onAction&&<button type="button" onClick={()=>{ onAction('Kira, haz seguimiento y liquidación preliminar de las selecciones reales de este ticket. Usa sports_chat_ticket_track con los IDs ESPN y mercados exactos SOLO si fueron capturados y verificados. Verifica reglas del operador y el recibo para diferenciar apuesta aceptada, resultado provisional, anulación y pago. Si faltan IDs/fecha, identifícalos antes de calcular. Selecciones: '+p.legs.map(l=>[l.event,l.selection,l.market,l.bookmaker,l.price].join(' / ')).join('; '),'draft') }}>Verificar si ganó o perdió</button>}
           {p.askPrompt&&onAction&&<button type="button" onClick={() => {if(p.askPrompt)onAction(p.askPrompt,'draft')}}>Revisar selecciones</button>}
         </footer>
-      </section></ForecastTicketScope>
+      </ForecastTicketScope></section>
     }
     case 'event_card': {
       const { title, subtitle, badge, left, center, right, footer } = block.props
