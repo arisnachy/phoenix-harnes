@@ -5,8 +5,20 @@ import {evidencePricedTicket} from '../src/evidence-priced-ticket.ts'
 const date='2026-10-28',now=Date.parse('2026-10-28T15:00:00Z')
 const kick='2026-10-28T23:00:00Z'
 const board=(url)=>{
-  const day=String(url).match(/dates=([0-9]{8})/u)?.[1]
+  const day=String(url).match(/dates=([0-9]{6,8})/u)?.[1]
   if(!String(url).includes('/soccer/eng.1/'))return{events:[]}
+  if(day==='202610')return{events:
+    ['20261027','20261026','20261025','20261024','20261023'].flatMap(d=>
+      Array.from({length:5},(_,i)=>({
+        id:String(500+i+Number(d.slice(-2))*1000),
+        date:'2026-'+d.slice(4,6)+'-'+d.slice(6,8)+'T21:00:00Z',
+        status:{type:{state:'post'}},
+        competitions:[{competitors:[
+          {homeAway:'home',team:{id:String(i)+'1',displayName:'Home '+i},score:'3'},
+          {homeAway:'away',team:{id:String(i)+'2',displayName:'Away '+i},score:'0'},
+        ]}],
+      })))
+  }
   if(!['20261028','20261027','20261026','20261025','20261024','20261023'].includes(day))return{events:[]}
   const pre=day==='20261028'
   return{events:Array.from({length:5},(_,i)=>({
@@ -321,4 +333,34 @@ test('one missing lineup remains conditional; four researched legs are retained'
   assert.equal(result.card.props.legs.filter(x=>x.researchStatus==='conditional').length,1)
   assert.ok(result.card.props.legs.some(x=>x.pendingEvidence.includes('starting XI not published')))
   assert.equal(result.approvedLegs,0)
+})
+
+
+test('undated ESPN prices decorate the research ticket but NEVER complete its quotation',async()=>{
+  const read=async url=>{
+    const raw=board(url)
+    const u=String(url)
+    if(u.includes('/scoreboard?dates=20261028')){
+      raw.events=raw.events.map((e,i)=>({...e,competitions:e.competitions.map(c=>({
+        ...c,id:e.id,
+        odds:[{provider:{name:'ESPN Reference Book'},
+          homeTeamOdds:{moneyLine:-130},awayTeamOdds:{moneyLine:115},
+          drawOdds:240}],
+      }))}))
+    }
+    return new Response(JSON.stringify(raw),{status:200})
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',0,now,
+    {PHOENIX_SPORTS_ESPN_DISABLED:'0',
+      PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'},read,
+    undefined,'winner',stubSpecialists)
+  assert.equal(result.verifiedEvents,5)
+  assert.equal(result.quotedLegs,0)
+  assert.equal(result.priced,false)
+  assert.equal(result.card.props.legs.length,5)
+  assert.equal(result.card.props.combinedOdds,'No disponible')
+  assert.ok(result.card.props.legs.every(x=>x.referenceOdds?.nonCotizable===true))
+  assert.match(result.card.props.legs[0].rationale,/NO cotizable/)
+  assert.match(result.card.props.subtitle,/TICKET DE INVESTIGACIÓN/)
+  assert.equal(result.placed,false)
 })
