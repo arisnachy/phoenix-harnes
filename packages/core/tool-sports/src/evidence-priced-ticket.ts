@@ -151,7 +151,7 @@ export async function evidencePricedTicket(
         market:event.sport==='soccer'?'1x2':'h2h',
         selection:q.selection,point:q.point??null,price:q.price,
         home:q.home,away:q.away,time,updatedAt:q.updatedAt,
-        observedAt:currentSnapshot?q.observedAt:undefined,
+        ...(currentSnapshot&&q.observedAt?{observedAt:q.observedAt}:{}),
         source:q.source??'Proveedor de cuotas público',sportKey,
       }] satisfies KeylessQuote[]
     })
@@ -265,7 +265,7 @@ export async function evidencePricedTicket(
   const marketQuotes:MarketOutcome[]=best.choices.map((q,index)=>({
     eventId:q.eventId,bookmaker:q.bookmaker,market:q.market,selection:q.selection,point:q.point,
     price:q.price,home:q.home,away:q.away,time:q.time,updatedAt:q.updatedAt,
-    observedAt:q.observedAt,source:q.source,sportKey:leagueSportKey[research.events[index]?.league??'']??routing[research.events[index]?.sport??'']?.oddsSportKey??'sports_keyless',
+    ...(q.observedAt?{observedAt:q.observedAt}:{}),source:q.source,sportKey:leagueSportKey[research.events[index]?.league??'']??routing[research.events[index]?.sport??'']?.oddsSportKey??'sports_keyless',
   }))
   const selections:MarketSelection[]=marketQuotes.map(q=>({
     eventId:q.eventId,bookmaker:q.bookmaker,market:q.market,selection:q.selection,point:q.point??null,
