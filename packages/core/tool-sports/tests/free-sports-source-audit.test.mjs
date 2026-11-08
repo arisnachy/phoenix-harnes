@@ -38,7 +38,7 @@ test('unmatched or stale free events never become evidence or contradiction',asy
     strAwayTeam:'Boston Celtics',strTimestamp:'2026-11-11T01:00:00Z'}]})
   const result=await crosscheckFreeFixture(game,f)
   assert.equal(result[0].status,'not-found')
-  assert.match(result[0].detail,/NO confirma ausencia/)
+  assert.match(result[0].detail,/NO prueba ausencia/)
 })
 
 test('provider 429 is unavailable and never becomes an empty observed event',async()=>{
@@ -122,6 +122,7 @@ test('source catalog distinguishes integrated providers from catalog-only and hi
   assert.ok(freeSourceInventory.some(x=>x.name==='Jolpica F1'&&x.state==='catalog-only'))
   assert.ok(freeSourceInventory.some(x=>x.name==='StatsBomb Open Data'&&x.state==='historical-only'))
 })
+
 test('all 17 sports have truthful source coverage, including weak/no-API disciplines',()=>{
   const sports=['soccer','basketball','baseball','football','hockey','tennis','mma',
     'racing','golf','cricket','rugby','lacrosse','volleyball','water-polo',
