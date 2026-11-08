@@ -94,7 +94,7 @@ export async function evidenceTicket(
     if(offset>0&&Date.now()-researchStarted>85_000){budgetExhausted=true;break}
     const batch=await Promise.allSettled(shortlist.slice(offset,offset+3).map(({sport,league})=>
       researchSport(sport,league,date,fetcher,now,env,
-        sport==='football'?28:sport==='soccer'?28:sport==='tennis'?28:21)))
+        sport==='football'?35:sport==='soccer'?56:sport==='tennis'?42:28)))
     reports.push(...batch)
     // Stop costly expansion only after enough independently researched,
     // directionally consistent picks are available; an HTTP error is not a vote.
