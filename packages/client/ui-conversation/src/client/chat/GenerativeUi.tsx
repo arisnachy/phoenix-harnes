@@ -1,6 +1,7 @@
 import { useEffect,useId, useState, type ReactNode } from 'react'
 import { PhoenixStatusPill, PhoenixAgentLine, PhoenixUiIcon, choosePhoenixUiIcon, choosePhoenixUiTone, isPhoenixUiIconName, type PhoenixUiIconName, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
 import { ScaleForm, parseScaleForm, type ScaleFormSpec } from './ScaleForm.tsx'
+import { AssessmentKiraReport, parseAssessmentKiraReport, type AssessmentKiraReportSpec } from './AssessmentKiraReport.tsx'
 import { parseSmartForm, parseSmartLibrary, type SmartFormSpec, type SmartLibrarySpec } from './SmartFormEngine.ts'
 import { SmartFormWorkspace } from './SmartFormSurface.tsx'
 import { SpreadsheetSurface, parseSpreadsheet, type SpreadsheetSpec } from './SpreadsheetSurface.tsx'
@@ -164,7 +165,7 @@ type AgentLineBlock = {
 const supportedTones: readonly PhoenixStatusTone[] = ['positive', 'warning', 'negative', 'info', 'neutral']
 
 export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | SportsGameCard | SportsScheduleCard | SportsTicketCard | SportsOddsCard | SportsEspnDashboard
-  | CanvasSpec | VisualIntelligenceSpec | ScaleFormSpec | SmartFormSpec | SmartLibrarySpec | SpreadsheetSpec | GeoMapSpec | SceneMapSpec | DiagramSpec | StatusPillBlock | AgentLineBlock
+  | CanvasSpec | VisualIntelligenceSpec | ScaleFormSpec | AssessmentKiraReportSpec | SmartFormSpec | SmartLibrarySpec | SpreadsheetSpec | GeoMapSpec | SceneMapSpec | DiagramSpec | StatusPillBlock | AgentLineBlock
 
 export type GenerativeUiSegment =
   | { kind: 'markdown'; text: string }
@@ -452,6 +453,7 @@ export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null
     case 'ui_canvas': return parseCanvasSpec(value)
     case 'visual_intelligence': return parseVisualIntelligence(value)
     case 'scale_form': return parseScaleForm(value)
+    case 'assessment_report': return parseAssessmentKiraReport(value)
     case 'smart_form': return parseSmartForm(value)
     case 'smart_form_library': return parseSmartLibrary(value)
     case 'spreadsheet': return parseSpreadsheet(value)
@@ -515,7 +517,7 @@ export function splitGenerativeUiText(
     if (parsed === null) {
       if (/"component"\s*:\s*"(?:sports_game_card|sports_schedule_card|sports_ticket_card)"/.test(body ?? ''))
         segments.push({ kind: 'notice', text: 'La tarjeta deportiva no pudo validarse. Kira debe consultar de nuevo el evento y entregar los datos verificados.' })
-      else if (/"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_odds_card)"/.test(body ?? ''))
+      else if (/"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|assessment_report|smart_form|smart_form_library|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_odds_card)"/.test(body ?? ''))
         segments.push({ kind: 'notice', text: 'Esta interfaz no pudo mostrarse. Pide a Kira que la actualice.' })
       else appendMarkdown(segments, raw)
     }
@@ -529,7 +531,7 @@ export function splitGenerativeUiText(
   let tail = text.slice(cursor)
   if (options.streaming === true) {
     const lastJsonFence = tail.lastIndexOf('```json')
-    const relevantJson = lastJsonFence >= 0 && /"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_odds_card)"/.test(tail.slice(lastJsonFence))
+    const relevantJson = lastJsonFence >= 0 && /"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|assessment_report|smart_form|smart_form_library|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_odds_card)"/.test(tail.slice(lastJsonFence))
       ? lastJsonFence : -1
     const unfinishedFence = Math.max(tail.lastIndexOf('```generative-ui'), relevantJson)
     if (unfinishedFence >= 0) tail = tail.slice(0, unfinishedFence)
@@ -557,7 +559,7 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
       continue
     }
     const source = segment.text
-    const startPattern = /^[ \t]*\{\s*"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_odds_card)"/gm
+    const startPattern = /^[ \t]*\{\s*"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|assessment_report|smart_form|smart_form_library|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_odds_card)"/gm
     let cursor = 0
     for (const match of source.matchAll(startPattern)) {
       if (count >= MAX_UI_BLOCKS) break
@@ -744,6 +746,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'visual_intelligence': return <VisualIntelligence key={block.props.id} spec={block}
       onAction={onAction} conversationId={conversationId} />
     case 'scale_form': return <ScaleForm spec={block} onAction={onAction} />
+    case 'assessment_report': return <AssessmentKiraReport spec={block} />
     case 'smart_form': return <SmartFormWorkspace initial={block} onAction={onAction} />
     case 'smart_form_library': return <SmartFormWorkspace title={block.props.title} onAction={onAction} />
     case 'spreadsheet': return <SpreadsheetSurface key={block.props.id} spec={block} />

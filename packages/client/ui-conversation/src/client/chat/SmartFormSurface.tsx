@@ -11,9 +11,16 @@ import {
 } from './SmartFormLibrary.ts'
 import type { CanvasAction } from './GenerativeCanvas.tsx'
 import { assessmentCatalog } from './AssessmentCatalog.ts'
+import {
+  removeAssessmentDefinition, saveAssessmentDefinition, savedAssessmentDefinitions,
+} from './AssessmentDefinitionLibrary.ts'
+import {
+  assessmentDirectory, searchAssessmentDirectory, type AssessmentArea,
+} from './AssessmentDirectory.ts'
 import { ScaleForm, parseScaleForm, type ScaleFormSpec } from './ScaleForm.tsx'
 import { generateAssessmentPdf } from './AssessmentReportPdf.ts'
 import { smartAssessmentReport } from './AssessmentReportModel.ts'
+import { registerAssessmentForKira, createKiraAssessmentPrompt } from './AssessmentKiraReport.tsx'
 import css from './SmartFormSurface.module.css'
 
 type Panel = 'form' | 'library' | 'history'
@@ -72,7 +79,7 @@ function Field({field,value,onChange}:{
 }
 const defaultFormPrompt='Construye una interfaz nativa de PHOENIX en un bloque generative-ui JSON con component smart_form y version 1. Incluye props.id, props.title, props.kind, props.folder, props.fields y props.outputs. Campos: {id,label,type,required,min,max,step,unit,options:[{label,value}]}; tipos number,range,text,textarea,date,time,select,radio,checkbox. Salidas: {id,label,expression,precision,unit,bands:[{max,label}]}. Expresiones JSON sin JavaScript: {field:"id"}, {constant:2}, {today:true}, o {op:"add|sub|mul|div|pow|sqrt|ln|log10|sin|cos|tan|floor|round|days_between|add_days|if|eq|gt|lt",args:[...]}. Usa fórmulas documentadas, unidades explícitas y no inventes validez clínica.'
 
-const assessmentPrompt='Crea una evaluación universal completa y funcional en PHOENIX, usando generative-ui JSON con component scale_form y version 1. Incluye props.title, description, source, version, population, administration:[{id,title,instruction,phase:"prepare|administer|score"}], items:[{id,question,help,options:[{label,score}]}], scoring:{min,max,direction,note}, bands y, si hay dimensiones, domains:[{id,label,items:[ids]}]. Comprueba puntuaciones, rangos, dimensiones y procedencia antes de entregar. Si solicito una escala clínica con nombre propio, consulta su protocolo y versión lingüística autorizada; no inventes estímulos protegidos, validación ni puntos de corte. Si el procedimiento no se puede verificar, indica que es solo un registro no validado y qué falta. Para fórmulas no aditivas usa smart_form con expressions dependientes de campos. No entregues una tarjeta decorativa ni dos campos de registro como si fueran una prueba completa.'
+const assessmentPrompt='Crea una evaluación universal completa y funcional en PHOENIX, usando generative-ui JSON con component scale_form y version 1. Incluye props.title, description, source, version, population y presentation:"matrix" si todos los reactivos comparten exactamente las mismas respuestas oficiales, o "cards" si cada criterio tiene opciones diferentes; no inventes ni cambies respuestas para forzar una matriz. Incluye administration:[{id,title,instruction,phase:"prepare|administer|score"}], items:[{id,question,help,options:[{label,score}]}], scoring:{min,max,direction,note}, bands y, si hay dimensiones, domains:[{id,label,items:[ids]}]. Comprueba puntuaciones, rangos, dimensiones y procedencia antes de entregar. Si solicito una escala clínica con nombre propio, consulta su protocolo y versión lingüística autorizada; no inventes estímulos protegidos, validación ni puntos de corte. Si el procedimiento no se puede verificar, indica que es solo un registro no validado y qué falta. Para fórmulas no aditivas usa smart_form con expressions dependientes de campos. No entregues una tarjeta decorativa ni dos campos de registro como si fueran una prueba completa.'
 
 /** Model-facing component is declarative: all persistence and execution happen only in the client. */
 export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
@@ -84,11 +91,14 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
   const [filter,setFilter]=useState('')
   const [folder,setFolder]=useState(initial?.props.folder??'General')
   const [includeAnswers,setIncludeAnswers]=useState(false)
+  const [shareWithKira,setShareWithKira]=useState(false)
   const [message,setMessage]=useState('')
   const [confirmDelete,setConfirmDelete]=useState<string|null>(null)
   const [assessmentId,setAssessmentId]=useState<string|null>(null)
-  const [assessments,setAssessments]=useState<ScaleFormSpec[]>([])
+  const [assessments,setAssessments]=useState<ScaleFormSpec[]>(savedAssessmentDefinitions)
   const [usageAuthorized,setUsageAuthorized]=useState(false)
+  const [directoryArea,setDirectoryArea]=useState<AssessmentArea|''>('')
+  const [directoryCount,setDirectoryCount]=useState(24)
   const current=useMemo(()=>active?calculateSmartForm(active,values):null,[active,values])
   const allForms=useMemo(()=>{
     const map=new Map<string,{spec:SmartFormSpec;revision:number}>()
@@ -96,6 +106,9 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
     for(const stored of library)map.set(stored.spec.props.id,{spec:stored.spec,revision:stored.revision})
     return [...map.values()]
   },[library])
+  const directoryMatches=useMemo(()=>searchAssessmentDirectory(
+    filter,directoryArea||undefined,
+  ),[filter,directoryArea])
   const filtered=useMemo(()=>{
     const normalized=filter.trim().toLocaleLowerCase('es')
     return allForms.filter(({spec})=>
@@ -106,7 +119,7 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
   },[allForms,filter])
   const open=(spec:SmartFormSpec):void=>{
     setActive(spec);setValues(initialSmartValues(spec));setFolder(spec.props.folder??'General')
-    setIncludeAnswers(false);setPanel('form');setMessage('')
+    setIncludeAnswers(false);setShareWithKira(false);setPanel('form');setMessage('')
   }
   const setValue=(id:string,v:FormValue|undefined):void=>{
     setValues(old=>{
@@ -114,7 +127,7 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
       if(v===undefined)delete next[id]
       else next[id]=v
       return next
-    });setMessage('')
+    });setShareWithKira(false);setMessage('')
   }
   const saveDefinition=():void=>{
     if(!active)return
@@ -152,8 +165,9 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
         setMessage('Instrumento inválido: exige preguntas, puntuaciones, fuente, versión y administración.')
         return
       }
-      setAssessments(list=>[...list.filter(x=>x.props.title!==spec.props.title),spec])
-      setAssessmentId('import:'+spec.props.title)
+      setAssessments(list=>[...list.filter(x=>x.props.title!==spec.props.title
+        || x.props.version!==spec.props.version),spec])
+      setAssessmentId('import:'+spec.props.title+'::'+spec.props.version)
       setMessage('Instrumento importado para esta sesión. Revisa su validez antes de administrarlo.')
     }catch{setMessage('No se pudo leer la definición JSON autorizada.')}
   }
@@ -218,7 +232,7 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
         <div className={css.actions}>
           <button type="button" onClick={saveDefinition}><PhoenixUiIcon name="save" size={14} tone="info"/> Guardar plantilla</button>
           <button type="button" onClick={()=>download(active.props.id+'.smart-form.json',JSON.stringify(active,null,2))}>Exportar JSON</button>
-          <button type="button" onClick={()=>{setValues(initialSmartValues(active));setMessage('')}}>Reiniciar</button>
+          <button type="button" onClick={()=>{setValues(initialSmartValues(active));setShareWithKira(false);setMessage('')}}>Reiniciar</button>
           {onAction&&<button type="button" onClick={()=>onAction(
             'Adapta este formulario de PHOENIX a mis necesidades, devuelve un smart_form completo y conserva el id para guardar una revisión: '+JSON.stringify(active),'draft')}>Modificar con Kira</button>}
         </div>
@@ -229,11 +243,22 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
             Autorizo guardar las respuestas y resultados en este navegador (sin cifrado)</label>
           <p>No es historia clínica. Evita identificadores y datos sensibles en equipos compartidos.</p>
         </div>
+        {onAction&&<div className={css.privacy}>
+          <label><input type="checkbox" checked={shareWithKira} onChange={e=>setShareWithKira(e.currentTarget.checked)}/>
+            Autorizo enviar los datos de este formulario a Kira para elaborar un informe interpretativo.</label>
+        </div>}
         <div className={css.actions}>
           <button type="button" disabled={!includeAnswers} onClick={saveResult}>Guardar resultado</button>
           <button type="button" onClick={exportPdf}>Exportar formulario completo a PDF</button>
-          {onAction&&<button type="button" onClick={()=>onAction(
-            'Analiza los resultados de este formulario, diferenciando cálculo de diagnóstico. Verifica límites, fuentes y datos faltantes. Plantilla: '+JSON.stringify(active)+' Respuestas: '+JSON.stringify(values)+' Resultado: '+JSON.stringify(current),'draft')}>Analizar con Kira</button>}
+          {onAction&&<button type="button" disabled={!shareWithKira} onClick={()=>{
+            if(!active||!current)return
+            const report=smartAssessmentReport(active,values,current,{
+              participant:'',professional:'',context:'',observations:'',recommendations:'',
+            })
+            if(!report){setMessage('Completa los campos antes de solicitar el informe.');return}
+            const sessionId=registerAssessmentForKira(report)
+            onAction(createKiraAssessmentPrompt(sessionId,report),'submit')
+          }}>Generar informe PDF interpretativo con Kira</button>}
         </div>
       </>}
       <p className={css.footnote}>Cálculo local mediante reglas declaradas. {active.props.source?
@@ -287,12 +312,101 @@ export function SmartFormWorkspace({initial,onAction,title}:Props):ReactNode {
         {assessmentCatalog.filter(entry=>entry.id===assessmentId&&entry.spec).map(entry=>
           <ScaleForm key={entry.id} spec={entry.spec!} onAction={onAction}
             verified={entry.access==='reproducible'} />)}
-        {assessments.map((spec,index)=>assessmentId==='import:'+spec.props.title&&
+        {assessments.map((spec,index)=>assessmentId==='import:'+spec.props.title
+          +'::'+spec.props.version&&
           <ScaleForm key={index} spec={spec} onAction={onAction} verified={false}/>)}
-        {assessments.map(spec=><button key={spec.props.title} type="button"
-          onClick={()=>setAssessmentId('import:'+spec.props.title)}>
-          Abrir importado: {spec.props.title}
-        </button>)}
+        {assessments.map((spec)=><div className={css.smallActions} key={
+          spec.props.title+'::'+(spec.props.version??'')
+        }>
+          <button type="button" onClick={()=>setAssessmentId('import:'+spec.props.title+'::'+spec.props.version)}>
+            Abrir autorizado: {spec.props.title}
+          </button>
+          <button type="button" onClick={()=>{
+            if(saveAssessmentDefinition(spec)){
+              setMessage('Plantilla guardada en este navegador. No se almacenan respuestas.')
+            }else setMessage('No se pudo guardar la definición: verifica su versión y espacio.')
+          }}>Guardar instrumento</button>
+          <button type="button" onClick={()=>{
+            const id='assessment:'+spec.props.title+'::'+spec.props.version
+            if(confirmDelete!==id){setConfirmDelete(id);return}
+            if(removeAssessmentDefinition(spec)){
+              setAssessments(list=>list.filter(item=>item!==spec))
+              if(assessmentId==='import:'+spec.props.title+'::'+spec.props.version)
+                setAssessmentId(null)
+              setMessage('Definición eliminada de la biblioteca local.')
+            }else setMessage('No se pudo eliminar la definición.')
+            setConfirmDelete(null)
+          }}>Eliminar instrumento
+            {confirmDelete==='assessment:'+spec.props.title+'::'+spec.props.version?' (confirmar)':''}
+          </button>
+        </div>)}
+        <p className={css.footnote}>Las plantillas autorizadas se guardan solo
+          cuando pulsas Guardar instrumento y no contienen respuestas personales.
+          El almacenamiento del navegador no está cifrado ni se sincroniza.</p>
+      </section>
+      <section className={css.catalog} aria-label="Directorio profesional de instrumentos">
+        <h4>Directorio profesional: {assessmentDirectory.length} referencias</h4>
+        <p>Este índice ayuda a localizar instrumentos conocidos; no entrega reactivos,
+          normas, puntuaciones, manuales ni adaptaciones no autorizadas.
+          Consulta al titular antes de administrar una versión digital.</p>
+        <div className={css.searchRow}>
+          <label>Especialidad
+            <select aria-label="Filtrar instrumentos por especialidad"
+              value={directoryArea} onChange={e=>{
+                setDirectoryArea(e.currentTarget.value as AssessmentArea|'')
+                setDirectoryCount(24)
+              }}>
+              <option value="">Todas las especialidades</option>
+              <option value="Neuropsicología">Neuropsicología</option>
+              <option value="Psicología">Psicología</option>
+              <option value="Medicina">Medicina</option>
+              <option value="Rehabilitación">Rehabilitación</option>
+              <option value="Universal">Universal</option>
+            </select>
+          </label>
+          <span>{directoryMatches.length} referencias encontradas</span>
+        </div>
+        {onAction&&filter.trim().length>=3&&<div className={css.actions}>
+          <button type="button" onClick={()=>onAction(
+            'Kira: investiga en fuentes profesionales el instrumento denominado '+filter.trim()+
+            (directoryArea?' en el área '+directoryArea:'')+
+            '. No limites la búsqueda al directorio local de PHOENIX: busca la fuente original, '+ 
+            'editor/titular, guías de aplicación, versión, traducción, población, baremos, '+ 
+            'reglas de puntuación, permiso de uso y digitalización. Aporta enlaces oficiales '+ 
+            'y estado de verificación. Si la versión es reproducible legalmente y su método '+ 
+            'está verificado, propone un scale_form completo; de lo contrario explica cómo '+ 
+            'obtenerla o cómo registrar resultados administrados externamente. No inventes '+ 
+            'reactivos, estímulos, baremos ni licencias.', 'submit'
+          )}>Investigar este instrumento con Kira (catálogo ampliable)</button>
+        </div>}
+        {directoryMatches.slice(0,directoryCount).map(entry=>
+          <article className={css.catalogItem} key={entry.id}>
+            <div>
+              <small>{entry.area} · {entry.domain}</small>
+              <h4>{entry.title}</h4>
+              <p>Solo referencia bibliográfica. Versión, idioma, licencias,
+                materiales, requisitos profesionales y puntuación pendientes de verificar.</p>
+              <small>{entry.publisher}</small>
+            </div>
+            <div className={css.smallActions}>
+              <a href={entry.sourcePortal} target="_blank" rel="noopener noreferrer">
+                Consultar fuente o titular</a>
+              {onAction&&<button type="button" onClick={()=>onAction(
+                'Investiga el instrumento profesional '+entry.title+' ('+entry.domain+
+                '). Consulta su titular '+entry.sourcePortal+
+                '. Verifica versión exacta, idioma, población, manual, requisitos de '
+                +'administración, normas, fórmulas, derechos de reproducción y de '
+                +'digitalización. NO inventes preguntas, puntuaciones, baremos '
+                +'ni permisos. Si existe una versión cuya incorporación está '
+                +'autorizada, prepara un scale_form completo con evidencia y '
+                +'procedimiento; de lo contrario informa cómo obtener el material '
+                +'y habilita el registro posterior con el protocolo oficial.',
+                'draft')}>Preparar instrumento con Kira</button>}
+            </div>
+          </article>)}
+        {directoryMatches.length>directoryCount&&<button type="button" onClick={()=>
+          setDirectoryCount(n=>n+24)}>Mostrar más instrumentos
+          ({directoryMatches.length-directoryCount} restantes)</button>}
       </section>
       {filtered.length===0&&<p className={css.hint}>No hay formularios de cálculo con ese término.</p>}
       <div className={css.catalog}>{filtered.map(({spec,revision})=>
