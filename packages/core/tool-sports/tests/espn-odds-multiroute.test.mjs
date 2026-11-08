@@ -390,3 +390,57 @@ test('provider ID alone is not a verified bookmaker name',async()=>{
  assert.equal(r.observations.length,2)
  assert.ok(r.observations.every(x=>x.reason==='proveedor_sin_nombre'))
 })
+
+test('ESPN is credited to ESPN Site/Core, never SportsGameOdds or TheRundown',async()=>{
+  const fetcher=async url=>new Response(JSON.stringify(
+    String(url).includes('/scoreboard?')?scoreboard([event([priced({name:'ESPN Verified'})])]):{}
+  ),{status:200})
+  const result=await marketOddsDetailed('basketball_nba','h2h',
+    {PHOENIX_SPORTS_ESPN_DISABLED:'0',PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'},fetcher,now)
+  assert.equal(result.quotes.length,2)
+  assert.equal(result.sources.find(x=>x.provider==='ESPN Site/Core')?.status,'observed')
+  assert.equal(result.sources.find(x=>x.provider==='ESPN Site/Core')?.count,2)
+  assert.equal(result.sources.find(x=>x.provider==='SportsGameOdds')?.status,'unconfigured')
+  assert.equal(result.sources.find(x=>x.provider==='TheRundown')?.status,'unconfigured')
+  assert.equal(result.sources.find(x=>x.provider==='OddsHarvester')?.status,'unconfigured')
+  assert.equal(result.observations.length,0)
+})
+test('ESPN prices without provider lastUpdated survive only as research observations',async()=>{
+  const fetcher=async url=>new Response(JSON.stringify(
+    String(url).includes('/scoreboard?')?
+      scoreboard([event([{...priced({name:'ESPN Research Book'}),lastUpdated:undefined}])]):{}
+  ),{status:200})
+  const result=await marketOddsDetailed('basketball_nba','h2h',
+    {PHOENIX_SPORTS_ESPN_DISABLED:'0',PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'},fetcher,now)
+  assert.equal(result.quotes.length,0)
+  assert.equal(result.observations.length,2)
+  assert.ok(result.observations.every(x=>x.nonCotizable&&x.reason==='sin_fecha'))
+  assert.ok(result.observations.every(x=>x.source.includes('referencia no cotizable')))
+  assert.equal(result.sources.find(x=>x.provider==='ESPN Site/Core')?.status,'empty')
+})
+test('Core lookup uses exact competition ID from ESPN scoreboard, not always event ID',async()=>{
+  const called=[]
+  const special={...event([]),competitions:[{...event([]).competitions[0],id:'601123450'}]}
+  const request=async url=>{
+    called.push(url)
+    if(url.includes('/scoreboard?'))return scoreboard([special])
+    if(url.includes('/competitions/601123450/odds?'))return{items:[priced()]}
+    if(url.includes('/summary?'))return{pickcenter:[]}
+    throw Error('wrong ESPN path '+url)
+  }
+  const out=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',request,
+    {now,days:1,date:'2026-10-29'})
+  assert.equal(out.quotes.length,2)
+  assert.ok(called.some(u=>u.includes('/events/401111111/competitions/601123450/odds?')))
+  assert.ok(!called.some(u=>u.includes('/competitions/401111111/odds?')))
+})
+test('Italian and Portuguese football odds reach their correct ESPN leagues, not EPL',async()=>{
+  for(const [key,slug] of [['soccer_italy_serie_a','ita.1'],
+    ['soccer_portugal_primeira_liga','por.1']]){
+    const calls=[]
+    const f=async url=>{calls.push(url);return scoreboard([])}
+    await fetchPublicEspnOddsDetailed(key,'h2h',f,{now,days:1})
+    assert.ok(calls[0].includes('/soccer/'+slug+'/scoreboard?'))
+    assert.ok(!calls[0].includes('/soccer/eng.1/'))
+  }
+})
