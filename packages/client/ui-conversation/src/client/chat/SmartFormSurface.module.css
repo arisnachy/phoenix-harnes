@@ -74,3 +74,16 @@
  .actions button,.smallActions button{width:100%}
  .searchRow>input{flex-basis:100%}
 }
+
+/* Shared clinician context drawer for all smart forms, including non-clinical templates. */
+.reportEditor{margin:16px 0 12px;border:1px solid var(--dsw-alias-border-subtle,#dce3e5);border-radius:13px;overflow:hidden}
+.reportEditor>summary{cursor:pointer;padding:13px 15px;font-weight:750;background:var(--dsw-alias-interactive-bg-hover,#f5f8f8);font-size:13px}
+.reportEditor>summary span{display:block;margin:4px 0 0 18px;color:var(--dsw-alias-label-secondary,#65737a);font-weight:400;font-size:11px}
+.reportEditor[open]>summary{border-bottom:1px solid var(--dsw-alias-border-subtle,#dce3e5)}
+.reportEditorFields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;padding:15px}
+.reportEditorFields label{display:grid;gap:5px;min-width:0;font-size:12px;font-weight:650}
+.reportEditorFields label:nth-child(n+3){grid-column:1/-1}
+.reportEditorFields input,.reportEditorFields textarea{box-sizing:border-box;width:100%;min-width:0;max-width:100%;min-height:38px;font:inherit;font-weight:400;border:1px solid var(--dsw-alias-border-subtle,#dce3e5);border-radius:9px;background:var(--dsw-alias-surface-primary,#fff);color:inherit;padding:9px 11px}
+.reportEditorFields textarea{resize:vertical}
+.reportEditorFields input:focus-visible,.reportEditorFields textarea:focus-visible{outline:2px solid var(--dsw-alias-accent-primary,#b88939);outline-offset:2px}
+@container phoenix-form (max-width:490px){.reportEditorFields{grid-template-columns:1fr}.reportEditorFields label{grid-column:1/-1}}
