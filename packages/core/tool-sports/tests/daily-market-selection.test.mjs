@@ -52,3 +52,12 @@ test('never invents more games than the actual slate and validates goal',()=>{
   assert.throws(()=>selectDailyResearchedMarkets([],3),/4 a 6/)
   assert.throws(()=>selectDailyResearchedMarkets([],7),/4 a 6/)
 })
+
+test('independently positive market beats negative-value descriptive favorite',()=>{
+  const overpriced={...review(66,'h2h','descriptive-support',20),
+    priceAudit:{classification:'negative-value'}}
+  const better={...review(66,'totals','descriptive-support',1),
+    priceAudit:{classification:'potential-value'}}
+  const result=selectDailyResearchedMarkets([overpriced,better],5)
+  assert.equal(result.selected[0].candidate.market,'totals')
+})
