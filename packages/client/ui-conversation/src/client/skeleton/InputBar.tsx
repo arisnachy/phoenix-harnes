@@ -1158,6 +1158,20 @@ export function InputBar({
                 </div>
               </details>
             )}
+            {codexVoiceFailure !== null && !voiceRepairing
+              && !codexRealtimeRequiresLogin(codexVoiceFailure) && !voiceEnabled && (
+              <button
+                type="button"
+                className={css.voiceReconnectAction}
+                data-codex-live-retry
+                disabled={locked || machineBusy}
+                aria-label="Reintentar conexión nativa de Codex Live"
+                title="Volver a comprobar Codex Live y reabrir la voz nativa. No activa el reconocimiento del navegador."
+                onClick={() => { void toggleVoice() }}
+              >
+                Reintentar Codex Live
+              </button>
+            )}
             {voiceEnabled && useAlternativeVoice && (
               <span className={css.voiceAlternativeActive} role="status"
                 title="Respaldo autorizado: reconocimiento del navegador y voz de Phoenix (Kokoro si está disponible). No es Codex Live.">
@@ -1193,7 +1207,7 @@ export function InputBar({
                 label={voiceRepairing
                   ? 'Cancelar la recuperación automática de Codex Live'
                   : codexVoiceFailure !== null
-                  ? 'Codex Live no disponible. Usa la voz alternativa autorizada.'
+                  ? 'Codex Live sin conexión. Reintenta la voz nativa o consulta Detalles.'
                   : voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
                 side="top"
                 delayMs={500}

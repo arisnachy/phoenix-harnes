@@ -1872,6 +1872,7 @@ describe('command launcher chrome and control seats', () => {
       expect(view.getByRole('button', { name: '开始语音助手' })
         .getAttribute('data-codex-voice-failure')).toBe('codex-login-required')
       expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(false)
+      expect(view.container.querySelector('[data-codex-live-retry]')).toBeNull()
     } finally {
       live.mockRestore()
       support.mockRestore()
@@ -1897,6 +1898,37 @@ describe('command launcher chrome and control seats', () => {
       expect(view.getByText('Detalles').closest('details')?.textContent)
         .toContain('invalid_quicksilver_alpha_header')
     } finally {
+      support.mockRestore()
+      live.mockRestore()
+      cleanup()
+    }
+  })
+
+
+  it('offers a native Codex Live retry and restores it without switching voice providers', async () => {
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
+      .mockResolvedValueOnce({ kind: 'failed', reason: 'capability-probe-failed' })
+      .mockImplementationOnce(async () => {
+        voiceAdapter.setVoiceAssistantActive(true)
+        return { kind: 'started' }
+      })
+    try {
+      const { view } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+      const retry = view.getByRole('button', { name: 'Reintentar conexión nativa de Codex Live' })
+      expect(retry).toBeTruthy()
+      expect(voiceAdapter.hasApprovedVoiceFallback()).toBe(false)
+      fireEvent.click(retry)
+      await act(async () => { await Promise.resolve() })
+      expect(live).toHaveBeenCalledTimes(2)
+      expect(view.container.querySelector('[data-codex-live-retry]')).toBeNull()
+      expect(view.container.querySelector('[data-codex-voice-fallback]')).toBeNull()
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(true)
+      expect(voiceAdapter.hasApprovedVoiceFallback()).toBe(false)
+    } finally {
+      voiceAdapter.setVoiceAssistantActive(false)
       support.mockRestore()
       live.mockRestore()
       cleanup()
