@@ -1,5 +1,6 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
 import { fetchPublicEspnOddsDetailed } from './espn-odds.ts'
+import {fetchEspnWebsiteOdds,espnOddsWebsiteUrl} from './espn-website-odds.ts'
 import { fetchTheOddsApi } from './free-odds.ts'
 import {fetchTheRundownOdds,fetchSportsGameOdds,rundownSupports,sportsGameSupports} from './open-odds-providers.ts'
 import { keylessEnabled, keylessOdds, type KeylessSport } from './keyless-odds.ts'
@@ -347,7 +348,7 @@ export async function marketOddsDetailed(
   const sources:OddsSourceAttempt[]=[]
   let espnDetail=''
   let espnRawCount=0,espnStarted=0,espnUndated=0,espnExpired=0
-  const names=['The Odds API v4','TheOddsAPI','TheRundown','SportsGameOdds','OddsHarvester','ESPN Site/Core']
+  const names=['The Odds API v4','TheOddsAPI','TheRundown','SportsGameOdds','OddsHarvester','ESPN Site/Core','ESPN Website']
   const configured=new Set<string>()
   if(hasSportsPermission('odds',env)){
     configured.add(names[0]!)
@@ -420,9 +421,9 @@ export async function marketOddsDetailed(
       if(wants.includes('totals')&&sport!=='cricket'&&chosen.length<2)
         chosen.push(sport==='tennis'?'total_games_over_under':
           sport==='volleyball'?'total_points_over_under':'over_under')
-      if(chosen.length)configured.add(names[2]!)
+      if(chosen.length)configured.add('OddsHarvester')
       for(const market of chosen){
-        requests.push({name:names[2]!,run:async()=>{
+        requests.push({name:'OddsHarvester',run:async()=>{
           const rows=await keylessOdds(sport,market,undefined,env,now)
           return rows.filter(q=>sportKey===sport||belongsToLeague(sportKey,q))
             .map(q=>({...q,sportKey,time:localTime(q.time),timeIso:q.time}))
@@ -431,8 +432,8 @@ export async function marketOddsDetailed(
     }
   }
   if(hasSportsPermission('espn',env)){
-    configured.add(names[3]!)
-    requests.push({name:names[3]!,run:async()=>{
+    configured.add('ESPN Site/Core')
+    requests.push({name:'ESPN Site/Core',run:async()=>{
       const {quotes,diagnostics}=await fetchPublicEspnOddsDetailed(sportKey,markets,
         <T>(url:string)=>getFeed<T>(url,fetcher),{now,cache:fetcher===fetch})
       espnRawCount=diagnostics.rawOddsEntries+diagnostics.startedOddsEntries
@@ -480,7 +481,39 @@ export async function marketOddsDetailed(
         startedOddsEntries:espnStarted,undatedOutcomes:espnUndated,
         expiredOutcomes:espnExpired}:{})})
   }
-  for(const name of names)if(!configured.has(name)){
+  // ESPN's official odds webpages are a final best-effort source when the
+  // structured Site/Core API did not publish the requested market. This is NOT
+  // a CAPTCHA bypass. HTML odds are promoted only when they include explicit
+  // event/bookmaker/timestamp JSON that matches ESPN's scoreboard exactly.
+  const webUrl=espnOddsWebsiteUrl(sportKey)
+  if(!hasSportsPermission('espn',env)||
+    env.PHOENIX_SPORTS_ESPN_WEB_DISABLED==='1'||!webUrl){
+    sources.push({provider:'ESPN Website',status:'unconfigured',count:0,
+      detail:!webUrl?'Liga sin página web ESPN configurada':
+        'ESPN/web deshabilitado por el operador'})
+  }else{
+    configured.add('ESPN Website')
+    const requested=markets.split(',')
+    const missing=requested.filter(m=>!merged.some(q=>
+      q.source?.startsWith('ESPN')&&q.market===m))
+    if(missing.length){
+      const web=await fetchEspnWebsiteOdds(sportKey,missing.join(','),fetcher,
+        <T>(url:string)=>getFeed<T>(url,fetcher),now)
+      let added=0
+      for(const q of web.quotes){
+        const key=[sportKey,q.eventId,q.bookmaker,q.market,q.selection,q.point??''].join('|')
+        if(identity.has(key))continue
+        identity.add(key)
+        merged.push({...q,sportKey,source:'ESPN Website (JSON embebido)'})
+        added++
+      }
+      sources.push({provider:'ESPN Website',status:added?'observed':
+        web.status==='blocked'||web.status==='unavailable'?'error':'empty',
+        count:added,detail:(web.detail+' · '+web.url).slice(0,340)})
+    }else sources.push({provider:'ESPN Website',status:'empty',count:0,
+      detail:'No se solicitó HTML: ESPN Site/Core publicó todos los mercados consultados · '+webUrl})
+  }
+  for(const name of names)if(name!=='ESPN Website'&&!configured.has(name)){
     sources.push({provider:name,status:'unconfigured',count:0,
       detail:name==='OddsHarvester'?'Instalación/configuración o permiso pendiente':
         name==='ESPN Site/Core'?'ESPN deshabilitado':
