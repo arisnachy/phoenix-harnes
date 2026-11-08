@@ -78,8 +78,11 @@ export function assessDailyMarketEvidence(
     away=(a.scoredPerGame!+h.allowedPerGame!)/2
     total=round(home+away);diff=round(home-away)
     home=round(home);away=round(away)
-    const points=[...evidence.home.lastGames.map(g=>g.scored+g.allowed),
-      ...evidence.away.lastGames.map(g=>g.scored+g.allowed)]
+    const points=candidate.market==='totals'?
+      [...evidence.home.lastGames.map(g=>g.scored+g.allowed),
+        ...evidence.away.lastGames.map(g=>g.scored+g.allowed)]:
+      [...evidence.home.lastGames.map(g=>g.scored-g.allowed),
+        ...evidence.away.lastGames.map(g=>g.allowed-g.scored)]
     variability=standardDeviation(points)
     // A large difference against a bookmaker line is descriptive support only:
     // sampling uncertainty, roster changes and pricing costs remain unresolved.
