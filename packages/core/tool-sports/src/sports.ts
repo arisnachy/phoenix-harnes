@@ -116,7 +116,7 @@ export const hasSportsPermission=(provider:'espn'|'mlb'|'odds',env:NodeJS.Proces
  */
 export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise<T> {
   const u=new URL(url)
-  if(u.protocol!=='https:'||u.username||u.password||!['site.api.espn.com','site.web.api.espn.com','sports.core.api.espn.com','statsapi.mlb.com','api-web.nhle.com','api.the-odds-api.com','api.open-meteo.com'].includes(u.hostname))throw Error('Host no permitido')
+  if(u.protocol!=='https:'||u.username||u.password||!['site.api.espn.com','site.web.api.espn.com','sports.core.api.espn.com','statsapi.mlb.com','api-web.nhle.com','api.the-odds-api.com','api.open-meteo.com','www.thesportsdb.com','api.openligadb.de','raw.githubusercontent.com'].includes(u.hostname))throw Error('Host no permitido')
   const response=await fetcher(u.toString(),{ headers:{ accept:'application/json' },redirect:'error',signal:AbortSignal.timeout(9000) })
   if(!response.ok)throw Error(`Proveedor HTTP ${response.status}`)
   if(Number(response.headers.get('content-length')||0)>4_000_000)throw Error('Respuesta supera 4 MB')
@@ -330,6 +330,8 @@ export type MarketOutcome = MarketSelection & { price:number;home:string;away:st
  * @param fetcher - HTTP adapter for isolated tests.
  * @returns Normalized quotes with bookmaker names and update times.
  */
+export type OddsResearchObservation=MarketOutcome&{reason:'sin_fecha'|'antigua'|'proveedor_sin_nombre'|'fecha_futura';
+  endpointSource?:'scoreboard'|'core'|'summary';nonCotizable:true}
 export type OddsSourceAttempt={provider:string;status:'observed'|'empty'|'unconfigured'|'error';
   count:number;detail:string;rawCount?:number;startedOddsEntries?:number;
   undatedOutcomes?:number;expiredOutcomes?:number}
@@ -339,13 +341,15 @@ export type OddsSourceAttempt={provider:string;status:'observed'|'empty'|'unconf
 export async function marketOddsDetailed(
   sportKey:string,markets='h2h',env:NodeJS.ProcessEnv=process.env,
   fetcher:typeof fetch=fetch,now=Date.now(),
-):Promise<{quotes:MarketOutcome[];sources:OddsSourceAttempt[]}>{
+):Promise<{quotes:MarketOutcome[];sources:OddsSourceAttempt[];
+  observations:OddsResearchObservation[]}>{
   if(!/^[a-z0-9_]{3,80}$/u.test(sportKey)||
     !/^(h2h|totals|spreads)(,(h2h|totals|spreads))*$/u.test(markets))
     throw Error('Mercado inválido')
   const requests:Array<{name:string;run:()=>Promise<MarketOutcome[]>}>=[]
   const sources:OddsSourceAttempt[]=[]
   let espnDetail=''
+  const observations:OddsResearchObservation[]=[]
   let espnRawCount=0,espnStarted=0,espnUndated=0,espnExpired=0
   const names=['The Odds API v4','TheOddsAPI','TheRundown','SportsGameOdds','OddsHarvester','ESPN Site/Core']
   const configured=new Set<string>()
@@ -412,6 +416,7 @@ export async function marketOddsDetailed(
       const wants=markets.split(',')
       if(wants.includes('h2h')){
         const market=sport==='football'||sport==='handball'?'1x2':
+          sport==='basketball'?'home_away':
           sport==='tennis'?'match_winner':
             ['ice-hockey','volleyball','rugby-league','rugby-union','cricket'].includes(sport)?
               'home_away':'moneyline'
@@ -420,9 +425,9 @@ export async function marketOddsDetailed(
       if(wants.includes('totals')&&sport!=='cricket'&&chosen.length<2)
         chosen.push(sport==='tennis'?'total_games_over_under':
           sport==='volleyball'?'total_points_over_under':'over_under')
-      if(chosen.length)configured.add(names[2]!)
+      if(chosen.length)configured.add('OddsHarvester')
       for(const market of chosen){
-        requests.push({name:names[2]!,run:async()=>{
+        requests.push({name:'OddsHarvester',run:async()=>{
           const rows=await keylessOdds(sport,market,undefined,env,now)
           return rows.filter(q=>sportKey===sport||belongsToLeague(sportKey,q))
             .map(q=>({...q,sportKey,time:localTime(q.time),timeIso:q.time}))
@@ -431,10 +436,17 @@ export async function marketOddsDetailed(
     }
   }
   if(hasSportsPermission('espn',env)){
-    configured.add(names[3]!)
-    requests.push({name:names[3]!,run:async()=>{
-      const {quotes,diagnostics}=await fetchPublicEspnOddsDetailed(sportKey,markets,
+    configured.add('ESPN Site/Core')
+    requests.push({name:'ESPN Site/Core',run:async()=>{
+      const {quotes,diagnostics,observations:resultObservations}=await fetchPublicEspnOddsDetailed(sportKey,markets,
         <T>(url:string)=>getFeed<T>(url,fetcher),{now,cache:fetcher===fetch})
+      // Preserve genuine ESPN price observations even when no bookmaker
+      // updatedAt exists. NEVER add them to purchasable/live market quotes.
+      for(const observation of resultObservations){
+        observations.push({...observation,sportKey,
+          source:'ESPN '+(observation.endpointSource??'public')+' · referencia no cotizable',
+          nonCotizable:true})
+      }
       espnRawCount=diagnostics.rawOddsEntries+diagnostics.startedOddsEntries
       espnStarted=diagnostics.startedOddsEntries
       espnUndated=diagnostics.undatedOutcomes
@@ -492,7 +504,7 @@ export async function marketOddsDetailed(
     try{await saveOddsSnapshot(sportKey,merged,env,now)}
     catch{/* disk write failure cannot remove real live quotes */}
   }
-  return{quotes:merged,sources}
+  return{quotes:merged,sources,observations:observations.slice(0,120)}
 }
 /** Compatibility facade for all existing betting tools. */
 export async function marketOdds(
