@@ -12,20 +12,46 @@ Manual de las 14 rutas, movimiento, históricos y procedimientos de Kira: [ESPN_
 
 ESPN Site/Core and MLB Stats are queried as publicly reachable read-only sources without needing an API key or a PHOENIX_SPORTS_ESPN_ALLOWED setting. Operators may opt out using PHOENIX_SPORTS_ESPN_DISABLED=1 or PHOENIX_SPORTS_MLB_DISABLED=1; public access does not grant a license to reuse data. THE_ODDS_API_KEY selects the existing `api.the-odds-api.com` v4 adapter, with its own quota and license. Separately, `THEODDSAPI_API_KEY` selects the optional `api.theoddsapi.com` adapter, which publishes a free NBA/MLB moneyline tier (registration and a key still required); **these are independent services, credentials and JSON schemas**. If both keys are present the original v4 adapter takes priority; without either, PHOENIX tries published ESPN moneylines. The free adapter uses a fixed HTTPS host, a server-only `x-api-key` header, a bounded response and a 90-second per-account cache. No provider key is written into the URL or a rendered card. If missing, ESPN Core/Site moneyline quotes are read when available, but no absent prices or missing markets are fabricated. PHOENIX_SPORTS_ESPN_IMAGES_ALLOWED=1 is an additional opt-in after media rights review. Credentials stay in the host environment and never appear in tool output. Only fixed hosts can be queried.
 
-## Free provider backups (2026-11-08)
+## Redundancia de proveedores gratuitos y recuperación (2026-11-08)
 
-The specialist ticket gate now performs **secondary fixture corroboration**, without replacing ESPN or sports-specific investigations:
+El investigador mantiene ESPN como fuente primaria con ID verificable. La herramienta Kira `sports_chat_source_resilience` publica un inventario de integraciones reales y, para un partido concreto, realiza auditoría fuente por fuente. Las fuentes del catálogo no se anuncian como integradas si no lo están.
 
-- **TheSportsDB v1 (public key 123)**: `eventsday.php` for soccer, basketball, baseball, NFL, hockey and tennis. The free endpoint returns at most three matches per day/query; a missing match **is not a cancellation, an injury report or an absence of coverage**. Docs: https://www.thesportsdb.com/docs/api
-- **OpenLigaDB (no key)**: Bundesliga `getmatchdata/bl1/{seasonStart}`, only for ESPN league `ger.1`. Free, no registration; observe its published 60 requests/minute/IP limit. Docs: https://api.openligadb.de/index.html
-- **Official NBA injury report**: https://official.nba.com/nba-injury-report-2026-27-season/ — a manual verification pointer only; this implementation does **not** parse PDFs or assert that a questionable player is active/inactive.
-- **nflverse season injury CSV**: https://github.com/nflverse/nflverse-data/releases — **integrated** as an optional, attribution-required NFL injury report, matched to both NFL clubs and the appropriate season/week, with a seven-day age bound and kickoff-week filter. Only explicit Out/Doubtful/Questionable designations are reported; it does **not** establish game-day inactives or a confirmed QB. Depth charts, snap counts and advanced player stats remain **not integrated**. Dictionary: https://nflreadr.nflverse.com/articles/dictionary_injuries.html
-- **football-data.org** (free account/token required): https://www.football-data.org/pricing — prospective secondary soccer results/standings provider. Not wired until the operator explicitly provisions a free account; free plan has delayed scores and excludes advanced player data.
+| Fuente | Datos | Acceso y estado |
+| --- | --- | --- |
+| ESPN Site/Core | Cartelera, resultados, rosters, prensa | Público, primario; API no oficial |
+| MLB StatsAPI | Abridores probables, rosters, estadísticas | Público, especialista MLB integrado |
+| NHL Web API | Calendario, rosters y porteros candidatos | Público, NHL integrado; no confirma portero titular |
+| TheSportsDB v1 | Calendario multideporte secundario | Clave pública 123; límite gratis de resultados |
+| OpenLigaDB | Partidos Bundesliga | Sin clave, cotejo de hora/clubes |
+| OpenFootball Football.JSON | Fixtures de siete ligas europeas | Sin clave, CC0; cotejo solo de clubes/fecha, no UTC |
+| football-data.org v4 | Partidos y clubes en siete ligas | Clave gratis opcional PHOENIX_FOOTBALL_DATA_TOKEN |
+| nflverse | Lesiones semanales NFL | CSV atribuido, control de temporada y vigencia |
+| NBA Official Injury Report | Bajas oficiales en reportes del día | Enlace para revisión, PDFs sin parsing automático |
+| The Odds API v4 / TheOddsAPI | Cuotas si realmente publicadas | Claves opcionales, con límites y timestamp |
+| OddsHarvester | Investigación de cuotas de acceso público | Opt-in sujeto a términos/sitio; no garantiza precios vigentes |
+| Open-Meteo | Previsión meteorológica contextual | Público con condiciones de uso, no predicción deportiva causal |
+| StatsBomb Open Data (Hudl) | Datos abiertos de eventos y xG históricos | Histórico, no dato actual garantizado |
+| Jolpica F1 / OpenF1 | Resultados F1, telemetría (según nivel) | En catálogo, NO conectados al ticket |
+| SportScore | Marcadores y estadísticas | Catálogo; atribución visible requerida antes de activar |
+| API-Football | Eventos, tablas y lesiones en planes compatibles | Catálogo; requiere cuenta y cuotas |
 
-Every secondary event needs BOTH normalized teams in the correct home/away positions and a kickoff within 90 minutes. Contradictions are surfaced; no-match, partial HTTP responses and provider errors never establish a missing scheduled game. Secondary evidence only confirms fixture metadata, **not** starting lineups, official injuries, bookmaker acceptance, probability calibration or betting eligibility. The original specialist gate remains fail-closed. Disable the public backups with `PHOENIX_SPORTS_FREE_BACKUPS_DISABLED=1` when needed. Live provider success and data rights remain to be validated in the deployment environment.
+### Contratos de recuperación
 
-Verification:
-`node --experimental-strip-types --test packages/core/tool-sports/tests/free-sports-source-audit.test.mjs packages/core/tool-sports/tests/nflverse-injury-report.test.mjs packages/core/tool-sports/tests/ticket-specialist-gate.test.mjs`.
+1. Para aceptar un cotejo verificable se requieren equipos, localía y horario (tolerancia 90 minutos). Las fuentes sin UTC solo respaldan fecha+clubes (estado parcial).
+2. HTTP 429, fallos, respuestas vacías o cuotas agotadas NO significan partido cancelado. No se convierte una fuente caída en una lesión, alineación o precio.
+3. Los JSON públicos idénticos se deduplican durante 10 minutos en producción. Pruebas con fetch inyectado quedan aisladas. Hosts HTTPS y tamaños están acotados.
+4. El motor investiga seis ligas primero; si la investigación no ofrece suficientes partidos con historia, investiga hasta otras seis ligas. Así aumenta cobertura sin obligar a inventar cinco ganadores.
+5. Las cuotas exigen la misma casa, selección, evento, período, mercado, fecha y línea. Una fuente de marcador nunca equivale a cuota. Fuentes históricas nunca se etiquetan como precio actual.
+6. Opt-out: PHOENIX_SPORTS_FREE_BACKUPS_DISABLED=1. Clave football-data.org solo en el servidor, en cabecera X-Auth-Token; no se publica en tarjetas ni logs.
+
+### Enlaces y pruebas
+
+- TheSportsDB: https://www.thesportsdb.com/docs/api ; OpenLigaDB: https://api.openligadb.de/index.html ; OpenFootball: https://github.com/openfootball/football.json
+- Football-data.org: https://www.football-data.org/documentation/api ; nflverse: https://github.com/nflverse/nflverse-data ; NBA oficial: https://official.nba.com/nba-injury-report-2026-27-season/
+- StatsBomb/Hudl: https://github.com/hudl/open-data ; Jolpica: https://api.jolpi.ca/docs/ ; SportScore: https://sportscore.com/developers/
+- Pruebas: node --experimental-strip-types --test packages/core/tool-sports/tests/free-sports-source-audit.test.mjs packages/core/tool-sports/tests/nflverse-injury-report.test.mjs packages/core/tool-sports/tests/evidence-ticket.test.mjs packages/core/tool-sports/tests/ticket-specialist-gate.test.mjs
+
+**Límite:** los proveedores y las credenciales deben comprobarse realmente en el despliegue. Ni la cobertura ampliada ni varias fuentes implican certeza de acertar una combinada, ni autorizan automatizar apuestas o superar bloqueos.
 
 ## NBA research (source-derived, not calibrated)
 
