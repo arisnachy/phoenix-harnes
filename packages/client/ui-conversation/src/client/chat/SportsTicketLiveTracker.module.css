@@ -42,3 +42,62 @@
 .footer{padding:13px 20px 17px;display:grid;gap:8px;border-top:1px solid var(--dsw-alias-border-subtle,#e2e6ea);font-size:11px;line-height:1.5}
 .footer small{color:var(--dsw-alias-label-secondary,#777)}
 @media(max-width:600px){.header{padding:14px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{padding:8px;grid-template-columns:1fr}.footer{padding:12px}}
+
+
+/* PHOENIX Pearl Light: preserve the host chat, typography and warm accents. */
+.root{max-width:920px;margin:8px auto 15px;background:var(--dsw-alias-bg-primary,#fff);
+  border:1px solid var(--dsw-alias-border-subtle,#e4ded5);
+  border-top:3px solid var(--dsw-alias-accent-primary,#cb923d);
+  border-radius:18px;box-shadow:0 5px 22px rgba(64,42,18,.045)}
+.header{padding:15px 17px;background:linear-gradient(180deg,
+  var(--dsw-alias-interactive-bg-hover,rgba(217,172,106,.075)),var(--dsw-alias-bg-primary,#fff))}
+.titleRow{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:5px 0 9px}
+.titleRow>div:first-child{min-width:0}
+.titleRow h3{font-size:19px;margin:0 0 4px}
+.titleRow p{margin:0;font-size:11px}
+.ticketCount{flex:none;display:grid;gap:3px;text-align:right}
+.ticketCount b{font-size:22px;line-height:1.15;font-variant-numeric:tabular-nums}
+.ticketCount small{font-size:9px;color:var(--dsw-alias-label-secondary,#827667)}
+.eyebrow{color:var(--dsw-alias-label-secondary,#81705b);font-size:10px}
+.summary{margin-bottom:10px;border-radius:9px;font-weight:750;
+  background:var(--dsw-alias-bg-primary,#fff)}
+.metrics{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.metrics>div{padding:7px 8px;background:var(--dsw-alias-bg-primary,#fff)}
+.metrics b{font-size:16px}.metrics small{font-size:9px}
+.progress{margin:10px 0 9px;background:var(--dsw-alias-border-subtle,#eee0c9)}
+.progress>span{background:var(--dsw-alias-accent-primary,#c88739)}
+.money{font-size:10px;gap:6px 14px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding:10px 13px}
+.leg{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:8px 12px;
+  align-items:center;padding:11px 12px;border-radius:12px;border-top-width:1px;
+  border-left:3px solid var(--dsw-alias-border-subtle,#d8d1c7);
+  background:var(--dsw-alias-bg-primary,#fff);box-shadow:0 1px 5px rgba(65,48,27,.027)}
+.leg.positive{border-left-color:var(--dsw-alias-label-success,#488a57)}
+.leg.negative{border-left-color:var(--dsw-alias-label-danger,#cb6256)}
+.leg.review{border-left-color:var(--dsw-alias-label-warning,#bd863d)}
+.legHead{grid-column:1;grid-row:1;align-self:start;flex-wrap:nowrap;gap:7px}
+.legHead>div{min-width:0;flex:1;font-size:11px}
+.legHead>div strong{overflow-wrap:anywhere}
+.legHead .phase{margin-left:auto;white-space:normal;max-width:110px;text-align:center;font-size:9px}
+.teams{grid-column:1;grid-row:2;gap:3px}
+.team{padding:2px 5px}.avatar{width:25px;height:25px;flex-basis:25px}
+.teamName{font-size:11px}.score{font-size:15px}
+.goal{grid-column:2;grid-row:1 / 3;align-self:stretch;gap:4px;padding:9px 10px;
+  background:var(--dsw-alias-interactive-bg-hover,rgba(205,153,74,.033))}
+.goal>strong{font-size:13px}.goal>span{font-size:10px}
+.goal .grade{display:inline-flex;justify-self:start;padding:4px 8px;border-radius:999px;
+  border:1px solid var(--dsw-alias-border-subtle,#e5d8c5);font-size:10px}
+.grade[data-grade="leading"],.grade[data-grade="won"]{
+  color:var(--dsw-alias-label-success,#32794c);border-color:var(--dsw-alias-label-success,#89af93)}
+.grade[data-grade="trailing"],.grade[data-grade="lost"]{
+  color:var(--dsw-alias-label-danger,#b7463b);border-color:var(--dsw-alias-label-danger,#c99088)}
+.quote{font-size:10px;color:var(--dsw-alias-label-secondary,#776857)}
+.details{grid-column:1/-1;grid-row:3;margin:0;padding-top:4px;
+  border-top:1px dashed var(--dsw-alias-border-subtle,#e9e1d7)}
+.footer{padding:10px 17px 14px;background:var(--dsw-alias-bg-primary,#fff)}
+.footer strong{font-size:11px}.footer small{font-size:10px}
+@media(max-width:660px){.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .grid{padding:8px}.leg{grid-template-columns:minmax(0,1fr)}
+  .legHead,.teams,.goal,.details{grid-column:1;grid-row:auto}
+  .goal{margin-top:0}.titleRow h3{font-size:17px}}
+@media(prefers-reduced-motion:reduce){.progress>span{transition:none}}
