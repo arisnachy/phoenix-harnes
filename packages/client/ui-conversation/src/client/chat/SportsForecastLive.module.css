@@ -1,0 +1,20 @@
+.summary{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;padding:10px 13px;
+  border:1px solid var(--dsw-alias-border-subtle,#e6d9c6);border-radius:13px;
+  background:var(--dsw-alias-interactive-bg-hover,rgba(197,147,66,.035));font-size:12px}
+.summary>div{flex:1;min-width:160px;display:grid;gap:3px}
+.summary strong{color:var(--dsw-alias-label-primary,#302c28)}
+.summary small{font-size:10px;line-height:1.45;color:var(--dsw-alias-label-secondary,#706960)}
+.count{display:grid;text-align:right;gap:2px;font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}
+.count small{font-size:9px}
+.summary>.disclaimer{flex-basis:100%;font-size:10px}
+.live{display:grid;gap:3px;flex:0 1 185px;min-width:125px;
+  padding:7px 9px;border:1px solid var(--dsw-alias-border-subtle,#e7ded2);
+  background:var(--dsw-alias-bg-primary,#fff);border-radius:10px;line-height:1.25}
+.live strong{font-size:11px}
+.live small{font-size:9px;color:var(--dsw-alias-label-secondary,#777)}
+.live[data-forecast-leg-state="leading"],.live[data-forecast-leg-state="won"]{border-color:var(--dsw-alias-label-success,#81b88f)}
+.live[data-forecast-leg-state="trailing"],.live[data-forecast-leg-state="lost"]{border-color:var(--dsw-alias-label-danger,#d29a92)}
+.live[data-forecast-leg-state="review"],.live[data-forecast-leg-state="push"]{border-color:var(--dsw-alias-label-warning,#d6aa65)}
+.status{font-weight:800}.score{font-size:10px;font-variant-numeric:tabular-nums}
+.unlinked{color:var(--dsw-alias-label-secondary,#777)}
+@media(max-width:560px){.live{flex-basis:100%;min-width:0}.count{font-size:14px}}
