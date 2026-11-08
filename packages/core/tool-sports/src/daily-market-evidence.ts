@@ -191,7 +191,7 @@ export function assessDailyMarketEvidence(
         (side.line===null?'':' '+side.line)+' a cuota observada '+side.decimalOdds]:[]),
     ],warnings:missing,rankingScore,
     descriptiveLineDistance:lineDistance===null?null:round(lineDistance),
-    relativeSignal,nhlPuckLineAudit,
+    relativeSignal,...(nhlPuckLineAudit?{nhlPuckLineAudit}:{}),
   }
   return report
 }
