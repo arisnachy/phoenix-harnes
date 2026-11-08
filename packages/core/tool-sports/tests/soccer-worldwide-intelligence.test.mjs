@@ -27,7 +27,7 @@ const players=(side)=>Array.from({length:11},(_,i)=>({
 }))
 const statHistory={
   events:[{
-    id:'old-10',date:'2026-10-29T19:00:00Z',
+    id:'770010',date:'2026-10-29T19:00:00Z',
     status:{type:{state:'post',completed:true}},
     competitions:[{competitors:[
       {homeAway:'home',team:{id:'101',displayName:'Inter Miami'},score:'2'},
@@ -47,7 +47,7 @@ function mock({noRosters=false,started=false,confirmed=true}={}){
     }else if(u.pathname.endsWith('/scoreboard')){
       const league=u.pathname.includes('/esp.1/')?'esp.1':'usa.1'
       const searched=u.searchParams.get('dates')??''
-      payload=searched.includes('-')?statHistory:{events:[started?
+      payload=searched==='202610'?statHistory:searched.length===6?{events:[]}:{events:[started?
         {...game(league),date:'2026-11-01T19:00:00Z'}:game(league)]}
     }else if(u.pathname.endsWith('/summary')){
       const home=players('home'),away=players('away')
