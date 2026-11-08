@@ -4,6 +4,21 @@
  * sportsgameodds.com/docs/endpoints/getEvents. Read only, no wager placement.
  */
 import type {MarketOutcome} from './sports.ts'
+import {setTimeout as sleep} from 'node:timers/promises'
+// TheRundown Free allows 1 request/sec. Serialize production requests from
+// parallel sport-league tools; injected test transports remain deterministic.
+let rundownPrevious=0
+let rundownQueue:Promise<unknown>=Promise.resolve()
+function rundownRequest<T>(job:()=>Promise<T>):Promise<T>{
+  const running=rundownQueue.then(async()=>{
+    const delay=Math.max(0,rundownPrevious+1100-Date.now())
+    if(delay)await sleep(delay)
+    rundownPrevious=Date.now()
+    return job()
+  })
+  rundownQueue=running.then(()=>undefined,()=>undefined)
+  return running
+}
 const name=(v:unknown,n=120)=>typeof v==='string'?v.trim().slice(0,n):''
 const obj=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)
   ?v as Record<string,unknown>:{}
@@ -64,7 +79,8 @@ export async function fetchTheRundownOdds(
   url.searchParams.set('affiliate_ids','19,22,23')
   url.searchParams.set('main_line','true')
   url.searchParams.set('hide_closed','true')
-  const raw=obj(await requestJson(url.toString(),key,'X-TheRundown-Key',fetcher))
+  const load=()=>requestJson(url.toString(),key,'X-TheRundown-Key',fetcher)
+  const raw=obj(await (fetcher===fetch?rundownRequest(load):load()))
   if(!Array.isArray(raw.events))throw Error('TheRundown: respuesta sin events')
   const quotes:MarketOutcome[]=[]
   for(const val of arr(raw.events).slice(0,60)){
