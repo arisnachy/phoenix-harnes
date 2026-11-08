@@ -117,13 +117,15 @@ function rosterRows(raw:unknown):Array<{id:string;name:string;position:string;je
 type Task={url:string;destination:(value:unknown|null)=>void;type:string}
 const cache=new Map<string,{at:number;value:unknown|null}>()
 async function fetchBounded(url:string,fetcher:typeof fetch,now:number):Promise<unknown|null>{
-  const cached=cache.get(url)
+  const cached=fetcher===fetch?cache.get(url):undefined
   if(cached&&now>=cached.at&&now-cached.at<(cached.value===null?30_000:600_000))
     return cached.value
   let value:unknown|null=null
   try{value=await getFeed<unknown>(url,fetcher)}catch{}
-  if(cache.size>180)cache.clear()
-  cache.set(url,{at:now,value})
+  if(fetcher===fetch){
+    if(cache.size>180)cache.clear()
+    cache.set(url,{at:now,value})
+  }
   return value
 }
 /** Automatic, bounded, direct ESPN team/athlete research.
@@ -183,28 +185,33 @@ export async function collectDirectEspnStats(
         splits:[],status:'unavailable',verifiedSources:[]}
       team.athletes.push(athlete)
       const uri=web+'athletes/'+person.id+'/'
+      // Avoid 60-100 redundant player endpoints when ESPN returns empty
+      // responses. Probe the roster once, then request deeper metrics only
+      // for athletes whose first probe yields actual records or the top three
+      // whose gamelog may exist independently of season stats.
+      const early=team.athletes.length<=3
       add(uri+'stats','athlete_stats',value=>{
         athlete.stats=extract(value,12)
         if(athlete.stats.length)athlete.verifiedSources.push('stats')
+        if(athlete.stats.length||early||priority(person)===0){
+          add(uri+'gamelog','athlete_gamelog',data=>{
+            athlete.lastGames=gameLog(data)
+            if(athlete.lastGames.length)athlete.verifiedSources.push('gamelog')
+          })
+        }
+        if(athlete.stats.length&&(priority(person)===0||early)){
+          add(uri+'splits','athlete_splits',data=>{
+            athlete.splits=extract(data,6)
+            if(athlete.splits.length)athlete.verifiedSources.push('splits')
+          })
+        }
       })
-      add(uri+'gamelog','athlete_gamelog',value=>{
-        athlete.lastGames=gameLog(value)
-        if(athlete.lastGames.length)athlete.verifiedSources.push('gamelog')
-      })
-      // Game-by-game splits are relevant to pitchers and star QBs. Also
-      // probe first four roster players when specialized labels are absent.
-      if(priority(person)===0||team.athletes.length<=4){
-        add(uri+'splits','athlete_splits',value=>{
-          athlete.splits=extract(value,6)
-          if(athlete.splits.length)athlete.verifiedSources.push('splits')
-        })
-      }
     }
   }
   // Strict maximum of five concurrent first-party GET operations, no arbitrary
   // redirects or URLs provided by the model.
   let cursor=0
-  await Promise.all(Array.from({length:Math.min(5,jobs.length)},async()=>{
+  await Promise.all(Array.from({length:Math.min(3,jobs.length)},async()=>{
     while(cursor<jobs.length){
       const task=jobs[cursor++]!
       const response=await fetchBounded(task.url,fetcher,now)
