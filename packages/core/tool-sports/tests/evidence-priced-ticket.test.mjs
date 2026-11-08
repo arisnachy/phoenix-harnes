@@ -280,12 +280,45 @@ test('disabled OddsHarvester is never described as queried with live prices',asy
 })
 
 
-test('real specialist gate refuses to claim complete research from scoreboard-only data',async()=>{
+test('missing specialist data creates a visible conditional ticket when ESPN and exact quotes agree',async()=>{
   const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,mkQuotes())
-  assert.equal(result.complete,false)
-  assert.equal(result.priced,false)
+  assert.equal(result.complete,true,'five real legs are present')
+  assert.equal(result.priced,true,'real same-bookmaker prices can be displayed')
+  assert.equal(result.conditional,true)
+  assert.equal(result.dossierComplete,false)
   assert.equal(result.approvedLegs,0)
   assert.equal(result.specialistChecks.length,5)
   assert.ok(result.specialistChecks.some(x=>x.status!=='researched'))
-  assert.match(result.explanation,/INCOMPLETO/)
+  assert.ok(result.card.props.legs.every(x=>x.researchStatus==='conditional'))
+  assert.match(result.card.props.subtitle,/TICKET CONDICIONAL/)
+  assert.match(result.explanation,/TICKET CONDICIONAL/)
+})
+test('explicit team identity conflict still blocks attaching odds to the wrong fixture',async()=>{
+  const wrongTeams=async games=>games.map(game=>({
+    sport:game.sport,league:game.league,eventId:game.eventId,
+    specialist:'fixture identity',status:'unavailable',
+    verifiedSteps:[],pendingSteps:['equipos no coinciden con el partido cotizado'],
+    approvedForBetting:false,checkedAt:new Date(now).toISOString(),
+  }))
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,
+    mkQuotes(), 'winner',wrongTeams)
+  assert.equal(result.priced,false)
+  assert.equal(result.complete,false)
+  assert.match(result.explanation,/CONFLICTIVO/)
+})
+test('one missing lineup remains conditional; four researched legs are retained',async()=>{
+  const mostlyChecked=async games=>games.map((game,i)=>({
+    sport:game.sport,league:game.league,eventId:game.eventId,
+    specialist:'dossier',status:i===2?'incomplete':'researched',
+    verifiedSteps:['form','roster'],pendingSteps:i===2?['starting XI not published']:[],
+    approvedForBetting:false,checkedAt:new Date(now).toISOString(),
+  }))
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,
+    mkQuotes(),'winner',mostlyChecked)
+  assert.equal(result.priced,true)
+  assert.equal(result.conditional,true)
+  assert.equal(result.researchedLegs,4)
+  assert.equal(result.card.props.legs.filter(x=>x.researchStatus==='conditional').length,1)
+  assert.ok(result.card.props.legs.some(x=>x.pendingEvidence.includes('starting XI not published')))
+  assert.equal(result.approvedLegs,0)
 })
