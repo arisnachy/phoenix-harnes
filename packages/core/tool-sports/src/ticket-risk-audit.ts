@@ -25,10 +25,10 @@ export function auditTicketMarketRisk(inputs:readonly TicketMarketLeg[]):TicketM
   return{
     legs:inputs.map(row=>{
       const share=valid(row.noVigShare)?row.noVigShare!:null
+      const relativeRisk:TicketMarketRisk['legs'][number]['relativeRisk']=
+        share===null?'unknown':share<.6?'elevated':share<.7?'moderate':'lower'
       return{eventId:row.eventId,selection:row.selection,market:row.market,
-        noVigPercent:share===null?null:percentage(share),
-        relativeRisk:share===null?'unknown':share<.6?'elevated':
-          share<.7?'moderate':'lower'}
+        noVigPercent:share===null?null:percentage(share),relativeRisk}
     }),
     weakest:weak&&weak.selection?{eventId:weak.eventId,selection:weak.selection,
       noVigPercent:percentage(weak.noVigShare!)}:null,
