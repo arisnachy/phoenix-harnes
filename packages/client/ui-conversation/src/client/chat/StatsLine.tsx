@@ -297,7 +297,7 @@ export const StatsLine = memo(function StatsLine({ useSession, useProjection, t 
     const observer = new ResizeObserver(measure)
     observer.observe(el)
     return () => { observer.disconnect() }
-  }, [line])
+  }, [line, visible])
   if (metrics.length === 0) return null
   const visibilityLabel = t(visible ? 'stats.hide' : 'stats.show')
   return (
