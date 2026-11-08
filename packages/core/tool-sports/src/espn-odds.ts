@@ -15,7 +15,7 @@ export interface EspnMarketQuote {
   time: string
   timeIso: string
   updatedAt: string
-  endpointSource?:'scoreboard'|'core'|'summary'
+  endpointSource?:'scoreboard'|'core'|'summary'|'website'
 }
 type QuotedPrice=number|string|{american?:string|number;decimal?:string|number;
   value?:string|number;alternateDisplayValue?:string|number}
@@ -44,6 +44,15 @@ const slugs:Readonly<Record<string,readonly [string,string]>>={
   basketball_ncaab:['basketball','mens-college-basketball'],
   americanfootball_ncaaf:['football','college-football'],
   soccer_world_cup:['soccer','fifa.world'],
+  soccer_fifa_world_cup:['soccer','fifa.world'],
+  soccer_germany_bundesliga:['soccer','ger.1'],
+  soccer_italy_serie_a:['soccer','ita.1'],
+  soccer_france_ligue_one:['soccer','fra.1'],
+  soccer_portugal_primeira_liga:['soccer','por.1'],
+  soccer_netherlands_eredivisie:['soccer','ned.1'],
+  soccer_brazil_campeonato:['soccer','bra.1'],
+  soccer_argentina_primera_division:['soccer','arg.1'],
+  soccer_uefa_europa_league:['soccer','uefa.europa'],
 }
 const americanToDecimal=(value:unknown):number|null=>{
   if(typeof value!=='string'&&typeof value!=='number')return null

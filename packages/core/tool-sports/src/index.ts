@@ -39,6 +39,7 @@ import { checkSportsTicket, type SportsBetLeg } from './sports-bet-settlement.ts
 import {registerSportsReceipt,type ReceiptLegInput,type ReceiptInput} from './sports-receipt-register.ts'
 import { espnCoreModes,queryEspnCore,type EspnCoreMode } from './espn-core-intelligence.ts'
 import { fetchPublicEspnOddsDetailed } from './espn-odds.ts'
+import {fetchEspnWebsiteOdds,espnOddsWebsiteCatalog,espnOddsWebsiteUrl} from './espn-website-odds.ts'
 import { espnEndpointGuide,espnWorkflow } from './espn-endpoint-guide.ts'
 import { fetchEspnHistoricalOdds } from './espn-odds-history.ts'
 import { secondaryMarketSourceCatalog } from './sports-secondary-sources.ts'
@@ -64,6 +65,7 @@ export const inject = ['tools','systemPrompt']
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'ESPN WEB COMO RESPALDO: para cuotas de NFL, MLB, NHL, NBA, WNBA, MLS y fútbol primero consulta ESPN Scoreboard/Core/Summary; si faltan mercados, marketOddsDetailed prueba una sola lectura HTML pública en espn.com usando sports_chat_espn_web_odds. Valida ID, clubes, fecha, mercado, casa y updatedAt, muestra el enlace oficial. Si ESPN exige JavaScript/CAPTCHA, no intentes evadirlo y continúa con The Odds API/TheOddsAPI/TheRundown/SportsGameOdds/OddsHarvester, si están configurados. Que el usuario vea cuotas en una página NO acredita que sean accesibles ni actuales por API. Nunca confundas 1X2 con moneyline de dos selecciones. ',
   'REGLA OBLIGATORIA PARA TICKETS GANADORES: las cotizaciones y favoritos de casas no son investigación deportiva. Si el usuario solicita un ticket ganador del día (incluido solo equipos ganadores), usa sports_chat_ticket_evidence_priced_auto con marketPreference=winner cuando corresponda, o sports_chat_daily_market_shortlist con deep=true. Cada partido requiere expediente de su especialista NFL/NBA/WNBA/NHL/MLB/Fútbol/Tenis, identidad verificada y diagnóstico de bajas, alineaciones, forma y contradicciones. Los resultados incomplete/unavailable de un especialista NO bloquean mostrar un ticket condicional si el evento ESPN y la cuota real están verificados y la tendencia histórica tiene apoyo descriptivo. Sí impiden presentar esa selección como investigada o aprobada. Conflictos expresos de identidad o mercados contradichos bloquean esa pata. Si faltan eventos o cuotas genuinas, entrega borrador visible sin fabricar patas, nunca ticket ganador certificado. La cuota no demuestra acierto y ninguna ruta puede reportar aprobación o EV sin modelo validado. ',
   'MERCADOS DE TOTAL Y HÁNDICAP: ganar un partido no demuestra cubrir -1.5/+1.5 o una línea over/under. Antes de considerar un total o spread con sports_chat_daily_market_shortlist(deep=true), coteja la línea EXACTA contra resultados previos de AMBOS clubes, separa aciertos, fallos y pushes, y exige dirección consistente en los dos historiales. Si marketOutcomeDiagnostic.status es mixed, insufficient o adverse, etiquetar CONDICIONAL/CONTRAINDICADA y no ponerla como pata cotizada; nunca conviertas frecuencia histórica en probabilidad futura o EV. Para NHL añade portero y reglas OT/SO; para NBA pace, eficiencia y lesiones siguen pendientes si no fueron medidos. La meta de 5–6 patas no autoriza inventar una probabilidad ni rellenar selecciones sin respaldo. ',
   'NHL ESPECIALIZADO: para NHL consulta sports_chat_hockey_slate y sports_chat_nhl_investigate con gameId oficial NHL, no ID ESPN. Recupera rosters y estadísticas observadas de skaters/porteros; distingue portero candidato del titular confirmado y ganador a 60 minutos del ganador con OT/SO. No infieras xG/GSAx, alineaciones definitivas o probabilidades no calibradas, ni llames cuota actual a una línea sin timestamp. En +1.5/-1.5 evalúa el riesgo de caer por dos goles, los márgenes recientes de ambos equipos, la probabilidad de equilibrio del precio, porteros, descanso, empty-net y OT. Sin titular y modelo de cobertura calibrado, clasifica como CONDICIONAL o CONTRAINDICADA. ',
@@ -1144,6 +1146,34 @@ export function apply(ctx: Context): void {
     presentCall:()=>({card:'generic',title:'Investigar cuotas históricas ESPN',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
+    name:'sports_chat_espn_web_odds',
+    description:'Respaldo web público ESPN para cuotas NFL/MLB/NHL/NBA/WNBA/MLS/fútbol: lee HTML estructurado solo si es accesible y comprueba el partido contra el scoreboard oficial. Informa CAPTCHA/JS y enlace oficial sin eludir bloqueos ni fabricar precios.',
+    parameters:{
+      sportKey:{type:'string',required:true,description:'Ej.: americanfootball_nfl, baseball_mlb, icehockey_nhl, basketball_nba, basketball_wnba, soccer_usa_mls, soccer_epl.'},
+      markets:{type:'string',description:'h2h,spreads,totals; por defecto h2h.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const env=await sportsEnv(ctx),now=Date.now()
+      const url=espnOddsWebsiteUrl(args.sportKey)
+      if(!url)return JSON.stringify({status:'unsupported',
+        available:espnOddsWebsiteCatalog,quoted:0,
+        instruction:'Liga no identificada: seleccionar una ruta ESPN real.'})
+      if(env.PHOENIX_SPORTS_ESPN_DISABLED==='1'||
+        env.PHOENIX_SPORTS_ESPN_WEB_DISABLED==='1')
+        return JSON.stringify({status:'disabled',url,quoted:0,
+          instruction:'El administrador deshabilitó ESPN; no acceder a la web.'})
+      const r=await fetchEspnWebsiteOdds(args.sportKey,args.markets??'h2h',
+        fetch,<T>(link:string)=>getFeed<T>(link),now)
+      return JSON.stringify({...r,quoted:r.quotes.length,
+        instruction:r.status==='blocked'?
+          'ESPN exige navegador, JS o CAPTCHA. Muestra la URL y prueba otras API autorizadas; no intentas simular interacciones ni declaras cotizaciones.':
+          'Solo precios con timestamp real, casas y eventos verificados contra ESPN Scoreboard. Si hay cero, enlazar página para comprobación humana y buscar mercados en fuentes independientes. Nunca estimar precio a partir de favoritos.'})
+    },
+    presentCall:()=>({card:'generic',title:'Investigar cuotas ESPN web y verificar respaldo',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
     name:'sports_chat_odds',
     description:'Consulta por defecto cuotas ESPN Scoreboard, Core y Summary/Pickcenter sin clave. Usa eventId ESPN y date para un partido exacto. sourcePolicy=all compara voluntariamente otros proveedores; sus IDs no se mezclan.',
     parameters:{
@@ -1176,9 +1206,19 @@ export function apply(ctx: Context): void {
             <T>(url:string)=>getFeed<T>(url),
             {now:observedAt,cache:true,...(args.eventId?{eventId:args.eventId}:{}),
               ...(args.date?{date:args.date}:{}),days:args.date?1:args.eventId?7:3})
+          const missing=(args.markets??'h2h').split(',').filter(m=>
+            !result.quotes.some(q=>q.market===m))
+          const web=missing.length&&env.PHOENIX_SPORTS_ESPN_WEB_DISABLED!=='1'
+            ?await fetchEspnWebsiteOdds(args.sportKey,missing.join(','),fetch,
+              <T>(url:string)=>getFeed<T>(url),observedAt):null
+          const webQuotes=(web?.quotes??[]).filter(q=>
+            (!args.eventId||q.eventId===args.eventId)&&
+            (!args.date||q.timeIso.slice(0,10)===args.date))
           return{
-            quotes:result.quotes.map(q=>({...q,sportKey:args.sportKey,
+            quotes:[...result.quotes.map(q=>({...q,sportKey:args.sportKey,
               source:'ESPN '+q.endpointSource+' (sin clave)'})),
+              ...webQuotes.map(q=>({...q,sportKey:args.sportKey,
+                source:'ESPN Website (HTML público cotejado)'}))],
             observations:result.observations.map(q=>({...q,sportKey:args.sportKey,
               source:'ESPN '+q.endpointSource+' (referencia no cotizable)'})),
             sources:[{provider:'ESPN Site/Core',status:result.quotes.length?
@@ -1196,7 +1236,11 @@ export function apply(ctx: Context): void {
                 ' · cuotas sin fecha '+result.diagnostics.undatedOutcomes+
                 ' · antiguas '+result.diagnostics.expiredOutcomes+
                 ' · fallos '+result.diagnostics.failures+
-                ' · '+result.diagnostics.notes.join(' | ').slice(0,350)}],
+                ' · '+result.diagnostics.notes.join(' | ').slice(0,350)},
+                ...(web?[{provider:'ESPN Website',status:webQuotes.length?
+                  'observed' as const:web.status==='blocked'||web.status==='unavailable'?
+                    'error' as const:'empty' as const,count:webQuotes.length,
+                  detail:(web.detail+' · '+web.url).slice(0,340)}]:[])],
           }
         })():
         await marketOddsDetailed(args.sportKey,args.markets,env)
