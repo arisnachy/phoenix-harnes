@@ -6,16 +6,18 @@ import {evaluateSportsPick,validTrackedPick,type SportsPickGrade,type SportsTrac
 import {SportsLiveProvider,type PhoenixLiveGame,type PhoenixLiveMeta} from './SportsLive.tsx'
 import {importSportsReceipt,type SportsReceiptFixture} from './SportsTicketAutoLink.ts'
 import css from './SportsTicketLiveTracker.module.css'
+import {SportsLeagueBadge} from './SportsLeagueIdentity.tsx'
 
 export type TicketLeg={
   event:string;selection:string;price:string;bookmaker:string;when?:string;
   sport?:string;league?:string;providerLeague?:string;eventDate?:string;eventId?:string;
   homeTeam?:string;awayTeam?:string;homeLogo?:string;awayLogo?:string;
+  rationale?:string;market?:string;country?:string;
   trackedBet?:SportsTrackedPick
 }
 export type TicketProps={
   ticketReference?:string;title:string;subtitle?:string;source:string;note:string;
-  stake?:string;grossReturn?:string;legs:TicketLeg[]
+  stake?:string;grossReturn?:string;combinedOdds?:string;legs:TicketLeg[]
 }
 export type TicketState=SportsPickGrade['state']
 export type TicketSummary={
@@ -81,8 +83,8 @@ function LiveLegContent({leg,index,receipt,game,meta,onGrade}:{
     data-leg-state={grade.state} data-ticket-leg={index+1}>
     <div className={css.legHead}>
       <span className={css.number}>{String(index+1).padStart(2,'0')}</span>
-      <div><strong>{leg.sport==='hockey'?'🏒':leg.sport==='soccer'?'⚽':
-        leg.sport==='basketball'?'🏀':leg.sport==='baseball'?'⚾':'🏆'} {leg.league??leg.providerLeague??'Evento'}</strong>
+      <SportsLeagueBadge league={leg.league??leg.providerLeague} sport={leg.sport} compact/>
+      <div><strong>{leg.league??leg.providerLeague??'Evento'}</strong>
         <small>{leg.when??leg.eventDate??'Hora pendiente'}</small></div>
       <span className={css.phase}>{phase}</span>
     </div>
@@ -93,16 +95,19 @@ function LiveLegContent({leg,index,receipt,game,meta,onGrade}:{
         selected={Boolean(linked&&p?.side==='home'&&p.market!=='total')} score={exact?.homeScore}/>
     </div>
     <div className={css.goal}>
-      <small>OBJETIVO DE LA PATA · BOLETO #{receipt}</small>
+      <small>MERCADO SELECCIONADO · BOLETO #{receipt}</small>
       <strong>{goal(leg)}</strong>
-      <span className={css.grade}>{grade.label}</span>
+      {leg.price&&leg.price!=='No disponible'&&<span className={css.quote}>Cuota del recibo · {leg.price}</span>}
+      <span className={css.grade} data-grade={grade.state}>{grade.label}</span>
       <span>{linked?grade.target:'Falta vincular este partido inequívocamente con ESPN.'}</span>
+      {meta.updatedAt>0&&<small>ESPN · actualizado {new Date(meta.updatedAt).toLocaleTimeString('es-DO',{hour:'2-digit',minute:'2-digit'})}</small>}
       {meta.error||meta.stale?<small>Datos sin actualizar; el estado puede haber cambiado.</small>:null}
     </div>
     <details className={css.details}><summary>Detalles del partido</summary>
       <small>ESPN: {leg.eventId??'Sin ID'} · {leg.eventDate??'Sin fecha'} · {leg.sport??'Deporte'}</small>
       {exact?.periods?.length?<small>Períodos: {exact.periods.map(v=>v.label+': '+v.away+'–'+v.home).join(' · ')}</small>:null}
       {exact?.lastPlay&&<small>Última jugada: {exact.lastPlay}</small>}
+      {leg.rationale&&<small>Fundamento del pronóstico: {leg.rationale}</small>}
     </details>
   </article>
 }
@@ -134,25 +139,29 @@ export function SportsTicketLiveTracker({props}:{props:TicketProps}):ReactNode{
   return <section className={css.root} data-generative-ui="sports_ticket_card"
     data-ticket-reference={receipt} aria-label={'Seguimiento del boleto '+receipt}>
     <header className={css.header}>
-      <div className={css.eyebrow}><span>PHOENIX / TICKET TRACKER</span><span>Actualización automática ESPN</span></div>
-      <h3>Boleto #{receipt}</h3>
-      <p>Seguimiento de las {summary.total} patas de esta acumulada</p>
+      <div className={css.eyebrow}><span>PHOENIX / TICKET INTELIGENTE</span><span>ESPN · marcador en vivo</span></div>
+      <div className={css.titleRow}>
+        <div><h3>Boleto #{receipt}</h3><p>Seguimiento automático de {summary.total} selecciones · Pearl Light</p></div>
+        <div className={css.ticketCount}><b>{summary.won} / {summary.total}</b><small>Acertadas al final*</small></div>
+      </div>
       <strong className={css.summary+' '+(summary.state==='won'?css.positive:
         summary.state==='lost'?css.negative:summary.state==='review'?css.review:css.pending)}
         data-ticket-state={summary.state}>{summary.label}</strong>
       <div className={css.metrics}>
-        <div><b>{summary.total}</b><small>Total de patas</small></div>
-        <div><b>{summary.covering}</b><small>Cumpliendo ahora</small></div>
-        <div><b>{summary.completed}</b><small>Terminadas / revisión</small></div>
-        <div><b>{summary.lost}</b><small>Perdidas provisionales</small></div>
+        <div><b>{summary.total}</b><small>Patas</small></div>
+        <div><b>{summary.won}</b><small>Aciertos finales*</small></div>
+        <div><b>{summary.leading}</b><small>Acertando ahora</small></div>
+        <div><b>{summary.trailing}</b><small>No acertando ahora</small></div>
+        <div><b>{summary.lost}</b><small>Fallos finales*</small></div>
       </div>
       <div className={css.progress} role="progressbar" aria-label="Patas finalizadas o por revisión"
         aria-valuemin={0} aria-valuemax={summary.total} aria-valuenow={summary.completed}>
         <span style={{width:(summary.total?100*summary.completed/summary.total:0)+'%'}}/>
       </div>
       <div className={css.money}>
-        {props.stake&&<span>Importe: <b>RD$ {props.stake}</b></span>}
-        {props.grossReturn&&<span>Retorno potencial del recibo: <b>RD$ {props.grossReturn}</b></span>}
+        {props.combinedOdds&&props.combinedOdds!=='No disponible'&&<span>Cuota combinada: <b>{props.combinedOdds}</b></span>}
+        {props.stake&&<span>Importe del recibo: <b>RD$ {props.stake}</b></span>}
+        {props.grossReturn&&<span>Retorno potencial: <b>RD$ {props.grossReturn}</b></span>}
       </div>
     </header>
     <div className={css.grid}>{props.legs.map((leg,i)=>
@@ -160,7 +169,7 @@ export function SportsTicketLiveTracker({props}:{props:TicketProps}):ReactNode{
         receipt={receipt} onGrade={report}/>)}</div>
     <footer className={css.footer}>
       <strong>{summary.won} ganadas provisionalmente · {summary.lost} perdidas · {summary.leading} cumpliendo en vivo · {summary.trailing} sin cumplir en vivo · {summary.pending+summary.review+summary.push} pendientes/revisión.</strong>
-      <small>El cálculo utiliza marcadores públicos y el objetivo del comprobante. No confirma aceptación, liquidación ni pago. Las anulaciones, prolongaciones y reglas del operador requieren validación adicional.</small>
+      <small>* Acertada/fallada significa resultado deportivo provisional basado en ESPN. No significa boleto pagado. El operador confirma aceptación, reglas de hándicap y prórroga, anulaciones, liquidación y pago. Si falta información, PHOENIX deja la pata pendiente de verificación.</small>
     </footer>
   </section>
 }
