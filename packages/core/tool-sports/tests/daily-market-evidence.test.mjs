@@ -111,3 +111,21 @@ test('a favorable descriptive NHL +1.5 remains uncertain without goalie and xG v
   assert.equal(review.nhlPuckLineAudit.calibrated,false)
   assert.equal(review.nhlPuckLineAudit.approved,false)
 })
+
+test('expensive Carolina -460 moneyline remains uncertain without validated probability',()=>{
+  const basic=market('h2h','Home',null)
+  const choice={...basic,sport:'hockey',league:'nhl',
+    outcomes:[{selection:'Home',line:null,decimalOdds:1+100/460,noVigShare:.8},
+      {selection:'Away',line:null,decimalOdds:5.2,noVigShare:.2}]}
+  const original=evidence(),matchup={...original,sport:'hockey',league:'nhl',
+    home:{name:'Home',form:{games:10,scoredPerGame:5,allowedPerGame:1},
+      lastGames:Array.from({length:10},()=>({scored:5,allowed:1}))},
+    away:{name:'Away',form:{games:10,scoredPerGame:1,allowedPerGame:5},
+      lastGames:Array.from({length:10},()=>({scored:1,allowed:5}))}}
+  const review=assessDailyMarketEvidence(choice,matchup)
+  assert.equal(review.status,'uncertain')
+  assert.equal(review.selectedOutcome.selection,'Home')
+  assert.equal(review.priceAudit.breakEvenPercent,82.14)
+  assert.equal(review.priceAudit.expectedValuePercent,null)
+  assert.match(review.warnings.join(' '),/BLOQUEO DE PRECIO/)
+})
