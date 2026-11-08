@@ -72,8 +72,27 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
       const form=d.teamForm[side]
       return form!==null&&Number.isSafeInteger(form.games)&&form.games>0&&
         Array.isArray(form.lastResults)&&form.lastResults.length===form.games&&
+        [form.wins,form.losses,form.runsFor,form.runsAgainst,
+          form.home.wins,form.home.losses,form.away.wins,form.away.losses]
+          .every(n=>Number.isSafeInteger(n)&&n>=0)&&
+        form.wins+form.losses===form.games&&
+        form.home.wins+form.home.losses+form.away.wins+form.away.losses===form.games&&
+        form.home.wins+form.away.wins===form.wins&&
+        form.home.losses+form.away.losses===form.losses&&
         form.lastResults.every(g=>Number.isFinite(Date.parse(g.date))&&
-          Date.parse(g.date)<checkedMs)
+          Date.parse(g.date)<checkedMs&&Number.isSafeInteger(g.opponentId)&&
+          g.opponentId>0&&Number.isSafeInteger(g.scored)&&g.scored>=0&&
+          Number.isSafeInteger(g.allowed)&&g.allowed>=0&&
+          (g.side==='home'||g.side==='away'))&&
+        form.lastResults.reduce((n,g)=>n+g.scored,0)===form.runsFor&&
+        form.lastResults.reduce((n,g)=>n+g.allowed,0)===form.runsAgainst&&
+        form.lastResults.filter(g=>g.scored>g.allowed).length===form.wins&&
+        form.lastResults.filter(g=>g.scored<g.allowed).length===form.losses&&
+        (['home','away'] as const).every(location=>
+          form.lastResults.filter(g=>g.side===location&&g.scored>g.allowed).length===
+            form[location].wins&&
+          form.lastResults.filter(g=>g.side===location&&g.scored<g.allowed).length===
+            form[location].losses)
     }),
     bothRostersVerified:nineVerified('home')&&nineVerified('away'),
     lineupsConfirmed:(['home','away'] as const).every(side=>{
