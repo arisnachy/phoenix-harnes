@@ -16,7 +16,7 @@ export function choosePhoenix3DPipeline(request: string):
  */
 export function isAnatomicalVisualRequest(request: string): boolean {
   const text=request.normalize('NFKD').replace(/[\u0300-\u036f]/gu,'').toLowerCase()
-  const anatomical=/\b(?:anatom\w*|neuroanatom\w*|histolog\w*|fisiolog\w*|physiolog\w*|sistema\s+(?:nervios\w*|cardiovascular|respiratorio|urinario|digestivo)|human\s+anatomy)\b/u.test(text)
+  const anatomical=/\b(?:anatom\w*|neuroanatom\w*|histolog\w*|fisiolog\w*|physiolog\w*|sistema\s+(?:nervios\w*|cardiovascular|respiratorio|urinario|digestivo)|human\s+anatomy|organos?\s+humanos?|human\s+organs?)\b/u.test(text)
   const organs=/\b(?:corazon|cardiac\w*|heart|cerebro|brain|encefalo|espina\w*|medula|spinal|pulmon\w*|lungs?|rinon(?:es)?|kidneys?|higado|liver|pancreas|uter\w*|prostata|aorta|coronari\w*|arteri\w*|venas?|neuron\w*|esqueleto|skeleton|bladder|vejiga|organos?\s+humanos?)\b/u.test(text)
   const visual=/\b(?:3d|tridimensional|gemel\w*|digital\s+twins?|model\w*|imagen(?:es)?|images?|render\w*|ilustr\w*|visualiz\w*|reconstr\w*|simul\w*|atlas|muestr\w*|crea\w*|dibuj\w*|disen\w*)\b/u.test(text)
   return anatomical || (organs && visual)
