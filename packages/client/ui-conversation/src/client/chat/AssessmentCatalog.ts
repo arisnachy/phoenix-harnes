@@ -146,11 +146,11 @@ export function resolveGeneratedAssessment(spec:ScaleFormSpec):{
   readonly spec:ScaleFormSpec;readonly verified:boolean;readonly replaced:boolean
 }{
   const name=spec.props.title.trim().toLowerCase()
-  const catalogId=/^phq[\\s-]?9\\b/u.test(name)?'phq9-es':
-    /^gad[\\s-]?7\\b/u.test(name)?'gad7-es':null
+  const catalogId=/^phq[\s-]?9\b/u.test(name)?'phq9-es':
+    /^gad[\s-]?7\b/u.test(name)?'gad7-es':null
   const known=assessmentCatalog.find(item=>item.id===catalogId)
   const spanish=spec.props.items.some(item=>
-    /\\b(?:poco|interés|placer|días|sentido|ansioso|preocupación|dormir)\\b/iu.test(item.question))
+    /\b(?:poco|interés|placer|días|sentido|ansioso|preocupación|dormir)\b/iu.test(item.question))
   if(known?.spec && known.access==='reproducible' && spanish
     && spec.props.items.length===known.spec.props.items.length){
     return {spec:known.spec,verified:true,replaced:true}
