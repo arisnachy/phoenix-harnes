@@ -58,7 +58,7 @@ export async function fetchTheRundownOdds(
   if(!key.trim())throw Error('THERUNDOWN_API_KEY no configurada')
   const sport=rundownSports[sportKey]
   if(!sport)return []
-  const marketIds=markets.split(',').map(m=>({h2h:1,spreads:2,totals:3})[m]!).join(',')
+  const marketIds=markets.split(',').map(m=>m==='h2h'?1:m==='spreads'?2:3).join(',')
   const url=new URL('https://therundown.io/api/v2/sports/'+sport+'/events/'+day(now))
   url.searchParams.set('market_ids',marketIds)
   url.searchParams.set('affiliate_ids','19,22,23')
@@ -147,7 +147,7 @@ export async function fetchSportsGameOdds(
         ((soccer&&type==='ml3way'&&period==='reg')||
           (!soccer&&type==='ml'&&period==='game'))?'h2h':null
       if(!market||!markets.split(',').includes(market))continue
-      if(market!=='h2h'&&period!=='game'&&period!=='reg')continue
+      if(market!=='h2h'&&period!==(soccer?'reg':'game'))continue
       const selection=market==='totals'
         ?side==='over'?'Over':side==='under'?'Under':''
         :side==='home'?home:side==='away'?away:
