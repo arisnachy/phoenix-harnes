@@ -42,6 +42,7 @@ export async function evidencePricedTicket(
   specialistChecks:SpecialistGate[];researchedLegs:number;
   modelAudit:Array<{eventId:string;status:'support'|'contradiction'|'unavailable';
     prediction:ModelForecast|null}>;
+  conditional:boolean;dossierComplete:boolean;
   explanation:string}>{
   const research=await evidenceTicket(count,date,sport,fetcher,now,env)
   const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
@@ -54,6 +55,11 @@ export async function evidencePricedTicket(
   })),fetcher,now,env)
   const researchedLegs=specialistChecks.filter(x=>x.status==='researched').length
   const specialistComplete=research.events.length===count&&researchedLegs===count
+  // A missing injury report or lineup is a conditional research gap, not an
+  // automatic refusal to display a priced candidate. Explicit identity
+  // conflicts must still prevent matching bookmaker outcomes.
+  const identityConflict=specialistChecks.some(x=>x.pendingSteps.some(step=>
+    /equipos no coinciden|conflicto de cartelera|identidad contradictoria/iu.test(step)))
   // Independent, openly licensed probabilities are a second opinion only.
   // They are NEVER bookmaker quotations, approval, or calibrated PHOENIX EV.
   const modelKeys=[...new Set(research.events.map(e=>leagueSportKey[e.league]).filter(
@@ -100,7 +106,8 @@ export async function evidencePricedTicket(
   const base={card:researchCard,priced:false as boolean,placed:false as const,
     complete:research.complete&&specialistComplete,verifiedEvents:research.verifiedEvents,
     quotedLegs:0,missingQuotes:count,sourceAudit:initialSources,
-    specialistChecks,researchedLegs,modelAudit,
+    specialistChecks,researchedLegs,modelAudit,conditional:!specialistComplete,
+    dossierComplete:specialistComplete,
     multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
     explanation:'Preselección ESPN, cuotas todavía NO verificadas: '+quoteAccess+
       '. Los archivos históricos no ofrecen precios para apostar hoy.'}
@@ -234,12 +241,9 @@ export async function evidencePricedTicket(
   }}
   const checked={...base,card:auditCard,sourceAudit,quotedLegs,
     missingQuotes:count-quotedLegs}
-  if(!specialistComplete)return{...checked,complete:false,
-    explanation:'Borrador INCOMPLETO: '+researchedLegs+'/'+count+
-      ' expedientes deportivos individuales suficientemente documentados. '+
-      specialistChecks.filter(x=>x.status!=='researched').map(x=>
-        x.sport+' '+x.eventId+': '+x.pendingSteps.slice(0,2).join('; ')).join(' | ')+
-      '. No se cotiza ticket como investigación completa.'}
+  if(identityConflict)return{...checked,complete:false,
+    explanation:'Borrador CONFLICTIVO: los equipos o la localía no coinciden con el '+
+      'partido verificado. No se adjudican cuotas a encuentros ambiguos.'}
   if(!research.complete)return{...checked,
     explanation:'Borrador INCOMPLETO: '+research.verifiedEvents+'/'+count+
       ' partidos con tendencia histórica documentada, '+
@@ -283,6 +287,8 @@ export async function evidencePricedTicket(
       ?row as Record<string,unknown>:{}
     return {...pricedRow,
       specialistResearch:specialistChecks[index]??null,
+      researchStatus:specialistChecks[index]?.status==='researched'?'documented':'conditional',
+      pendingEvidence:specialistChecks[index]?.pendingSteps.slice(0,5)??[],
       ...Object.fromEntries(['homeTeam','awayTeam','homeLogo','awayLogo','sport',
         'league','country','rationale','when'].filter(k=>typeof prior[k]==='string')
         .map(k=>[k,prior[k]])),
@@ -295,18 +301,25 @@ export async function evidencePricedTicket(
   })
   const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,modelAudit,
-    subtitle:'Cuotas verificadas · '+best.book+' · análisis de forma con datos ESPN',
-    note:'COTIZACIÓN DE INVESTIGACIÓN CON DOSSIER DEPORTIVO POR PATA, NO APUESTA APROBADA NI GANADORA. '+(marketPreference==='double_chance'
+    subtitle:(specialistComplete?'Investigación especializada':'TICKET CONDICIONAL')+
+      ' · cuotas verificadas · '+best.book+' · forma histórica ESPN',
+    note:(specialistComplete?'COTIZACIÓN INVESTIGADA':
+      'TICKET CONDICIONAL: faltan datos especializados. Se muestran solo cuotas reales.')+
+      ' NO ES APUESTA APROBADA NI GANADORA. '+(marketPreference==='double_chance'
       ?'Fútbol: la doble oportunidad cubre empate (1X/X2), NO asegura ganar. ':'')+
       'TheRundown Free informa cuotas con retraso aproximado de 5 min; observedAt es consulta del proveedor, updatedAt es último cambio de la casa. Confirmar precio actual antes de apostar. '+
       'Contradicciones de Bet Better: '+modelDisagreements+
       ' (predicción independiente, no cuota). Formas y descanso históricos NO son probabilidades calibradas. El expediente deportivo puede señalar titulares, bajas y estadísticas PENDIENTES; confirmar la casa antes de apostar. '+priced.warning,
     askPrompt:'Kira, comprueba lesiones, titulares, estadísticas específicas, correlación y vigencia de las '+count+' cuotas antes de recomendar este ticket.',
   }}
-  return{card,priced:true,placed:false,complete:true,verifiedEvents:research.verifiedEvents,
+  return{card,priced:true,placed:false,complete:true,
+    conditional:!specialistComplete,dossierComplete:specialistComplete,
+    verifiedEvents:research.verifiedEvents,
     quotedLegs:count,missingQuotes:0,sourceAudit,approvedLegs:0,
     specialistChecks,researchedLegs,modelAudit,
     multisportSatisfied:research.multisportSatisfied,
     explanation:'Las '+count+' selecciones tienen cuota vigente y la misma casa '+best.book+
-      '. Cada pata pasó por su expediente deportivo; NO equivale a aprobación de apuesta ni es modelo de acierto calibrado. Validar lesiones, titulares, restricciones y precios antes de apostar.'}
+      (specialistComplete?'. Expedientes especializados investigados.':
+      '. TICKET CONDICIONAL: '+(count-researchedLegs)+' expedientes parciales o no disponibles; verificar datos pendientes.')+
+      ' Es un ticket de investigación cotizado, NO apuesta aprobada ni predicción calibrada.'}
 }
