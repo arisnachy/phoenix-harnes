@@ -80,27 +80,27 @@ export async function nflverseInjuryReport(
     const validTeams=new Map([[home,new Set(aliases[home]??[home])],
       [away,new Set(aliases[away]??[away])]])
     const current=rows.filter(r=>{
-      const modified=Date.parse(r.date_modified)
+      const modified=Date.parse(r.date_modified??'')
       return Number(r.season)===season&&Number.isInteger(Number(r.week))&&
         Number(r.week)>0&&Number.isFinite(modified)&&modified<=now+60_000&&
         modified<=kickoff&&modified>=Math.max(now-7*86_400_000,kickoff-6*86_400_000)&&
-        [...validTeams.values()].some(codes=>codes.has(r.team))
+        [...validTeams.values()].some(codes=>codes.has(r.team??''))
     })
     if(!current.length)return missing('stale','Sin reporte reciente para ambos clubes')
     const week=Math.max(...current.map(r=>Number(r.week)))
     const latest=current.filter(r=>Number(r.week)===week)
     const covered=[...validTeams.entries()].filter(([,codes])=>
-      latest.some(r=>codes.has(r.team))).map(([code])=>code)
+      latest.some(r=>codes.has(r.team??''))).map(([code])=>code)
     const found=new Map<string,NflverseInjury>()
     for(const row of latest){
-      const club=[...validTeams.entries()].find(([,codes])=>codes.has(row.team))?.[0]
-      if(!club||!row.full_name.trim())continue
-      const status=row.report_status.trim()
+      const club=[...validTeams.entries()].find(([,codes])=>codes.has(row.team??''))?.[0]
+      if(!club||!(row.full_name??'').trim())continue
+      const status=(row.report_status??'').trim()
       if(!['Out','Doubtful','Questionable'].includes(status))continue
-      const record={team:club,name:row.full_name.slice(0,100),
+      const record={team:club,name:(row.full_name??'').slice(0,100),
         position:(row.position??'').slice(0,12),status,
         injury:(row.report_primary_injury??'').slice(0,100),
-        modifiedAt:row.date_modified,week}
+        modifiedAt:row.date_modified??'',week}
       const key=club+'|'+norm(record.name)
       const prev=found.get(key)
       if(!prev||Date.parse(prev.modifiedAt)<Date.parse(record.modifiedAt))found.set(key,record)
