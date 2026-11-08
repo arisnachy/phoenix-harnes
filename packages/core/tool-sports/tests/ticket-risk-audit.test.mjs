@@ -35,6 +35,8 @@ test('no-vig market share requires BOTH live sides at same book and event',()=>{
   const away={...home,selection:'Away',price:2.05}
   assert.equal(quoteSideNoVig(home,[home,away],now),
     Number(((1/1.8)/(1/1.8+1/2.05)).toFixed(5)))
+  assert.ok(quoteSideNoVig({...home,market:'home_away'},[
+    {...home,market:'home_away'},{...away,market:'home_away'}],now)!==null)
   assert.equal(quoteSideNoVig(home,[home],now),null)
   assert.equal(quoteSideNoVig(home,[home,{...away,bookmaker:'Other'}],now),null)
   assert.equal(quoteSideNoVig(home,[home,{...away,eventId:'101'}],now),null)
