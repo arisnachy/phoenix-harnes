@@ -1,6 +1,7 @@
 /** Mandatory, sport-specific pregame dossier audit before any automated ticket is quoted.
  * A successful fetch is not proof of a starting lineup, calibrated edge, or permission
- * to describe a leg as approved. Absent/partial specialist research fails closed.
+ * to describe a leg as approved. Missing specialist data stays conditional,
+ * not invisible; confirmed identity/market mismatches still block that leg.
  */
 import type {MarketOutcome} from './sports.ts'
 import {crosscheckFreeFixture,freeOfficialFollowUps} from './free-sports-source-audit.ts'
