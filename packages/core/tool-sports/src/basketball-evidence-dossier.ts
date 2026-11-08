@@ -212,7 +212,6 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
   const root='https://site.api.espn.com/apis/site/v2/sports/basketball/'+league+'/'
   const sources=board.sources
   const day0=Date.parse(date+'T12:00:00Z')
-  const prior=(n:number)=>new Date(day0-n*86_400_000).toISOString().slice(0,10).replaceAll('-','')
   const [summary,historyReport,injuriesData,newsData,players]=await Promise.all([
     basketballRead<unknown>(root+'summary?event='+eventId,fetcher,sources,now),
     readHistoricalScoreboard(root,new Date(day0-42*86_400_000).toISOString().slice(0,10),
