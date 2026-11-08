@@ -134,3 +134,26 @@ export function findAssessment(query:string): AssessmentCatalogEntry[] {
   const q=query.trim().toLocaleLowerCase('es')
   return assessmentCatalog.filter(e=>!q||[e.title,e.id,e.description,e.discipline].join(' ').toLocaleLowerCase('es').includes(q))
 }
+
+/**
+ * Generated questionnaires cannot authenticate their own provenance by claiming
+ * to be a named clinical test. Resolve only known, reproducible questionnaires,
+ * using the catalog's full item wording and scoring in place of model output.
+ * Unrecognized/protected versions stay unverified and are never auto-scored as
+ * official instruments.
+ */
+export function resolveGeneratedAssessment(spec:ScaleFormSpec):{
+  readonly spec:ScaleFormSpec;readonly verified:boolean;readonly replaced:boolean
+}{
+  const name=spec.props.title.trim().toLowerCase()
+  const catalogId=/^phq[\s-]?9\b/u.test(name)?'phq9-es':
+    /^gad[\s-]?7\b/u.test(name)?'gad7-es':null
+  const known=assessmentCatalog.find(item=>item.id===catalogId)
+  const spanish=spec.props.items.some(item=>
+    /\b(?:poco|interés|placer|días|sentido|ansioso|preocupación|dormir)\b/iu.test(item.question))
+  if(known?.spec && known.access==='reproducible' && spanish
+    && spec.props.items.length===known.spec.props.items.length){
+    return {spec:known.spec,verified:true,replaced:true}
+  }
+  return {spec,verified:false,replaced:false}
+}
