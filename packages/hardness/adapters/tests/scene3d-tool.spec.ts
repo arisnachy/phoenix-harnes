@@ -46,6 +46,20 @@ describe('phoenix_3d actual geometry tool',()=>{
       await expect(tool.execute({title:'Invalido',scene:invalid},execution())).rejects.toThrow()
     }
   })
+  it('rejects primitive anatomical scenes and redirects to image generation',async()=>{
+    const tool=createPhoenix3DTool()
+    const part={type:'sphere',name:'Parte',position:[0,0,0],size:[1,1,1],color:'#bb2244'}
+    for(const args of [
+      {title:'Gemelo digital anatómico del corazón',scene:{nodes:[part]}},
+      {title:'Riñones 3D',scene:{nodes:[part]}},
+      {title:'Proyecto visual',subject:'human brain anatomical visualization',scene:{nodes:[part]}},
+      {title:'Objeto genérico',scene:{name:'Órganos humanos',nodes:[part]}},
+      {title:'Objeto genérico',scene:{nodes:[{...part,name:'Corazón 3D'}]}},
+    ]){
+      await expect(tool.execute(args,execution())).rejects.toThrow(/image_generation/u)
+    }
+    expect(tool.description).toContain('backend=auto')
+  })
   it('generates an anatomical pelican instead of silently rendering a box', async () => {
     const tool = createPhoenix3DTool()
     const result = await tool.execute({ title: 'Pelícano en 3D', preset: 'pelican' }, execution()) as {

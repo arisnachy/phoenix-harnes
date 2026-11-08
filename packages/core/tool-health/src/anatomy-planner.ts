@@ -84,6 +84,26 @@ export function planAnatomicalTwin(region: string, studyDescriptions: string) {
   const descriptors=modalities.map(code=>({code,...MODALITIES[code]}))
   const volumetric=descriptors.some(row=>row.geometry==='potentially-patient-specific'||row.geometry==='partial-patient-specific')
   const engines=[...new Set(descriptors.flatMap(row=>row.engines))]
+  // A modality label alone does not establish access to patient imaging.
+  const safeRegions=regions.filter(region=>region.system!=='region-not-identified')
+    .map(region=>region.structures.join(', '))
+  const imageReady=safeRegions.length>0
+  const visualOutput={
+    preferredMedium:'image' as const,
+    generator:'image_generation' as const,
+    backend:'auto' as const,
+    imageFormat:'png' as const,
+    ready:imageReady,
+    patientSpecific:false,
+    status:'EDUCATIONAL_REFERENCE_NOT_PATIENT_SPECIFIC' as const,
+    label:'Ilustración anatómica educativa; no representa una reconstrucción individual del paciente.',
+    prompt:imageReady
+      ?'Ilustración anatómica médica de alta resolución y calidad editorial, anatomía realista y proporciones correctas, sin esferas, cilindros ni geometría 3D rudimentaria. '+
+       'Representar con fidelidad las siguientes estructuras de atlas: '+safeRegions.join('; ')+'. '+
+       'Mostrar vista principal y corte complementario si resulta útil; fondo claro, iluminación suave, colores anatómicos precisos, orientación clara y etiquetas discretas y legibles. '+
+       'No inventar lesiones, hallazgos, implantes ni estructuras individualizadas; no presentar el resultado como derivado del paciente.'
+      :null,
+  }
   const limitations=[
     'Este resultado es un PLAN de trabajo; no se han abierto archivos ni generado mallas.',
     'ECG, radiografías, informes y analíticas NO determinan por sí solos una geometría vascular o tisular 3D individual.',
@@ -92,7 +112,7 @@ export function planAnatomicalTwin(region: string, studyDescriptions: string) {
   ]
   return {
     status:'planning-only',patientDataAccessed:false,modelCreated:false,
-    scope:regions,studies:descriptors,
+    scope:regions,studies:descriptors,visualOutput,
     geometryAssessment:volumetric?'reconstruction-candidate-requires-source-images-and-validation':'reference-anatomy-only',
     suggestedEngines:engines,
     nextSteps:[
