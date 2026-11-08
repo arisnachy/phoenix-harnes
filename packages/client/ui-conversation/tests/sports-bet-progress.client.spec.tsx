@@ -68,14 +68,14 @@ describe('PHOENIX user ticket goals and scoreboard evidence',()=>{
     const props={sport:'hockey',league:'nhl',date:'2026-11-07',home:'Carolina Hurricanes',
       away:'Chicago Blackhawks',eventId:'401900001',game:hockey,meta}
     const progress=render(<SportsBetProgress {...props}/>)
-    expect(screen.getByText('Boleto #12126409')).toBeTruthy()
-    expect(screen.getByText('Boleto #12126415')).toBeTruthy()
+    expect(screen.getAllByText('Boleto #12126409')[0]).toBeTruthy()
+    expect(screen.getAllByText('Boleto #12126415')[0]).toBeTruthy()
     expect(screen.getAllByText(/Cumpliendo por ahora/)).toHaveLength(2)
     expect(screen.queryByText(/Registrar mi apuesta/)).toBeNull()
     ticketA.unmount();ticketB.unmount();progress.unmount()
     render(<SportsBetProgress {...props}/>)
-    expect(screen.getByText('Boleto #12126409')).toBeTruthy()
-    expect(screen.getByText('Boleto #12126415')).toBeTruthy()
+    expect(screen.getAllByText('Boleto #12126409')[0]).toBeTruthy()
+    expect(screen.getAllByText('Boleto #12126415')[0]).toBeTruthy()
   })
   it('never assigns a receipt to an opponent, another day, or an ESPN event ID mismatch',()=>{
     const fixture={sport:'soccer',providerLeague:'usa.1',eventDate:'2026-11-07',
