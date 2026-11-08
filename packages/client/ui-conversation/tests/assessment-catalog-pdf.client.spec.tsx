@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { assessmentCatalog, findAssessment } from '../src/client/chat/AssessmentCatalog.ts'
+import { assessmentCatalog, findAssessment, resolveGeneratedAssessment } from '../src/client/chat/AssessmentCatalog.ts'
 import { buildAssessmentPdfBytes, generateAssessmentPdf } from '../src/client/chat/AssessmentReportPdf.ts'
 import { scaleAssessmentReport, smartAssessmentReport } from '../src/client/chat/AssessmentReportModel.ts'
 import { parseScaleForm, scoreScale, ScaleForm } from '../src/client/chat/ScaleForm.tsx'
@@ -96,11 +96,12 @@ describe('professional assessment catalog and complete local PDF',()=>{
   it('renders actual instrument questions and a PDF control after completion',()=>{
     const spec=assessmentCatalog.find(x=>x.id==='gad7-es')!.spec!
     render(<ScaleForm spec={spec} verified />)
-    expect(screen.getAllByRole('combobox')).toHaveLength(7)
+    expect(screen.getAllByRole('radio')).toHaveLength(28)
+    fireEvent.click(screen.getByText(/Informe profesional · PDF/))
     const download=screen.getByRole('button',{name:/Generar informe PDF completo/})
     expect(download).toHaveProperty('disabled',true)
-    for(const select of screen.getAllByRole('combobox')){
-      fireEvent.change(select,{target:{value:'0'}})
+    for(const question of document.querySelectorAll('fieldset')){
+      fireEvent.click(question.querySelector('input[type="radio"]')!)
     }
     expect(download).toHaveProperty('disabled',false)
     expect(screen.getByText('7 de 7 respuestas')).toBeTruthy()
@@ -110,10 +111,11 @@ describe('professional assessment catalog and complete local PDF',()=>{
     const spec=assessmentCatalog.find(x=>x.id==='phq9-es')!.spec!
     const onAction=vi.fn()
     render(<ScaleForm spec={spec} verified onAction={onAction}/>)
+    fireEvent.click(screen.getByText(/Informe profesional · PDF/))
     const draft=screen.getByRole('button',{name:'Preparar borrador interpretativo con Kira'})
     expect(draft).toHaveProperty('disabled',true)
-    for(const select of screen.getAllByRole('combobox')){
-      fireEvent.change(select,{target:{value:'0'}})
+    for(const question of document.querySelectorAll('fieldset')){
+      fireEvent.click(question.querySelector('input[type="radio"]')!)
     }
     expect(draft).toHaveProperty('disabled',true)
     fireEvent.click(screen.getByRole('checkbox',{
@@ -138,6 +140,47 @@ describe('professional assessment catalog and complete local PDF',()=>{
       name:/Confirmo que dispongo de autorización/,
     }))
     expect(importInput).toHaveProperty('disabled',false)
+  })
+
+  it('replaces generated PHQ-9 with catalog evidence and correct scored responses',()=>{
+    const canonical=assessmentCatalog.find(x=>x.id==='phq9-es')!.spec!
+    const generated=parseScaleForm({...canonical,props:{...canonical.props,
+      title:'PHQ-9 · síntomas durante las últimas dos semanas',
+      source:undefined,version:undefined,administration:undefined,scoring:undefined,bands:undefined,
+      items:canonical.props.items.map(item=>({...item,question:item.question+' generado'})),
+    }})!
+    const resolved=resolveGeneratedAssessment(generated)
+    expect(resolved.verified).toBe(true)
+    expect(resolved.replaced).toBe(true)
+    expect(resolved.spec).toBe(canonical)
+    expect(resolved.spec.props.items[0]?.question).not.toContain('generado')
+    const incomplete=parseScaleForm({...generated,props:{...generated.props,
+      items:generated.props.items.slice(0,8),
+    }})!
+    expect(resolveGeneratedAssessment(incomplete).verified).toBe(false)
+  })
+
+  it('shows a clinical classification only with catalog verification',()=>{
+    const spec=assessmentCatalog.find(x=>x.id==='phq9-es')!.spec!
+    const {container}=render(<ScaleForm spec={spec} verified/>)
+    expect(screen.getAllByRole('radio')).toHaveLength(36)
+    for(const question of container.querySelectorAll('fieldset')){
+      fireEvent.click(question.querySelector('input[type="radio"]')!)
+    }
+    expect(screen.getByText(/Interpretación descriptiva:/)).toBeTruthy()
+    expect(screen.getByText('9 de 9 respuestas')).toBeTruthy()
+    expect(screen.queryByText(/Instrumento incompleto o no verificable/)).toBeNull()
+  })
+
+  it('prints a full untruncated clinical identity and score gauge in the vector PDF',()=>{
+    const {spec,values}=answers('phq9-es',0)
+    const longName='Paciente demostración con apellido compuesto y referencia profesional deliberadamente extensa y final'
+    const report=scaleAssessmentReport(spec,values,{...identity,participant:longName},true)!
+    const pdf=pdfText(buildAssessmentPdfBytes(report))
+    expect(pdf).toContain('deliberadamente')
+    expect(pdf).toContain('extensa y final')
+    expect(pdf).toContain('Documento para revisión profesional')
+    expect(pdf).toContain('Firma, matrícula y sello')
   })
 
   it('rejects incomplete or misleading scoring definitions through native parsing',()=>{
