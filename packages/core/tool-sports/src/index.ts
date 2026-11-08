@@ -62,7 +62,7 @@ export const inject = ['tools','systemPrompt']
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
-  'NHL ESPECIALIZADO: para NHL consulta sports_chat_hockey_slate y sports_chat_nhl_investigate con gameId oficial NHL, no ID ESPN. Recupera rosters y estadísticas observadas de skaters/porteros; distingue portero candidato del titular confirmado y ganador a 60 minutos del ganador con OT/SO. No infieras xG/GSAx, alineaciones definitivas o probabilidades no calibradas, ni llames cuota actual a una línea sin timestamp. ',
+  'NHL ESPECIALIZADO: para NHL consulta sports_chat_hockey_slate y sports_chat_nhl_investigate con gameId oficial NHL, no ID ESPN. Recupera rosters y estadísticas observadas de skaters/porteros; distingue portero candidato del titular confirmado y ganador a 60 minutos del ganador con OT/SO. No infieras xG/GSAx, alineaciones definitivas o probabilidades no calibradas, ni llames cuota actual a una línea sin timestamp. En +1.5/-1.5 evalúa el riesgo de caer por dos goles, los márgenes recientes de ambos equipos, la probabilidad de equilibrio del precio, porteros, descanso, empty-net y OT. Sin titular y modelo de cobertura calibrado, clasifica como CONDICIONAL o CONTRAINDICADA. ',
   'TENNIS INTELLIGENCE ATP/WTA: investiga con sports_chat_tennis_slate(tour=atp|wta,date) y sports_chat_tennis_investigate(tour,date,matchId) tras cotejar matchId y participantes exactos, superficie y formato oficial. Valorar primer y segundo servicio vs devolución, break points, fatigue, H2H por superficie, indoor/outdoor y cambios de calendario solo cuando se dispone de fuentes; jamás declarar ranking, H2H, best-of-5, lesiones, cuota o resultado sintético. ATP/WTA son circuitos diferentes; distinguir singles/doubles, retiro, walkover y match-tiebreak en mercados. Si no hay datos suficientes, abstenerse. ',
   'NFL AMERICAN FOOTBALL INTELLIGENCE: consulta sports_chat_nfl_slate para fecha/eventId real y sports_chat_nfl_investigate para investigar quarterback, roster completo de ambos clubes, ofensiva, defensiva, OL vs pass rush, WR/TE vs CB/LB, RB vs front seven, descanso, lesiones, clima, cuartos y cotizaciones auténticas. Los 11 titulares ofensivos y los 11 defensivos de CADA club se confirman por IDs explícitos y unidad; no infieras titularidad del roster o profundidad. NFL no es fútbol soccer ni NCAA. No inventes QB titular, rutas, snaps, EPA, probabilidades, prices ni props; confirma evento/casa/mercado/período y abstente si falta evidencia. ',
   'INVESTIGACIÓN MLB POR PARTIDO: usa sports_chat_mlb_investigate para obtener primero la cartelera por fecha y luego el expediente mediante gamePk de MLB Stats API (no confundir con eventId ESPN). Investiga las estadísticas de cada jugador y la matriz bateador×abridor/bullpen, localía, parque, meteorología, últimas salidas y precios cotejados. El expediente marca como PENDIENTES los enfrentamientos BvP, fatiga, lesiones, alineaciones y expertos que no estén confirmados; no interpretes una fila de roster como un bateador titular ni inventes simulaciones probabilísticas. La conclusión se fundamenta en evidencia favorable Y contradictoria y en escenarios por entradas; si matchupNextOffset no es null hay cruces adicionales consultables. No vendas el expediente como una apuesta aprobada. ',
@@ -242,9 +242,10 @@ export function apply(ctx: Context): void {
       // native priced ticket. Never substitute a different house or odds.
       const quoted=best.flatMap(review=>{
         const candidate=review.candidate
-        const selected=review.selectedOutcome??candidate.outcomes.find(outcome=>
-          outcome.selection===candidate.selection&&outcome.line===candidate.line)
-        if(!selected)return []
+        // Uncertain/contraindicated/unavailable legs remain research-only.
+        // Never revert silently to the book's favorite if research fails.
+        if(review.status!=='descriptive-support'||!review.selectedOutcome)return []
+        const selected=review.selectedOutcome
         const raw=quotes.find(quote=>quote.eventId===candidate.bookmakerEventId&&
           quote.bookmaker===candidate.bookmaker&&quote.market===candidate.market&&
           quote.selection===selected.selection&&(quote.point??null)===selected.line&&
@@ -259,8 +260,8 @@ export function apply(ctx: Context): void {
           const built=pricedTicket(quoted.map(x=>x.market),quoted.map(x=>x.raw))
           const legs=Array.isArray(built.card.props.legs)?built.card.props.legs:[]
           ticket={...built.card,props:{...built.card.props,
-            title:'PHOENIX · Ticket investigado de '+quoted.length+' patas',
-            subtitle:'Cuotas verificadas · investigación descriptiva · sin apuesta realizada',
+            title:'PHOENIX · Candidatas investigadas ('+quoted.length+' patas)',
+            subtitle:'Preselección descriptiva · ventaja no demostrada · sin apuesta realizada',
             requestedLegs:count,
             legs:legs.map((leg,index)=>({
               ...(leg!==null&&typeof leg==='object'?leg:{}),
@@ -299,8 +300,8 @@ export function apply(ctx: Context): void {
         eventsScanned:daily.totalEligible,fixturesConsidered:daily.events.length,
         competitionsChecked:daily.coverage,sourcesChecked:attempts,
         providerHealth,specialMarkets,placed:false,
-        warning:'Selección orientativa y cuotas reales observadas: ni proyecciones descriptivas ni probabilidades sin margen son modelos calibrados ni garantías de ganar. La línea y el precio deben confirmarse en la casa, igual que las bajas y titulares oficiales. El campo specialMarkets investiga automáticamente props, periodos y líneas alternativas de la MISMA casa cuando el proveedor las publica; son opciones de investigación y NO patas aprobadas sin modelo específico. Nunca inventar ofertas.',
-        instruction:'La tarjeta nativa solo muestra precios cotejados de una misma casa. Distingue CANDIDATAS CON APOYO DESCRIPTIVO de CONDICIONALES (no equivalen a picks validados). Si la evidencia favorece el lado opuesto, usa el precio real de selectedOutcome. Verifica informes oficiales de lesiones, titulares/porteros, props, períodos y reglas antes de apostar. No hay apuesta realizada.',
+        warning:'Los hándicaps NHL +1.5/-1.5 sin porteros confirmados ni modelo calibrado de cobertura se bloquean como patas cotizadas. Selección orientativa y cuotas reales observadas: ni proyecciones descriptivas ni probabilidades sin margen son modelos calibrados ni garantías de ganar. La línea y el precio deben confirmarse en la casa, igual que las bajas y titulares oficiales. El campo specialMarkets investiga automáticamente props, periodos y líneas alternativas de la MISMA casa cuando el proveedor las publica; son opciones de investigación y NO patas aprobadas sin modelo específico. Nunca inventar ofertas.',
+        instruction:'Nunca conviertas un resultado CONTRAINDICADO o INCIERTO en pata del ticket; muestra riesgo y alternativas sin inventar precios. La tarjeta nativa solo muestra precios cotejados de una misma casa. Distingue CANDIDATAS CON APOYO DESCRIPTIVO de CONDICIONALES (no equivalen a picks validados). Si la evidencia favorece el lado opuesto, usa el precio real de selectedOutcome. Verifica informes oficiales de lesiones, titulares/porteros, props, períodos y reglas antes de apostar. No hay apuesta realizada.',
       })
     },
     presentCall:()=>({card:'generic',title:'Investigar el ticket diario y los mercados reales',kind:'read' as const}),
