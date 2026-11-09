@@ -6,6 +6,7 @@ import {preloadDailyResearch,dailyResearchStatus,dailyResearchFetcher,santoDomin
 import {crosscheckFreeFixture,freeOfficialFollowUps,freeSourceInventory,freeSourceCoverageForSport} from './free-sports-source-audit.ts'
 import {nflverseInjuryReport} from './nflverse-injury-report.ts'
 import {fetchEspnInjuryBackup,espnInjuryCatalog} from './espn-injury-backup.ts'
+import {nbaNflPublicSources,readNbaNflDepthPreviews} from './nba-nfl-keyless-closure.ts'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import { sportsCatalog, discoverEspnLeagues, hasSportsPermission, chatGames, compactSportsSchedule, marketOdds, marketOddsDetailed, pricedTicket, getFeed, type MarketSelection } from './sports.ts'
@@ -81,6 +82,7 @@ const GUIDANCE = [
 
   'MEMORIA DE INVESTIGACIÓN POR DÍA: antes de construir un ticket consulta sports_chat_daily_research_cache(statusOnly=true); si no hay datos recientes, precarga con statusOnly=false. Reutiliza información ESPN/NHL/MLB/TheSportsDB y API-Sports con cuota regulada (20 reservas de 100); conserva hasta 7 días PERO respeta vencimiento de cada dato. La precarga ayuda, no reemplaza búsquedas libres ni confirma porteros titulares, alineaciones, cuotas o lesiones. SportsDataIO trial contiene datos alterados y NO sirve para picks. Si un proveedor falla, usa otros sin gastar su cuota repetidamente. ',
   'SONDEO RÁPIDO DE FUENTES GRATUITAS: cuando una consulta deportiva dé 0 datos o el usuario solicite diagnóstico, llama sports_chat_free_sources_probe para comprobar seis endpoints públicos ESPN NBA/NFL/Liga MX, MLB StatsAPI, NHL Web API y TheSportsDB, sin claves ni scraping no autorizado. Un día sin partidos indica empty y NO proveedor caído. Los endpoints públicos aportan datos deportivos, NO cuotas comerciales ni disponibilidad médica. Para OddsHarvester MLB/NFL usa home_away (ganador incluyendo prórroga), nunca market moneyline como argumento CLI; 1x2 es un mercado distinto. ',
+  'NBA Y NFL: antes de aceptar cada ganador, EXIGE datos recientes para AMBOS rivales. Usa sports_chat_nba_nfl_keyless para consultar depth charts sin API key (son proyecciones, NO QB ni quinteto confirmado), sports_chat_espn_injuries y el expediente especialista. Muestra literalmente legDecision.argumentsFor y argumentsAgainst, decide si descartar, y no conviertas un 3-1 vs 3-1 en ventaja. En NBA contrasta último reporte oficial https://official.nba.com/nba-injury-report-2026-27-season/ y minutos/descanso; en NFL QB titular, inactivos y reporte oficial https://www.nfl.com/injuries/. Una URL, HTTP 200 o reporte de práctica no equivale a disponibilidad confirmada. ',
   'LESIONES ESPN COMO EVIDENCIA: usar sports_chat_espn_injuries cuando un expediente NBA/WNBA/NFL/NHL/MLB indique lesiones no verificadas. Consultar el JSON público ESPN por liga y equipos con fecha y fuente, no limitarse a la página espn.com.do/basquetbol/nba/lesiones. El estado reported, questionable, out, active o day-to-day es solo lo publicado; no convertirlo en quinteto, portero, QB titular ni confirmación de inactivos. Para NBA, cotejar en la página oficial de reportes antes de afirmar disponibilidad definitiva. Una fuente vacía/no actualizada no equivale a equipo sano, ni impide mostrar un ticket CONDICIONAL con cuotas reales; no inventar bajas. ',
   'RECUPERACIÓN DE DATOS: si ESPN publica estadística vacía o histórico HTTP 400, usar recuperación por mes/día y calendario de equipo; para eventos concretos consultar sports_chat_source_resilience y sus fuentes independientes. Fuentes del catálogo o enlaces no equivalen a consulta real, ni calendario equivale a lesiones, alineación o cuota. Nunca eludir 401/403/429 ni inventar resultados. ',
   'AUDITORIA DE RIESGO DEL TICKET: cuando pidan solo ganadores empieza con sports_chat_ticket_evidence_priced_auto con marketPreference=winner, aun SIN cuotas; si solicitan comparaciones de casas, continúa con sports_chat_daily_market_shortlist con deep=true y winnerOnly=true. Verifica rivales, estado, descanso, lesiones, titulares, porteros, precio y mercado exacto. Compara la fortaleza relativa por precio no-vig en cada pata y razona solo probabilidades INDIVIDUALES con procedencia, nunca la probabilidad combinada. Estas cifras provienen de la casa y asumen independencia: NO son una prediccion propia, EV ni garantia. Usa OBLIGATORIAMENTE decisionAudit de sports_chat_ticket_evidence_priced_auto: da VEREDICTO POR PATA (candidate/caution/hold/exclude), explica las razones observadas, descarta el 52% tipo Anaheim sin edge validado, no ocultes porteros/lesiones pendientes, compara escenarios 3/4/5 sin confundir no-vig con acierto propio y propone alternativas REALES solo si las investigaste. Identifica la pata mas fragil, nunca agregues un partido casi 50/50 solo para completar cinco. No anunciar probabilidades de que gane la combinada aunque marketRisk las calcule internamente. NHL: portero candidato NO significa confirmado; distingue moneyline con OT/SO de 60 minutos. Si falta un dato, mostrar CONDICIONAL y fuentes pendientes. ',
@@ -496,15 +498,22 @@ export function apply(ctx: Context): void {
       // Mandatory specialist dossiers: do NOT convert general ESPN form or an odds
       // quotation into an approved daily ticket without each sport's investigation.
       const specialistChecks=args.deep===false?[]:await investigateTicketSpecialists(
-        best.map(review=>({
-          sport:review.candidate.sport,league:review.candidate.league,
-          eventId:review.candidate.espnEventId,date:daily.date,
-          home:daily.events.find(x=>x.eventId===review.candidate.espnEventId&&
-            x.sport===review.candidate.sport&&x.league===review.candidate.league)?.home.name??'',
-          away:daily.events.find(x=>x.eventId===review.candidate.espnEventId&&
-            x.sport===review.candidate.sport&&x.league===review.candidate.league)?.away.name??'',
-          kickoff:review.candidate.kickoff,
-        })),fetch,now,env,quotes)
+        best.map(review=>{
+          const event=daily.events.find(x=>x.eventId===review.candidate.espnEventId&&
+            x.sport===review.candidate.sport&&x.league===review.candidate.league)
+          const normSide=(value:string)=>value.normalize('NFD')
+            .replace(/[\u0300-\u036f]/gu,'').toLowerCase().replace(/[^a-z0-9]/gu,'')
+          const chosen=normSide(review.selectedOutcome?.selection??'')
+          const pick=chosen&&chosen===normSide(event?.home.name??'')?'home' as const:
+            chosen&&chosen===normSide(event?.away.name??'')?'away' as const:null
+          return{
+            sport:review.candidate.sport,league:review.candidate.league,
+            eventId:review.candidate.espnEventId,date:daily.date,
+            home:event?.home.name??'',away:event?.away.name??'',
+            kickoff:review.candidate.kickoff,
+            ...(pick?{pick}:{})
+          }
+        }),fetch,now,env,quotes)
       const specialistFor=(review:(typeof best)[number])=>
         specialistChecks.find(check=>check.sport===review.candidate.sport&&
           check.league===review.candidate.league&&
@@ -529,6 +538,7 @@ export function apply(ctx: Context): void {
         // Never revert silently to the book's favorite if research fails.
         if(review.status!=='descriptive-support'||!review.selectedOutcome||
           review.priceAudit.classification==='negative-value'||
+          specialistFor(review)?.legDecision?.decision==='discard'||
           specialistFor(review)?.pendingSteps.some(step=>
             /equipos no coinciden|conflicto de cartelera|identidad contradictoria|identidad u horario|horario.*no coinciden/iu.test(step))||
           specialistFor(review)?.sourceChecks?.some(x=>x.status==='conflict'))return []
@@ -556,6 +566,14 @@ export function apply(ctx: Context): void {
             requestedLegs:count,
             specialistChecks,marketRisk,
             legs:legs.map((leg,index)=>({
+              selectionVerdict:ticketQuoted[index]?.review?
+                specialistFor(ticketQuoted[index]!.review)?.legDecision?.decision??'pending':'pending',
+              argumentsFor:ticketQuoted[index]?.review?
+                specialistFor(ticketQuoted[index]!.review)?.legDecision?.argumentsFor??[]:[],
+              argumentsAgainst:ticketQuoted[index]?.review?
+                specialistFor(ticketQuoted[index]!.review)?.legDecision?.argumentsAgainst??[]:[],
+              unverifiedAvailability:ticketQuoted[index]?.review?
+                specialistFor(ticketQuoted[index]!.review)?.legDecision?.missing??[]:[],
               ...(leg!==null&&typeof leg==='object'?leg:{}),
               rationale:ticketQuoted[index]?.review.status==='descriptive-support'?
                 'Apoyo descriptivo ('+ticketQuoted[index]!.review.sampleGames.home+'/'+
@@ -2343,6 +2361,35 @@ export function apply(ctx: Context): void {
         instruction:'Kira: no afirmar portero confirmado, lineup fijo, duelo real, xG/GSAx ni valor esperado sin fuente. Examina porteros y skaters versus el rival, PP/PK, descanso y lesiones pendientes. Distingue mercados 60 minutos, OT y shootout; abstenerse si falta evidencia.'})
     },
     presentCall:()=>({card:'generic',title:'Investigar NHL · porteros y mercados',kind:'read' as const}),
+  }))
+
+  ctx.tools.register(defineTool({
+    name:'sports_chat_nba_nfl_keyless',
+    description:'Fuentes gratuitas sin API key específicas de NBA y NFL; permite consultar depth charts reales de dos IDs ESPN ya verificados. Devuelve nombres PROYECTADOS, estado HTTP y URLs oficiales de lesiones; NO confirma quintetos, QB titular ni inactivos.',
+    parameters:{
+      league:{type:'string',required:true,description:'nba o nfl'},
+      homeId:{type:'string',description:'ID ESPN numérico del equipo local, obtenido del evento validado'},
+      awayId:{type:'string',description:'ID ESPN numérico del equipo visitante, obtenido del evento validado'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const league=args.league==='nba'?'nba':args.league==='nfl'?'nfl':null
+      if(!league)return JSON.stringify({status:'invalid-league',
+        supported:['nba','nfl'],sources:nbaNflPublicSources})
+      if(!args.homeId||!args.awayId)return JSON.stringify({
+        status:'catalog-only',league,sources:nbaNflPublicSources.filter(x=>
+          x.id.includes(league)||x.id.startsWith('nba-')&&league==='nba'),
+        warning:'Para verificar dos depth charts necesito los IDs ESPN reales; un catálogo no confirma disponibilidad.'})
+      const reviews=await readNbaNflDepthPreviews(league,
+        [args.homeId,args.awayId],fetch,Date.now())
+      return JSON.stringify({league,checkedAt:new Date().toISOString(),
+        reports:reviews,sources:nbaNflPublicSources,
+        status:reviews.some(r=>r.state==='observed')?'partial':'unavailable',
+        confirmedLineup:false,confirmedInactives:false,bookmakerOdds:false,
+        warning:'Depth chart observado es PROYECTADO; leer el parte oficial y confirmación antes del juego. HTTP 200 no significa jugador disponible.'})
+    },
+    presentCall:()=>({card:'generic',title:'NBA/NFL · lesiones, quintetos y quarterbacks',kind:'read' as const}),
   }))
 
   ctx.tools.register(defineTool({
