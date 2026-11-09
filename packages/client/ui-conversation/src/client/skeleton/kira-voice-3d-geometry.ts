@@ -67,9 +67,9 @@ export function kira3dPose(
   const energy=clamp(Number.isFinite(level)?level:0,0,1)
   const animated=phase==='speaking' || phase==='listening'
   return{
-    yaw:Math.sin(elapsedMs/1850)*.105 + (phase==='listening'?.015:0),
-    pitch:Math.sin(elapsedMs/2380)*.043-(phase==='thinking'?.028:0),
-    roll:Math.sin(elapsedMs/2800)*.027,
+    yaw:Math.sin(elapsedMs/1850)*.080 + (phase==='listening'?.015:0),
+    pitch:Math.sin(elapsedMs/2380)*.026-(phase==='thinking'?.028:0),
+    roll:Math.sin(elapsedMs/2800)*.014,
     scale:1+(animated?.012+energy*.021:0),
   }
 }
