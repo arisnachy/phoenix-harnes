@@ -160,8 +160,9 @@ export async function evidencePricedTicket(
       const observedAt=Date.parse(q.observedAt??'')
       const currentSnapshot=delayedSource&&Number.isFinite(observedAt)&&
         observedAt<=now&&now-observedAt<=15*60_000
+      // Even delayed free feeds must not resurrect old bookmaker lines.
       const validBookTime=Number.isFinite(updated)&&updated<=now&&
-        now-updated<7*86_400_000
+        now-updated<3_600_000
       if(!Number.isFinite(Date.parse(time))||
         !(currentSnapshot?validBookTime:
           Number.isFinite(updated)&&updated<=now&&now-updated<=3_600_000))return []
@@ -193,7 +194,7 @@ export async function evidencePricedTicket(
       const quoteAge=now-updated
       return Number.isFinite(kickoff)&&Number.isFinite(updated)&&Number.isFinite(quoteKickoff)
         &&Math.abs(kickoff-quoteKickoff)<=3_600_000
-        &&quoteAge>=0&&(snapshotValid?quoteAge<7*86_400_000:quoteAge<=3_600_000)
+        &&quoteAge>=0&&(snapshotValid?quoteAge<3_600_000:quoteAge<=3_600_000)
         &&typeof q.bookmaker==='string'&&q.bookmaker.trim().length>0
         &&typeof q.eventId==='string'&&q.eventId.length>0
         &&Number.isFinite(q.price)&&q.price>1&&q.price<1000
