@@ -1801,8 +1801,28 @@ export function apply(ctx: Context): void {
       const preference=args.marketPreference??'winner'
       if(preference!=='winner'&&preference!=='double_chance')throw Error('Mercado de ticket inválido')
       const env=await sportsEnv(ctx)
-      const result=await evidencePricedTicket(args.count,args.date,args.sport,args.stake??0,
-        Date.now(),env,fetch,undefined,preference)
+      const requestedAt=Date.now()
+      let result:Awaited<ReturnType<typeof evidencePricedTicket>>
+      try{
+        result=await boundedDailyTool(evidencePricedTicket(
+          args.count,args.date,args.sport,args.stake??0,
+          requestedAt,env,fetch,undefined,preference),95_000)
+      }catch(error){
+        const message=error instanceof Error?error.message:'Tiempo de espera agotado'
+        return JSON.stringify({
+          status:'research-timeout',priced:false,placed:false,approvedLegs:0,
+          requestedLegs:args.count,verifiedEvents:0,quotedLegs:0,
+          uiBlock:{component:'sports_ticket_card',version:1,props:{
+            title:'PHOENIX · Investigación no completada',
+            subtitle:'Tiempo de espera · reanudar por fuentes independientes',
+            requestedLegs:args.count,legs:[],combinedOdds:'No disponible',
+            note:'Ningún ganador se confirma sin datos suficientes. '+message+
+              '. Consultar sports_chat_daily_scan y fuentes de respaldo; '+
+              'no volver a ejecutar automáticamente el flujo costoso.',
+          }},
+          instruction:'No repetir indefinidamente esta llamada. Entregar al usuario el estado y, en una nueva consulta ligera, presentar solo datos verificables de la cartelera.',
+        })
+      }
       const cloudFollowUp=result.trackingEvents.length?
         await registerCloudForecast(result.trackingEvents,preference,
           result.priced,env):{status:'disabled',issueNumber:null,
