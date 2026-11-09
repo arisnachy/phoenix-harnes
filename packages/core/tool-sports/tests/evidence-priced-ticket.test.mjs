@@ -69,6 +69,10 @@ test('six-legged evidence path quotes only same bookmaker and preserves the requ
   assert.equal(complete.priced,true)
   assert.equal(complete.approvedLegs,0,'uncalibrated specialists cannot approve bets')
   assert.equal(complete.researchedLegs,5)
+  assert.equal(complete.decisionAudit.legs.length,5)
+  assert.ok(complete.decisionAudit.legs.every(x=>x.verdict==='hold'))
+  assert.equal(complete.card.props.legs[0].decisionReview.verdict,'hold')
+  assert.equal(complete.card.props.decisionAudit.approvedForBetting,false)
   assert.equal(complete.card.props.legs.length,5)
   assert.equal(complete.card.props.stake,'100.00')
   assert.equal(complete.card.props.requestedLegs,5)
@@ -349,7 +353,9 @@ test('one missing lineup remains conditional; four researched legs are retained'
   assert.equal(result.priced,true)
   assert.equal(result.conditional,true)
   assert.equal(result.researchedLegs,4)
-  assert.equal(result.card.props.legs.filter(x=>x.researchStatus==='conditional').length,1)
+  // A specialist without a verified checklist is conditional, even if its
+  // descriptive status says researched. No silently promoted candidates.
+  assert.equal(result.card.props.legs.filter(x=>x.researchStatus==='conditional').length,5)
   assert.ok(result.card.props.legs.some(x=>x.pendingEvidence.includes('starting XI not published')))
   assert.equal(result.approvedLegs,0)
 })
