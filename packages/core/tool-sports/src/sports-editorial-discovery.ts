@@ -10,6 +10,8 @@ export const editorialDomains={
   vegasinsider:'vegasinsider.com',
   scoresandodds:'scoresandodds.com',
   oddsportal:'oddsportal.com',
+  sportsline:'sportsline.com',
+  dimers:'dimers.com',
 } as const
 /** One trusted publisher-key discriminator for RSS-only discovery. */
 export type EditorialSource=keyof typeof editorialDomains
@@ -125,7 +127,7 @@ export async function discoverEditorialResearch(
   query:string,sources:readonly EditorialSource[]=Object.keys(editorialDomains) as EditorialSource[],
   fetcher:typeof fetch=fetch,now=Date.now(),
 ):Promise<EditorialDiscovery>{
-  const names=[...new Set(sources)].slice(0,4)
+  const names=[...new Set(sources)].slice(0,6)
   const responses=await Promise.allSettled(names.map(async source=>{
     const url=editorialIndexUrl(source,query)
     const cached=cache.get(url)
