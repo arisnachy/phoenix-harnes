@@ -180,3 +180,34 @@ export function compareNbaNflCandidate(
   return{side,decision,argumentsFor,argumentsAgainst,missing,
     calibrated:false,approvedForBetting:false}
 }
+
+/** Comparison of a like-for-like named ESPN player metric only. We do NOT
+ * compare a season total to per-game averages nor infer who starts tonight.
+ */
+export function compareIndividualMetrics(
+  league:TwoSport,
+  home:readonly {name:string;position:string;stats:readonly{name:string;value:string}[]}[],
+  away:readonly {name:string;position:string;stats:readonly{name:string;value:string}[]}[],
+):{observations:string[];missing:string[]}{
+  const relevant=(name:string)=>league==='nba'?
+    /points per game|pts\/g|ppg|assists per game|ast\/g|rebounds per game|reb\/g/iu.test(name):
+    /passer rating|yards per attempt|completion percentage|completion percent/iu.test(name)
+  const read=(players:typeof home)=>players.flatMap(player=>
+    player.stats.filter(x=>relevant(x.name)).flatMap(stat=>{
+      const n=Number(stat.value.trim())
+      return Number.isFinite(n)&&n>=0?
+        [{player:player.name,metric:stat.name.trim().toLowerCase(),value:n}]:[]
+    })).slice(0,80)
+  const h=read(home),a=read(away)
+  const matching=h.flatMap(x=>a.filter(y=>x.metric===y.metric)
+    .map(y=>({home:x,away:y}))).slice(0,10)
+  return{
+    observations:matching.slice(0,3).map(x=>
+      'ESPN comparación individual de '+x.home.metric+': '+x.home.player+' '+
+      x.home.value+' vs '+x.away.player+' '+x.away.value+
+      '. Ambos datos con el MISMO nombre de métrica; no confirma minutos ni titularidad'),
+    missing:matching.length?[]:[
+      'Estadísticas individuales ESPN comparables de ambos equipos no verificadas '+
+      '(misma métrica y ventana temporal)'],
+  }
+}
