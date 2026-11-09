@@ -16,8 +16,8 @@ const runFile = promisify(execFile)
 export const keylessSports = {
   football:['1x2','double_chance','btts','over_under'],
   basketball:['moneyline','home_away','1x2','over_under'],
-  baseball:['moneyline','over_under'],
-  'american-football':['moneyline','over_under'],
+  baseball:['moneyline','home_away','1x2','over_under'],
+  'american-football':['moneyline','home_away','1x2','over_under'],
   tennis:['match_winner','total_sets_over_under','total_games_over_under'],
   'ice-hockey':['home_away','1x2','double_chance','btts','over_under'],
   'rugby-league':['home_away','over_under'],
@@ -123,6 +123,10 @@ export function normalizeOddsHarvester(
         const row=item as Record<string,unknown>
         const period=str(row.period,50)
         if(period!=='FullTime'&&period!=='FullIncludingOT')continue
+        // Two-way winners for these sports include overtime/extra innings.
+        // A regulation-only home_away quote must never be priced as full-game h2h.
+        if(market==='h2h'&&['basketball','baseball','american-football','ice-hockey'].includes(sportKey)
+          &&period!=='FullIncludingOT')continue
         const bookmaker=str(row.bookmaker_name,100)
         if(!bookmaker)continue
         const blocked=new Set(Array.isArray(row.blocked_outcomes)?row.blocked_outcomes.filter(x=>typeof x==='string'):[])
@@ -354,7 +358,8 @@ export async function keylessOdds(
   if(!validDate(date))throw Error('Fecha de cuotas inválida')
   if(!keylessEnabled(env))throw Error('Scraping sin API key desactivado por el operador')
   // Replacing a broken local CLI must not reuse another executable's snapshot.
-  const key=[env.PHOENIX_SPORTS_ODDSHARVESTER_BIN||'oddsharvester',sport,market,date].join('|')
+  const key=[env.PHOENIX_SPORTS_ODDSHARVESTER_BIN||'oddsharvester',sport,
+    cliMarketFor(sport,market),date].join('|')
   const cached=runner===runScraper?cache.get(key):undefined
   if(cached&&now>=cached.at&&now-cached.at<(cached.rows.length?300_000:45_000))return cached.rows
   const running=runner===runScraper?inFlight.get(key):undefined
