@@ -62,3 +62,48 @@ test('resolves trusted same-league ESPN references without requesting unrelated 
   assert.equal(result.snapshot[0].displayName,'Verified athlete')
   assert.equal(result.snapshot[1].unresolved,true)
 })
+
+test('all ESPN families generate fixed-host URLs, not arbitrary destinations',()=>{
+  const cases={
+    site_scoreboard:['site.api.espn.com','/apis/site/v2/sports/basketball/nba/scoreboard'],
+    site_summary:['site.api.espn.com','/apis/site/v2/sports/basketball/nba/summary'],
+    game_prop_bets:['sports.core.api.espn.com','/odds/58/propBets'],
+    game_situation:['sports.core.api.espn.com','/competitions/200/situation'],
+    web_statistics_by_team:['site.web.api.espn.com','/statistics/byteam'],
+    cdn_game:['cdn.espn.com','/core/nba/game'],
+    fantasy_player_info:['lm-api-reads.fantasy.espn.com','/seasons/2026/players'],
+    search_entities:['site.web.api.espn.com','/apis/search/v2'],
+    news_feed:['now.core.api.espn.com','/v1/sports/news'],
+    video_feed:['site.web.api.espn.com','/apis/v2/videos'],
+  }
+  for(const [mode,[host,suffix]] of Object.entries(cases)){
+    const u=new URL(extendedEspnUrl({...base,sport:'basketball',league:'nba',
+      providerId:'58',mode,query:'Ohtani'}))
+    assert.equal(u.hostname,host,mode)
+    assert.ok(u.pathname.endsWith(suffix),mode)
+  }
+  assert.equal(new URL(extendedEspnUrl({...base,mode:'site_scoreboard',date:'20261109'})).searchParams.get('dates'),'20261109')
+  assert.equal(new URL(extendedEspnUrl({...base,mode:'site_summary'})).searchParams.get('event'),'401873032')
+  assert.equal(new URL(extendedEspnUrl({...base,sport:'basketball',league:'nba',mode:'cdn_game'})).searchParams.get('gameId'),'401873032')
+  assert.equal(new URL(extendedEspnUrl({...base,sport:'basketball',league:'nba',mode:'fantasy_player_info'})).searchParams.get('view'),'kona_player_info')
+})
+test('block invalid dates, injection, unsupported Fantasy/CDN leagues and missing IDs',()=>{
+  for(const value of [
+    {...base,mode:'site_scoreboard',date:'20260230'},
+    {...base,mode:'site_scoreboard',date:'20261109&key=evil'},
+    {...base,mode:'game_prop_bets',providerId:'../foo'},
+    {...base,mode:'season_group_standings',groupId:undefined},
+    {...base,mode:'cdn_game',eventId:undefined},
+    {...base,mode:'fantasy_players',league:'wnba'},
+    {...base,mode:'cdn_scoreboard',sport:'soccer',league:'eng.1'},
+    {...base,mode:'search_entities',query:'a'},
+  ])assert.throws(()=>extendedEspnUrl(value),/inválid|admitid|Falta/u)
+})
+test('does not call a ref-only collection an observed data payload',async()=>{
+ const input={...base,mode:'game_odds'}
+ const result=await readExtendedEspn(input,async()=>({count:1,items:[{
+   $ref:'https://untrusted.example/odds/1',
+ }]}))
+ assert.equal(result.status,'ref_only')
+ assert.equal(result.resolvedRefs,0)
+})

@@ -34,3 +34,14 @@ test('skips parameterized routes with missing real IDs without network requests'
  assert.ok(audit.results.some(x=>x.status==='error'))
  assert.ok(calls<audit.total)
 })
+
+test('HTTP 200 paging metadata and JSON errors are not evidence',async()=>{
+ const audit=await probeExtendedEspnCatalog({
+   sport:'basketball',league:'nba',eventId:'100',competitionId:'100',
+   teamId:'5',athleteId:'123',season:2026,providerId:'58',groupId:'2',query:'lebron',
+ },async url=>url.includes('/roster')?{count:0,items:[]}:url.includes('/scoreboard')?
+   {message:'Not found',error:'404'}:{count:0,pageIndex:1,pageCount:0},fixed)
+ assert.ok(audit.results.some(x=>x.status==='error'))
+ assert.ok(audit.results.some(x=>x.status==='empty'))
+ assert.equal(audit.available,0)
+})

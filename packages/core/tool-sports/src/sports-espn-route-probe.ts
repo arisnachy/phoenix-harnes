@@ -13,7 +13,7 @@ const meaningful=(data:unknown):boolean=>{
   if(Array.isArray(data))return data.slice(0,10).some(meaningful)
   if(typeof data==='object'){
     return Object.entries(dict(data)).some(([key,val])=>
-      !['$ref','count','pageCount','pageIndex','pageSize','timestamp','items'].includes(key)
+      !['$ref','count','pageCount','pageIndex','pageSize','timestamp','items','error','errors','message','code'].includes(key)
       && meaningful(val))||Array.isArray(dict(data).items)&&
       (dict(data).items as unknown[]).slice(0,10).some(meaningful)
   }
@@ -49,10 +49,10 @@ export async function probeExtendedEspnCatalog(
         const data=await provider<unknown>(endpoint)
         const x=dict(data)
         const items=Array.isArray(x.items)?x.items:Array.isArray(data)?data:null
-        const records=items?.length??(Object.keys(x).length?1:0)
+        const records=items?.length??(meaningful(data)?1:0)
         const isRef=items!==null&&items.length>0&&items.every(v=>
           Object.keys(dict(v)).every(key=>key==='$ref'))
-        out[idx]={mode,status:records===0?'empty':isRef?'ref_only':
+        out[idx]={mode,status:x.error||x.errors?'error':records===0?'empty':isRef?'ref_only':
           meaningful(data)?'data':'empty',endpoint,records,
           observedAt:new Date(now).toISOString()}
       }catch(error){
