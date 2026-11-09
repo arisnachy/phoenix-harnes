@@ -1,4 +1,4 @@
-import {createKiraHeadGeometry,kira3dPose,kiraBlinkAmount,kiraFacePoint} from './kira-voice-3d-geometry.ts'
+import {createKiraHeadGeometry,createKiraHairBackGeometry,kira3dPose,kiraBlinkAmount,kiraFacePoint} from './kira-voice-3d-geometry.ts'
 import type {KiraAvatarExpression} from './kira-voice-movement.ts'
 export type Kira3DPhase='listening'|'speaking'|'paused'|'thinking'|'inactive'
 export type Kira3DFrame={elapsed:number;level:number;phase:Kira3DPhase;expression:KiraAvatarExpression;reducedMotion:boolean}
@@ -99,14 +99,16 @@ export function createKira3DRenderer(canvas:HTMLCanvasElement,portrait:HTMLImage
     premultipliedAlpha:true,preserveDrawingBuffer:false})
   if(!gl)return undefined
   let resources:{program:WebGLProgram;texture:WebGLTexture;face:WebGLBuffer;indices:WebGLBuffer;dynamic:WebGLBuffer;
-    faceVao:WebGLVertexArrayObject;dynamicVao:WebGLVertexArrayObject}|undefined
+    faceVao:WebGLVertexArrayObject;dynamicVao:WebGLVertexArrayObject;hair:WebGLBuffer;hairVao:WebGLVertexArrayObject}|undefined
   try{
     const program=programFor(gl)
     const texture=gl.createTexture(),face=gl.createBuffer(),indices=gl.createBuffer()
     const dynamic=gl.createBuffer(),faceVao=gl.createVertexArray(),dynamicVao=gl.createVertexArray()
-    if(!texture||!face||!indices||!dynamic||!faceVao||!dynamicVao)
+    const hair=gl.createBuffer(),hairVao=gl.createVertexArray()
+    if(!texture||!face||!indices||!dynamic||!faceVao||!dynamicVao||!hair||!hairVao)
       throw new Error('Kira WebGL buffers unavailable')
     const geometry=createKiraHeadGeometry()
+    const backHair=createKiraHairBackGeometry(geometry)
     gl.bindTexture(gl.TEXTURE_2D,texture)
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,1)
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,portrait)
@@ -121,12 +123,18 @@ export function createKira3DRenderer(canvas:HTMLCanvasElement,portrait:HTMLImage
     gl.vertexAttribPointer(1,2,gl.FLOAT,false,20,12);gl.enableVertexAttribArray(1)
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indices)
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,geometry.indices,gl.STATIC_DRAW)
+    gl.bindVertexArray(hairVao)
+    gl.bindBuffer(gl.ARRAY_BUFFER,hair)
+    gl.bufferData(gl.ARRAY_BUFFER,backHair.vertices,gl.STATIC_DRAW)
+    gl.vertexAttribPointer(0,3,gl.FLOAT,false,20,0);gl.enableVertexAttribArray(0)
+    gl.vertexAttribPointer(1,2,gl.FLOAT,false,20,12);gl.enableVertexAttribArray(1)
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indices)
     gl.bindVertexArray(dynamicVao)
     gl.bindBuffer(gl.ARRAY_BUFFER,dynamic)
     gl.vertexAttribPointer(0,3,gl.FLOAT,false,20,0);gl.enableVertexAttribArray(0)
     gl.vertexAttribPointer(1,2,gl.FLOAT,false,20,12);gl.enableVertexAttribArray(1)
     gl.bindVertexArray(null)
-    resources={program,texture,face,indices,dynamic,faceVao,dynamicVao}
+    resources={program,texture,face,indices,dynamic,faceVao,dynamicVao,hair,hairVao}
     const matrixLocation=gl.getUniformLocation(program,'uMvp')
     const texturedLocation=gl.getUniformLocation(program,'uTextured')
     const colorLocation=gl.getUniformLocation(program,'uColor')
@@ -161,6 +169,10 @@ export function createKira3DRenderer(canvas:HTMLCanvasElement,portrait:HTMLImage
       const pose=kira3dPose(frame.elapsed,frame.level,frame.phase,frame.reducedMotion)
       gl.uniformMatrix4fv(matrixLocation,false,modelProjection(pose.yaw,pose.pitch,pose.roll,pose.scale))
       gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture)
+      gl.uniform1i(texturedLocation,0);gl.uniform4fv(colorLocation,
+        new Float32Array([.19,.085,.075,1]))
+      gl.bindVertexArray(hairVao)
+      gl.drawElements(gl.TRIANGLES,backHair.indices.length,gl.UNSIGNED_SHORT,0)
       gl.uniform1i(texturedLocation,1);gl.bindVertexArray(faceVao)
       gl.drawElements(gl.TRIANGLES,geometry.indices.length,gl.UNSIGNED_SHORT,0)
       const mouth=Math.max(0,Math.min(1,frame.phase==='speaking'?frame.level:0))
@@ -190,15 +202,15 @@ export function createKira3DRenderer(canvas:HTMLCanvasElement,portrait:HTMLImage
     return{
       draw,dispose(){
         if(disposed)return;disposed=true
-        gl.deleteVertexArray(faceVao);gl.deleteVertexArray(dynamicVao)
-        gl.deleteBuffer(face);gl.deleteBuffer(indices);gl.deleteBuffer(dynamic)
+        gl.deleteVertexArray(faceVao);gl.deleteVertexArray(dynamicVao);gl.deleteVertexArray(hairVao)
+        gl.deleteBuffer(face);gl.deleteBuffer(indices);gl.deleteBuffer(dynamic);gl.deleteBuffer(hair)
         gl.deleteTexture(texture);gl.deleteProgram(program)
       },
     }
   }catch{
     if(resources){
-      gl.deleteVertexArray(resources.faceVao);gl.deleteVertexArray(resources.dynamicVao)
-      gl.deleteBuffer(resources.face);gl.deleteBuffer(resources.indices);gl.deleteBuffer(resources.dynamic)
+      gl.deleteVertexArray(resources.faceVao);gl.deleteVertexArray(resources.dynamicVao);gl.deleteVertexArray(resources.hairVao)
+      gl.deleteBuffer(resources.face);gl.deleteBuffer(resources.indices);gl.deleteBuffer(resources.dynamic);gl.deleteBuffer(resources.hair)
       gl.deleteTexture(resources.texture);gl.deleteProgram(resources.program)
     }
     return undefined
