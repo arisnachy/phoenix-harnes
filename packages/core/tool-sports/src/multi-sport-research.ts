@@ -125,7 +125,10 @@ export async function researchSport(
   const starting=Date.parse(date+'T12:00:00Z')
   const first=new Date(starting-lookbackDays*86_400_000).toISOString().slice(0,10)
   const last=new Date(starting-86_400_000).toISOString().slice(0,10)
-  const teamIds=upcoming.slice(0,2).flatMap(e=>{
+  // When league history fails, recover across several candidate fixtures,
+  // not only the two sides of the very first matchup. The downstream reader
+  // imposes a strict cap on independent team-schedule calls.
+  const teamIds=upcoming.flatMap(e=>{
     const pair=sides(e)
     return[pid(pair.home),pid(pair.away)].filter(Boolean)
   })
