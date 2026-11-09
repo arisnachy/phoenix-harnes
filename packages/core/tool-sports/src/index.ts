@@ -12,7 +12,7 @@ import { getMlbPitcherReport } from './mlb.ts'
 import { researchTicket, autoResearchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { sportsPromptNeeded } from './sports-prompt.ts'
 import { researchNbaSlate } from './nba-research.ts'
-import {shortlistDailyMarkets,dailyOddsSportKey} from './daily-market-shortlist.ts'
+import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets} from './daily-market-shortlist.ts'
 import {assessDailyMarketEvidence,unavailableMarketEvidence} from './daily-market-evidence.ts'
 import {selectDailyResearchedMarkets} from './daily-market-selection.ts'
 import {auditTicketMarketRisk} from './ticket-risk-audit.ts'
@@ -72,8 +72,8 @@ const GUIDANCE = [
   'SONDEO RÁPIDO DE FUENTES GRATUITAS: cuando una consulta deportiva dé 0 datos o el usuario solicite diagnóstico, llama sports_chat_free_sources_probe para comprobar seis endpoints públicos ESPN NBA/NFL/Liga MX, MLB StatsAPI, NHL Web API y TheSportsDB, sin claves ni scraping no autorizado. Un día sin partidos indica empty y NO proveedor caído. Los endpoints públicos aportan datos deportivos, NO cuotas comerciales ni disponibilidad médica. Para OddsHarvester MLB/NFL usa home_away (ganador incluyendo prórroga), nunca market moneyline como argumento CLI; 1x2 es un mercado distinto. ',
   'LESIONES ESPN COMO EVIDENCIA: usar sports_chat_espn_injuries cuando un expediente NBA/WNBA/NFL/NHL/MLB indique lesiones no verificadas. Consultar el JSON público ESPN por liga y equipos con fecha y fuente, no limitarse a la página espn.com.do/basquetbol/nba/lesiones. El estado reported, questionable, out, active o day-to-day es solo lo publicado; no convertirlo en quinteto, portero, QB titular ni confirmación de inactivos. Para NBA, cotejar en la página oficial de reportes antes de afirmar disponibilidad definitiva. Una fuente vacía/no actualizada no equivale a equipo sano, ni impide mostrar un ticket CONDICIONAL con cuotas reales; no inventar bajas. ',
   'RECUPERACIÓN DE DATOS: si ESPN publica estadística vacía o histórico HTTP 400, usar recuperación por mes/día y calendario de equipo; para eventos concretos consultar sports_chat_source_resilience y sus fuentes independientes. Fuentes del catálogo o enlaces no equivalen a consulta real, ni calendario equivale a lesiones, alineación o cuota. Nunca eludir 401/403/429 ni inventar resultados. ',
-  'AUDITORIA DE RIESGO DEL TICKET: cuando pidan solo ganadores elegir sports_chat_daily_market_shortlist con deep=true y winnerOnly=true. Verifica rivales, estado, descanso, lesiones, titulares, porteros, precio y mercado exacto. Compara la fortaleza relativa por precio no-vig en cada pata y la version de 3/4/5 con marketRisk. Estas cifras provienen de la casa y asumen independencia: NO son una prediccion propia, EV ni garantia. Identifica la pata mas fragil, nunca agregues un partido casi 50/50 solo para completar cinco. NHL: portero candidato NO significa confirmado; distingue moneyline con OT/SO de 60 minutos. Si falta un dato, mostrar CONDICIONAL y fuentes pendientes. ',
-  'REGLA OBLIGATORIA PARA TICKETS GANADORES: las cotizaciones y favoritos de casas no son investigación deportiva. Si el usuario solicita un ticket ganador del día (incluido solo equipos ganadores), usa sports_chat_ticket_evidence_priced_auto con marketPreference=winner cuando corresponda, o sports_chat_daily_market_shortlist con deep=true. Cada partido requiere expediente de su especialista NFL/NBA/WNBA/NHL/MLB/Fútbol/Tenis, identidad verificada y diagnóstico de bajas, alineaciones, forma y contradicciones. Los resultados incomplete/unavailable de un especialista NO bloquean mostrar un ticket condicional si el evento ESPN y la cuota real están verificados y la tendencia histórica tiene apoyo descriptivo. Sí impiden presentar esa selección como investigada o aprobada. Conflictos expresos de identidad o mercados contradichos bloquean esa pata. Si faltan eventos o cuotas genuinas, entrega borrador visible sin fabricar patas, nunca ticket ganador certificado. La cuota no demuestra acierto y ninguna ruta puede reportar aprobación o EV sin modelo validado. ',
+  'AUDITORIA DE RIESGO DEL TICKET: cuando pidan solo ganadores empieza con sports_chat_ticket_evidence_auto para pronósticos sustentados y sin cuotas; si solicitan comparaciones de casas, continúa con sports_chat_daily_market_shortlist con deep=true y winnerOnly=true. Verifica rivales, estado, descanso, lesiones, titulares, porteros, precio y mercado exacto. Compara la fortaleza relativa por precio no-vig en cada pata y la version de 3/4/5 con marketRisk. Estas cifras provienen de la casa y asumen independencia: NO son una prediccion propia, EV ni garantia. Identifica la pata mas fragil, nunca agregues un partido casi 50/50 solo para completar cinco. NHL: portero candidato NO significa confirmado; distingue moneyline con OT/SO de 60 minutos. Si falta un dato, mostrar CONDICIONAL y fuentes pendientes. ',
+  'REGLA OBLIGATORIA PARA TICKETS GANADORES: las cotizaciones y favoritos de casas no son investigación deportiva. Si el usuario pide PRONOSTICAR GANADORES, primero usa sports_chat_ticket_evidence_auto: investiga partidos y equipos INDEPENDIENTEMENTE de si una casa publica cuotas. Después usa sports_chat_daily_market_shortlist con deep=true y winnerOnly=true para cotejar precios solo si el usuario quiere ticket cotizado. Una falla de cuotas JAMÁS invalida la investigación deportiva ni exige declarar 0 pronósticos. Cada partido requiere expediente de su especialista NFL/NBA/WNBA/NHL/MLB/Fútbol/Tenis, identidad verificada y diagnóstico de bajas, alineaciones, forma y contradicciones. Los resultados incomplete/unavailable de un especialista NO bloquean mostrar un ticket condicional si el evento ESPN y la cuota real están verificados y la tendencia histórica tiene apoyo descriptivo. Sí impiden presentar esa selección como investigada o aprobada. Conflictos expresos de identidad o mercados contradichos bloquean esa pata. Si faltan eventos o cuotas genuinas, entrega borrador visible sin fabricar patas, nunca ticket ganador certificado. La cuota no demuestra acierto y ninguna ruta puede reportar aprobación o EV sin modelo validado. ',
   'MERCADOS DE TOTAL Y HÁNDICAP: ganar un partido no demuestra cubrir -1.5/+1.5 o una línea over/under. Antes de considerar un total o spread con sports_chat_daily_market_shortlist(deep=true), coteja la línea EXACTA contra resultados previos de AMBOS clubes, separa aciertos, fallos y pushes, y exige dirección consistente en los dos historiales. Si marketOutcomeDiagnostic.status es mixed, insufficient o adverse, etiquetar CONDICIONAL/CONTRAINDICADA y no ponerla como pata cotizada; nunca conviertas frecuencia histórica en probabilidad futura o EV. Para NHL añade portero y reglas OT/SO; para NBA pace, eficiencia y lesiones siguen pendientes si no fueron medidos. La meta de 5–6 patas no autoriza inventar una probabilidad ni rellenar selecciones sin respaldo. ',
   'NHL ESPECIALIZADO: para NHL consulta sports_chat_hockey_slate y sports_chat_nhl_investigate con gameId oficial NHL, no ID ESPN. Recupera rosters y estadísticas observadas de skaters/porteros; distingue portero candidato del titular confirmado y ganador a 60 minutos del ganador con OT/SO. No infieras xG/GSAx, alineaciones definitivas o probabilidades no calibradas, ni llames cuota actual a una línea sin timestamp. En +1.5/-1.5 evalúa el riesgo de caer por dos goles, los márgenes recientes de ambos equipos, la probabilidad de equilibrio del precio, porteros, descanso, empty-net y OT. Sin titular y modelo de cobertura calibrado, clasifica como CONDICIONAL o CONTRAINDICADA. ',
   'TENNIS INTELLIGENCE ATP/WTA: investiga con sports_chat_tennis_slate(tour=atp|wta,date) y sports_chat_tennis_investigate(tour,date,matchId) tras cotejar matchId y participantes exactos, superficie y formato oficial. Valorar primer y segundo servicio vs devolución, break points, fatigue, H2H por superficie, indoor/outdoor y cambios de calendario solo cuando se dispone de fuentes; jamás declarar ranking, H2H, best-of-5, lesiones, cuota o resultado sintético. ATP/WTA son circuitos diferentes; distinguir singles/doubles, retiro, walkover y match-tiebreak en mercados. Si no hay datos suficientes, abstenerse. ',
@@ -178,7 +178,7 @@ export function apply(ctx: Context): void {
       for(let offset=0;offset<keys.length;offset+=3){
         const group=keys.slice(offset,offset+3)
         const results=await Promise.allSettled(group.map(key=>
-          marketOddsDetailed(key,'h2h,spreads,totals',env,fetch,now)))
+          marketOddsDetailed(key,requestedDailyOddsMarkets(args.winnerOnly===true),env,fetch,now)))
         for(let i=0;i<group.length;i++){
           const key=group[i]!,result=results[i]
           if(result?.status==='fulfilled'){
@@ -196,6 +196,36 @@ export function apply(ctx: Context): void {
                 result.reason.message:result?.reason??'unknown').slice(0,150)})
           }
         }
+      }
+      // Winner research must not be hostage to unavailable sportsbook prices.
+      // The dedicated ESPN research path continues with verified fixtures,
+      // historical form and specialist uncertainty. Never fabricate odds.
+      if(args.winnerOnly===true&&quotes.length===0){
+        const research=await evidenceTicket(count,daily.date,undefined,fetch,now,env)
+          .then(value=>({result:value,error:null as string|null}))
+          .catch(reason=>({result:null,error:
+            String(reason instanceof Error?reason.message:reason).slice(0,220)}))
+        return JSON.stringify({
+          source:'PHOENIX investigación de ganadores sin dependencia de cuotas',
+          status:research.result?.complete?'research-only':'research-incomplete',
+          ...(research.result?{uiBlock:research.result.card,researchedEvents:research.result.events,
+            verifiedEvents:research.result.verifiedEvents,
+            candidatesEvaluated:research.result.candidatesEvaluated,
+            insufficientEvidence:research.result.insufficientEvidence,
+            researchStandard:research.result.researchStandard,
+            pregameSummariesVerified:research.result.pregameSummariesVerified,
+            injuryFeedsVerified:research.result.injuryFeedsVerified,
+            multisportSatisfied:research.result.multisportSatisfied}:{}),
+          ...(!research.result?{researchError:research.error,
+            fixtures:daily.events.slice(0,12).map(event=>({
+              sport:event.sport,league:event.league,eventId:event.eventId,
+              home:event.home.name,away:event.away.name,date:event.kickoff,
+            }))}:{}),
+          sourceHealth:providerHealth,oddsAttempts:attempts,
+          priced:false,placed:false,approvedForBetting:0,
+          note:'Una fuente de cuotas vacía no equivale a falta de investigación. Los candidatos son descriptivos o condicionales; no son apuestas aprobadas.',
+          instruction:'Muestra SIEMPRE la tarjeta de investigación si existe, aunque 0/5 cuotas fueran verificables. No digas 0 pronósticos solamente por falta de odds. Si faltan resultados históricos o el expediente del deporte es insuficiente, indica cada limitación y no fabriques ganadores, probabilidades ni patas.',
+        })
       }
       // Evaluate a small extra pool rather than settling prematurely for the
       // bookmaker's cheapest outcomes as if that were an independent prediction.

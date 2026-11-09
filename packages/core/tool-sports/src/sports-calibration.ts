@@ -4,6 +4,7 @@
  * This evaluates historical accuracy only; it cannot prove betting profit.
  */
 import {estimateEvidenceForecast,type FinishedGame,type ForecastResult} from './sports-forecast.ts'
+import {readHistoricalScoreboard} from './sports-historical-scoreboard.ts'
 /** Final game with scored outcomes and ESPN event/team identifiers. */
 export type HistoricalFixture={
  id:string;sport:string;league:string;date:string;homeId:string;awayId:string
@@ -171,51 +172,79 @@ export function evaluateSportsCalibration(fixtures:readonly HistoricalFixture[],
 type Board={events?:Array<{id?:string|number;date?:string;
  status?:{type?:{state?:string}};competitions?:Array<{competitors?:Array<{
  homeAway?:string;score?:string|number;team?:{id?:string|number}}>}>}>}
-const day=(timestamp:number)=>new Date(timestamp).toISOString().slice(0,10).replaceAll('-','')
-/** Collect bounded, official historical scoreboard snapshots by calendar day.
- * @param sport - One supported ESPN discipline.
- * @param league - One supported ESPN league (validated by the caller).
- * @param lookbackDays - 28..180 daily requests, with concurrency <=4.
- * @param getJSON - Injected read-only ESPN JSON provider.
- * @param now - Fixed audit cutoff for reproducibility.
- * @returns Dataset coverage and a strictly chronological audit.
+/** Historical calibration with bounded monthly ESPN reads and verifiable daily
+ * fallback. The dates refer exclusively to finished matches before today; no
+ * source is permitted to create synthetic wins or infer missing scores.
+ * Groups of <=56 days avoid exceeding the resilient history reader's limits.
  */
 export async function auditSportsCalibration(
  sport:string,league:string,lookbackDays:number,getJSON:<T>(url:string)=>Promise<T>,
  now=Date.now()){
  if(!/^[a-z][a-z-]{1,35}$/u.test(sport)||!/^[a-z0-9][a-z0-9._-]{0,45}$/u.test(league)
- ||!Number.isInteger(lookbackDays)||lookbackDays<28||lookbackDays>180)
-   throw Error('Liga o período de evaluación no permitido')
- const fixtures:HistoricalFixture[]=[],errors:string[]=[]
- const offsets=Array.from({length:lookbackDays},(_,i)=>i+1)
- for(let i=0;i<offsets.length;i+=4){
-   const batch=offsets.slice(i,i+4)
-   const replies=await Promise.allSettled(batch.map(async offset=>{
-     const date=day(now-offset*86_400_000)
-     const endpoint='https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+
-       '/scoreboard?dates='+date+'&limit=200'
-     const data=await getJSON<Board>(endpoint)
-     return Array.isArray(data.events)?data.events:[]
-   }))
-   replies.forEach((reply,j)=>{
-     if(reply.status==='rejected'){errors.push('Día -'+batch[j]+': consulta no disponible');return}
-     for(const event of reply.value.slice(0,120)){
-       if(event.status?.type?.state!=='post')continue
-       const competitors=event.competitions?.[0]?.competitors??[]
-       const home=competitors.find(x=>x.homeAway==='home'),away=competitors.find(x=>x.homeAway==='away')
-       const scores=[Number(home?.score),Number(away?.score)]
-       if(!home?.team?.id||!away?.team?.id||home.score===undefined||away.score===undefined
-          ||!scores.every(x=>Number.isInteger(x)))continue
-       fixtures.push({id:String(event.id??''),sport,league,date:String(event.date??''),
-         homeId:String(home.team.id),awayId:String(away.team.id),
-         homeScore:scores[0]!,awayScore:scores[1]!,status:'post'})
-     }
-   })
+ ||!Number.isInteger(lookbackDays)||lookbackDays<28||lookbackDays>180
+ ||!Number.isFinite(now))throw Error('Liga o período de evaluación no permitido')
+ const root='https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+'/'
+ const utcDay=new Date(now).toISOString().slice(0,10)
+ const midnight=Date.parse(utcDay+'T00:00:00Z')
+ const dayAt=(daysBefore:number)=>new Date(midnight-daysBefore*86_400_000).toISOString().slice(0,10)
+ const reports:Awaited<ReturnType<typeof readHistoricalScoreboard>>[]=[]
+ for(let oldest=lookbackDays;oldest>=1;oldest-=56){
+   const newest=Math.max(1,oldest-55)
+   const report=await readHistoricalScoreboard(root,dayAt(oldest),dayAt(newest),
+     async url=>{
+       const raw=await getJSON<Board>(url)
+       return Array.isArray(raw?.events)?raw:null
+     })
+   reports.push(report)
  }
- const report=evaluateSportsCalibration(fixtures,sport,league,now)
- const merged={...report,coverage:{daysRequested:lookbackDays,
-   failedDays:errors.length,fixturesRead:fixtures.length,failedExamples:errors.slice(0,6)}}
- // Cache only genuinely validated audits, and only for a short period.
- if(report.calibrated)cache.set(cacheKey(sport,league),{until:now+6*3_600_000,audit:report})
- return merged
+ const earliest=Date.parse(dayAt(lookbackDays)+'T00:00:00Z')
+ const latest=midnight
+ const events=new Map<string,NonNullable<Board['events']>[number]>()
+ for(const report of reports){
+   for(const value of report.events.slice(0,5000)){
+     if(!value||typeof value!=='object'||Array.isArray(value))continue
+     const event=value as NonNullable<Board['events']>[number]
+     const at=Date.parse(event.date??''),id=String(event.id??'')
+     if(!Number.isFinite(at)||at<earliest||at>=latest||
+       !/^\\d{1,20}$/u.test(id))continue
+     events.set(id,event)
+   }
+ }
+ const fixtures:HistoricalFixture[]=[]
+ for(const event of events.values()){
+   if(event.status?.type?.state!=='post')continue
+   const sides=event.competitions?.[0]?.competitors??[]
+   const home=sides.find(x=>x.homeAway==='home')
+   const away=sides.find(x=>x.homeAway==='away')
+   if(!home?.team?.id||!away?.team?.id||
+     home.score===undefined||away.score===undefined)continue
+   const hs=Number(home.score),as=Number(away.score)
+   if(!Number.isInteger(hs)||!Number.isInteger(as))continue
+   fixtures.push({id:String(event.id),sport,league,date:String(event.date),
+     homeId:String(home.team.id),awayId:String(away.team.id),
+     homeScore:hs,awayScore:as,status:'post'})
+ }
+ const evaluation=evaluateSportsCalibration(fixtures,sport,league,now)
+ const verified=reports.reduce((n,r)=>n+r.verifiedCalendarDays,0)
+ const coverage={
+   daysRequested:lookbackDays,verifiedCalendarDays:verified,
+   failedDays:Math.max(0,lookbackDays-verified),
+   monthlyQueries:reports.reduce((n,r)=>n+r.monthlyQueries,0),
+   monthlySuccesses:reports.reduce((n,r)=>n+r.monthlySuccesses,0),
+   dailyQueries:reports.reduce((n,r)=>n+r.dailyQueries,0),
+   dailySuccesses:reports.reduce((n,r)=>n+r.dailySuccesses,0),
+   fixturesRead:fixtures.length,
+   failedExamples:reports.filter(r=>r.status!=='verified')
+     .slice(0,6).map(r=>r.explanation),
+ }
+ // A good-looking Brier score from a partial archive is not enough.
+ // A league must have auditable coverage before its result is reusable.
+ const complete=reports.every(r=>r.status==='verified')
+ const result=complete?evaluation:{
+   ...evaluation,status:'insufficient' as const,calibrated:false,
+   missing:[...evaluation.missing,'Historial de ESPN incompleto; la evaluación no habilita cuotas predictivas calibradas'],
+   warning:'Se calculó una evaluación preliminar sobre datos parciales; está prohibido presentarla como calibrada.'}
+ if(result.calibrated)cache.set(cacheKey(sport,league),{
+   until:now+6*3_600_000,audit:result})
+ return {...result,coverage}
 }
