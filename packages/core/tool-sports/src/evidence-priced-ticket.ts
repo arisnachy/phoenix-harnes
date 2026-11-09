@@ -68,6 +68,7 @@ export async function evidencePricedTicket(
     pick:'home'|'away';kickoff:string}>;
   marketRisk?:TicketMarketRisk;
   decisionAudit:TicketDecisionAudit}>{
+  const pipelineStartedAt=Date.now()
   const researchFetcher=fetcher===fetch?dailyResearchFetcher(fetcher,env):fetcher
   const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
     year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
@@ -216,6 +217,20 @@ export async function evidencePricedTicket(
     multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
     explanation:'Preselección ESPN, cuotas todavía NO verificadas: '+quoteAccess+
       '. Los archivos históricos no ofrecen precios para apostar hoy.'}
+  // If research already consumed the wall-clock budget, return the actual
+  // verified preselection now instead of starting more independent quote scans.
+  // In particular, do not make Kira lose a valid draft to the outer watchdog.
+  if(Date.now()-pipelineStartedAt>=72_000){
+    return {...base,sourceAudit:initialSources.map(row=>({
+      ...row,status:row.status==='attempted'?'not-applicable' as const:row.status,
+      note:row.note+' Omitido: se alcanzó el presupuesto de tiempo del ticket.',
+    })),conditional:true,
+      explanation:'Tiempo de investigación agotado: se conserva la preselección '+
+        'verificada con '+research.verifiedEvents+' eventos y '+
+        researchedLegs+' expedientes especializados. Falta la verificación '+
+        'de cuotas actuales. Reintentar solo fuentes pendientes, sin rehacer '+
+        'el barrido completo.'}
+  }
   // Even an incomplete 4/5 slate must audit the four real events for quotes;
   // otherwise 'no prices available' falsely implies the sources were checked.
   const categories=[...new Set(research.events.map(e=>e.sport))]
