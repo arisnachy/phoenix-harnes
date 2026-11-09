@@ -45,17 +45,22 @@ const compare=(a:MarketResearchReview,b:MarketResearchReview)=>{
 
 /** Select the strongest descriptive, authentic market for each game.
  * @param reviews - Alternate real market offers reviewed against one dossier/event.
- * @param goal - Desired number of games, 4–6.
+ * @param goal - Desired number of games, 5–6.
  * @returns A bounded, independently reviewable shortlist; never a winning guarantee.
  */
 export function selectDailyResearchedMarkets(
   reviews:readonly MarketResearchReview[],goal=5,
 ):DailyResearchedSelection{
-  if(!Number.isInteger(goal)||goal<4||goal>6)throw Error('Ticket diario de 4 a 6 patas')
-  const books=new Set(reviews.map(review=>review.candidate.bookmaker))
+  if(!Number.isInteger(goal)||goal<5||goal>6)throw Error('Ticket diario de 5 a 6 patas')
+  // Block outright contraindications, absent research and negative-value
+  // prices BEFORE ranking. Only "uncertain" can enter a conditional draft.
+  const eligible=reviews.filter(review=>
+    (review.status==='descriptive-support'||review.status==='uncertain')&&
+    review.priceAudit?.classification!=='negative-value')
+  const books=new Set(eligible.map(review=>review.candidate.bookmaker))
   if(books.size>1)throw Error('No combinar casas diferentes en un solo ticket')
   const unique=new Map<string,MarketResearchReview[]>()
-  for(const review of reviews){
+  for(const review of eligible){
     const key=eventIdentity(review),candidates=unique.get(key)??[]
     candidates.push(review);unique.set(key,candidates)
   }
