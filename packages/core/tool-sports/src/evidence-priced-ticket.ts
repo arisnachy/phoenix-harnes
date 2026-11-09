@@ -61,11 +61,16 @@ export async function evidencePricedTicket(
   })),fetcher,now,env)
   const researchedLegs=specialistChecks.filter(x=>x.status==='researched').length
   const specialistComplete=research.events.length===count&&researchedLegs===count
+  // Number of leg dossiers checked is NOT the number of research steps closed.
+  // A partial injury report or candidate goalie leaves the ticket conditional.
+  const checklistComplete=specialistComplete&&specialistChecks.every(x=>
+    x.checklist?.complete===true)
   // A missing injury report or lineup is a conditional research gap, not an
   // automatic refusal to display a priced candidate. Explicit identity
   // conflicts must still prevent matching bookmaker outcomes.
   const identityConflict=specialistChecks.some(x=>x.pendingSteps.some(step=>
-    /equipos no coinciden|conflicto de cartelera|identidad contradictoria/iu.test(step)))
+    /equipos no coinciden|conflicto de cartelera|identidad contradictoria|identidad u horario|horario.*no coinciden/iu.test(step))
+    ||x.sourceChecks?.some(source=>source.status==='conflict'))
   // Independent, openly licensed probabilities are a second opinion only.
   // They are NEVER bookmaker quotations, approval, or calibrated PHOENIX EV.
   const modelKeys=[...new Set(research.events.map(e=>leagueSportKey[e.league]).filter(
@@ -112,8 +117,8 @@ export async function evidencePricedTicket(
   const base={card:researchCard,priced:false as boolean,placed:false as const,
     complete:research.complete&&specialistComplete,verifiedEvents:research.verifiedEvents,
     quotedLegs:0,missingQuotes:count,sourceAudit:initialSources,
-    specialistChecks,researchedLegs,modelAudit,conditional:!specialistComplete,
-    dossierComplete:specialistComplete,
+    specialistChecks,researchedLegs,modelAudit,conditional:!checklistComplete,
+    dossierComplete:checklistComplete,
     multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
     explanation:'Preselección ESPN, cuotas todavía NO verificadas: '+quoteAccess+
       '. Los archivos históricos no ofrecen precios para apostar hoy.'}
@@ -343,7 +348,8 @@ export async function evidencePricedTicket(
       marketNoVigPercent:marketRisk.legs[index]?.noVigPercent??null,
       marketRiskTier:marketRisk.legs[index]?.relativeRisk??'unknown',
       specialistResearch:specialistChecks[index]??null,
-      researchStatus:specialistChecks[index]?.status==='researched'?'documented':'conditional',
+      researchStatus:specialistChecks[index]?.status==='researched'
+        &&specialistChecks[index]?.checklist?.complete===true?'documented':'conditional',
       pendingEvidence:specialistChecks[index]?.pendingSteps.slice(0,5)??[],
       ...Object.fromEntries(['homeTeam','awayTeam','homeLogo','awayLogo','sport',
         'league','country','rationale','when'].filter(k=>typeof prior[k]==='string')
@@ -357,9 +363,9 @@ export async function evidencePricedTicket(
   })
   const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,modelAudit,marketRisk,
-    subtitle:(specialistComplete&&!elevatedMarketRisk?'Investigación especializada':'TICKET CONDICIONAL')+
+    subtitle:(checklistComplete&&!elevatedMarketRisk?'Investigación especializada':'TICKET CONDICIONAL')+
       ' · cuotas verificadas · '+best.book+' · forma histórica ESPN',
-    note:(specialistComplete&&!elevatedMarketRisk?'COTIZACIÓN INVESTIGADA':
+    note:(checklistComplete&&!elevatedMarketRisk?'COTIZACIÓN INVESTIGADA':
       'TICKET CONDICIONAL: faltan datos especializados. Se muestran solo cuotas reales.')+
       ' NO ES APUESTA APROBADA NI GANADORA. '+(marketPreference==='double_chance'
       ?'Fútbol: la doble oportunidad cubre empate (1X/X2), NO asegura ganar. ':'')+
@@ -375,7 +381,7 @@ export async function evidencePricedTicket(
     askPrompt:'Kira, comprueba lesiones, titulares, estadísticas específicas, correlación y vigencia de las '+count+' cuotas antes de recomendar este ticket.',
   }}
   return{card,priced:true,placed:false,complete:true,
-    conditional:!specialistComplete||elevatedMarketRisk,dossierComplete:specialistComplete,
+    conditional:!checklistComplete||elevatedMarketRisk,dossierComplete:checklistComplete,
     marketRisk,
     verifiedEvents:research.verifiedEvents,
     quotedLegs:count,missingQuotes:0,sourceAudit,approvedLegs:0,
@@ -383,7 +389,7 @@ export async function evidencePricedTicket(
     multisportSatisfied:research.multisportSatisfied,
     explanation:'Las '+count+' selecciones tienen cuota vigente y la misma casa '+best.book+
       (elevatedMarketRisk?'. AVISO: pata con participacion de mercado inferior a 60%; considerar reducir el boleto.':'')+
-      (specialistComplete?'. Expedientes especializados investigados.':
+      (checklistComplete?'. Todos los pasos especializados verificados.':
       '. TICKET CONDICIONAL: '+(count-researchedLegs)+' expedientes parciales o no disponibles; verificar datos pendientes.')+
       ' Es un ticket de investigación cotizado, NO apuesta aprobada ni predicción calibrada.'}
 }
