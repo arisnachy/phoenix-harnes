@@ -1403,9 +1403,10 @@ function updateCodexRealtimePhase(payload: string): void {
       if (terminal.has(code)) {
         document.documentElement.dataset.phoenixVoiceSpeechStatus = 'failed'
         document.documentElement.dataset.phoenixVoiceSpeechError = code
-        const generation = codexRealtimeVoiceGeneration + 1
         void stopCodexRealtimeVoice().then(() => {
-          if (codexRealtimeVoiceGeneration !== generation || voiceAssistantSnapshot.active) return
+          // Stop also invalidates pending probes through setVoiceAssistantActive.
+          // Check actual ownership instead of assuming exactly one epoch bump.
+          if (codexRealtimeVoiceSession !== undefined || voiceAssistantSnapshot.active) return
           publishVoiceAssistant({ ...INACTIVE_VOICE_ASSISTANT,
             lastError: code === 'usage_check_failed'
               ? 'Codex Live: el servicio rechazó esta sesión de voz (usage_check_failed). Revisa el acceso o cupo de voz de la cuenta.'
