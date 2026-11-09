@@ -50,7 +50,7 @@ test('ESPN and ScoresAndOdds can be inspected without promoting a raw price',asy
   assert.equal(result.pages[2].status,'observed-team-mentions')
   assert.equal(result.pages[2].markets.includes('moneyline'),true)
   assert.match(result.pages[2].snippet??'',/Boston Celtics/)
-  assert.match(result.pages[1].snippet??'',/Milwaukee Bucks/)
+  assert.match(result.pages[2].snippet??'',/Milwaukee Bucks/)
   assert.equal(result.pages[2].bookmakerVerified,false)
   assert.equal(result.bookmakerQuotes,0)
   assert.match(result.warning,/NO cotizaciones elegibles/)
