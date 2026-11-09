@@ -363,7 +363,8 @@ export async function evidenceTicket(
     const candidate=selected[index]
     const observed=contextual[index]
     const context=observed?.status==='fulfilled'?observed.value:undefined
-    const external=editorial[index]?.status==='fulfilled'?editorial[index].value.hits:[]
+    const editorialRow=editorial[index]
+    const external=editorialRow?.status==='fulfilled'?editorialRow.value.hits:[]
     const narrative=candidate?composeTicketLegNarrative({
       eventId:candidate.pick.eventId,sport:candidate.pick.sport,
       league:candidate.pick.league,home:candidate.home,away:candidate.away,
