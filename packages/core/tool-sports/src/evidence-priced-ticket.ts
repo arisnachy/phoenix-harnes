@@ -8,6 +8,7 @@ import {auditTicketMarketRisk,quoteSideNoVig,type TicketMarketRisk} from './tick
 import {investigateTicketSpecialists,type SpecialistGate} from './ticket-specialist-gate.ts'
 import { keylessEnabled,keylessOdds,type KeylessQuote } from './keyless-odds.ts'
 import {lookupExactEspnWinner} from './sports-exact-espn-winner.ts'
+import {researchPublicOddsWebsites} from './sports-public-odds-pages.ts'
 import { getFeed,marketOddsDetailed,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome,type OddsResearchObservation } from './sports.ts'
 import {fetchBetBetterModels,findModelOpinion,type ModelForecast} from './betbetter-model-evidence.ts'
 import {enrichSpecialistNarrative,type TicketNarrative} from './sports-ticket-narrative.ts'
@@ -401,11 +402,52 @@ export async function evidencePricedTicket(
       reason:reference.reason,source:reference.endpointSource,nonCotizable:true},
       rationale:(String(original.rationale??'').slice(0,300)+' · '+label).slice(0,480)}
   })
+  // Last, bounded public-web reconnaissance for legs still without a *current*
+  // bookmaker quote. Unlike ESPN Core, an odds-comparator HTML price has no
+  // independently verified bookmaker updatedAt or event identity. Expose it
+  // as an attributed REFERENCE with its exact URL, never as a priced leg.
+  const unresolved=research.events.flatMap((event,index)=>
+    groups[index]?.length?[]:[{event,index}]).slice(0,6)
+  const siteResearch=quotedLegs===count||quotesProvider?[]:
+    await Promise.allSettled(unresolved.map(async({event,index})=>{
+      const sportKey=leagueSportKey[event.league]??
+        (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
+      if(!sportKey)return null
+      return{index,report:await researchPublicOddsWebsites({
+        sportKey,date:day,home:event.home,away:event.away,
+      },fetcher,now)}
+    }))
+  const websiteByIndex=new Map(siteResearch.flatMap(item=>
+    item.status==='fulfilled'&&item.value?
+      [[item.value.index,item.value.report] as const]:[]))
+  const hintedLegs=referenceLegs.map((row,index)=>{
+    const report=websiteByIndex.get(index)
+    if(!report||!row||typeof row!=='object'||Array.isArray(row))return row
+    const leg=row as Record<string,unknown>
+    const observations=report.pages.map(page=>({
+      provider:page.provider,url:page.url,status:page.status,
+      pageObservedAt:page.pageObservedAt,
+      quoteUpdatedAt:null,bookmakerVerified:false,
+      referenceMoneylines:page.referenceMoneylines,
+    }))
+    return{...leg,webOddsResearch:observations,
+      // These observed HTML links are NEVER copied into price/bookmaker fields.
+      oddsReferenceNote:'Investigadas '+observations.length+
+        ' páginas públicas. Precios de comparador solo referenciales '+
+        '(sin casa, actualización ni aceptación verificadas).'}
+  })
+  const webObserved=siteResearch.filter(x=>x.status==='fulfilled'&&
+    x.value?.report.pages.some(p=>p.status==='observed-team-mentions')).length
+  if(siteResearch.length)sourceAudit.push(audited('ESPN/Oddschecker/ScoresAndOdds WEB',
+    webObserved?'observed':'empty',0,
+    'Se inspeccionaron '+siteResearch.length+' partidos con '+webObserved+
+    ' menciones próximas de equipos; las cifras HTML son referencia sin '+
+    'bookmaker ni hora de actualización, NO cuotas elegibles.'))
   const auditSummary=' Cuotas cotejadas: '+quotedLegs+'/'+count+
     ' selecciones; proveedores: '+sourceAudit.map(x=>x.source+' '+x.status+
     ' ('+x.offers+' observaciones)').join('; ')+'.'
   const auditCard:ChatBlock={...researchCard,props:{...researchCard.props,
-    legs:referenceLegs,
+    legs:hintedLegs,
     subtitle:quotedLegs!==count?'TICKET DE INVESTIGACIÓN · '+quotedLegs+'/'+count+
       ' cuotas verificadas · '+reportedReferences+' precios ESPN de referencia':
       researchCard.props.subtitle,
