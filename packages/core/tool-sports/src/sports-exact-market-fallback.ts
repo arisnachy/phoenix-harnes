@@ -42,7 +42,7 @@ const supportedMarket=(name:string,requested:string,sportKey:string)=>{
   const want=requested.split(',')
   const market=name.toLowerCase()
   return (want.includes('h2h')&&(
-    sportKey.startsWith('soccer_')?market==='1x2':
+    sportKey.startsWith('soccer_')?['1x2','h2h'].includes(market):
     ['h2h','moneyline','home_away','match_winner'].includes(market)))
     ||(want.includes('totals')&&market==='totals')
     ||(want.includes('spreads')&&market==='spreads')
@@ -65,7 +65,8 @@ export function exactProviderQuote(
   const selection=norm(quote.selection)
   if(['h2h','moneyline','home_away','match_winner','1x2'].includes(quote.market.toLowerCase())){
     return compareTeam(selection,fixture.home)||compareTeam(selection,fixture.away)
-      ||(quote.market.toLowerCase()==='1x2'&&['draw','empate','tie'].includes(selection))
+      ||(sportKey.startsWith('soccer_')&&['1x2','h2h'].includes(quote.market.toLowerCase())
+        &&['draw','empate','tie'].includes(selection))
   }
   return quote.point!==undefined&&quote.point!==null&&Number.isFinite(quote.point)
 }
@@ -77,7 +78,8 @@ export async function exactAlternativeOdds(
   const which=leagues[sportKey]
   if(!which||!/^\d{1,20}$/u.test(eventId)
     ||!/^\d{4}-\d{2}-\d{2}$/u.test(date)
-    ||!Number.isFinite(Date.parse(date+'T00:00:00Z')))
+    ||!Number.isFinite(Date.parse(date+'T00:00:00Z'))
+    ||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date)
     throw Error('Evento exacto ESPN o liga sin ruta verificada')
   const base={espnEventId:eventId,league:which[1],home:null,away:null,kickoff:null,
     quotes:[] as MarketOutcome[],sources:[] as ExactMarketResult['sources']}
@@ -103,8 +105,18 @@ export async function exactAlternativeOdds(
         reason:'Estado, equipos, fecha local u hora del partido no verificables como futuros'}
     const known={home,away,kickoff:fixture.date!}
     const observed=await marketOddsDetailed(sportKey,markets,env,fetcher,now)
-    const quotes=observed.quotes.filter(q=>exactProviderQuote(q,known,markets,sportKey,now))
-      .slice(0,40)
+    const eligible=observed.quotes.filter(q=>exactProviderQuote(q,known,markets,sportKey,now))
+    // Soccer 'h2h' must be a complete THREE-way market (home/draw/away)
+    // from the SAME bookmaker, event and source. Never create 1X2 from 2-way.
+    const hasThreeWay=(q:MarketOutcome)=>eligible.some(x=>
+      x.eventId===q.eventId&&x.bookmaker===q.bookmaker&&x.source===q.source
+      &&x.market===q.market&&['draw','empate','tie'].includes(norm(x.selection)))
+      &&eligible.some(x=>x.eventId===q.eventId&&x.bookmaker===q.bookmaker
+        &&x.source===q.source&&compareTeam(x.selection,home))
+      &&eligible.some(x=>x.eventId===q.eventId&&x.bookmaker===q.bookmaker
+        &&x.source===q.source&&compareTeam(x.selection,away))
+    const quotes=eligible.filter(q=>!sportKey.startsWith('soccer_')||
+      !['h2h','1x2'].includes(q.market.toLowerCase())||hasThreeWay(q)).slice(0,40)
     return{...base,home,away,kickoff:fixture.date!,
       status:quotes.length?'matched':'unmatched',quotes,sources:observed.sources,
       reason:quotes.length?'Cuotas de proveedor externo cotejadas por equipos, mercado y UTC; IDs de casas conservados':
