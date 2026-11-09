@@ -24,6 +24,7 @@ import {
   cancelVoiceAssistantSentenceStream,
   streamVoiceAssistantResponse,
   stopCodexRealtimeVoice,
+  retryCodexRealtimeAudio,
   tryStartCodexRealtimeVoice,
   type VoiceRecognitionLike,
 } from '../src/client/voice.ts'
@@ -302,6 +303,9 @@ describe('browser voice adapter', () => {
     const rtcDescriptor = Object.getOwnPropertyDescriptor(window, 'RTCPeerConnection')
     const mediaDescriptor = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices')
     const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)
+    const playback = vi.spyOn(HTMLMediaElement.prototype, 'play')
+      .mockRejectedValueOnce(new Error('NotAllowedError'))
+      .mockResolvedValue(undefined)
     Object.defineProperty(window, 'RTCPeerConnection', {
       configurable: true,
       value: FakePeer,
@@ -426,6 +430,13 @@ describe('browser voice adapter', () => {
 
       const peer = FakePeer.instance
       expect(peer).toBeDefined()
+      // Autoplay may be rejected while the transport is still muted.
+      const remoteStream = { getAudioTracks: () => [] } as unknown as MediaStream
+      peer?.ontrack?.({ streams: [remoteStream], track: {} as MediaStreamTrack })
+      await Promise.resolve()
+      expect(audio?.dataset.phoenixAudioPlayback).toBe('blocked')
+      // The next real authorized utterance must retry unmuted playback.
+      playback.mockRejectedValueOnce(new Error('NotAllowedError'))
 
       // A long Hardness/tool turn can make WebRTC report a transient
       // "disconnected". Native Codex voice must remain the selected transport.
@@ -458,6 +469,12 @@ describe('browser voice adapter', () => {
       expect(microphoneTrack.enabled).toBe(true)
       expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('echo-filtered-for-output')
       expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe('none')
+      await Promise.resolve()
+      expect(getVoiceAssistantSnapshot().audioBlocked).toBe(true)
+      expect(retryCodexRealtimeAudio()).toBe(true)
+      await Promise.resolve()
+      expect(getVoiceAssistantSnapshot().audioBlocked).toBe(false)
+      expect(audio?.dataset.phoenixAudioPlayback).toBe('playing')
       expect(document.documentElement.dataset.phoenixVoiceSpeechOrigin).toBe('provisional-chat-stream')
       await Promise.resolve()
       expect(document.documentElement.dataset.phoenixVoiceAudioThisReply).toBe('inbound-audio-received')
@@ -809,12 +826,25 @@ describe('browser voice adapter', () => {
       expect(isCodexRealtimeVoiceActive()).toBe(false)
       expect(getVoiceAssistantSnapshot().active).toBe(false)
       expect(audio?.isConnected).toBe(false)
+
+      // The service may accept an SDP connection but reject voice eligibility
+      // after the data channel opens. Show the real reason instead of silence.
+      await expect(tryStartCodexRealtimeVoice('session-harness')).resolves.toEqual({ kind: 'started' })
+      const rejectedChannel = FakeDataChannel.instance
+      rejectedChannel?.onmessage?.({ data: JSON.stringify({
+        type: 'error', error: { code: 'usage_check_failed', message: 'non-public details' },
+      }) })
+      await vi.waitFor(() => expect(getVoiceAssistantSnapshot().lastError).toContain('usage_check_failed'))
+      expect(isCodexRealtimeVoiceActive()).toBe(false)
+      expect(document.documentElement.dataset.phoenixVoiceServiceError).toBe('usage_check_failed')
+      expect(getVoiceAssistantSnapshot().lastError).not.toContain('non-public details')
     } finally {
       vi.useRealTimers()
       await stopCodexRealtimeVoice()
       disposeRemote()
       disposeRoute()
       disposeTranscript()
+      playback.mockRestore()
       pause.mockRestore()
       if (rtcDescriptor === undefined) Reflect.deleteProperty(window, 'RTCPeerConnection')
       else Object.defineProperty(window, 'RTCPeerConnection', rtcDescriptor)

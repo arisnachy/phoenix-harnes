@@ -22,7 +22,7 @@ Comic Studio 制品提供可展开的静态阅读器，以及自包含的 `.html
 
 HARDNESS 工件使用一个自适应表面来显示 JSON、表格、代码、HTML、图像、文本和执行结果。该表面在有界的响应式范围内测量内容，将工件保留在对话投影中，并且只为显式声明可执行的代码显示运行/停止控件。HTML 保留在具有唯一来源的 iframe 中，使用限制性 CSP，禁止网络和父页面访问；代码执行委托给 Host 挂载的运行时。
 
-编辑器的麦克风会启动明确的浏览器原生语音助手模式。启用后，每个最终识别片段都会自动作为排队轮次提交，轮次之间会重新启动识别器。当活动的 Codex Live 通道携带持久化的 `conversational-tail` step，且其中只有文本或 reasoning block 时，已完成的句子会在到达时发送给原生语音，每次只发送一个 response；最终尾部通过 cursor 去重。上下文或工具 step 仍然只有在所属轮次完成后才获准播报。没有原生 Codex Live 时，现有的 `speechSynthesis` 路径会进行对话文本清理、自然语音选择和适中语速处理。再次点击麦克风会停止识别和播放。此功能需要浏览器权限以及原生 `SpeechRecognition`/`speechSynthesis` 支持。
+编辑器的麦克风会启动明确的浏览器原生语音助手模式。启用后，每个最终识别片段都会自动作为排队轮次提交，轮次之间会重新启动识别器。当活动的 Codex Live 通道携带持久化的 `conversational-tail` step，且其中只有文本或 reasoning block 时，已完成的句子会在到达时发送给原生语音，每次只发送一个 response；最终尾部通过 cursor 去重。上下文或工具 step 仍然只有在所属轮次完成后才获准播报。没有原生 Codex Live 时，现有的 `speechSynthesis` 路径会进行对话文本清理、自然语音选择和适中语速处理。再次点击麦克风会停止识别和播放。34px 的 PHOENIX 徽标与音量响应光环只显示在麦克风按钮内，不会遮挡用户消息。如果浏览器拒绝原生音频 `play()`，界面会提示播放受阻，并提供 `Activar sonido` 按钮，让用户在同一 WebRTC 扬声器上通过点击恢复播放。Quicksilver 协议不兼容仍是独立的 Codex 功能故障；连接后的服务拒绝（如 `usage_check_failed`）会结束被拒绝的语音会话，并在现有 Codex 诊断中显示不含敏感内容的原因，而不会让无声会话继续显示为活动状态。此功能需要浏览器权限以及原生 `SpeechRecognition`/`speechSynthesis` 支持。
 
 Chat 业务行是彼此独立的注册表贡献，不是封闭的内建联合。Client 插件通过 declaration merging 增加类型化 `ChatNodeDataMap` key，在 `ctx.conversationEvents` 上注册 `ConversationNodeDefinition`，再向 `conversation.chat.node` 注册匹配的 keyed renderer；它无须修改会话 fold 或中央 renderer switch。稳定事件 id、append/prepend 回放、Location data 与 renderer 约束见 [Conversation Node 实操手册](../../../docs/cookbook/adding-a-conversation-node.zh.md)。
 
