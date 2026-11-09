@@ -139,3 +139,22 @@ test('expert priority can replace weaker historical ranking before verifying the
   assert.ok(report.events.some(x=>x.eventId===inspected[5].eventId))
   assert.ok(report.selections.some(x=>/Revisión de alternativas/.test(x.rationale??'')))
 })
+
+test('a verified NBA/soccer fixture survives a later rotating or paginated ESPN scoreboard',async()=>{
+  let dailyFetches=0
+  const mutating=async url=>{
+    const u=String(url)
+    if(u.includes('/soccer/eng.1/scoreboard?dates=20261028')){
+      dailyFetches++
+      // Scout and research see the real slate. Later queries omit it.
+      if(dailyFetches>2)return new Response(JSON.stringify({events:[]}),{status:200})
+    }
+    return mock()(url)
+  }
+  const result=await evidenceTicket(5,day,'soccer',mutating,now)
+  assert.equal(result.complete,true)
+  assert.equal(result.verifiedEvents,5)
+  assert.equal(result.events.length,5)
+  assert.equal(dailyFetches,2,
+    'final rendering must reuse the exact timestamped provider-verified game IDs')
+})
