@@ -39,6 +39,7 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
     let samples:Uint8Array|undefined
     let nextAttempt=0
     let smooth=0
+    let seenWaveform=false
     let expression='neutral'
     const start=performance.now()
     const reduced=typeof window.matchMedia==='function'
@@ -50,6 +51,7 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
       if(stream===undefined||stream.getAudioTracks().length===0)return
       try{
         const context=new AudioContext()
+        audioContext=context
         const input=context.createMediaStreamSource(stream)
         const meter=context.createAnalyser()
         meter.fftSize=512
@@ -61,7 +63,7 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
         meter.connect(sink)
         sink.connect(context.destination)
         void context.resume().catch(()=>undefined)
-        audioContext=context;source=input;analyser=meter;silent=sink
+        source=input;analyser=meter;silent=sink
         samples=new Uint8Array(meter.fftSize)
         if(stageRef.current)stageRef.current.dataset.audioReactive='true'
       }catch {
@@ -78,6 +80,7 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
         let total=0
         for(const sample of samples){const centered=(sample-128)/128;total+=centered*centered}
         rms=Math.sqrt(total/samples.length)
+        if(rms>.016)seenWaveform=true
       }
       const speech=getVoiceAssistantSpokenText()
       if(phase==='speaking'&&speech){
@@ -93,8 +96,10 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
       }
       const fallback=phase==='speaking'
         ?kiraSpeechMouthEnvelope(speech,elapsed):0
+      const hasMeasuredVoice=analyser&&audioContext?.state==='running'
+        &&(seenWaveform||elapsed<800)
       const target=phase==='speaking'
-        ?(analyser&&audioContext?.state==='running'?kiraAudioMouthLevel(rms):fallback)
+        ?(hasMeasuredVoice?kiraAudioMouthLevel(rms):fallback)
         :(phase==='listening'?kiraAudioMouthLevel(rms):0)
       smooth=.68*smooth+.32*target
       if(stageRef.current){
