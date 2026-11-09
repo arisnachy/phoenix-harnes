@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {shortlistDailyMarkets,dailyOddsSportKey} from '../src/daily-market-shortlist.ts'
+import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets} from '../src/daily-market-shortlist.ts'
 
 const now=Date.parse('2026-11-06T17:00:00Z')
 const kickoff='2026-11-07T00:00:00Z'
@@ -183,4 +183,11 @@ test('research retains two different actual NBA total lines for the same game',(
   const lines=list.alternatives.filter(x=>x.market==='totals').map(x=>x.line)
   assert.deepEqual(lines.sort((a,b)=>a-b),[225.5,229.5])
   assert.equal(list.alternatives.length,3)
+})
+
+
+test('winner-only research queries exactly two-way/three-way winner market, never premium spreads/totals',()=>{
+  assert.equal(requestedDailyOddsMarkets(true),'h2h')
+  assert.equal(requestedDailyOddsMarkets(false),'h2h,spreads,totals')
+  assert.equal(dailyOddsSportKey('basketball','nba'),'basketball_nba')
 })
