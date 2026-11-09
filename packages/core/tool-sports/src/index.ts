@@ -2,6 +2,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import { scoutDailySports } from './daily-sports-scout.ts'
 import {probeFastFreeSports} from './sports-fast-free-probes.ts'
+import {preloadDailyResearch,dailyResearchStatus,dailyResearchFetcher,santoDomingoDay} from './sports-daily-preload.ts'
 import {crosscheckFreeFixture,freeOfficialFollowUps,freeSourceInventory,freeSourceCoverageForSport} from './free-sports-source-audit.ts'
 import {nflverseInjuryReport} from './nflverse-injury-report.ts'
 import {fetchEspnInjuryBackup,espnInjuryCatalog} from './espn-injury-backup.ts'
@@ -69,6 +70,7 @@ export const inject = ['tools','systemPrompt']
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'MEMORIA DE INVESTIGACIÓN POR DÍA: antes de construir un ticket consulta sports_chat_daily_research_cache(statusOnly=true); si no hay datos recientes, precarga con statusOnly=false. Reutiliza información ESPN/NHL/MLB/TheSportsDB y API-Sports con cuota regulada (20 reservas de 100); conserva hasta 7 días PERO respeta vencimiento de cada dato. La precarga ayuda, no reemplaza búsquedas libres ni confirma porteros titulares, alineaciones, cuotas o lesiones. SportsDataIO trial contiene datos alterados y NO sirve para picks. Si un proveedor falla, usa otros sin gastar su cuota repetidamente. ',
   'SONDEO RÁPIDO DE FUENTES GRATUITAS: cuando una consulta deportiva dé 0 datos o el usuario solicite diagnóstico, llama sports_chat_free_sources_probe para comprobar seis endpoints públicos ESPN NBA/NFL/Liga MX, MLB StatsAPI, NHL Web API y TheSportsDB, sin claves ni scraping no autorizado. Un día sin partidos indica empty y NO proveedor caído. Los endpoints públicos aportan datos deportivos, NO cuotas comerciales ni disponibilidad médica. Para OddsHarvester MLB/NFL usa home_away (ganador incluyendo prórroga), nunca market moneyline como argumento CLI; 1x2 es un mercado distinto. ',
   'LESIONES ESPN COMO EVIDENCIA: usar sports_chat_espn_injuries cuando un expediente NBA/WNBA/NFL/NHL/MLB indique lesiones no verificadas. Consultar el JSON público ESPN por liga y equipos con fecha y fuente, no limitarse a la página espn.com.do/basquetbol/nba/lesiones. El estado reported, questionable, out, active o day-to-day es solo lo publicado; no convertirlo en quinteto, portero, QB titular ni confirmación de inactivos. Para NBA, cotejar en la página oficial de reportes antes de afirmar disponibilidad definitiva. Una fuente vacía/no actualizada no equivale a equipo sano, ni impide mostrar un ticket CONDICIONAL con cuotas reales; no inventar bajas. ',
   'RECUPERACIÓN DE DATOS: si ESPN publica estadística vacía o histórico HTTP 400, usar recuperación por mes/día y calendario de equipo; para eventos concretos consultar sports_chat_source_resilience y sus fuentes independientes. Fuentes del catálogo o enlaces no equivalen a consulta real, ni calendario equivale a lesiones, alineación o cuota. Nunca eludir 401/403/429 ni inventar resultados. ',
@@ -139,6 +141,42 @@ export function apply(ctx: Context): void {
     },
   })
   ctx.tools.register(defineTool({
+    name:'sports_chat_daily_research_cache',
+    description:'Prepara y consulta la memoria deportiva diaria persistente por siete días. Lista por disciplina qué investigar, precarga calendarios y respaldos públicos y limita cuotas API-Sports por API/UTC. No obtiene cuotas comerciales, no certifica porteros, lesiones ni pronósticos.',
+    parameters:{
+      date:{type:'string',description:'Fecha AAAA-MM-DD local RD; defecto hoy'},
+      statusOnly:{type:'boolean',description:'true: leer estado y agenda sin gastar API; false: precargar fuentes admitidas, defecto true.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const now=Date.now(),day=args.date??santoDomingoDay(now),env=await sportsEnv(ctx)
+      const report=args.statusOnly===false?
+        await preloadDailyResearch(day,env,fetch,now):
+        await dailyResearchStatus(day,env,now)
+      return JSON.stringify({report,readOnly:true,
+        instruction:'Este expediente de cache es un ahorro de consultas y una agenda, no un pronóstico. Reusar fuentes frescas al investigar el ticket; buscar fuentes adicionales ante faltantes y cotejar cada candidato por su especialista. Portero de roster NO es titular. 100 solicitudes son por API, no por deporte dentro del mismo endpoint.'})
+    },
+    presentCall:()=>({card:'generic',title:'Preparar investigación deportiva diaria',kind:'read' as const}),
+  }))
+  // Optional preflight while PHOENIX is RUNNING: scheduling is not possible
+  // when the machine or the application is shut down.
+  if(process.env.PHOENIX_SPORTS_DAILY_PRELOAD_AUTO==='1'){
+    ctx.effect(()=>{
+      let stopped=false,lastDay=''
+      const run=()=>{
+        const now=Date.now(),day=santoDomingoDay(now)
+        if(stopped||day===lastDay)return
+        lastDay=day
+        void sportsEnv(ctx).then(env=>preloadDailyResearch(day,env,fetch,now))
+          .catch(()=>{ /* A failed preflight never blocks application startup. */ })
+      }
+      const initial=setTimeout(run,1500)
+      const periodic=setInterval(run,60*60_000)
+      return()=>{stopped=true;clearTimeout(initial);clearInterval(periodic)}
+    })
+  }
+  ctx.tools.register(defineTool({
     name:'sports_chat_daily_scan',
     description:'Barrido barato de las ligas deportivas de hoy: NBA, WNBA, MLB, NFL, NHL, fútbol y tenis; devuelve eventos ESPN futuros confirmados, cobertura y una preselección equilibrada entre disciplinas. NO predice resultados ni cuotas.',
     parameters:{
@@ -148,7 +186,8 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const report=await scoutDailySports(args.date,args.limit??30,fetch,Date.now(),process.env)
+      const report=await scoutDailySports(args.date,args.limit??30,
+        dailyResearchFetcher(fetch,process.env),Date.now(),process.env)
       return JSON.stringify({...report,instruction:'Primer filtro para construir 4-6 propuestas (objetivo 5), NO ranking predictivo. Investiga a fondo estos eventos; si no alcanzan, amplía Soccer mundial por páginas. Para cada candidato compara H2H, bajas, clima, jugadores y mercados reales h2h, spreads, totales, períodos y props si la fuente los publica. No inventes cuotas, modelos ni estadísticas; las propuestas sin cotización comprobada no son apuestas aprobadas.'})
     },
     presentCall:()=>({card:'generic',title:'Escanear deportes y partidos de la jornada',kind:'read' as const}),
@@ -168,7 +207,7 @@ export function apply(ctx: Context): void {
       const now=Date.now(),env=await sportsEnv(ctx),count=args.count??5
       if(!Number.isInteger(count)||count<4||count>6)
         throw Error('Se requieren de 4 a 6 candidatas para el ticket diario')
-      const daily=await scoutDailySports(args.date,36,fetch,now,env)
+      const daily=await scoutDailySports(args.date,36,dailyResearchFetcher(fetch,env),now,env)
       const keys=[...new Set(daily.events.map(event=>dailyOddsSportKey(event.sport,event.league))
         .filter((key):key is string=>typeof key==='string'))].slice(0,12)
       const attempts:Array<{sportKey:string;status:'observed'|'empty'|'error';count:number}>=[]
