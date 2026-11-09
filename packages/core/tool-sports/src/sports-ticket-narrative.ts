@@ -207,8 +207,8 @@ export function enrichSpecialistNarrative(
   const contradictions=uniq([...prior.contradictions,...pending,...conflicts],12)
   const hasPrice=typeof marketNoVigPercent==='number'&&
     Number.isFinite(marketNoVigPercent)&&marketNoVigPercent>=0&&marketNoVigPercent<=100
-  const percentage=hasPrice?{
-    value:marketNoVigPercent,kind:'market-no-vig' as const,
+  const percentage:TicketNarrative['percentage']=hasPrice?{
+    value:marketNoVigPercent as number,kind:'market-no-vig' as const,
     warning:'Probabilidad implícita SIN margen de la casa: referencia de mercado, no probabilidad de acierto calibrada.',
   }:prior.percentage
   const documented=check?.status==='researched'&&check.checklist?.complete===true&&
