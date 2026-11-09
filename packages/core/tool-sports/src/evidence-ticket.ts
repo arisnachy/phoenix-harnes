@@ -11,7 +11,7 @@ import { investigateEventDeep } from './sports-deep-context.ts'
 import { diversifiedSportsPicks,diversifiedSportsShortlist } from './sports-diversity.ts'
 import {composeTicketLegNarrative} from './sports-ticket-narrative.ts'
 import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
-import {discoverGdeltTicketNews} from './sports-gdelt-editorial.ts'
+import {discoverGdeltTicketNews,type GdeltReport} from './sports-gdelt-editorial.ts'
 export type TicketPreselectCandidate={
   eventId:string;sport:string;league:string;home:string;away:string;
   kickoff:string;pick:'home'|'away'|'draw';rank:number;level:'strong'|'conditional'
@@ -332,8 +332,8 @@ export async function evidenceTicket(
       .catch(()=>[]),
     boundedTicket(discoverGdeltTicketNews(selected.map(x=>({
       eventId:x.pick.eventId,home:x.home,away:x.away,
-    })),fetcher,now),6_000).catch(()=>({
-      status:'unavailable' as const,checkedAt:new Date(now).toISOString(),
+    })),fetcher,now),6_000).catch(():GdeltReport=>({
+      status:'unavailable',checkedAt:new Date(now).toISOString(),
       sourceUrl:null,byEvent:{},scanned:0,note:'GDELT agotó el plazo; sin noticias verificadas',
     })),
   ])
