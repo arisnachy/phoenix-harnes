@@ -74,7 +74,7 @@ const form=(current:Competitor,all:Game[],kickoff:number):FormSide=>{
     averageAllowed:total?Number((records.reduce((n,r)=>n+r.allowed,0)/total).toFixed(2)):null,
     averageMargin:total?Number((records.reduce((n,r)=>n+r.scored-r.allowed,0)/total).toFixed(2)):null,
     restHours:last?Number(((kickoff-Date.parse(last.date))/3_600_000).toFixed(1)):null,
-    lastResults:records.slice(0,5)}
+    lastResults:records.slice(0,10)}
 }
 const today=()=>new Intl.DateTimeFormat('en-CA',{
   timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit',
