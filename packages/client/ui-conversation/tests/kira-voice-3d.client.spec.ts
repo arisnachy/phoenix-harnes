@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest'
+import {readFileSync} from 'node:fs'
 import {
   createKiraHeadGeometry,createKiraHairBackGeometry,kira3dPose,kiraFaceDepth,kiraFacePoint,kiraBlinkAmount,
 } from '../src/client/skeleton/kira-voice-3d-geometry.ts'
@@ -27,7 +28,7 @@ describe('Kira anime 3D head',()=>{
       expect(hair.vertices[i+2]).toBeLessThan(head.vertices[i+2]!)
     }
   })
-  it('keeps facial points on the same surface as 3D lip and eye meshes',()=>{
+  it('keeps original facial coordinates on the sculpted 3D texture',()=>{
     const [x,y,z]=kiraFacePoint(.616,.693,.05)
     expect(x).toBeGreaterThan(0)
     expect(y).toBeLessThan(0)
@@ -49,6 +50,23 @@ describe('Kira anime 3D head',()=>{
     expect(kiraBlinkAmount(2600)).toBeGreaterThan(.9)
     expect(kiraBlinkAmount(4200)).toBe(0)
     expect(kiraBlinkAmount(Infinity)).toBe(0)
+  })
+  it('morphs the ORIGINAL lip texture rather than rendering overlay ellipses',()=>{
+    const shader=readFileSync(new URL('../src/client/skeleton/kira-voice-webgl.ts',import.meta.url),'utf8')
+    expect(shader).toContain('uniform float uMouth;')
+    expect(shader).toContain('texture(uPortrait,')
+    expect(shader).not.toContain('drawOval(')
+    expect(shader).not.toContain('gl.TRIANGLE_FAN')
+    const face=readFileSync(new URL('../src/client/skeleton/KiraVoiceAvatar.tsx',import.meta.url),'utf8')
+    expect(face).not.toContain('SVGEllipseElement')
+  })
+  it('anchors a <=118px avatar beside the composer, including mobile',()=>{
+    const css=readFileSync(new URL('../src/client/skeleton/KiraVoiceAvatar.module.css',import.meta.url),'utf8')
+    expect(css).toContain('position:absolute')
+    expect(css).not.toContain('position:fixed')
+    expect(css).toContain('width:118px')
+    expect(css).toContain('width:92px')
+    expect(css).toContain('calc(100% + 12px)')
   })
   it('keeps the original approved Kira anime identity as the texture',()=>{
     expect(KIRA_VOICE_PORTRAIT).toMatch(/^data:image\/webp;base64,UklGR/u)
