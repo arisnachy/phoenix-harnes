@@ -1730,6 +1730,9 @@ describe('command launcher chrome and control seats', () => {
       expect(avatar?.getAttribute('data-voice-phase')).toBe('listening')
       expect(avatar?.querySelector('img')?.getAttribute('src')).toMatch(/^data:image\/webp;base64,/u)
       expect(avatar?.querySelector('ellipse')).toBeDefined()
+      // In jsdom there is no WebGL2: the original approved 2D face stays visible.
+      expect(avatar?.querySelector('[data-kira-avatar-3d]')).not.toBeNull()
+      expect(avatar?.querySelector('[data-renderer="portrait-2d"]')).not.toBeNull()
       fireEvent.click(view.getByRole('button',{name:'Finalizar conversación por voz'}))
       await act(async()=>{await Promise.resolve()})
       expect(view.container.querySelector('[data-kira-voice-avatar]')).toBeNull()
