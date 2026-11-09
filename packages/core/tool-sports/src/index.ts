@@ -12,7 +12,7 @@ import { getMlbPitcherReport } from './mlb.ts'
 import { researchTicket, autoResearchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { sportsPromptNeeded } from './sports-prompt.ts'
 import { researchNbaSlate } from './nba-research.ts'
-import {shortlistDailyMarkets,dailyOddsSportKey} from './daily-market-shortlist.ts'
+import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets} from './daily-market-shortlist.ts'
 import {assessDailyMarketEvidence,unavailableMarketEvidence} from './daily-market-evidence.ts'
 import {selectDailyResearchedMarkets} from './daily-market-selection.ts'
 import {auditTicketMarketRisk} from './ticket-risk-audit.ts'
@@ -178,7 +178,7 @@ export function apply(ctx: Context): void {
       for(let offset=0;offset<keys.length;offset+=3){
         const group=keys.slice(offset,offset+3)
         const results=await Promise.allSettled(group.map(key=>
-          marketOddsDetailed(key,args.winnerOnly===true?'h2h':'h2h,spreads,totals',env,fetch,now)))
+          marketOddsDetailed(key,requestedDailyOddsMarkets(args.winnerOnly===true),env,fetch,now)))
         for(let i=0;i<group.length;i++){
           const key=group[i]!,result=results[i]
           if(result?.status==='fulfilled'){
