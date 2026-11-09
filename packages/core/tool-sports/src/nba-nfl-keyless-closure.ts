@@ -4,7 +4,7 @@
  */
 export type TwoSport='nba'|'nfl'
 export type PublicSource={
-  id:string;url:string;kind:'automated-json'|'official-reference';
+  id:string;url:string;kind:'automated-json'|'automated-csv'|'official-reference';
   covers:string[];limitation:string
 }
 const base=(league:TwoSport)=>'https://site.api.espn.com/apis/site/v2/sports/'+
@@ -40,7 +40,7 @@ export const nbaNflPublicSources:readonly PublicSource[]=[
     covers:['snapshots','boxscore','QB y starters cuando consten explícitos'],
     limitation:'Un boxscore antiguo no confirma titularidad en el juego futuro'},
   {id:'nflverse-injuries',url:'https://github.com/nflverse/nflverse-data/releases/download/injuries/injuries_{season}.csv',
-    kind:'automated-json',covers:['informe semanal','segunda fuente de lesiones'],
+    kind:'automated-csv',covers:['informe semanal','segunda fuente de lesiones'],
     limitation:'CSV ya integrado en PHOENIX; no identifica inactivos definitivos'},
   {id:'nfl-official-injuries',url:'https://www.nfl.com/injuries/',kind:'official-reference',
     covers:['parte de entrenamientos','estados del juego'],
