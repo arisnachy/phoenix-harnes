@@ -875,6 +875,86 @@ const Header = ({ title, subtitle, badge, visualIcon = false }: HeaderProps) => 
 const statusClass = (status: Status | undefined): string =>
   status === undefined ? '' : (css[status] ?? '')
 
+
+function SportsTicketResearchNarrative({value,index}:{value:SportsTicketNarrative;index:number}):ReactNode{
+  const label=value.percentage.kind==='market-no-vig'?'Implícita del mercado (sin margen)':
+    value.percentage.kind==='exploratory-recent-form'?'Exploratoria (no calibrada)':'Sin estimación'
+  const photo=value.news.find(x=>x.imageUrl!==null&&x.articleUrl!==null)
+  return <section className={css.sportsTicketNarrative} aria-label={'Investigación de pata '+(index+1)}>
+    <div className={css.sportsTicketNarrativeTop}>
+      <strong>¿Por qué esta selección?</strong>
+      <span>{value.status==='documented'?'Expediente documentado':'Análisis condicional'}</span>
+    </div>
+    <p className={css.sportsTicketNarrativeWhy}>{value.selectionWhy}</p>
+    <div className={css.sportsTicketNarrativeMeasures}>
+      <div><small>Probabilidad individual</small>
+        <strong>{value.percentage.value===null?'Sin dato':value.percentage.value.toFixed(1)+'%'}</strong>
+        <span>{label}</span></div>
+      <div><small>Ante este rival</small>
+        <strong>{value.directOpponentHistory.games?
+          value.directOpponentHistory.wins+'V · '+value.directOpponentHistory.losses+'D':'Sin muestra'}</strong>
+        <span>{value.directOpponentHistory.games} encuentro(s) observados</span></div>
+      <div><small>En el estadio</small>
+        <strong>{value.venue.games?value.venue.wins+'V · '+value.venue.losses+'D':'No verificado'}</strong>
+        <span>{value.venue.name??'Sede por confirmar'}</span></div>
+    </div>
+    <p className={css.sportsTicketNarrativeCaution}>{value.percentage.warning}</p>
+    <div className={css.sportsTicketNarrativeContext}>
+      <p><strong>Clima:</strong> {value.weather.description}</p>
+      <p><strong>Árbitros:</strong> {value.referee.names.length?value.referee.names.join(', '):
+        'asignación no comprobada'} · ninguna preferencia hacia un equipo demostrada.</p>
+      {value.externalModel.status!=='unavailable'&&
+        <p><strong>Modelo externo:</strong> Bet Better · {value.externalModel.selection??'sin selección'} ·
+          {' '}{value.externalModel.modelProbabilityPercent===null?'sin probabilidad':
+            value.externalModel.modelProbabilityPercent.toFixed(1)+'%'}
+          {' '}({value.externalModel.status==='support'?'coincide':'discrepa'}) ·
+          {' '}<a href="https://betbetter.world" target="_blank" rel="noreferrer noopener">fuente</a>
+        </p>}
+    </div>
+    {value.news.length>0&&<div className={css.sportsTicketNarrativeNews}>
+      <strong>Noticias vinculadas</strong>
+      {photo?.imageUrl&&photo.articleUrl&&<a href={photo.articleUrl}
+        target="_blank" rel="noopener noreferrer" className={css.sportsTicketNarrativePhoto}>
+        <img src={photo.imageUrl} loading="lazy" referrerPolicy="no-referrer"
+          alt={'Imagen editorial de '+photo.publisher}/>
+        <small>Imagen de {photo.publisher} · abrir noticia original</small>
+      </a>}
+      {value.news.slice(0,3).map((item,i)=><p key={i}>
+        {item.articleUrl?<a href={item.articleUrl} target="_blank" rel="noopener noreferrer">
+          {item.headline}</a>:<span>{item.headline}</span>}
+        <small>{' '}· {item.publisher} · {item.publishedAt?
+          item.publishedAt.slice(0,16).replace('T',' ')+ ' UTC':'fecha no comprobada'}</small>
+      </p>)}
+      <small>Titular y fotografía no confirman lesiones, alineaciones ni pronósticos.</small>
+    </div>}
+    {(value.globalNews.length>0||value.externalOpinions.length>0)&&
+      <details className={css.sportsTicketNarrativeMore}>
+        <summary>Prensa internacional y opiniones externas</summary>
+        {value.globalNews.map((item,i)=><p key={'g'+i}><a href={item.articleUrl}
+          target="_blank" rel="noopener noreferrer">{item.headline}</a>
+          {' '}· {item.publisher} · indexado {item.indexedAt?.slice(0,10)??'sin hora'}
+        </p>)}
+        {value.externalOpinions.map((item,i)=><p key={'e'+i}><a href={item.discoveryUrl}
+          target="_blank" rel="noopener noreferrer">{item.headline}</a>
+          {' '}· {item.publisher} · titular indexado, no pronóstico verificado.
+        </p>)}
+      </details>}
+    {value.contradictions.length>0&&<div className={css.sportsTicketNarrativeRisks}>
+      <strong>Riesgos y datos por confirmar</strong>
+      <ul>{value.contradictions.slice(0,5).map((x,i)=><li key={i}>{x}</li>)}</ul>
+    </div>}
+    {value.sources.length>0&&<details className={css.sportsTicketNarrativeMore}>
+      <summary>Fuentes y trazabilidad ({value.sources.length})</summary>
+      <ul>{value.sources.map((source,i)=><li key={i}>
+        {source.url?<a href={source.url} target="_blank" rel="noopener noreferrer">
+          {source.name}</a>:source.name}
+        {' '}· {source.status==='verified'?'verificado':
+          source.status==='partial'?'parcial':'sin dato'}
+      </li>)}</ul>
+    </details>}
+  </section>
+}
+
 export function GenerativeUi({ block, onAction, conversationId }: { block: GenerativeUiBlock; onAction?: CanvasAction | undefined; conversationId?: string }): ReactNode {
   switch (block.component) {
     case 'ui_canvas': return <GenerativeCanvas spec={block} onAction={onAction} />
@@ -1171,7 +1251,8 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                   <strong>{leg.selection}</strong>
                 </div>
                 <small>{[leg.market,leg.player?'Jugador · '+leg.player:undefined,unpriced?undefined:leg.bookmaker].filter(Boolean).join(' · ')}</small>
-                {leg.rationale&&<details className={css.sportsTicketReason}><summary>Ver fundamento</summary><p>{sportsDisplayText(leg.rationale)}</p></details>}
+                {leg.narrative?<SportsTicketResearchNarrative value={leg.narrative} index={p.legs.indexOf(leg)}/>:
+                  leg.rationale&&<details className={css.sportsTicketReason}><summary>Ver fundamento</summary><p>{sportsDisplayText(leg.rationale)}</p></details>}
               </div>
               {unpriced&&!receipt
                 ? <span className={css.sportsTicketVerified} aria-label="Partido verificado">✓ Evento</span>
