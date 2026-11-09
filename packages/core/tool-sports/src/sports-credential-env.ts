@@ -19,7 +19,9 @@ export async function sportsEnvWithVaultKey(ctx: Context, env: NodeJS.ProcessEnv
   const resolved = {...env}
   // Keys are kept in the Host vault and resolved on each tool invocation.
   // No secret is persisted into the sport UI, logs, snapshots or model prompts.
-  for (const ref of ['THE_ODDS_API_KEY','THERUNDOWN_API_KEY','SPORTSGAMEODDS_API_KEY']) {
+  for (const ref of ['THE_ODDS_API_KEY','THERUNDOWN_API_KEY','SPORTSGAMEODDS_API_KEY',
+    'PHOENIX_API_FOOTBALL_KEY','PHOENIX_API_HOCKEY_KEY','PHOENIX_API_NFL_KEY',
+    'PHOENIX_BIGBALLS_API_KEY','PHOENIX_NFLMETA_KEY','PHOENIX_SPORTMONKS_KEY']) {
     try {
       const saved = await vault.resolve(ref)
       if (typeof saved?.value === 'string' && saved.value.trim()) {
