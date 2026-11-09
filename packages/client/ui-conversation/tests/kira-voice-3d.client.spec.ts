@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest'
 import {
-  createKiraHeadGeometry,kira3dPose,kiraFaceDepth,kiraFacePoint,kiraBlinkAmount,
+  createKiraHeadGeometry,createKiraHairBackGeometry,kira3dPose,kiraFaceDepth,kiraFacePoint,kiraBlinkAmount,
 } from '../src/client/skeleton/kira-voice-3d-geometry.ts'
 import {KIRA_VOICE_PORTRAIT} from '../src/client/skeleton/kira-voice-portrait.ts'
 
@@ -15,6 +15,17 @@ describe('Kira anime 3D head',()=>{
     for(let i=2;i<head.vertices.length;i+=5)depths.push(head.vertices[i]!)
     expect(Math.max(...depths)-Math.min(...depths)).toBeGreaterThan(.25)
     expect(kiraFaceDepth(.61,.55)).toBeGreaterThan(kiraFaceDepth(.05,.05))
+  })
+  it('contains real rear hair volume and a front sculpt with shared coordinates',()=>{
+    const head=createKiraHeadGeometry()
+    const hair=createKiraHairBackGeometry(head)
+    expect(hair.vertices.length).toBe(head.vertices.length)
+    expect(hair.indices.length).toBe(head.indices.length)
+    for(let i=0;i<head.vertices.length;i+=5){
+      expect(hair.vertices[i]).toBe(head.vertices[i])
+      expect(hair.vertices[i+1]).toBe(head.vertices[i+1])
+      expect(hair.vertices[i+2]).toBeLessThan(head.vertices[i+2]!)
+    }
   })
   it('keeps facial points on the same surface as 3D lip and eye meshes',()=>{
     const [x,y,z]=kiraFacePoint(.616,.693,.05)
