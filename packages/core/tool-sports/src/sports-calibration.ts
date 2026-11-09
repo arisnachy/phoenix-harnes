@@ -206,7 +206,7 @@ export async function auditSportsCalibration(
      const event=value as NonNullable<Board['events']>[number]
      const at=Date.parse(event.date??''),id=String(event.id??'')
      if(!Number.isFinite(at)||at<earliest||at>=latest||
-       !/^\\d{1,20}$/u.test(id))continue
+       !/^\d{1,20}$/u.test(id))continue
      events.set(id,event)
    }
  }
