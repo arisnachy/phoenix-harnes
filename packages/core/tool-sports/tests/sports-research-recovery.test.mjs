@@ -64,7 +64,7 @@ test('automatic ticket looks beyond six original leagues and never invents a pri
   assert.equal(report.priced,false)
   assert.equal(report.modelProbabilities,false)
 })
-test('NBA OddsHarvester invalid moneyline retries explicit two-way including-OT market only',async()=>{
+test('NBA moneyline compatibility alias directly uses CLI home_away including OT',async()=>{
   const calls=[]
   const observed=[{
     scraped_date:'2026-11-08 17:00:00 UTC',match_date:'2026-11-09 01:00:00 UTC',
@@ -74,12 +74,12 @@ test('NBA OddsHarvester invalid moneyline retries explicit two-way including-OT 
   }]
   const runner=async(_sport,market)=>{
     calls.push(market)
-    if(market==='moneyline')throw Error('Invalid market: moneyline for basketball')
+    if(market==='moneyline')throw Error('The CLI must never receive moneyline')
     return observed
   }
   const rows=await keylessOdds('basketball','moneyline',day,
     {PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'1'},now,runner)
-  assert.deepEqual(calls,['moneyline','home_away'])
+  assert.deepEqual(calls,['home_away'])
   assert.equal(rows.length,2)
   assert.ok(rows.every(x=>x.market==='h2h'&&x.bookmaker==='Book A'))
   const args=oddsHarvesterArgs('basketball','home_away',day,'odds.json')
