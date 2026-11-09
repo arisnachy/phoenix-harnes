@@ -42,6 +42,12 @@ const providerKeys:Readonly<Record<string,string>>={
 export const dailyOddsSportKey=(sport:string,league:string):string|null=>
   providerKeys[sport+'|'+league]??null
 
+/** Winner-only analysis must not ask free bookmakers for premium spreads/totals.
+ * The absence of a bookmaker response does not affect fixture research.
+ */
+export const requestedDailyOddsMarkets=(winnerOnly:boolean):
+  'h2h'|'h2h,spreads,totals'=>winnerOnly?'h2h':'h2h,spreads,totals'
+
 const aliases:Readonly<Record<string,string>>={
   laclippers:'losangelesclippers',nyknicks:'newyorkknicks',
   okcthunder:'oklahomacitythunder',gswarriors:'goldenstatewarriors',
