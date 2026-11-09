@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {keylessOdds,normalizeOddsHarvester,recoverScraperRows,oddsHarvesterArgs,oddsHarvesterHistoricArgs,keylessHistoricOdds} from '../src/keyless-odds.ts'
+import {keylessOdds,normalizeOddsHarvester,recoverScraperRows,oddsHarvesterArgs,oddsHarvesterHistoricArgs,keylessHistoricOdds,classifyScraperFailure,describeScraperError} from '../src/keyless-odds.ts'
 const now=Date.parse('2026-10-28T18:05:00Z')
 const fixture=[{
   scraped_date:'2026-10-28 18:00:00 UTC',match_date:'2026-10-28 23:00:00 UTC',
@@ -50,6 +50,13 @@ test('OddsHarvester requests the correct period for NHL winner including overtim
   assert.ok(!doubleChance.includes('--period'))
   const nba=oddsHarvesterArgs('basketball','1x2','2026-10-29','odds.json')
   assert.equal(nba[nba.indexOf('--period')+1],'full_time')
+  for(const sport of ['basketball','baseball','american-football']){
+    const winner=oddsHarvesterArgs(sport,'moneyline','2026-10-29','odds.json')
+    assert.equal(winner[winner.indexOf('--market')+1],'home_away',
+      sport+' must use the actual v0.20.0 CLI market')
+    assert.equal(winner[winner.indexOf('--period')+1],'full_including_ot')
+    assert.ok(!winner.includes('moneyline'))
+  }
   const soccer=oddsHarvesterArgs('football','double_chance','2026-10-29','odds.json')
   assert.ok(!soccer.includes('--period'))
   assert.deepEqual(soccer.slice(-5),['--format','json','--stream-ndjson','--output','odds.json'])
@@ -93,6 +100,30 @@ test('keyless historic query preserves past lines rather than mislabeling as liv
   assert.equal(args[0],'historic')
   assert.ok(args.includes('--max-pages'))
   assert.ok(args.includes('--stream-ndjson'))
+  for(const sport of ['basketball','baseball','american-football']){
+    const archive=oddsHarvesterHistoricArgs(
+      sport,'league-name','2024-2025','moneyline','archive.json')
+    assert.equal(archive[archive.indexOf('--market')+1],'home_away')
+    assert.equal(archive[archive.indexOf('--period')+1],'full_including_ot')
+  }
   await assert.rejects(()=>keylessHistoricOdds('football','../../unsafe',
     '2024-2025','1x2',{PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'1'},now,async()=>old),/inválida/)
+})
+
+test('distinguishes invalid-market and empty listing from real runtime failures',()=>{
+  const invalid={code:2,stderr:'Invalid market(s) for baseball: moneyline'}
+  assert.equal(classifyScraperFailure(invalid),'invalid-market')
+  assert.match(describeScraperError(invalid),/category=invalid-market/)
+  assert.equal(classifyScraperFailure({
+    code:2,stderr:'No upcoming match links for the selected date; 0 failed'
+  }),'no-events')
+  assert.equal(classifyScraperFailure({
+    code:2,stderr:'No upcoming match links; failed: 1'
+  }),'scraper-exit-error')
+  assert.equal(classifyScraperFailure({
+    code:'ETIMEDOUT',killed:true,stderr:'timeout'
+  }),'timeout')
+  assert.equal(classifyScraperFailure({
+    code:1,stderr:'HTTP 429: too many requests'
+  }),'site-blocked-or-limited')
 })
