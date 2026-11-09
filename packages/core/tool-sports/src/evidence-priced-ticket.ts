@@ -9,6 +9,7 @@ import {investigateTicketSpecialists,type SpecialistGate} from './ticket-special
 import { keylessEnabled,keylessOdds,type KeylessQuote } from './keyless-odds.ts'
 import { marketOddsDetailed,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome,type OddsResearchObservation } from './sports.ts'
 import {fetchBetBetterModels,findModelOpinion,type ModelForecast} from './betbetter-model-evidence.ts'
+import {enrichSpecialistNarrative,type TicketNarrative} from './sports-ticket-narrative.ts'
 
 export type OddsAuditRow={
   source:string
@@ -155,7 +156,20 @@ export async function evidencePricedTicket(
     env.SPORTSGAMEODDS_API_KEY?.trim()?'SportsGameOdds configurado':'SportsGameOdds sin clave',
     'ESPN: cuotas solo cuando el proveedor publique mercados con fecha',
   ].join(' · ')
+  const preliminaryLegs=Array.isArray(research.card.props.legs)?research.card.props.legs:[]
   const researchCard:ChatBlock={...research.card,props:{...research.card.props,
+    legs:preliminaryLegs.map((row,index)=>{
+      const leg=row!==null&&typeof row==='object'&&!Array.isArray(row)?
+        row as Record<string,unknown>:{}
+      return {...leg,narrative:enrichSpecialistNarrative(
+        leg.narrative as TicketNarrative|null|undefined,specialistChecks[index])}
+    }),
+    chatNarrative:preliminaryLegs.map((row,index)=>{
+      const leg=row!==null&&typeof row==='object'&&!Array.isArray(row)?
+        row as Record<string,unknown>:{}
+      return enrichSpecialistNarrative(
+        leg.narrative as TicketNarrative|null|undefined,specialistChecks[index])
+    }).filter(Boolean),
     note:(String(research.card.props.note??'')+' Especialistas consultados '+researchedLegs+'/'+count+
       '. Contradicciones de modelo independiente: '+modelDisagreements+
       '. Bet Better son probabilidades teóricas, NUNCA cuotas de bookmaker. Estado de fuentes de cuotas: '+quoteAccess+
@@ -430,6 +444,9 @@ export async function evidencePricedTicket(
     const pricedRow=row&&typeof row==='object'&&!Array.isArray(row)
       ?row as Record<string,unknown>:{}
     return {...pricedRow,
+      narrative:enrichSpecialistNarrative(
+        prior.narrative as TicketNarrative|null|undefined,specialistChecks[index],
+        marketRisk.legs[index]?.noVigPercent),
       marketNoVigPercent:marketRisk.legs[index]?.noVigPercent??null,
       // One chance per leg. Prefer a two-sided, same-bookmaker no-vig
       // estimate; otherwise preserve the disclosed exploratory forecast.
@@ -473,6 +490,8 @@ export async function evidencePricedTicket(
   })
   const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,modelAudit,marketRisk,decisionAudit,
+    chatNarrative:legs.map(x=>x.narrative).filter(Boolean),
+    narrativeInstruction:'Kira debe explicar cada selección DEBAJO del ticket con datos favorables, datos contrarios, fecha y enlaces de noticias, sede, clima, árbitro verificado o no y porcentaje con origen; jamás resumir cinco patas en una sola frase.',
     subtitle:(checklistComplete&&!elevatedMarketRisk?'Investigación especializada':'TICKET CONDICIONAL')+
       ' · cuotas verificadas · '+best.book+' · forma histórica ESPN',
     note:(checklistComplete&&!elevatedMarketRisk?'COTIZACIÓN INVESTIGADA':
