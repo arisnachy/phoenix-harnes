@@ -1,7 +1,7 @@
 /** Quote only when independently researched fixtures match fresh, same-bookmaker prices.
  * No combined-odds claims across different bookmakers or historical sources.
  */
-import { evidenceTicket } from './evidence-ticket.ts'
+import { evidenceTicket, type TicketPreselectReviewer } from './evidence-ticket.ts'
 import {dailyResearchFetcher} from './sports-daily-preload.ts'
 import {auditTicketDecisions,readDecisionPolicy,type TicketDecisionAudit} from './sports-ticket-decision.ts'
 import {auditTicketMarketRisk,quoteSideNoVig,type TicketMarketRisk} from './ticket-risk-audit.ts'
@@ -51,18 +51,55 @@ export async function evidencePricedTicket(
   modelAudit:Array<{eventId:string;status:'support'|'contradiction'|'unavailable';
     prediction:ModelForecast|null}>;
   conditional:boolean;dossierComplete:boolean;
-  explanation:string;marketRisk?:TicketMarketRisk;
+  explanation:string;reviewedBeforeSelection:number;removedConflicts:number;
+  marketRisk?:TicketMarketRisk;
   decisionAudit:TicketDecisionAudit}>{
   const researchFetcher=fetcher===fetch?dailyResearchFetcher(fetcher,env):fetcher
-  const research=await evidenceTicket(count,date,sport,researchFetcher,now,env)
   const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
     year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
-  // A winner picked from records cannot bypass the discipline-specific dossier.
-  // Review each selected fixture before attaching even one bookmaker quote.
-  const specialistChecks=await specialistResearcher(research.events.map(e=>({
-    sport:e.sport,league:e.league,eventId:e.eventId,date:day,
-    home:e.home,away:e.away,kickoff:e.kickoff,
-  })),researchFetcher,now,env)
+  const preview=new Map<string,SpecialistGate>()
+  let reviewedBeforeSelection=0,removedConflicts=0
+  const reviewCandidates:TicketPreselectReviewer=async candidates=>{
+    // The historical ranking is a PRE-FILTER only. Challenge more candidates
+    // before choosing the final 5/6, and retain the review by exact event ID.
+    const games=candidates.map(c=>({
+      sport:c.sport,league:c.league,eventId:c.eventId,date:day,
+      home:c.home,away:c.away,kickoff:c.kickoff,
+    }))
+    const checks=await specialistResearcher(games,researchFetcher,now,env,[],8_000)
+    reviewedBeforeSelection=checks.length
+    return checks.map((check,index)=>{
+      const fixture=candidates[index]!
+      preview.set(fixture.eventId,check)
+      const conflicts=check.pendingSteps.some(step=>
+        /equipos no coinciden|conflicto de cartelera|identidad contradictoria|identidad u horario|horario.*no coinciden/iu.test(step))
+        ||check.sourceChecks?.some(source=>source.status==='conflict')===true
+      if(conflicts)removedConflicts++
+      const pending=check.checklist?.criticalPending.length??12
+      const priority=check.checklist?.complete===true?1.25:
+        check.status==='researched'?0.38:
+          check.status==='incomplete'?0.09:-0.04
+      const reason='Especialista '+check.status+
+        '; pasos críticos pendientes '+pending+
+        (conflicts?'; conflicto de identidad':'')
+      return{eventId:fixture.eventId,excluded:conflicts,
+        priority:priority-Math.min(12,pending)*0.015,reason}
+    })
+  }
+  const research=await evidenceTicket(count,date,sport,researchFetcher,now,env,
+    reviewCandidates)
+  // Full specialist reassessment is retained for a preliminary timeout or
+  // unavailable dossier. Never treat a short preflight as completed research.
+  const pendingGames=research.events.filter(e=>preview.get(e.eventId)?.status!=='researched')
+    .map(e=>({sport:e.sport,league:e.league,eventId:e.eventId,
+      date:day,home:e.home,away:e.away,kickoff:e.kickoff}))
+  const retried=await specialistResearcher(pendingGames,researchFetcher,now,env)
+  const byId=new Map(retried.map(x=>[x.eventId,x]))
+  const specialistChecks=research.events.map(e=>byId.get(e.eventId)??preview.get(e.eventId)??{
+    sport:e.sport,league:e.league,eventId:e.eventId,specialist:'unavailable',
+    status:'unavailable' as const,verifiedSteps:[],pendingSteps:['Sin expediente verificado'],
+    approvedForBetting:false as const,checkedAt:new Date(now).toISOString(),
+  })
   const researchedLegs=specialistChecks.filter(x=>x.status==='researched').length
   const specialistComplete=research.events.length===count&&researchedLegs===count
   // Number of leg dossiers checked is NOT the number of research steps closed.
@@ -134,7 +171,7 @@ export async function evidencePricedTicket(
     complete:research.complete&&specialistComplete,verifiedEvents:research.verifiedEvents,
     quotedLegs:0,missingQuotes:count,sourceAudit:initialSources,
     specialistChecks,researchedLegs,modelAudit,
-    decisionAudit:preliminaryDecisionAudit,conditional:!checklistComplete,
+    decisionAudit:preliminaryDecisionAudit,reviewedBeforeSelection,removedConflicts,conditional:!checklistComplete,
     dossierComplete:checklistComplete,
     multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
     explanation:'Preselección ESPN, cuotas todavía NO verificadas: '+quoteAccess+
@@ -443,7 +480,7 @@ export async function evidencePricedTicket(
   }}
   return{card,priced:true,placed:false,complete:true,
     conditional:!checklistComplete||elevatedMarketRisk,dossierComplete:checklistComplete,
-    marketRisk,decisionAudit,
+    marketRisk,decisionAudit,reviewedBeforeSelection,removedConflicts,
     verifiedEvents:research.verifiedEvents,
     quotedLegs:count,missingQuotes:0,sourceAudit,approvedLegs:0,
     specialistChecks,researchedLegs,modelAudit,
