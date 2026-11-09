@@ -57,6 +57,12 @@
 .figure[data-expression="focused"] .frame{
   box-shadow:0 0 0 2px #d69b76,0 12px 38px rgba(159,98,66,.17);
 }
+
+.brow{opacity:0;transition:opacity 150ms ease-out,transform 160ms ease-out}
+.cheek{opacity:0;transition:opacity 180ms ease-out}
+.figure[data-expression="focused"] .brow{opacity:.17}
+.figure[data-expression="concerned"] .brow{opacity:.38;transform:translateY(-1px)}
+.figure[data-expression="warm"] .cheek{opacity:.24}
 .statusLine{display:flex;align-items:center;gap:7px;min-height:28px;font-size:15px;line-height:22px}
 .statusLine strong{font-weight:600}
 .statusLine span:last-child{color:var(--dsw-alias-label-secondary,#736961)}
