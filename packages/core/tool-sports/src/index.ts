@@ -206,7 +206,8 @@ export function apply(ctx: Context): void {
         return{provider:entry.provider,ref:entry.ref,use:entry.use,
           configured:record.configured,writable:record.writable}
       }))
-      const env=await sportsEnv(ctx)
+      // Inspection is metadata-only: do not resolve secret values to check status.
+      const env=hydrateSportsSources(process.env)
       for(const key of keys){
         if(!key.configured&&!!env[key.ref]?.trim()){
           key.configured=true
