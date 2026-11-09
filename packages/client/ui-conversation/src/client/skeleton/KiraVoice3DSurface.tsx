@@ -40,12 +40,18 @@ export function KiraVoice3DSurface({phase,busy,motionRef,onReady}:KiraVoice3DSur
       const motion=motionRef.current
       const phase:Kira3DPhase=state.phase==='paused'&&state.busy
         ?'thinking':state.phase
-      renderer.draw({
-        elapsed:now-start,
-        level:motion?.level??0,
-        expression:motion?.expression??'neutral',
-        phase,reducedMotion:media?.matches??false,
-      })
+      try{
+        renderer.draw({
+          elapsed:now-start,
+          level:motion?.level??0,
+          expression:motion?.expression??'neutral',
+          phase,reducedMotion:media?.matches??false,
+        })
+      }catch{
+        renderer.dispose();renderer=undefined
+        onReady(false)
+        return
+      }
       frame=window.requestAnimationFrame(draw)
     }
     const initialize=()=>{
@@ -53,9 +59,10 @@ export function KiraVoice3DSurface({phase,busy,motionRef,onReady}:KiraVoice3DSur
       renderer?.dispose()
       renderer=createKira3DRenderer(canvas,image)
       if(renderer===undefined){onReady(false);return}
-      onReady(true)
       start=0
-      frame=window.requestAnimationFrame(draw)
+      // First frame is complete before hiding the 2D portrait.
+      draw(performance.now())
+      if(renderer!==undefined)onReady(true)
     }
     const onLost=(event:Event)=>{
       event.preventDefault()
