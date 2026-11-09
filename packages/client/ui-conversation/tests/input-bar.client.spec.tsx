@@ -1712,6 +1712,34 @@ describe('command launcher chrome and control seats', () => {
     }
   })
 
+
+  it('shows Kira official living avatar only during active hands-free mode and stops it', async () => {
+    const support=vi.spyOn(voiceAdapter,'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const start=vi.spyOn(voiceAdapter,'tryStartCodexRealtimeVoice').mockImplementation(async ()=>{
+      voiceAdapter.setVoiceAssistantActive(true)
+      voiceAdapter.setVoiceAssistantListening(true)
+      return {kind:'started'}
+    })
+    try{
+      const {view}=bench()
+      expect(view.container.querySelector('[data-kira-voice-avatar]')).toBeNull()
+      fireEvent.click(view.getByRole('button',{name:'开始语音助手'}))
+      await act(async()=>{await Promise.resolve()})
+      const avatar=view.container.querySelector('[data-kira-voice-avatar]')
+      expect(avatar).not.toBeNull()
+      expect(avatar?.getAttribute('data-voice-phase')).toBe('listening')
+      expect(avatar?.querySelector('img')?.getAttribute('src')).toMatch(/^data:image\/webp;base64,/u)
+      expect(avatar?.querySelector('ellipse')).toBeDefined()
+      fireEvent.click(view.getByRole('button',{name:'Finalizar conversación por voz'}))
+      await act(async()=>{await Promise.resolve()})
+      expect(view.container.querySelector('[data-kira-voice-avatar]')).toBeNull()
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(false)
+    }finally{
+      voiceAdapter.setVoiceAssistantActive(false)
+      start.mockRestore();support.mockRestore();cleanup()
+    }
+  })
+
   it('does not open a competing browser microphone while Codex Live owns transcript input', async () => {
     class FakeRecognition implements VoiceRecognitionLike {
       static instance: FakeRecognition | undefined
