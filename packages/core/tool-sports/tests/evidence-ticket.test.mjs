@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {evidenceTicket} from '../src/evidence-ticket.ts'
+import {boundedTicket,evidenceTicket} from '../src/evidence-ticket.ts'
 
 const day='2026-10-28',now=Date.parse('2026-10-28T15:00:00Z')
 const future='2026-10-28T23:00:00Z'
@@ -157,4 +157,10 @@ test('a verified NBA/soccer fixture survives a later rotating or paginated ESPN 
   assert.equal(result.events.length,5)
   assert.equal(dailyFetches,2,
     'final rendering must reuse the exact timestamped provider-verified game IDs')
+})
+
+test('individual ESPN research stages cannot remain in Running forever',async()=>{
+  const started=Date.now()
+  await assert.rejects(()=>boundedTicket(new Promise(()=>{}),35),/Tiempo de investigación excedido/)
+  assert.ok(Date.now()-started<500)
 })
