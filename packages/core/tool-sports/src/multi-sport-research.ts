@@ -13,13 +13,13 @@ type Competitor = {
 type Game = {
   id?:string|number;date?:string
   status?:{type?:{state?:string}}
-  competitions?:Array<{competitors?:Competitor[]}>
+  competitions?:Array<{competitors?:Competitor[];venue?:{name?:string;fullName?:string}}>
 }
 type Scoreboard={events?:Game[]}
 export type FormSide = {
   id:string;name:string;completedGames:number;wins:number;losses:number;draws:number
   averageScored:number|null;averageAllowed:number|null;averageMargin:number|null
-  restHours:number|null;lastResults:Array<{eventId:string;date:string;opponent:string;scored:number;allowed:number}>
+  restHours:number|null;lastResults:Array<{eventId:string;date:string;opponent:string;scored:number;allowed:number;homeAway?:'home'|'away';venue?:string|null}>
 }
 export type ResearchMatch = {
   eventId:string;date:string;sport:string;league:string;home:FormSide;away:FormSide
@@ -59,7 +59,10 @@ const form=(current:Competitor,all:Game[],kickoff:number):FormSide=>{
     const scored=cleanScore(mine.score),allowed=cleanScore(rival.score)
     if(scored===null||allowed===null)return []
     seenEvents.add(eventId)
-    return[{eventId:String(e.id??''),date:e.date??'',opponent:pname(rival),scored,allowed}]
+    const place=e.competitions?.[0]?.venue
+    const venue=String(place?.fullName??place?.name??'').trim().slice(0,100)||null
+    return[{eventId:String(e.id??''),date:e.date??'',opponent:pname(rival),scored,allowed,
+      homeAway:mine===home?'home' as const:'away' as const,venue}]
   }).sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,10)
   const wins=records.filter(r=>r.scored>r.allowed).length
   const losses=records.filter(r=>r.scored<r.allowed).length
