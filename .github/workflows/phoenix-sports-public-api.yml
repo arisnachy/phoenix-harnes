@@ -40,3 +40,5 @@ jobs:
           node --check scripts/phoenix-sports-live-probe.mjs
           node --test scripts/phoenix-sports.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/chat-sports.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-public-odds-pages.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-exact-espn-winner.test.mjs

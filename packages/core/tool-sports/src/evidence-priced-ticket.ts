@@ -7,7 +7,9 @@ import {auditTicketDecisions,readDecisionPolicy,type TicketDecisionAudit} from '
 import {auditTicketMarketRisk,quoteSideNoVig,type TicketMarketRisk} from './ticket-risk-audit.ts'
 import {investigateTicketSpecialists,type SpecialistGate} from './ticket-specialist-gate.ts'
 import { keylessEnabled,keylessOdds,type KeylessQuote } from './keyless-odds.ts'
-import { marketOddsDetailed,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome,type OddsResearchObservation } from './sports.ts'
+import {lookupExactEspnWinner} from './sports-exact-espn-winner.ts'
+import {researchPublicOddsWebsites} from './sports-public-odds-pages.ts'
+import { getFeed,marketOddsDetailed,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome,type OddsResearchObservation } from './sports.ts'
 import {fetchBetBetterModels,findModelOpinion,type ModelForecast} from './betbetter-model-evidence.ts'
 import {enrichSpecialistNarrative,type TicketNarrative} from './sports-ticket-narrative.ts'
 
@@ -261,7 +263,49 @@ export async function evidencePricedTicket(
       }] satisfies KeylessQuote[]
     })
   }))
-  const all=[...keyless,...additional.flatMap(s=>s.status==='fulfilled'?s.value:[])]
+  const discovered=[...keyless,...additional.flatMap(s=>s.status==='fulfilled'?s.value:[])]
+  // A league-level ESPN scan has an eight-game cap. On short nightly slates
+  // that cap can miss the requested event entirely, especially when games are
+  // grouped under the following UTC day. Retry only exact still-unpriced ESPN
+  // event IDs, with source timestamps and provider names independently checked.
+  const exactTargets=quotesProvider||env.PHOENIX_SPORTS_ESPN_DISABLED==='1'?[]:
+    research.events.filter(event=>{
+      const kickoff=Date.parse(event.kickoff)
+      return Number.isFinite(kickoff)&&kickoff>now&&!discovered.some(q=>
+        normalize(q.home)===normalize(event.home)&&
+        normalize(q.away)===normalize(event.away)&&
+        Math.abs(Date.parse(q.time)-kickoff)<=3_600_000&&
+        q.market===(event.sport==='soccer'?'1x2':'h2h'))
+    }).slice(0,6)
+  const exactReports=await Promise.allSettled(exactTargets.map(async event=>{
+    const sportKey=leagueSportKey[event.league]??
+      (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
+    if(!sportKey)return null
+    const deadline=AbortSignal.timeout(9_000)
+    const bounded:typeof fetch=(input,init)=>{
+      const signal=init?.signal?AbortSignal.any([init.signal,deadline]):deadline
+      return fetcher(input,{...init,signal})
+    }
+    return lookupExactEspnWinner({
+      sportKey,eventId:event.eventId,date:day,
+      home:event.home,away:event.away,kickoff:event.kickoff,
+    },<T>(url:string)=>getFeed<T>(url,bounded),now)
+  }))
+  const specific=exactReports.flatMap(row=>row.status==='fulfilled'&&row.value?
+    row.value.quotes:[])
+  const rawExactReferences=exactReports.reduce((total,row)=>
+    total+(row.status==='fulfilled'?row.value?.referenceCount??0:0),0)
+  const rawExactCount=specific.length
+  if(exactTargets.length){
+    fallbackSources.push({provider:'ESPN Site/Core',
+      status:rawExactCount?'observed':'empty',count:rawExactCount,
+      detail:'Consulta por ID real de '+exactTargets.length+
+        ' partidos, incluyendo el siguiente día UTC; '+
+        rawExactCount+' moneylines vigentes y '+rawExactReferences+
+        ' referencias sin fecha o caducadas. No se aceptaron líneas sin casa/updatedAt.',
+    })
+  }
+  const all=[...discovered,...specific]
   const groups:KeylessQuote[][]=research.events.map(event=>{
     const kickoff=Date.parse(event.kickoff)
     const doubleChance=event.sport==='soccer'&&marketPreference==='double_chance'
@@ -358,11 +402,61 @@ export async function evidencePricedTicket(
       reason:reference.reason,source:reference.endpointSource,nonCotizable:true},
       rationale:(String(original.rationale??'').slice(0,300)+' · '+label).slice(0,480)}
   })
+  // Last, bounded public-web reconnaissance for legs still without a *current*
+  // bookmaker quote. Unlike ESPN Core, an odds-comparator HTML price has no
+  // independently verified bookmaker updatedAt or event identity. Expose it
+  // as an attributed REFERENCE with its exact URL, never as a priced leg.
+  const unresolved=research.events.flatMap((event,index)=>
+    groups[index]?.length?[]:[{event,index}]).slice(0,6)
+  const siteResearch=quotedLegs===count||quotesProvider?[]:
+    await Promise.allSettled(unresolved.map(async({event,index})=>{
+      const sportKey=leagueSportKey[event.league]??
+        (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
+      if(!sportKey)return null
+      return{index,report:await researchPublicOddsWebsites({
+        sportKey,date:day,home:event.home,away:event.away,
+      },fetcher,now)}
+    }))
+  const websiteByIndex=new Map(siteResearch.flatMap(item=>
+    item.status==='fulfilled'&&item.value?
+      [[item.value.index,item.value.report] as const]:[]))
+  const hintedLegs=referenceLegs.map((row,index)=>{
+    const report=websiteByIndex.get(index)
+    if(!report||!row||typeof row!=='object'||Array.isArray(row))return row
+    const leg=row as Record<string,unknown>
+    const observations=report.pages.map(page=>({
+      provider:page.provider,url:page.url,status:page.status,
+      pageObservedAt:page.pageObservedAt,
+      quoteUpdatedAt:null,bookmakerVerified:false,
+      referenceMoneylines:page.referenceMoneylines,
+    }))
+    const chosen=research.events[index]?.pick==='home'?
+      research.events[index]?.home:research.events[index]?.away
+    const visible=report.pages.flatMap(page=>page.referenceMoneylines)
+      .find(ref=>normalize(ref.selection)===normalize(chosen??''))
+    const reference=visible?'Moneyline visible de comparador '+visible.american+
+      ' (decimal '+visible.decimal+'), SIN casa ni fecha de actualización, '+
+      'NO cotizable. ':''
+    // Show the result in the existing rationale field as well: older clients
+    // may not render the new typed webOddsResearch array yet.
+    return{...leg,webOddsResearch:observations,
+      rationale:(reference+String(leg.rationale??'')).slice(0,480),
+      oddsReferenceNote:'Investigadas '+observations.length+
+        ' páginas públicas. Precios de comparador solo referenciales '+
+        '(sin casa, actualización ni aceptación verificadas).'}
+  })
+  const webObserved=siteResearch.filter(x=>x.status==='fulfilled'&&
+    x.value?.report.pages.some(p=>p.status==='observed-team-mentions')).length
+  if(siteResearch.length)sourceAudit.push(audited('ESPN/Oddschecker/ScoresAndOdds WEB',
+    webObserved?'observed':'empty',0,
+    'Se inspeccionaron '+siteResearch.length+' partidos con '+webObserved+
+    ' menciones próximas de equipos; las cifras HTML son referencia sin '+
+    'bookmaker ni hora de actualización, NO cuotas elegibles.'))
   const auditSummary=' Cuotas cotejadas: '+quotedLegs+'/'+count+
     ' selecciones; proveedores: '+sourceAudit.map(x=>x.source+' '+x.status+
     ' ('+x.offers+' observaciones)').join('; ')+'.'
   const auditCard:ChatBlock={...researchCard,props:{...researchCard.props,
-    legs:referenceLegs,
+    legs:hintedLegs,
     subtitle:quotedLegs!==count?'TICKET DE INVESTIGACIÓN · '+quotedLegs+'/'+count+
       ' cuotas verificadas · '+reportedReferences+' precios ESPN de referencia':
       researchCard.props.subtitle,
