@@ -6,7 +6,7 @@ import type {MarketOutcome} from './sports.ts'
 import {crosscheckFreeFixture,type BackupFinding} from './free-sports-source-audit.ts'
 import {auditSportChecklist,type SportChecklist,type StepObservation} from './daily-specialist-checklist.ts'
 import {fetchEspnInjuryBackup} from './espn-injury-backup.ts'
-import {readNbaNflDepthPreviews,compareNbaNflCandidate,
+import {readNbaNflDepthPreviews,compareNbaNflCandidate,compareIndividualMetrics,
   type DepthPreview,type PickComparison} from './nba-nfl-keyless-closure.ts'
 import {investigateNfl} from './nfl-evidence-research.ts'
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
@@ -139,6 +139,13 @@ export async function investigateTicketSpecialist(
         else pending.push('Depth chart NFL '+(i?'visitante':'local')+
           ' no verificable: '+depth.detail)
       }
+      const qbStats=compareIndividualMetrics('nfl',
+        d.teams.home.roster.filter(x=>x.role==='quarterback').map(x=>({
+          name:x.name,position:x.position,stats:x.statistics})),
+        d.teams.away.roster.filter(x=>x.role==='quarterback').map(x=>({
+          name:x.name,position:x.position,stats:x.statistics})))
+      steps.push(...qbStats.observations)
+      pending.push(...qbStats.missing)
       pending.push('Lista de INACTIVOS y QB oficial pendientes: https://www.nfl.com/injuries/. '+
         'Un depth chart NO confirma QB titular')
     }else if(game.sport==='basketball'&&(game.league==='nba'||game.league==='wnba')){
@@ -189,6 +196,11 @@ export async function investigateTicketSpecialist(
           else pending.push('Rotación NBA '+(i?'visitante':'local')+
             ' no verificable: '+depth.detail)
         }
+        const individuals=compareIndividualMetrics('nba',
+          d.teams.home.roster.map(x=>({name:x.name,position:x.position,stats:x.stats})),
+          d.teams.away.roster.map(x=>({name:x.name,position:x.position,stats:x.stats})))
+        steps.push(...individuals.observations)
+        pending.push(...individuals.missing)
         pending.push('Informe médico oficial NBA POR HORA pendiente: '+
           'https://official.nba.com/nba-injury-report-2026-27-season/')
       }
