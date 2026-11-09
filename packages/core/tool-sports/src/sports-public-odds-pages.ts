@@ -40,9 +40,12 @@ const today=(now:number)=>new Intl.DateTimeFormat('en-CA',{
 export function publicOddsWebsitePages(sportKey:string):Page[]{
   if(!/^[a-z0-9_]{3,75}$/u.test(sportKey))throw Error('Liga no válida')
   const routes:Page[]=[{provider:'ESPN',url:'https://www.espn.com/sports-betting/odds'}]
+  if(sportsPages[sportKey])routes.push({
+    provider:'ESPN',url:'https://www.espn.com/'+sportsPages[sportKey]+'/odds',
+  })
   const northAmerica=sportsPages[sportKey]
-  if(northAmerica&&northAmerica!=='wnba')routes.push({
-    provider:'ScoresAndOdds',url:'https://www.scoresandodds.com/'+northAmerica,
+  if(northAmerica)routes.push({
+    provider:'ScoresAndOdds',url:'https://www.scoresandodds.com/'+northAmerica+'/odds',
   })
   if(sportKey.startsWith('soccer_')){
     const slug=soccerPages[sportKey]
