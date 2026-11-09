@@ -52,6 +52,8 @@ export async function evidencePricedTicket(
     prediction:ModelForecast|null}>;
   conditional:boolean;dossierComplete:boolean;
   explanation:string;reviewedBeforeSelection:number;removedConflicts:number;
+  trackingEvents:Array<{eventId:string;sport:string;league:string;date:string;
+    pick:'home'|'away';kickoff:string}>;
   marketRisk?:TicketMarketRisk;
   decisionAudit:TicketDecisionAudit}>{
   const researchFetcher=fetcher===fetch?dailyResearchFetcher(fetcher,env):fetcher
@@ -100,6 +102,10 @@ export async function evidencePricedTicket(
     status:'unavailable' as const,verifiedSteps:[],pendingSteps:['Sin expediente verificado'],
     approvedForBetting:false as const,checkedAt:new Date(now).toISOString(),
   })
+  const trackingEvents=research.events.map(e=>({
+    eventId:e.eventId,sport:e.sport,league:e.league,date:day,
+    pick:e.pick,kickoff:e.kickoff,
+  }))
   const researchedLegs=specialistChecks.filter(x=>x.status==='researched').length
   const specialistComplete=research.events.length===count&&researchedLegs===count
   // Number of leg dossiers checked is NOT the number of research steps closed.
@@ -170,7 +176,7 @@ export async function evidencePricedTicket(
   const base={card:researchCard,priced:false as boolean,placed:false as const,
     complete:research.complete&&specialistComplete,verifiedEvents:research.verifiedEvents,
     quotedLegs:0,missingQuotes:count,sourceAudit:initialSources,
-    specialistChecks,researchedLegs,modelAudit,
+    specialistChecks,researchedLegs,modelAudit,trackingEvents,
     decisionAudit:preliminaryDecisionAudit,reviewedBeforeSelection,removedConflicts,conditional:!checklistComplete,
     dossierComplete:checklistComplete,
     multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
@@ -483,7 +489,7 @@ export async function evidencePricedTicket(
     marketRisk,decisionAudit,reviewedBeforeSelection,removedConflicts,
     verifiedEvents:research.verifiedEvents,
     quotedLegs:count,missingQuotes:0,sourceAudit,approvedLegs:0,
-    specialistChecks,researchedLegs,modelAudit,
+    specialistChecks,researchedLegs,modelAudit,trackingEvents,
     multisportSatisfied:research.multisportSatisfied,
     explanation:'Las '+count+' selecciones tienen cuota vigente y la misma casa '+best.book+
       '. Decisión crítica: '+decisionAudit.recommendation+
