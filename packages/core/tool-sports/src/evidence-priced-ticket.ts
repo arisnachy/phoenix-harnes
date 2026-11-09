@@ -92,7 +92,12 @@ export async function evidencePricedTicket(
     reviewCandidates)
   // Full specialist reassessment is retained for a preliminary timeout or
   // unavailable dossier. Never treat a short preflight as completed research.
-  const pendingGames=research.events.filter(e=>preview.get(e.eventId)?.status!=='researched')
+  const pendingGames=research.events.filter(e=>{
+    const existing=preview.get(e.eventId)
+    // A genuine incomplete dossier is evidence, not a retryable outage.
+    // Re-evaluating it with a new subset may falsely promote a missing lineup.
+    return !existing||existing.status==='unavailable'
+  })
     .map(e=>({sport:e.sport,league:e.league,eventId:e.eventId,
       date:day,home:e.home,away:e.away,kickoff:e.kickoff}))
   const retried=await specialistResearcher(pendingGames,researchFetcher,now,env)
@@ -355,7 +360,10 @@ export async function evidencePricedTicket(
     explanation:'Borrador CONFLICTIVO: los equipos o la localía no coinciden con el '+
       'partido verificado. No se adjudican cuotas a encuentros ambiguos.'}
   if(!research.complete)return{...checked,
-    explanation:'Borrador INCOMPLETO: '+research.verifiedEvents+'/'+count+
+    explanation:(removedConflicts>0?
+      'Borrador CONFLICTIVO: '+removedConflicts+
+      ' identidades contradictorias excluidas antes de elegir. ':'')+
+      'Borrador INCOMPLETO: '+research.verifiedEvents+'/'+count+
       ' partidos con tendencia histórica documentada, '+
       quotedLegs+' con precio cotejado. '+
       (research.multisportSatisfied?'':'No cumple diversidad de deportes. ')+
