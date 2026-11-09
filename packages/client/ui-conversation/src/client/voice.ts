@@ -162,6 +162,8 @@ interface CodexRealtimeVoiceSession {
   /** Reopen the human transcript path while RTC finishes playing authorized speech. */
   inputResumeTimer?: number
   audioDrainUntil?: number
+  /** Limit tolerance for late V3 markers so autonomous speech remains blocked. */
+  lateAssistantTurnMarkers?: number
   /** One native generation can report both response.done and assistant turn.done. */
   lastCompletedNativeTerminal?: {
     readonly key: string
@@ -244,6 +246,7 @@ function clearCodexRealtimeTimers(session: CodexRealtimeVoiceSession): void {
   delete session.audioDrainTimer
   delete session.inputResumeTimer
   delete session.audioDrainUntil
+  delete session.lateAssistantTurnMarkers
   delete session.lastCompletedNativeTerminal
   delete session.disconnectTimer
   delete session.inactivityTimer
@@ -477,6 +480,7 @@ function clearCodexRealtimeAudioDrain(session: CodexRealtimeVoiceSession): void 
   delete session.audioDrainTimer
   delete session.inputResumeTimer
   delete session.audioDrainUntil
+  delete session.lateAssistantTurnMarkers
 }
 
 /**
@@ -687,6 +691,7 @@ function finishNativeUtterance(session: CodexRealtimeVoiceSession, utterance: Pe
   // Leave that already-authorized audio audible for a bounded drain window.
   clearCodexRealtimeAudioDrain(session)
   session.audioDrainUntil = Date.now() + CODEX_VOICE_AUDIO_DRAIN_MS
+  session.lateAssistantTurnMarkers = 0
   // Keep the speaker audible during RTC draining, but do not ignore a natural
   // short answer for six seconds after the preceding generated sentence ends.
   session.inputResumeTimer = window.setTimeout(() => {
@@ -1439,10 +1444,14 @@ function updateCodexRealtimePhase(payload: string): void {
   }
   const assistantStarted = type === 'response.created' || assistantTurnCreated
   if (assistantStarted && session.activeUtterance === undefined) {
-    // V3 may send repeated late assistant turn.created events for the already
-    // completed reply. Do not mute buffered speech before the drain expires.
+    // Tolerate a small number of duplicate V3 turn markers during RTC drain,
+    // but never grant indefinite permission to autonomous model speech.
     if (assistantTurnCreated && session.audioDrainUntil !== undefined
-      && Date.now() < session.audioDrainUntil) return
+      && Date.now() < session.audioDrainUntil
+      && (session.lateAssistantTurnMarkers ?? 0) < 3) {
+      session.lateAssistantTurnMarkers = (session.lateAssistantTurnMarkers ?? 0) + 1
+      return
+    }
     muteCodexRealtimeAudio(session, 'unsolicited-response')
     // Some realtime transports can start autonomous VAD replies even with
     // create_response:false. Suppress unverified "sigo en ello" narration.
