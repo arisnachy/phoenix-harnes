@@ -65,3 +65,19 @@ export async function registerCloudReceipt(reference:string,
   catch{return{status:'error',issueNumber:null,
     reason:'El recibo contiene mercados sin evaluación remota segura; no se registró parcialmente.'}}
 }
+
+/** Daily market shortlist tickets have exact research-priced side and line. */
+export async function registerCloudMarkets(legs:readonly CloudLeg[],
+  env:NodeJS.ProcessEnv,transport:typeof fetch=fetch):Promise<CloudEnrollment>{
+  if(env.PHOENIX_SPORTS_CLOUD_TRACKING_ENABLED!=='1')
+    return{status:'disabled',issueNumber:null,
+      reason:'Seguimiento cloud desactivado; ticket permanece solo en el chat.'}
+  try{
+    const ticket=validateCloudTicket({version:1,kind:'research',
+      reference:'PHX-'+randomUUID(),createdAt:new Date().toISOString(),legs:[...legs]})
+    return await enrollCloudTicket(ticket,env,transport)
+  }catch{
+    return{status:'error',issueNumber:null,
+      reason:'Un mercado no tiene identidad, período o línea verificables; seguimiento no registrado.'}
+  }
+}
