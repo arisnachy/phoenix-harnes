@@ -21,6 +21,9 @@ export type TicketNarrative={
   news:TicketNewsItem[];
   externalOpinions:Array<{publisher:string;headline:string;publishedAt:string|null;
     discoveryUrl:string;status:'indexed-headline-only'}>;
+  externalModel:{provider:string;status:'support'|'contradiction'|'unavailable';
+    selection:string|null;modelProbabilityPercent:number|null;updatedAt:string|null;
+    sourceUrl:string|null};
   venue:{name:string|null;city:string|null;venueSplit:'verified'|'not-verified';
     games:number;wins:number;losses:number};
   directOpponentHistory:{status:'verified'|'not-verified';note:string;
@@ -166,7 +169,8 @@ export function composeTicketLegNarrative(
   return{
     eventId:event.eventId,selected,title,status:documented?'documented':'conditional',
     selectionWhy,favorable,contradictions,specialistEvidence,criticalPending,news,
-    externalOpinions:[],
+    externalOpinions:[],externalModel:{provider:'Bet Better',status:'unavailable',
+      selection:null,modelProbabilityPercent:null,updatedAt:null,sourceUrl:null},
     venue:{name:venueName,city:venueCity,venueSplit:venueGames>0?'verified':'not-verified',
       games:venueGames,wins:venueWins,losses:venueLosses},
     directOpponentHistory:{status:opponentGames>0?'verified':'not-verified',
@@ -188,6 +192,9 @@ export function enrichSpecialistNarrative(
   prior:TicketNarrative|null|undefined,
   specialist?:SpecialistGate,
   marketNoVigPercent?:number|null,
+  externalOpinion?:{status:'support'|'contradiction'|'unavailable';prediction?:{
+    selection:string;modelProbabilityPct:number;updatedAt:string;provider:string;
+  }|null},
 ):TicketNarrative|null{
   if(!prior)return null
   const check=specialist?.eventId===prior.eventId?specialist:undefined
@@ -206,6 +213,15 @@ export function enrichSpecialistNarrative(
   }:prior.percentage
   const documented=check?.status==='researched'&&check.checklist?.complete===true&&
     contradictions.length===0
+  const prediction=externalOpinion?.prediction
+  const modelPercent=prediction&&Number.isFinite(prediction.modelProbabilityPct)&&
+    prediction.modelProbabilityPct>=0&&prediction.modelProbabilityPct<=100?
+    prediction.modelProbabilityPct:null
+  const externalModel=prediction?{provider:'Bet Better',status:externalOpinion?.status??'unavailable',
+    selection:clean(prediction.selection,100)||null,modelProbabilityPercent:modelPercent,
+    updatedAt:Number.isFinite(Date.parse(prediction.updatedAt))?prediction.updatedAt:null,
+    sourceUrl:'https://betbetter.world'} as TicketNarrative['externalModel']:
+    prior.externalModel
   const explanationForChat=prior.explanationForChat
     .replace(/^Porcentaje: .*$/mu,'Porcentaje: '+
       (percentage.value===null?'no disponible':percentage.value.toFixed(1)+'%')+
@@ -214,9 +230,16 @@ export function enrichSpecialistNarrative(
       'investigación especializada documentada.':
       'condicional; indicadores críticos pendientes o sin comprobar.'))+
     (evidence.length?'\nEspecialista: '+evidence.slice(0,4).join('; ')+'.':'')+
-    (pending.length?'\nPendientes: '+pending.slice(0,5).join('; ')+'.':'')
+    (pending.length?'\nPendientes: '+pending.slice(0,5).join('; ')+'.':'')+
+    (prediction?'\nModelo externo independiente Bet Better: pronostica '+
+      clean(prediction.selection,100)+', '+(modelPercent===null?'porcentaje no verificado':
+      modelPercent.toFixed(1)+'%')+', '+(externalOpinion?.status??'unavailable')+
+      '. Fuente https://betbetter.world, actualizado '+clean(prediction.updatedAt,45)+
+      '. Es segunda opinión con licencia CC BY, no precio de bookmaker ni certeza.':
+      '\nModelo externo: sin predicción comprobada para este evento.');
   return {...prior,status:documented?'documented':'conditional',
     specialistEvidence:evidence,criticalPending:pending,contradictions,percentage,
+    externalModel,
     favorable:uniq([...prior.favorable,...evidence.slice(0,2).map(x=>'Datos especialistas: '+x)],6),
     explanationForChat}
 }
