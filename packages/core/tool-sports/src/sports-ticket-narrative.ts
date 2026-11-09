@@ -19,8 +19,10 @@ export type TicketNarrative={
   selectionWhy:string;favorable:string[];contradictions:string[];
   specialistEvidence:string[];criticalPending:string[];
   news:TicketNewsItem[];
-  venue:{name:string|null;city:string|null;venueSplit:'not-verified'};
-  directOpponentHistory:{status:'not-verified';note:string};
+  venue:{name:string|null;city:string|null;venueSplit:'verified'|'not-verified';
+    games:number;wins:number;losses:number};
+  directOpponentHistory:{status:'verified'|'not-verified';note:string;
+    games:number;wins:number;losses:number};
   referee:{names:string[];bias:'not-assessed';note:string};
   weather:{status:'verified'|'unavailable'|'not-applicable';description:string;source:string|null};
   imagery:{imageUrl:string|null;attribution:string|null;articleUrl:string|null};
@@ -76,7 +78,16 @@ export function composeTicketLegNarrative(
   })).filter(x=>x.headline)
   const storyWithImage=news.find(n=>n.imageUrl&&n.articleUrl)
   const image=storyWithImage?.imageUrl??null
-  const venueName=clean(deep?.venue?.name,120)||null
+  const historical=leg.historicalContext&&typeof leg.historicalContext==='object'&&
+    !Array.isArray(leg.historicalContext)?leg.historicalContext as Record<string,unknown>:{}
+  const size=(key:string)=>typeof historical[key]==='number'&&
+    Number.isInteger(historical[key])&&Number(historical[key])>=0&&
+    Number(historical[key])<=10?Number(historical[key]):0
+  const opponentGames=size('opponentGames'),opponentWins=size('opponentWins'),
+    opponentLosses=size('opponentLosses')
+  const venueGames=size('venueGames'),venueWins=size('venueWins'),
+    venueLosses=size('venueLosses')
+  const venueName=clean(deep?.venue?.name,120)||clean(historical.venueName,120)||null
   const venueCity=clean(deep?.venue?.city,110)||null
   const officials=(deep?.officials??[]).map(x=>clean(x.name,100))
   const climate=deep?.weather
@@ -130,12 +141,19 @@ export function composeTicketLegNarrative(
     favorable.length?'Evidencia favorable: '+favorable.slice(1).join('; ')+'.':'',
     news.length?'Noticias relacionadas: '+news.map(x=>x.headline).slice(0,2).join('; ')+
       '. Son titulares, no lesiones o picks confirmados.':'Noticias relevantes: sin artículos individualizados comprobados.',
-    venueName?'Sede comprobada: '+venueName+(venueCity?' ('+venueCity+')':'')+'.':
-      'Rendimiento específico de estadio: pendiente de cotejo histórico.',
+    venueName?'Sede identificada: '+venueName+(venueCity?' ('+venueCity+')':'')+'.':
+      'Sede sin nombre comprobado.',
+    venueGames>0?'En ese estadio, '+venueGames+' partido(s) previos observados en la muestra: '+
+      venueWins+' victorias y '+venueLosses+' derrotas; historial parcial, no ventaja calculada.':
+      'Rendimiento en estadio exacto: no verificado.',
     'Árbitro: '+(officials.length?officials.join(', '):'asignación sin verificar')+
       '. Ningún sesgo hacia un equipo queda demostrado por el nombre del oficial.',
     'Clima: '+weatherDescription,
-    'Duelo directo / jugador contra rival: sin muestra enlazada y validada; no se inventa una ventaja.',
+    opponentGames>0?'Historial ante este oponente en la muestra reciente: '+
+      opponentGames+' enfrentamiento(s), '+opponentWins+' victoria(s), '+
+      opponentLosses+' derrota(s); muestra pequeña, no predicción.':
+      'H2H reciente contra el oponente: sin enfrentamientos verificables en la muestra disponible.',
+    'Cruce individual jugador/portero/pitcher: pendiente de evidencia identificada por nombre e ID.',
     'Porcentaje: '+(percentage.value===null?'no disponible':percentage.value.toFixed(1)+'%')+
       '. '+percentage.warning,
     contradictions.length?'Advertencias: '+contradictions.slice(0,4).join('; ')+'.':
@@ -146,9 +164,12 @@ export function composeTicketLegNarrative(
   return{
     eventId:event.eventId,selected,title,status:documented?'documented':'conditional',
     selectionWhy,favorable,contradictions,specialistEvidence,criticalPending,news,
-    venue:{name:venueName,city:venueCity,venueSplit:'not-verified'},
-    directOpponentHistory:{status:'not-verified',
-      note:'No se debe extrapolar el H2H histórico a jugadores o porteros actuales sin IDs, fecha y muestra.'},
+    venue:{name:venueName,city:venueCity,venueSplit:venueGames>0?'verified':'not-verified',
+      games:venueGames,wins:venueWins,losses:venueLosses},
+    directOpponentHistory:{status:opponentGames>0?'verified':'not-verified',
+      games:opponentGames,wins:opponentWins,losses:opponentLosses,
+      note:opponentGames>0?'Registros ESPN observados entre los últimos encuentros; no extrapolar al duelo individual.':
+        'No se debe extrapolar el H2H histórico a jugadores o porteros actuales sin IDs, fecha y muestra.'},
     referee:{names:uniq(officials,6),bias:'not-assessed',
       note:'Penalizaciones, tarjetas y faltas requieren tasas ajustadas y datos anteriores al encuentro; jamás inferir favoritismo de un registro bruto.'},
     weather:{status:weatherStatus,description:weatherDescription,
