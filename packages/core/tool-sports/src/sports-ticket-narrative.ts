@@ -158,3 +158,41 @@ export function composeTicketLegNarrative(
     percentage,sources,explanationForChat:chat,
   }
 }
+
+/** Promote only verified specialist findings; a quote never repairs missing data. */
+export function enrichSpecialistNarrative(
+  prior:TicketNarrative|null|undefined,
+  specialist?:SpecialistGate,
+  marketNoVigPercent?:number|null,
+):TicketNarrative|null{
+  if(!prior)return null
+  const check=specialist?.eventId===prior.eventId?specialist:undefined
+  const evidence=uniq([...(prior.specialistEvidence??[]),
+    ...(check?.verifiedSteps??[]).map(x=>clean(x,180))],12)
+  const pending=uniq([...(check?.checklist?.criticalPending??[]),
+    ...(check?.pendingSteps??[])].map(x=>clean(x,180)),12)
+  const conflicts=(check?.sourceChecks??[]).filter(x=>x.status==='conflict')
+    .map(x=>'Conflicto de fuente: '+clean(x.detail,140))
+  const contradictions=uniq([...prior.contradictions,...pending,...conflicts],12)
+  const hasPrice=typeof marketNoVigPercent==='number'&&
+    Number.isFinite(marketNoVigPercent)&&marketNoVigPercent>=0&&marketNoVigPercent<=100
+  const percentage=hasPrice?{
+    value:marketNoVigPercent,kind:'market-no-vig' as const,
+    warning:'Probabilidad implícita SIN margen de la casa: referencia de mercado, no probabilidad de acierto calibrada.',
+  }:prior.percentage
+  const documented=check?.status==='researched'&&check.checklist?.complete===true&&
+    contradictions.length===0
+  const explanationForChat=prior.explanationForChat
+    .replace(/^Porcentaje: .*$/mu,'Porcentaje: '+
+      (percentage.value===null?'no disponible':percentage.value.toFixed(1)+'%')+
+      '. '+percentage.warning)
+    .replace(/^Estado: .*$/mu,'Estado: '+(documented?
+      'investigación especializada documentada.':
+      'condicional; indicadores críticos pendientes o sin comprobar.'))+
+    (evidence.length?'\nEspecialista: '+evidence.slice(0,4).join('; ')+'.':'')+
+    (pending.length?'\nPendientes: '+pending.slice(0,5).join('; ')+'.':'')
+  return {...prior,status:documented?'documented':'conditional',
+    specialistEvidence:evidence,criticalPending:pending,contradictions,percentage,
+    favorable:uniq([...prior.favorable,...evidence.slice(0,2).map(x=>'Datos especialistas: '+x)],6),
+    explanationForChat}
+}
