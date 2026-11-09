@@ -219,6 +219,9 @@ export function InputBar({
   )
   const voiceEnabled = voiceAssistant.active
   const [codexVoiceFailure, setCodexVoiceFailure] = useState<string | null>(null)
+  useEffect(() => {
+    if (voiceAssistant.lastError !== undefined) setCodexVoiceFailure(voiceAssistant.lastError)
+  }, [voiceAssistant.lastError])
   const [voiceRepairing, setVoiceRepairing] = useState(false)
   const voiceRepairAbortRef = useRef<AbortController | null>(null)
   const voiceRef = useRef<VoiceRecognitionLike | null>(null)

@@ -826,6 +826,18 @@ describe('browser voice adapter', () => {
       expect(isCodexRealtimeVoiceActive()).toBe(false)
       expect(getVoiceAssistantSnapshot().active).toBe(false)
       expect(audio?.isConnected).toBe(false)
+
+      // The service may accept an SDP connection but reject voice eligibility
+      // after the data channel opens. Show the real reason instead of silence.
+      await expect(tryStartCodexRealtimeVoice('session-harness')).resolves.toEqual({ kind: 'started' })
+      const rejectedChannel = FakeDataChannel.instance
+      rejectedChannel?.onmessage?.({ data: JSON.stringify({
+        type: 'error', error: { code: 'usage_check_failed', message: 'non-public details' },
+      }) })
+      await vi.waitFor(() => expect(getVoiceAssistantSnapshot().lastError).toContain('usage_check_failed'))
+      expect(isCodexRealtimeVoiceActive()).toBe(false)
+      expect(document.documentElement.dataset.phoenixVoiceServiceError).toBe('usage_check_failed')
+      expect(getVoiceAssistantSnapshot().lastError).not.toContain('non-public details')
     } finally {
       vi.useRealTimers()
       await stopCodexRealtimeVoice()
