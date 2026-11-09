@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto'
 
 export type FreeFixture={sport:string;league:string;eventId:string;date:string;
   home:string;away:string;kickoff:string}
-export type BackupFinding={provider:'TheSportsDB'|'OpenLigaDB'|'OpenFootball'|'FootballData.org'|'balldontlie'|'API-Football';
+export type BackupFinding={provider:'TheSportsDB'|'OpenLigaDB'|'OpenFootball'|'FootballData.org'|'balldontlie'|'API-Football'|'MLB StatsAPI'|'NHL Web API'|'nflverse schedules';
   status:'verified'|'partial'|'not-found'|'unavailable'|'conflict';
   url:string;checkedAt:string;detail:string}
 type Obj=Record<string,unknown>
@@ -251,6 +251,95 @@ async function apiFootballFixture(input:FreeFixture,fetcher:typeof fetch,now:num
     'API-Football no disponible: '+(e instanceof Error?e.message:String(e)).slice(0,80)}}
 }
 
+
+/** First-party MLB schedule and NHL web scoreboard: verified fixture identity
+ * and start time only. These sources do NOT publish book-specific prices here.
+ */
+const nhlName=(team:unknown):string=>{
+  const item=obj(team)
+  const direct=str(obj(item.name).default)||str(item.name)
+  if(direct)return direct
+  const place=str(obj(item.placeName).default)||str(item.placeName)
+  const mascot=str(obj(item.commonName).default)||str(item.commonName)
+  return [place,mascot].filter(Boolean).join(' ')
+}
+
+/** nflverse nfldata publishes schedules as a community-maintained CC BY 4.0
+ * CSV. It contains local calendar dates without a guaranteed UTC kickoff; its
+ * corroboration is ALWAYS partial. Avoid claiming that CSV lines are odds.
+ * Source: https://github.com/nflverse/nfldata/blob/master/data/games.csv
+ */
+const nflTeams:Readonly<Record<string,string>>={
+  ARI:'Arizona Cardinals',ATL:'Atlanta Falcons',BAL:'Baltimore Ravens',
+  BUF:'Buffalo Bills',CAR:'Carolina Panthers',CHI:'Chicago Bears',
+  CIN:'Cincinnati Bengals',CLE:'Cleveland Browns',DAL:'Dallas Cowboys',
+  DEN:'Denver Broncos',DET:'Detroit Lions',GB:'Green Bay Packers',
+  HOU:'Houston Texans',IND:'Indianapolis Colts',JAX:'Jacksonville Jaguars',
+  KC:'Kansas City Chiefs',LA:'Los Angeles Rams',LAC:'Los Angeles Chargers',
+  LV:'Las Vegas Raiders',MIA:'Miami Dolphins',MIN:'Minnesota Vikings',
+  NE:'New England Patriots',NO:'New Orleans Saints',NYG:'New York Giants',
+  NYJ:'New York Jets',PHI:'Philadelphia Eagles',PIT:'Pittsburgh Steelers',
+  SEA:'Seattle Seahawks',SF:'San Francisco 49ers',TB:'Tampa Bay Buccaneers',
+  TEN:'Tennessee Titans',WAS:'Washington Commanders',
+}
+const nflCode=(name:string):string=>
+  Object.keys(nflTeams).find(key=>canonical(nflTeams[key]!)===canonical(name))??''
+const nflCsvUrl='https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv'
+let nflCsvCache:{until:number;value:Promise<string>}|null=null
+async function loadNflCsv(fetcher:typeof fetch,now:number):Promise<string>{
+  if(fetcher===fetch&&nflCsvCache&&nflCsvCache.until>now)
+    return nflCsvCache.value
+  const request=(async()=>{
+    const response=await fetcher(nflCsvUrl,{headers:{accept:'text/csv'},
+      redirect:'error',signal:AbortSignal.timeout(8_000)})
+    if(!response.ok)throw Error('HTTP '+response.status)
+    if(Number(response.headers.get('content-length')||0)>3_000_000)
+      throw Error('NFL CSV supera el máximo de 3 MB')
+    const body=await response.text()
+    if(body.length>3_000_000)throw Error('NFL CSV supera el máximo de 3 MB')
+    if(!body.startsWith('game_id,')||!body.includes(',home_team,'))
+      throw Error('NFL CSV sin columnas verificables')
+    return body
+  })()
+  if(fetcher!==fetch)return request
+  nflCsvCache={until:now+20*60_000,value:request}
+  try{return await request}catch(e){nflCsvCache=null;throw e}
+}
+async function nflverseFixture(input:FreeFixture,fetcher:typeof fetch,
+  now:number):Promise<BackupFinding>{
+  const base={provider:'nflverse schedules' as const,url:nflCsvUrl,checkedAt:checked(now)}
+  try{
+    const csv=await loadNflCsv(fetcher,now)
+    const lines=csv.split(/\r?\n/u)
+    const columns=lines[0]!.split(',')
+    const at=(name:string)=>columns.indexOf(name)
+    const gameDate=at('gameday'),home=at('home_team'),
+      away=at('away_team'),espn=at('espn')
+    if([gameDate,home,away].some(i=>i<0))throw Error('NFL CSV sin columnas obligatorias')
+    const homeCode=nflCode(input.home),awayCode=nflCode(input.away)
+    if(!homeCode||!awayCode)return{...base,status:'not-found',
+      detail:'Equipo NFL sin correspondencia confirmada: no se inventó abreviatura'}
+    let reversed=false
+    // Recent calendar rows only: bounded scan of ~four seasons, no mass API.
+    for(const line of lines.slice(-1200)){
+      if(!line)continue
+      const cells=line.split(',')
+      if(cells[gameDate]!==input.date)continue
+      const recordedId=espn>=0?(cells[espn]??'').trim():''
+      if(recordedId&&/^\d{7,16}$/u.test(input.eventId)&&
+        recordedId!==input.eventId)continue
+      if(cells[home]===homeCode&&cells[away]===awayCode)
+        return{...base,status:'partial',
+          detail:'Equipos/localía y fecha coinciden con nflverse (CC BY 4.0); horario UTC NO corroborado'}
+      if(cells[home]===awayCode&&cells[away]===homeCode)reversed=true
+    }
+    return{...base,status:reversed?'conflict':'not-found',
+      detail:reversed?'nflverse contradice localía; revisar el evento':
+        'Sin partido cotejado en CSV de cobertura reciente; no demuestra ausencia'}
+  }catch(e){return{...base,status:'unavailable',
+    detail:'nflverse no accesible: '+(e instanceof Error?e.message:String(e)).slice(0,110)}}
+}
+
 /** Sources are independent checks, never sources of fresh bookmaker odds.
  * A no-key football.json JSON file has local kickoff times, NOT validated UTC;
  * it can only corroborate date and teams. Optional key is server-side.
@@ -272,6 +361,25 @@ export async function crosscheckFreeFixture(input:FreeFixture,
         when:str(o.strTimestamp)||str(o.dateEvent)}
     },input,fetcher,now))
   }
+  if(input.sport==='baseball'&&input.league==='mlb'){
+    const url='https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+input.date
+    reports.push(probe('MLB StatsAPI',url,x=>
+      arr(obj(x).dates).flatMap(d=>arr(obj(d).games)),x=>{
+      const game=obj(x),teams=obj(game.teams)
+      return{home:str(obj(obj(teams.home).team).name),
+        away:str(obj(obj(teams.away).team).name),when:str(game.gameDate)}
+    },input,fetcher,now))
+  }
+  if(input.sport==='hockey'&&input.league==='nhl'){
+    const url='https://api-web.nhle.com/v1/score/'+input.date
+    reports.push(probe('NHL Web API',url,x=>arr(obj(x).games),x=>{
+      const game=obj(x)
+      return{home:nhlName(game.homeTeam),away:nhlName(game.awayTeam),
+        when:str(game.startTimeUTC)}
+    },input,fetcher,now))
+  }
+  if(input.sport==='football'&&input.league==='nfl')
+    reports.push(nflverseFixture(input,fetcher,now))
   const bdlKey=env.PHOENIX_BALLDONTLIE_API_KEY?.trim()
   if(input.sport==='basketball'&&(input.league==='nba'||input.league==='wnba')&&bdlKey)
     reports.push(ballDontLieFixture(input,fetcher,now,bdlKey))
@@ -330,6 +438,7 @@ export const freeSourceInventory=[
   {name:'OpenFootball',access:'no-key',sport:'soccer',capability:'multi-league calendar/historical CC0',state:'integrated'},
   {name:'football-data.org',access:'free-key-optional',sport:'soccer',capability:'fixture matching of seven leagues',state:'integrated-opt-in'},
   {name:'nflverse',access:'no-key',sport:'football',capability:'weekly injury CSV',state:'integrated'},
+  {name:'nflverse schedules',access:'no-key-cc-by',sport:'football',capability:'NFL schedule and home/away/date only; partial without UTC',state:'integrated'},
   {name:'NBA Official Injury Report',access:'public-web',sport:'basketball',capability:'official player status',state:'manual-followup'},
   {name:'StatsBomb Open Data',access:'no-key',sport:'soccer',capability:'licensed historical xG/events; limited seasons',state:'historical-only'},
   {name:'The Odds API v4',access:'free-key-optional',sport:'multi',capability:'markets/prices',state:'existing-opt-in'},
