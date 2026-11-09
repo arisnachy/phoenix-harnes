@@ -53,7 +53,6 @@ export type DepthPreview={
 }
 type JsonRow=Record<string,unknown>
 const row=(v:unknown):JsonRow=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as JsonRow:{}
-const arr=(v:unknown):unknown[]=>Array.isArray(v)?v:[]
 const txt=(v:unknown,max=90)=>typeof v==='string'?v.trim().slice(0,max):''
 const validId=(v:string)=>/^\d{1,12}$/u.test(v)
 const projection=(payload:unknown,league:TwoSport)=>{
