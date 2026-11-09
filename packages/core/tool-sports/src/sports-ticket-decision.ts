@@ -111,8 +111,8 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
   const scenarios:DecisionScenario[]=[3,4,5].map(n=>{
     const count=n as 3|4|5,core=candidates.slice(0,count)
     return{count,eventIds:core.map(x=>x.eventId),
-      marketProductPct:core.length===count?Number(core.reduce((p,x)=>
-        p*x.marketNoVigPct!/100,1)*100).toFixed(2)*1:null}
+      marketProductPct:core.length===count?Number((core.reduce((p,x)=>
+        p*x.marketNoVigPct!/100,1)*100).toFixed(2)):null}
   })
   const excludedEvents=legs.filter(l=>l.verdict==='exclude').map(l=>l.eventId)
   const heldEvents=legs.filter(l=>l.verdict==='hold').map(l=>l.eventId)
