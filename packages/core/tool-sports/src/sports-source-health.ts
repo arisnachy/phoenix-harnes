@@ -174,10 +174,19 @@ export async function sportsSourcesHealth(
   if(keylessEnabled(env)){
     const bin=env.PHOENIX_SPORTS_ODDSHARVESTER_BIN?.trim()||'oddsharvester'
     const found=await probe(bin)
+    const pathExists=isAbsolute(bin)&&await fileExists(bin)
+    const declaredInstalled=oddsStep?.status==='installed'
+    const configuredVia=env.PHOENIX_SPORTS_ODDSHARVESTER_BIN?.trim()?
+      'ruta explícita/manifest del instalador':'PATH del proceso host'
     live.push({provider:'jordantete/OddsHarvester',purpose:'live-odds',
-      status:found?'configured':'missing-binary',
-      note:found?'CLI disponible; aún falta comprobar cuotas reales y acceso a OddsPortal.':
-        'CLI no ejecutable. Instala oddsharvester y Playwright Chromium en el Windows que ejecuta PHOENIX.'})
+      status:found?'configured':(pathExists||declaredInstalled?'install-error':'missing-binary'),
+      note:found?'CLI --help operativo por '+configuredVia+
+        '; aún falta comprobar cuotas reales y acceso a OddsPortal.':
+        (pathExists||declaredInstalled?
+          'El manifest o archivo indica instalado, pero este proceso NO puede ejecutar --help en '+configuredVia+
+          '; revisar entorno, versión de Python, permisos y Playwright; no reinstalar a ciegas.':
+          'Este proceso no encuentra el ejecutable en '+configuredVia+
+          '; comprobar ruta del instalador y PATH antes de reinstalar.')})
   }else live.push({provider:'jordantete/OddsHarvester',purpose:'live-odds',
     status:oddsStep?.status==='installing'?'installing':
       oddsStep?.status==='error'?'install-error':'disabled',
