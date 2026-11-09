@@ -83,7 +83,7 @@ test('no cross-site scraping or invalid date passes the fixed provider allowlist
 test('embedded scripts are ignored when finding public text but cannot become quotes',async()=>{
   const [page]=publicOddsWebsitePages('soccer_epl')
   const result=await readPublicOddsWebsitePage(page,'Barcelona','Real Madrid',
-    async()=>html('<script>Barcelona +180 Real Madrid -115</script><div>Other matches listed</div>'),at)
+    async()=>html('<script>Barcelona +180 Real Madrid -115</script><div>Other matches listed, including full schedules for several unrelated clubs this evening and more information for readers.</div>'),at)
   assert.equal(result.status,'not-found')
   assert.equal(result.bookmakerVerified,false)
 })
