@@ -27,6 +27,19 @@ const localDay=(when:Date)=>new Intl.DateTimeFormat('en-CA',{
   timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit',
 }).format(when)
 const dayNow=()=>localDay(new Date())
+/** A provider which never settles must not hold Kira's tool indefinitely.
+ * The lower-level HTTP transport still enforces its own timeout; this guard
+ * also covers cache and filesystem stalls and test adapters ignoring aborts.
+ */
+function settleWithin<T>(operation:Promise<T>,ms:number):Promise<T>{
+  let timer:ReturnType<typeof setTimeout>|undefined
+  const timeout=new Promise<never>((_resolve,reject)=>{
+    timer=setTimeout(()=>reject(Error('ESPN: tiempo de espera agotado')),ms)
+  })
+  return Promise.race([operation,timeout]).finally(()=>{
+    if(timer!==undefined)clearTimeout(timer)
+  })
+}
 const participant=(s:Side|undefined)=>{
   const rawId=s?.team?.id??s?.athlete?.id
   const id=typeof rawId==='number'||typeof rawId==='string'?String(rawId):''
@@ -59,10 +72,18 @@ export async function scoutDailySports(
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
 ):Promise<{date:string,checkedAt:string,events:DailySportsEvent[],
   totalEligible:number,coverage:DailySportsCoverage[],
+  diagnostics:{elapsedMs:number;requestTimeoutMs:number;requestedPartitions:number;
+    partialLeagues:number;unavailableLeagues:number},
   warning:string}>{
   if(!dateValid(date))throw Error('Fecha inválida, usar AAAA-MM-DD')
   if(!Number.isInteger(limit)||limit<1||limit>36)throw Error('Límite de 1 a 36 eventos')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración')
+  const startedAt=Date.now()
+  // 20 leagues x 2 UTC partitions; avoid serial waits through five long waves.
+  // Optional shorter budget is useful for operators and deterministic tests.
+  const requestedMs=Number(env.PHOENIX_SPORTS_SCAN_TIMEOUT_MS)
+  const requestTimeoutMs=Number.isInteger(requestedMs)&&requestedMs>=30&&requestedMs<=6000
+    ?requestedMs:4_500
   const coverage:DailySportsCoverage[]=[]
   const all:DailySportsEvent[]=[]
   const seen=new Set<string>()
@@ -72,13 +93,17 @@ export async function scoutDailySports(
   const nextUtcDay=new Date(Date.parse(date+'T00:00:00Z')+86_400_000)
     .toISOString().slice(0,10).replaceAll('-','')
   const partitions=[date.replaceAll('-',''),nextUtcDay]
-  for(let offset=0;offset<schedule.length;offset+=4){
-    const batch=schedule.slice(offset,offset+4)
+  // Eight leagues concurrently; both date partitions are independent and
+  // cannot block the other. Four-digit league groups and timeout budget remain
+  // visible in diagnostics instead of silently returning an empty slate.
+  for(let offset=0;offset<schedule.length;offset+=8){
+    const batch=schedule.slice(offset,offset+8)
     const reports=await Promise.allSettled(batch.map(async item=>{
       if(!sportsCatalog[item.sport]?.includes(item.league))throw Error('Liga fuera del catálogo')
-      return Promise.allSettled(partitions.map(day=>getFeed<Board>(
+      return Promise.allSettled(partitions.map(day=>settleWithin(getFeed<Board>(
         'https://site.api.espn.com/apis/site/v2/sports/'
-        +item.sport+'/'+item.league+'/scoreboard?dates='+day,fetcher)))
+        +item.sport+'/'+item.league+'/scoreboard?dates='+day,fetcher),
+        requestTimeoutMs)))
     }))
     for(let i=0;i<batch.length;i++){
       const item=batch[i]
@@ -111,11 +136,11 @@ export async function scoutDailySports(
         all.push({...item,eventId:id,kickoff:new Date(at).toISOString(),
           home,away,source:'ESPN Site API',status:'scheduled'})
       }
-      coverage.push({...item,status:valid?'available':boards.length===partitions.length?
-        'empty':'unavailable',futureEvents:valid,
-        reason:boards.length===partitions.length?
+      const full=boards.length===partitions.length
+      coverage.push({...item,status:valid?'available':full?'empty':'unavailable',
+        futureEvents:valid,reason:full?
           (valid?'Participantes y evento futuro confirmados':'Sin futuros verificables'):
-          'Cobertura parcial: falta una partición UTC del día solicitado'})
+          'Cobertura parcial: falta una partición UTC; los partidos recuperados sí se conservan'})
     }
   }
   // A high-fixture league must not displace all other disciplines.
@@ -137,7 +162,11 @@ export async function scoutDailySports(
     if(!progressed)break
   }
   return{date,checkedAt:new Date(now).toISOString(),events,totalEligible:all.length,
-    coverage,warning:'Lista de partidos verificables, NO ranking de ganancias ni probabilidades. '
+    coverage,diagnostics:{elapsedMs:Date.now()-startedAt,requestTimeoutMs,
+      requestedPartitions:schedule.length*partitions.length,
+      partialLeagues:coverage.filter(x=>x.reason.startsWith('Cobertura parcial')).length,
+      unavailableLeagues:coverage.filter(x=>x.status==='unavailable').length},
+    warning:'Lista de partidos verificables, NO ranking de ganancias ni probabilidades. '
       +'Investiga estadísticas, bajas, titulares, noticias y cuotas por mercado solo para '
       +'los candidatos priorizados. Sin precio fechado no hay selección cotizada.'}
 }

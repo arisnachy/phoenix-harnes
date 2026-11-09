@@ -21,9 +21,15 @@ test('audits every registered route and separates payload from ref-only or error
  assert.ok(result.results.some(x=>x.status==='data'))
  assert.ok(result.results.some(x=>x.status==='ref_only'))
  assert.ok(result.results.some(x=>x.status==='error'))
- assert.ok(seen.every(u=>u.startsWith('https://sports.core.api.espn.com/')||
-   u.startsWith('https://site.api.espn.com/')||
-   u.startsWith('https://site.web.api.espn.com/')))
+ const allowedHosts=new Set([
+   'sports.core.api.espn.com','site.api.espn.com','site.web.api.espn.com',
+   'cdn.espn.com','lm-api-reads.fantasy.espn.com','now.core.api.espn.com',
+ ])
+ assert.ok(seen.every(raw=>{
+   const url=new URL(raw)
+   return url.protocol==='https:'&&allowedHosts.has(url.hostname)&&
+     !url.username&&!url.password
+ }))
  assert.ok(result.results.every(x=>x.observedAt==='2026-11-02T17:00:00.000Z'))
 })
 test('skips parameterized routes with missing real IDs without network requests',async()=>{
