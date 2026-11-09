@@ -8,7 +8,7 @@ import {dailyResearchFetcher} from './sports-daily-preload.ts'
 
 export type FreeFixture={sport:string;league:string;eventId:string;date:string;
   home:string;away:string;kickoff:string}
-export type BackupFinding={provider:'TheSportsDB'|'OpenLigaDB'|'OpenFootball'|'FootballData.org'|'balldontlie'|'API-Football'|'API-Hockey'|'API-NFL'|'Big Balls NHL'|'MLB StatsAPI'|'NHL Web API'|'nflverse schedules';
+export type BackupFinding={provider:'TheSportsDB'|'OpenLigaDB'|'OpenFootball'|'FootballData.org'|'balldontlie'|'API-Football'|'API-Hockey'|'API-NFL'|'Big Balls NHL'|'MLB StatsAPI'|'NHL Web API'|'NBA Official CDN'|'nflverse schedules';
   status:'verified'|'partial'|'not-found'|'unavailable'|'conflict';
   url:string;checkedAt:string;detail:string}
 type Obj=Record<string,unknown>
@@ -43,10 +43,16 @@ function compare(home:string,away:string,when:string,input:FreeFixture,
   const same=h===expectedH&&a===expectedA
   const reverse=h===expectedA&&a===expectedH
   if(!same&&!reverse)return'not-found'
-  const timeOK=dateOnly?when.slice(0,10)===input.date:inside90(when,input.kickoff)
+  // ISO text with no explicit offset is NOT UTC; Date.parse() would silently
+  // use the host's local timezone and produce a false verified fixture.
+  const explicitZone=/(?:Z|[+-]\d{2}:?\d{2})$/iu.test(when)
+  const partial=dateOnly||!explicitZone
+  const utcDay=new Date(Date.parse(input.kickoff)).toISOString().slice(0,10)
+  const dateMatches=when.slice(0,10)===input.date||when.slice(0,10)===utcDay
+  const timeOK=partial?dateMatches:inside90(when,input.kickoff)
   if(!timeOK)return'not-found'
   if(reverse)return'conflict'
-  return dateOnly?'partial':'verified'
+  return partial?'partial':'verified'
 }
 type EventRow={home:string;away:string;when:string}
 const cache=new Map<string,{until:number;value:Promise<unknown>}>()
@@ -412,6 +418,27 @@ export async function crosscheckFreeFixture(input:FreeFixture,
         when:str(o.strTimestamp)||str(o.dateEvent)}
     },input,fetcher,now))
   }
+  if(input.sport==='basketball'&&input.league==='nba'){
+    // NBA's public CDN is independent of TheSportsDB. Its season schedule
+    // provides actual UTC start times; it is not a live odds or injury feed.
+    const url='https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json'
+    const utcDay=new Date(Date.parse(input.kickoff)).toISOString().slice(0,10)
+    reports.push(probe('NBA Official CDN',url,x=>{
+      const schedule=obj(obj(x).leagueSchedule)
+      if(String(schedule.leagueId)!=='00')throw Error('CDN leagueId no es NBA')
+      const gameDates=arr(schedule.gameDates)
+      if(!gameDates.length)throw Error('Calendario NBA vacío o estructura incompatible')
+      return gameDates.flatMap(day=>arr(obj(day).games)).filter(game=>{
+        const row=obj(game),date=str(row.gameDateTimeUTC)||str(row.gameTimeUTC)
+        return date.slice(0,10)===input.date||date.slice(0,10)===utcDay
+      }).slice(0,120)
+    },x=>{
+      const game=obj(x),home=obj(game.homeTeam),away=obj(game.awayTeam)
+      const team=(t:Obj)=>[str(t.teamCity),str(t.teamName)].filter(Boolean).join(' ')
+      return{home:team(home),away:team(away),
+        when:str(game.gameDateTimeUTC)||str(game.gameTimeUTC)}
+    },input,fetcher,now))
+  }
   if(input.sport==='baseball'&&input.league==='mlb'){
     const url='https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+input.date
     reports.push(probe('MLB StatsAPI',url,x=>
@@ -503,6 +530,7 @@ export const freeSourceInventory=[
   {name:'ESPN Site/Core',access:'no-key',sport:'multi',capability:'fixtures,results,rosters',state:'primary'},
   {name:'MLB StatsAPI',access:'no-key',sport:'baseball',capability:'fixtures,probable pitchers,stats',state:'primary'},
   {name:'NHL Web API',access:'no-key',sport:'hockey',capability:'fixtures,rosters,stats',state:'primary'},
+  {name:'NBA Official CDN',access:'public-json',sport:'basketball',capability:'NBA full-season fixture corroboration; UTC timestamps, no odds',state:'integrated'},
   {name:'TheSportsDB',access:'public-key-123',sport:'multi',capability:'secondary fixtures,partial free',state:'integrated'},
   {name:'OpenLigaDB',access:'no-key',sport:'soccer',capability:'Bundesliga fixtures',state:'integrated'},
   {name:'OpenFootball',access:'no-key',sport:'soccer',capability:'multi-league calendar/historical CC0',state:'integrated'},
