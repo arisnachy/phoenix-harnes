@@ -2,6 +2,7 @@
  * No combined-odds claims across different bookmakers or historical sources.
  */
 import { evidenceTicket } from './evidence-ticket.ts'
+import {dailyResearchFetcher} from './sports-daily-preload.ts'
 import {auditTicketDecisions,readDecisionPolicy,type TicketDecisionAudit} from './sports-ticket-decision.ts'
 import {auditTicketMarketRisk,quoteSideNoVig,type TicketMarketRisk} from './ticket-risk-audit.ts'
 import {investigateTicketSpecialists,type SpecialistGate} from './ticket-specialist-gate.ts'
@@ -52,7 +53,8 @@ export async function evidencePricedTicket(
   conditional:boolean;dossierComplete:boolean;
   explanation:string;marketRisk?:TicketMarketRisk;
   decisionAudit:TicketDecisionAudit}>{
-  const research=await evidenceTicket(count,date,sport,fetcher,now,env)
+  const researchFetcher=fetcher===fetch?dailyResearchFetcher(fetcher,env):fetcher
+  const research=await evidenceTicket(count,date,sport,researchFetcher,now,env)
   const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
     year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
   // A winner picked from records cannot bypass the discipline-specific dossier.
@@ -60,7 +62,7 @@ export async function evidencePricedTicket(
   const specialistChecks=await specialistResearcher(research.events.map(e=>({
     sport:e.sport,league:e.league,eventId:e.eventId,date:day,
     home:e.home,away:e.away,kickoff:e.kickoff,
-  })),fetcher,now,env)
+  })),researchFetcher,now,env)
   const researchedLegs=specialistChecks.filter(x=>x.status==='researched').length
   const specialistComplete=research.events.length===count&&researchedLegs===count
   // Number of leg dossiers checked is NOT the number of research steps closed.

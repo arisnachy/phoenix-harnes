@@ -4,6 +4,7 @@
  */
 import {getFeed,sportsCatalog} from './sports.ts'
 import {createHash} from 'node:crypto'
+import {dailyResearchFetcher} from './sports-daily-preload.ts'
 
 export type FreeFixture={sport:string;league:string;eventId:string;date:string;
   home:string;away:string;kickoff:string}
@@ -104,7 +105,11 @@ type OptionalProvider=keyof typeof providerLimits
 async function optionalJson(provider:OptionalProvider,url:string,headers:Record<string,string>,
   secret:string,fetcher:typeof fetch,now:number):Promise<unknown>{
   const request=async(budgetKey:string|null):Promise<unknown>=>{
-    const response=await fetcher(url,{headers,redirect:'error',signal:AbortSignal.timeout(8000)})
+    // Every production API-Football request, not only ticket preflight, shares
+    // the persisted 80/100 UTC quota budget. Injected test transports stay isolated.
+    const transport=provider==='API-Football'&&fetcher===fetch?
+      dailyResearchFetcher(fetcher,process.env,()=>now):fetcher
+    const response=await transport(url,{headers,redirect:'error',signal:AbortSignal.timeout(8000)})
     if(!response.ok){
       if(budgetKey&&(response.status===429||response.status===503)){
         const raw=response.headers.get('retry-after')??''
