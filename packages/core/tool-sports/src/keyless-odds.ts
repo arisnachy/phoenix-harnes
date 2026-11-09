@@ -56,6 +56,17 @@ const price=(value:unknown):number|null=>{
 const sportOK=(value:string):value is KeylessSport=>Object.hasOwn(keylessSports,value)
 const marketOK=(sport:KeylessSport,market:string):boolean=>
   (keylessSports[sport] as readonly string[]).includes(market)
+// The pinned OddsHarvester 0.20.0 uses home_away for 2-way winners.
+const cliMarketFor=(sport:KeylessSport,market:string):string=>
+  market==='moneyline'
+    &&(sport==='basketball'||sport==='baseball'||sport==='american-football')
+      ?'home_away':market
+const cliPeriodFor=(sport:KeylessSport,market:string):string|null=>
+  (market==='home_away'&&(
+    sport==='ice-hockey'||sport==='basketball'||sport==='baseball'
+    ||sport==='american-football'))?'full_including_ot':
+  (market==='1x2'&&(sport==='basketball'||sport==='american-football'))
+    ?'full_time':null
 const safeLink=(value:unknown):string|null=>{
   const raw=str(value,500)
   try{
@@ -144,8 +155,11 @@ export function oddsHarvesterHistoricArgs(
     !/^[a-z0-9][a-z0-9-]{2,80}$/u.test(league)||
     !/^(?:20[0-9]{2})(?:-20[0-9]{2})?$/u.test(season)||
     !file||file.length>512)throw Error('Consulta histórica inválida')
+  const upstreamMarket=cliMarketFor(sport,market)
+  const period=cliPeriodFor(sport,upstreamMarket)
   return ['historic','--sport',sport,'--league',league,'--season',season,
-    '--market',market,'--max-pages','2','--headless','--format','json',
+    '--market',upstreamMarket,...(period?['--period',period]:[]),
+    '--max-pages','2','--headless','--format','json',
     '--stream-ndjson','--output',file]
 }
 export async function keylessHistoricOdds(
@@ -209,14 +223,8 @@ export function oddsHarvesterArgs(sport:KeylessSport,market:string,day:string,fi
   // OddsHarvester v0.20.0 calls the two-way winner "home_away", not
   // "moneyline", for NBA/MLB/NFL. This is the SAME including-OT settlement,
   // unlike 1x2 which may exclude overtime (never silently substitute 1x2).
-  const upstreamMarket=market==='moneyline'
-    &&(sport==='basketball'||sport==='baseball'||sport==='american-football')
-      ?'home_away':market
-  const period=((sport==='ice-hockey'||sport==='basketball'||sport==='baseball'
-    ||sport==='american-football')&&upstreamMarket==='home_away')
-    ?'full_including_ot':
-    ((sport==='basketball'||sport==='american-football')&&upstreamMarket==='1x2')
-      ?'full_time':null
+  const upstreamMarket=cliMarketFor(sport,market)
+  const period=cliPeriodFor(sport,upstreamMarket)
   return ['upcoming','--sport',sport,'--date',day.replaceAll('-',''),
     '--market',upstreamMarket,...(period?['--period',period]:[]),
     '--headless','--format','json','--stream-ndjson','--output',file]
