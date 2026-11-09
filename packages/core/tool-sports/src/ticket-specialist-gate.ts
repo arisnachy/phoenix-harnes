@@ -88,8 +88,9 @@ export async function investigateTicketSpecialist(
     if(game.sport==='football'&&game.league==='nfl'){
       specialist='NFL: QB, 44 titulares, OL/pass rush, lesiones y clima'
       const d=await investigateNfl(game.date,game.eventId,fetcher,now,env,quotes)
-      if(!identities(d.event.home.name,d.event.away.name,game.home,game.away))
-        throw Error('NFL: equipos no coinciden con el partido cotizado')
+      if(!identities(d.event.home.name,d.event.away.name,game.home,game.away)
+        ||!closeTime(d.event.scheduledAt,game.kickoff))
+        throw Error('NFL: identidad u horario del evento no coinciden')
       level=d.coverage.level
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
       steps=['Rosters NFL '+d.coverage.verifiedPlayers+' jugadores',
@@ -118,8 +119,9 @@ export async function investigateTicketSpecialist(
       specialist='NBA/WNBA: jugadores, quintetos, eficiencia y bajas'
       const d=await researchBasketballCase(game.league,game.date,game.eventId,
         fetcher,now,env,quotes)
-      if(!identities(d.fixture.home.name,d.fixture.away.name,game.home,game.away))
-        throw Error('NBA/WNBA: equipos no coinciden con el partido cotizado')
+      if(!identities(d.fixture.home.name,d.fixture.away.name,game.home,game.away)
+        ||!closeTime(d.opportunity.scheduledAt,game.kickoff))
+        throw Error('NBA/WNBA: identidad u horario del evento no coinciden')
       level=d.coverage.level
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
       steps=['Jugadores en roster '+d.coverage.players,
@@ -144,8 +146,9 @@ export async function investigateTicketSpecialist(
       specialist='Fútbol: once, xG, forma local/visita, lesiones y empate'
       const d=await investigateSoccer(game.date,game.league,game.eventId,
         fetcher,now,env,quotes)
-      if(!identities(d.fixture.home.name,d.fixture.away.name,game.home,game.away))
-        throw Error('Fútbol: equipos no coinciden con el partido cotizado')
+      if(!identities(d.fixture.home.name,d.fixture.away.name,game.home,game.away)
+        ||!closeTime(d.opportunity.scheduledAt,game.kickoff))
+        throw Error('Fútbol: identidad u horario del evento no coinciden')
       level=d.coverage.level
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
       steps=['Jugadores disponibles '+d.coverage.players,
@@ -260,6 +263,10 @@ export async function investigateTicketSpecialist(
       // fallback failures never erase evidence already collected.
       const injury=await fetchEspnInjuryBackup(game,fetcher,now)
       if(injury.status==='verified'||injury.status==='partial'){
+        // A feed can identify reported injuries, but never guarantees a final
+        // inactive list, starting lineup or availability at tipoff/kickoff.
+        mark('injuries','partial','ESPN '+injury.status+
+          ' · observación de lesiones, sin confirmación de bajas definitivas')
         steps.push('ESPN lesiones '+injury.status+': local '+
           injury.home.injuries.length+' · visitante '+injury.away.injuries.length+
           ' · fuente '+injury.source)
@@ -269,8 +276,18 @@ export async function investigateTicketSpecialist(
       }else pending.push('ESPN lesiones '+injury.status+': '+injury.source)
       pending.push(...injury.notes.slice(0,4))
     }
+    const sourceChecks=await sourceTask
+    const mismatches=sourceChecks.filter(s=>s.status==='conflict')
+    if(mismatches.length)
+      pending.push('Revisar localía en fuente secundaria: '+
+        mismatches.map(x=>x.provider).join(', '))
+    const checklist=auditSportChecklist(game.sport,signals,now)
+    if(checklist.criticalPending.length)
+      pending.push('Pasos obligatorios sin cerrar ('+
+        checklist.criticalPending.length+'): '+
+        checklist.criticalPending.slice(0,3).join('; '))
     return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
-      checkedAt:new Date(now).toISOString()}
+      sourceChecks,checklist,checkedAt:new Date(now).toISOString()}
   }catch(error){
     return errorResult(game,(error instanceof Error?error.message:String(error)))
   }
