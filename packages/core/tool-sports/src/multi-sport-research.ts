@@ -25,6 +25,8 @@ export type ResearchMatch = {
   eventId:string;date:string;sport:string;league:string;home:FormSide;away:FormSide
   source:'ESPN Site API'; evidence:'descriptive'|'insufficient'
   coverageDays:number;successfulDays:number;limitations:string[]
+  /** Exact ESPN pregame fixture observed during research, reused at final validation. */
+  verifiedEvent:Game
 }
 const valid=(v:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(v)&&
   Number.isFinite(Date.parse(v+'T00:00:00Z'))&&
@@ -152,6 +154,7 @@ export async function researchSport(
     const sufficient=archive.status!=='unavailable'&&
       homeForm.completedGames>=requiredGames&&awayForm.completedGames>=requiredGames
     const result:ResearchMatch={eventId:String(event.id??''),date:event.date??'',sport,league,
+      verifiedEvent:event,
       home:homeForm,away:awayForm,source:'ESPN Site API',evidence:sufficient?'descriptive':'insufficient',
       coverageDays:lookbackDays,successfulDays,
       limitations:[
