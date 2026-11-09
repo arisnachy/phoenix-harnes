@@ -6,6 +6,8 @@ import type {MarketOutcome} from './sports.ts'
 import {crosscheckFreeFixture,type BackupFinding} from './free-sports-source-audit.ts'
 import {auditSportChecklist,type SportChecklist,type StepObservation} from './daily-specialist-checklist.ts'
 import {fetchEspnInjuryBackup} from './espn-injury-backup.ts'
+import {readNbaNflDepthPreviews,compareNbaNflCandidate,
+  type DepthPreview,type PickComparison} from './nba-nfl-keyless-closure.ts'
 import {investigateNfl} from './nfl-evidence-research.ts'
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
 import {investigateSoccer} from './soccer-worldwide-dossier.ts'
@@ -15,7 +17,7 @@ import {tennisSlate,investigateTennis,type TennisTour} from './tennis-evidence-r
 
 export type SpecialistFixture={
   sport:string;league:string;eventId:string;date:string;
-  home:string;away:string;kickoff:string
+  home:string;away:string;kickoff:string;pick?:'home'|'away'
 }
 export type SpecialistGate={
   sport:string;league:string;eventId:string;specialist:string;
@@ -27,6 +29,8 @@ export type SpecialistGate={
   checklist?:SportChecklist
   /** Secondary fixtures are not bookmaker offers or confirmed starters. */
   sourceChecks?:BackupFinding[]
+  legDecision?:PickComparison
+  depthPreviews?:DepthPreview[]
 }
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
@@ -85,6 +89,7 @@ export async function investigateTicketSpecialist(
   try{
     let specialist='',level:'A'|'B'|'C'|'D'|null=null
     let steps:string[]=[],pending:string[]=[],teams=false
+    let legDecision:PickComparison|undefined,depthPreviews:DepthPreview[]|undefined
     if(game.sport==='football'&&game.league==='nfl'){
       specialist='NFL: QB, 44 titulares, OL/pass rush, lesiones y clima'
       const d=await investigateNfl(game.date,game.eventId,fetcher,now,env,quotes)
@@ -115,6 +120,27 @@ export async function investigateTicketSpecialist(
         'Datos meteorológicos disponibles; horario y estadio requieren cotejo')
       mark('market',d.markets.length?'partial':'missing',
         d.markets.length+' líneas; falta validar reglas exactas de la casa')
+      const sideMeasures=(side:'home'|'away')=>{
+        const team=d.teams[side]
+        return{name:team.name,wins:team.wins,losses:team.losses,games:team.recent.length,
+          restHours:team.restHours,netMarginPerGame:team.recent.length?
+            team.recent.reduce((sum,g)=>sum+g.pts-g.allowed,0)/team.recent.length:null,
+          confirmedStarter:team.roster.some(p=>p.role==='quarterback'&&p.confirmedOffense)}
+      }
+      if(game.pick)legDecision=compareNbaNflCandidate('nfl',sideMeasures('home'),
+        sideMeasures('away'),game.pick)
+      const depths=await readNbaNflDepthPreviews('nfl',
+        [d.teams.home.id,d.teams.away.id],fetcher,now)
+      depthPreviews=[...depths]
+      for(const [i,depth]of depths.entries()){
+        if(depth.state==='observed')
+          steps.push('ESPN NFL '+(i?'visitante':'local')+
+            ' QB proyectado: '+(depth.candidateQB??'sin nombre')+' · '+depth.url)
+        else pending.push('Depth chart NFL '+(i?'visitante':'local')+
+          ' no verificable: '+depth.detail)
+      }
+      pending.push('Lista de INACTIVOS y QB oficial pendientes: https://www.nfl.com/injuries/. '+
+        'Un depth chart NO confirma QB titular')
     }else if(game.sport==='basketball'&&(game.league==='nba'||game.league==='wnba')){
       specialist='NBA/WNBA: jugadores, quintetos, eficiencia y bajas'
       const d=await researchBasketballCase(game.league,game.date,game.eventId,
@@ -142,6 +168,30 @@ export async function investigateTicketSpecialist(
         'Descanso de ambos rivales estimado desde partidos verificados')
       mark('market',d.markets.length?'partial':'missing',
         d.markets.length+' opciones consultadas, sujetas a fecha y liquidación')
+      if(game.league==='nba'){
+        const measures=(side:'home'|'away')=>{
+          const team=d.teams[side]
+          return{name:team.name,wins:team.wins,losses:team.losses,
+            games:team.lastGames.length,restHours:d.context.restHours[side],
+            netMarginPerGame:team.lastGames.length?
+              team.lastGames.reduce((sum,g)=>sum+g.pts-g.allowed,0)/team.lastGames.length:null,
+            confirmedStarter:team.quintetConfirmed}
+        }
+        if(game.pick)legDecision=compareNbaNflCandidate('nba',measures('home'),
+          measures('away'),game.pick)
+        const depths=await readNbaNflDepthPreviews('nba',
+          [d.teams.home.id,d.teams.away.id],fetcher,now)
+        depthPreviews=[...depths]
+        for(const [i,depth]of depths.entries()){
+          if(depth.state==='observed')
+            steps.push('ESPN NBA rotación PROYECTADA '+(i?'visitante':'local')+
+              ': '+depth.potentialNames.slice(0,5).join(', ')+' · '+depth.url)
+          else pending.push('Rotación NBA '+(i?'visitante':'local')+
+            ' no verificable: '+depth.detail)
+        }
+        pending.push('Informe médico oficial NBA POR HORA pendiente: '+
+          'https://official.nba.com/nba-injury-report-2026-27-season/')
+      }
     }else if(game.sport==='soccer'){
       specialist='Fútbol: once, xG, forma local/visita, lesiones y empate'
       const d=await investigateSoccer(game.date,game.league,game.eventId,
@@ -281,13 +331,24 @@ export async function investigateTicketSpecialist(
     if(mismatches.length)
       pending.push('Revisar localía en fuente secundaria: '+
         mismatches.map(x=>x.provider).join(', '))
+    if(legDecision){
+      steps.push(...legDecision.argumentsFor.map(x=>'A FAVOR: '+x))
+      pending.push(...legDecision.argumentsAgainst.map(x=>'EN CONTRA: '+x))
+      pending.push(...legDecision.missing.map(x=>'PENDIENTE: '+x))
+      pending.push('DECISIÓN: '+legDecision.decision+
+        ' · evidencia comparativa, sin probabilidad calibrada')
+    }
     const checklist=auditSportChecklist(game.sport,signals,now)
     if(checklist.criticalPending.length)
       pending.push('Pasos obligatorios sin cerrar ('+
         checklist.criticalPending.length+'): '+
         checklist.criticalPending.slice(0,3).join('; '))
-    return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
-      sourceChecks,checklist,checkedAt:new Date(now).toISOString()}
+    const result=classifySpecialistCoverage(level,teams,steps,pending)
+    if(legDecision?.decision==='discard')result.status='incomplete'
+    return{...base,specialist,...result,sourceChecks,checklist,
+      ...(legDecision?{legDecision}:{}),
+      ...(depthPreviews?{depthPreviews}:{}),
+      checkedAt:new Date(now).toISOString()}
   }catch(error){
     return errorResult(game,(error instanceof Error?error.message:String(error)))
   }
