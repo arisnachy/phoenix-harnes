@@ -461,37 +461,38 @@ export function apply(ctx: Context): void {
         return [{review,raw,market:{eventId:raw.eventId,bookmaker:raw.bookmaker,
           market:raw.market,selection:raw.selection,point:raw.point??null}}]
       })
-      const conditionalQuoted=quoted.filter(x=>!dossierReady(x.review)).length
+      const ticketQuoted=quoted.slice(0,count)
+      const conditionalQuoted=ticketQuoted.filter(x=>!dossierReady(x.review)).length
       let ticket:ReturnType<typeof pricedTicket>['card']|null=null
-      if(args.deep!==false&&quoted.length>=count){
+      if(args.deep!==false&&ticketQuoted.length===count){
         try{
-          const built=pricedTicket(quoted.map(x=>x.market),quoted.map(x=>x.raw))
+          const built=pricedTicket(ticketQuoted.map(x=>x.market),ticketQuoted.map(x=>x.raw))
           const legs=Array.isArray(built.card.props.legs)?built.card.props.legs:[]
           ticket={...built.card,props:{...built.card.props,
             title:'PHOENIX · '+(conditionalQuoted?'Ticket condicional':'Candidatas investigadas')+
-              ' ('+quoted.length+' patas)',
+              ' ('+ticketQuoted.length+' patas)',
             subtitle:'Preselección con cuotas reales · '+conditionalQuoted+
               ' expedientes pendientes · sin apuesta realizada',
             requestedLegs:count,
             specialistChecks,marketRisk,
             legs:legs.map((leg,index)=>({
               ...(leg!==null&&typeof leg==='object'?leg:{}),
-              rationale:quoted[index]?.review.status==='descriptive-support'?
-                'Apoyo descriptivo ('+quoted[index]!.review.sampleGames.home+'/'+
-                quoted[index]!.review.sampleGames.away+' partidos). '+
-                quoted[index]!.review.marketDirection+
-                '. Línea: '+(quoted[index]!.review.marketOutcomeDiagnostic?
-                  quoted[index]!.review.marketOutcomeDiagnostic!.status+
-                  ' (equipo '+quoted[index]!.review.marketOutcomeDiagnostic!.team.wins+
-                  '/'+(quoted[index]!.review.marketOutcomeDiagnostic!.team.wins+
-                    quoted[index]!.review.marketOutcomeDiagnostic!.team.losses)+
-                  ', rival '+quoted[index]!.review.marketOutcomeDiagnostic!.opponent.wins+
-                  '/'+(quoted[index]!.review.marketOutcomeDiagnostic!.opponent.wins+
-                    quoted[index]!.review.marketOutcomeDiagnostic!.opponent.losses)+')':
+              rationale:ticketQuoted[index]?.review.status==='descriptive-support'?
+                'Apoyo descriptivo ('+ticketQuoted[index]!.review.sampleGames.home+'/'+
+                ticketQuoted[index]!.review.sampleGames.away+' partidos). '+
+                ticketQuoted[index]!.review.marketDirection+
+                '. Línea: '+(ticketQuoted[index]!.review.marketOutcomeDiagnostic?
+                  ticketQuoted[index]!.review.marketOutcomeDiagnostic!.status+
+                  ' (equipo '+ticketQuoted[index]!.review.marketOutcomeDiagnostic!.team.wins+
+                  '/'+(ticketQuoted[index]!.review.marketOutcomeDiagnostic!.team.wins+
+                    ticketQuoted[index]!.review.marketOutcomeDiagnostic!.team.losses)+
+                  ', rival '+ticketQuoted[index]!.review.marketOutcomeDiagnostic!.opponent.wins+
+                  '/'+(ticketQuoted[index]!.review.marketOutcomeDiagnostic!.opponent.wins+
+                    ticketQuoted[index]!.review.marketOutcomeDiagnostic!.opponent.losses)+')':
                   'no evaluable como hándicap/total')+
-                '. Expediente obligatorio: '+(specialistFor(quoted[index]!.review)?.specialist??'no disponible')+
-                '. Pendientes: '+(specialistFor(quoted[index]!.review)?.pendingSteps.slice(0,3).join('; ')??'sin evidencia')+
-                '. Acierto mínimo exigido '+quoted[index]!.review.priceAudit.breakEvenPercent+
+                '. Expediente obligatorio: '+(specialistFor(ticketQuoted[index]!.review)?.specialist??'no disponible')+
+                '. Pendientes: '+(specialistFor(ticketQuoted[index]!.review)?.pendingSteps.slice(0,3).join('; ')??'sin evidencia')+
+                '. Acierto mínimo exigido '+ticketQuoted[index]!.review.priceAudit.breakEvenPercent+
                 '%. Frecuencias históricas no son probabilidades calibradas; bajas y titulares pendientes.':
                 'Candidata CONDICIONAL: no existe una señal independiente suficiente. '+
                 'Verificar lesiones, titulares y reglas antes de considerar.',
