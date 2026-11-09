@@ -434,22 +434,105 @@ const sportsSchedule = (value:Record<string,unknown>):value is SportsScheduleCar
       && optionalText(x.askPrompt,400)
        && (x.trackedBets===undefined || Array.isArray(x.trackedBets) && x.trackedBets.length<=12 && x.trackedBets.every(validTrackedPick)))
 }
+
+/** Strict, bounded contract for narrative media and evidence from sports tools. */
+const safeSportsLink=(v:unknown):v is string=>{
+  if(typeof v!=='string'||v.length>700)return false
+  try{
+    const u=new URL(v)
+    return u.protocol==='https:'&&!u.username&&!u.password&&u.hostname.includes('.')
+  }catch{return false}
+}
+const nullableSportsLink=(v:unknown)=>v===null||safeSportsLink(v)
+const boundedSportsText=(v:unknown,n=300)=>typeof v==='string'&&v.length<=n
+const nullableSportsText=(v:unknown,n=300)=>v===null||boundedSportsText(v,n)
+const sportsTicketNarrative=(v:unknown):v is SportsTicketNarrative=>{
+  if(!isRecord(v)||!hasOnlyKeys(v,['eventId','selected','title','status',
+    'selectionWhy','favorable','contradictions','specialistEvidence','criticalPending',
+    'news','globalNews','externalOpinions','externalModel','venue',
+    'directOpponentHistory','referee','weather','imagery','percentage','sources',
+    'explanationForChat']))return false
+  if(!['documented','conditional'].includes(String(v.status))||
+    !isText(v.selectionWhy,1200)||!isText(v.explanationForChat,10_000))return false
+  const texts=(x:unknown,n:number)=>Array.isArray(x)&&x.length<=12&&
+    x.every(y=>boundedSportsText(y,n))
+  if(!texts(v.favorable,450)||!texts(v.contradictions,450))return false
+  if(!Array.isArray(v.news)||v.news.length>6||!v.news.every(x=>isRecord(x)&&
+    hasOnlyKeys(x,['headline','publishedAt','publisher','articleUrl','imageUrl'])&&
+    isText(x.headline,200)&&boundedSportsText(x.publisher,80)&&
+    nullableSportsText(x.publishedAt,48)&&nullableSportsLink(x.articleUrl)&&
+    (x.imageUrl===null||trustedPortrait(x.imageUrl))))return false
+  if(!Array.isArray(v.globalNews)||v.globalNews.length>4||!v.globalNews.every(x=>
+    isRecord(x)&&hasOnlyKeys(x,['publisher','headline','indexedAt','articleUrl','status'])&&
+    boundedSportsText(x.publisher,90)&&isText(x.headline,200)&&
+    nullableSportsText(x.indexedAt,48)&&safeSportsLink(x.articleUrl)&&
+    x.status==='indexed-only'))return false
+  if(!Array.isArray(v.externalOpinions)||v.externalOpinions.length>8||
+    !v.externalOpinions.every(x=>isRecord(x)&&hasOnlyKeys(x,
+      ['publisher','headline','publishedAt','discoveryUrl','status'])&&
+      isText(x.publisher,80)&&isText(x.headline,200)&&
+      nullableSportsText(x.publishedAt,48)&&safeSportsLink(x.discoveryUrl)&&
+      x.status==='indexed-headline-only'))return false
+  const venue=v.venue,history=v.directOpponentHistory,ref=v.referee,
+    weather=v.weather,media=v.imagery,percent=v.percentage,model=v.externalModel
+  const tally=(n:unknown)=>typeof n==='number'&&Number.isInteger(n)&&n>=0&&n<=10
+  if(!isRecord(venue)||!isRecord(history)||!isRecord(ref)||
+    !isRecord(weather)||!isRecord(media)||!isRecord(percent)||!isRecord(model))return false
+  if(!nullableSportsText(venue.name,140)||!nullableSportsText(venue.city,110)||
+    !['verified','not-verified'].includes(String(venue.venueSplit))||
+    !tally(venue.games)||!tally(venue.wins)||!tally(venue.losses)||
+    !['verified','not-verified'].includes(String(history.status))||
+    !boundedSportsText(history.note,360)||!tally(history.games)||
+    !tally(history.wins)||!tally(history.losses))return false
+  if(!Array.isArray(ref.names)||ref.names.length>6||
+    !ref.names.every(x=>isText(x,110))||ref.bias!=='not-assessed'||
+    !boundedSportsText(ref.note,400))return false
+  if(!['verified','unavailable','not-applicable'].includes(String(weather.status))||
+    !boundedSportsText(weather.description,300)||!nullableSportsText(weather.source,85)||
+    !nullableSportsText(media.attribution,100)||!nullableSportsLink(media.articleUrl)||
+    !(media.imageUrl===null||trustedPortrait(media.imageUrl)))return false
+  if(!(percent.value===null||typeof percent.value==='number'&&
+      Number.isFinite(percent.value)&&percent.value>=0&&percent.value<=100)||
+    !['exploratory-recent-form','market-no-vig','unavailable'].includes(String(percent.kind))||
+    !boundedSportsText(percent.warning,300))return false
+  if(!boundedSportsText(model.provider,60)||
+    !['support','contradiction','unavailable'].includes(String(model.status))||
+    !nullableSportsText(model.selection,120)||
+    !(model.modelProbabilityPercent===null||
+      typeof model.modelProbabilityPercent==='number'&&
+      Number.isFinite(model.modelProbabilityPercent)&&model.modelProbabilityPercent>=0&&
+      model.modelProbabilityPercent<=100)||
+    !nullableSportsText(model.updatedAt,50)||!nullableSportsLink(model.sourceUrl))return false
+  return Array.isArray(v.sources)&&v.sources.length<=16&&v.sources.every(x=>
+    isRecord(x)&&hasOnlyKeys(x,['name','status','url'])&&isText(x.name,180)&&
+    ['verified','partial','missing'].includes(String(x.status))&&nullableSportsLink(x.url))
+}
+
 const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
-    ['title','subtitle','source','legs','requestedLegs','combinedOdds','stake','grossReturn','note','askPrompt','ticketReference'])) return false
+    ['title','subtitle','source','legs','requestedLegs','combinedOdds','stake','grossReturn','note','askPrompt','ticketReference',
+      'cloudFollowUp','modelAudit','marketRisk','decisionAudit','chatNarrative','narrativeInstruction','specialistChecks',
+      'reviewedBeforeSelection','removedConflicts'])) return false
   const p = value.props
   return isText(p.title) && optionalText(p.subtitle) && isText(p.source,320)
     && isText(p.combinedOdds,40) && optionalText(p.ticketReference,25)
     && (p.ticketReference===undefined||/^[a-zA-Z0-9-]{1,25}$/u.test(p.ticketReference))
     && optionalText(p.stake,50)
-    && optionalText(p.grossReturn,50) && isText(p.note,MAX_TEXT)
-    && optionalText(p.askPrompt,400) && (p.requestedLegs===undefined ||
+    && optionalText(p.grossReturn,50) && isText(p.note,5000)
+    && optionalText(p.askPrompt,700)
+    && (p.narrativeInstruction===undefined||optionalText(p.narrativeInstruction,900))
+    && (p.chatNarrative===undefined||(Array.isArray(p.chatNarrative)&&p.chatNarrative.length<=12&&
+      p.chatNarrative.every(sportsTicketNarrative)))
+    && (p.requestedLegs===undefined ||
       (typeof p.requestedLegs==='number'&&Number.isInteger(p.requestedLegs)&&p.requestedLegs>=1&&p.requestedLegs<=(p.ticketReference?12:6)))
     && Array.isArray(p.legs) && (p.requestedLegs===undefined||p.legs.length<=Number(p.requestedLegs))
     && (p.legs.length >= 1 || (p.requestedLegs!==undefined
       && p.combinedOdds==='No disponible' && /TICKET INCOMPLETO/u.test(String(p.note))))
     && p.legs.length <= 12 && p.legs.every(x => isRecord(x)
-      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player','rationale','homeLogo','awayLogo','homeTeam','awayTeam','eventId','eventDate','providerLeague','trackedBet'])
+      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player','rationale',
+      'homeLogo','awayLogo','homeTeam','awayTeam','eventId','eventDate','providerLeague','trackedBet',
+      'narrative','legWinProbabilityPercent','legProbabilitySource','legProbabilityWarning','marketNoVigPercent',
+      'marketRiskTier','decisionReview','specialistResearch','researchStatus','pendingEvidence','preliminaryEvidenceTier'])
       && isText(x.event) && isText(x.selection) && isText(x.price,32)
       && isText(x.bookmaker) && optionalText(x.when) && trustedPortrait(x.image)
       && trustedPortrait(x.homeLogo) && trustedPortrait(x.awayLogo)
@@ -463,7 +546,17 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
          && typeof x.eventDate==='string' && /^\d{4}-\d{2}-\d{2}$/u.test(x.eventDate)
          && typeof x.eventId==='string' && /^\d{1,20}$/u.test(x.eventId)
          && !!x.homeTeam && !!x.awayTeam))
-       && optionalText(x.market,70) && optionalText(x.player,140) && optionalText(x.rationale,480))
+       && optionalText(x.market,70) && optionalText(x.player,140) && optionalText(x.rationale,480)
+       && (x.narrative===undefined||sportsTicketNarrative(x.narrative))
+       && (x.legWinProbabilityPercent===undefined||x.legWinProbabilityPercent===null||
+         typeof x.legWinProbabilityPercent==='number'&&Number.isFinite(x.legWinProbabilityPercent)&&
+         x.legWinProbabilityPercent>=0&&x.legWinProbabilityPercent<=100)
+       && (x.marketNoVigPercent===undefined||x.marketNoVigPercent===null||
+         typeof x.marketNoVigPercent==='number'&&Number.isFinite(x.marketNoVigPercent)&&
+         x.marketNoVigPercent>=0&&x.marketNoVigPercent<=100)
+       && optionalText(x.legProbabilitySource,90)&&optionalText(x.researchStatus,50)
+       && (x.pendingEvidence===undefined||Array.isArray(x.pendingEvidence)&&
+         x.pendingEvidence.length<=8&&x.pendingEvidence.every(y=>isText(y,260))))
 }
 
 function sportsTicketBundle(value: Record<string,unknown>): value is SportsTicketBundleCard{
