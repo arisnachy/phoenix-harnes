@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {inspectDepthPayload,readNbaNflDepthPreviews,compareNbaNflCandidate,
+import {inspectDepthPayload,readNbaNflDepthPreviews,compareNbaNflCandidate,compareIndividualMetrics,
   nbaNflPublicSources} from '../src/nba-nfl-keyless-closure.ts'
 
 const team=(name,wins,losses,margin=null,rest=72,starter=false)=>({
@@ -97,4 +97,29 @@ test('unselected team cannot be assigned its opponent statistics',()=>{
   assert.equal(x.decision,'pending')
   assert.ok(x.argumentsFor.length===0)
   assert.ok(x.missing.length>0)
+})
+
+test('athlete stats require same named metric on both rival rosters',()=>{
+  const home=[{name:'Home Guard',position:'PG',stats:[
+    {name:'Points per game',value:'28.2'}]}]
+  const away=[{name:'Away Guard',position:'PG',stats:[
+    {name:'Points per game',value:'20.5'}]}]
+  const data=compareIndividualMetrics('nba',home,away)
+  assert.equal(data.observations.length,1)
+  assert.match(data.observations[0],/28.2 vs Away Guard 20.5/)
+  assert.ok(data.missing.length===0)
+})
+test('individual NBA points total is not falsely compared to PPG',()=>{
+  const data=compareIndividualMetrics('nba',[
+    {name:'Home',position:'SG',stats:[{name:'Points',value:'100'}]},
+  ],[{name:'Away',position:'SG',stats:[{name:'Points per game',value:'25'}]}])
+  assert.deepEqual(data.observations,[])
+  assert.equal(data.missing.length,1)
+})
+test('NFL quarterback season passer rating can only be compared with same metric',()=>{
+  const data=compareIndividualMetrics('nfl',[
+    {name:'Home QB',position:'QB',stats:[{name:'Passer Rating',value:'105.8'}]},
+  ],[{name:'Away QB',position:'QB',stats:[{name:'Passer Rating',value:'95.2'}]}])
+  assert.equal(data.observations.length,1)
+  assert.match(data.observations[0],/105.8/)
 })
