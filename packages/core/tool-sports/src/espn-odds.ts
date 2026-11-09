@@ -47,6 +47,9 @@ const slugs:Readonly<Record<string,readonly [string,string]>>={
   soccer_netherlands_eredivisie:['soccer','ned.1'],
   soccer_france_ligue_one:['soccer','fra.1'],
   soccer_brazil_serie_a:['soccer','bra.1'],
+  // The Odds API uses different sport keys for the same ESPN competitions.
+  soccer_brazil_campeonato:['soccer','bra.1'],
+  soccer_fifa_world_cup:['soccer','fifa.world'],
   soccer_argentina_primera_division:['soccer','arg.1'],
   soccer_uefa_europa_league:['soccer','uefa.europa'],
   basketball_ncaab:['basketball','mens-college-basketball'],

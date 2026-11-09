@@ -60,11 +60,68 @@ test('calibrated output is unavailable unless audit is approved',()=>{
  assert.equal(calibratedSportsForecast(forecast,{...base,calibrated:false}),null)
  assert.equal(availableSportCalibration('basketball','nba',date,now),null)
 })
-test('real scoreboard ingestion reports unavailable dates and never claims accuracy',async()=>{
- let calls=0
- const result=await auditSportsCalibration('basketball','nba',28,async()=>{calls++;return {events:[]}},now)
- assert.equal(calls,28)
+test('calibration reads a complete month rather than sending 28 scoreboard requests',async()=>{
+ const calls=[]
+ const result=await auditSportsCalibration('basketball','nba',28,async url=>{
+   calls.push(url)
+   return {events:[]}
+ },now)
+ assert.equal(calls.length,1)
+ assert.match(calls[0],/dates=202610/)
  assert.equal(result.status,'insufficient')
  assert.equal(result.coverage.daysRequested,28)
+ assert.equal(result.coverage.monthlySuccesses,1)
  assert.equal(result.coverage.fixturesRead,0)
+})
+test('valid monthly results enter evaluation, but no future, in-progress or absent score does',async()=>{
+ const calls=[]
+ const matches=[
+   {id:'400001',date:'2026-10-20T20:00:00Z',status:{type:{state:'post'}},
+     competitions:[{competitors:[
+       {homeAway:'home',team:{id:'1'},score:'111'},
+       {homeAway:'away',team:{id:'2'},score:'100'},
+     ]}]},
+   {id:'400002',date:'2026-10-21T20:00:00Z',status:{type:{state:'post'}},
+     competitions:[{competitors:[
+       {homeAway:'home',team:{id:'2'},score:'105'},
+       {homeAway:'away',team:{id:'1'},score:'108'},
+     ]}]},
+   {id:'400003',date:'2026-10-22T20:00:00Z',status:{type:{state:'in'}},
+     competitions:[{competitors:[
+       {homeAway:'home',team:{id:'1'},score:'80'},
+       {homeAway:'away',team:{id:'2'},score:'73'},
+     ]}]},
+   {id:'400004',date:'2026-11-03T20:00:00Z',status:{type:{state:'post'}},
+     competitions:[{competitors:[
+       {homeAway:'home',team:{id:'1'},score:'999'},
+       {homeAway:'away',team:{id:'2'},score:'0'},
+     ]}]},
+   {id:'400005',date:'2026-10-23T20:00:00Z',status:{type:{state:'post'}},
+     competitions:[{competitors:[
+       {homeAway:'home',team:{id:'1'},score:'90'},
+       {homeAway:'away',team:{id:'2'}},
+     ]}]},
+ ]
+ const r=await auditSportsCalibration('basketball','nba',28,async url=>{
+   calls.push(url)
+   return {events:matches}
+ },now)
+ assert.equal(calls.length,1)
+ assert.equal(r.events,2)
+ assert.equal(r.coverage.fixturesRead,2)
+ assert.equal(r.status,'insufficient')
+ assert.equal(r.calibrated,false)
+})
+test('monthly outage falls back to real daily observations and never authorizes calibration',async()=>{
+ const calls=[]
+ const r=await auditSportsCalibration('basketball','nba',28,async url=>{
+   calls.push(url)
+   if(url.includes('dates=202610&'))throw Error('ESPN month unavailable')
+   if(url.includes('dates=20261004'))return {events:[]}
+   return {events:[]}
+ },now)
+ assert.equal(r.calibrated,false)
+ assert.ok(r.coverage.dailyQueries>0)
+ assert.equal(r.coverage.monthlySuccesses,0)
+ assert.ok(calls.length<28)
 })
