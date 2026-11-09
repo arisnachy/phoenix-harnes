@@ -65,7 +65,8 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
         samples=new Uint8Array(meter.fftSize)
         if(stageRef.current)stageRef.current.dataset.audioReactive='true'
       }catch {
-        // Browser audio graph may be restricted; the fallback uses speech text.
+        // Browser audio graph may be restricted; do not leave a dangling context.
+        if(audioContext)void audioContext.close().catch(()=>undefined)
       }
     }
     const animate=(now:number)=>{
@@ -93,7 +94,7 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
       const fallback=phase==='speaking'
         ?kiraSpeechMouthEnvelope(speech,elapsed):0
       const target=phase==='speaking'
-        ?(analyser?kiraAudioMouthLevel(rms):fallback)
+        ?(analyser&&audioContext?.state==='running'?kiraAudioMouthLevel(rms):fallback)
         :(phase==='listening'?kiraAudioMouthLevel(rms):0)
       smooth=.68*smooth+.32*target
       if(stageRef.current){
