@@ -1,17 +1,18 @@
 /* Kira Alive: motion is contained in the voice stage, never the input buttons. */
 .stage{
-  position:fixed;
-  top:clamp(115px,18vh,220px);
-  left:50%;
-  transform:translateX(-50%);
-  z-index:35;
+  /* Compact floating status beside the chat: the composer card is the anchor. */
+  position:absolute;
+  inset:auto 14px calc(100% + 12px) auto;
+  z-index:40;
   box-sizing:border-box;
   display:flex;
   align-items:center;
   flex-direction:column;
-  gap:6px;
-  width:min(330px,calc(100vw - 36px));
-  padding:18px 18px 10px;
+  justify-content:flex-end;
+  gap:3px;
+  width:158px;
+  max-width:calc(100vw - 28px);
+  padding:4px 4px 2px;
   pointer-events:none;
   color:var(--dsw-alias-label-primary,#352c27);
   isolation:isolate;
@@ -19,32 +20,33 @@
 .stage::before{
   position:absolute;
   z-index:-1;
-  inset:0;
+  inset:2px 0 12px;
   content:'';
-  border-radius:40%;
-  background:radial-gradient(ellipse,rgba(255,246,240,.93) 0%,rgba(255,247,241,.7) 48%,transparent 75%);
+  border-radius:50%;
+  background:radial-gradient(ellipse,rgba(255,245,239,.75) 0%,rgba(255,247,241,.30) 50%,transparent 77%);
+  pointer-events:none;
 }
-.figure{position:relative;display:grid;place-items:center;width:242px;height:242px;max-width:70vw;max-height:70vw}
+.figure{position:relative;display:grid;place-items:center;width:118px;height:118px;max-width:100%;aspect-ratio:1}
 .halo{
   position:absolute;
-  inset:-8px;
+  inset:-5px;
   border-radius:50%;
-  background:radial-gradient(circle,rgba(251,123,84,.21) 47%,rgba(255,169,126,.14) 58%,transparent 78%);
+  background:radial-gradient(circle,rgba(251,123,84,.13) 51%,rgba(255,169,126,.09) 63%,transparent 80%);
   transform:scale(var(--kira-orb-scale,1));
   transition:transform 115ms ease-out;
   animation:ambient 4.5s ease-in-out infinite;
 }
 .frame{
   position:relative;
-  width:90%;
-  height:90%;
+  width:93%;
+  height:93%;
   overflow:hidden;
-  border:5px solid rgba(255,242,226,.98);
+  border:2px solid rgba(255,250,246,.98);
   border-radius:50%;
   background:#f6e2d6;
-  box-shadow:0 0 0 2px rgba(232,147,84,.85),0 12px 38px rgba(126,73,48,.17),
-    0 0 35px rgba(246,124,78,.18);
-  transition:box-shadow 300ms ease;
+  box-shadow:0 0 0 1px rgba(232,147,84,.77),0 5px 20px rgba(126,73,48,.10),
+    0 0 14px rgba(246,124,78,.10);
+  transition:box-shadow 250ms ease;
 }
 .portrait{width:100%;height:100%;object-fit:cover;display:block;will-change:transform}
 .faceLayer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
@@ -80,29 +82,32 @@
   z-index:2;
   transition:opacity 140ms ease-out;
 }
-.statusLine{display:flex;align-items:center;gap:7px;min-height:28px;font-size:15px;line-height:22px}
+.statusLine{display:flex;align-items:center;gap:5px;min-height:20px;max-width:100%;font-size:12px;line-height:18px;white-space:nowrap}
 .statusLine strong{font-weight:600}
 .statusLine span:last-child{color:var(--dsw-alias-label-secondary,#736961)}
-.indicator{width:7px;height:7px;border-radius:50%;background:#e68b58;box-shadow:0 0 0 4px rgba(248,145,94,.13)}
+.indicator{width:6px;height:6px;border-radius:50%;background:#e68b58;box-shadow:0 0 0 3px rgba(248,145,94,.10)}
 .stage[data-voice-phase="listening"] .indicator{background:#2cb489;animation:blink 1.8s ease-in-out infinite}
 .stage[data-voice-phase="speaking"] .indicator{background:#f26e4f;animation:blink .8s ease-in-out infinite}
-.caption{margin:0;font-size:12px;line-height:17px;color:var(--dsw-alias-label-secondary,#847771)}
+.caption{display:none}
 .close{
-  position:absolute;top:4px;right:8px;display:grid;place-items:center;
-  width:29px;height:29px;border:1px solid rgba(151,101,72,.19);
-  border-radius:50%;background:rgba(255,255,255,.82);
-  color:#74594b;font-size:20px;line-height:1;cursor:pointer;pointer-events:auto;
+  position:absolute;top:0;right:9px;display:grid;place-items:center;
+  width:23px;height:23px;border:1px solid rgba(151,101,72,.16);
+  border-radius:50%;background:rgba(255,255,255,.95);
+  color:#74594b;font-size:16px;line-height:1;cursor:pointer;pointer-events:auto;
+  box-shadow:0 2px 8px rgba(75,49,35,.05);
 }
 .close:hover{background:#fff0e8;color:#c65a3c}
 @keyframes ambient{0%,100%{opacity:.8}50%{opacity:1}}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.32}}
 @media(max-width:640px){
-  .stage{top:13vh;width:min(280px,calc(100vw - 28px))}
-  .figure{width:192px;height:192px}
+  .stage{right:5px;bottom:calc(100% + 8px);width:122px;padding:2px}
+  .figure{width:92px;height:92px}
+  .statusLine{font-size:11px}
+  .close{right:0}
 }
 @media(max-height:690px){
-  .stage{top:8vh;padding-top:5px}
-  .figure{width:166px;height:166px}
+  .stage{bottom:calc(100% + 7px)}
+  .figure{width:92px;height:92px}
 }
 @media(prefers-reduced-motion:reduce){
   .halo,.indicator{animation:none!important;transition:none!important}
