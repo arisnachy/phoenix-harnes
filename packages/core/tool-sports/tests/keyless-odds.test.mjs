@@ -100,6 +100,12 @@ test('keyless historic query preserves past lines rather than mislabeling as liv
   assert.equal(args[0],'historic')
   assert.ok(args.includes('--max-pages'))
   assert.ok(args.includes('--stream-ndjson'))
+  for(const sport of ['basketball','baseball','american-football']){
+    const archive=oddsHarvesterHistoricArgs(
+      sport,'league-name','2024-2025','moneyline','archive.json')
+    assert.equal(archive[archive.indexOf('--market')+1],'home_away')
+    assert.equal(archive[archive.indexOf('--period')+1],'full_including_ot')
+  }
   await assert.rejects(()=>keylessHistoricOdds('football','../../unsafe',
     '2024-2025','1x2',{PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'1'},now,async()=>old),/inválida/)
 })
