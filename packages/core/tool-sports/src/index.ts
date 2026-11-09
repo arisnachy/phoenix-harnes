@@ -51,6 +51,9 @@ import { secondaryMarketSourceCatalog } from './sports-secondary-sources.ts'
 import {discoverEditorialResearch,type EditorialSource,editorialDomains} from './sports-editorial-discovery.ts'
 import {auditSportsCalibration,availableSportCalibration,calibratedSportsForecast} from './sports-calibration.ts'
 import {sportsEnvWithVaultKey} from './sports-credential-env.ts'
+import {registerCloudForecast,registerCloudReceipt,registerCloudMarkets} from './sports-cloud-host.ts'
+import type {CloudLeg} from './sports-cloud-outcome.ts'
+import {researchCoverage,researchCredentialRefs,coverageReport} from './sports-research-coverage.ts'
 
 import {mlbResearch} from './mlb-evidence-research.ts'
 import {reviewMlbResearch} from './mlb-market-research-review.ts'
@@ -70,11 +73,15 @@ export const inject = ['tools','systemPrompt']
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'SEGUIMIENTO CLOUD: al crear un ticket de investigación, registrar automáticamente solo si PHOENIX_SPORTS_CLOUD_TRACKING_ENABLED=1 y las credenciales GitHub/AES están en la bóveda. Devolver cloudFollowUp con su estado real, no afirmar que habrá correo cuando status sea disabled, needs-configuration o error. El cifrado mantiene ocultos los eventos en un issue público, pero los metadatos de issue sí son visibles. Cuando los encuentros terminen, un workflow remoto revisará marcadores y enviará correo únicamente si RESEND_API_KEY, correo destinatario, remitente y clave AES están configurados en GitHub Actions. Nunca afirmar que la banca confirmó pago ni que un correo salió sin prueba. ',
+  'TICKET DIARIO 5 O 6: primero ampliar y contrastar la cartelera multi-liga, después investigar todos los expedientes y usar decisionAudit. Si existen 5-6 encuentros futuros verificados, presentar hasta seis mejores CANDIDATAS, aunque deban marcarse CONDICIONALES, nunca inventar una victoria aprobada. Diversidad deportiva no autoriza eliminar una pata real y el precio no sustituye la investigación. Para cada pata reporta legWinProbabilityPercent con legProbabilitySource: NO sumar ni multiplicar porcentajes como pronóstico del ticket completo. No convertir un porcentaje exploratorio o no-vig en certeza predictiva; si no puede estimarse, mostrar valor pendiente y por qué. Confirmar estado de riesgo de cada pata antes de cualquier ejecución. ',
+  'CLAVES Y FUENTES SIN BLOQUEOS: para saber qué conectores faltan llama sports_chat_research_provider_status. No pidas que peguen una clave en mensajes normales del modelo ni la aceptes como argumento de herramientas. Si el usuario quiere añadirla, indica el comando humano seguro /secret set NOMBRE VALOR, interceptado por el Host antes del agente y con recordInput=false, o la interfaz de credenciales segura disponible. Pedir permiso y una sola clave pertinente. No bloquear investigación ni tickets por claves ausentes; usa fuentes públicas, respaldo y caché. Tener clave NO equivale a fuente activa ni a datos comprobados. ',
+
   'MEMORIA DE INVESTIGACIÓN POR DÍA: antes de construir un ticket consulta sports_chat_daily_research_cache(statusOnly=true); si no hay datos recientes, precarga con statusOnly=false. Reutiliza información ESPN/NHL/MLB/TheSportsDB y API-Sports con cuota regulada (20 reservas de 100); conserva hasta 7 días PERO respeta vencimiento de cada dato. La precarga ayuda, no reemplaza búsquedas libres ni confirma porteros titulares, alineaciones, cuotas o lesiones. SportsDataIO trial contiene datos alterados y NO sirve para picks. Si un proveedor falla, usa otros sin gastar su cuota repetidamente. ',
   'SONDEO RÁPIDO DE FUENTES GRATUITAS: cuando una consulta deportiva dé 0 datos o el usuario solicite diagnóstico, llama sports_chat_free_sources_probe para comprobar seis endpoints públicos ESPN NBA/NFL/Liga MX, MLB StatsAPI, NHL Web API y TheSportsDB, sin claves ni scraping no autorizado. Un día sin partidos indica empty y NO proveedor caído. Los endpoints públicos aportan datos deportivos, NO cuotas comerciales ni disponibilidad médica. Para OddsHarvester MLB/NFL usa home_away (ganador incluyendo prórroga), nunca market moneyline como argumento CLI; 1x2 es un mercado distinto. ',
   'LESIONES ESPN COMO EVIDENCIA: usar sports_chat_espn_injuries cuando un expediente NBA/WNBA/NFL/NHL/MLB indique lesiones no verificadas. Consultar el JSON público ESPN por liga y equipos con fecha y fuente, no limitarse a la página espn.com.do/basquetbol/nba/lesiones. El estado reported, questionable, out, active o day-to-day es solo lo publicado; no convertirlo en quinteto, portero, QB titular ni confirmación de inactivos. Para NBA, cotejar en la página oficial de reportes antes de afirmar disponibilidad definitiva. Una fuente vacía/no actualizada no equivale a equipo sano, ni impide mostrar un ticket CONDICIONAL con cuotas reales; no inventar bajas. ',
   'RECUPERACIÓN DE DATOS: si ESPN publica estadística vacía o histórico HTTP 400, usar recuperación por mes/día y calendario de equipo; para eventos concretos consultar sports_chat_source_resilience y sus fuentes independientes. Fuentes del catálogo o enlaces no equivalen a consulta real, ni calendario equivale a lesiones, alineación o cuota. Nunca eludir 401/403/429 ni inventar resultados. ',
-  'AUDITORIA DE RIESGO DEL TICKET: cuando pidan solo ganadores empieza con sports_chat_ticket_evidence_priced_auto con marketPreference=winner, aun SIN cuotas; si solicitan comparaciones de casas, continúa con sports_chat_daily_market_shortlist con deep=true y winnerOnly=true. Verifica rivales, estado, descanso, lesiones, titulares, porteros, precio y mercado exacto. Compara la fortaleza relativa por precio no-vig en cada pata y la version de 3/4/5 con marketRisk. Estas cifras provienen de la casa y asumen independencia: NO son una prediccion propia, EV ni garantia. Usa OBLIGATORIAMENTE decisionAudit de sports_chat_ticket_evidence_priced_auto: da VEREDICTO POR PATA (candidate/caution/hold/exclude), explica las razones observadas, descarta el 52% tipo Anaheim sin edge validado, no ocultes porteros/lesiones pendientes, compara escenarios 3/4/5 sin confundir no-vig con acierto propio y propone alternativas REALES solo si las investigaste. Identifica la pata mas fragil, nunca agregues un partido casi 50/50 solo para completar cinco. NHL: portero candidato NO significa confirmado; distingue moneyline con OT/SO de 60 minutos. Si falta un dato, mostrar CONDICIONAL y fuentes pendientes. ',
+  'AUDITORIA DE RIESGO DEL TICKET: cuando pidan solo ganadores empieza con sports_chat_ticket_evidence_priced_auto con marketPreference=winner, aun SIN cuotas; si solicitan comparaciones de casas, continúa con sports_chat_daily_market_shortlist con deep=true y winnerOnly=true. Verifica rivales, estado, descanso, lesiones, titulares, porteros, precio y mercado exacto. Compara la fortaleza relativa por precio no-vig en cada pata y razona solo probabilidades INDIVIDUALES con procedencia, nunca la probabilidad combinada. Estas cifras provienen de la casa y asumen independencia: NO son una prediccion propia, EV ni garantia. Usa OBLIGATORIAMENTE decisionAudit de sports_chat_ticket_evidence_priced_auto: da VEREDICTO POR PATA (candidate/caution/hold/exclude), explica las razones observadas, descarta el 52% tipo Anaheim sin edge validado, no ocultes porteros/lesiones pendientes, compara escenarios 3/4/5 sin confundir no-vig con acierto propio y propone alternativas REALES solo si las investigaste. Identifica la pata mas fragil, nunca agregues un partido casi 50/50 solo para completar cinco. No anunciar probabilidades de que gane la combinada aunque marketRisk las calcule internamente. NHL: portero candidato NO significa confirmado; distingue moneyline con OT/SO de 60 minutos. Si falta un dato, mostrar CONDICIONAL y fuentes pendientes. ',
   'REGLA OBLIGATORIA PARA TICKETS GANADORES: las cotizaciones y favoritos de casas no son investigación deportiva. Si el usuario pide PRONOSTICAR GANADORES, primero usa sports_chat_ticket_evidence_priced_auto: investiga cada evento con su especialista INDEPENDIENTEMENTE de si la casa publica cuotas; sin precio entrega borrador investigado y pasos pendientes. Después usa sports_chat_daily_market_shortlist con deep=true y winnerOnly=true para cotejar precios solo si el usuario quiere ticket cotizado. Una falla de cuotas JAMÁS invalida la investigación deportiva ni exige declarar 0 pronósticos. Cada partido requiere expediente de su especialista NFL/NBA/WNBA/NHL/MLB/Fútbol/Tenis, identidad verificada y diagnóstico de bajas, alineaciones, forma y contradicciones. Los resultados incomplete/unavailable de un especialista NO bloquean mostrar un ticket condicional si el evento ESPN y la cuota real están verificados y la tendencia histórica tiene apoyo descriptivo. Sí impiden presentar esa selección como investigada o aprobada. Conflictos expresos de identidad o mercados contradichos bloquean esa pata. Si faltan eventos o cuotas genuinas, entrega borrador visible sin fabricar patas, nunca ticket ganador certificado. La cuota no demuestra acierto y ninguna ruta puede reportar aprobación o EV sin modelo validado. ',
   'MERCADOS DE TOTAL Y HÁNDICAP: ganar un partido no demuestra cubrir -1.5/+1.5 o una línea over/under. Antes de considerar un total o spread con sports_chat_daily_market_shortlist(deep=true), coteja la línea EXACTA contra resultados previos de AMBOS clubes, separa aciertos, fallos y pushes, y exige dirección consistente en los dos historiales. Si marketOutcomeDiagnostic.status es mixed, insufficient o adverse, etiquetar CONDICIONAL/CONTRAINDICADA y no ponerla como pata cotizada; nunca conviertas frecuencia histórica en probabilidad futura o EV. Para NHL añade portero y reglas OT/SO; para NBA pace, eficiencia y lesiones siguen pendientes si no fueron medidos. La meta de 5–6 patas no autoriza inventar una probabilidad ni rellenar selecciones sin respaldo. ',
   'NHL ESPECIALIZADO: para NHL consulta sports_chat_hockey_slate y sports_chat_nhl_investigate con gameId oficial NHL, no ID ESPN. Recupera rosters y estadísticas observadas de skaters/porteros; distingue portero candidato del titular confirmado y ganador a 60 minutos del ganador con OT/SO. No infieras xG/GSAx, alineaciones definitivas o probabilidades no calibradas, ni llames cuota actual a una línea sin timestamp. En +1.5/-1.5 evalúa el riesgo de caer por dos goles, los márgenes recientes de ambos equipos, la probabilidad de equilibrio del precio, porteros, descanso, empty-net y OT. Sin titular y modelo de cobertura calibrado, clasifica como CONDICIONAL o CONTRAINDICADA. ',
@@ -177,6 +184,49 @@ export function apply(ctx: Context): void {
     })
   }
   ctx.tools.register(defineTool({
+    name:'sports_chat_research_provider_status',
+    description:'Muestra por deporte qué estadística requiere el expediente y las fuentes gratuitas, complementarias o aún no integradas. Revisa en la bóveda únicamente SI existen las API keys, sin leerlas ni transmitirlas al modelo. La ausencia nunca bloquea el ticket.',
+    parameters:{
+      sport:{type:'string',description:'Filtrar basketball, hockey, baseball, football, soccer o tennis; vacío para todas las disciplinas.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const requested=typeof args.sport==='string'?args.sport:undefined
+      if(requested&&!['basketball','hockey','baseball','football','soccer','tennis'].includes(requested))
+        throw Error('Deporte no admitido en el inventario de cobertura')
+      let vault:{describe(ref:string):Promise<{configured:boolean;writable:boolean;source?:string}>}|undefined
+      try{
+        vault=(ctx.get as (name:string)=>unknown)('credentials') as typeof vault
+      }catch{/* Vault not mounted: use only private server environment status. */}
+      const configured=new Set<string>()
+      const keys=await Promise.all(researchCredentialRefs.map(async entry=>{
+        let record:{configured:boolean;writable:boolean;source?:string}={
+          configured:false,writable:false}
+        try{if(vault)record=await vault.describe(entry.ref)}
+        catch{/* No public secret data or unverified provider readiness. */}
+        if(record.configured)configured.add(entry.ref)
+        return{provider:entry.provider,ref:entry.ref,use:entry.use,
+          configured:record.configured,writable:record.writable}
+      }))
+      // Inspection is metadata-only: do not resolve secret values to check status.
+      const env=hydrateSportsSources(process.env)
+      for(const key of keys){
+        if(!key.configured&&!!env[key.ref]?.trim()){
+          key.configured=true
+          configured.add(key.ref)
+        }
+      }
+      return JSON.stringify({keys,coverage:coverageReport(configured,requested),
+        documentedRequirements:researchCoverage.filter(x=>!requested||x.sport===requested).length,
+        nonExclusive:true,
+        secureEntry:'Si quieres conectar una fuente opcional, introduce /secret set NOMBRE VALOR como comando humano de PHOENIX, nunca como texto dirigido a Kira. La orden se procesa antes del modelo y evita registrar su entrada. Verificar estado sin mostrar la clave.',
+        warning:'Configurado no significa probado: no hay garantía de cobertura de temporada, permiso del plan, alineaciones, lesiones ni mercados. Las fuentes sin clave continúan operativas.',
+      })
+    },
+    presentCall:()=>({card:'generic',title:'Revisar cobertura deportiva y claves seguras',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
     name:'sports_chat_daily_scan',
     description:'Barrido barato de las ligas deportivas de hoy: NBA, WNBA, MLB, NFL, NHL, fútbol y tenis; devuelve eventos ESPN futuros confirmados, cobertura y una preselección equilibrada entre disciplinas. NO predice resultados ni cuotas.',
     parameters:{
@@ -244,10 +294,16 @@ export function apply(ctx: Context): void {
           .then(value=>({result:value,error:null as string|null}))
           .catch(reason=>({result:null,error:
             String(reason instanceof Error?reason.message:reason).slice(0,220)}))
+        const cloudFollowUp=research.result?.events.length?await registerCloudForecast(
+          research.result.events.map(x=>({...x,date:daily.date})), 'winner',false,env):
+          {status:'disabled',issueNumber:null,reason:'Sin eventos verificables que monitorizar.'}
         return JSON.stringify({
           source:'PHOENIX investigación de ganadores sin dependencia de cuotas',
+          cloudFollowUp,
           status:research.result?.complete?'research-only':'research-incomplete',
-          ...(research.result?{uiBlock:research.result.card,researchedEvents:research.result.events,
+          ...(research.result?{uiBlock:{...research.result.card,
+              props:{...research.result.card.props,cloudFollowUp}},
+            researchedEvents:research.result.events,
             verifiedEvents:research.result.verifiedEvents,
             candidatesEvaluated:research.result.candidatesEvaluated,
             insufficientEvidence:research.result.insufficientEvidence,
@@ -412,37 +468,38 @@ export function apply(ctx: Context): void {
         return [{review,raw,market:{eventId:raw.eventId,bookmaker:raw.bookmaker,
           market:raw.market,selection:raw.selection,point:raw.point??null}}]
       })
-      const conditionalQuoted=quoted.filter(x=>!dossierReady(x.review)).length
+      const ticketQuoted=quoted.slice(0,count)
+      const conditionalQuoted=ticketQuoted.filter(x=>!dossierReady(x.review)).length
       let ticket:ReturnType<typeof pricedTicket>['card']|null=null
-      if(args.deep!==false&&quoted.length>=count){
+      if(args.deep!==false&&ticketQuoted.length===count){
         try{
-          const built=pricedTicket(quoted.map(x=>x.market),quoted.map(x=>x.raw))
+          const built=pricedTicket(ticketQuoted.map(x=>x.market),ticketQuoted.map(x=>x.raw))
           const legs=Array.isArray(built.card.props.legs)?built.card.props.legs:[]
           ticket={...built.card,props:{...built.card.props,
             title:'PHOENIX · '+(conditionalQuoted?'Ticket condicional':'Candidatas investigadas')+
-              ' ('+quoted.length+' patas)',
+              ' ('+ticketQuoted.length+' patas)',
             subtitle:'Preselección con cuotas reales · '+conditionalQuoted+
               ' expedientes pendientes · sin apuesta realizada',
             requestedLegs:count,
             specialistChecks,marketRisk,
             legs:legs.map((leg,index)=>({
               ...(leg!==null&&typeof leg==='object'?leg:{}),
-              rationale:quoted[index]?.review.status==='descriptive-support'?
-                'Apoyo descriptivo ('+quoted[index]!.review.sampleGames.home+'/'+
-                quoted[index]!.review.sampleGames.away+' partidos). '+
-                quoted[index]!.review.marketDirection+
-                '. Línea: '+(quoted[index]!.review.marketOutcomeDiagnostic?
-                  quoted[index]!.review.marketOutcomeDiagnostic!.status+
-                  ' (equipo '+quoted[index]!.review.marketOutcomeDiagnostic!.team.wins+
-                  '/'+(quoted[index]!.review.marketOutcomeDiagnostic!.team.wins+
-                    quoted[index]!.review.marketOutcomeDiagnostic!.team.losses)+
-                  ', rival '+quoted[index]!.review.marketOutcomeDiagnostic!.opponent.wins+
-                  '/'+(quoted[index]!.review.marketOutcomeDiagnostic!.opponent.wins+
-                    quoted[index]!.review.marketOutcomeDiagnostic!.opponent.losses)+')':
+              rationale:ticketQuoted[index]?.review.status==='descriptive-support'?
+                'Apoyo descriptivo ('+ticketQuoted[index]!.review.sampleGames.home+'/'+
+                ticketQuoted[index]!.review.sampleGames.away+' partidos). '+
+                ticketQuoted[index]!.review.marketDirection+
+                '. Línea: '+(ticketQuoted[index]!.review.marketOutcomeDiagnostic?
+                  ticketQuoted[index]!.review.marketOutcomeDiagnostic!.status+
+                  ' (equipo '+ticketQuoted[index]!.review.marketOutcomeDiagnostic!.team.wins+
+                  '/'+(ticketQuoted[index]!.review.marketOutcomeDiagnostic!.team.wins+
+                    ticketQuoted[index]!.review.marketOutcomeDiagnostic!.team.losses)+
+                  ', rival '+ticketQuoted[index]!.review.marketOutcomeDiagnostic!.opponent.wins+
+                  '/'+(ticketQuoted[index]!.review.marketOutcomeDiagnostic!.opponent.wins+
+                    ticketQuoted[index]!.review.marketOutcomeDiagnostic!.opponent.losses)+')':
                   'no evaluable como hándicap/total')+
-                '. Expediente obligatorio: '+(specialistFor(quoted[index]!.review)?.specialist??'no disponible')+
-                '. Pendientes: '+(specialistFor(quoted[index]!.review)?.pendingSteps.slice(0,3).join('; ')??'sin evidencia')+
-                '. Acierto mínimo exigido '+quoted[index]!.review.priceAudit.breakEvenPercent+
+                '. Expediente obligatorio: '+(specialistFor(ticketQuoted[index]!.review)?.specialist??'no disponible')+
+                '. Pendientes: '+(specialistFor(ticketQuoted[index]!.review)?.pendingSteps.slice(0,3).join('; ')??'sin evidencia')+
+                '. Acierto mínimo exigido '+ticketQuoted[index]!.review.priceAudit.breakEvenPercent+
                 '%. Frecuencias históricas no son probabilidades calibradas; bajas y titulares pendientes.':
                 'Candidata CONDICIONAL: no existe una señal independiente suficiente. '+
                 'Verificar lesiones, titulares y reglas antes de considerar.',
@@ -460,7 +517,42 @@ export function apply(ctx: Context): void {
           }}
         }catch{ /* Invalid ticket is not rendered as a real quoted ticket. */ }
       }
+      // Cloud registration is based on the SAME quoted, already-researched
+      // ESPN event IDs. Never use a bookmaker ID or change h2h into total.
+      const cloudLegs:CloudLeg[]=[]
+      const norm=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
+        .toLowerCase().replace(/[^a-z0-9]/gu,'')
+      for(const item of ticketQuoted){
+        const candidate=item.review.candidate,offer=item.review.selectedOutcome
+        const event=daily.events.find(x=>x.sport===candidate.sport&&
+          x.league===candidate.league&&x.eventId===candidate.espnEventId)
+        if(!event||!offer||!['basketball','hockey','football','baseball',
+          'soccer','tennis'].includes(candidate.sport))break
+        const market=candidate.market==='h2h'?'winner':
+          candidate.market==='spreads'?'spread':
+          candidate.market==='totals'?'total':null
+        if(!market)break
+        const choice=String(offer.selection??'')
+        const sameHome=norm(choice)===norm(event.home.name)
+        const sameAway=norm(choice)===norm(event.away.name)
+        let selection:CloudLeg['selection']|null=null
+        if(market==='total'){
+          selection=/^(?:over|arriba|mas|más)/iu.test(choice)?'over':
+            /^(?:under|abajo|menos)/iu.test(choice)?'under':null
+        }else selection=sameHome?'home':sameAway?'away':null
+        if(!selection||['spread','total'].includes(market)&&
+          typeof offer.line!=='number')break
+        cloudLegs.push({sport:candidate.sport as CloudLeg['sport'],
+          league:candidate.league,eventId:candidate.espnEventId,
+          date:daily.date,market,selection,
+          ...(market==='winner'?{}:{line:offer.line!})})
+      }
+      const cloudFollowUp=ticket!==null&&cloudLegs.length===count?
+        await registerCloudMarkets(cloudLegs,env):
+        {status:'disabled',issueNumber:null,
+          reason:'No se registró: falta ticket completo o mercado verificable.'}
       return JSON.stringify({
+        cloudFollowUp,
         goal:count,range:[4,6],complete:args.deep===false?pool.selected.length>=count:
           ticket!==null,
         discoveryComplete:pool.selected.length>=count,
@@ -485,7 +577,8 @@ export function apply(ctx: Context): void {
           r.marketOutcomeDiagnostic?.status==='insufficient').length,
         priceAuditState:'umbrales-cotizados-sin-modelo-calibrado-por-mercado',
         selected:args.deep===false?pool.selected.slice(0,count):best,
-        ...(ticket?{uiBlock:ticket}:{status:'borrador-sin-cuatro-precios-validados'}),
+        ...(ticket?{uiBlock:{...ticket,
+          props:{...ticket.props,cloudFollowUp}}}:{status:'borrador-sin-cuatro-precios-validados'}),
         rejectedQuotes:pool.rejectedQuotes,
         date:daily.date,checkedAt:new Date(now).toISOString(),
         eventsScanned:daily.totalEligible,fixturesConsidered:daily.events.length,
@@ -730,13 +823,17 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
+      const env=await sportsEnv(ctx)
       const result=await registerSportsReceipt({
         ticketReference:args.ticketReference,date:args.date,bookmaker:args.bookmaker,
         ...(args.stake===undefined?{}:{stake:args.stake}),
         ...(args.reportedReturn===undefined?{}:{reportedReturn:args.reportedReturn}),
         legs:args.legs as ReceiptLegInput[],
-      },fetch,await sportsEnv(ctx))
-      return JSON.stringify(result.uiBlock)
+      },fetch,env)
+      const cloudFollowUp=await registerCloudReceipt(result.ticketReference,
+        result.linkedEvents,env)
+      return JSON.stringify({...result.uiBlock,
+        props:{...result.uiBlock.props,cloudFollowUp}})
     },
     presentCall:()=>({card:'generic',title:'Vincular objetivos del boleto automáticamente',kind:'read' as const}),
   }))
@@ -776,10 +873,12 @@ export function apply(ctx: Context): void {
         throw Error('No se admite repetir número de confirmación.')
       const env=await sportsEnv(ctx)
       const verified=await Promise.all(receipts.map(x=>registerSportsReceipt(x,fetch,env)))
+      const cloud=await Promise.all(verified.map(x=>
+        registerCloudReceipt(x.ticketReference,x.linkedEvents,env)))
       return JSON.stringify({component:'sports_ticket_bundle_card',version:1,props:{
         title:'PHOENIX · Seguimiento automático de boletos',
         source:'Recibos del usuario + ESPN Site API · '+new Date().toISOString(),
-        tickets:verified.map(x=>x.uiBlock.props),
+        tickets:verified.map((x,i)=>({...x.uiBlock.props,cloudFollowUp:cloud[i]})),
       }})
     },
     presentCall:()=>({card:'generic',title:'Seguir todas las patas de mis boletos',kind:'read' as const}),
@@ -1540,9 +1639,17 @@ export function apply(ctx: Context): void {
     async execute(args){
       const preference=args.marketPreference??'winner'
       if(preference!=='winner'&&preference!=='double_chance')throw Error('Mercado de ticket inválido')
+      const env=await sportsEnv(ctx)
       const result=await evidencePricedTicket(args.count,args.date,args.sport,args.stake??0,
-        Date.now(),await sportsEnv(ctx),fetch,undefined,preference)
-      return JSON.stringify({uiBlock:result.card,requestedLegs:args.count,
+        Date.now(),env,fetch,undefined,preference)
+      const cloudFollowUp=result.trackingEvents.length?
+        await registerCloudForecast(result.trackingEvents,preference,
+          result.priced,env):{status:'disabled',issueNumber:null,
+          reason:'Sin eventos verificados que puedan enviarse al monitor remoto.'}
+      return JSON.stringify({uiBlock:{...result.card,
+        props:{...result.card.props,cloudFollowUp}},
+        cloudFollowUp,reviewedBeforeSelection:result.reviewedBeforeSelection,
+        removedConflicts:result.removedConflicts,requestedLegs:args.count,
         complete:result.complete,priced:result.priced,placed:false,
         conditional:result.conditional,dossierComplete:result.dossierComplete,
         verifiedEvents:result.verifiedEvents,quotedLegs:result.quotedLegs,
@@ -1567,8 +1674,14 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const result=await evidenceTicket(args.count,args.date,args.sport,fetch,Date.now(),await sportsEnv(ctx))
-      return JSON.stringify({uiBlock:result.card,requestedLegs:args.count,verifiedEvents:result.verifiedEvents,
+      const env=await sportsEnv(ctx),day=args.date??santoDomingoDay()
+      const result=await evidenceTicket(args.count,args.date,args.sport,fetch,Date.now(),env)
+      const cloudFollowUp=result.events.length?await registerCloudForecast(
+        result.events.map(x=>({...x,date:day})), 'winner',false,env):
+        {status:'disabled',issueNumber:null,reason:'Sin eventos verificables para monitorizar.'}
+      return JSON.stringify({uiBlock:{...result.card,
+        props:{...result.card.props,cloudFollowUp}},
+        cloudFollowUp,requestedLegs:args.count,verifiedEvents:result.verifiedEvents,
         complete:result.complete,candidatesEvaluated:result.candidatesEvaluated,
         researchLeagues:result.researchLeagues,insufficientEvidence:result.insufficientEvidence,
         researchStandard:result.researchStandard,scannedSports:result.scannedSports,
@@ -1619,8 +1732,16 @@ export function apply(ctx: Context): void {
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
-      const result=await researchTicket(args.legs as ResearchTicketLeg[],args.date,fetch,Date.now(),process.env,args.requestedLegs)
-      return JSON.stringify({ uiBlock:result.card,priced:false,placed:false,verifiedEvents:result.verifiedEvents,requestedLegs:args.requestedLegs,complete:result.complete,
+      const env=await sportsEnv(ctx),date=args.date??santoDomingoDay()
+      const requested=args.legs as ResearchTicketLeg[]
+      const result=await researchTicket(requested,date,fetch,Date.now(),env,args.requestedLegs)
+      const cloudFollowUp=await registerCloudForecast(requested.map(x=>({
+        sport:x.sport,league:x.league,eventId:x.eventId,pick:x.pick,date,
+      })), 'winner',false,env)
+      return JSON.stringify({ uiBlock:{...result.card,
+        props:{...result.card.props,cloudFollowUp}},cloudFollowUp,
+        priced:false,placed:false,verifiedEvents:result.verifiedEvents,
+        requestedLegs:args.requestedLegs,complete:result.complete,
         instruction:'Phoenix renderiza el ticket nativo sin código ni JSON. Explica el fundamento de tus picks y busca casas y cuotas verificables si se solicita un boleto cotizado. No calcules retorno sin cuotas.' })
     },
     presentCall:()=>({ card:'generic',title:'Crear ticket de pronósticos',kind:'read' as const }),

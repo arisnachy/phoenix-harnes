@@ -1,0 +1,30 @@
+name: PHOENIX Sports Cloud Ticket Monitor
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: phoenix-sports-cloud-ticket-monitor
+  cancel-in-progress: false
+jobs:
+  monitor:
+    name: Verify outcomes and email results with computer off
+    if: github.repository == 'arisnachy/phoenix-harnes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check encrypted tickets and send provisional sporting outcome emails
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PHOENIX_SPORTS_CLOUD_AES_KEY: ${{ secrets.PHOENIX_SPORTS_CLOUD_AES_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          PHOENIX_SPORTS_NOTIFY_TO: ${{ secrets.PHOENIX_SPORTS_NOTIFY_TO }}
+          PHOENIX_SPORTS_NOTIFY_FROM: ${{ secrets.PHOENIX_SPORTS_NOTIFY_FROM }}
+        run: node --experimental-strip-types packages/core/tool-sports/scripts/monitor-cloud-ticket.mjs

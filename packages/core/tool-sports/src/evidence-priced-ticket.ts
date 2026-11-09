@@ -1,7 +1,7 @@
 /** Quote only when independently researched fixtures match fresh, same-bookmaker prices.
  * No combined-odds claims across different bookmakers or historical sources.
  */
-import { evidenceTicket } from './evidence-ticket.ts'
+import { evidenceTicket, type TicketPreselectReviewer } from './evidence-ticket.ts'
 import {dailyResearchFetcher} from './sports-daily-preload.ts'
 import {auditTicketDecisions,readDecisionPolicy,type TicketDecisionAudit} from './sports-ticket-decision.ts'
 import {auditTicketMarketRisk,quoteSideNoVig,type TicketMarketRisk} from './ticket-risk-audit.ts'
@@ -51,18 +51,66 @@ export async function evidencePricedTicket(
   modelAudit:Array<{eventId:string;status:'support'|'contradiction'|'unavailable';
     prediction:ModelForecast|null}>;
   conditional:boolean;dossierComplete:boolean;
-  explanation:string;marketRisk?:TicketMarketRisk;
+  explanation:string;reviewedBeforeSelection:number;removedConflicts:number;
+  trackingEvents:Array<{eventId:string;sport:string;league:string;date:string;
+    pick:'home'|'away';kickoff:string}>;
+  marketRisk?:TicketMarketRisk;
   decisionAudit:TicketDecisionAudit}>{
   const researchFetcher=fetcher===fetch?dailyResearchFetcher(fetcher,env):fetcher
-  const research=await evidenceTicket(count,date,sport,researchFetcher,now,env)
   const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
     year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
-  // A winner picked from records cannot bypass the discipline-specific dossier.
-  // Review each selected fixture before attaching even one bookmaker quote.
-  const specialistChecks=await specialistResearcher(research.events.map(e=>({
-    sport:e.sport,league:e.league,eventId:e.eventId,date:day,
-    home:e.home,away:e.away,kickoff:e.kickoff,
-  })),researchFetcher,now,env)
+  const preview=new Map<string,SpecialistGate>()
+  let reviewedBeforeSelection=0,removedConflicts=0
+  const reviewCandidates:TicketPreselectReviewer=async candidates=>{
+    // The historical ranking is a PRE-FILTER only. Challenge more candidates
+    // before choosing the final 5/6, and retain the review by exact event ID.
+    const games=candidates.map(c=>({
+      sport:c.sport,league:c.league,eventId:c.eventId,date:day,
+      home:c.home,away:c.away,kickoff:c.kickoff,
+    }))
+    const checks=await specialistResearcher(games,researchFetcher,now,env,[],8_000)
+    reviewedBeforeSelection=checks.length
+    return checks.map((check,index)=>{
+      const fixture=candidates[index]!
+      preview.set(fixture.eventId,check)
+      const conflicts=check.pendingSteps.some(step=>
+        /equipos no coinciden|conflicto de cartelera|identidad contradictoria|identidad u horario|horario.*no coinciden/iu.test(step))
+        ||check.sourceChecks?.some(source=>source.status==='conflict')===true
+      if(conflicts)removedConflicts++
+      const pending=check.checklist?.criticalPending.length??12
+      const priority=check.checklist?.complete===true?1.25:
+        check.status==='researched'?0.38:
+          check.status==='incomplete'?0.09:-0.04
+      const reason='Especialista '+check.status+
+        '; pasos críticos pendientes '+pending+
+        (conflicts?'; conflicto de identidad':'')
+      return{eventId:fixture.eventId,excluded:conflicts,
+        priority:priority-Math.min(12,pending)*0.015,reason}
+    })
+  }
+  const research=await evidenceTicket(count,date,sport,researchFetcher,now,env,
+    reviewCandidates)
+  // Full specialist reassessment is retained for a preliminary timeout or
+  // unavailable dossier. Never treat a short preflight as completed research.
+  const pendingGames=research.events.filter(e=>{
+    const existing=preview.get(e.eventId)
+    // A genuine incomplete dossier is evidence, not a retryable outage.
+    // Re-evaluating it with a new subset may falsely promote a missing lineup.
+    return !existing||existing.status==='unavailable'
+  })
+    .map(e=>({sport:e.sport,league:e.league,eventId:e.eventId,
+      date:day,home:e.home,away:e.away,kickoff:e.kickoff}))
+  const retried=await specialistResearcher(pendingGames,researchFetcher,now,env)
+  const byId=new Map(retried.map(x=>[x.eventId,x]))
+  const specialistChecks:SpecialistGate[]=research.events.map(e=>byId.get(e.eventId)??preview.get(e.eventId)??{
+    sport:e.sport,league:e.league,eventId:e.eventId,specialist:'unavailable',
+    status:'unavailable' as const,verifiedSteps:[],pendingSteps:['Sin expediente verificado'],
+    approvedForBetting:false as const,checkedAt:new Date(now).toISOString(),
+  })
+  const trackingEvents=research.events.map(e=>({
+    eventId:e.eventId,sport:e.sport,league:e.league,date:day,
+    pick:e.pick,kickoff:e.kickoff,
+  }))
   const researchedLegs=specialistChecks.filter(x=>x.status==='researched').length
   const specialistComplete=research.events.length===count&&researchedLegs===count
   // Number of leg dossiers checked is NOT the number of research steps closed.
@@ -133,8 +181,8 @@ export async function evidencePricedTicket(
   const base={card:researchCard,priced:false as boolean,placed:false as const,
     complete:research.complete&&specialistComplete,verifiedEvents:research.verifiedEvents,
     quotedLegs:0,missingQuotes:count,sourceAudit:initialSources,
-    specialistChecks,researchedLegs,modelAudit,
-    decisionAudit:preliminaryDecisionAudit,conditional:!checklistComplete,
+    specialistChecks,researchedLegs,modelAudit,trackingEvents,
+    decisionAudit:preliminaryDecisionAudit,reviewedBeforeSelection,removedConflicts,conditional:!checklistComplete,
     dossierComplete:checklistComplete,
     multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
     explanation:'Preselección ESPN, cuotas todavía NO verificadas: '+quoteAccess+
@@ -312,7 +360,10 @@ export async function evidencePricedTicket(
     explanation:'Borrador CONFLICTIVO: los equipos o la localía no coinciden con el '+
       'partido verificado. No se adjudican cuotas a encuentros ambiguos.'}
   if(!research.complete)return{...checked,
-    explanation:'Borrador INCOMPLETO: '+research.verifiedEvents+'/'+count+
+    explanation:(removedConflicts>0?
+      'Borrador CONFLICTIVO: '+removedConflicts+
+      ' identidades contradictorias excluidas antes de elegir. ':'')+
+      'Borrador INCOMPLETO: '+research.verifiedEvents+'/'+count+
       ' partidos con tendencia histórica documentada, '+
       quotedLegs+' con precio cotejado. '+
       (research.multisportSatisfied?'':'No cumple diversidad de deportes. ')+
@@ -380,6 +431,17 @@ export async function evidencePricedTicket(
       ?row as Record<string,unknown>:{}
     return {...pricedRow,
       marketNoVigPercent:marketRisk.legs[index]?.noVigPercent??null,
+      // One chance per leg. Prefer a two-sided, same-bookmaker no-vig
+      // estimate; otherwise preserve the disclosed exploratory forecast.
+      legWinProbabilityPercent:marketRisk.legs[index]?.noVigPercent??
+        (quote?.market==='double_chance'?null:
+          typeof prior.legWinProbabilityPercent==='number'?
+            prior.legWinProbabilityPercent:null),
+      legProbabilitySource:marketRisk.legs[index]?.noVigPercent!==null&&
+        marketRisk.legs[index]?.noVigPercent!==undefined?
+          'bookmaker-market-no-vig':quote?.market==='double_chance'?
+            'unavailable':typeof prior.legWinProbabilityPercent==='number'?
+              'exploratory-recent-form':'unavailable',
       marketRiskTier:marketRisk.legs[index]?.relativeRisk??'unknown',
       decisionReview:decisionAudit.legs[index]??null,
       specialistResearch:specialistChecks[index]??null,
@@ -389,12 +451,25 @@ export async function evidencePricedTicket(
       ...Object.fromEntries(['homeTeam','awayTeam','homeLogo','awayLogo','sport',
         'league','country','rationale','when'].filter(k=>typeof prior[k]==='string')
         .map(k=>[k,prior[k]])),
+      rationale:marketRisk.legs[index]?.noVigPercent!==null&&
+        marketRisk.legs[index]?.noVigPercent!==undefined?
+          ('Probabilidad individual implícita del mercado sin margen: '+
+          marketRisk.legs[index]!.noVigPercent+'% (NO pronóstico calibrado). '+
+          String(prior.rationale??'').replace(
+            /^Probabilidad individual exploratoria[^.]*\.\s*/u,'')).slice(0,480):
+          String(prior.rationale??'').slice(0,480),
       ...(quote?{price:String(quote.price),bookmaker:quote.bookmaker,
         ...(quote.market==='double_chance'?{selection:quote.selection==='1X'
           ?'1X · Local o empate':'X2 · Visita o empate',
           market:'Doble oportunidad (1X/X2)',
-          rationale:(String(prior.rationale??'').slice(0,420)+
-            ' · Cobertura del empate; cuota verificada, riesgo vigente.').slice(0,480)}:{})}:{})}
+          rationale:((marketRisk.legs[index]?.noVigPercent!==null&&
+            marketRisk.legs[index]?.noVigPercent!==undefined?
+              'Probabilidad implícita específica del mercado 1X/X2: '+
+              marketRisk.legs[index]!.noVigPercent+'% (NO calibrada). ':
+              'Probabilidad específica de doble oportunidad: no estimable. ')+
+            String(prior.rationale??'').replace(
+              /^Probabilidad individual exploratoria[^.]*\.\s*/u,'').slice(0,340)+
+            ' · Cubre empate; verificar precio, riesgo vigente.').slice(0,480)}:{})}:{})}
   })
   const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,modelAudit,marketRisk,decisionAudit,
@@ -412,18 +487,17 @@ export async function evidencePricedTicket(
       ' (predicción independiente, no cuota). '+
       (marketRisk.weakest?'Pata mas ajustada: '+marketRisk.weakest.selection+
         ' ('+marketRisk.weakest.noVigPercent+'% sin margen). ':'')+
-      (marketRisk.fullPercent===null?'Cuota de dos lados insuficiente para estimar el producto sin margen. ':
-        'Producto del mercado bajo independencia: '+marketRisk.fullPercent+
-        '% (NO prediccion propia). ')+
+      'Cada porcentaje pertenece únicamente a su pata y su mercado; '+
+      'no presentar una probabilidad conjunta del boleto. '+
       'Formas y descanso históricos NO son probabilidades calibradas. El expediente deportivo puede señalar titulares, bajas y estadísticas PENDIENTES; confirmar la casa antes de apostar. '+priced.warning,
-    askPrompt:'Kira, explica decisionAudit.legs por partido: mantener, advertir, esperar o excluir. Contrasta las patas frágiles, titulares, porteros, fuentes y escenarios de 3/4/5. No rellenes cinco por obligación ni atribuyas EV a cuotas sin modelo validado.',
+    askPrompt:'Kira, razona cada pata de forma individual: estimación con origen, datos favorables y contradicciones, lesionados y titulares. No mostrar probabilidad conjunta del boleto; no inventar valor esperado ni afirmar ticket ganador.',
   }}
   return{card,priced:true,placed:false,complete:true,
     conditional:!checklistComplete||elevatedMarketRisk,dossierComplete:checklistComplete,
-    marketRisk,decisionAudit,
+    marketRisk,decisionAudit,reviewedBeforeSelection,removedConflicts,
     verifiedEvents:research.verifiedEvents,
     quotedLegs:count,missingQuotes:0,sourceAudit,approvedLegs:0,
-    specialistChecks,researchedLegs,modelAudit,
+    specialistChecks,researchedLegs,modelAudit,trackingEvents,
     multisportSatisfied:research.multisportSatisfied,
     explanation:'Las '+count+' selecciones tienen cuota vigente y la misma casa '+best.book+
       '. Decisión crítica: '+decisionAudit.recommendation+
