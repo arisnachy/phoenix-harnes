@@ -51,6 +51,7 @@ import { secondaryMarketSourceCatalog } from './sports-secondary-sources.ts'
 import {discoverEditorialResearch,type EditorialSource,editorialDomains} from './sports-editorial-discovery.ts'
 import {auditSportsCalibration,availableSportCalibration,calibratedSportsForecast} from './sports-calibration.ts'
 import {sportsEnvWithVaultKey} from './sports-credential-env.ts'
+import {researchCoverage,researchCredentialRefs,coverageReport} from './sports-research-coverage.ts'
 
 import {mlbResearch} from './mlb-evidence-research.ts'
 import {reviewMlbResearch} from './mlb-market-research-review.ts'
@@ -70,6 +71,9 @@ export const inject = ['tools','systemPrompt']
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'TICKET DIARIO 5 O 6: primero ampliar y contrastar la cartelera multi-liga, después investigar todos los expedientes y usar decisionAudit. Si existen 5-6 encuentros futuros verificados, presentar hasta seis mejores CANDIDATAS, aunque deban marcarse CONDICIONALES, nunca inventar una victoria aprobada. Diversidad deportiva no autoriza eliminar una pata real y el precio no sustituye la investigación. Para cada pata reporta legWinProbabilityPercent con legProbabilitySource: NO sumar ni multiplicar porcentajes como pronóstico del ticket completo. No convertir un porcentaje exploratorio o no-vig en certeza predictiva; si no puede estimarse, mostrar valor pendiente y por qué. Confirmar estado de riesgo de cada pata antes de cualquier ejecución. ',
+  'CLAVES Y FUENTES SIN BLOQUEOS: para saber qué conectores faltan llama sports_chat_research_provider_status. No pidas que peguen una clave en mensajes normales del modelo ni la aceptes como argumento de herramientas. Si el usuario quiere añadirla, indica el comando humano seguro /secret set NOMBRE VALOR, interceptado por el Host antes del agente y con recordInput=false, o la interfaz de credenciales segura disponible. Pedir permiso y una sola clave pertinente. No bloquear investigación ni tickets por claves ausentes; usa fuentes públicas, respaldo y caché. Tener clave NO equivale a fuente activa ni a datos comprobados. ',
+
   'MEMORIA DE INVESTIGACIÓN POR DÍA: antes de construir un ticket consulta sports_chat_daily_research_cache(statusOnly=true); si no hay datos recientes, precarga con statusOnly=false. Reutiliza información ESPN/NHL/MLB/TheSportsDB y API-Sports con cuota regulada (20 reservas de 100); conserva hasta 7 días PERO respeta vencimiento de cada dato. La precarga ayuda, no reemplaza búsquedas libres ni confirma porteros titulares, alineaciones, cuotas o lesiones. SportsDataIO trial contiene datos alterados y NO sirve para picks. Si un proveedor falla, usa otros sin gastar su cuota repetidamente. ',
   'SONDEO RÁPIDO DE FUENTES GRATUITAS: cuando una consulta deportiva dé 0 datos o el usuario solicite diagnóstico, llama sports_chat_free_sources_probe para comprobar seis endpoints públicos ESPN NBA/NFL/Liga MX, MLB StatsAPI, NHL Web API y TheSportsDB, sin claves ni scraping no autorizado. Un día sin partidos indica empty y NO proveedor caído. Los endpoints públicos aportan datos deportivos, NO cuotas comerciales ni disponibilidad médica. Para OddsHarvester MLB/NFL usa home_away (ganador incluyendo prórroga), nunca market moneyline como argumento CLI; 1x2 es un mercado distinto. ',
   'LESIONES ESPN COMO EVIDENCIA: usar sports_chat_espn_injuries cuando un expediente NBA/WNBA/NFL/NHL/MLB indique lesiones no verificadas. Consultar el JSON público ESPN por liga y equipos con fecha y fuente, no limitarse a la página espn.com.do/basquetbol/nba/lesiones. El estado reported, questionable, out, active o day-to-day es solo lo publicado; no convertirlo en quinteto, portero, QB titular ni confirmación de inactivos. Para NBA, cotejar en la página oficial de reportes antes de afirmar disponibilidad definitiva. Una fuente vacía/no actualizada no equivale a equipo sano, ni impide mostrar un ticket CONDICIONAL con cuotas reales; no inventar bajas. ',
@@ -176,6 +180,47 @@ export function apply(ctx: Context): void {
       return()=>{stopped=true;clearTimeout(initial);clearInterval(periodic)}
     })
   }
+  ctx.tools.register(defineTool({
+    name:'sports_chat_research_provider_status',
+    description:'Muestra por deporte qué estadística requiere el expediente y las fuentes gratuitas, complementarias o aún no integradas. Revisa en la bóveda únicamente SI existen las API keys, sin leerlas ni transmitirlas al modelo. La ausencia nunca bloquea el ticket.',
+    parameters:{
+      sport:{type:'string',description:'Filtrar basketball, hockey, baseball, football, soccer o tennis; vacío para todas las disciplinas.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const requested=typeof args.sport==='string'?args.sport:undefined
+      if(requested&&!['basketball','hockey','baseball','football','soccer','tennis'].includes(requested))
+        throw Error('Deporte no admitido en el inventario de cobertura')
+      const vault=(ctx.get as (name:string)=>unknown)('credentials') as
+        {describe(ref:string):Promise<{configured:boolean;writable:boolean;source?:string}>}|undefined
+      const configured=new Set<string>()
+      const keys=await Promise.all(researchCredentialRefs.map(async entry=>{
+        let record:{configured:boolean;writable:boolean;source?:string}={
+          configured:false,writable:false}
+        try{if(vault)record=await vault.describe(entry.ref)}
+        catch{/* No public secret data or unverified provider readiness. */}
+        if(record.configured)configured.add(entry.ref)
+        return{provider:entry.provider,ref:entry.ref,use:entry.use,
+          configured:record.configured,writable:record.writable}
+      }))
+      const scope=coverageReport(configured,requested)
+      const env=await sportsEnv(ctx)
+      for(const key of keys){
+        if(!key.configured&&!!env[key.ref]?.trim()){
+          key.configured=true
+          configured.add(key.ref)
+        }
+      }
+      return JSON.stringify({keys,coverage:coverageReport(configured,requested),
+        documentedRequirements:researchCoverage.filter(x=>!requested||x.sport===requested).length,
+        nonExclusive:true,
+        secureEntry:'Si quieres conectar una fuente opcional, introduce /secret set NOMBRE VALOR como comando humano de PHOENIX, nunca como texto dirigido a Kira. La orden se procesa antes del modelo y evita registrar su entrada. Verificar estado sin mostrar la clave.',
+        warning:'Configurado no significa probado: no hay garantía de cobertura de temporada, permiso del plan, alineaciones, lesiones ni mercados. Las fuentes sin clave continúan operativas.',
+      })
+    },
+    presentCall:()=>({card:'generic',title:'Revisar cobertura deportiva y claves seguras',kind:'read' as const}),
+  }))
   ctx.tools.register(defineTool({
     name:'sports_chat_daily_scan',
     description:'Barrido barato de las ligas deportivas de hoy: NBA, WNBA, MLB, NFL, NHL, fútbol y tenis; devuelve eventos ESPN futuros confirmados, cobertura y una preselección equilibrada entre disciplinas. NO predice resultados ni cuotas.',
