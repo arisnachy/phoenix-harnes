@@ -118,7 +118,7 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
         return Number.isFinite(at)&&at<=checkedMs&&
           checkedMs-at<=45*24*60*60*1000&&
           at<=reviewMs&&reviewMs-at<=45*24*60*60*1000&&
-          Number.isSafeInteger(out.opponentId)&&out.opponentId>0&&
+          typeof out.opponentId==='number'&&Number.isSafeInteger(out.opponentId)&&out.opponentId>0&&
           validInnings&&
           [out.pitches,out.earnedRuns,out.strikeouts,out.walks].every(validCount)
       })),
