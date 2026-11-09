@@ -21,6 +21,8 @@ export type TicketNarrative={
   news:TicketNewsItem[];
   externalOpinions:Array<{publisher:string;headline:string;publishedAt:string|null;
     discoveryUrl:string;status:'indexed-headline-only'}>;
+  globalNews:Array<{publisher:string;headline:string;indexedAt:string|null;
+    articleUrl:string;status:'indexed-only'}>;
   externalModel:{provider:string;status:'support'|'contradiction'|'unavailable';
     selection:string|null;modelProbabilityPercent:number|null;updatedAt:string|null;
     sourceUrl:string|null};
@@ -171,7 +173,7 @@ export function composeTicketLegNarrative(
   return{
     eventId:event.eventId,selected,title,status:documented?'documented':'conditional',
     selectionWhy,favorable,contradictions,specialistEvidence,criticalPending,news,
-    externalOpinions:[],externalModel:{provider:'Bet Better',status:'unavailable',
+    externalOpinions:[],globalNews:[],externalModel:{provider:'Bet Better',status:'unavailable',
       selection:null,modelProbabilityPercent:null,updatedAt:null,sourceUrl:null},
     venue:{name:venueName,city:venueCity,venueSplit:venueGames>0?'verified':'not-verified',
       games:venueGames,wins:venueWins,losses:venueLosses},
