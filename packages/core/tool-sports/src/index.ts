@@ -1384,7 +1384,7 @@ export function apply(ctx: Context): void {
       markets:{ type:'string',description:'h2h, totals o spreads. Por defecto h2h.' },
       eventId:{type:'string',description:'ID ESPN real de un encuentro futuro; restringe la búsqueda a ese evento.'},
       date:{type:'string',description:'Fecha AAAA-MM-DD del partido, obtenida del scoreboard.'},
-      sourcePolicy:{type:'string',description:'espn (por defecto) o all (comparación multifuente solo sin eventId ni fecha).'},
+      sourcePolicy:{type:'string',description:'espn (por defecto) o all (comparar proveedores autorizados; con eventId+date exige cotejo exacto ESPN).'},
     },
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
@@ -1443,7 +1443,7 @@ export function apply(ctx: Context): void {
         return Number.isFinite(updated)&&updated<=observedAt&&observedAt-updated<=3_600_000
           &&Number.isFinite(kickoff)&&kickoff>observedAt
       })
-      const excludedStaleOrStarted=report.quotes.length-quotes.length
+      const excludedStaleOrStarted=Math.max(0,report.quotes.length-quotes.length+extraQuotes.length)
       const rawSource=report.sources.find(x=>x.provider==='ESPN Site/Core')
       const espnRaw=rawSource&&'rawCount' in rawSource&&
         typeof rawSource.rawCount==='number'?rawSource.rawCount:0
