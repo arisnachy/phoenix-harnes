@@ -163,3 +163,16 @@ test('medical image-only uploads always carry a clinical source-first guard',()=
  assert.doesNotMatch(source.split('export const CLINICAL_VISION_BASELINE')[1].split('function healthRequest')[0],/WPW|preexcitaci[oó]n/i)
  assert.match(source,/NO ANALIZADO/)
 })
+
+test('medical vision contract prioritizes source inspection, differential and no unsolicited atlas',()=> {
+ const source=readFileSync(new URL('../packages/core/tool-health/src/index.ts',import.meta.url),'utf8')
+ const baseline=source.split('export const CLINICAL_VISION_BASELINE')[1].split('function healthRequest')[0]
+ assert.match(baseline,/hallazgos positivos y negativos/)
+ assert.match(baseline,/diagnósticos diferenciales priorizados/)
+ assert.match(baseline,/hallazgos a favor y en contra/)
+ assert.match(baseline,/No generes dibujos, atlas ni reconstrucciones/)
+ assert.match(baseline,/NO ANALIZADO/)
+ assert.match(baseline,/modelo/)
+ assert.match(source,/Una captura parcial no impide comunicar una sospecha provisional sustentada/)
+ assert.match(source,/Esta auditoría no lee píxeles/)
+})
