@@ -6,7 +6,7 @@ import {validateCloudTicket,type CloudTicket,type CloudLeg,type CloudSport}
   from './sports-cloud-outcome.ts'
 import {enrollCloudTicket,type CloudEnrollment} from './sports-cloud-ticket.ts'
 type Fixture={sport:string;league:string;eventId:string;date:string;
-  pick:'home'|'away';kickoff:string}
+  pick:'home'|'away'|'draw';kickoff?:string}
 type ReceiptFixture={sport:string;league:string;eventId:string;date:string;
   goal:{market:string;side:string;line?:number}}
 const supported=(name:string):name is CloudSport=>
@@ -17,9 +17,10 @@ export function cloudForecastTicket(fixtures:readonly Fixture[],
   const legs:CloudLeg[]=fixtures.map(x=>{
     if(!supported(x.sport))throw Error('Deporte sin clasificador cloud')
     const double=marketPreference==='double_chance'&&priced&&x.sport==='soccer'
+    const draw=x.pick==='draw'
     return{sport:x.sport,league:x.league,eventId:x.eventId,date:x.date,
-      market:double?'double_chance':'winner',
-      selection:double?(x.pick==='home'?'1X':'X2'):x.pick}
+      market:draw?'three-way':double?'double_chance':'winner',
+      selection:draw?'draw':double?(x.pick==='home'?'1X':'X2'):x.pick}
   })
   return validateCloudTicket({version:1,kind:'research',
     reference:'PHX-'+randomUUID(),createdAt:new Date(now).toISOString(),legs})
