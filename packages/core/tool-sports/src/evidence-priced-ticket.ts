@@ -104,7 +104,7 @@ export async function evidencePricedTicket(
   })
     .map(e=>({sport:e.sport,league:e.league,eventId:e.eventId,
       date:day,home:e.home,away:e.away,kickoff:e.kickoff,
-      ...(e.pick==='draw'?{}:{pick:e.pick})}))
+      pick:e.pick}))
   const retried=await specialistResearcher(pendingGames,researchFetcher,now,env)
   const byId=new Map(retried.map(x=>[x.eventId,x]))
   const specialistChecks:SpecialistGate[]=research.events.map(e=>byId.get(e.eventId)??preview.get(e.eventId)??{
