@@ -107,3 +107,11 @@ test('does not call a ref-only collection an observed data payload',async()=>{
  assert.equal(result.status,'ref_only')
  assert.equal(result.resolvedRefs,0)
 })
+
+test('a successful HTTP 200 with paging metadata is not verified ESPN data',async()=>{
+ const input={...base,mode:'game_odds'}
+ for(const payload of [{count:0},{pageCount:0,pageIndex:1},{items:[],count:5}]){
+  const result=await readExtendedEspn(input,async()=>payload)
+  assert.equal(result.status,'empty')
+ }
+})

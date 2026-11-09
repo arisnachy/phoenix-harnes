@@ -295,7 +295,9 @@ export async function readExtendedEspn(
     const resolved=await resolveExtendedRefs(items??data,endpoint,getJSON)
     const rawRefs=items?.length&&items.every(x=>x!==null&&typeof x==='object'&&
       Object.keys(x as Record<string,unknown>).every(k=>k==='$ref'))
-    const status=rows===0||obj.error||obj.errors?'empty':rawRefs&&resolved.resolvedRefs===0?'ref_only':'data'
+    const metadataOnly=Object.keys(obj).every(k=>['count','pageIndex','pageCount','pageSize','timestamp'].includes(k))
+    const status=rows===0||obj.count===0||metadataOnly||obj.error||obj.errors?'empty':
+      rawRefs&&resolved.resolvedRefs===0?'ref_only':'data'
     return {...base,status,count:typeof obj.count==='number'?obj.count:rows,
       refCount:resolved.refCount,resolvedRefs:resolved.resolvedRefs,
       snapshot:compact(resolved.data)}
