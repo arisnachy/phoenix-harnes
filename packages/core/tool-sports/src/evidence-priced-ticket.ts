@@ -430,8 +430,17 @@ export async function evidencePricedTicket(
       quoteUpdatedAt:null,bookmakerVerified:false,
       referenceMoneylines:page.referenceMoneylines,
     }))
+    const chosen=research.events[index]?.pick==='home'?
+      research.events[index]?.home:research.events[index]?.away
+    const visible=report.pages.flatMap(page=>page.referenceMoneylines)
+      .find(ref=>normalize(ref.selection)===normalize(chosen??''))
+    const reference=visible?'Moneyline visible de comparador '+visible.american+
+      ' (decimal '+visible.decimal+'), SIN casa ni fecha de actualización, '+
+      'NO cotizable. ':''
+    // Show the result in the existing rationale field as well: older clients
+    // may not render the new typed webOddsResearch array yet.
     return{...leg,webOddsResearch:observations,
-      // These observed HTML links are NEVER copied into price/bookmaker fields.
+      rationale:(reference+String(leg.rationale??'')).slice(0,480),
       oddsReferenceNote:'Investigadas '+observations.length+
         ' páginas públicas. Precios de comparador solo referenciales '+
         '(sin casa, actualización ni aceptación verificadas).'}
