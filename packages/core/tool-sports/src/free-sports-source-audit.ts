@@ -383,7 +383,7 @@ async function keyedFixture(
 }
 const apiTeams=(data:unknown):EventRow[]=>arr(obj(data).response).map(raw=>{
   const game=obj(raw),teams=obj(game.teams),date=obj(game.date)
-  const when=str(date.time)||str(date.date)||str(game.date)
+  const when=str(game.date)||str(date.date)||str(date.time)
   return{home:str(obj(teams.home).name),away:str(obj(teams.away).name),when}
 })
 const bigTeams=(data:unknown):EventRow[]=>arr(obj(data).data).map(raw=>{
