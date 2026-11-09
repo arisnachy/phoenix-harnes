@@ -6,6 +6,7 @@ import type {MarketOutcome} from './sports.ts'
 import {crosscheckFreeFixture,type BackupFinding} from './free-sports-source-audit.ts'
 import {auditSportChecklist,type SportChecklist,type StepObservation} from './daily-specialist-checklist.ts'
 import {fetchEspnInjuryBackup} from './espn-injury-backup.ts'
+import {nflverseInjuryReport} from './nflverse-injury-report.ts'
 import {readNbaNflDepthPreviews,compareNbaNflCandidate,compareIndividualMetrics,
   type DepthPreview,type PickComparison} from './nba-nfl-keyless-closure.ts'
 import {investigateNfl} from './nfl-evidence-research.ts'
@@ -337,6 +338,25 @@ export async function investigateTicketSpecialist(
             ' · '+item.status+' · '+(item.reportedAt??'sin fecha'))
       }else pending.push('ESPN lesiones '+injury.status+': '+injury.source)
       pending.push(...injury.notes.slice(0,4))
+      if(game.league==='nfl'&&
+        (injury.status==='unavailable'||injury.status==='stale')){
+        // Independent fallback: CSV injury snapshots are NOT inactives.
+        // Keep it under a shorter budget than the whole game dossier.
+        const bounded:typeof fetch=(input,init)=>{
+          const budget=AbortSignal.timeout(2400)
+          const signal=init?.signal?AbortSignal.any([budget,init.signal]):budget
+          return fetcher(input,{...init,signal})
+        }
+        const backup=await nflverseInjuryReport(game,bounded,now,env)
+        if(backup.status==='verified'||backup.status==='partial'){
+          mark('injuries','partial','NFLverse '+backup.status+
+            ' (informe SEMANAL, nunca lista final de inactivos)')
+          steps.push('Redundancia NFLverse '+backup.status+' '+backup.source)
+          steps.push(...backup.injuries.slice(0,12).map(p=>'NFLverse '+p.team+
+            ' · '+p.name+' · '+p.status+' · '+p.modifiedAt))
+        }else pending.push('Redundancia NFLverse '+backup.status+
+          ': '+backup.warning)
+      }
     }
     const sourceChecks=await sourceTask
     const mismatches=sourceChecks.filter(s=>s.status==='conflict')
