@@ -217,7 +217,7 @@ export function apply(ctx: Context): void {
           ...(!research.result?{researchError:research.error,
             fixtures:daily.events.slice(0,12).map(event=>({
               sport:event.sport,league:event.league,eventId:event.eventId,
-              home:event.home.name,away:event.away.name,date:event.start,
+              home:event.home.name,away:event.away.name,date:event.kickoff,
             }))}:{}),
           sourceHealth:providerHealth,oddsAttempts:attempts,
           priced:false,placed:false,approvedForBetting:0,
