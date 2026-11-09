@@ -6,12 +6,55 @@
  */
 export type PublicOddsProvider='ESPN'|'Oddschecker'|'ScoresAndOdds'
 export type PageStatus='observed-team-mentions'|'page-accessible'|'not-found'|'blocked'|'unavailable'
+export type PublicMoneylineHint={
+  selection:string;american:string;decimal:number
+  market:'moneyline';status:'reference-only';bookmaker:null;quoteUpdatedAt:null
+  detail:string
+}
+/** Recognize only explicit single-number moneyline links in ScoresAndOdds.
+ * Prices near a team are hints from a comparison portal, NOT a bookmaker quote:
+ * this page does not supply a verified bookmaker, game timestamp or source age.
+ * Never use these as offers in a priced ticket.
+ */
+export function scoresAndOddsMoneylineHints(
+  html:string,home:string,away:string,
+):PublicMoneylineHint[]{
+  if(!/moneyline/iu.test(html)||html.length>1_500_000)return []
+  const candidates=[home,away].filter(x=>x.trim().length>=5)
+  if(candidates.length!==2)return []
+  const found=new Map<string,PublicMoneylineHint>()
+  // An anchor with only a moneyline price, not a combined handicap/total.
+  const links=/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]{0,140}?)<\/a>/giu
+  for(const match of html.matchAll(links)){
+    const target=decode(match[1]??'')
+    if(!/^https:\/\/switchboard\.scoresandodds\.com\//iu.test(target))continue
+    const raw=clean(match[2]??'')
+    if(!/^[+-]\d{3,5}$/u.test(raw))continue
+    const price=Number(raw)
+    if(!Number.isFinite(price)||Math.abs(price)<100||Math.abs(price)>10000)continue
+    const at=match.index??-1
+    const team=candidates.map(name=>({
+      name,index:html.toLowerCase().lastIndexOf(name.toLowerCase(),at),
+    })).filter(x=>x.index>=0&&at-x.index<=850)
+      .sort((a,b)=>b.index-a.index)[0]
+    if(!team||found.has(team.name))continue
+    const decimal=Number((price>0?1+price/100:1+100/Math.abs(price)).toFixed(4))
+    found.set(team.name,{
+      selection:team.name,american:raw,decimal,market:'moneyline',
+      status:'reference-only',bookmaker:null,quoteUpdatedAt:null,
+      detail:'Precio visible en enlace del comparador. No se confirmó fecha, '+
+        'casa, período ni aceptación; NO es una cotización para ticket',
+    })
+  }
+  return [...found.values()]
+}
+
 export type OddsPageObservation={
   provider:PublicOddsProvider;url:string;status:PageStatus
   checkedAt:string;pageObservedAt:string;quoteUpdatedAt:null
   bookmakerVerified:false;eventVerified:false;priced:false
   htmlTitle:string|null;snippet:string|null
-  markets:string[];detail:string
+  markets:string[];referenceMoneylines:PublicMoneylineHint[];detail:string
 }
 export type PublicOddsWebsiteReport={
   sportKey:string;requestedDate:string;home:string|null;away:string|null
@@ -110,7 +153,8 @@ export async function readPublicOddsWebsitePage(
     throw Error('Página de cuotas no autorizada')
   const checkedAt=new Date(now).toISOString()
   const base={provider:page.provider,url:uri.toString(),checkedAt,pageObservedAt:checkedAt,
-    quoteUpdatedAt:null,bookmakerVerified:false as const,eventVerified:false as const,priced:false as const}
+    quoteUpdatedAt:null,bookmakerVerified:false as const,eventVerified:false as const,
+    priced:false as const,referenceMoneylines:[] as PublicMoneylineHint[]}
   const work=async():Promise<OddsPageObservation>=>{
     try{
       const response=await fetcher(uri.toString(),{headers:{accept:'text/html'},
@@ -136,7 +180,9 @@ export async function readPublicOddsWebsitePage(
       const terms=['moneyline','spread','total','1x2','draw','handicap','over/under']
         .filter(x=>new RegExp('\\b'+x.replace('/','\\/')+'\\b','iu').test(visible)).slice(0,7)
       const status:PageStatus=excerpt?'observed-team-mentions':home&&away?'not-found':'page-accessible'
-      return {...base,status,htmlTitle,snippet:excerpt,markets:terms,
+      const referenceMoneylines=page.provider==='ScoresAndOdds'&&excerpt?
+        scoresAndOddsMoneylineHints(html,home!,away!):[]
+      return {...base,status,htmlTitle,snippet:excerpt,markets:terms,referenceMoneylines,
         detail:excerpt?'Ambos equipos mencionados cerca en HTML; horario, mercado, precio, casa y vigencia NO confirmados':
           home&&away?'No aparecen ambos equipos cercanos; no prueba que el evento no exista':
             'Sitio accesible; ninguna oferta individual de casa ha sido comprobada'}
@@ -169,5 +215,5 @@ export async function researchPublicOddsWebsites(input:{
     readPublicOddsWebsitePage(page,home,away,fetcher,now)))
   return {sportKey:input.sportKey,requestedDate:date,home,away,pages:reports,
     bookmakerQuotes:0,bookmakerVerified:false,
-    warning:'Las páginas son referencias de investigación, NO cotizaciones elegibles. Ninguna cifra de HTML se transforma en cuota sin identidad de ambos equipos, fecha/hora del evento, casa, mercado, período, precio y marca temporal de la casa. No eludir geobloqueos, CAPTCHA ni paywalls. Ante falta de precios, presentar borrador CONDICIONAL y finalizar la respuesta, sin repetir notas de progreso.'}
+    warning:'Los precios visibles de ScoresAndOdds se etiquetan referencia y NO son cuotas elegibles: falta casa, hora de actualización y cotejo de evento. Las páginas son referencias de investigación, NO cotizaciones elegibles. Ninguna cifra de HTML se transforma en cuota sin identidad de ambos equipos, fecha/hora del evento, casa, mercado, período, precio y marca temporal de la casa. No eludir geobloqueos, CAPTCHA ni paywalls. Ante falta de precios, presentar borrador CONDICIONAL y finalizar la respuesta, sin repetir notas de progreso.'}
 }
