@@ -169,9 +169,9 @@ test('balldontlie NBA/WNBA free games are optional and do not leak the key',asyn
     const x=await crosscheckFreeFixture(fixture,fetcher,Date.now(),
       {PHOENIX_BALLDONTLIE_API_KEY:'secret-bdl-key'})
     assert.equal(seen,true)
-    assert.equal(x.length,2)
-    assert.equal(x[1].provider,'balldontlie')
-    assert.equal(x[1].status,'verified')
+    assert.equal(x.length,league==='nba'?3:2)
+    const bdl=x.find(row=>row.provider==='balldontlie')
+    assert.equal(bdl?.status,'verified')
     assert.ok(!JSON.stringify(x).includes('secret-bdl-key'))
   }
   assert.ok(freeSourceCoverageForSport('basketball',{}).unconfiguredOptional.includes('balldontlie'))
