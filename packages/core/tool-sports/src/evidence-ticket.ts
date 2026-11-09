@@ -9,6 +9,7 @@ import { researchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { investigatePregame } from './pregame-investigation.ts'
 import { investigateEventDeep } from './sports-deep-context.ts'
 import { diversifiedSportsPicks,diversifiedSportsShortlist } from './sports-diversity.ts'
+import {composeTicketLegNarrative} from './sports-ticket-narrative.ts'
 export type TicketPreselectCandidate={
   eventId:string;sport:string;league:string;home:string;away:string;
   kickoff:string;pick:'home'|'away'|'draw';rank:number;level:'strong'|'conditional'
@@ -337,7 +338,18 @@ export async function evidenceTicket(
     const leg=raw&&typeof raw==='object'&&!Array.isArray(raw)?
       raw as Record<string,unknown>:{}
     const candidate=selected[index]
-    return {...leg,
+    const observed=contextual[index]
+    const context=observed?.status==='fulfilled'?observed.value:undefined
+    const narrative=candidate?composeTicketLegNarrative({
+      eventId:candidate.pick.eventId,sport:candidate.pick.sport,
+      league:candidate.pick.league,home:candidate.home,away:candidate.away,
+      kickoff:candidate.kickoff,pick:candidate.pick.pick,
+    },{...leg,
+      legWinProbabilityPercent:candidate.estimatedPct??null,
+      legProbabilitySource:candidate.estimatedPct!==null&&
+        candidate.estimatedPct!==undefined?'exploratory-recent-form':'unavailable',
+    },context):null
+    return {...leg,narrative,
       preliminaryEvidenceTier:candidate?.level??'conditional',
       legWinProbabilityPercent:candidate?.estimatedPct??null,
       legProbabilitySource:candidate?.estimatedPct!==null&&
@@ -348,6 +360,8 @@ export async function evidenceTicket(
   })
   const card:ChatBlock={...ticket.card,props:{...ticket.card.props,
     legs:enrichedLegs,
+    chatNarrative:enrichedLegs.map(x=>x.narrative).filter(Boolean),
+    narrativeInstruction:'Kira debe acompañar cada pata en el chat con su análisis documentado, noticias enlazadas, riesgos, estadio, clima y árbitro si realmente están confirmados. Si algo falta, declararlo sin completar con imaginación. Fotografías de la noticia solo con URL HTTPS y fuente atribuida.',
     subtitle:'Preselección de '+chosen.length+' eventos · '+
       candidatesConditional+' candidatos CONDICIONALES · especialistas después',
     note:(note+' Se evaluaron candidatos adicionales antes de formar el ticket. '+
