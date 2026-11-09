@@ -32,7 +32,7 @@ test('exact ESPN event is found even when the game falls after midnight UTC',asy
   assert.equal(report.attempted,true)
   assert.equal(report.quotes.length,2)
   assert.ok(report.quotes.every(q=>q.bookmaker==='DraftKings'))
-  assert.ok(report.quotes.every(q=>q.time===target.kickoff))
+  assert.ok(report.quotes.every(q=>Date.parse(q.time)===Date.parse(target.kickoff)))
   assert.ok(report.quotes.every(q=>q.market==='h2h'))
   assert.ok(report.quotes.every(q=>q.source.includes('ESPN')))
   assert.ok(hits.some(x=>x.includes('dates=20261109')))
