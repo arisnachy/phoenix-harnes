@@ -1824,13 +1824,17 @@ export function apply(ctx: Context): void {
         })
       }
       const cloudFollowUp=result.trackingEvents.length?
-        await registerCloudForecast(result.trackingEvents,preference,
-          result.priced,env):{status:'disabled',issueNumber:null,
+        await boundedDailyTool(registerCloudForecast(result.trackingEvents,preference,
+          result.priced,env),12_000).catch(()=>({
+          status:'error' as const,issueNumber:null,
+          reason:'Seguimiento cloud superó el plazo; el ticket se conserva en el chat.',
+        })):{status:'disabled' as const,issueNumber:null,
           reason:'Sin eventos verificados que puedan enviarse al monitor remoto.'}
       return JSON.stringify({uiBlock:{...result.card,
         props:{...result.card.props,cloudFollowUp}},
         cloudFollowUp,reviewedBeforeSelection:result.reviewedBeforeSelection,
         removedConflicts:result.removedConflicts,requestedLegs:args.count,
+        elapsedMs:Date.now()-requestedAt,
         complete:result.complete,priced:result.priced,placed:false,
         conditional:result.conditional,dossierComplete:result.dossierComplete,
         verifiedEvents:result.verifiedEvents,quotedLegs:result.quotedLegs,
