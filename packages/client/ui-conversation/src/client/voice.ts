@@ -894,6 +894,26 @@ export function isCodexRealtimeVoiceActive(): boolean {
   return codexRealtimeVoiceSession !== undefined
 }
 
+/** The avatar consumes only live stream amplitude; it never opens a new
+ * microphone, records audio, or gains authority over the Codex transport.
+ */
+export function getVoiceAvatarAudioStream(kind:'input'|'output'):MediaStream|undefined {
+  if (!voiceAssistantSnapshot.active) return undefined
+  const session=codexRealtimeVoiceSession
+  if(session===undefined)return undefined
+  if(kind==='input')return session.microphone
+  const current=session.audio.srcObject
+  return typeof MediaStream!=='undefined'&&current instanceof MediaStream
+    ?current:undefined
+}
+
+/** Most recently authorized speech text for local expression cues; this is
+ * an ephemeral in-memory value cleared when the hands-free session ends.
+ */
+export function getVoiceAssistantSpokenText():string {
+  return voiceAssistantSnapshot.active ? voiceAssistantSpokenText : ''
+}
+
 /** Resolve Codex CLI startup errors across old/new generated Host Remote types.
  * The Host may send a new diagnostic before the client-side generated
  * declaration is rebuilt. Do not statically access status.detail.
