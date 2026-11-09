@@ -11,10 +11,11 @@ const count=Math.max(5,Math.min(6,Number(process.env.PHOENIX_REPLAY_COUNT||5)))
 if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isInteger(count))
   throw Error('Fecha o cantidad de patas de replay inválida')
 const now=Date.now()
+const nativeFetch=globalThis.fetch.bind(globalThis)
 const activity=new Map()
 const errors=[]
 let calls=0
-const maxCalls=600
+const maxCalls=850
 const fetcher=async(input,init={})=>{
   const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url)
   const key=url.hostname+(url.pathname.includes('scoreboard')?'/scoreboard':
@@ -24,7 +25,7 @@ const fetcher=async(input,init={})=>{
   try{
     const abort=AbortSignal.timeout(9000)
     const signal=init.signal?AbortSignal.any([init.signal,abort]):abort
-    const response=await fetch(url,{...init,signal,redirect:'error'})
+    const response=await nativeFetch(url,{...init,signal,redirect:'error'})
     const row=activity.get(key)||{requests:0,success:0,httpErrors:0,latencyMs:0}
     row.requests++
     row.success+=Number(response.ok)
@@ -41,6 +42,9 @@ const fetcher=async(input,init={})=>{
     throw error
   }
 }
+// Make the instrumented adapter the default global transport too, so the
+// SAME production dailyResearchFetcher cache/quota path runs on CI.
+globalThis.fetch=fetcher
 const report={
   day,count,startedAt:new Date(now).toISOString(),
   engine:'PHOENIX tool-sports real pipeline',publicOnly:true,
