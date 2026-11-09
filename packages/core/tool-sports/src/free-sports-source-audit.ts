@@ -5,7 +5,6 @@
 import {getFeed,sportsCatalog} from './sports.ts'
 import {createHash} from 'node:crypto'
 import {dailyResearchFetcher} from './sports-daily-preload.ts'
-import {dailyResearchFetcher} from './sports-daily-preload.ts'
 
 export type FreeFixture={sport:string;league:string;eventId:string;date:string;
   home:string;away:string;kickoff:string}
