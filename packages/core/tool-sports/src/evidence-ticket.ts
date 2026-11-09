@@ -9,6 +9,16 @@ import { researchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { investigatePregame } from './pregame-investigation.ts'
 import { investigateEventDeep } from './sports-deep-context.ts'
 import { diversifiedSportsPicks,diversifiedSportsShortlist } from './sports-diversity.ts'
+export type TicketPreselectCandidate={
+  eventId:string;sport:string;league:string;home:string;away:string;
+  kickoff:string;pick:'home'|'away';rank:number;level:'strong'|'conditional'
+}
+export type TicketPreselectVerdict={
+  eventId:string;excluded:boolean;priority:number;reason:string
+}
+export type TicketPreselectReviewer=(
+  candidates:readonly TicketPreselectCandidate[],
+)=>Promise<readonly TicketPreselectVerdict[]>
 const defaultLeagues = [
   ['basketball','nba'],['hockey','nhl'],['baseball','mlb'],['football','nfl'],
   ['soccer','eng.1'],['soccer','esp.1'],['soccer','usa.1'],['soccer','uefa.champions'],
@@ -65,6 +75,7 @@ const conditionalRank=(match:Awaited<ReturnType<typeof researchSport>>['matches'
 export async function evidenceTicket(
   count:number,date=dayNow(),sportFilter?:string,fetcher:typeof fetch=fetch,
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
+  reviewCandidates?:TicketPreselectReviewer,
 ):Promise<{card:ChatBlock;complete:boolean;verifiedEvents:number;
   candidatesEvaluated:number;researchLeagues:number;modelProbabilities:false;priced:false;placed:false;
   insufficientEvidence:number;researchStandard:string;
@@ -184,9 +195,57 @@ export async function evidenceTicket(
     }
   }
   candidateLegs.sort((a,b)=>b.rank-a.rank||a.pick.eventId.localeCompare(b.pick.eventId))
+  // The expert critic can review MORE than five preliminary candidates.
+  // An invalid fixture may be rejected and replaced before the final ticket
+  // is rendered. Failures in this optional phase retain honest conditional
+  // status rather than declaring an unreviewed favorite approved.
+  let reviewedCandidates=0,rejectedCandidates=0
+  const reviewNotes=new Map<string,string>()
+  if(reviewCandidates&&candidateLegs.length){
+    const pool=candidateLegs.slice(0,Math.min(12,Math.max(count+5,8)))
+    const input=pool.map(c=>({
+      eventId:c.pick.eventId,sport:c.pick.sport,league:c.pick.league,
+      home:c.home,away:c.away,kickoff:c.kickoff,pick:c.pick.pick,
+      rank:c.rank,level:c.level,
+    }))
+    try{
+      const findings=await reviewCandidates(input)
+      const known=new Set(input.map(x=>x.eventId))
+      const seen=new Set<string>()
+      const decisions=new Map<string,TicketPreselectVerdict>()
+      for(const finding of findings){
+        if(!known.has(finding.eventId)||seen.has(finding.eventId)||
+          typeof finding.excluded!=='boolean'||
+          !Number.isFinite(finding.priority)||finding.priority< -100||
+          finding.priority>100||typeof finding.reason!=='string')continue
+        seen.add(finding.eventId)
+        decisions.set(finding.eventId,finding)
+      }
+      reviewedCandidates=decisions.size
+      rejectedCandidates=[...decisions.values()].filter(x=>x.excluded).length
+      for(let i=candidateLegs.length-1;i>=0;i--){
+        const row=candidateLegs[i]!,decision=decisions.get(row.pick.eventId)
+        if(!decision)continue
+        if(decision.excluded){candidateLegs.splice(i,1);continue}
+        // Explicitly reviewed expert evidence dominates marginal differences
+        // in historical form; unrated pool candidates stay at descriptive tier.
+        row.rank+=decision.priority
+        reviewNotes.set(row.pick.eventId,decision.reason.slice(0,180))
+      }
+      candidateLegs.sort((a,b)=>b.rank-a.rank||a.pick.eventId.localeCompare(b.pick.eventId))
+    }catch{
+      // Review not performed. Downstream mandatory specialist check still runs.
+      reviewedCandidates=0;rejectedCandidates=0
+    }
+  }
   const {chosen:selected,diversitySatisfied:multisportSatisfied}=
     diversifiedSportsPicks(candidateLegs,count,!sportFilter)
-  const chosen=selected.map(x=>x.pick)
+  const chosen=selected.map(x=>({
+    ...x.pick,
+    rationale:(String(x.pick.rationale??'')+
+      (reviewNotes.has(x.pick.eventId)?
+        ' · Revisión de alternativas: '+reviewNotes.get(x.pick.eventId):'')).slice(0,480),
+  }))
   const candidatesConditional=selected.filter(x=>x.level==='conditional').length
   const scannedSports=new Set(shortlist.map(x=>x.sport)).size
   const selectedSports=[...new Set(selected.map(x=>x.pick.sport))]
@@ -277,7 +336,9 @@ export async function evidenceTicket(
     subtitle:'Preselección de '+chosen.length+' eventos · '+
       candidatesConditional+' candidatos CONDICIONALES · especialistas después',
     note:(note+' Se evaluaron candidatos adicionales antes de formar el ticket. '+
-      'Las probabilidades por pata son exploratorias y NO calibradas.').slice(0,1250),
+      'Las probabilidades por pata son exploratorias y NO calibradas. '+
+      'Candidatos revisados antes de elegir: '+reviewedCandidates+
+      ', descartados por contraindicación: '+rejectedCandidates+'.').slice(0,1250),
   }}
   return{card,complete:ticket.complete,verifiedEvents:ticket.verifiedEvents,
     candidatesEvaluated:evaluated,researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
