@@ -192,8 +192,10 @@ export function apply(ctx: Context): void {
       const requested=typeof args.sport==='string'?args.sport:undefined
       if(requested&&!['basketball','hockey','baseball','football','soccer','tennis'].includes(requested))
         throw Error('Deporte no admitido en el inventario de cobertura')
-      const vault=(ctx.get as (name:string)=>unknown)('credentials') as
-        {describe(ref:string):Promise<{configured:boolean;writable:boolean;source?:string}>}|undefined
+      let vault:{describe(ref:string):Promise<{configured:boolean;writable:boolean;source?:string}>}|undefined
+      try{
+        vault=(ctx.get as (name:string)=>unknown)('credentials') as typeof vault
+      }catch{/* Vault not mounted: use only private server environment status. */}
       const configured=new Set<string>()
       const keys=await Promise.all(researchCredentialRefs.map(async entry=>{
         let record:{configured:boolean;writable:boolean;source?:string}={
@@ -204,7 +206,6 @@ export function apply(ctx: Context): void {
         return{provider:entry.provider,ref:entry.ref,use:entry.use,
           configured:record.configured,writable:record.writable}
       }))
-      const scope=coverageReport(configured,requested)
       const env=await sportsEnv(ctx)
       for(const key of keys){
         if(!key.configured&&!!env[key.ref]?.trim()){
