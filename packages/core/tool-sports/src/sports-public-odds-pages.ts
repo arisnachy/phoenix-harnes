@@ -107,7 +107,7 @@ export async function readPublicOddsWebsitePage(
     throw Error('Página de cuotas no autorizada')
   const checkedAt=new Date(now).toISOString()
   const base={provider:page.provider,url:uri.toString(),checkedAt,pageObservedAt:checkedAt,
-    quoteUpdatedAt:null,bookmakerVerified:false,eventVerified:false,priced:false}
+    quoteUpdatedAt:null,bookmakerVerified:false as const,eventVerified:false as const,priced:false as const}
   const work=async():Promise<OddsPageObservation>=>{
     try{
       const response=await fetcher(uri.toString(),{headers:{accept:'text/html'},
