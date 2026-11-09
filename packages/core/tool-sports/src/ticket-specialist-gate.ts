@@ -3,6 +3,8 @@
  * to describe a leg as approved. Absent/partial specialist research fails closed.
  */
 import type {MarketOutcome} from './sports.ts'
+import {crosscheckFreeFixture,type BackupFinding} from './free-sports-source-audit.ts'
+import {auditSportChecklist,type SportChecklist,type StepObservation} from './daily-specialist-checklist.ts'
 import {fetchEspnInjuryBackup} from './espn-injury-backup.ts'
 import {investigateNfl} from './nfl-evidence-research.ts'
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
@@ -21,6 +23,10 @@ export type SpecialistGate={
   verifiedSteps:string[];pendingSteps:string[];
   /** No existing specialist currently supplies calibrated betting approval. */
   approvedForBetting:false;checkedAt:string
+  /** Mandatory per-sport steps; an API response is not a completed step. */
+  checklist?:SportChecklist
+  /** Secondary fixtures are not bookmaker offers or confirmed starters. */
+  sourceChecks?:BackupFinding[]
 }
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
@@ -59,14 +65,32 @@ export async function investigateTicketSpecialist(
   quotes:MarketOutcome[]=[],
 ):Promise<SpecialistGate>{
   const base={sport:game.sport,league:game.league,eventId:game.eventId}
+  const eligible=game.sport==='soccer'||game.sport==='football'&&game.league==='nfl'
+    ||game.sport==='basketball'&&['nba','wnba'].includes(game.league)
+    ||game.sport==='hockey'&&game.league==='nhl'
+    ||game.sport==='baseball'&&game.league==='mlb'
+    ||game.sport==='tennis'&&['atp','wta'].includes(game.league)
+  // Source verification overlaps the specialist: no serial network waterfall.
+  // Failures are isolated; absence in a small feed cannot negate an ESPN game.
+  const sourceTask:Promise<BackupFinding[]>=eligible
+    ?crosscheckFreeFixture(game,fetcher,now,env).catch(()=>[] as BackupFinding[])
+    :Promise.resolve([])
+  const signals:Record<string,StepObservation>={}
+  const mark=(key:string,state:StepObservation['state'],detail:string)=>{
+    signals[key]={state,detail}
+  }
+  const observed=(key:string,yes:boolean,detail:string)=>{
+    mark(key,yes?'verified':'missing',detail)
+  }
   try{
     let specialist='',level:'A'|'B'|'C'|'D'|null=null
     let steps:string[]=[],pending:string[]=[],teams=false
     if(game.sport==='football'&&game.league==='nfl'){
       specialist='NFL: QB, 44 titulares, OL/pass rush, lesiones y clima'
       const d=await investigateNfl(game.date,game.eventId,fetcher,now,env,quotes)
-      if(!identities(d.event.home.name,d.event.away.name,game.home,game.away))
-        throw Error('NFL: equipos no coinciden con el partido cotizado')
+      if(!identities(d.event.home.name,d.event.away.name,game.home,game.away)
+        ||!closeTime(d.event.scheduledAt,game.kickoff))
+        throw Error('NFL: identidad u horario del evento no coinciden')
       level=d.coverage.level
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
       steps=['Rosters NFL '+d.coverage.verifiedPlayers+' jugadores',
@@ -74,12 +98,30 @@ export async function investigateTicketSpecialist(
         'Titulares confirmados '+(d.coverage.confirmedOffense+d.coverage.confirmedDefense)+'/44',
         'Enfrentamientos individuales '+d.matchups.length]
       pending=d.missingEvidence
+      observed('fixture',closeTime(d.event.scheduledAt,game.kickoff),
+        'ESPN NFL: identificación y horario cotejados')
+      observed('form',d.teams.home.recent.length>=3&&d.teams.away.recent.length>=3,
+        'Últimos partidos comprobados por ambos rivales')
+      observed('rosters',teams,'Rosters y roles observados para ambos equipos')
+      const qb=(['home','away'] as const).every(side=>
+        d.teams[side].roster.some(p=>p.role==='quarterback'&&p.confirmedOffense))
+      mark('qb',qb?'verified':
+        (['home','away'] as const).every(side=>d.teams[side].roster.some(p=>p.role==='quarterback'))
+          ?'partial':'missing',
+        'QB en roster no implica titular confirmado para hoy')
+      mark('matchups',d.matchups.length?'partial':'missing',
+        d.matchups.length+' enfrentamientos de candidatos; disponibilidad actual por confirmar')
+      mark('weather',d.weather?.timestamp?'partial':'missing',
+        'Datos meteorológicos disponibles; horario y estadio requieren cotejo')
+      mark('market',d.markets.length?'partial':'missing',
+        d.markets.length+' líneas; falta validar reglas exactas de la casa')
     }else if(game.sport==='basketball'&&(game.league==='nba'||game.league==='wnba')){
       specialist='NBA/WNBA: jugadores, quintetos, eficiencia y bajas'
       const d=await researchBasketballCase(game.league,game.date,game.eventId,
         fetcher,now,env,quotes)
-      if(!identities(d.fixture.home.name,d.fixture.away.name,game.home,game.away))
-        throw Error('NBA/WNBA: equipos no coinciden con el partido cotizado')
+      if(!identities(d.fixture.home.name,d.fixture.away.name,game.home,game.away)
+        ||!closeTime(d.opportunity.scheduledAt,game.kickoff))
+        throw Error('NBA/WNBA: identidad u horario del evento no coinciden')
       level=d.coverage.level
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
       steps=['Jugadores en roster '+d.coverage.players,
@@ -87,12 +129,26 @@ export async function investigateTicketSpecialist(
         'Quintetos confirmados '+d.coverage.starters+'/10',
         'Eficiencia/pace verificados '+String(d.coverage.advancedMetrics)]
       pending=d.missingEvidence
+      observed('fixture',closeTime(d.opportunity.scheduledAt,game.kickoff),
+        'ESPN baloncesto: identidad y hora del evento')
+      observed('form',d.teams.home.lastGames.length>=5&&d.teams.away.lastGames.length>=5,
+        'Resultados terminados de ambos equipos')
+      observed('rosters',teams,'Rosters oficiales individuales')
+      observed('starters',d.teams.home.quintetConfirmed&&d.teams.away.quintetConfirmed,
+        'Dos quintetos titulares comprobados; roster no es titularidad')
+      observed('efficiency',d.coverage.advancedMetrics,
+        'Pace y eficiencia de ambos equipos en la fuente consultada')
+      observed('schedule',d.context.restHours.home!==null&&d.context.restHours.away!==null,
+        'Descanso de ambos rivales estimado desde partidos verificados')
+      mark('market',d.markets.length?'partial':'missing',
+        d.markets.length+' opciones consultadas, sujetas a fecha y liquidación')
     }else if(game.sport==='soccer'){
       specialist='Fútbol: once, xG, forma local/visita, lesiones y empate'
       const d=await investigateSoccer(game.date,game.league,game.eventId,
         fetcher,now,env,quotes)
-      if(!identities(d.fixture.home.name,d.fixture.away.name,game.home,game.away))
-        throw Error('Fútbol: equipos no coinciden con el partido cotizado')
+      if(!identities(d.fixture.home.name,d.fixture.away.name,game.home,game.away)
+        ||!closeTime(d.opportunity.scheduledAt,game.kickoff))
+        throw Error('Fútbol: identidad u horario del evento no coinciden')
       level=d.coverage.level
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
       steps=['Jugadores disponibles '+d.coverage.players,
@@ -100,6 +156,22 @@ export async function investigateTicketSpecialist(
         'Onces verificados '+String(d.coverage.lineups),
         'Enfrentamientos individuales '+d.duels.length]
       pending=d.missingEvidence
+      observed('fixture',closeTime(d.opportunity.scheduledAt,game.kickoff),
+        'ESPN fútbol: local, visita y horario cotejados')
+      observed('form',d.teams.home.recent.length>=5&&d.teams.away.recent.length>=5,
+        'Forma y local/visita de ambos rivales')
+      observed('rosters',teams,'Rosters específicos de los clubes')
+      observed('lineups',d.lineupConfirmed.home&&d.lineupConfirmed.away,
+        'Dos onces confirmados, no solo plantillas')
+      const hasXg=d.teamStatistics.some(f=>/xg|expected goals/iu.test(f.label))
+      mark('xg',hasXg?'partial':'missing',
+        'Debe confirmarse xG y xGA para ambos clubes, no una única cifra')
+      mark('injuries',d.injuries.length?'partial':'missing',
+        'Bajas observadas; sin reporte completo de ambos clubes no se certifica disponibilidad')
+      mark('draw',d.markets.some(m=>m.market==='1x2')?'partial':'missing',
+        'Riesgo de empate y reglas reglamentarias de 90 minutos por validar')
+      mark('market',d.markets.length?'partial':'missing',
+        'Mercados observados; falta comprobar período, casa y fecha')
     }else if(game.sport==='hockey'&&game.league==='nhl'){
       specialist='NHL: porteros, forma, tiros y unidades especiales'
       const slate=await nhlSlate(game.date,fetcher,now)
@@ -113,6 +185,17 @@ export async function investigateTicketSpecialist(
         'Porteros candidatos '+(d.goalieCandidates.home.length+d.goalieCandidates.away.length),
         'Forma local/visita '+(d.form.home?.games??0)+'/'+(d.form.away?.games??0)]
       pending=d.missingEvidence
+      observed('fixture',closeTime(match.date,game.kickoff),
+        'NHL Web API: equipos y hora cotejados')
+      observed('form',(d.form.home?.games??0)>=5&&(d.form.away?.games??0)>=5,
+        'Resultados NHL y descanso de ambos clubes')
+      observed('rosters',teams,'Jugadores NHL por club')
+      mark('goalies',d.goalieCandidates.home.length&&d.goalieCandidates.away.length?
+        'partial':'missing','Porteros candidatos: ninguno confirmado como titular')
+      mark('xg','missing','xG 5v5/GSAx sin fuente verificable en este expediente')
+      mark('special','missing','Unidades PP/PK y enfrentamientos sin métricas verificadas')
+      mark('market',d.markets.length?'partial':'missing',
+        'Precios observados; reglas de OT y shootout pendientes')
     }else if(game.sport==='baseball'&&game.league==='mlb'){
       specialist='MLB: abridores, bullpen, bateadores, clima y parque'
       const slate=await discoverMlbDay(game.date,fetcher,now)
@@ -127,6 +210,25 @@ export async function investigateTicketSpecialist(
         'Cruces bateador-lanzador '+d.matchups.length,
         'Escenarios por entradas '+d.scenarioAnalysis.length]
       pending=d.missingEvidence
+      observed('fixture',closeTime(match.date,game.kickoff),
+        'MLB Stats API: equipos y horario cotejados')
+      observed('form',(d.teamForm.home?.games??0)>=5&&(d.teamForm.away?.games??0)>=5,
+        'Forma observada MLB para los dos equipos')
+      observed('rosters',teams,'Rosters activos y perfiles')
+      mark('starters',d.starters.home&&d.starters.away?'partial':'missing',
+        'Abridores probables observados, no alineación definitiva de ambos')
+      const freshBullpen=(['home','away'] as const).every(side=>
+        d.bullpen[side].some(p=>p.reliefUsage72h.length>0))
+      mark('bullpen',freshBullpen?'verified':d.bullpen.home.length&&d.bullpen.away.length?
+        'partial':'missing','Bullpen y utilización de las últimas 72 horas')
+      mark('matchups',d.matchups.some(m=>m.bvp!==null)?'partial':'missing',
+        'Cruces bateador-pitcher observados; tamaños muestrales por cotejar')
+      mark('weather',d.weather?'partial':'missing',
+        'Viento, temperatura y estado del techo sujetos a horario de juego')
+      mark('injuries',d.lineupStatus.home==='confirmed'&&d.lineupStatus.away==='confirmed'?
+        'partial':'missing','Alineaciones y estado de lesionados por comprobar')
+      mark('market',d.odds.length?'partial':'missing',
+        'Líneas cotejadas; condiciones del mercado por confirmar')
     }else if(game.sport==='tennis'&&(game.league==='atp'||game.league==='wta')){
       specialist='Tenis: superficie, servicio/devolución, fatiga y H2H'
       const tour=game.league as TennisTour
@@ -141,12 +243,30 @@ export async function investigateTicketSpecialist(
         'Rankings verificados '+d.coverage.rankCount+'/2',
         'Servicio/devolución '+d.coverage.advancedStatsPlayers+'/2 jugadores']
       pending=d.missingEvidence
+      observed('fixture',closeTime(match.start,game.kickoff),
+        'ESPN tenis: encuentro, ID y hora cotejados')
+      observed('form',d.players.every(p=>p.lastMatches.length>=5),
+        'Cinco partidos recientes por cada tenista')
+      observed('players',teams&&d.coverage.rankCount===2,
+        'Perfiles y rankings individuales')
+      observed('surface',d.coverage.surfaceObserved,
+        'Superficie específica declarada para el evento')
+      observed('serve',d.coverage.advancedStatsPlayers===2,
+        'Estadísticas de servicio y devolución de ambos tenistas')
+      mark('fatigue',d.players.some(p=>p.lastMatches.length>0)?'partial':'missing',
+        'Últimos partidos observados, pero fatiga y desplazamientos no verificados')
+      mark('market',d.markets.length?'partial':'missing',
+        'Mercado de tenis; formato, tie-breaks y condiciones por confirmar')
     }else return errorResult(game,'Sin especialista integrado para esta liga; no promover a ticket final')
     if(['nfl','nba','wnba','nhl','mlb'].includes(game.league)){
       // Read the public ESPN injury feed after the discipline-specific dossier;
       // fallback failures never erase evidence already collected.
       const injury=await fetchEspnInjuryBackup(game,fetcher,now)
       if(injury.status==='verified'||injury.status==='partial'){
+        // A feed can identify reported injuries, but never guarantees a final
+        // inactive list, starting lineup or availability at tipoff/kickoff.
+        mark('injuries','partial','ESPN '+injury.status+
+          ' · observación de lesiones, sin confirmación de bajas definitivas')
         steps.push('ESPN lesiones '+injury.status+': local '+
           injury.home.injuries.length+' · visitante '+injury.away.injuries.length+
           ' · fuente '+injury.source)
@@ -156,8 +276,18 @@ export async function investigateTicketSpecialist(
       }else pending.push('ESPN lesiones '+injury.status+': '+injury.source)
       pending.push(...injury.notes.slice(0,4))
     }
+    const sourceChecks=await sourceTask
+    const mismatches=sourceChecks.filter(s=>s.status==='conflict')
+    if(mismatches.length)
+      pending.push('Revisar localía en fuente secundaria: '+
+        mismatches.map(x=>x.provider).join(', '))
+    const checklist=auditSportChecklist(game.sport,signals,now)
+    if(checklist.criticalPending.length)
+      pending.push('Pasos obligatorios sin cerrar ('+
+        checklist.criticalPending.length+'): '+
+        checklist.criticalPending.slice(0,3).join('; '))
     return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
-      checkedAt:new Date(now).toISOString()}
+      sourceChecks,checklist,checkedAt:new Date(now).toISOString()}
   }catch(error){
     return errorResult(game,(error instanceof Error?error.message:String(error)))
   }
