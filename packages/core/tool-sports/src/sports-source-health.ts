@@ -156,13 +156,16 @@ const exists = async(file:string):Promise<boolean>=>{
  * Ready-to-run does not imply OddsPortal access or an active price.
  */
 export async function sportsSourcesHealth(
-  env:NodeJS.ProcessEnv=process.env,
+  inputEnv:NodeJS.ProcessEnv=process.env,
   probe:(bin:string)=>Promise<boolean>=async bin=>{
     try{await run(bin,['--help'],{shell:false,windowsHide:true,timeout:6000,maxBuffer:256000});return true}
     catch{return false}
   },
   fileExists:(file:string)=>Promise<boolean>=exists,
 ):Promise<SportsSourceHealth[]>{
+  // Probe the exact CLI selected by the managed install, not an unrelated
+  // PATH executable. Respect explicit operator overrides and opt-out flags.
+  const env=hydrateSportsSources(inputEnv)
   const live:SportsSourceHealth[]=[]
   const managed=managedSportsInstallStatus(env)
   const oddsStep=managed.components.find(x=>x.name==='OddsHarvester + Playwright')
