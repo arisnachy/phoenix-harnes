@@ -8,8 +8,10 @@ import { belongsToLeague } from './sports-odds-coverage.ts'
 import { enrichMlbMatch } from './mlb-matchup.ts'
 import { researchMlbTrend } from './mlb-research.ts'
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
-  soccer: ['eng.1','esp.1','mex.1','usa.1','uefa.champions','fifa.world',
-    'ger.1','ita.1','fra.1','por.1','ned.1','bra.1','arg.1','uefa.europa'],
+  soccer: ['eng.1','eng.2','esp.1','mex.1','usa.1','usa.nwsl','uefa.champions','fifa.world',
+    'ger.1','ita.1','fra.1','por.1','ned.1','bra.1','arg.1','uefa.europa',
+    'uefa.europa.conf','conmebol.libertadores','conmebol.sudamericana',
+    'concacaf.champions','fifa.cwc','uefa.euro','conmebol.america'],
   basketball: ['nba','wnba','mens-college-basketball'],
   baseball: ['mlb','dominican-winter-league','caribbean-series'],
   football: ['nfl','college-football'],
@@ -116,8 +118,14 @@ export const hasSportsPermission=(provider:'espn'|'mlb'|'odds',env:NodeJS.Proces
  */
 export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise<T> {
   const u=new URL(url)
-  if(u.protocol!=='https:'||u.username||u.password||!['site.api.espn.com','site.web.api.espn.com','sports.core.api.espn.com','statsapi.mlb.com','api-web.nhle.com','api.the-odds-api.com','api.open-meteo.com','www.thesportsdb.com','cdn.nba.com','api.openligadb.de','raw.githubusercontent.com'].includes(u.hostname))throw Error('Host no permitido')
-  const response=await fetcher(u.toString(),{ headers:{ accept:'application/json' },redirect:'error',signal:AbortSignal.timeout(9000) })
+  if(u.protocol!=='https:'||u.username||u.password||!['site.api.espn.com','site.web.api.espn.com','sports.core.api.espn.com','cdn.espn.com','lm-api-reads.fantasy.espn.com','now.core.api.espn.com','statsapi.mlb.com','api-web.nhle.com','api.the-odds-api.com','api.open-meteo.com','www.thesportsdb.com','cdn.nba.com','api.openligadb.de','raw.githubusercontent.com'].includes(u.hostname))throw Error('Host no permitido')
+  // Restrict unauthenticated ESPN Fantasy player views to 40 candidates.
+  // No session cookies, user tokens or private league access.
+  const headers:Record<string,string>={accept:'application/json'}
+  if(u.hostname==='lm-api-reads.fantasy.espn.com'&&u.pathname.endsWith('/players'))
+    headers['X-Fantasy-Filter']=JSON.stringify({players:{limit:40,
+      sortPercOwned:{sortPriority:1,sortAsc:false}}})
+  const response=await fetcher(u.toString(),{ headers,redirect:'error',signal:AbortSignal.timeout(9000) })
   if(!response.ok)throw Error(`Proveedor HTTP ${response.status}`)
   if(Number(response.headers.get('content-length')||0)>4_000_000)throw Error('Respuesta supera 4 MB')
   const text=await response.text()

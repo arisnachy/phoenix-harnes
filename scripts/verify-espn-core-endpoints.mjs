@@ -3,6 +3,7 @@
  * successful HTTP responses are observations, NOT proof of live wagerability.
  */
 import {espnCoreUrl} from '../packages/core/tool-sports/src/espn-core-intelligence.ts'
+import {extendedEspnUrl} from '../packages/core/tool-sports/src/espn-extra-intelligence.ts'
 
 const core={sport:'football',league:'nfl'}
 const localDay=new Intl.DateTimeFormat('en-CA',{
@@ -24,6 +25,21 @@ const probes=[
       eventId:'401809303',competitionId:'401809303',providerId:'58',movementType:1,limit:5})},
   {label:'NBA scoreboard today',url:'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates='+localDay},
   {label:'NHL scoreboard today',url:'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates='+localDay},
+  {label:'NBA ESPN injuries (league dependent)',url:extendedEspnUrl({
+    sport:'basketball',league:'nba',mode:'league_injuries',
+  })},
+  {label:'NBA player stats ranking',url:extendedEspnUrl({
+    sport:'basketball',league:'nba',mode:'web_statistics_by_athlete',limit:5,
+  })},
+  {label:'NBA CDN fallback scoreboard',url:extendedEspnUrl({
+    sport:'basketball',league:'nba',mode:'cdn_scoreboard',
+  })},
+  {label:'Public fantasy pro schedules (no cookies)',url:extendedEspnUrl({
+    sport:'basketball',league:'nba',mode:'fantasy_pro_team_schedules',season:2026,
+  })},
+  {label:'ESPN newsroom',url:extendedEspnUrl({
+    sport:'basketball',league:'nba',mode:'news_feed',
+  })},
   {label:'NFL old reference',url:espnCoreUrl({...core,mode:'odds',eventId:'401220181',competitionId:'401220181'})},
   {label:'NFL ATS',url:espnCoreUrl({...core,mode:'ats',season:2026,teamId:'1',seasonType:2})},
   {label:'NFL futures',url:espnCoreUrl({...core,mode:'futures',season:2026})},
