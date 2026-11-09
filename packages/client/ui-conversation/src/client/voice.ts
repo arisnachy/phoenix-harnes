@@ -66,6 +66,8 @@ export interface VoiceAssistantSnapshot {
   readonly activatedAt: number
   /** An authorized Codex audio element could not start browser playback. */
   readonly audioBlocked?: boolean
+  /** Safe native Codex service error for the composer to display after shutdown. */
+  readonly lastError?: string
 }
 
 
@@ -1385,6 +1387,35 @@ function updateCodexRealtimePhase(payload: string): void {
     assistantTurnDone = type === 'turn.done' && value.turn?.role === 'assistant'
     assistantTurnCreated = type === 'turn.created' && value.turn?.role === 'assistant'
   } catch {
+    return
+  }
+  if (type === 'error') {
+    let code = ''
+    try {
+      const value = JSON.parse(payload) as { error?: { code?: unknown }; code?: unknown }
+      const raw = typeof value.error?.code === 'string' ? value.error.code : value.code
+      if (typeof raw === 'string') code = raw.slice(0, 64).replace(/[^a-z0-9_-]/giu, '')
+    } catch { /* The event was decoded above; malformed diagnostics stay empty. */ }
+    if (code !== '') {
+      document.documentElement.dataset.phoenixVoiceServiceError = code
+      const terminal = new Set(['usage_check_failed', 'invalid_quicksilver_alpha_header',
+        'no_matching_rule', 'permission_denied', 'quota_exceeded', 'voice_not_enabled'])
+      if (terminal.has(code)) {
+        document.documentElement.dataset.phoenixVoiceSpeechStatus = 'failed'
+        document.documentElement.dataset.phoenixVoiceSpeechError = code
+        const generation = codexRealtimeVoiceGeneration + 1
+        void stopCodexRealtimeVoice().then(() => {
+          if (codexRealtimeVoiceGeneration !== generation || voiceAssistantSnapshot.active) return
+          publishVoiceAssistant({ ...INACTIVE_VOICE_ASSISTANT,
+            lastError: code === 'usage_check_failed'
+              ? 'Codex Live: el servicio rechazó esta sesión de voz (usage_check_failed). Revisa el acceso o cupo de voz de la cuenta.'
+              : code === 'invalid_quicksilver_alpha_header'
+                ? 'Codex Live: el servicio exige Quicksilver v2. Actualiza la versión oficial de Codex.'
+                : `Codex Live: el servicio rechazó la sesión de voz (${code}).`,
+          })
+        })
+      }
+    }
     return
   }
   const assistantStarted = type === 'response.created' || assistantTurnCreated
