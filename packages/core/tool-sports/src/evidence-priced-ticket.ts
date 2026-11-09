@@ -2,6 +2,7 @@
  * No combined-odds claims across different bookmakers or historical sources.
  */
 import { evidenceTicket } from './evidence-ticket.ts'
+import {auditTicketDecisions,readDecisionPolicy,type TicketDecisionAudit} from './sports-ticket-decision.ts'
 import {auditTicketMarketRisk,quoteSideNoVig,type TicketMarketRisk} from './ticket-risk-audit.ts'
 import {investigateTicketSpecialists,type SpecialistGate} from './ticket-specialist-gate.ts'
 import { keylessEnabled,keylessOdds,type KeylessQuote } from './keyless-odds.ts'
@@ -49,7 +50,8 @@ export async function evidencePricedTicket(
   modelAudit:Array<{eventId:string;status:'support'|'contradiction'|'unavailable';
     prediction:ModelForecast|null}>;
   conditional:boolean;dossierComplete:boolean;
-  explanation:string;marketRisk?:TicketMarketRisk}>{
+  explanation:string;marketRisk?:TicketMarketRisk;
+  decisionAudit:TicketDecisionAudit}>{
   const research=await evidenceTicket(count,date,sport,fetcher,now,env)
   const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
     year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
@@ -82,6 +84,18 @@ export async function evidencePricedTicket(
     eventId:e.eventId,...findModelOpinion(forecasts,e),
   }))
   const modelDisagreements=modelAudit.filter(x=>x.status==='contradiction').length
+  const decisionPolicy=readDecisionPolicy(env)
+  // Evaluate and expose uncertainty even when prices cannot be found.
+  const preliminaryDecisionAudit=auditTicketDecisions(research.events.map((event,index)=>({
+    eventId:event.eventId,sport:event.sport,
+    selection:event.pick==='home'?event.home:event.away,
+    quotedPrice:null,noVigShare:null,
+    specialistStatus:specialistChecks[index]?.status??'unavailable',
+    checklistComplete:specialistChecks[index]?.checklist?.complete===true,
+    criticalPending:specialistChecks[index]?.checklist?.criticalPending??
+      ['Expediente especializado no disponible'],
+    modelStatus:modelAudit[index]?.status??'unavailable',
+  })),decisionPolicy)
   const quoteAccess=[
     keylessEnabled(env)?'OddsHarvester habilitado (sujeto al acceso del sitio)':
       'OddsHarvester inactivo: requiere instalación y habilitación por el operador',
@@ -117,7 +131,8 @@ export async function evidencePricedTicket(
   const base={card:researchCard,priced:false as boolean,placed:false as const,
     complete:research.complete&&specialistComplete,verifiedEvents:research.verifiedEvents,
     quotedLegs:0,missingQuotes:count,sourceAudit:initialSources,
-    specialistChecks,researchedLegs,modelAudit,conditional:!checklistComplete,
+    specialistChecks,researchedLegs,modelAudit,
+    decisionAudit:preliminaryDecisionAudit,conditional:!checklistComplete,
     dossierComplete:checklistComplete,
     multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
     explanation:'Preselección ESPN, cuotas todavía NO verificadas: '+quoteAccess+
@@ -324,8 +339,24 @@ export async function evidencePricedTicket(
     eventId:research.events[index]?.eventId??q.eventId,selection:q.selection,
     market:q.market,noVigShare:quoteSideNoVig(q,all,now),
   })))
+  // Second-pass critic: a fragile market favorite is not a justified leg.
+  // A non-vig market share cannot be substituted for a calibrated model.
+  const decisionAudit=auditTicketDecisions(best.choices.map((quote,index)=>({
+    eventId:research.events[index]?.eventId??quote.eventId,
+    sport:research.events[index]?.sport??'unknown',
+    selection:quote.selection,quotedPrice:quote.price,
+    noVigShare:marketRisk.legs[index]?.noVigPercent===null||
+      marketRisk.legs[index]?.noVigPercent===undefined?null:
+      marketRisk.legs[index]!.noVigPercent!/100,
+    specialistStatus:specialistChecks[index]?.status??'unavailable',
+    checklistComplete:specialistChecks[index]?.checklist?.complete===true,
+    criticalPending:specialistChecks[index]?.checklist?.criticalPending??
+      ['Expediente especializado no disponible'],
+    modelStatus:modelAudit[index]?.status??'unavailable',
+  })),decisionPolicy)
   const elevatedMarketRisk=marketRisk.missingQuotes>0||
-    marketRisk.legs.some(x=>x.relativeRisk==='elevated')
+    marketRisk.legs.some(x=>x.relativeRisk==='elevated')||
+    decisionAudit.legs.some(x=>x.verdict==='hold'||x.verdict==='exclude')
   const marketQuotes:MarketOutcome[]=best.choices.map((q,index)=>({
     eventId:q.eventId,bookmaker:q.bookmaker,market:q.market,selection:q.selection,point:q.point,
     price:q.price,home:q.home,away:q.away,time:q.time,updatedAt:q.updatedAt,
@@ -348,6 +379,7 @@ export async function evidencePricedTicket(
     return {...pricedRow,
       marketNoVigPercent:marketRisk.legs[index]?.noVigPercent??null,
       marketRiskTier:marketRisk.legs[index]?.relativeRisk??'unknown',
+      decisionReview:decisionAudit.legs[index]??null,
       specialistResearch:specialistChecks[index]??null,
       researchStatus:specialistChecks[index]?.status==='researched'
         &&specialistChecks[index]?.checklist?.complete===true?'documented':'conditional',
@@ -363,7 +395,7 @@ export async function evidencePricedTicket(
             ' · Cobertura del empate; cuota verificada, riesgo vigente.').slice(0,480)}:{})}:{})}
   })
   const card:ChatBlock={...priced.card,props:{
-    ...priced.card.props,legs,requestedLegs:count,modelAudit,marketRisk,
+    ...priced.card.props,legs,requestedLegs:count,modelAudit,marketRisk,decisionAudit,
     subtitle:(checklistComplete&&!elevatedMarketRisk?'Investigación especializada':'TICKET CONDICIONAL')+
       ' · cuotas verificadas · '+best.book+' · forma histórica ESPN',
     note:(checklistComplete&&!elevatedMarketRisk?'COTIZACIÓN INVESTIGADA':
@@ -371,6 +403,9 @@ export async function evidencePricedTicket(
       ' NO ES APUESTA APROBADA NI GANADORA. '+(marketPreference==='double_chance'
       ?'Fútbol: la doble oportunidad cubre empate (1X/X2), NO asegura ganar. ':'')+
       'TheRundown Free informa cuotas con retraso aproximado de 5 min; observedAt es consulta del proveedor, updatedAt es último cambio de la casa. Confirmar precio actual antes de apostar. '+
+      'Auditor crítico: '+decisionAudit.recommendation+' '+
+      'Excluidas '+decisionAudit.excludedEvents.length+', en espera '+
+      decisionAudit.heldEvents.length+'. '+
       'Contradicciones de Bet Better: '+modelDisagreements+
       ' (predicción independiente, no cuota). '+
       (marketRisk.weakest?'Pata mas ajustada: '+marketRisk.weakest.selection+
@@ -379,16 +414,17 @@ export async function evidencePricedTicket(
         'Producto del mercado bajo independencia: '+marketRisk.fullPercent+
         '% (NO prediccion propia). ')+
       'Formas y descanso históricos NO son probabilidades calibradas. El expediente deportivo puede señalar titulares, bajas y estadísticas PENDIENTES; confirmar la casa antes de apostar. '+priced.warning,
-    askPrompt:'Kira, comprueba lesiones, titulares, estadísticas específicas, correlación y vigencia de las '+count+' cuotas antes de recomendar este ticket.',
+    askPrompt:'Kira, explica decisionAudit.legs por partido: mantener, advertir, esperar o excluir. Contrasta las patas frágiles, titulares, porteros, fuentes y escenarios de 3/4/5. No rellenes cinco por obligación ni atribuyas EV a cuotas sin modelo validado.',
   }}
   return{card,priced:true,placed:false,complete:true,
     conditional:!checklistComplete||elevatedMarketRisk,dossierComplete:checklistComplete,
-    marketRisk,
+    marketRisk,decisionAudit,
     verifiedEvents:research.verifiedEvents,
     quotedLegs:count,missingQuotes:0,sourceAudit,approvedLegs:0,
     specialistChecks,researchedLegs,modelAudit,
     multisportSatisfied:research.multisportSatisfied,
     explanation:'Las '+count+' selecciones tienen cuota vigente y la misma casa '+best.book+
+      '. Decisión crítica: '+decisionAudit.recommendation+
       (elevatedMarketRisk?'. AVISO: pata con participacion de mercado inferior a 60%; considerar reducir el boleto.':'')+
       (checklistComplete?'. Todos los pasos especializados verificados.':
       '. TICKET CONDICIONAL: '+(count-researchedLegs)+' expedientes parciales o no disponibles; verificar datos pendientes.')+
