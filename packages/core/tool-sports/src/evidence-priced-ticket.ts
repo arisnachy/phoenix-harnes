@@ -7,7 +7,8 @@ import {auditTicketDecisions,readDecisionPolicy,type TicketDecisionAudit} from '
 import {auditTicketMarketRisk,quoteSideNoVig,type TicketMarketRisk} from './ticket-risk-audit.ts'
 import {investigateTicketSpecialists,type SpecialistGate} from './ticket-specialist-gate.ts'
 import { keylessEnabled,keylessOdds,type KeylessQuote } from './keyless-odds.ts'
-import { marketOddsDetailed,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome,type OddsResearchObservation } from './sports.ts'
+import {lookupExactEspnWinner} from './sports-exact-espn-winner.ts'
+import { getFeed,marketOddsDetailed,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome,type OddsResearchObservation } from './sports.ts'
 import {fetchBetBetterModels,findModelOpinion,type ModelForecast} from './betbetter-model-evidence.ts'
 import {enrichSpecialistNarrative,type TicketNarrative} from './sports-ticket-narrative.ts'
 
@@ -261,7 +262,49 @@ export async function evidencePricedTicket(
       }] satisfies KeylessQuote[]
     })
   }))
-  const all=[...keyless,...additional.flatMap(s=>s.status==='fulfilled'?s.value:[])]
+  const discovered=[...keyless,...additional.flatMap(s=>s.status==='fulfilled'?s.value:[])]
+  // A league-level ESPN scan has an eight-game cap. On short nightly slates
+  // that cap can miss the requested event entirely, especially when games are
+  // grouped under the following UTC day. Retry only exact still-unpriced ESPN
+  // event IDs, with source timestamps and provider names independently checked.
+  const exactTargets=quotesProvider||env.PHOENIX_SPORTS_ESPN_DISABLED==='1'?[]:
+    research.events.filter(event=>{
+      const kickoff=Date.parse(event.kickoff)
+      return Number.isFinite(kickoff)&&kickoff>now&&!discovered.some(q=>
+        normalize(q.home)===normalize(event.home)&&
+        normalize(q.away)===normalize(event.away)&&
+        Math.abs(Date.parse(q.time)-kickoff)<=3_600_000&&
+        q.market===(event.sport==='soccer'?'1x2':'h2h'))
+    }).slice(0,6)
+  const exactReports=await Promise.allSettled(exactTargets.map(async event=>{
+    const sportKey=leagueSportKey[event.league]??
+      (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
+    if(!sportKey)return null
+    const deadline=AbortSignal.timeout(9_000)
+    const bounded:typeof fetch=(input,init)=>{
+      const signal=init?.signal?AbortSignal.any([init.signal,deadline]):deadline
+      return fetcher(input,{...init,signal})
+    }
+    return lookupExactEspnWinner({
+      sportKey,eventId:event.eventId,date:day,
+      home:event.home,away:event.away,kickoff:event.kickoff,
+    },<T>(url:string)=>getFeed<T>(url,bounded),now)
+  }))
+  const specific=exactReports.flatMap(row=>row.status==='fulfilled'&&row.value?
+    row.value.quotes:[])
+  const rawExactReferences=exactReports.reduce((total,row)=>
+    total+(row.status==='fulfilled'?row.value?.referenceCount??0:0),0)
+  const rawExactCount=specific.length
+  if(exactTargets.length){
+    fallbackSources.push({provider:'ESPN Site/Core',
+      status:rawExactCount?'observed':'empty',count:rawExactCount,
+      detail:'Consulta por ID real de '+exactTargets.length+
+        ' partidos, incluyendo el siguiente día UTC; '+
+        rawExactCount+' moneylines vigentes y '+rawExactReferences+
+        ' referencias sin fecha o caducadas. No se aceptaron líneas sin casa/updatedAt.',
+    })
+  }
+  const all=[...discovered,...specific]
   const groups:KeylessQuote[][]=research.events.map(event=>{
     const kickoff=Date.parse(event.kickoff)
     const doubleChance=event.sport==='soccer'&&marketPreference==='double_chance'
