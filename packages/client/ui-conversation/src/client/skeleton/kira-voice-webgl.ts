@@ -95,8 +95,13 @@ function ribbon(points:readonly (readonly [number,number])[],width:number,offset
   return new Float32Array(data)
 }
 export function createKira3DRenderer(canvas:HTMLCanvasElement,portrait:HTMLImageElement):Kira3DRenderer|undefined{
-  const gl=canvas.getContext('webgl2',{alpha:true,antialias:true,depth:true,
-    premultipliedAlpha:true,preserveDrawingBuffer:false})
+  // Some GPU drivers throw instead of returning null during WebGL creation.
+  // Never let a renderer failure crash PHOENIX's voice transport.
+  let gl:WebGL2RenderingContext|null
+  try {
+    gl=canvas.getContext('webgl2',{alpha:true,antialias:true,depth:true,
+      premultipliedAlpha:true,preserveDrawingBuffer:false})
+  }catch{return undefined}
   if(!gl)return undefined
   let resources:{program:WebGLProgram;texture:WebGLTexture;face:WebGLBuffer;indices:WebGLBuffer;dynamic:WebGLBuffer;
     faceVao:WebGLVertexArrayObject;dynamicVao:WebGLVertexArrayObject;hair:WebGLBuffer;hairVao:WebGLVertexArrayObject}|undefined
