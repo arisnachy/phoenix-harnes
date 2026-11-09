@@ -129,3 +129,37 @@ test('one failed UTC partition cannot masquerade as full empty league coverage',
   assert.equal(report.coverage.find(x=>x.league==='nba')?.status,'unavailable')
   assert.match(report.coverage.find(x=>x.league==='nba')?.reason??'',/Cobertura parcial/)
 })
+
+test('a permanently stalled ESPN endpoint cannot freeze the daily scan',async()=>{
+  const never= new Promise(()=>{})
+  const fast=async url=>{
+    if(String(url).includes('/basketball/nba/'))return never
+    const events=String(url).includes('/football/nfl/')?[game(908)]:[]
+    return new Response(JSON.stringify({events}),{status:200})
+  }
+  const started=Date.now()
+  const report=await scoutDailySports(day,5,fast,now,
+    {PHOENIX_SPORTS_SCAN_TIMEOUT_MS:'45'})
+  assert.ok(Date.now()-started<1800,'a hanging provider must be isolated')
+  assert.equal(report.coverage.find(x=>x.league==='nba')?.status,'unavailable')
+  assert.ok(report.events.some(e=>e.league==='nfl'&&e.eventId==='908'))
+  assert.equal(report.diagnostics.requestTimeoutMs,45)
+  assert.equal(report.diagnostics.requestedPartitions,40)
+  assert.ok(report.diagnostics.unavailableLeagues>=1)
+})
+test('a partial ESPN date timeout preserves verified events and reports incomplete coverage',async()=>{
+  const fetcher=async url=>{
+    const u=String(url)
+    if(u.includes('/basketball/nba/')&&u.includes('dates=20261103'))
+      return new Promise(()=>{})
+    return new Response(JSON.stringify({events:u.includes('/basketball/nba/')?
+      [game(77)]:[]}))
+  }
+  const result=await scoutDailySports(day,8,fetcher,now,
+    {PHOENIX_SPORTS_SCAN_TIMEOUT_MS:'35'})
+  assert.ok(result.events.some(e=>e.eventId==='77'))
+  const league=result.coverage.find(c=>c.league==='nba')
+  assert.equal(league?.status,'available')
+  assert.match(league?.reason??'',/Cobertura parcial/)
+  assert.ok(result.diagnostics.partialLeagues>=1)
+})
