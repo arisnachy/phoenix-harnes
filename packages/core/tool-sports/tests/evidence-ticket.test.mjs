@@ -111,3 +111,31 @@ test('three different scoreboards per team remain insufficient for a stronger au
   assert.equal(result.complete,false)
   assert.equal(result.verifiedEvents,0)
 })
+
+test('a failed expert dossier is excluded before five-leg selection and replaced with the next real game',async()=>{
+  const inspected=[]
+  const result=await evidenceTicket(5,day,'soccer',mock(),now,process.env,async pool=>{
+    inspected.push(...pool)
+    assert.ok(pool.length>=6)
+    return [{eventId:pool[0].eventId,excluded:true,priority:0,
+      reason:'Contradicción entre participantes; excluir'}]
+  })
+  assert.equal(result.complete,true)
+  assert.equal(result.verifiedEvents,5)
+  assert.equal(result.card.props.legs.length,5)
+  assert.equal(result.events.length,5)
+  assert.ok(!result.events.some(x=>x.eventId===inspected[0].eventId))
+  assert.ok(result.events.some(x=>x.eventId===inspected[5].eventId))
+  assert.match(result.card.props.note,/descartados por contraindicación: 1/)
+})
+test('expert priority can replace weaker historical ranking before verifying the same five fixtures',async()=>{
+  const inspected=[]
+  const report=await evidenceTicket(5,day,'soccer',mock(),now,process.env,async pool=>{
+    inspected.push(...pool)
+    return [{eventId:pool[5].eventId,excluded:false,priority:1.5,
+      reason:'Mejor expediente de lesiones, forma y titulares cotejado'}]
+  })
+  assert.equal(report.verifiedEvents,5)
+  assert.ok(report.events.some(x=>x.eventId===inspected[5].eventId))
+  assert.ok(report.selections.some(x=>/Revisión de alternativas/.test(x.rationale??'')))
+})
