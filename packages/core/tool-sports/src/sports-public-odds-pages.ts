@@ -26,7 +26,7 @@ const sportsPages:Readonly<Record<string,string>>={
 }
 const soccerPages:Readonly<Record<string,string>>={
   soccer_epl:'premier-league',soccer_spain_la_liga:'la-liga-primera',
-  soccer_mexico_ligamx:'liga-mx',soccer_usa_mls:'mls',
+  soccer_mexico_ligamx:'mexican-primera-division',soccer_usa_mls:'mls',
   soccer_uefa_champs_league:'uefa-champions-league',
   soccer_italy_serie_a:'serie-a',soccer_germany_bundesliga:'bundesliga',
 }
