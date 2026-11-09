@@ -144,8 +144,10 @@ export function composeTicketLegNarrative(
     'Pata '+title+': '+selected+'.',
     'Por qué se eligió: '+selectionWhy,
     favorable.length?'Evidencia favorable: '+favorable.slice(1).join('; ')+'.':'',
-    news.length?'Noticias relacionadas: '+news.map(x=>x.headline).slice(0,2).join('; ')+
-      '. Son titulares, no lesiones o picks confirmados.':'Noticias relevantes: sin artículos individualizados comprobados.',
+    news.length?'Noticias relacionadas: '+news.slice(0,3).map(x=>
+      x.headline+(x.publishedAt?' · '+x.publishedAt.slice(0,16)+' UTC':' · sin fecha comprobable')+
+      (x.articleUrl?' · '+x.articleUrl:' · enlace no verificable')).join('; ')+
+      '. Estos titulares NO confirman lesiones ni picks.':'Noticias relevantes: sin artículos individualizados comprobados.',
     venueName?'Sede identificada: '+venueName+(venueCity?' ('+venueCity+')':'')+'.':
       'Sede sin nombre comprobado.',
     venueGames>0?'En ese estadio, '+venueGames+' partido(s) previos observados en la muestra: '+
