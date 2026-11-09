@@ -285,7 +285,7 @@ describe('browser voice adapter', () => {
       onconnectionstatechange: (() => void) | null = null
       constructor() { FakePeer.instance = this }
       createDataChannel(): FakeDataChannel { return new FakeDataChannel() }
-      addTrack(): void {}
+      addTrack = vi.fn((_track: unknown, _stream: unknown): void => {})
       async getStats(): Promise<Map<string, { type: string; kind: string; bytesReceived: number }>> {
         return new Map([['remote-audio', { type: 'inbound-rtp', kind: 'audio', bytesReceived: 4_096 }]])
       }
@@ -300,6 +300,28 @@ describe('browser voice adapter', () => {
     }
 
     const microphoneTrack = { enabled: true, stop: vi.fn() }
+    const gatedTrack = { enabled: true, stop: vi.fn() }
+    const echoGateGain = {
+      value: 1,
+      setTargetAtTime: vi.fn((value: number) => { echoGateGain.value = value }),
+    }
+    const closeEchoGate = vi.fn(async () => {})
+    class FakeAudioContext {
+      readonly state = 'running'
+      readonly currentTime = 0
+      createMediaStreamSource(): { connect: ReturnType<typeof vi.fn> } {
+        return { connect: vi.fn() }
+      }
+      createGain(): { gain: typeof echoGateGain; connect: ReturnType<typeof vi.fn> } {
+        return { gain: echoGateGain, connect: vi.fn() }
+      }
+      createMediaStreamDestination(): { stream: { getAudioTracks: () => typeof gatedTrack[] } } {
+        return { stream: { getAudioTracks: () => [gatedTrack] } }
+      }
+      close = closeEchoGate
+    }
+    const audioContextDescriptor = Object.getOwnPropertyDescriptor(window, 'AudioContext')
+    Object.defineProperty(window, 'AudioContext', { configurable: true, value: FakeAudioContext })
     const rtcDescriptor = Object.getOwnPropertyDescriptor(window, 'RTCPeerConnection')
     const mediaDescriptor = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices')
     const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)
@@ -398,6 +420,8 @@ describe('browser voice adapter', () => {
       })
       const channel = FakeDataChannel.instance
       expect(channel).toBeDefined()
+      expect(document.documentElement.dataset.phoenixVoiceMicEchoGate).toBe('active')
+      expect(FakePeer.instance?.addTrack).toHaveBeenCalledWith(gatedTrack, expect.anything())
       const audio = document.querySelector<HTMLAudioElement>('[data-phoenix-codex-voice]')
       expect(audio?.muted).toBe(true)
       expect(microphoneTrack.enabled).toBe(true)
@@ -472,6 +496,8 @@ describe('browser voice adapter', () => {
       expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('requested')
       expect(audio?.muted).toBe(false)
       expect(microphoneTrack.enabled).toBe(true)
+      expect(gatedTrack.enabled).toBe(true)
+      expect(echoGateGain.value).toBe(0)
       expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('echo-filtered-for-output')
       expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe('none')
       expect(audio?.dataset.phoenixAudioPlayback).toBe('starting')
@@ -742,6 +768,7 @@ describe('browser voice adapter', () => {
       await vi.advanceTimersByTimeAsync(950)
       expect(audio?.muted).toBe(false)
       expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('listening')
+      expect(echoGateGain.value).toBe(1)
       channel?.onmessage?.({ data: JSON.stringify({
         type: 'turn.done', turn: { role: 'user', transcript: 'Respuesta corregida.' },
       }) })
@@ -844,6 +871,7 @@ describe('browser voice adapter', () => {
         expect(getVoiceAssistantSnapshot().lastError).toContain('conexión de voz de Codex se interrumpió'))
       expect(document.documentElement.dataset.phoenixVoiceSpeechError).toBe('webrtc-transport-lost')
       expect(audio?.isConnected).toBe(false)
+      expect(closeEchoGate).toHaveBeenCalled()
 
       // The service may accept an SDP connection but reject voice eligibility
       // after the data channel opens. Show the real reason instead of silence.
@@ -864,6 +892,8 @@ describe('browser voice adapter', () => {
       disposeTranscript()
       playback.mockRestore()
       pause.mockRestore()
+      if (audioContextDescriptor === undefined) Reflect.deleteProperty(window, 'AudioContext')
+      else Object.defineProperty(window, 'AudioContext', audioContextDescriptor)
       if (rtcDescriptor === undefined) Reflect.deleteProperty(window, 'RTCPeerConnection')
       else Object.defineProperty(window, 'RTCPeerConnection', rtcDescriptor)
       if (mediaDescriptor === undefined) Reflect.deleteProperty(navigator, 'mediaDevices')
