@@ -89,7 +89,8 @@ export function gradeCloudLeg(leg:CloudLeg,event:unknown):CloudGrade{
   const result=(won:boolean):CloudGrade=>({
     eventId:leg.eventId,score,result:won?'won':'lost',
     reason:'Resultado deportivo oficial provisional; verificar reglas y pago de casa'})
-  const flags=statusText(e)
+  const flags=statusText(e)+' '+name(obj(comp.status).detail)+' '+
+    arr(comp.details).map(x=>name(obj(x).text)).join(' ')
   if(leg.sport==='tennis'){
     if(/retir|walkover|forfeit|suspend|cancel/u.test(flags))
       return unknown('unverifiable','Retiro o walkover exige reglas de casa')
@@ -119,8 +120,8 @@ export function gradeCloudLeg(leg:CloudLeg,event:unknown):CloudGrade{
     if(leg.market==='three-way'&&leg.selection==='draw')return result(difference===0)
     if(difference===0){
       return leg.sport==='soccer'||leg.market==='three-way'?
-        result(false):
-        {...common,score,result:'push',reason:'Empate final: validar reglas de prórroga'}
+        result(false):unknown('unverifiable',
+          'Empate final: sin reglas comprobadas de overtime/shootout o void de casa')
     }
     return result(leg.selection==='home'?difference>0:difference<0)
   }
