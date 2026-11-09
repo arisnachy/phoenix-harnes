@@ -63,6 +63,23 @@
 .figure[data-expression="focused"] .brow{opacity:.17}
 .figure[data-expression="concerned"] .brow{opacity:.38;transform:translateY(-1px)}
 .figure[data-expression="warm"] .cheek{opacity:.24}
+/* GPU portrait uses the same Kira image on a curved 3D facial mesh. Keep the
+   original portrait and SVG lips available as an instant fallback on WebGL loss. */
+.figure[data-renderer="webgl-3d"] .portrait,
+.figure[data-renderer="webgl-3d"] .faceLayer{
+  opacity:0;
+  visibility:hidden;
+}
+.figure[data-renderer="webgl-3d"] [data-kira-avatar-3d]{
+  opacity:1;
+}
+.figure[data-renderer="portrait-2d"] [data-kira-avatar-3d]{
+  opacity:0;
+}
+.figure [data-kira-avatar-3d]{
+  z-index:2;
+  transition:opacity 140ms ease-out;
+}
 .statusLine{display:flex;align-items:center;gap:7px;min-height:28px;font-size:15px;line-height:22px}
 .statusLine strong{font-weight:600}
 .statusLine span:last-child{color:var(--dsw-alias-label-secondary,#736961)}
