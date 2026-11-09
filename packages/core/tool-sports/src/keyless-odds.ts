@@ -206,11 +206,19 @@ const validDate=(day:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(day)
  */
 export function oddsHarvesterArgs(sport:KeylessSport,market:string,day:string,file:string):string[]{
   if(!sportOK(sport)||!marketOK(sport,market)||!validDate(day))throw Error('Petición no permitida')
-  const period=((sport==='ice-hockey'||sport==='basketball')&&market==='home_away')
+  // OddsHarvester v0.20.0 calls the two-way winner "home_away", not
+  // "moneyline", for NBA/MLB/NFL. This is the SAME including-OT settlement,
+  // unlike 1x2 which may exclude overtime (never silently substitute 1x2).
+  const upstreamMarket=market==='moneyline'
+    &&(sport==='basketball'||sport==='baseball'||sport==='american-football')
+      ?'home_away':market
+  const period=((sport==='ice-hockey'||sport==='basketball'||sport==='baseball'
+    ||sport==='american-football')&&upstreamMarket==='home_away')
     ?'full_including_ot':
-    ((sport==='basketball'||sport==='american-football')&&market==='1x2')?'full_time':null
+    ((sport==='basketball'||sport==='american-football')&&upstreamMarket==='1x2')
+      ?'full_time':null
   return ['upcoming','--sport',sport,'--date',day.replaceAll('-',''),
-    '--market',market,...(period?['--period',period]:[]),
+    '--market',upstreamMarket,...(period?['--period',period]:[]),
     '--headless','--format','json','--stream-ndjson','--output',file]
 }
 /** Run a fixed local executable with fixed command shape, no shell, no user URLs. */
