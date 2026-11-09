@@ -100,3 +100,21 @@ test('old daily archives are pruned after seven days, with current data retained
     await assert.rejects(()=>access(join(root,'quota-2026-10-31.json')))
   })
 })
+
+test('a hung preflight provider is isolated while other free fixtures remain cached',async()=>{
+ await temp(async root=>{
+   const env={PHOENIX_SPORTS_DAILY_RESEARCH_HOME:root,
+     PHOENIX_SPORTS_PRELOAD_TIMEOUT_MS:'40'}
+   const good=mock([])
+   const stalled=async (url,init)=>{
+     if(String(url).includes('/basketball/nba/'))return new Promise(()=>{})
+     return good(url,init)
+   }
+   const started=Date.now()
+   const result=await preloadDailyResearch(date,env,stalled,now)
+   assert.ok(Date.now()-started<1500)
+   assert.ok(result.rows.some(x=>x.status==='unavailable'&&x.provider==='ESPN'))
+   assert.ok(result.rows.some(x=>x.status==='cached'))
+   assert.ok(result.cache.sources.length>=5)
+ })
+})

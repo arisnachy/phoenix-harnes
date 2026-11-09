@@ -68,7 +68,7 @@ test('all ESPN families generate fixed-host URLs, not arbitrary destinations',()
     site_scoreboard:['site.api.espn.com','/apis/site/v2/sports/basketball/nba/scoreboard'],
     site_summary:['site.api.espn.com','/apis/site/v2/sports/basketball/nba/summary'],
     game_prop_bets:['sports.core.api.espn.com','/odds/58/propBets'],
-    game_situation:['sports.core.api.espn.com','/competitions/200/situation'],
+    game_situation:['sports.core.api.espn.com','/competitions/401873123/situation'],
     web_statistics_by_team:['site.web.api.espn.com','/statistics/byteam'],
     cdn_game:['cdn.espn.com','/core/nba/game'],
     fantasy_player_info:['lm-api-reads.fantasy.espn.com','/seasons/2026/players'],
