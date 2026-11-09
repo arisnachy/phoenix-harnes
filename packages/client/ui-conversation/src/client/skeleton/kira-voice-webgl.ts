@@ -134,7 +134,7 @@ export function createKira3DRenderer(canvas:HTMLCanvasElement,portrait:HTMLImage
     if(!matrixLocation||!texturedLocation||!colorLocation||!samplerLocation)
       throw new Error('Kira WebGL uniforms unavailable')
     const drawColor=(vertices:Float32Array,color:readonly[number,number,number,number])=>{
-      gl.uniform1i(texturedLocation,0);gl.uniform4fv(colorLocation,color)
+      gl.uniform1i(texturedLocation,0);gl.uniform4fv(colorLocation,new Float32Array(color))
       gl.bindVertexArray(dynamicVao);gl.bindBuffer(gl.ARRAY_BUFFER,dynamic)
       gl.bufferData(gl.ARRAY_BUFFER,vertices,gl.DYNAMIC_DRAW)
       gl.drawArrays(gl.TRIANGLES,0,vertices.length/5)
@@ -142,7 +142,7 @@ export function createKira3DRenderer(canvas:HTMLCanvasElement,portrait:HTMLImage
     const drawOval=(u:number,v:number,rx:number,ry:number,offset:number,
       rgba:readonly[number,number,number,number])=>{
       const polygon=oval(u,v,rx,ry,offset)
-      gl.uniform1i(texturedLocation,0);gl.uniform4fv(colorLocation,rgba)
+      gl.uniform1i(texturedLocation,0);gl.uniform4fv(colorLocation,new Float32Array(rgba))
       gl.bindVertexArray(dynamicVao);gl.bindBuffer(gl.ARRAY_BUFFER,dynamic)
       gl.bufferData(gl.ARRAY_BUFFER,polygon,gl.DYNAMIC_DRAW)
       gl.drawArrays(gl.TRIANGLE_FAN,0,polygon.length/5)
