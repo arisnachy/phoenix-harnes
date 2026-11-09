@@ -43,6 +43,21 @@ export function createKiraHeadGeometry(segments=KIRA_HEAD_SEGMENTS):KiraHeadGeom
   }
   return{vertices,indices:new Uint16Array(indices)}
 }
+/** Back volume makes this an actual 3D head with thickness rather than a
+ * flat card. Dark chocolate hair is visible naturally when Kira turns.
+ * Shares the curved portrait's topology and stays behind the approved face.
+ */
+export function createKiraHairBackGeometry(
+  face:KiraHeadGeometry,
+):KiraHeadGeometry {
+  const vertices=new Float32Array(face.vertices)
+  for(let i=0;i<vertices.length;i+=5){
+    const x=vertices[i]!,y=vertices[i+1]!
+    const rr=(x/1.03)**2+(y/1.03)**2
+    vertices[i+2]=-.12-.24*Math.sqrt(Math.max(0,1-rr))
+  }
+  return{vertices,indices:face.indices}
+}
 /** A bounded physical head pose prevents a flat side profile from being shown. */
 export function kira3dPose(
   elapsedMs:number,level:number,phase:'listening'|'speaking'|'paused'|'thinking'|'inactive',
