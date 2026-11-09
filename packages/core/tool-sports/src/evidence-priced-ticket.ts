@@ -162,13 +162,15 @@ export async function evidencePricedTicket(
       const leg=row!==null&&typeof row==='object'&&!Array.isArray(row)?
         row as Record<string,unknown>:{}
       return {...leg,narrative:enrichSpecialistNarrative(
-        leg.narrative as TicketNarrative|null|undefined,specialistChecks[index])}
+        leg.narrative as TicketNarrative|null|undefined,specialistChecks[index],
+        undefined,modelAudit[index])}
     }),
     chatNarrative:preliminaryLegs.map((row,index)=>{
       const leg=row!==null&&typeof row==='object'&&!Array.isArray(row)?
         row as Record<string,unknown>:{}
       return enrichSpecialistNarrative(
-        leg.narrative as TicketNarrative|null|undefined,specialistChecks[index])
+        leg.narrative as TicketNarrative|null|undefined,specialistChecks[index],
+        undefined,modelAudit[index])
     }).filter(Boolean),
     note:(String(research.card.props.note??'')+' Especialistas consultados '+researchedLegs+'/'+count+
       '. Contradicciones de modelo independiente: '+modelDisagreements+
@@ -446,7 +448,7 @@ export async function evidencePricedTicket(
     return {...pricedRow,
       narrative:enrichSpecialistNarrative(
         prior.narrative as TicketNarrative|null|undefined,specialistChecks[index],
-        marketRisk.legs[index]?.noVigPercent),
+        marketRisk.legs[index]?.noVigPercent,modelAudit[index]),
       marketNoVigPercent:marketRisk.legs[index]?.noVigPercent??null,
       // One chance per leg. Prefer a two-sided, same-bookmaker no-vig
       // estimate; otherwise preserve the disclosed exploratory forecast.
