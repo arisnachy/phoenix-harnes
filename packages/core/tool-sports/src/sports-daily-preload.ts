@@ -307,8 +307,8 @@ export async function preloadDailyResearch(date:string,
   for(let i=0;i<plan.length;i+=3){
     const group=await Promise.all(plan.slice(i,i+3).map(async target=>{
       try{
-        const res=await cached(target.url,{headers:target.headers,
-          signal:AbortSignal.timeout(8_000)})
+        const res=await cached(target.url,{signal:AbortSignal.timeout(8_000),
+          ...(target.headers?{headers:target.headers}:{})})
         if(!res.ok)throw Error('HTTP '+res.status)
         const json=await res.json() as {events?:unknown[];dates?:unknown[];
           games?:unknown[];response?:unknown[];data?:unknown[]}
