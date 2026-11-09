@@ -11,7 +11,7 @@ import { investigateEventDeep } from './sports-deep-context.ts'
 import { diversifiedSportsPicks,diversifiedSportsShortlist } from './sports-diversity.ts'
 export type TicketPreselectCandidate={
   eventId:string;sport:string;league:string;home:string;away:string;
-  kickoff:string;pick:'home'|'away';rank:number;level:'strong'|'conditional'
+  kickoff:string;pick:'home'|'away'|'draw';rank:number;level:'strong'|'conditional'
 }
 export type TicketPreselectVerdict={
   eventId:string;excluded:boolean;priority:number;reason:string
