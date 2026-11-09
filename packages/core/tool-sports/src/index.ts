@@ -1,6 +1,7 @@
 /** Kira's sports-only model-facing tools. Cards belong in the existing chat. */
 import type { Context } from '@phoenix-ai/cordis'
 import { scoutDailySports } from './daily-sports-scout.ts'
+import {probeFastFreeSports} from './sports-fast-free-probes.ts'
 import {crosscheckFreeFixture,freeOfficialFollowUps,freeSourceInventory,freeSourceCoverageForSport} from './free-sports-source-audit.ts'
 import {nflverseInjuryReport} from './nflverse-injury-report.ts'
 import {fetchEspnInjuryBackup,espnInjuryCatalog} from './espn-injury-backup.ts'
@@ -70,6 +71,7 @@ const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
 const GUIDANCE = [
   'LESIONES ESPN COMO EVIDENCIA: usar sports_chat_espn_injuries cuando un expediente NBA/WNBA/NFL/NHL/MLB indique lesiones no verificadas. Consultar el JSON público ESPN por liga y equipos con fecha y fuente, no limitarse a la página espn.com.do/basquetbol/nba/lesiones. El estado reported, questionable, out, active o day-to-day es solo lo publicado; no convertirlo en quinteto, portero, QB titular ni confirmación de inactivos. Para NBA, cotejar en la página oficial de reportes antes de afirmar disponibilidad definitiva. Una fuente vacía/no actualizada no equivale a equipo sano, ni impide mostrar un ticket CONDICIONAL con cuotas reales; no inventar bajas. ',
   'RECUPERACIÓN DE DATOS: si ESPN publica estadística vacía o histórico HTTP 400, usar recuperación por mes/día y calendario de equipo; para eventos concretos consultar sports_chat_source_resilience y sus fuentes independientes. Fuentes del catálogo o enlaces no equivalen a consulta real, ni calendario equivale a lesiones, alineación o cuota. Nunca eludir 401/403/429 ni inventar resultados. ',
+  'AUDITORÍA GRATIS Y RÁPIDA: para diagnosticar fuentes abiertas por deporte y fecha consulta sports_chat_free_sources_probe antes de atribuir a ESPN o a las APIs públicas una caída. Consulta seis endpoints oficiales/públicos (NBA/NFL/Liga MX ESPN, MLB StatsAPI, NHL API, TheSportsDB); status empty significa fecha sin partidos, no API rota. Este escaneo NO verifica cuotas ni lesiones. OddsHarvester usa home_away para ganadores NBA/MLB/NFL en su CLI, nunca enviar moneyline directamente; 1x2 reglamentario no se confunde con ganador incluyendo prórroga. ',
   'AUDITORIA DE RIESGO DEL TICKET: cuando pidan solo ganadores elegir sports_chat_daily_market_shortlist con deep=true y winnerOnly=true. Verifica rivales, estado, descanso, lesiones, titulares, porteros, precio y mercado exacto. Compara la fortaleza relativa por precio no-vig en cada pata y la version de 3/4/5 con marketRisk. Estas cifras provienen de la casa y asumen independencia: NO son una prediccion propia, EV ni garantia. Identifica la pata mas fragil, nunca agregues un partido casi 50/50 solo para completar cinco. NHL: portero candidato NO significa confirmado; distingue moneyline con OT/SO de 60 minutos. Si falta un dato, mostrar CONDICIONAL y fuentes pendientes. ',
   'REGLA OBLIGATORIA PARA TICKETS GANADORES: las cotizaciones y favoritos de casas no son investigación deportiva. Si el usuario solicita un ticket ganador del día (incluido solo equipos ganadores), usa sports_chat_ticket_evidence_priced_auto con marketPreference=winner cuando corresponda, o sports_chat_daily_market_shortlist con deep=true. Cada partido requiere expediente de su especialista NFL/NBA/WNBA/NHL/MLB/Fútbol/Tenis, identidad verificada y diagnóstico de bajas, alineaciones, forma y contradicciones. Los resultados incomplete/unavailable de un especialista NO bloquean mostrar un ticket condicional si el evento ESPN y la cuota real están verificados y la tendencia histórica tiene apoyo descriptivo. Sí impiden presentar esa selección como investigada o aprobada. Conflictos expresos de identidad o mercados contradichos bloquean esa pata. Si faltan eventos o cuotas genuinas, entrega borrador visible sin fabricar patas, nunca ticket ganador certificado. La cuota no demuestra acierto y ninguna ruta puede reportar aprobación o EV sin modelo validado. ',
   'MERCADOS DE TOTAL Y HÁNDICAP: ganar un partido no demuestra cubrir -1.5/+1.5 o una línea over/under. Antes de considerar un total o spread con sports_chat_daily_market_shortlist(deep=true), coteja la línea EXACTA contra resultados previos de AMBOS clubes, separa aciertos, fallos y pushes, y exige dirección consistente en los dos historiales. Si marketOutcomeDiagnostic.status es mixed, insufficient o adverse, etiquetar CONDICIONAL/CONTRAINDICADA y no ponerla como pata cotizada; nunca conviertas frecuencia histórica en probabilidad futura o EV. Para NHL añade portero y reglas OT/SO; para NBA pace, eficiencia y lesiones siguen pendientes si no fueron medidos. La meta de 5–6 patas no autoriza inventar una probabilidad ni rellenar selecciones sin respaldo. ',
@@ -464,6 +466,19 @@ export function apply(ctx: Context): void {
     presentCall:()=>({card:'generic',title:'Verificar y autorreparar fuentes deportivas',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
+    name:'sports_chat_free_sources_probe',
+    description:'Diagnóstico rápido y gratuito, sin API key: verifica el calendario JSON real de ESPN NBA/NFL/Liga MX, MLB StatsAPI, NHL Web API y TheSportsDB. Informa accesible, vacío, deshabilitado o error, tiempos, eventos observados y URL. NO ofrece cuotas ni asegura expedientes.',
+    parameters:{date:{type:'string',description:'Fecha del calendario dominicano AAAA-MM-DD; por defecto hoy.'}},
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const result=await probeFastFreeSports(args.date,fetch,Date.now(),await sportsEnv(ctx))
+      return JSON.stringify({...result,priced:false,verifiedInjuries:false,
+        instruction:result.instruction+' Para cotejar UN partido específico, usa sports_chat_source_resilience y expediente especialista. Ninguna consulta gratuita suplanta una cuota vigente atribuida a una casa.'})
+    },
+    presentCall:()=>({card:'generic',title:'Probar fuentes deportivas gratuitas de la fecha',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
     name:'sports_chat_sources_repair',
     description:'Reparar de forma autónoma y sin bloquear el chat los tres proveedores deportivos opcionales: OddsHarvester/Chromium y dos repositorios históricos. Devuelve el estado del lanzador y archivo de errores. No promete cuotas.',
     parameters:{},
@@ -779,9 +794,9 @@ export function apply(ctx: Context): void {
           (async()=>{
             const routes:Record<string,{sport:string;markets:string[]}> = {
               soccer:{sport:'football',markets:['1x2','double_chance','over_under']},
-              basketball:{sport:'basketball',markets:['moneyline','over_under']},
-              baseball:{sport:'baseball',markets:['moneyline','over_under']},
-              americanfootball:{sport:'american-football',markets:['moneyline','over_under']},
+              basketball:{sport:'basketball',markets:['home_away','over_under']},
+              baseball:{sport:'baseball',markets:['home_away','over_under']},
+              americanfootball:{sport:'american-football',markets:['home_away','over_under']},
               icehockey:{sport:'ice-hockey',markets:['home_away','double_chance','over_under']},
               tennis:{sport:'tennis',markets:['match_winner','total_games_over_under']},
             }
