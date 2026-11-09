@@ -81,6 +81,8 @@ export async function exactAlternativeOdds(
     throw Error('Evento exacto ESPN o liga sin ruta verificada')
   const base={espnEventId:eventId,league:which[1],home:null,away:null,kickoff:null,
     quotes:[] as MarketOutcome[],sources:[] as ExactMarketResult['sources']}
+  if(env.PHOENIX_SPORTS_ESPN_DISABLED==='1')return{...base,status:'fixture-unverified',
+    reason:'ESPN deshabilitado por el operador; no cotejar IDs externos sin fixture oficial'}
   try{
     const next=new Date(Date.parse(date+'T00:00:00Z')+86_400_000)
       .toISOString().slice(0,10)
