@@ -51,7 +51,8 @@ import { secondaryMarketSourceCatalog } from './sports-secondary-sources.ts'
 import {discoverEditorialResearch,type EditorialSource,editorialDomains} from './sports-editorial-discovery.ts'
 import {auditSportsCalibration,availableSportCalibration,calibratedSportsForecast} from './sports-calibration.ts'
 import {sportsEnvWithVaultKey} from './sports-credential-env.ts'
-import {registerCloudForecast,registerCloudReceipt} from './sports-cloud-host.ts'
+import {registerCloudForecast,registerCloudReceipt,registerCloudMarkets} from './sports-cloud-host.ts'
+import type {CloudLeg} from './sports-cloud-outcome.ts'
 import {researchCoverage,researchCredentialRefs,coverageReport} from './sports-research-coverage.ts'
 
 import {mlbResearch} from './mlb-evidence-research.ts'
@@ -293,10 +294,16 @@ export function apply(ctx: Context): void {
           .then(value=>({result:value,error:null as string|null}))
           .catch(reason=>({result:null,error:
             String(reason instanceof Error?reason.message:reason).slice(0,220)}))
+        const cloudFollowUp=research.result?.events.length?await registerCloudForecast(
+          research.result.events.map(x=>({...x,date:daily.date})), 'winner',false,env):
+          {status:'disabled',issueNumber:null,reason:'Sin eventos verificables que monitorizar.'}
         return JSON.stringify({
           source:'PHOENIX investigación de ganadores sin dependencia de cuotas',
+          cloudFollowUp,
           status:research.result?.complete?'research-only':'research-incomplete',
-          ...(research.result?{uiBlock:research.result.card,researchedEvents:research.result.events,
+          ...(research.result?{uiBlock:{...research.result.card,
+              props:{...research.result.card.props,cloudFollowUp}},
+            researchedEvents:research.result.events,
             verifiedEvents:research.result.verifiedEvents,
             candidatesEvaluated:research.result.candidatesEvaluated,
             insufficientEvidence:research.result.insufficientEvidence,
@@ -510,7 +517,42 @@ export function apply(ctx: Context): void {
           }}
         }catch{ /* Invalid ticket is not rendered as a real quoted ticket. */ }
       }
+      // Cloud registration is based on the SAME quoted, already-researched
+      // ESPN event IDs. Never use a bookmaker ID or change h2h into total.
+      const cloudLegs:CloudLeg[]=[]
+      const norm=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
+        .toLowerCase().replace(/[^a-z0-9]/gu,'')
+      for(const item of ticketQuoted){
+        const candidate=item.review.candidate,offer=item.review.selectedOutcome
+        const event=daily.events.find(x=>x.sport===candidate.sport&&
+          x.league===candidate.league&&x.eventId===candidate.espnEventId)
+        if(!event||!offer||!['basketball','hockey','football','baseball',
+          'soccer','tennis'].includes(candidate.sport))break
+        const market=candidate.market==='h2h'?'winner':
+          candidate.market==='spreads'?'spread':
+          candidate.market==='totals'?'total':null
+        if(!market)break
+        const choice=String(offer.selection??'')
+        const sameHome=norm(choice)===norm(event.home.name)
+        const sameAway=norm(choice)===norm(event.away.name)
+        let selection:CloudLeg['selection']|null=null
+        if(market==='total'){
+          selection=/^(?:over|arriba|mas|más)/iu.test(choice)?'over':
+            /^(?:under|abajo|menos)/iu.test(choice)?'under':null
+        }else selection=sameHome?'home':sameAway?'away':null
+        if(!selection||['spread','total'].includes(market)&&
+          typeof offer.line!=='number')break
+        cloudLegs.push({sport:candidate.sport as CloudLeg['sport'],
+          league:candidate.league,eventId:candidate.espnEventId,
+          date:daily.date,market,selection,
+          ...(market==='winner'?{}:{line:offer.line!})})
+      }
+      const cloudFollowUp=ticket!==null&&cloudLegs.length===count?
+        await registerCloudMarkets(cloudLegs,env):
+        {status:'disabled',issueNumber:null,
+          reason:'No se registró: falta ticket completo o mercado verificable.'}
       return JSON.stringify({
+        cloudFollowUp,
         goal:count,range:[4,6],complete:args.deep===false?pool.selected.length>=count:
           ticket!==null,
         discoveryComplete:pool.selected.length>=count,
@@ -535,7 +577,8 @@ export function apply(ctx: Context): void {
           r.marketOutcomeDiagnostic?.status==='insufficient').length,
         priceAuditState:'umbrales-cotizados-sin-modelo-calibrado-por-mercado',
         selected:args.deep===false?pool.selected.slice(0,count):best,
-        ...(ticket?{uiBlock:ticket}:{status:'borrador-sin-cuatro-precios-validados'}),
+        ...(ticket?{uiBlock:{...ticket,
+          props:{...ticket.props,cloudFollowUp}}}:{status:'borrador-sin-cuatro-precios-validados'}),
         rejectedQuotes:pool.rejectedQuotes,
         date:daily.date,checkedAt:new Date(now).toISOString(),
         eventsScanned:daily.totalEligible,fixturesConsidered:daily.events.length,
