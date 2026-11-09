@@ -87,7 +87,10 @@ export async function readHistoricalScoreboard(root:string,start:string,end:stri
   // A schedule is not a boxscore; only completed events with actual scores
   // will be counted later by each sport's recent-games parser.
   if(completeMonths<months.length||!results.size){
-    for(const teamId of [...new Set(teamIds)].slice(0,2)){
+    // On monthly and daily outages diversify the last-resort recovery to
+    // three entire fixtures at most. A bounded six team-schedule GETs is
+    // cheaper than repeating league scans with zero historical evidence.
+    for(const teamId of [...new Set(teamIds)].slice(0,6)){
       if(!/^\d{1,18}$/u.test(teamId))continue
       result.scheduleQueries++
       const schedule=await load(root+'teams/'+teamId+'/schedule?limit=250')

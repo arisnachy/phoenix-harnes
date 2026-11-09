@@ -43,8 +43,8 @@ export function diversifiedSportsPicks<T extends RankedSportsCandidate>(
   }
   const diversitySatisfied=!multisport||count<=1||
     new Set(chosen.map(row=>row.pick.sport)).size>=2
-  // An all-NHL 5/5 ticket is NOT a completed 'multideporte' request.
-  // Retain the strongest <= 4 research hypotheses as an incomplete draft.
-  if(!diversitySatisfied&&chosen.length>=count)chosen.pop()
+  // A single-sport slate is an honest limitation, not a reason to
+  // silently discard a verified fifth or sixth fixture. The caller reports
+  // diversitySatisfied=false without altering the actual candidate count.
   return{chosen,diversitySatisfied}
 }

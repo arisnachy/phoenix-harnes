@@ -37,6 +37,10 @@ test('evidence-first automatic ticket returns exactly five sourced legs, no inve
   assert.equal(new Set(result.card.props.legs.map(x=>x.event)).size,5)
   assert.equal(result.priced,false)
   assert.equal(result.modelProbabilities,false)
+  assert.equal(result.card.props.legs.length,5)
+  assert.ok(result.card.props.legs.every(x=>x.legProbabilitySource==='exploratory-recent-form'))
+  assert.ok(result.card.props.legs.every(x=>Number.isFinite(x.legWinProbabilityPercent)))
+  assert.match(result.card.props.legs[0].rationale,/Probabilidad individual exploratoria/)
   assert.equal(result.card.props.combinedOdds,'No disponible')
 })
 test('auto ticket shows an honest 0/5 draft when historic games are unavailable',async()=>{
@@ -106,4 +110,51 @@ test('three different scoreboards per team remain insufficient for a stronger au
   const result=await evidenceTicket(5,day,'soccer',threeOnly,now)
   assert.equal(result.complete,false)
   assert.equal(result.verifiedEvents,0)
+})
+
+test('a failed expert dossier is excluded before five-leg selection and replaced with the next real game',async()=>{
+  const inspected=[]
+  const result=await evidenceTicket(5,day,'soccer',mock(),now,process.env,async pool=>{
+    inspected.push(...pool)
+    assert.ok(pool.length>=6)
+    return [{eventId:pool[0].eventId,excluded:true,priority:0,
+      reason:'Contradicción entre participantes; excluir'}]
+  })
+  assert.equal(result.complete,true)
+  assert.equal(result.verifiedEvents,5)
+  assert.equal(result.card.props.legs.length,5)
+  assert.equal(result.events.length,5)
+  assert.ok(!result.events.some(x=>x.eventId===inspected[0].eventId))
+  assert.ok(result.events.some(x=>x.eventId===inspected[5].eventId))
+  assert.match(result.card.props.note,/descartados por contraindicación: 1/)
+})
+test('expert priority can replace weaker historical ranking before verifying the same five fixtures',async()=>{
+  const inspected=[]
+  const report=await evidenceTicket(5,day,'soccer',mock(),now,process.env,async pool=>{
+    inspected.push(...pool)
+    return [{eventId:pool[5].eventId,excluded:false,priority:1.5,
+      reason:'Mejor expediente de lesiones, forma y titulares cotejado'}]
+  })
+  assert.equal(report.verifiedEvents,5)
+  assert.ok(report.events.some(x=>x.eventId===inspected[5].eventId))
+  assert.ok(report.selections.some(x=>/Revisión de alternativas/.test(x.rationale??'')))
+})
+
+test('a verified NBA/soccer fixture survives a later rotating or paginated ESPN scoreboard',async()=>{
+  let dailyFetches=0
+  const mutating=async url=>{
+    const u=String(url)
+    if(u.includes('/soccer/eng.1/scoreboard?dates=20261028')){
+      dailyFetches++
+      // Scout and research see the real slate. Later queries omit it.
+      if(dailyFetches>2)return new Response(JSON.stringify({events:[]}),{status:200})
+    }
+    return mock()(url)
+  }
+  const result=await evidenceTicket(5,day,'soccer',mutating,now)
+  assert.equal(result.complete,true)
+  assert.equal(result.verifiedEvents,5)
+  assert.equal(result.events.length,5)
+  assert.equal(dailyFetches,2,
+    'final rendering must reuse the exact timestamped provider-verified game IDs')
 })
