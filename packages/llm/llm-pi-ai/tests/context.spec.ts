@@ -600,4 +600,44 @@ describe('pi-ai request context conversion', () => {
     )).toThrow(/assistant image output/)
   })
 
+  it('does not silently remove a newly submitted human image when the route is undersized', async () => {
+    const current = createUserMessage({
+      source: { kind: 'user' },
+      content: [{ type: 'image', attachment: { ...ref, bytes: 300 } }],
+    })
+    const readImageRequest = vi.fn()
+    await expect(toPiContext(request([current]), projectionStore(readImageRequest), undefined, 8))
+      .rejects.toMatchObject({
+        code: 'UNSUPPORTED_CONTENT',
+        message: expect.stringContaining('No image analysis was performed'),
+      })
+    expect(readImageRequest).not.toHaveBeenCalled()
+  })
+
+  it('retains the current human image while older visual history is compacted', async () => {
+    const old = { ...ref, attachmentId: AttachmentId(`sha256:${'c'.repeat(64)}`), bytes: 3 }
+    const recent = { ...ref, attachmentId: AttachmentId(`sha256:${'d'.repeat(64)}`), bytes: 3 }
+    const current = createUserMessage({
+      source: { kind: 'user' },
+      content: [{ type: 'image', attachment: recent }],
+    })
+    const context = await toPiContext(request([
+      user([{ type: 'image', attachment: old }]), current,
+    ]), projectionStore(async value => requestImage(value, Uint8Array.of(1, 2, 3))), undefined, 4)
+    expect(context.messages[0]?.content).toBe(OFFLOADED_IMAGE_TEXT)
+    expect(context.messages[1]?.content).toEqual([
+      expect.objectContaining({ type: 'text' }), expect.objectContaining({ type: 'image' }),
+    ])
+  })
+
+  it('also detects current-image loss after exact request encoding', async () => {
+    const current = createUserMessage({
+      source: { kind: 'user' },
+      content: [{ type: 'image', attachment: ref }],
+    })
+    const store = projectionStore(async value => requestImage(value, Uint8Array.of(1, 2, 3, 4, 5, 6, 7, 8, 9)))
+    await expect(toPiContext(request([current]), store, undefined, 8))
+      .rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
+  })
+
 })
