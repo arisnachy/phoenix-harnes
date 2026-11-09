@@ -141,6 +141,29 @@ type SportsOddsCard = {
   props: { title:string;source:string;subtitle?:string;note:string
     rows:Array<{ event:string;market:string;selection:string;bookmaker:string;price:string;point?:string }> }
 }
+/** Render-only projection of the server's fully sourced per-leg dossier. */
+type SportsTicketNarrative = {
+  status:'documented'|'conditional'
+  selectionWhy:string
+  favorable:string[]
+  contradictions:string[]
+  news:Array<{headline:string;publisher:string;publishedAt:string|null;
+    articleUrl:string|null;imageUrl:string|null}>
+  globalNews:Array<{publisher:string;headline:string;indexedAt:string|null;articleUrl:string;status:string}>
+  externalOpinions:Array<{publisher:string;headline:string;publishedAt:string|null;
+    discoveryUrl:string;status:string}>
+  venue:{name:string|null;city:string|null;venueSplit:string;games:number;wins:number;losses:number}
+  directOpponentHistory:{status:string;note:string;games:number;wins:number;losses:number}
+  referee:{names:string[];bias:'not-assessed';note:string}
+  weather:{status:string;description:string;source:string|null}
+  imagery:{imageUrl:string|null;articleUrl:string|null;attribution:string|null}
+  percentage:{value:number|null;kind:string;warning:string}
+  externalModel:{provider:string;status:string;selection:string|null;
+    modelProbabilityPercent:number|null;updatedAt:string|null;sourceUrl:string|null}
+  sources:Array<{name:string;status:string;url:string|null}>
+  explanationForChat:string
+}
+
 type SportsTicketCard = {
   component: 'sports_ticket_card'; version: 1
   props: {
@@ -148,10 +171,14 @@ type SportsTicketCard = {
     legs: Array<{ event: string; selection: string; price: string; bookmaker: string; when?: string; image?: string
       sport?:string;country?:string;league?:string;market?:string;player?:string;rationale?:string
       homeLogo?:string;awayLogo?:string;homeTeam?:string;awayTeam?:string
-      eventId?:string;eventDate?:string;providerLeague?:string;trackedBet?:SportsTrackedPick }>
+      eventId?:string;eventDate?:string;providerLeague?:string;trackedBet?:SportsTrackedPick;
+      narrative?:SportsTicketNarrative;legWinProbabilityPercent?:number|null;
+      legProbabilitySource?:string;marketNoVigPercent?:number|null;
+      researchStatus?:string;pendingEvidence?:string[] }>
     requestedLegs?:number; combinedOdds: string; stake?: string; grossReturn?: string; note: string
     ticketReference?:string
-    askPrompt?: string
+    askPrompt?: string;chatNarrative?:SportsTicketNarrative[];
+    narrativeInstruction?:string
   }
 }
 
