@@ -9,6 +9,9 @@ import { researchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { investigatePregame } from './pregame-investigation.ts'
 import { investigateEventDeep } from './sports-deep-context.ts'
 import { diversifiedSportsPicks,diversifiedSportsShortlist } from './sports-diversity.ts'
+import {composeTicketLegNarrative} from './sports-ticket-narrative.ts'
+import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
+import {discoverGdeltTicketNews} from './sports-gdelt-editorial.ts'
 export type TicketPreselectCandidate={
   eventId:string;sport:string;league:string;home:string;away:string;
   kickoff:string;pick:'home'|'away'|'draw';rank:number;level:'strong'|'conditional'
@@ -139,7 +142,10 @@ export async function evidenceTicket(
   }
   const candidateLegs:Array<{pick:ResearchTicketLeg;rank:number;home:string;away:string;
     kickoff:string;verifiedEvent:Awaited<ReturnType<typeof researchSport>>['matches'][number]['verifiedEvent'];
-    level:'strong'|'conditional';estimatedPct:number|null}> = []
+    level:'strong'|'conditional';estimatedPct:number|null;
+    historicalContext:{opponentGames:number;opponentWins:number;opponentLosses:number;
+      venueName:string;venueGames:number;venueWins:number;venueLosses:number;
+      scannedRecent:number}}> = []
   let evaluated=0
   let insufficientEvidence=0
   for(const report of reports){
@@ -182,7 +188,22 @@ export async function evidenceTicket(
       const selectedProbability=rank>0?forecast.probabilityHome:forecast.probabilityAway
       const estimatedPct=forecast.status==='exploratory'&&
         selectedProbability!==null?Number((selectedProbability*100).toFixed(1)):null
-      candidateLegs.push({rank:Math.abs(rank),level,estimatedPct,
+      const canonical=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
+        .toLowerCase().replace(/[^a-z0-9]/gu,'')
+      const previousVsOpponent=favorite.lastResults.filter(g=>
+        canonical(g.opponent)===canonical(opponent.name))
+      const currentVenue=String(match.verifiedEvent.competitions?.[0]?.venue?.fullName??
+        match.verifiedEvent.competitions?.[0]?.venue?.name??'').trim().slice(0,100)
+      const previousAtVenue=currentVenue?favorite.lastResults.filter(g=>
+        canonical(g.venue??'')===canonical(currentVenue)):[]
+      const history={opponentGames:previousVsOpponent.length,
+        opponentWins:previousVsOpponent.filter(g=>g.scored>g.allowed).length,
+        opponentLosses:previousVsOpponent.filter(g=>g.scored<g.allowed).length,
+        venueName:currentVenue,venueGames:previousAtVenue.length,
+        venueWins:previousAtVenue.filter(g=>g.scored>g.allowed).length,
+        venueLosses:previousAtVenue.filter(g=>g.scored<g.allowed).length,
+        scannedRecent:favorite.lastResults.length}
+      candidateLegs.push({rank:Math.abs(rank),level,estimatedPct,historicalContext:history,
         verifiedEvent:match.verifiedEvent,
         home:home.name,away:away.name,kickoff:match.date,pick:{
         sport:match.sport,league:match.league,eventId:match.eventId,
@@ -285,8 +306,15 @@ export async function evidenceTicket(
   const checks=await investigatePregame(selected.map(x=>({
     sport:x.pick.sport,league:x.pick.league,eventId:x.pick.eventId,
   })),cachedFetcher)
-  const contextual=await Promise.allSettled(selected.map(x=>investigateEventDeep(
-    x.pick.sport,x.pick.league,x.pick.eventId,cachedFetcher,now,env)))
+  const [contextual,editorial,gdelt]=await Promise.all([
+    Promise.allSettled(selected.map(x=>investigateEventDeep(
+      x.pick.sport,x.pick.league,x.pick.eventId,cachedFetcher,now,env))),
+    Promise.allSettled(selected.map(x=>discoverEditorialResearch(
+      x.home+' '+x.away,['covers','vegasinsider'],cachedFetcher,now))),
+    discoverGdeltTicketNews(selected.map(x=>({
+      eventId:x.pick.eventId,home:x.home,away:x.away,
+    })),fetcher,now),
+  ])
   let deepContextChecked=0,newsMatched=0,playerStatsChecked=0
   for(const result of contextual)if(result.status==='fulfilled'){
     deepContextChecked++
@@ -337,7 +365,43 @@ export async function evidenceTicket(
     const leg=raw&&typeof raw==='object'&&!Array.isArray(raw)?
       raw as Record<string,unknown>:{}
     const candidate=selected[index]
-    return {...leg,
+    const observed=contextual[index]
+    const context=observed?.status==='fulfilled'?observed.value:undefined
+    const editorialRow=editorial[index]
+    const external=editorialRow?.status==='fulfilled'?editorialRow.value.hits:[]
+    const narrative=candidate?composeTicketLegNarrative({
+      eventId:candidate.pick.eventId,sport:candidate.pick.sport,
+      league:candidate.pick.league,home:candidate.home,away:candidate.away,
+      kickoff:candidate.kickoff,pick:candidate.pick.pick,
+    },{...leg,
+      legWinProbabilityPercent:candidate.estimatedPct??null,
+      legProbabilitySource:candidate.estimatedPct!==null&&
+        candidate.estimatedPct!==undefined?'exploratory-recent-form':'unavailable',
+      historicalContext:candidate.historicalContext,
+    },context):null
+    const augmented=narrative?{...narrative,
+      globalNews:(gdelt.byEvent[candidate!.pick.eventId]??[]).map(hit=>({
+        publisher:hit.publisher,headline:hit.title,indexedAt:hit.indexedAt,
+        articleUrl:hit.articleUrl,status:hit.status,
+      })),
+      sources:[...narrative.sources,...(gdelt.byEvent[candidate!.pick.eventId]??[]).map(hit=>({
+        name:'GDELT · '+hit.publisher,status:'partial' as const,url:hit.articleUrl,
+      }))],
+      externalOpinions:external.slice(0,6).map(hit=>({
+        publisher:hit.publisher,headline:hit.headline,publishedAt:hit.publishedAt,
+        discoveryUrl:hit.discoveryUrl,status:hit.status,
+      })),
+      explanationForChat:narrative.explanationForChat+'\nNoticias globales indexadas por GDELT: '+
+        ((gdelt.byEvent[candidate!.pick.eventId]??[]).length?
+          (gdelt.byEvent[candidate!.pick.eventId]??[]).slice(0,2).map(hit=>
+            hit.title+' · '+hit.articleUrl+' (visto '+(hit.indexedAt??'sin hora')+')').join('; ')+
+            '. La fecha indica indexación, no publicación; noticia aún no contrastada.':
+            'sin artículos adicionales verificables.')+'\nOpiniones externas: '+
+        (external.length?external.slice(0,3).map(hit=>hit.publisher+': '+hit.headline).join('; ')+
+          '. Son titulares indexados, NO picks contrastados ni pronósticos de consenso.':
+          'sin artículos indexados verificables; no se atribuye consenso a tipsters.'),
+    }:null
+    return {...leg,narrative:augmented,
       preliminaryEvidenceTier:candidate?.level??'conditional',
       legWinProbabilityPercent:candidate?.estimatedPct??null,
       legProbabilitySource:candidate?.estimatedPct!==null&&
@@ -348,6 +412,8 @@ export async function evidenceTicket(
   })
   const card:ChatBlock={...ticket.card,props:{...ticket.card.props,
     legs:enrichedLegs,
+    chatNarrative:enrichedLegs.map(x=>x.narrative).filter(Boolean),
+    narrativeInstruction:'Kira debe acompañar cada pata en el chat con su análisis documentado, noticias enlazadas, riesgos, estadio, clima y árbitro si realmente están confirmados. Si algo falta, declararlo sin completar con imaginación. Fotografías de la noticia solo con URL HTTPS y fuente atribuida.',
     subtitle:'Preselección de '+chosen.length+' eventos · '+
       candidatesConditional+' candidatos CONDICIONALES · especialistas después',
     note:(note+' Se evaluaron candidatos adicionales antes de formar el ticket. '+
