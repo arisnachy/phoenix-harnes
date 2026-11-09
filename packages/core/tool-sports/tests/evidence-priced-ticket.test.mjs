@@ -48,6 +48,10 @@ const stubSpecialists=async games=>games.map(g=>({
   verifiedSteps:['both team rosters','form and injury audit'],
   pendingSteps:['independent model not calibrated'],approvedForBetting:false,
   checkedAt:new Date(now).toISOString(),
+  checklist:{sport:g.sport,checkedAt:new Date(now).toISOString(),
+    steps:[{key:'fixture',title:'Both teams and kickoff',critical:true,
+      state:'verified',detail:'test fixture'}],verified:1,partial:0,missing:0,
+    criticalPending:[],complete:true},
 }))
 const withSpecialists=(...args)=>{
   const [count,day,sport,stake,at,env,fetcher,quotesProvider,marketPreference]=args
@@ -378,4 +382,20 @@ test('undated ESPN prices decorate the research ticket but NEVER complete its qu
   assert.match(result.card.props.legs[0].rationale,/NO cotizable/)
   assert.match(result.card.props.subtitle,/TICKET DE INVESTIGACIÓN/)
   assert.equal(result.placed,false)
+})
+
+
+test('five source-quoted legs remain CONDITIONAL when research checklist is incomplete',async()=>{
+  const specialist=async games=>(await stubSpecialists(games)).map(s=>({
+    ...s,checklist:{...s.checklist,verified:1,missing:1,
+      criticalPending:['Two starting goalies or injury report'],complete:false},
+  }))
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,
+    mkQuotes(),'winner',specialist)
+  assert.equal(result.quotedLegs,5)
+  assert.equal(result.priced,true)
+  assert.equal(result.dossierComplete,false)
+  assert.equal(result.conditional,true)
+  assert.ok(result.card.props.legs.every(x=>x.researchStatus==='conditional'))
+  assert.equal(result.approvedLegs,0)
 })
