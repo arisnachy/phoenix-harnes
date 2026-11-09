@@ -76,6 +76,8 @@ export const researchCoverage:readonly ResearchRequirement[]=[
     caveat:'Team announcements and suspensions are needed'},
   {sport:'soccer',step:'draw',providers:[espn,football,quote],
     caveat:'90-minute 1X2 not a moneyline including extra time'},
+  {sport:'soccer',step:'market',providers:[quote,espn,football],
+    caveat:'Confirm exact 90-minute 1X2, draw, handicap or double-chance and quote timestamp'},
   {sport:'tennis',step:'surface',providers:[espn,db],
     caveat:'ATP and WTA singles/doubles, surface exact'},
   {sport:'tennis',step:'serve',providers:[espn,db],
