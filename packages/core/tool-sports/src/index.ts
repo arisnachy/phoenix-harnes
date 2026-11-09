@@ -692,7 +692,7 @@ export function apply(ctx: Context): void {
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>false,
-    async execute(){
+    async execute(args){
       // Recover missing source installs even when the prepared Windows runtime
       // did not ship the updater script. Launch remains nonblocking.
       const autoRepair=await ensureSportsSourcesStarted(process.env)
