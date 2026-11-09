@@ -1688,8 +1688,16 @@ export function apply(ctx: Context): void {
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
-      const result=await researchTicket(args.legs as ResearchTicketLeg[],args.date,fetch,Date.now(),process.env,args.requestedLegs)
-      return JSON.stringify({ uiBlock:result.card,priced:false,placed:false,verifiedEvents:result.verifiedEvents,requestedLegs:args.requestedLegs,complete:result.complete,
+      const env=await sportsEnv(ctx),date=args.date??santoDomingoDay()
+      const requested=args.legs as ResearchTicketLeg[]
+      const result=await researchTicket(requested,date,fetch,Date.now(),env,args.requestedLegs)
+      const cloudFollowUp=await registerCloudForecast(requested.map(x=>({
+        sport:x.sport,league:x.league,eventId:x.eventId,pick:x.pick,date,
+      })), 'winner',false,env)
+      return JSON.stringify({ uiBlock:{...result.card,
+        props:{...result.card.props,cloudFollowUp}},cloudFollowUp,
+        priced:false,placed:false,verifiedEvents:result.verifiedEvents,
+        requestedLegs:args.requestedLegs,complete:result.complete,
         instruction:'Phoenix renderiza el ticket nativo sin código ni JSON. Explica el fundamento de tus picks y busca casas y cuotas verificables si se solicita un boleto cotizado. No calcules retorno sin cuotas.' })
     },
     presentCall:()=>({ card:'generic',title:'Crear ticket de pronósticos',kind:'read' as const }),
