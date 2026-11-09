@@ -11,7 +11,7 @@ import { investigateEventDeep } from './sports-deep-context.ts'
 import { diversifiedSportsPicks,diversifiedSportsShortlist } from './sports-diversity.ts'
 import {composeTicketLegNarrative} from './sports-ticket-narrative.ts'
 import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
-import {discoverGdeltTicketNews} from './sports-gdelt-editorial.ts'
+import {discoverGdeltTicketNews,type GdeltReport} from './sports-gdelt-editorial.ts'
 export type TicketPreselectCandidate={
   eventId:string;sport:string;league:string;home:string;away:string;
   kickoff:string;pick:'home'|'away'|'draw';rank:number;level:'strong'|'conditional'
@@ -31,6 +31,15 @@ const defaultLeagues = [
   ['soccer','por.1'],['soccer','ned.1'],['soccer','bra.1'],['soccer','arg.1'],
   ['soccer','uefa.europa'],['soccer','fifa.world'],
 ] as const
+export function boundedTicket<T>(task:Promise<T>,ms:number):Promise<T>{
+  let timer:ReturnType<typeof setTimeout>|undefined
+  const limit=new Promise<never>((_resolve,reject)=>{
+    timer=setTimeout(()=>reject(Error('Tiempo de investigación excedido')),ms)
+  })
+  return Promise.race([task,limit]).finally(()=>{
+    if(timer!==undefined)clearTimeout(timer)
+  })
+}
 const dayNow=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
   year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
 const validDate=(day:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(day)
@@ -91,18 +100,18 @@ export async function evidenceTicket(
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por el operador')
   const leagues=defaultLeagues.filter(([sport])=>!sportFilter||sport===sportFilter)
   if(!leagues.length)throw Error('Disciplina sin cobertura para ticket automático')
-  // A burst of 40+ ESPN scoreboards causes rate-limit/HTTP 400 failures.
-  // Scan no more than five leagues (two UTC dates each) concurrently.
+  // Keep historical screening separate from full specialist investigations.
+  // A stalled provider must not block the ticket; failures retain their state.
   const slate:Array<PromiseSettledResult<{sport:string;league:string;active:number}>>=[]
-  for(let offset=0;offset<leagues.length;offset+=5){
-    const batch=await Promise.allSettled(leagues.slice(offset,offset+5).map(async([sport,league])=>{
+  for(let offset=0;offset<leagues.length;offset+=8){
+    const batch=await Promise.allSettled(leagues.slice(offset,offset+8).map(async([sport,league])=>{
     // Search both ESPN UTC date partitions for the requested local (RD) day.
     const next=new Date(Date.parse(date+'T00:00:00Z')+86_400_000)
       .toISOString().slice(0,10).replaceAll('-','')
     const partitions=await Promise.allSettled([date.replaceAll('-',''),next].map(day=>
-      getFeed<{events?:Array<{id?:string|number;date?:string;status?:{type?:{state?:string}}}>}>(
+      boundedTicket(getFeed<{events?:Array<{id?:string|number;date?:string;status?:{type?:{state?:string}}}>}>(
         'https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+
-        '/scoreboard?dates='+day,fetcher)))
+        '/scoreboard?dates='+day,fetcher),4_000)))
     const observed=partitions.flatMap(x=>x.status==='fulfilled'&&Array.isArray(x.value.events)
       ?x.value.events:[])
     if(!partitions.some(x=>x.status==='fulfilled'&&Array.isArray(x.value.events)))
@@ -118,18 +127,26 @@ export async function evidenceTicket(
   }
   const eligible=slate.flatMap(r=>r.status==='fulfilled'&&r.value.active>0?[r.value]:[])
   eligible.sort((a,b)=>b.active-a.active||a.sport.localeCompare(b.sport))
-  // Investigate in three-league batches. Do not stop at the first six leagues
+  // Investigate in four-league batches. Do not stop at the first six leagues
   // when their evidence is weak: expand into verified Portugal/Italy/etc slates.
   // Only verified, future ESPN event IDs can become selections.
   const shortlist=sportFilter?eligible:diversifiedSportsShortlist(eligible,eligible.length)
   const reports:Array<PromiseSettledResult<Awaited<ReturnType<typeof researchSport>>>>=[]
   const researchStarted=Date.now()
   let budgetExhausted=false
-  for(let offset=0;offset<shortlist.length;offset+=3){
-    if(offset>0&&Date.now()-researchStarted>85_000){budgetExhausted=true;break}
-    const batch=await Promise.allSettled(shortlist.slice(offset,offset+3).map(({sport,league})=>
-      researchSport(sport,league,date,fetcher,now,env,
-        sport==='football'?35:sport==='soccer'?56:sport==='tennis'?42:28)))
+  for(let offset=0;offset<shortlist.length;offset+=4){
+    if(offset>0&&Date.now()-researchStarted>=34_000){budgetExhausted=true;break}
+    const allowance=Math.max(750,34_000-(Date.now()-researchStarted))
+    const batch=await Promise.allSettled(shortlist.slice(offset,offset+4).map(({sport,league})=>{
+      const deadline=AbortSignal.timeout(Math.min(8_500,allowance))
+      const guarded:typeof fetch=(input,init)=>{
+        const signal=init?.signal?AbortSignal.any([init.signal,deadline]):deadline
+        return fetcher(input,{...init,signal})
+      }
+      return boundedTicket(researchSport(sport,league,date,guarded,now,env,
+        sport==='football'?35:sport==='soccer'?56:sport==='tennis'?42:28),
+        Math.min(8_500,allowance))
+    }))
     reports.push(...batch)
     // Stop costly expansion only after enough independently researched,
     // directionally consistent picks are available; an HTTP error is not a vote.
@@ -138,7 +155,7 @@ export async function evidenceTicket(
     const diversified=sportFilter!==undefined||new Set(viable.map(x=>x.sport)).size>=2
     // First-pass quality matters: do not end the league scan as soon as
     // exactly five provisional winners appear. Compare a wider rival pool.
-    if(offset+3>=9&&viable.length>=Math.max(12,count*3)&&diversified)break
+    if(offset+4>=8&&viable.length>=Math.max(12,count*3)&&diversified)break
   }
   const candidateLegs:Array<{pick:ResearchTicketLeg;rank:number;home:string;away:string;
     kickoff:string;verifiedEvent:Awaited<ReturnType<typeof researchSport>>['matches'][number]['verifiedEvent'];
@@ -225,14 +242,14 @@ export async function evidenceTicket(
   let reviewedCandidates=0,rejectedCandidates=0
   const reviewNotes=new Map<string,string>()
   if(reviewCandidates&&candidateLegs.length){
-    const pool=candidateLegs.slice(0,Math.min(12,Math.max(count+5,8)))
+    const pool=candidateLegs.slice(0,Math.min(10,Math.max(count+4,7)))
     const input=pool.map(c=>({
       eventId:c.pick.eventId,sport:c.pick.sport,league:c.pick.league,
       home:c.home,away:c.away,kickoff:c.kickoff,pick:c.pick.pick,
       rank:c.rank,level:c.level,
     }))
     try{
-      const findings=await reviewCandidates(input)
+      const findings=await boundedTicket(reviewCandidates(input),12_000)
       const known=new Set(input.map(x=>x.eventId))
       const seen=new Set<string>()
       const decisions=new Map<string,TicketPreselectVerdict>()
@@ -303,17 +320,22 @@ export async function evidenceTicket(
     if(!request){request=fetcher(input,init);networkCache.set(url,request)}
     return request.then(response=>response.clone())
   }
-  const checks=await investigatePregame(selected.map(x=>({
+  const checks=await boundedTicket(investigatePregame(selected.map(x=>({
     sport:x.pick.sport,league:x.pick.league,eventId:x.pick.eventId,
-  })),cachedFetcher)
+  })),cachedFetcher),6_000).catch(()=>new Map())
   const [contextual,editorial,gdelt]=await Promise.all([
-    Promise.allSettled(selected.map(x=>investigateEventDeep(
-      x.pick.sport,x.pick.league,x.pick.eventId,cachedFetcher,now,env))),
-    Promise.allSettled(selected.map(x=>discoverEditorialResearch(
-      x.home+' '+x.away,['covers','vegasinsider'],cachedFetcher,now))),
-    discoverGdeltTicketNews(selected.map(x=>({
+    boundedTicket(Promise.allSettled(selected.map(x=>investigateEventDeep(
+      x.pick.sport,x.pick.league,x.pick.eventId,cachedFetcher,now,env))),6_000)
+      .catch(()=>[]),
+    boundedTicket(Promise.allSettled(selected.map(x=>discoverEditorialResearch(
+      x.home+' '+x.away,['covers','vegasinsider'],cachedFetcher,now))),6_000)
+      .catch(()=>[]),
+    boundedTicket(discoverGdeltTicketNews(selected.map(x=>({
       eventId:x.pick.eventId,home:x.home,away:x.away,
-    })),fetcher,now),
+    })),fetcher,now),6_000).catch(():GdeltReport=>({
+      status:'unavailable',checkedAt:new Date(now).toISOString(),
+      sourceUrl:null,byEvent:{},scanned:0,note:'GDELT agotó el plazo; sin noticias verificadas',
+    })),
   ])
   let deepContextChecked=0,newsMatched=0,playerStatsChecked=0
   for(const result of contextual)if(result.status==='fulfilled'){

@@ -19,6 +19,15 @@ export type OddsAuditRow={
   offers:number
   note:string
 }
+export const boundedPriced=<T>(work:Promise<T>,ms:number):Promise<T>=>{
+  let timer:ReturnType<typeof setTimeout>|undefined
+  const deadline=new Promise<never>((_resolve,reject)=>{
+    timer=setTimeout(()=>reject(Error('Fuente de cuotas: plazo agotado')),ms)
+  })
+  return Promise.race([work,deadline]).finally(()=>{
+    if(timer!==undefined)clearTimeout(timer)
+  })
+}
 const audited=(source:string,status:OddsAuditRow['status'],offers:number,note:string):OddsAuditRow=>
   ({source,status,offers,note})
 const normalize=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
@@ -59,6 +68,7 @@ export async function evidencePricedTicket(
     pick:'home'|'away';kickoff:string}>;
   marketRisk?:TicketMarketRisk;
   decisionAudit:TicketDecisionAudit}>{
+  const pipelineStartedAt=Date.now()
   const researchFetcher=fetcher===fetch?dailyResearchFetcher(fetcher,env):fetcher
   const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
     year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
@@ -71,7 +81,8 @@ export async function evidencePricedTicket(
       sport:c.sport,league:c.league,eventId:c.eventId,date:day,
       home:c.home,away:c.away,kickoff:c.kickoff,
     }))
-    const checks=await specialistResearcher(games,researchFetcher,now,env,[],8_000)
+    const checks=await boundedPriced(specialistResearcher(games,researchFetcher,
+      now,env,[],5_000),11_000)
     reviewedBeforeSelection=checks.length
     return checks.map((check,index)=>{
       const fixture=candidates[index]!
@@ -103,7 +114,8 @@ export async function evidencePricedTicket(
   })
     .map(e=>({sport:e.sport,league:e.league,eventId:e.eventId,
       date:day,home:e.home,away:e.away,kickoff:e.kickoff}))
-  const retried=await specialistResearcher(pendingGames,researchFetcher,now,env)
+  const retried=await boundedPriced(specialistResearcher(
+    pendingGames,researchFetcher,now,env,[],7_000),15_000).catch(()=>[])
   const byId=new Map(retried.map(x=>[x.eventId,x]))
   const specialistChecks:SpecialistGate[]=research.events.map(e=>byId.get(e.eventId)??preview.get(e.eventId)??{
     sport:e.sport,league:e.league,eventId:e.eventId,specialist:'unavailable',
@@ -131,7 +143,7 @@ export async function evidencePricedTicket(
   const modelKeys=[...new Set(research.events.map(e=>leagueSportKey[e.league]).filter(
     (x):x is string=>Boolean(x)))]
   const modelResults=await Promise.allSettled(modelKeys.map(key=>
-    fetchBetBetterModels(key,fetcher,now)))
+    boundedPriced(fetchBetBetterModels(key,fetcher,now),4_000)))
   const forecasts=modelResults.flatMap(x=>x.status==='fulfilled'?x.value:[])
   const modelAudit=research.events.map(e=>({
     eventId:e.eventId,...findModelOpinion(forecasts,e),
@@ -205,6 +217,20 @@ export async function evidencePricedTicket(
     multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
     explanation:'Preselección ESPN, cuotas todavía NO verificadas: '+quoteAccess+
       '. Los archivos históricos no ofrecen precios para apostar hoy.'}
+  // If research already consumed the wall-clock budget, return the actual
+  // verified preselection now instead of starting more independent quote scans.
+  // In particular, do not make Kira lose a valid draft to the outer watchdog.
+  if(Date.now()-pipelineStartedAt>=72_000){
+    return {...base,sourceAudit:initialSources.map(row=>({
+      ...row,status:row.status==='attempted'?'not-applicable' as const:row.status,
+      note:row.note+' Omitido: se alcanzó el presupuesto de tiempo del ticket.',
+    })),conditional:true,
+      explanation:'Tiempo de investigación agotado: se conserva la preselección '+
+        'verificada con '+research.verifiedEvents+' eventos y '+
+        researchedLegs+' expedientes especializados. Falta la verificación '+
+        'de cuotas actuales. Reintentar solo fuentes pendientes, sin rehacer '+
+        'el barrido completo.'}
+  }
   // Even an incomplete 4/5 slate must audit the four real events for quotes;
   // otherwise 'no prices available' falsely implies the sources were checked.
   const categories=[...new Set(research.events.map(e=>e.sport))]
@@ -214,7 +240,8 @@ export async function evidencePricedTicket(
     const market=category==='soccer'&&marketPreference==='double_chance'
       ?'double_chance':route.market
     const quotes=quotesProvider?await quotesProvider(route.sport,market,day,env,now):
-      keylessEnabled(env)?await keylessOdds(route.sport,market,day,env,now):[]
+      keylessEnabled(env)?await boundedPriced(
+        keylessOdds(route.sport,market,day,env,now),6_000):[]
     return {category,quotes}
   }))
   const keyless=sources.flatMap(s=>s.status==='fulfilled'?s.value.quotes:[])
@@ -230,7 +257,8 @@ export async function evidencePricedTicket(
     const sportKey=leagueSportKey[event.league]??
       (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
     if(!sportKey)return [] as KeylessQuote[]
-    const report=await marketOddsDetailed(sportKey,'h2h',env,fetcher,now)
+    const report=await boundedPriced(marketOddsDetailed(
+      sportKey,'h2h',env,fetcher,now),7_000)
     fallbackSources.push(...report.sources)
     // Reference quotes without an updatedAt are useful for comparison,
     // but MUST NOT be placed into the live quoted groups.
@@ -286,10 +314,10 @@ export async function evidencePricedTicket(
       const signal=init?.signal?AbortSignal.any([init.signal,deadline]):deadline
       return fetcher(input,{...init,signal})
     }
-    return lookupExactEspnWinner({
+    return boundedPriced(lookupExactEspnWinner({
       sportKey,eventId:event.eventId,date:day,
       home:event.home,away:event.away,kickoff:event.kickoff,
-    },<T>(url:string)=>getFeed<T>(url,bounded),now)
+    },<T>(url:string)=>getFeed<T>(url,bounded),now),8_000)
   }))
   const specific=exactReports.flatMap(row=>row.status==='fulfilled'&&row.value?
     row.value.quotes:[])
@@ -413,9 +441,9 @@ export async function evidencePricedTicket(
       const sportKey=leagueSportKey[event.league]??
         (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
       if(!sportKey)return null
-      return{index,report:await researchPublicOddsWebsites({
+      return{index,report:await boundedPriced(researchPublicOddsWebsites({
         sportKey,date:day,home:event.home,away:event.away,
-      },fetcher,now)}
+      },fetcher,now),6_000)}
     }))
   const websiteByIndex=new Map(siteResearch.flatMap(item=>
     item.status==='fulfilled'&&item.value?

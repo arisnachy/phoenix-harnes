@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {evidencePricedTicket} from '../src/evidence-priced-ticket.ts'
+import {boundedPriced,evidencePricedTicket} from '../src/evidence-priced-ticket.ts'
 
 const date='2026-10-28',now=Date.parse('2026-10-28T15:00:00Z')
 const kick='2026-10-28T23:00:00Z'
@@ -411,4 +411,10 @@ test('five source-quoted legs remain CONDITIONAL when research checklist is inco
   assert.equal(result.conditional,true)
   assert.ok(result.card.props.legs.every(x=>x.researchStatus==='conditional'))
   assert.equal(result.approvedLegs,0)
+})
+
+test('optional quote sources have an independent finite deadline',async()=>{
+  const started=Date.now()
+  await assert.rejects(()=>boundedPriced(new Promise(()=>{}),35),/Fuente de cuotas: plazo agotado/)
+  assert.ok(Date.now()-started<500)
 })

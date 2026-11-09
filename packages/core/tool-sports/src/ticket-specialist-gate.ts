@@ -323,8 +323,8 @@ export async function investigateTicketSpecialists(
     }finally{if(timer!==undefined)clearTimeout(timer)}
   }
   const audited:SpecialistGate[]=[]
-  for(let offset=0;offset<games.length;offset+=2){
-    const batch=await Promise.all(games.slice(offset,offset+2).map(inspect))
+  for(let offset=0;offset<games.length;offset+=4){
+    const batch=await Promise.all(games.slice(offset,offset+4).map(inspect))
     audited.push(...batch)
   }
   return audited
