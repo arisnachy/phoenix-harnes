@@ -140,7 +140,10 @@ export async function evidenceTicket(
   }
   const candidateLegs:Array<{pick:ResearchTicketLeg;rank:number;home:string;away:string;
     kickoff:string;verifiedEvent:Awaited<ReturnType<typeof researchSport>>['matches'][number]['verifiedEvent'];
-    level:'strong'|'conditional';estimatedPct:number|null}> = []
+    level:'strong'|'conditional';estimatedPct:number|null;
+    historicalContext:{opponentGames:number;opponentWins:number;opponentLosses:number;
+      venueName:string;venueGames:number;venueWins:number;venueLosses:number;
+      scannedRecent:number}}> = []
   let evaluated=0
   let insufficientEvidence=0
   for(const report of reports){
@@ -183,7 +186,22 @@ export async function evidenceTicket(
       const selectedProbability=rank>0?forecast.probabilityHome:forecast.probabilityAway
       const estimatedPct=forecast.status==='exploratory'&&
         selectedProbability!==null?Number((selectedProbability*100).toFixed(1)):null
-      candidateLegs.push({rank:Math.abs(rank),level,estimatedPct,
+      const canonical=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
+        .toLowerCase().replace(/[^a-z0-9]/gu,'')
+      const previousVsOpponent=favorite.lastResults.filter(g=>
+        canonical(g.opponent)===canonical(opponent.name))
+      const currentVenue=String(match.verifiedEvent.competitions?.[0]?.venue?.fullName??
+        match.verifiedEvent.competitions?.[0]?.venue?.name??'').trim().slice(0,100)
+      const previousAtVenue=currentVenue?favorite.lastResults.filter(g=>
+        canonical(g.venue??'')===canonical(currentVenue)):[]
+      const history={opponentGames:previousVsOpponent.length,
+        opponentWins:previousVsOpponent.filter(g=>g.scored>g.allowed).length,
+        opponentLosses:previousVsOpponent.filter(g=>g.scored<g.allowed).length,
+        venueName:currentVenue,venueGames:previousAtVenue.length,
+        venueWins:previousAtVenue.filter(g=>g.scored>g.allowed).length,
+        venueLosses:previousAtVenue.filter(g=>g.scored<g.allowed).length,
+        scannedRecent:favorite.lastResults.length}
+      candidateLegs.push({rank:Math.abs(rank),level,estimatedPct,historicalContext:history,
         verifiedEvent:match.verifiedEvent,
         home:home.name,away:away.name,kickoff:match.date,pick:{
         sport:match.sport,league:match.league,eventId:match.eventId,
@@ -348,6 +366,7 @@ export async function evidenceTicket(
       legWinProbabilityPercent:candidate.estimatedPct??null,
       legProbabilitySource:candidate.estimatedPct!==null&&
         candidate.estimatedPct!==undefined?'exploratory-recent-form':'unavailable',
+      historicalContext:candidate.historicalContext,
     },context):null
     return {...leg,narrative,
       preliminaryEvidenceTier:candidate?.level??'conditional',
