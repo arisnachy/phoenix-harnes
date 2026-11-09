@@ -133,7 +133,7 @@ async function quotaUpdate(root:string,day:string,key:string,
   await lock(root,async()=>{
     const file=join(root,'quota-'+day+'.json')
     const data=await read(file,emptyBudgets(day))
-    const entry=data.buckets[key]??{used:0,minute:-1,minuteCount:0,
+    const entry:Budget=data.buckets[key]??{used:0,minute:-1,minuteCount:0,
       cooldownUntil:0,observedRemaining:null}
     const minute=Math.floor(now/60_000)
     if(entry.minute!==minute){entry.minute=minute;entry.minuteCount=0}
