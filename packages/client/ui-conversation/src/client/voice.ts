@@ -131,10 +131,18 @@ export interface VoiceModelRoute {
 type VoiceModelRouteResolver = (sessionKey: string) => Promise<VoiceModelRoute | undefined>
 type CodexRealtimeUserTranscriptHandler = (text: string) => void
 
+interface CodexRealtimeMicrophoneGate {
+  readonly context: AudioContext
+  readonly gain: GainNode
+  readonly stream: MediaStream
+}
+
 interface CodexRealtimeVoiceSession {
   readonly key: string
   readonly peer: RTCPeerConnection
   readonly microphone: MediaStream
+  /** Optional silent RTP mic gate: suppress speaker echo without disabling WebRTC audio. */
+  readonly microphoneGate?: CodexRealtimeMicrophoneGate
   readonly events: RTCDataChannel
   readonly audio: HTMLAudioElement
   /** Single authorized harness-owned speech request currently in flight. */
@@ -162,8 +170,8 @@ interface CodexRealtimeVoiceSession {
   /** Reopen the human transcript path while RTC finishes playing authorized speech. */
   inputResumeTimer?: number
   audioDrainUntil?: number
-  /** Ignore one late V3 assistant turn marker belonging to the completed reply. */
-  lateAssistantTurnIgnored?: boolean
+  /** Limit tolerance for late V3 markers so autonomous speech remains blocked. */
+  lateAssistantTurnMarkers?: number
   /** One native generation can report both response.done and assistant turn.done. */
   lastCompletedNativeTerminal?: {
     readonly key: string
@@ -246,11 +254,24 @@ function clearCodexRealtimeTimers(session: CodexRealtimeVoiceSession): void {
   delete session.audioDrainTimer
   delete session.inputResumeTimer
   delete session.audioDrainUntil
-  delete session.lateAssistantTurnIgnored
+  delete session.lateAssistantTurnMarkers
   delete session.lastCompletedNativeTerminal
   delete session.disconnectTimer
   delete session.inactivityTimer
   delete session.nativeCancelTimer
+}
+
+function reportCodexRealtimeTransportLoss(session: CodexRealtimeVoiceSession): void {
+  if (codexRealtimeVoiceSession !== session) return
+  document.documentElement.dataset.phoenixVoiceSpeechStatus = 'failed'
+  document.documentElement.dataset.phoenixVoiceSpeechError = 'webrtc-transport-lost'
+  void stopCodexRealtimeVoice().then(() => {
+    if (codexRealtimeVoiceSession !== undefined || voiceAssistantSnapshot.active) return
+    publishVoiceAssistant({
+      ...INACTIVE_VOICE_ASSISTANT,
+      lastError: 'La conexión de voz de Codex se interrumpió. Pulsa el micrófono para reconectar.',
+    })
+  })
 }
 
 function refreshCodexRealtimeActivity(session: CodexRealtimeVoiceSession): void {
@@ -419,6 +440,9 @@ function playCodexRealtimeAudio(audio: HTMLAudioElement): void {
   if (!audio.srcObject || audio.dataset.phoenixAudioPlayback === 'blocked'
     || audio.dataset.phoenixAudioPlayback === 'starting'
     || (!audio.paused && audio.dataset.phoenixAudioPlayback === 'playing')) return
+  // A muted WebRTC preflight may still be awaiting play() when Phoenix
+  // authorizes the first words. Retry its failed start once as audible output.
+  const beganMuted = audio.muted
   audio.dataset.phoenixAudioPlayback = 'starting'
   const played = (): void => {
     if (!audio.isConnected) return
@@ -428,6 +452,13 @@ function playCodexRealtimeAudio(audio: HTMLAudioElement): void {
   }
   const blocked = (): void => {
     if (!audio.isConnected) return
+    if (beganMuted && !audio.muted && audio.dataset.phoenixAudioPlayback === 'starting') {
+      // This rejection belongs to the old muted attempt, not the newly
+      // authorized reply. If the audible retry fails, show Activar sonido.
+      delete audio.dataset.phoenixAudioPlayback
+      playCodexRealtimeAudio(audio)
+      return
+    }
     audio.dataset.phoenixAudioPlayback = 'blocked'
     document.documentElement.dataset.phoenixVoiceAudioPlayback = 'blocked'
     if (!audio.muted) publishCodexAudioBlocked(audio, true)
@@ -457,7 +488,7 @@ function clearCodexRealtimeAudioDrain(session: CodexRealtimeVoiceSession): void 
   delete session.audioDrainTimer
   delete session.inputResumeTimer
   delete session.audioDrainUntil
-  delete session.lateAssistantTurnIgnored
+  delete session.lateAssistantTurnMarkers
 }
 
 /**
@@ -468,11 +499,45 @@ function clearCodexRealtimeAudioDrain(session: CodexRealtimeVoiceSession): void 
  * after the WebRTC jitter buffer drains or an explicit interruption.
  */
 function setCodexRealtimeMicOpen(session: CodexRealtimeVoiceSession, open: boolean): void {
-  // Disabling the mic's RTP track prevents audio output on some Codex V3
-  // sessions. Preserve the negotiated WebRTC tracks, and suppress only
-  // the transcript/command path during authorized assistant playback.
+  // Disabling the RTP track can also stop Codex V3 output. If available,
+  // gate microphone samples while keeping the WebRTC sender track live.
+  const gate = session.microphoneGate
+  if (gate !== undefined) {
+    try {
+      gate.gain.gain.setTargetAtTime(open ? 1 : 0, gate.context.currentTime, 0.012)
+    } catch {
+      gate.gain.gain.value = open ? 1 : 0
+    }
+  }
   session.ignoreUserTranscripts = !open
   document.documentElement.dataset.phoenixVoiceMicrophone = open ? 'listening' : 'echo-filtered-for-output'
+}
+
+/**
+ * Keep RTP alive while suppressing speaker feedback. Never wait for a
+ * suspended AudioContext: original microphone capture remains the fallback.
+ */
+function createCodexRealtimeMicrophoneGate(microphone: MediaStream): CodexRealtimeMicrophoneGate | undefined {
+  const Constructor = typeof window === 'undefined' ? undefined : window.AudioContext
+  if (typeof Constructor !== 'function') return undefined
+  let context: AudioContext | undefined
+  try {
+    context = new Constructor({ latencyHint: 'interactive' })
+    if (context.state !== 'running') {
+      void context.close().catch(() => {})
+      return undefined
+    }
+    const source = context.createMediaStreamSource(microphone)
+    const gain = context.createGain()
+    const destination = context.createMediaStreamDestination()
+    source.connect(gain)
+    gain.connect(destination)
+    if (destination.stream.getAudioTracks().length === 0) throw new Error('silent-microphone-track')
+    return { context, gain, stream: destination.stream }
+  } catch {
+    if (context !== undefined) void context.close().catch(() => {})
+    return undefined
+  }
 }
 
 function muteCodexRealtimeAudio(session: CodexRealtimeVoiceSession, reason: string): void {
@@ -668,7 +733,7 @@ function finishNativeUtterance(session: CodexRealtimeVoiceSession, utterance: Pe
   // Leave that already-authorized audio audible for a bounded drain window.
   clearCodexRealtimeAudioDrain(session)
   session.audioDrainUntil = Date.now() + CODEX_VOICE_AUDIO_DRAIN_MS
-  session.lateAssistantTurnIgnored = false
+  session.lateAssistantTurnMarkers = 0
   // Keep the speaker audible during RTC draining, but do not ignore a natural
   // short answer for six seconds after the preceding generated sentence ends.
   session.inputResumeTimer = window.setTimeout(() => {
@@ -1115,6 +1180,7 @@ export async function tryStartCodexRealtimeVoice(
   const generation = ++codexRealtimeVoiceGeneration
   codexRealtimeVoiceStarting = true
   let microphone: MediaStream | undefined
+  let microphoneGate: CodexRealtimeMicrophoneGate | undefined
   let peer: RTCPeerConnection | undefined
   let events: RTCDataChannel | undefined
   let audio: HTMLAudioElement | undefined
@@ -1143,7 +1209,11 @@ export async function tryStartCodexRealtimeVoice(
     audio.style.display = 'none'
     document.body.append(audio)
 
-    for (const track of microphone.getAudioTracks()) peer.addTrack(track, microphone)
+    microphoneGate = createCodexRealtimeMicrophoneGate(microphone)
+    document.documentElement.dataset.phoenixVoiceMicEchoGate = microphoneGate === undefined
+      ? 'unavailable' : 'active'
+    const rtcMicrophone = microphoneGate?.stream ?? microphone
+    for (const track of rtcMicrophone.getAudioTracks()) peer.addTrack(track, rtcMicrophone)
     peer.ontrack = (event) => {
       if (codexRealtimeVoiceGeneration !== generation || audio === undefined) return
       const stream = event.streams[0] ?? new MediaStream([event.track])
@@ -1202,7 +1272,9 @@ export async function tryStartCodexRealtimeVoice(
     if (generation !== codexRealtimeVoiceGeneration) throw new Error('start-superseded')
 
     const liveSession: CodexRealtimeVoiceSession = {
-      key: sessionKey, peer, microphone, events, audio, recentTranscripts: new Map(),
+      key: sessionKey, peer, microphone,
+      ...(microphoneGate !== undefined ? { microphoneGate } : {}),
+      events, audio, recentTranscripts: new Map(),
       onPageHide: () => { void stopCodexRealtimeVoice() },
     }
     codexRealtimeVoiceSession = liveSession
@@ -1236,7 +1308,7 @@ export async function tryStartCodexRealtimeVoice(
         // A dropped Telegram Mini App/browser call cannot leave the mic active forever.
         liveSession.disconnectTimer ??= window.setTimeout(() => {
           if (codexRealtimeVoiceSession === liveSession && liveSession.peer.connectionState === 'disconnected') {
-            void stopCodexRealtimeVoice()
+            reportCodexRealtimeTransportLoss(liveSession)
           }
         }, CODEX_VOICE_DISCONNECT_GRACE_MS)
         return
@@ -1244,12 +1316,13 @@ export async function tryStartCodexRealtimeVoice(
       if (peer?.connectionState === 'failed' || peer?.connectionState === 'closed') {
         // End voice completely; do not silently re-enable browser recognition.
         // The Phoenix harness and its pending tasks are deliberately unaffected.
-        void stopCodexRealtimeVoice()
+        reportCodexRealtimeTransportLoss(liveSession)
       }
     }
     return { kind: 'started' }
   } catch (error) {
     if (peer !== undefined) peer.close()
+    if (microphoneGate !== undefined) void microphoneGate.context.close().catch(() => {})
     if (microphone !== undefined) {
       for (const track of microphone.getTracks()) track.stop()
     }
@@ -1292,6 +1365,7 @@ export async function stopCodexRealtimeVoice(): Promise<boolean> {
   pendingNativeAssistantMessages.clear()
   session.events.close()
   session.peer.close()
+  if (session.microphoneGate !== undefined) void session.microphoneGate.context.close().catch(() => {})
   for (const track of session.microphone.getTracks()) track.stop()
   session.audio.pause()
   session.audio.srcObject = null
@@ -1421,12 +1495,12 @@ function updateCodexRealtimePhase(payload: string): void {
   }
   const assistantStarted = type === 'response.created' || assistantTurnCreated
   if (assistantStarted && session.activeUtterance === undefined) {
-    // V3 sometimes delivers a trailing assistant turn.created after its terminal
-    // response.done, while the previously authorized speech is still playing.
-    // Do not treat one such delayed marker as fresh, unsolicited speech.
+    // Tolerate a small number of duplicate V3 turn markers during RTC drain,
+    // but never grant indefinite permission to autonomous model speech.
     if (assistantTurnCreated && session.audioDrainUntil !== undefined
-      && Date.now() < session.audioDrainUntil && !session.lateAssistantTurnIgnored) {
-      session.lateAssistantTurnIgnored = true
+      && Date.now() < session.audioDrainUntil
+      && (session.lateAssistantTurnMarkers ?? 0) < 3) {
+      session.lateAssistantTurnMarkers = (session.lateAssistantTurnMarkers ?? 0) + 1
       return
     }
     muteCodexRealtimeAudio(session, 'unsolicited-response')
