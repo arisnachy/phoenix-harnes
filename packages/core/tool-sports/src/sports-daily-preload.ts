@@ -263,15 +263,26 @@ export function dailyPreloadTargets(date:string,env:NodeJS.ProcessEnv):PrefetchT
         date+'&s='+encodeURIComponent(s),
     })),
   ]
-  const api=[
-    ['PHOENIX_API_FOOTBALL_KEY','API-Sports Football','soccer',
-      'https://v3.football.api-sports.io/fixtures?date='+date],
+  // Match the exact API-Football fixture URLs used by the specialist backup.
+  // Four league-level reads use far fewer requests than one read per ticket leg.
+  if(env.PHOENIX_API_FOOTBALL_KEY?.trim()){
+    for(const [league,leagueId] of [['eng.1',39],['esp.1',140],
+      ['usa.1',253],['mex.1',262]] as const){
+      const year=Number(date.slice(0,4)),month=Number(date.slice(5,7))
+      const season=['usa.1','mex.1'].includes(league)?year:
+        year-(month<7?1:0)
+      list.push({provider:'API-Sports Football',sport:'soccer',kind:'quota',
+        url:'https://v3.football.api-sports.io/fixtures?league='+leagueId+
+          '&season='+season+'&date='+date,
+        headers:{'x-apisports-key':env.PHOENIX_API_FOOTBALL_KEY!}})
+    }
+  }
+  for(const [key,provider,sport,url] of [
     ['PHOENIX_API_HOCKEY_KEY','API-Sports Hockey','hockey',
       'https://v1.hockey.api-sports.io/games?date='+date],
     ['PHOENIX_API_NFL_KEY','API-Sports NFL','football',
       'https://v1.american-football.api-sports.io/games?date='+date],
-  ] as const
-  for(const [key,provider,sport,url] of api){
+  ] as const){
     if(env[key]?.trim())list.push({provider,sport,kind:'quota',url,
       headers:{'x-apisports-key':env[key]!}})
   }
