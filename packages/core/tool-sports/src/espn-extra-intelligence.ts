@@ -1,7 +1,8 @@
 /**
  * Curated extended ESPN routes. All are unofficial and availability varies
  * across leagues. An entry in this catalog does not prove HTTP reachability.
- * No arbitrary URLs, CDN scraping, partner credentials or private fantasy APIs.
+ * Only enumerated HTTPS JSON endpoints; no arbitrary URLs, private Fantasy
+ * credentials, partner credentials or HTML scraping. Each route is provisional.
  */
 export const extendedEspnRoutes={
   team_record:{root:'core',path:'/seasons/{season}/types/{seasonType}/teams/{teamId}/record'},
@@ -55,6 +56,59 @@ export const extendedEspnRoutes={
   season_groups:{root:'core',path:'/seasons/{season}/types/{seasonType}/groups'},
   season_group_events:{root:'core',path:'/seasons/{season}/types/{seasonType}/weeks/{week}/events'},
 
+  // ESPN Site: game, teams, transactions and college rankings.
+  site_scoreboard:{root:'site',path:'/scoreboard'},
+  site_summary:{root:'site',path:'/summary'},
+  site_team:{root:'site',path:'/teams/{teamId}'},
+  site_team_depth_chart:{root:'site',path:'/teams/{teamId}/depthcharts'},
+  site_transactions:{root:'site',path:'/transactions'},
+  site_rankings:{root:'site',path:'/rankings'},
+  // Common v3 athletes/team statistical leaderboards.
+  web_statistics_by_athlete:{root:'web',path:'/statistics/byathlete'},
+  web_statistics_by_team:{root:'web',path:'/statistics/byteam'},
+  // Core league and seasons.
+  league_info:{root:'core',path:''},
+  season_awards:{root:'core',path:'/seasons/{season}/awards'},
+  season_powerindex:{root:'core',path:'/seasons/{season}/powerindex'},
+  season_powerindex_team:{root:'core',path:'/seasons/{season}/powerindex/{teamId}'},
+  season_draft_rounds:{root:'core',path:'/seasons/{season}/draft/rounds'},
+  season_draft_athletes:{root:'core',path:'/seasons/{season}/draft/athletes'},
+  season_group_standings:{root:'core',path:'/seasons/{season}/types/{seasonType}/groups/{groupId}/standings'},
+  season_group_teams:{root:'core',path:'/seasons/{season}/types/{seasonType}/groups/{groupId}/teams'},
+  season_futures:{root:'core',path:'/seasons/{season}/futures'},
+  season_team_leaders:{root:'core',path:'/seasons/{season}/types/{seasonType}/teams/{teamId}/leaders'},
+  season_team_ats:{root:'core',path:'/seasons/{season}/types/{seasonType}/teams/{teamId}/ats'},
+  // Core player injuries and verified event components.
+  athlete_notes:{root:'core',path:'/athletes/{athleteId}/notes'},
+  athlete_injuries:{root:'core',path:'/athletes/{athleteId}/injuries'},
+  game_status:{root:'core',path:'/events/{eventId}/competitions/{competitionId}/status'},
+  game_situation:{root:'core',path:'/events/{eventId}/competitions/{competitionId}/situation'},
+  game_broadcasts:{root:'core',path:'/events/{eventId}/competitions/{competitionId}/broadcasts'},
+  game_details:{root:'core',path:'/events/{eventId}/competitions/{competitionId}/details'},
+  game_commentary:{root:'core',path:'/events/{eventId}/competitions/{competitionId}/commentary'},
+  game_team_leaders:{root:'core',path:'/events/{eventId}/competitions/{competitionId}/competitors/{teamId}/leaders'},
+  game_odds:{root:'core',path:'/events/{eventId}/competitions/{competitionId}/odds'},
+  game_odds_provider:{root:'core',path:'/events/{eventId}/competitions/{competitionId}/odds/{providerId}'},
+  game_prop_bets:{root:'core',path:'/events/{eventId}/competitions/{competitionId}/odds/{providerId}/propBets'},
+  game_probabilities:{root:'core',path:'/events/{eventId}/competitions/{competitionId}/probabilities'},
+  game_predictor:{root:'core',path:'/events/{eventId}/competitions/{competitionId}/predictor'},
+  // Public CDN JSON; format and access differ by league. Never a live price guarantee.
+  cdn_scoreboard:{root:'cdn',path:'/scoreboard'},
+  cdn_game:{root:'cdn',path:'/game'},
+  cdn_boxscore:{root:'cdn',path:'/boxscore'},
+  cdn_playbyplay:{root:'cdn',path:'/playbyplay'},
+  cdn_matchup:{root:'cdn',path:'/matchup'},
+  cdn_schedule:{root:'cdn',path:'/schedule'},
+  cdn_standings:{root:'cdn',path:'/standings'},
+  // Public Fantasy views only: never attach ESPN authentication cookies.
+  fantasy_players:{root:'fantasy',path:'/players'},
+  fantasy_player_info:{root:'fantasy',path:'/players'},
+  fantasy_pro_team_schedules:{root:'fantasy',path:'/'},
+  // Standalone ESPN search, newsroom and videos; no arbitrary URLs.
+  search_entities:{root:'search',path:''},
+  news_feed:{root:'news',path:''},
+  video_feed:{root:'videos',path:''},
+
 } as const
 /** Supported, explicitly enumerated modes for safe ESPN route generation. */
 export type ExtendedEspnMode=keyof typeof extendedEspnRoutes
@@ -63,6 +117,7 @@ export type ExtendedEspnInput={
   mode:ExtendedEspnMode;sport:string;league:string;eventId?:string|undefined
   competitionId?:string|undefined;teamId?:string|undefined;athleteId?:string|undefined
   season?:number|undefined;seasonType?:number|undefined;week?:number|undefined;limit?:number|undefined
+  providerId?:string|undefined;groupId?:string|undefined;date?:string|undefined;query?:string|undefined
 }
 const digits=(raw:unknown,key:string):string=>{
   const value=String(raw??'')
@@ -84,6 +139,11 @@ const roots={
   site:'https://site.api.espn.com/apis/site/v2/sports/',
   web:'https://site.web.api.espn.com/apis/common/v3/sports/',
   standings:'https://site.api.espn.com/apis/v2/sports/',
+  cdn:'https://cdn.espn.com/core/',
+  fantasy:'https://lm-api-reads.fantasy.espn.com/apis/v3/games/',
+  search:'https://site.web.api.espn.com/apis/search/v2',
+  news:'https://now.core.api.espn.com/v1/sports/news',
+  videos:'https://site.web.api.espn.com/apis/v2/videos',
 } as const
 /**
  * Build a fixed-host ESPN URL with league, season, event and team IDs validated.
@@ -104,13 +164,59 @@ export function extendedEspnUrl(input:ExtendedEspnInput):string{
   }
   let path:string=def.path
   for(const [key,value] of Object.entries(vars))path=path.replace('{'+key+'}',value)
-  const base=roots[def.root]+sport+(def.root==='core'?'/leagues/':'/')+league
+
+  // Derive league-to-Fantasy IDs from a fixed mapping, not model suggestions.
+  const fantasyGames:Record<string,string>={
+    'football/nfl':'ffl','basketball/nba':'fba',
+    'baseball/mlb':'flb','hockey/nhl':'fhl',
+  }
+  let base:string
+  if(def.root==='fantasy'){
+    const game=fantasyGames[sport+'/'+league]
+    if(!game)throw Error('Liga ESPN Fantasy no admitida')
+    base=roots.fantasy+game+'/seasons/'+number(input.season,'season',1900,2100)
+  }else if(def.root==='cdn'){
+    if(!['nfl','nba','mlb','nhl','wnba','college-football','mens-college-basketball'].includes(league))
+      throw Error('Liga ESPN CDN no admitida')
+    base=roots.cdn+league
+  }else if(def.root==='search'||def.root==='news'||def.root==='videos'){
+    base=roots[def.root]
+  }else base=roots[def.root]+sport+(def.root==='core'?'/leagues/':'/')+league
   const url=new URL(base+path)
+  if(input.mode==='site_scoreboard'){
+    if(input.date!==undefined){
+      if(!/^\d{8}$/u.test(input.date)||Number.isNaN(Date.parse(input.date.slice(0,4)+'-'+input.date.slice(4,6)+'-'+input.date.slice(6,8)+'T00:00:00Z'))||
+        new Date(input.date.slice(0,4)+'-'+input.date.slice(4,6)+'-'+input.date.slice(6,8)+'T00:00:00Z').toISOString().slice(0,10).replaceAll('-','')!==input.date)
+        throw Error('Fecha ESPN inválida (YYYYMMDD)')
+      url.searchParams.set('dates',input.date)
+    }
+    if(input.week!==undefined)url.searchParams.set('week',number(input.week,'week',1,65))
+    if(input.seasonType!==undefined)url.searchParams.set('seasontype',number(input.seasonType,'seasonType',0,4))
+  }
+  if(input.mode==='site_summary')url.searchParams.set('event',digits(input.eventId,'eventId'))
+  if(input.mode==='cdn_game'||input.mode==='cdn_boxscore'||input.mode==='cdn_playbyplay'||input.mode==='cdn_matchup')
+    url.searchParams.set('gameId',digits(input.eventId,'eventId'))
+  if(def.root==='cdn')url.searchParams.set('xhr','1')
+  if(def.root==='fantasy'){
+    url.searchParams.set('view',input.mode==='fantasy_players'?'players_wl':
+      input.mode==='fantasy_player_info'?'kona_player_info':'proTeamSchedules_wl')
+    if(input.mode==='fantasy_players')url.searchParams.set('scoringPeriodId','0')
+  }
+  if(def.root==='search'){
+    if(typeof input.query!=='string'||input.query.trim().length<2||input.query.length>80)
+      throw Error('Búsqueda ESPN inválida')
+    url.searchParams.set('query',input.query.trim())
+  }
+  if(def.root==='videos'){
+    url.searchParams.set('sport',sport);url.searchParams.set('league',league)
+  }
+  if(def.root==='news')url.searchParams.set('limit','25')
   if(input.mode==='team_news')url.searchParams.set('team',digits(input.teamId,'teamId'))
   if(input.mode==='team_schedule')url.searchParams.set('season',number(input.season,'season',1900,2100))
   if(input.mode==='athlete_splits')url.searchParams.set('season',number(input.season,'season',1900,2100))
+  if(input.mode==='standings'&&input.season!==undefined)url.searchParams.set('season',number(input.season,'season',1900,2100))
   const defaultLimit=input.mode==='game_plays'?100:25
-  if(input.limit!==undefined)url.searchParams.set('limit',number(input.limit,'limit',1,200))
+  if(input.limit!==undefined&&def.root!=='fantasy'&&def.root!=='cdn')url.searchParams.set('limit',number(input.limit,'limit',1,200))
   else if(def.root==='core')url.searchParams.set('limit',String(defaultLimit))
   return url.toString()
 }
@@ -187,7 +293,12 @@ export async function readExtendedEspn(
     const items=Array.isArray(obj.items)?obj.items:null
     const rows=items?.length??(Array.isArray(data)?data.length:Object.keys(obj).length?1:0)
     const resolved=await resolveExtendedRefs(items??data,endpoint,getJSON)
-    return {...base,status:rows>0?'data':'empty',count:typeof obj.count==='number'?obj.count:rows,
+    const rawRefs=items?.length&&items.every(x=>x!==null&&typeof x==='object'&&
+      Object.keys(x as Record<string,unknown>).every(k=>k==='$ref'))
+    const metadataOnly=Object.keys(obj).every(k=>['count','pageIndex','pageCount','pageSize','timestamp'].includes(k))
+    const status=rows===0||obj.count===0||metadataOnly||obj.error||obj.errors?'empty':
+      rawRefs&&resolved.resolvedRefs===0?'ref_only':'data'
+    return {...base,status,count:typeof obj.count==='number'?obj.count:rows,
       refCount:resolved.refCount,resolvedRefs:resolved.resolvedRefs,
       snapshot:compact(resolved.data)}
   }catch(error){
