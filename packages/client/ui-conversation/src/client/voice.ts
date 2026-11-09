@@ -1272,7 +1272,9 @@ export async function tryStartCodexRealtimeVoice(
     if (generation !== codexRealtimeVoiceGeneration) throw new Error('start-superseded')
 
     const liveSession: CodexRealtimeVoiceSession = {
-      key: sessionKey, peer, microphone, microphoneGate, events, audio, recentTranscripts: new Map(),
+      key: sessionKey, peer, microphone,
+      ...(microphoneGate !== undefined ? { microphoneGate } : {}),
+      events, audio, recentTranscripts: new Map(),
       onPageHide: () => { void stopCodexRealtimeVoice() },
     }
     codexRealtimeVoiceSession = liveSession
