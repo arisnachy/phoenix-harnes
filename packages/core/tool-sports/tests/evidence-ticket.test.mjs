@@ -37,6 +37,10 @@ test('evidence-first automatic ticket returns exactly five sourced legs, no inve
   assert.equal(new Set(result.card.props.legs.map(x=>x.event)).size,5)
   assert.equal(result.priced,false)
   assert.equal(result.modelProbabilities,false)
+  assert.equal(result.card.props.legs.length,5)
+  assert.ok(result.card.props.legs.every(x=>x.legProbabilitySource==='exploratory-recent-form'))
+  assert.ok(result.card.props.legs.every(x=>Number.isFinite(x.legWinProbabilityPercent)))
+  assert.match(result.card.props.legs[0].rationale,/Probabilidad individual exploratoria/)
   assert.equal(result.card.props.combinedOdds,'No disponible')
 })
 test('auto ticket shows an honest 0/5 draft when historic games are unavailable',async()=>{
