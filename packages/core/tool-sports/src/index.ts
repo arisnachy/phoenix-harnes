@@ -466,6 +466,7 @@ export function apply(ctx: Context): void {
         // Never revert silently to the book's favorite if research fails.
         if(review.status!=='descriptive-support'||!review.selectedOutcome||
           review.priceAudit.classification==='negative-value'||
+          specialistFor(review)?.legDecision?.decision==='discard'||
           specialistFor(review)?.pendingSteps.some(step=>
             /equipos no coinciden|conflicto de cartelera|identidad contradictoria|identidad u horario|horario.*no coinciden/iu.test(step))||
           specialistFor(review)?.sourceChecks?.some(x=>x.status==='conflict'))return []
