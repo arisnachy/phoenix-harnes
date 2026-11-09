@@ -20,9 +20,9 @@ const PHASE_TEXT={
   listening:'Te escucho',speaking:'Hablando',
 } as const
 
-/** The authorized voice transport owns audio; the avatar only observes levels.
- * A still, approved Kira portrait stays intact behind a small articulated mouth
- * and head pose. For actual viseme-level animation a rigged art asset is needed.
+/** The authorized voice transport owns audio; Kira only observes levels.
+ * The 3D renderer morphs the original portrait texture, without fake painted
+ * lips/eyebrows. Unsupported GPU falls back to the pristine anime artwork.
  */
 export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvatarProps) {
   const [gpuReady,setGpuReady]=useState(false)
@@ -30,8 +30,6 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
   const motionRef=useRef<Kira3DMotion>({level:0,expression:'neutral'})
   const figureRef=useRef<HTMLDivElement>(null)
   const portraitRef=useRef<HTMLImageElement>(null)
-  const mouthRef=useRef<SVGEllipseElement>(null)
-  const lipRef=useRef<SVGEllipseElement>(null)
   const stageRef=useRef<HTMLElement>(null)
   const observedPhase=phase==='paused'&&busy?'thinking':phase
 
@@ -116,17 +114,6 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
         stageRef.current.style.setProperty('--kira-voice-level',String(smooth))
         stageRef.current.style.setProperty('--kira-orb-scale',String(1+smooth*.10))
       }
-      if(mouthRef.current){
-        const opening=phase==='speaking'?smooth:0
-        mouthRef.current.setAttribute('ry',String((.34+opening*3.15).toFixed(2)))
-        mouthRef.current.setAttribute('rx',String((4.6+opening*1.1).toFixed(2)))
-        mouthRef.current.style.opacity=String(Math.min(.9,.2+opening*.78))
-      }
-      if(lipRef.current){
-        const opening=phase==='speaking'?smooth:0
-        lipRef.current.setAttribute('cy',String((77.7+opening*2.2).toFixed(2)))
-        lipRef.current.style.opacity=String(opening*.65)
-      }
       if(portraitRef.current){
         const amount=reduced?0:phase==='speaking'?.55:phase==='listening'?.27:.16
         const x=Math.sin(elapsed/700)*amount
@@ -149,7 +136,9 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
   if(!active)return null
   return <section ref={stageRef} className={css.stage}
       data-kira-voice-avatar data-voice-phase={observedPhase}
-      data-audio-reactive="false" aria-label={'Kira · '+PHASE_TEXT[observedPhase]}>
+      data-audio-reactive="false"
+      title={native?'Kira · Codex Live':'Kira · voz alternativa'}
+      aria-label={'Kira · '+PHASE_TEXT[observedPhase]}>
     <div ref={figureRef} className={css.figure}
       data-expression="neutral" data-renderer={gpuReady?'webgl-3d':'portrait-2d'}>
       <div className={css.halo}/>
@@ -157,17 +146,6 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
         <img ref={portraitRef} src={KIRA_VOICE_PORTRAIT}
           draggable={false} className={css.portrait}
           alt="Kira, avatar oficial de PHOENIX"/>
-        <svg className={css.faceLayer} viewBox="0 0 112 112"
-          aria-hidden="true" focusable="false">
-          <ellipse ref={mouthRef} cx="69" cy="77.3" rx="4.6" ry=".34"
-            fill="#662d29" transform="rotate(-13 69 77.3)" opacity=".2"/>
-          <ellipse ref={lipRef} cx="69" cy="77.7" rx="4.7" ry="1.05"
-            fill="#f09082" transform="rotate(-13 69 77.7)" opacity="0"/>
-          <path className={css.brow} d="M61 45.5 Q68 41 76 44.5"
-            stroke="#5c372d" strokeWidth="1.1" fill="none"/>
-          <ellipse className={css.cheek} cx="75.5" cy="71.3"
-            rx="7" ry="3.6" fill="#f29083"/>
-        </svg>
         <KiraVoice3DSurface phase={phase} busy={busy} motionRef={motionRef} onReady={onGpuReady}/>
       </div>
     </div>
@@ -176,10 +154,9 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
       <strong>Kira</strong>
       <span aria-live="polite">{PHASE_TEXT[observedPhase]}</span>
     </div>
-    <p className={css.caption}>
-      {native?'Codex Live · voz natural':'Voz alternativa · PHOENIX'}
-    </p>
-    <button className={css.close} type="button" onClick={onStop}
+
+    <button className={css.close} type="button"
+      onClick={(event) => { event.stopPropagation(); onStop() }}
       aria-label="Finalizar conversación por voz" title="Finalizar voz">×</button>
   </section>
 }
