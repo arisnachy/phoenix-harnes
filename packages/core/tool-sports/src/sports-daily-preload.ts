@@ -28,6 +28,18 @@ const validDay=(day:string)=>dayPattern.test(day)&&
 export const santoDomingoDay=(now=Date.now())=>
   new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
     year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
+/** Prevent a hung HTTP adapter, cache lock or JSON body from blocking the
+ * complete preflight. Transport may still finish later, but the tool returns.
+ */
+function boundedPreload<T>(operation:Promise<T>,ms:number):Promise<T>{
+  let timer:ReturnType<typeof setTimeout>|undefined
+  const timeout=new Promise<never>((_resolve,reject)=>{
+    timer=setTimeout(()=>reject(Error('Precarga: plazo máximo por fuente agotado')),ms)
+  })
+  return Promise.race([operation,timeout]).finally(()=>{
+    if(timer!==undefined)clearTimeout(timer)
+  })
+}
 const iso=(at:number)=>new Date(at).toISOString()
 const digest=(input:string)=>createHash('sha256').update(input).digest('hex').slice(0,32)
 const home=(env:NodeJS.ProcessEnv)=>resolve(env.PHOENIX_SPORTS_DAILY_RESEARCH_HOME?.trim()||
@@ -320,11 +332,16 @@ export async function preloadDailyResearch(date:string,
   now=Date.now()):Promise<DailyPreloadResult>{
   const plan=dailyPreloadTargets(date,env)
   const cached=dailyResearchFetcher(fetcher,env,()=>now)
+  const requestedMs=Number(env.PHOENIX_SPORTS_PRELOAD_TIMEOUT_MS)
+  const deadlineMs=Number.isInteger(requestedMs)&&requestedMs>=30&&requestedMs<=8_000
+    ?requestedMs:5_000
   const rows:DailyPreloadResult['rows']=[]
-  for(let i=0;i<plan.length;i+=3){
-    const group=await Promise.all(plan.slice(i,i+3).map(async target=>{
+  // Work in bounded waves and isolate providers that ignore abort signals.
+  for(let i=0;i<plan.length;i+=6){
+    const group=await Promise.all(plan.slice(i,i+6).map(async target=>{
       try{
-        const res=await cached(target.url,{signal:AbortSignal.timeout(8_000),
+        return await boundedPreload((async()=>{
+          const res=await cached(target.url,{signal:AbortSignal.timeout(8_000),
           ...(target.headers?{headers:target.headers}:{})})
         if(!res.ok)throw Error('HTTP '+res.status)
         const json=await res.json() as {events?:unknown[];dates?:unknown[];
@@ -337,6 +354,7 @@ export async function preloadDailyResearch(date:string,
         return{provider:target.provider,sport:target.sport,
           status:(events.length?'cached':'empty') as 'cached'|'empty',
           detail:events.length+' registros; calendario/estadísticas, NO titulares o cuotas'}
+        })(),deadlineMs)
       }catch(e){return{provider:target.provider,sport:target.sport,
         status:'unavailable' as const,detail:(e instanceof Error?e.message:String(e)).slice(0,110)}}
     }))

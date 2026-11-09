@@ -75,6 +75,15 @@ export const inject = ['tools','systemPrompt']
 /** Resolves credentials fresh per tool invocation and never changes process.env. */
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
+const boundedDailyTool=<T>(operation:Promise<T>,ms:number):Promise<T>=>{
+  let timer:ReturnType<typeof setTimeout>|undefined
+  const timeout=new Promise<never>((_resolve,reject)=>{
+    timer=setTimeout(()=>reject(Error('Tiempo de espera deportivo agotado')),ms)
+  })
+  return Promise.race([operation,timeout]).finally(()=>{
+    if(timer!==undefined)clearTimeout(timer)
+  })
+}
 const GUIDANCE = [
   'RESCATE OBLIGATORIO DE CUOTAS DIRECTAS: si el usuario pide ganador de hoy, ejecutar sports_chat_ticket_evidence_priced_auto con marketPreference=winner. El motor PRIMERO busca cuotas de casa en OddsHarvester/API/ESPN Site-Core, y si un barrido global no localiza un evento consulta ESPN por eventId EXACTO, scoreboard de fecha dominicana + siguiente fecha UTC, Core odds y summary, sin clave. Si continúa sin precios, el mismo motor consulta automáticamente páginas de cuotas específicas: www.scoresandodds.com/{nba,nfl,nhl,mlb,wnba}/odds; www.oddschecker.com/us/soccer/<liga>; ESPN sports-betting/odds y <liga>/odds. sports_chat_public_odds_pages permite profundizar por cada equipo. Leer SOLO HTML público autorizado, sección Moneyline (NBA/NFL/NHL/MLB/WNBA) o 1X2 con Draw (fútbol), dos rivales, fecha, bookmaker y último cambio. No confundir scoreboards, precios de apertura, números de handicap, consenso, pronósticos ni cuota indicativa de comparador con cuota cotizable. ESPN puede bloquear por JS/CAPTCHA: registrar blocked y continuar SIN eludir. Los enlaces de switchboard de ScoresAndOdds son referencia de comparador salvo que una fuente autorizada certifique identidad exacta, casa, mercado, periodo y updatedAt. Una cita web solo muestra precio REFERENCIAL, nunca cotización vigente; mostrar ambas cifras por separado. Exponer urls y hallazgos webOddsResearch por pata cuando falten cuotas. Tras 1 investigación y su rescate, ENTREGAR de inmediato el boleto de candidatos con sus equipos, argumentos y fuentes y declarar claramente N/M ofertas vigentes: NUNCA repetir cinco mensajes de progreso diciendo «sin cuotas». NO inventar números ni asegurar cinco ganadores. ',
 
@@ -166,9 +175,17 @@ export function apply(ctx: Context): void {
     isConcurrencySafe:()=>true,
     async execute(args){
       const now=Date.now(),day=args.date??santoDomingoDay(now),env=await sportsEnv(ctx)
-      const report=args.statusOnly===false?
-        await preloadDailyResearch(day,env,fetch,now):
-        await dailyResearchStatus(day,env,now)
+      let report:Awaited<ReturnType<typeof preloadDailyResearch>>|
+        Awaited<ReturnType<typeof dailyResearchStatus>>
+      try{
+        report=args.statusOnly===false?
+          await boundedDailyTool(preloadDailyResearch(day,env,fetch,now),25_000):
+          await boundedDailyTool(dailyResearchStatus(day,env,now),3_500)
+      }catch(error){
+        return JSON.stringify({date:day,status:'unavailable',readOnly:true,
+          error:error instanceof Error?error.message.slice(0,180):'Error de caché',
+          instruction:'La precarga no es obligatoria para construir el ticket. Continuar con sports_chat_daily_scan y fuentes ESPN/MLB/NHL de respaldo; no repetir inmediatamente la precarga fallida.'})
+      }
       return JSON.stringify({report,readOnly:true,
         instruction:'Este expediente de cache es un ahorro de consultas y una agenda, no un pronóstico. Reusar fuentes frescas al investigar el ticket; buscar fuentes adicionales ante faltantes y cotejar cada candidato por su especialista. Portero de roster NO es titular. 100 solicitudes son por API, no por deporte dentro del mismo endpoint.'})
     },
