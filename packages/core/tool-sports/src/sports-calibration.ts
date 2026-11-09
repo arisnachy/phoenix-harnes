@@ -172,7 +172,6 @@ export function evaluateSportsCalibration(fixtures:readonly HistoricalFixture[],
 type Board={events?:Array<{id?:string|number;date?:string;
  status?:{type?:{state?:string}};competitions?:Array<{competitors?:Array<{
  homeAway?:string;score?:string|number;team?:{id?:string|number}}>}>}>}
-const day=(timestamp:number)=>new Date(timestamp).toISOString().slice(0,10).replaceAll('-','')
 /** Historical calibration with bounded monthly ESPN reads and verifiable daily
  * fallback. The dates refer exclusively to finished matches before today; no
  * source is permitted to create synthetic wins or infer missing scores.
