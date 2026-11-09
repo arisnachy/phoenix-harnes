@@ -97,7 +97,7 @@ export async function evidencePricedTicket(
       date:day,home:e.home,away:e.away,kickoff:e.kickoff}))
   const retried=await specialistResearcher(pendingGames,researchFetcher,now,env)
   const byId=new Map(retried.map(x=>[x.eventId,x]))
-  const specialistChecks=research.events.map(e=>byId.get(e.eventId)??preview.get(e.eventId)??{
+  const specialistChecks:SpecialistGate[]=research.events.map(e=>byId.get(e.eventId)??preview.get(e.eventId)??{
     sport:e.sport,league:e.league,eventId:e.eventId,specialist:'unavailable',
     status:'unavailable' as const,verifiedSteps:[],pendingSteps:['Sin expediente verificado'],
     approvedForBetting:false as const,checkedAt:new Date(now).toISOString(),
