@@ -253,18 +253,18 @@ export function classifyScraperFailure(error:unknown):
   const stderr=typeof record.stderr==='string'?record.stderr:''
   const stdout=typeof record.stdout==='string'?record.stdout:''
   const message=typeof record.message==='string'?record.message:''
-  const detail=(stderr+'\\n'+stdout+'\\n'+message).slice(0,100_000)
+  const detail=(stderr+'\n'+stdout+'\n'+message).slice(0,100_000)
   const code=String(record.code??'')
   if(code==='ENOENT')return 'missing-executable'
   if(code==='ETIMEDOUT'||record.killed===true)return 'timeout'
-  if(/invalid market\\(s\\)|unsupported market|invalid choice.{0,80}market/iu.test(detail))
+  if(/invalid market\(s\)|unsupported market|invalid choice.{0,80}market/iu.test(detail))
     return 'invalid-market'
   if(/executable doesn.t exist|playwright.*install|chromium.*not found/iu.test(detail))
     return 'missing-playwright-browser'
   if(/403|429|access denied|captcha|cloudflare/iu.test(detail))
     return 'site-blocked-or-limited'
   if(/no upcoming match links|no upcoming matches|no matches found|no events found/iu.test(detail)
-    &&/(?:\\b0\\s+failed\\b|\\bfailed\\s*[:=]\\s*0\\b)/iu.test(detail))
+    &&/(?:\b0\s+failed\b|\bfailed\s*[:=]\s*0\b)/iu.test(detail))
     return 'no-events'
   return 'scraper-exit-error'
 }
