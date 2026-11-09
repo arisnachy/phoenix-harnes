@@ -46,21 +46,27 @@ export async function lookupExactEspnWinner(
     )
     result.referenceCount=scanned.observations.filter(q=>
       q.eventId===target.eventId).length
-    result.quotes=scanned.quotes.filter(q=>
+    const soccer=target.sportKey.startsWith('soccer_')
+    const valid=scanned.quotes.filter(q=>
       q.eventId===target.eventId&&q.market==='h2h'&&q.point===null&&
       norm(q.home)===norm(target.home)&&norm(q.away)===norm(target.away)&&
-      [norm(target.home),norm(target.away)].includes(norm(q.selection))&&
+      [norm(target.home),norm(target.away),'draw'].includes(norm(q.selection))&&
       Math.abs(Date.parse(q.timeIso)-kickoff)<=90_000&&
       Number.isFinite(Date.parse(q.updatedAt))&&
       Date.parse(q.updatedAt)<=now+5*60_000&&
       now-Date.parse(q.updatedAt)<=60*60_000&&
-      q.price>1&&q.price<1000&&!q.bookmaker.startsWith('ESPN proveedor #'),
-    ).map(q=>({
-      eventId:q.eventId,bookmaker:q.bookmaker,market:'h2h',
-      selection:q.selection,point:null,price:q.price,home:q.home,away:q.away,
-      time:q.timeIso,updatedAt:q.updatedAt,
-      source:result.source,sportKey:target.sportKey,
-    }))
+      q.price>1&&q.price<1000&&!q.bookmaker.startsWith('ESPN proveedor #'))
+    const soccerBooks=new Set(valid.filter(q=>norm(q.selection)==='draw')
+      .map(q=>q.bookmaker))
+    // Soccer 1X2 requires an actual draw price from the SAME bookmaker.
+    result.quotes=valid.filter(q=>!soccer||soccerBooks.has(q.bookmaker))
+      .map(q=>({
+        eventId:q.eventId,bookmaker:q.bookmaker,
+        market:soccer?'1x2':'h2h',
+        selection:q.selection,point:null,price:q.price,home:q.home,away:q.away,
+        time:q.timeIso,updatedAt:q.updatedAt,
+        source:result.source,sportKey:target.sportKey,
+      }))
     result.notes.push(...scanned.diagnostics.notes.slice(0,3))
     if(!result.quotes.length)result.notes.push(
       'Sin moneyline con casa identificada y fecha de publicación reciente; '+
