@@ -560,3 +560,54 @@
   .sportsTicketCard .sportsTicketGroup .sportsLeg{align-items:flex-start}
   .sportsTicketCard .sportsTicketLegMain{flex-basis:calc(100% - 50px)}
 }
+
+
+/* PHOENIX Sports — sourced, responsive narration immediately under each leg. */
+.sportsTicketNarrative{
+  display:grid;gap:9px;min-width:0;margin-top:10px;padding:10px 0 2px;
+  border-top:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.16));
+  font-size:12px;line-height:1.5;color:var(--dsw-alias-label-primary,inherit);
+}
+.sportsTicketNarrativeTop{display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:6px}
+.sportsTicketNarrativeTop>strong{font-size:12px;letter-spacing:.01em}
+.sportsTicketNarrativeTop>span{font-size:10px;font-weight:650;
+  color:var(--dsw-alias-label-secondary,#777)}
+.sportsTicketNarrativeWhy{margin:0;font-size:12px;line-height:1.55;overflow-wrap:anywhere}
+.sportsTicketNarrativeMeasures{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.sportsTicketNarrativeMeasures>div{display:grid;align-content:start;gap:4px;min-width:0;padding:8px;
+  border-radius:9px;background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.035))}
+.sportsTicketNarrativeMeasures small,.sportsTicketNarrativeMeasures span{
+  color:var(--dsw-alias-label-secondary,#777);font-size:10px;line-height:1.35}
+.sportsTicketNarrativeMeasures strong{font-size:13px;font-weight:750;overflow-wrap:anywhere}
+.sportsTicketNarrativeCaution{margin:0;color:var(--dsw-alias-label-secondary,#777);font-size:10px}
+.sportsTicketNarrativeContext{display:grid;gap:3px}
+.sportsTicketNarrativeContext p{margin:0;overflow-wrap:anywhere}
+.sportsTicketNarrativeContext strong{font-weight:700}
+.sportsTicketNarrativeNews{display:grid;gap:6px;border-top:1px solid
+  var(--dsw-alias-border-subtle,rgba(125,125,125,.13));padding-top:9px;min-width:0}
+.sportsTicketNarrativeNews>strong{font-size:11px}
+.sportsTicketNarrativeNews>p{margin:0;overflow-wrap:anywhere;font-size:11px}
+.sportsTicketNarrativeNews small{font-size:10px;color:var(--dsw-alias-label-secondary,#777)}
+.sportsTicketNarrativePhoto{width:min(100%,335px);display:grid;gap:3px;text-decoration:none}
+.sportsTicketNarrativePhoto img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;
+  border-radius:9px;border:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.18))}
+.sportsTicketNarrative a{color:var(--dsw-alias-accent-primary,#547cbb);
+  text-decoration:none;overflow-wrap:anywhere}
+.sportsTicketNarrative a:hover{text-decoration:underline}
+.sportsTicketNarrativeRisks{display:grid;gap:4px;padding:8px 10px;
+  border-left:2px solid var(--dsw-alias-label-secondary,#999);
+  background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.035));
+  border-radius:2px 8px 8px 2px}
+.sportsTicketNarrativeRisks>strong{font-size:11px}
+.sportsTicketNarrativeRisks ul,.sportsTicketNarrativeMore ul{margin:1px 0 0;padding-left:17px}
+.sportsTicketNarrativeRisks li,.sportsTicketNarrativeMore li{margin:3px 0;overflow-wrap:anywhere}
+.sportsTicketNarrativeMore{font-size:11px;min-width:0}
+.sportsTicketNarrativeMore summary{cursor:pointer;font-weight:650;padding:5px 0}
+.sportsTicketNarrativeMore p{margin:4px 0;overflow-wrap:anywhere}
+@media(max-width:580px){
+  .sportsTicketNarrativeMeasures{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sportsTicketNarrativeMeasures>div:last-child{grid-column:1 / -1}
+}
+@media(max-width:375px){.sportsTicketNarrativeMeasures{grid-template-columns:minmax(0,1fr)}
+  .sportsTicketNarrativeMeasures>div:last-child{grid-column:auto}}
