@@ -424,15 +424,22 @@ export function apply(ctx: Context): void {
       // Mandatory specialist dossiers: do NOT convert general ESPN form or an odds
       // quotation into an approved daily ticket without each sport's investigation.
       const specialistChecks=args.deep===false?[]:await investigateTicketSpecialists(
-        best.map(review=>({
-          sport:review.candidate.sport,league:review.candidate.league,
-          eventId:review.candidate.espnEventId,date:daily.date,
-          home:daily.events.find(x=>x.eventId===review.candidate.espnEventId&&
-            x.sport===review.candidate.sport&&x.league===review.candidate.league)?.home.name??'',
-          away:daily.events.find(x=>x.eventId===review.candidate.espnEventId&&
-            x.sport===review.candidate.sport&&x.league===review.candidate.league)?.away.name??'',
-          kickoff:review.candidate.kickoff,
-        })),fetch,now,env,quotes)
+        best.map(review=>{
+          const event=daily.events.find(x=>x.eventId===review.candidate.espnEventId&&
+            x.sport===review.candidate.sport&&x.league===review.candidate.league)
+          const normSide=(value:string)=>value.normalize('NFD')
+            .replace(/[\u0300-\u036f]/gu,'').toLowerCase().replace(/[^a-z0-9]/gu,'')
+          const chosen=normSide(review.selectedOutcome?.selection??'')
+          const pick=chosen&&chosen===normSide(event?.home.name??'')?'home' as const:
+            chosen&&chosen===normSide(event?.away.name??'')?'away' as const:null
+          return{
+            sport:review.candidate.sport,league:review.candidate.league,
+            eventId:review.candidate.espnEventId,date:daily.date,
+            home:event?.home.name??'',away:event?.away.name??'',
+            kickoff:review.candidate.kickoff,
+            ...(pick?{pick}:{})
+          }
+        }),fetch,now,env,quotes)
       const specialistFor=(review:(typeof best)[number])=>
         specialistChecks.find(check=>check.sport===review.candidate.sport&&
           check.league===review.candidate.league&&
@@ -484,6 +491,14 @@ export function apply(ctx: Context): void {
             requestedLegs:count,
             specialistChecks,marketRisk,
             legs:legs.map((leg,index)=>({
+              selectionVerdict:ticketQuoted[index]?.review?
+                specialistFor(ticketQuoted[index]!.review)?.legDecision?.decision??'pending':'pending',
+              argumentsFor:ticketQuoted[index]?.review?
+                specialistFor(ticketQuoted[index]!.review)?.legDecision?.argumentsFor??[]:[],
+              argumentsAgainst:ticketQuoted[index]?.review?
+                specialistFor(ticketQuoted[index]!.review)?.legDecision?.argumentsAgainst??[]:[],
+              unverifiedAvailability:ticketQuoted[index]?.review?
+                specialistFor(ticketQuoted[index]!.review)?.legDecision?.missing??[]:[],
               ...(leg!==null&&typeof leg==='object'?leg:{}),
               rationale:ticketQuoted[index]?.review.status==='descriptive-support'?
                 'Apoyo descriptivo ('+ticketQuoted[index]!.review.sampleGames.home+'/'+
