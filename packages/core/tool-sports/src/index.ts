@@ -49,6 +49,7 @@ import { espnEndpointGuide,espnWorkflow } from './espn-endpoint-guide.ts'
 import { fetchEspnHistoricalOdds } from './espn-odds-history.ts'
 import { secondaryMarketSourceCatalog } from './sports-secondary-sources.ts'
 import {researchPublicOddsWebsites} from './sports-public-odds-pages.ts'
+import {exactAlternativeOdds} from './sports-exact-market-fallback.ts'
 import {discoverEditorialResearch,type EditorialSource,editorialDomains} from './sports-editorial-discovery.ts'
 import {auditSportsCalibration,availableSportCalibration,calibratedSportsForecast} from './sports-calibration.ts'
 import {sportsEnvWithVaultKey} from './sports-credential-env.ts'
@@ -1377,7 +1378,7 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_odds',
-    description:'Consulta por defecto cuotas ESPN Scoreboard, Core y Summary/Pickcenter sin clave. Usa eventId ESPN y date para un partido exacto. sourcePolicy=all compara voluntariamente otros proveedores; sus IDs no se mezclan.',
+    description:'Consulta cuotas ESPN Scoreboard/Core/Summary. Si sourcePolicy=all y se aportan eventId ESPN + fecha exacta, investiga además proveedores autorizados y solo acepta precios que coinciden en ambos equipos, hora y mercado. Mantiene IDs propios de cada fuente. Sin bookmaker ni timestamp no hay cuota cotizable.',
     parameters:{
       sportKey:{ type:'string',required:true,description:'Clave del proveedor: baseball_mlb, basketball_nba, soccer_epl, etc.' },
       markets:{ type:'string',description:'h2h, totals o spreads. Por defecto h2h.' },
@@ -1428,7 +1429,16 @@ export function apply(ctx: Context): void {
           }
         })():
         await marketOddsDetailed(args.sportKey,args.markets,env)
-      const quotes=report.quotes.filter(q=>{
+      // An ESPN eventId must NOT suppress authorized alternative providers.
+      // They retain their own IDs; market identity is verified separately.
+      const exactFallback=args.sourcePolicy==='all'&&args.eventId&&args.date
+        ?await exactAlternativeOdds(args.sportKey,args.eventId,args.date,
+          args.markets??'h2h',env,fetch,observedAt):null
+      const extraQuotes=(exactFallback?.quotes??[]).map(q=>({
+        ...q,providerEventId:q.eventId,espnEventId:args.eventId,
+        source:q.source+' · coincidente con evento ESPN',
+      }))
+      const quotes=[...report.quotes,...extraQuotes].filter(q=>{
         const updated=Date.parse(q.updatedAt),kickoff=Date.parse(q.timeIso??q.time)
         return Number.isFinite(updated)&&updated<=observedAt&&observedAt-updated<=3_600_000
           &&Number.isFinite(kickoff)&&kickoff>observedAt
@@ -1458,13 +1468,17 @@ export function apply(ctx: Context): void {
           },
         }]
       })
-      return JSON.stringify({ uiBlocks,source:quotes[0]?.source||'Sin ofertas recuperadas',sources:report.sources,
-        observedAt:new Date(observedAt).toISOString(),requestedSourcePolicy:useEspn?'espn':'all',
+      return JSON.stringify({ uiBlocks,source:quotes[0]?.source||'Sin ofertas recuperadas',
+        sources:[...report.sources,...(exactFallback?.sources.filter(x=>x.provider!=='ESPN Site/Core')??[])],
+        exactFallback:exactFallback?{status:exactFallback.status,espnEventId:exactFallback.espnEventId,
+          home:exactFallback.home,away:exactFallback.away,kickoff:exactFallback.kickoff,
+          matchedQuoteCount:exactFallback.quotes.length,reason:exactFallback.reason}:null,
+        observedAt:new Date(observedAt).toISOString(),requestedSourcePolicy:args.sourcePolicy??'espn', 
         requestedEventId:args.eventId??null,
         requestedDate:args.date??null,excludedStaleOrStarted,outcomes:quotes.slice(0,120),
         researchObservations:(report.observations??[]).slice(0,60),
         total:quotes.length,remaining:Math.max(0,quotes.length-120),
-        note:quotes.length?'Ofertas auténticas observadas; elegir la casa y el horario antes de cotizar. No son cuotas automáticamente atribuibles a Juancito.':(report.observations?.length??0)>0?'ESPN devolvió precios en researchObservations con fecha ausente, antigua o proveedor no identificado: son SOLO referencias, nunca cuotas vigentes ni elegibles para ticket.':espnRaw>0?'ESPN Core/Site entregó '+espnRaw+' registros de cuotas, pero ninguno superó las comprobaciones de precio, fecha y vigencia para apostar ahora. Consulta sources.rawCount, undatedOutcomes y expiredOutcomes. No describas ESPN como desconectado ni conviertas líneas históricas en vigentes.':'Sin precios confirmados para esta liga/mercado y fechas consultadas. Consulta sports_chat_public_odds_pages para examinar ESPN, Oddschecker y ScoresAndOdds con los equipos exactos; estas páginas son evidencia secundaria NO cotizable sin casa y timestamp propios. Muestra las faltas y un ticket condicional en lugar de repetir progresos.' })
+        note:quotes.length?'Ofertas auténticas observadas; elegir la casa y el horario antes de cotizar. No son cuotas automáticamente atribuibles a Juancito.':(report.observations?.length??0)>0?'ESPN devolvió precios en researchObservations con fecha ausente, antigua o proveedor no identificado: son SOLO referencias, nunca cuotas vigentes ni elegibles para ticket.':espnRaw>0?'ESPN Core/Site entregó '+espnRaw+' registros de cuotas, pero ninguno superó las comprobaciones de precio, fecha y vigencia para apostar ahora. Consulta sources.rawCount, undatedOutcomes y expiredOutcomes. No describas ESPN como desconectado ni conviertas líneas históricas en vigentes.':'Sin precios confirmados para esta liga/mercado y fechas consultadas. Si hay eventId ESPN y fecha, reintenta sports_chat_odds con sourcePolicy=all para cotejar proveedores autorizados sin reutilizar IDs externos. Consulta sports_chat_public_odds_pages para examinar ESPN, Oddschecker y ScoresAndOdds con los equipos exactos; estas páginas son evidencia secundaria NO cotizable sin casa y timestamp propios. Muestra las faltas y un ticket condicional en lugar de repetir progresos.' })
     },
     presentCall:()=>({ card:'generic',title:'Comparar cuotas',kind:'read' as const }),
   }))
