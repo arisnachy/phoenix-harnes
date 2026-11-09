@@ -16,11 +16,11 @@ test('free TheSportsDB agrees only with both teams, home/away and kickoff',async
       strAwayTeam:'Boston Celtics',strTimestamp:'2026-11-09T01:00:00Z'}]})
   }
   const result=await crosscheckFreeFixture(game,f,Date.parse('2026-11-08T18:00:00Z'),{})
-  assert.equal(result.length,1)
+  assert.equal(result.length,2)
   assert.equal(result[0].provider,'TheSportsDB')
   assert.equal(result[0].status,'verified')
   assert.match(result[0].detail,/solo calendario/)
-  assert.equal(calls.length,1)
+  assert.equal(calls.length,2)
   assert.match(calls[0],/eventsday\.php\?d=2026-11-08/)
   assert.ok(!('probability' in result[0]))
   assert.ok(!('odds' in result[0]))
@@ -254,4 +254,28 @@ test('nflverse keyless schedule is only date-level partial evidence, never UTC o
     String(url).includes('/nfldata/')?new Response('throttled',{status:429})
       :reply({events:[]}))
   assert.equal(unavailable[1].status,'unavailable')
+})
+
+
+test('NBA CDN official season schedule corroborates a real NBA fixture missed by TheSportsDB',async()=>{
+  const response=async url=>String(url).includes('cdn.nba.com')?
+    reply({leagueSchedule:{leagueId:'00',gameDates:[{games:[{
+      gameDateTimeUTC:'2026-11-09T01:00:00Z',
+      homeTeam:{teamCity:'Milwaukee',teamName:'Bucks'},
+      awayTeam:{teamCity:'Boston',teamName:'Celtics'},
+    }]}]}}):reply({events:[]})
+  const reports=await crosscheckFreeFixture(game,response)
+  assert.equal(reports.find(x=>x.provider==='TheSportsDB')?.status,'not-found')
+  assert.equal(reports.find(x=>x.provider==='NBA Official CDN')?.status,'verified')
+  assert.ok(reports.every(x=>!JSON.stringify(x).includes('moneyline')))
+})
+
+test('TheSportsDB timezone-less timestamps are partial, never host-local verified',async()=>{
+  const f=async url=>String(url).includes('thesportsdb.com')?
+    reply({events:[{strHomeTeam:'Milwaukee Bucks',strAwayTeam:'Boston Celtics',
+      strTimestamp:'2026-11-08T20:00:00'}]}):
+    reply({leagueSchedule:{leagueId:'00',gameDates:[]}})
+  const reports=await crosscheckFreeFixture(game,f)
+  assert.equal(reports.find(x=>x.provider==='TheSportsDB')?.status,'partial')
+  assert.match(reports.find(x=>x.provider==='TheSportsDB')?.detail??'',/UTC verificable/)
 })
