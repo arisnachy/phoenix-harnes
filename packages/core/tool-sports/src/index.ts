@@ -51,6 +51,7 @@ import { secondaryMarketSourceCatalog } from './sports-secondary-sources.ts'
 import {discoverEditorialResearch,type EditorialSource,editorialDomains} from './sports-editorial-discovery.ts'
 import {auditSportsCalibration,availableSportCalibration,calibratedSportsForecast} from './sports-calibration.ts'
 import {sportsEnvWithVaultKey} from './sports-credential-env.ts'
+import {sportsCredentialAsk,sportsCredentialGuides,type SportsKeyAskAction} from './sports-credential-ask.ts'
 import {registerCloudForecast,registerCloudReceipt,registerCloudMarkets} from './sports-cloud-host.ts'
 import type {CloudLeg} from './sports-cloud-outcome.ts'
 import {researchCoverage,researchCredentialRefs,coverageReport} from './sports-research-coverage.ts'
@@ -75,6 +76,7 @@ const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
 const GUIDANCE = [
   'SEGUIMIENTO CLOUD: al crear un ticket de investigación, registrar automáticamente solo si PHOENIX_SPORTS_CLOUD_TRACKING_ENABLED=1 y las credenciales GitHub/AES están en la bóveda. Devolver cloudFollowUp con su estado real, no afirmar que habrá correo cuando status sea disabled, needs-configuration o error. El cifrado mantiene ocultos los eventos en un issue público, pero los metadatos de issue sí son visibles. Cuando los encuentros terminen, un workflow remoto revisará marcadores y enviará correo únicamente si RESEND_API_KEY, correo destinatario, remitente y clave AES están configurados en GitHub Actions. Nunca afirmar que la banca confirmó pago ni que un correo salió sin prueba. ',
   'TICKET DIARIO 5 O 6: primero ampliar y contrastar la cartelera multi-liga, después investigar todos los expedientes y usar decisionAudit. Si existen 5-6 encuentros futuros verificados, presentar hasta seis mejores CANDIDATAS, aunque deban marcarse CONDICIONALES, nunca inventar una victoria aprobada. Diversidad deportiva no autoriza eliminar una pata real y el precio no sustituye la investigación. Para cada pata reporta legWinProbabilityPercent con legProbabilitySource: NO sumar ni multiplicar porcentajes como pronóstico del ticket completo. No convertir un porcentaje exploratorio o no-vig en certeza predictiva; si no puede estimarse, mostrar valor pendiente y por qué. Confirmar estado de riesgo de cada pata antes de cualquier ejecución. ',
+  'ASK DE CLAVES OPCIONALES: tras detectar una clave relevante ausente, usa sports_chat_credential_ask(action=request,ref=...) para obtener una pregunta Ask con URL para registrarse y entrada segura. Si el usuario indica no volver a preguntar, llama mute para esa fuente o mute-all para todas; si dice ahora no, se respeta una pausa de 30 días. Nunca recibir la clave en texto del modelo: solo /secret set o interfaz segura del Host. No bloquear investigación por falta de claves. ',
   'CLAVES Y FUENTES SIN BLOQUEOS: para saber qué conectores faltan llama sports_chat_research_provider_status. No pidas que peguen una clave en mensajes normales del modelo ni la aceptes como argumento de herramientas. Si el usuario quiere añadirla, indica el comando humano seguro /secret set NOMBRE VALOR, interceptado por el Host antes del agente y con recordInput=false, o la interfaz de credenciales segura disponible. Pedir permiso y una sola clave pertinente. No bloquear investigación ni tickets por claves ausentes; usa fuentes públicas, respaldo y caché. Tener clave NO equivale a fuente activa ni a datos comprobados. ',
 
   'MEMORIA DE INVESTIGACIÓN POR DÍA: antes de construir un ticket consulta sports_chat_daily_research_cache(statusOnly=true); si no hay datos recientes, precarga con statusOnly=false. Reutiliza información ESPN/NHL/MLB/TheSportsDB y API-Sports con cuota regulada (20 reservas de 100); conserva hasta 7 días PERO respeta vencimiento de cada dato. La precarga ayuda, no reemplaza búsquedas libres ni confirma porteros titulares, alineaciones, cuotas o lesiones. SportsDataIO trial contiene datos alterados y NO sirve para picks. Si un proveedor falla, usa otros sin gastar su cuota repetidamente. ',
@@ -114,7 +116,7 @@ const GUIDANCE = [
   'ESPN INTELLIGENCE: cuando el usuario pida un equipo específico, un jugador, su historia, splits, gamelog, tabla, líderes, noticias o búsqueda, consulta sports_chat_espn_explore con la vista apropiada y un ID real comprobado. Esa herramienta devuelve una superficie adaptable de estadísticas, noticias, plantillas, fotos y fuentes; Phoenix dibuja sports_espn_dashboard automáticamente. Para carteleras utiliza sports_chat_games y para cuotas comercializables sports_chat_odds; evita convertir probabilidades ESPN o referencias Core en cuotas actuales. Las plantillas se construyen dinámicamente a partir de secciones verificadas, sin nuevas pantallas.',
   'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_daily_market_shortlist, sports_chat_event_market_menu, sports_chat_hockey_slate, sports_chat_nhl_investigate, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_sources_repair, sports_chat_market_source_catalog, sports_chat_deep_research, sports_chat_matchup_factors, sports_chat_predict, sports_chat_calibration_audit, sports_chat_editorial_discovery, sports_chat_bet_rules, sports_chat_ticket_track, sports_chat_market_intelligence, sports_chat_espn_core, sports_chat_espn_core_catalog, sports_chat_espn_extended, sports_chat_espn_extended_catalog, sports_chat_espn_historical_odds, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
   'TICKET NARRADO CON EVIDENCIA POR PATA: tras sports_chat_ticket_evidence_priced_auto o sports_chat_ticket_evidence_auto, reproduce en el chat los campos chatNarrative en orden y con explicación INDIVIDUAL de por qué se escogió, datos a favor, en contra, noticias fechadas con enlace, contexto del estadio, clima y oficiales. Las fotos solo se ofrecen con URL del medio y atribución; una noticia no confirma titularidad ni consenso experto. No decir que un árbitro favorece a un equipo por tasas brutas o anécdotas. La probabilidad de mercado sin margen no es pronóstico propio y la exploratoria no está calibrada.',
-  'TICKET DIARIO DE 4 A 6 PATAS: ante «prepara el ticket ganador para hoy» o petición equivalente, intenta fundamentar 5 selecciones (rango 4 a 6) investigando las seis disciplinas NBA, WNBA, MLB, NHL, NFL y Soccer mundial disponibles en la fecha. No te detengas en tres favoritos ni en moneyline: escanea la cartelera con sports_chat_daily_scan limit=30 y, si faltan candidatos, continúa con páginas de sports_chat_soccer_world_scan y fuentes habilitadas. Para cada candidato consulta estadísticas, participantes, lesiones, descanso, forma, noticias y cuotas del operador, y contrasta todos los mercados realmente publicados (h2h, spread/run line, totales, por períodos y props autorizadas). Al investigar cada juego, si la cuota procede de The Odds API v4 y el evento tiene eventId propio de ese proveedor, consulta sports_chat_event_market_menu para descubrir alternativas de línea, periodos y props; si no está configurada la clave o el libro no publica mercado, NO lo inventes. La meta de cinco selecciones NO convierte falta de fuente o cuota en apuesta verificada; distingue explícitamente las propuestas investigadas de las cotizadas y las que tienen modelo calibrado, no inventes líneas ni garantías. Si no hay 4 ofertas válidas, entrega las candidatas verificadas y el déficit concreto de cobertura, y continúa el diagnóstico de fuentes en vez de rechazar genéricamente. ',
+  'TICKET DIARIO DE 5 A 6 PATAS: ante «prepara el ticket ganador para hoy» o petición equivalente, intenta fundamentar 5 selecciones (rango 5 a 6) investigando las seis disciplinas NBA, WNBA, MLB, NHL, NFL y Soccer mundial disponibles en la fecha. No te detengas en tres favoritos ni en moneyline: escanea la cartelera con sports_chat_daily_scan limit=30 y, si faltan candidatos, continúa con páginas de sports_chat_soccer_world_scan y fuentes habilitadas. Para cada candidato consulta estadísticas, participantes, lesiones, descanso, forma, noticias y cuotas del operador, y contrasta todos los mercados realmente publicados (h2h, spread/run line, totales, por períodos y props autorizadas). Al investigar cada juego, si la cuota procede de The Odds API v4 y el evento tiene eventId propio de ese proveedor, consulta sports_chat_event_market_menu para descubrir alternativas de línea, periodos y props; si no está configurada la clave o el libro no publica mercado, NO lo inventes. La meta de cinco selecciones NO convierte falta de fuente o cuota en apuesta verificada; distingue explícitamente las propuestas investigadas de las cotizadas y las que tienen modelo calibrado, no inventes líneas ni garantías. Si no hay 5 ofertas válidas, entrega las candidatas verificadas y el déficit concreto de cobertura, y continúa el diagnóstico de fuentes en vez de rechazar genéricamente. ',
   'Para descubrir candidatos por fecha, usa sports_chat_daily_scan con límite hasta 36 y después sports_chat_daily_market_shortlist con deep=true para cotejar las cuotas con resultados históricos, lesiones y noticias disponibles; después investiga cada cruce con suficiente evidencia antes de elegir el mercado. La preselección no equivale a una probabilidad predictiva. ',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'INVESTIGACIÓN NBA: antes de defender cualquier favorito o selección NBA, consulta sports_chat_nba_research (y sports_chat_odds cuando existan cuotas). Contrasta forma en marcadores finales, márgenes, descanso y muestra; revisa además informe oficial de lesiones, rotaciones, estadísticas avanzadas, rival, localía y movimiento de precios desde fuentes autorizadas. Lo no consultado debe permanecer explícitamente SIN VERIFICAR. No transformes la forma descriptiva en porcentajes de victoria ni cites atletas que no tengan plantilla actual confirmada. Un ticket automático se considera SOLO una preselección, nunca una investigación completa.',
@@ -131,7 +133,7 @@ const GUIDANCE = [
   'Cuando el usuario pida una cartelera, deja que sports_chat_games entregue una sola cartelera compacta en el chat con hasta 25 encuentros reales. Para un partido, cruce o equipo concreto, pasa team, opponent o eventId a sports_chat_games: así se mantiene la sports_game_card detallada existente. No cambies el menú, la página ni la caja del chat. Nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes.',
   'MERCADOS MÚLTIPLES: antes de elegir un ganador, consulta sports_chat_market_intelligence para evaluar 1X2, doble oportunidad 1X/X2, over/under, BTTS, spread o handicap según el deporte y mercados REALES presentes. 1/cuota representa expectativa del precio del bookmaker, NO tu probabilidad calibrada; no digas que una apuesta es la más probable basándote solo en su precio. Para investigar jugadores, lesiones, noticias, plantillas y métricas de cada evento usa sports_chat_deep_research con el ID ESPN confirmado. No trates titulares, porteros ni jugadores mencionados en noticias como confirmados si la fuente no lo dice. ',
   'DOBLE OPORTUNIDAD: si el usuario quiere 1X/X2, indica marketPreference=double_chance en sports_chat_ticket_evidence_priced_auto para encuentros de fútbol; elige solo cuotas auténticas del mismo bookmaker. 1X cubre local o empate; X2, visita o empate. No transformes ganador directo en doble oportunidad sin consultar ese mercado. El usuario puede pedir 5 o 6 selecciones y debe ver razones y riesgos, no una promesa de acierto.',
-  'CONTRATO DE PATAS: cuando el usuario pide 5 patas, el resultado DEBE contener exactamente cinco selecciones verificadas; jamás presentes 1 de 5 como ticket completo. Si faltan datos, muestra explícitamente el número conseguido y el número pendiente como borrador incompleto. Respeta igualmente cualquier otro número de 1 a 6. No afirmes que una combinada ganará.',
+  'CONTRATO DE PATAS: el ticket DIARIO tiene meta de 5 a 6 patas. En solicitudes explícitas de análisis individual o borradores de 1 a 4 encuentros, respetar esos expedientes sin titularlos ticket diario completo. Cuando el usuario pide 5 patas, el resultado DEBE contener exactamente cinco selecciones verificadas; jamás presentes 1 de 5 como ticket completo. Si faltan datos, muestra explícitamente el número conseguido y el número pendiente como borrador incompleto. Respeta igualmente cualquier otro número de 1 a 6. No afirmes que una combinada ganará.',
   'Si se pide un ticket y no hay cuotas, no finjas precio ni retorno. Prefiere sports_chat_ticket_evidence_priced_auto para investigación especializada y respaldo gratuito aunque no haya precios; sports_chat_ticket_evidence_auto es SOLO preselección histórica, no expediente final. sports_chat_ticket_research_auto es solo un respaldo antiguo por récord y NO cumple investigación deportiva profunda. Si ya tienes IDs y fundamentos por partido usa sports_chat_ticket_research. Un borrador de menos patas debe mostrarse INCOMPLETO. Si no hay partidos verificables, dilo y busca otras ligas y fechas sin inventar mercados.',
   'Usa ESPN Site/Core como proveedor público para marcadores y moneylines cuando se publiquen. Hay DOS proveedores comerciales distintos, opcionales: TheOddsAPI (api.theoddsapi.com, THEODDSAPI_API_KEY, acceso gratuito con cupo) y The Odds API v4 (api.the-odds-api.com, THE_ODDS_API_KEY); no confundas claves, endpoints ni formatos. Si ambos están configurados, consulta ambos de forma independiente y conserva la fuente de cada cuota. Si ESPN no presenta cuotas, no inventes precios: sports_chat_ticket_research ofrece un ticket de pronósticos sin cotización basado en encuentros futuros verificados. sports_chat_ticket es un ticket COTIZADO y solo puede usar precios del proveedor consultados en ese momento. El boleto cotizado es una propuesta comercial no aceptada por la casa; no hay garantía de acierto. Identifica correlaciones y ausencia de predicción calibrada.',
   'Los datos deben indicar su fuente, fecha y zona horaria, y adaptar el detalle a cada deporte. Cuando el usuario pida favoritos, muestra primero los encuentros reales con escudos, horarios, país y liga (si son conocidos), y solo después una tendencia propia sustentada en investigación verificable; una cuota baja no prueba cuál equipo es favorito de tu modelo. En tickets separa visualmente por deporte, país y liga y, si hay un mercado de jugador respaldado por el proveedor, muestra también el jugador; no inventes nombres, mercados ni fotos. Los tickets heredan el tema claro/oscuro de Phoenix. Nunca presentes porcentajes de ESPN como estimaciones propias ni afirmes un porcentaje sin calibración.',
@@ -208,7 +210,8 @@ export function apply(ctx: Context): void {
         catch{/* No public secret data or unverified provider readiness. */}
         if(record.configured)configured.add(entry.ref)
         return{provider:entry.provider,ref:entry.ref,use:entry.use,
-          configured:record.configured,writable:record.writable}
+          configured:record.configured,writable:record.writable,
+          registrationUrl:sportsCredentialGuides[entry.ref]?.url??null}
       }))
       // Inspection is metadata-only: do not resolve secret values to check status.
       const env=hydrateSportsSources(process.env)
@@ -218,7 +221,8 @@ export function apply(ctx: Context): void {
           configured.add(key.ref)
         }
       }
-      return JSON.stringify({keys,coverage:coverageReport(configured,requested),
+      const askPreference=await sportsCredentialAsk('status',undefined,env)
+      return JSON.stringify({keys,askPreference,coverage:coverageReport(configured,requested),
         documentedRequirements:researchCoverage.filter(x=>!requested||x.sport===requested).length,
         nonExclusive:true,
         secureEntry:'Si quieres conectar una fuente opcional, introduce /secret set NOMBRE VALOR como comando humano de PHOENIX, nunca como texto dirigido a Kira. La orden se procesa antes del modelo y evita registrar su entrada. Verificar estado sin mostrar la clave.',
@@ -226,6 +230,74 @@ export function apply(ctx: Context): void {
       })
     },
     presentCall:()=>({card:'generic',title:'Revisar cobertura deportiva y claves seguras',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_credential_ask',
+    description:'Pregunta mediante Ask por UNA API key deportiva opcional y recuerda si el usuario no desea nuevos avisos. Solo gestiona preferencias: NUNCA recibe ni muestra el valor secreto. /secret set es interceptado por el Host.',
+    parameters:{
+      action:{type:'string',description:'status | request | mute | unmute | mute-all | unmute-all'},
+      ref:{type:'string',description:'Nombre exacto de la variable, NO la clave. Por ejemplo THE_ODDS_API_KEY.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>false,
+    async execute(args,exec){
+      const action=String(args.action??'status')
+      if(!['status','request','mute','unmute','mute-all','unmute-all'].includes(action))
+        throw Error('Acción Ask de credenciales no admitida')
+      const ref=typeof args.ref==='string'?args.ref:undefined
+      if(action==='request'&&ref){
+        const env=await sportsEnv(ctx)
+        if(env[ref]?.trim())return JSON.stringify({
+          status:'already-configured',ref,question:null,secretExposed:false})
+      }
+      const proposal=await sportsCredentialAsk(
+        action as SportsKeyAskAction,ref,process.env)
+      if(action!=='request'||proposal.status!=='ask'||!ref)
+        return JSON.stringify(proposal)
+      // Native Ask surface via the Host's userQuestions service. This presents
+      // ONLY consent/choice; never ask for or store the secret value here.
+      type AskService={ask(request:{
+        questions:Array<{id:string;header:string;question:string;sensitive:boolean;
+          options:Array<{label:string;recommended?:boolean;description?:string}>}>;
+        agent?:unknown;signal?:AbortSignal;
+      }):Promise<{answers:Array<{id:string;selected:string[]}>;automatic?:boolean}>}
+      let asker:AskService|undefined
+      try{asker=(ctx.get as (key:string)=>unknown)('userQuestions') as AskService|undefined}
+      catch{/* Headless runtimes can present the question in ordinary chat. */}
+      if(!asker)return JSON.stringify({...proposal,delivery:'ask-ui-unavailable',
+        instruction:'Presenta la pregunta al usuario una sola vez, sin pedirle que comparta la clave.'})
+      try{
+        const answer=await asker.ask({
+          questions:[{id:'sports-key-'+ref,header:'Fuente deportiva opcional',
+            question:proposal.question??'¿Configurar este proveedor?',
+            sensitive:true,options:[
+              {label:'Configurar de forma segura',
+                description:'Mostrar enlace oficial y comando de la bóveda PHOENIX'},
+              {label:'Ahora no',recommended:true,
+                description:'Seguir con fuentes públicas; no volver a preguntar durante 30 días'},
+              {label:'No volver a preguntar',
+                description:'Desactivar este aviso de forma persistente'},
+            ]}],
+          ...(exec.agent!==undefined?{agent:exec.agent}:{}),
+          signal:exec.signal,
+        })
+        const selected=answer.answers[0]?.selected[0]??'Ahora no'
+        if(selected==='No volver a preguntar'){
+          const muted=await sportsCredentialAsk('mute',ref,process.env)
+          return JSON.stringify({...muted,status:'suppressed',decision:selected})
+        }
+        return JSON.stringify({...proposal,delivery:'native-ask',decision:selected,
+          needsSecureEntry:selected==='Configurar de forma segura',
+          instruction:selected==='Configurar de forma segura'?
+            'Abrir configuración segura o ejecutar /secret set. Nunca insertar la clave en chat.':
+            'Continuar con ESPN y otras fuentes gratuitas; no volver a solicitar esta clave durante 30 días.'})
+      }catch(error){
+        return JSON.stringify({...proposal,delivery:'ask-unavailable',
+          detail:String(error instanceof Error?error.message:error).slice(0,130),
+          instruction:'Continuar sin bloquear la investigación; nunca pedir la clave en el chat.'})
+      }
+    },
+    presentCall:()=>({card:'generic',title:'Ask · clave deportiva opcional',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_daily_scan',
@@ -239,16 +311,16 @@ export function apply(ctx: Context): void {
     async execute(args){
       const report=await scoutDailySports(args.date,args.limit??30,
         dailyResearchFetcher(fetch,process.env),Date.now(),process.env)
-      return JSON.stringify({...report,instruction:'Primer filtro para construir 4-6 propuestas (objetivo 5), NO ranking predictivo. Investiga a fondo estos eventos; si no alcanzan, amplía Soccer mundial por páginas. Para cada candidato compara H2H, bajas, clima, jugadores y mercados reales h2h, spreads, totales, períodos y props si la fuente los publica. No inventes cuotas, modelos ni estadísticas; las propuestas sin cotización comprobada no son apuestas aprobadas.'})
+      return JSON.stringify({...report,instruction:'Primer filtro para construir 5-6 propuestas (objetivo 5), NO ranking predictivo. Investiga a fondo estos eventos; si no alcanzan, amplía Soccer mundial por páginas. Para cada candidato compara H2H, bajas, clima, jugadores y mercados reales h2h, spreads, totales, períodos y props si la fuente los publica. No inventes cuotas, modelos ni estadísticas; las propuestas sin cotización comprobada no son apuestas aprobadas.'})
     },
     presentCall:()=>({card:'generic',title:'Escanear deportes y partidos de la jornada',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_daily_market_shortlist',
-    description:'Investiga mercados alternativos por partido ANTES de seleccionar 4 a 6 patas, entre NBA, WNBA, MLB, NFL, NHL y Soccer; coteja cuotas reales de ganador, hándicap y totales con partidos ESPN, y opcionalmente investiga H2H, forma, descansos, bajas, prensa, estadio y clima. Compara las dos opciones del mercado, no solo al favorito. No promete victorias ni coloca apuestas.',
+    description:'Investiga mercados alternativos por partido ANTES de seleccionar 5 a 6 patas, entre NBA, WNBA, MLB, NFL, NHL y Soccer; coteja cuotas reales de ganador, hándicap y totales con partidos ESPN, y opcionalmente investiga H2H, forma, descansos, bajas, prensa, estadio y clima. Compara las dos opciones del mercado, no solo al favorito. No promete victorias ni coloca apuestas.',
     parameters:{
       date:{type:'string',description:'Fecha AAAA-MM-DD en Santo Domingo, defecto hoy.'},
-      count:{type:'integer',description:'Objetivo de 4 a 6 candidatos; por defecto cinco.'},
+      count:{type:'integer',description:'Objetivo de 5 o 6 candidatos; por defecto cinco.'},
       deep:{type:'boolean',description:'Investigar evidencias del partido y comparar varias ofertas por evento (defecto true). false para un primer escaneo rápido de cuotas.'},
       winnerOnly:{type:'boolean',description:'true para apuestas SOLO al ganador directo h2h; sin totals ni spreads.'},
     },
@@ -256,8 +328,8 @@ export function apply(ctx: Context): void {
     isConcurrencySafe:()=>true,
     async execute(args){
       const now=Date.now(),env=await sportsEnv(ctx),count=args.count??5
-      if(!Number.isInteger(count)||count<4||count>6)
-        throw Error('Se requieren de 4 a 6 candidatas para el ticket diario')
+      if(!Number.isInteger(count)||count<5||count>6)
+        throw Error('Se requieren 5 o 6 candidatas para el ticket diario')
       const daily=await scoutDailySports(args.date,36,dailyResearchFetcher(fetch,env),now,env)
       const keys=[...new Set(daily.events.map(event=>dailyOddsSportKey(event.sport,event.league))
         .filter((key):key is string=>typeof key==='string'))].slice(0,12)
@@ -613,18 +685,40 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_sources_health',
-    description:'Audita los proveedores deportivos. Si faltan, inicia su instalación administrada opcional sin bloquear el chat; retorna estado y logs, sin exponer credenciales ni prometer cuotas.',
-    parameters:{},
+    description:'Audita configuración/instalación de proveedores deportivos; verifyLive=true comprueba realmente mercados, fecha y respuestas de fuentes en una liga concreta. Una clave instalada NO demuestra cuotas actuales.',
+    parameters:{
+      verifyLive:{type:'boolean',description:'true para ejecutar un sondeo REAL de cuotas; consume la cuota del proveedor. Por defecto false.'},
+      sportKey:{type:'string',description:'Liga para probar con verifyLive: basketball_nba, icehockey_nhl, americanfootball_nfl, baseball_mlb o basketball_wnba.'},
+    },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>false,
-    async execute(){
+    async execute(args){
       // Recover missing source installs even when the prepared Windows runtime
       // did not ship the updater script. Launch remains nonblocking.
       const autoRepair=await ensureSportsSourcesStarted(process.env)
       const env=await sportsEnv(ctx)
       const installation=managedSportsInstallStatus(env)
       const sources=await sportsSourcesHealth(env)
-      return JSON.stringify({sources,installation,autoRepair,checkedAt:new Date().toISOString(),
+      const allowedKeys=['basketball_nba','basketball_wnba','icehockey_nhl',
+        'americanfootball_nfl','baseball_mlb']
+      let liveProbe:unknown=null
+      if(args.verifyLive===true){
+        const sportKey=String(args.sportKey??'basketball_nba')
+        if(!allowedKeys.includes(sportKey))throw Error('Liga no admitida para sondeo de cuotas')
+        try{
+          const response=await marketOddsDetailed(sportKey,'h2h',env,fetch,Date.now())
+          liveProbe={sportKey,checkedAt:new Date().toISOString(),
+            status:response.quotes.length?'observed-quotes':'no-usable-quotes',
+            usableQuotes:response.quotes.length,
+            providers:response.sources.map(source=>({
+              provider:source.provider,status:source.status,count:source.count,
+              detail:source.detail.slice(0,140)})),
+            caveat:'Cuotas observadas para esta liga y consulta, no para toda la cartelera. Comprobar casa, evento, hora y período de cada pata.'}
+        }catch(error){liveProbe={sportKey,status:'probe-error',
+          detail:String(error instanceof Error?error.message:error).slice(0,180)}}
+      }
+      return JSON.stringify({sources,liveProbe,healthScope:'configuration-only-unless-liveProbe-observed',
+        installation,autoRepair,checkedAt:new Date().toISOString(),
         repair:'Si la instalación falla: ejecutar node scripts/phoenix-sports-source-bootstrap.mjs --status y revisar installation.logPath. Para reparar, node scripts/phoenix-sports-source-bootstrap.mjs --install desde la carpeta de PHOENIX. OddsHarvester requiere Python >=3.12 y Playwright Chromium. No copiar claves al chat.',
         warning:'Instalado no equivale a cuota real. OddsHarvester usa Playwright sobre OddsPortal; comprueba bookmaker, mercado, período y timestamp. SportsbookReview y MLB solo contienen históricos; para extraer datos nuevos se ejecutan sus propios scripts en tareas explícitas, no funcionan como fuentes vivas.'})
     },

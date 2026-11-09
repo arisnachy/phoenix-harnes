@@ -36,9 +36,9 @@ test('no fabricated completeness when only conditional research remains',()=>{
     review(13,'h2h','descriptive-support'),
     review(14,'h2h','uncertain'),review(15,'h2h','unavailable')]
   const result=selectDailyResearchedMarkets(choices,5)
-  assert.equal(result.selected.length,5)
+  assert.equal(result.selected.length,3)
   assert.equal(result.supportedLegs,1)
-  assert.equal(result.conditionalLegs,4)
+  assert.equal(result.conditionalLegs,2)
   assert.equal(result.completed,false)
 })
 test('rejects mixed bookmakers rather than creating a false commercial parlay',()=>{
@@ -49,8 +49,9 @@ test('never invents more games than the actual slate and validates goal',()=>{
   const result=selectDailyResearchedMarkets([review(1),review(1,'spreads'),review(2)],6)
   assert.equal(result.selected.length,2)
   assert.equal(result.completed,false)
-  assert.throws(()=>selectDailyResearchedMarkets([],3),/4 a 6/)
-  assert.throws(()=>selectDailyResearchedMarkets([],7),/4 a 6/)
+  assert.throws(()=>selectDailyResearchedMarkets([],3),/5 a 6/)
+  assert.throws(()=>selectDailyResearchedMarkets([],4),/5 a 6/)
+  assert.throws(()=>selectDailyResearchedMarkets([],7),/5 a 6/)
 })
 
 test('independently positive market beats negative-value descriptive favorite',()=>{
@@ -69,4 +70,28 @@ test('equally researched moneyline prioritizes stronger market favorite over raw
     selectedOutcome:{selection:'Home 22',line:null,decimalOdds:1.19,noVigShare:.84}}
   const r=selectDailyResearchedMarkets([low,high],5)
   assert.equal(r.selected[0].candidate.espnEventId,'22')
+})
+
+test('daily selection excludes unavailable, contraindicated and negative-value legs before ranking',()=>{
+  const bad={...review(31,'h2h','descriptive-support',100),
+    priceAudit:{classification:'negative-value'}}
+  const choices=[
+    review(30,'h2h','unavailable',99),
+    review(32,'h2h','contraindicated',90),
+    bad,
+    review(33,'h2h','uncertain',3),
+    review(34,'h2h','descriptive-support',5),
+  ]
+  const result=selectDailyResearchedMarkets(choices,5)
+  assert.deepEqual(new Set(result.selected.map(x=>x.candidate.espnEventId)),
+    new Set(['33','34']))
+  assert.equal(result.completed,false)
+  assert.equal(result.conditionalLegs,1)
+  assert.equal(result.supportedLegs,1)
+})
+
+test('disqualified quotes from unrelated bookmakers cannot invalidate an otherwise clean draft',()=>{
+  const invalid={...review(3,'h2h','contraindicated',88,'Other Book')}
+  const chosen=selectDailyResearchedMarkets([review(1),review(2),invalid],5)
+  assert.equal(chosen.selected.length,2)
 })
