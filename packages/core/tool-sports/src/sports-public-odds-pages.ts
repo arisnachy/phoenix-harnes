@@ -91,7 +91,7 @@ export function websiteTeamExcerpt(visible:string,home:string,away:string):strin
   }
   return null
 }
-const isBlocked=(html:string)=>/just a moment|verify that you.re not a robot|are you a human|captcha|cloudflare challenge|enable javascript and then reload the page/iu.test(html)
+const isBlocked=(html:string)=>/just a moment|verify that you(?:\s+are|['’]re) not a robot|are you a human|captcha|cloudflare challenge|enable javascript and then reload the page/iu.test(html)
   ||(/<title[^>]*>[^<]*access denied/iu.test(html))
 const hosts:Readonly<Record<PublicOddsProvider,string>>={
   ESPN:'www.espn.com',Oddschecker:'www.oddschecker.com',
