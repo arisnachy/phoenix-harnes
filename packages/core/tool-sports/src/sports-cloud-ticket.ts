@@ -60,7 +60,7 @@ export async function enrollCloudTicket(ticket:CloudTicket,
     })
     if(response.status!==201)throw Error('GitHub Issues HTTP '+response.status)
     const issue=await response.json() as Record<string,unknown>
-    if(!Number.isInteger(issue.number)||Number(issue.number)<1)
+    if(typeof issue.number!=='number'||!Number.isInteger(issue.number)||issue.number<1)
       throw Error('Issue de monitorización no confirmada')
     return{status:'enqueued',issueNumber:Number(issue.number),
       reason:'Boleto cifrado registrado en GitHub. Correo condicionado a la ejecución '
