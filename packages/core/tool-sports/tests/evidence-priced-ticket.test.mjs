@@ -353,7 +353,9 @@ test('one missing lineup remains conditional; four researched legs are retained'
   assert.equal(result.priced,true)
   assert.equal(result.conditional,true)
   assert.equal(result.researchedLegs,4)
-  assert.equal(result.card.props.legs.filter(x=>x.researchStatus==='conditional').length,1)
+  // A specialist without a verified checklist is conditional, even if its
+  // descriptive status says researched. No silently promoted candidates.
+  assert.equal(result.card.props.legs.filter(x=>x.researchStatus==='conditional').length,5)
   assert.ok(result.card.props.legs.some(x=>x.pendingEvidence.includes('starting XI not published')))
   assert.equal(result.approvedLegs,0)
 })
