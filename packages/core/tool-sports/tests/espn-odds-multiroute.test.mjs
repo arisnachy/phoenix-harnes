@@ -444,3 +444,14 @@ test('Italian and Portuguese football odds reach their correct ESPN leagues, not
     assert.ok(!calls[0].includes('/soccer/eng.1/'))
   }
 })
+
+test('ESPN recognizes external provider soccer league key aliases without misrouting leagues',async()=>{
+ const cases=[['soccer_brazil_campeonato','bra.1'],['soccer_fifa_world_cup','fifa.world']]
+ for(const [sportKey,league] of cases){
+   const urls=[]
+   const get=async url=>{urls.push(url);return {events:[]}}
+   const report=await fetchPublicEspnOddsDetailed(sportKey,'h2h',get,{now,days:1})
+   assert.equal(report.quotes.length,0)
+   assert.ok(urls[0]?.includes('/soccer/'+league+'/scoreboard?'))
+ }
+})
