@@ -1,0 +1,44 @@
+name: PHOENIX NBA NFL free-source reality check
+
+on:
+  push:
+    branches:
+      - main
+      - stable
+      - 'feat/nba-nfl-keyless-gameday-*'
+    paths:
+      - 'scripts/phoenix-nba-nfl-keyless-smoke.mjs'
+      - 'packages/core/tool-sports/src/nba-nfl-keyless-closure.ts'
+      - '.github/workflows/phoenix-nba-nfl-keyless-sources.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nba-nfl-keyless-health-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Probe public JSON shapes and official reference pages
+        run: node scripts/phoenix-nba-nfl-keyless-smoke.mjs
+      - name: Store observations, including HTTP 403/429/5xx
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nba-nfl-keyless-health-${{ github.run_id }}
+          path: artifacts/nba-nfl-keyless-health.json
+          if-no-files-found: warn
+          retention-days: 14
