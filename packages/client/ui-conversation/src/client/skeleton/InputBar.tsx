@@ -29,13 +29,13 @@ import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
 import { ReferenceIcon } from '../ReferenceIcon.tsx'
 import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
-import { KiraVoiceAvatar } from './KiraVoiceAvatar.tsx'
+import { PhoenixVoiceOrb } from './PhoenixVoiceOrb.tsx'
 import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
 import {
   configureCodexRealtimeUserTranscriptHandler,
   createVoiceRecognition, getVoiceAssistantSnapshot, hasCodexRealtimeVoiceSupport, hasVoiceRecognition,
   interruptVoiceAssistantSpeech, isCodexLiveRepairPending, waitForCodexLiveRepair, stopCodexRealtimeVoice,
-  isCodexRealtimeVoiceActive, isLikelyVoiceAssistantEcho, openCodexReconnection, codexRealtimeRequiresLogin,
+  isCodexRealtimeVoiceActive, retryCodexRealtimeAudio, isLikelyVoiceAssistantEcho, openCodexReconnection, codexRealtimeRequiresLogin,
   setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant, tryStartCodexRealtimeVoice,
   hasApprovedVoiceFallback, setApprovedVoiceFallback,
   type VoiceInputState, type VoiceRecognitionLike,
@@ -1016,13 +1016,6 @@ export function InputBar({
         onClick={workspaceTrigger ? onRequestWorkspace : undefined}
         onPointerDown={workspaceTrigger ? (e) => { e.stopPropagation() } : undefined}
       >
-        {/* Voice portrait is anchored to the composer card, NEVER to viewport
-            or the transformed chat scroller. It floats just above the input. */}
-        {voiceEnabled && (
-          <KiraVoiceAvatar active={voiceEnabled} phase={voiceAssistant.phase}
-            busy={running} native={!useAlternativeVoice && isCodexRealtimeVoiceActive()}
-            onStop={() => { void toggleVoice() }}/>
-        )}
         {overlay !== undefined && <div className={css.overlayAnchor}>{overlay}</div>}
         {accessory !== undefined && <div className={css.accessory}>{accessory}</div>}
         {renderSlot('conversation.input.attachments', {
@@ -1180,6 +1173,16 @@ export function InputBar({
                 Reintentar Codex Live
               </button>
             )}
+            {voiceEnabled && voiceAssistant.audioBlocked === true && (
+              <button type="button" className={css.voiceAudioUnlock}
+                data-codex-audio-unlock
+                aria-label="Activar sonido de Codex"
+                title="El navegador bloqueó la reproducción. Activar sonido sin reiniciar la conversación."
+                onMouseDown={keepFocus}
+                onClick={() => { retryCodexRealtimeAudio() }}>
+                Activar sonido
+              </button>
+            )}
             {voiceEnabled && useAlternativeVoice && (
               <span className={css.voiceAlternativeActive} role="status"
                 title="Respaldo autorizado: reconocimiento del navegador y voz de Phoenix (Kokoro si está disponible). No es Codex Live.">
@@ -1226,14 +1229,14 @@ export function InputBar({
                   aria-label={voiceRepairing ? 'Cancelar recuperación de Codex Live' : voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
                   aria-pressed={voiceEnabled}
                   data-voice-state={voiceState}
+                  data-voice-phase={voiceEnabled ? voiceAssistant.phase : 'inactive'}
                   data-codex-voice-failure={codexVoiceFailure ?? undefined}
                   disabled={(locked || machineBusy) && !voiceRepairing}
                   onMouseDown={keepFocus}
                   onClick={() => { void toggleVoice() }}
                 >
-                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                    <path d="M8 1.5a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0V4A2.5 2.5 0 0 0 8 1.5Zm-4 6.5a4 4 0 0 0 8 0h1.5a5.5 5.5 0 0 1-4.75 5.44V15h-1.5v-1.56A5.5 5.5 0 0 1 2.5 8H4Z" fill="currentColor" />
-                  </svg>
+                  <PhoenixVoiceOrb phase={voiceEnabled ? voiceAssistant.phase : 'inactive'}
+                    native={!useAlternativeVoice && isCodexRealtimeVoiceActive()} />
                 </button>
               </Tooltip>
             )}

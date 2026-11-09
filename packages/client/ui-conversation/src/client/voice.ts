@@ -64,6 +64,8 @@ export interface VoiceAssistantSnapshot {
   readonly phase: VoiceAssistantPhase
   /** Wall-clock activation point used to avoid reading old history on enable. */
   readonly activatedAt: number
+  /** An authorized Codex audio element could not start browser playback. */
+  readonly audioBlocked?: boolean
 }
 
 
@@ -264,6 +266,12 @@ function publishVoiceAssistant(next: VoiceAssistantSnapshot): void {
 }
 
 
+function publishCodexAudioBlocked(audio: HTMLAudioElement, blocked: boolean): void {
+  if (codexRealtimeVoiceSession?.audio !== audio || !voiceAssistantSnapshot.active
+    || voiceAssistantSnapshot.audioBlocked === blocked) return
+  publishVoiceAssistant({ ...voiceAssistantSnapshot, audioBlocked: blocked })
+}
+
 function publishVoiceIdle(): void {
   if (!voiceAssistantSnapshot.active) return
   publishVoiceAssistant({
@@ -406,27 +414,39 @@ function sendCodexRealtimeUtterance(
  * response, retry play on the same attached track and report a blocked output.
  */
 function playCodexRealtimeAudio(audio: HTMLAudioElement): void {
-  // Audio deltas can arrive dozens of times per second. A pending/already
-  // running HTMLAudioElement must not receive overlapping play() promises.
-  if (audio.dataset.phoenixAudioPlayback === 'starting'
+  if (!audio.srcObject || audio.dataset.phoenixAudioPlayback === 'blocked'
+    || audio.dataset.phoenixAudioPlayback === 'starting'
     || (!audio.paused && audio.dataset.phoenixAudioPlayback === 'playing')) return
   audio.dataset.phoenixAudioPlayback = 'starting'
+  const played = (): void => {
+    if (!audio.isConnected) return
+    audio.dataset.phoenixAudioPlayback = 'playing'
+    document.documentElement.dataset.phoenixVoiceAudioPlayback = 'playing'
+    publishCodexAudioBlocked(audio, false)
+  }
+  const blocked = (): void => {
+    if (!audio.isConnected) return
+    audio.dataset.phoenixAudioPlayback = 'blocked'
+    document.documentElement.dataset.phoenixVoiceAudioPlayback = 'blocked'
+    if (!audio.muted) publishCodexAudioBlocked(audio, true)
+    console.warn('[PHOENIX VOICE] The browser blocked native Codex Live audio. Use Activar sonido.')
+  }
   try {
     const playback = audio.play()
-    if (playback === undefined || typeof playback.catch !== 'function') {
-      audio.dataset.phoenixAudioPlayback = 'playing'
-      return
-    }
-    void playback.then(() => {
-      audio.dataset.phoenixAudioPlayback = 'playing'
-    }, () => {
-      audio.dataset.phoenixAudioPlayback = 'blocked'
-      console.warn('[PHOENIX VOICE] The browser blocked native Codex Live audio playback.')
-    })
+    if (playback === undefined || typeof playback.then !== 'function') played()
+    else void playback.then(played, blocked)
   } catch {
-    audio.dataset.phoenixAudioPlayback = 'blocked'
-    console.warn('[PHOENIX VOICE] The browser could not start native Codex Live audio playback.')
+    blocked()
   }
+}
+
+/** Retry a blocked Codex speaker from an explicit user gesture, without restarting WebRTC. */
+export function retryCodexRealtimeAudio(): boolean {
+  const session = codexRealtimeVoiceSession
+  if (session === undefined || session.audio.muted || !session.audio.srcObject) return false
+  delete session.audio.dataset.phoenixAudioPlayback
+  playCodexRealtimeAudio(session.audio)
+  return true
 }
 
 function clearCodexRealtimeAudioDrain(session: CodexRealtimeVoiceSession): void {
@@ -497,7 +517,14 @@ function allowAuthorizedCodexAudio(session: CodexRealtimeVoiceSession): void {
   monitorCodexInboundAudio(session)
   clearCodexRealtimeAudioDrain(session)
   setCodexRealtimeMicOpen(session, false)
+  const wasMuted = session.audio.muted
   session.audio.muted = false
+  // A muted preflight autoplay denial is not a permanent denial of the
+  // subsequently authorized speech. Retry once unmuted; further rejections
+  // expose the explicit user-gesture recovery button.
+  if (wasMuted && session.audio.dataset.phoenixAudioPlayback === 'blocked') {
+    delete session.audio.dataset.phoenixAudioPlayback
+  }
   document.documentElement.dataset.phoenixVoiceAudioMuteReason = 'none'
   session.audio.volume = 1
   if (session.audio.srcObject) playCodexRealtimeAudio(session.audio)
