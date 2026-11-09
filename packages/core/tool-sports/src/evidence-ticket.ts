@@ -31,7 +31,7 @@ const defaultLeagues = [
   ['soccer','por.1'],['soccer','ned.1'],['soccer','bra.1'],['soccer','arg.1'],
   ['soccer','uefa.europa'],['soccer','fifa.world'],
 ] as const
-function boundedTicket<T>(task:Promise<T>,ms:number):Promise<T>{
+export function boundedTicket<T>(task:Promise<T>,ms:number):Promise<T>{
   let timer:ReturnType<typeof setTimeout>|undefined
   const limit=new Promise<never>((_resolve,reject)=>{
     timer=setTimeout(()=>reject(Error('Tiempo de investigación excedido')),ms)
@@ -137,10 +137,16 @@ export async function evidenceTicket(
   for(let offset=0;offset<shortlist.length;offset+=4){
     if(offset>0&&Date.now()-researchStarted>=34_000){budgetExhausted=true;break}
     const allowance=Math.max(750,34_000-(Date.now()-researchStarted))
-    const batch=await Promise.allSettled(shortlist.slice(offset,offset+4).map(({sport,league})=>
-      boundedTicket(researchSport(sport,league,date,fetcher,now,env,
+    const batch=await Promise.allSettled(shortlist.slice(offset,offset+4).map(({sport,league})=>{
+      const deadline=AbortSignal.timeout(Math.min(8_500,allowance))
+      const guarded:typeof fetch=(input,init)=>{
+        const signal=init?.signal?AbortSignal.any([init.signal,deadline]):deadline
+        return fetcher(input,{...init,signal})
+      }
+      return boundedTicket(researchSport(sport,league,date,guarded,now,env,
         sport==='football'?35:sport==='soccer'?56:sport==='tennis'?42:28),
-        Math.min(8_500,allowance))))
+        Math.min(8_500,allowance))
+    }))
     reports.push(...batch)
     // Stop costly expansion only after enough independently researched,
     // directionally consistent picks are available; an HTTP error is not a vote.

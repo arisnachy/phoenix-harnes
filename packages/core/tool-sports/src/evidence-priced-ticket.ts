@@ -19,7 +19,7 @@ export type OddsAuditRow={
   offers:number
   note:string
 }
-const boundedPriced=<T>(work:Promise<T>,ms:number):Promise<T>=>{
+export const boundedPriced=<T>(work:Promise<T>,ms:number):Promise<T>=>{
   let timer:ReturnType<typeof setTimeout>|undefined
   const deadline=new Promise<never>((_resolve,reject)=>{
     timer=setTimeout(()=>reject(Error('Fuente de cuotas: plazo agotado')),ms)
