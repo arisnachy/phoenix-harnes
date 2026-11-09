@@ -1729,7 +1729,11 @@ describe('command launcher chrome and control seats', () => {
       expect(avatar).not.toBeNull()
       expect(avatar?.getAttribute('data-voice-phase')).toBe('listening')
       expect(avatar?.querySelector('img')?.getAttribute('src')).toMatch(/^data:image\/webp;base64,/u)
-      expect(avatar?.querySelector('ellipse')).toBeDefined()
+      // The avatar must be in the composer positioning context, never a
+      // fixed overlay that drifts below the input when ancestors transform.
+      expect(avatar?.closest('[data-composer-card]')).not.toBeNull()
+      // Never paint a second set of lips over the artist's original smile.
+      expect(avatar?.querySelector('svg')).toBeNull()
       // In jsdom there is no WebGL2: the original approved 2D face stays visible.
       expect(avatar?.querySelector('[data-kira-avatar-3d]')).not.toBeNull()
       expect(avatar?.querySelector('[data-renderer="portrait-2d"]')).not.toBeNull()

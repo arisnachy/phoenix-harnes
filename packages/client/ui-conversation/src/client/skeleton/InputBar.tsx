@@ -1004,11 +1004,6 @@ export function InputBar({
           {notice.text}
         </div>
       )}
-      {voiceEnabled && (
-        <KiraVoiceAvatar active={voiceEnabled} phase={voiceAssistant.phase}
-          busy={running} native={!useAlternativeVoice && isCodexRealtimeVoiceActive()}
-          onStop={() => { void toggleVoice() }}/>
-      )}
       {/* Trigger clicks land on the card, not the textarea: the toolbar row's
           disabled controls swallow clicks otherwise (the CSS state disarms
           their pointer events), so the WHOLE capsule is the pick target.
@@ -1021,6 +1016,13 @@ export function InputBar({
         onClick={workspaceTrigger ? onRequestWorkspace : undefined}
         onPointerDown={workspaceTrigger ? (e) => { e.stopPropagation() } : undefined}
       >
+        {/* Voice portrait is anchored to the composer card, NEVER to viewport
+            or the transformed chat scroller. It floats just above the input. */}
+        {voiceEnabled && (
+          <KiraVoiceAvatar active={voiceEnabled} phase={voiceAssistant.phase}
+            busy={running} native={!useAlternativeVoice && isCodexRealtimeVoiceActive()}
+            onStop={() => { void toggleVoice() }}/>
+        )}
         {overlay !== undefined && <div className={css.overlayAnchor}>{overlay}</div>}
         {accessory !== undefined && <div className={css.accessory}>{accessory}</div>}
         {renderSlot('conversation.input.attachments', {
