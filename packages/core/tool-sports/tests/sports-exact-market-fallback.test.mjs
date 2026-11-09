@@ -20,7 +20,9 @@ test('accepted only for same home away, UTC, bookmaker, timestamp and market',()
   assert.equal(exactProviderQuote({...valid,price:1},match,'h2h','basketball_nba',now),false)
 })
 test('never maps soccer 1X2 to a two-way drawless moneyline',()=>{
-  assert.equal(exactProviderQuote({...valid,market:'h2h'},match,'h2h','soccer_epl',now),false)
+  assert.equal(exactProviderQuote({...valid,market:'h2h'},match,'h2h','soccer_epl',now),true)
+  // A single qualified leg is only preliminary; exactAlternativeOdds
+  // additionally requires HOME + DRAW + AWAY from one book/event.
   assert.equal(exactProviderQuote({...valid,market:'1x2',selection:'Draw'},match,'h2h','soccer_epl',now),true)
 })
 test('queries exact ESPN fixture then matches a distinct provider ID without inventing a quote',async()=>{
