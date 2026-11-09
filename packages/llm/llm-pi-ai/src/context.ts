@@ -626,6 +626,27 @@ export function toPiContext(
     : toPiContextWithImages(options, attachments, onReplayDegrade, maxRequestImageBytes, requestImagePolicy, maxInlineFileBytes)
 }
 
+/** Keep a human's newest visual evidence intact across request-byte compaction. */
+function assertLatestHumanImagesRetained(
+  original: readonly Message[],
+  projected: readonly Message[],
+): void {
+  const index = original.findLastIndex(message => message.role === 'user' && message.source.kind === 'user')
+  if (index < 0) return
+  const expected = original[index]!.content.filter(block => block.type === 'image')
+    .map(block => String(block.attachment.attachmentId))
+  if (expected.length === 0) return
+  const actual = projected[index]?.content.filter(block => block.type === 'image')
+    .map(block => String(block.attachment.attachmentId)) ?? []
+  if (expected.length !== actual.length || expected.some((id, offset) => id !== actual[offset])) {
+    throw new LlmError(
+      'The current image upload exceeds the selected model request image budget. '
+      + 'No image analysis was performed: send fewer images or choose a vision route with a larger image budget.',
+      'UNSUPPORTED_CONTENT',
+    )
+  }
+}
+
 async function toPiContextWithImages(
   options: GenerateOptions,
   attachments: AttachmentStore,
@@ -644,6 +665,7 @@ async function toPiContextWithImages(
     byteQuantum: 1,
     byteLength: ref => Math.min(ref.bytes, requestImagePolicy.maxBytes),
   })
+  assertLatestHumanImagesRetained(options.messages, requestMessages)
   const requestImages = await prepareRequestImages(requestMessages, attachments, requestImagePolicy, options.signal)
   const requestFiles = await prepareRequestFiles(requestMessages, attachments, options.signal)
   const exactMessages = offloadRequestImagesWithPolicy(requestMessages, {
@@ -652,6 +674,7 @@ async function toPiContextWithImages(
     byteQuantum: 1,
     byteLength: ref => (requestImages.get(ref.attachmentId) as RequestImageAttachment).bytes,
   })
+  assertLatestHumanImagesRetained(options.messages, exactMessages)
   const toolNames = new Map<CallId, string>()
   const messages: PiMessage[] = []
 
