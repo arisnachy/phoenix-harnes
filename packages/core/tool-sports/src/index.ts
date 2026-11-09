@@ -240,7 +240,7 @@ export function apply(ctx: Context): void {
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>false,
-    async execute(args){
+    async execute(args,exec){
       const action=String(args.action??'status')
       if(!['status','request','mute','unmute','mute-all','unmute-all'].includes(action))
         throw Error('Acción Ask de credenciales no admitida')
@@ -250,8 +250,52 @@ export function apply(ctx: Context): void {
         if(env[ref]?.trim())return JSON.stringify({
           status:'already-configured',ref,question:null,secretExposed:false})
       }
-      return JSON.stringify(await sportsCredentialAsk(
-        action as SportsKeyAskAction,ref,process.env))
+      const proposal=await sportsCredentialAsk(
+        action as SportsKeyAskAction,ref,process.env)
+      if(action!=='request'||proposal.status!=='ask'||!ref)
+        return JSON.stringify(proposal)
+      // Native Ask surface via the Host's userQuestions service. This presents
+      // ONLY consent/choice; never ask for or store the secret value here.
+      type AskService={ask(request:{
+        questions:Array<{id:string;header:string;question:string;sensitive:boolean;
+          options:Array<{label:string;recommended?:boolean;description?:string}>}>;
+        agent?:unknown;signal?:AbortSignal;
+      }):Promise<{answers:Array<{id:string;selected:string[]}>;automatic?:boolean}>}
+      let asker:AskService|undefined
+      try{asker=(ctx.get as (key:string)=>unknown)('userQuestions') as AskService|undefined}
+      catch{/* Headless runtimes can present the question in ordinary chat. */}
+      if(!asker)return JSON.stringify({...proposal,delivery:'ask-ui-unavailable',
+        instruction:'Presenta la pregunta al usuario una sola vez, sin pedirle que comparta la clave.'})
+      try{
+        const answer=await asker.ask({
+          questions:[{id:'sports-key-'+ref,header:'Fuente deportiva opcional',
+            question:proposal.question??'¿Configurar este proveedor?',
+            sensitive:true,options:[
+              {label:'Configurar de forma segura',
+                description:'Mostrar enlace oficial y comando de la bóveda PHOENIX'},
+              {label:'Ahora no',recommended:true,
+                description:'Seguir con fuentes públicas; no volver a preguntar durante 30 días'},
+              {label:'No volver a preguntar',
+                description:'Desactivar este aviso de forma persistente'},
+            ]}],
+          ...(exec.agent!==undefined?{agent:exec.agent}:{}),
+          signal:exec.signal,
+        })
+        const selected=answer.answers[0]?.selected[0]??'Ahora no'
+        if(selected==='No volver a preguntar'){
+          const muted=await sportsCredentialAsk('mute',ref,process.env)
+          return JSON.stringify({...muted,status:'suppressed',decision:selected})
+        }
+        return JSON.stringify({...proposal,delivery:'native-ask',decision:selected,
+          needsSecureEntry:selected==='Configurar de forma segura',
+          instruction:selected==='Configurar de forma segura'?
+            'Abrir configuración segura o ejecutar /secret set. Nunca insertar la clave en chat.':
+            'Continuar con ESPN y otras fuentes gratuitas; no volver a solicitar esta clave durante 30 días.'})
+      }catch(error){
+        return JSON.stringify({...proposal,delivery:'ask-unavailable',
+          detail:String(error instanceof Error?error.message:error).slice(0,130),
+          instruction:'Continuar sin bloquear la investigación; nunca pedir la clave en el chat.'})
+      }
     },
     presentCall:()=>({card:'generic',title:'Ask · clave deportiva opcional',kind:'read' as const}),
   }))
