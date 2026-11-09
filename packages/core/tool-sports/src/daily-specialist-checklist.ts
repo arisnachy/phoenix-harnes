@@ -1,0 +1,81 @@
+/** Per-discipline daily-ticket audit. Presence of a provider response or a
+ * candidate on a roster is not proof of starter confirmation or bet approval.
+ * This checklist records individually observed research steps, not probability.
+ */
+export type StepState='verified'|'partial'|'missing'
+export type StepObservation={state:StepState;detail:string}
+export type ChecklistStep={key:string;title:string;critical:boolean;
+  state:StepState;detail:string}
+export type SportChecklist={sport:string;checkedAt:string;
+  steps:ChecklistStep[];verified:number;partial:number;missing:number;
+  criticalPending:string[];complete:boolean}
+type Requirement={key:string;title:string;critical:boolean}
+const common=[
+  {key:'fixture',title:'Identidad, localía e inicio del partido',critical:true},
+  {key:'form',title:'Forma reciente de ambos rivales, local/visitante y descanso',critical:true},
+  {key:'market',title:'Cuota real vigente, mercado y período exactos',critical:true},
+] as const
+const definitions:Readonly<Record<string,readonly Requirement[]>>={
+  football:[...common,
+    {key:'rosters',title:'Rosters de ambos equipos y posiciones',critical:true},
+    {key:'qb',title:'Quarterback titular y disponibilidad',critical:true},
+    {key:'matchups',title:'Líneas ofensivas, pass rush y enfrentamientos individuales',critical:true},
+    {key:'injuries',title:'Lesiones e inactivos con parte actualizado',critical:true},
+    {key:'weather',title:'Clima y situación del estadio',critical:false}],
+  basketball:[...common,
+    {key:'rosters',title:'Plantillas de ambos equipos',critical:true},
+    {key:'starters',title:'Quintetos y rotaciones confirmados',critical:true},
+    {key:'efficiency',title:'Pace, eficiencia y métricas avanzadas',critical:true},
+    {key:'injuries',title:'Lesiones, descansos y bajas actualizadas',critical:true},
+    {key:'schedule',title:'Back-to-back y descanso comparado',critical:true}],
+  hockey:[...common,
+    {key:'rosters',title:'Jugadores y defensa de ambos equipos',critical:true},
+    {key:'goalies',title:'Dos porteros titulares CONFIRMADOS (no candidatos)',critical:true},
+    {key:'xg',title:'xG 5 contra 5, tiros de calidad y GSAx',critical:true},
+    {key:'special',title:'Power play, penalty kill y enfrentamientos',critical:true},
+    {key:'injuries',title:'Lesiones, scratches y suspensiones actuales',critical:true}],
+  baseball:[...common,
+    {key:'rosters',title:'Rosters activos de ambos equipos',critical:true},
+    {key:'starters',title:'Dos pitchers abridores confirmados',critical:true},
+    {key:'bullpen',title:'Bullpen y carga de relevistas',critical:true},
+    {key:'matchups',title:'Bateadores versus abridores y forma de equipos',critical:true},
+    {key:'weather',title:'Parque, techo, viento y clima en el horario',critical:true},
+    {key:'injuries',title:'Bajas y lineups de ambos equipos',critical:true}],
+  soccer:[...common,
+    {key:'rosters',title:'Plantillas de ambos clubes',critical:true},
+    {key:'lineups',title:'Onces y ausencias confirmadas',critical:true},
+    {key:'xg',title:'xG/xGA y calidad de las ocasiones',critical:true},
+    {key:'injuries',title:'Lesiones, sanciones y bajas',critical:true},
+    {key:'draw',title:'Riesgo de empate y reglas de mercado a 90 minutos',critical:true}],
+  tennis:[...common,
+    {key:'players',title:'Perfiles y ranking de ambos tenistas',critical:true},
+    {key:'surface',title:'Superficie y forma específica',critical:true},
+    {key:'serve',title:'Servicio, devolución y estadísticas de ambos',critical:true},
+    {key:'fatigue',title:'Fatiga, calendario y viajes',critical:true},
+    {key:'injuries',title:'Disponibilidad y molestias físicas',critical:true}],
+}
+/** Missing observations are explicitly missing; never auto-credit a step
+ * because a tool was called or another step had a valid source.
+ */
+export function auditSportChecklist(sport:string,
+  observations:Readonly<Record<string,StepObservation>>,
+  now=Date.now()):SportChecklist{
+  if(!Number.isFinite(now))throw Error('Fecha de auditoría inválida')
+  const requirements=definitions[sport]??[]
+  const steps=requirements.map(requirement=>{
+    const observed=observations[requirement.key]
+    const state:StepState=observed?.state==='verified'||observed?.state==='partial'
+      ?observed.state:'missing'
+    return{...requirement,state,
+      detail:typeof observed?.detail==='string'&&observed.detail.trim()
+        ?observed.detail.slice(0,220):'Sin evidencia individual comprobada'}
+  })
+  const verified=steps.filter(x=>x.state==='verified').length
+  const partial=steps.filter(x=>x.state==='partial').length
+  const missing=steps.filter(x=>x.state==='missing').length
+  const criticalPending=steps.filter(x=>x.critical&&x.state!=='verified')
+    .map(x=>x.title)
+  return{sport,checkedAt:new Date(now).toISOString(),steps,verified,partial,
+    missing,criticalPending,complete:steps.length>0&&criticalPending.length===0}
+}
+export const supportedChecklistSports=Object.keys(definitions)
