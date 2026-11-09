@@ -1,0 +1,92 @@
+/* Kira Alive: motion is contained in the voice stage, never the input buttons. */
+.stage{
+  position:fixed;
+  top:clamp(115px,18vh,220px);
+  left:50%;
+  transform:translateX(-50%);
+  z-index:35;
+  box-sizing:border-box;
+  display:flex;
+  align-items:center;
+  flex-direction:column;
+  gap:6px;
+  width:min(330px,calc(100vw - 36px));
+  padding:18px 18px 10px;
+  pointer-events:none;
+  color:var(--dsw-alias-label-primary,#352c27);
+  isolation:isolate;
+}
+.stage::before{
+  position:absolute;
+  z-index:-1;
+  inset:0;
+  content:'';
+  border-radius:40%;
+  background:radial-gradient(ellipse,rgba(255,246,240,.93) 0%,rgba(255,247,241,.7) 48%,transparent 75%);
+}
+.figure{position:relative;display:grid;place-items:center;width:242px;height:242px;max-width:70vw;max-height:70vw}
+.halo{
+  position:absolute;
+  inset:-8px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(251,123,84,.21) 47%,rgba(255,169,126,.14) 58%,transparent 78%);
+  transform:scale(var(--kira-orb-scale,1));
+  transition:transform 115ms ease-out;
+  animation:ambient 4.5s ease-in-out infinite;
+}
+.frame{
+  position:relative;
+  width:90%;
+  height:90%;
+  overflow:hidden;
+  border:5px solid rgba(255,242,226,.98);
+  border-radius:50%;
+  background:#f6e2d6;
+  box-shadow:0 0 0 2px rgba(232,147,84,.85),0 12px 38px rgba(126,73,48,.17),
+    0 0 35px rgba(246,124,78,.18);
+  transition:box-shadow 300ms ease;
+}
+.portrait{width:100%;height:100%;object-fit:cover;display:block;will-change:transform}
+.faceLayer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.figure[data-expression="warm"] .frame{
+  box-shadow:0 0 0 2px #f6ae73,0 12px 40px rgba(199,96,64,.22),0 0 43px rgba(246,122,77,.34);
+}
+.figure[data-expression="concerned"] .frame{
+  box-shadow:0 0 0 2px #dcb88b,0 12px 35px rgba(128,83,49,.12);
+}
+.figure[data-expression="focused"] .frame{
+  box-shadow:0 0 0 2px #d69b76,0 12px 38px rgba(159,98,66,.17);
+}
+
+.brow{opacity:0;transition:opacity 150ms ease-out,transform 160ms ease-out}
+.cheek{opacity:0;transition:opacity 180ms ease-out}
+.figure[data-expression="focused"] .brow{opacity:.17}
+.figure[data-expression="concerned"] .brow{opacity:.38;transform:translateY(-1px)}
+.figure[data-expression="warm"] .cheek{opacity:.24}
+.statusLine{display:flex;align-items:center;gap:7px;min-height:28px;font-size:15px;line-height:22px}
+.statusLine strong{font-weight:600}
+.statusLine span:last-child{color:var(--dsw-alias-label-secondary,#736961)}
+.indicator{width:7px;height:7px;border-radius:50%;background:#e68b58;box-shadow:0 0 0 4px rgba(248,145,94,.13)}
+.stage[data-voice-phase="listening"] .indicator{background:#2cb489;animation:blink 1.8s ease-in-out infinite}
+.stage[data-voice-phase="speaking"] .indicator{background:#f26e4f;animation:blink .8s ease-in-out infinite}
+.caption{margin:0;font-size:12px;line-height:17px;color:var(--dsw-alias-label-secondary,#847771)}
+.close{
+  position:absolute;top:4px;right:8px;display:grid;place-items:center;
+  width:29px;height:29px;border:1px solid rgba(151,101,72,.19);
+  border-radius:50%;background:rgba(255,255,255,.82);
+  color:#74594b;font-size:20px;line-height:1;cursor:pointer;pointer-events:auto;
+}
+.close:hover{background:#fff0e8;color:#c65a3c}
+@keyframes ambient{0%,100%{opacity:.8}50%{opacity:1}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.32}}
+@media(max-width:640px){
+  .stage{top:13vh;width:min(280px,calc(100vw - 28px))}
+  .figure{width:192px;height:192px}
+}
+@media(max-height:690px){
+  .stage{top:8vh;padding-top:5px}
+  .figure{width:166px;height:166px}
+}
+@media(prefers-reduced-motion:reduce){
+  .halo,.indicator{animation:none!important;transition:none!important}
+}
