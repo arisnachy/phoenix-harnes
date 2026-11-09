@@ -71,7 +71,8 @@ export function validateCloudTicket(value:unknown):CloudTicket{
   return value as CloudTicket
 }
 export function gradeCloudLeg(leg:CloudLeg,event:unknown):CloudGrade{
-  const e=obj(event),eventId=name(e.id)
+  const e=obj(event),eventId=/^\d{1,20}$/u.test(String(obj(event).id??''))?
+    String(obj(event).id):''
   const common={eventId:leg.eventId,score:null as string|null}
   const unknown=(result:CloudGrade['result'],reason:string):CloudGrade=>({
     ...common,result,reason})
