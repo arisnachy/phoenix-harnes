@@ -7,6 +7,11 @@ on:
       - 'packages/core/tool-sports/tests/espn-odds-history.test.mjs'
       - 'packages/core/tool-sports/src/index.ts'
       - 'packages/core/tool-sports/src/espn-odds.ts'
+      - 'packages/core/tool-sports/src/espn-extra-intelligence.ts'
+      - 'packages/core/tool-sports/src/sports-espn-route-probe.ts'
+      - 'packages/core/tool-sports/src/sports.ts'
+      - 'packages/core/tool-sports/tests/espn-extra-intelligence.test.mjs'
+      - 'packages/core/tool-sports/tests/sports-espn-route-probe.test.mjs'
       - 'packages/core/tool-sports/src/espn-core-intelligence.ts'
       - 'packages/core/tool-sports/src/index.ts'
       - 'packages/core/tool-sports/src/espn-odds.ts'
@@ -42,6 +47,8 @@ jobs:
           node --experimental-strip-types --test packages/core/tool-sports/tests/espn-core-intelligence.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/espn-odds-multiroute.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/espn-odds-history.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/espn-extra-intelligence.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-espn-route-probe.test.mjs
       - name: Report real ESPN Core HTTP availability (not a bookmaker verification)
         run: node --experimental-strip-types scripts/verify-espn-core-endpoints.mjs
       - name: Strict host build

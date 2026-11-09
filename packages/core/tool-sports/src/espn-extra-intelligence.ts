@@ -185,7 +185,7 @@ export function extendedEspnUrl(input:ExtendedEspnInput):string{
   const url=new URL(base+path)
   if(input.mode==='site_scoreboard'){
     if(input.date!==undefined){
-      if(!/^\\d{8}$/u.test(input.date)||Number.isNaN(Date.parse(input.date.slice(0,4)+'-'+input.date.slice(4,6)+'-'+input.date.slice(6,8)+'T00:00:00Z'))||
+      if(!/^\d{8}$/u.test(input.date)||Number.isNaN(Date.parse(input.date.slice(0,4)+'-'+input.date.slice(4,6)+'-'+input.date.slice(6,8)+'T00:00:00Z'))||
         new Date(input.date.slice(0,4)+'-'+input.date.slice(4,6)+'-'+input.date.slice(6,8)+'T00:00:00Z').toISOString().slice(0,10).replaceAll('-','')!==input.date)
         throw Error('Fecha ESPN inválida (YYYYMMDD)')
       url.searchParams.set('dates',input.date)

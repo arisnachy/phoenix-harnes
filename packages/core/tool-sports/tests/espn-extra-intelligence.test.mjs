@@ -102,7 +102,7 @@ test('block invalid dates, injection, unsupported Fantasy/CDN leagues and missin
 test('does not call a ref-only collection an observed data payload',async()=>{
  const input={...base,mode:'game_odds'}
  const result=await readExtendedEspn(input,async()=>({count:1,items:[{
-   $ref:'https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/odds/1',
+   $ref:'https://untrusted.example/odds/1',
  }]}))
  assert.equal(result.status,'ref_only')
  assert.equal(result.resolvedRefs,0)
