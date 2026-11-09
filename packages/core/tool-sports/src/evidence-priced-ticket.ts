@@ -383,11 +383,14 @@ export async function evidencePricedTicket(
       // One chance per leg. Prefer a two-sided, same-bookmaker no-vig
       // estimate; otherwise preserve the disclosed exploratory forecast.
       legWinProbabilityPercent:marketRisk.legs[index]?.noVigPercent??
-        (typeof prior.legWinProbabilityPercent==='number'?
-          prior.legWinProbabilityPercent:null),
+        (quote?.market==='double_chance'?null:
+          typeof prior.legWinProbabilityPercent==='number'?
+            prior.legWinProbabilityPercent:null),
       legProbabilitySource:marketRisk.legs[index]?.noVigPercent!==null&&
         marketRisk.legs[index]?.noVigPercent!==undefined?
-          'bookmaker-market-no-vig':'exploratory-recent-form',
+          'bookmaker-market-no-vig':quote?.market==='double_chance'?
+            'unavailable':typeof prior.legWinProbabilityPercent==='number'?
+              'exploratory-recent-form':'unavailable',
       marketRiskTier:marketRisk.legs[index]?.relativeRisk??'unknown',
       decisionReview:decisionAudit.legs[index]??null,
       specialistResearch:specialistChecks[index]??null,
@@ -408,8 +411,14 @@ export async function evidencePricedTicket(
         ...(quote.market==='double_chance'?{selection:quote.selection==='1X'
           ?'1X · Local o empate':'X2 · Visita o empate',
           market:'Doble oportunidad (1X/X2)',
-          rationale:(String(prior.rationale??'').slice(0,420)+
-            ' · Cobertura del empate; cuota verificada, riesgo vigente.').slice(0,480)}:{})}:{})}
+          rationale:((marketRisk.legs[index]?.noVigPercent!==null&&
+            marketRisk.legs[index]?.noVigPercent!==undefined?
+              'Probabilidad implícita específica del mercado 1X/X2: '+
+              marketRisk.legs[index]!.noVigPercent+'% (NO calibrada). ':
+              'Probabilidad específica de doble oportunidad: no estimable. ')+
+            String(prior.rationale??'').replace(
+              /^Probabilidad individual exploratoria[^.]*\.\s*/u,'').slice(0,340)+
+            ' · Cubre empate; verificar precio, riesgo vigente.').slice(0,480)}:{})}:{})}
   })
   const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,modelAudit,marketRisk,decisionAudit,
@@ -427,11 +436,10 @@ export async function evidencePricedTicket(
       ' (predicción independiente, no cuota). '+
       (marketRisk.weakest?'Pata mas ajustada: '+marketRisk.weakest.selection+
         ' ('+marketRisk.weakest.noVigPercent+'% sin margen). ':'')+
-      (marketRisk.fullPercent===null?'Cuota de dos lados insuficiente para estimar el producto sin margen. ':
-        'Producto del mercado bajo independencia: '+marketRisk.fullPercent+
-        '% (NO prediccion propia). ')+
+      'Cada porcentaje pertenece únicamente a su pata y su mercado; '+
+      'no presentar una probabilidad conjunta del boleto. '+
       'Formas y descanso históricos NO son probabilidades calibradas. El expediente deportivo puede señalar titulares, bajas y estadísticas PENDIENTES; confirmar la casa antes de apostar. '+priced.warning,
-    askPrompt:'Kira, explica decisionAudit.legs por partido: mantener, advertir, esperar o excluir. Contrasta las patas frágiles, titulares, porteros, fuentes y escenarios de 3/4/5. No rellenes cinco por obligación ni atribuyas EV a cuotas sin modelo validado.',
+    askPrompt:'Kira, razona cada pata de forma individual: estimación con origen, datos favorables y contradicciones, lesionados y titulares. No mostrar probabilidad conjunta del boleto; no inventar valor esperado ni afirmar ticket ganador.',
   }}
   return{card,priced:true,placed:false,complete:true,
     conditional:!checklistComplete||elevatedMarketRisk,dossierComplete:checklistComplete,
