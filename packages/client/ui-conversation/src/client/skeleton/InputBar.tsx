@@ -29,6 +29,7 @@ import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
 import { ReferenceIcon } from '../ReferenceIcon.tsx'
 import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
+import { KiraVoiceAvatar } from './KiraVoiceAvatar.tsx'
 import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
 import {
   configureCodexRealtimeUserTranscriptHandler,
@@ -1002,6 +1003,11 @@ export function InputBar({
         <div className={css.notice} role="status">
           {notice.text}
         </div>
+      )}
+      {voiceEnabled && (
+        <KiraVoiceAvatar active={voiceEnabled} phase={voiceAssistant.phase}
+          busy={running} native={!useAlternativeVoice && isCodexRealtimeVoiceActive()}
+          onStop={() => { void toggleVoice() }}/>
       )}
       {/* Trigger clicks land on the card, not the textarea: the toolbar row's
           disabled controls swallow clicks otherwise (the CSS state disarms
