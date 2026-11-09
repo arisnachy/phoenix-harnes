@@ -5,10 +5,11 @@
 import {getFeed,sportsCatalog} from './sports.ts'
 import {createHash} from 'node:crypto'
 import {dailyResearchFetcher} from './sports-daily-preload.ts'
+import {dailyResearchFetcher} from './sports-daily-preload.ts'
 
 export type FreeFixture={sport:string;league:string;eventId:string;date:string;
   home:string;away:string;kickoff:string}
-export type BackupFinding={provider:'TheSportsDB'|'OpenLigaDB'|'OpenFootball'|'FootballData.org'|'balldontlie'|'API-Football'|'MLB StatsAPI'|'NHL Web API'|'nflverse schedules';
+export type BackupFinding={provider:'TheSportsDB'|'OpenLigaDB'|'OpenFootball'|'FootballData.org'|'balldontlie'|'API-Football'|'API-Hockey'|'API-NFL'|'Big Balls NHL'|'MLB StatsAPI'|'NHL Web API'|'nflverse schedules';
   status:'verified'|'partial'|'not-found'|'unavailable'|'conflict';
   url:string;checkedAt:string;detail:string}
 type Obj=Record<string,unknown>
@@ -345,6 +346,52 @@ async function nflverseFixture(input:FreeFixture,fetcher:typeof fetch,
     detail:'nflverse no accesible: '+(e instanceof Error?e.message:String(e)).slice(0,110)}}
 }
 
+/** Optional authenticated corroboration. A verified match does not establish
+ * a starter or carry a bet. Independently credentialed sources must never be
+ * used to bypass unavailable official feeds or provider rate limits.
+ */
+async function keyedFixture(
+  provider:'API-Hockey'|'API-NFL'|'Big Balls NHL',url:string,
+  headers:Record<string,string>,fixture:FreeFixture,
+  parse:(data:unknown)=>EventRow[],fetcher:typeof fetch,
+  now:number,env:NodeJS.ProcessEnv,
+):Promise<BackupFinding>{
+  const base={provider,url,checkedAt:checked(now)}
+  try{
+    // Production fetches pass through the shared persisted quota guardian.
+    const transport=fetcher===fetch?dailyResearchFetcher(fetch,env,()=>now):fetcher
+    const response=await transport(url,{headers,redirect:'error',
+      signal:AbortSignal.timeout(8_000)})
+    if(!response.ok)throw Error('HTTP '+response.status)
+    const data=await response.json() as unknown
+    const error=obj(data).errors
+    if((Array.isArray(error)&&error.length)||Object.keys(obj(error)).length)
+      throw Error('Plan, temporada o proveedor no habilitado')
+    const records=parse(data).slice(0,200)
+    let reverse=false
+    for(const row of records){
+      const state=compare(row.home,row.away,row.when,fixture)
+      if(state==='verified'||state==='partial')
+        return{...base,status:state,
+          detail:'Identidad, localía y hora coinciden; esto NO prueba titular, lesión o cuota'}
+      if(state==='conflict')reverse=true
+    }
+    return{...base,status:reverse?'conflict':'not-found',
+      detail:reverse?'Localía invertida en esta fuente; revisar identidad':
+        'Sin coincidencia verificable en este lote; ESPN no queda invalidado'}
+  }catch(e){return{...base,status:'unavailable',
+    detail:(e instanceof Error?e.message:String(e)).slice(0,120)}}
+}
+const apiTeams=(data:unknown):EventRow[]=>arr(obj(data).response).map(raw=>{
+  const game=obj(raw),teams=obj(game.teams),date=obj(game.date)
+  const when=str(date.time)||str(date.date)||str(game.date)
+  return{home:str(obj(teams.home).name),away:str(obj(teams.away).name),when}
+})
+const bigTeams=(data:unknown):EventRow[]=>arr(obj(data).data).map(raw=>{
+  const game=obj(raw)
+  return{home:str(obj(game.home).name),away:str(obj(game.away).name),
+    when:str(game.kickoff_utc)}
+})
 /** Sources are independent checks, never sources of fresh bookmaker odds.
  * A no-key football.json JSON file has local kickoff times, NOT validated UTC;
  * it can only corroborate date and teams. Optional key is server-side.
@@ -385,6 +432,25 @@ export async function crosscheckFreeFixture(input:FreeFixture,
   }
   if(input.sport==='football'&&input.league==='nfl')
     reports.push(nflverseFixture(input,fetcher,now))
+  // Resolve by exact event identity and kickoff, never use an ESPN event ID
+  // as an API-Sports or Big Balls provider ID.
+  const utcDate=new Date(Date.parse(input.kickoff)).toISOString().slice(0,10)
+  if(input.sport==='hockey'&&input.league==='nhl'){
+    const apiKey=env.PHOENIX_API_HOCKEY_KEY?.trim()
+    if(apiKey)reports.push(keyedFixture('API-Hockey',
+      'https://v1.hockey.api-sports.io/games?date='+utcDate,
+      {'x-apisports-key':apiKey},input,apiTeams,fetcher,now,env))
+    const bigKey=env.PHOENIX_BIGBALLS_API_KEY?.trim()
+    if(bigKey)reports.push(keyedFixture('Big Balls NHL',
+      'https://api.bigballsdata.com/v1/matches?sport=ice_hockey&league=nhl&limit=200',
+      {Authorization:'Bearer '+bigKey},input,bigTeams,fetcher,now,env))
+  }
+  if(input.sport==='football'&&input.league==='nfl'){
+    const apiKey=env.PHOENIX_API_NFL_KEY?.trim()
+    if(apiKey)reports.push(keyedFixture('API-NFL',
+      'https://v1.american-football.api-sports.io/games?date='+utcDate,
+      {'x-apisports-key':apiKey},input,apiTeams,fetcher,now,env))
+  }
   const bdlKey=env.PHOENIX_BALLDONTLIE_API_KEY?.trim()
   if(input.sport==='basketball'&&(input.league==='nba'||input.league==='wnba')&&bdlKey)
     reports.push(ballDontLieFixture(input,fetcher,now,bdlKey))
@@ -454,6 +520,9 @@ export const freeSourceInventory=[
   {name:'OpenF1',access:'no-key-historical',sport:'racing',capability:'F1 telemetry; live may be paid',state:'catalog-only'},
   {name:'SportScore',access:'no-key-attribution',sport:'multi',capability:'scores/stats with UI attribution required',state:'catalog-only'},
   {name:'API-Football',access:'free-key-optional',sport:'soccer',capability:'fixture UTC by league where free season allows, 100/day',state:'integrated-opt-in'},
+  {name:'API-Hockey',access:'free-key-optional',sport:'hockey',capability:'fixtures with date and teams only; starters not confirmed',state:'integrated-opt-in'},
+  {name:'API-NFL',access:'free-key-optional',sport:'football',capability:'fixtures with date and teams only; QB not confirmed',state:'integrated-opt-in'},
+  {name:'Big Balls NHL',access:'free-key-optional',sport:'hockey',capability:'NHL fixture backup; deeper data tier depends on plan',state:'integrated-opt-in'},
   {"name":"NBA Stats / LiveData","access":"no-key-restricted","sport":"basketball","capability":"NBA boxscores/play-by-play; bloqueo 403/timeout posible","state":"catalog-only"},
   {"name":"WNBA Stats","access":"no-key-restricted","sport":"basketball","capability":"WNBA estadísticas, LeagueID=10; acceso externo no garantizado","state":"catalog-only"},
   {"name":"balldontlie","access":"free-key-optional","sport":"basketball","capability":"NBA/WNBA juegos gratuitos con key, 5/min; no props, boxscore ni lesiones","state":"integrated-opt-in"},
@@ -502,6 +571,9 @@ export function freeSourceCoverageForSport(sport:string,env:NodeJS.ProcessEnv=pr
   for(const source of rows){
     const key=source.name==='football-data.org'?'PHOENIX_FOOTBALL_DATA_TOKEN':
       source.name==='API-Football'?'PHOENIX_API_FOOTBALL_KEY':
+      source.name==='API-Hockey'?'PHOENIX_API_HOCKEY_KEY':
+      source.name==='API-NFL'?'PHOENIX_API_NFL_KEY':
+      source.name==='Big Balls NHL'?'PHOENIX_BIGBALLS_API_KEY':
       source.name==='balldontlie'?'PHOENIX_BALLDONTLIE_API_KEY':
       source.name==='The Odds API v4'?'THE_ODDS_API_KEY':
       source.name==='TheOddsAPI'?'THEODDSAPI_API_KEY':null
