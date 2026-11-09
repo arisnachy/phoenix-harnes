@@ -3,9 +3,9 @@
  */
 export const oddsDisciplines=[
   {sport:'football',label:'Fútbol / soccer',market:'1x2',leagues:['Premier League','LaLiga','Liga MX','MLS','Champions League']},
-  {sport:'basketball',label:'Baloncesto',market:'moneyline',leagues:['NBA','WNBA','otras ligas']},
-  {sport:'baseball',label:'Béisbol',market:'moneyline',leagues:['MLB','otras ligas']},
-  {sport:'american-football',label:'Fútbol americano',market:'moneyline',leagues:['NFL','college']},
+  {sport:'basketball',label:'Baloncesto',market:'home_away',leagues:['NBA','WNBA','otras ligas']},
+  {sport:'baseball',label:'Béisbol',market:'home_away',leagues:['MLB','otras ligas']},
+  {sport:'american-football',label:'Fútbol americano',market:'home_away',leagues:['NFL','college']},
   {sport:'ice-hockey',label:'Hockey hielo',market:'home_away',leagues:['NHL','otras ligas']},
   {sport:'tennis',label:'Tenis',market:'match_winner',leagues:['ATP','WTA','otros circuitos']},
   {sport:'handball',label:'Balonmano',market:'1x2',leagues:['según cobertura del proveedor']},
