@@ -141,6 +141,29 @@ type SportsOddsCard = {
   props: { title:string;source:string;subtitle?:string;note:string
     rows:Array<{ event:string;market:string;selection:string;bookmaker:string;price:string;point?:string }> }
 }
+/** Render-only projection of the server's fully sourced per-leg dossier. */
+type SportsTicketNarrative = {
+  status:'documented'|'conditional'
+  selectionWhy:string
+  favorable:string[]
+  contradictions:string[]
+  news:Array<{headline:string;publisher:string;publishedAt:string|null;
+    articleUrl:string|null;imageUrl:string|null}>
+  globalNews:Array<{publisher:string;headline:string;indexedAt:string|null;articleUrl:string;status:string}>
+  externalOpinions:Array<{publisher:string;headline:string;publishedAt:string|null;
+    discoveryUrl:string;status:string}>
+  venue:{name:string|null;city:string|null;venueSplit:string;games:number;wins:number;losses:number}
+  directOpponentHistory:{status:string;note:string;games:number;wins:number;losses:number}
+  referee:{names:string[];bias:'not-assessed';note:string}
+  weather:{status:string;description:string;source:string|null}
+  imagery:{imageUrl:string|null;articleUrl:string|null;attribution:string|null}
+  percentage:{value:number|null;kind:string;warning:string}
+  externalModel:{provider:string;status:string;selection:string|null;
+    modelProbabilityPercent:number|null;updatedAt:string|null;sourceUrl:string|null}
+  sources:Array<{name:string;status:string;url:string|null}>
+  explanationForChat:string
+}
+
 type SportsTicketCard = {
   component: 'sports_ticket_card'; version: 1
   props: {
@@ -148,10 +171,14 @@ type SportsTicketCard = {
     legs: Array<{ event: string; selection: string; price: string; bookmaker: string; when?: string; image?: string
       sport?:string;country?:string;league?:string;market?:string;player?:string;rationale?:string
       homeLogo?:string;awayLogo?:string;homeTeam?:string;awayTeam?:string
-      eventId?:string;eventDate?:string;providerLeague?:string;trackedBet?:SportsTrackedPick }>
+      eventId?:string;eventDate?:string;providerLeague?:string;trackedBet?:SportsTrackedPick;
+      narrative?:SportsTicketNarrative;legWinProbabilityPercent?:number|null;
+      legProbabilitySource?:string;marketNoVigPercent?:number|null;
+      researchStatus?:string;pendingEvidence?:string[] }>
     requestedLegs?:number; combinedOdds: string; stake?: string; grossReturn?: string; note: string
     ticketReference?:string
-    askPrompt?: string
+    askPrompt?: string;chatNarrative?:SportsTicketNarrative[];
+    narrativeInstruction?:string
   }
 }
 
@@ -407,22 +434,105 @@ const sportsSchedule = (value:Record<string,unknown>):value is SportsScheduleCar
       && optionalText(x.askPrompt,400)
        && (x.trackedBets===undefined || Array.isArray(x.trackedBets) && x.trackedBets.length<=12 && x.trackedBets.every(validTrackedPick)))
 }
+
+/** Strict, bounded contract for narrative media and evidence from sports tools. */
+const safeSportsLink=(v:unknown):v is string=>{
+  if(typeof v!=='string'||v.length>700)return false
+  try{
+    const u=new URL(v)
+    return u.protocol==='https:'&&!u.username&&!u.password&&u.hostname.includes('.')
+  }catch{return false}
+}
+const nullableSportsLink=(v:unknown)=>v===null||safeSportsLink(v)
+const boundedSportsText=(v:unknown,n=300)=>typeof v==='string'&&v.length<=n
+const nullableSportsText=(v:unknown,n=300)=>v===null||boundedSportsText(v,n)
+const sportsTicketNarrative=(v:unknown):v is SportsTicketNarrative=>{
+  if(!isRecord(v)||!hasOnlyKeys(v,['eventId','selected','title','status',
+    'selectionWhy','favorable','contradictions','specialistEvidence','criticalPending',
+    'news','globalNews','externalOpinions','externalModel','venue',
+    'directOpponentHistory','referee','weather','imagery','percentage','sources',
+    'explanationForChat']))return false
+  if(!['documented','conditional'].includes(String(v.status))||
+    !isText(v.selectionWhy,1200)||!isText(v.explanationForChat,10_000))return false
+  const texts=(x:unknown,n:number)=>Array.isArray(x)&&x.length<=12&&
+    x.every(y=>boundedSportsText(y,n))
+  if(!texts(v.favorable,450)||!texts(v.contradictions,450))return false
+  if(!Array.isArray(v.news)||v.news.length>6||!v.news.every(x=>isRecord(x)&&
+    hasOnlyKeys(x,['headline','publishedAt','publisher','articleUrl','imageUrl'])&&
+    isText(x.headline,200)&&boundedSportsText(x.publisher,80)&&
+    nullableSportsText(x.publishedAt,48)&&nullableSportsLink(x.articleUrl)&&
+    (x.imageUrl===null||trustedPortrait(x.imageUrl))))return false
+  if(!Array.isArray(v.globalNews)||v.globalNews.length>4||!v.globalNews.every(x=>
+    isRecord(x)&&hasOnlyKeys(x,['publisher','headline','indexedAt','articleUrl','status'])&&
+    boundedSportsText(x.publisher,90)&&isText(x.headline,200)&&
+    nullableSportsText(x.indexedAt,48)&&safeSportsLink(x.articleUrl)&&
+    x.status==='indexed-only'))return false
+  if(!Array.isArray(v.externalOpinions)||v.externalOpinions.length>8||
+    !v.externalOpinions.every(x=>isRecord(x)&&hasOnlyKeys(x,
+      ['publisher','headline','publishedAt','discoveryUrl','status'])&&
+      isText(x.publisher,80)&&isText(x.headline,200)&&
+      nullableSportsText(x.publishedAt,48)&&safeSportsLink(x.discoveryUrl)&&
+      x.status==='indexed-headline-only'))return false
+  const venue=v.venue,history=v.directOpponentHistory,ref=v.referee,
+    weather=v.weather,media=v.imagery,percent=v.percentage,model=v.externalModel
+  const tally=(n:unknown)=>typeof n==='number'&&Number.isInteger(n)&&n>=0&&n<=10
+  if(!isRecord(venue)||!isRecord(history)||!isRecord(ref)||
+    !isRecord(weather)||!isRecord(media)||!isRecord(percent)||!isRecord(model))return false
+  if(!nullableSportsText(venue.name,140)||!nullableSportsText(venue.city,110)||
+    !['verified','not-verified'].includes(String(venue.venueSplit))||
+    !tally(venue.games)||!tally(venue.wins)||!tally(venue.losses)||
+    !['verified','not-verified'].includes(String(history.status))||
+    !boundedSportsText(history.note,360)||!tally(history.games)||
+    !tally(history.wins)||!tally(history.losses))return false
+  if(!Array.isArray(ref.names)||ref.names.length>6||
+    !ref.names.every(x=>isText(x,110))||ref.bias!=='not-assessed'||
+    !boundedSportsText(ref.note,400))return false
+  if(!['verified','unavailable','not-applicable'].includes(String(weather.status))||
+    !boundedSportsText(weather.description,300)||!nullableSportsText(weather.source,85)||
+    !nullableSportsText(media.attribution,100)||!nullableSportsLink(media.articleUrl)||
+    !(media.imageUrl===null||trustedPortrait(media.imageUrl)))return false
+  if(!(percent.value===null||typeof percent.value==='number'&&
+      Number.isFinite(percent.value)&&percent.value>=0&&percent.value<=100)||
+    !['exploratory-recent-form','market-no-vig','unavailable'].includes(String(percent.kind))||
+    !boundedSportsText(percent.warning,300))return false
+  if(!boundedSportsText(model.provider,60)||
+    !['support','contradiction','unavailable'].includes(String(model.status))||
+    !nullableSportsText(model.selection,120)||
+    !(model.modelProbabilityPercent===null||
+      typeof model.modelProbabilityPercent==='number'&&
+      Number.isFinite(model.modelProbabilityPercent)&&model.modelProbabilityPercent>=0&&
+      model.modelProbabilityPercent<=100)||
+    !nullableSportsText(model.updatedAt,50)||!nullableSportsLink(model.sourceUrl))return false
+  return Array.isArray(v.sources)&&v.sources.length<=16&&v.sources.every(x=>
+    isRecord(x)&&hasOnlyKeys(x,['name','status','url'])&&isText(x.name,180)&&
+    ['verified','partial','missing'].includes(String(x.status))&&nullableSportsLink(x.url))
+}
+
 const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
-    ['title','subtitle','source','legs','requestedLegs','combinedOdds','stake','grossReturn','note','askPrompt','ticketReference'])) return false
+    ['title','subtitle','source','legs','requestedLegs','combinedOdds','stake','grossReturn','note','askPrompt','ticketReference',
+      'cloudFollowUp','modelAudit','marketRisk','decisionAudit','chatNarrative','narrativeInstruction','specialistChecks',
+      'reviewedBeforeSelection','removedConflicts'])) return false
   const p = value.props
   return isText(p.title) && optionalText(p.subtitle) && isText(p.source,320)
     && isText(p.combinedOdds,40) && optionalText(p.ticketReference,25)
     && (p.ticketReference===undefined||/^[a-zA-Z0-9-]{1,25}$/u.test(p.ticketReference))
     && optionalText(p.stake,50)
-    && optionalText(p.grossReturn,50) && isText(p.note,MAX_TEXT)
-    && optionalText(p.askPrompt,400) && (p.requestedLegs===undefined ||
+    && optionalText(p.grossReturn,50) && isText(p.note,5000)
+    && optionalText(p.askPrompt,700)
+    && (p.narrativeInstruction===undefined||optionalText(p.narrativeInstruction,900))
+    && (p.chatNarrative===undefined||(Array.isArray(p.chatNarrative)&&p.chatNarrative.length<=12&&
+      p.chatNarrative.every(sportsTicketNarrative)))
+    && (p.requestedLegs===undefined ||
       (typeof p.requestedLegs==='number'&&Number.isInteger(p.requestedLegs)&&p.requestedLegs>=1&&p.requestedLegs<=(p.ticketReference?12:6)))
     && Array.isArray(p.legs) && (p.requestedLegs===undefined||p.legs.length<=Number(p.requestedLegs))
     && (p.legs.length >= 1 || (p.requestedLegs!==undefined
       && p.combinedOdds==='No disponible' && /TICKET INCOMPLETO/u.test(String(p.note))))
     && p.legs.length <= 12 && p.legs.every(x => isRecord(x)
-      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player','rationale','homeLogo','awayLogo','homeTeam','awayTeam','eventId','eventDate','providerLeague','trackedBet'])
+      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player','rationale',
+      'homeLogo','awayLogo','homeTeam','awayTeam','eventId','eventDate','providerLeague','trackedBet',
+      'narrative','legWinProbabilityPercent','legProbabilitySource','legProbabilityWarning','marketNoVigPercent',
+      'marketRiskTier','decisionReview','specialistResearch','researchStatus','pendingEvidence','preliminaryEvidenceTier'])
       && isText(x.event) && isText(x.selection) && isText(x.price,32)
       && isText(x.bookmaker) && optionalText(x.when) && trustedPortrait(x.image)
       && trustedPortrait(x.homeLogo) && trustedPortrait(x.awayLogo)
@@ -436,7 +546,17 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
          && typeof x.eventDate==='string' && /^\d{4}-\d{2}-\d{2}$/u.test(x.eventDate)
          && typeof x.eventId==='string' && /^\d{1,20}$/u.test(x.eventId)
          && !!x.homeTeam && !!x.awayTeam))
-       && optionalText(x.market,70) && optionalText(x.player,140) && optionalText(x.rationale,480))
+       && optionalText(x.market,70) && optionalText(x.player,140) && optionalText(x.rationale,480)
+       && (x.narrative===undefined||sportsTicketNarrative(x.narrative))
+       && (x.legWinProbabilityPercent===undefined||x.legWinProbabilityPercent===null||
+         typeof x.legWinProbabilityPercent==='number'&&Number.isFinite(x.legWinProbabilityPercent)&&
+         x.legWinProbabilityPercent>=0&&x.legWinProbabilityPercent<=100)
+       && (x.marketNoVigPercent===undefined||x.marketNoVigPercent===null||
+         typeof x.marketNoVigPercent==='number'&&Number.isFinite(x.marketNoVigPercent)&&
+         x.marketNoVigPercent>=0&&x.marketNoVigPercent<=100)
+       && optionalText(x.legProbabilitySource,90)&&optionalText(x.researchStatus,50)
+       && (x.pendingEvidence===undefined||Array.isArray(x.pendingEvidence)&&
+         x.pendingEvidence.length<=8&&x.pendingEvidence.every(y=>isText(y,260))))
 }
 
 function sportsTicketBundle(value: Record<string,unknown>): value is SportsTicketBundleCard{
@@ -755,6 +875,86 @@ const Header = ({ title, subtitle, badge, visualIcon = false }: HeaderProps) => 
 const statusClass = (status: Status | undefined): string =>
   status === undefined ? '' : (css[status] ?? '')
 
+
+function SportsTicketResearchNarrative({value,index}:{value:SportsTicketNarrative;index:number}):ReactNode{
+  const label=value.percentage.kind==='market-no-vig'?'Implícita del mercado (sin margen)':
+    value.percentage.kind==='exploratory-recent-form'?'Exploratoria (no calibrada)':'Sin estimación'
+  const photo=value.news.find(x=>x.imageUrl!==null&&x.articleUrl!==null)
+  return <section className={css.sportsTicketNarrative} aria-label={'Investigación de pata '+(index+1)}>
+    <div className={css.sportsTicketNarrativeTop}>
+      <strong>¿Por qué esta selección?</strong>
+      <span>{value.status==='documented'?'Expediente documentado':'Análisis condicional'}</span>
+    </div>
+    <p className={css.sportsTicketNarrativeWhy}>{value.selectionWhy}</p>
+    <div className={css.sportsTicketNarrativeMeasures}>
+      <div><small>Probabilidad individual</small>
+        <strong>{value.percentage.value===null?'Sin dato':value.percentage.value.toFixed(1)+'%'}</strong>
+        <span>{label}</span></div>
+      <div><small>Ante este rival</small>
+        <strong>{value.directOpponentHistory.games?
+          value.directOpponentHistory.wins+'V · '+value.directOpponentHistory.losses+'D':'Sin muestra'}</strong>
+        <span>{value.directOpponentHistory.games} encuentro(s) observados</span></div>
+      <div><small>En el estadio</small>
+        <strong>{value.venue.games?value.venue.wins+'V · '+value.venue.losses+'D':'No verificado'}</strong>
+        <span>{value.venue.name??'Sede por confirmar'}</span></div>
+    </div>
+    <p className={css.sportsTicketNarrativeCaution}>{value.percentage.warning}</p>
+    <div className={css.sportsTicketNarrativeContext}>
+      <p><strong>Clima:</strong> {value.weather.description}</p>
+      <p><strong>Árbitros:</strong> {value.referee.names.length?value.referee.names.join(', '):
+        'asignación no comprobada'} · ninguna preferencia hacia un equipo demostrada.</p>
+      {value.externalModel.status!=='unavailable'&&
+        <p><strong>Modelo externo:</strong> Bet Better · {value.externalModel.selection??'sin selección'} ·
+          {' '}{value.externalModel.modelProbabilityPercent===null?'sin probabilidad':
+            value.externalModel.modelProbabilityPercent.toFixed(1)+'%'}
+          {' '}({value.externalModel.status==='support'?'coincide':'discrepa'}) ·
+          {' '}<a href="https://betbetter.world" target="_blank" rel="noreferrer noopener">fuente</a>
+        </p>}
+    </div>
+    {value.news.length>0&&<div className={css.sportsTicketNarrativeNews}>
+      <strong>Noticias vinculadas</strong>
+      {photo?.imageUrl&&photo.articleUrl&&<a href={photo.articleUrl}
+        target="_blank" rel="noopener noreferrer" className={css.sportsTicketNarrativePhoto}>
+        <img src={photo.imageUrl} loading="lazy" referrerPolicy="no-referrer"
+          alt={'Imagen editorial de '+photo.publisher}/>
+        <small>Imagen de {photo.publisher} · abrir noticia original</small>
+      </a>}
+      {value.news.slice(0,3).map((item,i)=><p key={i}>
+        {item.articleUrl?<a href={item.articleUrl} target="_blank" rel="noopener noreferrer">
+          {item.headline}</a>:<span>{item.headline}</span>}
+        <small>{' '}· {item.publisher} · {item.publishedAt?
+          item.publishedAt.slice(0,16).replace('T',' ')+ ' UTC':'fecha no comprobada'}</small>
+      </p>)}
+      <small>Titular y fotografía no confirman lesiones, alineaciones ni pronósticos.</small>
+    </div>}
+    {(value.globalNews.length>0||value.externalOpinions.length>0)&&
+      <details className={css.sportsTicketNarrativeMore}>
+        <summary>Prensa internacional y opiniones externas</summary>
+        {value.globalNews.map((item,i)=><p key={'g'+i}><a href={item.articleUrl}
+          target="_blank" rel="noopener noreferrer">{item.headline}</a>
+          {' '}· {item.publisher} · indexado {item.indexedAt?.slice(0,10)??'sin hora'}
+        </p>)}
+        {value.externalOpinions.map((item,i)=><p key={'e'+i}><a href={item.discoveryUrl}
+          target="_blank" rel="noopener noreferrer">{item.headline}</a>
+          {' '}· {item.publisher} · titular indexado, no pronóstico verificado.
+        </p>)}
+      </details>}
+    {value.contradictions.length>0&&<div className={css.sportsTicketNarrativeRisks}>
+      <strong>Riesgos y datos por confirmar</strong>
+      <ul>{value.contradictions.slice(0,5).map((x,i)=><li key={i}>{x}</li>)}</ul>
+    </div>}
+    {value.sources.length>0&&<details className={css.sportsTicketNarrativeMore}>
+      <summary>Fuentes y trazabilidad ({value.sources.length})</summary>
+      <ul>{value.sources.map((source,i)=><li key={i}>
+        {source.url?<a href={source.url} target="_blank" rel="noopener noreferrer">
+          {source.name}</a>:source.name}
+        {' '}· {source.status==='verified'?'verificado':
+          source.status==='partial'?'parcial':'sin dato'}
+      </li>)}</ul>
+    </details>}
+  </section>
+}
+
 export function GenerativeUi({ block, onAction, conversationId }: { block: GenerativeUiBlock; onAction?: CanvasAction | undefined; conversationId?: string }): ReactNode {
   switch (block.component) {
     case 'ui_canvas': return <GenerativeCanvas spec={block} onAction={onAction} />
@@ -1051,7 +1251,8 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                   <strong>{leg.selection}</strong>
                 </div>
                 <small>{[leg.market,leg.player?'Jugador · '+leg.player:undefined,unpriced?undefined:leg.bookmaker].filter(Boolean).join(' · ')}</small>
-                {leg.rationale&&<details className={css.sportsTicketReason}><summary>Ver fundamento</summary><p>{sportsDisplayText(leg.rationale)}</p></details>}
+                {leg.narrative?<SportsTicketResearchNarrative value={leg.narrative} index={p.legs.indexOf(leg)}/>:
+                  leg.rationale&&<details className={css.sportsTicketReason}><summary>Ver fundamento</summary><p>{sportsDisplayText(leg.rationale)}</p></details>}
               </div>
               {unpriced&&!receipt
                 ? <span className={css.sportsTicketVerified} aria-label="Partido verificado">✓ Evento</span>
