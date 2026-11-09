@@ -174,8 +174,12 @@ export async function evidenceTicket(
         home:home.name,away:away.name,kickoff:match.date,pick:{
         sport:match.sport,league:match.league,eventId:match.eventId,
         pick:rank>0?'home':'away',
-        rationale:(level==='conditional'?'CANDIDATA CONDICIONAL: tendencia no concluyente. ':'')+
-          rationale.slice(0,level==='conditional'?425:480),
+        rationale:((estimatedPct===null?
+          'Probabilidad de esta pata: no estimable con los datos disponibles. ':
+          'Probabilidad individual exploratoria '+estimatedPct+
+            '% (NO calibrada; no garantiza acierto). ')+
+          (level==='conditional'?'CANDIDATA CONDICIONAL. ':'')+
+          rationale).slice(0,480),
       }})
     }
   }
