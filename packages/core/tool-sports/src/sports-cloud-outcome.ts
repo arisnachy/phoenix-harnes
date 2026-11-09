@@ -5,8 +5,8 @@
 export type CloudSport='basketball'|'hockey'|'football'|'baseball'|'soccer'|'tennis'
 export type CloudLeg={
   sport:CloudSport;league:string;eventId:string;date:string
-  market:'winner'|'double_chance'|'spread'|'total'
-  selection:'home'|'away'|'1X'|'X2'|'over'|'under'
+  market:'winner'|'three-way'|'double_chance'|'spread'|'total'
+  selection:'home'|'away'|'draw'|'1X'|'X2'|'over'|'under'
   line?:number
 }
 export type CloudTicket={
@@ -51,9 +51,11 @@ export function validateCloudTicket(value:unknown):CloudTicket{
       !/^\d{4}-\d{2}-\d{2}$/u.test(day)||
       !Number.isFinite(Date.parse(day+'T00:00:00Z'))||
       new Date(day+'T00:00:00Z').toISOString().slice(0,10)!==day||
-      !['winner','double_chance','spread','total'].includes(market)||
-      !['home','away','1X','X2','over','under'].includes(pick)||
+      !['winner','three-way','double_chance','spread','total'].includes(market)||
+      !['home','away','draw','1X','X2','over','under'].includes(pick)||
       (market==='winner'&&!['home','away'].includes(pick))||
+      (market==='three-way'&&(sport!=='soccer'||
+        !['home','away','draw'].includes(pick)))||
       (market==='double_chance'&&(sport!=='soccer'||!['1X','X2'].includes(pick)))||
       (market==='spread'&&!['home','away'].includes(pick))||
       (market==='total'&&!['over','under'].includes(pick))||
@@ -113,10 +115,11 @@ export function gradeCloudLeg(leg:CloudLeg,event:unknown):CloudGrade{
       return unknown('unverifiable','MLB: innings suficientes no verificados para reglas de casa')
   }
   const difference=scoreHome-scoreAway,points=scoreHome+scoreAway
-  if(leg.market==='winner'){
+  if(leg.market==='winner'||leg.market==='three-way'){
+    if(leg.market==='three-way'&&leg.selection==='draw')return result(difference===0)
     if(difference===0){
-      return leg.sport==='soccer'?
-        unknown('unverifiable','Empate no cubre ganador 1X2; verificar mercado concreto'):
+      return leg.sport==='soccer'||leg.market==='three-way'?
+        result(false):
         {...common,score,result:'push',reason:'Empate final: validar reglas de prórroga'}
     }
     return result(leg.selection==='home'?difference>0:difference<0)
