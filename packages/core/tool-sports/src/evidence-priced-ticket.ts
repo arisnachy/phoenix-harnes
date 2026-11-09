@@ -85,8 +85,10 @@ export async function evidencePricedTicket(
           check.status==='incomplete'?0.09:-0.04
       const reason='Especialista '+check.status+
         '; pasos críticos pendientes '+pending+
-        (conflicts?'; conflicto de identidad':'')
-      return{eventId:fixture.eventId,excluded:conflicts,
+        (conflicts?'; conflicto de identidad':'')+
+        (check.legDecision?.decision==='discard'?'; elección descartada por comparación bilateral':'')
+      return{eventId:fixture.eventId,
+        excluded:conflicts||check.legDecision?.decision==='discard',
         priority:priority-Math.min(12,pending)*0.015,reason}
     })
   }
