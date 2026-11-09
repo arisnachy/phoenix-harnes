@@ -203,3 +203,55 @@ test('API-Football optional free plan corroborates an exact soccer event only',a
   assert.ok(!JSON.stringify(x).includes('secret-foot-key'))
   assert.ok(freeSourceCoverageForSport('soccer',{}).unconfiguredOptional.includes('API-Football'))
 })
+
+
+test('official MLB StatsAPI crosschecks exact teams and UTC without creating prices',async()=>{
+  const fixture={sport:'baseball',league:'mlb',eventId:'90001',
+    date:'2026-11-08',home:'New York Yankees',away:'Boston Red Sox',
+    kickoff:'2026-11-08T23:00:00Z'}
+  const fetcher=async url=>String(url).includes('statsapi.mlb.com')
+    ?reply({dates:[{games:[{gameDate:'2026-11-08T23:00:00Z',
+      teams:{home:{team:{name:'New York Yankees'}},
+        away:{team:{name:'Boston Red Sox'}}}}]}]})
+    :reply({events:[]})
+  const result=await crosscheckFreeFixture(fixture,fetcher)
+  assert.equal(result.length,2)
+  assert.equal(result[1].provider,'MLB StatsAPI')
+  assert.equal(result[1].status,'verified')
+  assert.ok(!('price' in result[1]))
+})
+test('NHL Web official score corroborates both team names and full UTC kickoff',async()=>{
+  const fixture={sport:'hockey',league:'nhl',eventId:'2026020999',
+    date:'2026-11-08',home:'Montreal Canadiens',away:'Toronto Maple Leafs',
+    kickoff:'2026-11-09T00:00:00Z'}
+  const fetcher=async url=>String(url).includes('api-web.nhle.com')
+    ?reply({games:[{startTimeUTC:'2026-11-09T00:00:00Z',
+      homeTeam:{placeName:{default:'Montréal'},commonName:{default:'Canadiens'}},
+      awayTeam:{placeName:{default:'Toronto'},commonName:{default:'Maple Leafs'}}}]})
+    :reply({events:[]})
+  const result=await crosscheckFreeFixture(fixture,fetcher)
+  assert.equal(result.length,2)
+  assert.equal(result[1].provider,'NHL Web API')
+  assert.equal(result[1].status,'verified')
+})
+test('nflverse keyless schedule is only date-level partial evidence, never UTC or odds',async()=>{
+  const fixture={sport:'football',league:'nfl',eventId:'401873059',
+    date:'2026-11-08',home:'Buffalo Bills',away:'Miami Dolphins',
+    kickoff:'2026-11-08T18:00:00Z'}
+  const csv='game_id,season,gameday,away_team,home_team,espn\n'+
+    '2026_10_MIA_BUF,2026,2026-11-08,MIA,BUF,401873059\n'
+  const fetcher=async url=>String(url).includes('/nfldata/')
+    ?new Response(csv,{status:200})
+    :reply({events:[]})
+  const result=await crosscheckFreeFixture(fixture,fetcher)
+  assert.equal(result.length,2)
+  assert.equal(result[1].provider,'nflverse schedules')
+  assert.equal(result[1].status,'partial')
+  assert.match(result[1].detail,/UTC NO corroborado/)
+  assert.equal((await crosscheckFreeFixture({...fixture,home:fixture.away,
+    away:fixture.home},fetcher))[1].status,'conflict')
+  const unavailable=await crosscheckFreeFixture(fixture,async url=>
+    String(url).includes('/nfldata/')?new Response('throttled',{status:429})
+      :reply({events:[]}))
+  assert.equal(unavailable[1].status,'unavailable')
+})
