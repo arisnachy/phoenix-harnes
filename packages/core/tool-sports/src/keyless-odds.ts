@@ -245,6 +245,29 @@ export function recoverScraperRows(stdout:unknown,output:unknown):unknown[]{
  * exposing environment variables, authorization headers or a raw shell command.
  * @param error - Untrusted transport error to sanitize before displaying.
  */
+/** Separate empty fixture slates from genuine runtime/market failures. */
+export function classifyScraperFailure(error:unknown):
+  'no-events'|'invalid-market'|'missing-executable'|'timeout'|
+  'missing-playwright-browser'|'site-blocked-or-limited'|'scraper-exit-error'{
+  const record=error&&typeof error==='object'?error as Record<string,unknown>:{}
+  const stderr=typeof record.stderr==='string'?record.stderr:''
+  const stdout=typeof record.stdout==='string'?record.stdout:''
+  const message=typeof record.message==='string'?record.message:''
+  const detail=(stderr+'\\n'+stdout+'\\n'+message).slice(0,100_000)
+  const code=String(record.code??'')
+  if(code==='ENOENT')return 'missing-executable'
+  if(code==='ETIMEDOUT'||record.killed===true)return 'timeout'
+  if(/invalid market\\(s\\)|unsupported market|invalid choice.{0,80}market/iu.test(detail))
+    return 'invalid-market'
+  if(/executable doesn.t exist|playwright.*install|chromium.*not found/iu.test(detail))
+    return 'missing-playwright-browser'
+  if(/403|429|access denied|captcha|cloudflare/iu.test(detail))
+    return 'site-blocked-or-limited'
+  if(/no upcoming match links|no upcoming matches|no matches found|no events found/iu.test(detail)
+    &&/(?:\\b0\\s+failed\\b|\\bfailed\\s*[:=]\\s*0\\b)/iu.test(detail))
+    return 'no-events'
+  return 'scraper-exit-error'
+}
 export function describeScraperError(error:unknown):string{
   const record=error&&typeof error==='object'?error as Record<string,unknown>:{}
   const raw=typeof record.stderr==='string'?record.stderr:''
@@ -262,12 +285,7 @@ export function describeScraperError(error:unknown):string{
     String(record.code).slice(0,40):'desconocido'
   const signal=typeof record.signal==='string'?record.signal.slice(0,30):'ninguna'
   const killed=record.killed===true
-  const category=code==='ENOENT'?'missing-executable':
-    code==='ETIMEDOUT'||killed?'timeout':
-      /executable doesn.t exist|playwright.*install|chromium.*not found/iu.test(raw)?
-        'missing-playwright-browser':
-      /403|429|access denied|captcha|cloudflare/iu.test(raw)?
-        'site-blocked-or-limited':'scraper-exit-error'
+  const category=classifyScraperFailure(error)
   return 'category='+category+'; exitCode='+code+'; signal='+signal+
     '; killed='+String(killed)+'; stderr='+ (diagnostic||'sin detalles de stderr')+
     '; verificar el log local del instalador y una consulta CLI controlada.'
@@ -299,6 +317,8 @@ async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS
     const recovered=recoverScraperRows(stdout,output)
     if(recovered.length)return recovered
     if(failure){
+      // A complete zero-failed empty listing is not a broken scraper.
+      if(classifyScraperFailure(failure)==='no-events')return []
       throw Error('OddsHarvester falló sin cuotas recuperables: '+describeScraperError(failure))
     }
     return Array.isArray(output)?output:[]
@@ -317,9 +337,10 @@ export async function keylessOdds(
   if(!sportOK(sport)||!marketOK(sport,market))throw Error('Deporte o mercado sin soporte verificado en OddsHarvester')
   if(!validDate(date))throw Error('Fecha de cuotas inválida')
   if(!keylessEnabled(env))throw Error('Scraping sin API key desactivado por el operador')
-  const key=[sport,market,date].join('|')
+  // Replacing a broken local CLI must not reuse another executable's snapshot.
+  const key=[env.PHOENIX_SPORTS_ODDSHARVESTER_BIN||'oddsharvester',sport,market,date].join('|')
   const cached=runner===runScraper?cache.get(key):undefined
-  if(cached&&now>=cached.at&&now-cached.at<300_000)return cached.rows
+  if(cached&&now>=cached.at&&now-cached.at<(cached.rows.length?300_000:45_000))return cached.rows
   const running=runner===runScraper?inFlight.get(key):undefined
   if(running)return running
   const task=(async()=>{
