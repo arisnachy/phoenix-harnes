@@ -38,7 +38,6 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
     let silent:GainNode|undefined
     let samples:Uint8Array|undefined
     let nextAttempt=0
-    let lastSpeech=''
     let smooth=0
     let expression='neutral'
     const start=performance.now()
@@ -80,10 +79,16 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
         rms=Math.sqrt(total/samples.length)
       }
       const speech=getVoiceAssistantSpokenText()
-      if(phase==='speaking'&&speech!==lastSpeech){
-        lastSpeech=speech
-        expression=kiraExpressionFromSpeech(speech)
-        if(figureRef.current)figureRef.current.dataset.expression=expression
+      if(phase==='speaking'&&speech){
+        // Use the approximate spoken phrase rather than the whole future reply.
+        // Precise alignment needs timed visemes from the voice engine.
+        const cursor=Math.min(speech.length,Math.floor(elapsed/97))
+        const phrase=speech.slice(Math.max(0,cursor-85),Math.min(speech.length,cursor+24))
+        const next=kiraExpressionFromSpeech(phrase)
+        if(expression!==next){
+          expression=next
+          if(figureRef.current)figureRef.current.dataset.expression=next
+        }
       }
       const fallback=phase==='speaking'
         ?kiraSpeechMouthEnvelope(speech,elapsed):0
@@ -93,6 +98,7 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
       smooth=.68*smooth+.32*target
       if(stageRef.current){
         stageRef.current.style.setProperty('--kira-voice-level',String(smooth))
+        stageRef.current.style.setProperty('--kira-orb-scale',String(1+smooth*.10))
       }
       if(mouthRef.current){
         const opening=phase==='speaking'?smooth:0
@@ -140,6 +146,10 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
             fill="#662d29" transform="rotate(-13 69 77.3)" opacity=".2"/>
           <ellipse ref={lipRef} cx="69" cy="77.7" rx="4.7" ry="1.05"
             fill="#f09082" transform="rotate(-13 69 77.7)" opacity="0"/>
+          <path className={css.brow} d="M61 45.5 Q68 41 76 44.5"
+            stroke="#5c372d" strokeWidth="1.1" fill="none"/>
+          <ellipse className={css.cheek} cx="75.5" cy="71.3"
+            rx="7" ry="3.6" fill="#f29083"/>
         </svg>
       </div>
     </div>
