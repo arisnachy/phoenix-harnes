@@ -1,8 +1,11 @@
-import {useEffect, useRef} from 'react'
+import {useCallback, useEffect, useRef, useState} from 'react'
 import type {VoiceAssistantPhase} from '../voice.ts'
 import {getVoiceAvatarAudioStream,getVoiceAssistantSpokenText} from '../voice.ts'
 import {KIRA_VOICE_PORTRAIT} from './kira-voice-portrait.ts'
 import {kiraAudioMouthLevel,kiraExpressionFromSpeech,kiraSpeechMouthEnvelope} from './kira-voice-movement.ts'
+import type {KiraAvatarExpression} from './kira-voice-movement.ts'
+import {KiraVoice3DSurface} from './KiraVoice3DSurface.tsx'
+import type {Kira3DMotion} from './KiraVoice3DSurface.tsx'
 import css from './KiraVoiceAvatar.module.css'
 
 export interface KiraVoiceAvatarProps {
@@ -22,6 +25,9 @@ const PHASE_TEXT={
  * and head pose. For actual viseme-level animation a rigged art asset is needed.
  */
 export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvatarProps) {
+  const [gpuReady,setGpuReady]=useState(false)
+  const onGpuReady=useCallback((ready:boolean)=>setGpuReady(ready),[])
+  const motionRef=useRef<Kira3DMotion>({level:0,expression:'neutral'})
   const figureRef=useRef<HTMLDivElement>(null)
   const portraitRef=useRef<HTMLImageElement>(null)
   const mouthRef=useRef<SVGEllipseElement>(null)
@@ -32,6 +38,8 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
   useEffect(()=>{
     if(!active)return
     let frame=0
+    motionRef.current.level=0
+    motionRef.current.expression='neutral'
     let audioContext:AudioContext|undefined
     let source:MediaStreamAudioSourceNode|undefined
     let analyser:AnalyserNode|undefined
@@ -40,7 +48,7 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
     let nextAttempt=0
     let smooth=0
     let seenWaveform=false
-    let expression='neutral'
+    let expression:KiraAvatarExpression='neutral'
     const start=performance.now()
     const reduced=typeof window.matchMedia==='function'
       &&window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -102,6 +110,8 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
         ?(hasMeasuredVoice?kiraAudioMouthLevel(rms):fallback)
         :(phase==='listening'?kiraAudioMouthLevel(rms):0)
       smooth=.68*smooth+.32*target
+      motionRef.current.level=phase==='speaking'||phase==='listening'?smooth:0
+      motionRef.current.expression=expression
       if(stageRef.current){
         stageRef.current.style.setProperty('--kira-voice-level',String(smooth))
         stageRef.current.style.setProperty('--kira-orb-scale',String(1+smooth*.10))
@@ -140,7 +150,8 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
   return <section ref={stageRef} className={css.stage}
       data-kira-voice-avatar data-voice-phase={observedPhase}
       data-audio-reactive="false" aria-label={'Kira · '+PHASE_TEXT[observedPhase]}>
-    <div ref={figureRef} className={css.figure} data-expression="neutral">
+    <div ref={figureRef} className={css.figure}
+      data-expression="neutral" data-renderer={gpuReady?'webgl-3d':'portrait-2d'}>
       <div className={css.halo}/>
       <div className={css.frame}>
         <img ref={portraitRef} src={KIRA_VOICE_PORTRAIT}
@@ -157,6 +168,7 @@ export function KiraVoiceAvatar({active,phase,busy,native,onStop}:KiraVoiceAvata
           <ellipse className={css.cheek} cx="75.5" cy="71.3"
             rx="7" ry="3.6" fill="#f29083"/>
         </svg>
+        <KiraVoice3DSurface phase={phase} busy={busy} motionRef={motionRef} onReady={onGpuReady}/>
       </div>
     </div>
     <div className={css.statusLine}>
