@@ -122,7 +122,7 @@ export function normalizeOddsHarvester(
         const period=str(row.period,50)
         if(period!=='FullTime'&&period!=='FullIncludingOT')continue
         // 2-way match winners for these sports must include overtime/extra innings.
-        if(market==='h2h'&&['basketball','baseball','american-football','ice-hockey'].includes(sport)
+        if(market==='h2h'&&['basketball','baseball','american-football','ice-hockey'].includes(sportKey)
           &&period!=='FullIncludingOT')continue
         const bookmaker=str(row.bookmaker_name,100)
         if(!bookmaker)continue
