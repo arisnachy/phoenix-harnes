@@ -68,6 +68,7 @@ export async function evidencePricedTicket(
     const games=candidates.map(c=>({
       sport:c.sport,league:c.league,eventId:c.eventId,date:day,
       home:c.home,away:c.away,kickoff:c.kickoff,
+      ...(c.pick==='draw'?{}:{pick:c.pick}),
     }))
     const checks=await specialistResearcher(games,researchFetcher,now,env,[],8_000)
     reviewedBeforeSelection=checks.length
@@ -100,7 +101,8 @@ export async function evidencePricedTicket(
     return !existing||existing.status==='unavailable'
   })
     .map(e=>({sport:e.sport,league:e.league,eventId:e.eventId,
-      date:day,home:e.home,away:e.away,kickoff:e.kickoff}))
+      date:day,home:e.home,away:e.away,kickoff:e.kickoff,
+      ...(e.pick==='draw'?{}:{pick:e.pick})}))
   const retried=await specialistResearcher(pendingGames,researchFetcher,now,env)
   const byId=new Map(retried.map(x=>[x.eventId,x]))
   const specialistChecks:SpecialistGate[]=research.events.map(e=>byId.get(e.eventId)??preview.get(e.eventId)??{
