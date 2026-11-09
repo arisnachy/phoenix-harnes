@@ -51,6 +51,7 @@ import { secondaryMarketSourceCatalog } from './sports-secondary-sources.ts'
 import {discoverEditorialResearch,type EditorialSource,editorialDomains} from './sports-editorial-discovery.ts'
 import {auditSportsCalibration,availableSportCalibration,calibratedSportsForecast} from './sports-calibration.ts'
 import {sportsEnvWithVaultKey} from './sports-credential-env.ts'
+import {registerCloudForecast,registerCloudReceipt} from './sports-cloud-host.ts'
 import {researchCoverage,researchCredentialRefs,coverageReport} from './sports-research-coverage.ts'
 
 import {mlbResearch} from './mlb-evidence-research.ts'
@@ -71,6 +72,7 @@ export const inject = ['tools','systemPrompt']
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'SEGUIMIENTO CLOUD: al crear un ticket de investigación, registrar automáticamente solo si PHOENIX_SPORTS_CLOUD_TRACKING_ENABLED=1 y las credenciales GitHub/AES están en la bóveda. Devolver cloudFollowUp con su estado real, no afirmar que habrá correo cuando status sea disabled, needs-configuration o error. El cifrado mantiene ocultos los eventos en un issue público, pero los metadatos de issue sí son visibles. Cuando los encuentros terminen, un workflow remoto revisará marcadores y enviará correo únicamente si RESEND_API_KEY, correo destinatario, remitente y clave AES están configurados en GitHub Actions. Nunca afirmar que la banca confirmó pago ni que un correo salió sin prueba. ',
   'TICKET DIARIO 5 O 6: primero ampliar y contrastar la cartelera multi-liga, después investigar todos los expedientes y usar decisionAudit. Si existen 5-6 encuentros futuros verificados, presentar hasta seis mejores CANDIDATAS, aunque deban marcarse CONDICIONALES, nunca inventar una victoria aprobada. Diversidad deportiva no autoriza eliminar una pata real y el precio no sustituye la investigación. Para cada pata reporta legWinProbabilityPercent con legProbabilitySource: NO sumar ni multiplicar porcentajes como pronóstico del ticket completo. No convertir un porcentaje exploratorio o no-vig en certeza predictiva; si no puede estimarse, mostrar valor pendiente y por qué. Confirmar estado de riesgo de cada pata antes de cualquier ejecución. ',
   'CLAVES Y FUENTES SIN BLOQUEOS: para saber qué conectores faltan llama sports_chat_research_provider_status. No pidas que peguen una clave en mensajes normales del modelo ni la aceptes como argumento de herramientas. Si el usuario quiere añadirla, indica el comando humano seguro /secret set NOMBRE VALOR, interceptado por el Host antes del agente y con recordInput=false, o la interfaz de credenciales segura disponible. Pedir permiso y una sola clave pertinente. No bloquear investigación ni tickets por claves ausentes; usa fuentes públicas, respaldo y caché. Tener clave NO equivale a fuente activa ni a datos comprobados. ',
 
@@ -777,13 +779,17 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
+      const env=await sportsEnv(ctx)
       const result=await registerSportsReceipt({
         ticketReference:args.ticketReference,date:args.date,bookmaker:args.bookmaker,
         ...(args.stake===undefined?{}:{stake:args.stake}),
         ...(args.reportedReturn===undefined?{}:{reportedReturn:args.reportedReturn}),
         legs:args.legs as ReceiptLegInput[],
-      },fetch,await sportsEnv(ctx))
-      return JSON.stringify(result.uiBlock)
+      },fetch,env)
+      const cloudFollowUp=await registerCloudReceipt(result.ticketReference,
+        result.linkedEvents,env)
+      return JSON.stringify({...result.uiBlock,
+        props:{...result.uiBlock.props,cloudFollowUp}})
     },
     presentCall:()=>({card:'generic',title:'Vincular objetivos del boleto automáticamente',kind:'read' as const}),
   }))
@@ -823,10 +829,12 @@ export function apply(ctx: Context): void {
         throw Error('No se admite repetir número de confirmación.')
       const env=await sportsEnv(ctx)
       const verified=await Promise.all(receipts.map(x=>registerSportsReceipt(x,fetch,env)))
+      const cloud=await Promise.all(verified.map(x=>
+        registerCloudReceipt(x.ticketReference,x.linkedEvents,env)))
       return JSON.stringify({component:'sports_ticket_bundle_card',version:1,props:{
         title:'PHOENIX · Seguimiento automático de boletos',
         source:'Recibos del usuario + ESPN Site API · '+new Date().toISOString(),
-        tickets:verified.map(x=>x.uiBlock.props),
+        tickets:verified.map((x,i)=>({...x.uiBlock.props,cloudFollowUp:cloud[i]})),
       }})
     },
     presentCall:()=>({card:'generic',title:'Seguir todas las patas de mis boletos',kind:'read' as const}),
@@ -1587,9 +1595,17 @@ export function apply(ctx: Context): void {
     async execute(args){
       const preference=args.marketPreference??'winner'
       if(preference!=='winner'&&preference!=='double_chance')throw Error('Mercado de ticket inválido')
+      const env=await sportsEnv(ctx)
       const result=await evidencePricedTicket(args.count,args.date,args.sport,args.stake??0,
-        Date.now(),await sportsEnv(ctx),fetch,undefined,preference)
-      return JSON.stringify({uiBlock:result.card,requestedLegs:args.count,
+        Date.now(),env,fetch,undefined,preference)
+      const cloudFollowUp=result.trackingEvents.length?
+        await registerCloudForecast(result.trackingEvents,preference,
+          result.priced,env):{status:'disabled',issueNumber:null,
+          reason:'Sin eventos verificados que puedan enviarse al monitor remoto.'}
+      return JSON.stringify({uiBlock:{...result.card,
+        props:{...result.card.props,cloudFollowUp}},
+        cloudFollowUp,reviewedBeforeSelection:result.reviewedBeforeSelection,
+        removedConflicts:result.removedConflicts,requestedLegs:args.count,
         complete:result.complete,priced:result.priced,placed:false,
         conditional:result.conditional,dossierComplete:result.dossierComplete,
         verifiedEvents:result.verifiedEvents,quotedLegs:result.quotedLegs,
@@ -1614,8 +1630,14 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const result=await evidenceTicket(args.count,args.date,args.sport,fetch,Date.now(),await sportsEnv(ctx))
-      return JSON.stringify({uiBlock:result.card,requestedLegs:args.count,verifiedEvents:result.verifiedEvents,
+      const env=await sportsEnv(ctx),day=args.date??santoDomingoDay()
+      const result=await evidenceTicket(args.count,args.date,args.sport,fetch,Date.now(),env)
+      const cloudFollowUp=result.events.length?await registerCloudForecast(
+        result.events.map(x=>({...x,date:day})), 'winner',false,env):
+        {status:'disabled',issueNumber:null,reason:'Sin eventos verificables para monitorizar.'}
+      return JSON.stringify({uiBlock:{...result.card,
+        props:{...result.card.props,cloudFollowUp}},
+        cloudFollowUp,requestedLegs:args.count,verifiedEvents:result.verifiedEvents,
         complete:result.complete,candidatesEvaluated:result.candidatesEvaluated,
         researchLeagues:result.researchLeagues,insufficientEvidence:result.insufficientEvidence,
         researchStandard:result.researchStandard,scannedSports:result.scannedSports,
