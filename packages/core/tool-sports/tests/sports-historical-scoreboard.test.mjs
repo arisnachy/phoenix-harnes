@@ -74,3 +74,23 @@ test('team schedule is third independent path after ESPN month/day outage',async
   assert.equal(x.scheduleSuccesses,1)
   assert.deepEqual(x.events.map(e=>e.id),['511'])
 })
+
+test('a broken league archive reaches three different fixtures with a strict six-team fallback cap',async()=>{
+  const calls=[]
+  const read=async url=>{
+    calls.push(url)
+    if(url.includes('/teams/'))return {events:[game(
+      '9'+(url.match(/teams\/(\d+)/u)?.[1]??'0'),
+      '2026-11-05T19:00:00Z',
+    )]}
+    return null
+  }
+  const teamIds=['101','102','201','202','301','302','401','402']
+  const audit=await readHistoricalScoreboard(root,'2026-11-01','2026-11-06',
+    read,teamIds)
+  assert.equal(audit.scheduleQueries,6)
+  assert.equal(audit.scheduleSuccesses,6)
+  assert.equal(audit.status,'partial')
+  assert.equal(calls.filter(url=>url.includes('/teams/')).length,6)
+  assert.ok(!calls.some(url=>url.includes('/teams/401/')))
+})
