@@ -16,8 +16,10 @@ const runFile = promisify(execFile)
 export const keylessSports = {
   football:['1x2','double_chance','btts','over_under'],
   basketball:['moneyline','home_away','1x2','over_under'],
-  baseball:['moneyline','over_under'],
-  'american-football':['moneyline','over_under'],
+  // 'moneyline' is accepted as a compatibility alias, NEVER passed to the CLI.
+  // Actual OddsHarvester enums expose home_away (FT incl. OT/extra innings).
+  baseball:['moneyline','home_away','1x2','over_under'],
+  'american-football':['moneyline','home_away','1x2','over_under'],
   tennis:['match_winner','total_sets_over_under','total_games_over_under'],
   'ice-hockey':['home_away','1x2','double_chance','btts','over_under'],
   'rugby-league':['home_away','over_under'],
@@ -32,6 +34,7 @@ export type KeylessQuote = {
   eventId:string;bookmaker:string;market:string;selection:string;point:number|null
   price:number;home:string;away:string;time:string;updatedAt:string
   source:string
+  period?:'FullTime'|'FullIncludingOT'
   observedAt?:string
   sportKey:string
   league?:string
@@ -56,6 +59,12 @@ const price=(value:unknown):number|null=>{
 const sportOK=(value:string):value is KeylessSport=>Object.hasOwn(keylessSports,value)
 const marketOK=(sport:KeylessSport,market:string):boolean=>
   (keylessSports[sport] as readonly string[]).includes(market)
+/** Upstream v0.20 enums, not README prose, define which CLI tokens exist.
+ * Public callers retain moneyline, but no unsupported token reaches Python.
+ */
+export const cliMarket=(sport:KeylessSport,market:string):string=>
+  market==='moneyline'&&(['basketball','baseball','american-football'] as string[]).includes(sport)
+    ?'home_away':market
 const safeLink=(value:unknown):string|null=>{
   const raw=str(value,500)
   try{
@@ -112,6 +121,9 @@ export function normalizeOddsHarvester(
         const row=item as Record<string,unknown>
         const period=str(row.period,50)
         if(period!=='FullTime'&&period!=='FullIncludingOT')continue
+        // 2-way match winners for these sports must include overtime/extra innings.
+        if(market==='h2h'&&['basketball','baseball','american-football','ice-hockey'].includes(sport)
+          &&period!=='FullIncludingOT')continue
         const bookmaker=str(row.bookmaker_name,100)
         if(!bookmaker)continue
         const blocked=new Set(Array.isArray(row.blocked_outcomes)?row.blocked_outcomes.filter(x=>typeof x==='string'):[])
@@ -119,11 +131,12 @@ export function normalizeOddsHarvester(
           if(blocked.has(key))continue // Withdrawn markets are not active quotes.
           const decimal=price(row[key])
           if(decimal===null)continue
-          const identity=[eventId,bookmaker,market,selection,point??''].join('|')
+          const identity=[eventId,bookmaker,market,selection,point??'',period].join('|')
           if(dedupe.has(identity))continue
           dedupe.add(identity)
           result.push({eventId,bookmaker,market,selection,point,price:decimal,home,away,
             time:new Date(kickoff).toISOString(),updatedAt:new Date(observed).toISOString(),
+            period:period as 'FullTime'|'FullIncludingOT',
             league:str(game.league_name,120),matchLink:link,
             source:historical?'OddsHarvester/OddsPortal (histórico, no vigente)':'OddsHarvester/OddsPortal (sin API key)',sportKey})
           if(result.length>=2500)return result
@@ -145,7 +158,7 @@ export function oddsHarvesterHistoricArgs(
     !/^(?:20[0-9]{2})(?:-20[0-9]{2})?$/u.test(season)||
     !file||file.length>512)throw Error('Consulta histórica inválida')
   return ['historic','--sport',sport,'--league',league,'--season',season,
-    '--market',market,'--max-pages','2','--headless','--format','json',
+    '--market',cliMarket(sport,market),'--max-pages','2','--headless','--format','json',
     '--stream-ndjson','--output',file]
 }
 export async function keylessHistoricOdds(
@@ -206,11 +219,13 @@ const validDate=(day:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(day)
  */
 export function oddsHarvesterArgs(sport:KeylessSport,market:string,day:string,file:string):string[]{
   if(!sportOK(sport)||!marketOK(sport,market)||!validDate(day))throw Error('Petición no permitida')
-  const period=((sport==='ice-hockey'||sport==='basketball')&&market==='home_away')
-    ?'full_including_ot':
-    ((sport==='basketball'||sport==='american-football')&&market==='1x2')?'full_time':null
+  const actual=cliMarket(sport,market)
+  const period=(['ice-hockey','basketball','baseball','american-football'].includes(sport)
+    &&actual==='home_away')?'full_including_ot':
+    ((sport==='basketball'||sport==='american-football'||sport==='baseball')
+      &&actual==='1x2')?'full_time':null
   return ['upcoming','--sport',sport,'--date',day.replaceAll('-',''),
-    '--market',market,...(period?['--period',period]:[]),
+    '--market',actual,...(period?['--period',period]:[]),
     '--headless','--format','json','--stream-ndjson','--output',file]
 }
 /** Run a fixed local executable with fixed command shape, no shell, no user URLs. */
@@ -241,6 +256,15 @@ export function recoverScraperRows(stdout:unknown,output:unknown):unknown[]{
   return rows
 }
 /** Run a fixed local executable with fixed command shape, no shell, no user URLs. */
+/** Empty OddsHarvester discovery is not a transport error. Require explicit
+ * zero-failure accounting as well as a no-fixture message to avoid hiding 403s.
+ */
+export const isScraperNoEvents=(stderr:unknown):boolean=>{
+  if(typeof stderr!=='string')return false
+  return /(?:no\s+(?:upcoming\s+)?(?:matches|fixtures|match\s+links)|0\s+(?:upcoming\s+)?(?:matches|fixtures|match\s+links)\s+found|found\s+0\s+(?:matches|match\s+links|fixtures))/iu.test(stderr)
+    &&/\b0\s+(?:failed|failures|errors)\b/iu.test(stderr)
+    &&!/\b(?:403|401|429|captcha|access\s+denied|cloudflare|timed\s*out)\b/iu.test(stderr)
+}
 /** Sanitized transport failure: retain exit status and stderr diagnostics without
  * exposing environment variables, authorization headers or a raw shell command.
  * @param error - Untrusted transport error to sanitize before displaying.
@@ -263,6 +287,7 @@ export function describeScraperError(error:unknown):string{
   const signal=typeof record.signal==='string'?record.signal.slice(0,30):'ninguna'
   const killed=record.killed===true
   const category=code==='ENOENT'?'missing-executable':
+    isScraperNoEvents(raw)?'no-upcoming-events':
     code==='ETIMEDOUT'||killed?'timeout':
       /executable doesn.t exist|playwright.*install|chromium.*not found/iu.test(raw)?
         'missing-playwright-browser':
@@ -299,6 +324,7 @@ async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS
     const recovered=recoverScraperRows(stdout,output)
     if(recovered.length)return recovered
     if(failure){
+      if(isScraperNoEvents((failure as {stderr?:unknown}).stderr))return []
       throw Error('OddsHarvester falló sin cuotas recuperables: '+describeScraperError(failure))
     }
     return Array.isArray(output)?output:[]
@@ -317,7 +343,8 @@ export async function keylessOdds(
   if(!sportOK(sport)||!marketOK(sport,market))throw Error('Deporte o mercado sin soporte verificado en OddsHarvester')
   if(!validDate(date))throw Error('Fecha de cuotas inválida')
   if(!keylessEnabled(env))throw Error('Scraping sin API key desactivado por el operador')
-  const key=[sport,market,date].join('|')
+  const actual=cliMarket(sport,market)
+  const key=[sport,actual,date].join('|')
   const cached=runner===runScraper?cache.get(key):undefined
   if(cached&&now>=cached.at&&now-cached.at<300_000)return cached.rows
   const running=runner===runScraper?inFlight.get(key):undefined
@@ -325,16 +352,12 @@ export async function keylessOdds(
   const task=(async()=>{
     let raw:unknown
     try{
-      raw=await runner(sport,market,date,env)
+      raw=await runner(sport,actual,date,env)
     }catch(error){
-      // Some installed OddsHarvester builds expose basketball two-way
-      // including-OT winners as home_away instead of moneyline.
-      // Retry ONLY an explicit invalid-market error; never hide 401/403,
-      // browser failures or rate-limit errors behind a different market.
+      // Explicitly distinguish a no-fixture discovery from CLI/network failure.
+      // Never retry authorization, captcha or rate limiting with guessed tokens.
       const reason=error instanceof Error?error.message:String(error)
-      if(sport==='basketball'&&market==='moneyline'
-        &&/(?:invalid|unsupported|not.*valid|unexpected).{0,140}moneyline|moneyline.{0,140}(?:invalid|unsupported|not.*valid)/iu.test(reason))
-        raw=await runner(sport,'home_away',date,env)
+      if(isScraperNoEvents(reason))raw=[]
       else throw error
     }
     const rows=normalizeOddsHarvester(raw,sport,now,3_600_000)
