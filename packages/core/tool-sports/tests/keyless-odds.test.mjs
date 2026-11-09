@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {keylessOdds,normalizeOddsHarvester,recoverScraperRows,oddsHarvesterArgs,oddsHarvesterHistoricArgs,keylessHistoricOdds} from '../src/keyless-odds.ts'
+import {keylessOdds,normalizeOddsHarvester,recoverScraperRows,oddsHarvesterArgs,oddsHarvesterHistoricArgs,keylessHistoricOdds,cliMarket,isScraperNoEvents,describeScraperError} from '../src/keyless-odds.ts'
 const now=Date.parse('2026-10-28T18:05:00Z')
 const fixture=[{
   scraped_date:'2026-10-28 18:00:00 UTC',match_date:'2026-10-28 23:00:00 UTC',
@@ -95,4 +95,61 @@ test('keyless historic query preserves past lines rather than mislabeling as liv
   assert.ok(args.includes('--stream-ndjson'))
   await assert.rejects(()=>keylessHistoricOdds('football','../../unsafe',
     '2024-2025','1x2',{PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'1'},now,async()=>old),/inválida/)
+})
+
+test('upstream CLI maps NBA, MLB and NFL two-way winners to home_away including OT',()=>{
+  for(const sport of ['basketball','baseball','american-football']){
+    assert.equal(cliMarket(sport,'moneyline'),'home_away')
+    const args=oddsHarvesterArgs(sport,'moneyline','2026-10-29','odds.json')
+    assert.equal(args[args.indexOf('--market')+1],'home_away')
+    assert.equal(args[args.indexOf('--period')+1],'full_including_ot')
+    assert.ok(!args.includes('moneyline'))
+    const native=oddsHarvesterArgs(sport,'home_away','2026-10-29','odds.json')
+    assert.equal(native[native.indexOf('--market')+1],'home_away')
+  }
+  const regulation=oddsHarvesterArgs('american-football','1x2','2026-10-29','odds.json')
+  assert.equal(regulation[regulation.indexOf('--period')+1],'full_time')
+  assert.equal(regulation[regulation.indexOf('--market')+1],'1x2')
+})
+test('two-way bookmaker odds require FullIncludingOT for MLB and NFL',()=>{
+  for(const sport of ['baseball','american-football']){
+    const rows=[{
+      scraped_date:'2026-10-28 18:00:00 UTC',match_date:'2026-10-28 23:00:00 UTC',
+      match_link:'https://www.oddsportal.com/'+sport+'/h2h/home-away/test/',
+      home_team:'Home',away_team:'Away',
+      home_away_market:[
+        {bookmaker_name:'Book A',period:'FullTime','1':'1.55','2':'2.60'},
+        {bookmaker_name:'Book A',period:'FullIncludingOT','1':'1.70','2':'2.20'},
+      ],
+    }]
+    const out=normalizeOddsHarvester(rows,sport,now)
+    assert.equal(out.length,2)
+    assert.ok(out.every(q=>q.period==='FullIncludingOT'&&q.market==='h2h'))
+  }
+})
+test('empty match listing is different from blocked scraping and returns no fake odds',async()=>{
+  assert.equal(isScraperNoEvents('No match links found. 0 failed'),true)
+  assert.equal(isScraperNoEvents('No upcoming matches; 0 failed'),true)
+  assert.equal(isScraperNoEvents('No upcoming matches; 2 failed'),false)
+  assert.equal(isScraperNoEvents('No upcoming matches, 0 failed; HTTP 403'),false)
+  assert.match(describeScraperError({code:2,stderr:'No match links found. 0 failed'}),
+    /category=no-upcoming-events/)
+  let attempts=0
+  const results=await keylessOdds('baseball','moneyline','2026-10-28',
+    {PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'1'},now,async(_sport,market)=>{
+      attempts++
+      assert.equal(market,'home_away')
+      throw Error('No upcoming matches; 0 failed')
+    })
+  assert.deepEqual(results,[])
+  assert.equal(attempts,1)
+})
+test('auth and site blocks must not be treated as empty or silently retried',async()=>{
+  let attempts=0
+  await assert.rejects(()=>keylessOdds('american-football','moneyline','2026-10-28',
+    {PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'1'},now,async()=>{
+      attempts++
+      throw Error('No upcoming matches, 0 failed; HTTP 403 captcha')
+    }),/403/)
+  assert.equal(attempts,1)
 })
