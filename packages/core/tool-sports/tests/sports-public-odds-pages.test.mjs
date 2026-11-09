@@ -14,6 +14,8 @@ test('routes actual supplied and league-specific public provider pages without a
     ['https://www.espn.com/sports-betting/odds','https://www.scoresandodds.com/nba'])
   assert.ok(publicOddsWebsitePages('soccer_spain_la_liga').some(x=>
     x.url==='https://www.oddschecker.com/us/soccer/la-liga-primera'))
+  assert.ok(publicOddsWebsitePages('soccer_mexico_ligamx').some(x=>
+    x.url==='https://www.oddschecker.com/us/soccer/mexican-primera-division'))
   assert.ok(publicOddsWebsitePages('soccer_epl').some(x=>
     x.url==='https://www.oddschecker.com/us/soccer/premier-league'))
   assert.ok(publicOddsWebsitePages('soccer_usa_mls').some(x=>
