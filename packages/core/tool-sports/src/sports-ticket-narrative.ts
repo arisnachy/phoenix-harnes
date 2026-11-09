@@ -19,6 +19,8 @@ export type TicketNarrative={
   selectionWhy:string;favorable:string[];contradictions:string[];
   specialistEvidence:string[];criticalPending:string[];
   news:TicketNewsItem[];
+  externalOpinions:Array<{publisher:string;headline:string;publishedAt:string|null;
+    discoveryUrl:string;status:'indexed-headline-only'}>;
   venue:{name:string|null;city:string|null;venueSplit:'verified'|'not-verified';
     games:number;wins:number;losses:number};
   directOpponentHistory:{status:'verified'|'not-verified';note:string;
@@ -164,6 +166,7 @@ export function composeTicketLegNarrative(
   return{
     eventId:event.eventId,selected,title,status:documented?'documented':'conditional',
     selectionWhy,favorable,contradictions,specialistEvidence,criticalPending,news,
+    externalOpinions:[],
     venue:{name:venueName,city:venueCity,venueSplit:venueGames>0?'verified':'not-verified',
       games:venueGames,wins:venueWins,losses:venueLosses},
     directOpponentHistory:{status:opponentGames>0?'verified':'not-verified',
