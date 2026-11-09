@@ -60,6 +60,14 @@ test('Kira automatically reads verified update manifest without manual environme
     assert.equal(env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED,'1')
     assert.equal(env.PHOENIX_SPORTS_ODDSHARVESTER_BIN,bin)
     assert.equal(env.PHOENIX_SPORTS_HISTORY_DIR,history)
+    // Health must auto-hydrate the managed binary; otherwise it probes an
+    // unrelated PATH command and falsely reports missing-binary.
+    const verified=await sportsSourcesHealth(
+      {PHOENIX_SPORTS_SOURCE_HOME:home},
+      async actualBin=>{assert.equal(actualBin,bin);return true},
+      async()=>false,
+    )
+    assert.equal(find(verified,'jordantete/OddsHarvester').status,'configured')
     const disabled=hydrateSportsSources({
       PHOENIX_SPORTS_SOURCE_HOME:home,PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0',
     })
