@@ -313,7 +313,7 @@ export async function evidenceTicket(
       x.home+' '+x.away,['covers','vegasinsider'],cachedFetcher,now))),
     discoverGdeltTicketNews(selected.map(x=>({
       eventId:x.pick.eventId,home:x.home,away:x.away,
-    })),cachedFetcher,now),
+    })),fetcher,now),
   ])
   let deepContextChecked=0,newsMatched=0,playerStatsChecked=0
   for(const result of contextual)if(result.status==='fulfilled'){
