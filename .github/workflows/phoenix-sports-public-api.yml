@@ -26,6 +26,15 @@ jobs:
           node-version: '24'
       - name: ESPN five live public read-only API checks
         run: node scripts/phoenix-sports-live-probe.mjs
+      - name: Verify NBA NFL live keyless sources, HTTP and response shapes
+        run: node scripts/phoenix-nba-nfl-keyless-smoke.mjs
+      - name: Retain independent status including 403 and 429
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nba-nfl-keyless-report-${{ github.run_id }}
+          path: artifacts/nba-nfl-keyless-health.json
+          if-no-files-found: warn
   keyless-regression:
     runs-on: ubuntu-latest
     timeout-minutes: 7
@@ -40,3 +49,4 @@ jobs:
           node --check scripts/phoenix-sports-live-probe.mjs
           node --test scripts/phoenix-sports.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/chat-sports.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/nba-nfl-keyless-closure.test.mjs

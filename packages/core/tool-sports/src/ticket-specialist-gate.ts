@@ -6,6 +6,9 @@ import type {MarketOutcome} from './sports.ts'
 import {crosscheckFreeFixture,type BackupFinding} from './free-sports-source-audit.ts'
 import {auditSportChecklist,type SportChecklist,type StepObservation} from './daily-specialist-checklist.ts'
 import {fetchEspnInjuryBackup} from './espn-injury-backup.ts'
+import {nflverseInjuryReport} from './nflverse-injury-report.ts'
+import {readNbaNflDepthPreviews,compareNbaNflCandidate,compareIndividualMetrics,
+  type DepthPreview,type PickComparison} from './nba-nfl-keyless-closure.ts'
 import {investigateNfl} from './nfl-evidence-research.ts'
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
 import {investigateSoccer} from './soccer-worldwide-dossier.ts'
@@ -15,7 +18,7 @@ import {tennisSlate,investigateTennis,type TennisTour} from './tennis-evidence-r
 
 export type SpecialistFixture={
   sport:string;league:string;eventId:string;date:string;
-  home:string;away:string;kickoff:string
+  home:string;away:string;kickoff:string;pick?:'home'|'away'
 }
 export type SpecialistGate={
   sport:string;league:string;eventId:string;specialist:string;
@@ -27,6 +30,8 @@ export type SpecialistGate={
   checklist?:SportChecklist
   /** Secondary fixtures are not bookmaker offers or confirmed starters. */
   sourceChecks?:BackupFinding[]
+  legDecision?:PickComparison
+  depthPreviews?:DepthPreview[]
 }
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
@@ -85,6 +90,7 @@ export async function investigateTicketSpecialist(
   try{
     let specialist='',level:'A'|'B'|'C'|'D'|null=null
     let steps:string[]=[],pending:string[]=[],teams=false
+    let legDecision:PickComparison|undefined,depthPreviews:DepthPreview[]|undefined
     if(game.sport==='football'&&game.league==='nfl'){
       specialist='NFL: QB, 44 titulares, OL/pass rush, lesiones y clima'
       const d=await investigateNfl(game.date,game.eventId,fetcher,now,env,quotes)
@@ -115,6 +121,34 @@ export async function investigateTicketSpecialist(
         'Datos meteorológicos disponibles; horario y estadio requieren cotejo')
       mark('market',d.markets.length?'partial':'missing',
         d.markets.length+' líneas; falta validar reglas exactas de la casa')
+      const sideMeasures=(side:'home'|'away')=>{
+        const team=d.teams[side]
+        return{name:team.name,wins:team.wins,losses:team.losses,games:team.recent.length,
+          restHours:team.restHours,netMarginPerGame:team.recent.length?
+            team.recent.reduce((sum,g)=>sum+g.pts-g.allowed,0)/team.recent.length:null,
+          confirmedStarter:team.roster.some(p=>p.role==='quarterback'&&p.confirmedOffense)}
+      }
+      legDecision=compareNbaNflCandidate('nfl',sideMeasures('home'),
+        sideMeasures('away'),game.pick??null)
+      const depths=await readNbaNflDepthPreviews('nfl',
+        [d.teams.home.id,d.teams.away.id],fetcher,now)
+      depthPreviews=[...depths]
+      for(const [i,depth]of depths.entries()){
+        if(depth.state==='observed')
+          steps.push('ESPN NFL '+(i?'visitante':'local')+
+            ' QB proyectado: '+(depth.candidateQB??'sin nombre')+' · '+depth.url)
+        else pending.push('Depth chart NFL '+(i?'visitante':'local')+
+          ' no verificable: '+depth.detail)
+      }
+      const qbStats=compareIndividualMetrics('nfl',
+        d.teams.home.roster.filter(x=>x.role==='quarterback').map(x=>({
+          name:x.name,position:x.position,stats:x.statistics})),
+        d.teams.away.roster.filter(x=>x.role==='quarterback').map(x=>({
+          name:x.name,position:x.position,stats:x.statistics})))
+      steps.push(...qbStats.observations)
+      pending.push(...qbStats.missing)
+      pending.push('Lista de INACTIVOS y QB oficial pendientes: https://www.nfl.com/injuries/. '+
+        'Un depth chart NO confirma QB titular')
     }else if(game.sport==='basketball'&&(game.league==='nba'||game.league==='wnba')){
       specialist='NBA/WNBA: jugadores, quintetos, eficiencia y bajas'
       const d=await researchBasketballCase(game.league,game.date,game.eventId,
@@ -142,6 +176,35 @@ export async function investigateTicketSpecialist(
         'Descanso de ambos rivales estimado desde partidos verificados')
       mark('market',d.markets.length?'partial':'missing',
         d.markets.length+' opciones consultadas, sujetas a fecha y liquidación')
+      if(game.league==='nba'){
+        const measures=(side:'home'|'away')=>{
+          const team=d.teams[side]
+          return{name:team.name,wins:team.wins,losses:team.losses,
+            games:team.lastGames.length,restHours:d.context.restHours[side],
+            netMarginPerGame:team.lastGames.length?
+              team.lastGames.reduce((sum,g)=>sum+g.pts-g.allowed,0)/team.lastGames.length:null,
+            confirmedStarter:team.quintetConfirmed}
+        }
+        legDecision=compareNbaNflCandidate('nba',measures('home'),
+          measures('away'),game.pick??null)
+        const depths=await readNbaNflDepthPreviews('nba',
+          [d.teams.home.id,d.teams.away.id],fetcher,now)
+        depthPreviews=[...depths]
+        for(const [i,depth]of depths.entries()){
+          if(depth.state==='observed')
+            steps.push('ESPN NBA rotación PROYECTADA '+(i?'visitante':'local')+
+              ': '+depth.potentialNames.slice(0,5).join(', ')+' · '+depth.url)
+          else pending.push('Rotación NBA '+(i?'visitante':'local')+
+            ' no verificable: '+depth.detail)
+        }
+        const individuals=compareIndividualMetrics('nba',
+          d.teams.home.roster.map(x=>({name:x.name,position:x.position,stats:x.stats})),
+          d.teams.away.roster.map(x=>({name:x.name,position:x.position,stats:x.stats})))
+        steps.push(...individuals.observations)
+        pending.push(...individuals.missing)
+        pending.push('Informe médico oficial NBA POR HORA pendiente: '+
+          'https://official.nba.com/nba-injury-report-2026-27-season/')
+      }
     }else if(game.sport==='soccer'){
       specialist='Fútbol: once, xG, forma local/visita, lesiones y empate'
       const d=await investigateSoccer(game.date,game.league,game.eventId,
@@ -275,19 +338,49 @@ export async function investigateTicketSpecialist(
             ' · '+item.status+' · '+(item.reportedAt??'sin fecha'))
       }else pending.push('ESPN lesiones '+injury.status+': '+injury.source)
       pending.push(...injury.notes.slice(0,4))
+      if(game.league==='nfl'&&
+        (injury.status==='unavailable'||injury.status==='stale')){
+        // Independent fallback: CSV injury snapshots are NOT inactives.
+        // Keep it under a shorter budget than the whole game dossier.
+        const bounded:typeof fetch=(input,init)=>{
+          const budget=AbortSignal.timeout(2400)
+          const signal=init?.signal?AbortSignal.any([budget,init.signal]):budget
+          return fetcher(input,{...init,signal})
+        }
+        const backup=await nflverseInjuryReport(game,bounded,now,env)
+        if(backup.status==='verified'||backup.status==='partial'){
+          mark('injuries','partial','NFLverse '+backup.status+
+            ' (informe SEMANAL, nunca lista final de inactivos)')
+          steps.push('Redundancia NFLverse '+backup.status+' '+backup.source)
+          steps.push(...backup.injuries.slice(0,12).map(p=>'NFLverse '+p.team+
+            ' · '+p.name+' · '+p.status+' · '+p.modifiedAt))
+        }else pending.push('Redundancia NFLverse '+backup.status+
+          ': '+backup.warning)
+      }
     }
     const sourceChecks=await sourceTask
     const mismatches=sourceChecks.filter(s=>s.status==='conflict')
     if(mismatches.length)
       pending.push('Revisar localía en fuente secundaria: '+
         mismatches.map(x=>x.provider).join(', '))
+    if(legDecision){
+      steps.push(...legDecision.argumentsFor.map(x=>'A FAVOR: '+x))
+      pending.push(...legDecision.argumentsAgainst.map(x=>'EN CONTRA: '+x))
+      pending.push(...legDecision.missing.map(x=>'PENDIENTE: '+x))
+      pending.push('DECISIÓN: '+legDecision.decision+
+        ' · evidencia comparativa, sin probabilidad calibrada')
+    }
     const checklist=auditSportChecklist(game.sport,signals,now)
     if(checklist.criticalPending.length)
       pending.push('Pasos obligatorios sin cerrar ('+
         checklist.criticalPending.length+'): '+
         checklist.criticalPending.slice(0,3).join('; '))
-    return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
-      sourceChecks,checklist,checkedAt:new Date(now).toISOString()}
+    const result=classifySpecialistCoverage(level,teams,steps,pending)
+    if(legDecision?.decision==='discard')result.status='incomplete'
+    return{...base,specialist,...result,sourceChecks,checklist,
+      ...(legDecision?{legDecision}:{}),
+      ...(depthPreviews?{depthPreviews}:{}),
+      checkedAt:new Date(now).toISOString()}
   }catch(error){
     return errorResult(game,(error instanceof Error?error.message:String(error)))
   }
