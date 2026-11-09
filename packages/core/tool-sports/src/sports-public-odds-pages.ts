@@ -143,11 +143,14 @@ export async function readPublicOddsWebsitePage(
     }
   }
   if(fetcher!==fetch)return work()
-  const cached=cache.get(uri.toString())
+  // The same league page can be queried for different fixtures. Never reuse
+  // a previous team's excerpt as evidence for another matchup.
+  const cacheKey=[uri.toString(),norm(home??''),norm(away??'')].join('|')
+  const cached=cache.get(cacheKey)
   if(cached&&cached.expires>now)return cached.work
   if(cache.size>30)cache.clear()
   const value=work()
-  cache.set(uri.toString(),{expires:now+5*60_000,work:value})
+  cache.set(cacheKey,{expires:now+5*60_000,work:value})
   return value
 }
 export async function researchPublicOddsWebsites(input:{
