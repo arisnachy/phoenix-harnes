@@ -48,6 +48,7 @@ import { fetchPublicEspnOddsDetailed } from './espn-odds.ts'
 import { espnEndpointGuide,espnWorkflow } from './espn-endpoint-guide.ts'
 import { fetchEspnHistoricalOdds } from './espn-odds-history.ts'
 import { secondaryMarketSourceCatalog } from './sports-secondary-sources.ts'
+import {researchPublicOddsWebsites} from './sports-public-odds-pages.ts'
 import {discoverEditorialResearch,type EditorialSource,editorialDomains} from './sports-editorial-discovery.ts'
 import {auditSportsCalibration,availableSportCalibration,calibratedSportsForecast} from './sports-calibration.ts'
 import {sportsEnvWithVaultKey} from './sports-credential-env.ts'
@@ -73,6 +74,8 @@ export const inject = ['tools','systemPrompt']
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'BÚSQUEDA REAL DE PÁGINAS DE CUOTAS: cuando sports_chat_odds o sports_chat_ticket_evidence_priced_auto no logre cotizaciones vigentes, llama sports_chat_public_odds_pages por liga y por los dos equipos de las patas candidatas, para comprobar las rutas públicas ESPN Sports Betting Odds, Oddschecker USA Soccer y ScoresAndOdds, URLs y texto legible. La consulta marca HTML accesible, nombres próximos, bloqueo de JavaScript/robot o error. NO transformes los números de una página sin casa y quoteUpdatedAt en cuotas elegibles; un portal comparador NO es el operador. ESPN web puede exigir JavaScript y no debe eludirse. Si tras la consulta no hay bookmaker y timestamp, ENTREGA el ticket de pronósticos condicional como tarjeta y una tabla concreta de faltantes, sin repetir mensajes de progreso ni prometer cinco aprobadas. ',
+
   'SEGUIMIENTO CLOUD: al crear un ticket de investigación, registrar automáticamente solo si PHOENIX_SPORTS_CLOUD_TRACKING_ENABLED=1 y las credenciales GitHub/AES están en la bóveda. Devolver cloudFollowUp con su estado real, no afirmar que habrá correo cuando status sea disabled, needs-configuration o error. El cifrado mantiene ocultos los eventos en un issue público, pero los metadatos de issue sí son visibles. Cuando los encuentros terminen, un workflow remoto revisará marcadores y enviará correo únicamente si RESEND_API_KEY, correo destinatario, remitente y clave AES están configurados en GitHub Actions. Nunca afirmar que la banca confirmó pago ni que un correo salió sin prueba. ',
   'TICKET DIARIO 5 O 6: primero ampliar y contrastar la cartelera multi-liga, después investigar todos los expedientes y usar decisionAudit. Si existen 5-6 encuentros futuros verificados, presentar hasta seis mejores CANDIDATAS, aunque deban marcarse CONDICIONALES, nunca inventar una victoria aprobada. Diversidad deportiva no autoriza eliminar una pata real y el precio no sustituye la investigación. Para cada pata reporta legWinProbabilityPercent con legProbabilitySource: NO sumar ni multiplicar porcentajes como pronóstico del ticket completo. No convertir un porcentaje exploratorio o no-vig en certeza predictiva; si no puede estimarse, mostrar valor pendiente y por qué. Confirmar estado de riesgo de cada pata antes de cualquier ejecución. ',
   'CLAVES Y FUENTES SIN BLOQUEOS: para saber qué conectores faltan llama sports_chat_research_provider_status. No pidas que peguen una clave en mensajes normales del modelo ni la aceptes como argumento de herramientas. Si el usuario quiere añadirla, indica el comando humano seguro /secret set NOMBRE VALOR, interceptado por el Host antes del agente y con recordInput=false, o la interfaz de credenciales segura disponible. Pedir permiso y una sola clave pertinente. No bloquear investigación ni tickets por claves ausentes; usa fuentes públicas, respaldo y caché. Tener clave NO equivale a fuente activa ni a datos comprobados. ',
@@ -708,6 +711,27 @@ export function apply(ctx: Context): void {
       return JSON.stringify(secondaryMarketSourceCatalog())
     },
     presentCall:()=>({card:'generic',title:'Investigar portales deportivos complementarios',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_public_odds_pages',
+    description:'Consulta páginas públicas de cuotas ESPN Sports Betting Odds, Oddschecker US Soccer y ScoresAndOdds según la liga, opcionalmente busca ambos equipos en HTML visible. Informa bloqueos, URLs y posibles menciones sin presentar HTML como cuota verificada de una casa. Sin CAPTCHA bypass, sin credenciales ni scraping continuo.',
+    parameters:{
+      sportKey:{type:'string',required:true,description:'Clave de liga de mercados: basketball_nba, americanfootball_nfl, icehockey_nhl, baseball_mlb, soccer_epl, soccer_spain_la_liga, etc.'},
+      date:{type:'string',description:'Fecha local dominicana AAAA-MM-DD para identificar un objetivo de investigación; no filtra fechas de la web.'},
+      home:{type:'string',description:'Nombre completo del equipo local, desde el evento ESPN verificado.'},
+      away:{type:'string',description:'Nombre completo del equipo visitante, desde el evento ESPN verificado.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      return JSON.stringify(await researchPublicOddsWebsites({
+        sportKey:args.sportKey,
+        ...(args.date?{date:args.date}:{}),
+        ...(args.home?{home:args.home}:{}),
+        ...(args.away?{away:args.away}:{}),
+      },fetch,Date.now()))
+    },
+    presentCall:()=>({card:'generic',title:'Consultar portales de cuotas por liga y equipos',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_espn_explore',
@@ -1440,7 +1464,7 @@ export function apply(ctx: Context): void {
         requestedDate:args.date??null,excludedStaleOrStarted,outcomes:quotes.slice(0,120),
         researchObservations:(report.observations??[]).slice(0,60),
         total:quotes.length,remaining:Math.max(0,quotes.length-120),
-        note:quotes.length?'Ofertas auténticas observadas; elegir la casa y el horario antes de cotizar. No son cuotas automáticamente atribuibles a Juancito.':(report.observations?.length??0)>0?'ESPN devolvió precios en researchObservations con fecha ausente, antigua o proveedor no identificado: son SOLO referencias, nunca cuotas vigentes ni elegibles para ticket.':espnRaw>0?'ESPN Core/Site entregó '+espnRaw+' registros de cuotas, pero ninguno superó las comprobaciones de precio, fecha y vigencia para apostar ahora. Consulta sources.rawCount, undatedOutcomes y expiredOutcomes. No describas ESPN como desconectado ni conviertas líneas históricas en vigentes.':'Sin precios confirmados para esta liga/mercado y fechas consultadas. Revisa las fuentes y amplía la búsqueda; nunca inventes cotizaciones.' })
+        note:quotes.length?'Ofertas auténticas observadas; elegir la casa y el horario antes de cotizar. No son cuotas automáticamente atribuibles a Juancito.':(report.observations?.length??0)>0?'ESPN devolvió precios en researchObservations con fecha ausente, antigua o proveedor no identificado: son SOLO referencias, nunca cuotas vigentes ni elegibles para ticket.':espnRaw>0?'ESPN Core/Site entregó '+espnRaw+' registros de cuotas, pero ninguno superó las comprobaciones de precio, fecha y vigencia para apostar ahora. Consulta sources.rawCount, undatedOutcomes y expiredOutcomes. No describas ESPN como desconectado ni conviertas líneas históricas en vigentes.':'Sin precios confirmados para esta liga/mercado y fechas consultadas. Consulta sports_chat_public_odds_pages para examinar ESPN, Oddschecker y ScoresAndOdds con los equipos exactos; estas páginas son evidencia secundaria NO cotizable sin casa y timestamp propios. Muestra las faltas y un ticket condicional en lugar de repetir progresos.' })
     },
     presentCall:()=>({ card:'generic',title:'Comparar cuotas',kind:'read' as const }),
   }))
