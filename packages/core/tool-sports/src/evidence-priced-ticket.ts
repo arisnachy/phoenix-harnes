@@ -380,6 +380,14 @@ export async function evidencePricedTicket(
       ?row as Record<string,unknown>:{}
     return {...pricedRow,
       marketNoVigPercent:marketRisk.legs[index]?.noVigPercent??null,
+      // One chance per leg. Prefer a two-sided, same-bookmaker no-vig
+      // estimate; otherwise preserve the disclosed exploratory forecast.
+      legWinProbabilityPercent:marketRisk.legs[index]?.noVigPercent??
+        (typeof prior.legWinProbabilityPercent==='number'?
+          prior.legWinProbabilityPercent:null),
+      legProbabilitySource:marketRisk.legs[index]?.noVigPercent!==null&&
+        marketRisk.legs[index]?.noVigPercent!==undefined?
+          'bookmaker-market-no-vig':'exploratory-recent-form',
       marketRiskTier:marketRisk.legs[index]?.relativeRisk??'unknown',
       decisionReview:decisionAudit.legs[index]??null,
       specialistResearch:specialistChecks[index]??null,
@@ -389,6 +397,13 @@ export async function evidencePricedTicket(
       ...Object.fromEntries(['homeTeam','awayTeam','homeLogo','awayLogo','sport',
         'league','country','rationale','when'].filter(k=>typeof prior[k]==='string')
         .map(k=>[k,prior[k]])),
+      rationale:marketRisk.legs[index]?.noVigPercent!==null&&
+        marketRisk.legs[index]?.noVigPercent!==undefined?
+          ('Probabilidad individual implícita del mercado sin margen: '+
+          marketRisk.legs[index]!.noVigPercent+'% (NO pronóstico calibrado). '+
+          String(prior.rationale??'').replace(
+            /^Probabilidad individual exploratoria[^.]*\.\s*/u,'')).slice(0,480):
+          String(prior.rationale??'').slice(0,480),
       ...(quote?{price:String(quote.price),bookmaker:quote.bookmaker,
         ...(quote.market==='double_chance'?{selection:quote.selection==='1X'
           ?'1X · Local o empate':'X2 · Visita o empate',
