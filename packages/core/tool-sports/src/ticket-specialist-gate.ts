@@ -3,6 +3,8 @@
  * to describe a leg as approved. Absent/partial specialist research fails closed.
  */
 import type {MarketOutcome} from './sports.ts'
+import {crosscheckFreeFixture,type BackupFinding} from './free-sports-source-audit.ts'
+import {auditSportChecklist,type SportChecklist,type StepObservation} from './daily-specialist-checklist.ts'
 import {fetchEspnInjuryBackup} from './espn-injury-backup.ts'
 import {investigateNfl} from './nfl-evidence-research.ts'
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
@@ -21,6 +23,10 @@ export type SpecialistGate={
   verifiedSteps:string[];pendingSteps:string[];
   /** No existing specialist currently supplies calibrated betting approval. */
   approvedForBetting:false;checkedAt:string
+  /** Mandatory per-sport steps; an API response is not a completed step. */
+  checklist?:SportChecklist
+  /** Secondary fixtures are not bookmaker offers or confirmed starters. */
+  sourceChecks?:BackupFinding[]
 }
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
@@ -59,6 +65,23 @@ export async function investigateTicketSpecialist(
   quotes:MarketOutcome[]=[],
 ):Promise<SpecialistGate>{
   const base={sport:game.sport,league:game.league,eventId:game.eventId}
+  const eligible=game.sport==='soccer'||game.sport==='football'&&game.league==='nfl'
+    ||game.sport==='basketball'&&['nba','wnba'].includes(game.league)
+    ||game.sport==='hockey'&&game.league==='nhl'
+    ||game.sport==='baseball'&&game.league==='mlb'
+    ||game.sport==='tennis'&&['atp','wta'].includes(game.league)
+  // Source verification overlaps the specialist: no serial network waterfall.
+  // Failures are isolated; absence in a small feed cannot negate an ESPN game.
+  const sourceTask:Promise<BackupFinding[]>=eligible
+    ?crosscheckFreeFixture(game,fetcher,now,env).catch(()=>[] as BackupFinding[])
+    :Promise.resolve([])
+  const signals:Record<string,StepObservation>={}
+  const mark=(key:string,state:StepObservation['state'],detail:string)=>{
+    signals[key]={state,detail}
+  }
+  const observed=(key:string,yes:boolean,detail:string)=>{
+    mark(key,yes?'verified':'missing',detail)
+  }
   try{
     let specialist='',level:'A'|'B'|'C'|'D'|null=null
     let steps:string[]=[],pending:string[]=[],teams=false
