@@ -138,7 +138,8 @@ export async function evidenceTicket(
     if(offset+3>=9&&viable.length>=Math.max(12,count*3)&&diversified)break
   }
   const candidateLegs:Array<{pick:ResearchTicketLeg;rank:number;home:string;away:string;
-    kickoff:string;level:'strong'|'conditional';estimatedPct:number|null}> = []
+    kickoff:string;verifiedEvent:Awaited<ReturnType<typeof researchSport>>['matches'][number]['verifiedEvent'];
+    level:'strong'|'conditional';estimatedPct:number|null}> = []
   let evaluated=0
   let insufficientEvidence=0
   for(const report of reports){
@@ -182,6 +183,7 @@ export async function evidenceTicket(
       const estimatedPct=forecast.status==='exploratory'&&
         selectedProbability!==null?Number((selectedProbability*100).toFixed(1)):null
       candidateLegs.push({rank:Math.abs(rank),level,estimatedPct,
+        verifiedEvent:match.verifiedEvent,
         home:home.name,away:away.name,kickoff:match.date,pick:{
         sport:match.sport,league:match.league,eventId:match.eventId,
         pick:rank>0?'home':'away',
@@ -307,7 +309,20 @@ export async function evidenceTicket(
     return {...pick,rationale:(String(pick.rationale??'').slice(0,Math.max(0,477-audit.length))+
       ' · '+sourceSummary+audit).slice(0,480)}
   })
-  const ticket=await researchTicket(documented,date,fetcher,now,env,count,true)
+  // Final validation must inspect the SAME provider-recorded fixture IDs as
+  // scouting. ESPN re-query can omit a game due scoreboard pagination/rotation.
+  // Do not weaken integrity: researchTicket still checks exact IDs, kickoff,
+  // local date, future 'pre' status and both opponents on saved ESPN snapshots.
+  const verifiedBoards=new Map<string,{events:typeof selected[number]['verifiedEvent'][]}>()
+  for(const candidate of selected){
+    const key=candidate.pick.sport+'|'+candidate.pick.league
+    const board=verifiedBoards.get(key)??{events:[]}
+    if(!board.events.some(event=>String(event.id)===candidate.pick.eventId))
+      board.events.push(candidate.verifiedEvent)
+    verifiedBoards.set(key,board)
+  }
+  const ticket=await researchTicket(documented,date,fetcher,now,env,count,true,
+    verifiedBoards)
   const note=String(ticket.card.props.note??'')+
     ' Investigación ampliada en '+deepContextChecked+'/'+documented.length+
     ' eventos: '+newsMatched+' noticias relacionadas, '+playerStatsChecked+
