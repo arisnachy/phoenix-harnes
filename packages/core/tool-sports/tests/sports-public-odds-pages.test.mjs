@@ -78,9 +78,10 @@ test('no cross-site scraping or invalid date passes the fixed provider allowlist
   },async()=>{count++;return html('x')},at),/ambos equipos/)
   assert.equal(count,0)
 })
-test('human-visible text is not executable markup or a stored bookmaker price',()=>{
-  const snippet=websiteTeamExcerpt(
-    '<script>alert(1)</script> Barcelona +180 Real Madrid -115','Barcelona','Real Madrid')
-  assert.ok(snippet)
-  assert.equal(snippet?.includes('alert(1)'),true) // parser itself does not execute HTML
+test('embedded scripts are ignored when finding public text but cannot become quotes',async()=>{
+  const [page]=publicOddsWebsitePages('soccer_epl')
+  const result=await readPublicOddsWebsitePage(page,'Barcelona','Real Madrid',
+    async()=>html('<script>Barcelona +180 Real Madrid -115</script><div>Other matches listed</div>'),at)
+  assert.equal(result.status,'not-found')
+  assert.equal(result.bookmakerVerified,false)
 })
