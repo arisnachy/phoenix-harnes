@@ -10,6 +10,7 @@ import { investigatePregame } from './pregame-investigation.ts'
 import { investigateEventDeep } from './sports-deep-context.ts'
 import { diversifiedSportsPicks,diversifiedSportsShortlist } from './sports-diversity.ts'
 import {composeTicketLegNarrative} from './sports-ticket-narrative.ts'
+import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
 export type TicketPreselectCandidate={
   eventId:string;sport:string;league:string;home:string;away:string;
   kickoff:string;pick:'home'|'away'|'draw';rank:number;level:'strong'|'conditional'
@@ -304,8 +305,12 @@ export async function evidenceTicket(
   const checks=await investigatePregame(selected.map(x=>({
     sport:x.pick.sport,league:x.pick.league,eventId:x.pick.eventId,
   })),cachedFetcher)
-  const contextual=await Promise.allSettled(selected.map(x=>investigateEventDeep(
-    x.pick.sport,x.pick.league,x.pick.eventId,cachedFetcher,now,env)))
+  const [contextual,editorial]=await Promise.all([
+    Promise.allSettled(selected.map(x=>investigateEventDeep(
+      x.pick.sport,x.pick.league,x.pick.eventId,cachedFetcher,now,env))),
+    Promise.allSettled(selected.map(x=>discoverEditorialResearch(
+      x.home+' '+x.away,['covers','vegasinsider'],cachedFetcher,now))),
+  ])
   let deepContextChecked=0,newsMatched=0,playerStatsChecked=0
   for(const result of contextual)if(result.status==='fulfilled'){
     deepContextChecked++
@@ -358,6 +363,7 @@ export async function evidenceTicket(
     const candidate=selected[index]
     const observed=contextual[index]
     const context=observed?.status==='fulfilled'?observed.value:undefined
+    const external=editorial[index]?.status==='fulfilled'?editorial[index].value.hits:[]
     const narrative=candidate?composeTicketLegNarrative({
       eventId:candidate.pick.eventId,sport:candidate.pick.sport,
       league:candidate.pick.league,home:candidate.home,away:candidate.away,
@@ -368,7 +374,17 @@ export async function evidenceTicket(
         candidate.estimatedPct!==undefined?'exploratory-recent-form':'unavailable',
       historicalContext:candidate.historicalContext,
     },context):null
-    return {...leg,narrative,
+    const augmented=narrative?{...narrative,
+      externalOpinions:external.slice(0,6).map(hit=>({
+        publisher:hit.publisher,headline:hit.headline,publishedAt:hit.publishedAt,
+        discoveryUrl:hit.discoveryUrl,status:hit.status,
+      })),
+      explanationForChat:narrative.explanationForChat+'\nOpiniones externas: '+
+        (external.length?external.slice(0,3).map(hit=>hit.publisher+': '+hit.headline).join('; ')+
+          '. Son titulares indexados, NO picks contrastados ni pronósticos de consenso.':
+          'sin artículos indexados verificables; no se atribuye consenso a tipsters.'),
+    }:null
+    return {...leg,narrative:augmented,
       preliminaryEvidenceTier:candidate?.level??'conditional',
       legWinProbabilityPercent:candidate?.estimatedPct??null,
       legProbabilitySource:candidate?.estimatedPct!==null&&
