@@ -127,3 +127,25 @@ test('distinguishes invalid-market and empty listing from real runtime failures'
     code:1,stderr:'HTTP 429: too many requests'
   }),'site-blocked-or-limited')
 })
+
+test('native MLB and NFL home_away rows must include overtime or extra innings',()=>{
+  for(const sport of ['baseball','american-football']){
+    const date='2026-10-28 23:00:00 UTC'
+    const game=[{scraped_date:'2026-10-28 18:00:00 UTC',match_date:date,
+      match_link:'https://www.oddsportal.com/'+sport+'/home-away/game/',
+      home_team:'Home',away_team:'Away',
+      home_away_market:[
+        {bookmaker_name:'Book A',period:'FullTime','1':'1.50','2':'2.60'},
+        {bookmaker_name:'Book A',period:'FullIncludingOT','1':'1.70','2':'2.20'},
+      ]}]
+    const rows=normalizeOddsHarvester(game,sport,now)
+    assert.equal(rows.length,2)
+    assert.ok(rows.every(x=>x.market==='h2h'&&x.price!==1.5))
+    const cmd=oddsHarvesterArgs(sport,'home_away','2026-10-28','odds.json')
+    assert.equal(cmd[cmd.indexOf('--period')+1],'full_including_ot')
+  }
+})
+test('zero matches with zero failed are not a scraper crash but captcha remains blocked',()=>{
+  assert.equal(classifyScraperFailure({code:2,stderr:'No upcoming match links found; 0 failed'}),'no-events')
+  assert.equal(classifyScraperFailure({code:2,stderr:'No upcoming matches; 0 failed; HTTP 403'}),'site-blocked-or-limited')
+})
