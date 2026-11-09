@@ -162,8 +162,6 @@ interface CodexRealtimeVoiceSession {
   /** Reopen the human transcript path while RTC finishes playing authorized speech. */
   inputResumeTimer?: number
   audioDrainUntil?: number
-  /** Ignore one late V3 assistant turn marker belonging to the completed reply. */
-  lateAssistantTurnIgnored?: boolean
   /** One native generation can report both response.done and assistant turn.done. */
   lastCompletedNativeTerminal?: {
     readonly key: string
@@ -246,11 +244,23 @@ function clearCodexRealtimeTimers(session: CodexRealtimeVoiceSession): void {
   delete session.audioDrainTimer
   delete session.inputResumeTimer
   delete session.audioDrainUntil
-  delete session.lateAssistantTurnIgnored
   delete session.lastCompletedNativeTerminal
   delete session.disconnectTimer
   delete session.inactivityTimer
   delete session.nativeCancelTimer
+}
+
+function reportCodexRealtimeTransportLoss(session: CodexRealtimeVoiceSession): void {
+  if (codexRealtimeVoiceSession !== session) return
+  document.documentElement.dataset.phoenixVoiceSpeechStatus = 'failed'
+  document.documentElement.dataset.phoenixVoiceSpeechError = 'webrtc-transport-lost'
+  void stopCodexRealtimeVoice().then(() => {
+    if (codexRealtimeVoiceSession !== undefined || voiceAssistantSnapshot.active) return
+    publishVoiceAssistant({
+      ...INACTIVE_VOICE_ASSISTANT,
+      lastError: 'La conexión de voz de Codex se interrumpió. Pulsa el micrófono para reconectar.',
+    })
+  })
 }
 
 function refreshCodexRealtimeActivity(session: CodexRealtimeVoiceSession): void {
@@ -419,6 +429,9 @@ function playCodexRealtimeAudio(audio: HTMLAudioElement): void {
   if (!audio.srcObject || audio.dataset.phoenixAudioPlayback === 'blocked'
     || audio.dataset.phoenixAudioPlayback === 'starting'
     || (!audio.paused && audio.dataset.phoenixAudioPlayback === 'playing')) return
+  // A muted WebRTC preflight may still be awaiting play() when Phoenix
+  // authorizes the first words. Retry its failed start once as audible output.
+  const beganMuted = audio.muted
   audio.dataset.phoenixAudioPlayback = 'starting'
   const played = (): void => {
     if (!audio.isConnected) return
@@ -428,6 +441,13 @@ function playCodexRealtimeAudio(audio: HTMLAudioElement): void {
   }
   const blocked = (): void => {
     if (!audio.isConnected) return
+    if (beganMuted && !audio.muted && audio.dataset.phoenixAudioPlayback === 'starting') {
+      // This rejection belongs to the old muted attempt, not the newly
+      // authorized reply. If the audible retry fails, show Activar sonido.
+      delete audio.dataset.phoenixAudioPlayback
+      playCodexRealtimeAudio(audio)
+      return
+    }
     audio.dataset.phoenixAudioPlayback = 'blocked'
     document.documentElement.dataset.phoenixVoiceAudioPlayback = 'blocked'
     if (!audio.muted) publishCodexAudioBlocked(audio, true)
@@ -457,7 +477,6 @@ function clearCodexRealtimeAudioDrain(session: CodexRealtimeVoiceSession): void 
   delete session.audioDrainTimer
   delete session.inputResumeTimer
   delete session.audioDrainUntil
-  delete session.lateAssistantTurnIgnored
 }
 
 /**
@@ -668,7 +687,6 @@ function finishNativeUtterance(session: CodexRealtimeVoiceSession, utterance: Pe
   // Leave that already-authorized audio audible for a bounded drain window.
   clearCodexRealtimeAudioDrain(session)
   session.audioDrainUntil = Date.now() + CODEX_VOICE_AUDIO_DRAIN_MS
-  session.lateAssistantTurnIgnored = false
   // Keep the speaker audible during RTC draining, but do not ignore a natural
   // short answer for six seconds after the preceding generated sentence ends.
   session.inputResumeTimer = window.setTimeout(() => {
@@ -1236,7 +1254,7 @@ export async function tryStartCodexRealtimeVoice(
         // A dropped Telegram Mini App/browser call cannot leave the mic active forever.
         liveSession.disconnectTimer ??= window.setTimeout(() => {
           if (codexRealtimeVoiceSession === liveSession && liveSession.peer.connectionState === 'disconnected') {
-            void stopCodexRealtimeVoice()
+            reportCodexRealtimeTransportLoss(liveSession)
           }
         }, CODEX_VOICE_DISCONNECT_GRACE_MS)
         return
@@ -1244,7 +1262,7 @@ export async function tryStartCodexRealtimeVoice(
       if (peer?.connectionState === 'failed' || peer?.connectionState === 'closed') {
         // End voice completely; do not silently re-enable browser recognition.
         // The Phoenix harness and its pending tasks are deliberately unaffected.
-        void stopCodexRealtimeVoice()
+        reportCodexRealtimeTransportLoss(liveSession)
       }
     }
     return { kind: 'started' }
@@ -1421,14 +1439,10 @@ function updateCodexRealtimePhase(payload: string): void {
   }
   const assistantStarted = type === 'response.created' || assistantTurnCreated
   if (assistantStarted && session.activeUtterance === undefined) {
-    // V3 sometimes delivers a trailing assistant turn.created after its terminal
-    // response.done, while the previously authorized speech is still playing.
-    // Do not treat one such delayed marker as fresh, unsolicited speech.
+    // V3 may send repeated late assistant turn.created events for the already
+    // completed reply. Do not mute buffered speech before the drain expires.
     if (assistantTurnCreated && session.audioDrainUntil !== undefined
-      && Date.now() < session.audioDrainUntil && !session.lateAssistantTurnIgnored) {
-      session.lateAssistantTurnIgnored = true
-      return
-    }
+      && Date.now() < session.audioDrainUntil) return
     muteCodexRealtimeAudio(session, 'unsolicited-response')
     // Some realtime transports can start autonomous VAD replies even with
     // create_response:false. Suppress unverified "sigo en ello" narration.
