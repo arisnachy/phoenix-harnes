@@ -127,8 +127,8 @@ export async function investigateTicketSpecialist(
             team.recent.reduce((sum,g)=>sum+g.pts-g.allowed,0)/team.recent.length:null,
           confirmedStarter:team.roster.some(p=>p.role==='quarterback'&&p.confirmedOffense)}
       }
-      if(game.pick)legDecision=compareNbaNflCandidate('nfl',sideMeasures('home'),
-        sideMeasures('away'),game.pick)
+      legDecision=compareNbaNflCandidate('nfl',sideMeasures('home'),
+        sideMeasures('away'),game.pick??null)
       const depths=await readNbaNflDepthPreviews('nfl',
         [d.teams.home.id,d.teams.away.id],fetcher,now)
       depthPreviews=[...depths]
@@ -177,8 +177,8 @@ export async function investigateTicketSpecialist(
               team.lastGames.reduce((sum,g)=>sum+g.pts-g.allowed,0)/team.lastGames.length:null,
             confirmedStarter:team.quintetConfirmed}
         }
-        if(game.pick)legDecision=compareNbaNflCandidate('nba',measures('home'),
-          measures('away'),game.pick)
+        legDecision=compareNbaNflCandidate('nba',measures('home'),
+          measures('away'),game.pick??null)
         const depths=await readNbaNflDepthPreviews('nba',
           [d.teams.home.id,d.teams.away.id],fetcher,now)
         depthPreviews=[...depths]
