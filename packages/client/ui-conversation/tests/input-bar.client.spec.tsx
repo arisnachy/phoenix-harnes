@@ -1713,37 +1713,35 @@ describe('command launcher chrome and control seats', () => {
   })
 
 
-  it('shows Kira official living avatar only during active hands-free mode and stops it', async () => {
-    const support=vi.spyOn(voiceAdapter,'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
-    const start=vi.spyOn(voiceAdapter,'tryStartCodexRealtimeVoice').mockImplementation(async ()=>{
+  it('renders the voice-reactive PHOENIX emblem inside the microphone, without a floating avatar', async () => {
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const start = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice').mockImplementation(async () => {
       voiceAdapter.setVoiceAssistantActive(true)
       voiceAdapter.setVoiceAssistantListening(true)
-      return {kind:'started'}
+      return { kind: 'started' }
     })
-    try{
-      const {view}=bench()
+    try {
+      const { view } = bench()
+      const microphone = view.getByRole('button', { name: '开始语音助手' })
+      expect(microphone.getAttribute('data-voice-phase')).toBe('inactive')
+      expect(microphone.querySelector('[data-phoenix-voice-orb]')).not.toBeNull()
       expect(view.container.querySelector('[data-kira-voice-avatar]')).toBeNull()
-      fireEvent.click(view.getByRole('button',{name:'开始语音助手'}))
-      await act(async()=>{await Promise.resolve()})
-      const avatar=view.container.querySelector('[data-kira-voice-avatar]')
-      expect(avatar).not.toBeNull()
-      expect(avatar?.getAttribute('data-voice-phase')).toBe('listening')
-      expect(avatar?.querySelector('img')?.getAttribute('src')).toMatch(/^data:image\/webp;base64,/u)
-      // The avatar must be in the composer positioning context, never a
-      // fixed overlay that drifts below the input when ancestors transform.
-      expect(avatar?.closest('[data-composer-card]')).not.toBeNull()
-      // Never paint a second set of lips over the artist's original smile.
-      expect(avatar?.querySelector('svg')).toBeNull()
-      // In jsdom there is no WebGL2: the original approved 2D face stays visible.
-      expect(avatar?.querySelector('[data-kira-avatar-3d]')).not.toBeNull()
-      expect(avatar?.querySelector('[data-renderer="portrait-2d"]')).not.toBeNull()
-      fireEvent.click(view.getByRole('button',{name:'Finalizar conversación por voz'}))
-      await act(async()=>{await Promise.resolve()})
+      fireEvent.click(microphone)
+      await act(async () => { await Promise.resolve() })
+      expect(microphone.getAttribute('data-voice-phase')).toBe('listening')
+      const orb = microphone.querySelector('[data-phoenix-voice-orb]')
+      expect(orb?.querySelector('img')?.getAttribute('src')).toBe('/phoenix-emblem.png')
+      expect(orb?.closest('[data-composer-card]')).not.toBeNull()
       expect(view.container.querySelector('[data-kira-voice-avatar]')).toBeNull()
+      fireEvent.click(microphone)
+      await act(async () => { await Promise.resolve() })
+      expect(microphone.getAttribute('data-voice-phase')).toBe('inactive')
       expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(false)
-    }finally{
+    } finally {
       voiceAdapter.setVoiceAssistantActive(false)
-      start.mockRestore();support.mockRestore();cleanup()
+      start.mockRestore()
+      support.mockRestore()
+      cleanup()
     }
   })
 
