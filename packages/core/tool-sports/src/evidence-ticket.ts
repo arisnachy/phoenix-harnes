@@ -11,6 +11,7 @@ import { investigateEventDeep } from './sports-deep-context.ts'
 import { diversifiedSportsPicks,diversifiedSportsShortlist } from './sports-diversity.ts'
 import {composeTicketLegNarrative} from './sports-ticket-narrative.ts'
 import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
+import {discoverGdeltTicketNews} from './sports-gdelt-editorial.ts'
 export type TicketPreselectCandidate={
   eventId:string;sport:string;league:string;home:string;away:string;
   kickoff:string;pick:'home'|'away'|'draw';rank:number;level:'strong'|'conditional'
@@ -305,11 +306,14 @@ export async function evidenceTicket(
   const checks=await investigatePregame(selected.map(x=>({
     sport:x.pick.sport,league:x.pick.league,eventId:x.pick.eventId,
   })),cachedFetcher)
-  const [contextual,editorial]=await Promise.all([
+  const [contextual,editorial,gdelt]=await Promise.all([
     Promise.allSettled(selected.map(x=>investigateEventDeep(
       x.pick.sport,x.pick.league,x.pick.eventId,cachedFetcher,now,env))),
     Promise.allSettled(selected.map(x=>discoverEditorialResearch(
       x.home+' '+x.away,['covers','vegasinsider'],cachedFetcher,now))),
+    discoverGdeltTicketNews(selected.map(x=>({
+      eventId:x.pick.eventId,home:x.home,away:x.away,
+    })),cachedFetcher,now),
   ])
   let deepContextChecked=0,newsMatched=0,playerStatsChecked=0
   for(const result of contextual)if(result.status==='fulfilled'){
@@ -376,11 +380,23 @@ export async function evidenceTicket(
       historicalContext:candidate.historicalContext,
     },context):null
     const augmented=narrative?{...narrative,
+      globalNews:(gdelt.byEvent[candidate!.pick.eventId]??[]).map(hit=>({
+        publisher:hit.publisher,headline:hit.title,indexedAt:hit.indexedAt,
+        articleUrl:hit.articleUrl,status:hit.status,
+      })),
+      sources:[...narrative.sources,...(gdelt.byEvent[candidate!.pick.eventId]??[]).map(hit=>({
+        name:'GDELT · '+hit.publisher,status:'partial' as const,url:hit.articleUrl,
+      }))],
       externalOpinions:external.slice(0,6).map(hit=>({
         publisher:hit.publisher,headline:hit.headline,publishedAt:hit.publishedAt,
         discoveryUrl:hit.discoveryUrl,status:hit.status,
       })),
-      explanationForChat:narrative.explanationForChat+'\nOpiniones externas: '+
+      explanationForChat:narrative.explanationForChat+'\nNoticias globales indexadas por GDELT: '+
+        ((gdelt.byEvent[candidate!.pick.eventId]??[]).length?
+          (gdelt.byEvent[candidate!.pick.eventId]??[]).slice(0,2).map(hit=>
+            hit.title+' · '+hit.articleUrl+' (visto '+(hit.indexedAt??'sin hora')+')').join('; ')+
+            '. La fecha indica indexación, no publicación; noticia aún no contrastada.':
+            'sin artículos adicionales verificables.')+'\nOpiniones externas: '+
         (external.length?external.slice(0,3).map(hit=>hit.publisher+': '+hit.headline).join('; ')+
           '. Son titulares indexados, NO picks contrastados ni pronósticos de consenso.':
           'sin artículos indexados verificables; no se atribuye consenso a tipsters.'),
