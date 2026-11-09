@@ -1511,6 +1511,7 @@ export function apply(ctx: Context): void {
         multisportSatisfied:result.multisportSatisfied,sourceAudit:result.sourceAudit,
         specialistChecks:result.specialistChecks,researchedLegs:result.researchedLegs,
         modelAudit:result.modelAudit,
+        decisionAudit:result.decisionAudit,marketRisk:result.marketRisk,
         explanation:result.explanation,
         instruction:'PHOENIX debe dibujar el ticket cotizado aunque un expediente especializado esté parcial: señalar CONDICIONAL por pata y listar pendingEvidence. Cuota real, selección de mercado y evento verificado permiten mostrar el ticket, no recomiendan apostarlo. Si approvedLegs=0, aclarar 0 apuestas aprobadas. Sin precios auténticos, dibujar preselección sin cuota, nunca inventar una.'})
     },
