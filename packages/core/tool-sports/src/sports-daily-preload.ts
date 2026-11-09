@@ -197,11 +197,28 @@ async function cachedRequest(url:string,init:RequestInit|undefined,
     const type=response.headers.get('content-type')??''
     // JSON payloads only; never persist HTML challenges, personal data or URLs with tokens.
     if(type&& !/json|text\/plain/iu.test(type))return response
-    const body=await response.clone().text()
+    let body=await response.clone().text()
     if(Buffer.byteLength(body)>750_000)return response
     let data:unknown
     try{data=JSON.parse(body)}
     catch{return response}
+    // Research uses only fixture facts. ESPN may embed undated bookmaker prices
+    // in scoreboards; remove them from the durable cache rather than turning
+    // yesterday's prefetch into a false quote.
+    if(source.provider==='ESPN'&&parsed.pathname.endsWith('/scoreboard')){
+      const root=data&&typeof data==='object'?data as {events?:unknown[]}:null
+      for(const raw of root?.events??[]){
+        const event=raw&&typeof raw==='object'?raw as {competitions?:unknown[]}:null
+        for(const item of event?.competitions??[]){
+          if(item&&typeof item==='object'){
+            const comp=item as Record<string,unknown>
+            delete comp.odds
+            delete comp.pickcenter
+          }
+        }
+      }
+      body=JSON.stringify(data)
+    }
     if(quota&&data&&typeof data==='object'&&
       Object.keys((data as {errors?:Record<string,unknown>}).errors??{}).length>0)
       return response
@@ -337,7 +354,14 @@ export async function dailyResearchStatus(date:string,
   await purge(root,now)
   const data=await read(join(root,'research-'+day+'.json'),empty(day))
   const quotas=await read(join(root,'quota-'+day+'.json'),emptyBudgets(day))
-  const entries=Object.values(data.entries).filter(x=>x&&typeof x.url==='string')
+  const entries=Object.values(data.entries).filter(x=>{
+    if(!x||typeof x.url!=='string')return false
+    const url=new URL(x.url)
+    const named=url.searchParams.get('dates')||url.searchParams.get('date')
+    if(named)return named===date||named===date.replaceAll('-','')
+    const pathDay=/\d{4}-\d{2}-\d{2}/u.exec(url.pathname)?.[0]
+    return pathDay?pathDay===date:santoDomingoDay(x.fetchedAt)===date
+  })
   const sources=entries.map(x=>({provider:x.provider,kind:x.kind,
     fetchedAt:iso(x.fetchedAt),fresh:x.expiresAt>now,url:x.url}))
   const totals:Record<string,number>={}
