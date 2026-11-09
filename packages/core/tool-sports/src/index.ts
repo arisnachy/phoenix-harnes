@@ -641,8 +641,11 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_sources_health',
-    description:'Audita los proveedores deportivos. Si faltan, inicia su instalación administrada opcional sin bloquear el chat; retorna estado y logs, sin exponer credenciales ni prometer cuotas.',
-    parameters:{},
+    description:'Audita configuración/instalación de proveedores deportivos; verifyLive=true comprueba realmente mercados, fecha y respuestas de fuentes en una liga concreta. Una clave instalada NO demuestra cuotas actuales.',
+    parameters:{
+      verifyLive:{type:'boolean',description:'true para ejecutar un sondeo REAL de cuotas; consume la cuota del proveedor. Por defecto false.'},
+      sportKey:{type:'string',description:'Liga para probar con verifyLive: basketball_nba, icehockey_nhl, americanfootball_nfl, baseball_mlb o basketball_wnba.'},
+    },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>false,
     async execute(){
@@ -652,7 +655,26 @@ export function apply(ctx: Context): void {
       const env=await sportsEnv(ctx)
       const installation=managedSportsInstallStatus(env)
       const sources=await sportsSourcesHealth(env)
-      return JSON.stringify({sources,installation,autoRepair,checkedAt:new Date().toISOString(),
+      const allowedKeys=['basketball_nba','basketball_wnba','icehockey_nhl',
+        'americanfootball_nfl','baseball_mlb']
+      let liveProbe:unknown=null
+      if(args.verifyLive===true){
+        const sportKey=String(args.sportKey??'basketball_nba')
+        if(!allowedKeys.includes(sportKey))throw Error('Liga no admitida para sondeo de cuotas')
+        try{
+          const response=await marketOddsDetailed(sportKey,'h2h',env,fetch,Date.now())
+          liveProbe={sportKey,checkedAt:new Date().toISOString(),
+            status:response.quotes.length?'observed-quotes':'no-usable-quotes',
+            usableQuotes:response.quotes.length,
+            providers:response.sources.map(source=>({
+              provider:source.provider,status:source.status,count:source.count,
+              detail:source.detail.slice(0,140)})),
+            caveat:'Cuotas observadas para esta liga y consulta, no para toda la cartelera. Comprobar casa, evento, hora y período de cada pata.'}
+        }catch(error){liveProbe={sportKey,status:'probe-error',
+          detail:String(error instanceof Error?error.message:error).slice(0,180)}}
+      }
+      return JSON.stringify({sources,liveProbe,healthScope:'configuration-only-unless-liveProbe-observed',
+        installation,autoRepair,checkedAt:new Date().toISOString(),
         repair:'Si la instalación falla: ejecutar node scripts/phoenix-sports-source-bootstrap.mjs --status y revisar installation.logPath. Para reparar, node scripts/phoenix-sports-source-bootstrap.mjs --install desde la carpeta de PHOENIX. OddsHarvester requiere Python >=3.12 y Playwright Chromium. No copiar claves al chat.',
         warning:'Instalado no equivale a cuota real. OddsHarvester usa Playwright sobre OddsPortal; comprueba bookmaker, mercado, período y timestamp. SportsbookReview y MLB solo contienen históricos; para extraer datos nuevos se ejecutan sus propios scripts en tareas explícitas, no funcionan como fuentes vivas.'})
     },
