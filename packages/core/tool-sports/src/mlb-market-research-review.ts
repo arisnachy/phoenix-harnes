@@ -128,6 +128,10 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
     fiveStarterOutingsVerified:reviewTimeValid&&[h,a].every(p=>p!==null&&
       new Set(p.recentStarts.filter(out=>{
         const at=Date.parse(out.date)
+        // Game logs are calendar dates, not timestamps. Reject rollover dates
+        // and timestamps masquerading as distinct starts.
+        const validDate=typeof out.date==='string'&&/^\d{4}-\d{2}-\d{2}$/u.test(out.date)&&
+          Number.isFinite(at)&&new Date(at).toISOString().slice(0,10)===out.date
         const innings=String(out.innings)
         const validCount=(value:unknown)=>{
           if(typeof value!=='string'&&typeof value!=='number')return false
@@ -135,7 +139,7 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
           const n=Number(value)
           return Number.isSafeInteger(n)&&n>=0
         }
-        return Number.isFinite(at)&&at<=checkedMs&&at<=reviewMs&&
+        return validDate&&at<=checkedMs&&at<=reviewMs&&
           checkedMs-at<=45*86400000&&reviewMs-at<=45*86400000&&
           Number.isSafeInteger(out.opponentId)&&out.opponentId>0&&
           /^\d+\.[012]$/u.test(innings)&&
