@@ -91,7 +91,7 @@ async function setup(sport,league,date){
  }
  return ctx
 }
-function endpoint(label,c){
+function endpoint(label,c,step){
  const key=ptn.find(x=>x[0].test(label))?.[1]??'unmapped'
  const day=c.date.replaceAll('-',''),team=c.teamId?c.root+'teams/'+c.teamId:null
  const paths={
@@ -118,7 +118,8 @@ function endpoint(label,c){
   nflverse:'https://github.com/nflverse/nflverse-data/releases',
   nflnext:'https://nextgenstats.nfl.com/',nflInj:'https://www.nfl.com/injuries/',
   moneypuck:c.sport==='hockey'?
-    'https://moneypuck.com/moneypuck/playerData/seasonSummary/2026/regular/teams.csv':null,
+    'https://moneypuck.com/moneypuck/playerData/seasonSummary/2026/regular/'+
+      (step==='H06'?'goalies.csv':'teams.csv'):null,
   faceoff:'https://www.dailyfaceoff.com/starting-goalies',
   savant:'https://baseballsavant.mlb.com/leaderboard/expected_statistics?year=2026',
   fangraphs:'https://www.fangraphs.com/leaders/major-league',
@@ -145,7 +146,7 @@ for(const ctx of contexts){
   const sourceNames=row.sources.slice(0,3)
   while(sourceNames.length<3)sourceNames.push('SIN TERCER RESPALDO INDEPENDIENTE ACREDITADO')
   steps.push({sport:ctx.sport,league:ctx.league,step:row.key,title:row.title,
-    providers:sourceNames.map((name,index)=>({rank:index+1,name,...endpoint(name,ctx)}))})
+    providers:sourceNames.map((name,index)=>({rank:index+1,name,...endpoint(name,ctx,row.key)}))})
  }
 }
 const urls=[...new Set(steps.flatMap(x=>x.providers.map(p=>p.url)).filter(Boolean))]
@@ -160,7 +161,8 @@ for(const row of steps)for(const s of row.providers){
  // Never mark the WHOLE step as verified from an HTTP 200.
  const rule=row.step==='B04'?/offensiveRating|defensiveRating|netRating|pace/i:
    row.step==='B08'?/athlete|injur|out|questionable/i:
-   row.step==='H05'?/expectedGoals|xg|corsi/i:
+   row.step==='H05'?/expectedGoals|xGoals|corsi|xGoalsFor/i:
+   row.step==='H06'?/goalsAboveExpected|goalsSavedAboveExpected|gsax|savePercentage|xGoals/i:
    row.step==='M04'?/era|whip|fip|pitcher/i:
    row.step==='N03'?/epa|successRate/i:
    row.step==='S04'?/xg|expectedGoals/i:
