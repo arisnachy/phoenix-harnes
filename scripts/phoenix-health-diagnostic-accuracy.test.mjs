@@ -185,6 +185,6 @@ test('medical image fallback source-reading policy requires caliper ROI review b
  assert.match(baseline,/hallazgos positivos y los principales diferenciales/)
  assert.match(baseline,/interpolaci[oó]n/)
  assert.match(baseline,/Nunca prometas/)
- assert.match(baseline,/solo se anuncia cuando la herramienta confirma/)
+ assert.match(baseline,/solamente se anuncia cuando la herramienta confirma/)
  assert.doesNotMatch(baseline,/APENDICITIS CONFIRMADA/i)
 })
