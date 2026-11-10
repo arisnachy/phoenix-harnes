@@ -51,6 +51,7 @@ export function GenericToolCard({ toolName, block, cwd, home, openFile, inspect,
       t={t}
       variant={model.variant}
       toolName={toolName}
+      sourceBlock={block}
       icon={VARIANT_ICONS[model.variant]}
       title={model.title}
       // A terminal presenter's description is the contract's above-card text, so

@@ -67,6 +67,7 @@ export function TodoRow({ toolName, block, inspect, t }: TodoRowProps) {
       t={t}
       variant={model.variant}
       toolName={toolName}
+      sourceBlock={block}
       icon={<IconChecklistOutline14 />}
       title={t('todo.rowTitle')}
       summary={summary.text}

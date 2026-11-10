@@ -19,6 +19,8 @@
 
 import { useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import clsx from 'clsx'
+import type { ToolCallBlock } from '@phoenix-ai/dsh-client-runtime/client'
+import { SourceFavicon } from './SourceFavicon.tsx'
 import {
   CodeBlock, DiffBlock, DisclosureRow, IconInspectOutline12, ReadBlock, SearchBlock, StateDot, TerminalBlock, WebBlock,
 } from '@phoenix-ai/dsh-client-ui-primitives'
@@ -39,6 +41,8 @@ export interface ToolRowProps {
   toolName?: string | undefined
   /** Leading 16px tool icon, shown while collapsed and not running/failed. */
   icon: ReactNode
+  /** Call provenance for verified source favicon selection. */
+  sourceBlock?: ToolCallBlock | undefined
   title: string
   summary: string
   /**
@@ -130,6 +134,7 @@ export function ToolRow({
   variant,
   toolName,
   icon,
+  sourceBlock,
   title,
   summary,
   summarySuffix,
@@ -199,7 +204,7 @@ export function ToolRow({
         leadingClassName={css.leading}
         titleClassName={css.title}
         chevronClassName={css.chevron}
-        icon={leadingFor(state, icon)}
+        icon={leadingFor(state, sourceBlock === undefined ? icon : <SourceFavicon block={sourceBlock} fallback={icon} />)}
         title={title}
         open={open}
         expandable={expandable}
