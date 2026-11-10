@@ -52,6 +52,10 @@ export function belongsToLeague(
     case 'soccer_usa_mls':return is(/\bmls\b|major league soccer/u)&&
       !is(/mls next|mlsnext|next pro|development|academy/u)
     case 'soccer_uefa_champs_league':return is(/champions league/u)&&
+      !is(/women|womens|femenin|female/u)&&
+      (is(/uefa|europe/u)||path.includes('/europe/'))
+    case 'soccer_uefa_womens_champions_league':return is(/champions league/u)&&
+      is(/women|womens|femenin|female/u)&&
       (is(/uefa|europe/u)||path.includes('/europe/'))
     default:return false
   }
