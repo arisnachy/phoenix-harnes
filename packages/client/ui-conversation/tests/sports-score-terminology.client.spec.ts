@@ -5,7 +5,7 @@ import type {PhoenixLiveGame} from '../src/client/chat/SportsLive.tsx'
 const game=(awayScore:string,homeScore:string)=>({
   home:'Charlotte Hornets',away:'Cleveland Cavaliers',
   homeScore,awayScore,phase:'in',periods:[],
-}) as PhoenixLiveGame
+}) as unknown as PhoenixLiveGame
 
 describe('score deficits use the units of the sport',()=>{
   it('uses points, not baskets, for NBA winning margins',()=>{
