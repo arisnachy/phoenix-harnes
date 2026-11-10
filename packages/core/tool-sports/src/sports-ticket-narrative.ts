@@ -208,7 +208,30 @@ export function enrichSpecialistNarrative(
     ...(check?.pendingSteps??[])].map(x=>clean(x,180)),12)
   const conflicts=(check?.sourceChecks??[]).filter(x=>x.status==='conflict')
     .map(x=>'Conflicto de fuente: '+clean(x.detail,140))
-  const contradictions=uniq([...prior.contradictions,...pending,...conflicts],12)
+  // A market favorite can have injured starters. Show each team's reported
+  // availability explicitly; never relabel an ESPN feed as a final NBA report.
+  const injuries=check?.injuryAudit
+  const identity=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
+    .toLowerCase().replace(/[^a-z0-9]/gu,'')
+  const selectedSide=injuries&&identity(prior.selected)===identity(injuries.home.name)?
+    injuries.home:injuries&&identity(prior.selected)===identity(injuries.away.name)?
+      injuries.away:null
+  const opponentSide=injuries&&selectedSide===injuries.home?injuries.away:
+    injuries&&selectedSide===injuries.away?injuries.home:null
+  const availability=(side:typeof selectedSide)=>side?.injuries
+    .filter(x=>!/^(?:available|active|healthy)$/iu.test(x.status))
+    .slice(0,6).map(x=>clean(x.athlete,90)+' ('+clean(x.status,60)+
+      (x.reportedAt?', '+clean(x.reportedAt,40):', fecha no confirmada')+')')??[]
+  const ownInjuries=availability(selectedSide),opponentInjuries=availability(opponentSide)
+  const availabilityUnknown=!injuries||!selectedSide||!opponentSide||
+    injuries.status==='stale'||injuries.status==='unavailable'||
+    injuries.status==='unsupported'||!injuries.home.matched||!injuries.away.matched
+  const injuryWarnings=availabilityUnknown?[
+    'Disponibilidad de ambos equipos incompleta o desactualizada; no asumir que una plantilla está sana',
+  ]:ownInjuries.length?[
+    'Bajas o dudas del equipo elegido ('+prior.selected+'): '+ownInjuries.slice(0,4).join('; '),
+  ]:[]
+  const contradictions=uniq([...prior.contradictions,...pending,...conflicts,...injuryWarnings],12)
   const hasPrice=typeof marketNoVigPercent==='number'&&
     Number.isFinite(marketNoVigPercent)&&marketNoVigPercent>=0&&marketNoVigPercent<=100
   const percentage:TicketNarrative['percentage']=hasPrice?{
@@ -226,7 +249,11 @@ export function enrichSpecialistNarrative(
     updatedAt:Number.isFinite(Date.parse(prediction.updatedAt))?prediction.updatedAt:null,
     sourceUrl:'https://betbetter.world'} as TicketNarrative['externalModel']:
     prior.externalModel
-  const explanationForChat=prior.explanationForChat
+  const baseChat=prior.explanationForChat.split('\n').filter(line=>
+    !line.startsWith('Disponibilidad del elegido:')&&
+    !line.startsWith('Disponibilidad del rival:')&&
+    !line.startsWith('Fuente de disponibilidad:')).join('\n')
+  const explanationForChat=baseChat
     .replace(/^Porcentaje: .*$/mu,'Porcentaje: '+
       (percentage.value===null?'no disponible':percentage.value.toFixed(1)+'%')+
       '. '+percentage.warning)
@@ -240,10 +267,33 @@ export function enrichSpecialistNarrative(
       modelPercent.toFixed(1)+'%')+', '+(externalOpinion?.status??'unavailable')+
       '. Fuente https://betbetter.world, actualizado '+clean(prediction.updatedAt,45)+
       '. Es segunda opinión con licencia CC BY, no precio de bookmaker ni certeza.':
-      '\nModelo externo: sin predicción comprobada para este evento.');
+      '\nModelo externo: sin predicción comprobada para este evento.')+
+    '\nDisponibilidad del elegido: '+(ownInjuries.length?ownInjuries.join('; '):
+      selectedSide?.matched?'sin bajas individualizadas en esta respuesta; NO confirma plantilla sana.':
+        'reporte no disponible para verificar ausencias.')+
+    '\nDisponibilidad del rival: '+(opponentInjuries.length?opponentInjuries.join('; '):
+      opponentSide?.matched?'sin bajas individualizadas en esta respuesta; NO confirma plantilla sana.':
+        'reporte no disponible para verificar ausencias.')+
+    '\nFuente de disponibilidad: '+(injuries?
+      'ESPN '+injuries.status+' · '+(injuries.feedUpdatedAt??'sin hora verificable')+
+      ' · '+injuries.source+'. Requiere cotejo con parte oficial y quintetos antes de apostar.':
+      'sin parte comprobado; investigación condicional.')
   return {...prior,status:documented?'documented':'conditional',
     specialistEvidence:evidence,criticalPending:pending,contradictions,percentage,
     externalModel,
-    favorable:uniq([...prior.favorable,...evidence.slice(0,2).map(x=>'Datos especialistas: '+x)],6),
+    favorable:uniq([...prior.favorable,
+      ...evidence.filter(x=>!/lesion|baja|injur/iu.test(x)).slice(0,2)
+        .map(x=>'Datos especialistas: '+x),
+      ...(opponentInjuries.length?[
+        'Reporte del rival '+opponentSide?.name+' (no equivale a victoria): '+
+          opponentInjuries.slice(0,3).join('; '),
+      ]:[])],6),
+    sources:injuries?[
+      ...prior.sources,
+      {name:'ESPN lesiones de ambos equipos · reporte no definitivo',
+        status:injuries.status==='verified'?'verified' as const:
+          injuries.status==='partial'?'partial' as const:'missing' as const,
+        url:https(injuries.source,['espn.com'])},
+    ]:prior.sources,
     explanationForChat}
 }
