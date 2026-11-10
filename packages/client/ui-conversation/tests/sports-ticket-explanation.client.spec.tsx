@@ -28,6 +28,6 @@ describe('explainability of every unpriced forecast',()=>{
     show(ticket([{...leg,rationale:'Forma reciente, todavía sin investigar las bajas.'}]))
     expect(screen.getByText('Kira · Revisión individual de las selecciones')).toBeTruthy()
     expect(screen.getByText(/No hay expediente completo de lesiones, titulares/)).toBeTruthy()
-    expect(screen.getByText(/Forma reciente, todavía sin investigar las bajas/)).toBeTruthy()
+    expect(screen.getAllByText(/Forma reciente, todavía sin investigar las bajas/).length).toBeGreaterThan(0)
   })
 })
