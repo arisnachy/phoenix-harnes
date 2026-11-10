@@ -151,9 +151,28 @@ export function eclipseDelegationNeedsSourceImage(
   const blocks=human.flatMap(event=>(event.data as {
     readonly content?:readonly {readonly type?:string;readonly text?:string}[]
   }).content??[])
-  if(!blocks.some(b=>b.type==='image'))return false
+  const currentImage=blocks.some(b=>b.type==='image')
   const request=blocks.filter(b=>b.type==='text').map(b=>b.text??'').join(' ')
+  // Current-turn specialists do not receive pixels; neither do fresh children
+  // get earlier uploaded images just because the user says "la misma TC".
+  const prior=events.slice(0,start).findLast(event=>{
+    if(event.type!=='user/message')return false
+    const data=event.data as {
+      readonly source?:{readonly kind?:string}
+      readonly content?:readonly {readonly type?:string}[]
+    }
+    return data.source?.kind==='user'
+      && data.content?.some(block=>block.type==='image')===true
+  })
+  const previousImageReferenced=prior!==undefined
+    && /(?:imagen|captura|foto|placa|tomograf|\btac\b|\bct\b|estudio|lesi[oó]n|apendic|mism[ao]|anterio|adjunt|subid|gemelo|hiperrealista)/iu.test(
+      request+' '+assignment)
+  if(!currentImage&&!previousImageReferenced)return false
+  const priorText=prior===undefined?'':((prior.data as {
+    readonly content?:readonly {readonly type?:string;readonly text?:string}[]
+  }).content??[]).filter(x=>x.type==='text').map(x=>x.text??'').join(' ')
   const medical=isClinicalVisualTurn(request)||isClinicalVisualTurn(assignment)
+    || (previousImageReferenced&&isClinicalVisualTurn(priorText))
   if(!medical)return false
   // Distinguish reading/rendering the CURRENT patient image from independent
   // tasks like looking up public documentation or testing a pure function.
