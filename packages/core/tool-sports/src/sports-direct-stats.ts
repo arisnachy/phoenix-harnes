@@ -178,9 +178,10 @@ export async function collectDirectEspnStats(
     const root=site+'teams/'+t.id+'/'
     add(root+'statistics','team_statistics',value=>{
       const all=extract(value,90)
-      const important=/offensive.*rating|defensive.*rating|net.*rating|pace|
-        expected|effective.*field|true.*shoot|turnovers|rebound|points|goals|
-        power.play|penalty.kill|whip|era/iu
+      const important=new RegExp(
+        'offensive.*rating|defensive.*rating|net.*rating|pace|expected|'+
+        'effective.*field|true.*shoot|turnovers|rebound|points|goals|'+
+        'power.play|penalty.kill|whip|era','iu')
       team.stats=all.sort((a,b)=>Number(important.test(b.name))-
         Number(important.test(a.name))).slice(0,35)
       team.coverage.push({endpoint:'team_statistics',
