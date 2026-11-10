@@ -1021,3 +1021,22 @@ test('MLB five-start gate excludes zero-inning and zero-pitch pseudo-outings',as
     assert.equal(review.eligibleForTicket,false)
   }
 })
+
+test('MLB two-start gate rejects invalid calendar dates and zero-activity starts',async()=>{
+  const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true}).fetcher,at)
+  const outing=(day)=>({date:day,opponentId:123,innings:'5.2',
+    pitches:'85',earnedRuns:'2',strikeouts:'7',walks:'1'})
+  for(const p of [d.starters.home,d.starters.away]){
+    assert.ok(p)
+    p.recentStarts=[outing('2026-06-25'),outing('2026-06-24')]
+  }
+  assert.equal(reviewMlbResearch(d).evidenceGates.recentStarterOutingsVerified,true)
+  for(const [field,value] of [['date','2026-06-31'],['date','2026-02-30'],
+    ['date','2026-06-23T00:00:00Z'],['innings','0.0'],['pitches','0']]){
+    d.starters.home.recentStarts=[outing('2026-06-25'),{...outing('2026-06-24'),[field]:value}]
+    const review=reviewMlbResearch(d)
+    assert.equal(review.evidenceGates.recentStarterOutingsVerified,false,field+'='+value)
+    assert.ok(review.missingEvidence.some(x=>x.includes('Últimas salidas fechadas')))
+    assert.equal(review.eligibleForTicket,false)
+  }
+})
