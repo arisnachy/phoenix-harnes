@@ -65,3 +65,17 @@ test('never reads attacker supplied IDs or invalid sport/leagues',async()=>{
     [{id:'5',name:'Team'}],fetcher,now,200))
   assert.equal(calls,0)
 })
+
+test('isolates identical ESPN URLs between independent fetch transports',async()=>{
+  const makeFetcher=name=>async url=>new Response(JSON.stringify(
+    String(url).endsWith('/roster')?{athletes:[{id:'991',displayName:name}]}:
+    String(url).endsWith('/stats')?{categories:[{stats:[{displayName:'Points',displayValue:name}]}]}:{}
+  ),{status:200})
+  const first=await collectDirectEspnStats('basketball','nba',
+    [{id:'456',name:'Team'}],makeFetcher('First'),now,1)
+  const second=await collectDirectEspnStats('basketball','nba',
+    [{id:'456',name:'Team'}],makeFetcher('Second'),now,1)
+  assert.equal(first.teams[0].athletes[0].name,'First')
+  assert.equal(second.teams[0].athletes[0].name,'Second')
+  assert.equal(second.teams[0].athletes[0].stats[0].value,'Second')
+})
