@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {boundedPriced,evidencePricedTicket} from '../src/evidence-priced-ticket.ts'
+import {boundedPriced,evidencePricedTicket,acceptedObservedProviderQuote} from '../src/evidence-priced-ticket.ts'
 
 const date='2026-10-28',now=Date.parse('2026-10-28T15:00:00Z')
 const kick='2026-10-28T23:00:00Z'
@@ -417,4 +417,60 @@ test('optional quote sources have an independent finite deadline',async()=>{
   const started=Date.now()
   await assert.rejects(()=>boundedPriced(new Promise(()=>{}),35),/Fuente de cuotas: plazo agotado/)
   assert.ok(Date.now()-started<500)
+})
+
+test('provider snapshot freshness differs from unchanged bookmaker last-price-change time',()=>{
+  const quote={source:'TheRundown',observedAt:new Date(now).toISOString(),
+    updatedAt:new Date(now-26*3_600_000).toISOString()}
+  assert.equal(acceptedObservedProviderQuote(quote,now),true)
+  assert.equal(acceptedObservedProviderQuote({...quote,
+    observedAt:new Date(now-16*60_000).toISOString()},now),false)
+  assert.equal(acceptedObservedProviderQuote({...quote,
+    updatedAt:new Date(now+60_000).toISOString()},now),false)
+  assert.equal(acceptedObservedProviderQuote({...quote,
+    updatedAt:new Date(now-8*86_400_000).toISOString()},now),false)
+  assert.equal(acceptedObservedProviderQuote({...quote,source:'ESPN Site/Core'},now),false)
+  assert.equal(acceptedObservedProviderQuote({...quote,source:'OddsHarvester'},now),false)
+  assert.equal(acceptedObservedProviderQuote({...quote,observedAt:undefined},now),false)
+})
+
+test('five pregame legs recover actual same-book TheRundown quotes when V2 omits period_id and price is unchanged',async()=>{
+  let apiCount=0
+  const lastChange=new Date(now-26*3_600_000).toISOString()
+  const fromPublicAndRundown=async(url,init)=>{
+    if(String(url).includes('therundown.io/api/v2/sports/11/events/')){
+      apiCount++
+      assert.equal(init.headers['X-TheRundown-Key'],'test-private-rundown')
+      return new Response(JSON.stringify({events:Array.from({length:5},(_,i)=>({
+        event_id:'run-'+i,event_date:kick,
+        teams:[{name:'Away '+i,is_away:true},{name:'Home '+i,is_away:false}],
+        markets:[{market_id:1,participants:[
+          {name:'Home '+i,lines:[{prices:{'19':{
+            price:-130,updated_at:lastChange,is_main_line:true}}}]},
+          {name:'Away '+i,lines:[{prices:{'19':{
+            price:115,updated_at:lastChange,is_main_line:true}}}]},
+          {name:'Draw',lines:[{prices:{'19':{
+            price:310,updated_at:lastChange,is_main_line:true}}}]},
+        ]}],
+      }))}),{status:200})
+    }
+    return feed(url)
+  }
+  const result=await withSpecialists(5,date,'soccer',100,now,
+    {THERUNDOWN_API_KEY:'test-private-rundown'},fromPublicAndRundown)
+  assert.equal(apiCount,1)
+  assert.equal(result.verifiedEvents,5)
+  assert.equal(result.quotedLegs,5)
+  assert.equal(result.priced,true)
+  assert.ok(result.card.props.legs.every(x=>x.bookmaker==='DraftKings'))
+  assert.equal(result.card.props.legs[0].price,'1.76923')
+  assert.equal(result.placed,false)
+})
+
+test('old ESPN or unverified snapshot cannot be upgraded to bookmaker open price',()=>{
+  const q={source:'ESPN Site/Core',updatedAt:new Date(now-6*3_600_000).toISOString(),
+    observedAt:new Date(now).toISOString()}
+  assert.equal(acceptedObservedProviderQuote(q,now),false)
+  assert.equal(acceptedObservedProviderQuote({...q,source:'TheRundown',
+    observedAt:'not-a-date'},now),false)
 })
