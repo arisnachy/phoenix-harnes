@@ -224,7 +224,10 @@ export async function collectDirectEspnStats(
             if(athlete.lastGames.length)athlete.verifiedSources.push('gamelog')
           })
         }
-        if(athlete.stats.length&&(priority(person)===0||early)){
+        // ESPN may publish splits even when season totals are empty. Probe
+        // the first three roster-verified athletes, but never all 30+ players
+        // solely because a provider returned an empty stats payload.
+        if(athlete.stats.length&&(priority(person)===0||early)||early){
           add(uri+'splits','athlete_splits',data=>{
             athlete.splits=extract(data,6)
             if(athlete.splits.length)athlete.verifiedSources.push('splits')
