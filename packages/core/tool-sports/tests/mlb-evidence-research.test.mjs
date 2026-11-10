@@ -796,8 +796,9 @@ test('cached pitcher evidence expires at review time even when collection was va
   assert.ok(d.starters.home&&d.starters.away)
   assert.ok(d.bullpen.home.length&&d.bullpen.away.length)
   for(const p of [d.starters.home,d.starters.away]){
-    // At collection these starts are 44 and 45 days old; at re-review one expires.
-    p.recentStarts=[log('2026-05-18'),log('2026-05-17')]
+    // At July 1 noon, both calendar-dated starts are within 45 days;
+    // by July 2 noon the older start has crossed the exact 45-day cutoff.
+    p.recentStarts=[log('2026-05-19'),log('2026-05-18')]
   }
   for(const side of ['home','away']){
     d.bullpen[side][0].reliefUsage72h=[log('2026-06-28')]
