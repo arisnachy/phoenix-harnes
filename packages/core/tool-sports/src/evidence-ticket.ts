@@ -358,9 +358,14 @@ export async function evidenceTicket(
       '; titulares pendientes'
     // Reserve the whole source suffix, not only the audit. Otherwise long
     // specialist notes erase the actual ESPN summary and injury checks.
-    const suffix=' · '+sourceSummary+audit
-    return {...pick,rationale:(String(pick.rationale??'').slice(0,
-      Math.max(0,480-suffix.length))+suffix).slice(0,480)}
+    const rationale=String(pick.rationale??'')
+    const reviewerMarker=' · Revisión de alternativas:'
+    const reviewerAt=rationale.indexOf(reviewerMarker)
+    const reviewer=reviewerAt>=0?rationale.slice(reviewerAt):''
+    const core=reviewerAt>=0?rationale.slice(0,reviewerAt):rationale
+    const suffix=reviewer+' · '+sourceSummary+audit
+    return {...pick,rationale:(core.slice(0,Math.max(0,480-suffix.length))+
+      suffix).slice(0,480)}
   })
   // Final validation must inspect the SAME provider-recorded fixture IDs as
   // scouting. ESPN re-query can omit a game due scoreboard pagination/rotation.
