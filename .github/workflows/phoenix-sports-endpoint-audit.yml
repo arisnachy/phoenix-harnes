@@ -4,6 +4,7 @@ on:
     paths:
       - 'scripts/phoenix-sports-endpoint-audit.mjs'
       - 'scripts/phoenix-sports-adapter-live-probe.mjs'
+      - 'scripts/phoenix-sports-three-source-step-audit.mjs'
       - '.github/workflows/phoenix-sports-endpoint-audit.yml'
       - 'packages/core/tool-sports/src/espn-odds.ts'
       - 'packages/core/tool-sports/src/espn-injury-backup.ts'
@@ -43,3 +44,15 @@ jobs:
           path: phoenix-sports-adapter-live.json
           if-no-files-found: warn
           retention-days: 14
+      - name: Check three candidate routes for every original research step
+        run: node --experimental-strip-types scripts/phoenix-sports-three-source-step-audit.mjs
+      - name: Save full per-step three-source status
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-three-source-step-results
+          path: |
+            phoenix-3-source-step-audit.json
+            phoenix-3-source-step-audit.md
+          if-no-files-found: warn
+          retention-days: 21
