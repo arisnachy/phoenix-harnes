@@ -185,6 +185,9 @@ describe('live image-specialist dispatch', () => {
       try {
         const assembled = await ctx.systemPrompt.assemble()
         expect(assembled.sections.some(section => section.name === 'phoenix:auto-visible-handoff')).toBe(false)
+        expect(assembled.sections.find(section =>
+          section.name === 'phoenix:eclipse-clinical-image-owner')?.text)
+          .toContain('NOT automatically delivered to Orion')
         const routed = await agentEvents(ctx, agent).waterfall(
           'agent/request', { turn: 1, step: 1, signal: new AbortController().signal },
           () => Promise.resolve({ provider: 'seed', model: 'seed' }),
