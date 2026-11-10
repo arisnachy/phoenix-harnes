@@ -57,19 +57,19 @@ export function scoresAndOddsMoneylineHints(
 function scoresAndOddsTableMoneylines(html:string,home:string,away:string):PublicMoneylineHint[]{
   const hints:PublicMoneylineHint[]=[]
   if(html.length>1_500_000)return hints
-  const escaped=(s:string)=>s.normalize('NFD').replace(/[\\u0300-\\u036f]/gu,'')
-    .toLowerCase().replace(/[^a-z0-9 ]/gu,' ').replace(/\\s+/gu,' ').trim()
+  const escaped=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
+    .toLowerCase().replace(/[^a-z0-9 ]/gu,' ').replace(/\s+/gu,' ').trim()
   const choices=[home,away].filter(name=>name.trim().length>=5)
   if(choices.length!==2)return hints
   const detected=new Set<string>()
-  for(const table of html.matchAll(/<table\\b[^>]*>([\\s\\S]{0,150000}?)<\\/table>/giu)){
-    const header=table[1]?.match(/<tr\\b[^>]*>[\\s\\S]*?<\\/tr>/iu)?.[0]??''
-    const columnNames=[...header.matchAll(/<th\\b[^>]*>([\\s\\S]*?)<\\/th>/giu)]
+  for(const table of html.matchAll(/<table\b[^>]*>([\s\S]{0,150000}?)<\/table>/giu)){
+    const header=table[1]?.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/iu)?.[0]??''
+    const columnNames=[...header.matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/giu)]
       .map(match=>escaped(clean(match[1]??'')))
     const column=columnNames.findIndex(name=>name==='moneyline'||name==='money line')
     if(column<0)continue
-    for(const row of (table[1]??'').matchAll(/<tr\\b[^>]*>([\\s\\S]*?)<\\/tr>/giu)){
-      const cells=[...(row[1]??'').matchAll(/<td\\b[^>]*>([\\s\\S]*?)<\\/td>/giu)]
+    for(const row of (table[1]??'').matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/giu)){
+      const cells=[...(row[1]??'').matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/giu)]
         .map(m=>clean(m[1]??''))
       if(cells.length<=column)continue
       const teamCell=escaped(cells.slice(0,2).join(' '))
@@ -80,7 +80,7 @@ function scoresAndOddsTableMoneylines(html:string,home:string,away:string):Publi
       })
       if(!team||detected.has(team))continue
       const american=cells[column]?.trim().replace(/^even$/iu,'+100')??''
-      if(!/^[+-]\\d{3,5}$/u.test(american))continue
+      if(!/^[+-]\d{3,5}$/u.test(american))continue
       const price=Number(american)
       if(Math.abs(price)<100||Math.abs(price)>10000)continue
       detected.add(team)
@@ -224,7 +224,7 @@ async function readPublicDocument(url:string,fetcher:typeof fetch,now:number):Pr
     if(![401,403,429].includes(response.status)){
       if(!response.ok)throw Error('HTTP '+response.status)
       const kind=response.headers.get('content-type')??''
-      if(!/text\\/html|application\\/xhtml\\+xml/iu.test(kind))
+      if(!/text\/html|application\/xhtml\+xml/iu.test(kind))
         throw Error('La página no devolvió HTML público verificable')
       if(Number(response.headers.get('content-length')??0)>1_500_000)
         throw Error('Página demasiado grande')
