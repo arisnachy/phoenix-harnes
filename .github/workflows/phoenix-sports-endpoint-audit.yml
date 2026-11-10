@@ -1,0 +1,32 @@
+name: PHOENIX Sports real endpoint matrix
+on:
+  pull_request:
+    paths:
+      - 'scripts/phoenix-sports-endpoint-audit.mjs'
+      - '.github/workflows/phoenix-sports-endpoint-audit.yml'
+      - 'packages/core/tool-sports/src/espn-odds.ts'
+      - 'packages/core/tool-sports/src/espn-injury-backup.ts'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  endpoint-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate source probe syntax
+        run: node --check scripts/phoenix-sports-endpoint-audit.mjs
+      - name: Check every registered route family with real HTTP requests
+        run: node scripts/phoenix-sports-endpoint-audit.mjs
+      - name: Publish inspectable network observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-sports-endpoint-audit
+          path: phoenix-sports-endpoint-audit.json
+          if-no-files-found: warn
+          retention-days: 14
