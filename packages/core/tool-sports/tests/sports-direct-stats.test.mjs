@@ -21,8 +21,10 @@ test('directly fetches ESPN player stats, gamelog and splits without a prompt ac
     else if(u===web+'athletes/101/stats')body={
       categories:[{stats:[{displayName:'Points per game',displayValue:'24.4'},
         {displayName:'Rebounds',displayValue:'5.1'}]}]}
-    else if(u===web+'athletes/101/gamelog')body={tables:[{
-      labels:['Points','Assists'],stats:['26','7']}]}
+    else if(u===web+'athletes/101/gamelog')body={
+      events:{'401555001':{name:'Home NBA vs Away NBA'}},
+      seasonTypes:[{categories:[{labels:['Points','Assists'],
+        events:[{eventId:'401555001',stats:['26','7']}]}]}]}
     else if(u===web+'athletes/101/splits')body={
       categories:[{stats:[{name:'Home points',value:'27.0'}]}]}
     return new Response(JSON.stringify(body),{status:200})
@@ -35,7 +37,7 @@ test('directly fetches ESPN player stats, gamelog and splits without a prompt ac
   const player=report.teams[0].athletes.find(p=>p.id==='101')
   assert.equal(player.teamId,'5')
   assert.equal(player.stats[0].value,'24.4')
-  assert.equal(player.lastGames[0].value,'26')
+  assert.match(player.lastGames[0].value,/Points: 26.*Assists: 7/)
   assert.equal(player.splits[0].value,'27.0')
   assert.ok(player.verifiedSources.includes('gamelog'))
   assert.ok(calls.every(u=>u.startsWith(site)||u.startsWith(web)))
