@@ -45,7 +45,6 @@ export function auditBasketballGranularEvidence(d:BasketballCase):
   const fourAny=both.some(x=>Object.values(main).some(re=>
     take(x.teamStats,re)!==null))
   const shooting=both.map(x=>other.map(re=>take(x.teamStats,re)))
-  const shootingComplete=shooting.every(metrics=>metrics.every(Boolean))
   const shootingAny=shooting.some(metrics=>metrics.some(Boolean))
   const playersWithStats=both.map(x=>x.roster.filter(p=>p.stats.length>0))
   const playersWithGames=both.map(x=>x.roster.filter(p=>p.lastGames.length>0))
