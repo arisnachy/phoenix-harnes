@@ -957,3 +957,28 @@ test('MLB review requires at least two valid recent starts for each probable sta
   assert.ok(review.missingEvidence.some(x=>x.includes('Últimas salidas fechadas')))
   assert.equal(review.eligibleForTicket,false)
 })
+
+
+test('MLB five-start evidence is enforced in global summary without duplicate blockers',async()=>{
+  const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true}).fetcher,at)
+  const outing=(day)=>({date:day,opponentId:123,innings:'5.2',
+    pitches:'85',earnedRuns:'2',strikeouts:'7',walks:'1'})
+  const dates=['2026-06-25','2026-06-24','2026-06-23','2026-06-22','2026-06-21']
+  for(const p of [d.starters.home,d.starters.away]){
+    assert.ok(p)
+    p.recentStarts=dates.slice(0,4).map(outing)
+  }
+  let review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.recentStarterOutingsVerified,true)
+  assert.equal(review.evidenceGates.fiveStarterOutingsVerified,false)
+  assert.equal(review.missingEvidence.filter(x=>x.includes('Cinco salidas recientes distintas')).length,1)
+  assert.equal(review.eligibleForTicket,false)
+  d.starters.home.recentStarts.push(outing(dates[4]))
+  review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.fiveStarterOutingsVerified,false)
+  d.starters.away.recentStarts.push(outing(dates[4]))
+  review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.fiveStarterOutingsVerified,true)
+  assert.equal(review.missingEvidence.some(x=>x.includes('Cinco salidas recientes distintas')),false)
+  assert.equal(review.eligibleForTicket,false)
+})
