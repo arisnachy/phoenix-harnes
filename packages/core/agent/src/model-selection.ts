@@ -469,6 +469,16 @@ const AUTO_SOL_RESCUE_HANDOFF =
   'apply the correction only if it respects the original user request and permissions, ' +
   'execute the next tool action and stop when verified. Do not reopen completed work.'
 
+const AUTO_ASSESSMENT_EXECUTION_HANDOFF =
+  'Eclipse: continue the SAME task after a qualified first-step analysis. ' +
+  'The planner already supplied a provisional evidence-based assessment and an executable objective; ' +
+  'the coordinator must preserve its positive findings, alternatives and explicit uncertainties. ' +
+  'Do not replace a supported but provisional hypothesis with a generic refusal solely because the model changed. ' +
+  'Do not upgrade a hypothesis to a confirmed fact; only change it when new observed evidence proves why. ' +
+  'Execute the requested concrete tool action (for example, image_generation for an authorized educational illustration), ' +
+  'verify real artifacts, and then submit the outcome for bounded planner supervision. ' +
+  'If the tool is unavailable or the evidence gate genuinely blocks, report the exact technical/evidence blocker instead of promising work later.'
+
 const AUTO_VISIBLE_PLAN_HANDOFF =
   'You are Kira. The visible **Plan:** you authored is your own authoritative execution plan. ' +
   'Continue the current user request as the SAME Kira on the Luna Max execution coordinator route, without addressing yourself as another speaker; execute the next concrete action now, ' +
@@ -1712,15 +1722,22 @@ export function installModelSelection(
     // The actual visible assistant text is the coordinator handoff. A persisted
     // assistant source may omit the model: the explicit visible plan plus the
     // active Phoenix Auto route is authoritative; never silently stop here.
+    const firstStepContract=latest.step===1
+      ? eclipseCurrentWorkContract(agent.session.events, {
+        allowUnattributedAssessment:humanImageInTurn(agent.session.events,turn),
+      }) : undefined
+    const canContinueFirstStep=firstStepContract?.kind==='plan'
+      || (firstStepContract?.kind==='assessment' && phoenixAutoTaskRequest(directText))
     if (latest.step === 1 && !latestStepHasToolActivity
-      && hasVisibleSolPlan(latest.text) && !phoenixAutoExplicitlyClosed(latest.text)) {
+      && canContinueFirstStep && !phoenixAutoExplicitlyClosed(latest.text)) {
       // Once the plan was handed off, do not re-enter Team admission for the
       // exact same stopping step. It would manufacture a second coordination turn.
       if (phoenixAutoState.lastContinuationStep === latest.step) return
       phoenixAutoState.continuationCount += 1
       phoenixAutoState.lastContinuationStep = latest.step
       agent.steer(createUserMessage({
-        content: [{ type: 'text', text: AUTO_VISIBLE_PLAN_HANDOFF }],
+        content: [{ type: 'text', text: firstStepContract?.kind==='assessment'
+          ? AUTO_ASSESSMENT_EXECUTION_HANDOFF : AUTO_VISIBLE_PLAN_HANDOFF }],
         source: {
           kind: 'plugin', plugin: 'model-selection', form: 'notice',
           summary: 'Phoenix Auto visible coordinator handoff',
