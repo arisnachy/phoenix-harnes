@@ -164,7 +164,7 @@ test('NFL preseason results are excluded from the formal dossier',async()=>{
     const response=await base(url)
     const path=new URL(String(url))
     const key=path.searchParams.get('dates')??''
-    if(path.pathname.endsWith('/scoreboard')&&key==='202610'){
+    if(path.pathname.endsWith('/scoreboard')&&key!=='20261108'){
       const payload=await response.json()
       return new Response(JSON.stringify({events:payload.events?.map(e=>({
         ...e,season:{type:1},
