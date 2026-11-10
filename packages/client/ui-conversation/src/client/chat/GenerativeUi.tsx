@@ -164,6 +164,8 @@ type SportsTicketNarrative = {
   selectionWhy:string
   favorable:string[]
   contradictions:string[]
+  researchSteps?:Array<{key:string;title:string;critical:boolean;
+    state:'verified'|'partial'|'missing';detail:string}>
   news:Array<{headline:string;publisher:string;publishedAt:string|null;
     articleUrl:string|null;imageUrl:string|null}>
   globalNews:Array<{publisher:string;headline:string;indexedAt:string|null;articleUrl:string;status:string}>
@@ -191,7 +193,13 @@ type SportsTicketCard = {
       eventId?:string;eventDate?:string;providerLeague?:string;trackedBet?:SportsTrackedPick;
       narrative?:SportsTicketNarrative;legWinProbabilityPercent?:number|null;
       legProbabilitySource?:string;marketNoVigPercent?:number|null;
-      researchStatus?:string;pendingEvidence?:string[] }>
+      researchStatus?:string;pendingEvidence?:string[];
+      referenceOdds?:{bookmaker:string;price:number;reason:string;source?:string;
+        nonCotizable:true};
+      webOddsResearch?:Array<{provider:string;url:string;status:string;
+        pageObservedAt:string;quoteUpdatedAt:null;bookmakerVerified:false;
+        referenceMoneylines:unknown[]}>;
+      oddsReferenceNote?:string }>
     requestedLegs?:number; combinedOdds: string; stake?: string; grossReturn?: string; note: string
     ticketReference?:string
     askPrompt?: string;chatNarrative?:SportsTicketNarrative[];
@@ -465,7 +473,7 @@ const boundedSportsText=(v:unknown,n=300)=>typeof v==='string'&&v.length<=n
 const nullableSportsText=(v:unknown,n=300)=>v===null||boundedSportsText(v,n)
 const sportsTicketNarrative=(v:unknown):v is SportsTicketNarrative=>{
   if(!isRecord(v)||!hasOnlyKeys(v,['eventId','selected','title','status',
-    'selectionWhy','favorable','contradictions','specialistEvidence','criticalPending',
+    'selectionWhy','favorable','contradictions','specialistEvidence','criticalPending','researchSteps',
     'news','globalNews','externalOpinions','externalModel','venue',
     'directOpponentHistory','referee','weather','imagery','percentage','sources',
     'explanationForChat']))return false
@@ -475,6 +483,13 @@ const sportsTicketNarrative=(v:unknown):v is SportsTicketNarrative=>{
   const texts=(x:unknown,n:number)=>Array.isArray(x)&&x.length<=12&&
     x.every(y=>boundedSportsText(y,n))
   if(!texts(v.favorable,450)||!texts(v.contradictions,450))return false
+  if(v.researchSteps!==undefined&&(!Array.isArray(v.researchSteps)||
+    v.researchSteps.length>25||!v.researchSteps.every(x=>isRecord(x)&&
+      hasOnlyKeys(x,['key','title','critical','state','detail'])&&
+      boundedSportsText(x.key,50)&&boundedSportsText(x.title,180)&&
+      typeof x.critical==='boolean'&&
+      ['verified','partial','missing'].includes(String(x.state))&&
+      boundedSportsText(x.detail,240))))return false
   if(!Array.isArray(v.news)||v.news.length>6||!v.news.every(x=>isRecord(x)&&
     hasOnlyKeys(x,['headline','publishedAt','publisher','articleUrl','imageUrl'])&&
     isText(x.headline,200)&&boundedSportsText(x.publisher,80)&&
@@ -550,7 +565,8 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
       && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player','rationale',
       'homeLogo','awayLogo','homeTeam','awayTeam','eventId','eventDate','providerLeague','trackedBet',
       'narrative','legWinProbabilityPercent','legProbabilitySource','legProbabilityWarning','marketNoVigPercent',
-      'marketRiskTier','decisionReview','specialistResearch','researchStatus','pendingEvidence','preliminaryEvidenceTier'])
+      'marketRiskTier','decisionReview','specialistResearch','researchStatus','pendingEvidence',
+      'preliminaryEvidenceTier','referenceOdds','webOddsResearch','oddsReferenceNote'])
       && isText(x.event) && isText(x.selection) && isText(x.price,32)
       && isText(x.bookmaker) && optionalText(x.when) && trustedPortrait(x.image)
       && trustedPortrait(x.homeLogo) && trustedPortrait(x.awayLogo)
@@ -573,6 +589,22 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
          typeof x.marketNoVigPercent==='number'&&Number.isFinite(x.marketNoVigPercent)&&
          x.marketNoVigPercent>=0&&x.marketNoVigPercent<=100)
        && optionalText(x.legProbabilitySource,90)&&optionalText(x.researchStatus,50)
+       && (x.referenceOdds===undefined||(isRecord(x.referenceOdds)&&
+         hasOnlyKeys(x.referenceOdds,['bookmaker','price','reason','source','nonCotizable'])&&
+         boundedSportsText(x.referenceOdds.bookmaker,120)&&
+         typeof x.referenceOdds.price==='number'&&
+         Number.isFinite(x.referenceOdds.price)&&x.referenceOdds.price>1&&
+         x.referenceOdds.price<1000&&boundedSportsText(x.referenceOdds.reason,70)&&
+         (x.referenceOdds.source===undefined||boundedSportsText(x.referenceOdds.source,40))&&
+         x.referenceOdds.nonCotizable===true))
+       && optionalText(x.oddsReferenceNote,500)
+       && (x.webOddsResearch===undefined||(Array.isArray(x.webOddsResearch)&&
+         x.webOddsResearch.length<=12&&x.webOddsResearch.every(y=>isRecord(y)&&
+           ['ESPN','Oddschecker','ScoresAndOdds'].includes(String(y.provider))&&
+           safeSportsLink(y.url)&&boundedSportsText(y.status,70)&&
+           boundedSportsText(y.pageObservedAt,50)&&
+           y.quoteUpdatedAt===null&&y.bookmakerVerified===false&&
+           Array.isArray(y.referenceMoneylines)&&y.referenceMoneylines.length<=6)))
        && (x.pendingEvidence===undefined||Array.isArray(x.pendingEvidence)&&
          x.pendingEvidence.length<=8&&x.pendingEvidence.every(y=>isText(y,260))))
 }
