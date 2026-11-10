@@ -39,6 +39,7 @@ const leagueInfo:Record<string,{ sport:string;country?:string;league:string }>={
   'mex.1':{ sport:'Fútbol',country:'México',league:'Liga MX' },
   'usa.1':{ sport:'Fútbol',country:'Estados Unidos / Canadá',league:'MLS' },
   'uefa.champions':{ sport:'Fútbol',country:'Europa',league:'Champions League' },
+  'uefa.wchampions':{ sport:'Fútbol',country:'Europa',league:'Champions League femenina' },
   'mlb':{ sport:'Béisbol',league:'MLB' },
   'nba':{ sport:'Baloncesto',league:'NBA' },
   'wnba':{ sport:'Baloncesto',league:'WNBA' },
@@ -204,6 +205,7 @@ export async function autoResearchTicket(
   const leagues=[
     ['basketball','nba'],['football','nfl'],['hockey','nhl'],
     ['soccer','eng.1'],['soccer','esp.1'],['soccer','uefa.champions'],
+    ['soccer','uefa.wchampions'],
     ['baseball','mlb'],['basketball','wnba'],
   ] as const
   const boards=new Map<string,EspnBoard>()
