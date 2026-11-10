@@ -79,10 +79,15 @@ async function fetchOne(item){
      output.items=Array.isArray(games)?games.length:null
      output.evidence={keys:Object.keys(obj).slice(0,9)}
    }else{
-     const valid=Array.isArray(val)
-     output.status=!valid?'invalid_schema':val.length?'available':'empty'
-     output.items=valid?val.length:null
-     output.evidence={keys:Object.keys(obj).slice(0,12)}
+     const isList=Array.isArray(val),isMap=!!val&&typeof val==='object'&&!isList
+     const n=isList?val.length:isMap?Object.keys(val).length:
+       Array.isArray(data)?data.length:null
+     output.status=n===null?'invalid_schema':n>0?'available':'empty'
+     output.items=n
+     output.evidence={keys:Object.keys(obj).slice(0,12),
+       shape:isList?'array':isMap?'object':Array.isArray(data)?'root-array':'missing',
+       sampleKeys:isMap?Object.keys(val).slice(0,8):
+         isList&&val[0]?Object.keys(val[0]).slice(0,8):[]}
    }
    // A structurally valid but empty off-season feed is not an outage.
    if(['events','injuries','articles','sports','children','dates','games','scoreboard','roster','athletes','items'].includes(item.shape)){
@@ -94,16 +99,43 @@ async function fetchOne(item){
        eventIds:found.slice(0,3).map(x=>String(x.id??'')),
        gamesWithEmbeddedOdds:found.filter(x=>
          x.competitions?.some(y=>Array.isArray(y.odds)&&y.odds.length>0)).length,
-       games:found.length}
+       games:found.length,
+       oddsExample:found.flatMap(e=>e.competitions??[])
+         .flatMap(c=>c.odds??[]).slice(0,1).map(o=>({
+           provider:o.provider?.name??o.provider??null,
+           updatedAt:o.lastUpdated??o.updatedAt??o.lastUpdate??null,
+           homeTeamOdds:o.homeTeamOdds??null,
+           awayTeamOdds:o.awayTeamOdds??null,
+           overUnder:o.overUnder??null,
+           details:o.details??null,
+           fields:Object.keys(o)}))}
    }
    if(item.step.includes('lesiones')&&Array.isArray(obj.injuries))
      output.evidence={...output.evidence,
        sampleKeys:Object.keys(obj.injuries[0]??{}).slice(0,15),
        sampleTeam:obj.injuries[0]?.displayName??obj.injuries[0]?.team?.displayName??null,
-       feedTimestamp:obj.timestamp??null}
+       feedTimestamp:obj.timestamp??null,
+       teamSample:obj.injuries.slice(0,2).map(g=>({
+         team:g.displayName??g.name??null,
+         count:Array.isArray(g.injuries)?g.injuries.length:null,
+         first:g.injuries?.[0]?{
+           athlete:g.injuries[0].athlete?.displayName??null,
+           status:g.injuries[0].status??null,
+           lastUpdated:g.injuries[0].date??g.injuries[0].updatedAt??null,
+           fields:Object.keys(g.injuries[0]),
+         }:null}))}
    if(item.step==='cuotas_core'&&typeof data==='object')
      output.evidence={...output.evidence,
        refCount:obj.count??null,itemsPreview:Array.isArray(obj.items)?obj.items.slice(0,2).map(x=>x.$ref??null):[]}
+   if(item.step==='cuotas_core_detalle'&&data&&typeof data==='object'){
+     const o=data
+     output.status=Object.keys(o).length?'available':'empty'
+     output.items=Object.keys(o).length
+     output.evidence={fields:Object.keys(o).slice(0,22),
+       provider:o.provider??null,lastUpdated:o.lastUpdated??o.updatedAt??null,
+       homeTeamOdds:o.homeTeamOdds??null,awayTeamOdds:o.awayTeamOdds??null,
+       overUnder:o.overUnder??null}
+   }
    return output
  }catch(e){output.evidence=err(e);return output}
  finally{output.elapsedMs=Date.now()-begin}
@@ -149,6 +181,15 @@ for(const [sport,league,history] of leagues){
  }
 }
 await runBatch(followup,4)
+// Fetch the actual ESPN Core entry referenced by its HTTP 200 collection.
+const coreDetails=[]
+for(const row of followup.filter(x=>x.step==='cuotas_core')){
+ const data=payloads.get(row.url),ref=data?.items?.find(x=>
+   typeof x?.$ref==='string'&&/^https?:\/\/sports\.core\.api\.espn\.com\/v2\/sports\//iu.test(x.$ref))?.$ref
+ if(ref)coreDetails.push({...row,step:'cuotas_core_detalle',
+   url:ref.replace(/^http:/iu,'https:'),shape:'provider'})
+}
+await runBatch(coreDetails,3)
 // Probe at least one real athlete ID from an observed roster.
 const athletes=[]
 for(const row of followup.filter(x=>x.step==='plantilla_del_equipo')){
