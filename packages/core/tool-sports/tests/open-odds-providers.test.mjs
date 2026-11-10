@@ -119,3 +119,17 @@ test('Bet Better is independent probability and locked rows are excluded',async(
   assert.equal(findModelOpinion(models,{home:'Chicago Bulls',away:'Boston Celtics',
     kickoff,pick:'home'}).status,'contradiction')
 })
+
+test('TheRundown official V2 JSON without period_id retains open full-game moneylines',async()=>{
+  const example=structuredClone(rundown)
+  delete example.events[0].markets[0].period_id
+  const prices=await fetchTheRundownOdds('basketball_nba','h2h','key',
+    async()=>json(example),now)
+  assert.equal(prices.length,2)
+  assert.deepEqual(prices.map(x=>x.selection),['Boston Celtics','Chicago Bulls'])
+  assert.ok(prices.every(x=>x.bookmaker==='DraftKings'&&x.observedAt))
+  // An explicit subperiod must still be rejected.
+  example.events[0].markets[0].period_id='1'
+  assert.deepEqual(await fetchTheRundownOdds('basketball_nba','h2h','key',
+    async()=>json(example),now),[])
+})
