@@ -91,7 +91,7 @@ const GUIDANCE = [
 
   'SEGUIMIENTO CLOUD: al crear un ticket de investigación, registrar automáticamente solo si PHOENIX_SPORTS_CLOUD_TRACKING_ENABLED=1 y las credenciales GitHub/AES están en la bóveda. Devolver cloudFollowUp con su estado real, no afirmar que habrá correo cuando status sea disabled, needs-configuration o error. El cifrado mantiene ocultos los eventos en un issue público, pero los metadatos de issue sí son visibles. Cuando los encuentros terminen, un workflow remoto revisará marcadores y enviará correo únicamente si RESEND_API_KEY, correo destinatario, remitente y clave AES están configurados en GitHub Actions. Nunca afirmar que la banca confirmó pago ni que un correo salió sin prueba. ',
   'TICKET DIARIO 5 O 6: primero ampliar y contrastar la cartelera multi-liga, después investigar todos los expedientes y usar decisionAudit. Si existen 5-6 encuentros futuros verificados, presentar hasta seis mejores CANDIDATAS, aunque deban marcarse CONDICIONALES, nunca inventar una victoria aprobada. Diversidad deportiva no autoriza eliminar una pata real y el precio no sustituye la investigación. Para cada pata reporta legWinProbabilityPercent con legProbabilitySource: NO sumar ni multiplicar porcentajes como pronóstico del ticket completo. No convertir un porcentaje exploratorio o no-vig en certeza predictiva; si no puede estimarse, mostrar valor pendiente y por qué. Confirmar estado de riesgo de cada pata antes de cualquier ejecución. ',
-  'ASK DE CLAVES OPCIONALES: tras detectar una clave relevante ausente, usa sports_chat_credential_ask(action=request,ref=...) para obtener una pregunta Ask con URL para registrarse y entrada segura. Si el usuario indica no volver a preguntar, llama mute para esa fuente o mute-all para todas; si dice ahora no, se respeta una pausa de 30 días. Nunca recibir la clave en texto del modelo: solo /secret set o interfaz segura del Host. No bloquear investigación por falta de claves. ',
+  'CREDENCIALES DEPORTIVAS AUTOMÁTICAS: si un proveedor necesario devuelve 401/403, invalid-key, necesita API key o está sin configurar, consulta sports_chat_research_provider_status, identifica la referencia EXACTA de ese proveedor y usa sports_chat_credential_ask(action=request,ref=...). Ask solicita consentimiento, NO el valor. Si el usuario acepta, indica que debe pegar su clave en Conectores > APIs deportivas (pestaña sports-api-keys, formulario tipo password), donde el Host la guarda en su bóveda y devuelve solo el estado. No pedir jamás el valor en el chat ni en una respuesta Ask. No preguntar por claves de fuentes que no intervienen en la tarea ni repetir solicitudes silenciadas o recientes; si dice no volver a preguntar, mute o mute-all, y si dice ahora no, pausa 30 días. Reintenta el proveedor tras guardar, en una nueva operación, sin reiniciar PHOENIX. Mientras no exista una clave válida, continuar con ESPN/NHL/MLB y fuentes públicas, entregando el ticket de investigación cuando existan candidatos; no quedarse bloqueada ni prometer cuota vigente no acreditada. ',
   'CLAVES Y FUENTES SIN BLOQUEOS: para saber qué conectores faltan llama sports_chat_research_provider_status. No pidas que peguen una clave en mensajes normales del modelo ni la aceptes como argumento de herramientas. Si el usuario quiere añadirla, indica el comando humano seguro /secret set NOMBRE VALOR, interceptado por el Host antes del agente y con recordInput=false, o la interfaz de credenciales segura disponible. Pedir permiso y una sola clave pertinente. No bloquear investigación ni tickets por claves ausentes; usa fuentes públicas, respaldo y caché. Tener clave NO equivale a fuente activa ni a datos comprobados. ',
 
   'MEMORIA DE INVESTIGACIÓN POR DÍA: antes de construir un ticket consulta sports_chat_daily_research_cache(statusOnly=true); no esperes la precarga statusOnly=false para un ticket solicitado ahora: haz el barrido de partidos directamente y usa precarga opcional fuera de la ruta crítica. Reutiliza información ESPN/NHL/MLB/TheSportsDB y API-Sports con cuota regulada (20 reservas de 100); conserva hasta 7 días PERO respeta vencimiento de cada dato. La precarga ayuda, no reemplaza búsquedas libres ni confirma porteros titulares, alineaciones, cuotas o lesiones. SportsDataIO trial contiene datos alterados y NO sirve para picks. Si un proveedor falla, usa otros sin gastar su cuota repetidamente. ',
@@ -260,7 +260,7 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_credential_ask',
-    description:'Pregunta mediante Ask por UNA API key deportiva opcional y recuerda si el usuario no desea nuevos avisos. Solo gestiona preferencias: NUNCA recibe ni muestra el valor secreto. /secret set es interceptado por el Host.',
+    description:'Ante proveedor deportivo relevante sin clave o 401/403: Ask pide permiso UNA vez y señala Conectores > APIs deportivas para introducirla en un password seguro conectado a la bóveda. No recibe el secreto en Ask ni chat y respeta no volver a preguntar.',
     parameters:{
       action:{type:'string',description:'status | request | mute | unmute | mute-all | unmute-all'},
       ref:{type:'string',description:'Nombre exacto de la variable, NO la clave. Por ejemplo THE_ODDS_API_KEY.'},
@@ -299,7 +299,7 @@ export function apply(ctx: Context): void {
             question:proposal.question??'¿Configurar este proveedor?',
             sensitive:true,options:[
               {label:'Configurar de forma segura',
-                description:'Mostrar enlace oficial y comando de la bóveda PHOENIX'},
+                description:'Abrir Conectores > APIs deportivas y pegar la clave en el campo protegido'},
               {label:'Ahora no',recommended:true,
                 description:'Seguir con fuentes públicas; no volver a preguntar durante 30 días'},
               {label:'No volver a preguntar',
@@ -314,9 +314,10 @@ export function apply(ctx: Context): void {
           return JSON.stringify({...muted,status:'suppressed',decision:selected})
         }
         return JSON.stringify({...proposal,delivery:'native-ask',decision:selected,
-          needsSecureEntry:selected==='Configurar de forma segura',
+          nextAction:selected==='Configurar de forma segura'?'open-sports-api-keys':null,
+          secureConnectorTab:'sports-api-keys',needsSecureEntry:selected==='Configurar de forma segura',
           instruction:selected==='Configurar de forma segura'?
-            'Abrir configuración segura o ejecutar /secret set. Nunca insertar la clave en chat.':
+            'Abrir Conectores > APIs deportivas (sports-api-keys); pegar la clave en el campo protegido y guardarla. Nunca insertarla en chat ni Ask.':
             'Continuar con ESPN y otras fuentes gratuitas; no volver a solicitar esta clave durante 30 días.'})
       }catch(error){
         return JSON.stringify({...proposal,delivery:'ask-unavailable',
