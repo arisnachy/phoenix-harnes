@@ -2,7 +2,8 @@
  * Daily league-level odds discovery can silently miss events due to the global
  * request cap or Santo Domingo evening games listed on the following UTC day.
  * This adapter checks both UTC dates by *exact ESPN event ID*; it NEVER
- * promotes an undated price, unauthenticated bookmaker, or commenced game.
+ * promotes an unnamed bookmaker, unmatched fixture, or commenced game.
+ * The last-update field is optional; observedAt identifies this ESPN read.
  */
 import {fetchPublicEspnOddsDetailed,type EspnOddsObservation} from './espn-odds.ts'
 import type {KeylessQuote} from './keyless-odds.ts'
@@ -64,9 +65,9 @@ export async function lookupExactEspnWinner(
       norm(q.home)===norm(target.home)&&norm(q.away)===norm(target.away)&&
       [norm(target.home),norm(target.away),'draw'].includes(norm(q.selection))&&
       Math.abs(Date.parse(q.timeIso)-kickoff)<=90_000&&
-      Number.isFinite(Date.parse(q.updatedAt))&&
-      Date.parse(q.updatedAt)<=now+5*60_000&&
-      now-Date.parse(q.updatedAt)<=60*60_000&&
+      Number.isFinite(Date.parse(q.observedAt??''))&&
+      Date.parse(q.observedAt!)<=now&&
+      now-Date.parse(q.observedAt!)<=15*60_000&&
       q.price>1&&q.price<1000&&!q.bookmaker.startsWith('ESPN proveedor #'))
     const soccerBooks=new Set(valid.filter(q=>norm(q.selection)==='draw')
       .map(q=>q.bookmaker))
@@ -77,14 +78,14 @@ export async function lookupExactEspnWinner(
         market:soccer?'1x2':'h2h',
         selection:q.selection,point:null,price:q.price,home:q.home,away:q.away,
         time:q.timeIso,updatedAt:q.updatedAt,
+        ...(q.observedAt?{observedAt:q.observedAt}:{}),
         source:result.source,sportKey:target.sportKey,
       }))
     result.notes.push(...scanned.diagnostics.notes.slice(0,3))
     if(!result.quotes.length)result.notes.push(
       result.referenceCount?
-        'ESPN publicó precios de casa para este partido, pero no suministró '+ 
-        'marca de actualización suficiente; mostrarlos como referencia oficial observada, '+ 
-        'no como cotización vigente en casa.':
+        'ESPN publicó referencias sin proveedor identificado o con hora inconsistente; '+
+        'no se añadieron como cuotas observadas.':
         'Sin cuotas de ganador con casa, ID y mercado cotejables para este evento')
   }catch(error){
     result.notes.push((error instanceof Error?error.message:String(error)).slice(0,240))

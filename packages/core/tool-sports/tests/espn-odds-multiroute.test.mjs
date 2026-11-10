@@ -52,7 +52,7 @@ test('Core outage falls back to summary pickcenter and reports partial failure',
   assert.ok(requested.some(url=>url.includes('summary?event=')))
 })
 
-test('Core list expands only same-game ESPN references; stale summary odds stay excluded',async()=>{
+test('Core same-game references and unchanged summary prices remain source observations',async()=>{
   const tried=[]
   const own='https://sports.core.api.espn.pvt/v2/sports/basketball/leagues/nba/events/401111111/competitions/401111111/odds/41'
   const read=async url=>{
@@ -66,7 +66,9 @@ test('Core list expands only same-game ESPN references; stale summary odds stay 
     throw Error('unexpected '+url)
   }
   const result=await fetchPublicEspnOddsDetailed('basketball_nba','h2h,totals',read,{now,days:1})
-  assert.equal(result.quotes.length,2)
+  assert.equal(result.quotes.length,4)
+  assert.ok(result.quotes.some(q=>q.bookmaker==='Verified book'))
+  assert.ok(result.quotes.some(q=>q.bookmaker==='DraftKings'))
   assert.equal(result.diagnostics.resolvedRefs,1)
   assert.equal(tried.some(url=>url.includes('evil.example')),false)
   assert.equal(tried.some(url=>url.includes('espn.pvt')),false)
@@ -86,7 +88,7 @@ test('date-scoped scanning discovers tomorrow games when today has no events',as
   assert.equal(result.quotes.length,2)
 })
 
-test('does not advertise unnamed, undated or historical odds as current offers',async()=>{
+test('unnamed ESPN bookmakers remain excluded; unchanged named prices are observed',async()=>{
   const read=async url=>{
     if(url.includes('scoreboard?'))return scoreboard([event([
       {...priced({id:'41'}),lastUpdated:updated},
@@ -97,8 +99,10 @@ test('does not advertise unnamed, undated or historical odds as current offers',
     throw Error('unexpected '+url)
   }
   const result=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',read,{now,days:1})
-  assert.deepEqual(result.quotes,[])
-  assert.match(result.diagnostics.notes.join(' '),/sin|No se|ESPN/u)
+  assert.equal(result.quotes.length,2)
+  assert.ok(result.quotes.every(q=>q.bookmaker==='Old book'&&
+    q.updatedAt==='2026-10-20T10:00:00Z'&&q.observedAt===new Date(now).toISOString()))
+  assert.ok(result.observations.every(q=>q.reason==='proveedor_sin_nombre'))
 })
 
 test('source diagnostics include Core/summary failures, never claim all markets closed',async()=>{
@@ -158,7 +162,7 @@ test('real ESPN Core item shape decodes nested decimal and American prices witho
   assert.ok(quotes.every(q=>q.bookmaker==='ESPN BET'))
 })
 
-test('Core inline items are recognized but undated prices are never advertised as active ticket odds',async()=>{
+test('Core inline items with undated prices are accepted as ESPN observations',async()=>{
   const now=Date.now()
   const start=new Date(now+86_400_000).toISOString()
   const sample={provider:{id:'58',name:'ESPN BET'},details:'LAD -126',
@@ -180,15 +184,17 @@ test('Core inline items are recognized but undated prices are never advertised a
   }
   const found=await fetchPublicEspnOddsDetailed('baseball_mlb','h2h,totals',
     read,{now,days:1})
-  assert.equal(found.quotes.length,0)
+  assert.equal(found.quotes.length,4)
+  assert.ok(found.quotes.every(q=>q.observedAt===new Date(now).toISOString()&&
+    q.updatedAt==='No indicada por ESPN'))
   assert.equal(found.diagnostics.rawOddsEntries,1)
   assert.ok(found.diagnostics.undatedOutcomes>=2)
   assert.equal(found.diagnostics.expiredOutcomes,0)
-  assert.match(found.diagnostics.notes.join(' '),/sin fecha/u)
+  assert.ok(found.quotes.every(q=>q.bookmaker==='ESPN BET'))
   assert.ok(calls.some(x=>x.includes('/events/401809303/competitions/401809303/odds')))
 })
 
-test('dated nested ESPN Core lines are usable on a future game, old lines are excluded',async()=>{
+test('dated and unchanged nested ESPN Core lines remain usable on future games',async()=>{
   const now=Date.now(),date=new Date(now+72*60*60*1000).toISOString()
   const updated=new Date(now-60_000).toISOString()
   const board={events:[{id:'401809303',date,competitions:[{id:'401809303',
@@ -208,8 +214,9 @@ test('dated nested ESPN Core lines are usable on a future game, old lines are ex
   }
   const result=await fetchPublicEspnOddsDetailed('baseball_mlb','h2h',
     read,{now,days:1})
-  assert.equal(result.quotes.length,2)
+  assert.equal(result.quotes.length,4)
   assert.equal(result.quotes[0].bookmaker,'ESPN BET')
+  assert.ok(result.quotes.some(q=>q.bookmaker==='OldBook'&&q.observedAt))
   assert.equal(result.diagnostics.rawOddsEntries,2)
   assert.equal(result.diagnostics.expiredOutcomes,2)
 })
@@ -350,7 +357,7 @@ test('targeted event searches Scoreboard, Core and Summary for distinct ESPN boo
  assert.equal(requests.length,3)
 })
 
-test('ESPN missing timestamps and old prices remain available for research, not ticket odds',async()=>{
+test('ESPN missing or old update stamps do not suppress newly observed prices',async()=>{
  const game=event([{...priced({name:'Unknown time'}),lastUpdated:undefined},
   {...priced({name:'Old book'}),lastUpdated:new Date(now-3_600_001).toISOString()}])
  const read=async url=>{
@@ -360,9 +367,11 @@ test('ESPN missing timestamps and old prices remain available for research, not 
   throw Error('Unexpected '+url)
  }
  const r=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',read,{now,days:1})
- assert.equal(r.quotes.length,0)
- assert.deepEqual([...new Set(r.observations.map(x=>x.reason))].sort(),['antigua','sin_fecha'])
- assert.ok(r.observations.every(x=>x.price>1&&x.endpointSource==='scoreboard'))
+ assert.equal(r.quotes.length,4)
+ assert.ok(r.quotes.every(x=>x.price>1&&x.endpointSource==='scoreboard'))
+ assert.ok(r.quotes.every(x=>x.observedAt===new Date(now).toISOString()))
+ assert.equal(r.diagnostics.undatedOutcomes,2)
+ assert.equal(r.diagnostics.expiredOutcomes,2)
 })
 
 test('top-level spread reconstructs sides only when the favorite is identified',()=>{
@@ -405,18 +414,18 @@ test('ESPN is credited to ESPN Site/Core, never SportsGameOdds or TheRundown',as
   assert.equal(result.sources.find(x=>x.provider==='OddsHarvester')?.status,'unconfigured')
   assert.equal(result.observations.length,0)
 })
-test('ESPN prices without provider lastUpdated survive only as research observations',async()=>{
+test('ESPN prices without lastUpdated enter the fresh observed-price pool',async()=>{
   const fetcher=async url=>new Response(JSON.stringify(
     String(url).includes('/scoreboard?')?
       scoreboard([event([{...priced({name:'ESPN Research Book'}),lastUpdated:undefined}])]):{}
   ),{status:200})
   const result=await marketOddsDetailed('basketball_nba','h2h',
     {PHOENIX_SPORTS_ESPN_DISABLED:'0',PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'},fetcher,now)
-  assert.equal(result.quotes.length,0)
-  assert.equal(result.observations.length,2)
-  assert.ok(result.observations.every(x=>x.nonCotizable&&x.reason==='sin_fecha'))
-  assert.ok(result.observations.every(x=>x.source.includes('referencia no cotizable')))
-  assert.equal(result.sources.find(x=>x.provider==='ESPN Site/Core')?.status,'empty')
+  assert.equal(result.quotes.length,2)
+  assert.ok(result.quotes.every(x=>x.updatedAt==='No indicada por ESPN'&&
+    x.observedAt===new Date(now).toISOString()))
+  assert.equal(result.observations.length,0)
+  assert.equal(result.sources.find(x=>x.provider==='ESPN Site/Core')?.status,'observed')
 })
 test('Core lookup uses exact competition ID from ESPN scoreboard, not always event ID',async()=>{
   const called=[]
