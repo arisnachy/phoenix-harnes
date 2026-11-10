@@ -453,7 +453,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                       : null}
                 </span>
                 <span className={styles['rowActions']}>
-                  {isCodex && accountFlowFor(row.entry.provider)?.methods.some(method => method.id === 'oauth') ? (
+                  {isCodex ? (
                     <button
                       type="button"
                       className={styles['secondaryButton']}
