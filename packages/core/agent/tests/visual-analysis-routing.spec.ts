@@ -4,7 +4,7 @@ import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk }
 import { Context } from '@phoenix-ai/cordis'
 import LlmRuntime from '@phoenix-ai/dsh-llm'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
-import { humanImageInTurn, selectVisualAnalysisRoute, selectClinicalVisualAnalysisRoute, installModelSelection, PHOENIX_CODEX_AUTO_MODEL } from '../src/model-selection.ts'
+import { humanImageInTurn, selectVisualAnalysisRoute, selectClinicalVisualAnalysisRoute, isClinicalVisualTurn, needsSolFirstImageReading, installModelSelection, PHOENIX_CODEX_AUTO_MODEL } from '../src/model-selection.ts'
 import { agentEvents } from '../src/dispatch.ts'
 import type { Agent } from '../src/runtime-types.ts'
 
@@ -118,7 +118,7 @@ describe('clinical image turn continuity', () => {
           'agent/request', {turn:1,step,signal:new AbortController().signal},
           () => Promise.resolve({provider:'seed',model:'seed'}),
         )
-        expect(routed).toMatchObject({model:'gpt-6.1-terra',
+        expect(routed).toMatchObject({model:'gpt-6.1-sol',
           reasoningEffort:ReasoningEffortId('low')})
       }
     } finally { dispose(); await ctx.fiber.dispose() }
@@ -160,7 +160,7 @@ describe('clinical image turn continuity', () => {
 
 describe('live image-specialist dispatch', () => {
   for (const [terraHasImage, expected] of [
-    [true, 'gpt-6.1-terra'], [false, 'gpt-6.1-sol'],
+    [true, 'gpt-6.1-sol'], [false, 'gpt-6.1-sol'],
   ] as const) {
     it('routes actual uploaded images to ' + expected + ' Low without a planning-only turn', async () => {
       const ctx = new Context()
@@ -185,6 +185,9 @@ describe('live image-specialist dispatch', () => {
       try {
         const assembled = await ctx.systemPrompt.assemble()
         expect(assembled.sections.some(section => section.name === 'phoenix:auto-visible-handoff')).toBe(false)
+        expect(assembled.sections.find(section =>
+          section.name === 'phoenix:eclipse-clinical-image-owner')?.text)
+          .toContain('NOT automatically delivered to Orion')
         const routed = await agentEvents(ctx, agent).waterfall(
           'agent/request', { turn: 1, step: 1, signal: new AbortController().signal },
           () => Promise.resolve({ provider: 'seed', model: 'seed' }),
@@ -221,7 +224,40 @@ describe('clinical specialist selection is capability-driven rather than Terra L
     expect(selectClinicalVisualAnalysisRoute([
       model('gpt-6.1-terra',['low']),
       model('gpt-6.1-sol',['low']),
-    ])).toMatchObject({model:'gpt-6.1-terra',reasoningEffort:ReasoningEffortId('low')})
+    ])).toMatchObject({model:'gpt-6.1-sol',reasoningEffort:ReasoningEffortId('low')})
+    expect(selectClinicalVisualAnalysisRoute([
+      model('gpt-6.1-terra',['high']),
+    ])).toBeUndefined()
     expect(selectClinicalVisualAnalysisRoute([])).toBeUndefined()
+  })
+})
+
+describe('regression: real clinical vision uses Sol as the source-reading owner',()=>{
+  const m=(id:string,efforts:readonly ('low'|'medium'|'high')[])=>({
+    provider:'openai-codex',id,name:id,inputModalities:['text','image'] as const,
+    reasoning:{efforts:efforts.map(tier=>({id:ReasoningEffortId(tier),name:tier}))},
+  })
+  it('Sol Medium takes priority over Terra High when reading the same clinical image',()=>{
+    expect(selectClinicalVisualAnalysisRoute([
+      m('gpt-6.1-terra',['high']),
+      m('gpt-6.1-sol',['medium']),
+    ])).toMatchObject({model:'gpt-6.1-sol',reasoningEffort:ReasoningEffortId('medium')})
+  })
+  it('requires a real image modality and never routes a text-only Sol',()=>{
+    expect(selectClinicalVisualAnalysisRoute([
+      {...m('gpt-6.1-sol',['high']),inputModalities:['text'] as const},
+      m('gpt-6.1-terra',['high']),
+    ])).toBeUndefined()
+  })
+  it('recognizes short radiology, lesion, ECG, laboratory and ambiguous image requests',()=>{
+    for(const text of [
+      'La imagen muestra abdomen inferior derecho',
+      'Crea el modelo hiperrealista con la lesión y su vascularidad',
+      'Analiza las anormalidades de este trazado',
+      '¿Qué ves?', '', 'Mira esta imagen',
+      'Interpretar citología del paciente',
+    ]) expect(needsSolFirstImageReading(text)).toBe(true)
+    expect(isClinicalVisualTurn('Lesión abdominal')).toBe(true)
+    expect(needsSolFirstImageReading('Arregla esta interfaz CSS')).toBe(false)
   })
 })

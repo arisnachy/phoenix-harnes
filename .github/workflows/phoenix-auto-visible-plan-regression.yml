@@ -5,6 +5,9 @@ on:
     branches: [main, stable]
     paths:
       - 'packages/core/agent/src/model-selection.ts'
+      - 'packages/core/agent/tests/visual-analysis-routing.spec.ts'
+      - 'packages/host/apiproxy/src/vision-fallback.ts'
+      - 'packages/host/apiproxy/tests/api-proxy-vision-fallback.spec.ts'
       - 'packages/core/agent/src/eclipse-work-contract.ts'
       - 'packages/core/agent/tests/eclipse-work-contract.spec.ts'
       - 'packages/core/agent/tests/eclipse-supervision.spec.ts'
@@ -42,4 +45,6 @@ jobs:
             packages/core/agent/tests/model-selection-boundaries.spec.ts \
             packages/core/agent/tests/eclipse-work-contract.spec.ts \
             packages/core/agent/tests/eclipse-supervision.spec.ts \
-            packages/subagent/tool-agent-team/tests/eclipse-team-routing.spec.ts
+            packages/subagent/tool-agent-team/tests/eclipse-team-routing.spec.ts \
+            packages/core/agent/tests/visual-analysis-routing.spec.ts \
+            packages/host/apiproxy/tests/api-proxy-vision-fallback.spec.ts

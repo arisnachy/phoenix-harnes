@@ -668,34 +668,46 @@ export function selectVisualAnalysisRoute(models: readonly LlmResolvedModelInfo[
   }
 }
 
-/** Clinical images warrant a higher-capability reader than the generic Terra Low path.
- * Discover from real provider capabilities; never assume High is present.
- * ECG lead territories and a single CT screenshot cannot establish culprit
- * arteries or spatially confirmed lesions, regardless of reasoning effort.
+/** The clinical reading seat belongs to Sol in automatic Eclipse. An
+ * available Terra High must NOT silently outrank Sol Medium/Low by effort;
+ * image support and effort must both be advertised by the real provider.
+ * Do not fall back to Terra for a provisional medical interpretation.
+ *
+ * This is ROUTING policy, not a claim that a model has diagnostic validation.
  */
 export function selectClinicalVisualAnalysisRoute(models: readonly LlmResolvedModelInfo[]): ModelSelection | undefined {
-  const eligible = models.filter(model =>
-    model.provider === 'openai-codex'
-    && /^gpt-\d+(?:\.\d+)?-(?:terra|sol)(?:$|-)/iu.test(model.id)
-    && model.inputModalities?.includes('image') === true)
-  const version = (id: string): number => Number(/^gpt-(\d+(?:\.\d+)?)/iu.exec(id)?.[1] ?? '0')
-  const choices: Array<{id:'high'|'medium'}> = [
-    {id:'high'},{id:'medium'},
-  ]
-  for (const choice of choices) {
-    const matches=eligible.filter(model=>model.reasoning?.efforts.some(
-      effort=>effort.id===choice.id)===true)
-    matches.sort((a,b)=>{
-      const aSol=/-sol(?:$|-)/iu.test(a.id),bSol=/-sol(?:$|-)/iu.test(b.id)
-      return aSol===bSol?version(b.id)-version(a.id):aSol?-1:1
-    })
-    if (matches[0])return {provider:'openai-codex',model:matches[0].id,
-      reasoningEffort:ReasoningEffortId(choice.id)}
+  const eligible=models.filter(model=>
+    model.provider==='openai-codex'
+    && /^gpt-\d+(?:\.\d+)?-sol(?:$|-)/iu.test(model.id)
+    && model.inputModalities?.includes('image')===true)
+  const version=(id:string):number=>Number(/^gpt-(\d+(?:\.\d+)?)/iu.exec(id)?.[1]??'0')
+  eligible.sort((a,b)=>version(b.id)-version(a.id))
+  for(const tier of ['high','medium','low'] as const){
+    const chosen=eligible.find(m=>m.reasoning?.efforts.some(e=>e.id===tier)===true)
+    if(chosen!==undefined)return {
+      provider:'openai-codex',model:chosen.id,reasoningEffort:ReasoningEffortId(tier),
+    }
   }
-  return selectVisualAnalysisRoute(models)
+  return undefined
 }
-const isClinicalVisualTurn=(text:string)=>!text.trim()||
-  /(?:ecg|ekg|electrocardi|card[ií]ac|tomograf|tac|radiograf|rayos? x|x-ray|mri|resonancia|ultrason|ecograf|sonograf|doppler|citolog|histolog|biopsia|laborator|anal[ií]tica|hemograma|bioqu[ií]mica|diagn[oó]stic|lesi[oó]n|arteria|vascular|ap[eé]ndice|apendic|[oó]rgano|cl[ií]nic|paciente|patient|medical|pathology|blood test)/iu.test(text)
+
+/** Clinical intent must cover terse region/lesion descriptions, not merely
+ * literal "ECG" or "CT". A blank image-only message is conservatively clinical.
+ */
+export function isClinicalVisualTurn(text:string):boolean {
+  const request=text.trim()
+  return request.length===0 ||
+    /(?:\becg\b|\bekg\b|electrocardi|card[ií]ac|tomograf|\btac\b|\bct\b|radiograf|rayos? x|x-ray|\bmri\b|resonancia|ultrason|ecograf|sonograf|doppler|citolog|histolog|biopsia|laborator|anal[ií]tica|hemograma|bioqu[ií]mica|diagn[oó]stic|lesi[oó]n|arteria|vascular|ap[eé]ndice|apendic|[oó]rgano|abdomen|abdominal|fosa il[ií]aca|intestinal|inflamaci[oó]n|patolog[ií]a|anormalidad|anormalidades|trazado|cl[ií]nic|paciente|patient|medical|pathology|blood test)/iu.test(request)
+}
+
+/** Terse uploads like "¿qué ves?" might be medical: choose Sol for any
+ * ambiguous raster unless the request is plainly a nonmedical design task.
+ * No LLM classifier or invented attachment modality.
+ */
+export function needsSolFirstImageReading(text:string):boolean {
+  return isClinicalVisualTurn(text)
+    || !/(?:\b(?:logo|icono|[ií]cono|banner|meme|avatar|paisaje|fashion|moda|producto|product|web|css|html|typescript|javascript|ui|ux|interfaz|dise[nñ]o gr[aá]fico|comic|c[oó]mic)\b)/iu.test(text)
+}
 
 /** Inspect only registered Codex image/effort metadata; never dispatch a guessed model.
  * @param ctx - Agent context with optional LLM provider registration.
@@ -1536,6 +1548,11 @@ export function installModelSelection(
         ...(planHandoff===undefined?[]:[{
           name:'phoenix:eclipse-execution-contract',text:planHandoff,
         }]),
+        ...(autoStep!==undefined && humanVisual
+          && needsSolFirstImageReading(currentRequest)?[{
+          name:'phoenix:eclipse-clinical-image-owner',
+          text:'Clinical image source rule for Eclipse: the verified image-capable Sol route reads the original pixels first. The current medical image is NOT automatically delivered to Orion, Terra, or new Team workers: never delegate diagnosis, lesion localization, or source-dependent medical illustration to a specialist with only a text assignment. After Sol records observed findings and uncertainty, Luna can execute available image_generation on the lead route using the evidence-bounded educational scene contract, not re-diagnose from a generic description. Verify actual generated raster before reporting an image. If Sol lacks image access or no safe renderer is available, explain the exact limitation and do not imply that an image was examined or generated.',
+        }]:[]),
       ],
       // Planner and final reviewer do not execute tools. Luna gets the
       // original work contract plus normal execution tools at its own step.
@@ -1601,7 +1618,7 @@ export function installModelSelection(
         if (uploadedImage
           && (!exactUserChoice || isPhoenixCodexAutoSelection(selected))
           && (_payload.step === 1 || !needsArtifactExecution)) {
-          const specialist = await availableVisualAnalysisRoute(agentCtx,isClinicalVisualTurn(directText))
+          const specialist = await availableVisualAnalysisRoute(agentCtx,needsSolFirstImageReading(directText))
           if (specialist !== undefined) {
             const { reasoningEffort: _oldEffort, ...withoutInheritedEffort } = resolved
             return { ...withoutInheritedEffort, ...specialist }

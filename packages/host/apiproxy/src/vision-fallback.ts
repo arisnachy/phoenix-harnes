@@ -84,33 +84,42 @@ const DESCRIPTION_SYSTEM_PROMPT = [
  */
 export function requiresFocusedClinicalVision(text:string):boolean {
   const s=text.trim()
-  return s.length===0 ||
-    /(?:tomograf|tac|\bct\b|corte axial|radiograf|rayos? x|ecograf|sonograf|ultrason|resonancia|\bmri\b|\bekg\b|\becg\b|electrocardi|\blab(?:s|oratorio)?\b|anal[ií]tic|citolog|biopsia|histolog|diagn[oó]stic|lesi[oó]n|paciente|m[eé]dic|ap[eé]ndic|apendic|patolog|cl[ií]nic|vascular|medical|radiolog|pathology|blood test)/iu.test(s)
+  const explicit=/(?:tomograf|\btac\b|\bct\b|corte axial|radiograf|rayos? x|ecograf|sonograf|ultrason|resonancia|\bmri\b|\bekg\b|\becg\b|electrocardi|\blab(?:s|oratorio)?\b|anal[ií]tic|citolog|biopsia|histolog|diagn[oó]stic|lesi[oó]n|paciente|m[eé]dic|ap[eé]ndic|apendic|patolog|cl[ií]nic|vascular|abdomen|abdominal|trazado|anormalidad|anormalidades|[oó]rgano|medical|radiolog|pathology|blood test)/iu
+  if(explicit.test(s))return true
+  // A short "¿qué ves?" with an attached scan lacks modality words.
+  // Prioritize a stronger image reader unless explicitly creative/nonmedical.
+  return s.length===0 || (s.length<120
+    && !/(?:\b(?:logo|icono|[ií]cono|banner|meme|avatar|paisaje|moda|fashion|producto|product|interfaz|css|html|website|comic|c[oó]mic)\b)/iu.test(s))
 }
 
-/** Select a supported, capable visual reader for clinically relevant sources
- * without inventing access, models or reasoning-effort offerings.
+/** Prefer a real Sol visual route over Terra even when Terra advertises a
+ * higher effort; never silently use Terra as the ONLY clinical reader.
+ * Non-Codex image readers stay eligible if they are the only documented
+ * non-Terra vision option, without claiming a clinical validation.
  */
 export function pickFocusedVisionReader(
   models:readonly LlmResolvedModelInfo[],current:ModelSelection,
 ):VisionRoute|undefined {
-  const candidates=models.filter(x=>x.inputModalities?.includes('image')===true
-    &&!(x.provider===current.provider&&x.id===current.model))
-  const rank=(x:LlmResolvedModelInfo)=>{
-    const efforts=x.reasoning?.efforts??[]
-    const high=efforts.some(e=>e.id==='high')
-    const medium=efforts.some(e=>e.id==='medium')
-    const clinicalSol=/-sol(?:$|-)/iu.test(x.id)
-    return (high?100:medium?50:0)+(clinicalSol?10:0)
+  const eligible=models.filter(x=>x.inputModalities?.includes('image')===true
+    &&!(x.provider===current.provider&&x.id===current.model)
+    && !/-terra(?:$|-)/iu.test(x.id))
+  const version=(id:string)=>Number(/^gpt-(\d+(?:\.\d+)?)/iu.exec(id)?.[1]??'0')
+  const score=(x:LlmResolvedModelInfo)=>{
+    const sol=x.provider==='openai-codex'&&/-sol(?:$|-)/iu.test(x.id)
+    const effort=x.reasoning?.efforts??[]
+    return (sol?1000:0)+(effort.some(e=>e.id==='high')?100:
+      effort.some(e=>e.id==='medium')?60:
+      effort.some(e=>e.id==='low')?20:0)+version(x.id)
   }
-  candidates.sort((a,b)=>rank(b)-rank(a))
-  const selected=candidates[0]
-  if(selected===undefined)return undefined
-  const efforts=selected.reasoning?.efforts??[]
-  const effort=efforts.some(x=>x.id==='high')?'high':
-    efforts.some(x=>x.id==='medium')?'medium':undefined
-  return {provider:selected.provider,model:selected.id,...(effort===undefined?{}:
-    {reasoningEffort:ReasoningEffortId(effort)})}
+  eligible.sort((a,b)=>score(b)-score(a))
+  const chosen=eligible[0]
+  if(chosen===undefined)return undefined
+  const effort=chosen.reasoning?.efforts??[]
+  const tier=effort.some(e=>e.id==='high')?'high':
+    effort.some(e=>e.id==='medium')?'medium':
+    effort.some(e=>e.id==='low')?'low':undefined
+  return {provider:chosen.provider,model:chosen.id,
+    ...(tier===undefined?{}:{reasoningEffort:ReasoningEffortId(tier)})}
 }
 
 /**
@@ -142,7 +151,11 @@ export async function resolveVisionFallbackRoute(
   // An explicit pin is honored verbatim: deployments name routes catalogs may
   // not advertise (adapters accept unlisted ids), and re-validating here would
   // silently downgrade every pin to discovery.
-  if (explicit !== undefined) return explicit
+  // A legacy deployment may have pinned Terra for every image. That pin is
+  // suitable for nonclinical use, but must not bypass clinical Sol routing.
+  // Resolve a verifiable non-Terra visual reader for clinical sources instead.
+  if (explicit !== undefined && (!focusedClinical
+    || !/-terra(?:$|-)/iu.test(explicit.model))) return explicit
   // Discovery order: the current provider first (same-vendor eyes), then the rest.
   const ordered = [
     ...providers.filter(provider => provider === current.provider),
