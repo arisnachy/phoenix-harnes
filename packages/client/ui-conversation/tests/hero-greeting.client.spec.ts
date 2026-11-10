@@ -81,3 +81,16 @@ describe('neutral, universal hero architecture', () => {
     expect(source).not.toContain('Personalizar portada')
   })
 })
+
+
+describe('balanced commemorative ornaments', () => {
+  it('uses restrained mirrored motifs without the old science circuit sticker', () => {
+    for (const name of ['world-11-10-45.svg', 'fallback-science.svg', 'fallback-health.svg', 'fallback-patriotic.svg']) {
+      const svg = readFileSync(new URL('../../../../apps/web/public/assets/celebrations/' + name, import.meta.url), 'utf8')
+      expect(svg).toContain('translate(83 366)')
+      expect(svg).toContain('translate(429 366) scale(-1 1)')
+      expect(svg).not.toContain('<rect')
+      expect(svg).not.toContain('M42 410')
+    }
+  })
+})
