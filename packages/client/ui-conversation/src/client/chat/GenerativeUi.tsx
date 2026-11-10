@@ -975,6 +975,18 @@ function SportsTicketResearchNarrative({value,index}:{value:SportsTicketNarrativ
       <span>{value.status==='documented'?'Expediente documentado':'Análisis condicional'}</span>
     </div>
     <p className={css.sportsTicketNarrativeWhy}>{value.selectionWhy}</p>
+    <details className={css.sportsTicketNarrativeMore}>
+      <summary>Checklist de investigación · {(value.researchSteps??[]).filter(x=>
+        x.state==='verified').length}/{value.researchSteps?.length??0} pasos verificados</summary>
+      {value.researchSteps?.length?<ul>{value.researchSteps.map((step,i)=>
+        <li key={step.key+'-'+i}>
+          <strong>{step.state==='verified'?'✓':step.state==='partial'?'◐':'○'}
+            {' '}{step.title}</strong> · {step.state==='verified'?'Dato comprobado':
+              step.state==='partial'?'Dato parcial':'Dato no obtenido'}
+            {' '}· {step.detail}
+        </li>)}</ul>:<p>No se recibió un checklist detallado para esta pata.
+          PHOENIX debe obtener y mostrar datos, no darla por investigada sin evidencia.</p>}
+    </details>
     <div className={css.sportsTicketNarrativeMeasures}>
       <div><small>Probabilidad individual</small>
         <strong>{value.percentage.value===null?'Sin dato':value.percentage.value.toFixed(1)+'%'}</strong>
@@ -1335,6 +1347,18 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                   <strong>{leg.selection}</strong>
                 </div>
                 <small>{[leg.market,leg.player?'Jugador · '+leg.player:undefined,unpriced?undefined:leg.bookmaker].filter(Boolean).join(' · ')}</small>
+                {leg.referenceOdds&&<p className={css.sportsTicketNarrativeCaution}>
+                  <strong>ESPN Core · {leg.referenceOdds.bookmaker}:
+                    {' '}{leg.referenceOdds.price.toFixed(2)} decimal</strong>
+                  {' '}· precio observado, sin hora de actualización comprobada.
+                  No equivale a cuota aceptada por la casa.</p>}
+                {leg.webOddsResearch?.length?<details className={css.sportsTicketNarrativeMore}>
+                  <summary>Fuentes de cuotas web consultadas ({leg.webOddsResearch.length})</summary>
+                  <ul>{leg.webOddsResearch.map((x,i)=><li key={i}>
+                    <a href={x.url} target="_blank" rel="noopener noreferrer">
+                      {x.provider}</a> · {x.status}
+                  </li>)}</ul>
+                </details>:null}
                 {narrative?<SportsTicketResearchNarrative value={narrative} index={p.legs.indexOf(leg)}/>:
                   <details className={css.sportsTicketReason}>
                     <summary>Ver fundamento</summary>
