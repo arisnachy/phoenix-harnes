@@ -9,7 +9,7 @@ import {createHash} from 'node:crypto'
 export type ObservedOdds={
   eventId:string;bookmaker:string;market:string;selection:string;point?:number|null;
   price:number;home:string;away:string;time:string;timeIso?:string;
-  updatedAt:string;source?:string;sportKey?:string
+  updatedAt:string;observedAt?:string;source?:string;sportKey?:string
 }
 export type OddsSnapshot={
   sportKey:string;observedAt:string;historical:true;quotes:ObservedOdds[];source:string
@@ -25,7 +25,9 @@ const useful=(q:ObservedOdds)=>q&&typeof q.eventId==='string'&&q.eventId.length>
   typeof q.market==='string'&&typeof q.selection==='string'&&
   Number.isFinite(q.price)&&q.price>1&&q.price<1000&&
   typeof q.home==='string'&&typeof q.away==='string'&&
-  Number.isFinite(Date.parse(q.updatedAt))&&
+  (Number.isFinite(Date.parse(q.updatedAt))||
+    (q.source?.startsWith('ESPN Site/Core')===true&&
+      Number.isFinite(Date.parse(q.observedAt??''))))&&
   Number.isFinite(Date.parse(q.timeIso??q.time))
 /** Record only authentic provider-observed offers; never make them current on read. */
 export async function saveOddsSnapshot(
