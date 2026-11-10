@@ -7,7 +7,7 @@
  * per-requirement observation exists. Sources are ordered recovery options,
  * NOT evidence that a route was invoked or succeeded.
  */
-export type DeepStepState='verified'|'partial'|'missing'
+export type DeepStepState='verified'|'partial'|'missing'|'conflict'|'stale'
 export type DeepObservation={state:DeepStepState;detail:string}
 export type DeepProtocolStep={
   key:string;title:string;critical:boolean;group:'universal'|'specialist'
@@ -213,9 +213,12 @@ export function auditDeepProtocol(
     .map(r=>{
       const direct=observations[r.key]
       const broad=r.from?observations[r.from]:undefined
-      const state=direct?.state==='verified'||direct?.state==='partial'
-        ?direct.state:broad?.state==='verified'||broad?.state==='partial'
-          ?'partial':'missing'
+      const state:DeepStepState=direct?.state==='verified'||direct?.state==='partial'||
+        direct?.state==='missing'||direct?.state==='conflict'||direct?.state==='stale'
+        ?direct.state:
+        broad?.state==='conflict'?'conflict':
+        broad?.state==='stale'?'stale':
+        broad?.state==='verified'||broad?.state==='partial'?'partial':'missing'
       const detail=direct&&direct.detail?.trim()?direct.detail.slice(0,220):
         broad&&broad.detail?.trim()?
           ('Dato general ('+r.from+'): '+broad.detail+
