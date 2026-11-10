@@ -107,6 +107,9 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
     recentStarterOutingsVerified:reviewTimeValid&&[h,a].every(p=>p!==null&&
       new Set(p.recentStarts.filter(out=>{
         const at=Date.parse(out.date)
+        // Game logs must be actual calendar dates, not rollover dates or timestamps.
+        const validDate=typeof out.date==='string'&&/^\d{4}-\d{2}-\d{2}$/u.test(out.date)&&
+          Number.isFinite(at)&&new Date(at).toISOString().slice(0,10)===out.date
         const validCount=(value:unknown)=>{
           if(typeof value!=='string'&&typeof value!=='number')return false
           if(typeof value==='string'&&!value.trim())return false
@@ -115,12 +118,12 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
         }
         const innings=String(out.innings)
         const validInnings=/^\d+\.[012]$/u.test(innings)
-        return Number.isFinite(at)&&at<=checkedMs&&
+        return validDate&&at<=checkedMs&&
           checkedMs-at<=45*24*60*60*1000&&
           at<=reviewMs&&reviewMs-at<=45*24*60*60*1000&&
           typeof out.opponentId==='number'&&Number.isSafeInteger(out.opponentId)&&out.opponentId>0&&
-          validInnings&&
-          [out.pitches,out.earnedRuns,out.strikeouts,out.walks].every(validCount)
+          validInnings&&Number(innings)>0&&validCount(out.pitches)&&Number(out.pitches)>0&&
+          [out.earnedRuns,out.strikeouts,out.walks].every(validCount)
       }).map(out=>out.date)).size>=2),
     // Five distinct, valid and temporally relevant starts per pitcher are needed
     // for a deeper recent-form assessment. The legacy two-start gate remains
