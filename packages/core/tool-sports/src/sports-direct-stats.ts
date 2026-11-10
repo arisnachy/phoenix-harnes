@@ -115,8 +115,11 @@ function rosterRows(raw:unknown):Array<{id:string;name:string;position:string;je
   }).slice(0,55)
 }
 type Task={url:string;destination:(value:unknown|null)=>void;type:string}
-const cache=new Map<string,{at:number;value:unknown|null}>()
+const transportCaches=new WeakMap<typeof fetch,Map<string,{at:number;value:unknown|null}>>()
 async function fetchBounded(url:string,fetcher:typeof fetch,now:number):Promise<unknown|null>{
+  // Cache responses per transport to prevent stale mock/live cross-contamination.
+  let cache=transportCaches.get(fetcher)
+  if(!cache){cache=new Map();transportCaches.set(fetcher,cache)}
   const cached=cache.get(url)
   if(cached&&now>=cached.at&&now-cached.at<(cached.value===null?30_000:600_000))
     return cached.value
