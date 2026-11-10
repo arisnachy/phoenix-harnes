@@ -1303,7 +1303,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                 <small>{[leg.market,leg.player?'Jugador · '+leg.player:undefined,unpriced?undefined:leg.bookmaker].filter(Boolean).join(' · ')}</small>
                 {narrative?<SportsTicketResearchNarrative value={narrative} index={p.legs.indexOf(leg)}/>:
                   <details className={css.sportsTicketReason}>
-                    <summary>Fundamento incompleto · revisar antes de apostar</summary>
+                    <summary>Ver fundamento</summary>
                     {leg.rationale&&<p>{sportsDisplayText(leg.rationale)}</p>}
                     {leg.pendingEvidence?.length?<ul>{leg.pendingEvidence.map((item,i)=>
                       <li key={i}>{sportsDisplayText(item)}</li>)}</ul>:
@@ -1326,7 +1326,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           {p.chatNarrative.map((n,i)=>{
             const leg=p.legs.find(x=>Boolean(x.eventId)&&x.eventId===n.eventId)
             const picture=n.news.find(x=>x.imageUrl&&x.articleUrl)
-            return <article key={n.eventId+'-'+i} className={css.sportsTicketNarrativeContext}>
+            return <div key={n.eventId+'-'+i} className={css.sportsTicketNarrativeContext}>
               <div className={css.sportsTicketNarrativeTop}>
                 <strong>{String(i+1).padStart(2,'0')} · {n.selected}</strong>
                 <span>{n.status==='documented'?'Documentada':'Condicional'}</span>
@@ -1344,13 +1344,13 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
               {n.news.length>0&&n.news[0]?.articleUrl&&
                 <p><a href={n.news[0].articleUrl} target="_blank" rel="noopener noreferrer">
                   Fuente editorial: {n.news[0].publisher} · {n.news[0].headline}</a></p>}
-            </article>
+            </div>
           })}
         </section>:null}
         {!p.chatNarrative?.length&&<section className={css.sportsTicketNarrative}
           aria-label="Explicación pendiente por selección">
           <h4>Kira · Revisión individual de las selecciones</h4>
-          {p.legs.map((leg,i)=><article key={leg.eventId??i}
+          {p.legs.map((leg,i)=><div key={leg.eventId??i}
             className={css.sportsTicketNarrativeContext}>
             <strong>{String(i+1).padStart(2,'0')} · {leg.selection}</strong>
             <p>{leg.rationale? sportsDisplayText(leg.rationale):
@@ -1358,7 +1358,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             <p><strong>Investigación por completar:</strong> {leg.pendingEvidence?.length?
               leg.pendingEvidence.slice(0,5).map(sportsDisplayText).join(' · '):
               'No hay expediente completo de lesiones, titulares, forma y contradicciones asociado a esta pata.'}</p>
-          </article>)}
+          </div>)}
         </section>}
         {receipt?<div className={css.sportsTicketTotal}>
           <div><small>Estado del boleto</small><strong>Recibo aportado · sin liquidación confirmada</strong></div>
