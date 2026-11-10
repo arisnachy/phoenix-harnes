@@ -1001,3 +1001,23 @@ test('MLB five-start gate rejects invalid calendar dates and timestamp aliases',
     assert.equal(review.eligibleForTicket,false)
   }
 })
+
+test('MLB five-start gate excludes zero-inning and zero-pitch pseudo-outings',async()=>{
+  const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true}).fetcher,at)
+  const dates=['2026-06-25','2026-06-24','2026-06-23','2026-06-22','2026-06-21']
+  const outing=(day)=>({date:day,opponentId:123,innings:'5.2',
+    pitches:'85',earnedRuns:'2',strikeouts:'7',walks:'1'})
+  for(const p of [d.starters.home,d.starters.away]){
+    assert.ok(p)
+    p.recentStarts=dates.map(outing)
+  }
+  assert.equal(reviewMlbResearch(d).evidenceGates.fiveStarterOutingsVerified,true)
+  for(const [field,value] of [['innings','0.0'],['pitches','0']]){
+    d.starters.home.recentStarts=dates.map(outing)
+    d.starters.home.recentStarts[0][field]=value
+    const review=reviewMlbResearch(d)
+    assert.equal(review.evidenceGates.fiveStarterOutingsVerified,false,field)
+    assert.ok(review.missingEvidence.some(x=>x.includes('Cinco salidas recientes distintas')))
+    assert.equal(review.eligibleForTicket,false)
+  }
+})
