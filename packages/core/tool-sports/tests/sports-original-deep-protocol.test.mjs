@@ -60,3 +60,13 @@ test('unverified source never penalizes a side or manufactures injury',()=>{
   assert.equal(data.find(x=>x.key==='U07').state,'verified')
   assert.ok(data.find(x=>x.key==='H07').sources.some(x=>x.includes('Daily Faceoff')))
 })
+
+test('obsolete and contradictory findings persist rather than becoming verified or empty',()=>{
+  const steps=auditDeepProtocol('basketball',{
+    B08:{state:'stale',detail:'injury status from past week'},
+    U05:{state:'conflict',detail:'official says Out; ESPN says Available'},
+  })
+  assert.equal(steps.find(x=>x.key==='B08').state,'stale')
+  assert.equal(steps.find(x=>x.key==='U05').state,'conflict')
+  assert.ok(steps.some(x=>x.state==='missing'))
+})
