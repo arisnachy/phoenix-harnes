@@ -651,11 +651,11 @@ export function selectVisualAnalysisRoute(models: readonly LlmResolvedModelInfo[
 export function selectClinicalVisualAnalysisRoute(models: readonly LlmResolvedModelInfo[]): ModelSelection | undefined {
   const eligible = models.filter(model =>
     model.provider === 'openai-codex'
-    && /^gpt-\\d+(?:\\.\\d+)?-(?:terra|sol)(?:$|-)/iu.test(model.id)
+    && /^gpt-\d+(?:\.\d+)?-(?:terra|sol)(?:$|-)/iu.test(model.id)
     && model.inputModalities?.includes('image') === true)
-  const version = (id: string): number => Number(/^gpt-(\\d+(?:\\.\\d+)?)/iu.exec(id)?.[1] ?? '0')
-  const choices: Array<{id:'high'|'medium';score:number}> = [
-    {id:'high',score:2},{id:'medium',score:1},
+  const version = (id: string): number => Number(/^gpt-(\d+(?:\.\d+)?)/iu.exec(id)?.[1] ?? '0')
+  const choices: Array<{id:'high'|'medium'}> = [
+    {id:'high'},{id:'medium'},
   ]
   for (const choice of choices) {
     const matches=eligible.filter(model=>model.reasoning?.efforts.some(
