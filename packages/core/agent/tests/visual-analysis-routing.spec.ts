@@ -4,7 +4,7 @@ import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk }
 import { Context } from '@phoenix-ai/cordis'
 import LlmRuntime from '@phoenix-ai/dsh-llm'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
-import { humanImageInTurn, selectVisualAnalysisRoute, installModelSelection, PHOENIX_CODEX_AUTO_MODEL } from '../src/model-selection.ts'
+import { humanImageInTurn, selectVisualAnalysisRoute, selectClinicalVisualAnalysisRoute, installModelSelection, PHOENIX_CODEX_AUTO_MODEL } from '../src/model-selection.ts'
 import { agentEvents } from '../src/dispatch.ts'
 import type { Agent } from '../src/runtime-types.ts'
 
@@ -198,4 +198,30 @@ describe('live image-specialist dispatch', () => {
       }
     })
   }
+})
+
+describe('clinical specialist selection is capability-driven rather than Terra Low by default',()=>{
+  const model=(id:string,efforts:readonly ('low'|'medium'|'high')[])=>({
+    provider:'openai-codex',id,name:id,inputModalities:['text','image'] as const,
+    reasoning:{efforts:efforts.map(e=>({id:ReasoningEffortId(e),name:e}))},
+  })
+  it('prioritizes Sol High for medical images when genuinely supported',()=>{
+    expect(selectClinicalVisualAnalysisRoute([
+      model('gpt-6.1-terra',['low','high']),
+      model('gpt-6.1-sol',['low','high']),
+    ])).toMatchObject({model:'gpt-6.1-sol',reasoningEffort:ReasoningEffortId('high')})
+  })
+  it('uses Medium if High is unavailable, never fabricating model capability',()=>{
+    expect(selectClinicalVisualAnalysisRoute([
+      model('gpt-6.1-terra',['low']),
+      model('gpt-6.1-sol',['medium']),
+    ])).toMatchObject({model:'gpt-6.1-sol',reasoningEffort:ReasoningEffortId('medium')})
+  })
+  it('falls back to actual image-capable Low if higher effort is unavailable',()=>{
+    expect(selectClinicalVisualAnalysisRoute([
+      model('gpt-6.1-terra',['low']),
+      model('gpt-6.1-sol',['low']),
+    ])).toMatchObject({model:'gpt-6.1-terra',reasoningEffort:ReasoningEffortId('low')})
+    expect(selectClinicalVisualAnalysisRoute([])).toBeUndefined()
+  })
 })
