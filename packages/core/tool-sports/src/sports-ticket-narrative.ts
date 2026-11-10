@@ -20,7 +20,8 @@ export type TicketNarrative={
   specialistEvidence:string[];criticalPending:string[];
   /** Verifiable per-sport steps for the user-facing research checklist. */
   researchSteps?:Array<{key:string;title:string;critical:boolean;
-    state:'verified'|'partial'|'missing';detail:string;sources?:string[]}>;
+    state:'verified'|'partial'|'missing';detail:string;sources?:string[];
+    group?:'universal'|'specialist'}>;
   news:TicketNewsItem[];
   externalOpinions:Array<{publisher:string;headline:string;publishedAt:string|null;
     discoveryUrl:string;status:'indexed-headline-only'}>;
@@ -176,7 +177,7 @@ export function composeTicketLegNarrative(
   return{
     eventId:event.eventId,selected,title,status:documented?'documented':'conditional',
     selectionWhy,favorable,contradictions,specialistEvidence,criticalPending,
-    researchSteps:audit?.checklist?.steps??[],news,
+    researchSteps:audit?.checklist?.fullSteps??audit?.checklist?.steps??[],news,
     externalOpinions:[],globalNews:[],externalModel:{provider:'Bet Better',status:'unavailable',
       selection:null,modelProbabilityPercent:null,updatedAt:null,sourceUrl:null},
     venue:{name:venueName,city:venueCity,venueSplit:venueGames>0?'verified':'not-verified',
@@ -262,7 +263,8 @@ export function enrichSpecialistNarrative(
     !line.startsWith('Disponibilidad del elegido:')&&
     !line.startsWith('Disponibilidad del rival:')&&
     !line.startsWith('Fuente de disponibilidad:')).join('\n')
-  const researchSteps=check?.checklist?.steps??prior.researchSteps??[]
+  const researchSteps=check?.checklist?.fullSteps??check?.checklist?.steps??
+    prior.researchSteps??[]
   const explanationForChat=baseChat
     .replace(/^Porcentaje: .*$/mu,'Porcentaje: '+
       (percentage.value===null?'no disponible':percentage.value.toFixed(1)+'%')+
@@ -278,7 +280,7 @@ export function enrichSpecialistNarrative(
       '. Fuente https://betbetter.world, actualizado '+clean(prediction.updatedAt,45)+
       '. Es segunda opinión con licencia CC BY, no precio de bookmaker ni certeza.':
       '\nModelo externo: sin predicción comprobada para este evento.')+
-    '\nChecklist comprobado: '+(researchSteps.length?
+    '\nChecklist completo PHOENIX (10 universales + 12/13 por deporte), hechos verificados por paso: '+(researchSteps.length?
       researchSteps.map(x=>x.title+' ['+x.state+'] '+clean(x.detail,90)+
         (x.sources?.length?' · Rutas: '+x.sources.slice(0,2).join(' → '):'')).join('; '):
       'sin expediente de pasos individuales todavía.')+
