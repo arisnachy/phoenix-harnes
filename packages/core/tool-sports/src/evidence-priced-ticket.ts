@@ -449,7 +449,7 @@ export async function evidencePricedTicket(
     if(!reference)return original
     const label='Cuota observada en ESPN '+reference.price.toFixed(2)+' ('+
       reference.bookmaker+', '+reference.reason+
-      '); precio auténtico publicado, vigencia en casa pendiente de confirmar.'
+      '); precio auténtico publicado; NO cotizable para un ticket real hasta confirmar vigencia en la casa.'
     return {...original,referenceOdds:{
       bookmaker:reference.bookmaker,price:reference.price,
       reason:reference.reason,source:reference.endpointSource,
