@@ -113,6 +113,19 @@ describe('Eclipse Sol plan → Luna execution → Sol supervision',()=>{
     }finally{await s.close()}
   })
 
+  it('does not terminate when Luna says she will generate an artifact but did not invoke its tool',async()=>{
+    const s=await fixture()
+    try{
+      await s.assemble()
+      s.events.push({type:'assistant/message',data:{turn:1,step:2,
+        message:{source:{kind:'model',model:'gpt-6-luna'},content:[
+          {type:'text',text:'Prepararé una lámina profesional con las estructuras indicadas.'},
+        ]}}})
+      await s.stop()
+      expect(s.steered).toHaveLength(1)
+      expect(JSON.stringify(s.steered[0])).toContain('next concrete action')
+    }finally{await s.close()}
+  })
   it('does not claim a final verification for a bare coordinator message or empty tool result',async()=>{
     const s=await fixture()
     try{
