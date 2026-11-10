@@ -65,7 +65,13 @@ export function eclipseCurrentWorkContract(
   if(start<0)return undefined
   const messages=events.slice(start+1).map(assistantText).filter(
     (x):x is NonNullable<typeof x>=>x!==undefined)
-  const plan=messages.findLast(x=>VISIBLE_PLAN.test(x.text))
+  // The first planner-authored brief is the execution baseline. A later
+  // worker response saying "**Plan:**" must not silently replace it.
+  // Focused strategy revisions are handled by explicit escalation evidence.
+  const plans=messages.filter(x=>VISIBLE_PLAN.test(x.text))
+  const plan=plans.find(x=>x.step===1)
+    ?? plans.find(x=>/\b(?:sol|astra|terra)(?:$|-)/iu.test(x.sourceModel??''))
+    ?? plans[0]
   if(plan!==undefined)return {kind:'plan',step:plan.step,
     sourceModel:plan.sourceModel,brief:concise(plan.text)}
   // When the planner produced a substantive source reading instead of the
