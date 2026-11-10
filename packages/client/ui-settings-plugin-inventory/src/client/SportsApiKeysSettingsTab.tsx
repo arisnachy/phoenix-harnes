@@ -4,7 +4,6 @@
 import {useEffect,useState,type ReactNode} from 'react'
 import type {SportsApiKeyId,SportsApiKeyState} from '@phoenix-ai/dsh-api-remotes/client'
 import type {InjectFace,PropsLocale,PropsRuntime} from '@phoenix-ai/dsh-client-ui-slots'
-import type {PluginInventoryLocaleKey} from './locales.ts'
 import css from './SportsApiKeysSettingsTab.module.css'
 
 export interface SportsApiKeysInjected{
