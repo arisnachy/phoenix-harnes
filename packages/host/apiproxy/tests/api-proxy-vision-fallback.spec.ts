@@ -396,6 +396,9 @@ describe('regression: focused reading of marked medical studies',()=>{
     expect(requiresFocusedClinicalVision('Citología: ¿qué células se observan?')).toBe(true)
     expect(requiresFocusedClinicalVision('')).toBe(true)
     expect(requiresFocusedClinicalVision('Haz un logo minimalista')).toBe(false)
+    expect(requiresFocusedClinicalVision('¿Qué ves?')).toBe(true)
+    expect(requiresFocusedClinicalVision('Mira esta imagen')).toBe(true)
+    expect(requiresFocusedClinicalVision('Corte abdominal con medición de lesión')).toBe(true)
   })
   it('prefers a verified High specialist, without relying on names alone',()=>{
     const r=pickFocusedVisionReader([
@@ -404,6 +407,26 @@ describe('regression: focused reading of marked medical studies',()=>{
     ],{provider:'plain',model:'text-only'})
     expect(r).toMatchObject({provider:'openai-codex',model:'gpt-6.1-sol',
       reasoningEffort:ReasoningEffortId('high')})
+  })
+  it('prefers Sol Medium over Terra High for a clinical image',()=>{
+    const r=pickFocusedVisionReader([
+      reader('openai-codex','gpt-6.1-terra',['high']),
+      reader('openai-codex','gpt-6.1-sol',['medium']),
+    ],{provider:'plain',model:'text-only'})
+    expect(r).toEqual({
+      provider:'openai-codex',model:'gpt-6.1-sol',
+      reasoningEffort:ReasoningEffortId('medium'),
+    })
+  })
+  it('blocks automatic Terra-only clinical transcription rather than pretending to see',()=>{
+    expect(pickFocusedVisionReader([
+      reader('openai-codex','gpt-6.1-terra',['high']),
+    ],{provider:'plain',model:'text-only'})).toBeUndefined()
+    expect(pickFocusedVisionReader([
+      reader('eyes','genuine-visual-reader',['medium']),
+      reader('openai-codex','gpt-6.1-terra',['high']),
+    ],{provider:'plain',model:'text-only'}))
+      .toMatchObject({model:'genuine-visual-reader'})
   })
   it('does not hallucinate High support or reuse a text-only session model',()=>{
     const r=pickFocusedVisionReader([
