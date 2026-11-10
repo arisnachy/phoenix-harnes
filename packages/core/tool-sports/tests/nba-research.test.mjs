@@ -7,7 +7,7 @@ const fixture={events:[{id:'9001',date:today,status:{type:{state:'pre'}},competi
   {homeAway:'home',team:{id:'10',displayName:'Atlanta Hawks'},records:[{summary:'4-1'}]},
   {homeAway:'away',team:{id:'11',displayName:'Miami Heat'},records:[{summary:'2-3'}]},
 ]}]}]}
-const past=(id,day,homeScore,awayScore)=>({id:String(id),date:day+'T23:00:00Z',status:{type:{state:'post'}},competitions:[{competitors:[
+const past=(id,day,homeScore,awayScore)=>({id:String(id),date:day+'T23:00:00Z',season:{type:2},status:{type:{state:'post'}},competitions:[{competitors:[
   {homeAway:'home',team:{id:'10',displayName:'Atlanta Hawks'},score:String(homeScore)},
   {homeAway:'away',team:{id:'11',displayName:'Miami Heat'},score:String(awayScore)},
 ]}]})
@@ -46,4 +46,21 @@ test('NBA report rejects invented matches and invalid dates before recommending 
   await assert.rejects(()=>researchNbaSlate(date,'NOT-REAL',mock),/ID/)
   await assert.rejects(()=>researchNbaSlate(date,'9002',mock,Date.parse('2026-10-28T12:00:00Z')),/No hay partidos/)
   await assert.rejects(()=>researchNbaSlate(date,'9001',mock,Date.parse('2026-10-28T12:00:00Z'),{PHOENIX_SPORTS_ESPN_DISABLED:'1'}),/deshabilitado/)
+})
+
+test('preseason and unclassified NBA results never contaminate regular-season form',async()=>{
+  const fetcher=async url=>{
+    const key=String(url).split('dates=')[1]
+    const known=days[key]
+    const historical=key==='20261027'&&known?{...known,season:{type:1}}:
+      key==='20261026'&&known?({...known,season:undefined}):known
+    return new Response(JSON.stringify(key==='20261028'?fixture:
+      {events:historical?[historical]:[]}),{status:200})
+  }
+  const report=await researchNbaSlate(date,'9001',fetcher,Date.parse('2026-10-28T12:00:00Z'),{},4)
+  const match=report.matches[0]
+  assert.equal(match.home.gamesObserved,1)
+  assert.equal(match.away.gamesObserved,1)
+  assert.equal(match.sampleAdequate,false)
+  assert.equal(match.evidenceStatus,'insufficient')
 })
