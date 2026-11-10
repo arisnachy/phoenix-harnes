@@ -1,0 +1,58 @@
+name: PHOENIX Sports real endpoint matrix
+on:
+  pull_request:
+    paths:
+      - 'scripts/phoenix-sports-endpoint-audit.mjs'
+      - 'scripts/phoenix-sports-adapter-live-probe.mjs'
+      - 'scripts/phoenix-sports-three-source-step-audit.mjs'
+      - '.github/workflows/phoenix-sports-endpoint-audit.yml'
+      - 'packages/core/tool-sports/src/espn-odds.ts'
+      - 'packages/core/tool-sports/src/espn-injury-backup.ts'
+      - 'packages/core/tool-sports/src/sports-direct-stats.ts'
+      - 'packages/core/tool-sports/src/daily-specialist-checklist.ts'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  endpoint-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate source probe syntax
+        run: node --check scripts/phoenix-sports-endpoint-audit.mjs
+      - name: Check every registered route family with real HTTP requests
+        run: node scripts/phoenix-sports-endpoint-audit.mjs
+      - name: Publish inspectable network observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-sports-endpoint-audit
+          path: phoenix-sports-endpoint-audit.json
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Probe real PHOENIX injury, stats and odds adapters
+        run: node --experimental-strip-types scripts/phoenix-sports-adapter-live-probe.mjs
+      - name: Save PHOENIX adapter outcomes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-sports-adapter-live
+          path: phoenix-sports-adapter-live.json
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Check three candidate routes for every original research step
+        run: node --experimental-strip-types scripts/phoenix-sports-three-source-step-audit.mjs
+      - name: Save full per-step three-source status
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-three-source-step-results
+          path: |
+            phoenix-3-source-step-audit.json
+            phoenix-3-source-step-audit.md
+          if-no-files-found: warn
+          retention-days: 21

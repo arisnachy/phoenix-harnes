@@ -36,16 +36,12 @@ test('ESPN public injury routes include NBA WNBA NFL MLB NHL, not soccer',()=>{
     assert.match(espnInjuryFeedUrl(sport,league),/\/injuries$/)
   assert.equal(espnInjuryFeedUrl('soccer','eng.1'),null)
 })
-test('verify team-specific ESPN injuries against official scoreboard identity',async()=>{
+test('prefer current league-wide ESPN injuries instead of empty team endpoints',async()=>{
   const visited=[]
   const response=async url=>{
     const u=String(url);visited.push(u)
-    if(u.includes('/scoreboard?'))return json(board)
-    if(u.endsWith('/teams/2/injuries'))return json({
-      timestamp:'2026-11-08T20:12:00Z',injuries:[groups().injuries[0]]})
-    if(u.endsWith('/teams/15/injuries'))return json({
-      timestamp:'2026-11-08T20:12:00Z',injuries:[groups().injuries[1]]})
-    throw Error('Unexpected endpoint '+u)
+    if(u===espnInjuryFeedUrl('basketball','nba'))return json(groups())
+    throw Error('Should not need empty team injury endpoints: '+u)
   }
   const r=await fetchEspnInjuryBackup(fixture,response,now)
   assert.equal(r.status,'verified')
@@ -56,9 +52,28 @@ test('verify team-specific ESPN injuries against official scoreboard identity',a
   assert.equal(r.away.injuries[0].status,'Out')
   assert.equal(r.home.injuries[0].athleteId,'123')
   assert.equal(r.home.injuries[0].returnDate,'2026-11-09T00:00:00.000Z')
-  assert.equal(visited.length,3,'team routes avoid huge league-wide report')
+  assert.equal(visited.length,1,'one current league report covers both real teams')
   assert.ok(r.officialSource.includes('official.nba.com'))
   assert.ok(r.notes.some(x=>x.includes('no es alineación')))
+})
+test('fallback team endpoints only when league report omits both teams',async()=>{
+  const visited=[]
+  const response=async url=>{
+    const u=String(url);visited.push(u)
+    if(u===espnInjuryFeedUrl('basketball','nba'))return json({timestamp:
+      '2026-11-08T20:12:00Z',injuries:[]})
+    if(u.includes('/scoreboard?'))return json(board)
+    if(u.endsWith('/teams/2/injuries'))return json({
+      timestamp:'2026-11-08T20:12:00Z',injuries:[groups().injuries[0]]})
+    if(u.endsWith('/teams/15/injuries'))return json({
+      timestamp:'2026-11-08T20:12:00Z',injuries:[groups().injuries[1]]})
+    throw Error('Unexpected endpoint '+u)
+  }
+  const result=await fetchEspnInjuryBackup(fixture,response,now)
+  assert.equal(result.status,'verified')
+  assert.equal(result.home.injuries[0].athlete,'Player Alpha')
+  assert.equal(result.away.injuries[0].athlete,'Player Beta')
+  assert.equal(visited.length,4)
 })
 test('league-wide fallback preserves injury observations without an event ID',async()=>{
   const r=await fetchEspnInjuryBackup({

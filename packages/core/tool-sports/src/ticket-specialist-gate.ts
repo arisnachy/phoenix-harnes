@@ -8,6 +8,9 @@ import {auditSportChecklist,type SportChecklist,type StepObservation} from './da
 import {fetchEspnInjuryBackup,type InjuryBackup} from './espn-injury-backup.ts'
 import {investigateNfl} from './nfl-evidence-research.ts'
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
+import {auditBasketballGranularEvidence} from './basketball-granular-evidence.ts'
+import {nflDeepSignals,nhlDeepSignals,mlbDeepSignals,
+  soccerDeepSignals,tennisDeepSignals} from './sports-granular-bridge.ts'
 import {investigateSoccer} from './soccer-worldwide-dossier.ts'
 import {nhlSlate,investigateNhl} from './nhl-evidence-research.ts'
 import {discoverMlbDay,researchMlbCase} from './mlb-evidence-research.ts'
@@ -102,6 +105,7 @@ export async function investigateTicketSpecialist(
         'Titulares confirmados '+(d.coverage.confirmedOffense+d.coverage.confirmedDefense)+'/44',
         'Enfrentamientos individuales '+d.matchups.length]
       pending=d.missingEvidence
+      Object.assign(signals,nflDeepSignals(d))
       observed('fixture',closeTime(d.event.scheduledAt,game.kickoff),
         'ESPN NFL: identificación y horario cotejados')
       observed('form',d.teams.home.recent.length>=3&&d.teams.away.recent.length>=3,
@@ -133,17 +137,28 @@ export async function investigateTicketSpecialist(
         'Quintetos confirmados '+d.coverage.starters+'/10',
         'Eficiencia/pace verificados '+String(d.coverage.advancedMetrics)]
       pending=d.missingEvidence
+      Object.assign(signals,auditBasketballGranularEvidence(d))
       observed('fixture',closeTime(d.opportunity.scheduledAt,game.kickoff),
         'ESPN baloncesto: identidad y hora del evento')
       observed('form',d.teams.home.lastGames.length>=5&&d.teams.away.lastGames.length>=5,
-        'Resultados terminados de ambos equipos')
-      observed('rosters',teams,'Rosters oficiales individuales')
+        d.teams.home.name+': '+d.teams.home.wins+'V/'+d.teams.home.losses+
+        'D en '+d.teams.home.lastGames.length+'; '+d.teams.away.name+': '+
+        d.teams.away.wins+'V/'+d.teams.away.losses+'D en '+
+        d.teams.away.lastGames.length)
+      observed('rosters',teams,'Rosters ESPN: local '+
+        d.teams.home.roster.length+' atletas; visitante '+
+        d.teams.away.roster.length+' atletas')
       observed('starters',d.teams.home.quintetConfirmed&&d.teams.away.quintetConfirmed,
         'Dos quintetos titulares comprobados; roster no es titularidad')
+      const metric=(side:'home'|'away')=>d.teams[side].teamStats
+        .filter(x=>/pace|possessions|offensive.*rating|offrtg|defensive.*rating|defrtg/iu.test(x.name))
+        .slice(0,3).map(x=>x.name+': '+x.value).join(', ')
       observed('efficiency',d.coverage.advancedMetrics,
-        'Pace y eficiencia de ambos equipos en la fuente consultada')
+        'Local '+(metric('home')||'sin cifras')+
+        '; visitante '+(metric('away')||'sin cifras'))
       observed('schedule',d.context.restHours.home!==null&&d.context.restHours.away!==null,
-        'Descanso de ambos rivales estimado desde partidos verificados')
+        'Descanso local '+(d.context.restHours.home?.toFixed(1)??'?')+
+        ' h; visitante '+(d.context.restHours.away?.toFixed(1)??'?')+' h')
       mark('market',d.markets.length?'partial':'missing',
         d.markets.length+' opciones consultadas, sujetas a fecha y liquidación')
     }else if(game.sport==='soccer'){
@@ -160,6 +175,7 @@ export async function investigateTicketSpecialist(
         'Onces verificados '+String(d.coverage.lineups),
         'Enfrentamientos individuales '+d.duels.length]
       pending=d.missingEvidence
+      Object.assign(signals,soccerDeepSignals(d))
       observed('fixture',closeTime(d.opportunity.scheduledAt,game.kickoff),
         'ESPN fútbol: local, visita y horario cotejados')
       observed('form',d.teams.home.recent.length>=5&&d.teams.away.recent.length>=5,
@@ -189,6 +205,7 @@ export async function investigateTicketSpecialist(
         'Porteros candidatos '+(d.goalieCandidates.home.length+d.goalieCandidates.away.length),
         'Forma local/visita '+(d.form.home?.games??0)+'/'+(d.form.away?.games??0)]
       pending=d.missingEvidence
+      Object.assign(signals,nhlDeepSignals(d))
       observed('fixture',closeTime(match.date,game.kickoff),
         'NHL Web API: equipos y hora cotejados')
       observed('form',(d.form.home?.games??0)>=5&&(d.form.away?.games??0)>=5,
@@ -214,6 +231,7 @@ export async function investigateTicketSpecialist(
         'Cruces bateador-lanzador '+d.matchups.length,
         'Escenarios por entradas '+d.scenarioAnalysis.length]
       pending=d.missingEvidence
+      Object.assign(signals,mlbDeepSignals(d))
       observed('fixture',closeTime(match.date,game.kickoff),
         'MLB Stats API: equipos y horario cotejados')
       observed('form',(d.teamForm.home?.games??0)>=5&&(d.teamForm.away?.games??0)>=5,
@@ -247,6 +265,7 @@ export async function investigateTicketSpecialist(
         'Rankings verificados '+d.coverage.rankCount+'/2',
         'Servicio/devolución '+d.coverage.advancedStatsPlayers+'/2 jugadores']
       pending=d.missingEvidence
+      Object.assign(signals,tennisDeepSignals(d))
       observed('fixture',closeTime(match.start,game.kickoff),
         'ESPN tenis: encuentro, ID y hora cotejados')
       observed('form',d.players.every(p=>p.lastMatches.length>=5),
@@ -270,8 +289,26 @@ export async function investigateTicketSpecialist(
       if(injury.status==='verified'||injury.status==='partial'){
         // A feed can identify reported injuries, but never guarantees a final
         // inactive list, starting lineup or availability at tipoff/kickoff.
-        mark('injuries','partial','ESPN '+injury.status+
-          ' · observación de lesiones, sin confirmación de bajas definitivas')
+        mark('injuries',injury.status==='verified'&&injury.home.matched&&
+          injury.away.matched?'verified':'partial',
+          'ESPN reporte bilateral '+injury.status+
+          ' · '+(injury.feedUpdatedAt??'sin hora')+
+          ' · local '+injury.home.injuries.length+' y visitante '+
+          injury.away.injuries.length+' registros; sin confirmar quinteto final')
+        // A verified ESPN league injury record is credible evidence of the
+        // reported status, not a definitive NBA/NFL inactive list.
+        const injured=[...injury.home.injuries,...injury.away.injuries]
+        const note=injured.slice(0,8).map(x=>x.athlete+' ('+x.status+
+          ', '+(x.reportedAt??'sin fecha')+')').join('; ')
+        const detail='ESPN '+injury.source+'; local '+
+          injury.home.injuries.length+', visitante '+
+          injury.away.injuries.length+'; '+note
+        if(game.sport==='basketball'){
+          mark('B08','partial',detail+
+            '; pendiente parte oficial NBA/WNBA y efecto en rotación')
+          mark('U05','partial',detail+
+            '; pendiente confirmación de quinteto y minutos')
+        }
         steps.push('ESPN lesiones '+injury.status+': local '+
           injury.home.injuries.length+' · visitante '+injury.away.injuries.length+
           ' · fuente '+injury.source)

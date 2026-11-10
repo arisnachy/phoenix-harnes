@@ -104,7 +104,7 @@ test('old daily archives are pruned after seven days, with current data retained
 test('a hung preflight provider is isolated while other free fixtures remain cached',async()=>{
  await temp(async root=>{
    const env={PHOENIX_SPORTS_DAILY_RESEARCH_HOME:root,
-     PHOENIX_SPORTS_PRELOAD_TIMEOUT_MS:'40'}
+     PHOENIX_SPORTS_PRELOAD_TIMEOUT_MS:'300'}
    const good=mock([])
    const stalled=async (url,init)=>{
      if(String(url).includes('/basketball/nba/'))return new Promise(()=>{})
