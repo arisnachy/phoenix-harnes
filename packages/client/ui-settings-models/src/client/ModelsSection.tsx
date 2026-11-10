@@ -22,6 +22,7 @@ import { deriveKeyRef, messageOf, protocolChoices, providerUsable } from './stor
 import type { ModelsSettingsStore, ProviderRow } from './store.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import { ProviderEditor, type ProviderEditorProps } from './ProviderEditor.tsx'
+import { AuthorizationAttemptProgress, useAuthorizationAttempt } from './authorization-attempt.tsx'
 import type { en } from './locales.ts'
 import styles from './ModelsSection.module.css'
 
@@ -222,6 +223,17 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   // Registered account flows, keyed by the provider id after the scope slash
   // (`llm-pi-ai/openai-codex` → `openai-codex`): the same join the cards use.
   const [accountFlows, setAccountFlows] = useState<ReadonlyMap<string, AccountFlow>>(() => new Map())
+  const [authRefresh, setAuthRefresh] = useState(0)
+  // Codex's native sign-in remains available even when a stale marker reports
+  // connected: authorization.begin performs the authoritative refresh check.
+  const {
+    attempt: codexAttempt, answer: codexAnswer, setAnswer: setCodexAnswer,
+    failure: codexAuthFailure, preparingKey: codexPreparingKey,
+    begin: beginCodexAuthorization, submitAnswer: submitCodexAnswer, cancel: cancelCodexAuthorization,
+  } = useAuthorizationAttempt(api.authorization, () => {
+    setAuthRefresh(value => value + 1)
+    void controller.load()
+  })
   const [reordering, setReordering] = useState(false)
   const [orderFailure, setOrderFailure] = useState<string | undefined>(undefined)
 
@@ -236,7 +248,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
       ])))
     }, () => undefined)
     return () => { stale = true }
-  }, [api.authorization])
+  }, [api.authorization, authRefresh])
 
   /**
    * The provider's account flow, when this deployment registers one. A flow
@@ -361,6 +373,15 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
           </p>
         )}
       {orderFailure === undefined ? null : <p className={styles['notice']} role="status">{`${t('orderSaveFailed')}: ${orderFailure}`}</p>}
+      {codexAttempt?.key !== NATIVE_CODEX_ACCOUNT_KEY ? null : (
+        <section className={styles['authorizationPrompt']} aria-label="Autenticación de Codex">
+          <AuthorizationAttemptProgress
+            attempt={codexAttempt} answer={codexAnswer} setAnswer={setCodexAnswer}
+            submitAnswer={submitCodexAnswer} cancel={cancelCodexAuthorization} t={t}
+          />
+        </section>
+      )}
+      {codexAuthFailure === undefined ? null : <p role="alert" className={styles['error']}>{codexAuthFailure}</p>}
       <ul className={styles['rows']}>
         {configured.map((row, index) => {
           const target = targetOf(row)
@@ -379,6 +400,8 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                   api,
                   t,
                   readOnly: !state.writable,
+                  oauth: accountFlowFor(target.provider),
+                  onAuthorized: () => { setAuthRefresh(value => value + 1); void controller.load() },
                   onClose: (changed) => { closeSetup(changed, target) },
                 })}
               </li>
@@ -430,6 +453,20 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                       : null}
                 </span>
                 <span className={styles['rowActions']}>
+                  {isCodex && accountFlowFor(row.entry.provider)?.methods.some(method => method.id === 'oauth') ? (
+                    <button
+                      type="button"
+                      className={styles['secondaryButton']}
+                      disabled={row.entry.provider === CODEX_PROVIDER && (
+                        codexPreparingKey === NATIVE_CODEX_ACCOUNT_KEY
+                        || (codexAttempt?.key === NATIVE_CODEX_ACCOUNT_KEY && codexAttempt.status === 'pending')
+                      )}
+                      onClick={() => { beginCodexAuthorization(NATIVE_CODEX_ACCOUNT_KEY, 'oauth') }}
+                    >
+                      {codexPreparingKey === NATIVE_CODEX_ACCOUNT_KEY || codexAttempt?.status === 'pending'
+                        ? t('signingIn') : 'Autenticar Codex'}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className={styles['iconButton']}
@@ -489,6 +526,8 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                   api,
                   t,
                   readOnly: !state.writable,
+                  oauth: accountFlowFor(target.provider),
+                  onAuthorized: () => { setAuthRefresh(value => value + 1); void controller.load() },
                   onClose: (changed) => { closeEditor(changed, target) },
                 })
                 : null}
@@ -529,6 +568,8 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                 api={api}
                 t={t}
                 readOnly={!state.writable}
+                oauth={accountFlowFor(addTarget.provider)}
+                onAuthorized={() => { setAuthRefresh(value => value + 1); void controller.load() }}
                 onClose={(changed) => { closeEditor(changed, addTarget) }}
               />
             </div>
