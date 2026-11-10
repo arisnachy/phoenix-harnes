@@ -164,3 +164,19 @@ test('individual ESPN research stages cannot remain in Running forever',async()=
   await assert.rejects(()=>boundedTicket(new Promise(()=>{}),35),/Tiempo de investigación excedido/)
   assert.ok(Date.now()-started<500)
 })
+
+test('women Champions League enters automated ticket research after calendar discovery',async()=>{
+  const requested=[]
+  const womenOnly=async url=>{
+    const raw=String(url);requested.push(raw)
+    const source=raw.includes('/soccer/uefa.wchampions/')?
+      fixture(raw.replace('/soccer/uefa.wchampions/','/soccer/eng.1/')):{events:[]}
+    return new Response(JSON.stringify(source),{status:200})
+  }
+  const result=await evidenceTicket(5,day,'soccer',womenOnly,now)
+  assert.ok(requested.some(url=>url.includes('/soccer/uefa.wchampions/')))
+  assert.equal(result.verifiedEvents,5)
+  assert.ok(result.events.every(x=>x.league==='uefa.wchampions'))
+  assert.equal(result.priced,false)
+  assert.equal(result.card.props.combinedOdds,'No disponible')
+})
