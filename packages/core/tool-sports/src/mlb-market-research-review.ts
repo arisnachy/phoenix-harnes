@@ -143,6 +143,7 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
           checkedMs-at<=45*86400000&&reviewMs-at<=45*86400000&&
           Number.isSafeInteger(out.opponentId)&&out.opponentId>0&&
           /^\d+\.[012]$/u.test(innings)&&
+          Number(innings)>0&&Number(out.pitches)>0&&
           [out.pitches,out.earnedRuns,out.strikeouts,out.walks].every(validCount)
       }).map(out=>out.date)).size>=5),
     injuriesDatedVerified:false, // Injured roster alone has no dated medical report or return-to-play status.
