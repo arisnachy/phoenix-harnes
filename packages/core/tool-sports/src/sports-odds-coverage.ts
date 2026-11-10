@@ -17,7 +17,7 @@ export const oddsDisciplines=[
 export type OddsDiscipline=typeof oddsDisciplines[number]['sport']
 export const coveredSportKeys:Readonly<Record<string,readonly string[]>>={
   football:['soccer_epl','soccer_spain_la_liga','soccer_mexico_ligamx',
-    'soccer_usa_mls','soccer_uefa_champs_league'],
+    'soccer_usa_mls','soccer_uefa_champs_league','soccer_uefa_womens_champions_league'],
   basketball:['basketball_nba','basketball_wnba'],
   baseball:['baseball_mlb'],
   'american-football':['americanfootball_nfl'],
