@@ -136,14 +136,24 @@ export async function investigateTicketSpecialist(
       observed('fixture',closeTime(d.opportunity.scheduledAt,game.kickoff),
         'ESPN baloncesto: identidad y hora del evento')
       observed('form',d.teams.home.lastGames.length>=5&&d.teams.away.lastGames.length>=5,
-        'Resultados terminados de ambos equipos')
-      observed('rosters',teams,'Rosters oficiales individuales')
+        d.teams.home.name+': '+d.teams.home.wins+'V/'+d.teams.home.losses+
+        'D en '+d.teams.home.lastGames.length+'; '+d.teams.away.name+': '+
+        d.teams.away.wins+'V/'+d.teams.away.losses+'D en '+
+        d.teams.away.lastGames.length)
+      observed('rosters',teams,'Rosters ESPN: local '+
+        d.teams.home.roster.length+' atletas; visitante '+
+        d.teams.away.roster.length+' atletas')
       observed('starters',d.teams.home.quintetConfirmed&&d.teams.away.quintetConfirmed,
         'Dos quintetos titulares comprobados; roster no es titularidad')
+      const metric=(side:'home'|'away')=>d.teams[side].teamStats
+        .filter(x=>/pace|possessions|offensive.*rating|offrtg|defensive.*rating|defrtg/iu.test(x.name))
+        .slice(0,3).map(x=>x.name+': '+x.value).join(', ')
       observed('efficiency',d.coverage.advancedMetrics,
-        'Pace y eficiencia de ambos equipos en la fuente consultada')
+        'Local '+(metric('home')||'sin cifras')+
+        '; visitante '+(metric('away')||'sin cifras'))
       observed('schedule',d.context.restHours.home!==null&&d.context.restHours.away!==null,
-        'Descanso de ambos rivales estimado desde partidos verificados')
+        'Descanso local '+(d.context.restHours.home?.toFixed(1)??'?')+
+        ' h; visitante '+(d.context.restHours.away?.toFixed(1)??'?')+' h')
       mark('market',d.markets.length?'partial':'missing',
         d.markets.length+' opciones consultadas, sujetas a fecha y liquidación')
     }else if(game.sport==='soccer'){
@@ -274,7 +284,8 @@ export async function investigateTicketSpecialist(
           injury.away.matched?'verified':'partial',
           'ESPN reporte bilateral '+injury.status+
           ' · '+(injury.feedUpdatedAt??'sin hora')+
-          ' · registrado; no sustituye el parte oficial ni el quinteto final')
+          ' · local '+injury.home.injuries.length+' y visitante '+
+          injury.away.injuries.length+' registros; sin confirmar quinteto final')
         steps.push('ESPN lesiones '+injury.status+': local '+
           injury.home.injuries.length+' · visitante '+injury.away.injuries.length+
           ' · fuente '+injury.source)
