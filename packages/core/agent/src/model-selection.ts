@@ -1548,6 +1548,11 @@ export function installModelSelection(
         ...(planHandoff===undefined?[]:[{
           name:'phoenix:eclipse-execution-contract',text:planHandoff,
         }]),
+        ...(autoStep!==undefined && humanVisual
+          && needsSolFirstImageReading(currentRequest)?[{
+          name:'phoenix:eclipse-clinical-image-owner',
+          text:'Clinical image source rule for Eclipse: the verified image-capable Sol route reads the original pixels first. The current medical image is NOT automatically delivered to Orion, Terra, or new Team workers: never delegate diagnosis, lesion localization, or source-dependent medical illustration to a specialist with only a text assignment. After Sol records observed findings and uncertainty, Luna can execute available image_generation on the lead route using the evidence-bounded educational scene contract, not re-diagnose from a generic description. Verify actual generated raster before reporting an image. If Sol lacks image access or no safe renderer is available, explain the exact limitation and do not imply that an image was examined or generated.',
+        }]:[]),
       ],
       // Planner and final reviewer do not execute tools. Luna gets the
       // original work contract plus normal execution tools at its own step.
