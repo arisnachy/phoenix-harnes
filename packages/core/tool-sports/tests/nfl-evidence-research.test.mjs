@@ -18,7 +18,7 @@ function athletes(team){
     jersey:String(i+1)}))
 }
 const history={events:[{id:'401998001',date:'2026-10-30T18:00:00Z',
-  status:{type:{state:'post',completed:true}},competitions:[{competitors:[
+  status:{type:{state:'post',completed:true}},season:{type:2},competitions:[{competitors:[
     {homeAway:'home',team:{id:'10',displayName:'Home Eagles'},score:'27'},
     {homeAway:'away',team:{id:'20',displayName:'Away Ravens'},score:'20'}]}]}]}
 function mock({started=false,noRoster=false,offseason=false,officialEleven=true}={}){
@@ -31,8 +31,8 @@ function mock({started=false,noRoster=false,offseason=false,officialEleven=true}
     let payload={}
     if(u.pathname.endsWith('/scoreboard')){
       const dates=u.searchParams.get('dates')??''
-      payload=dates.includes('-')?history:{events:offseason?[]:
-        [started?{...game,status:{type:{state:'in'}}}:game]}
+      payload=dates==='20261108'?{events:offseason?[]:
+        [started?{...game,status:{type:{state:'in'}}}:game]}:history
     }else if(u.pathname.endsWith('/summary')){
       const roster=team=>athletes(team).map((p,i)=>({
         athlete:{id:p.id},starter:officialEleven,
@@ -95,6 +95,8 @@ test('NFL full rosters support 11 offense + 11 defense per team, stats bounded t
   assert.equal(d.coverage.confirmedOffense,22)
   assert.equal(d.coverage.confirmedDefense,22)
   assert.equal(d.teams.home.wins,1)
+  assert.ok(api.calls.some(url=>url.includes('/scoreboard?dates=202610')),'monthly historical recovery')
+  assert.ok(!api.calls.some(url=>/scoreboard\\?dates=\\d{8}-\\d{8}/u.test(url)),'no deprecated date range')
   assert.equal(d.teams.away.losses,1)
   assert.equal(d.injuries.length,1)
   assert.equal(d.injuries[0].playerId,'10002')
@@ -153,4 +155,24 @@ test('DNP and cross-event / player props never become imaginary loss or zero',()
   assert.equal(settleNflPlayerProp({...box,participation:'dnp'},
     {...mk('passingYards',200),dnpPolicy:'void'}).status,'void')
   assert.throws(()=>settleNflPlayerProp(box,{...mk('passingYards',200),playerId:'10002'}),/Identidad/)
+})
+
+test('NFL preseason results are excluded from the formal dossier',async()=>{
+  const api=mock()
+  const base=api.fetcher
+  const fetcher=async url=>{
+    const response=await base(url)
+    const path=new URL(String(url))
+    const key=path.searchParams.get('dates')??''
+    if(path.pathname.endsWith('/scoreboard')&&key!=='20261108'){
+      const payload=await response.json()
+      return new Response(JSON.stringify({events:payload.events?.map(e=>({
+        ...e,season:{type:1},
+      }))??[]}),{status:200})
+    }
+    return response
+  }
+  const dossier=await investigateNfl(date,'401999001',fetcher,now,{},[],4)
+  assert.equal(dossier.teams.home.recent.length,0)
+  assert.ok(dossier.missingEvidence.some(x=>x.includes('temporada regular')))
 })

@@ -4,6 +4,7 @@
 import {type MarketOutcome} from './sports.ts'
 import {collectDirectEspnStats,type DirectTeam} from './sports-direct-stats.ts'
 import {readHistoricalScoreboard} from './sports-historical-scoreboard.ts'
+import {isVerifiedRegularSeason} from './sports-regular-season.ts'
 import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
 import {basketballSlate,basketballRead,record,values,label,id,teamKey,regulationMinutes,
   type BasketballFixture,type BasketballLeague,type BasketballSource} from './basketball-research-core.ts'
@@ -60,7 +61,8 @@ function recentGames(raw:unknown,fixture:BasketballFixture,teamId:string){
   for(const x of values(record(raw).events)){
     const e=record(x),d=Date.parse(label(e.date))
     const status=record(record(e.status).type)
-    if(!Number.isFinite(d)||d>=cutoff||(status.state!=='post'&&status.completed!==true))continue
+    if(!Number.isFinite(d)||d>=cutoff||!isVerifiedRegularSeason(e)||
+      (status.state!=='post'&&status.completed!==true))continue
     const participants=values(record(values(e.competitions)[0]).competitors).map(record)
     const me=participants.find(t=>id(record(t.team).id)===teamId)
     const other=participants.find(t=>id(record(t.team).id)!==teamId)
@@ -286,8 +288,8 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
     ...(!teams.home.roster.length?['Roster y estadísticas locales no accesibles']:[]),
     ...(!teams.away.roster.length?['Roster y estadísticas visitantes no accesibles']:[]),
     ...(historyReport.status!=='verified'?['Cobertura ESPN histórica parcial: '+historyReport.explanation]:[]),
-    ...(!teams.home.lastGames.length?['Historial reciente local no verificado']:[]),
-    ...(!teams.away.lastGames.length?['Historial reciente visitante no verificado']:[]),
+    ...(!teams.home.lastGames.length?['Historial de temporada regular local no verificado']:[]),
+    ...(!teams.away.lastGames.length?['Historial de temporada regular visitante no verificado']:[]),
     ...(!injuriesData?['Estado de lesionados sin fuente verificable']:[]),
     ...(!referee?['Crew arbitral no verificado']:[]),
     'Quintetos 5-on-5, on/off, Four Factors y tracking de posesiones no verificados en este expediente',
