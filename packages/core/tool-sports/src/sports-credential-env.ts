@@ -21,6 +21,7 @@ export async function sportsEnvWithVaultKey(ctx: Context, env: NodeJS.ProcessEnv
   // No secret is persisted into the sport UI, logs, snapshots or model prompts.
   for (const ref of ['THE_ODDS_API_KEY','THEODDSAPI_API_KEY','THERUNDOWN_API_KEY','SPORTSGAMEODDS_API_KEY',
     'PHOENIX_API_FOOTBALL_KEY','PHOENIX_API_HOCKEY_KEY','PHOENIX_API_NFL_KEY',
+    'PHOENIX_BALLDONTLIE_API_KEY',
     'PHOENIX_BIGBALLS_API_KEY','PHOENIX_NFLMETA_KEY','PHOENIX_SPORTMONKS_KEY',
     'PHOENIX_SPORTS_CLOUD_GITHUB_TOKEN','PHOENIX_SPORTS_CLOUD_AES_KEY']) {
     try {
