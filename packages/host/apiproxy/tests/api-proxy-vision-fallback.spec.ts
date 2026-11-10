@@ -21,7 +21,7 @@ import UserQuestionService from '@phoenix-ai/dsh-user-questions'
 import type { RpcRequest } from '@phoenix-ai/dsh-host-apiproxy/api/rpc'
 import { RpcId } from '@phoenix-ai/dsh-host-apiproxy/api/rpc'
 import { createApiProxy } from '../src/api-proxy.ts'
-import { pickFocusedVisionReader, requiresFocusedClinicalVision } from '../src/vision-fallback.ts'
+import { pickFocusedVisionReader, requiresFocusedClinicalVision, resolveVisionFallbackRoute } from '../src/vision-fallback.ts'
 import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 
 let nextRpc = 1
@@ -383,6 +383,20 @@ describe('Borrowed-eyes prompt admission', () => {
     const delivered = (followup.mock.calls[0]?.[0] as UserMessage).content
     expect(delivered.some(block => block.type === 'text' && block.text.includes('fallback vision model'))).toBe(true)
     await ctx.fiber.dispose()
+  })
+})
+
+describe('clinical route overrides unsafe legacy Terra fallback pins',()=>{
+  it('uses the real alternative reader for clinical content but preserves explicit nonmedical pins',async()=>{
+    const {ctx}=await harness()
+    try{
+      const current={provider:'plain',model:'txt-1'}
+      const terraPin={enabled:true,provider:'openai-codex',model:'gpt-6.1-terra'}
+      const medical=await resolveVisionFallbackRoute(ctx,current,terraPin,true)
+      expect(medical).toEqual({provider:'eyes',model:'see-1'})
+      const design=await resolveVisionFallbackRoute(ctx,current,terraPin,false)
+      expect(design).toEqual({provider:'openai-codex',model:'gpt-6.1-terra'})
+    }finally{await ctx.fiber.dispose()}
   })
 })
 
