@@ -7,6 +7,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import type { Agent } from './runtime-types.ts'
 import type { Session } from '@phoenix-ai/dsh-session'
 import { ReasoningEffortId, createUserMessage, type LlmCallConfig, type LlmResolvedModelInfo } from '@phoenix-ai/dsh-llm'
+import { eclipseCurrentWorkContract, eclipseCoordinatorContractInstruction } from './eclipse-work-contract.ts'
 
 /** Complete provider, model, and optional reasoning effort selected for one live Agent. */
 export interface ModelSelection {
@@ -422,6 +423,19 @@ const AUTO_VISIBLE_PLAN_POLICY =
   'On the next step Kira switches to the execution coordinator on Luna Max, uses this exact plan and coordinates the real specialists without asking for routine approval. ' +
   'If the user only wants a greeting, explanation, answer or standalone preview, respond normally with no planning stage.'
 
+/** Final independent verification belongs to the strategy seat after real
+ * execution receipts, not to an unverified Luna "done" message.
+ */
+const AUTO_SOL_FINAL_SUPERVISION_POLICY =
+  'You are Kira using the Eclipse planner seat for ONE final supervision pass, not a new planning loop. ' +
+  'Compare the original current-turn work contract and user requirements against real execution/tool receipts. ' +
+  'The tool evidence is authoritative only for operations it actually confirms; do not invent success, files, images, diagnoses, measurements, or repository changes. ' +
+  'Preserve the originally supported findings and uncertainty (including clinical differentials) unless NEW evidence justifies an explicit correction. ' +
+  'Audit executor drift, omissions, unexpected scope changes and unverified deliverables. ' +
+  'Give the user a concise final verdict: what was actually completed, what was tested, what remains blocked, and any limitations. ' +
+  'You may report a concrete corrective next action, but do not say you already performed it; this is a final supervision step with no tools. ' +
+  'Do not produce another Plan: or address Kira as a different agent.'
+
 const AUTO_SOL_STRATEGY_POLICY =
   'You are Kira herself using the selected strategy/planner model for one focused review of execution evidence. ' +
   'The coordinator is not a separate teammate, speaker or consultant; the Lead identity and ongoing conversation remain Kira. ' +
@@ -435,6 +449,7 @@ const AUTO_LUNA_COORDINATION_POLICY =
   'You are still Kira, coordinating through Eclipse. Luna Max owns execution and team coordination. ' +
   'FÉNIX offers a consultation through fenix_consult only when real Team evidence identifies a material contradiction, missing requirement or failed verification; Terra never takes over Kira. ' +
   'The single Kira identity owns the plan across model switches; never address Kira as another speaker. ' +
+  'When a current-turn Eclipse work contract is supplied, preserve its requirements and supported provisional observations rather than reinterpret them based solely on a model switch. Any changed conclusion needs new evidence and an explicit reason. ' +
   'If a user-visible **Plan:** was written earlier in THIS turn, ' +
   'treat that text as the already-approved execution brief; do not rewrite, replan, recite or re-announce it. ' +
   'Start the first permitted real action promptly, supervise the critical path and choose a genuine teammate ' +
@@ -1095,6 +1110,9 @@ interface PhoenixAutoRouterState {
   continuationCount: number
   lastContinuationStep: number
   forcePlannerNext: boolean
+  supervisionPending: boolean
+  supervisionStep: number
+  supervisionCompleted: boolean
   lastTeamEscalationMessageId: string | undefined
 }
 
@@ -1107,6 +1125,9 @@ function resetPhoenixAutoTurnState(state: PhoenixAutoRouterState, turn: number):
   state.continuationCount = 0
   state.lastContinuationStep = 0
   state.forcePlannerNext = false
+  state.supervisionPending = false
+  state.supervisionStep = 0
+  state.supervisionCompleted = false
   state.lastTeamEscalationMessageId = undefined
 }
 
@@ -1116,6 +1137,33 @@ function phoenixAutoEvidenceVersion(
   turn: number,
 ): number {
   return turnEvents(agent, turn).filter(event => event.type === 'tool/result' || event.type === 'llm/retry').length
+}
+
+/** Require a real current-turn tool result with readable evidence before paying
+ * for a final Sol review. A bare "done" or empty tool-result event is not proof.
+ */
+function eclipseHasInspectableToolReceipt(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+): boolean {
+  return turnEvents(agent, turn).some(event => {
+    if (event.type !== 'tool/result') return false
+    const data=event.data as {
+      readonly error?:unknown
+      readonly message?: {readonly content?:readonly {
+        readonly type?:string
+        readonly isError?:boolean
+        readonly content?:readonly {readonly type?:string;readonly text?:string}[]
+        readonly text?:string
+      }[]}
+    }
+    if(data.error!==undefined)return false
+    return data.message?.content?.some(block=>
+      block.isError!==true &&
+      (typeof block.text==='string'&&block.text.trim().length>0
+       || block.content?.some(x=>x.type==='text'&&
+         typeof x.text==='string'&&x.text.trim().length>0)===true))===true
+  })
 }
 
 /** Use substantive outcomes, not changing tool-call IDs, to suppress duplicate rescues. */
@@ -1369,6 +1417,9 @@ export function installModelSelection(
     continuationCount: 0,
     lastContinuationStep: 0,
     forcePlannerNext: false,
+    supervisionPending: false,
+    supervisionStep: 0,
+    supervisionCompleted: false,
     lastTeamEscalationMessageId: undefined,
   }
   // A rehydrated Phoenix session can temporarily display an empty selector.
