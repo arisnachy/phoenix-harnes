@@ -165,7 +165,7 @@ type SportsTicketNarrative = {
   favorable:string[]
   contradictions:string[]
   researchSteps?:Array<{key:string;title:string;critical:boolean;
-    state:'verified'|'partial'|'missing';detail:string}>
+    state:'verified'|'partial'|'missing';detail:string;sources?:string[]}>
   news:Array<{headline:string;publisher:string;publishedAt:string|null;
     articleUrl:string|null;imageUrl:string|null}>
   globalNews:Array<{publisher:string;headline:string;indexedAt:string|null;articleUrl:string;status:string}>
@@ -485,11 +485,13 @@ const sportsTicketNarrative=(v:unknown):v is SportsTicketNarrative=>{
   if(!texts(v.favorable,450)||!texts(v.contradictions,450))return false
   if(v.researchSteps!==undefined&&(!Array.isArray(v.researchSteps)||
     v.researchSteps.length>25||!v.researchSteps.every(x=>isRecord(x)&&
-      hasOnlyKeys(x,['key','title','critical','state','detail'])&&
+      hasOnlyKeys(x,['key','title','critical','state','detail','sources'])&&
       boundedSportsText(x.key,50)&&boundedSportsText(x.title,180)&&
       typeof x.critical==='boolean'&&
       ['verified','partial','missing'].includes(String(x.state))&&
-      boundedSportsText(x.detail,240))))return false
+      boundedSportsText(x.detail,240)&&
+      (x.sources===undefined||(Array.isArray(x.sources)&&x.sources.length<=5&&
+        x.sources.every(y=>boundedSportsText(y,150)))))))return false
   if(!Array.isArray(v.news)||v.news.length>6||!v.news.every(x=>isRecord(x)&&
     hasOnlyKeys(x,['headline','publishedAt','publisher','articleUrl','imageUrl'])&&
     isText(x.headline,200)&&boundedSportsText(x.publisher,80)&&
@@ -984,6 +986,7 @@ function SportsTicketResearchNarrative({value,index}:{value:SportsTicketNarrativ
             {' '}{step.title}</strong> · {step.state==='verified'?'Dato comprobado':
               step.state==='partial'?'Dato parcial':'Dato no obtenido'}
             {' '}· {step.detail}
+          {step.sources?.length?<small> · Fuentes previstas: {step.sources.join(' → ')}</small>:null}
         </li>)}</ul>:<p>No se recibió un checklist detallado para esta pata.
           PHOENIX debe obtener y mostrar datos, no darla por investigada sin evidencia.</p>}
     </details>
