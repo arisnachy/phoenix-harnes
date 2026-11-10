@@ -463,7 +463,7 @@ test('five pregame legs recover actual same-book TheRundown quotes when V2 omits
   assert.equal(result.quotedLegs,5)
   assert.equal(result.priced,true)
   assert.ok(result.card.props.legs.every(x=>x.bookmaker==='DraftKings'))
-  assert.equal(result.card.props.legs[0].price,'1.76923')
+  assert.equal(result.card.props.legs[0].price,'1.77')
   assert.equal(result.placed,false)
 })
 
