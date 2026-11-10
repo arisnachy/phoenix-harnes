@@ -14,8 +14,7 @@ const put=(r:Audit,key:string,ok:boolean,detail:string)=>{
   r[key]={state:ok?'partial':'missing',detail:detail.slice(0,500)}
 }
 const isVenue=(text:string)=>Boolean(text&&
-  !/^(?:unknown|no verificado|sede no confirmada|estadio no verificado|
-    sin verificar|sin sede)$/iu.test(text.trim()))
+  !/^(?:unknown|no verificado|sede no confirmada|estadio no verificado|sin verificar|sin sede)$/iu.test(text.trim()))
 const identity=(r:Audit,key:string,id:unknown,time:string,venue:string,detail:string)=>{
   const complete=Boolean(id&&Number.isFinite(Date.parse(time))&&isVenue(venue))
   r[key]={state:complete?'verified':'partial',detail:detail.slice(0,500)}
