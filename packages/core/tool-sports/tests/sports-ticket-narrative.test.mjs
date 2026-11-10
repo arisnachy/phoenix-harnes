@@ -124,3 +124,32 @@ test('NBA injury statuses and both teams are visible in the selection defence',(
   assert.equal(updated.status,'conditional')
   assert.ok(updated.sources.some(x=>/ESPN lesiones de ambos/u.test(x.name)))
 })
+
+test('specialist checklist preserves the exact observed stats and ranked sources for Kira',()=>{
+  const prior=composeTicketLegNarrative({
+    eventId:'4',sport:'basketball',league:'nba',
+    home:'Charlotte Hornets',away:'Cleveland Cavaliers',
+    kickoff:'2026-11-11T01:00:00Z',pick:'away',
+  },{rationale:'Form research with injuries evaluated'})
+  const updated=enrichSpecialistNarrative(prior,{
+    eventId:'4',sport:'basketball',league:'nba',status:'researched',
+    verifiedSteps:['stats observed'],pendingSteps:['starting five'],
+    checklist:{complete:false,criticalPending:['Starting five'],steps:[
+      {key:'form',title:'Forma reciente',critical:true,state:'verified',
+        detail:'Cleveland 4V/1D; Charlotte 2V/3D',
+        sources:['ESPN scoreboard historical']},
+      {key:'injuries',title:'Lesiones',critical:true,state:'verified',
+        detail:'Cleveland 4; Charlotte 3',
+        sources:['ESPN basketball/nba/injuries','NBA official injury report PDF']},
+      {key:'starters',title:'Quintetos',critical:true,state:'partial',
+        detail:'Dos quintetos sin confirmar',
+        sources:['ESPN summary']},
+    ]},
+  })
+  assert.equal(updated.researchSteps.length,3)
+  assert.deepEqual(updated.researchSteps[1].sources,
+    ['ESPN basketball/nba/injuries','NBA official injury report PDF'])
+  assert.match(updated.explanationForChat,/Cleveland 4; Charlotte 3/)
+  assert.match(updated.explanationForChat,/Rutas: ESPN basketball\/nba\/injuries/)
+  assert.equal(updated.status,'conditional')
+})
