@@ -85,6 +85,34 @@ describe('Eclipse Sol plan → Luna execution → Sol supervision',()=>{
       expect(s.steered).toHaveLength(1)
     } finally {await s.close()}
   })
+  it('continues a Sol clinical/image assessment to Luna without erasing the lesion hypothesis',async()=>{
+    const s=await fixture()
+    try{
+      s.events[1]={type:'user/message',data:{source:{kind:'user'},content:[
+        {type:'text',text:'Crea el modelo hiperrealista educativo con la lesión y las estructuras vecinas'},
+        {type:'image',attachment:{attachmentId:'ct-source'}},
+      ]}}
+      s.events[2]={type:'assistant/message',data:{turn:1,step:1,
+        message:{source:{kind:'model',model:'gpt-6.1-sol'},
+          content:[{type:'text',text:
+            'En el corte axial de tomografía, el hallazgo sugiere una inflamación apendicular provisional, '+
+            'sin confirmar continuidad con el ciego. Crearé una ilustración hiperrealista educativa con la '+
+            'lesión como sospecha, estructuras vecinas y limitaciones documentadas.'}]}}}
+      await s.assemble()
+      await s.stop()
+      expect(s.steered).toHaveLength(1)
+      expect(JSON.stringify(s.steered[0])).toContain('qualified first-step analysis')
+      const route=await s.request(2)
+      expect(route.model).toBe('gpt-6-luna')
+      s.events.push({type:'step/start',data:{turn:1,step:1}})
+      const next=await s.assemble()
+      const contract=next.sections.find(x=>x.name==='phoenix:eclipse-execution-contract')?.text
+      expect(contract).toContain('inflamación apendicular')
+      expect(contract).toContain('sin confirmar')
+      expect(contract).toContain('no reinicies ni debilites')
+    }finally{await s.close()}
+  })
+
   it('does not claim a final verification for a bare coordinator message or empty tool result',async()=>{
     const s=await fixture()
     try{
