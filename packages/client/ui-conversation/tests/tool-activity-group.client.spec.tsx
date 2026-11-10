@@ -317,12 +317,11 @@ describe('chat tool activity grouping', () => {
     expect(status.dataset.activity).toBe('generating-image')
     expect(status.getAttribute('data-chat-flow-kind')).toBe('image-generation-progress')
     expect(status.textContent).toContain('status.generatingImage')
-    expect(status.textContent).toContain('image.progressEstimateNote')
+    expect(status.textContent).toContain('image.progressUnknown')
     expect(status.textContent).not.toContain('text2im')
     const progress = screen.getByRole('progressbar')
-    const percent = Number(progress.getAttribute('aria-valuenow'))
-    expect(percent).toBeGreaterThanOrEqual(1)
-    expect(percent).toBeLessThanOrEqual(95)
+    expect(progress.getAttribute('aria-valuenow')).toBeNull()
+    expect(progress.getAttribute('aria-valuetext')).toBe('image.progressInFlight')
     expect(screen.getByTestId('live-tool-activity')).toBeTruthy()
   })
 
@@ -583,21 +582,33 @@ describe('chat tool activity grouping', () => {
 })
 
 describe('HealthIA transcript cards are independent of model prose',()=>{
-  it('displays an actual activation receipt as an interactive clinical surface',()=>{
+  it('displays an explicitly requested patient workspace as an interactive clinical surface',()=>{
     const node={
-      ...settledTool('healthia-activation-1'),
-      call:{name:'healthia_activate',argsRaw:'{}'},
+      ...settledTool('healthia-workspace-1'),
+      call:{name:'health_patient_workspace',argsRaw:'{}'},
       content:[{type:'text' as const,text:JSON.stringify({
-        active:true,alreadyActive:false,patients:[],
+        workspace:'patient_management',patients:[],
       })}],
     }
-    renderChat([user(1,'Activa HealthIA para una prueba'),node])
+    renderChat([user(1,'Abre gestión de pacientes de HealthIA'),node])
     expect(screen.getByText('HealthIA · Pacientes')).toBeTruthy()
     expect(screen.getByRole('region',{name:'Tarjeta clínica de HealthIA'})).toBeTruthy()
     expect(screen.getByRole('button',{name:'Preparar registro'})).toBeTruthy()
     // A collapsed technical disclosure does not conceal the native card.
     expect(screen.getByRole('button',{name:'Tools'}).getAttribute('aria-expanded')).toBe('false')
   })
+  it('does not turn background HealthIA activation into a patient management card',()=>{
+    renderChat([user(1,'Activa HealthIA para una prueba'),{
+      ...settledTool('healthia-activation-1'),
+      call:{name:'healthia_activate',argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({
+        active:true,alreadyActive:false,patients:[],
+      })}],
+    }])
+    expect(screen.queryByText('HealthIA · Pacientes')).toBeNull()
+    expect(screen.queryByRole('region',{name:'Tarjeta clínica de HealthIA'})).toBeNull()
+  })
+
   it('does not manufacture a saved patient card from an unverified assistant claim',()=>{
     renderChat([user(1,'Crear paciente'),{
       ...settledTool('healthia-failed'),
