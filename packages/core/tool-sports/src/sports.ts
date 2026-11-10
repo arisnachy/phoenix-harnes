@@ -554,8 +554,12 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
     source:quotes.some(q=>q.source?.includes('OddsHarvester'))?
       'OddsHarvester/OddsPortal · cuotas públicas observadas':
       quotes.some(q=>q.source?.includes('ESPN'))?'ESPN Site/Core (cuotas públicas cuando ESPN las publique)':
+      quotes.some(q=>q.source==='TheRundown')?
+        'TheRundown · DraftKings/FanDuel/BetMGM · feed Free con 5 min de retraso':
+      quotes.some(q=>q.source==='SportsGameOdds')?
+        'SportsGameOdds · precios de casas · consultar demora del plan':
       quotes.some(q=>q.source==='TheOddsAPI')?'TheOddsAPI · cuotas de casas identificadas':
-      'The Odds API · precios de las casas indicadas',note:'COTIZACIÓN COMERCIAL CONSULTADA; PENDIENTE DE ACEPTACIÓN EN LA CASA. '+warning+' Deben comprobarse fecha, mercado, reglas y cambio de precio antes de enviar el ticket. No existe garantía de ganar.',
+      'The Odds API v4 · precios de las casas indicadas',note:'COTIZACIÓN COMERCIAL CONSULTADA; PENDIENTE DE ACEPTACIÓN EN LA CASA. '+warning+' Deben comprobarse fecha, mercado, reglas y cambio de precio antes de enviar el ticket. No existe garantía de ganar.',
     askPrompt:'Kira, revisa este ticket con datos actuales, riesgos, ausencias y correlaciones antes de recomendar nada.',
   } } }
 }

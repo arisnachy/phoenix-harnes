@@ -119,3 +119,27 @@ test('Bet Better is independent probability and locked rows are excluded',async(
   assert.equal(findModelOpinion(models,{home:'Chicago Bulls',away:'Boston Celtics',
     kickoff,pick:'home'}).status,'contradiction')
 })
+
+test('TheRundown official V2 JSON without period_id retains open full-game moneylines',async()=>{
+  const example=structuredClone(rundown)
+  delete example.events[0].markets[0].period_id
+  const prices=await fetchTheRundownOdds('basketball_nba','h2h','key',
+    async()=>json(example),now)
+  assert.equal(prices.length,2)
+  assert.deepEqual(prices.map(x=>x.selection),['Boston Celtics','Chicago Bulls'])
+  assert.ok(prices.every(x=>x.bookmaker==='DraftKings'&&x.observedAt))
+  // An explicit subperiod must still be rejected.
+  example.events[0].markets[0].period_id='1'
+  assert.deepEqual(await fetchTheRundownOdds('basketball_nba','h2h','key',
+    async()=>json(example),now),[])
+})
+
+test('rejects stale CDN odds snapshots even when their last bookmaker price looks recent',async()=>{
+  const request=async(url,options)=>{
+    assert.equal(options.cache,'no-store')
+    assert.equal(options.redirect,'error')
+    return new Response(JSON.stringify(rundown),{status:200,headers:{age:'901'}})
+  }
+  await assert.rejects(()=>fetchTheRundownOdds('basketball_nba','h2h',
+    'not-a-real-secret',request,now),/snapshot de caché demasiado antiguo/u)
+})
