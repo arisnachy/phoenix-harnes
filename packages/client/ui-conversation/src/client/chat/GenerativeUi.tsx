@@ -1347,6 +1347,19 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             </article>
           })}
         </section>:null}
+        {!p.chatNarrative?.length&&<section className={css.sportsTicketNarrative}
+          aria-label="Explicación pendiente por selección">
+          <h4>Kira · Revisión individual de las selecciones</h4>
+          {p.legs.map((leg,i)=><article key={leg.eventId??i}
+            className={css.sportsTicketNarrativeContext}>
+            <strong>{String(i+1).padStart(2,'0')} · {leg.selection}</strong>
+            <p>{leg.rationale? sportsDisplayText(leg.rationale):
+              'El motor no entregó una justificación individual verificable para esta elección.'}</p>
+            <p><strong>Investigación por completar:</strong> {leg.pendingEvidence?.length?
+              leg.pendingEvidence.slice(0,5).map(sportsDisplayText).join(' · '):
+              'No hay expediente completo de lesiones, titulares, forma y contradicciones asociado a esta pata.'}</p>
+          </article>)}
+        </section>}
         {receipt?<div className={css.sportsTicketTotal}>
           <div><small>Estado del boleto</small><strong>Recibo aportado · sin liquidación confirmada</strong></div>
           {p.stake&&<div><small>Importe informado</small><strong>RD$ {p.stake}</strong></div>}
