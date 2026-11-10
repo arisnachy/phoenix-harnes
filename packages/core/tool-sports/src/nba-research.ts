@@ -1,5 +1,6 @@
 /** Evidence-only NBA pregame form research. No player roster, injury or odds claims. */
 import { getFeed, hasSportsPermission } from './sports.ts'
+import {isVerifiedRegularSeason} from './sports-regular-season.ts'
 
 type EspnTeam = {
   homeAway?: string
@@ -60,7 +61,7 @@ const sides = (e: EspnEvent): { home: EspnTeam | undefined; away: EspnTeam | und
 const teamId = (team: EspnTeam | undefined): string => String(team?.team?.id ?? '')
 const teamName = (team: EspnTeam | undefined): string => (team?.team?.displayName ?? team?.team?.name ?? '').slice(0,100)
 const resultFor = (event: EspnEvent, id: string, before: number): Result | null => {
-  if(event.status?.type?.state!=='post')return null
+  if(event.status?.type?.state!=='post'||!isVerifiedRegularSeason(event))return null
   const gameAt = Date.parse(event.date ?? '')
   if (!Number.isFinite(gameAt)||gameAt>=before)return null
   const {home,away}=sides(event)
@@ -131,7 +132,7 @@ export async function researchNbaSlate(
     const awayReport=summarize(away,completed,kickoff)
     const enough=daysRetrieved===lookbackDays&&homeReport.gamesObserved>=3&&awayReport.gamesObserved>=3
     const missing=[
-      ...(!enough?['Muestra histórica insuficiente o fechas no accesibles']:[]),
+      ...(!enough?['Muestra histórica insuficiente o fechas no accesibles: solo temporada regular verificada']:[]),
       'Lesiones y quintetos oficiales sin contrastar',
       'Eficiencia avanzada y emparejamientos tácticos sin contrastar',
       'Cuotas por casa y valor esperado sin contrastar',
