@@ -85,3 +85,58 @@ test('soccer winner requires same-bookmaker DRAW leg for 1X2, not h2h',async()=>
   assert.ok(checked.quotes.every(q=>q.market==='1x2'))
   assert.ok(checked.quotes.some(q=>q.selection==='Draw'))
 })
+
+test('verified unknown soccer league uses ESPN event ID without inventing an odds route',async()=>{
+  const targetUnknown={...target,sportKey:'soccer_espn_dynamic',espnLeague:'mex.w.1',
+    home:'Tigres UANL',away:'Pumas UNAM'}
+  const urls=[]
+  const fixture={id:target.eventId,date:target.kickoff,competitions:[{
+    id:target.eventId,competitors:[
+      {homeAway:'home',team:{displayName:targetUnknown.home}},
+      {homeAway:'away',team:{displayName:targetUnknown.away}},
+    ],odds:[{provider:{name:'DraftKings'},lastUpdated:'2026-11-09T18:35:00Z',
+      homeTeamOdds:{moneyLine:'-120'},awayTeamOdds:{moneyLine:'+205'},
+      drawOdds:'+300'}],
+  }]}
+  const fetcher=async url=>{
+    urls.push(url)
+    if(url.includes('/soccer/mex.w.1/scoreboard?dates=20261110'))
+      return{events:[fixture]}
+    if(url.includes('scoreboard?'))return{events:[]}
+    return{items:[]}
+  }
+  const result=await lookupExactEspnWinner(targetUnknown,fetcher,now)
+  assert.equal(result.quotes.length,3)
+  assert.ok(result.quotes.every(x=>x.bookmaker==='DraftKings'&&x.market==='1x2'))
+  assert.ok(urls.some(url=>url.includes('/soccer/mex.w.1/scoreboard?')))
+  assert.ok(!urls.some(url=>url.includes('epl')||url.includes('/eng.1/')))
+})
+
+test('undated official ESPN DraftKings observations are preserved but not treated as live odds',async()=>{
+  const unknown={...target,sportKey:'soccer_espn_dynamic',espnLeague:'mex.w.1',
+    home:'Tigres UANL',away:'Pumas UNAM'}
+  const fake=async url=>url.includes('scoreboard?dates=20261110')?
+    {events:[{id:target.eventId,date:target.kickoff,competitions:[{
+      id:target.eventId,competitors:[
+        {homeAway:'home',team:{displayName:unknown.home}},
+        {homeAway:'away',team:{displayName:unknown.away}},
+      ],odds:[{provider:{name:'DraftKings'},
+        homeTeamOdds:{moneyLine:'-135'},awayTeamOdds:{moneyLine:'+115'},
+        drawOdds:'+280'}],
+    }]}]}:url.includes('scoreboard?')?{events:[]}:{items:[]}
+  const found=await lookupExactEspnWinner(unknown,fake,now)
+  assert.equal(found.quotes.length,0)
+  assert.equal(found.referenceCount,3)
+  assert.ok(found.referenceOdds.every(q=>q.bookmaker==='DraftKings'
+    &&q.reason==='sin_fecha'&&Number.isFinite(q.price)))
+  const wrong=await lookupExactEspnWinner({...unknown,away:'Monterrey'},fake,now)
+  assert.equal(wrong.referenceCount,0)
+})
+
+test('dynamic soccer route cannot be used with unsafe league slugs',async()=>{
+  const result=await lookupExactEspnWinner({...target,sportKey:'soccer_espn_dynamic',
+    espnLeague:'mex.w.1/../../bad'},async()=>{throw Error('No network')},now)
+  assert.equal(result.attempted,false)
+  assert.equal(result.quotes.length,0)
+  assert.equal(result.referenceOdds.length,0)
+})
