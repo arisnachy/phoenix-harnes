@@ -15,6 +15,8 @@ export interface EspnMarketQuote {
   time: string
   timeIso: string
   updatedAt: string
+  /** Successful ESPN feed observation. NEVER substitute for last price change. */
+  observedAt?: string
   endpointSource?:'scoreboard'|'core'|'summary'
 }
 type QuotedPrice=number|string|{american?:string|number;decimal?:string|number;
@@ -210,7 +212,7 @@ export type EspnOddsDiagnostics = {
 }
 export type EspnOddsObservation=EspnMarketQuote & {reason:'sin_fecha'|'antigua'|'proveedor_sin_nombre'|'fecha_futura'}
 export type EspnOddsResult={quotes:EspnMarketQuote[];observations:EspnOddsObservation[];diagnostics:EspnOddsDiagnostics}
-const MAX_QUOTE_AGE_MS=60*60*1000 // Match the one-hour live quotation gate in sports_chat_odds.
+const MAX_QUOTE_AGE_MS=60*60*1000 // Diagnostic of unchanged bookmaker price, not an ESPN rejection gate.
 const MAX_REQUESTS=28
 const MAX_GAMES_PER_DAY=8
 const MAX_REFS_PER_GAME=3
@@ -249,9 +251,14 @@ const quotationEntries=(value:unknown):EspnOdds[]=>{
     [value as EspnOdds]:[]
 }
 const availableQuote=(quote:EspnMarketQuote,now:number):boolean=>{
+  const observed=Date.parse(quote.observedAt??'')
   const updated=Date.parse(quote.updatedAt)
-  return !quote.bookmaker.startsWith('ESPN proveedor #')&&Number.isFinite(updated)&&
-    updated<=now+5*60_000&&now-updated<=MAX_QUOTE_AGE_MS
+  // ESPN's public JSON can omit lastUpdated or leave an unchanged bookmaker
+  // price for hours. The CURRENT feed observation is the eligibility signal.
+  // It does not mean the bookmaker accepted that price.
+  return Boolean(quote.bookmaker.trim())&&!quote.bookmaker.startsWith('ESPN proveedor #')&&
+    Number.isFinite(observed)&&observed<=now&&now-observed<=15*60_000&&
+    (!Number.isFinite(updated)||updated<=now+5*60_000)
 }
 /** Request-scoped budget plus in-process short cache only for trusted, live transport.
  * The injected test transport never shares global cache data between fixtures.
@@ -323,6 +330,8 @@ export async function fetchPublicEspnOddsDetailed(
     diagnostics.rawOddsEntries+=odds.length
     const candidates=normalizeEspnMarkets(event,odds,{now})
       .filter(q=>markets.includes(q.market))
+      .map(q=>({...q,observedAt:new Date(now).toISOString(),
+        endpointSource:origin==='embedded'?'scoreboard' as const:origin}))
     for(const q of candidates){
       const timestamp=Date.parse(q.updatedAt)
       const reason:EspnOddsObservation['reason']|null=
@@ -332,7 +341,9 @@ export async function fetchPublicEspnOddsDetailed(
         now-timestamp>MAX_QUOTE_AGE_MS?'antigua':null
       if(!Number.isFinite(timestamp))diagnostics.undatedOutcomes++
       else if(reason==='antigua'||reason==='fecha_futura')diagnostics.expiredOutcomes++
-      if(reason&&observationMap.size<120){
+      // Undated/unchanged prices from a fresh ESPN response are now
+      // eligible observations, while invalid provider/future timestamps stay excluded.
+      if((reason==='proveedor_sin_nombre'||reason==='fecha_futura')&&observationMap.size<120){
         const key=[q.eventId,q.bookmaker,q.market,q.selection,q.point??''].join('|')
         observationMap.set(key,{...q,reason,endpointSource:origin==='embedded'?'scoreboard':origin})
       }
@@ -343,8 +354,11 @@ export async function fetchPublicEspnOddsDetailed(
       for(const quote of found){
         const key=[quote.eventId,quote.bookmaker,quote.market,quote.selection,quote.point??''].join('|')
         const previous=quoteMap.get(key)
-        if(previous===undefined||Date.parse(previous.updatedAt)<Date.parse(quote.updatedAt))
-          quoteMap.set(key,{...quote,endpointSource:origin==='embedded'?'scoreboard':origin})
+        const oldUpdate=Date.parse(previous?.updatedAt??'')
+        const newUpdate=Date.parse(quote.updatedAt)
+        if(previous===undefined||(Number.isFinite(newUpdate)&&
+          (!Number.isFinite(oldUpdate)||newUpdate>oldUpdate)))
+          quoteMap.set(key,quote)
       }
     }
   }
@@ -441,9 +455,9 @@ export async function fetchPublicEspnOddsDetailed(
     diagnostics.notes.push(diagnostics.startedOddsEntries
       ?'ESPN conserva cuotas en encuentros ya iniciados; son referencias de investigación, NO precios prepartido actuales'
       :diagnostics.undatedOutcomes
-      ?'ESPN devolvió precios con proveedor, pero sin fecha verificable de actualización; quedan disponibles para investigación, NO para tickets vigentes'
+      ?'ESPN devolvió precios sin fecha de cambio; revisar identidad y si la respuesta es reciente'
       :diagnostics.expiredOutcomes
-        ?'ESPN devolvió precios antiguos; ninguno cumple la ventana de vigencia del mercado'
+        ?'ESPN devolvió precios con fecha de cambio antigua; comprobar publicación actual'
         :diagnostics.rawOddsEntries
           ?'ESPN publicó entradas de cuotas, pero faltan precios numéricos o equipos/mercados compatibles'
           :diagnostics.games
