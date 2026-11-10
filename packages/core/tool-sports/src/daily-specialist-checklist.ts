@@ -2,13 +2,19 @@
  * candidate on a roster is not proof of starter confirmation or bet approval.
  * This checklist records individually observed research steps, not probability.
  */
+import {auditDeepProtocol,type DeepProtocolStep} from './sports-original-deep-protocol.ts'
 export type StepState='verified'|'partial'|'missing'
 export type StepObservation={state:StepState;detail:string}
 export type ChecklistStep={key:string;title:string;critical:boolean;
   state:StepState;detail:string;sources:string[]}
 export type SportChecklist={sport:string;checkedAt:string;
   steps:ChecklistStep[];verified:number;partial:number;missing:number;
-  criticalPending:string[];complete:boolean}
+  criticalPending:string[];complete:boolean
+  /** 10 universal + original 12/13 specialist checks; never claimed complete
+   * merely because the compact acquisition gate has passed. */
+  fullSteps:DeepProtocolStep[]
+  fullVerified:number;fullPartial:number;fullMissing:number;fullComplete:boolean
+}
 type Requirement={key:string;title:string;critical:boolean}
 const common=[
   {key:'fixture',title:'Identidad, localía e inicio del partido',critical:true},
@@ -136,7 +142,13 @@ export function auditSportChecklist(sport:string,
   const missing=steps.filter(x=>x.state==='missing').length
   const criticalPending=steps.filter(x=>x.critical&&x.state!=='verified')
     .map(x=>x.title)
+  const fullSteps=auditDeepProtocol(sport,observations)
+  const fullVerified=fullSteps.filter(x=>x.state==='verified').length
+  const fullPartial=fullSteps.filter(x=>x.state==='partial').length
+  const fullMissing=fullSteps.filter(x=>x.state==='missing').length
   return{sport,checkedAt:new Date(now).toISOString(),steps,verified,partial,
-    missing,criticalPending,complete:steps.length>0&&criticalPending.length===0}
+    missing,criticalPending,complete:steps.length>0&&criticalPending.length===0,
+    fullSteps,fullVerified,fullPartial,fullMissing,
+    fullComplete:fullSteps.length>0&&fullVerified===fullSteps.length}
 }
 export const supportedChecklistSports=Object.keys(definitions)
