@@ -103,14 +103,17 @@ function endpoint(label,c){
   nhlstats:'https://api.nhle.com/stats/rest/en/team/summary?cayenneExp=seasonId=20262027',
   nbaInj:'https://official.nba.com/nba-injury-report-2026-27-season/',
   wnbaInj:'https://www.wnba.com/wnba-injury-report',
-  nbaStats:'https://stats.nba.com/stats/leaguedashteamstats?LeagueID=00&Season=2026-27&SeasonType=Regular%20Season',
+  nbaStats:c.league==='wnba'?
+    'https://stats.wnba.com/stats/leaguedashteamstats?LeagueID=10&Season=2026&SeasonType=Regular%20Season':
+    'https://stats.nba.com/stats/leaguedashteamstats?LeagueID=00&Season=2026-27&SeasonType=Regular%20Season',
   nflverse:'https://github.com/nflverse/nflverse-data/releases',
   nflnext:'https://nextgenstats.nfl.com/',nflInj:'https://www.nfl.com/injuries/',
   moneypuck:'https://moneypuck.com/data.htm',
   faceoff:'https://www.dailyfaceoff.com/starting-goalies',
   savant:'https://baseballsavant.mlb.com/leaderboard/expected_statistics?year=2026',
   fangraphs:'https://www.fangraphs.com/leaders/major-league',
-  asa:'https://app.americansocceranalysis.com/api/v1/mls/teams/xgoals?season_name=2026',
+  asa:c.league==='usa.1'?
+    'https://app.americansocceranalysis.com/api/v1/mls/teams/xgoals?season_name=2026':null,
   understat:'https://understat.com/league/EPL',
   weather:null, // requires venue coords; an arbitrary weather URL is invalid
   sportsdb:'https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d='+c.date+
