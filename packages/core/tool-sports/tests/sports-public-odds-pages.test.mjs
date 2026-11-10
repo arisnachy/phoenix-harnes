@@ -13,7 +13,11 @@ test('routes actual supplied and league-specific public provider pages without a
   assert.deepEqual(publicOddsWebsitePages('basketball_nba').map(x=>x.url),
     ['https://www.espn.com/sports-betting/odds','https://www.cuotasahora.com/',
       'https://sports.yahoo.com/betting/odds/', 'https://www.espn.com/nba/odds',
-      'https://www.scoresandodds.com/nba/odds'])
+      'https://www.scoresandodds.com/nba',
+      'https://www.scoresandodds.com/nba/odds',
+      'https://www.covers.com/sport/basketball/nba/odds',
+      'https://www.vegasinsider.com/nba/odds/las-vegas/',
+      'https://www.sportsbookreview.com/betting-odds/nba-basketball/'])
   assert.ok(publicOddsWebsitePages('soccer_spain_la_liga').some(x=>
     x.url==='https://www.oddschecker.com/us/soccer/la-liga-primera'))
   assert.ok(publicOddsWebsitePages('soccer_mexico_ligamx').some(x=>
@@ -47,7 +51,7 @@ test('ESPN and ScoresAndOdds can be inspected without promoting a raw price',asy
     if(String(url).includes('espn.com'))return html('Enable JavaScript and then reload the page. Verify that you are not a robot.')
     return html('<section>Boston Celtics -120 Milwaukee Bucks +110 Moneyline</section>')
   },at)
-  assert.equal(requested,5)
+  assert.equal(requested,9)
   assert.equal(result.pages.find(x=>x.provider==='ESPN')?.status,'blocked')
   const comparison=result.pages.find(x=>x.provider==='ScoresAndOdds')
   assert.equal(comparison?.status,'observed-team-mentions')
@@ -130,4 +134,40 @@ test('new comparison portals are reference-only, Yahoo 429 is explicit and spoof
   assert.equal(comparison.priced,false)
   assert.equal(comparison.bookmakerVerified,false)
   assert.equal(comparison.quoteUpdatedAt,null)
+})
+
+test('comparison coverage supports NBA, NHL, NFL, EPL; blocked source does not suppress other pages',async()=>{
+  const pages=publicOddsWebsitePages('basketball_nba')
+  assert.ok(pages.some(x=>x.provider==='Covers'))
+  assert.ok(pages.some(x=>x.provider==='VegasInsider'))
+  assert.ok(pages.some(x=>x.provider==='SportsbookReview'))
+  assert.ok(publicOddsWebsitePages('icehockey_nhl').some(x=>x.provider==='Covers'))
+  assert.ok(publicOddsWebsitePages('americanfootball_nfl').some(x=>x.provider==='Covers'))
+  assert.ok(publicOddsWebsitePages('soccer_epl').some(x=>
+    x.url==='https://www.covers.com/sport/soccer/premier-league/odds'))
+  const report=await researchPublicOddsWebsites({
+    sportKey:'basketball_nba',date:'2026-11-09',
+    home:'Boston Celtics',away:'Milwaukee Bucks',
+  },async url=>url.includes('sportsbookreview.com')
+    ?new Response('Denied',{status:403})
+    :html('<table><tr><td>Boston Celtics</td><td>Milwaukee Bucks</td>'+
+      '<td>Moneyline -125 +105</td></tr></table>'),at)
+  assert.equal(report.pages.find(x=>x.provider==='SportsbookReview')?.status,'blocked')
+  assert.equal(report.pages.filter(x=>x.status==='observed-team-mentions').length,8)
+  assert.equal(report.bookmakerQuotes,0)
+  assert.ok(report.pages.every(x=>x.priced===false&&x.bookmakerVerified===false))
+})
+
+test('explicit ScoresAndOdds Moneyline table provides both research prices, not bookmaker offers',()=>{
+  const grid='<table><thead><tr><th>Team</th><th>Spread</th><th>Total</th>'+
+    '<th>Moneyline</th></tr></thead><tbody>'+
+    '<tr><td>Boston Celtics</td><td>-2.5 -110</td><td>o220.5 -110</td><td>-160</td></tr>'+
+    '<tr><td>Milwaukee Bucks</td><td>+2.5 -110</td><td>u220.5 -110</td><td>+140</td></tr>'+
+    '</tbody></table>'
+  const hints=scoresAndOddsMoneylineHints('<h2>Moneyline</h2>'+grid,
+    'Boston Celtics','Milwaukee Bucks')
+  assert.deepEqual(hints.map(x=>x.american),['-160','+140'])
+  assert.ok(hints.every(x=>x.bookmaker===null&&x.quoteUpdatedAt===null))
+  assert.deepEqual(scoresAndOddsMoneylineHints('<h2>Moneyline</h2>'+grid.replace(
+    '<td>+140</td>','<td>+2.5 -110</td>'),'Boston Celtics','Milwaukee Bucks'),[])
 })
