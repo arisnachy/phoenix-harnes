@@ -162,7 +162,7 @@ export function compactSportsSchedule(games:readonly ChatBlock[],day:string,sour
     const research=object(p.research)
     const featured=text(firstHighlight.value,90)
     const detail=text(firstHighlight.detail,55)
-    const favorite=text(research.favorite,170)
+    const favorite=text(p.favorite,170)??text(research.favorite,170)
     return {
       ...(text(p.eventId,50)?{eventId:text(p.eventId,50)}:{}),
       when:text(p.when,80)??'Hora no confirmada',
@@ -171,7 +171,8 @@ export function compactSportsSchedule(games:readonly ChatBlock[],day:string,sour
       ...(text(p.venue,180)?{venue:text(p.venue,180)}:{}),
       away:p.away,home:p.home,
       ...(featured?{featured:featured+(detail?' · '+detail:'')}:{}),
-      ...(favorite&&Array.isArray(research.evidence)&&research.evidence.length>0?{favorite}:{}),
+      ...(favorite&&(text(p.favorite,170)||Array.isArray(research.evidence)&&research.evidence.length>0)?{favorite}:{}),
+      ...(Array.isArray(p.trackedBets)&&p.trackedBets.length?{trackedBets:p.trackedBets.slice(0,12)}:{}),
       ...(text(p.askPrompt,400)?{askPrompt:text(p.askPrompt,400)}:{}),
     }
   })
