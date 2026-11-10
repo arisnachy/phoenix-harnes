@@ -159,6 +159,7 @@ type SportsOddsCard = {
 }
 /** Render-only projection of the server's fully sourced per-leg dossier. */
 type SportsTicketNarrative = {
+  eventId:string;selected:string;title:string
   status:'documented'|'conditional'
   selectionWhy:string
   favorable:string[]
@@ -469,6 +470,7 @@ const sportsTicketNarrative=(v:unknown):v is SportsTicketNarrative=>{
     'directOpponentHistory','referee','weather','imagery','percentage','sources',
     'explanationForChat']))return false
   if(!['documented','conditional'].includes(String(v.status))||
+    !isText(v.eventId,60)||!isText(v.selected,200)||!isText(v.title,240)||
     !isText(v.selectionWhy,1200)||!isText(v.explanationForChat,10_000))return false
   const texts=(x:unknown,n:number)=>Array.isArray(x)&&x.length<=12&&
     x.every(y=>boundedSportsText(y,n))
