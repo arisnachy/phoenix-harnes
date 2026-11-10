@@ -270,8 +270,11 @@ export async function investigateTicketSpecialist(
       if(injury.status==='verified'||injury.status==='partial'){
         // A feed can identify reported injuries, but never guarantees a final
         // inactive list, starting lineup or availability at tipoff/kickoff.
-        mark('injuries','partial','ESPN '+injury.status+
-          ' · observación de lesiones, sin confirmación de bajas definitivas')
+        mark('injuries',injury.status==='verified'&&injury.home.matched&&
+          injury.away.matched?'verified':'partial',
+          'ESPN reporte bilateral '+injury.status+
+          ' · '+(injury.feedUpdatedAt??'sin hora')+
+          ' · registrado; no sustituye el parte oficial ni el quinteto final')
         steps.push('ESPN lesiones '+injury.status+': local '+
           injury.home.injuries.length+' · visitante '+injury.away.injuries.length+
           ' · fuente '+injury.source)
