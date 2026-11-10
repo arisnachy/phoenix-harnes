@@ -59,7 +59,16 @@ async function setup(sport,league,date){
  const competitors=event?.competitions?.[0]?.competitors??[]
  const team=competitors.find(x=>x.homeAway==='home')?.team??competitors[0]?.team
  const ctx={sport,league,date,root,id:String(event?.id??''),
-  cid:String(event?.competitions?.[0]?.id??event?.id??''),teamId:String(team?.id??''),gameId:''}
+  cid:String(event?.competitions?.[0]?.id??event?.id??''),
+  teamId:String(team?.id??''),gameId:'',athleteId:''}
+ if(ctx.teamId){
+  const roster=await get(root+'teams/'+ctx.teamId+'/roster')
+  const entries=roster.json?.athletes??[]
+  const groups=Array.isArray(entries)?entries.flatMap(x=>
+    Array.isArray(x.items)?x.items:[x]):[]
+  const athlete=groups.find(x=>/^\d{1,15}$/.test(String(x?.id??x?.athlete?.id??'')))
+  ctx.athleteId=String(athlete?.id??athlete?.athlete?.id??'')
+ }
  if(sport==='hockey'){
   const answer=await get('https://api-web.nhle.com/v1/score/'+date)
   ctx.gameId=String(answer.json?.games?.[0]?.id??'')
@@ -78,7 +87,8 @@ function endpoint(label,c){
   summary:c.id?c.root+'summary?event='+c.id:null,
   injuries:c.root+'injuries',
   roster:team?team+'/roster':null,stats:team?team+'/statistics':null,
-  athlete:null, // must resolve a real athlete ID from the team's roster
+  athlete:c.athleteId?'https://site.web.api.espn.com/apis/common/v3/sports/'+
+    c.sport+'/'+c.league+'/athletes/'+c.athleteId+'/stats':null,
   odds:c.id?'https://sports.core.api.espn.com/v2/sports/'+c.sport+
     '/leagues/'+c.league+'/events/'+c.id+'/competitions/'+c.cid+'/odds':null,
   news:c.root+'news?limit=10',
