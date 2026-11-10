@@ -157,7 +157,7 @@ export function eclipseDelegationNeedsSourceImage(
   if(!medical)return false
   // Distinguish reading/rendering the CURRENT patient image from independent
   // tasks like looking up public documentation or testing a pure function.
-  return /(?:analiz|interpret|diagnostic|identific|detect|localiz|segment|reconstru|lectura|leer|read|inspect|classif|extraer|transcrib|describ|visualiz|dibuj|gener|crea|render|modelo|model|gemelo|ilustr|imagen|image|tomograf|radiograf|ecg|ekg|citolog|histolog|lesi[oó]n|anatom[ií])/iu.test(assignment)
+  return /(?:analiz|interpret|diagnostica(?:r|ndo|da|do)?|identific|detect|localiz|segment|reconstru|lectura|leer|read|inspect|classif|extraer|transcrib|describ|visualiz|dibuj|gener|crea|render|modelo|model|gemelo|ilustr|imagen|image|tomograf|radiograf|ecg|ekg|citolog|histolog|lesi[oó]n|anatom[ií])/iu.test(assignment)
 }
 
 declare module '@phoenix-ai/dsh-session/types' {
