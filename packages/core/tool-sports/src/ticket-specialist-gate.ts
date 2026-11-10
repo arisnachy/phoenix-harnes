@@ -292,7 +292,8 @@ export async function investigateTicketSpecialist(
         checklist.criticalPending.length+'): '+
         checklist.criticalPending.slice(0,3).join('; '))
     return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
-      sourceChecks,checklist,injuryAudit,checkedAt:new Date(now).toISOString()}
+      sourceChecks,checklist,...(injuryAudit?{injuryAudit}:{}),
+      checkedAt:new Date(now).toISOString()}
   }catch(error){
     return errorResult(game,(error instanceof Error?error.message:String(error)))
   }
