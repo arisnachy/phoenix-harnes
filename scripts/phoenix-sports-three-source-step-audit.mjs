@@ -14,15 +14,18 @@ async function get(url){
    const response=await fetch(url,{signal:AbortSignal.timeout(7500),redirect:'error',
     headers:{accept:'application/json,text/html;q=0.9,*/*;q=0.8'}})
    if(!response.ok)return {state:'http_error',http:response.status}
-   const raw=(await response.text()).slice(0,150000)
+   const raw=await response.text()
    if(/<!doctype html|<html/i.test(raw.slice(0,300)))return {
     state:/captcha|access denied|not a robot|enable javascript/i.test(raw)?
       'anti_bot':'html_only',http:response.status}
+   if(raw.length>8_000_000)return {state:'oversized',http:response.status,
+     reason:'Payload superior a 8 MB: requiere extracción en streaming'}
    let json
-   try{json=JSON.parse(raw)}catch{return {state:'not_json',http:response.status}}
+   try{json=JSON.parse(raw)}catch{return {state:'not_json',http:response.status,
+     reason:'Respuesta completa sin JSON válido; longitud '+raw.length}}
    const keys=json&&typeof json==='object'?Object.keys(json):[]
    return {state:keys.length?'json_present':'empty',http:response.status,
-     keys:keys.slice(0,18),sample:raw.slice(0,32000),json}
+     keys:keys.slice(0,18),sample:raw.slice(0,750000),json}
   }catch(e){return {state:'network_error',reason:String(e?.message??e).slice(0,130)}}
  })()
  cache.set(url,task);return task
