@@ -29,6 +29,7 @@ const providerKeys:Readonly<Record<string,string>>={
   'soccer|mex.1':'soccer_mexico_ligamx',
   'soccer|usa.1':'soccer_usa_mls',
   'soccer|uefa.champions':'soccer_uefa_champs_league',
+  'soccer|uefa.wchampions':'soccer_uefa_womens_champions_league',
   'soccer|ger.1':'soccer_germany_bundesliga',
   'soccer|ita.1':'soccer_italy_serie_a',
   'soccer|fra.1':'soccer_france_ligue_one',
