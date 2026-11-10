@@ -53,17 +53,34 @@ const extract=(raw:unknown,max=10):DirectMetric[]=>{
       for(const item of next.value.slice(0,35))queue.push({value:item,depth:next.depth})
       continue
     }
-    const labels=arr(node.labels).length?arr(node.labels):arr(node.displayNames)
-    const values=arr(node.stats)
-    if(labels.length&&labels.length===values.length&&
-      values.every(v=>typeof v==='string'||typeof v==='number')){
-      labels.slice(0,25).forEach((v,i)=>insert(v,values[i]))
+    const labels=arr(node.labels).length?arr(node.labels):
+      arr(node.displayNames).length?arr(node.displayNames):arr(node.names)
+    // ESPN Common v3 sends parallel labels/totals (not stats). Only pair
+    // arrays when their lengths match, so a value cannot be assigned to the
+    // wrong metric. Includes WNBA, NBA, MLB, NHL and NFL athlete stats.
+    const candidates=[node.totals,node.stats,node.statistics,node.displayValues,node.values]
+    for(const candidate of candidates){
+      const rawValues=arr(candidate)
+      const values=rawValues.map(x=>{
+        const item=obj(x);return Object.keys(item).length?
+          item.displayValue??item.value??item.total:x
+      })
+      if(labels.length&&labels.length===values.length&&values.length&&
+        values.every(v=>typeof v==='string'||typeof v==='number')){
+        labels.slice(0,80).forEach((v,i)=>insert(v,values[i]))
+        break
+      }
     }
     const label=node.displayName??node.label??node.name??node.abbreviation
     const value=node.displayValue??node.value
     if(label!==undefined&&value!==undefined)insert(label,value)
     if(next.depth>=5)continue
-    for(const key of ['categories','statistics','stats','splits','records','seasonTypes','tables','rows','items','totals']){
+    // ESPN's live team-statistics route returns metrics under results, while
+    // depthcharts uses a singular depthchart object. Omitting these keys
+    // silently turned HTTP 200 with data into "no advanced metrics".
+    for(const key of ['results','depthchart','depthCharts','categories','statistics',
+      'stats','splits','splitCategories','records','seasonTypes','tables','rows',
+      'items','totals','averages']){
       const child=node[key]
       if(child!==undefined)queue.push({value:child,depth:next.depth+1})
     }
@@ -96,7 +113,9 @@ function gameLog(raw:unknown):DirectMetric[]{
     for(const field of ['seasonTypes','categories','tables'])
       for(const child of arr(node[field]).slice(0,15))queue.push({v:child,depth:next.depth+1})
   }
-  return results.length?results:extract(raw,8)
+  // No event-specific observations means no verified gamelog; season averages
+  // MUST NOT be relabeled as last games.
+  return results
 }
 function rosterRows(raw:unknown):Array<{id:string;name:string;position:string;jersey:string;headshot:string|null}>{
   const listed=arr(obj(raw).athletes).flatMap(group=>{
@@ -158,7 +177,13 @@ export async function collectDirectEspnStats(
     result.push(team)
     const root=site+'teams/'+t.id+'/'
     add(root+'statistics','team_statistics',value=>{
-      team.stats=extract(value,18)
+      const all=extract(value,90)
+      const important=new RegExp(
+        'offensive.*rating|defensive.*rating|net.*rating|pace|expected|'+
+        'effective.*field|true.*shoot|turnovers|rebound|points|goals|'+
+        'power.play|penalty.kill|whip|era','iu')
+      team.stats=all.sort((a,b)=>Number(important.test(b.name))-
+        Number(important.test(a.name))).slice(0,35)
       team.coverage.push({endpoint:'team_statistics',
         status:value===null?'unavailable':team.stats.length?'available':'empty'})
     })
@@ -199,7 +224,10 @@ export async function collectDirectEspnStats(
             if(athlete.lastGames.length)athlete.verifiedSources.push('gamelog')
           })
         }
-        if(athlete.stats.length&&(priority(person)===0||early)){
+        // ESPN may publish splits even when season totals are empty. Probe
+        // the first three roster-verified athletes, but never all 30+ players
+        // solely because a provider returned an empty stats payload.
+        if(athlete.stats.length&&(priority(person)===0||early)||early){
           add(uri+'splits','athlete_splits',data=>{
             athlete.splits=extract(data,6)
             if(athlete.splits.length)athlete.verifiedSources.push('splits')
