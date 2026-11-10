@@ -116,7 +116,7 @@ export function apply(ctx: Context): void {
     description:'Audita que una lectura clínica de ECG, radiografía o informe documente los hallazgos realmente observados por zona/derivación y sus límites antes de etiquetarla como normal o descartar enfermedades. No lee imágenes, no diagnostica y no sustituye revisión médica. Sin información personal.',
     parameters:{
       modality:{type:'string',required:true,description:'Modalidad de la fuente, por ejemplo ecg, xray, ct, mri o report.'},
-      sourceKind:{type:'string',required:true,enum:['image','waveform','report','document'],
+      sourceKind:{type:'string',required:true,enum:['image','waveform','report','document','dicom','numeric','wsi'],
         description:'Tipo del archivo original realmente examinado.'},
       sourceReviewed:{type:'boolean',required:true,description:'TRUE solo si se accedió a los datos fuente; no basta una ilustración o un resumen inventado.'},
       sourceQuality:{type:'string',required:true,enum:['adequate','limited','unknown'],
