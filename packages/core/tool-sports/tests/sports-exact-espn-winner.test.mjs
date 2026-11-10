@@ -38,7 +38,7 @@ test('exact ESPN event is found even when the game falls after midnight UTC',asy
   assert.ok(hits.some(x=>x.includes('dates=20261109')))
   assert.ok(hits.some(x=>x.includes('dates=20261110')))
 })
-test('old or undated odds cannot be promoted to live ticket',async()=>{
+test('old or undated ESPN quotes are usable as observed prices, not bookmaker updates',async()=>{
   for(const stamp of ['2026-11-08T18:00:00Z','']){
     const report=await lookupExactEspnWinner(target,async url=>{
       if(url.includes('scoreboard?dates=20261110'))
@@ -46,7 +46,9 @@ test('old or undated odds cannot be promoted to live ticket',async()=>{
       if(url.includes('scoreboard?'))return{events:[]}
       return{items:[]}
     },now)
-    assert.equal(report.quotes.length,0)
+    assert.equal(report.quotes.length,2)
+    assert.ok(report.quotes.every(x=>x.observedAt===new Date(now).toISOString()&&
+      x.bookmaker==='DraftKings'))
   }
 })
 test('same ESPN event id but wrong matchup must never be priced',async()=>{
@@ -112,7 +114,7 @@ test('verified unknown soccer league uses ESPN event ID without inventing an odd
   assert.ok(!urls.some(url=>url.includes('epl')||url.includes('/eng.1/')))
 })
 
-test('undated official ESPN DraftKings observations are preserved but not treated as live odds',async()=>{
+test('undated official ESPN DraftKings prices are exposed as fresh source observations',async()=>{
   const unknown={...target,sportKey:'soccer_espn_dynamic',espnLeague:'mex.w.1',
     home:'Tigres UANL',away:'Pumas UNAM'}
   const fake=async url=>url.includes('scoreboard?dates=20261110')?
@@ -125,10 +127,11 @@ test('undated official ESPN DraftKings observations are preserved but not treate
         drawOdds:'+280'}],
     }]}]}:url.includes('scoreboard?')?{events:[]}:{items:[]}
   const found=await lookupExactEspnWinner(unknown,fake,now)
-  assert.equal(found.quotes.length,0)
-  assert.equal(found.referenceCount,3)
-  assert.ok(found.referenceOdds.every(q=>q.bookmaker==='DraftKings'
-    &&q.reason==='sin_fecha'&&Number.isFinite(q.price)))
+  assert.equal(found.quotes.length,3)
+  assert.equal(found.referenceCount,0)
+  assert.ok(found.quotes.every(q=>q.bookmaker==='DraftKings'&&
+    q.updatedAt==='No indicada por ESPN'&&
+    q.observedAt===new Date(now).toISOString()))
   const wrong=await lookupExactEspnWinner({...unknown,away:'Monterrey'},fake,now)
   assert.equal(wrong.referenceCount,0)
 })

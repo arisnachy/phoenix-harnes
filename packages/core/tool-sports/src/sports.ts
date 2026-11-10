@@ -451,8 +451,8 @@ export async function marketOddsDetailed(
     requests.push({name:'ESPN Site/Core',run:async()=>{
       const {quotes,diagnostics,observations:resultObservations}=await fetchPublicEspnOddsDetailed(sportKey,markets,
         <T>(url:string)=>getFeed<T>(url,fetcher),{now,cache:fetcher===fetch})
-      // Preserve genuine ESPN price observations even when no bookmaker
-      // updatedAt exists. NEVER add them to purchasable/live market quotes.
+      // Provider-name/future-timestamp anomalies remain references. A recent
+      // ESPN observation need not have a last price-change timestamp.
       for(const observation of resultObservations){
         observations.push({...observation,sportKey,
           source:'ESPN '+(observation.endpointSource??'public')+' · referencia no cotizable',
@@ -469,7 +469,7 @@ export async function marketOddsDetailed(
         diagnostics.embedded+' líneas scoreboard',diagnostics.core+' líneas Core',
         diagnostics.summary+' líneas summary',diagnostics.rawOddsEntries+' registros de cuotas encontrados',
         diagnostics.undatedOutcomes+' resultados sin fecha',
-        diagnostics.expiredOutcomes+' resultados caducados',diagnostics.failures+' fallos parciales',
+        diagnostics.expiredOutcomes+' precios con última modificación antigua',diagnostics.failures+' fallos parciales',
         ...diagnostics.notes.slice(0,2)].join(' · ')
       return quotes.map(quote=>({...quote,sportKey,source:'ESPN Site/Core (sin clave)'}))
     }})
@@ -549,13 +549,18 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
   if(events.size!==legs.length)throw Error('No se admite combinar por producto cuotas correlacionadas del mismo encuentro; requiere precio SGP ofrecido por la casa')
   const warning='No se ha estimado probabilidad conjunta ni ventaja estadística calibrada.'
   return { warning,card:{ component:'sports_ticket_card',version:1,props:{
-    title:'PHOENIX · Ticket de análisis',subtitle:'Cuotas consultadas en proveedor real · '+new Date().toISOString(),
+    title:'PHOENIX · Ticket de análisis',subtitle:'Precios consultados · '+new Date().toISOString(),
     legs,combinedOdds:combined.toFixed(3),stake:stake?stake.toFixed(2):undefined,grossReturn:stake?(stake*combined).toFixed(2):undefined,
     source:quotes.some(q=>q.source?.includes('OddsHarvester'))?
       'OddsHarvester/OddsPortal · cuotas públicas observadas':
-      quotes.some(q=>q.source?.includes('ESPN'))?'ESPN Site/Core (cuotas públicas cuando ESPN las publique)':
+      quotes.some(q=>q.source?.includes('ESPN'))?'ESPN Site/Core (precios públicos observados; aceptación no confirmada)':
       quotes.some(q=>q.source==='TheOddsAPI')?'TheOddsAPI · cuotas de casas identificadas':
-      'The Odds API · precios de las casas indicadas',note:'COTIZACIÓN COMERCIAL CONSULTADA; PENDIENTE DE ACEPTACIÓN EN LA CASA. '+warning+' Deben comprobarse fecha, mercado, reglas y cambio de precio antes de enviar el ticket. No existe garantía de ganar.',
+      'The Odds API · precios de las casas indicadas',note:
+      (quotes.some(q=>q.source?.startsWith('ESPN Site/Core'))?
+        'ESPN: PRECIOS OBSERVADOS EN UN FEED PÚBLICO, NO OFERTA EJECUTABLE. '+
+        'La hora de observación NO es la hora de actualización de la casa. ':
+        'COTIZACIÓN COMERCIAL CONSULTADA; PENDIENTE DE ACEPTACIÓN EN LA CASA. ')+
+      warning+' Comprobar precio, fecha, mercado y reglas antes de apostar. No existe garantía de ganar.',
     askPrompt:'Kira, revisa este ticket con datos actuales, riesgos, ausencias y correlaciones antes de recomendar nada.',
   } } }
 }

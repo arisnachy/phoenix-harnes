@@ -368,7 +368,7 @@ test('one missing lineup remains conditional; four researched legs are retained'
 })
 
 
-test('undated ESPN prices decorate the research ticket but NEVER complete its quotation',async()=>{
+test('fresh ESPN odds without lastUpdated complete an observed same-bookmaker research ticket',async()=>{
   const read=async url=>{
     const raw=board(url)
     const u=String(url)
@@ -387,13 +387,13 @@ test('undated ESPN prices decorate the research ticket but NEVER complete its qu
       PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'},read,
     undefined,'winner',stubSpecialists)
   assert.equal(result.verifiedEvents,5)
-  assert.equal(result.quotedLegs,0)
-  assert.equal(result.priced,false)
+  assert.equal(result.quotedLegs,5)
+  assert.equal(result.priced,true)
   assert.equal(result.card.props.legs.length,5)
-  assert.equal(result.card.props.combinedOdds,'No disponible')
-  assert.ok(result.card.props.legs.every(x=>x.referenceOdds?.nonCotizable===true))
-  assert.match(result.card.props.legs[0].rationale,/NO cotizable/)
-  assert.match(result.card.props.subtitle,/TICKET DE INVESTIGACIÓN/)
+  assert.ok(Number(result.card.props.combinedOdds)>1)
+  assert.ok(result.card.props.legs.every(x=>x.bookmaker==='ESPN Reference Book'))
+  assert.match(result.card.props.subtitle,/precios observados en ESPN/)
+  assert.match(result.card.props.note,/No se confirmó que la casa acepte ese precio/)
   assert.equal(result.placed,false)
 })
 
