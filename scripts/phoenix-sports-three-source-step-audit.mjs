@@ -23,11 +23,11 @@ async function get(url){
    // MoneyPuck publishes these downloadable CSVs for non-commercial usage;
    // a valid column header is source evidence, not an entire hockey model.
    if(url.startsWith('https://moneypuck.com/moneypuck/playerData/seasonSummary/')&&
-     /\\.csv(?:\\?|$)/u.test(url)){
-     const header=raw.split(/\\r?\\n/u,1)[0]??''
+     /\.csv(?:\?|$)/u.test(url)){
+     const header=raw.split(/\r?\n/u,1)[0]??''
      const columns=header.split(',').map(x=>x.replaceAll('"','').trim())
      return{state:columns.length>15?'csv_metric':'invalid_csv',http:response.status,
-       keys:columns.slice(0,32),sample:header,records:Math.max(0,raw.split('\\n').length-1)}
+       keys:columns.slice(0,32),sample:header,records:Math.max(0,raw.split('\n').length-1)}
    }
    let json
    try{json=JSON.parse(raw)}catch{return {state:'not_json',http:response.status,
