@@ -43,6 +43,7 @@ const routing:Record<string,{sport:string;market:string;oddsSportKey:string}>={
 const leagueSportKey:Record<string,string>={
   'eng.1':'soccer_epl','esp.1':'soccer_spain_la_liga','usa.1':'soccer_usa_mls',
   'uefa.champions':'soccer_uefa_champs_league',
+  'uefa.wchampions':'soccer_uefa_womens_champions_league',
   'por.1':'soccer_portugal_primeira_liga','ita.1':'soccer_italy_serie_a',
   'ger.1':'soccer_germany_bundesliga','ned.1':'soccer_netherlands_eredivisie',
   'fra.1':'soccer_france_ligue_one','mex.1':'soccer_mexico_ligamx',
@@ -485,7 +486,7 @@ export async function evidencePricedTicket(
   })
   const webObserved=siteResearch.filter(x=>x.status==='fulfilled'&&
     x.value?.report.pages.some(p=>p.status==='observed-team-mentions')).length
-  if(siteResearch.length)sourceAudit.push(audited('ESPN/Oddschecker/ScoresAndOdds WEB',
+  if(siteResearch.length)sourceAudit.push(audited('ESPN/CuotasAhora/Yahoo/Oddspedia/Oddschecker/ScoresAndOdds WEB',
     webObserved?'observed':'empty',0,
     'Se inspeccionaron '+siteResearch.length+' partidos con '+webObserved+
     ' menciones próximas de equipos; las cifras HTML son referencia sin '+
