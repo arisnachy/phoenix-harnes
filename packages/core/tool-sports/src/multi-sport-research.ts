@@ -164,7 +164,7 @@ export async function researchSport(
       coverageDays:lookbackDays,successfulDays,
       limitations:[
         ...(!sufficient?['Muestra inferior a '+requiredGames+' partidos distintos por equipo'+
-          ((sport==='basketball'||sport==='football')?' de temporada regular verificada':''):[]),
+          ((sport==='basketball'||sport==='football')?' de temporada regular verificada':'')]:[]),
         ...(archive.status!=='verified'?['Cobertura ESPN parcial: '+archive.explanation]:[]),
         'Lesiones/ausencias y alineaciones pendientes de verificación',
         'Rendimiento ajustado por rival y métricas específicas pendientes',
