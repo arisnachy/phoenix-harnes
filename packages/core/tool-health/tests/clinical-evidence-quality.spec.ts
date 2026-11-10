@@ -91,3 +91,39 @@ describe('medical image diagnostic evidence quality', () => {
     expect(result.missingDomains).toContain('lead-distribution')
   })
 })
+
+describe('study-family evidence gates do not confuse different diagnostic modalities',()=>{
+  const clinical=(modality:string,sourceKind:string,domains:unknown[])=>auditClinicalEvidenceDraft({
+    modality,sourceKind,sourceReviewed:true,sourceQuality:'adequate',
+    calibration:'not-applicable',claim:'provisional',urgencyReviewed:true,
+    impression:'Revisión provisional que requiere correlación clínica',domains,
+  })
+  it('requires anatomical coverage of CTA, not a generic three-field checklist',()=>{
+    const r=clinical('ct_angiography','dicom',[
+      {domain:'technique',status:'assessed',evidence:'Phase examined'},
+      {domain:'observations',status:'assessed',evidence:'Observed signal'},
+      {domain:'limitations',status:'assessed',evidence:'Scan cropped'},
+    ])
+    expect(r.decision).toBe('NEEDS_EVIDENCE_COMPLETION')
+    expect(r.missingDomains).toContain('anatomical-findings')
+    expect(r.missingDomains).toContain('distribution')
+  })
+  it('requires quantitative lab units, reference context and sample quality',()=>{
+    const r=clinical('chemistry_panel','numeric',[
+      {domain:'analyte-or-assay',status:'assessed',evidence:'Creatinine'},
+      {domain:'limitations',status:'assessed',evidence:'Single measurement'},
+    ])
+    expect(r.missingDomains).toContain('result-and-units')
+    expect(r.missingDomains).toContain('reference-context')
+    expect(r.missingDomains).toContain('sample-quality')
+  })
+  it('requires specimen preparation, cell morphology and distribution for WSI',()=>{
+    const r=clinical('cytology','wsi',[
+      {domain:'specimen-site',status:'assessed',evidence:'Specimen source documented'},
+      {domain:'limitations',status:'assessed',evidence:'Only subset examined'},
+    ])
+    expect(r.missingDomains).toContain('cell-or-tissue-morphology')
+    expect(r.missingDomains).toContain('sample-preparation')
+    expect(r.missingDomains).toContain('distribution')
+  })
+})

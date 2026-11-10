@@ -6,6 +6,8 @@
  * This is not an automated diagnostic device or clearance to dismiss disease.
  */
 
+import { diagnosticInputById } from './diagnostic-catalog.ts'
+
 export type ClinicalEvidenceDecision =
   | 'BLOCK_UNEXAMINED_SOURCE'
   | 'BLOCK_UNVERIFIED_MEASUREMENT'
@@ -38,13 +40,25 @@ export interface ClinicalEvidenceInput {
   readonly qrsMs?: unknown
 }
 
-/** Domain checks inspect coverage, not a fixed list of possible diseases. */
+/** All domains are source-coverage checks, not disease-classifier labels. */
 const ECG_DOMAINS = [
   'rhythm', 'rate', 'axis', 'intervals', 'qrs-morphology',
   'repolarization', 'lead-distribution',
 ] as const
 const IMAGING_DOMAINS = [
   'technique', 'anatomical-findings', 'distribution', 'limitations',
+] as const
+const MICROSCOPY_DOMAINS = [
+  'specimen-site', 'sample-preparation', 'cell-or-tissue-morphology',
+  'distribution', 'limitations',
+] as const
+const LABORATORY_DOMAINS = [
+  'analyte-or-assay', 'result-and-units', 'reference-context',
+  'sample-quality', 'limitations',
+] as const
+const FUNCTIONAL_DOMAINS = [
+  'recording-technique', 'quantitative-measures', 'functional-pattern',
+  'limitations',
 ] as const
 const REPORT_DOMAINS = [
   'readable-text', 'reported-impression', 'limitations',
@@ -53,12 +67,21 @@ const GENERIC_DOMAINS = [
   'technique', 'observations', 'limitations',
 ] as const
 
-/** Return which non-diagnostic assessment dimensions apply to one study. */
+/** Cover actual catalog families, not only a handful of short modality ids. */
 function domainsFor(modality: string, sourceKind: string): readonly string[] {
   if (sourceKind === 'report') return REPORT_DOMAINS
-  if (/^(?:ecg|ekg|electrocardiogram)$/iu.test(modality)) return ECG_DOMAINS
-  if (/^(?:xray|radiograph|radiografia|chest_xray|ct|mri|ultrasound|mammography)$/iu.test(modality))
+  const family=diagnosticInputById(modality)?.family
+  if (family === 'ecg' || /^(?:ekg|electrocardiogram)$/iu.test(modality))return ECG_DOMAINS
+  if (['cytology','histopathology'].includes(family??''))return MICROSCOPY_DOMAINS
+  if (['laboratory','hematology','microbiology','molecular'].includes(family??''))
+    return LABORATORY_DOMAINS
+  if (['physiology','neurophysiology','sleep','obstetric'].includes(family??''))
+    return FUNCTIONAL_DOMAINS
+  if (['xray','ct','mri','ultrasound','nuclear','ophthalmic','endoscopy',
+       'dermatology','dental','ent'].includes(family??''))
     return IMAGING_DOMAINS
+  // For unregistered legacy aliases, retain modality-specific imaging checks.
+  if (/^(?:radiograph|radiografia)$/iu.test(modality))return IMAGING_DOMAINS
   return GENERIC_DOMAINS
 }
 
@@ -87,7 +110,7 @@ export function auditClinicalEvidenceDraft(input: ClinicalEvidenceInput) {
   const sourceQuality = bounded(input.sourceQuality, 24, 'sourceQuality')
   const calibration = bounded(input.calibration, 24, 'calibration')
   const claim = bounded(input.claim, 48, 'claim')
-  if (!['image', 'waveform', 'report', 'document'].includes(sourceKind)) throw new Error('Unknown source kind')
+  if (!['image', 'waveform', 'report', 'document', 'dicom', 'numeric', 'wsi'].includes(sourceKind)) throw new Error('Unknown source kind')
   if (!['adequate', 'limited', 'unknown'].includes(sourceQuality)) throw new Error('Unknown source quality')
   if (!['verified', 'unverified', 'not-applicable'].includes(calibration))
     throw new Error('Unknown calibration evidence')
