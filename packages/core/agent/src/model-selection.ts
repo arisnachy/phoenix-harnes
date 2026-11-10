@@ -643,11 +643,40 @@ export function selectVisualAnalysisRoute(models: readonly LlmResolvedModelInfo[
   }
 }
 
+/** Clinical images warrant a higher-capability reader than the generic Terra Low path.
+ * Discover from real provider capabilities; never assume High is present.
+ * ECG lead territories and a single CT screenshot cannot establish culprit
+ * arteries or spatially confirmed lesions, regardless of reasoning effort.
+ */
+export function selectClinicalVisualAnalysisRoute(models: readonly LlmResolvedModelInfo[]): ModelSelection | undefined {
+  const eligible = models.filter(model =>
+    model.provider === 'openai-codex'
+    && /^gpt-\\d+(?:\\.\\d+)?-(?:terra|sol)(?:$|-)/iu.test(model.id)
+    && model.inputModalities?.includes('image') === true)
+  const version = (id: string): number => Number(/^gpt-(\\d+(?:\\.\\d+)?)/iu.exec(id)?.[1] ?? '0')
+  const choices: Array<{id:'high'|'medium';score:number}> = [
+    {id:'high',score:2},{id:'medium',score:1},
+  ]
+  for (const choice of choices) {
+    const matches=eligible.filter(model=>model.reasoning?.efforts.some(
+      effort=>effort.id===choice.id)===true)
+    matches.sort((a,b)=>{
+      const aSol=/-sol(?:$|-)/iu.test(a.id),bSol=/-sol(?:$|-)/iu.test(b.id)
+      return aSol===bSol?version(b.id)-version(a.id):aSol?-1:1
+    })
+    if (matches[0])return {provider:'openai-codex',model:matches[0].id,
+      reasoningEffort:ReasoningEffortId(choice.id)}
+  }
+  return selectVisualAnalysisRoute(models)
+}
+const isClinicalVisualTurn=(text:string)=>!text.trim()||
+  /(?:ecg|ekg|electrocardi|card[ií]ac|tomograf|tac|radiograf|rayos? x|x-ray|mri|resonancia|ultrason|ecograf|sonograf|doppler|citolog|histolog|biopsia|laborator|anal[ií]tica|hemograma|bioqu[ií]mica|diagn[oó]stic|lesi[oó]n|arteria|vascular|ap[eé]ndice|apendic|[oó]rgano|cl[ií]nic|paciente|patient|medical|pathology|blood test)/iu.test(text)
+
 /** Inspect only registered Codex image/effort metadata; never dispatch a guessed model.
  * @param ctx - Agent context with optional LLM provider registration.
  * @returns Selected image analysis model, when an actual supported route exists.
  */
-async function availableVisualAnalysisRoute(ctx: Context): Promise<ModelSelection | undefined> {
+async function availableVisualAnalysisRoute(ctx: Context, clinical = false): Promise<ModelSelection | undefined> {
   const llm = ctx.get('llm')
   if (llm === undefined) return undefined
   try {
@@ -659,8 +688,9 @@ async function availableVisualAnalysisRoute(ctx: Context): Promise<ModelSelectio
       try { return await llm.resolveModelInfo('openai-codex', model.id) }
       catch { return undefined }
     }))
-    return selectVisualAnalysisRoute(
-      resolved.filter((model): model is LlmResolvedModelInfo => model !== undefined))
+    const candidatesResolved = resolved.filter((model): model is LlmResolvedModelInfo => model !== undefined)
+    return clinical ? selectClinicalVisualAnalysisRoute(candidatesResolved)
+      : selectVisualAnalysisRoute(candidatesResolved)
   } catch {
     return undefined
   }
@@ -1483,7 +1513,7 @@ export function installModelSelection(
         if (uploadedImage
           && (!exactUserChoice || isPhoenixCodexAutoSelection(selected))
           && (_payload.step === 1 || !needsArtifactExecution)) {
-          const specialist = await availableVisualAnalysisRoute(agentCtx)
+          const specialist = await availableVisualAnalysisRoute(agentCtx,isClinicalVisualTurn(directText))
           if (specialist !== undefined) {
             const { reasoningEffort: _oldEffort, ...withoutInheritedEffort } = resolved
             return { ...withoutInheritedEffort, ...specialist }
