@@ -165,7 +165,7 @@ type SportsTicketNarrative = {
   favorable:string[]
   contradictions:string[]
   researchSteps?:Array<{key:string;title:string;critical:boolean;
-    state:'verified'|'partial'|'missing';detail:string;sources?:string[];
+    state:'verified'|'partial'|'missing'|'conflict'|'stale';detail:string;sources?:string[];
     group?:'universal'|'specialist'}>
   news:Array<{headline:string;publisher:string;publishedAt:string|null;
     articleUrl:string|null;imageUrl:string|null}>
@@ -489,7 +489,7 @@ const sportsTicketNarrative=(v:unknown):v is SportsTicketNarrative=>{
       hasOnlyKeys(x,['key','title','critical','state','detail','sources','group'])&&
       boundedSportsText(x.key,50)&&boundedSportsText(x.title,180)&&
       typeof x.critical==='boolean'&&
-      ['verified','partial','missing'].includes(String(x.state))&&
+      ['verified','partial','missing','conflict','stale'].includes(String(x.state))&&
       boundedSportsText(x.detail,240)&&
       (x.group===undefined||x.group==='universal'||x.group==='specialist')&&
       (x.sources===undefined||(Array.isArray(x.sources)&&x.sources.length<=5&&
@@ -984,9 +984,11 @@ function SportsTicketResearchNarrative({value,index}:{value:SportsTicketNarrativ
         x.state==='verified').length}/{value.researchSteps?.length??0} pasos verificados</summary>
       {value.researchSteps?.length?<ul>{value.researchSteps.map((step,i)=>
         <li key={step.key+'-'+i}>
-          <strong>{step.state==='verified'?'✓':step.state==='partial'?'◐':'○'}
+          <strong>{step.state==='verified'?'✓':step.state==='partial'?'◐':
+            step.state==='conflict'?'!':step.state==='stale'?'↻':'○'}
             {' '}{step.key} · {step.title}</strong> · {step.state==='verified'?'Dato comprobado':
-              step.state==='partial'?'Dato parcial':'Dato no obtenido'}
+              step.state==='partial'?'Dato parcial':step.state==='conflict'?'Contradictorio':
+              step.state==='stale'?'Obsoleto':'Dato no obtenido'}
             {' '}· {step.detail}
           {step.sources?.length?<small> · Fuentes previstas: {step.sources.join(' → ')}</small>:null}
         </li>)}</ul>:<p>No se recibió un checklist detallado para esta pata.
