@@ -1,0 +1,42 @@
+name: PHOENIX Sports chronological calibration audit
+on:
+  pull_request:
+    paths:
+      - 'scripts/phoenix-sports-chronological-backtest.mjs'
+      - 'packages/core/tool-sports/src/sports-calibration.ts'
+      - 'packages/core/tool-sports/src/sports-forecast.ts'
+      - 'packages/core/tool-sports/src/sports-historical-scoreboard.ts'
+      - 'packages/core/tool-sports/tests/sports-calibration.test.mjs'
+      - '.github/workflows/phoenix-sports-calibration-audit.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '25 9 * * 1'
+permissions:
+  contents: read
+jobs:
+  chronological-calibration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check audit runner syntax and chronological calibration contract
+        run: |
+          node --check scripts/phoenix-sports-chronological-backtest.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-calibration.test.mjs
+      - name: Audit genuine ESPN prior-to-kickoff histories
+        run: node --experimental-strip-types scripts/phoenix-sports-chronological-backtest.mjs
+        env:
+          PHOENIX_BACKTEST_MODE: ${{ github.event_name == 'pull_request' && 'smoke' || 'full' }}
+      - name: Publish source and evaluation evidence (including incomplete cohorts)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-sports-chronological-backtest
+          path: |
+            phoenix-sports-chronological-backtest.json
+            phoenix-sports-chronological-backtest.md
+          if-no-files-found: warn
+          retention-days: 28
