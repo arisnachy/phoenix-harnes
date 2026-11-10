@@ -67,7 +67,8 @@ const extract=(raw:unknown,max=10):DirectMetric[]=>{
     // depthcharts uses a singular depthchart object. Omitting these keys
     // silently turned HTTP 200 with data into "no advanced metrics".
     for(const key of ['results','depthchart','depthCharts','categories','statistics',
-      'stats','splits','records','seasonTypes','tables','rows','items','totals']){
+      'stats','splits','splitCategories','records','seasonTypes','tables','rows',
+      'items','totals']){
       const child=node[key]
       if(child!==undefined)queue.push({value:child,depth:next.depth+1})
     }
