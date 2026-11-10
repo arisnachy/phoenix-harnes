@@ -226,12 +226,17 @@ export function enrichSpecialistNarrative(
   const availabilityUnknown=!injuries||!selectedSide||!opponentSide||
     injuries.status==='stale'||injuries.status==='unavailable'||
     injuries.status==='unsupported'||!injuries.home.matched||!injuries.away.matched
-  const injuryWarnings=availabilityUnknown?[
-    'Disponibilidad de ambos equipos incompleta o desactualizada; no asumir que una plantilla está sana',
-  ]:ownInjuries.length?[
-    'Bajas o dudas del equipo elegido ('+prior.selected+'): '+ownInjuries.slice(0,4).join('; '),
-  ]:[]
-  const contradictions=uniq([...prior.contradictions,...pending,...conflicts,...injuryWarnings],12)
+  const injuryWarnings=[
+    ...(ownInjuries.length?[
+      'Bajas o dudas del elegido ('+prior.selected+'): '+ownInjuries.slice(0,3).join('; '),
+    ]:[]),
+    ...(availabilityUnknown?[
+      'Disponibilidad bilateral incompleta: fuente parcial o antigua; sin prueba de plantilla sana',
+    ]:[]),
+  ]
+  // Put concrete injury risks ahead of general specialist gaps so the
+  // selected team's missing stars cannot disappear behind 12 generic warnings.
+  const contradictions=uniq([...injuryWarnings,...prior.contradictions,...pending,...conflicts],12)
   const hasPrice=typeof marketNoVigPercent==='number'&&
     Number.isFinite(marketNoVigPercent)&&marketNoVigPercent>=0&&marketNoVigPercent<=100
   const percentage:TicketNarrative['percentage']=hasPrice?{
@@ -281,13 +286,15 @@ export function enrichSpecialistNarrative(
   return {...prior,status:documented?'documented':'conditional',
     specialistEvidence:evidence,criticalPending:pending,contradictions,percentage,
     externalModel,
-    favorable:uniq([...prior.favorable,
+    favorable:uniq([
+      ...(opponentInjuries.length?[
+        'Reporte del rival '+opponentSide?.name+' (no asegura victoria): '+
+          opponentInjuries.slice(0,3).join('; '),
+      ]:[]),
+      ...prior.favorable,
       ...evidence.filter(x=>!/lesion|baja|injur/iu.test(x)).slice(0,2)
         .map(x=>'Datos especialistas: '+x),
-      ...(opponentInjuries.length?[
-        'Reporte del rival '+opponentSide?.name+' (no equivale a victoria): '+
-          opponentInjuries.slice(0,3).join('; '),
-      ]:[])],6),
+    ],6),
     sources:injuries?[
       ...prior.sources,
       {name:'ESPN lesiones de ambos equipos · reporte no definitivo',
