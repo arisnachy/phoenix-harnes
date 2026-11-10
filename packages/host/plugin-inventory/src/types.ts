@@ -66,6 +66,36 @@ export interface ClawHubCatalogSnapshot {
   readonly items: readonly ClawHubCatalogItem[]
 }
 
+/** Exact allowlisted credential names accepted by the sports Host connector. */
+export type SportsApiKeyId=
+  |'THE_ODDS_API_KEY'|'THEODDSAPI_API_KEY'|'THERUNDOWN_API_KEY'
+  |'SPORTSGAMEODDS_API_KEY'|'PHOENIX_API_FOOTBALL_KEY'
+  |'PHOENIX_API_HOCKEY_KEY'|'PHOENIX_API_NFL_KEY'
+  |'PHOENIX_BALLDONTLIE_API_KEY'|'PHOENIX_BIGBALLS_API_KEY'
+  |'PHOENIX_NFLMETA_KEY'|'PHOENIX_SPORTMONKS_KEY'
+/** Browser-safe sports credential metadata. Never includes a secret value. */
+export interface SportsApiKeyState{
+  readonly id:SportsApiKeyId
+  readonly name:string
+  readonly signup:string
+  readonly purpose:string
+  readonly configured:boolean
+  readonly verified:boolean
+  readonly writable:boolean
+  readonly source:'none'|'vault'|'environment'
+  readonly status:'missing-key'|'configured-unverified'|'ready'
+    |'invalid-key'|'rate-limited'|'unreachable'|'vault-unavailable'
+}
+/** One human-initiated secret entry, exclusively over the trusted Host Remote. */
+export interface SportsApiKeySaveRequest{
+  readonly id:SportsApiKeyId
+  readonly apiKey:string
+}
+/** Only an allowlisted provider identifier crosses the deletion/probe boundary. */
+export interface SportsApiKeySelectRequest{
+  readonly id:SportsApiKeyId
+}
+
 /** Secret-free The Odds API v4 credential state projected to trusted clients. */
 export interface OddsApiConnectorState {
   readonly configured: boolean
