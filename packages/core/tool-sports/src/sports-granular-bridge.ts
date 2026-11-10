@@ -23,17 +23,17 @@ export function nflDeepSignals(d:NflDossier):Audit{
  const r:Audit={},h=d.teams.home,a=d.teams.away,e=d.event
  identity(r,'N01',e.eventId,e.scheduledAt,e.venue,
    e.away.name+' vs '+e.home.name+' '+e.scheduledAt+' · '+e.venue)
- r.U01=r.N01
+ r.U01=r.N01!
  put(r,'N02',h.recent.length>=3&&a.recent.length>=3,
    h.name+' '+h.recent.length+' juegos, '+a.name+' '+a.recent.length+
    '; faltan ventana 10 y calidad de rivales')
- r.U02=r.N02
+ r.U02=r.N02!
  const stats=[...h.teamStats,...a.teamStats]
  put(r,'N03',stats.some(x=>/epa|success|drive|defense|offense/i.test(x.name)),
    stats.filter(x=>/epa|success|drive|defense|offense/i.test(x.name))
     .slice(0,9).map(x=>x.name+': '+x.value).join('; ')+
     '; EPA/play y métricas ajustadas deben aparecer para ambos equipos')
- r.U03=r.N03
+ r.U03=r.N03!
  const qb=[h,a].map(t=>t.roster.filter(p=>p.role==='quarterback')
    .map(p=>p.name+(p.confirmedOffense?' confirmado':' sin titularidad')+
      ' ('+p.statistics.length+' métricas)'))
@@ -56,12 +56,12 @@ export function nflDeepSignals(d:NflDossier):Audit{
    'Viento '+(d.weather.windKmh??'?')+' km/h, temperatura '+
    (d.weather.temperatureC??'?')+' C; campo/techo por cotejar':
    'Sin meteorología horario-estadio validada')
- r.U06=r.N11
+ r.U06=r.N11!
  put(r,'N12',d.markets.length>0,d.markets.length+
    ' mercados observados; sin probabilidades calibradas ni spread/total independientes')
- r.U04=r.N07
+ r.U04=r.N07!
  r.U08={state:'missing',detail:'Sin modelo ML/spread/total calibrado y auditado'}
- r.U09=r.N12
+ r.U09=r.N12!
  put(r,'U10',d.news.length+d.editorial.length>0,
    d.news.length+' noticias y '+d.editorial.length+' opiniones; auditoría adversarial pendiente')
  return r
@@ -70,11 +70,11 @@ export function nhlDeepSignals(d:HockeyDossier):Audit{
  const r:Audit={},f=d.fixture,h=d.form.home,a=d.form.away
  identity(r,'H01',f.id,f.date,f.venue,
    f.away.name+' vs '+f.home.name+' · '+f.venue+' · '+f.date)
- r.U01=r.H01
+ r.U01=r.H01!
  put(r,'H02',(h?.games??0)>=5&&(a?.games??0)>=5,
    'Últimos '+(h?.games??0)+' local y '+(a?.games??0)+
    ' visitante; fuerza de calendario y ventana 20 pendientes')
- r.U02=r.H02
+ r.U02=r.H02!
  put(r,'H03',(h?.games??0)>0&&(a?.games??0)>0,
    'Marcadores existentes; falta distinguir regulación 60min vs OT/SO')
  put(r,'H04',(h?.games??0)>0&&(a?.games??0)>0,
@@ -97,9 +97,9 @@ export function nhlDeepSignals(d:HockeyDossier):Audit{
    ' h / visitante '+(a?.restHours??'?')+' h; viajes por confirmar')
  put(r,'H12',d.markets.length>0,d.markets.length+
    ' líneas observadas; verificar si ML incluye OT/SO y vigencia del proveedor')
- r.U04=r.H09;r.U06=r.H10
+ r.U04=r.H09!;r.U06=r.H10!
  r.U08={state:'missing',detail:'Sin modelo NHL ML/puck line/total calibrado'}
- r.U09=r.H12
+ r.U09=r.H12!
  return r
 }
 export function mlbDeepSignals(d:MlbCase):Audit{
@@ -107,11 +107,11 @@ export function mlbDeepSignals(d:MlbCase):Audit{
  identity(r,'M01',f.gamePk,f.date,f.venue.name,
    'gamePk '+f.gamePk+' · '+f.away.name+' vs '+f.home.name+
    ' · '+f.venue.name+' · '+f.date+'; dobles carteleras cotejar')
- r.U01=r.M01
+ r.U01=r.M01!
  put(r,'M02',(h?.games??0)>=5&&(a?.games??0)>=5,
    (h?.games??0)+' juegos locales; '+(a?.games??0)+
    ' visitantes; resultado 5/10/20 y calidad de rivales pendientes')
- r.U02=r.M02
+ r.U02=r.M02!
  put(r,'M03',!!h&&!!a,
    'Splits casa '+(h?.home.wins??0)+'V, '+(a?.away.wins??0)+
    'V visitante; vs zurdo/derecho no contrastado')
@@ -143,9 +143,9 @@ export function mlbDeepSignals(d:MlbCase):Audit{
    '; efecto relativo al campo no confirmado')
  put(r,'M13',d.odds.length>0,d.odds.length+
    ' mercados; confirmación de abridores y liquidación pendiente')
- r.U03=r.M04;r.U04=r.M07;r.U06=r.M10
+ r.U03=r.M04!;r.U04=r.M07!;r.U06=r.M10!
  r.U08={state:'missing',detail:'Faltan modelos F5/ML/run line/totales calibrados'}
- r.U09=r.M13
+ r.U09=r.M13!
  return r
 }
 export function soccerDeepSignals(d:SoccerDossier):Audit{
@@ -153,10 +153,10 @@ export function soccerDeepSignals(d:SoccerDossier):Audit{
  identity(r,'S01',f.eventId,d.opportunity.scheduledAt,d.stadium,
    f.away.name+' vs '+f.home.name+' · '+d.stadium+
    ' · '+d.opportunity.scheduledAt)
- r.U01=r.S01
+ r.U01=r.S01!
  put(r,'S02',h.recent.length>=5&&a.recent.length>=5,
    h.recent.length+'/'+a.recent.length+' juegos; últimos 20 y fuerza de rival pendientes')
- r.U02=r.S02
+ r.U02=r.S02!
  put(r,'S03',!!h.form&&!!a.form,
    'Casa '+(h.form?.homeWdl??'?')+' / visita '+
    (a.form?.awayWdl??'?')+'; xG ajustado no comprobado')
@@ -181,9 +181,9 @@ export function soccerDeepSignals(d:SoccerDossier):Audit{
    (d.weather?.temperatureC??'?')+' C; motivación/tabla por contrastar')
  put(r,'S13',d.markets.length>0,d.markets.length+
    ' mercados observados; reglamento 90 min y movimientos sin cotejo')
- r.U04=r.S07;r.U06=r.S11
+ r.U04=r.S07!;r.U06=r.S11!
  r.U08={state:'missing',detail:'Sin modelo 1X2/empate/BTTS calibrado por liga'}
- r.U09=r.S13
+ r.U09=r.S13!
  put(r,'U10',d.headlines.length+d.editorial.length>0,
    d.headlines.length+' noticias; '+d.editorial.length+
    ' editoriales; auditoría adversarial pendiente')
@@ -194,12 +194,12 @@ export function tennisDeepSignals(d:TennisDossier):Audit{
  identity(r,'T01',m.matchId,m.start,m.tournament,
    m.players.map(x=>x.name).join(' vs ')+' · '+m.tournament+
    ', ronda '+m.round+', superficie '+(m.surface??'?')+', '+m.start)
- r.U01=r.T01
+ r.U01=r.T01!
  put(r,'T02',d.coverage.rankCount===2&&d.players.every(x=>x.lastMatches.length>=5),
    'Rankings '+d.coverage.rankCount+'/2; últimos partidos '+
    d.players.map(x=>x.lastMatches.length).join('/')+
    '; Elo y dificultad de rivales sin cotejo')
- r.U02=r.T02
+ r.U02=r.T02!
  put(r,'T03',!!m.surface,'Superficie '+(m.surface??'desconocida')+
    '; forma por superficie e indoor/outdoor pendiente')
  const stats=d.players.map(x=>x.statistics)
@@ -217,8 +217,8 @@ export function tennisDeepSignals(d:TennisDossier):Audit{
    ' partidos históricos; duración, viajes y fatiga pendientes')
  put(r,'T12',d.markets.length>0,d.markets.length+
    ' precios observados; retiradas y super-tiebreak bajo reglas del operador')
- r.U03=r.T04;r.U04=r.T05;r.U06=r.T10
+ r.U03=r.T04!;r.U04=r.T05!;r.U06=r.T10!
  r.U08={state:'missing',detail:'Falta modelo de servicio/retorno ML-sets-juegos calibrado'}
- r.U09=r.T12
+ r.U09=r.T12!
  return r
 }
