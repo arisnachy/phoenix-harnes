@@ -30,7 +30,7 @@ export function auditBasketballGranularEvidence(d:BasketballCase):
   Record<string,StepObservation>{
   const h=d.teams.home,a=d.teams.away, both=[h,a] as const
   const hasVenue=Boolean(d.venue&&d.venue.trim()&&
-    !/no verificado|unknown|sin sede/iu.test(d.venue))
+    !/sede sin verificar|no verificado|unknown|sin sede/iu.test(d.venue))
   const identified=Boolean(d.fixture.eventId&&h.name&&a.name&&
     Number.isFinite(Date.parse(d.fixture.start)))
   const formCounts=both.map(x=>x.lastGames.length)
@@ -62,7 +62,7 @@ export function auditBasketballGranularEvidence(d:BasketballCase):
     'ESPN identidad '+d.fixture.eventId+'; '+a.name+' vs '+h.name+
     '; arena '+(d.venue||'sin verificar')+'; '+d.fixture.start)
   results.B01=results.U01
-  results.U02=entry(fullHistory?'verified':someHistory?'partial':'missing',
+  results.U02=entry(someHistory?'partial':'missing',
     formText+'; calendario completo/20 y dificultad de rivales pendientes cuando corresponda')
   results.B02=entry(fullHistory?'verified':someHistory?'partial':'missing',
     formText+'; ventana de 5/10/20 juegos exigida')
@@ -71,11 +71,10 @@ export function auditBasketballGranularEvidence(d:BasketballCase):
     'requieren métricas separadas. '+formText)
   results.B04=entry(fourComplete?'verified':fourAny?'partial':'missing',
     both.map((x,i)=>x.name+': '+four[i]!.join(', ')).join(' | '))
-  results.B05=entry(shootingComplete?'verified':shootingAny?'partial':'missing',
+  results.B05=entry(shootingAny?'partial':'missing',
     both.map((x,i)=>x.name+': '+text(shooting[i]!)).join(' | ')+
     '; exige PTS, eFG, TS, pérdidas, ORB/DRB, FT y triples')
-  results.U03=entry(fourComplete&&shootingComplete?'verified':
-    fourAny||shootingAny?'partial':'missing',
+  results.U03=entry(fourAny||shootingAny?'partial':'missing',
     'Desglose comprobado de B04 y B05; no inferir cifras ausentes')
   results.B06=entry(playersWithStats.every(x=>x.length>0)?'partial':'missing',
     playerDetail+'; faltan USG, TS, minutos y figura principal verificados')
