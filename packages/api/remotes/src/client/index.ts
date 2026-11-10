@@ -25,6 +25,7 @@ export type {
   TokenTelemetryRecord,
   PluginInventorySnapshot,
   AnatomyConnectorId, AnatomyConnectorSnapshot, AnatomyConnectorInstallReceipt,
+  SportsApiKeyId,SportsApiKeyState,SportsApiKeySaveRequest,SportsApiKeySelectRequest,
   PluginBulkActivationReceipt,
   PluginEnableRequest,
   OpenClawProbeState,

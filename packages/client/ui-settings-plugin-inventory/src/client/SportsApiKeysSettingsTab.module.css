@@ -1,0 +1,20 @@
+.section{padding:12px 4px;display:flex;flex-direction:column;gap:12px}
+.header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.header h3{margin:0;font-size:1.05rem}
+.header p{margin:5px 0;color:var(--color-text-muted,#6c7280);font-size:.88rem}
+.privacy{font-size:.86rem;margin:0;color:var(--color-text-muted,#6c7280)}
+.notice{font-size:.9rem;margin:0}
+.grid{list-style:none;margin:0;padding:0;display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(100%,295px),1fr))}
+.card{border:1px solid var(--color-border,#dadde3);border-radius:12px;padding:13px;min-width:0;display:flex;flex-direction:column;gap:9px}
+.card p{margin:0;font-size:.86rem}
+.card small{color:var(--color-text-muted,#6c7280)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.top strong{font-size:.95rem}
+.phase{font-size:.76rem;white-space:nowrap}
+.actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.actions a,.actions button{font-size:.8rem}
+.secure{border-top:1px solid var(--color-border,#dadde3);padding-top:12px;display:flex;flex-direction:column;gap:8px}
+.secure label{font-size:.82rem;font-weight:600}
+.secure input{min-width:0;padding:9px;border:1px solid var(--color-border,#b8bfcb);border-radius:8px;background:var(--color-background,#fff);color:inherit}
+.secure button{align-self:flex-start}
+@media (max-width:600px){.header{flex-direction:column}}
