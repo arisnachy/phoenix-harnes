@@ -982,3 +982,22 @@ test('MLB five-start evidence is enforced in global summary without duplicate bl
   assert.equal(review.missingEvidence.some(x=>x.includes('Cinco salidas recientes distintas')),false)
   assert.equal(review.eligibleForTicket,false)
 })
+
+
+test('MLB five-start gate rejects invalid calendar dates and timestamp aliases',async()=>{
+  const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true}).fetcher,at)
+  const outing=(day)=>({date:day,opponentId:123,innings:'5.2',
+    pitches:'85',earnedRuns:'2',strikeouts:'7',walks:'1'})
+  const valid=['2026-06-25','2026-06-24','2026-06-23','2026-06-22','2026-06-21']
+  for(const p of [d.starters.home,d.starters.away]){
+    assert.ok(p)
+    p.recentStarts=valid.map(outing)
+  }
+  assert.equal(reviewMlbResearch(d).evidenceGates.fiveStarterOutingsVerified,true)
+  for(const invalid of ['2026-06-31','2026-02-30','2026-06-20T00:00:00Z','invalid']){
+    d.starters.home.recentStarts=[...valid.slice(0,4).map(outing),outing(invalid)]
+    const review=reviewMlbResearch(d)
+    assert.equal(review.evidenceGates.fiveStarterOutingsVerified,false,invalid)
+    assert.equal(review.eligibleForTicket,false)
+  }
+})
