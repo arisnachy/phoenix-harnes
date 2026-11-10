@@ -86,7 +86,7 @@ test('date-scoped scanning discovers tomorrow games when today has no events',as
   assert.equal(result.quotes.length,2)
 })
 
-test('does not advertise unnamed, undated or historical odds as current offers',async()=>{
+test('unnamed ESPN bookmakers remain excluded; unchanged named prices are observed',async()=>{
   const read=async url=>{
     if(url.includes('scoreboard?'))return scoreboard([event([
       {...priced({id:'41'}),lastUpdated:updated},
@@ -97,8 +97,10 @@ test('does not advertise unnamed, undated or historical odds as current offers',
     throw Error('unexpected '+url)
   }
   const result=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',read,{now,days:1})
-  assert.deepEqual(result.quotes,[])
-  assert.match(result.diagnostics.notes.join(' '),/sin|No se|ESPN/u)
+  assert.equal(result.quotes.length,2)
+  assert.ok(result.quotes.every(q=>q.bookmaker==='Old book'&&
+    q.updatedAt==='2026-10-20T10:00:00Z'&&q.observedAt===new Date(now).toISOString()))
+  assert.ok(result.observations.every(q=>q.reason==='proveedor_sin_nombre'))
 })
 
 test('source diagnostics include Core/summary failures, never claim all markets closed',async()=>{
@@ -350,7 +352,7 @@ test('targeted event searches Scoreboard, Core and Summary for distinct ESPN boo
  assert.equal(requests.length,3)
 })
 
-test('ESPN missing timestamps and old prices remain available for research, not ticket odds',async()=>{
+test('ESPN missing or old update stamps do not suppress newly observed prices',async()=>{
  const game=event([{...priced({name:'Unknown time'}),lastUpdated:undefined},
   {...priced({name:'Old book'}),lastUpdated:new Date(now-3_600_001).toISOString()}])
  const read=async url=>{
@@ -360,9 +362,11 @@ test('ESPN missing timestamps and old prices remain available for research, not 
   throw Error('Unexpected '+url)
  }
  const r=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',read,{now,days:1})
- assert.equal(r.quotes.length,0)
- assert.deepEqual([...new Set(r.observations.map(x=>x.reason))].sort(),['antigua','sin_fecha'])
- assert.ok(r.observations.every(x=>x.price>1&&x.endpointSource==='scoreboard'))
+ assert.equal(r.quotes.length,4)
+ assert.ok(r.quotes.every(x=>x.price>1&&x.endpointSource==='scoreboard'))
+ assert.ok(r.quotes.every(x=>x.observedAt===new Date(now).toISOString()))
+ assert.equal(r.diagnostics.undatedOutcomes,2)
+ assert.equal(r.diagnostics.expiredOutcomes,2)
 })
 
 test('top-level spread reconstructs sides only when the favorite is identified',()=>{
@@ -405,18 +409,18 @@ test('ESPN is credited to ESPN Site/Core, never SportsGameOdds or TheRundown',as
   assert.equal(result.sources.find(x=>x.provider==='OddsHarvester')?.status,'unconfigured')
   assert.equal(result.observations.length,0)
 })
-test('ESPN prices without provider lastUpdated survive only as research observations',async()=>{
+test('ESPN prices without lastUpdated enter the fresh observed-price pool',async()=>{
   const fetcher=async url=>new Response(JSON.stringify(
     String(url).includes('/scoreboard?')?
       scoreboard([event([{...priced({name:'ESPN Research Book'}),lastUpdated:undefined}])]):{}
   ),{status:200})
   const result=await marketOddsDetailed('basketball_nba','h2h',
     {PHOENIX_SPORTS_ESPN_DISABLED:'0',PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'},fetcher,now)
-  assert.equal(result.quotes.length,0)
-  assert.equal(result.observations.length,2)
-  assert.ok(result.observations.every(x=>x.nonCotizable&&x.reason==='sin_fecha'))
-  assert.ok(result.observations.every(x=>x.source.includes('referencia no cotizable')))
-  assert.equal(result.sources.find(x=>x.provider==='ESPN Site/Core')?.status,'empty')
+  assert.equal(result.quotes.length,2)
+  assert.ok(result.quotes.every(x=>x.updatedAt==='No indicada por ESPN'&&
+    x.observedAt===new Date(now).toISOString()))
+  assert.equal(result.observations.length,0)
+  assert.equal(result.sources.find(x=>x.provider==='ESPN Site/Core')?.status,'observed')
 })
 test('Core lookup uses exact competition ID from ESPN scoreboard, not always event ID',async()=>{
   const called=[]
