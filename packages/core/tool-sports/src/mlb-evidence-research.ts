@@ -13,6 +13,8 @@ const word=(v:unknown,n=130):string=>(typeof v==='string'||typeof v==='number'
   ?String(v).replace(/[\u0000-\u001f]/gu,' ').trim().slice(0,n):'')
 const numeric=(v:unknown):number|null=>{
   if(typeof v!=='number'&&typeof v!=='string')return null
+  // Blank provider fields are missing evidence, never an observed zero.
+  if(typeof v==='string'&&v.trim()==='')return null
   const n=Number(v)
   return Number.isFinite(n)?n:null
 }
@@ -127,18 +129,25 @@ async function boundedMap<T,R>(items:T[],concurrency:number,fn:(item:T)=>Promise
   return out
 }
 function form(games:unknown[],teamId:number,cutoff:number):MlbForm{
+  // Final is the API's status at retrieval, NOT proof a game had finished at
+  // a historical checkedAt. With no verified final timestamp, exclude the
+  // snapshot's UTC calendar day and deduplicate repeated schedule game IDs.
+  const cutoffDay=iso(cutoff).slice(0,10)
+  const seen=new Set<number>()
   const valid=games.flatMap(entry=>{
     const g=obj(entry),status=obj(g.status),t=obj(g.teams),h=obj(t.home),a=obj(t.away)
-    const homeId=id(obj(h.team).id),awayId=id(obj(a.team).id)
-    if(homeId!==teamId&&awayId!==teamId)return []
+    const gamePk=id(g.gamePk),homeId=id(obj(h.team).id),awayId=id(obj(a.team).id)
+    if(!gamePk||seen.has(gamePk)||(homeId!==teamId&&awayId!==teamId))return []
     const isHome=homeId===teamId
     const own=isHome?h:a,opponent=isHome?a:h
     const opponentId=id(obj(opponent.team).id)
-    const d=Date.parse(word(g.gameDate))
+    const gameDate=word(g.gameDate),d=Date.parse(gameDate)
     const scored=numeric(own.score),allowed=numeric(opponent.score)
     if(!opponentId||!Number.isFinite(d)||d>=cutoff||
+      gameDate.slice(0,10)>=cutoffDay||
       word(status.abstractGameState)!=='Final'||scored===null||allowed===null)return []
-    return[{date:word(g.gameDate),opponentId,scored,allowed,side:isHome?'home' as const:'away' as const}]
+    seen.add(gamePk)
+    return[{date:gameDate,opponentId,scored,allowed,side:isHome?'home' as const:'away' as const}]
   }).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,20)
   const slice=(side:'home'|'away')=>valid.filter(g=>g.side===side)
   return{games:valid.length,wins:valid.filter(g=>g.scored>g.allowed).length,
@@ -216,6 +225,7 @@ function verifiedOdds(fixture:MlbFixture,quotes:MarketOutcome[],now:number):Mark
   const target=Date.parse(fixture.date)
   return quotes.filter(q=>{
     const qdate=Date.parse(q.timeIso??q.time),observed=Date.parse(q.updatedAt)
+    if(q.sportKey!==undefined&&q.sportKey!=='baseball_mlb')return false
     if(!Number.isFinite(qdate)||!Number.isFinite(observed)||observed>now||
       now-observed>3_600_000||Math.abs(qdate-target)>3_600_000)return false
     return normalize(q.home)===h&&normalize(q.away)===a&&
@@ -224,12 +234,16 @@ function verifiedOdds(fixture:MlbFixture,quotes:MarketOutcome[],now:number):Mark
       typeof q.selection==='string'&&q.selection.trim().length>0&&
       (q.point==null||(typeof q.point==='number'&&Number.isFinite(q.point)))&&
       typeof q.price==='number'&&q.price>1&&Number.isFinite(q.price)
-  }).slice(0,40)
+  })
 }
 function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
   const sections:MlbCase['uiBlock']['props']['sections']=[]
   const add=(heading:string,items:Array<{label:string;value:string;detail?:string}>)=>{
-    if(items.length)sections.push({heading,kind:'list',items:items.slice(0,40)})
+    if(items.length)for(let start=0;start<items.length;start+=40){
+      const end=Math.min(start+40,items.length)
+      sections.push({heading:items.length>40?`${heading} (${start+1}–${end} de ${items.length})`:heading,
+        kind:'list',items:items.slice(start,end)})
+    }
   }
   const home=result.fixture.home,away=result.fixture.away
   add('Clasificación de temporada',(['away','home'] as const).map(side=>({
@@ -277,7 +291,7 @@ function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
   add('Contraste editorial externo',result.externalHeadlines.map(p=>({
     label:p.headline,value:p.source+' · titular indexado',
     detail:p.published??'Sin fecha confirmada; NO es un pick validado'})))
-  add('Matriz roster contra abridores y bullpen',result.matchups.slice(0,30).map(m=>({
+  add('Matriz roster contra abridores y bullpen',result.matchups.map(m=>({
     label:m.batter+' vs '+m.pitcher,value:m.pitcherRole==='probable-starter'?'Abridor probable':'Bullpen posible',
     detail:[...m.observations.slice(0,3),...m.missing.slice(0,1)].join(' · ')})))
   add('Parque y clima',[{label:result.venue.name,
@@ -288,7 +302,7 @@ function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
       ' · distancias LF/CF/RF '+[result.venue.dimensionsFt.leftLine,
         result.venue.dimensionsFt.center,result.venue.dimensionsFt.rightLine]
         .map(trimNum).join('/')+' ft. Estado del techo el día del juego y orientación del viento SIN confirmar'}])
-  add('Mercados de casas',result.odds.slice(0,12).map(q=>({
+  add('Mercados de casas',result.odds.map(q=>({
     label:q.bookmaker+' · '+q.market+' '+q.selection,
     value:q.price.toFixed(2)+(q.point===null||q.point===undefined?'':' · línea '+q.point),
     detail:q.updatedAt+' · '+(q.source??'Proveedor cotejado')})))
@@ -337,8 +351,8 @@ export async function researchMlbCase(
   const [box,live,venueRaw,homeRoster,awayRoster,homeSchedule,awaySchedule]=await Promise.all([
     measured<unknown>('https://statsapi.mlb.com/api/v1/game/'+gamePk+'/boxscore',fetcher,sources,now),
     measured<unknown>('https://statsapi.mlb.com/api/v1/game/'+gamePk+'/feed/live',fetcher,sources,now),
-    fixture.venue.id?measured<unknown>('https://statsapi.mlb.com/api/v1/venues?venueIds='+
-      fixture.venue.id+'&hydrate=location,fieldInfo',fetcher,sources,now):Promise.resolve(null),
+    fixture.venue.id?measured<unknown>('https://statsapi.mlb.com/api/v1/venues/'+
+      fixture.venue.id+'?hydrate=location,fieldInfo',fetcher,sources,now):Promise.resolve(null),
     measured<unknown>('https://statsapi.mlb.com/api/v1/teams/'+fixture.home.id+
       '/roster?rosterType=active',fetcher,sources,now),
     measured<unknown>('https://statsapi.mlb.com/api/v1/teams/'+fixture.away.id+
@@ -541,12 +555,16 @@ export async function researchMlbCase(
     .filter(name=>name.length>=5)
   const news=arr(obj(newsFeed).articles).flatMap(raw=>{
     const a=obj(raw),headline=word(a.headline,200),description=word(a.description,320)
-    if(!headline||!clubNames.some(name=>normalize(headline+' '+description).includes(name)))return []
-    return[{headline,published:word(a.published,60),source:'ESPN MLB News · titular público, no lesión confirmada'}]
+    const published=word(a.published,60),publishedAt=Date.parse(published)
+    // A later article must not enter a dossier as evidence known at checkedAt.
+    if(!headline||!Number.isFinite(publishedAt)||publishedAt>now||
+      !clubNames.some(name=>normalize(headline+' '+description).includes(name)))return []
+    return[{headline,published,source:'ESPN MLB News · titular público, no lesión confirmada'}]
   }).slice(0,12)
   const editorial=await discoverEditorialResearch(
     fixture.home.name+' '+fixture.away.name,['covers','vegasinsider'],fetcher,now)
-  const externalHeadlines=editorial.hits.map(x=>({
+  const externalHeadlines=editorial.hits.filter(x=>!x.publishedAt||
+    (Number.isFinite(Date.parse(x.publishedAt))&&Date.parse(x.publishedAt)<=now)).map(x=>({
     headline:x.headline,published:x.publishedAt,source:x.publisher,
     status:'headline-only' as const,
   }))
