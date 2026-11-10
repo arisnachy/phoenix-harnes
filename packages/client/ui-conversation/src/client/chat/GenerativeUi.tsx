@@ -1285,7 +1285,10 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
               </span>
               <span>{heading}</span>
             </span><small>{legs.length} {legs.length===1?'pata':'patas'}</small></h4>
-            <div className={css.sportsLegs}>{legs.map(leg=><article key={p.legs.indexOf(leg)} className={css.sportsLeg}>
+            <div className={css.sportsLegs}>{legs.map(leg=>{
+              const narrative=leg.narrative??p.chatNarrative?.find(n=>
+                Boolean(leg.eventId)&&n.eventId===leg.eventId)
+              return <article key={p.legs.indexOf(leg)} className={css.sportsLeg}>
               <span className={css.sportsTicketLegNumber}>{String(p.legs.indexOf(leg)+1).padStart(2,'0')}</span>
               <div className={css.sportsTicketLegMain}>
                 <span className={css.sportsTicketEvent}>{leg.event}{leg.when?' · '+leg.when:''}</span>
@@ -1298,8 +1301,15 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                   <strong>{leg.selection}</strong>
                 </div>
                 <small>{[leg.market,leg.player?'Jugador · '+leg.player:undefined,unpriced?undefined:leg.bookmaker].filter(Boolean).join(' · ')}</small>
-                {leg.narrative?<SportsTicketResearchNarrative value={leg.narrative} index={p.legs.indexOf(leg)}/>:
-                  leg.rationale&&<details className={css.sportsTicketReason}><summary>Ver fundamento</summary><p>{sportsDisplayText(leg.rationale)}</p></details>}
+                {narrative?<SportsTicketResearchNarrative value={narrative} index={p.legs.indexOf(leg)}/>:
+                  <details className={css.sportsTicketReason}>
+                    <summary>Fundamento incompleto · revisar antes de apostar</summary>
+                    {leg.rationale&&<p>{sportsDisplayText(leg.rationale)}</p>}
+                    {leg.pendingEvidence?.length?<ul>{leg.pendingEvidence.map((item,i)=>
+                      <li key={i}>{sportsDisplayText(item)}</li>)}</ul>:
+                      <p>Sin expediente especializado, lesiones y quintetos verificados para esta pata.
+                        La cuota o la forma reciente no justifican por sí solas la selección.</p>}
+                  </details>}
               </div>
               {unpriced&&!receipt
                 ? <span className={css.sportsTicketVerified} aria-label="Partido verificado">✓ Evento</span>
@@ -1308,8 +1318,35 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                   <b aria-label={`Cuota ${leg.price}`}>{leg.price}</b>
                 </div>}
               <ForecastTicketLegStatus leg={leg} index={p.legs.indexOf(leg)}/>
-            </article>)}</div>
+            </article>})}</div>
           </section>)}</div>
+        {p.chatNarrative?.length? <section className={css.sportsTicketNarrative}
+          aria-label="Justificación de Kira para cada pata">
+          <h4>Kira · Por qué elegí cada selección</h4>
+          {p.chatNarrative.map((n,i)=>{
+            const leg=p.legs.find(x=>Boolean(x.eventId)&&x.eventId===n.eventId)
+            const picture=n.news.find(x=>x.imageUrl&&x.articleUrl)
+            return <article key={n.eventId+'-'+i} className={css.sportsTicketNarrativeContext}>
+              <div className={css.sportsTicketNarrativeTop}>
+                <strong>{String(i+1).padStart(2,'0')} · {n.selected}</strong>
+                <span>{n.status==='documented'?'Documentada':'Condicional'}</span>
+              </div>
+              {leg?.homeLogo&&<SportsPortrait label={leg.homeTeam??'Local'} logo={leg.homeLogo}/>}
+              {leg?.awayLogo&&<SportsPortrait label={leg.awayTeam??'Visitante'} logo={leg.awayLogo}/>}
+              <p className={css.sportsTicketNarrativeWhy}>{n.selectionWhy}</p>
+              {n.favorable.length>0&&<p><strong>A favor:</strong> {n.favorable.slice(0,3).join(' · ')}</p>}
+              {n.contradictions.length>0&&<p><strong>Riesgos:</strong> {n.contradictions.slice(0,3).join(' · ')}</p>}
+              {picture?.imageUrl&&picture.articleUrl&&
+                <a href={picture.articleUrl} target="_blank" rel="noopener noreferrer"
+                  className={css.sportsTicketNarrativePhoto}>
+                  <img src={picture.imageUrl} loading="lazy" referrerPolicy="no-referrer"
+                    alt={'Noticia de '+picture.publisher}/></a>}
+              {n.news.length>0&&n.news[0]?.articleUrl&&
+                <p><a href={n.news[0].articleUrl} target="_blank" rel="noopener noreferrer">
+                  Fuente editorial: {n.news[0].publisher} · {n.news[0].headline}</a></p>}
+            </article>
+          })}
+        </section>:null}
         {receipt?<div className={css.sportsTicketTotal}>
           <div><small>Estado del boleto</small><strong>Recibo aportado · sin liquidación confirmada</strong></div>
           {p.stake&&<div><small>Importe informado</small><strong>RD$ {p.stake}</strong></div>}
