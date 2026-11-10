@@ -108,6 +108,18 @@ jobs:
             phoenix-sports-chronological-backtest.md
           if-no-files-found: error
           retention-days: 28
+      - name: Reject underperforming or insufficient league evaluations
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const report=JSON.parse(fs.readFileSync("phoenix-sports-chronological-backtest.json","utf8"));
+            const failing=report.leagues.filter(l=>l.status!=="validated" || l.calibrated!==true);
+            for(const x of report.leagues) console.log(x.sport+"/"+x.league+": "+x.status+" ("+(x.samples??0)+" samples)");
+            if(failing.length) {
+              console.error("Not all leagues are validated: "+failing.map(x=>x.sport+"/"+x.league).join(", "));
+              process.exitCode=1;
+            }
+          '
 
   ticket-decision-contract:
     name: Ticket integrity, no invented odds
