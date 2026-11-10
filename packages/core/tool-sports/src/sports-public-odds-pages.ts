@@ -46,7 +46,53 @@ export function scoresAndOddsMoneylineHints(
         'casa, período ni aceptación; NO es una cotización para ticket',
     })
   }
+  // Some public scoreboard views render moneylines as ordinary table cells,
+  // not price-only links. Parse ONLY an explicitly named Moneyline column,
+  // never spreads, totals or anonymous numbers elsewhere on the page.
+  for(const hint of scoresAndOddsTableMoneylines(html,home,away)){
+    if(!found.has(hint.selection))found.set(hint.selection,hint)
+  }
   return [...found.values()]
+}
+function scoresAndOddsTableMoneylines(html:string,home:string,away:string):PublicMoneylineHint[]{
+  const hints:PublicMoneylineHint[]=[]
+  if(html.length>1_500_000)return hints
+  const escaped=(s:string)=>s.normalize('NFD').replace(/[\\u0300-\\u036f]/gu,'')
+    .toLowerCase().replace(/[^a-z0-9 ]/gu,' ').replace(/\\s+/gu,' ').trim()
+  const choices=[home,away].filter(name=>name.trim().length>=5)
+  if(choices.length!==2)return hints
+  const detected=new Set<string>()
+  for(const table of html.matchAll(/<table\\b[^>]*>([\\s\\S]{0,150000}?)<\\/table>/giu)){
+    const header=table[1]?.match(/<tr\\b[^>]*>[\\s\\S]*?<\\/tr>/iu)?.[0]??''
+    const columnNames=[...header.matchAll(/<th\\b[^>]*>([\\s\\S]*?)<\\/th>/giu)]
+      .map(match=>escaped(clean(match[1]??'')))
+    const column=columnNames.findIndex(name=>name==='moneyline'||name==='money line')
+    if(column<0)continue
+    for(const row of (table[1]??'').matchAll(/<tr\\b[^>]*>([\\s\\S]*?)<\\/tr>/giu)){
+      const cells=[...(row[1]??'').matchAll(/<td\\b[^>]*>([\\s\\S]*?)<\\/td>/giu)]
+        .map(m=>clean(m[1]??''))
+      if(cells.length<=column)continue
+      const teamCell=escaped(cells.slice(0,2).join(' '))
+      const team=choices.find(name=>{
+        const whole=escaped(name),nickname=whole.split(' ').at(-1)??''
+        return (whole.length>=5&&teamCell.includes(whole))||
+          (nickname.length>=5&&new RegExp('(?:^| )'+nickname+'(?: |$)','u').test(teamCell))
+      })
+      if(!team||detected.has(team))continue
+      const american=cells[column]?.trim().replace(/^even$/iu,'+100')??''
+      if(!/^[+-]\\d{3,5}$/u.test(american))continue
+      const price=Number(american)
+      if(Math.abs(price)<100||Math.abs(price)>10000)continue
+      detected.add(team)
+      hints.push({selection:team,american,
+        decimal:Number((price>0?1+price/100:1+100/Math.abs(price)).toFixed(4)),
+        market:'moneyline',status:'reference-only',bookmaker:null,quoteUpdatedAt:null,
+        detail:'Precio en columna Moneyline del comparador, no oferta del bookmaker. '+
+          'Fecha, casa, hora del partido y aceptación sin verificar'})
+    }
+  }
+  // An individual team alone is not evidence of the proposed MATCHUP.
+  return detected.size===2?hints:[]
 }
 
 export type OddsPageObservation={
