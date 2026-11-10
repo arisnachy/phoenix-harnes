@@ -72,6 +72,7 @@ describe('sports connectors secure Ask handoff and Host vault',()=>{
     const state=await verifySportsApiKey(ctx,'THE_ODDS_API_KEY',request)
     expect(state.verified).toBe(true)
     expect(request).toHaveBeenCalled()
-    expect(request.mock.calls[0]?.[0]).toBe('https://api.the-odds-api.com/v4/sports/?apiKey='+key)
+    expect(request).toHaveBeenCalledWith(
+      'https://api.the-odds-api.com/v4/sports/?apiKey='+key,expect.anything())
   })
 })
