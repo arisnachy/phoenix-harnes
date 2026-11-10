@@ -8,6 +8,7 @@ import {auditSportChecklist,type SportChecklist,type StepObservation} from './da
 import {fetchEspnInjuryBackup,type InjuryBackup} from './espn-injury-backup.ts'
 import {investigateNfl} from './nfl-evidence-research.ts'
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
+import {auditBasketballGranularEvidence} from './basketball-granular-evidence.ts'
 import {investigateSoccer} from './soccer-worldwide-dossier.ts'
 import {nhlSlate,investigateNhl} from './nhl-evidence-research.ts'
 import {discoverMlbDay,researchMlbCase} from './mlb-evidence-research.ts'
@@ -133,6 +134,7 @@ export async function investigateTicketSpecialist(
         'Quintetos confirmados '+d.coverage.starters+'/10',
         'Eficiencia/pace verificados '+String(d.coverage.advancedMetrics)]
       pending=d.missingEvidence
+      Object.assign(signals,auditBasketballGranularEvidence(d))
       observed('fixture',closeTime(d.opportunity.scheduledAt,game.kickoff),
         'ESPN baloncesto: identidad y hora del evento')
       observed('form',d.teams.home.lastGames.length>=5&&d.teams.away.lastGames.length>=5,
@@ -286,6 +288,20 @@ export async function investigateTicketSpecialist(
           ' · '+(injury.feedUpdatedAt??'sin hora')+
           ' · local '+injury.home.injuries.length+' y visitante '+
           injury.away.injuries.length+' registros; sin confirmar quinteto final')
+        // A verified ESPN league injury record is credible evidence of the
+        // reported status, not a definitive NBA/NFL inactive list.
+        const injured=[...injury.home.injuries,...injury.away.injuries]
+        const note=injured.slice(0,8).map(x=>x.athlete+' ('+x.status+
+          ', '+(x.reportedAt??'sin fecha')+')').join('; ')
+        const detail='ESPN '+injury.source+'; local '+
+          injury.home.injuries.length+', visitante '+
+          injury.away.injuries.length+'; '+note
+        if(game.sport==='basketball'){
+          mark('B08','partial',detail+
+            '; pendiente parte oficial NBA/WNBA y efecto en rotación')
+          mark('U05','partial',detail+
+            '; pendiente confirmación de quinteto y minutos')
+        }
         steps.push('ESPN lesiones '+injury.status+': local '+
           injury.home.injuries.length+' · visitante '+injury.away.injuries.length+
           ' · fuente '+injury.source)
