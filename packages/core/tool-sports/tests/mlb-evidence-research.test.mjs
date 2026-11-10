@@ -937,3 +937,15 @@ test('MLB starter outing gate rejects malformed innings and missing boxscore met
   assert.equal(reviewMlbResearch(d).evidenceGates.recentStarterOutingsVerified,true)
   assert.equal(reviewMlbResearch(d).eligibleForTicket,false)
 })
+
+test('MLB review requires at least two valid recent starts for each probable starter',async()=>{
+  const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true,pitcherLogs:true}).fetcher,at)
+  assert.equal(d.starters.home.recentStarts.length,2)
+  assert.equal(d.starters.away.recentStarts.length,2)
+  assert.equal(reviewMlbResearch(d).evidenceGates.recentStarterOutingsVerified,true)
+  d.starters.home.recentStarts=d.starters.home.recentStarts.slice(0,1)
+  const review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.recentStarterOutingsVerified,false)
+  assert.ok(review.missingEvidence.some(x=>x.includes('Últimas salidas fechadas')))
+  assert.equal(review.eligibleForTicket,false)
+})
