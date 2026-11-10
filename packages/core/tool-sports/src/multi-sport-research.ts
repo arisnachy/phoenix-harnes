@@ -4,6 +4,7 @@
  */
 import { getFeed, hasSportsPermission, sportsCatalog } from './sports.ts'
 import {readHistoricalScoreboard} from './sports-historical-scoreboard.ts'
+import {isVerifiedRegularSeason} from './sports-regular-season.ts'
 
 type Competitor = {
   id?:string|number;homeAway?:string;score?:number|string
@@ -43,11 +44,12 @@ const cleanScore=(s:unknown):number|null=>{
   if(!/^\d{1,3}$/u.test(String(s)))return null
   return Number(s)
 }
-const form=(current:Competitor,all:Game[],kickoff:number):FormSide=>{
+const form=(current:Competitor,all:Game[],kickoff:number,sport:string):FormSide=>{
   const id=pid(current)
   const seenEvents=new Set<string>()
   const records=all.flatMap(e=>{
-    if(e.status?.type?.state!=='post')return []
+    if(e.status?.type?.state!=='post'||
+      ((sport==='basketball'||sport==='football')&&!isVerifiedRegularSeason(e)))return []
     const at=Date.parse(e.date??'')
     if(!Number.isFinite(at)||at>=kickoff)return []
     const eventId=String(e.id??'')
@@ -148,7 +150,7 @@ export async function researchSport(
     const {home,away}=sides(event)
     if(!home||!away||!pid(home)||!pid(away)||!pname(home)||!pname(away))return []
     const kickoff=Date.parse(event.date??'')
-    const homeForm=form(home,archived,kickoff),awayForm=form(away,archived,kickoff)
+    const homeForm=form(home,archived,kickoff,sport),awayForm=form(away,archived,kickoff,sport)
     const requiredGames=sport==='football'?3:5
     // Research reports a preliminary minimum, while the automatic-ticket
     // promotion layer requires five distinct games per team (NFL: three).
@@ -161,7 +163,8 @@ export async function researchSport(
       home:homeForm,away:awayForm,source:'ESPN Site API',evidence:sufficient?'descriptive':'insufficient',
       coverageDays:lookbackDays,successfulDays,
       limitations:[
-        ...(!sufficient?['Muestra inferior a '+requiredGames+' partidos distintos por equipo']:[]),
+        ...(!sufficient?['Muestra inferior a '+requiredGames+' partidos distintos por equipo'+
+          ((sport==='basketball'||sport==='football')?' de temporada regular verificada':'')]:[]),
         ...(archive.status!=='verified'?['Cobertura ESPN parcial: '+archive.explanation]:[]),
         'Lesiones/ausencias y alineaciones pendientes de verificación',
         'Rendimiento ajustado por rival y métricas específicas pendientes',

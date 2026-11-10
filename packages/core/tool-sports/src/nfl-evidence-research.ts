@@ -3,6 +3,8 @@
  */
 import {getFeed,hasSportsPermission,type MarketOutcome} from './sports.ts'
 import {collectDirectEspnStats,type DirectTeam} from './sports-direct-stats.ts'
+import {readHistoricalScoreboard} from './sports-historical-scoreboard.ts'
+import {isVerifiedRegularSeason} from './sports-regular-season.ts'
 import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
 type Row=Record<string,unknown>
 const obj=(v:unknown):Row=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Row:{}
@@ -110,7 +112,8 @@ function positionRole(position:string):NflPlayer['role']{
 function recentResults(raw:unknown,teamId:string,kickoff:number):Result[]{
   return arr(obj(raw).events).flatMap(ev=>{
     const e=obj(ev),at=Date.parse(str(e.date)),st=obj(obj(e.status).type)
-    if(!Number.isFinite(at)||at>=kickoff||(st.state!=='post'&&st.completed!==true))return []
+    if(!Number.isFinite(at)||at>=kickoff||!isVerifiedRegularSeason(e)||
+      (st.state!=='post'&&st.completed!==true))return []
     const ps=arr(obj(arr(e.competitions)[0]).competitors).map(obj)
     const me=ps.find(x=>id(obj(x.team).id)===teamId)
     const opp=ps.find(x=>id(obj(x.team).id)!==teamId)
@@ -251,11 +254,13 @@ export async function investigateNfl(date:string,eventId:string,fetcher:typeof f
   const sources=board.sources
   const date0=Date.parse(date+'T12:00:00Z')
   const past=(d:number)=>new Date(date0-d*86_400_000).toISOString().slice(0,10)
-    .replaceAll('-','')
-  const [summary,history,injuryData,newsData,rosterHome,rosterAway,people]=await Promise.all([
+  const [summary,historyReport,injuryData,newsData,rosterHome,rosterAway,people]=await Promise.all([
     read<unknown>(root+'summary?event='+eventId,fetcher,sources,now),
-    read<unknown>(root+'scoreboard?dates='+past(85)+'-'+past(1)+'&limit=250',
-      fetcher,sources,now),
+    // The deprecated ESPN date-range scoreboard is unreliable: use monthly
+    // archive, dated-day and verified team-calendar fallbacks from the shared reader.
+    readHistoricalScoreboard(root,past(61),past(1),
+      url=>read<{events?:unknown[]}>(url,fetcher,sources,now),
+      [event.home.id,event.away.id]),
     read<unknown>(root+'injuries',fetcher,sources,now),
     read<unknown>(root+'news?limit=30',fetcher,sources,now),
     read<unknown>(root+'teams/'+event.home.id+'/roster',fetcher,sources,now),
@@ -264,6 +269,7 @@ export async function investigateNfl(date:string,eventId:string,fetcher:typeof f
       [{id:event.home.id,name:event.home.name},{id:event.away.id,name:event.away.name}],
       fetcher,now,maxPlayers),
   ])
+  const history={events:historyReport.events}
   const make=(side:'home'|'away'):NflSide=>{
     const meta=event[side],e=people.teams.find(x=>x.id===meta.id)
     const full=verifiedRoster(side==='home'?rosterHome:rosterAway,meta.id)
@@ -332,8 +338,9 @@ export async function investigateNfl(date:string,eventId:string,fetcher:typeof f
   const missing=[
     ...(!teams.home.roster.length?['Roster local no disponible']:[]),
     ...(!teams.away.roster.length?['Roster visitante no disponible']:[]),
-    ...(!teams.home.recent.length?['Forma reciente local sin verificar']:[]),
-    ...(!teams.away.recent.length?['Forma reciente visitante sin verificar']:[]),
+    ...(!teams.home.recent.length?['Forma reciente de temporada regular local sin verificar']:[]),
+    ...(!teams.away.recent.length?['Forma reciente de temporada regular visitante sin verificar']:[]),
+    ...(historyReport.status!=='verified'?['Archivo NFL parcial: '+historyReport.explanation]:[]),
     ...(!weather?['Meteorología horaria no verificable']:[]),
     ...(!injuryData?['Reporte de lesiones no disponible']:[]),
     ...(!referee?['Crew arbitral pendiente']:[]),
