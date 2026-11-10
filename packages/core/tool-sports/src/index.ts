@@ -85,7 +85,8 @@ const boundedDailyTool=<T>(operation:Promise<T>,ms:number):Promise<T>=>{
   })
 }
 const GUIDANCE = [
-  'RESCATE OBLIGATORIO DE CUOTAS DIRECTAS: si el usuario pide ganador de hoy, ejecutar sports_chat_ticket_evidence_priced_auto con marketPreference=winner. El motor PRIMERO busca cuotas de casa en OddsHarvester/API/ESPN Site-Core, y si un barrido global no localiza un evento consulta ESPN por eventId EXACTO, scoreboard de fecha dominicana + siguiente fecha UTC, Core odds y summary, sin clave. Si continúa sin precios, el mismo motor consulta automáticamente páginas de cuotas específicas: www.scoresandodds.com/{nba,nfl,nhl,mlb,wnba}/odds; www.oddschecker.com/us/soccer/<liga>; ESPN sports-betting/odds y <liga>/odds. sports_chat_public_odds_pages permite profundizar por cada equipo. Leer SOLO HTML público autorizado, sección Moneyline (NBA/NFL/NHL/MLB/WNBA) o 1X2 con Draw (fútbol), dos rivales, fecha, bookmaker y último cambio. No confundir scoreboards, precios de apertura, números de handicap, consenso, pronósticos ni cuota indicativa de comparador con cuota cotizable. ESPN puede bloquear por JS/CAPTCHA: registrar blocked y continuar SIN eludir. Los enlaces de switchboard de ScoresAndOdds son referencia de comparador salvo que una fuente autorizada certifique identidad exacta, casa, mercado, periodo y updatedAt. Una cita web solo muestra precio REFERENCIAL, nunca cotización vigente; mostrar ambas cifras por separado. Exponer urls y hallazgos webOddsResearch por pata cuando falten cuotas. Tras 1 investigación y su rescate, ENTREGAR de inmediato el boleto de candidatos con sus equipos, argumentos y fuentes y declarar claramente N/M ofertas vigentes: NUNCA repetir cinco mensajes de progreso diciendo «sin cuotas». NO inventar números ni asegurar cinco ganadores. ',
+  'CALENDARIO PRIMERO: al recibir ticket para fecha y deportes definidos, comienza con sports_chat_daily_scan(sports=[basketball,hockey,football,soccer] según lo solicitado). Usa coverage.available/empty/unavailable para descartar ligas sin juegos, pero empty no significa temporada cancelada y unavailable exige respaldo. Filtra partidos por día local Santo Domingo e IDs. No recorres las 220 ligas del catálogo de fútbol antes de investigar los encuentros ya confirmados; amplía páginas solo si faltan candidatos y detente cuando el expediente tenga suficientes partidos. Nunca infieras cuotas desde una fecha de calendario. ',
+  'RESCATE OBLIGATORIO DE CUOTAS DIRECTAS: si el usuario pide ganador de hoy, ejecutar sports_chat_ticket_evidence_priced_auto con marketPreference=winner. El motor PRIMERO busca cuotas de casa en OddsHarvester/API/ESPN Site-Core, y si un barrido global no localiza un evento consulta ESPN por eventId EXACTO, scoreboard de fecha dominicana + siguiente fecha UTC, Core odds y summary, sin clave. Si continúa sin precios, el mismo motor consulta automáticamente páginas de cuotas específicas: www.scoresandodds.com/{nba,nfl,nhl,mlb,wnba}/odds; www.oddschecker.com/us/soccer/<liga>; www.cuotasahora.com; sports.yahoo.com/betting/odds; oddspedia.com/es/futbol; ESPN sports-betting/odds y <liga>/odds. sports_chat_public_odds_pages permite profundizar por cada equipo. Leer SOLO HTML público autorizado, sección Moneyline (NBA/NFL/NHL/MLB/WNBA) o 1X2 con Draw (fútbol), dos rivales, fecha, bookmaker y último cambio. No confundir scoreboards, precios de apertura, números de handicap, consenso, pronósticos ni cuota indicativa de comparador con cuota cotizable. ESPN puede bloquear por JS/CAPTCHA: registrar blocked y continuar SIN eludir. Los enlaces de switchboard de ScoresAndOdds son referencia de comparador salvo que una fuente autorizada certifique identidad exacta, casa, mercado, periodo y updatedAt. Una cita web solo muestra precio REFERENCIAL, nunca cotización vigente; mostrar ambas cifras por separado. Exponer urls y hallazgos webOddsResearch por pata cuando falten cuotas. Tras 1 investigación y su rescate, ENTREGAR de inmediato el boleto de candidatos con sus equipos, argumentos y fuentes y declarar claramente N/M ofertas vigentes: NUNCA repetir cinco mensajes de progreso diciendo «sin cuotas». NO inventar números ni asegurar cinco ganadores. ',
 
   'SEGUIMIENTO CLOUD: al crear un ticket de investigación, registrar automáticamente solo si PHOENIX_SPORTS_CLOUD_TRACKING_ENABLED=1 y las credenciales GitHub/AES están en la bóveda. Devolver cloudFollowUp con su estado real, no afirmar que habrá correo cuando status sea disabled, needs-configuration o error. El cifrado mantiene ocultos los eventos en un issue público, pero los metadatos de issue sí son visibles. Cuando los encuentros terminen, un workflow remoto revisará marcadores y enviará correo únicamente si RESEND_API_KEY, correo destinatario, remitente y clave AES están configurados en GitHub Actions. Nunca afirmar que la banca confirmó pago ni que un correo salió sin prueba. ',
   'TICKET DIARIO 5 O 6: primero ampliar y contrastar la cartelera multi-liga, después investigar todos los expedientes y usar decisionAudit. Si existen 5-6 encuentros futuros verificados, presentar hasta seis mejores CANDIDATAS, aunque deban marcarse CONDICIONALES, nunca inventar una victoria aprobada. Diversidad deportiva no autoriza eliminar una pata real y el precio no sustituye la investigación. Para cada pata reporta legWinProbabilityPercent con legProbabilitySource: NO sumar ni multiplicar porcentajes como pronóstico del ticket completo. No convertir un porcentaje exploratorio o no-vig en certeza predictiva; si no puede estimarse, mostrar valor pendiente y por qué. Confirmar estado de riesgo de cada pata antes de cualquier ejecución. ',
@@ -330,12 +331,13 @@ export function apply(ctx: Context): void {
     parameters:{
       date:{type:'string',description:'Día local AAAA-MM-DD; defecto hoy'},
       limit:{type:'integer',description:'Máximo 1-36 eventos para investigar; por defecto 30 para cubrir más candidatos del ticket de 4-6 patas.'},
+      sports:{type:'array',description:'Deportes solicitados; opcional. Valores como basketball, hockey, football, baseball, soccer, tennis. Evita consultar ligas de otros deportes.',items:{type:'string'}},
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
       const report=await scoutDailySports(args.date,args.limit??30,
-        dailyResearchFetcher(fetch,process.env),Date.now(),process.env)
+        dailyResearchFetcher(fetch,process.env),Date.now(),process.env,args.sports)
       return JSON.stringify({...report,instruction:'Este barrido tiene plazo limitado: si diagnostics.unavailableLeagues>0, investiga las demás disciplinas y usa respaldos MLB/NHL/NBA/Soccer cuando corresponda, sin llamar a la misma fuente bloqueada repetidamente. Primer filtro para construir 5-6 propuestas (objetivo 5), NO ranking predictivo. Investiga a fondo estos eventos; si no alcanzan, amplía Soccer mundial por páginas. Para cada candidato compara H2H, bajas, clima, jugadores y mercados reales h2h, spreads, totales, períodos y props si la fuente los publica. No inventes cuotas, modelos ni estadísticas; las propuestas sin cotización comprobada no son apuestas aprobadas.'})
     },
     presentCall:()=>({card:'generic',title:'Escanear deportes y partidos de la jornada',kind:'read' as const}),
@@ -348,6 +350,7 @@ export function apply(ctx: Context): void {
       count:{type:'integer',description:'Objetivo de 5 o 6 candidatos; por defecto cinco.'},
       deep:{type:'boolean',description:'Investigar evidencias del partido y comparar varias ofertas por evento (defecto true). false para un primer escaneo rápido de cuotas.'},
       winnerOnly:{type:'boolean',description:'true para apuestas SOLO al ganador directo h2h; sin totals ni spreads.'},
+      sports:{type:'array',description:'Deportes a investigar; omitir ligas de deportes no solicitados.',items:{type:'string'}},
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
@@ -355,7 +358,7 @@ export function apply(ctx: Context): void {
       const now=Date.now(),env=await sportsEnv(ctx),count=args.count??5
       if(!Number.isInteger(count)||count<5||count>6)
         throw Error('Se requieren 5 o 6 candidatas para el ticket diario')
-      const daily=await scoutDailySports(args.date,36,dailyResearchFetcher(fetch,env),now,env)
+      const daily=await scoutDailySports(args.date,36,dailyResearchFetcher(fetch,env),now,env,args.sports)
       const keys=[...new Set(daily.events.map(event=>dailyOddsSportKey(event.sport,event.league))
         .filter((key):key is string=>typeof key==='string'))].slice(0,12)
       const attempts:Array<{sportKey:string;status:'observed'|'empty'|'error';count:number}>=[]
@@ -830,7 +833,7 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_public_odds_pages',
-    description:'Navega rutas específicas de ESPN Odds, Oddschecker US Soccer y ScoresAndOdds /nba/odds, /nfl/odds, /nhl/odds, /mlb/odds, /wnba/odds; coteja equipos, posibles precios moneyline referenciales, URLs y bloqueos. NUNCA presenta HTML de comparador sin bookmaker/updatedAt como cuota cotizable. Sin CAPTCHA bypass ni scraping no autorizado.',
+    description:'Consulta ESPN Odds, CuotasAhora, Yahoo Sports, Oddspedia fútbol, Oddschecker y ScoresAndOdds como fuentes públicas de contraste; coteja equipos, mercados, precios referenciales, URLs y bloqueos. NUNCA presenta HTML de comparador sin bookmaker/updatedAt como cuota cotizable. Sin CAPTCHA bypass ni scraping no autorizado.',
     parameters:{
       sportKey:{type:'string',required:true,description:'Clave de liga de mercados: basketball_nba, americanfootball_nfl, icehockey_nhl, baseball_mlb, soccer_epl, soccer_spain_la_liga, etc.'},
       date:{type:'string',description:'Fecha local dominicana AAAA-MM-DD para identificar un objetivo de investigación; no filtra fechas de la web.'},
