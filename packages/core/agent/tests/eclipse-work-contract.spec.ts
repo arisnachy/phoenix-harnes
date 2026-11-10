@@ -24,6 +24,15 @@ describe('Eclipse current-turn planner-to-executor work contract',()=>{
     expect(brief?.brief).toContain('Verificar pruebas')
     expect(brief?.brief).not.toContain('Plan anterior')
   })
+  it('does not allow a later lower-tier Plan header to overwrite the approved planner brief',()=>{
+    const current=eclipseCurrentWorkContract([
+      start(1),
+      assistant(1,'**Plan:** Mantener diagnóstico provisional, generar atlas y verificar evidencia.'),
+      assistant(2,'**Plan:** Retirar la hipótesis y dibujar anatomía normal.','gpt-6-luna'),
+    ])
+    expect(current?.brief).toContain('Mantener diagnóstico provisional')
+    expect(current?.brief).not.toContain('Retirar la hipótesis')
+  })
   it('preserves a provisional medical assessment with visual deliverable',()=>{
     const events=[
       start(3),
