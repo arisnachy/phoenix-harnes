@@ -24,7 +24,6 @@ describe('Sports APIs trusted Connectors tab',()=>{
     render(<SportsApiKeysSettingsTab {...(hooks as unknown as SportsApiKeysSettingsTabProps)}/>)
     expect(await screen.findByText('TheRundown')).toBeTruthy()
     fireEvent.click(screen.getByRole('button',{name:es.sportsKeysConfigure}))
-    const input=screen.getByRole('textbox',{hidden:true}) as HTMLInputElement|null
     const secure=(screen.getByLabelText(es.sportsKeysPaste) as HTMLInputElement)
     expect(secure.type).toBe('password')
     expect(secure.autocomplete).toBe('new-password')
