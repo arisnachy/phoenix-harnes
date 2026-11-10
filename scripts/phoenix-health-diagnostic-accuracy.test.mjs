@@ -176,3 +176,15 @@ test('medical vision contract prioritizes source inspection, differential and no
  assert.match(source,/Una captura parcial no impide comunicar una sospecha provisional sustentada/)
  assert.match(source,/Esta auditoría no lee píxeles/)
 })
+
+test('medical image fallback source-reading policy requires caliper ROI review before illustration',()=>{
+ const source=readFileSync(new URL('../packages/core/tool-health/src/index.ts',import.meta.url),'utf8')
+ const baseline=source.split('export const CLINICAL_VISION_BASELINE')[1].split('function healthRequest')[0]
+ assert.match(baseline,/caliper/)
+ assert.match(baseline,/continuidad tubular con ciego/)
+ assert.match(baseline,/hallazgos positivos y los principales diferenciales/)
+ assert.match(baseline,/interpolaci[oó]n/)
+ assert.match(baseline,/Nunca prometas/)
+ assert.match(baseline,/solamente se anuncia cuando la herramienta confirma/)
+ assert.doesNotMatch(baseline,/APENDICITIS CONFIRMADA/i)
+})
