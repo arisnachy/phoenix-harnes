@@ -9,6 +9,8 @@ import {fetchEspnInjuryBackup,type InjuryBackup} from './espn-injury-backup.ts'
 import {investigateNfl} from './nfl-evidence-research.ts'
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
 import {auditBasketballGranularEvidence} from './basketball-granular-evidence.ts'
+import {nflDeepSignals,nhlDeepSignals,mlbDeepSignals,
+  soccerDeepSignals,tennisDeepSignals} from './sports-granular-bridge.ts'
 import {investigateSoccer} from './soccer-worldwide-dossier.ts'
 import {nhlSlate,investigateNhl} from './nhl-evidence-research.ts'
 import {discoverMlbDay,researchMlbCase} from './mlb-evidence-research.ts'
@@ -103,6 +105,7 @@ export async function investigateTicketSpecialist(
         'Titulares confirmados '+(d.coverage.confirmedOffense+d.coverage.confirmedDefense)+'/44',
         'Enfrentamientos individuales '+d.matchups.length]
       pending=d.missingEvidence
+      Object.assign(signals,nflDeepSignals(d))
       observed('fixture',closeTime(d.event.scheduledAt,game.kickoff),
         'ESPN NFL: identificación y horario cotejados')
       observed('form',d.teams.home.recent.length>=3&&d.teams.away.recent.length>=3,
@@ -172,6 +175,7 @@ export async function investigateTicketSpecialist(
         'Onces verificados '+String(d.coverage.lineups),
         'Enfrentamientos individuales '+d.duels.length]
       pending=d.missingEvidence
+      Object.assign(signals,soccerDeepSignals(d))
       observed('fixture',closeTime(d.opportunity.scheduledAt,game.kickoff),
         'ESPN fútbol: local, visita y horario cotejados')
       observed('form',d.teams.home.recent.length>=5&&d.teams.away.recent.length>=5,
@@ -201,6 +205,7 @@ export async function investigateTicketSpecialist(
         'Porteros candidatos '+(d.goalieCandidates.home.length+d.goalieCandidates.away.length),
         'Forma local/visita '+(d.form.home?.games??0)+'/'+(d.form.away?.games??0)]
       pending=d.missingEvidence
+      Object.assign(signals,nhlDeepSignals(d))
       observed('fixture',closeTime(match.date,game.kickoff),
         'NHL Web API: equipos y hora cotejados')
       observed('form',(d.form.home?.games??0)>=5&&(d.form.away?.games??0)>=5,
@@ -226,6 +231,7 @@ export async function investigateTicketSpecialist(
         'Cruces bateador-lanzador '+d.matchups.length,
         'Escenarios por entradas '+d.scenarioAnalysis.length]
       pending=d.missingEvidence
+      Object.assign(signals,mlbDeepSignals(d))
       observed('fixture',closeTime(match.date,game.kickoff),
         'MLB Stats API: equipos y horario cotejados')
       observed('form',(d.teamForm.home?.games??0)>=5&&(d.teamForm.away?.games??0)>=5,
@@ -259,6 +265,7 @@ export async function investigateTicketSpecialist(
         'Rankings verificados '+d.coverage.rankCount+'/2',
         'Servicio/devolución '+d.coverage.advancedStatsPlayers+'/2 jugadores']
       pending=d.missingEvidence
+      Object.assign(signals,tennisDeepSignals(d))
       observed('fixture',closeTime(match.start,game.kickoff),
         'ESPN tenis: encuentro, ID y hora cotejados')
       observed('form',d.players.every(p=>p.lastMatches.length>=5),
