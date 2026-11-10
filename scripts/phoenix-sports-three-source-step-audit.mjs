@@ -137,7 +137,17 @@ function endpoint(label,c,step){
   abstract:'https://www.tennisabstract.com/',kickserve:'https://kick-serve.com/data/',
   licensedOdds:null,localModel:null,unmapped:null
  }
- return{provider:key,url:paths[key]??null}
+ const url=paths[key]??null
+ const routeClass=url?'executable_http_route':
+   key==='unmapped'?
+     (/SIN TERCER RESPALDO INDEPENDIENTE/iu.test(label)?
+       'no_independent_backup_identified':'unmapped_source_catalog'):
+   key==='licensedOdds'?'bookmaker_access_or_adapter_required':
+   key==='localModel'?'local_model_or_backtest_required':
+   key==='weather'?'verified_venue_coordinates_required':
+   ['summary','roster','stats','athlete','odds','mlbbox'].includes(key)?
+     'fixture_or_athlete_identifier_missing':'source_listed_without_executable_route'
+ return{provider:key,url,routeClass}
 }
 const contexts=await Promise.all(cases.map(x=>setup(...x)))
 const steps=[]
@@ -158,6 +168,12 @@ for(const row of steps)for(const s of row.providers){
  const a=s.url?await get(s.url):{state:'unverified_source',
   reason:'No se identificó URL ejecutable y compatible con este paso'}
  s.status=a.state;s.http=a.http??null;s.keys=a.keys??[]
+ s.unresolvedCause=s.url?null:s.routeClass
+ s.observationClass=s.url?
+   (a.state==='json_present'||a.state==='csv_metric'?'reachable_structured':
+     a.state==='html_only'||a.state==='anti_bot'?'page_without_structured_data':
+     a.state==='http_error'||a.state==='network_error'?'request_failed':
+     'other_http_observation'):'not_probed_no_route'
  // Never mark the WHOLE step as verified from an HTTP 200.
  const rule=row.step==='B04'?/offensiveRating|defensiveRating|netRating|pace/i:
    row.step==='B08'?/athlete|injur|out|questionable/i:
@@ -174,10 +190,16 @@ for(const row of steps)for(const s of row.providers){
  s.stepVerified=false
  delete s.provider // preserve provider name from label; source host in URL
 }
-const counts={}
-for(const row of steps)for(const p of row.providers)counts[p.status]=(counts[p.status]??0)+1
+const counts={},unresolvedByCause={},observationClasses={}
+for(const row of steps)for(const p of row.providers){
+ counts[p.status]=(counts[p.status]??0)+1
+ observationClasses[p.observationClass]=(observationClasses[p.observationClass]??0)+1
+ if(p.unresolvedCause)
+   unresolvedByCause[p.unresolvedCause]=(unresolvedByCause[p.unresolvedCause]??0)+1
+}
 const data={checkedAt:new Date().toISOString(),steps:steps.length,
- sources:steps.length*3,uniqueURLs:urls.length,counts,rows:steps,
+ sources:steps.length*3,uniqueURLs:urls.length,counts,unresolvedByCause,
+ observationClasses,rows:steps,
   warning:'The presence of a field does NOT validate complete statistics, both rivals or timestamps'}
 await writeFile('phoenix-3-source-step-audit.json',JSON.stringify(data,null,2))
 let md='# PHOENIX · tres fuentes por paso; prueba HTTP real con evidencia\n\n'
@@ -197,4 +219,5 @@ md+='\\n**Criterio de aceptación:** cada indicador necesita los valores exigido
 await writeFile('phoenix-3-source-step-audit.md',md)
 console.log('PHOENIX_STEP_THREE_SOURCE_SUMMARY '+JSON.stringify({
  steps:data.steps,sourceSlots:data.sources,uniqueURLs:urls.length,counts,
+ unresolvedByCause,observationClasses,
  examples:steps.filter(x=>x.league==='nba'&&['B04','B07','B08','B12'].includes(x.step))}))
