@@ -4,7 +4,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import {
   PHOENIX_CODEX_AUTO_MODEL, PHOENIX_CODEX_AUTO_WORKER_MODEL, adaptiveCodexReasoningEffort, isPhoenixCodexAutoSelection,
-  latestModelSelectionPreference, eclipseCurrentWorkContract,
+  latestModelSelectionPreference, eclipseCurrentWorkContract, isClinicalVisualTurn,
 } from '@phoenix-ai/dsh-agent'
 import type { EclipseRoutingSettings } from '@phoenix-ai/dsh-agent'
 import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
@@ -130,6 +130,53 @@ export function eclipseTeamPlanSummary(events: readonly { readonly type: string;
 export function eclipseTeamAssignmentPrompt(planBrief:string|undefined,assignment:string):string {
   if(planBrief===undefined)return assignment
   return `Plan de ejecución acordado por Kira:\n${planBrief}\n\nResponsabilidad delegada:\n${assignment}\n\nContrato de entrega: conserva requisitos, restricciones y decisiones respaldadas; ejecuta solo este alcance y entrega pruebas reales, incertidumbres y cualquier contradicción a Kira. Un resultado nuevo contradictorio debe escalarse, no ocultarse ni reemplazar silenciosamente el plan.`
+}
+
+/** A fresh Team child only receives a text prompt and completed fork history,
+ * not the current user's raw image. For clinical image-dependent tasks this
+ * would produce confident-sounding readings from no pixels. Keep such work
+ * on the Lead vision route until secure attachment transfer is implemented.
+ */
+export function eclipseDelegationNeedsSourceImage(
+  events:readonly {readonly type:string;readonly data:unknown}[],
+  assignment:string,
+):boolean {
+  const start=events.findLastIndex(event=>event.type==='turn/start')
+  if(start<0)return false
+  const human=events.slice(start+1).filter(event=>{
+    if(event.type!=='user/message')return false
+    const data=event.data as {readonly source?:{readonly kind?:string}}
+    return data.source?.kind==='user'
+  })
+  const blocks=human.flatMap(event=>(event.data as {
+    readonly content?:readonly {readonly type?:string;readonly text?:string}[]
+  }).content??[])
+  const currentImage=blocks.some(b=>b.type==='image')
+  const request=blocks.filter(b=>b.type==='text').map(b=>b.text??'').join(' ')
+  // Current-turn specialists do not receive pixels; neither do fresh children
+  // get earlier uploaded images just because the user says "la misma TC".
+  const prior=events.slice(0,start).findLast(event=>{
+    if(event.type!=='user/message')return false
+    const data=event.data as {
+      readonly source?:{readonly kind?:string}
+      readonly content?:readonly {readonly type?:string}[]
+    }
+    return data.source?.kind==='user'
+      && data.content?.some(block=>block.type==='image')===true
+  })
+  const previousImageReferenced=prior!==undefined
+    && /(?:imagen|captura|foto|placa|tomograf|\btac\b|\bct\b|estudio|lesi[oó]n|apendic|mism[ao]|anterio|adjunt|subid|gemelo|hiperrealista)/iu.test(
+      request+' '+assignment)
+  if(!currentImage&&!previousImageReferenced)return false
+  const priorText=prior===undefined?'':((prior.data as {
+    readonly content?:readonly {readonly type?:string;readonly text?:string}[]
+  }).content??[]).filter(x=>x.type==='text').map(x=>x.text??'').join(' ')
+  const medical=isClinicalVisualTurn(request)||isClinicalVisualTurn(assignment)
+    || (previousImageReferenced&&isClinicalVisualTurn(priorText))
+  if(!medical)return false
+  // Distinguish reading/rendering the CURRENT patient image from independent
+  // tasks like looking up public documentation or testing a pure function.
+  return /(?:analiz|interpret|diagnostica(?:r|ndo|da|do)?|identific|detect|localiz|segment|reconstru|lectura|leer|read|inspect|classif|extraer|transcrib|describ|visualiz|dibuj|gener|crea|render|modelo|model|gemelo|ilustr|imagen|image|tomograf|radiograf|ecg|ekg|citolog|histolog|lesi[oó]n|anatom[ií])/iu.test(assignment)
 }
 
 declare module '@phoenix-ai/dsh-session/types' {
@@ -570,6 +617,13 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       output: jsonOutput(SPAWN_VALUE_SCHEMA),
       async execute(args, exec) {
         const agent = callingAgent(exec.agent, 'spawn_teammate')
+        if (eclipseDelegationNeedsSourceImage(agent.session.events,
+          args.description+' '+args.prompt)) {
+          throw new TeamError(
+            'No puedo delegar la interpretación o visualización de esta imagen clínica: el especialista no recibe el archivo original. La ruta principal con visión debe analizar la fuente y generar una ilustración solo con hallazgos sustentados.',
+            'ECLIPSE_CLINICAL_SOURCE_NOT_TRANSFERRED',
+          )
+        }
         if (args.mission_complexity !== undefined) {
           const tierLimit = teammateBudgetForMission(args.mission_complexity)
           const occupied = ctx.agentTeams.listMembers(agent)
@@ -690,6 +744,13 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         execute(args, exec) {
           const actor = callingAgent(exec.agent, toolName)
           const membership = ctx.agentTeams.membership(actor)
+          if (membership.role==='lead' && args.purpose==='assignment'
+            && eclipseDelegationNeedsSourceImage(actor.session.events,args.message)) {
+            throw new TeamError(
+              'El especialista no tiene acceso a los píxeles originales del estudio clínico; mantén la lectura/visualización en el Lead con visión o entrega primero un flujo autorizado de adjuntos.',
+              'ECLIPSE_CLINICAL_SOURCE_NOT_TRANSFERRED',
+            )
+          }
           const claim = args.purpose === 'result'
             || (args.purpose === 'update' && COMPLETION_CLAIM.test(args.message))
           const proofTools = membership.role === 'teammate' && claim

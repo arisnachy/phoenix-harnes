@@ -21,7 +21,7 @@ import UserQuestionService from '@phoenix-ai/dsh-user-questions'
 import type { RpcRequest } from '@phoenix-ai/dsh-host-apiproxy/api/rpc'
 import { RpcId } from '@phoenix-ai/dsh-host-apiproxy/api/rpc'
 import { createApiProxy } from '../src/api-proxy.ts'
-import { pickFocusedVisionReader, requiresFocusedClinicalVision } from '../src/vision-fallback.ts'
+import { pickFocusedVisionReader, requiresFocusedClinicalVision, resolveVisionFallbackRoute } from '../src/vision-fallback.ts'
 import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 
 let nextRpc = 1
@@ -386,6 +386,20 @@ describe('Borrowed-eyes prompt admission', () => {
   })
 })
 
+describe('clinical route overrides unsafe legacy Terra fallback pins',()=>{
+  it('uses the real alternative reader for clinical content but preserves explicit nonmedical pins',async()=>{
+    const {ctx}=await harness()
+    try{
+      const current={provider:'plain',model:'txt-1'}
+      const terraPin={enabled:true,provider:'openai-codex',model:'gpt-6.1-terra'}
+      const medical=await resolveVisionFallbackRoute(ctx,current,terraPin,true)
+      expect(medical).toEqual({provider:'eyes',model:'see-1'})
+      const design=await resolveVisionFallbackRoute(ctx,current,terraPin,false)
+      expect(design).toEqual({provider:'openai-codex',model:'gpt-6.1-terra'})
+    }finally{await ctx.fiber.dispose()}
+  })
+})
+
 describe('regression: focused reading of marked medical studies',()=>{
   const reader=(provider:string,id:string,efforts:('high'|'medium'|'low')[]=[])=>
     ({provider,id,name:id,inputModalities:['text','image'] as const,
@@ -396,6 +410,9 @@ describe('regression: focused reading of marked medical studies',()=>{
     expect(requiresFocusedClinicalVision('Citología: ¿qué células se observan?')).toBe(true)
     expect(requiresFocusedClinicalVision('')).toBe(true)
     expect(requiresFocusedClinicalVision('Haz un logo minimalista')).toBe(false)
+    expect(requiresFocusedClinicalVision('¿Qué ves?')).toBe(true)
+    expect(requiresFocusedClinicalVision('Mira esta imagen')).toBe(true)
+    expect(requiresFocusedClinicalVision('Corte abdominal con medición de lesión')).toBe(true)
   })
   it('prefers a verified High specialist, without relying on names alone',()=>{
     const r=pickFocusedVisionReader([
@@ -404,6 +421,26 @@ describe('regression: focused reading of marked medical studies',()=>{
     ],{provider:'plain',model:'text-only'})
     expect(r).toMatchObject({provider:'openai-codex',model:'gpt-6.1-sol',
       reasoningEffort:ReasoningEffortId('high')})
+  })
+  it('prefers Sol Medium over Terra High for a clinical image',()=>{
+    const r=pickFocusedVisionReader([
+      reader('openai-codex','gpt-6.1-terra',['high']),
+      reader('openai-codex','gpt-6.1-sol',['medium']),
+    ],{provider:'plain',model:'text-only'})
+    expect(r).toEqual({
+      provider:'openai-codex',model:'gpt-6.1-sol',
+      reasoningEffort:ReasoningEffortId('medium'),
+    })
+  })
+  it('blocks automatic Terra-only clinical transcription rather than pretending to see',()=>{
+    expect(pickFocusedVisionReader([
+      reader('openai-codex','gpt-6.1-terra',['high']),
+    ],{provider:'plain',model:'text-only'})).toBeUndefined()
+    expect(pickFocusedVisionReader([
+      reader('eyes','genuine-visual-reader',['medium']),
+      reader('openai-codex','gpt-6.1-terra',['high']),
+    ],{provider:'plain',model:'text-only'}))
+      .toMatchObject({model:'genuine-visual-reader'})
   })
   it('does not hallucinate High support or reuse a text-only session model',()=>{
     const r=pickFocusedVisionReader([
