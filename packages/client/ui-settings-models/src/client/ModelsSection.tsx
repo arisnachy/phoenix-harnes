@@ -457,7 +457,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                     <button
                       type="button"
                       className={styles['secondaryButton']}
-                      disabled={row.entry.provider === CODEX_PROVIDER && (
+                      disabled={api.authorization === undefined || (
                         codexPreparingKey === NATIVE_CODEX_ACCOUNT_KEY
                         || (codexAttempt?.key === NATIVE_CODEX_ACCOUNT_KEY && codexAttempt.status === 'pending')
                       )}
