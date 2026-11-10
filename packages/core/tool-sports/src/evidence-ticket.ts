@@ -25,6 +25,7 @@ export type TicketPreselectReviewer=(
 const defaultLeagues = [
   ['basketball','nba'],['hockey','nhl'],['baseball','mlb'],['football','nfl'],
   ['soccer','eng.1'],['soccer','esp.1'],['soccer','usa.1'],['soccer','uefa.champions'],
+  ['soccer','uefa.wchampions'],
   ['basketball','wnba'],['tennis','atp'],['tennis','wta'],
   // Keep the ticket scout aligned with the daily world soccer slate.
   ['soccer','mex.1'],['soccer','ger.1'],['soccer','ita.1'],['soccer','fra.1'],
