@@ -1496,7 +1496,15 @@ export function installModelSelection(
       && phoenixAutoHasFreshStrategyEvidence(scopedAgent, currentTurnNumber, phoenixAutoState)
       && (needsTeamRescue || (autoStep > 1 && (phoenixAutoState.forcePlannerNext || needsStallRescue)))
     const fenixAcceptance = fenixCodingQualityBrief(currentRequest)
-    const autoPolicy = strategyRescueStep ? AUTO_SOL_STRATEGY_POLICY
+    const supervisionStep = autoStep !== undefined && phoenixAutoState.supervisionPending
+      && autoStep >= phoenixAutoState.supervisionStep
+    const workContract = autoStep !== undefined && autoStep > 1
+      && scopedAgent !== undefined
+      ? eclipseCurrentWorkContract(scopedAgent.session.events, {
+        allowUnattributedAssessment: humanVisual,
+      }) : undefined
+    const autoPolicy = supervisionStep ? AUTO_SOL_FINAL_SUPERVISION_POLICY
+      : strategyRescueStep ? AUTO_SOL_STRATEGY_POLICY
       : autoStep === 1
         && !humanVisual
         && phoenixAutoTaskRequest(currentRequest)
@@ -1505,18 +1513,25 @@ export function installModelSelection(
         && !isStandaloneVisualPreviewRequest(currentRequest)
         && !isBriefTeamDemonstration(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
         : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_COORDINATION_POLICY : undefined
+    const planHandoff = workContract === undefined ? undefined
+      : eclipseCoordinatorContractInstruction(workContract)
     return {
       ...assembled,
-      ...autoPolicy === undefined ? {} : {
-        sections: [...assembled.sections, {
-          name: 'phoenix:auto-visible-handoff',
-          text: autoPolicy + (fenixAcceptance === undefined ? '' : `\n${fenixAcceptance}`),
-        }],
-      },
-      // The initial coordinator plan cannot execute tools. The coordinator
-      // receives regular tools on the next step, and the continuation gate
-      // still knows that real tools are available after the plan.
-      tools: autoPolicy === AUTO_VISIBLE_PLAN_POLICY || autoPolicy === AUTO_SOL_STRATEGY_POLICY ? [] : tools,
+      sections: [
+        ...assembled.sections,
+        ...(autoPolicy===undefined?[]:[{
+          name:'phoenix:auto-visible-handoff',
+          text:autoPolicy+(fenixAcceptance===undefined?'':`\n${fenixAcceptance}`),
+        }]),
+        ...(planHandoff===undefined?[]:[{
+          name:'phoenix:eclipse-execution-contract',text:planHandoff,
+        }]),
+      ],
+      // Planner and final reviewer do not execute tools. Luna gets the
+      // original work contract plus normal execution tools at its own step.
+      tools: autoPolicy === AUTO_VISIBLE_PLAN_POLICY
+        || autoPolicy === AUTO_SOL_STRATEGY_POLICY
+        || autoPolicy === AUTO_SOL_FINAL_SUPERVISION_POLICY ? [] : tools,
       variables: {
         ...assembled.variables,
         provider: selected.provider,
@@ -1553,6 +1568,18 @@ export function installModelSelection(
       }
       const directText = directUserTextForTurn(_payload.agent, _payload.turn)
       if (isKiraCodexAutoLead(selected, scopedAgent)) {
+        if (phoenixAutoState.supervisionPending
+          && _payload.step >= phoenixAutoState.supervisionStep) {
+          const profile=configuredEclipse(agentCtx)
+          const review=resolveEclipseRoleRoute(profile,'planner',{
+            provider:'openai-codex',model:PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+            reasoningEffort:adaptiveCodexPlanningEffort(directText),
+          })
+          const {reasoningEffort:_oldEffort,...withoutOldEffort}=resolved
+          return {...withoutOldEffort,provider:review.provider,model:review.model,
+            ...(review.reasoningEffort===undefined?{}:
+              {reasoningEffort:review.reasoningEffort})}
+        }
         // Keep source interpretation on the same vision-capable specialist
         // through every step of the *same* image reading; the first step alone
         // previously handed a follow-up clinical conclusion back to Luna.
@@ -1674,6 +1701,14 @@ export function installModelSelection(
       if (event.type !== 'tool/call' && event.type !== 'tool/result') return false
       return (event.data as { readonly step?: number }).step === latest.step
     })
+    // This is the final planner-owned review, not another Luna promise. It
+    // terminates independently of wording, and never enters an infinite loop.
+    if (phoenixAutoState.supervisionPending
+      && latest.step >= phoenixAutoState.supervisionStep) {
+      phoenixAutoState.supervisionPending=false
+      phoenixAutoState.supervisionCompleted=true
+      return
+    }
     // The actual visible assistant text is the coordinator handoff. A persisted
     // assistant source may omit the model: the explicit visible plan plus the
     // active Phoenix Auto route is authoritative; never silently stop here.
@@ -1694,6 +1729,34 @@ export function installModelSelection(
       return
     }
 
+    // Review a substantial executed mission once at the stronger planning
+    // seat. A verified tool response is required; the coordinator's claim of
+    // completion alone cannot trigger a fabricated quality verdict.
+    const contract=eclipseCurrentWorkContract(agent.session.events, {
+      allowUnattributedAssessment:humanImageInTurn(agent.session.events,turn),
+    })
+    const reviewable=contract!==undefined && latest.step>contract.step
+      && !phoenixAutoState.supervisionCompleted
+      && !phoenixAutoState.supervisionPending
+      && !isBriefTeamDemonstration(directText)
+      && eclipseHasInspectableToolReceipt(agent,turn)
+      && latest.text.length>25 && !phoenixAutoUnfinishedAction(latest.text)
+      && !kiraNeedsSolStrategy(latest.text)
+    if(reviewable) {
+      phoenixAutoState.supervisionPending=true
+      phoenixAutoState.supervisionStep=latest.step+1
+      phoenixAutoState.lastContinuationStep=latest.step
+      phoenixAutoState.continuationCount+=1
+      agent.steer(createUserMessage({
+        content:[{type:'text',text:
+          'Eclipse supervision: review the ORIGINAL current-turn plan, the actual '+
+          'execution receipts and the coordinator outcome. Give the final user '+
+          'verdict without re-planning or inventing completed work.'}],
+        source:{kind:'plugin',plugin:'model-selection',form:'notice',
+          summary:'Eclipse final verification with the planning seat'},
+      }))
+      return
+    }
     if (phoenixAutoState.lastContinuationStep === latest.step) return
     // The serving model receipt is stronger than an ephemeral step counter.
     // On rehydrated Goal turns that counter may be lost even though the
