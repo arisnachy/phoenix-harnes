@@ -18,7 +18,7 @@ const squad=(tid)=>Array.from({length:5},(_,i)=>({
   id:String(Number(tid)*100+i+1),displayName:'Player '+tid+'-'+i,
   position:{abbreviation:['PG','SG','SF','PF','C'][i]},jersey:String(i+1)}))
 const history=(league)=>({events:[{
-  id:'600100',date:'2026-10-29T22:00:00Z',
+  id:'600100',date:'2026-10-29T22:00:00Z',season:{type:2},
   status:{type:{state:'post',completed:true}},competitions:[{competitors:[
     {homeAway:'home',team:{id:league==='nba'?'10':'30',displayName:'Prior Home'},score:'110'},
     {homeAway:'away',team:{id:league==='nba'?'20':'40',displayName:'Prior Away'},score:'102'},
