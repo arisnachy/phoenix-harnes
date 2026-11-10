@@ -77,7 +77,8 @@ export async function lookupExactEspnWinner(
         eventId:q.eventId,bookmaker:q.bookmaker,
         market:soccer?'1x2':'h2h',
         selection:q.selection,point:null,price:q.price,home:q.home,away:q.away,
-        time:q.timeIso,updatedAt:q.updatedAt,observedAt:q.observedAt,
+        time:q.timeIso,updatedAt:q.updatedAt,
+        ...(q.observedAt?{observedAt:q.observedAt}:{}),
         source:result.source,sportKey:target.sportKey,
       }))
     result.notes.push(...scanned.diagnostics.notes.slice(0,3))
