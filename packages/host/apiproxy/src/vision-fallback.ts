@@ -17,7 +17,8 @@
 import type { Context } from '@phoenix-ai/cordis'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
-import type { ContentBlock } from '@phoenix-ai/dsh-llm'
+import type { ContentBlock, LlmResolvedModelInfo } from '@phoenix-ai/dsh-llm'
+import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import type { ModelSelection } from './api/index.ts'
 
 /** Deployment configuration for borrowed-eyes transcription. */
@@ -37,6 +38,7 @@ export interface VisionFallbackConfig {
 export interface VisionRoute {
   provider: string
   model: string
+  reasoningEffort?: ReturnType<typeof ReasoningEffortId>
 }
 
 /** One transcription attempt failed; the prompt is refused with this reason. */
@@ -56,15 +58,60 @@ const DESCRIPTION_SYSTEM_PROMPT = [
   '- A tiny screenshot or unclear area limits certainty, but image dimensions alone are not proof that nothing can be assessed. Describe what is legible before explaining limitations.',
   '- Do not invent a lesion, location, measurement, diagnostic certainty, or patient-specific three-dimensional geometry.',
   '- Never replace the requested source reading with generic anatomy. A subsequent illustration must be tied to the documented or visibly supported findings.',
-  'Use these exact headings ONLY for medical studies, clinical images, and clinical diagnostic reports; write "Not visible / not assessable" for unavailable clinical fields. For other images respond with ordinary faithful description and transcription, NOT clinical headings:',
+  
+  '- MEDICAL FOCUS / ABNORMALITY SEARCH: inspect the physician-marked or measured region FIRST, then identify nearby organ, orientation, tissue boundaries, adjacent fat, lumen, vascular landmarks and direct versus indirect abnormal signs.',
+  '- For an axial CT, use radiological orientation: the patient\'s right usually appears on image left. Report site in patient coordinates; never guess laterality from the screen alone.',
+  '- A caliper or displayed measurement is an attention cue, not itself a diagnosis. Transcribe the numeric value and units ONLY if genuinely legible; specify which structure may be measured and what remains uncertain.',
+  '- Consider visible differential diagnoses, including inflammatory, obstructive, vascular and normal mimics relevant to the marked site. If a condition is suggested by evidence, say suspected and list what supports or weakens it; never default to generic anatomy-only text.',
+  '- For suspected appendiceal pathology, look for actual tubular continuity with the cecum, diameter if measured, appendicolith, wall thickening, periappendiceal fat stranding, adjacent fluid and complications. Do not presuppose appendicitis or fabricate a sign that is not visible.',
+  '- For ECG, analyze calibrated rhythm, intervals, QRS and contiguous lead distributions before electrical-territory hypotheses. For microscopy, focus on actual cellular morphology; for labs, exact units and reference intervals.',
+  '- An upscaled thumbnail does not restore information lost from the original. Do not claim absence of disease in unexamined sections or invent patient-specific 3D geometry.',
+'Use these exact headings ONLY for medical studies, clinical images, and clinical diagnostic reports; write "Not visible / not assessable" for unavailable clinical fields. For other images respond with ordinary faithful description and transcription, NOT clinical headings:',
   'Image and modality:',
   'Verbatim text and report sections:',
   'Observed findings:',
   'Reported diagnosis or impression:',
   'Potential clinical interpretation (provisional, only if supported):',
+  'Measured / marked region and anatomically localized findings:',
+  'Potential differentials with evidence for and against:',
   'Visual limitations:',
   'Output only this evidence transcription, without proposing or generating an image.',
 ].join('\n')
+
+/** Whether a request needs focused medical-image reading. Empty text is
+ * conservatively treated as potentially medical; the specialist still has to
+ * recognize the image rather than assuming it is a clinical study.
+ */
+export function requiresFocusedClinicalVision(text:string):boolean {
+  const s=text.trim()
+  return s.length===0 ||
+    /(?:tomograf|tac|\bct\b|corte axial|radiograf|rayos? x|ecograf|sonograf|ultrason|resonancia|\bmri\b|\bekg\b|\becg\b|electrocardi|\blab(?:s|oratorio)?\b|anal[ií]tic|citolog|biopsia|histolog|diagn[oó]stic|lesi[oó]n|paciente|m[eé]dic|ap[eé]ndic|apendic|patolog|cl[ií]nic|vascular|medical|radiolog|pathology|blood test)/iu.test(s)
+}
+
+/** Select a supported, capable visual reader for clinically relevant sources
+ * without inventing access, models or reasoning-effort offerings.
+ */
+export function pickFocusedVisionReader(
+  models:readonly LlmResolvedModelInfo[],current:ModelSelection,
+):VisionRoute|undefined {
+  const candidates=models.filter(x=>x.inputModalities?.includes('image')===true
+    &&!(x.provider===current.provider&&x.id===current.model))
+  const rank=(x:LlmResolvedModelInfo)=>{
+    const efforts=x.reasoning?.efforts??[]
+    const high=efforts.some(e=>e.id==='high')
+    const medium=efforts.some(e=>e.id==='medium')
+    const clinicalSol=/-sol(?:$|-)/iu.test(x.id)
+    return (high?100:medium?50:0)+(clinicalSol?10:0)
+  }
+  candidates.sort((a,b)=>rank(b)-rank(a))
+  const selected=candidates[0]
+  if(selected===undefined)return undefined
+  const efforts=selected.reasoning?.efforts??[]
+  const effort=efforts.some(x=>x.id==='high')?'high':
+    efforts.some(x=>x.id==='medium')?'medium':undefined
+  return {provider:selected.provider,model:selected.id,...(effort===undefined?{}:
+    {reasoningEffort:ReasoningEffortId(effort)})}
+}
 
 /**
  * Resolve the route that will lend its eyes, honoring explicit configuration
@@ -82,6 +129,7 @@ export async function resolveVisionFallbackRoute(
   ctx: Context,
   current: ModelSelection,
   config: VisionFallbackConfig,
+  focusedClinical = false,
 ): Promise<VisionRoute | undefined> {
   if (config.enabled !== true) return undefined
   const sameAsCurrent = (provider: string, model: string): boolean =>
@@ -100,6 +148,7 @@ export async function resolveVisionFallbackRoute(
     ...providers.filter(provider => provider === current.provider),
     ...providers.filter(provider => provider !== current.provider),
   ]
+  const resolvedClinical:LlmResolvedModelInfo[]=[]
   for (const candidate of ordered) {
     let models: readonly { id: string; inputModalities?: readonly string[] }[]
     try {
@@ -107,12 +156,25 @@ export async function resolveVisionFallbackRoute(
     } catch {
       continue // Catalog failures are advisory; keep searching.
     }
-    const match = models.find(model =>
-      model.inputModalities?.includes('image') === true
-      && !sameAsCurrent(candidate, model.id))
-    if (match !== undefined) return { provider: candidate, model: match.id }
+    const matching=models.filter(model=>model.inputModalities?.includes('image')===true
+      && !sameAsCurrent(candidate,model.id))
+    if(!focusedClinical){
+      if(matching[0]!==undefined)return {provider:candidate,model:matching[0].id}
+      continue
+    }
+    for(const model of matching){
+      try {
+        const info=await ctx.llm.resolveModelInfo(candidate,model.id)
+        resolvedClinical.push(info)
+      }catch{
+        // Advertised image input remains useful even when detailed capability
+        // resolution fails; never assume High effort from a bare model name.
+        resolvedClinical.push({provider:candidate,id:model.id,name:model.id,
+          inputModalities:['image']})
+      }
+    }
   }
-  return undefined
+  return focusedClinical?pickFocusedVisionReader(resolvedClinical,current):undefined
 }
 
 /**
@@ -135,6 +197,7 @@ async function describeImage(
   const stream = ctx.llm.stream({
     provider: route.provider,
     model: route.model,
+    ...(route.reasoningEffort===undefined?{}:{reasoningEffort:route.reasoningEffort}),
     system: DESCRIPTION_SYSTEM_PROMPT,
     messages: [createUserMessage({
       source: { kind: 'user' },
