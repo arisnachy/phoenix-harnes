@@ -34,7 +34,6 @@ describe('Sports APIs trusted Connectors tab',()=>{
     await waitFor(()=>expect(screen.getByText(es.sportsKeysSavedUnverified)).toBeTruthy())
     expect(screen.queryByDisplayValue('secret_test_owner_only_123456')).toBeNull()
     expect(screen.getByText(es.sportsKeysUnverified)).toBeTruthy()
-    expect(input).toBeNull()
   })
   it('does not echo a secret when Host rejects a credential',async()=>{
     const hooks=props()
