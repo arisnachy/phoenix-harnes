@@ -26,7 +26,7 @@ const fetcher=async url=>{
 test('one bounded daily scan covers the real leagues and diversifies sports',async()=>{
   calls.length=0
   const report=await scoutDailySports(day,5,fetcher,now)
-  assert.equal(calls.length,40)
+  assert.equal(calls.length,42)
   assert.equal(report.totalEligible,7)
   assert.equal(report.events.length,5)
   assert.equal(new Set(report.events.map(x=>x.sport)).size,4)
@@ -116,7 +116,7 @@ test('late Santo Domingo kickoff is found even when ESPN returns it only in the 
   assert.deepEqual(report.events.map(e=>e.eventId),['71'])
   assert.equal(report.events[0].kickoff,'2026-11-03T02:45:00.000Z')
   assert.equal(report.totalEligible,1)
-  assert.equal(calls.length,40)
+  assert.equal(calls.length,42)
 })
 test('one failed UTC partition cannot masquerade as full empty league coverage',async()=>{
   const partial=async url=>{
@@ -144,7 +144,7 @@ test('a permanently stalled ESPN endpoint cannot freeze the daily scan',async()=
   assert.equal(report.coverage.find(x=>x.league==='nba')?.status,'unavailable')
   assert.ok(report.events.some(e=>e.league==='nfl'&&e.eventId==='908'))
   assert.equal(report.diagnostics.requestTimeoutMs,45)
-  assert.equal(report.diagnostics.requestedPartitions,40)
+  assert.equal(report.diagnostics.requestedPartitions,42)
   assert.ok(report.diagnostics.unavailableLeagues>=1)
 })
 test('a partial ESPN date timeout preserves verified events and reports incomplete coverage',async()=>{
@@ -162,4 +162,21 @@ test('a partial ESPN date timeout preserves verified events and reports incomple
   assert.equal(league?.status,'available')
   assert.match(league?.reason??'',/Cobertura parcial/)
   assert.ok(result.diagnostics.partialLeagues>=1)
+})
+
+test('calendar-first scan limits calls to requested sports and recognizes womens Champions League',async()=>{
+  const seen=[]
+  const targeted=async url=>{
+    const value=String(url);seen.push(value)
+    const events=value.includes('/soccer/uefa.wchampions/')?
+      [game(992,'team',kickoff)]:[]
+    return new Response(JSON.stringify({events}))
+  }
+  const report=await scoutDailySports(day,5,targeted,now,{},['soccer'])
+  assert.ok(seen.length<42)
+  assert.ok(seen.every(url=>url.includes('/soccer/')))
+  assert.ok(report.events.some(x=>x.eventId==='992'&&x.league==='uefa.wchampions'))
+  assert.equal(report.diagnostics.requestedPartitions,report.coverage.length*2)
+  await assert.rejects(()=>scoutDailySports(day,5,targeted,now,{},['bad-sport']),
+    /fuera del calendario/)
 })
