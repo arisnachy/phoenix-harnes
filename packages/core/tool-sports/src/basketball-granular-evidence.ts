@@ -52,7 +52,7 @@ export function auditBasketballGranularEvidence(d:BasketballCase):
     ' jugadores con estadísticas; '+playersWithGames[i]!.length+
     ' con gamelog').join(' | ')
   const confirmed=both.every(x=>x.quintetConfirmed)
-  const rest=both.map((x,i)=>d.context.restHours[i ? 'away' : 'home']))
+  const rest=both.map((_team,i)=>d.context.restHours[i === 0 ? 'home' : 'away'])
   const bothRest=rest.every(x=>x!==null)
   const h2h=d.context.h2h
   const results:Record<string,StepObservation>={}
