@@ -68,6 +68,17 @@ describe('Eclipse original medical image must not vanish during Team delegation'
       ]}},
     ],'Genera un esquema educativo sin paciente')).toBe(false)
   })
+  it('blocks an Orion request to inspect the same previously uploaded CT',()=>{
+    const events=[
+      ...image('Paciente: corte axial de TC abdominal'),
+      {type:'turn/start',data:{turn:2}},
+      {type:'user/message',data:{source:{kind:'user'},content:[
+        {type:'text',text:'Con la misma imagen, crea el gemelo con lesión'},
+      ]}},
+    ]
+    expect(eclipseDelegationNeedsSourceImage(events,
+      'Interpreta esa misma TC y genera el modelo hiperrealista')).toBe(true)
+  })
   it('does not inherit prior-turn images into a new clinical assignment',()=>{
     const events=[
       ...image('Paciente con TC axial'),
