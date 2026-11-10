@@ -500,7 +500,14 @@ export function apply(ctx: Context): void {
     label: () => t('view.chat'),
     locale: NS,
     children: {
-      'conversation.chat.node': { kind: 'keyed', scope: 'session', inject: CHAT_NODE_INJECT },
+      'conversation.chat.node': {
+        kind: 'keyed',
+        scope: 'session',
+        inject: {
+          ...CHAT_NODE_INJECT,
+          getCodexAuthorization: () => (ctx.get('connection') as ConnectionHandle | undefined)?.api.authorization,
+        },
+      },
       'conversation.message.images': { kind: 'single', scope: 'session' },
       'conversation.chat.message-author': { kind: 'list', scope: 'session' },
       'conversation.chat.message-actions': { kind: 'list', scope: 'session' },
