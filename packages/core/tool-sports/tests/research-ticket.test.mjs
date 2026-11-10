@@ -96,7 +96,9 @@ const nbaFixtureBoard=(url,at,count)=>{
   const key=match?.[1]??''
   const target=dayOf(at)
   if(key===target.replaceAll('-',''))return {events:Array.from({length:count},(_,i)=>recordEvent(301+i,at))}
-  const offset=Array.from({length:4},(_,i)=>i+1).find(i=>historicalDay(target,i).replaceAll('-','')===key)
+  // The live engine now requires at least five DIFFERENT finished games
+  // per NBA team; four fixture dates silently invalidated this test.
+  const offset=Array.from({length:7},(_,i)=>i+1).find(i=>historicalDay(target,i).replaceAll('-','')===key)
   if(!offset)return {events:[]}
   return {events:Array.from({length:count},(_,i)=>completedEvent(301+i,historicalDay(target,offset),offset))}
 }
