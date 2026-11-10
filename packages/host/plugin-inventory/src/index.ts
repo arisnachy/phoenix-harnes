@@ -33,6 +33,7 @@ import { TokenTelemetryCollector } from './telemetry.ts'
 import { PluginEnablementStore } from './plugin-enablement.ts'
 import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
 import { theOddsApiConnectorState, configureTheOddsApiConnector, disconnectTheOddsApiConnector } from './odds-api-connector.ts'
+import {sportsApiKeyStates,saveSportsApiKey,removeSportsApiKey,verifySportsApiKey} from './sports-api-connectors.ts'
 import {
   BINANCE_AGENT_OS_SERVER_NAME,
   BINANCE_AGENT_OS_URL,
@@ -77,6 +78,7 @@ import type {
   PhoenixUpdateSnapshot,
   TokenTelemetrySnapshot,
   OddsApiConnectorState,
+  SportsApiKeyState,SportsApiKeySaveRequest,SportsApiKeySelectRequest,
   TokenTelemetryPreference,
   TelegramBotSnapshot,
   PluginEntryId,
@@ -623,6 +625,30 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('repairManagedMcpConnector')
   async repairManagedMcpConnector(request: ManagedMcpEntryRequest): Promise<McpRegistryInstallReceipt> {
     return this.managedMcp.repair(request)
+  }
+
+  /** List optional sports connectors as vault metadata; no secret ever crosses to Kira. */
+  @Remote('sportsApiKeyStates')
+  async sportsApiKeyStates():Promise<SportsApiKeyState[]>{
+    return sportsApiKeyStates(this.ctx)
+  }
+
+  /** Owner-only secure input: keep the raw secret out of prompts and settings. */
+  @Remote('saveSportsApiKey')
+  async saveSportsApiKey(request:SportsApiKeySaveRequest):Promise<SportsApiKeyState>{
+    return saveSportsApiKey(this.ctx,request.id,request.apiKey)
+  }
+
+  /** Remove a vault-owned credential by exact allowlisted provider ID. */
+  @Remote('removeSportsApiKey')
+  async removeSportsApiKey(request:SportsApiKeySelectRequest):Promise<SportsApiKeyState>{
+    return removeSportsApiKey(this.ctx,request.id)
+  }
+
+  /** Check a provider without passing its key to the client/model. */
+  @Remote('verifySportsApiKey')
+  async verifySportsApiKey(request:SportsApiKeySelectRequest):Promise<SportsApiKeyState>{
+    return verifySportsApiKey(this.ctx,request.id)
   }
 
   /** Read The Odds API vault state and verify using the provider's zero-credit sports catalog.
