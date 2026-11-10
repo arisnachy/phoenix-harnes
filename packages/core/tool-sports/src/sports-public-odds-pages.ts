@@ -4,7 +4,7 @@
  * dynamic client scripts, region spoofing or arbitrary user-provided URLs.
  * ESPN may challenge automated clients; that is reported as blocked.
  */
-export type PublicOddsProvider='ESPN'|'Oddschecker'|'ScoresAndOdds'|'CuotasAhora'|'YahooSports'|'Oddspedia'
+export type PublicOddsProvider='ESPN'|'Oddschecker'|'ScoresAndOdds'|'CuotasAhora'|'YahooSports'|'Oddspedia'|'Covers'|'VegasInsider'|'SportsbookReview'
 export type PageStatus='observed-team-mentions'|'page-accessible'|'not-found'|'blocked'|'unavailable'
 export type PublicMoneylineHint={
   selection:string;american:string;decimal:number
@@ -46,7 +46,53 @@ export function scoresAndOddsMoneylineHints(
         'casa, período ni aceptación; NO es una cotización para ticket',
     })
   }
+  // Some public scoreboard views render moneylines as ordinary table cells,
+  // not price-only links. Parse ONLY an explicitly named Moneyline column,
+  // never spreads, totals or anonymous numbers elsewhere on the page.
+  for(const hint of scoresAndOddsTableMoneylines(html,home,away)){
+    if(!found.has(hint.selection))found.set(hint.selection,hint)
+  }
   return [...found.values()]
+}
+function scoresAndOddsTableMoneylines(html:string,home:string,away:string):PublicMoneylineHint[]{
+  const hints:PublicMoneylineHint[]=[]
+  if(html.length>1_500_000)return hints
+  const escaped=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
+    .toLowerCase().replace(/[^a-z0-9 ]/gu,' ').replace(/\s+/gu,' ').trim()
+  const choices=[home,away].filter(name=>name.trim().length>=5)
+  if(choices.length!==2)return hints
+  const detected=new Set<string>()
+  for(const table of html.matchAll(/<table\b[^>]*>([\s\S]{0,150000}?)<\/table>/giu)){
+    const header=table[1]?.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/iu)?.[0]??''
+    const columnNames=[...header.matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/giu)]
+      .map(match=>escaped(clean(match[1]??'')))
+    const column=columnNames.findIndex(name=>name==='moneyline'||name==='money line')
+    if(column<0)continue
+    for(const row of (table[1]??'').matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/giu)){
+      const cells=[...(row[1]??'').matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/giu)]
+        .map(m=>clean(m[1]??''))
+      if(cells.length<=column)continue
+      const teamCell=escaped(cells.slice(0,2).join(' '))
+      const team=choices.find(name=>{
+        const whole=escaped(name),nickname=whole.split(' ').at(-1)??''
+        return (whole.length>=5&&teamCell.includes(whole))||
+          (nickname.length>=5&&new RegExp('(?:^| )'+nickname+'(?: |$)','u').test(teamCell))
+      })
+      if(!team||detected.has(team))continue
+      const american=cells[column]?.trim().replace(/^even$/iu,'+100')??''
+      if(!/^[+-]\d{3,5}$/u.test(american))continue
+      const price=Number(american)
+      if(Math.abs(price)<100||Math.abs(price)>10000)continue
+      detected.add(team)
+      hints.push({selection:team,american,
+        decimal:Number((price>0?1+price/100:1+100/Math.abs(price)).toFixed(4)),
+        market:'moneyline',status:'reference-only',bookmaker:null,quoteUpdatedAt:null,
+        detail:'Precio en columna Moneyline del comparador, no oferta del bookmaker. '+
+          'Fecha, casa, hora del partido y aceptación sin verificar'})
+    }
+  }
+  // An individual team alone is not evidence of the proposed MATCHUP.
+  return detected.size===2?hints:[]
 }
 
 export type OddsPageObservation={
@@ -91,14 +137,29 @@ export function publicOddsWebsitePages(sportKey:string):Page[]{
     provider:'ESPN',url:'https://www.espn.com/'+sportsPages[sportKey]+'/odds',
   })
   const northAmerica=sportsPages[sportKey]
-  if(northAmerica)routes.push({
-    provider:'ScoresAndOdds',url:'https://www.scoresandodds.com/'+northAmerica+'/odds',
-  })
+  if(northAmerica){
+    // The daily scoreboard and the market comparison grid are separate routes.
+    // Reuse both without claiming either represents accepted house prices.
+    routes.push({provider:'ScoresAndOdds',url:'https://www.scoresandodds.com/'+northAmerica})
+    routes.push({provider:'ScoresAndOdds',url:'https://www.scoresandodds.com/'+northAmerica+'/odds'})
+    const covers:Readonly<Record<string,string>>={
+      nba:'basketball/nba',wnba:'basketball/wnba',nfl:'football/nfl',
+      mlb:'baseball/mlb',nhl:'hockey/nhl',
+    }
+    if(covers[northAmerica])routes.push({provider:'Covers',
+      url:'https://www.covers.com/sport/'+covers[northAmerica]+'/odds'})
+    routes.push({provider:'VegasInsider',
+      url:'https://www.vegasinsider.com/'+northAmerica+'/odds/las-vegas/'})
+    if(northAmerica==='nba')routes.push({provider:'SportsbookReview',
+      url:'https://www.sportsbookreview.com/betting-odds/nba-basketball/'})
+  }
   if(sportKey.startsWith('soccer_')){
     const slug=soccerPages[sportKey]
     routes.push({provider:'Oddschecker',url:'https://www.oddschecker.com/us/soccer'+
       (slug?'/'+slug:'')})
     routes.push({provider:'Oddspedia',url:'https://oddspedia.com/es/futbol'})
+    if(sportKey==='soccer_epl')routes.push({provider:'Covers',
+      url:'https://www.covers.com/sport/soccer/premier-league/odds'})
   }
   return routes
 }
@@ -148,6 +209,40 @@ const hosts:Readonly<Record<PublicOddsProvider,string>>={
   ESPN:'www.espn.com',Oddschecker:'www.oddschecker.com',
   ScoresAndOdds:'www.scoresandodds.com',CuotasAhora:'www.cuotasahora.com',
   YahooSports:'sports.yahoo.com',Oddspedia:'oddspedia.com',
+  Covers:'www.covers.com',VegasInsider:'www.vegasinsider.com',
+  SportsbookReview:'www.sportsbookreview.com',
+}
+// A shared league page can serve multiple fixture checks. Reuse only its raw
+// HTML, never the result of a different fixture's identity search.
+type PageSnapshot={html:string;httpStatus:number;observedAt:string}
+const documentCache=new Map<string,{expires:number;work:Promise<PageSnapshot>}>()
+async function readPublicDocument(url:string,fetcher:typeof fetch,now:number):Promise<PageSnapshot>{
+  const work=async():Promise<PageSnapshot>=>{
+    const response=await fetcher(url,{headers:{accept:'text/html'},
+      redirect:'error',signal:AbortSignal.timeout(4200)})
+    const observedAt=new Date(fetcher===fetch?Date.now():now).toISOString()
+    if(![401,403,429].includes(response.status)){
+      if(!response.ok)throw Error('HTTP '+response.status)
+      const kind=response.headers.get('content-type')??''
+      if(!/text\/html|application\/xhtml\+xml/iu.test(kind))
+        throw Error('La página no devolvió HTML público verificable')
+      if(Number(response.headers.get('content-length')??0)>1_500_000)
+        throw Error('Página demasiado grande')
+    }
+    const html=[401,403,429].includes(response.status)?'':await response.text()
+    if(html.length>1_500_000)throw Error('Página demasiado grande')
+    return {html,httpStatus:response.status,observedAt}
+  }
+  if(fetcher!==fetch)return work()
+  const previous=documentCache.get(url)
+  if(previous&&previous.expires>Date.now())return previous.work
+  if(documentCache.size>24)documentCache.clear()
+  const pending=work().catch((error:unknown)=>{
+    if(documentCache.get(url)?.work===pending)documentCache.delete(url)
+    throw error
+  })
+  documentCache.set(url,{expires:Date.now()+90_000,work:pending})
+  return pending
 }
 const cache=new Map<string,{expires:number;work:Promise<OddsPageObservation>}>()
 export async function readPublicOddsWebsitePage(
@@ -163,19 +258,12 @@ export async function readPublicOddsWebsitePage(
     priced:false as const,referenceMoneylines:[] as PublicMoneylineHint[]}
   const work=async():Promise<OddsPageObservation>=>{
     try{
-      const response=await fetcher(uri.toString(),{headers:{accept:'text/html'},
-        redirect:'error',signal:AbortSignal.timeout(7000)})
-      if([401,403,429].includes(response.status))
+      const snapshot=await readPublicDocument(uri.toString(),fetcher,now)
+      base.pageObservedAt=snapshot.observedAt
+      if([401,403,429].includes(snapshot.httpStatus))
         return {...base,status:'blocked',htmlTitle:null,snippet:null,markets:[],
-          detail:'Acceso restringido HTTP '+response.status+'; no intentar eludir protecciones'}
-      if(!response.ok)throw Error('HTTP '+response.status)
-      const kind=response.headers.get('content-type')??''
-      if(!/text\/html|application\/xhtml\+xml/iu.test(kind))
-        throw Error('La página no devolvió HTML público verificable')
-      if(Number(response.headers.get('content-length')??0)>1_500_000)
-        throw Error('Página demasiado grande')
-      const html=await response.text()
-      if(html.length>1_500_000)throw Error('Página demasiado grande')
+          detail:'Acceso restringido HTTP '+snapshot.httpStatus+'; no intentar eludir protecciones'}
+      const html=snapshot.html
       if(isBlocked(html))return {...base,status:'blocked',htmlTitle:null,snippet:null,
         markets:[],detail:'Verificación humana/JavaScript requerida; usar navegación autorizada'}
       const titleMatch=/<title[^>]*>([\s\S]{0,200}?)<\/title>/iu.exec(html)
@@ -205,7 +293,7 @@ export async function readPublicOddsWebsitePage(
   if(cached&&cached.expires>now)return cached.work
   if(cache.size>30)cache.clear()
   const value=work()
-  cache.set(cacheKey,{expires:now+5*60_000,work:value})
+  cache.set(cacheKey,{expires:now+90_000,work:value})
   return value
 }
 export async function researchPublicOddsWebsites(input:{
@@ -221,5 +309,5 @@ export async function researchPublicOddsWebsites(input:{
     readPublicOddsWebsitePage(page,home,away,fetcher,now)))
   return {sportKey:input.sportKey,requestedDate:date,home,away,pages:reports,
     bookmakerQuotes:0,bookmakerVerified:false,
-    warning:'ESPN publica cuotas oficiales mediante su proveedor DraftKings, pero cada precio requiere mercado, casa y timestamp verificables para ser cotizable. CuotasAhora, Yahoo Sports y Oddspedia se consultan como referencias públicas; un HTML no acredita cuota vigente. Los precios visibles de ScoresAndOdds se etiquetan referencia y NO son cuotas elegibles: falta casa, hora de actualización y cotejo de evento. Las páginas son referencias de investigación, NO cotizaciones elegibles. Ninguna cifra de HTML se transforma en cuota sin identidad de ambos equipos, fecha/hora del evento, casa, mercado, período, precio y marca temporal de la casa. No eludir geobloqueos, CAPTCHA ni paywalls. Ante falta de precios, presentar borrador CONDICIONAL y finalizar la respuesta, sin repetir notas de progreso.'}
+    warning:'ESPN, Covers, VegasInsider, SportsbookReview y otros comparadores se investigan; cada precio requiere mercado, casa, partido y timestamp verificables para ser cotizable. CuotasAhora, Yahoo Sports y Oddspedia se consultan como referencias públicas; un HTML no acredita cuota vigente. Los precios visibles de ScoresAndOdds se etiquetan referencia y NO son cuotas elegibles: falta casa, hora de actualización y cotejo de evento. Las páginas son referencias de investigación, NO cotizaciones elegibles. Ninguna cifra de HTML se transforma en cuota sin identidad de ambos equipos, fecha/hora del evento, casa, mercado, período, precio y marca temporal de la casa. No eludir geobloqueos, CAPTCHA ni paywalls. Ante falta de precios, presentar borrador CONDICIONAL y finalizar la respuesta, sin repetir notas de progreso.'}
 }
