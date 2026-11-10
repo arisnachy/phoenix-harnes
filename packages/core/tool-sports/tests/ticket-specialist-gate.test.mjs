@@ -1,7 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {classifySpecialistCoverage,investigateTicketSpecialist,
-  investigateTicketSpecialists} from '../src/ticket-specialist-gate.ts'
+  investigateTicketSpecialists,resolveNhlTicketMatch} from '../src/ticket-specialist-gate.ts'
 
 const fixture=(sport,league='nfl',eventId='123')=>({
   sport,league,eventId,date:'2026-11-08',
@@ -46,4 +46,20 @@ test('multiple unsupported fixtures retain exact identity and order',async()=>{
   assert.deepEqual(checks.map(x=>x.eventId),['123','456'])
   assert.deepEqual(checks.map(x=>x.status),['unavailable','unavailable'])
   assert.ok(checks.every(x=>x.approvedForBetting===false))
+})
+
+test('NHL gameId cannot cross from Devils-Jets to Panthers-Columbus',()=>{
+  const slate=[
+    {id:'2026020222',date:'2026-11-11T00:30:00Z',
+      home:{name:'Columbus Blue Jackets'},away:{name:'Florida Panthers'}},
+    {id:'2026020221',date:'2026-11-11T00:00:00Z',
+      home:{name:'Winnipeg Jets'},away:{name:'New Jersey Devils'}},
+  ]
+  const target={home:'Winnipeg Jets',away:'New Jersey Devils',kickoff:'2026-11-11T00:00:00Z'}
+  assert.equal(resolveNhlTicketMatch(slate,target)?.id,'2026020221')
+  assert.equal(resolveNhlTicketMatch([slate[0]],target),null)
+  assert.equal(resolveNhlTicketMatch(slate,{...target,
+    home:'New Jersey Devils',away:'Winnipeg Jets'}),null)
+  assert.equal(resolveNhlTicketMatch([slate[1],slate[1]],target),null)
+  assert.equal(resolveNhlTicketMatch(slate,{...target,kickoff:'2026-11-11T07:00:00Z'}),null)
 })

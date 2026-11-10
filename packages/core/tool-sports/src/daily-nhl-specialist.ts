@@ -48,6 +48,11 @@ export async function researchNhlOfficialMatch(
     if(matches.length!==1)
       return unavailable('No se pudo cotejar un único gameId NHL oficial con equipos y horario ESPN')
     const dossier=await investigateNhl(input.date,matches[0]!.id,fetcher,now,[],3)
+    if(dossier.fixture.id!==matches[0]!.id||
+      normalize(dossier.fixture.home.name)!==normalize(input.home)||
+      normalize(dossier.fixture.away.name)!==normalize(input.away)||
+      Math.abs(Date.parse(dossier.fixture.date)-Date.parse(input.kickoff))>60*60_000)
+      return unavailable('NHL gameId diferente del enfrentamiento solicitado: porteros descartados')
     return {status:'observed',reason:'Expediente NHL oficial; titulares NO confirmados',
       officialGameId:dossier.fixture.id,sourceCount:dossier.sources.length,
       verifiedSources:dossier.sources.filter(s=>s.status==='verified').length,
