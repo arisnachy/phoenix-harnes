@@ -777,7 +777,7 @@ test('MLB temporal gates reject future, stale and invalid pitcher logs',async()=
   assert.ok(review.missingEvidence.some(x=>x.includes('bullpen')))
   assert.equal(review.eligibleForTicket,false)
   for(const p of [d.starters.home,d.starters.away]){
-    p.recentStarts=[log('2026-06-25')]
+    p.recentStarts=[log('2026-06-25'),log('2026-06-24')]
   }
   for(const side of ['home','away']){
     d.bullpen[side][0].reliefUsage72h=[log('2026-06-30')]
@@ -796,7 +796,7 @@ test('cached pitcher evidence expires at review time even when collection was va
   assert.ok(d.starters.home&&d.starters.away)
   assert.ok(d.bullpen.home.length&&d.bullpen.away.length)
   for(const p of [d.starters.home,d.starters.away]){
-    p.recentStarts=[log('2026-05-18')]
+    p.recentStarts=[log('2026-05-18'),log('2026-05-17')]
   }
   for(const side of ['home','away']){
     d.bullpen[side][0].reliefUsage72h=[log('2026-06-28')]
@@ -921,19 +921,19 @@ test('MLB recent form rejects contradictory win-loss, venue and run aggregates',
 
 test('MLB starter outing gate rejects malformed innings and missing boxscore metrics',async()=>{
   const d=await researchMlbCase(date,812345,fakeNetwork({fullLineup:true}).fetcher,at)
-  const valid=()=>({date:'2026-06-25',opponentId:123,innings:'5.2',
+  const valid=(day='2026-06-25')=>({date:day,opponentId:123,innings:'5.2',
     pitches:'85',earnedRuns:'2',strikeouts:'7',walks:'1'})
   assert.ok(d.starters.home&&d.starters.away)
-  for(const p of [d.starters.home,d.starters.away])p.recentStarts=[valid()]
+  for(const p of [d.starters.home,d.starters.away])p.recentStarts=[valid(),valid('2026-06-24')]
   assert.equal(reviewMlbResearch(d).evidenceGates.recentStarterOutingsVerified,true)
   for(const [field,value] of [['innings','5.3'],['innings',''],['pitches',''],
     ['pitches','-1'],['earnedRuns','NaN'],['strikeouts','-2'],
     ['walks','1.5'],['opponentId',0]]){
-    d.starters.home.recentStarts=[{...valid(),[field]:value}]
+    d.starters.home.recentStarts=[{...valid(),[field]:value},valid('2026-06-24')]
     assert.equal(reviewMlbResearch(d).evidenceGates.recentStarterOutingsVerified,false,
       'malformed '+field+'='+value+' must not count as verified')
   }
-  d.starters.home.recentStarts=[valid()]
+  d.starters.home.recentStarts=[valid(),valid('2026-06-24')]
   assert.equal(reviewMlbResearch(d).evidenceGates.recentStarterOutingsVerified,true)
   assert.equal(reviewMlbResearch(d).eligibleForTicket,false)
 })
