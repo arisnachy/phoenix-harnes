@@ -8,7 +8,7 @@ import { belongsToLeague } from './sports-odds-coverage.ts'
 import { enrichMlbMatch } from './mlb-matchup.ts'
 import { researchMlbTrend } from './mlb-research.ts'
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
-  soccer: ['eng.1','eng.2','esp.1','mex.1','usa.1','usa.nwsl','uefa.champions','fifa.world',
+  soccer: ['eng.1','eng.2','esp.1','mex.1','usa.1','usa.nwsl','uefa.champions','uefa.wchampions','fifa.world',
     'ger.1','ita.1','fra.1','por.1','ned.1','bra.1','arg.1','uefa.europa',
     'uefa.europa.conf','conmebol.libertadores','conmebol.sudamericana',
     'concacaf.champions','fifa.cwc','uefa.euro','conmebol.america'],
@@ -31,6 +31,7 @@ const leaguePresentation: Record<string,{league:string;country?:string}> = {
   'mex.1':{league:'Liga MX',country:'México'},
   'usa.1':{league:'MLS',country:'Estados Unidos / Canadá'},
   'uefa.champions':{league:'UEFA Champions League',country:'Europa'},
+  'uefa.wchampions':{league:'UEFA Champions League femenina',country:'Europa'},
   'ger.1':{league:'Bundesliga',country:'Alemania'},
   'ita.1':{league:'Serie A',country:'Italia'},
   'fra.1':{league:'Ligue 1',country:'Francia'},
