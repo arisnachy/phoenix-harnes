@@ -157,3 +157,17 @@ test('comparison coverage supports NBA, NHL, NFL, EPL; blocked source does not s
   assert.equal(report.bookmakerQuotes,0)
   assert.ok(report.pages.every(x=>x.priced===false&&x.bookmakerVerified===false))
 })
+
+test('explicit ScoresAndOdds Moneyline table provides both research prices, not bookmaker offers',()=>{
+  const grid='<table><thead><tr><th>Team</th><th>Spread</th><th>Total</th>'+
+    '<th>Moneyline</th></tr></thead><tbody>'+
+    '<tr><td>Boston Celtics</td><td>-2.5 -110</td><td>o220.5 -110</td><td>-160</td></tr>'+
+    '<tr><td>Milwaukee Bucks</td><td>+2.5 -110</td><td>u220.5 -110</td><td>+140</td></tr>'+
+    '</tbody></table>'
+  const hints=scoresAndOddsMoneylineHints('<h2>Moneyline</h2>'+grid,
+    'Boston Celtics','Milwaukee Bucks')
+  assert.deepEqual(hints.map(x=>x.american),['-160','+140'])
+  assert.ok(hints.every(x=>x.bookmaker===null&&x.quoteUpdatedAt===null))
+  assert.deepEqual(scoresAndOddsMoneylineHints('<h2>Moneyline</h2>'+grid.replace(
+    '<td>+140</td>','<td>+2.5 -110</td>'),'Boston Celtics','Milwaukee Bucks'),[])
+})
