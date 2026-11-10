@@ -42,6 +42,15 @@ const closeTime=(a:string,b:string)=>
   Number.isFinite(Date.parse(a))&&Number.isFinite(Date.parse(b))&&
   Math.abs(Date.parse(a)-Date.parse(b))<=90*60_000
 
+/** The official NHL game ID must identify exactly one matching fixture. */
+export function resolveNhlTicketMatch<T extends {
+  id:string;date:string;home:{name:string};away:{name:string}
+}>(slate:readonly T[],target:Pick<SpecialistFixture,'home'|'away'|'kickoff'>):T|null{
+  const matches=slate.filter(x=>identities(x.home.name,x.away.name,target.home,target.away)
+    &&closeTime(x.date,target.kickoff))
+  return matches.length===1?matches[0]!:null
+}
+
 /** Pure decision function, independently testable without providers. */
 export function classifySpecialistCoverage(
   level:'A'|'B'|'C'|'D'|null,hasTeamEvidence:boolean,
@@ -195,10 +204,15 @@ export async function investigateTicketSpecialist(
     }else if(game.sport==='hockey'&&game.league==='nhl'){
       specialist='NHL: porteros, forma, tiros y unidades especiales'
       const slate=await nhlSlate(game.date,fetcher,now)
-      const match=slate.games.find(x=>identities(x.home.name,x.away.name,game.home,game.away)
-        &&closeTime(x.date,game.kickoff))
+      const match=resolveNhlTicketMatch(slate.games,game)
       if(!match)throw Error('NHL: sin correspondencia oficial de ambos equipos y fecha')
       const d=await investigateNhl(game.date,match.id,fetcher,now,quotes)
+      // NHL IDs are not ESPN IDs. Validate again after fetching the official
+      // dossier to prevent a goalie report from a different game entering it.
+      if(d.fixture.id!==match.id||
+        !identities(d.fixture.home.name,d.fixture.away.name,game.home,game.away)||
+        !closeTime(d.fixture.date,game.kickoff))
+        throw Error('NHL: informe de porteros pertenece a otro partido; datos descartados')
       level=d.opportunity.decision==='investigate'?'B':'C'
       teams=d.players.home.length>0&&d.players.away.length>0
       steps=['Rosters '+(d.players.home.length+d.players.away.length),
