@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { eclipseTeamPlanSummary, fenixConsultableEvidence, resolveEclipseTeammateProfile } from '../src/index.ts'
+import { eclipseTeamPlanSummary, eclipseTeamAssignmentPrompt, fenixConsultableEvidence, resolveEclipseTeammateProfile } from '../src/index.ts'
 
 describe('Kira plan handoff to Luna Max specialists', () => {
   it('passes only the visible plan from the current turn, not old missions or full chat', () => {
@@ -34,6 +34,30 @@ describe('Kira plan handoff to Luna Max specialists', () => {
     expect(brief).toContain(last)
     expect(brief).toContain('extracto FÉNIX')
     expect(brief?.length).toBeLessThanOrEqual(1800)
+  })
+})
+
+describe('Eclipse specialist handoff contract',()=>{
+  it('carries the same plan and acceptance to an initial or follow-up worker assignment',()=>{
+    const plan='**Plan:** Corregir autenticación; verificar el acceso; no perder sesiones.'
+    const assigned=eclipseTeamAssignmentPrompt(plan,'Arregla únicamente el proveedor OAuth.')
+    expect(assigned).toContain(plan)
+    expect(assigned).toContain('Arregla únicamente')
+    expect(assigned).toContain('pruebas reales')
+    expect(assigned).toContain('escalarse')
+    expect(eclipseTeamAssignmentPrompt(undefined,'Solo revisar las pruebas.'))
+      .toBe('Solo revisar las pruebas.')
+  })
+  it('does not leak a free-form provisional clinical assessment to a fresh teammate',()=>{
+    const events=[
+      {type:'turn/start',data:{turn:4}},
+      {type:'assistant/message',data:{step:1,message:{
+        source:{kind:'model',model:'gpt-6.1-sol'},
+        content:[{text:'Hallazgos que sugieren inflamación y sospecha clínica, '+
+          'pero requieren correlación. Crearé una lámina didáctica, no reconstrucción del paciente.'}],
+      }}},
+    ]
+    expect(eclipseTeamPlanSummary(events)).toBeUndefined()
   })
 })
 
