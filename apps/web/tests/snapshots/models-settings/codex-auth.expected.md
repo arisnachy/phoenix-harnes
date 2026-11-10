@@ -45,6 +45,7 @@
     - listitem:
       - text: OpenAI Codex
       - img "需要登录账号（AUTH）": AUTH
+      - button "Autenticar Codex": Autenticar Codex
       - 'button "上移提供方: OpenAI Codex" [disabled]': ↑
       - 'button "下移提供方: OpenAI Codex"': ↓
       - button "编辑 OpenAI Codex (openai-codex)": 编辑
