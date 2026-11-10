@@ -42,6 +42,7 @@ export function WebRow({ toolName, block, inspect, t }: WebRowProps) {
       t={t}
       variant={model.variant}
       toolName={toolName}
+      sourceBlock={block}
       icon={icon}
       title={WEB_TITLES[toolName] ?? model.title}
       summary={model.summary}
