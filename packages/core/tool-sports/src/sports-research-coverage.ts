@@ -17,18 +17,21 @@ const football=p('API-Football','PHOENIX_API_FOOTBALL_KEY','free-100-per-api')
 const hockey=p('API-Hockey','PHOENIX_API_HOCKEY_KEY','fixture-only-free-100-per-api')
 const nfl=p('API-NFL','PHOENIX_API_NFL_KEY','fixture-only-free-100-per-api')
 const big=p('Big Balls NHL','PHOENIX_BIGBALLS_API_KEY','plan-dependent','planned')
-const nfldata=p('nflverse',null,'public-archive')
+const nfldata=p('nflverse PBP/EPA',null,'public-archive/weekly-release','planned')
 const nflmeta=p('NFLMeta','PHOENIX_NFLMETA_KEY','licensed-and-tier-dependent','planned')
 const sportmonks=p('Sportmonks','PHOENIX_SPORTMONKS_KEY',
   'free-Danish-Scottish-leagues-only','planned')
 const openfootball=p('OpenFootball',null,'public-archives')
 const official=p('Official league/team announcements',null,'human-follow-up','official-followup')
+const nbaInjuries=p('NBA official injury report PDF',null,'official-nba-as-of-kickoff','planned')
+const nbaAdvanced=p('NBA.com advanced team stats',null,'public-site-possibly-blocked','planned')
+const nflInactive=p('NFL official game-day inactives',null,'official-nfl-updates','official-followup')
 const quote=p('Live bookmaker quote connectors',null,'key-or-authorized-scraper')
 export const researchCoverage:readonly ResearchRequirement[]=[
   {sport:'basketball',step:'form',providers:[espn,db],caveat:'Last games must precede kickoff'},
-  {sport:'basketball',step:'efficiency',providers:[espn,db],
+  {sport:'basketball',step:'efficiency',providers:[espn,db,nbaAdvanced],
     caveat:'Pace/on-off not guaranteed by free endpoints'},
-  {sport:'basketball',step:'injuries',providers:[espn,official],
+  {sport:'basketball',step:'injuries',providers:[espn,nbaInjuries,official],
     caveat:'NBA official report may be later than first prefetch'},
   {sport:'basketball',step:'starters',providers:[espn,official],
     caveat:'Roster is not confirmed five'},
@@ -62,7 +65,7 @@ export const researchCoverage:readonly ResearchRequirement[]=[
     caveat:'Depth chart does not confirm QB starter or inactives'},
   {sport:'football',step:'matchups',providers:[espn,nfldata,nflmeta],
     caveat:'EPA, OL/pass rush, snap counts require verified samples'},
-  {sport:'football',step:'injuries',providers:[espn,nfldata,nflmeta,official],
+  {sport:'football',step:'injuries',providers:[espn,nfldata,nflmeta,nflInactive,official],
     caveat:'Weekly injury report versus Sunday inactive list'},
   {sport:'football',step:'market',providers:[quote,espn],
     caveat:'Moneyline versus regulation or overtime rules'},
