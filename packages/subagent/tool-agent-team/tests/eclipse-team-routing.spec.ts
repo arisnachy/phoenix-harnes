@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { eclipseTeamPlanSummary, eclipseTeamAssignmentPrompt, fenixConsultableEvidence, resolveEclipseTeammateProfile } from '../src/index.ts'
+import { eclipseTeamPlanSummary, eclipseTeamAssignmentPrompt, eclipseDelegationNeedsSourceImage, fenixConsultableEvidence, resolveEclipseTeammateProfile } from '../src/index.ts'
 
 describe('Kira plan handoff to Luna Max specialists', () => {
   it('passes only the visible plan from the current turn, not old missions or full chat', () => {
@@ -34,6 +34,50 @@ describe('Kira plan handoff to Luna Max specialists', () => {
     expect(brief).toContain(last)
     expect(brief).toContain('extracto FÉNIX')
     expect(brief?.length).toBeLessThanOrEqual(1800)
+  })
+})
+
+describe('Eclipse original medical image must not vanish during Team delegation',()=>{
+  const image=(text:string)=>[
+    {type:'turn/start',data:{turn:1}},
+    {type:'user/message',data:{source:{kind:'user'},content:[
+      {type:'image',attachment:{attachmentId:'real-image',mediaType:'image/png'}},
+      {type:'text',text},
+    ]}},
+  ]
+  it('blocks an Orion diagnosis or illustration assignment without original pixels',()=>{
+    for(const task of [
+      'Orión: interpreta la imagen de tomografía y señala la lesión',
+      'Genera un modelo hiperrealista de la lesión y su vascularidad',
+      'Localiza un apéndice inflamado usando esta captura',
+    ])expect(eclipseDelegationNeedsSourceImage(image(
+      'Paciente con imagen de TC abdominal. Revisar la lesión marcada.',
+    ),task)).toBe(true)
+  })
+  it('allows independent tasks without clinical source image interpretation',()=>{
+    expect(eclipseDelegationNeedsSourceImage(image(
+      'Paciente con estudio TC: lesión sospechosa',
+    ),'Busca guías públicas de diagnóstico diferencial')).toBe(false)
+    expect(eclipseDelegationNeedsSourceImage(image(
+      'Captura de interfaz web',
+    ),'Repara las pruebas de CSS')).toBe(false)
+    expect(eclipseDelegationNeedsSourceImage([
+      {type:'turn/start',data:{turn:1}},
+      {type:'user/message',data:{source:{kind:'user'},content:[
+        {type:'text',text:'Crea un simulador de ECG educativo sin archivos clínicos'},
+      ]}},
+    ],'Genera un esquema educativo sin paciente')).toBe(false)
+  })
+  it('does not inherit prior-turn images into a new clinical assignment',()=>{
+    const events=[
+      ...image('Paciente con TC axial'),
+      {type:'turn/start',data:{turn:2}},
+      {type:'user/message',data:{source:{kind:'user'},content:[
+        {type:'text',text:'Busca documentación de código'},
+      ]}},
+    ]
+    expect(eclipseDelegationNeedsSourceImage(events,
+      'Documenta una función')).toBe(false)
   })
 })
 
