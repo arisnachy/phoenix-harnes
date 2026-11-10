@@ -20,7 +20,7 @@ export type TicketNarrative={
   specialistEvidence:string[];criticalPending:string[];
   /** Verifiable per-sport steps for the user-facing research checklist. */
   researchSteps?:Array<{key:string;title:string;critical:boolean;
-    state:'verified'|'partial'|'missing';detail:string}>;
+    state:'verified'|'partial'|'missing';detail:string;sources?:string[]}>;
   news:TicketNewsItem[];
   externalOpinions:Array<{publisher:string;headline:string;publishedAt:string|null;
     discoveryUrl:string;status:'indexed-headline-only'}>;
@@ -279,7 +279,8 @@ export function enrichSpecialistNarrative(
       '. Es segunda opinión con licencia CC BY, no precio de bookmaker ni certeza.':
       '\nModelo externo: sin predicción comprobada para este evento.')+
     '\nChecklist comprobado: '+(researchSteps.length?
-      researchSteps.map(x=>x.title+' ['+x.state+'] '+clean(x.detail,90)).join('; '):
+      researchSteps.map(x=>x.title+' ['+x.state+'] '+clean(x.detail,90)+
+        (x.sources?.length?' · Rutas: '+x.sources.slice(0,2).join(' → '):'')).join('; '):
       'sin expediente de pasos individuales todavía.')+
     '\nDisponibilidad del elegido: '+(ownInjuries.length?ownInjuries.join('; '):
       selectedSide?.matched?'sin bajas individualizadas en esta respuesta; NO confirma plantilla sana.':
