@@ -37,7 +37,8 @@ function assistantText(event:Event): { step:number;sourceModel:string|undefined;
       readonly content?:readonly {readonly type?:string;readonly text?:unknown}[]
     }
   }
-  if(typeof data.step!=='number'||!Number.isInteger(data.step)||data.step<1)return undefined
+  const step=data.step===undefined?1:data.step
+  if(typeof step!=='number'||!Number.isInteger(step)||step<1)return undefined
   const source=data.message?.source
   // Only model-authored visible text; a forwarded tool/user message cannot
   // establish the coordinator's clinical or technical conclusion.
@@ -45,7 +46,7 @@ function assistantText(event:Event): { step:number;sourceModel:string|undefined;
   const text=data.message?.content?.map(part=>typeof part.text==='string'?
     part.text:'').filter(Boolean).join(' ').trim()??''
   if(text.length===0)return undefined
-  return {step:data.step,sourceModel:typeof source?.model==='string'?source.model:undefined,text}
+  return {step,sourceModel:typeof source?.model==='string'?source.model:undefined,text}
 }
 
 /** Return the last genuine published plan within THIS turn. A provisional
