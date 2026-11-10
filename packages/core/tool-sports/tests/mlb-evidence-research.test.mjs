@@ -944,6 +944,12 @@ test('MLB review requires at least two valid recent starts for each probable sta
   assert.equal(d.starters.home.recentStarts.length,2)
   assert.equal(d.starters.away.recentStarts.length,2)
   assert.equal(reviewMlbResearch(d).evidenceGates.recentStarterOutingsVerified,true)
+  // Repeated snapshots of the same game must not count as two outings.
+  const duplicate=structuredClone(d.starters.home.recentStarts[0])
+  d.starters.home.recentStarts=[duplicate,structuredClone(duplicate)]
+  assert.equal(reviewMlbResearch(d).evidenceGates.recentStarterOutingsVerified,false)
+  d.starters.home.recentStarts=d.starters.away.recentStarts.map(out=>structuredClone(out))
+  assert.equal(reviewMlbResearch(d).evidenceGates.recentStarterOutingsVerified,true)
   d.starters.home.recentStarts=d.starters.home.recentStarts.slice(0,1)
   const review=reviewMlbResearch(d)
   assert.equal(review.evidenceGates.recentStarterOutingsVerified,false)
