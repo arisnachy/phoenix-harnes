@@ -20,6 +20,15 @@ async function get(url){
       'anti_bot':'html_only',http:response.status}
    if(raw.length>8_000_000)return {state:'oversized',http:response.status,
      reason:'Payload superior a 8 MB: requiere extracción en streaming'}
+   // MoneyPuck publishes these downloadable CSVs for non-commercial usage;
+   // a valid column header is source evidence, not an entire hockey model.
+   if(url.startsWith('https://moneypuck.com/moneypuck/playerData/seasonSummary/')&&
+     /\\.csv(?:\\?|$)/u.test(url)){
+     const header=raw.split(/\\r?\\n/u,1)[0]??''
+     const columns=header.split(',').map(x=>x.replaceAll('"','').trim())
+     return{state:columns.length>15?'csv_metric':'invalid_csv',http:response.status,
+       keys:columns.slice(0,32),sample:header,records:Math.max(0,raw.split('\\n').length-1)}
+   }
    let json
    try{json=JSON.parse(raw)}catch{return {state:'not_json',http:response.status,
      reason:'Respuesta completa sin JSON válido; longitud '+raw.length}}
@@ -108,7 +117,8 @@ function endpoint(label,c){
     'https://stats.nba.com/stats/leaguedashteamstats?LeagueID=00&Season=2026-27&SeasonType=Regular%20Season',
   nflverse:'https://github.com/nflverse/nflverse-data/releases',
   nflnext:'https://nextgenstats.nfl.com/',nflInj:'https://www.nfl.com/injuries/',
-  moneypuck:'https://moneypuck.com/data.htm',
+  moneypuck:c.sport==='hockey'?
+    'https://moneypuck.com/moneypuck/playerData/seasonSummary/2026/regular/teams.csv':null,
   faceoff:'https://www.dailyfaceoff.com/starting-goalies',
   savant:'https://baseballsavant.mlb.com/leaderboard/expected_statistics?year=2026',
   fangraphs:'https://www.fangraphs.com/leaders/major-league',
@@ -156,7 +166,9 @@ for(const row of steps)for(const s of row.providers){
    row.step==='S04'?/xg|expectedGoals/i:
    row.step==='T04'?/aces|firstServe|doubleFault/i:
    row.step==='U09'?/moneyLine|moneyline|odds|provider/i:null
- s.relevantFieldSeen=Boolean(a.state==='json_present'&&rule?.test(a.sample??''))
+ s.relevantFieldSeen=Boolean(
+   (a.state==='json_present'||a.state==='csv_metric')&&
+   rule?.test((a.sample??'')+' '+(a.keys??[]).join(' ')))
  s.stepVerified=false
  delete s.provider // preserve provider name from label; source host in URL
 }
