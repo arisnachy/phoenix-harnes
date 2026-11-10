@@ -286,9 +286,16 @@ async function readOddsJSON(
  */
 export async function fetchPublicEspnOddsDetailed(
   sportKey:string,requestedMarkets:string,getJSON:<T>(url:string)=>Promise<T>,
-  options:{now?:number;cache?:boolean;days?:number;date?:string;eventId?:string}={},
+  options:{now?:number;cache?:boolean;days?:number;date?:string;eventId?:string;espnLeague?:string}={},
 ):Promise<EspnOddsResult>{
-  const route=slugs[sportKey]
+  // Only exact ESPN-verified soccer events may use a dynamic league slug.
+  // A user-supplied league alone must never enable arbitrary URL discovery.
+  const verifiedSoccerLeague=sportKey==='soccer_espn_dynamic'&&
+    Boolean(options.eventId&&options.date)&&
+    typeof options.espnLeague==='string'&&
+    /^[a-z][a-z0-9.-]{1,39}$/u.test(options.espnLeague)
+      ?(['soccer',options.espnLeague] as const):undefined
+  const route=slugs[sportKey]??verifiedSoccerLeague
   const diagnostics:EspnOddsDiagnostics={
     scoreboards:0,games:0,startedGames:0,startedOddsEntries:0,
     embedded:0,core:0,summary:0,resolvedRefs:0,
