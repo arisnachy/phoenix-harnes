@@ -76,7 +76,7 @@ test('five requested legs cannot silently become a one-leg completed ticket',asy
   )
 })
 const recordEvent=(id,at,hw='3-0',aw='0-3')=>({
-  id:String(id),date:at,status:{type:{state:'pre'}},competitions:[{competitors:[
+  id:String(id),date:at,season:{type:2},status:{type:{state:'pre'}},competitions:[{competitors:[
     {homeAway:'home',team:{id:String(id)+'0',displayName:'Home '+id,logo:'https://a.espncdn.com/logo.png'},records:[{summary:hw}]},
     {homeAway:'away',team:{id:String(id)+'1',displayName:'Away '+id,logo:'https://a.espncdn.com/away.png'},records:[{summary:aw}]},
   ]}],
@@ -96,7 +96,9 @@ const nbaFixtureBoard=(url,at,count)=>{
   const key=match?.[1]??''
   const target=dayOf(at)
   if(key===target.replaceAll('-',''))return {events:Array.from({length:count},(_,i)=>recordEvent(301+i,at))}
-  const offset=Array.from({length:4},(_,i)=>i+1).find(i=>historicalDay(target,i).replaceAll('-','')===key)
+  // The live engine now requires at least five DIFFERENT finished games
+  // per NBA team; four fixture dates silently invalidated this test.
+  const offset=Array.from({length:7},(_,i)=>i+1).find(i=>historicalDay(target,i).replaceAll('-','')===key)
   if(!offset)return {events:[]}
   return {events:Array.from({length:count},(_,i)=>completedEvent(301+i,historicalDay(target,offset),offset))}
 }
