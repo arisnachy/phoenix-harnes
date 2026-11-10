@@ -5,7 +5,7 @@
 import type {MarketOutcome} from './sports.ts'
 import {crosscheckFreeFixture,type BackupFinding} from './free-sports-source-audit.ts'
 import {auditSportChecklist,type SportChecklist,type StepObservation} from './daily-specialist-checklist.ts'
-import {fetchEspnInjuryBackup} from './espn-injury-backup.ts'
+import {fetchEspnInjuryBackup,type InjuryBackup} from './espn-injury-backup.ts'
 import {investigateNfl} from './nfl-evidence-research.ts'
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
 import {investigateSoccer} from './soccer-worldwide-dossier.ts'
@@ -27,6 +27,9 @@ export type SpecialistGate={
   checklist?:SportChecklist
   /** Secondary fixtures are not bookmaker offers or confirmed starters. */
   sourceChecks?:BackupFinding[]
+  /** Snapshot of both teams' reported availability; source freshness does not
+   * establish starter confirmation or an official pre-tipoff inactive list. */
+  injuryAudit?:InjuryBackup
 }
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
@@ -76,6 +79,7 @@ export async function investigateTicketSpecialist(
     ?crosscheckFreeFixture(game,fetcher,now,env).catch(()=>[] as BackupFinding[])
     :Promise.resolve([])
   const signals:Record<string,StepObservation>={}
+  let injuryAudit:InjuryBackup|undefined
   const mark=(key:string,state:StepObservation['state'],detail:string)=>{
     signals[key]={state,detail}
   }
@@ -262,6 +266,7 @@ export async function investigateTicketSpecialist(
       // Read the public ESPN injury feed after the discipline-specific dossier;
       // fallback failures never erase evidence already collected.
       const injury=await fetchEspnInjuryBackup(game,fetcher,now)
+      injuryAudit=injury
       if(injury.status==='verified'||injury.status==='partial'){
         // A feed can identify reported injuries, but never guarantees a final
         // inactive list, starting lineup or availability at tipoff/kickoff.
@@ -287,7 +292,7 @@ export async function investigateTicketSpecialist(
         checklist.criticalPending.length+'): '+
         checklist.criticalPending.slice(0,3).join('; '))
     return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
-      sourceChecks,checklist,checkedAt:new Date(now).toISOString()}
+      sourceChecks,checklist,injuryAudit,checkedAt:new Date(now).toISOString()}
   }catch(error){
     return errorResult(game,(error instanceof Error?error.message:String(error)))
   }
