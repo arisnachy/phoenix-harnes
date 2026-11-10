@@ -825,10 +825,13 @@ const SportsMarkedMatch=({away,home,hasStarted,favorite,trackedBets=[],sport='',
   trackedBets?:SportsTrackedPick[]|undefined;sport?:string|undefined;league?:string|undefined
   date?:string|undefined;eventId?:string|undefined;pendingLabel?:string|undefined
 })=>{
-  const lookup=()=>readSportsReceiptGoals({sport,league,date,home:home.label,away:away.label,eventId})
-  const [receiptPicks,setReceiptPicks]=useState<SportsTrackedPick[]>(lookup)
+  const [receiptPicks,setReceiptPicks]=useState<SportsTrackedPick[]>(()=>readSportsReceiptGoals({
+    sport,league,date,home:home.label,away:away.label,eventId,
+  }))
   useEffect(()=>{
-    const update=()=>setReceiptPicks(lookup())
+    const update=()=>setReceiptPicks(readSportsReceiptGoals({
+      sport,league,date,home:home.label,away:away.label,eventId,
+    }))
     update()
     if(typeof window==='undefined')return
     window.addEventListener(PHOENIX_TICKET_UPDATE,update)
