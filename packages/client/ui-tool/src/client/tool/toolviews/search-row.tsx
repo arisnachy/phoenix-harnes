@@ -44,6 +44,7 @@ export function SearchRow({ toolName, block, inspect, t }: SearchRowProps) {
       t={t}
       variant={model.variant}
       toolName={toolName}
+      sourceBlock={block}
       icon={<IconSearchOutline16 size={14} />}
       title={SEARCH_TITLES[toolName] ?? model.title}
       // The result view's replacement title outranks the args-derived summary,
