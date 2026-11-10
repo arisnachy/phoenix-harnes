@@ -4,7 +4,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import {
   PHOENIX_CODEX_AUTO_MODEL, PHOENIX_CODEX_AUTO_WORKER_MODEL, adaptiveCodexReasoningEffort, isPhoenixCodexAutoSelection,
-  latestModelSelectionPreference,
+  latestModelSelectionPreference, eclipseCurrentWorkContract,
 } from '@phoenix-ai/dsh-agent'
 import type { EclipseRoutingSettings } from '@phoenix-ai/dsh-agent'
 import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
@@ -116,17 +116,20 @@ export function fenixConsultableEvidence(
  * @returns The current turn's confirmed plan, or undefined when there is none.
  */
 export function eclipseTeamPlanSummary(events: readonly { readonly type: string; readonly data: unknown }[]): string | undefined {
-  const start = events.findLastIndex(event => event.type === 'turn/start')
-  const messages = events.slice(start + 1).filter(event => event.type === 'assistant/message')
-  const texts = messages.map(event => {
-    const data = event.data as { readonly message?: { readonly content?: readonly { readonly text?: string }[] } }
-    return data.message?.content?.map(part => part.text ?? '').filter(Boolean).join(' ') ?? ''
-  })
-  const plan = texts.findLast(text => /^(?:#{1,3}\s*)?(?:\*\*)?plan(?:\s+de\s+trabajo)?\s*:/iu.test(text.trim()))
-  if (plan === undefined || plan.length <= 1800) return plan
-  // Do not discard acceptance criteria and restrictions at the end of Sol's
-  // visible plan. The original plan remains durable in Session events.
-  return `${plan.slice(0, 950)}\n[...extracto FÉNIX; consultar el plan original para más detalles...]\n${plan.slice(-740)}`
+  const contract=eclipseCurrentWorkContract(events)
+  // A Team assignment can inherit an explicit plan, but clinical/image
+  // assessments remain in the Lead's session instead of silently exporting
+  // unverified or sensitive patient findings to a newly spawned worker.
+  return contract?.kind==='plan'?contract.brief:undefined
+}
+
+/** One consistent bounded assignment for newly spawned or already running
+ * workers. The planning seat owns scope and acceptance, while actual tool
+ * evidence can justify a documented deviation.
+ */
+export function eclipseTeamAssignmentPrompt(planBrief:string|undefined,assignment:string):string {
+  if(planBrief===undefined)return assignment
+  return `Plan de ejecución acordado por Kira:\n${planBrief}\n\nResponsabilidad delegada:\n${assignment}\n\nContrato de entrega: conserva requisitos, restricciones y decisiones respaldadas; ejecuta solo este alcance y entrega pruebas reales, incertidumbres y cualquier contradicción a Kira. Un resultado nuevo contradictorio debe escalarse, no ocultarse ni reemplazar silenciosamente el plan.`
 }
 
 declare module '@phoenix-ai/dsh-session/types' {
@@ -653,8 +656,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         // their bounded assignment. Fresh children cannot infer the plan from
         // the Lead's private history; a compact excerpt avoids token waste.
         const planBrief = eclipseEnabled ? eclipseTeamPlanSummary(agent.session.events) : undefined
-        const delegatedPrompt = planBrief === undefined ? args.prompt
-          : `Plan de ejecución acordado por Kira:\n${planBrief}\n\nResponsabilidad delegada:\n${args.prompt}`
+        const delegatedPrompt = eclipseTeamAssignmentPrompt(planBrief,args.prompt)
         return await ctx.agentTeams.spawnTeammate(agent, {
           name: memberName,
           description: args.description,
@@ -704,9 +706,16 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
               return [...new Set([...evidence, ...claimReceipts])]
             })()
             : []
+          // A fresh follow-up assignment must carry the newest published
+          // Eclipse plan, not rely on a stale initial worker spawn context.
+          const rolePlan=membership.role==='lead' && delivery==='wakeup'
+            && args.purpose==='assignment'
+            && isPhoenixCodexAutoSelection(latestModelSelectionPreference(actor.session)?.selection)
+            ? eclipseTeamPlanSummary(actor.session.events) : undefined
+          const assigned=eclipseTeamAssignmentPrompt(rolePlan,args.message)
           const message = proofTools.length === 0
-            ? args.message
-            : `${args.message}\n\n${executionProofText(proofTools)}`
+            ? assigned
+            : `${assigned}\n\n${executionProofText(proofTools)}`
           return ctx.agentTeams.sendMessage(actor, {
             target: args.target,
             purpose: args.purpose,
