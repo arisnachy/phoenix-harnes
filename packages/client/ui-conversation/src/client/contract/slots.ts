@@ -11,6 +11,7 @@ import type {
   TurnLocation, WorkspaceId,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import type { MarkdownFileMentions } from '@phoenix-ai/dsh-client-ui-primitives'
+import type { IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
 import type { MessageId } from '@phoenix-ai/dsh-client-connection/client'
 import type {} from '@phoenix-ai/dsh-client-ui-layout/client'
 import type { ComposerBlock } from './input.ts'
@@ -442,6 +443,8 @@ export interface ChatNodeTurnDataInjected {
   hooks: {
     turnData: SlotHookFactory<'conversation.chat.node', UseChatNodeTurnData>
   }
+  /** Live Host authorization access, injected without exposing credentials to the chat. */
+  getCodexAuthorization?: () => IApiClient['authorization'] | undefined
 }
 
 /** HTML canvas payload that Phoenix may route to its side visual workspace. */
