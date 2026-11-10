@@ -105,7 +105,7 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
     }),
     starterStatsVerified:readyStat(h,'era')&&readyStat(a,'era'),
     recentStarterOutingsVerified:reviewTimeValid&&[h,a].every(p=>p!==null&&
-      p.recentStarts.filter(out=>{
+      new Set(p.recentStarts.filter(out=>{
         const at=Date.parse(out.date)
         const validCount=(value:unknown)=>{
           if(typeof value!=='string'&&typeof value!=='number')return false
@@ -121,7 +121,7 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
           typeof out.opponentId==='number'&&Number.isSafeInteger(out.opponentId)&&out.opponentId>0&&
           validInnings&&
           [out.pitches,out.earnedRuns,out.strikeouts,out.walks].every(validCount)
-      }).length>=2),
+      }).map(out=>out.date)).size>=2),
     injuriesDatedVerified:false, // Injured roster alone has no dated medical report or return-to-play status.
     // MLB gameLog records calendar dates only. Do not interpret midnight UTC
     // as a verified first-pitch time or claim an exact rolling 72-hour window.
