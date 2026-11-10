@@ -7,12 +7,14 @@ import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 import type {} from '@phoenix-ai/dsh-client-ui-sidebar/client'
 import { PluginInventorySettingsTab, type PluginInventorySettingsTabInjected } from './PluginInventorySettingsTab.tsx'
 import { AnatomyConnectorsSettingsTab, type AnatomyConnectorsInjected } from './AnatomyConnectorsSettingsTab.tsx'
+import { SportsApiKeysSettingsTab,type SportsApiKeysInjected } from './SportsApiKeysSettingsTab.tsx'
 import { BusinessLibrarySettingsTab, type BusinessLibraryInjected } from './BusinessLibrarySettingsTab.tsx'
 import { UpdateFooterAction, type UpdateFooterActionInjected } from './UpdateFooterAction.tsx'
 import { en, es, zh, type PluginInventoryLocaleKey } from './locales.ts'
 
 export type { PluginInventorySettingsTabInjected, PluginInventorySettingsTabProps } from './PluginInventorySettingsTab.tsx'
 export type { AnatomyConnectorsInjected, AnatomyConnectorsSettingsTabProps } from './AnatomyConnectorsSettingsTab.tsx'
+export type { SportsApiKeysInjected,SportsApiKeysSettingsTabProps } from './SportsApiKeysSettingsTab.tsx'
 export type { BusinessLibraryInjected, BusinessLibrarySettingsTabProps } from './BusinessLibrarySettingsTab.tsx'
 export type { UpdateFooterActionInjected, UpdateFooterActionProps } from './UpdateFooterAction.tsx'
 export type { PluginInventoryLocaleKey } from './locales.ts'
@@ -74,6 +76,29 @@ export function apply(ctx: ClientContext): void {
     return result.value
   }
   const anatomyInjected=():AnatomyConnectorsInjected=>({listAnatomy,installAnatomy})
+  const listSportsApiKeys:SportsApiKeysInjected['listSportsApiKeys']=async()=>{
+    const result=await ctx.remote.pluginInventory.sportsApiKeyStates()
+    if(!result.ok)throw Error('Sports credentials status unavailable')
+    return result.value
+  }
+  const saveSportsApiKey:SportsApiKeysInjected['saveSportsApiKey']=async(id,apiKey)=>{
+    const result=await ctx.remote.pluginInventory.saveSportsApiKey({id,apiKey})
+    if(!result.ok)throw Error('Sports credential could not be saved')
+    return result.value
+  }
+  const removeSportsApiKey:SportsApiKeysInjected['removeSportsApiKey']=async id=>{
+    const result=await ctx.remote.pluginInventory.removeSportsApiKey({id})
+    if(!result.ok)throw Error('Sports credential could not be removed')
+    return result.value
+  }
+  const verifySportsApiKey:SportsApiKeysInjected['verifySportsApiKey']=async id=>{
+    const result=await ctx.remote.pluginInventory.verifySportsApiKey({id})
+    if(!result.ok)throw Error('Sports credential could not be verified')
+    return result.value
+  }
+  const sportsKeysInjected=():SportsApiKeysInjected=>({
+    listSportsApiKeys,saveSportsApiKey,removeSportsApiKey,verifySportsApiKey,
+  })
 
   const readUpdateState: UpdateFooterActionInjected['readUpdateState'] = async () => {
     const result = await ctx.remote.pluginInventory.updateState()
@@ -115,6 +140,15 @@ export function apply(ctx: ClientContext): void {
     locale:NS,
     inject:anatomyInjected,
   }, AnatomyConnectorsSettingsTab))
+
+  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
+    name:'settings.plugins.tab',
+    id:'sports-api-keys',
+    order:17,
+    label:()=>t('sportsKeysTab'),
+    locale:NS,
+    inject:sportsKeysInjected,
+  },SportsApiKeysSettingsTab))
 
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
     name: 'settings.plugins.tab',
