@@ -5,6 +5,11 @@ on:
     branches: [main, stable]
     paths:
       - 'packages/core/agent/src/model-selection.ts'
+      - 'packages/core/agent/src/eclipse-work-contract.ts'
+      - 'packages/core/agent/tests/eclipse-work-contract.spec.ts'
+      - 'packages/core/agent/tests/eclipse-supervision.spec.ts'
+      - 'packages/subagent/tool-agent-team/src/index.ts'
+      - 'packages/subagent/tool-agent-team/tests/eclipse-team-routing.spec.ts'
       - 'packages/core/agent/tests/model-selection.spec.ts'
       - 'packages/core/agent/tests/model-selection-boundaries.spec.ts'
       - 'apps/cli/config/agent-presets/standard/agent.cordis.yml'
@@ -34,4 +39,7 @@ jobs:
         run: |
           pnpm exec vitest run \
             packages/core/agent/tests/model-selection.spec.ts \
-            packages/core/agent/tests/model-selection-boundaries.spec.ts
+            packages/core/agent/tests/model-selection-boundaries.spec.ts \
+            packages/core/agent/tests/eclipse-work-contract.spec.ts \
+            packages/core/agent/tests/eclipse-supervision.spec.ts \
+            packages/subagent/tool-agent-team/tests/eclipse-team-routing.spec.ts
