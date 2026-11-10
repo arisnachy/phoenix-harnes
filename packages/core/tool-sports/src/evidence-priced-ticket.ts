@@ -317,8 +317,10 @@ export async function evidencePricedTicket(
         q.market===(event.sport==='soccer'?'1x2':'h2h'))
     }).slice(0,6)
   const exactReports=await Promise.allSettled(exactTargets.map(async event=>{
+    // The exact fixture's league is already verified by ESPN; unlike
+    // generic league-wide discovery this does not guess an unsupported slug.
     const sportKey=leagueSportKey[event.league]??
-      (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
+      (event.sport==='soccer'?'soccer_espn_dynamic':routing[event.sport]?.oddsSportKey)
     if(!sportKey)return null
     const deadline=AbortSignal.timeout(9_000)
     const bounded:typeof fetch=(input,init)=>{
@@ -328,10 +330,21 @@ export async function evidencePricedTicket(
     return boundedPriced(lookupExactEspnWinner({
       sportKey,eventId:event.eventId,date:day,
       home:event.home,away:event.away,kickoff:event.kickoff,
+      ...(sportKey==='soccer_espn_dynamic'?{espnLeague:event.league}:{}),
     },<T>(url:string)=>getFeed<T>(url,bounded),now),8_000)
   }))
   const specific=exactReports.flatMap(row=>row.status==='fulfilled'&&row.value?
     row.value.quotes:[])
+  // Exact event-ID matches rescue official undated ESPN prices for display.
+  // The live quote selection below still rejects every undated outcome.
+  for(const row of exactReports){
+    if(row.status!=='fulfilled'||!row.value)continue
+    espnReferenceOdds.push(...row.value.referenceOdds.map(q=>({
+      ...q,sportKey:'soccer_espn_dynamic',
+      source:'ESPN '+(q.endpointSource??'public')+' · referencia oficial observada',
+      nonCotizable:true as const,
+    })))
+  }
   const rawExactReferences=exactReports.reduce((total,row)=>
     total+(row.status==='fulfilled'?row.value?.referenceCount??0:0),0)
   const rawExactCount=specific.length
@@ -434,11 +447,15 @@ export async function evidencePricedTicket(
       ?value as Record<string,unknown>:{}
     const reference=referenceMap.get(index)
     if(!reference)return original
-    const label='ESPN precio de referencia '+reference.price.toFixed(2)+' ('+
-      reference.bookmaker+', '+reference.reason+'); NO cotizable ni vigente.'
+    const label='Cuota observada en ESPN '+reference.price.toFixed(2)+' ('+
+      reference.bookmaker+', '+reference.reason+
+      '); precio auténtico publicado; NO cotizable para un ticket real hasta confirmar vigencia en la casa.'
     return {...original,referenceOdds:{
       bookmaker:reference.bookmaker,price:reference.price,
-      reason:reference.reason,source:reference.endpointSource,nonCotizable:true},
+      reason:reference.reason,source:reference.endpointSource,
+      observedAt:new Date(now).toISOString(),origin:'ESPN Site/Core',
+      providerUpdatedAt:null,sourceVerified:true,bookmakerLiveVerified:false,
+      nonCotizable:true},
       rationale:(String(original.rationale??'').slice(0,300)+' · '+label).slice(0,480)}
   })
   // Last, bounded public-web reconnaissance for legs still without a *current*
@@ -449,8 +466,10 @@ export async function evidencePricedTicket(
     groups[index]?.length?[]:[{event,index}]).slice(0,6)
   const siteResearch=quotedLegs===count||quotesProvider?[]:
     await Promise.allSettled(unresolved.map(async({event,index})=>{
+      // For unknown soccer league pages, use league-independent comparison
+      // portals without turning any observed HTML into a dated sportsbook quote.
       const sportKey=leagueSportKey[event.league]??
-        (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
+        (event.sport==='soccer'?'soccer_worldwide':routing[event.sport]?.oddsSportKey)
       if(!sportKey)return null
       return{index,report:await boundedPriced(researchPublicOddsWebsites({
         sportKey,date:day,home:event.home,away:event.away,
