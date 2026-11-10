@@ -480,3 +480,31 @@
 .userAvatar{box-sizing:border-box;top:0;right:2px;width:49px;height:49px;padding:2px;border:2px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 64%,transparent);outline:2px solid var(--dsw-alias-bg-layer-1);border-radius:50%;box-shadow:0 2px 10px color-mix(in srgb,var(--dsw-alias-brand-primary) 14%,transparent);background:var(--dsw-alias-bg-layer-2)}
 .userAvatar img{display:block;border-radius:50%;object-position:center}
 @media(max-width:520px){.userRow{padding-right:49px}.userAvatar{width:42px;height:42px;right:0}}
+
+/* Native Codex reauthentication is a compact dialog, not a second chat bubble. */
+.codexAuthRecovery {
+  display: grid;
+  gap: 12px;
+  max-width: 520px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.codexAuthRecovery p { margin: 0; }
+.codexAuthActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.codexAuthButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 5px 12px;
+  margin-top: 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 15px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  cursor: pointer;
+}
+.codexAuthButton:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.codexAuthButton:disabled { opacity: .45; cursor: default; }
