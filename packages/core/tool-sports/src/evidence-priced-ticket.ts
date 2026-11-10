@@ -454,7 +454,9 @@ export async function evidencePricedTicket(
       bookmaker:reference.bookmaker,price:reference.price,
       reason:reference.reason,source:reference.endpointSource,
       observedAt:new Date(now).toISOString(),origin:'ESPN Site/Core',
-      providerUpdatedAt:null,sourceVerified:true,bookmakerLiveVerified:false,
+      providerUpdatedAt:Number.isFinite(Date.parse(reference.updatedAt))?
+        reference.updatedAt:null,
+      sourceVerified:true,bookmakerLiveVerified:false,
       nonCotizable:true},
       rationale:(String(original.rationale??'').slice(0,300)+' · '+label).slice(0,480)}
   })
