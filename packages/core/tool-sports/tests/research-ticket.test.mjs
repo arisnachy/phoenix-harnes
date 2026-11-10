@@ -76,7 +76,7 @@ test('five requested legs cannot silently become a one-leg completed ticket',asy
   )
 })
 const recordEvent=(id,at,hw='3-0',aw='0-3')=>({
-  id:String(id),date:at,status:{type:{state:'pre'}},competitions:[{competitors:[
+  id:String(id),date:at,season:{type:2},status:{type:{state:'pre'}},competitions:[{competitors:[
     {homeAway:'home',team:{id:String(id)+'0',displayName:'Home '+id,logo:'https://a.espncdn.com/logo.png'},records:[{summary:hw}]},
     {homeAway:'away',team:{id:String(id)+'1',displayName:'Away '+id,logo:'https://a.espncdn.com/away.png'},records:[{summary:aw}]},
   ]}],
