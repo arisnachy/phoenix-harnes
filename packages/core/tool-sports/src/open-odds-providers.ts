@@ -49,8 +49,14 @@ const filters=(key:string,markets:string)=>{
 }
 async function requestJson(url:string,token:string,header:string,fetcher:typeof fetch){
   const response=await fetcher(url,{headers:{accept:'application/json',[header]:token},
-    redirect:'error',signal:AbortSignal.timeout(12_000)})
+    cache:'no-store',redirect:'error',signal:AbortSignal.timeout(12_000)})
   if(!response.ok)throw Error('Fuente de cuotas HTTP '+response.status)
+  // Do not call a stale CDN snapshot a freshly confirmed OPEN sportsbook line.
+  // A successful no-store response with Age above the validity window is
+  // unusable even when its embedded updated_at looks plausible.
+  const age=response.headers.get('age')
+  if(age!==null&&/^[0-9]+$/u.test(age)&&Number(age)>900)
+    throw Error('Fuente de cuotas: snapshot de caché demasiado antiguo')
   if(Number(response.headers.get('content-length')||0)>4_000_000)
     throw Error('Respuesta de cuotas demasiado grande')
   const body=await response.text()
