@@ -92,14 +92,27 @@ export async function evidencePricedTicket(
         ||check.sourceChecks?.some(source=>source.status==='conflict')===true
       if(conflicts)removedConflicts++
       const pending=check.checklist?.criticalPending.length??12
-      const priority=check.checklist?.complete===true?1.25:
-        check.status==='researched'?0.38:
-          check.status==='incomplete'?0.09:-0.04
+      const injury=check.injuryAudit
+      const injuryGap=!injury||!['verified','partial'].includes(injury.status)||
+        !injury.home.matched||!injury.away.matched
+      const chosen=fixture.pick==='home'?injury?.home:injury?.away
+      const absences=(chosen?.injuries??[]).filter(x=>
+        /out|doubtful|questionable|day.to.day|inactive/iu.test(x.status))
+        .slice(0,3).map(x=>x.athlete+' ('+x.status+')')
+      // Research quality takes precedence over historical form. A partially
+      // investigated favorite must not receive the same priority as one with
+      // completed specialist checks. This is ranking, NOT a probability model.
+      const tier=check.checklist?.complete===true?1.25:
+        check.status==='researched'?0.10:
+          check.status==='incomplete'?-0.12:-0.40
+      const priority=tier-Math.min(12,pending)*0.025-(injuryGap?0.16:0)
       const reason='Especialista '+check.status+
-        '; pasos críticos pendientes '+pending+
+        '; críticos sin cerrar '+pending+
+        '; lesiones '+(injury?.status??'sin fuente')+
+        (absences.length?'; elegido: '+absences.join(', '):'')+
         (conflicts?'; conflicto de identidad':'')
       return{eventId:fixture.eventId,excluded:conflicts,
-        priority:priority-Math.min(12,pending)*0.015,reason}
+        priority,reason}
     })
   }
   const research=await evidenceTicket(count,date,sport,researchFetcher,now,env,

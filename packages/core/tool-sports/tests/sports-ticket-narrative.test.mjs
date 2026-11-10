@@ -81,14 +81,46 @@ test('specialist critical gaps remain conditional and market share never claims 
   assert.match(updated.explanationForChat,/Especialista:/)
   assert.match(updated.explanationForChat,/58\.1%/)
 })
-test('complete specialist with no contradiction may document dossier but never guarantee bet',()=>{
+test('a complete checklist without a verified availability report stays conditional',()=>{
   const original=composeTicketLegNarrative(event,{rationale:'Forma previa verificada'})
   const specialist={eventId:'901',sport:'hockey',league:'nhl',
     status:'researched',verifiedSteps:['Goalies confirmed'],pendingSteps:[],
     checklist:{complete:true,criticalPending:[]},sourceChecks:[]}
   const final=enrichSpecialistNarrative(original,specialist)
-  assert.equal(final.status,'documented')
+  assert.equal(final.status,'conditional')
+  assert.match(final.explanationForChat,/Disponibilidad del elegido:/)
   assert.equal(final.percentage.value,null)
   assert.match(final.explanationForChat,/no disponible/)
   assert.equal(final.referee.bias,'not-assessed')
+})
+
+test('NBA injury statuses and both teams are visible in the selection defence',()=>{
+  const cleveland={eventId:'9001',sport:'basketball',league:'nba',
+    home:'Charlotte Hornets',away:'Cleveland Cavaliers',
+    kickoff:'2026-11-09T23:00:00Z',pick:'away'}
+  const prior=composeTicketLegNarrative(cleveland,
+    {rationale:'Cleveland is favored by recent results; injuries must be checked.'})
+  const specialist={eventId:'9001',sport:'basketball',league:'nba',
+    status:'researched',verifiedSteps:['Rosters verificados'],pendingSteps:[],
+    checklist:{complete:false,criticalPending:['Lesiones e inactivos']},sourceChecks:[],
+    injuryAudit:{status:'verified',league:'nba',checkedAt:'2026-11-09T18:00:00Z',
+      feedUpdatedAt:'2026-11-09T17:59:00Z',
+      source:'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries',
+      officialSource:'https://official.nba.com/nba-injury-report-2026-27-season/',
+      home:{name:'Charlotte Hornets',matched:true,injuries:[{
+        team:'Charlotte Hornets',athlete:'Brandon Miller',athleteId:'2',
+        status:'Out',reportedAt:'2026-11-09T17:00:00Z',
+        details:'Hip',returnDate:null,source:'ESPN'}]},
+      away:{name:'Cleveland Cavaliers',matched:true,injuries:[{
+        team:'Cleveland Cavaliers',athlete:'Jarrett Allen',athleteId:'1',
+        status:'Questionable',reportedAt:'2026-11-09T17:00:00Z',
+        details:'Knee',returnDate:null,source:'ESPN'}]},
+      notes:['Uno de los titulares es cuestionable']}}
+  const updated=enrichSpecialistNarrative(prior,specialist)
+  assert.match(updated.explanationForChat,/Jarrett Allen \(Questionable/)
+  assert.match(updated.explanationForChat,/Brandon Miller \(Out/)
+  assert.match(updated.explanationForChat,/Fuente de disponibilidad: ESPN verified/)
+  assert.ok(updated.contradictions.some(x=>/Jarrett Allen/u.test(x)))
+  assert.equal(updated.status,'conditional')
+  assert.ok(updated.sources.some(x=>/ESPN lesiones de ambos/u.test(x.name)))
 })
