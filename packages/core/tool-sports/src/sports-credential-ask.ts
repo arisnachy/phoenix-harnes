@@ -13,6 +13,9 @@ export const sportsCredentialGuides:Readonly<Record<string,{provider:string;url:
   PHOENIX_API_HOCKEY_KEY:{provider:'API-Hockey',url:'https://www.api-hockey.com/'},
   PHOENIX_API_NFL_KEY:{provider:'API-NFL',url:'https://www.api-american-football.com/'},
   PHOENIX_BALLDONTLIE_API_KEY:{provider:'balldontlie',url:'https://www.balldontlie.io/'},
+  PHOENIX_BIGBALLS_API_KEY:{provider:'Big Balls NHL',url:'https://www.bigdataball.com/'},
+  PHOENIX_NFLMETA_KEY:{provider:'NFLMeta',url:'https://nflverse.nflverse.com/'},
+  PHOENIX_SPORTMONKS_KEY:{provider:'Sportmonks',url:'https://www.sportmonks.com/'},
 }
 export type SportsKeyAskAction='status'|'request'|'mute'|'unmute'|'mute-all'|'unmute-all'
 type Preferences={schema:1;never:boolean;muted:string[];asked:Record<string,string>}
@@ -70,7 +73,8 @@ export async function sportsCredentialAsk(
     question:offer?'¿Quieres conectar '+guide!.provider+
       ' con una API key opcional para ampliar las fuentes deportivas?':null,
     options:offer?['Configurar de forma segura','Ahora no','No volver a preguntar']:[],
-    secureEntry:offer?'/secret set '+ref+' VALOR_DE_LA_CLAVE':null,
-    safety:'Nunca pegar la clave en una respuesta Ask o mensaje del modelo; abrir la interfaz segura de credenciales del Host o ejecutar /secret set. Las fuentes gratuitas siguen funcionando.',
+    secureEntry:offer?'Conectores > APIs deportivas':null,
+    secureConnectorTab:offer?'sports-api-keys':null,
+    safety:'Nunca pegar la clave en una respuesta Ask ni en un mensaje de Kira. Tras el consentimiento abrir Conectores > APIs deportivas, pegarla en el formulario protegido del Host y guardar. Las fuentes públicas siguen funcionando.',
   }
 }
