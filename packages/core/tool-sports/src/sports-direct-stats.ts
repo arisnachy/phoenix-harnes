@@ -63,7 +63,11 @@ const extract=(raw:unknown,max=10):DirectMetric[]=>{
     const value=node.displayValue??node.value
     if(label!==undefined&&value!==undefined)insert(label,value)
     if(next.depth>=5)continue
-    for(const key of ['categories','statistics','stats','splits','records','seasonTypes','tables','rows','items','totals']){
+    // ESPN's live team-statistics route returns metrics under results, while
+    // depthcharts uses a singular depthchart object. Omitting these keys
+    // silently turned HTTP 200 with data into "no advanced metrics".
+    for(const key of ['results','depthchart','depthCharts','categories','statistics',
+      'stats','splits','records','seasonTypes','tables','rows','items','totals']){
       const child=node[key]
       if(child!==undefined)queue.push({value:child,depth:next.depth+1})
     }
