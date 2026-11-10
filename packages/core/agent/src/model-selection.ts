@@ -377,12 +377,12 @@ function adaptiveCodexPlanningEffort(text: string): ReasoningEffortId {
 }
 /** A stopped operational reply that still announces the next action rather than performing it. */
 // oxlint-disable-next-line @stylistic/max-len -- Keep the bilingual unfinished-action matcher auditable as one literal.
-const AUTO_UNFINISHED_ACTION = /(?:\b(?:ahora|a\s+continuaci[oó]n|enseguida|para\s+ir\s+m[aá]s\s+r[aá]pido)\b.{0,180}\b(?:voy\s+a|usar[eé]|har[eé]|comprobar[eé]|revisar[eé]|abrir[eé]|ejecutar[eé]|probar[eé]|verificar[eé]|continuar[eé]|seguir[eé])|\bvoy\s+a\s+(?:comprobar|revisar|abrir|ejecutar|probar|verificar|usar|hacer|continuar|seguir|navegar|inspeccionar)|\b(?:i(?:'|’)ll|i\s+will|i(?:'|’)m\s+going\s+to|let\s+me|next\s+i(?:'|’)ll)\s+(?:check|review|open|run|test|verify|use|continue|inspect|try|fix|update|change|browse|navigate))/isu
+const AUTO_UNFINISHED_ACTION = /(?:\b(?:ahora|a\s+continuaci[oó]n|enseguida|para\s+ir\s+m[aá]s\s+r[aá]pido)\b.{0,180}\b(?:voy\s+a|usar[eé]|har[eé]|comprobar[eé]|revisar[eé]|abrir[eé]|ejecutar[eé]|probar[eé]|verificar[eé]|continuar[eé]|seguir[eé])|\bvoy\s+a\s+(?:comprobar|revisar|abrir|ejecutar|probar|verificar|usar|hacer|continuar|seguir|navegar|inspeccionar|preparar|crear|generar|renderizar|entregar)|\b(?:i(?:'|’)ll|i\s+will|i(?:'|’)m\s+going\s+to|let\s+me|next\s+i(?:'|’)ll)\s+(?:check|review|open|run|test|verify|use|continue|inspect|try|fix|update|change|browse|navigate|create|generate|render|prepare|deliver))/isu
 /** Short explicit promises are not final answers either. */
 const AUTO_SHORT_PENDING_PROMISE = /\b(?:lo|la)\s+(?:har[eé]|revisar[eé]|probar[eé]|verificar[eé])\s+(?:ahora|enseguida)\b/iu
 /** Bare future-tense commitments (without "voy a") still promise pending action. */
 // oxlint-disable-next-line @stylistic/max-len -- One bounded pattern for outstanding first-person commitments.
-const AUTO_FUTURE_ACTION = /\b(?:comprobar[eé]|verificar[eé]|confirmar[eé]|consultar[eé]|inspeccionar[eé]|revisar[eé]|probar[eé]|buscar[eé]|ejecutar[eé])(?=$|[^\p{L}\p{N}_])/iu
+const AUTO_FUTURE_ACTION = /\b(?:comprobar[eé]|verificar[eé]|confirmar[eé]|consultar[eé]|inspeccionar[eé]|revisar[eé]|probar[eé]|buscar[eé]|ejecutar[eé]|crear[eé]|generar[eé]|preparar[eé]|renderizar[eé]|producir[eé]|entregar[eé])(?=$|[^\p{L}\p{N}_])/iu
 function phoenixAutoUnfinishedAction(text: string): boolean {
   return AUTO_UNFINISHED_ACTION.test(text)
     || AUTO_SHORT_PENDING_PROMISE.test(text)
