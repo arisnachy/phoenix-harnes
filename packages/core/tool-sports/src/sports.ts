@@ -50,6 +50,7 @@ const oddsPresentation:Record<string,{sport:string;country?:string;league?:strin
   soccer_mexico_ligamx:{sport:'Fútbol',country:'México',league:'Liga MX'},
   soccer_usa_mls:{sport:'Fútbol',country:'Estados Unidos / Canadá',league:'MLS'},
   soccer_uefa_champs_league:{sport:'Fútbol',country:'Europa',league:'Champions League'},
+  soccer_uefa_womens_champions_league:{sport:'Fútbol',country:'Europa',league:'Champions League femenina'},
   baseball_mlb:{sport:'Béisbol',league:'MLB'},
   basketball_nba:{sport:'Baloncesto',league:'NBA'},
   basketball_wnba:{sport:'Baloncesto',league:'WNBA'},
