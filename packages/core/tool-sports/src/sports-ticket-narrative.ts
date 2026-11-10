@@ -20,7 +20,7 @@ export type TicketNarrative={
   specialistEvidence:string[];criticalPending:string[];
   /** Verifiable per-sport steps for the user-facing research checklist. */
   researchSteps?:Array<{key:string;title:string;critical:boolean;
-    state:'verified'|'partial'|'missing';detail:string;sources?:string[];
+    state:'verified'|'partial'|'missing'|'conflict'|'stale';detail:string;sources?:string[];
     group?:'universal'|'specialist'}>;
   news:TicketNewsItem[];
   externalOpinions:Array<{publisher:string;headline:string;publishedAt:string|null;
