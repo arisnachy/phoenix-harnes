@@ -271,8 +271,8 @@ export async function evidencePricedTicket(
     const report=await boundedPriced(marketOddsDetailed(
       sportKey,'h2h',env,fetcher,now),7_000)
     fallbackSources.push(...report.sources)
-    // Reference quotes without an updatedAt are useful for comparison,
-    // but MUST NOT be placed into the live quoted groups.
+    // ESPN may omit updatedAt. Its fresh observedAt marks a published
+    // comparison price, NOT a bookmaker-accepted executable offer.
     espnReferenceOdds.push(...report.observations)
     const lines=report.quotes
     return lines.flatMap(q=>{
@@ -280,14 +280,14 @@ export async function evidencePricedTicket(
       const updated=Date.parse(q.updatedAt)
       const delayedSource=q.source==='TheRundown'||q.source==='SportsGameOdds'
       const observedAt=Date.parse(q.observedAt??'')
-      const currentSnapshot=delayedSource&&Number.isFinite(observedAt)&&
-        observedAt<=now&&now-observedAt<=15*60_000
-      // Even delayed free feeds must not resurrect old bookmaker lines.
+      const espnObserved=q.source?.startsWith('ESPN Site/Core')===true
+      const currentSnapshot=Number.isFinite(observedAt)&&observedAt<=now&&
+        now-observedAt<=15*60_000&&(delayedSource||espnObserved)
       const validBookTime=Number.isFinite(updated)&&updated<=now&&
-        now-updated<3_600_000
+        now-updated<=3_600_000
       if(!Number.isFinite(Date.parse(time))||
-        !(currentSnapshot?validBookTime:
-          Number.isFinite(updated)&&updated<=now&&now-updated<=3_600_000))return []
+        !(espnObserved?currentSnapshot:delayedSource?
+          currentSnapshot&&validBookTime:validBookTime))return []
       // Soccer 3-way victory must demonstrably include DRAW at this book.
       if(event.sport==='soccer'&&!lines.some(draw=>
         draw.eventId===q.eventId&&draw.bookmaker===q.bookmaker
@@ -335,8 +335,8 @@ export async function evidencePricedTicket(
   }))
   const specific=exactReports.flatMap(row=>row.status==='fulfilled'&&row.value?
     row.value.quotes:[])
-  // Exact event-ID matches rescue official undated ESPN prices for display.
-  // The live quote selection below still rejects every undated outcome.
+  // Exact event-ID matches also supply ESPN observed quotes without updatedAt.
+  // Their status is observed on ESPN, never acceptance at the bookmaker.
   for(const row of exactReports){
     if(row.status!=='fulfilled'||!row.value)continue
     espnReferenceOdds.push(...row.value.referenceOdds.map(q=>({
@@ -354,7 +354,7 @@ export async function evidencePricedTicket(
       detail:'Consulta por ID real de '+exactTargets.length+
         ' partidos, incluyendo el siguiente día UTC; '+
         rawExactCount+' moneylines vigentes y '+rawExactReferences+
-        ' referencias sin fecha o caducadas. No se aceptaron líneas sin casa/updatedAt.',
+        ' referencias sin nombre de casa o con inconsistencias; ESPN no exige updatedAt.',
     })
   }
   const all=[...discovered,...specific]
@@ -364,14 +364,16 @@ export async function evidencePricedTicket(
     const expectedMarket=doubleChance?'double_chance':event.sport==='soccer'?'1x2':'h2h'
     return all.filter(q=>{
       const updated=Date.parse(q.updatedAt),quoteKickoff=Date.parse(q.time)
-      const source=q.source==='TheRundown'||q.source==='SportsGameOdds'
+      const espnObserved=q.source?.startsWith('ESPN Site/Core')===true
       const observedAt=Date.parse(q.observedAt??'')
-      const snapshotValid=source&&Number.isFinite(observedAt)&&
-        now-observedAt>=0&&now-observedAt<=15*60_000
+      const snapshotValid=Number.isFinite(observedAt)&&observedAt<=now&&
+        now-observedAt<=15*60_000
       const quoteAge=now-updated
-      return Number.isFinite(kickoff)&&Number.isFinite(updated)&&Number.isFinite(quoteKickoff)
+      const acceptableAge=espnObserved?snapshotValid:
+        Number.isFinite(updated)&&quoteAge>=0&&quoteAge<=3_600_000
+      return Number.isFinite(kickoff)&&Number.isFinite(quoteKickoff)
         &&Math.abs(kickoff-quoteKickoff)<=3_600_000
-        &&quoteAge>=0&&(snapshotValid?quoteAge<3_600_000:quoteAge<=3_600_000)
+        &&acceptableAge
         &&typeof q.bookmaker==='string'&&q.bookmaker.trim().length>0
         &&typeof q.eventId==='string'&&q.eventId.length>0
         &&Number.isFinite(q.price)&&q.price>1&&q.price<1000
@@ -644,15 +646,21 @@ export async function evidencePricedTicket(
               /^Probabilidad individual exploratoria[^.]*\.\s*/u,'').slice(0,340)+
             ' · Cubre empate; verificar precio, riesgo vigente.').slice(0,480)}:{})}:{})}
   })
+  const espnOnlyObserved=best.choices.some(q=>q.source?.startsWith('ESPN Site/Core'))
+  const observationDisclaimer=espnOnlyObserved?
+    ' ESPN: precio publicado observado en la consulta, aunque updatedAt falte o sea antiguo. '+
+    'No se confirmó que la casa acepte ese precio; revisarlo antes de apostar. ':''
   const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,modelAudit,marketRisk,decisionAudit,
     chatNarrative:legs.map(x=>x.narrative).filter(Boolean),
     narrativeInstruction:'Kira debe explicar cada selección DEBAJO del ticket con datos favorables, datos contrarios, fecha y enlaces de noticias, sede, clima, árbitro verificado o no y porcentaje con origen; jamás resumir cinco patas en una sola frase.',
     subtitle:(checklistComplete&&!elevatedMarketRisk?'Investigación especializada':'TICKET CONDICIONAL')+
-      ' · cuotas verificadas · '+best.book+' · forma histórica ESPN',
+      ' · '+(espnOnlyObserved?'precios observados en ESPN':'cuotas verificadas')+
+      ' · '+best.book+' · forma histórica ESPN',
     note:(checklistComplete&&!elevatedMarketRisk?'COTIZACIÓN INVESTIGADA':
       'TICKET CONDICIONAL: faltan datos especializados. Se muestran solo cuotas reales.')+
-      ' NO ES APUESTA APROBADA NI GANADORA. '+(marketPreference==='double_chance'
+      ' NO ES APUESTA APROBADA NI GANADORA. '+observationDisclaimer+
+      (marketPreference==='double_chance'
       ?'Fútbol: la doble oportunidad cubre empate (1X/X2), NO asegura ganar. ':'')+
       'TheRundown Free informa cuotas con retraso aproximado de 5 min; observedAt es consulta del proveedor, updatedAt es último cambio de la casa. Confirmar precio actual antes de apostar. '+
       'Auditor crítico: '+decisionAudit.recommendation+' '+
@@ -674,7 +682,9 @@ export async function evidencePricedTicket(
     quotedLegs:count,missingQuotes:0,sourceAudit,approvedLegs:0,
     specialistChecks,researchedLegs,modelAudit,trackingEvents,
     multisportSatisfied:research.multisportSatisfied,
-    explanation:'Las '+count+' selecciones tienen cuota vigente y la misma casa '+best.book+
+    explanation:'Las '+count+' selecciones tienen '+
+      (espnOnlyObserved?'precio observado en ESPN, pendiente de confirmación en la casa':
+        'cuota cotejada')+' y la misma casa '+best.book+
       '. Decisión crítica: '+decisionAudit.recommendation+
       (elevatedMarketRisk?'. AVISO: pata con participacion de mercado inferior a 60%; considerar reducir el boleto.':'')+
       (checklistComplete?'. Todos los pasos especializados verificados.':
