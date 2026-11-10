@@ -5,7 +5,7 @@
 export type StepState='verified'|'partial'|'missing'
 export type StepObservation={state:StepState;detail:string}
 export type ChecklistStep={key:string;title:string;critical:boolean;
-  state:StepState;detail:string}
+  state:StepState;detail:string;sources:string[]}
 export type SportChecklist={sport:string;checkedAt:string;
   steps:ChecklistStep[];verified:number;partial:number;missing:number;
   criticalPending:string[];complete:boolean}
@@ -54,6 +54,67 @@ const definitions:Readonly<Record<string,readonly Requirement[]>>={
     {key:'fatigue',title:'Fatiga, calendario y viajes',critical:true},
     {key:'injuries',title:'Disponibilidad y molestias físicas',critical:true}],
 }
+/** Actual source order shown to Kira and the user per mandatory step.
+ * URLs with an event/team ID are resolved by their existing adapters. A named
+ * backup is a recovery instruction, NOT proof the specific endpoint responded.
+ * Live endpoint evidence is written by scripts/phoenix-sports-endpoint-audit.mjs.
+ */
+const commonSources:Record<string,string[]>={
+  fixture:['ESPN Site scoreboard (ID, localía, hora)'],
+  form:['ESPN scoreboard histórico por fechas individuales','ESPN team statistics'],
+  market:['ESPN scoreboard odds','ESPN Core event competition odds/ID',
+    'ESPN summary pickcenter','OddsHarvester / The Odds API si están disponibles'],
+}
+const specialistSources:Record<string,Record<string,string[]>>={
+  basketball:{
+    rosters:['ESPN Site teams/{id}/roster'],
+    starters:['ESPN summary boxscore/rosters','Quintetos de parte oficial de partido cuando se publiquen'],
+    efficiency:['ESPN Site teams/{id}/statistics.results',
+      'ESPN Common v3 athletes/{id}/stats','ESPN summary leaders'],
+    injuries:['ESPN Site basketball/{liga}/injuries por liga',
+      'NBA official injury report PDF (solo NBA)','ESPN summary injuries'],
+    schedule:['ESPN scoreboard histórico para ambos equipos'],
+  },
+  football:{
+    rosters:['ESPN Site football/nfl/teams/{id}/roster'],
+    qb:['ESPN NFL summary rosters y depthchart','NFL parte oficial de inactivos'],
+    matchups:['ESPN NFL team statistics','ESPN NFL summary boxscore'],
+    injuries:['ESPN football/nfl/injuries por liga','NFL parte de inactivos por club'],
+    weather:['ESPN summary venue','Open-Meteo Forecast API'],
+  },
+  hockey:{
+    rosters:['ESPN hockey/nhl roster','NHL API equipos y alineación'],
+    goalies:['NHL API score y gamecenter','ESPN summary goalies (titularidad sin asumir)'],
+    xg:['NHL estadísticas oficiales si se publican','Fuente externa xG validada si se conecta'],
+    special:['NHL Power Play / Penalty Kill','ESPN estadísticas de equipos'],
+    injuries:['ESPN hockey/nhl/injuries por liga','NHL roster/scratches gamecenter'],
+  },
+  baseball:{
+    rosters:['MLB Stats API roster','ESPN baseball/mlb roster'],
+    starters:['MLB Stats API schedule hydrate probablePitcher','MLB boxscore lineup'],
+    bullpen:['MLB Stats API boxscore/game logs (últimas 72h)'],
+    matchups:['MLB Stats API batter/pitcher splits','ESPN summary'],
+    weather:['MLB schedule venue','Open-Meteo temperatura y viento'],
+    injuries:['ESPN baseball/mlb/injuries por liga','MLB Stats API roster/IL'],
+  },
+  soccer:{
+    rosters:['ESPN soccer/{liga}/teams/{id}/roster'],
+    lineups:['ESPN soccer summary/rosters','Club o liga oficial (verificar)'],
+    xg:['ESPN soccer team statistics cuando estén','Proveedor xG externo validado'],
+    injuries:['ESPN summary injuries cuando estén','Club y liga oficial'],
+    draw:['ESPN Core 1X2 con empate explícito','ESPN scoreboard odds'],
+  },
+  tennis:{
+    players:['ESPN tennis athlete profiles','Torneo o circuito oficial'],
+    surface:['ESPN torneo/sede','Calendario del circuito oficial'],
+    serve:['ESPN athlete game logs','Estadísticas oficiales ATP/WTA'],
+    fatigue:['ESPN calendario y últimos encuentros'],
+    injuries:['Parte del torneo o atleta confirmado'],
+  },
+}
+export const getResearchStepSources=(sport:string,key:string):string[]=>[
+  ...(specialistSources[sport]?.[key]??commonSources[key]??[])].slice(0,5)
+
 /** Missing observations are explicitly missing; never auto-credit a step
  * because a tool was called or another step had a valid source.
  */
@@ -66,7 +127,7 @@ export function auditSportChecklist(sport:string,
     const observed=observations[requirement.key]
     const state:StepState=observed?.state==='verified'||observed?.state==='partial'
       ?observed.state:'missing'
-    return{...requirement,state,
+    return{...requirement,state,sources:getResearchStepSources(sport,requirement.key),
       detail:typeof observed?.detail==='string'&&observed.detail.trim()
         ?observed.detail.slice(0,220):'Sin evidencia individual comprobada'}
   })
