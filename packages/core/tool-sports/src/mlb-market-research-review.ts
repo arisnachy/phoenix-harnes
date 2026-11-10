@@ -222,7 +222,7 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
       ...(!gates.starterStatsVerified?['Estadísticas comprobadas de ambos abridores']:[]),
       ...(!gates.recentStarterOutingsVerified?['Últimas salidas fechadas de ambos abridores']:[]),
       ...(!gates.fiveStarterOutingsVerified?['Cinco salidas recientes distintas y válidas por cada abridor sin verificar']:[]),
-      ...(!gates.fiveStarterOutingsVerified?['Cinco salidas distintas y válidas por cada abridor']:[]),
+      ...(!gates.fiveStarterOutingsVerified?['Cinco salidas recientes distintas y válidas por cada abridor sin verificar']:[]),
       ...(!gates.injuriesDatedVerified?['Partes médicos fechados y disponibilidad de jugadores sin verificar']:[]),
       ...(!gates.venueKnown?['Identidad y características del estadio verificadas']:[]),
       ...(!gates.weatherForecastAvailable?['Pronóstico meteorológico horario para el encuentro']:[]),
