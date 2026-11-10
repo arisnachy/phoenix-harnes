@@ -8,6 +8,7 @@ on:
       - 'packages/core/agent/tests/visual-analysis-routing.spec.ts'
       - 'packages/core/tool-health/src/**'
       - 'packages/core/tool-health/tests/clinical-evidence-quality.spec.ts'
+      - 'scripts/phoenix-health-visual-twin.test.mjs'
       - '.github/workflows/clinical-visual-diagnostic-integrity.yml'
   workflow_dispatch:
 
@@ -36,4 +37,4 @@ jobs:
             packages/core/agent/tests/visual-analysis-routing.spec.ts \
             packages/core/tool-health/tests/clinical-evidence-quality.spec.ts
       - name: Confirm no unreviewed clinical claim escapes unit contracts
-        run: node --experimental-strip-types --test scripts/phoenix-health-diagnostic-accuracy.test.mjs
+        run: node --experimental-strip-types --test scripts/phoenix-health-diagnostic-accuracy.test.mjs scripts/phoenix-health-visual-twin.test.mjs
