@@ -191,3 +191,8 @@ test('winner-only research queries exactly two-way/three-way winner market, neve
   assert.equal(requestedDailyOddsMarkets(false),'h2h,spreads,totals')
   assert.equal(dailyOddsSportKey('basketball','nba'),'basketball_nba')
 })
+
+test('women Champions League fixtures are routed to their own ESPN odds league, never mens UCL',()=>{
+  assert.equal(dailyOddsSportKey('soccer','uefa.wchampions'),'soccer_uefa_womens_champions_league')
+  assert.equal(dailyOddsSportKey('soccer','uefa.champions'),'soccer_uefa_champs_league')
+})

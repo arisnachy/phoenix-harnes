@@ -15,6 +15,7 @@ const schedule:Schedule[]=[
   {sport:'tennis',league:'wta'}, {sport:'soccer',league:'eng.1'},
   {sport:'soccer',league:'esp.1'}, {sport:'soccer',league:'mex.1'},
   {sport:'soccer',league:'usa.1'}, {sport:'soccer',league:'uefa.champions'},
+  {sport:'soccer',league:'uefa.wchampions'},
   {sport:'soccer',league:'ger.1'}, {sport:'soccer',league:'ita.1'},
   {sport:'soccer',league:'fra.1'}, {sport:'soccer',league:'por.1'},
   {sport:'soccer',league:'ned.1'}, {sport:'soccer',league:'bra.1'},
@@ -70,6 +71,7 @@ type DailySportsCoverage = {
 export async function scoutDailySports(
   date=dayNow(),limit=30,fetcher:typeof fetch=fetch,
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
+  onlySports:readonly string[]|undefined=undefined,
 ):Promise<{date:string,checkedAt:string,events:DailySportsEvent[],
   totalEligible:number,coverage:DailySportsCoverage[],
   diagnostics:{elapsedMs:number;requestTimeoutMs:number;requestedPartitions:number;
@@ -78,8 +80,12 @@ export async function scoutDailySports(
   if(!dateValid(date))throw Error('Fecha inválida, usar AAAA-MM-DD')
   if(!Number.isInteger(limit)||limit<1||limit>36)throw Error('Límite de 1 a 36 eventos')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración')
+  if(onlySports!==undefined&&(!Array.isArray(onlySports)||!onlySports.length||
+    onlySports.some(x=>typeof x!=='string'||!schedule.some(s=>s.sport===x))))
+    throw Error('Deportes solicitados fuera del calendario conocido')
+  const scanPlan=onlySports? schedule.filter(x=>onlySports.includes(x.sport)):schedule
   const startedAt=Date.now()
-  // 20 leagues x 2 UTC partitions; avoid serial waits through five long waves.
+  // Only the requested sports are scanned when known; keep UTC partitions for local late games.
   // Optional shorter budget is useful for operators and deterministic tests.
   const requestedMs=Number(env.PHOENIX_SPORTS_SCAN_TIMEOUT_MS)
   const requestTimeoutMs=Number.isInteger(requestedMs)&&requestedMs>=30&&requestedMs<=6000
@@ -96,8 +102,8 @@ export async function scoutDailySports(
   // Eight leagues concurrently; both date partitions are independent and
   // cannot block the other. Four-digit league groups and timeout budget remain
   // visible in diagnostics instead of silently returning an empty slate.
-  for(let offset=0;offset<schedule.length;offset+=8){
-    const batch=schedule.slice(offset,offset+8)
+  for(let offset=0;offset<scanPlan.length;offset+=8){
+    const batch=scanPlan.slice(offset,offset+8)
     const reports=await Promise.allSettled(batch.map(async item=>{
       if(!sportsCatalog[item.sport]?.includes(item.league))throw Error('Liga fuera del catálogo')
       return Promise.allSettled(partitions.map(day=>settleWithin(getFeed<Board>(
@@ -163,7 +169,7 @@ export async function scoutDailySports(
   }
   return{date,checkedAt:new Date(now).toISOString(),events,totalEligible:all.length,
     coverage,diagnostics:{elapsedMs:Date.now()-startedAt,requestTimeoutMs,
-      requestedPartitions:schedule.length*partitions.length,
+      requestedPartitions:scanPlan.length*partitions.length,
       partialLeagues:coverage.filter(x=>x.reason.startsWith('Cobertura parcial')).length,
       unavailableLeagues:coverage.filter(x=>x.status==='unavailable').length},
     warning:'Lista de partidos verificables, NO ranking de ganancias ni probabilidades. '
