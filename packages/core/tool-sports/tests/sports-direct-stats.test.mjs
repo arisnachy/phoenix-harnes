@@ -83,3 +83,28 @@ test('failed ESPN season stats do not cause 90 further empty gamelog calls',asyn
   assert.ok(urls.length<50,'No lanzar 90 llamadas vacías para dos plantillas')
   assert.ok(dossier.teams.every(t=>t.athletes.every(a=>a.status==='unavailable')))
 })
+
+test('live ESPN results and singular depthchart objects are not discarded',async()=>{
+  const calls=[]
+  const transport=async url=>{
+    const u=String(url);calls.push(u)
+    const payload=u.endsWith('/roster')?{athletes:[{id:'221',displayName:'Active Player'}]}:
+      u.endsWith('/statistics')?{status:'success',results:{
+        season:{displayName:'2026-27'},
+        categories:[{stats:[{displayName:'Points Per Game',displayValue:'117.5'},
+          {displayName:'Offensive Rating',displayValue:'118.6'}]}]}}:
+      u.endsWith('/depthcharts')?{depthchart:{
+        items:[{displayName:'Starting Five',displayValue:'Five listed'}]}}:
+      u.endsWith('/stats')?{categories:[{stats:[{displayName:'Points',
+        displayValue:'19.7'}]}]}:{}
+    return new Response(JSON.stringify(payload),{status:200})
+  }
+  const result=await collectDirectEspnStats('basketball','nba',
+    [{id:'18',name:'New York Knicks'}],transport,Date.now(),1)
+  assert.equal(result.teams.length,1)
+  assert.ok(result.teams[0].stats.some(x=>x.name==='Offensive Rating'))
+  assert.ok(result.teams[0].depthChart.some(x=>x.name==='Starting Five'))
+  assert.ok(result.teams[0].coverage.some(x=>x.endpoint==='team_statistics'
+    &&x.status==='available'))
+  assert.ok(calls.some(x=>x.endsWith('/teams/18/statistics')))
+})
