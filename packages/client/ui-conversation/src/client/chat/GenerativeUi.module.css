@@ -611,3 +611,14 @@
 }
 @media(max-width:375px){.sportsTicketNarrativeMeasures{grid-template-columns:minmax(0,1fr)}
   .sportsTicketNarrativeMeasures>div:last-child{grid-column:auto}}
+
+/* A subtle accent marks the selection; it never implies the team is leading. */
+.sportsSlateMatch>div.sportsMarkedFavorite{
+  border-left:2px solid var(--dsw-alias-accent-primary,#bd793b);
+  padding-left:6px;margin-left:-8px;border-radius:3px;
+  background:var(--dsw-alias-interactive-bg-hover,rgba(184,123,52,.045))
+}
+.sportsSlateMatch .sportsFavoriteTag{
+  display:block;font-size:9px;font-weight:750;line-height:1.35;
+  color:var(--dsw-alias-accent-primary,#bb642f);letter-spacing:.01em
+}

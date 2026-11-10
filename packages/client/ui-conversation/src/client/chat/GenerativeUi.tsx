@@ -18,7 +18,7 @@ import { SportsBetProgress,validTrackedPick,type SportsTrackedPick } from './Spo
 import { SportsTicketLiveTracker } from './SportsTicketLiveTracker.tsx'
 import {SportsLeagueBadge} from './SportsLeagueIdentity.tsx'
 import {ForecastTicketScope,ForecastTicketSummary,ForecastTicketLegStatus} from './SportsForecastLive.tsx'
-import {importSportsReceipt,type SportsReceiptFixture} from './SportsTicketAutoLink.ts'
+import {PHOENIX_TICKET_UPDATE,importSportsReceipt,readSportsReceiptGoals,type SportsReceiptFixture} from './SportsTicketAutoLink.ts'
 import { SportsNewsPanel } from './SportsNewsPanel.tsx'
 
 const MAX_UI_BLOCKS = 6
@@ -97,6 +97,22 @@ type SportsPitcher = { team:string;name:string;id?:number;image?:string;stats?:s
 type SportsLineup = { team:string;confirmed:boolean;players:SportsPlayer[] }
 type SportsBullpen = { team:string;pitchers:SportsPlayer[];note:string }
 type SportsResearch = { favorite:string;method:string;source:string;evidence:string[] }
+/** A favorite only highlights one unambiguous team, never both rivals. */
+export function sportsFavoriteSide(favorite:string|undefined,away:string,home:string):'away'|'home'|undefined {
+  if(!favorite)return undefined
+  const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'').toLowerCase()
+    .replace(/[^a-z0-9]+/gu,' ').trim()
+  const phrase=norm(favorite)
+  if(!phrase)return undefined
+  const contains=(name:string)=>phrase===name||phrase.startsWith(name+' ')
+    ||phrase.endsWith(' '+name)||phrase.includes(' '+name+' ')
+  const matches=(name:string)=>{
+    const team=norm(name),nickname=team.split(' ').at(-1)??''
+    return !!team&&(contains(team)||(nickname.length>=4&&contains(nickname)))
+  }
+  const a=matches(away),h=matches(home)
+  return a===h?undefined:a?'away':'home'
+}
 type SportsGameCard = {
   component: 'sports_game_card'; version: 1
   props: {
@@ -104,7 +120,7 @@ type SportsGameCard = {
     home: SportsSide; away: SportsSide; source: string
     highlights?: Array<{ label: string; value: string; image?: string; detail?: string }>
     pitchers?: SportsPitcher[]; lineups?: SportsLineup[]; bullpen?: SportsBullpen[]
-    sport?: string; league?: string; providerLeague?:string; eventDate?:string; phase?:'pre'|'in'|'post'; country?: string; eventId?: string; broadcast?: string; research?: SportsResearch
+    sport?: string; league?: string; providerLeague?:string; eventDate?:string; phase?:'pre'|'in'|'post'; country?: string; eventId?: string; broadcast?: string; research?: SportsResearch; favorite?:string
     periods?: Array<{ label:string;away:string;home:string }>
     note?: string; askPrompt?: string; trackedBets?: SportsTrackedPick[]
   }
@@ -397,7 +413,7 @@ const sportsOdds = (v:Record<string,unknown>):v is SportsOddsCard => {
 }
 const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
-    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt','pitchers','lineups','bullpen','sport','league','providerLeague','eventDate','phase','country','eventId','broadcast','research','periods','trackedBets'])) return false
+    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt','pitchers','lineups','bullpen','sport','league','providerLeague','eventDate','phase','country','eventId','broadcast','research','favorite','periods','trackedBets'])) return false
   const p = value.props
   return isText(p.title) && optionalText(p.subtitle) && optionalText(p.status,60)
     && isText(p.when) && optionalText(p.venue) && sportsSide(p.home) && sportsSide(p.away)
@@ -405,7 +421,7 @@ const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => 
     && optionalText(p.sport,60) && optionalText(p.league,100) && optionalText(p.providerLeague,80)
     && optionalText(p.eventDate,12) && (p.phase===undefined || ['pre','in','post'].includes(String(p.phase)))
     && optionalText(p.country,100)
-    && optionalText(p.eventId,50) && optionalText(p.broadcast,150)
+    && optionalText(p.eventId,50) && optionalText(p.broadcast,150) && optionalText(p.favorite,170)
     && (p.trackedBets===undefined || Array.isArray(p.trackedBets) && p.trackedBets.length<=12 && p.trackedBets.every(validTrackedPick))
     && (p.research===undefined || sportsResearch(p.research))
     && (p.periods===undefined || Array.isArray(p.periods) && p.periods.length<=12 && p.periods.every(x=>isRecord(x)
@@ -803,6 +819,45 @@ const SportsPortrait = ({ label,logo,variant }:{ label:string;logo?:string|undef
       onError={(event)=>{event.currentTarget.style.display='none'}}/>}
   </span>
 )
+/** Mark the user's verified winner pick, or the analytic favorite, independently of the score. */
+const SportsMarkedMatch=({away,home,hasStarted,favorite,trackedBets=[],sport='',league='',date='',eventId,pendingLabel='VS · No iniciado'}:{
+  away:SportsSide;home:SportsSide;hasStarted:boolean;favorite?:string|undefined
+  trackedBets?:SportsTrackedPick[]|undefined;sport?:string|undefined;league?:string|undefined
+  date?:string|undefined;eventId?:string|undefined;pendingLabel?:string|undefined
+})=>{
+  const [receiptPicks,setReceiptPicks]=useState<SportsTrackedPick[]>(()=>readSportsReceiptGoals({
+    sport,league,date,home:home.label,away:away.label,eventId,
+  }))
+  useEffect(()=>{
+    const update=()=>setReceiptPicks(readSportsReceiptGoals({
+      sport,league,date,home:home.label,away:away.label,eventId,
+    }))
+    update()
+    if(typeof window==='undefined')return
+    window.addEventListener(PHOENIX_TICKET_UPDATE,update)
+    window.addEventListener('storage',update)
+    return()=>{window.removeEventListener(PHOENIX_TICKET_UPDATE,update);window.removeEventListener('storage',update)}
+  },[sport,league,date,home.label,away.label,eventId])
+  const sides=new Set([...trackedBets,...receiptPicks].filter(p=>
+    (p.market==='moneyline'||p.market==='three-way')&&(p.side==='home'||p.side==='away'))
+    .map(p=>p.side))
+  const ticketSide=sides.size===1?sides.values().next().value:undefined
+  const chosen=ticketSide??sportsFavoriteSide(favorite,away.label,home.label)
+  return <div className={css.sportsSlateMatch}>
+    {(['away','home'] as const).map(side=>{
+      const team=side==='away'?away:home,marked=chosen===side
+      return <div key={side} className={marked?css.sportsMarkedFavorite:undefined}
+        data-selected-favorite={marked?'true':undefined}>
+        <SportsPortrait label={team.label} logo={team.logo}/>
+        <span><strong>{team.label}</strong>
+          {marked&&<small className={css.sportsFavoriteTag}>{ticketSide?'★ Tu selección':'★ Favorito PHOENIX'}</small>}
+          {team.meta&&<small>{team.meta}</small>}</span>
+        {hasStarted&&team.score!==undefined&&<b>{team.score}</b>}
+      </div>
+    })}
+    {!hasStarted&&<span className={css.sportsSlateVs}>{pendingLabel}</span>}
+  </div>
+}
 const SportsLineups = ({ lineups }:{ lineups:SportsLineup[] }) => {
   const [selected,setSelected]=useState(0)
   const lineup=lineups[selected]
@@ -1078,15 +1133,10 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                 <strong>{e.when}</strong><span className={css.sportsSlatePhase}>{pending?'Participantes pendientes':phase==='pre'?'No iniciado':phase==='in'?'● En vivo':phase==='post'?'Finalizado':live?.status??e.status??'Estado sin confirmar'}</span>
               </div>
               {pending?<p className={css.sportsSlateUnknown}>Participantes pendientes de confirmar. No se muestra marcador ni análisis sin un encuentro verificado.</p>
-                :<div className={css.sportsSlateMatch}>
-                  <div><SportsPortrait label={away.label} logo={away.logo}/>
-                    <span><strong>{away.label}</strong>{away.meta&&<small>{away.meta}</small>}</span>
-                    {hasStarted&&away.score!==undefined&&<b>{away.score}</b>}</div>
-                  <div><SportsPortrait label={home.label} logo={home.logo}/>
-                    <span><strong>{home.label}</strong>{home.meta&&<small>{home.meta}</small>}</span>
-                    {hasStarted&&home.score!==undefined&&<b>{home.score}</b>}</div>
-                  {!hasStarted&&<span className={css.sportsSlateVs}>VS · Sin iniciar</span>}
-                </div>}
+                :<SportsMarkedMatch away={away} home={home} hasStarted={hasStarted}
+                  favorite={e.favorite} trackedBets={e.trackedBets} sport={p.sport}
+                  league={p.providerLeague??p.league} date={p.date}
+                  eventId={live?.id??e.eventId} pendingLabel="VS · Sin iniciar"/>}
               {!pending&&<SportsLiveFacts game={live} meta={meta} sport={p.sport} compact/>}
               {!pending&&<SportsBetProgress sport={p.sport??''} league={p.providerLeague??p.league??''}
                 date={p.date} home={e.home.label} away={e.away.label}
@@ -1122,15 +1172,12 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
               {(live?.status??p.status)&&<span className={css.sportsStatus}>{live?.status??p.status}</span>}
             </header>
             <small className={css.sportsGameWhen}>◷ {p.when}</small>
-            <div className={css.sportsSlateMatch}>
-              <div><SportsPortrait label={p.away.label} logo={p.away.logo}/>
-                <span><strong>{p.away.label}</strong>{p.away.meta&&<small>{p.away.meta}</small>}</span>
-                {hasStarted&&(live?.awayScore??p.away.score)!==undefined&&<b>{live?.awayScore??p.away.score}</b>}</div>
-              <div><SportsPortrait label={p.home.label} logo={p.home.logo}/>
-                <span><strong>{p.home.label}</strong>{p.home.meta&&<small>{p.home.meta}</small>}</span>
-                {hasStarted&&(live?.homeScore??p.home.score)!==undefined&&<b>{live?.homeScore??p.home.score}</b>}</div>
-              {!hasStarted&&<span className={css.sportsSlateVs}>VS · No iniciado</span>}
-            </div>
+            <SportsMarkedMatch
+              away={{...p.away,...(hasStarted&&live?.awayScore!==undefined?{score:live.awayScore}:{})}}
+              home={{...p.home,...(hasStarted&&live?.homeScore!==undefined?{score:live.homeScore}:{})}}
+              hasStarted={hasStarted} favorite={p.favorite??p.research?.favorite}
+              trackedBets={p.trackedBets} sport={p.sport} league={p.providerLeague??p.league}
+              date={p.eventDate} eventId={live?.id??p.eventId}/>
             <SportsLiveFacts game={live} meta={meta} sport={p.sport} compact/>
             <SportsBetProgress sport={p.sport??''} league={p.providerLeague??p.league??''}
               date={p.eventDate??''} home={p.home.label} away={p.away.label}
