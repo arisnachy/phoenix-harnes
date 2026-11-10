@@ -796,7 +796,7 @@ test('cached pitcher evidence expires at review time even when collection was va
   assert.ok(d.starters.home&&d.starters.away)
   assert.ok(d.bullpen.home.length&&d.bullpen.away.length)
   for(const p of [d.starters.home,d.starters.away]){
-    p.recentStarts=[log('2026-05-18'),log('2026-05-17')]
+    p.recentStarts=[log('2026-06-25'),log('2026-06-24')]
   }
   for(const side of ['home','away']){
     d.bullpen[side][0].reliefUsage72h=[log('2026-06-28')]
