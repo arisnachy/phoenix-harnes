@@ -99,7 +99,13 @@ export async function fetchTheRundownOdds(
     if(!eventId||!homeName||!awayName||!validTime(start,now,true))continue
     for(const value of arr(event.markets).slice(0,15)){
       const market=obj(value),id=Number(market.market_id)
-      if(![1,2,3].includes(id)||market.period_id!==0&&market.period_id!=='0')continue
+      // Main-line market IDs 1/2/3 represent full-game outcomes in V2.
+      // TheRundown's own response examples OMIT period_id entirely, so
+      // rejecting that optional field silently drops every valid moneyline.
+      // An explicit non-game period is always excluded.
+      const period=market.period_id
+      if(![1,2,3].includes(id)||
+        (period!==undefined&&period!==null&&period!==0&&period!=='0'))continue
       const type=id===1?'h2h':id===2?'spreads':'totals'
       if(!markets.split(',').includes(type))continue
       for(const rawParticipant of arr(market.participants).slice(0,5)){
