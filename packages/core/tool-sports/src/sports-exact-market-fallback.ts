@@ -17,6 +17,7 @@ const leagues:Readonly<Record<string,[string,string]>>={
   icehockey_nhl:['hockey','nhl'],soccer_epl:['soccer','eng.1'],
   soccer_spain_la_liga:['soccer','esp.1'],soccer_mexico_ligamx:['soccer','mex.1'],
   soccer_usa_mls:['soccer','usa.1'],soccer_uefa_champs_league:['soccer','uefa.champions'],
+  soccer_uefa_womens_champions_league:['soccer','uefa.wchampions'],
 }
 const norm=(text:string)=>text.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9 ]/gu,' ').replace(/\s+/gu,' ').trim()
