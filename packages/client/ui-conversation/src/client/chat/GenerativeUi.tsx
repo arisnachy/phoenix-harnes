@@ -165,7 +165,8 @@ type SportsTicketNarrative = {
   favorable:string[]
   contradictions:string[]
   researchSteps?:Array<{key:string;title:string;critical:boolean;
-    state:'verified'|'partial'|'missing';detail:string;sources?:string[]}>
+    state:'verified'|'partial'|'missing';detail:string;sources?:string[];
+    group?:'universal'|'specialist'}>
   news:Array<{headline:string;publisher:string;publishedAt:string|null;
     articleUrl:string|null;imageUrl:string|null}>
   globalNews:Array<{publisher:string;headline:string;indexedAt:string|null;articleUrl:string;status:string}>
@@ -485,11 +486,12 @@ const sportsTicketNarrative=(v:unknown):v is SportsTicketNarrative=>{
   if(!texts(v.favorable,450)||!texts(v.contradictions,450))return false
   if(v.researchSteps!==undefined&&(!Array.isArray(v.researchSteps)||
     v.researchSteps.length>25||!v.researchSteps.every(x=>isRecord(x)&&
-      hasOnlyKeys(x,['key','title','critical','state','detail','sources'])&&
+      hasOnlyKeys(x,['key','title','critical','state','detail','sources','group'])&&
       boundedSportsText(x.key,50)&&boundedSportsText(x.title,180)&&
       typeof x.critical==='boolean'&&
       ['verified','partial','missing'].includes(String(x.state))&&
       boundedSportsText(x.detail,240)&&
+      (x.group===undefined||x.group==='universal'||x.group==='specialist')&&
       (x.sources===undefined||(Array.isArray(x.sources)&&x.sources.length<=5&&
         x.sources.every(y=>boundedSportsText(y,150)))))))return false
   if(!Array.isArray(v.news)||v.news.length>6||!v.news.every(x=>isRecord(x)&&
@@ -983,7 +985,7 @@ function SportsTicketResearchNarrative({value,index}:{value:SportsTicketNarrativ
       {value.researchSteps?.length?<ul>{value.researchSteps.map((step,i)=>
         <li key={step.key+'-'+i}>
           <strong>{step.state==='verified'?'✓':step.state==='partial'?'◐':'○'}
-            {' '}{step.title}</strong> · {step.state==='verified'?'Dato comprobado':
+            {' '}{step.key} · {step.title}</strong> · {step.state==='verified'?'Dato comprobado':
               step.state==='partial'?'Dato parcial':'Dato no obtenido'}
             {' '}· {step.detail}
           {step.sources?.length?<small> · Fuentes previstas: {step.sources.join(' → ')}</small>:null}
