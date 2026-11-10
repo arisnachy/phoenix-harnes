@@ -154,40 +154,44 @@ export async function fetchEspnInjuryBackup(
     if(season&&(str(season.name??season.displayName).toLowerCase().includes('off season')||
       season.type===4))offSeason=true
   }
-  const ids=await officialIds(fixture,readJSON)
-  if(ids){
-    const prefix='https://site.api.espn.com/apis/site/v2/sports/'+
-      route.sport+'/'+route.league+'/teams/'
-    const results=await Promise.allSettled([
-      readJSON<unknown>(prefix+ids.home+'/injuries'),
-      readJSON<unknown>(prefix+ids.away+'/injuries'),
-    ])
-    for(const [idx,item] of results.entries()){
-      if(item.status!=='fulfilled'){
-        notes.push((idx===0?'Local':'Visitante')+' ESPN equipo: acceso fallido')
-        continue
-      }
-      const payload=row(item.value)
-      observeSeason(item.value)
-      const p=parseGroups(item.value,prefix+(idx===0?ids.home:ids.away)+'/injuries')
-      // A team route may return an ungrouped athlete list; never infer
-      // 'healthy' from an unrecognized schema.
-      if(p.length)groups.push(...p)
-      feedUpdatedAt=date(payload?.timestamp)??feedUpdatedAt
-    }
-  }
+  // Empirically working ESPN league feeds are the primary route.
+  // The sampled team /injuries routes replied HTTP 200 with an empty [].
+  // Never interpret an empty team response as healthy athletes.
+  try{
+    const payload=await readJSON<unknown>(base.source)
+    const root=row(payload)
+    observeSeason(payload)
+    feedUpdatedAt=date(root?.timestamp)??feedUpdatedAt
+    groups=parseGroups(payload,base.source)
+    if(!groups.length)notes.push('ESPN liga: sin grupos de lesiones reconocibles')
+  }catch(error){notes.push('ESPN lesiones por liga: '+
+    (error instanceof Error?error.message:String(error)).slice(0,85))}
   if(!groups.some(g=>same(g.name,fixture.home))||
     !groups.some(g=>same(g.name,fixture.away))){
-    try{
-      const payload=await readJSON<unknown>(base.source)
-      const root=row(payload)
-      observeSeason(payload)
-      feedUpdatedAt=date(root?.timestamp)??feedUpdatedAt
-      const received=parseGroups(payload,base.source)
-      for(const g of received)if(!groups.some(x=>same(x.name,g.name)))
-        groups.push(g)
-    }catch(error){notes.push('ESPN lesiones por liga: '+
-      (error instanceof Error?error.message:String(error)).slice(0,85))}
+    const ids=await officialIds(fixture,readJSON)
+    if(ids){
+      const prefix='https://site.api.espn.com/apis/site/v2/sports/'+
+        route.sport+'/'+route.league+'/teams/'
+      const targets=[{name:fixture.home,id:ids.home},{name:fixture.away,id:ids.away}]
+        .filter(t=>!groups.some(g=>same(g.name,t.name)))
+      const results=await Promise.allSettled(targets.map(t=>
+        readJSON<unknown>(prefix+t.id+'/injuries')))
+      for(const [idx,item] of results.entries()){
+        if(item.status!=='fulfilled'){
+          notes.push(targets[idx]!.name+' ESPN equipo: acceso fallido')
+          continue
+        }
+        const payload=row(item.value)
+        observeSeason(item.value)
+        const parsed=parseGroups(item.value,prefix+targets[idx]!.id+'/injuries')
+        if(parsed.length){
+          for(const team of parsed)
+            if(!groups.some(g=>same(g.name,team.name)))groups.push(team)
+        }else notes.push(targets[idx]!.name+
+          ' ruta de equipo vacía: NO demuestra plantilla sana')
+        feedUpdatedAt=date(payload?.timestamp)??feedUpdatedAt
+      }
+    }
   }
   const h=groups.find(x=>same(x.name,fixture.home))
   const a=groups.find(x=>same(x.name,fixture.away))
