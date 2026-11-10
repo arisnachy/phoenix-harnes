@@ -4,7 +4,7 @@
  * dynamic client scripts, region spoofing or arbitrary user-provided URLs.
  * ESPN may challenge automated clients; that is reported as blocked.
  */
-export type PublicOddsProvider='ESPN'|'Oddschecker'|'ScoresAndOdds'
+export type PublicOddsProvider='ESPN'|'Oddschecker'|'ScoresAndOdds'|'CuotasAhora'|'YahooSports'|'Oddspedia'
 export type PageStatus='observed-team-mentions'|'page-accessible'|'not-found'|'blocked'|'unavailable'
 export type PublicMoneylineHint={
   selection:string;american:string;decimal:number
@@ -82,7 +82,11 @@ const today=(now:number)=>new Intl.DateTimeFormat('en-CA',{
 /** Fixed, manually checked public navigation entry points; no string URL interpolation. */
 export function publicOddsWebsitePages(sportKey:string):Page[]{
   if(!/^[a-z0-9_]{3,75}$/u.test(sportKey))throw Error('Liga no válida')
-  const routes:Page[]=[{provider:'ESPN',url:'https://www.espn.com/sports-betting/odds'}]
+  const routes:Page[]=[
+    {provider:'ESPN',url:'https://www.espn.com/sports-betting/odds'},
+    {provider:'CuotasAhora',url:'https://www.cuotasahora.com/'},
+    {provider:'YahooSports',url:'https://sports.yahoo.com/betting/odds/'},
+  ]
   if(sportsPages[sportKey])routes.push({
     provider:'ESPN',url:'https://www.espn.com/'+sportsPages[sportKey]+'/odds',
   })
@@ -94,6 +98,7 @@ export function publicOddsWebsitePages(sportKey:string):Page[]{
     const slug=soccerPages[sportKey]
     routes.push({provider:'Oddschecker',url:'https://www.oddschecker.com/us/soccer'+
       (slug?'/'+slug:'')})
+    routes.push({provider:'Oddspedia',url:'https://oddspedia.com/es/futbol'})
   }
   return routes
 }
@@ -141,7 +146,8 @@ const isBlocked=(html:string)=>/just a moment|verify that you(?:\s+are|['’]re)
   ||(/<title[^>]*>[^<]*access denied/iu.test(html))
 const hosts:Readonly<Record<PublicOddsProvider,string>>={
   ESPN:'www.espn.com',Oddschecker:'www.oddschecker.com',
-  ScoresAndOdds:'www.scoresandodds.com',
+  ScoresAndOdds:'www.scoresandodds.com',CuotasAhora:'www.cuotasahora.com',
+  YahooSports:'sports.yahoo.com',Oddspedia:'oddspedia.com',
 }
 const cache=new Map<string,{expires:number;work:Promise<OddsPageObservation>}>()
 export async function readPublicOddsWebsitePage(
@@ -215,5 +221,5 @@ export async function researchPublicOddsWebsites(input:{
     readPublicOddsWebsitePage(page,home,away,fetcher,now)))
   return {sportKey:input.sportKey,requestedDate:date,home,away,pages:reports,
     bookmakerQuotes:0,bookmakerVerified:false,
-    warning:'Los precios visibles de ScoresAndOdds se etiquetan referencia y NO son cuotas elegibles: falta casa, hora de actualización y cotejo de evento. Las páginas son referencias de investigación, NO cotizaciones elegibles. Ninguna cifra de HTML se transforma en cuota sin identidad de ambos equipos, fecha/hora del evento, casa, mercado, período, precio y marca temporal de la casa. No eludir geobloqueos, CAPTCHA ni paywalls. Ante falta de precios, presentar borrador CONDICIONAL y finalizar la respuesta, sin repetir notas de progreso.'}
+    warning:'ESPN publica cuotas oficiales mediante su proveedor DraftKings, pero cada precio requiere mercado, casa y timestamp verificables para ser cotizable. CuotasAhora, Yahoo Sports y Oddspedia se consultan como referencias públicas; un HTML no acredita cuota vigente. Los precios visibles de ScoresAndOdds se etiquetan referencia y NO son cuotas elegibles: falta casa, hora de actualización y cotejo de evento. Las páginas son referencias de investigación, NO cotizaciones elegibles. Ninguna cifra de HTML se transforma en cuota sin identidad de ambos equipos, fecha/hora del evento, casa, mercado, período, precio y marca temporal de la casa. No eludir geobloqueos, CAPTCHA ni paywalls. Ante falta de precios, presentar borrador CONDICIONAL y finalizar la respuesta, sin repetir notas de progreso.'}
 }
