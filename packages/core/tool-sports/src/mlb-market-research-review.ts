@@ -122,6 +122,25 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
           validInnings&&
           [out.pitches,out.earnedRuns,out.strikeouts,out.walks].every(validCount)
       }).map(out=>out.date)).size>=2),
+    // Five distinct, valid and temporally relevant starts per pitcher are needed
+    // for a deeper recent-form assessment. The legacy two-start gate remains
+    // separately visible for compatibility; it must not be mistaken for five.
+    fiveStarterOutingsVerified:reviewTimeValid&&[h,a].every(p=>p!==null&&
+      new Set(p.recentStarts.filter(out=>{
+        const at=Date.parse(out.date)
+        const innings=String(out.innings)
+        const validCount=(value:unknown)=>{
+          if(typeof value!=='string'&&typeof value!=='number')return false
+          if(typeof value==='string'&&!value.trim())return false
+          const n=Number(value)
+          return Number.isSafeInteger(n)&&n>=0
+        }
+        return Number.isFinite(at)&&at<=checkedMs&&at<=reviewMs&&
+          checkedMs-at<=45*86400000&&reviewMs-at<=45*86400000&&
+          Number.isSafeInteger(out.opponentId)&&out.opponentId>0&&
+          /^\\d+\\.[012]$/u.test(innings)&&
+          [out.pitches,out.earnedRuns,out.strikeouts,out.walks].every(validCount)
+      }).map(out=>out.date)).size>=5),
     injuriesDatedVerified:false, // Injured roster alone has no dated medical report or return-to-play status.
     // MLB gameLog records calendar dates only. Do not interpret midnight UTC
     // as a verified first-pitch time or claim an exact rolling 72-hour window.
@@ -202,6 +221,8 @@ export function reviewMlbResearch(d:MlbCase,reviewAt:string=d.checkedAt):MlbRese
       ...(!gates.rosterMatchupsReviewed?['Matriz completa de nueve bateadores contra abridor y relevistas rivales']:[]),
       ...(!gates.starterStatsVerified?['Estadísticas comprobadas de ambos abridores']:[]),
       ...(!gates.recentStarterOutingsVerified?['Últimas salidas fechadas de ambos abridores']:[]),
+      ...(!gates.fiveStarterOutingsVerified?['Cinco salidas recientes distintas y válidas por cada abridor sin verificar']:[]),
+      ...(!gates.fiveStarterOutingsVerified?['Cinco salidas distintas y válidas por cada abridor']:[]),
       ...(!gates.injuriesDatedVerified?['Partes médicos fechados y disponibilidad de jugadores sin verificar']:[]),
       ...(!gates.venueKnown?['Identidad y características del estadio verificadas']:[]),
       ...(!gates.weatherForecastAvailable?['Pronóstico meteorológico horario para el encuentro']:[]),
