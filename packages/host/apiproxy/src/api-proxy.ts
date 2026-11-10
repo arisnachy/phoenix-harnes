@@ -66,6 +66,7 @@ import {
   VisionFallbackError,
   describePromptImagesWithFallback,
   resolveVisionFallbackRoute,
+  requiresFocusedClinicalVision,
   type VisionFallbackConfig,
 } from './vision-fallback.ts'
 import type { SessionRawArtifact } from '@phoenix-ai/dsh-session-persistence'
@@ -3023,7 +3024,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             if (hasImage) {
               const current = selectionFor(agent).current
               if (await selectedRouteRejectsImages(ctx, current)) {
-                const route = await resolveVisionFallbackRoute(ctx, current, defaults.visionFallback ?? {})
+                const sourceText=content.flatMap(part=>part.type==='text'?[part.text]:[]).join(' ')
+                const focusedClinical=requiresFocusedClinicalVision(sourceText)
+                const route = await resolveVisionFallbackRoute(
+                  ctx,current,defaults.visionFallback ?? {},focusedClinical,
+                )
                 if (route === undefined) {
                   return err(request, {
                     code: 'attachment-error',

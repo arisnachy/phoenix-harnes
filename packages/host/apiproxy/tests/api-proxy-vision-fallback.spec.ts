@@ -21,6 +21,8 @@ import UserQuestionService from '@phoenix-ai/dsh-user-questions'
 import type { RpcRequest } from '@phoenix-ai/dsh-host-apiproxy/api/rpc'
 import { RpcId } from '@phoenix-ai/dsh-host-apiproxy/api/rpc'
 import { createApiProxy } from '../src/api-proxy.ts'
+import { pickFocusedVisionReader, requiresFocusedClinicalVision } from '../src/vision-fallback.ts'
+import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 
 let nextRpc = 1
 function request<P>(payload: P): RpcRequest<P> {
@@ -380,6 +382,59 @@ describe('Borrowed-eyes prompt admission', () => {
     expect(content.some(block => block.type === 'text' && block.text.includes(question))).toBe(true)
     const delivered = (followup.mock.calls[0]?.[0] as UserMessage).content
     expect(delivered.some(block => block.type === 'text' && block.text.includes('fallback vision model'))).toBe(true)
+    await ctx.fiber.dispose()
+  })
+})
+
+describe('regression: focused reading of marked medical studies',()=>{
+  const reader=(provider:string,id:string,efforts:('high'|'medium'|'low')[]=[])=>
+    ({provider,id,name:id,inputModalities:['text','image'] as const,
+      reasoning:{efforts:efforts.map(e=>({id:ReasoningEffortId(e),name:e}))}})
+  it('identifies CT, ECG, histology and image-only uploads as potential medical images',()=>{
+    expect(requiresFocusedClinicalVision('Mira esta tomografía, mide el apéndice y describe el órgano')).toBe(true)
+    expect(requiresFocusedClinicalVision('Interpreta este ECG')).toBe(true)
+    expect(requiresFocusedClinicalVision('Citología: ¿qué células se observan?')).toBe(true)
+    expect(requiresFocusedClinicalVision('')).toBe(true)
+    expect(requiresFocusedClinicalVision('Haz un logo minimalista')).toBe(false)
+  })
+  it('prefers a verified High specialist, without relying on names alone',()=>{
+    const r=pickFocusedVisionReader([
+      reader('openai-codex','gpt-6.1-terra',['low']),
+      reader('openai-codex','gpt-6.1-sol',['high']),
+    ],{provider:'plain',model:'text-only'})
+    expect(r).toMatchObject({provider:'openai-codex',model:'gpt-6.1-sol',
+      reasoningEffort:ReasoningEffortId('high')})
+  })
+  it('does not hallucinate High support or reuse a text-only session model',()=>{
+    const r=pickFocusedVisionReader([
+      reader('plain','text-only',['high']),
+      reader('eyes','model-without-reasoning'),
+    ],{provider:'plain',model:'text-only'})
+    expect(r).toEqual({provider:'eyes',model:'model-without-reasoning'})
+  })
+  it('favors Medium when High is not available and returns no route when none can see',()=>{
+    const r=pickFocusedVisionReader([
+      reader('eyes','low-1',['low']),
+      reader('eyes','medium-1',['medium']),
+    ],{provider:'plain',model:'text-only'})
+    expect(r).toMatchObject({model:'medium-1',reasoningEffort:ReasoningEffortId('medium')})
+    expect(pickFocusedVisionReader([], {provider:'plain',model:'text-only'})).toBeUndefined()
+  })
+  it('vision prompt is explicitly lesion and ROI focused, never a predetermined appendicitis label',async()=>{
+    const {ctx,sessionId,eyeCalls}=await harness()
+    const api=proxy(ctx,{enabled:true})
+    const res=await api.sessions.prompt(request({
+      sessionId,mode:'queue' as const,
+      content:[IMAGE_PART,{type:'text',text:'Interpreta este corte axial de tomografía abdominal'}],
+    }))
+    expect(res.result.ok).toBe(true)
+    const prompt=eyeCalls[0]?.system??''
+    expect(prompt).toContain('MEDICAL FOCUS / ABNORMALITY SEARCH')
+    expect(prompt).toContain('physician-marked or measured region FIRST')
+    expect(prompt).toContain('radiological orientation')
+    expect(prompt).toContain('tubular continuity with the cecum')
+    expect(prompt).toContain('Do not presuppose appendicitis')
+    expect(prompt).toContain('Potential differentials with evidence for and against:')
     await ctx.fiber.dispose()
   })
 })
