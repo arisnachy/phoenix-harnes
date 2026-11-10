@@ -41,6 +41,7 @@ const slugs:Readonly<Record<string,readonly [string,string]>>={
   icehockey_nhl:['hockey','nhl'],soccer_epl:['soccer','eng.1'],
   soccer_spain_la_liga:['soccer','esp.1'],soccer_usa_mls:['soccer','usa.1'],
   soccer_mexico_ligamx:['soccer','mex.1'],soccer_uefa_champs_league:['soccer','uefa.champions'],
+  soccer_uefa_womens_champions_league:['soccer','uefa.wchampions'],
   soccer_portugal_primeira_liga:['soccer','por.1'],
   soccer_italy_serie_a:['soccer','ita.1'],
   soccer_germany_bundesliga:['soccer','ger.1'],
