@@ -35,6 +35,19 @@ export function validTrackedPick(p:unknown):p is SportsTrackedPick{
     &&Number.isFinite(row.line)&&Math.abs(row.line)<=10000)
 }
 const signed=(n:number)=>n>0?'+'+n:String(n)
+/** Units refer to the SCORE difference, not to the number of field goals, shots or plays.
+ * Twenty-five NBA points cannot be described as twenty-five baskets.
+ */
+export function sportScoreUnit(sport?:string):string{
+  switch((sport??'').toLowerCase()){
+    case 'basketball':case 'nba':case 'wnba':return 'puntos (canastas o tiros libres)'
+    case 'baseball':case 'mlb':return 'carreras'
+    case 'soccer':case 'football-soccer':return 'goles'
+    case 'hockey':case 'nhl':return 'goles'
+    case 'football':case 'nfl':return 'puntos'
+    default:return 'unidades del marcador'
+  }
+}
 /** Only score-supported full-game outcomes; never infer regulation scores from final totals. */
 export function evaluateSportsPick(pick:SportsTrackedPick,game:PhoenixLiveGame|undefined,sport?:string):SportsPickGrade{
   const pending=(label:string,target:string):SportsPickGrade=>({state:'pending',label,target})
@@ -65,6 +78,7 @@ export function evaluateSportsPick(pick:SportsTrackedPick,game:PhoenixLiveGame|u
   }
   const home=regulation?.home??finalHome,away=regulation?.away??finalAway
   let diff=0,description=''
+  const scoreUnit=sportScoreUnit(sport)
   if(pick.market==='total'){
     const total=home+away
     diff=pick.side==='over'?total-(pick.line??0):(pick.line??0)-total
@@ -79,8 +93,8 @@ export function evaluateSportsPick(pick:SportsTrackedPick,game:PhoenixLiveGame|u
     diff=yours-other+(pick.market==='spread'?(pick.line??0):0)
     const missing=Math.max(0,Math.floor(-diff)+1)
     description=pick.market==='spread'?'Marcador '+away+'–'+home+' · ajustado '+signed(diff)
-      +(missing?' · necesita '+missing+' gol(es)/punto(s) de ventaja adicional':' · está cubriendo la línea')
-      :'Marcador '+away+'–'+home+(diff>0?' · equipo adelante':diff===0?' · empate':' · necesita '+missing+' gol(es)/punto(s) para liderar')
+      +(missing?' · necesita '+missing+' '+scoreUnit+' de margen adicional para cubrir':' · está cubriendo la línea')
+      :'Marcador '+away+'–'+home+(diff>0?' · equipo adelante':diff===0?' · empate':' · necesita '+missing+' '+scoreUnit+' para pasar al frente')
   }
   if(finished){
     const result=diff>0?'won':diff<0?'lost':'push'
