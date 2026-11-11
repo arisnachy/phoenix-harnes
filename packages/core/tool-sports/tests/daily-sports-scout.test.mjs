@@ -27,9 +27,9 @@ test('one bounded daily scan covers the real leagues and diversifies sports',asy
   calls.length=0
   const report=await scoutDailySports(day,5,fetcher,now)
   assert.ok(calls.length>=report.coverage.length*2)
-  assert.equal(report.totalEligible,6)
+  assert.equal(report.totalEligible,7)
   assert.equal(report.events.length,5)
-  assert.equal(new Set(report.events.map(x=>x.sport)).size,3)
+  assert.equal(new Set(report.events.map(x=>x.sport)).size,4)
   assert.ok(report.events.every(x=>x.status==='scheduled'&&x.source==='ESPN Site API'))
   assert.ok(report.events.every(x=>x.home.id&&x.away.id&&x.eventId))
   assert.ok(report.coverage.some(x=>x.sport==='basketball'&&x.league==='wnba'&&x.status==='empty'))
@@ -200,4 +200,23 @@ test('same-provider short cache restores only the exact failed ESPN partition, w
   const expired=await scoutDailySports(day,5,flaky,now+360_000,{},['basketball'])
   assert.ok(!expired.events.some(x=>x.eventId==='845'))
   assert.equal(expired.coverage.find(x=>x.league==='nba').status,'unavailable')
+})
+
+test('league names and Spanish sports normalize without discarding the intended fixtures',async()=>{
+  const seen=[]
+  const request=async url=>{
+    const target=String(url)
+    seen.push(target)
+    const active=target.includes('/basketball/nba/')||
+      target.includes('/hockey/nhl/')||target.includes('/tennis/atp/')
+    return new Response(JSON.stringify({events:active?[game(802)]:[]}))
+  }
+  const result=await scoutDailySports(day,6,request,now,{},['NBA','NHL','ATP'])
+  assert.equal(result.coverage.length,3)
+  assert.ok(seen.every(url=>/\/(?:basketball\/nba|hockey\/nhl|tennis\/atp)\//u.test(url)))
+  assert.deepEqual(new Set(result.events.map(e=>e.league)),new Set(['nba','nhl','atp']))
+  const soccer=await scoutDailySports(day,5,request,now,{},['fútbol'])
+  assert.ok(soccer.coverage.every(row=>row.sport==='soccer'))
+  await assert.rejects(()=>scoutDailySports(day,5,request,now,{},['NBA','crypto']),
+    /fuera del calendario/u)
 })

@@ -128,8 +128,10 @@ export async function researchNbaSlate(
     const {home,away}=sides(event)
     if(!home||!away||!teamId(home)||!teamId(away)||!teamName(home)||!teamName(away))return []
     const kickoff=Date.parse(event.date??'')
-    const homeReport=summarize(home,completed,kickoff)
-    const awayReport=summarize(away,completed,kickoff)
+    // Guard against future results marked post before they could have finished.
+    const historyCutoff=Math.min(kickoff,now)
+    const homeReport=summarize(home,completed,historyCutoff)
+    const awayReport=summarize(away,completed,historyCutoff)
     const enough=daysRetrieved===lookbackDays&&homeReport.gamesObserved>=3&&awayReport.gamesObserved>=3
     const missing=[
       ...(!enough?['Muestra histórica insuficiente o fechas no accesibles: solo temporada regular verificada']:[]),
