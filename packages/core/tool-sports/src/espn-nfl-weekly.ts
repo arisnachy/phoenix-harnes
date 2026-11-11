@@ -39,11 +39,13 @@ export async function fetchEspnScoreboardWithFallback<T extends ScoreBoard>(
     if(daily)return daily
     throw firstError??Error('No fue posible consultar ESPN')
   }
-  const {season,phase,weeks}=weeksForDate(day)
+  const {phase,weeks}=weeksForDate(day)
   for(const week of weeks){
     try{
-      const response=await read(endpoint+'dates='+season+
-        '&seasontype='+phase+'&week='+week+'&limit=100')
+      // The verified ESPN NFL fallback uses week+seasontype without dates.
+      // A YYYYMMDD dates parameter may silently hide weekly games.
+      const response=await read(endpoint+'seasontype='+phase+
+        '&week='+week+'&limit=100')
       const events=(response.events??[]).filter(e=>correct(e)&&matches(e,day))
       if(events.length)return{...response,events} as T
     }catch{/* Continue bounded recovery using an adjacent official NFL week. */}
