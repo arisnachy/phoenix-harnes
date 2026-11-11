@@ -20,7 +20,7 @@ test('52% market side is cautioned but not automatically excluded',()=>{
   ],policy)
   assert.equal(audit.legs[4].verdict,'caution')
   assert.ok(audit.legs[4].reasons.join(' ').includes('52'))
-  assert.equal(audit.legs[3].verdict,'hold')
+  assert.equal(audit.legs[3].verdict,'caution')
   assert.match(audit.legs[3].reasons.join(' '),/porteros/)
   assert.equal(audit.legs[2].verdict,'caution')
   assert.equal(audit.legs[0].verdict,'candidate')
@@ -29,18 +29,23 @@ test('52% market side is cautioned but not automatically excluded',()=>{
   assert.equal(audit.scenarios[1].marketProductPct,23.04)
   assert.equal(audit.scenarios[2].marketProductPct,11.98)
   assert.equal(audit.legs[4].modelProbabilityPct,null)
+  assert.ok(audit.legs[3].reasons.join(' ').includes('PRECAUCIÓN'))
   assert.equal(audit.legs[4].expectedValue,null)
   assert.equal(audit.approvedForBetting,false)
 })
-test('unknown two-sided odds, missing specialist or contradictory model stay on hold',()=>{
+test('quoted research candidates survive missing specialist or other-side price',()=>{
   const audit=auditTicketDecisions([
     sample('A',null),sample('B',.78,{specialistStatus:'unavailable'}),
     sample('C',.77,{modelStatus:'contradiction'}),
+    sample('D',null,{quotedPrice:null}),
   ],policy)
-  assert.ok(audit.legs.every(x=>x.verdict==='hold'))
+  assert.equal(audit.legs[0].verdict,'caution','single-side priced quote is researchable')
+  assert.equal(audit.legs[1].verdict,'caution','unavailable specialist is a warning')
+  assert.equal(audit.legs[2].verdict,'hold','independent contradiction remains explicit')
+  assert.equal(audit.legs[3].verdict,'hold','missing actual price is still blocked')
   assert.equal(audit.scenarios[0].marketProductPct,null)
   assert.equal(audit.legs[0].marketNoVigPct,null)
-  assert.equal(audit.alternativesNeeded,3)
+  assert.equal(audit.alternativesNeeded,2)
 })
 test('a quote is break-even arithmetic, not a model forecast or EV',()=>{
   const result=auditTicketDecisions([sample('T',.65,{quotedPrice:1.5})],policy)

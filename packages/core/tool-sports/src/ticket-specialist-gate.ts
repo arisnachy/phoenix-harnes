@@ -90,6 +90,10 @@ export async function investigateTicketSpecialist(
   const sourceTask:Promise<BackupFinding[]>=eligible
     ?crosscheckFreeFixture(game,fetcher,now,env).catch(()=>[] as BackupFinding[])
     :Promise.resolve([])
+  // The first specialist pass receives no selected bookmaker quotes.
+  // A provisional market count never proves event/side/period/price. The
+  // post-quote pass in evidence-priced-ticket credits 'market' only after
+  // matching a real quote to the ESPN fixture and selected outcome.
   const signals:Record<string,StepObservation>={}
   let injuryAudit:InjuryBackup|undefined
   const mark=(key:string,state:StepObservation['state'],detail:string)=>{
