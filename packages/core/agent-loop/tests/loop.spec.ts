@@ -7,7 +7,7 @@ import ToolRuntime, { defineContentToolFixture } from '@phoenix-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@phoenix-ai/dsh-agent'
 
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
-import { shouldRequestToolProgress } from '../src/agent.ts'
+import { shouldAutoContinueOutputLimit, shouldRequestToolProgress } from '../src/agent.ts'
 import { MockAdapter, maxTokensResponse, textResponse, toolCallResponse } from './mock-adapter.ts'
 
 // oxlint-disable-next-line @stylistic/max-len -- Pin the complete harness identity independently of runtime assembly.
@@ -1762,4 +1762,12 @@ describe('agent loop', () => {
       agent.session.events.map(e => e.type))
     expect(replayed.events.at(-1)?.type).toBe('session/end-seed')
   })
+})
+
+
+it('restricts output-limit retries to opted-in non-Codex provider routes', () => {
+  expect(shouldAutoContinueOutputLimit('deepseek', 'deepseek-chat', ['deepseek'])).toBe(true)
+  expect(shouldAutoContinueOutputLimit('codex', 'gpt-6', ['codex'])).toBe(false)
+  expect(shouldAutoContinueOutputLimit('gateway', 'codex/gpt-6', ['gateway'])).toBe(false)
+  expect(shouldAutoContinueOutputLimit('gateway', 'gpt-6', ['deepseek'])).toBe(false)
 })
