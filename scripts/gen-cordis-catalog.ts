@@ -601,6 +601,9 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 
 /** Project types deliberately documented outside the subsystems catalog. */
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
+  HealthPatient: 'HealthIA patient entity contract is documented by packages/health/healthia/README.md and src/index.ts',
+  HealthRecord: 'HealthIA canonical record contract is documented by packages/health/healthia/README.md and src/index.ts',
+  HealthEpisode: 'HealthIA episode contract is documented by packages/health/healthia/README.md and src/index.ts',
   UniversalMissionSnapshot: 'durable UME mission snapshot is owned by packages/subagent/agent-team/src/universal-mission.ts',
   z: 'schemastery schema constructor is owned by vendor/schemastery (vendored upstream)',
   WakeEvent: 'Phoenix wake-event payload is owned by packages/hardness/adapters/README.md',
