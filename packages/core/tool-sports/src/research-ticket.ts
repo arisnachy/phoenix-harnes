@@ -1,5 +1,6 @@
 /** Ticket de pronósticos con encuentros verificables aunque falten cuotas comerciales. */
 import { getFeed, hasSportsPermission, sportsCatalog, type ChatBlock } from './sports.ts'
+import {fetchEspnScoreboardWithFallback} from './espn-nfl-weekly.ts'
 import { researchNbaSlate } from './nba-research.ts'
 
 /** Selección propuesta por Kira, independiente de cualquier precio de apuestas. */
@@ -92,7 +93,9 @@ export async function researchTicket(
     const { sport,league,eventId,pick }=selection
     if(typeof sport!=='string'||typeof league!=='string'||typeof eventId!=='string'||typeof pick!=='string'
       || !Object.hasOwn(sportsCatalog,sport) || !/^[a-z0-9][a-z0-9._-]{0,79}$/u.test(league)
-      || !sportsCatalog[sport]?.includes(league) || !/^\d{1,20}$/u.test(eventId)
+      || (!sportsCatalog[sport]?.includes(league)&&
+          !(sport==='soccer'&&!league.includes('..')&&!league.startsWith('.')&&
+            !league.endsWith('.'))) || !/^\d{1,20}$/u.test(eventId)
       || !['home','away','draw'].includes(pick) || (pick==='draw' && sport!=='soccer')){
       throw Error('Selecciona un evento real, liga admitida y mercado ganador/empate válido')
     }
@@ -105,9 +108,9 @@ export async function researchTicket(
     const key=sport+'|'+league
     let board=cache.get(key)
     if(!board){
-      const url='https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+'/scoreboard?dates='+requestedDate.replaceAll('-','')
       try{
-        board=await getFeed<EspnBoard>(url,fetcher)
+        board=await fetchEspnScoreboardWithFallback(sport,league,
+          requestedDate.replaceAll('-',''),uri=>getFeed<EspnBoard>(uri,fetcher),eventId)
         if(!Array.isArray(board.events))throw Error('Cartelera ESPN inválida')
       }catch{
         // Retain a chance to recover an exact fixture in the next UTC

@@ -22,6 +22,10 @@ on:
       - 'packages/core/tool-sports/tests/sports-new-provider-backups.test.mjs'
       - 'packages/core/tool-sports/src/nflverse-injury-report.ts'
       - 'packages/core/tool-sports/src/espn-odds.ts'
+      - 'packages/core/tool-sports/src/espn-website-odds.ts'
+      - 'packages/core/tool-sports/src/espn-nfl-weekly.ts'
+      - 'packages/core/tool-sports/tests/espn-website-odds.test.mjs'
+      - 'packages/core/tool-sports/tests/espn-nfl-weekly.test.mjs'
       - 'packages/core/tool-sports/src/sports.ts'
       - 'packages/core/tool-sports/tests/espn-odds-multiroute.test.mjs'
       - 'packages/core/tool-sports/tests/sports-historical-scoreboard.test.mjs'
@@ -99,6 +103,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify real-match IDs, market menus, injury uncertainty, no-vig and five/six target
         run: node --experimental-strip-types --test packages/core/tool-sports/tests/sports-calibration.test.mjs packages/core/tool-sports/tests/espn-odds-multiroute.test.mjs packages/core/tool-sports/tests/sports-historical-scoreboard.test.mjs packages/core/tool-sports/tests/sports-direct-stats.test.mjs packages/core/tool-sports/tests/free-sports-source-audit.test.mjs packages/core/tool-sports/tests/nflverse-injury-report.test.mjs packages/core/tool-sports/tests/daily-sports-scout.test.mjs packages/core/tool-sports/tests/daily-market-shortlist.test.mjs packages/core/tool-sports/tests/daily-market-selection.test.mjs packages/core/tool-sports/tests/daily-market-evidence.test.mjs packages/core/tool-sports/tests/daily-market-ranking.test.mjs packages/core/tool-sports/tests/daily-special-market-research.test.mjs packages/core/tool-sports/tests/sports-event-market-menu.test.mjs packages/core/tool-sports/tests/ticket-specialist-gate.test.mjs packages/core/tool-sports/tests/daily-specialist-checklist.test.mjs packages/core/tool-sports/tests/espn-injury-backup.test.mjs packages/core/tool-sports/tests/sports-research-recovery.test.mjs packages/core/tool-sports/tests/sports-public-odds-pages.test.mjs packages/core/tool-sports/tests/sports-exact-market-fallback.test.mjs packages/core/tool-sports/tests/sports-secondary-sources.test.mjs packages/core/tool-sports/tests/sports-fast-free-probes.test.mjs packages/core/tool-sports/tests/sports-source-health.test.mjs packages/core/tool-sports/tests/sports-odds-coverage.test.mjs packages/core/tool-sports/tests/evidence-ticket.test.mjs packages/core/tool-sports/tests/sports-diversity.test.mjs packages/core/tool-sports/tests/sports-research-coverage.test.mjs packages/core/tool-sports/tests/research-ticket.test.mjs packages/core/tool-sports/tests/keyless-odds.test.mjs packages/core/tool-sports/tests/evidence-priced-ticket.test.mjs packages/core/tool-sports/tests/sports-daily-preload.test.mjs packages/core/tool-sports/tests/sports-ticket-decision.test.mjs packages/core/tool-sports/tests/open-odds-providers.test.mjs
+      - name: Verify ESPN Website and NFL weekly fallback regressions
+        run: node --experimental-strip-types --test packages/core/tool-sports/tests/espn-website-odds.test.mjs packages/core/tool-sports/tests/espn-nfl-weekly.test.mjs
       - name: Strict host TypeScript validation
         run: pnpm exec tsc -b tsconfig.host.json --pretty false
 
