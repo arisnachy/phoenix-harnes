@@ -58,7 +58,8 @@ export async function evidencePricedTicket(
   marketPreference:'winner'|'double_chance'='winner',
   specialistResearcher:typeof investigateTicketSpecialists=investigateTicketSpecialists,
 ):Promise<{card:ChatBlock;priced:boolean;placed:false;complete:boolean;
-  verifiedEvents:number;quotedLegs:number;missingQuotes:number;
+  verifiedEvents:number;eventsFound:number;quotedLegs:number;missingQuotes:number;
+  conditionalLegs:number;approvedForBetting:false;
   sourceAudit:OddsAuditRow[];approvedLegs:number;multisportSatisfied:boolean;
   specialistChecks:SpecialistGate[];researchedLegs:number;
   modelAudit:Array<{eventId:string;status:'support'|'contradiction'|'unavailable';
@@ -221,7 +222,8 @@ export async function evidencePricedTicket(
   ]
   const base={card:researchCard,priced:false as boolean,placed:false as const,
     complete:research.complete&&specialistComplete,verifiedEvents:research.verifiedEvents,
-    quotedLegs:0,missingQuotes:count,sourceAudit:initialSources,
+    quotedLegs:0,missingQuotes:count,eventsFound:research.verifiedEvents,
+    conditionalLegs:0,approvedForBetting:false as const,sourceAudit:initialSources,
     specialistChecks,researchedLegs,modelAudit,trackingEvents,
     decisionAudit:preliminaryDecisionAudit,reviewedBeforeSelection,removedConflicts,conditional:!checklistComplete,
     dossierComplete:checklistComplete,
@@ -413,6 +415,25 @@ export async function evidencePricedTicket(
   }
   checklistComplete=specialistComplete&&specialistChecks.every(x=>x.checklist?.complete===true)
   const quotedLegs=groups.filter(g=>g.length>0).length
+  // The first critic runs before quotation. Re-run it even when only 4/5
+  // events have prices or no bookmaker is shared by all legs. Never expose
+  // pre-quote "no price" findings as the final state after finding quotes.
+  const postQuoteAudit=auditTicketDecisions(research.events.map((event,index)=>{
+    const selected=groups[index]?.slice().sort((a,b)=>b.price-a.price)[0]
+    return{
+      eventId:event.eventId,sport:event.sport,
+      selection:event.pick==='home'?event.home:event.away,
+      quotedPrice:selected?.price??null,
+      noVigShare:selected?quoteSideNoVig(selected,all,now):null,
+      specialistStatus:specialistChecks[index]?.status??'unavailable',
+      checklistComplete:specialistChecks[index]?.checklist?.complete===true,
+      criticalPending:specialistChecks[index]?.checklist?.criticalPending??
+        ['Expediente especializado no disponible'],
+      modelStatus:modelAudit[index]?.status??'unavailable',
+    }
+  }),decisionPolicy)
+  const conditionalLegs=postQuoteAudit.legs.filter(leg=>
+    leg.verdict==='hold'||leg.verdict==='caution').length
   const attributed=(source:string)=>source.toLowerCase().includes('oddsharvester')?'OddsHarvester':
     source==='The Odds API'?'The Odds API v4':
     source==='TheOddsAPI'?'TheOddsAPI':
@@ -547,6 +568,9 @@ export async function evidencePricedTicket(
     ' ('+x.offers+' observaciones)').join('; ')+'.'
   const auditCard:ChatBlock={...researchCard,props:{...researchCard.props,
     legs:hintedLegs,
+    decisionAudit:postQuoteAudit,
+    dataCounts:{eventsFound:research.verifiedEvents,quotedLegs,
+      researchedLegs,conditionalLegs,approvedForBetting:0},
     subtitle:quotedLegs!==count?'TICKET DE INVESTIGACIÓN · '+quotedLegs+'/'+count+
       ' cuotas verificadas · '+reportedReferences+' precios ESPN de referencia':
       researchCard.props.subtitle,
@@ -555,6 +579,7 @@ export async function evidencePricedTicket(
       String(researchCard.props.note??'')).slice(0,1000),
   }}
   const checked={...base,card:auditCard,sourceAudit,quotedLegs,
+    decisionAudit:postQuoteAudit,conditionalLegs,
     specialistChecks,conditional:!checklistComplete,dossierComplete:checklistComplete,
     missingQuotes:count-quotedLegs}
   if(identityConflict)return{...checked,complete:false,
@@ -681,6 +706,9 @@ export async function evidencePricedTicket(
     'No se confirmó que la casa acepte ese precio; revisarlo antes de apostar. ':''
   const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,modelAudit,marketRisk,decisionAudit,
+    dataCounts:{eventsFound:research.verifiedEvents,quotedLegs:count,
+      researchedLegs,conditionalLegs:decisionAudit.legs.filter(x=>
+        x.verdict==='hold'||x.verdict==='caution').length,approvedForBetting:0},
     chatNarrative:legs.map(x=>x.narrative).filter(Boolean),
     narrativeInstruction:'Kira debe explicar cada selección DEBAJO del ticket con datos favorables, datos contrarios, fecha y enlaces de noticias, sede, clima, árbitro verificado o no y porcentaje con origen; jamás resumir cinco patas en una sola frase.',
     subtitle:(checklistComplete&&!elevatedMarketRisk?'Investigación especializada':'TICKET CONDICIONAL')+
@@ -707,8 +735,11 @@ export async function evidencePricedTicket(
   return{card,priced:true,placed:false,complete:true,
     conditional:!checklistComplete||elevatedMarketRisk,dossierComplete:checklistComplete,
     marketRisk,decisionAudit,reviewedBeforeSelection,removedConflicts,
-    verifiedEvents:research.verifiedEvents,
+    verifiedEvents:research.verifiedEvents,eventsFound:research.verifiedEvents,
     quotedLegs:count,missingQuotes:0,sourceAudit,approvedLegs:0,
+    conditionalLegs:decisionAudit.legs.filter(x=>
+      x.verdict==='hold'||x.verdict==='caution').length,
+    approvedForBetting:false,
     specialistChecks,researchedLegs,modelAudit,trackingEvents,
     multisportSatisfied:research.multisportSatisfied,
     explanation:'Las '+count+' selecciones tienen '+
