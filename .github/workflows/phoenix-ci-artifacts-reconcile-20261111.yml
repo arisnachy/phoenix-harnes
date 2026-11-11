@@ -1,0 +1,55 @@
+name: PHOENIX CI generated artifacts (one-shot repair)
+on:
+  push:
+    branches:
+      - fix/ci-static-contracts-main-20261111
+      - fix/ci-static-contracts-stable-20261111
+    paths:
+      - .github/workflows/phoenix-ci-artifacts-reconcile-20261111.yml
+permissions:
+  contents: write
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: Recreate committed generated catalogs from source
+        shell: bash
+        run: |
+          set -u
+          failures=0
+          for task in gen-client-catalog gen-config-catalog gen-persistence-catalog gen-module-graph gen-cordis-catalog gen-tool-catalog gen-doc-graphs; do
+            echo "::group::$task"
+            if pnpm run "$task"; then
+              echo "OK $task"
+            else
+              echo "::warning title=Generator failed::$task requires an independent source repair"
+              failures=$((failures+1))
+            fi
+            echo "::endgroup::"
+          done
+          git add -u
+          git add -- docs/ packages/core/session/src/known-event-types.ts packages/extensions/cordis-client-runner/src/client/slot-catalog.ts || true
+          git diff --cached --check
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'chore(ci): regenerate source-derived catalogs'
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+          if [ "$failures" -gt 0 ]; then
+            echo "::error::$failures source-dependent generators still need repair"
+            exit 1
+          fi
