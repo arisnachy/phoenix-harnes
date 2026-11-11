@@ -221,3 +221,21 @@ test('ESPN soccer prices without draw remain rejected even with fresh observatio
   }],4,now)
   assert.equal(approved.selected.length,1)
 })
+
+test('genuine sub-1.20 NBA winner prices survive shortlist discovery',()=>{
+  const game=fixtures[0]
+  const quotes=[
+    {...price(0,'Home 0'),price:1.08333,source:'ESPN Site/Core · DraftKings',
+      observedAt:observed,updatedAt:''},
+    {...price(0,'Away 0'),price:9.10,source:'ESPN Site/Core · DraftKings',
+      observedAt:observed,updatedAt:''},
+  ]
+  // Opposite side may exceed the research candidate price ceiling, but
+  // the market pair must still be preserved for no-vig comparison.
+  const result=shortlistDailyMarkets([game],quotes,4,now)
+  assert.equal(result.matchesInSlate,1)
+  assert.equal(result.selected.length,1)
+  assert.equal(result.selected[0].decimalOdds,1.08333)
+  assert.equal(result.selected[0].selection,'Home 0')
+  assert.equal(result.selected[0].timestampSource,'espn-observation')
+})
