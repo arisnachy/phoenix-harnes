@@ -2,7 +2,8 @@
  * Stronger than simple win-loss record sorting, but intentionally NOT a calibrated
  * probability model. Event existence and kickoff are re-verified by researchTicket.
  */
-import { getFeed,hasSportsPermission, type ChatBlock } from './sports.ts'
+import { getFeed,hasSportsPermission,sportsCatalog, type ChatBlock } from './sports.ts'
+import {fetchEspnScoreboardWithFallback} from './espn-nfl-weekly.ts'
 import {estimateEvidenceForecast} from './sports-forecast.ts'
 import { researchSport } from './multi-sport-research.ts'
 import { researchTicket, type ResearchTicketLeg } from './research-ticket.ts'
@@ -22,16 +23,13 @@ export type TicketPreselectVerdict={
 export type TicketPreselectReviewer=(
   candidates:readonly TicketPreselectCandidate[],
 )=>Promise<readonly TicketPreselectVerdict[]>
-const defaultLeagues = [
-  ['basketball','nba'],['hockey','nhl'],['baseball','mlb'],['football','nfl'],
-  ['soccer','eng.1'],['soccer','esp.1'],['soccer','usa.1'],['soccer','uefa.champions'],
-  ['soccer','uefa.wchampions'],
-  ['basketball','wnba'],['tennis','atp'],['tennis','wta'],
-  // Keep the ticket scout aligned with the daily world soccer slate.
-  ['soccer','mex.1'],['soccer','ger.1'],['soccer','ita.1'],['soccer','fra.1'],
-  ['soccer','por.1'],['soccer','ned.1'],['soccer','bra.1'],['soccer','arg.1'],
-  ['soccer','uefa.europa'],['soccer','fifa.world'],
-] as const
+// A daily ticket searches only the six requested sport families, including
+// all known ESPN soccer leagues, instead of unrelated tennis/campus sports.
+const defaultLeagues:ReadonlyArray<readonly [string,string]>=[
+  ['basketball','nba'],['basketball','wnba'],['baseball','mlb'],
+  ['football','nfl'],['hockey','nhl'],
+  ...sportsCatalog.soccer.map(league=>['soccer',league] as const),
+]
 export function boundedTicket<T>(task:Promise<T>,ms:number):Promise<T>{
   let timer:ReturnType<typeof setTimeout>|undefined
   const limit=new Promise<never>((_resolve,reject)=>{
@@ -110,9 +108,9 @@ export async function evidenceTicket(
     const next=new Date(Date.parse(date+'T00:00:00Z')+86_400_000)
       .toISOString().slice(0,10).replaceAll('-','')
     const partitions=await Promise.allSettled([date.replaceAll('-',''),next].map(day=>
-      boundedTicket(getFeed<{events?:Array<{id?:string|number;date?:string;status?:{type?:{state?:string}}}>}>(
-        'https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+
-        '/scoreboard?dates='+day,fetcher),4_000)))
+      boundedTicket(fetchEspnScoreboardWithFallback(sport,league,day,
+        uri=>getFeed<{events?:Array<{id?:string|number;date?:string;status?:{type?:{state?:string}}}>}>(
+          uri,fetcher)),4_000)))
     const observed=partitions.flatMap(x=>x.status==='fulfilled'&&Array.isArray(x.value.events)
       ?x.value.events:[])
     if(!partitions.some(x=>x.status==='fulfilled'&&Array.isArray(x.value.events)))

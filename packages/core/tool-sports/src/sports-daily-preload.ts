@@ -277,7 +277,8 @@ export function dailyPreloadTargets(date:string,env:NodeJS.ProcessEnv):PrefetchT
     ...[['basketball','nba'],['basketball','wnba'],['hockey','nhl'],
       ['football','nfl'],['baseball','mlb'],['soccer','eng.1'],
       ['soccer','esp.1'],['soccer','usa.1'],['soccer','mex.1'],
-      ['tennis','atp'],['tennis','wta']].map(([s,l])=>({
+      ['soccer','uefa.champions'],['soccer','ger.1'],['soccer','ita.1'],
+      ['soccer','fra.1'],['soccer','bra.1']].map(([s,l])=>({
         provider:'ESPN',sport:s!,kind:'free' as const,
         url:'https://site.api.espn.com/apis/site/v2/sports/'+s+'/'+l+
           '/scoreboard?dates='+dt,

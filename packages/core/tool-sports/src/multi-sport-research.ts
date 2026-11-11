@@ -3,6 +3,7 @@
  * This provides descriptive features, NOT calibrated odds or win probabilities.
  */
 import { getFeed, hasSportsPermission, sportsCatalog } from './sports.ts'
+import {fetchEspnScoreboardWithFallback} from './espn-nfl-weekly.ts'
 import {readHistoricalScoreboard} from './sports-historical-scoreboard.ts'
 import {isVerifiedRegularSeason} from './sports-regular-season.ts'
 
@@ -102,10 +103,9 @@ export async function researchSport(
   if(!Number.isInteger(lookbackDays)||lookbackDays<1||lookbackDays>62)
     throw Error('Ventana histórica requiere entre 1 y 62 días')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por el operador')
-  const url=(day:string)=>'https://site.api.espn.com/apis/site/v2/sports/'+
-    sport+'/'+league+'/scoreboard?dates='+day.replaceAll('-','')
   const retrieve=async(day:string):Promise<Scoreboard>=>{
-    const board=await getFeed<Scoreboard>(url(day),fetcher)
+    const board=await fetchEspnScoreboardWithFallback(sport,league,
+      day.replaceAll('-',''),uri=>getFeed<Scoreboard>(uri,fetcher))
     if(!Array.isArray(board.events))throw Error('ESPN devolvió eventos inválidos')
     return board
   }
