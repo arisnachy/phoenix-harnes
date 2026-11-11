@@ -8,8 +8,10 @@ import {join,resolve} from 'node:path'
 
 export type DailyNeed={sport:string;required:string[]}
 export const dailyResearchNeeds:readonly DailyNeed[]=[
-  {sport:'NBA/WNBA',required:['fixture','pace/efficiency','recent form','back-to-back',
+  {sport:'NBA',required:['fixture','pace/efficiency','recent form','back-to-back',
     'official injury report','confirmed starters','market and price']},
+  {sport:'WNBA',required:['fixture','pace/efficiency','recent form','back-to-back',
+    'official WNBA injury report','confirmed starters','market and price']},
   {sport:'NHL',required:['fixture','goalie confirmations','xG 5v5/GSAx',
     'PP/PK','rest/travel','injuries/scratches','market with OT rules']},
   {sport:'MLB',required:['fixture','probable starters','bullpen last 72h','lineups',
@@ -18,8 +20,6 @@ export const dailyResearchNeeds:readonly DailyNeed[]=[
     'official inactives','weather','rest','market rules']},
   {sport:'Soccer',required:['fixture and home/away','xG/xGA','form','travel/rest',
     'confirmed XI','injuries/suspensions','draw risk','90-minute market']},
-  {sport:'ATP/WTA',required:['fixture and surface','serve/return','last matches',
-    'injuries','fatigue/travel','format','match-winner market']},
 ]
 const dayPattern=/^\d{4}-\d{2}-\d{2}$/u
 const validDay=(day:string)=>dayPattern.test(day)&&
