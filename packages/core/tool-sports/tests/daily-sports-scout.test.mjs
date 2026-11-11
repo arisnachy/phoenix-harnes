@@ -29,7 +29,7 @@ test('one bounded daily scan covers the real leagues and diversifies sports',asy
   assert.ok(calls.length>=report.coverage.length*2)
   assert.equal(report.totalEligible,7)
   assert.equal(report.events.length,5)
-  assert.equal(new Set(report.events.map(x=>x.sport)).size,3)
+  assert.equal(new Set(report.events.map(x=>x.sport)).size,4)
   assert.ok(report.events.every(x=>x.status==='scheduled'&&x.source==='ESPN Site API'))
   assert.ok(report.events.every(x=>x.home.id&&x.away.id&&x.eventId))
   assert.ok(report.coverage.some(x=>x.sport==='basketball'&&x.league==='wnba'&&x.status==='empty'))
