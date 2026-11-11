@@ -61,7 +61,9 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
       throw Error('Identificador de evento duplicado o ausente en la auditoría')
     seen.add(input.eventId)
   }
-  const legs=inputs.map(input=>{
+  // Preserve the public DecisionLeg contract for downstream audit consumers.
+  // The 55% screening threshold now yields caution, not automatic exclusion.
+  const legs:DecisionLeg[]=inputs.map(input=>{
     const share=validShare(input.noVigShare)?input.noVigShare:null
     const price=input.quotedPrice
     const breakEven=typeof price==='number'&&Number.isFinite(price)&&price>1&&price<1000
