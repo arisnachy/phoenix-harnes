@@ -30,6 +30,8 @@ test('team explorer produces responsive cards with only actual roster, news, log
   assert.ok(data.sections.some(s=>s.heading==='Estadísticas individuales consultadas'&&s.items.some(a=>a.label==='Verified Player A')))
   assert.equal(data.uiBlock.component,'sports_espn_dashboard')
   assert.ok(data.sections.some(s=>s.heading==='Plantilla verificada'&&s.items[0].label==='Verified Player A'))
+  assert.ok(data.sections.some(s=>s.heading==='Plantilla verificada'&&s.items[0].image===
+    'https://a.espncdn.com/i/headshots/nba/players/full/1.png'))
   assert.ok(data.sections.some(s=>s.heading==='Noticias del equipo'&&s.items[0].label==='City A injury update'))
   assert.ok(data.sections.some(s=>s.heading==='Noticias del equipo'&&s.items[0].href?.startsWith('https://www.espn.com/')))
   assert.ok(urls.some(u=>u.includes('/athletes/991/stats')))
