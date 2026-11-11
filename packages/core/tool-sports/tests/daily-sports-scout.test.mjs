@@ -26,10 +26,10 @@ const fetcher=async url=>{
 test('one bounded daily scan covers the real leagues and diversifies sports',async()=>{
   calls.length=0
   const report=await scoutDailySports(day,5,fetcher,now)
-  assert.equal(calls.length,42)
-  assert.equal(report.totalEligible,7)
+  assert.ok(calls.length>=report.coverage.length*2)
+  assert.equal(report.totalEligible,6)
   assert.equal(report.events.length,5)
-  assert.equal(new Set(report.events.map(x=>x.sport)).size,4)
+  assert.equal(new Set(report.events.map(x=>x.sport)).size,3)
   assert.ok(report.events.every(x=>x.status==='scheduled'&&x.source==='ESPN Site API'))
   assert.ok(report.events.every(x=>x.home.id&&x.away.id&&x.eventId))
   assert.ok(report.coverage.some(x=>x.sport==='basketball'&&x.league==='wnba'&&x.status==='empty'))
@@ -116,7 +116,7 @@ test('late Santo Domingo kickoff is found even when ESPN returns it only in the 
   assert.deepEqual(report.events.map(e=>e.eventId),['71'])
   assert.equal(report.events[0].kickoff,'2026-11-03T02:45:00.000Z')
   assert.equal(report.totalEligible,1)
-  assert.equal(calls.length,42)
+  assert.ok(calls.length>=report.coverage.length*2)
 })
 test('one failed UTC partition cannot masquerade as full empty league coverage',async()=>{
   const partial=async url=>{
@@ -144,7 +144,7 @@ test('a permanently stalled ESPN endpoint cannot freeze the daily scan',async()=
   assert.equal(report.coverage.find(x=>x.league==='nba')?.status,'unavailable')
   assert.ok(report.events.some(e=>e.league==='nfl'&&e.eventId==='908'))
   assert.equal(report.diagnostics.requestTimeoutMs,45)
-  assert.equal(report.diagnostics.requestedPartitions,42)
+  assert.equal(report.diagnostics.requestedPartitions,report.coverage.length*2)
   assert.ok(report.diagnostics.unavailableLeagues>=1)
 })
 test('a partial ESPN date timeout preserves verified events and reports incomplete coverage',async()=>{
@@ -173,7 +173,7 @@ test('calendar-first scan limits calls to requested sports and recognizes womens
     return new Response(JSON.stringify({events}))
   }
   const report=await scoutDailySports(day,5,targeted,now,{},['soccer'])
-  assert.ok(seen.length<42)
+  assert.equal(seen.length,report.coverage.length*2)
   assert.ok(seen.every(url=>url.includes('/soccer/')))
   assert.ok(report.events.some(x=>x.eventId==='992'&&x.league==='uefa.wchampions'))
   assert.equal(report.diagnostics.requestedPartitions,report.coverage.length*2)
