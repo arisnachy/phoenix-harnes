@@ -7,7 +7,7 @@ import {auditTicketDecisions,readDecisionPolicy,type TicketDecisionAudit} from '
 import {auditTicketMarketRisk,quoteSideNoVig,type TicketMarketRisk} from './ticket-risk-audit.ts'
 import {investigateTicketSpecialists,type SpecialistGate} from './ticket-specialist-gate.ts'
 import { keylessEnabled,keylessOdds,type KeylessQuote } from './keyless-odds.ts'
-import {lookupExactEspnWinner} from './sports-exact-espn-winner.ts'
+import {lookupExactEspnWinner,sameEspnTeam} from './sports-exact-espn-winner.ts'
 import {researchPublicOddsWebsites} from './sports-public-odds-pages.ts'
 import { getFeed,marketOddsDetailed,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome,type OddsResearchObservation } from './sports.ts'
 import {fetchBetBetterModels,findModelOpinion,type ModelForecast} from './betbetter-model-evidence.ts'
@@ -32,6 +32,9 @@ const audited=(source:string,status:OddsAuditRow['status'],offers:number,note:st
   ({source,status,offers,note})
 const normalize=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
+/** Known NHL mascot aliases only; no ambiguous city-only team matches. */
+const sameTeam=(a:string,b:string,sport:string):boolean=>
+  sameEspnTeam(a,b,sport==='hockey'?'icehockey_nhl':'strict')
 const routing:Record<string,{sport:string;market:string;oddsSportKey:string}>={
   soccer:{sport:'football',market:'1x2',oddsSportKey:'soccer_epl'},
   basketball:{sport:'basketball',market:'home_away',oddsSportKey:'basketball_nba'},
@@ -320,8 +323,8 @@ export async function evidencePricedTicket(
     research.events.filter(event=>{
       const kickoff=Date.parse(event.kickoff)
       return Number.isFinite(kickoff)&&kickoff>now&&!discovered.some(q=>
-        normalize(q.home)===normalize(event.home)&&
-        normalize(q.away)===normalize(event.away)&&
+        sameTeam(q.home,event.home,event.sport)&&
+        sameTeam(q.away,event.away,event.sport)&&
         Math.abs(Date.parse(q.time)-kickoff)<=3_600_000&&
         q.market===(event.sport==='soccer'?'1x2':'h2h'))
     }).slice(0,6)
@@ -386,11 +389,11 @@ export async function evidencePricedTicket(
         &&typeof q.bookmaker==='string'&&q.bookmaker.trim().length>0
         &&typeof q.eventId==='string'&&q.eventId.length>0
         &&Number.isFinite(q.price)&&q.price>1&&q.price<1000
-        &&normalize(q.home)===normalize(event.home)
-        &&normalize(q.away)===normalize(event.away)
+        &&sameTeam(q.home,event.home,event.sport)
+        &&sameTeam(q.away,event.away,event.sport)
         &&q.market===expectedMarket
         &&(doubleChance?q.selection===(event.pick==='home'?'1X':'X2'):
-          normalize(q.selection)===normalize(event.pick==='home'?event.home:event.away))
+          sameTeam(q.selection,event.pick==='home'?event.home:event.away,event.sport))
     })
   })
   // Post-quote reassessment: the dossier runs before prices arrive. A matching
@@ -494,8 +497,8 @@ export async function evidencePricedTicket(
     const expected=event.pick==='home'?event.home:event.away
     const candidates=espnReferenceOdds.filter(q=>
       q.eventId===event.eventId&&
-      normalize(q.home)===normalize(event.home)&&normalize(q.away)===normalize(event.away)&&
-      normalize(q.selection)===normalize(expected)&&
+      sameTeam(q.home,event.home,event.sport)&&sameTeam(q.away,event.away,event.sport)&&
+      sameTeam(q.selection,expected,event.sport)&&
       q.market==='h2h'&&q.nonCotizable&&
       Number.isFinite(Date.parse(q.timeIso??''))&&
       Math.abs(Date.parse(q.timeIso??'')-Date.parse(event.kickoff))<=3_600_000 &&
@@ -688,6 +691,8 @@ export async function evidencePricedTicket(
       specialistResearch:specialistChecks[index]??null,
       researchStatus:specialistChecks[index]?.status==='researched'
         &&specialistChecks[index]?.checklist?.complete===true?'documented':'conditional',
+      displayStatus:'research-selection',
+      riskNotes:specialistChecks[index]?.checklist?.criticalPending.slice(0,5)??[],
       pendingEvidence:specialistChecks[index]?.pendingSteps.slice(0,5)??[],
       ...Object.fromEntries(['homeTeam','awayTeam','homeLogo','awayLogo','sport',
         'league','country','rationale','when'].filter(k=>typeof prior[k]==='string')
@@ -726,7 +731,8 @@ export async function evidencePricedTicket(
     narrativeInstruction:'Kira debe explicar cada selección DEBAJO del ticket con datos favorables, datos contrarios, fecha y enlaces de noticias, sede, clima, árbitro verificado o no y porcentaje con origen; jamás resumir cinco patas en una sola frase.',
     // The research ticket is displayable even with genuine warnings. Its
     // visible title must not imply bookmaker acceptance or betting approval.
-    subtitle:'BOLETO DE INVESTIGACIÓN · '+count+'/'+count+' selecciones · '+
+    presentationStatus:'final-research',
+    subtitle:'TICKET FINAL DE INVESTIGACIÓN · '+count+'/'+count+' selecciones · '+
       (espnOnlyObserved?'precios observados en ESPN':'cuotas cotejadas')+
       ' · '+best.book+' · '+(checklistComplete&&!elevatedMarketRisk?
         'expediente documentado':'advertencias pendientes'),
@@ -737,9 +743,7 @@ export async function evidencePricedTicket(
       (marketPreference==='double_chance'
       ?'Fútbol: la doble oportunidad cubre empate (1X/X2), NO asegura ganar. ':'')+
       'TheRundown Free informa cuotas con retraso aproximado de 5 min; observedAt es consulta del proveedor, updatedAt es último cambio de la casa. Confirmar precio actual antes de apostar. '+
-      'Auditor crítico: '+decisionAudit.recommendation+' '+
-      'Excluidas '+decisionAudit.excludedEvents.length+', en espera '+
-      decisionAudit.heldEvents.length+'. '+
+      'Riesgos y datos no confirmados detallados individualmente en cada pata. '+
       'Contradicciones de Bet Better: '+modelDisagreements+
       ' (predicción independiente, no cuota). '+
       (marketRisk.weakest?'Pata mas ajustada: '+marketRisk.weakest.selection+
@@ -765,7 +769,7 @@ export async function evidencePricedTicket(
     explanation:'Las '+count+' selecciones tienen '+
       (espnOnlyObserved?'precio observado en ESPN, pendiente de confirmación en la casa':
         'cuota cotejada')+' y la misma casa '+best.book+
-      '. Decisión crítica: '+decisionAudit.recommendation+
+      '. Evaluación de riesgos individual disponible en decisionAudit. '+
       (elevatedMarketRisk?'. AVISO: pata con participacion de mercado inferior a 60%; considerar reducir el boleto.':'')+
       (checklistComplete?'. Todos los pasos especializados verificados.':
       '. ADVERTENCIA DE INVESTIGACIÓN: '+(count-researchedLegs)+' expedientes parciales o no disponibles; verificar datos pendientes.')+
