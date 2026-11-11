@@ -18,8 +18,23 @@ const schedule:Schedule[]=[
   {sport:'basketball',league:'nba'}, {sport:'basketball',league:'wnba'},
   {sport:'baseball',league:'mlb'}, {sport:'football',league:'nfl'},
   {sport:'hockey',league:'nhl'},
+  {sport:'tennis',league:'atp'}, {sport:'tennis',league:'wta'},
   ...(sportsCatalog.soccer??[]).map(league=>({sport:'soccer',league})),
 ]
+/** Accept user-facing league names without broadening an explicit league selection. */
+function normalizeDailySelection(value:string):{sport:string;league:string|null}|null{
+  const input=value.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
+    .trim().toLowerCase().replace(/\s+/gu,' ')
+  const sportAlias:Readonly<Record<string,string>>={
+    futbol:'soccer',futbolamericano:'football','futbol americano':'football',
+    basquetbol:'basketball',baloncesto:'basketball',beisbol:'baseball',
+    tenis:'tennis','ice hockey':'hockey',
+  }
+  const name=sportAlias[input]??input
+  if(schedule.some(item=>item.sport===name))return{sport:name,league:null}
+  const league=schedule.find(item=>item.league===name)
+  return league?{sport:league.sport,league:league.league}:null
+}
 const dateValid=(s:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(s)
   &&Number.isFinite(Date.parse(s+'T00:00:00Z'))
   &&new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s
@@ -79,10 +94,13 @@ export async function scoutDailySports(
   if(!dateValid(date))throw Error('Fecha inválida, usar AAAA-MM-DD')
   if(!Number.isInteger(limit)||limit<1||limit>36)throw Error('Límite de 1 a 36 eventos')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración')
+  const requested=onlySports?.map(value=>typeof value==='string'?
+    normalizeDailySelection(value):null)
   if(onlySports!==undefined&&(!Array.isArray(onlySports)||!onlySports.length||
-    onlySports.some(x=>typeof x!=='string'||!schedule.some(s=>s.sport===x))))
+    requested?.some(item=>item===null)))
     throw Error('Deportes solicitados fuera del calendario conocido')
-  const scanPlan=onlySports? schedule.filter(x=>onlySports.includes(x.sport)):schedule
+  const scanPlan=requested? schedule.filter(item=>requested.some(selected=>
+    selected?.sport===item.sport&&(selected.league===null||selected.league===item.league))):schedule
   const startedAt=Date.now()
   // Only the requested sports are scanned when known; keep UTC partitions for local late games.
   // Optional shorter budget is useful for operators and deterministic tests.
