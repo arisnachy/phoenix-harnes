@@ -418,3 +418,43 @@ test('optional quote sources have an independent finite deadline',async()=>{
   await assert.rejects(()=>boundedPriced(new Promise(()=>{}),35),/Fuente de cuotas: plazo agotado/)
   assert.ok(Date.now()-started<500)
 })
+
+test('partial 4/5 ticket recomputes market evidence and separate counts after quote fetch',async()=>{
+  const four=async()=> (await mkQuotes()()).slice(0,4)
+  const result=await withSpecialists(5,date,'soccer',0,now,enabled,feed,four)
+  assert.equal(result.verifiedEvents,5)
+  assert.equal(result.eventsFound,5)
+  assert.equal(result.quotedLegs,4)
+  assert.equal(result.approvedForBetting,false)
+  assert.equal(result.priced,false)
+  assert.equal(result.decisionAudit.legs.filter(x=>
+    x.bookmakerBreakEvenPct!==null).length,4)
+  assert.equal(result.decisionAudit.legs[4].bookmakerBreakEvenPct,null)
+  assert.deepEqual(result.card.props.dataCounts,{
+    eventsFound:5,quotedLegs:4,researchedLegs:5,
+    conditionalLegs:5,approvedForBetting:0,
+  })
+  assert.deepEqual(result.card.props.decisionAudit,result.decisionAudit)
+})
+
+test('matched bookmaker price closes only the compact market step on second pass',async()=>{
+  const partialMarket=async games=>(await stubSpecialists(games)).map(g=>({
+    ...g,pendingSteps:['Pasos obligatorios sin cerrar (1): Cuota y mercado'],
+    checklist:{...g.checklist,verified:1,partial:1,
+      steps:[...g.checklist.steps,{key:'market',title:'Cuota y mercado',
+        critical:true,state:'partial',detail:'Investigación anterior a cuotas',
+        sources:['ESPN']}],
+      criticalPending:['Cuota y mercado'],complete:false},
+  }))
+  const result=await evidencePricedTicket(5,date,'soccer',0,now,enabled,feed,
+    mkQuotes(),'winner',partialMarket)
+  assert.equal(result.quotedLegs,5)
+  assert.equal(result.dossierComplete,true)
+  assert.equal(result.eventsFound,5)
+  assert.ok(result.specialistChecks.every(x=>x.checklist.steps.some(step=>
+    step.key==='market'&&step.state==='verified')))
+  assert.ok(result.specialistChecks.every(x=>
+    x.checklist.criticalPending.length===0))
+  assert.equal(result.card.props.dataCounts.quotedLegs,5)
+  assert.equal(result.approvedLegs,0)
+})
