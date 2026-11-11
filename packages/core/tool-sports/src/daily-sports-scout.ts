@@ -1,5 +1,6 @@
 /** Bounded daily multi-sport discovery. Scheduling availability is NOT a prediction. */
 import { getFeed,hasSportsPermission,sportsCatalog } from './sports.ts'
+import {fetchEspnScoreboardWithFallback} from './espn-nfl-weekly.ts'
 
 type Side = { homeAway?:string, team?:{id?:string|number,displayName?:string,name?:string},
   athlete?:{id?:string|number,displayName?:string,name?:string} }
@@ -11,15 +12,8 @@ type Schedule = {sport:string,league:string}
 const schedule:Schedule[]=[
   {sport:'basketball',league:'nba'}, {sport:'basketball',league:'wnba'},
   {sport:'baseball',league:'mlb'}, {sport:'football',league:'nfl'},
-  {sport:'hockey',league:'nhl'}, {sport:'tennis',league:'atp'},
-  {sport:'tennis',league:'wta'}, {sport:'soccer',league:'eng.1'},
-  {sport:'soccer',league:'esp.1'}, {sport:'soccer',league:'mex.1'},
-  {sport:'soccer',league:'usa.1'}, {sport:'soccer',league:'uefa.champions'},
-  {sport:'soccer',league:'uefa.wchampions'},
-  {sport:'soccer',league:'ger.1'}, {sport:'soccer',league:'ita.1'},
-  {sport:'soccer',league:'fra.1'}, {sport:'soccer',league:'por.1'},
-  {sport:'soccer',league:'ned.1'}, {sport:'soccer',league:'bra.1'},
-  {sport:'soccer',league:'arg.1'}, {sport:'soccer',league:'uefa.europa'},
+  {sport:'hockey',league:'nhl'},
+  ...(sportsCatalog.soccer??[]).map(league=>({sport:'soccer',league})),
 ]
 const dateValid=(s:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(s)
   &&Number.isFinite(Date.parse(s+'T00:00:00Z'))
@@ -106,10 +100,9 @@ export async function scoutDailySports(
     const batch=scanPlan.slice(offset,offset+8)
     const reports=await Promise.allSettled(batch.map(async item=>{
       if(!sportsCatalog[item.sport]?.includes(item.league))throw Error('Liga fuera del catálogo')
-      return Promise.allSettled(partitions.map(day=>settleWithin(getFeed<Board>(
-        'https://site.api.espn.com/apis/site/v2/sports/'
-        +item.sport+'/'+item.league+'/scoreboard?dates='+day,fetcher),
-        requestTimeoutMs)))
+      return Promise.allSettled(partitions.map(day=>settleWithin(
+        fetchEspnScoreboardWithFallback(item.sport,item.league,day,
+          uri=>getFeed<Board>(uri,fetcher)),requestTimeoutMs)))
     }))
     for(let i=0;i<batch.length;i++){
       const item=batch[i]

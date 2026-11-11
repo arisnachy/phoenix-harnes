@@ -8,8 +8,10 @@ import {join,resolve} from 'node:path'
 
 export type DailyNeed={sport:string;required:string[]}
 export const dailyResearchNeeds:readonly DailyNeed[]=[
-  {sport:'NBA/WNBA',required:['fixture','pace/efficiency','recent form','back-to-back',
+  {sport:'NBA',required:['fixture','pace/efficiency','recent form','back-to-back',
     'official injury report','confirmed starters','market and price']},
+  {sport:'WNBA',required:['fixture','pace/efficiency','recent form','back-to-back',
+    'official WNBA injury report','confirmed starters','market and price']},
   {sport:'NHL',required:['fixture','goalie confirmations','xG 5v5/GSAx',
     'PP/PK','rest/travel','injuries/scratches','market with OT rules']},
   {sport:'MLB',required:['fixture','probable starters','bullpen last 72h','lineups',
@@ -18,8 +20,6 @@ export const dailyResearchNeeds:readonly DailyNeed[]=[
     'official inactives','weather','rest','market rules']},
   {sport:'Soccer',required:['fixture and home/away','xG/xGA','form','travel/rest',
     'confirmed XI','injuries/suspensions','draw risk','90-minute market']},
-  {sport:'ATP/WTA',required:['fixture and surface','serve/return','last matches',
-    'injuries','fatigue/travel','format','match-winner market']},
 ]
 const dayPattern=/^\d{4}-\d{2}-\d{2}$/u
 const validDay=(day:string)=>dayPattern.test(day)&&
@@ -277,7 +277,8 @@ export function dailyPreloadTargets(date:string,env:NodeJS.ProcessEnv):PrefetchT
     ...[['basketball','nba'],['basketball','wnba'],['hockey','nhl'],
       ['football','nfl'],['baseball','mlb'],['soccer','eng.1'],
       ['soccer','esp.1'],['soccer','usa.1'],['soccer','mex.1'],
-      ['tennis','atp'],['tennis','wta']].map(([s,l])=>({
+      ['soccer','uefa.champions'],['soccer','ger.1'],['soccer','ita.1'],
+      ['soccer','fra.1'],['soccer','bra.1']].map(([s,l])=>({
         provider:'ESPN',sport:s!,kind:'free' as const,
         url:'https://site.api.espn.com/apis/site/v2/sports/'+s+'/'+l+
           '/scoreboard?dates='+dt,
