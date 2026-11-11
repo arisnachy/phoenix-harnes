@@ -141,7 +141,7 @@ export async function evidencePricedTicket(
   const specialistComplete=research.events.length===count&&researchedLegs===count
   // Number of leg dossiers checked is NOT the number of research steps closed.
   // A partial injury report or candidate goalie leaves the ticket conditional.
-  const checklistComplete=specialistComplete&&specialistChecks.every(x=>
+  let checklistComplete=specialistComplete&&specialistChecks.every(x=>
     x.checklist?.complete===true)
   // A missing injury report or lineup is a conditional research gap, not an
   // automatic refusal to display a priced candidate. Explicit identity
@@ -384,6 +384,34 @@ export async function evidencePricedTicket(
           normalize(q.selection)===normalize(event.pick==='home'?event.home:event.away))
     })
   })
+  // Post-quote reassessment: the dossier runs before prices arrive. A matching
+  // market observation closes ONLY its market step, not missing lineups or form.
+  for(const [index,rows] of groups.entries()){
+    const current=specialistChecks[index]
+    if(!rows.length||!current?.checklist)continue
+    const prior=current.checklist
+    if(!prior.steps.some(step=>step.key==='market'))continue
+    const quote=rows[0]!
+    const steps=prior.steps.map(step=>step.key==='market'?{
+      ...step,state:'verified' as const,
+      detail:'Precio publicado observado en '+quote.source+' · '+quote.bookmaker+
+        ' · '+quote.market+' · '+quote.selection+' · '+quote.price+
+        '. Evento, rivales, inicio y selección cotejados; confirmar aceptación en la casa.',
+    }:step)
+    const criticalPending=steps.filter(step=>step.critical&&step.state!=='verified')
+      .map(step=>step.title)
+    const pendingSteps=current.pendingSteps.filter(step=>
+      !step.startsWith('Pasos obligatorios sin cerrar ('))
+    specialistChecks[index]={...current,checklist:{...prior,steps,
+      verified:steps.filter(step=>step.state==='verified').length,
+      partial:steps.filter(step=>step.state==='partial').length,
+      missing:steps.filter(step=>step.state==='missing').length,
+      criticalPending,complete:criticalPending.length===0},
+      pendingSteps:criticalPending.length?[
+        ...pendingSteps,'Pasos obligatorios sin cerrar ('+criticalPending.length+
+        '): '+criticalPending.slice(0,3).join('; ')]:pendingSteps}
+  }
+  checklistComplete=specialistComplete&&specialistChecks.every(x=>x.checklist?.complete===true)
   const quotedLegs=groups.filter(g=>g.length>0).length
   const attributed=(source:string)=>source.toLowerCase().includes('oddsharvester')?'OddsHarvester':
     source==='The Odds API'?'The Odds API v4':
@@ -527,6 +555,7 @@ export async function evidencePricedTicket(
       String(researchCard.props.note??'')).slice(0,1000),
   }}
   const checked={...base,card:auditCard,sourceAudit,quotedLegs,
+    specialistChecks,conditional:!checklistComplete,dossierComplete:checklistComplete,
     missingQuotes:count-quotedLegs}
   if(identityConflict)return{...checked,complete:false,
     explanation:'Borrador CONFLICTIVO: los equipos o la localía no coinciden con el '+

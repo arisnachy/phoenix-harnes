@@ -61,19 +61,16 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
       throw Error('Identificador de evento duplicado o ausente en la auditoría')
     seen.add(input.eventId)
   }
-  const legs=inputs.map(input=>{
+  // Preserve the public DecisionLeg contract for downstream audit consumers.
+  // The 55% screening threshold now yields caution, not automatic exclusion.
+  const legs:DecisionLeg[]=inputs.map(input=>{
     const share=validShare(input.noVigShare)?input.noVigShare:null
     const price=input.quotedPrice
     const breakEven=typeof price==='number'&&Number.isFinite(price)&&price>1&&price<1000
       ?pct(1/price):null
     const reasons:string[]=[]
     let verdict:DecisionVerdict
-    if(share!==null&&share<policy.excludeBelow){
-      verdict='exclude'
-      reasons.push('EXCLUIR: respaldo del mercado '+pct(share)+
-        '% sin margen, por debajo del filtro '+pct(policy.excludeBelow)+
-        '%. Ninguna ventaja propia calibrada demuestra que esta pata compense su riesgo.')
-    }else if(input.modelStatus==='contradiction'){
+    if(input.modelStatus==='contradiction'){
       verdict='hold'
       reasons.push('ESPERAR: un modelo externo discrepa del ganador; investigar la contradicción.')
     }else if(input.specialistStatus!=='researched'||!input.checklistComplete||
@@ -84,6 +81,11 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
     }else if(share===null||breakEven===null){
       verdict='hold'
       reasons.push('ESPERAR: faltan ambas caras del mercado de la misma casa y cuota vigente.')
+    }else if(share<policy.excludeBelow){
+      verdict='caution'
+      reasons.push('PRECAUCIÓN ALTA: cuota con '+pct(share)+
+        '% de participación del mercado sin margen; no equivale a probabilidad '+
+        'pronosticada ni justifica por sí sola una exclusión.')
     }else if(share<policy.cautionBelow){
       verdict='caution'
       reasons.push('RIESGO MEDIO: margen competitivo reducido, revisar alternativas antes de incluir.')

@@ -9,7 +9,7 @@ const sample=(eventId,share,overrides={})=>({
   checklistComplete:true,criticalPending:[],modelStatus:'unavailable',
   ...overrides,
 })
-test('Anaheim-like 52% side is excluded without fabricated predictive edge',()=>{
+test('52% market side is cautioned but not automatically excluded',()=>{
   const audit=auditTicketDecisions([
     sample('Boston',.85,{sport:'basketball'}),
     sample('Minnesota',.82,{sport:'basketball'}),
@@ -18,16 +18,16 @@ test('Anaheim-like 52% side is excluded without fabricated predictive edge',()=>
       criticalPending:['Dos porteros titulares CONFIRMADOS']}),
     sample('Anaheim',.52),
   ],policy)
-  assert.equal(audit.legs[4].verdict,'exclude')
+  assert.equal(audit.legs[4].verdict,'caution')
   assert.ok(audit.legs[4].reasons.join(' ').includes('52'))
   assert.equal(audit.legs[3].verdict,'hold')
   assert.match(audit.legs[3].reasons.join(' '),/porteros/)
   assert.equal(audit.legs[2].verdict,'caution')
   assert.equal(audit.legs[0].verdict,'candidate')
-  assert.deepEqual(audit.excludedEvents,['Anaheim'])
+  assert.deepEqual(audit.excludedEvents,[])
   assert.equal(audit.scenarios[0].marketProductPct,40.43)
   assert.equal(audit.scenarios[1].marketProductPct,23.04)
-  assert.equal(audit.scenarios[2].marketProductPct,null)
+  assert.equal(audit.scenarios[2].marketProductPct,11.98)
   assert.equal(audit.legs[4].modelProbabilityPct,null)
   assert.equal(audit.legs[4].expectedValue,null)
   assert.equal(audit.approvedForBetting,false)
