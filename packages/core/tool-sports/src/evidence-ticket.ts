@@ -28,7 +28,7 @@ export type TicketPreselectReviewer=(
 const defaultLeagues:ReadonlyArray<readonly [string,string]>=[
   ['basketball','nba'],['basketball','wnba'],['baseball','mlb'],
   ['football','nfl'],['hockey','nhl'],
-  ...sportsCatalog.soccer.map(league=>['soccer',league] as const),
+  ...(sportsCatalog.soccer??[]).map(league=>['soccer',league] as const),
 ]
 export function boundedTicket<T>(task:Promise<T>,ms:number):Promise<T>{
   let timer:ReturnType<typeof setTimeout>|undefined
