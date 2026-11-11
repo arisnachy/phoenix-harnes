@@ -60,7 +60,8 @@ export async function evidencePricedTicket(
 ):Promise<{card:ChatBlock;priced:boolean;placed:false;complete:boolean;
   verifiedEvents:number;eventsFound:number;quotedLegs:number;missingQuotes:number;
   conditionalLegs:number;approvedForBetting:false;
-  sourceAudit:OddsAuditRow[];approvedLegs:number;multisportSatisfied:boolean;
+  sourceAudit:OddsAuditRow[];approvedLegs:number;candidateLegs:number;
+  ticketReadyForReview:boolean;multisportSatisfied:boolean;
   specialistChecks:SpecialistGate[];researchedLegs:number;
   modelAudit:Array<{eventId:string;status:'support'|'contradiction'|'unavailable';
     prediction:ModelForecast|null}>;
@@ -185,6 +186,7 @@ export async function evidencePricedTicket(
   const preliminaryLegs=Array.isArray(research.card.props.legs)?research.card.props.legs:[]
   const researchCard:ChatBlock={...research.card,props:{...research.card.props,
     dataCounts:{eventsFound:research.verifiedEvents,quotedLegs:0,researchedLegs,
+      candidateLegs:0,
       conditionalLegs:specialistChecks.filter(x=>x.checklist?.complete!==true).length,
       approvedForBetting:0},
     legs:preliminaryLegs.map((row,index)=>{
@@ -228,6 +230,7 @@ export async function evidencePricedTicket(
     quotedLegs:0,missingQuotes:count,eventsFound:research.verifiedEvents,
     conditionalLegs:specialistChecks.filter(x=>x.checklist?.complete!==true).length,
     approvedForBetting:false as const,sourceAudit:initialSources,
+    candidateLegs:0,ticketReadyForReview:false,
     specialistChecks,researchedLegs,modelAudit,trackingEvents,
     decisionAudit:preliminaryDecisionAudit,reviewedBeforeSelection,removedConflicts,conditional:!checklistComplete,
     dossierComplete:checklistComplete,
@@ -579,7 +582,7 @@ export async function evidencePricedTicket(
     legs:hintedLegs,
     decisionAudit:postQuoteAudit,
     dataCounts:{eventsFound:research.verifiedEvents,quotedLegs,
-      researchedLegs,conditionalLegs,approvedForBetting:0},
+      researchedLegs,candidateLegs:quotedLegs,conditionalLegs,approvedForBetting:0},
     subtitle:quotedLegs!==count?'TICKET DE INVESTIGACIÓN · '+quotedLegs+'/'+count+
       ' cuotas verificadas · '+reportedReferences+' precios ESPN de referencia':
       researchCard.props.subtitle,
@@ -590,7 +593,7 @@ export async function evidencePricedTicket(
   const checked={...base,card:auditCard,sourceAudit,quotedLegs,
     decisionAudit:postQuoteAudit,conditionalLegs,
     specialistChecks,conditional:!checklistComplete,dossierComplete:checklistComplete,
-    missingQuotes:count-quotedLegs}
+    missingQuotes:count-quotedLegs,candidateLegs:quotedLegs}
   if(identityConflict)return{...checked,complete:false,
     explanation:'Borrador CONFLICTIVO: los equipos o la localía no coinciden con el '+
       'partido verificado. No se adjudican cuotas a encuentros ambiguos.'}
@@ -716,16 +719,21 @@ export async function evidencePricedTicket(
   const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,modelAudit,marketRisk,decisionAudit,
     dataCounts:{eventsFound:research.verifiedEvents,quotedLegs:count,
-      researchedLegs,conditionalLegs:decisionAudit.legs.filter(x=>
+      researchedLegs,candidateLegs:count,
+      conditionalLegs:decisionAudit.legs.filter(x=>
         x.verdict==='hold'||x.verdict==='caution').length,approvedForBetting:0},
     chatNarrative:legs.map(x=>x.narrative).filter(Boolean),
     narrativeInstruction:'Kira debe explicar cada selección DEBAJO del ticket con datos favorables, datos contrarios, fecha y enlaces de noticias, sede, clima, árbitro verificado o no y porcentaje con origen; jamás resumir cinco patas en una sola frase.',
-    subtitle:(checklistComplete&&!elevatedMarketRisk?'Investigación especializada':'TICKET CONDICIONAL')+
-      ' · '+(espnOnlyObserved?'precios observados en ESPN':'cuotas verificadas')+
-      ' · '+best.book+' · forma histórica ESPN',
-    note:(checklistComplete&&!elevatedMarketRisk?'COTIZACIÓN INVESTIGADA':
-      'TICKET CONDICIONAL: faltan datos especializados. Se muestran solo cuotas reales.')+
-      ' NO ES APUESTA APROBADA NI GANADORA. '+observationDisclaimer+
+    // The research ticket is displayable even with genuine warnings. Its
+    // visible title must not imply bookmaker acceptance or betting approval.
+    subtitle:'BOLETO DE INVESTIGACIÓN · '+count+'/'+count+' selecciones · '+
+      (espnOnlyObserved?'precios observados en ESPN':'cuotas cotejadas')+
+      ' · '+best.book+' · '+(checklistComplete&&!elevatedMarketRisk?
+        'expediente documentado':'advertencias pendientes'),
+    note:'BOLETO DE ESTUDIO CON PRECIOS PUBLICADOS. '+
+      (checklistComplete&&!elevatedMarketRisk?'Investigación especializada documentada. ':
+        'ADVERTENCIAS: hay datos especializados o riesgos de mercado pendientes. ')+
+      'NO ES APUESTA APROBADA NI GANADORA. '+observationDisclaimer+
       (marketPreference==='double_chance'
       ?'Fútbol: la doble oportunidad cubre empate (1X/X2), NO asegura ganar. ':'')+
       'TheRundown Free informa cuotas con retraso aproximado de 5 min; observedAt es consulta del proveedor, updatedAt es último cambio de la casa. Confirmar precio actual antes de apostar. '+
@@ -746,6 +754,9 @@ export async function evidencePricedTicket(
     marketRisk,decisionAudit,reviewedBeforeSelection,removedConflicts,
     verifiedEvents:research.verifiedEvents,eventsFound:research.verifiedEvents,
     quotedLegs:count,missingQuotes:0,sourceAudit,approvedLegs:0,
+    // Candidate = priced review opportunity; approvedLegs remains 0 because
+    // this is not a calibrated betting recommendation or actual placement.
+    candidateLegs:count,ticketReadyForReview:true,
     conditionalLegs:decisionAudit.legs.filter(x=>
       x.verdict==='hold'||x.verdict==='caution').length,
     approvedForBetting:false,
@@ -757,6 +768,6 @@ export async function evidencePricedTicket(
       '. Decisión crítica: '+decisionAudit.recommendation+
       (elevatedMarketRisk?'. AVISO: pata con participacion de mercado inferior a 60%; considerar reducir el boleto.':'')+
       (checklistComplete?'. Todos los pasos especializados verificados.':
-      '. TICKET CONDICIONAL: '+(count-researchedLegs)+' expedientes parciales o no disponibles; verificar datos pendientes.')+
+      '. ADVERTENCIA DE INVESTIGACIÓN: '+(count-researchedLegs)+' expedientes parciales o no disponibles; verificar datos pendientes.')+
       ' Es un ticket de investigación cotizado, NO apuesta aprobada ni predicción calibrada.'}
 }
