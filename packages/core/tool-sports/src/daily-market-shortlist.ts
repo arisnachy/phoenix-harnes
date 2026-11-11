@@ -143,7 +143,9 @@ export function shortlistDailyMarkets(
     const inverse=rows.map(q=>1/q.price),sum=inverse.reduce((a,b)=>a+b,0)
     if(!Number.isFinite(sum)||sum<=0)continue
     const options=rows.map((q,i)=>({quote:q,share:(inverse[i]??0)/sum}))
-      .filter(x=>x.quote.price>=1.20&&x.quote.price<=4)
+      // Very short genuine favorites remain research candidates; value/risk
+      // is assessed later, not silently erased by an arbitrary odds floor.
+      .filter(x=>x.quote.price>=1.01&&x.quote.price<=4)
       .sort((a,b)=>b.share-a.share||a.quote.selection.localeCompare(b.quote.selection))
     const choice=options[0]
     if(!choice)continue
