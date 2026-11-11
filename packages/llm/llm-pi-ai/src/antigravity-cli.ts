@@ -1,8 +1,8 @@
 /** Account-backed Gemini model route through the official Antigravity CLI. No token extraction. */
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { existsSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, readFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import { credentialKey } from '@phoenix-ai/dsh-credentials'
@@ -12,6 +12,25 @@ import type { GenerateOptions, LlmModelInfo, StreamChunk } from '@phoenix-ai/dsh
 export const GOOGLE_ACCOUNT_PROVIDER = 'google-account'
 export const GOOGLE_ACCOUNT_KEY = credentialKey('llm-pi-ai', GOOGLE_ACCOUNT_PROVIDER)
 
+
+/** Refuse API-key billing on the account-only route. */
+export function assertGoogleAccountMode(): void {
+  const settingsFile = join(homedir(), '.gemini', 'antigravity-cli', 'settings.json')
+  let config: unknown
+  try {
+    config = JSON.parse(readFileSync(settingsFile, 'utf8'))
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') return
+    throw new LlmError('No se pudo verificar que Antigravity esté en modo cuenta Google.', 'GOOGLE_AUTH_MODE_UNKNOWN')
+  }
+  if (typeof config === 'object' && config !== null && 'modelProvider' in config && config.modelProvider === 'gemini') {
+    throw new LlmError(
+      'Antigravity está configurado para facturación por GEMINI_API_KEY; desactiva modelProvider=gemini antes de usar la cuota de tu cuenta Google.',
+      'GOOGLE_ACCOUNT_API_MODE',
+    )
+  }
+}
+
 function executable(): string {
   const local = process.env.LOCALAPPDATA
   const installed = local === undefined ? undefined : join(local, 'agy', 'bin', 'agy.exe')
@@ -20,6 +39,7 @@ function executable(): string {
 
 /** Send sensitive prompts through stdin, never process command arguments. */
 export function runGoogleCli(args: readonly string[], input = '', signal?: AbortSignal): Promise<string> {
+  assertGoogleAccountMode()
   return new Promise((resolve, reject) => {
     const child = spawn(executable(), [...args], {
       shell: false, windowsHide: true, cwd: tmpdir(), stdio: ['pipe', 'pipe', 'pipe'],
