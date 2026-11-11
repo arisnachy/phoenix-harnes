@@ -64,3 +64,20 @@ test('preseason and unclassified NBA results never contaminate regular-season fo
   assert.equal(match.sampleAdequate,false)
   assert.equal(match.evidenceStatus,'insufficient')
 })
+
+test('NBA does not accept a future result even if ESPN says the game is final',async()=>{
+  const now=Date.parse('2026-10-28T12:00:00Z')
+  const fetcher=async url=>{
+    const key=String(url).split('dates=')[1]
+    const future=key==='20261027'?{
+      ...past(998,'2026-10-28',180,88),
+      date:'2026-10-28T20:00:00Z',
+    }:null
+    return new Response(JSON.stringify(key==='20261028'?fixture:
+      {events:future?[future]:days[key]?[days[key]]:[]}))
+  }
+  const report=await researchNbaSlate(date,'9001',fetcher,now,{},4)
+  const games=report.matches[0].home.recentResults
+  assert.equal(games.some(item=>item.eventId==='998'),false)
+  assert.ok(games.every(item=>Date.parse(item.date)<now))
+})
