@@ -104,3 +104,11 @@ Implementado en las ramas de trabajo: contexto de ESPN News con URL e imagen per
 ## VII. Aceptación
 
 Pasar unit tests y regresiones Node/Windows, CI TS, replay real por seis deportes, fallos intencionales de cada fuente, auditoría de imágenes/licencias, comprobación de muestras previas al inicio, cifras vs no-vig por mercado y validación de UI visual con 5–6 patas. Solo entonces habilitar merge y afirmar que quedó operativo.
+
+## VIII. Investigación abierta y lectura editorial de resultados
+
+El sistema deportivo activa las instrucciones de `src/sports-open-research-guidance.ts` únicamente ante una solicitud deportiva. ESPN, MLB, NHL, NBA, NFL, WNBA y el registro de conectores sirven como punto de partida, no como restricción a fuentes autorizadas adicionales. Kira utiliza las herramientas generales de búsqueda/lectura web **cuando realmente estén disponibles** para cotejar hechos decisivos de cada partido, sin afirmar lectura de un artículo a partir de su título indexado ni saltar restricciones del sitio. La guía no instala por sí misma un navegador o un proveedor.
+
+El componente `sports_ticket_card` sigue conservando patas, mercado, casa, probabilidades correctamente etiquetadas y el expediente `chatNarrative`. En el cliente, cada pata muestra ahora de inmediato su argumento central, los datos a favor, las contradicciones y hasta tres enlaces de fuentes realmente clasificadas como verificadas o parciales. El checklist extenso continúa desplegable. Un componente sin datos reales no se sustituye por citas fabricadas y el ticket es un producto de investigación, no una apuesta confirmada.
+
+Las pruebas focalizadas están en `tests/sports-open-research-guidance.test.mjs` y `packages/client/ui-conversation/tests/sports-ticket-explanation.client.spec.tsx`. Su aprobación y la reproducción visual real son condiciones para considerar la modificación operativa.
