@@ -13,7 +13,7 @@ const schedule:Schedule[]=[
   {sport:'basketball',league:'nba'}, {sport:'basketball',league:'wnba'},
   {sport:'baseball',league:'mlb'}, {sport:'football',league:'nfl'},
   {sport:'hockey',league:'nhl'},
-  ...sportsCatalog.soccer.map(league=>({sport:'soccer',league})),
+  ...(sportsCatalog.soccer??[]).map(league=>({sport:'soccer',league})),
 ]
 const dateValid=(s:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(s)
   &&Number.isFinite(Date.parse(s+'T00:00:00Z'))
