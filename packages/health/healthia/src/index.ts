@@ -209,11 +209,23 @@ declare module '@phoenix-ai/cordis' {
   }
 
   interface Events {
-    /** A patient profile was created or updated. */
+    /**
+     * A patient profile was created or updated.
+     * @mode emit
+     * @param patient The created or updated patient profile.
+     */
     'healthia/patient'(patient: Readonly<HealthPatient>): void
-    /** A canonical patient fact was durably recorded. */
+    /**
+     * A canonical patient fact was durably recorded.
+     * @mode emit
+     * @param record The persisted patient record.
+     */
     'healthia/record'(record: Readonly<HealthRecord>): void
-    /** A clinical episode was opened or updated. */
+    /**
+     * A clinical episode was opened or updated.
+     * @mode emit
+     * @param episode The opened or updated clinical episode.
+     */
     'healthia/episode'(episode: Readonly<HealthEpisode>): void
   }
 }
