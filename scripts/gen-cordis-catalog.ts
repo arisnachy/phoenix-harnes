@@ -602,6 +602,16 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 /** Project types deliberately documented outside the subsystems catalog. */
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   HealthPatient: 'HealthIA patient entity contract is documented by packages/health/healthia/README.md and src/index.ts',
+  HealthPatientId: 'HealthIA patient identifier contract is owned by packages/health/healthia/src/index.ts',
+  HealthEpisodeId: 'HealthIA episode identifier contract is owned by packages/health/healthia/src/index.ts',
+  CreateHealthPatientInput: 'HealthIA creation input contract is owned by packages/health/healthia/src/index.ts',
+  UpdateHealthPatientInput: 'HealthIA update input contract is owned by packages/health/healthia/src/index.ts',
+  AddHealthRecordInput: 'HealthIA canonical fact input is owned by packages/health/healthia/src/index.ts',
+  HealthRecordQuery: 'HealthIA record-query contract is owned by packages/health/healthia/src/index.ts',
+  OpenHealthEpisodeInput: 'HealthIA episode-opening input is owned by packages/health/healthia/src/index.ts',
+  UpdateHealthEpisodeInput: 'HealthIA episode-update input is owned by packages/health/healthia/src/index.ts',
+  HealthSnapshotOptions: 'HealthIA bounded history options are owned by packages/health/healthia/src/index.ts',
+  HealthPatientSnapshot: 'HealthIA bounded clinical history projection is owned by packages/health/healthia/src/index.ts',
   HealthRecord: 'HealthIA canonical record contract is documented by packages/health/healthia/README.md and src/index.ts',
   HealthEpisode: 'HealthIA episode contract is documented by packages/health/healthia/README.md and src/index.ts',
   UniversalMissionSnapshot: 'durable UME mission snapshot is owned by packages/subagent/agent-team/src/universal-mission.ts',
