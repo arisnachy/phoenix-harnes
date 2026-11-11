@@ -669,6 +669,7 @@ export function apply(ctx: Context): void {
         approvedForBetting:0,
         quotedCandidates:pool.selected.length,researchPool,
         marketCandidates:pool.eligibleMarkets,matchedGames:pool.matchesInSlate,
+        quoteMatchingDiagnostics:pool.matchDiagnostics,
         bookmaker:pool.bookmaker,reviewed:research.length,
         eventChoices:evaluated.eventChoices,
         winnerOnly:args.winnerOnly===true,marketRisk,
