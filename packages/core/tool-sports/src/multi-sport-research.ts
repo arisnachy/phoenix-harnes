@@ -150,7 +150,11 @@ export async function researchSport(
     const {home,away}=sides(event)
     if(!home||!away||!pid(home)||!pid(away)||!pname(home)||!pname(away))return []
     const kickoff=Date.parse(event.date??'')
-    const homeForm=form(home,archived,kickoff,sport),awayForm=form(away,archived,kickoff,sport)
+    // A provider's premature "post" flag must never reveal a result whose
+    // scheduled date is still in the future at observation time.
+    const historyCutoff=Math.min(kickoff,now)
+    const homeForm=form(home,archived,historyCutoff,sport)
+    const awayForm=form(away,archived,historyCutoff,sport)
     const requiredGames=sport==='football'?3:5
     // Research reports a preliminary minimum, while the automatic-ticket
     // promotion layer requires five distinct games per team (NFL: three).
