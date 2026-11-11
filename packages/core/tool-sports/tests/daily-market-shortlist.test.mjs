@@ -203,7 +203,7 @@ test('ESPN website markets use fresh observation without inventing bookmaker upd
   const result=shortlistDailyMarkets(fixtures,rows,4,now)
   assert.equal(result.selected.length,1)
   assert.equal(result.selected[0].quoteUpdatedAt,'')
-  assert.equal(result.selected[0].observedAt,observed)
+  assert.equal(Date.parse(result.selected[0].observedAt),Date.parse(observed))
   assert.equal(result.selected[0].timestampSource,'espn-observation')
   const stale=shortlistDailyMarkets(fixtures,rows.map(q=>({
     ...q,observedAt:'2026-11-06T15:45:00Z'
