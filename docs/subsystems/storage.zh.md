@@ -132,6 +132,75 @@ type DomainChanged = DomainChangedPut | DomainChangedDeleted
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxhealthia--healthiaservice-abstract-seam"></a>
+
+### `ctx.healthia` — `HealthiaService` (abstract seam)
+
+Service definition for Phoenix's longitudinal health record.
+
+Providers own persistence/encryption. Consumers never write a session log and pretend it is a medical record.
+
+```ts cordis-catalog
+/** List isolated patient profiles without returning clinical records.
+ * @returns Patient profiles only, never clinical record contents.
+ */
+abstract listPatients(): Promise<readonly HealthPatient[]>
+
+/** Resolve one patient profile or undefined.
+ * @param id - Patient identifier scoped to the owner-local record.
+ * @returns The matching patient profile or undefined if it does not exist.
+ */
+abstract getPatient(id: HealthPatientId): Promise<HealthPatient | undefined>
+
+/** Create one patient profile.
+ * @param input - Validated demographics and identity fields for the new profile.
+ * @returns The newly persisted profile.
+ */
+abstract createPatient(input: CreateHealthPatientInput): Promise<HealthPatient>
+
+/** Update demographics without changing patient identity.
+ * @param id - Immutable patient identity.
+ * @param input - Allowed demographic updates.
+ * @returns Updated durable patient profile.
+ */
+abstract updatePatient(id: HealthPatientId, input: UpdateHealthPatientInput): Promise<HealthPatient>
+
+/** Append one provenance-bearing canonical fact.
+ * @param input - Patient-scoped fact and its provenance.
+ * @returns Persisted canonical record with assigned identity.
+ */
+abstract addRecord(input: AddHealthRecordInput): Promise<HealthRecord>
+
+/** Query facts belonging only to the named patient.
+ * @param id - Patient whose records may be read.
+ * @param query - Optional bounded filters for the record query.
+ * @returns Patient-scoped clinical facts matching the query.
+ */
+abstract listRecords(id: HealthPatientId, query?: HealthRecordQuery): Promise<readonly HealthRecord[]>
+
+/** Open one longitudinal patient episode.
+ * @param input - Initial episode details tied to a patient.
+ * @returns Persisted open episode.
+ */
+abstract openEpisode(input: OpenHealthEpisodeInput): Promise<HealthEpisode>
+
+/** Update an existing episode.
+ * @param id - Identity of the longitudinal episode.
+ * @param input - Authorized changes to the episode.
+ * @returns Updated durable episode.
+ */
+abstract updateEpisode(id: HealthEpisodeId, input: UpdateHealthEpisodeInput): Promise<HealthEpisode>
+
+/** Return a bounded longitudinal projection for reasoning.
+ * @param id - Patient identity to scope the snapshot.
+ * @param options - Maximum record and episode counts.
+ * @returns Patient-specific bounded clinical history snapshot.
+ */
+abstract snapshot(id: HealthPatientId, options?: HealthSnapshotOptions): Promise<HealthPatientSnapshot>
+```
+
+Source: [`packages/health/healthia/src/index.ts`](../../packages/health/healthia/src/index.ts)
+
 <a id="ctxstorage--storage"></a>
 
 ### `ctx.storage` — `Storage`
@@ -226,4 +295,56 @@ A domain record or the global singleton changed, emitted once per write strictly
 ```
 
 Source: [`packages/storage/storage-domain/src/events.ts`](../../packages/storage/storage-domain/src/events.ts)
+
+<a id="healthia-events"></a>
+
+### `healthia/*` events
+
+<a id="healthiaepisode--emit"></a>
+
+#### `healthia/episode` — emit
+
+A clinical episode was opened or updated.
+
+```ts cordis-catalog
+/** A clinical episode was opened or updated.
+ * @mode emit
+ * @param episode - The persisted clinical episode after the change.
+ */
+'healthia/episode'(episode: Readonly<HealthEpisode>): void
+```
+
+Source: [`packages/health/healthia/src/index.ts`](../../packages/health/healthia/src/index.ts)
+
+<a id="healthiapatient--emit"></a>
+
+#### `healthia/patient` — emit
+
+A patient profile was created or updated.
+
+```ts cordis-catalog
+/** A patient profile was created or updated.
+ * @mode emit
+ * @param patient - The persisted patient profile after the change.
+ */
+'healthia/patient'(patient: Readonly<HealthPatient>): void
+```
+
+Source: [`packages/health/healthia/src/index.ts`](../../packages/health/healthia/src/index.ts)
+
+<a id="healthiarecord--emit"></a>
+
+#### `healthia/record` — emit
+
+A canonical patient fact was durably recorded.
+
+```ts cordis-catalog
+/** A canonical patient fact was durably recorded.
+ * @mode emit
+ * @param record - The durable clinical record emitted after storage.
+ */
+'healthia/record'(record: Readonly<HealthRecord>): void
+```
+
+Source: [`packages/health/healthia/src/index.ts`](../../packages/health/healthia/src/index.ts)
 <!-- END GENERATED cordis-surface -->

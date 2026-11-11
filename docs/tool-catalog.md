@@ -33,21 +33,24 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-schedule` | `schedule_create`, `schedule_delete`, `schedule_list` | `ctx.tools`, `ctx.sessions`, `Session persistence`, `a future live root Agent` | `tool/call`, `schedule/change create or delete`, `tool/result` | - | Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, and discloses session-local delivery; management reads and mutations require the shared Session persistence barrier. |
 | `@phoenix-ai/dsh-tool-business` | `business_plan_mission` | `ctx.tools`, `ctx.systemPrompt`, `ctx.mcpConnectors (optional at execution)` | `tool/call`, `tool/result` | - | Read-only intent and live MCP capability planning. Tool names and connection status never confer publication rights. |
 | `@phoenix-ai/dsh-tool-living` | `living_act`, `living_forget_creation`, `living_get_connector_kit`, `living_inspect_creation`, `living_list_creations`, `living_read_state`, `living_register_creation`, `living_verify_creation` | `ctx.tools`, `ctx.living`, `ctx.systemPrompt` | `tool/call`, `durable living creation manifest`, `live creation state/actions/events through ctx.living`, `tool/result` | - | Universal domain-neutral control surface: arbitrary future creation kinds describe their own state, actions, events, resources, actors, and target integration level; verification refuses delivery below that target. |
-| `@phoenix-ai/dsh-tool-health` | `health_copilot_ask`, `health_interview_plan`, `health_kira_mail_requirements` | `ctx.tools`, `ctx.systemPrompt`, `ctx.userQuestions` | `tool/call`, `tool/result` | - | Clinician-driven sensitive ASK prompts and de-identified planning; no patient data, signing, or clinical record writes. |
-| `@phoenix-ai/dsh-tool-sports` | `sports_chat_catalog`, `sports_chat_discover`, `sports_chat_games`, `sports_chat_mlb_pitchers`, `sports_chat_odds`, `sports_chat_ticket`, `sports_chat_ticket_research` | `ctx.tools`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | Read-only sports market and game context with inline chat cards. Tickets simulate returns, never transact or promise wins. |
+| `@phoenix-ai/dsh-tool-health` | `health_anatomy_connectors`, `health_anatomy_models`, `health_anatomy_prepare`, `health_anatomy_status`, `health_anatomy_workflow`, `health_clinical_evidence_audit`, `health_clinical_twin_scene`, `health_copilot_ask`, `health_diagnostic_catalog`, `health_diagnostic_concordance`, `health_diagnostic_protocol`, `health_diagnostic_visual_plan`, `health_ecg_preexcitation_review`, `health_interview_plan`, `health_kira_mail_requirements` | `ctx.tools`, `ctx.systemPrompt`, `ctx.userQuestions` | `tool/call`, `tool/result` | - | Clinician-driven sensitive ASK prompts and de-identified planning; no patient data, signing, or clinical record writes. |
+| `@phoenix-ai/dsh-tool-healthia` | `healthia_activate` | `ctx.tools`, `ctx.systemPrompt`, `ctx.healthia (real provider at execution time)` | `tool/call`, `healthia agent-scoped registration after explicit activation`, `tool/result` | - | Only the explicit clinical activator is global. Real patient tools are scoped to an authorized agent and require a live provider; this catalog never opens one. |
+| `@phoenix-ai/dsh-tool-oracle` | `oracle_audit_prediction`, `oracle_calibration_report`, `oracle_forecast_due`, `oracle_forecast_history`, `oracle_forecast_public_csv`, `oracle_forecast_public_event_csv`, `oracle_forecast_scorecard`, `oracle_fuse_series`, `oracle_plan_research`, `oracle_publish_research`, `oracle_research_forecast`, `oracle_revision_prediction`, `oracle_scientific_forecast`, `oracle_weather_daily_forecast` | `ctx.tools`, `ctx.systemPrompt`, `ctx.web`, `owner-local forecast ledger at execution time` | `tool/call`, `tool/result`, `forecast ledger only on invocation` | - | Research-first forecasting; a published percentage requires measurable evidence and calibration. Schema collection performs no forecasting or external requests. |
+| `@phoenix-ai/dsh-tool-sports` | `sports_chat_basketball_intelligence_slate`, `sports_chat_bet_rules`, `sports_chat_calibration_audit`, `sports_chat_catalog`, `sports_chat_community_opinions`, `sports_chat_credential_ask`, `sports_chat_daily_market_shortlist`, `sports_chat_daily_research_cache`, `sports_chat_daily_scan`, `sports_chat_deep_research`, `sports_chat_discover`, `sports_chat_editorial_discovery`, `sports_chat_espn_core`, `sports_chat_espn_core_catalog`, `sports_chat_espn_explore`, `sports_chat_espn_extended`, `sports_chat_espn_extended_catalog`, `sports_chat_espn_historical_odds`, `sports_chat_espn_injuries`, `sports_chat_espn_route_audit`, `sports_chat_event_market_menu`, `sports_chat_follow_receipts`, `sports_chat_free_sources_probe`, `sports_chat_games`, `sports_chat_historical_odds`, `sports_chat_hockey_slate`, `sports_chat_market_intelligence`, `sports_chat_market_source_catalog`, `sports_chat_matchup_factors`, `sports_chat_mlb_investigate`, `sports_chat_mlb_pitchers`, `sports_chat_nba_intelligence`, `sports_chat_nba_research`, `sports_chat_nfl_investigate`, `sports_chat_nfl_slate`, `sports_chat_nhl_investigate`, `sports_chat_odds`, `sports_chat_odds_keyless`, `sports_chat_odds_scan`, `sports_chat_predict`, `sports_chat_public_odds_pages`, `sports_chat_register_receipt`, `sports_chat_research`, `sports_chat_research_provider_status`, `sports_chat_soccer_daily`, `sports_chat_soccer_investigate`, `sports_chat_soccer_leagues`, `sports_chat_soccer_players`, `sports_chat_soccer_world_scan`, `sports_chat_source_resilience`, `sports_chat_sources_health`, `sports_chat_sources_repair`, `sports_chat_tennis_investigate`, `sports_chat_tennis_slate`, `sports_chat_ticket`, `sports_chat_ticket_evidence_auto`, `sports_chat_ticket_evidence_priced_auto`, `sports_chat_ticket_research`, `sports_chat_ticket_research_auto`, `sports_chat_ticket_track`, `sports_chat_wnba_intelligence` | `ctx.tools`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | Read-only sports market and game context with inline chat cards. Tickets simulate returns, never transact or promise wins. |
 | `@phoenix-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`, `ctx.lsp`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | The lsp tool keeps provider selection and language-server subprocesses behind ctx.lsp, so its model-visible schema stays stable across providers. Requires a registered provider (e.g. `@phoenix-ai/dsh-lsp-stdio`) at runtime; without one, a query returns the structured `LSP_UNAVAILABLE` error rather than changing the schema. |
 | `@phoenix-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`, `ctx.workflowEngine`, `ctx.subagents`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents every fresh round)` | `tool/call`, `tool/result`, `workflow and child session events during execution` | - | A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap. |
-| `@phoenix-ai/dsh-tool-skill` | `skill` | `ctx.tools`, `ctx.agents`, `ctx.skills` | `tool/call`, `tool/result`, `user/message replacement catalogs via agent.inject()` | - | - |
+| `@phoenix-ai/dsh-tool-skill` | `openclaw_plugin_catalog`, `openclaw_plugin_invoke`, `skill` | `ctx.tools`, `ctx.agents`, `ctx.skills` | `tool/call`, `tool/result`, `user/message replacement catalogs via agent.inject()` | - | - |
 | `@phoenix-ai/dsh-tool-session-learning` | `memory_remember`, `memory_search`, `memory_teach` | `ctx.tools`, `ctx.systemPrompt`, `ctx.learningMemory` | `tool/call`, `tool/result`, `bounded learning context` | - | memory_search and memory_remember expose only bounded, provenance-preserving learning records; they never grant permissions or modify trusted instructions. |
 | `@phoenix-ai/dsh-tool-session-query` | `session_event_read`, `session_event_search`, `session_event_trace`, `session_search`, `session_trace` | `ctx.tools`, `ctx.systemPrompt`, `ctx.sessionQuery`, `a calling Agent for workspace authority` | `tool/call`, `tool/result` | - | The five read-only tools hide provider cursors and authorize every result from the immutable calling agent session. The package is opt-in; compositions that need enforced deadlines or bounded inline output also mount the generic timeout or spill policies. |
 | `@phoenix-ai/dsh-tool-subagent` | `subagent` | `ctx.tools`, `ctx.subagents`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `child session events through the chosen provider` | `subagent`, `subagent_fork` | The registered tool name is the load-time `toolName` config (default `subagent`); the schema above is that default. The shipped compositions load this package once per subagent backend, so the model additionally sees `subagent_fork` bound to the fork backend. Each instance's description, `run_in_background` parameter, and system-prompt policy follow its own `backgroundMode` and `enableRunInBackground`, so the two shipped schemas are not identical: `subagent` is `continuable` and defaults omitted calls to background with automatic settlement delivery, while `subagent_fork` stays `one-shot` and defaults them to foreground — see `packages/bundle/base/cordis.patch.yml` and `examples/acp-agent/cordis.yml`. |
 | `@phoenix-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
 | `@phoenix-ai/dsh-tool-subagent-report` | `report` | `ctx.subagents`, `ctx.systemPrompt`, `a live continuable in-process child Agent` | `tool/call`, `tool/result`, `a user-role message in the direct parent session` | - | Registered per continuable in-process child rather than globally, so this schema is visible only inside such a child and survives its global `toolFilter`. The same contribution installs the child-scoped `tool:report` prompt section, which this catalog does not render. The parent-facing `send_message` tool is installed independently. |
 | `@phoenix-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
-| `@phoenix-ai/dsh-tool-agent-team` | `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_chat_answer`, `team_chat_react`, `team_chat_read`, `team_chat_reply_to_peer`, `team_react`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | The Team tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
+| `@phoenix-ai/dsh-tool-agent-team` | `fenix_consult`, `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_chat_answer`, `team_chat_react`, `team_chat_read`, `team_chat_reply_to_peer`, `team_react`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | The Team tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
 | `@phoenix-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@phoenix-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
-| `@phoenix-ai/dsh-tool-web` | `research_scholar`, `research_search`, `research_sources`, `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
+| `@phoenix-ai/dsh-tool-voice` | `phoenix_audio_file_listen`, `phoenix_audio_listen`, `phoenix_audio_status`, `phoenix_senses_status`, `phoenix_voice_speak`, `phoenix_voice_status` | `ctx.tools`, `ctx.systemPrompt`, `ctx.voice` | `tool/call`, `Host speech synthesis or Codex Live output acceptance`, `tool/result` | - | Speech is an explicit user-requested output side channel. A provider receipt is not proof that speakers were audible; this catalog boot never plays audio. |
+| `@phoenix-ai/dsh-tool-web` | `research_catalog`, `research_federated`, `research_health_series`, `research_investigate`, `research_scholar`, `research_search`, `research_sources`, `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
 
 <a id="phoenix-aidsh-tool-ask-user"></a>
 
@@ -1016,7 +1019,7 @@ The six terminal tools are opt-in and complement one-shot shell/filesystem tools
 
 ### `create_goal`
 
-Create one persisted same-session completion goal when the current direct human request is a long-running objective that should continue across autonomous goal rounds. You may infer that intent without requiring the user to say "create a goal". Do not use this for trivial single-turn work. Execution rejects non-human and subagent authority.
+Create a persisted same-session Goal ONLY when the direct human explicitly asks to create or activate Goal/persistent-goal mode. Never infer consent from complexity, unfinished steps, failed tools, retries, or ordinary implementation requests. The execution boundary enforces this consent, including for the root coordinator.
 
 ```json
 {
@@ -2203,9 +2206,1084 @@ Source: [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/
 
 Universal domain-neutral control surface: arbitrary future creation kinds describe their own state, actions, events, resources, actors, and target integration level; verification refuses delivery below that target.
 
+<a id="phoenix-aidsh-tool-health"></a>
+
+## `@phoenix-ai/dsh-tool-health`
+
+### `health_anatomy_connectors`
+
+Consulta la situación local de los siete conectores anatómicos sin instalar nada ni leer pacientes.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts)
+
+### `health_anatomy_models`
+
+Consulta catálogo anatómico verificado por modalidad y muestra las licencias de los modelos; no significa que los pesos estén descargados ni que exista un modelo educativo GLB.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts)
+
+### `health_anatomy_prepare`
+
+Inicia el autoinstalador local de componentes anatómicos autorizados por el usuario. Los SimVascular y openCARP externos exigen instalación oficial separada; started no significa instalado.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "component": {
+      "type": "string",
+      "description": "Opcional: slicerheart | monai-nnunet | totalsegmentator | ohif-cornerstone | three-vtk"
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts)
+
+### `health_anatomy_status`
+
+Consulta solo el estado de la instalación local de bibliotecas anatómicas; no lee pacientes ni archivos DICOM. No confundir instalación con validación clínica.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts)
+
+### `health_anatomy_workflow`
+
+Planifica un gemelo anatómico de cualquier sistema humano según modalidad; NO abre archivos, NO crea geometrías, NO diagnostica y NO toca expedientes. Úsala para explicar al médico qué estudios permiten una reconstrucción y cuáles solo generan hipótesis.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "region": {
+      "type": "string",
+      "description": "Órgano o sistema anatómico sin identificadores del paciente; e.g. brain, heart, lungs, bones, vessels, all."
+    },
+    "studies": {
+      "type": "string",
+      "description": "Modalidades genéricas: TC, angio-TC, RM, ecografía 3D, RX, ECG, analíticas. Nunca introducir datos identificables."
+    }
+  },
+  "required": [
+    "region",
+    "studies"
+  ]
+}
+```
+
+Source: [`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts)
+
+### `health_clinical_evidence_audit`
+
+Audita que una lectura clínica de ECG, radiografía o informe documente los hallazgos realmente observados por zona/derivación y sus límites antes de etiquetarla como normal o descartar enfermedades. No lee imágenes, no diagnostica y no sustituye revisión médica. Sin información personal.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "modality": {
+      "type": "string",
+      "description": "Modalidad de la fuente, por ejemplo ecg, xray, ct, mri o report."
+    },
+    "sourceKind": {
+      "type": "string",
+      "description": "Tipo del archivo original realmente examinado.",
+      "enum": [
+        "image",
+        "waveform",
+        "report",
+        "document",
+        "dicom",
+        "numeric",
+        "wsi"
+      ]
+    },
+    "sourceReviewed": {
+      "type": "boolean",
+      "description": "TRUE solo si se accedió a los datos fuente; no basta una ilustración o un resumen inventado."
+    },
+    "sourceQuality": {
+      "type": "string",
+      "description": "Calidad real para estudiar cambios sutiles. Una miniatura puede ser limitada.",
+      "enum": [
+        "adequate",
+        "limited",
+        "unknown"
+      ]
+    },
+    "calibration": {
+      "type": "string",
+      "description": "Las mediciones numéricas de ECG exigen calibración verificada.",
+      "enum": [
+        "verified",
+        "unverified",
+        "not-applicable"
+      ]
+    },
+    "domains": {
+      "type": "array",
+      "description": "Dimensiones observadas por separado, sin diagnóstico predeterminado.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "P. ej. rhythm, rate, axis, intervals, qrs-morphology, repolarization, lead-distribution."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "assessed",
+              "not-assessable",
+              "not-reviewed"
+            ]
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Hallazgo objetivo y localización, sin datos del paciente."
+          }
+        },
+        "required": [
+          "domain",
+          "status",
+          "evidence"
+        ]
+      }
+    },
+    "claim": {
+      "type": "string",
+      "description": "Grado de la conclusión a auditar, no una orden de emitir ese diagnóstico.",
+      "enum": [
+        "provisional",
+        "unremarkable",
+        "acute-condition-excluded"
+      ]
+    },
+    "urgencyReviewed": {
+      "type": "boolean",
+      "description": "Se investigaron signos de alarma según la modalidad y el contexto disponible."
+    },
+    "impression": {
+      "type": "string",
+      "description": "Impresión provisional separada de la evidencia observada."
+    },
+    "differentials": {
+      "type": "array",
+      "description": "Hipótesis alternativas basadas en la fuente, nunca un diagnóstico precargado.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "imageWidth": {
+      "type": "integer",
+      "description": "Anchura real en píxeles del archivo recibido, si se conoce."
+    },
+    "imageHeight": {
+      "type": "integer",
+      "description": "Altura real en píxeles del archivo recibido, si se conoce."
+    },
+    "prMs": {
+      "type": "number",
+      "description": "PR en ms, solo si se midió realmente sobre fuente calibrada."
+    },
+    "qrsMs": {
+      "type": "number",
+      "description": "QRS en ms, solo si se midió realmente sobre fuente calibrada."
+    }
+  },
+  "required": [
+    "modality",
+    "sourceKind",
+    "sourceReviewed",
+    "sourceQuality",
+    "calibration",
+    "domains",
+    "claim",
+    "urgencyReviewed"
+  ]
+}
+```
+
+Source: [`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts)
+
+### `health_clinical_twin_scene`
+
+Construye la especificación de un gemelo visual médico HIPERREALISTA rotulado y marcado por lesión para cualquier modalidad del catálogo. Solo después de leer la fuente, comparar diagnósticos diferenciales y documentar estructura/localización/hallazgos. No lee píxeles ni genera imágenes. Nunca atribuye arteria culpable desde un ECG ni lesión focal desde un analito aislado.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "modality": {
+      "type": "string",
+      "description": "ID exacto del catálogo, p.ej. ct, ecg, laboratory, cytology, histopathology."
+    },
+    "sourceKind": {
+      "type": "string",
+      "description": "Tipo real de archivo clínico examinado.",
+      "enum": [
+        "image",
+        "pdf",
+        "dicom",
+        "waveform",
+        "numeric",
+        "wsi",
+        "report",
+        "unknown"
+      ]
+    },
+    "sourceReviewed": {
+      "type": "boolean",
+      "description": "TRUE solo si el original fue realmente accesible y revisado; declaración, no prueba automática."
+    },
+    "sourceCompleteness": {
+      "type": "string",
+      "description": "Integralidad real de la fuente.",
+      "enum": [
+        "complete",
+        "partial",
+        "unknown"
+      ]
+    },
+    "finding": {
+      "type": "string",
+      "description": "Hallazgo observado o atribuido al informe, sin información identificativa."
+    },
+    "evidenceKind": {
+      "type": "string",
+      "description": "Procedencia del hallazgo, sin afirmar confirmación autónoma.",
+      "enum": [
+        "observed",
+        "reported",
+        "hypothesis",
+        "none"
+      ]
+    },
+    "sourceLocation": {
+      "type": "string",
+      "description": "Plano, corte, derivación o región anatómica verificable. Sin localización no se dibuja lesión."
+    },
+    "affectedStructure": {
+      "type": "string",
+      "description": "Nombre anatómico correcto y verificado de la estructura a marcar."
+    },
+    "vascularFinding": {
+      "type": "string",
+      "description": "SOLO anomalía vascular descrita por la fuente; no inventar a partir de una lesión."
+    },
+    "neuralFinding": {
+      "type": "string",
+      "description": "SOLO hallazgo neural realmente sustentado por la fuente."
+    }
+  },
+  "required": [
+    "modality",
+    "sourceKind",
+    "sourceReviewed",
+    "finding",
+    "evidenceKind"
+  ]
+}
+```
+
+Source: [`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts)
+
+### `health_copilot_ask`
+
+Activa el ASK original de PHOENIX para que médico y Kira elijan modo y coordinen preguntas clínicas genéricas. Nunca lee ni guarda el expediente, ni valida respuestas clínicas, consentimiento o firma. Usar solo con categorías sin identificadores.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "choose_mode | screen_urgency | next_question; siempre pregunta sensible."
+    },
+    "pathway": {
+      "type": "string",
+      "description": "general | abdominal | headache | mental-health; sin nombre, fecha o datos del paciente."
+    },
+    "answeredFields": {
+      "type": "string",
+      "description": "Solo claves de preguntas ya registradas en el expediente protegido, separadas por coma, NUNCA sus respuestas."
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+Source: [`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts)
+
+### `health_diagnostic_catalog`
+
+Consulta un catálogo de 243 tipos de estudios médicos en 20 grupos y 23 familias. Permite buscar por nombre o filtrar por grupo. Es un catálogo de entrada, NO son algoritmos diagnósticos instalados.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Palabra a buscar en nombre/código de modalidad, opcional; no introducir nombres ni datos personales."
+    },
+    "group": {
+      "type": "string",
+      "description": "Filtrar por identificador de grupo; opcional."
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts)
+
+### `health_diagnostic_concordance`
+
+Audita correspondencia entre hallazgos observados, hipótesis propuestas, diferenciales, criticidad y visualización de cualquier estudio. No preselecciona enfermedades ni interpreta píxeles. Solo metadatos desidentificados.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "modality": {
+      "type": "string",
+      "description": "ID de la modalidad, p.ej. ecg, mri_brain, histopathology."
+    },
+    "sourceType": {
+      "type": "string",
+      "description": "waveform, image, pdf, dicom, numeric o unknown."
+    },
+    "sourceReviewed": {
+      "type": "boolean",
+      "description": "Se revisó realmente la fuente médica y no solo una imagen derivada."
+    },
+    "sourceCompleteness": {
+      "type": "string",
+      "description": "complete | partial | unknown."
+    },
+    "observedEvidence": {
+      "type": "string",
+      "description": "Hallazgos generales efectivamente observados; sin nombre, ID ni otro dato de paciente."
+    },
+    "proposedImpression": {
+      "type": "string",
+      "description": "Hipótesis diagnóstica provisional; no afirmar confirmación."
+    },
+    "differentialConsidered": {
+      "type": "string",
+      "description": "Principales diagnósticos diferenciales realmente contrastados con las observaciones fuente."
+    },
+    "intendedVisualization": {
+      "type": "string",
+      "description": "none | mechanism | patient-specific | educational | quantitative"
+    },
+    "criticalFeaturesAssessed": {
+      "type": "boolean",
+      "description": "Se revisaron alertas y urgencia clínica."
+    },
+    "calibratedMeasurementsAvailable": {
+      "type": "boolean",
+      "description": "Solo verdadero si se midieron datos calibrados en el estudio fuente."
+    }
+  },
+  "required": [
+    "modality",
+    "sourceReviewed"
+  ]
+}
+```
+
+Source: [`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts)
+
+### `health_diagnostic_protocol`
+
+Para cualquiera de las 243 modalidades reconocidas, identifica el archivo original y la secuencia de revisión específica a su familia. No abre archivos y no diagnostica. Usa health_diagnostic_catalog si no conoces el ID.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "modality": {
+      "type": "string",
+      "description": "ID exacto de salud: eg ecg, eeg, ct_perfusion, blood_culture, genetic_exome, spirometry, whole_slide_imaging, other. Buscar primero en health_diagnostic_catalog."
+    },
+    "sourceType": {
+      "type": "string",
+      "description": "image | pdf | dicom | waveform | numeric | glb | unknown"
+    }
+  },
+  "required": [
+    "modality"
+  ]
+}
+```
+
+Source: [`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts)
+
+### `health_diagnostic_visual_plan`
+
+Evaluación previa obligatoria para cualquier imagen o visualización clínica: evita crear una ilustración genérica que aparente representar la lesión real del paciente. Solo planifica; no analiza píxeles ni genera imágenes.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "modality": {
+      "type": "string",
+      "description": "ID exacto del catálogo clínico."
+    },
+    "sourceType": {
+      "type": "string",
+      "description": "image, pdf, dicom, waveform, numeric, other"
+    },
+    "sourceReviewed": {
+      "type": "boolean",
+      "description": "El estudio original realmente fue revisado (no solo reconstrucción GLB)."
+    },
+    "observedFindings": {
+      "type": "string",
+      "description": "Hallazgos observados y medidos, sin datos identificativos. No inventar."
+    },
+    "visualizationKind": {
+      "type": "string",
+      "description": "conceptual | anatomical | quantitative | patient-lesion"
+    },
+    "patientSpecific": {
+      "type": "boolean",
+      "description": "El usuario solicita anatomía real de un paciente."
+    },
+    "verifiedSpatialGeometry": {
+      "type": "boolean",
+      "description": "Existe prueba geométrica verificada externamente a este plan."
+    },
+    "diagnosticUncertaintyAcknowledged": {
+      "type": "boolean",
+      "description": "Se reconocen las limitaciones."
+    }
+  },
+  "required": [
+    "modality",
+    "sourceReviewed",
+    "patientSpecific"
+  ]
+}
+```
+
+Source: [`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts)
+
+### `health_ecg_preexcitation_review`
+
+Herramienta ESPECÍFICA, opcional: solo si el análisis clínico independiente ya plantea preexcitación/WPW, contrasta PR, QRS y onda delta con mediciones verificadas o indicios fotográficos explícitamente no confirmados. No lee píxeles ni genera diagnóstico.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "prMs": {
+      "type": "number",
+      "description": "Duración PR medida en ms, opcional; no inventar."
+    },
+    "qrsMs": {
+      "type": "number",
+      "description": "Duración QRS medida en ms, opcional; no inventar."
+    },
+    "deltaWave": {
+      "type": "string",
+      "description": "present | absent | not-assessable; basado en trazado original."
+    },
+    "source": {
+      "type": "string",
+      "description": "calibrated-12-lead | partial-image | uncalibrated | not-reviewed"
+    },
+    "leadEvidence": {
+      "type": "string",
+      "description": "Derivaciones del ECG que muestran delta; nunca introducir nombre de paciente."
+    },
+    "rhythm": {
+      "type": "string",
+      "description": "sinus | irregular-wide-complex | other | unknown"
+    },
+    "photoDeltaHint": {
+      "type": "string",
+      "description": "possible | not-seen | not-assessable. Solo indicio cualitativo; NO implica interpretación automatizada de píxeles."
+    },
+    "qualitativePrHint": {
+      "type": "string",
+      "description": "appears-short | not-apparently-short | not-assessable; NO es una medición PR."
+    },
+    "axisHint": {
+      "type": "string",
+      "description": "left | right | normal | unknown; eje solo NO excluye WPW."
+    },
+    "clinicianReviewed": {
+      "type": "boolean",
+      "description": "El médico revisó realmente el ECG original calibrado. No es cierto si Kira solo vio una fotografía."
+    }
+  },
+  "required": [
+    "clinicianReviewed"
+  ]
+}
+```
+
+Source: [`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts)
+
+### `health_interview_plan`
+
+Propone hasta cuatro preguntas de interrogatorio por motivo general y especialidad; no almacena pacientes ni hace diagnósticos.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "complaint": {
+      "type": "string",
+      "description": "Motivo genérico, SIN nombres ni datos identificables del paciente."
+    },
+    "specialty": {
+      "type": "string",
+      "description": "Especialidad, por defecto general."
+    },
+    "mode": {
+      "type": "string",
+      "description": "kira | professional | mixed."
+    },
+    "answeredFields": {
+      "type": "string",
+      "description": "Claves de preguntas ya contestadas, separadas por comas, sin respuestas clínicas."
+    }
+  },
+  "required": [
+    "complaint"
+  ]
+}
+```
+
+Source: [`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts)
+
+### `health_kira_mail_requirements`
+
+Lista las verificaciones necesarias para configurar notificaciones clínicas seguras; no ejecuta ningún envío.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts)
+
+Clinician-driven sensitive ASK prompts and de-identified planning; no patient data, signing, or clinical record writes.
+
+<a id="phoenix-aidsh-tool-healthia"></a>
+
+## `@phoenix-ai/dsh-tool-healthia`
+
+### `healthia_activate`
+
+Activate HealthIA ONLY when the user is requesting personal patient care, longitudinal follow-up, or explicit patient profile/record management. Do NOT activate solely because an academic request, simulated or fictional case, clinical exam, evidence review, medical literature search, pharmacology comparison, guideline analysis, or public-health research mentions a disease, symptoms, labs or doses. Research is handled by ordinary PHOENIX/Research APEX without opening patient records. Never infer patient identity from a vignette; the user must explicitly request record-related work.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/health/tool-healthia/src/index.ts`](../packages/health/tool-healthia/src/index.ts)
+
+Only the explicit clinical activator is global. Real patient tools are scoped to an authorized agent and require a live provider; this catalog never opens one.
+
+<a id="phoenix-aidsh-tool-oracle"></a>
+
+## `@phoenix-ai/dsh-tool-oracle`
+
+### `oracle_audit_prediction`
+
+Evalúa un pronóstico numérico registrado cuando existe observación posterior; NO verifica por sí mismo la autenticidad de la evidencia.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "observedAt": {
+      "type": "string"
+    },
+    "observedValue": {
+      "type": "number"
+    },
+    "source": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "observedAt",
+    "observedValue",
+    "source"
+  ]
+}
+```
+
+Source: [`packages/core/tool-oracle/src/index.ts`](../packages/core/tool-oracle/src/index.ts)
+
+### `oracle_calibration_report`
+
+Laboratorio de calibración prospectiva del registro local: compara tasas pronosticadas con resultados reportados, muestra Brier y ECE con advertencia de procedencia no verificada.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-oracle/src/index.ts`](../packages/core/tool-oracle/src/index.ts)
+
+### `oracle_forecast_due`
+
+Lista hasta 20 pronósticos vencidos sin resultado conocido para verificar su desenlace en fuentes primarias; NO determina automáticamente qué ocurrió.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-oracle/src/index.ts`](../packages/core/tool-oracle/src/index.ts)
+
+### `oracle_forecast_history`
+
+Biblioteca local de pronósticos congelados, versiones, fechas y resultados reportados, sin exponer fuentes privadas y sin afirmar validación externa.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-oracle/src/index.ts`](../packages/core/tool-oracle/src/index.ts)
+
+### `oracle_forecast_public_csv`
+
+Descarga una serie temporal CSV pública mediante el proveedor web seguro, valida origen, formato, fechas y periodicidad, calcula una predicción con evaluación cronológica y muestra tarjeta científica. No fabrica datos ni garantiza calibración.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "URL HTTPS del CSV real publicado por una fuente que ya se investigó y se juzgó relevante."
+    },
+    "dateColumn": {
+      "type": "string",
+      "description": "Nombre EXACTO de la columna de fechas (YYYY-MM-DD o ISO 8601)."
+    },
+    "valueColumn": {
+      "type": "string",
+      "description": "Nombre EXACTO de la columna numérica observada."
+    },
+    "unit": {
+      "type": "string",
+      "description": "Unidad real de la variable observada."
+    },
+    "stepHours": {
+      "type": "number",
+      "description": "Horas entre observaciones. Ejemplo: 24 para diarios."
+    },
+    "horizonSteps": {
+      "type": "number",
+      "description": "Intervalos futuros: 1 a 30."
+    }
+  },
+  "required": [
+    "url",
+    "dateColumn",
+    "valueColumn",
+    "unit",
+    "stepHours",
+    "horizonSteps"
+  ]
+}
+```
+
+Source: [`packages/core/tool-oracle/src/index.ts`](../packages/core/tool-oracle/src/index.ts)
+
+### `oracle_forecast_public_event_csv`
+
+Investiga eventos binarios recurrentes mediante un CSV HTTPS histórico real: señal fechada antes del resultado, resolución, etiqueta y evaluación temporal fuera de entrenamiento. Calcula porcentaje únicamente si supera la tasa base; no verifica autenticidad externa.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "Enlace HTTPS del CSV público previamente investigado."
+    },
+    "question": {
+      "type": "string",
+      "description": "Evento futuro falsable (sí/no) con fecha definida."
+    },
+    "targetAt": {
+      "type": "string",
+      "description": "Fecha y hora ISO futura con zona, horizonte del evento."
+    },
+    "idColumn": {
+      "type": "string",
+      "description": "Columna de identificador irrepetible de cada episodio."
+    },
+    "signalAtColumn": {
+      "type": "string",
+      "description": "Columna fecha de observación de la señal previa."
+    },
+    "resolvedAtColumn": {
+      "type": "string",
+      "description": "Columna fecha en que se conoció el desenlace."
+    },
+    "signalColumn": {
+      "type": "string",
+      "description": "Columna binaria de la señal (1/0 o true/false)."
+    },
+    "outcomeColumn": {
+      "type": "string",
+      "description": "Columna binaria del evento observado (1/0 o true/false)."
+    },
+    "currentSignal": {
+      "type": "boolean",
+      "description": "Estado binario ACTUAL de la señal según una fuente observada."
+    }
+  },
+  "required": [
+    "url",
+    "question",
+    "targetAt",
+    "idColumn",
+    "signalAtColumn",
+    "resolvedAtColumn",
+    "signalColumn",
+    "outcomeColumn",
+    "currentSignal"
+  ]
+}
+```
+
+Source: [`packages/core/tool-oracle/src/index.ts`](../packages/core/tool-oracle/src/index.ts)
+
+### `oracle_forecast_scorecard`
+
+Resumen del registro local de pronósticos, sin declarar verificados los resultados aportados.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-oracle/src/index.ts`](../packages/core/tool-oracle/src/index.ts)
+
+### `oracle_fuse_series`
+
+Concilia tres a cinco fuentes de series históricas aportadas por usuario o herramienta, coteja fechas, intervalos, unidades y discrepancias; no inventa valores ni declara las fuentes autenticadas.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "inputJson": {
+      "type": "string",
+      "description": "JSON {series:[{source,unit,stepHours,points:[{at,value}]}],relativeTolerance?} con 3-5 conjuntos fechados y procedencia."
+    }
+  },
+  "required": [
+    "inputJson"
+  ]
+}
+```
+
+Source: [`packages/core/tool-oracle/src/index.ts`](../packages/core/tool-oracle/src/index.ts)
+
+### `oracle_plan_research`
+
+Paso INTERMEDIO: estructura hipótesis y evidencia necesaria; devuelve planificación sin tarjeta. Después INVESTIGA fuentes y publica solo al obtener evidencia.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "question": {
+      "type": "string",
+      "description": "Pregunta libre de pronóstico."
+    },
+    "targetAt": {
+      "type": "string",
+      "description": "Fecha ISO futura con zona horaria si existe."
+    }
+  },
+  "required": [
+    "question"
+  ]
+}
+```
+
+Source: [`packages/core/tool-oracle/src/index.ts`](../packages/core/tool-oracle/src/index.ts)
+
+### `oracle_publish_research`
+
+Publica un INFORME FINAL solo tras recuperar por HTTPS las fuentes originales y comprobar su pertinencia. No muestra UI si las páginas no se pudieron recuperar. El contenido no equivale a probabilidad.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "question": {
+      "type": "string",
+      "description": "Pregunta investigada y medible."
+    },
+    "targetAt": {
+      "type": "string",
+      "description": "Horizonte ISO futuro con zona horaria."
+    },
+    "urlsJson": {
+      "type": "string",
+      "description": "JSON array de 1 a 4 URLs HTTPS relevantes previamente encontradas; solo páginas primarias reales, sin enlaces inventados."
+    }
+  },
+  "required": [
+    "question",
+    "targetAt",
+    "urlsJson"
+  ]
+}
+```
+
+Source: [`packages/core/tool-oracle/src/index.ts`](../packages/core/tool-oracle/src/index.ts)
+
+### `oracle_research_forecast`
+
+Paso INTERMEDIO: descubre fuentes relevantes sin tarjeta UI. Incluso si retorna 0 fuentes, continúa buscando por APIs, portales oficiales o web_fetch. No concluyas solo con este paso; publica después de recuperar evidencia.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "question": {
+      "type": "string",
+      "description": "Evento futuro concreto, observable, con localidad cuando sea relevante."
+    },
+    "targetAt": {
+      "type": "string",
+      "description": "Fecha ISO futura con zona horaria, p.ej. 2026-12-01T00:00:00-04:00."
+    }
+  },
+  "required": [
+    "question",
+    "targetAt"
+  ]
+}
+```
+
+Source: [`packages/core/tool-oracle/src/index.ts`](../packages/core/tool-oracle/src/index.ts)
+
+### `oracle_revision_prediction`
+
+Crea una NUEVA versión de un pronóstico existente con datos y modelo suministrados; jamás modifica la versión anterior. Exige volver a investigar y un horizonte futuro verificable.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "previousId": {
+      "type": "string",
+      "description": "UUID de un pronóstico previamente guardado."
+    },
+    "inputJson": {
+      "type": "string",
+      "description": "Nueva solicitud científica completa y documentada; no inventar datos ni fuentes."
+    }
+  },
+  "required": [
+    "previousId",
+    "inputJson"
+  ]
+}
+```
+
+Source: [`packages/core/tool-oracle/src/index.ts`](../packages/core/tool-oracle/src/index.ts)
+
+### `oracle_scientific_forecast`
+
+Calcula proyecciones científicas y estimaciones de probabilidad condicionada con evidencia histórica y prueba temporal; se abstiene ante datos insuficientes. Debe usarse DESPUÉS de investigar las fuentes.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "inputJson": {
+      "type": "string",
+      "description": "Objeto JSON válido con mode, source y variables tipadas. Nunca insertar datos clínicos identificables, secretos ni información sensible."
+    }
+  },
+  "required": [
+    "inputJson"
+  ]
+}
+```
+
+Source: [`packages/core/tool-oracle/src/index.ts`](../packages/core/tool-oracle/src/index.ts)
+
+### `oracle_weather_daily_forecast`
+
+Para temperatura máxima diaria, investiga la ciudad con geocodificación REAL y consulta la API diaria de Open-Meteo. Solo devuelve tarjeta tras recuperar el dato de la fecha. Nunca convierte el pronóstico puntual en porcentaje de ocurrencia.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "location": {
+      "type": "string",
+      "description": "Ciudad, opcional país. Ejemplo: Santo Domingo, República Dominicana."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha LOCAL requerida YYYY-MM-DD, no usar fin de día UTC."
+    },
+    "countryCode": {
+      "type": "string",
+      "description": "País ISO-3166 de dos letras, p. ej. DO."
+    },
+    "thresholdC": {
+      "type": "number",
+      "description": "Umbral de temperatura máxima en °C para evaluación estricta (superará implica >)."
+    }
+  },
+  "required": [
+    "location",
+    "date"
+  ]
+}
+```
+
+Source: [`packages/core/tool-oracle/src/index.ts`](../packages/core/tool-oracle/src/index.ts)
+
+Research-first forecasting; a published percentage requires measurable evidence and calibration. Schema collection performs no forecasting or external requests.
+
 <a id="phoenix-aidsh-tool-sports"></a>
 
 ## `@phoenix-ai/dsh-tool-sports`
+
+### `sports_chat_basketball_intelligence_slate`
+
+Cartelera verificable NBA o WNBA por fecha, con IDs, sedes, estatus y ausencia de juegos en offseason; sin favoritos preseleccionados.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "league": {
+      "type": "string",
+      "description": "nba o wnba."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD del calendario."
+    }
+  },
+  "required": [
+    "league",
+    "date"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_bet_rules`
+
+Consulta catálogo extenso de mercados por disciplina y reglas relevantes de liquidación de casas verificables: run line -1.5/2.5, altas/bajas por 3/5/9 innings, props de jugadores, 1X2, hándicap, over/under, tickets/parlays, push, void y overtime. No atribuye reglas de otra casa a Juancito.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Filtrar disciplina: baseball, basketball, soccer, americanfootball, hockey, tennis, mma, cricket, golf."
+    },
+    "family": {
+      "type": "string",
+      "description": "Familia de mercado opcional: totals, moneyline, run_line, player_props, etc."
+    },
+    "bookmaker": {
+      "type": "string",
+      "description": "Casa consultada, solo para advertir que debe leerse su propio reglamento actual."
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_calibration_audit`
+
+Audita por deporte y liga la calibración REAL cronológica con datos ESPN finalizados: entrenamiento sin fuga, bloque holdout posterior, Brier/log-loss/ECE y baseline. No implica ganancias. 28 a 180 fechas de calendario, manteniendo separación temporal.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Deporte ESPN: basketball, soccer, baseball, football, hockey."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga ESPN registrada: nba, nhl, nfl, eng.1, etc."
+    },
+    "days": {
+      "type": "integer",
+      "description": "Ventana 28..180 días, por defecto 120. Solo repetir si se amplía la ventana o cambian datos."
+    }
+  },
+  "required": [
+    "sport",
+    "league"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
 
 ### `sports_chat_catalog`
 
@@ -2215,6 +3293,168 @@ Lista disciplinas y ligas documentadas. No crea menú ni abre otra pantalla.
 {
   "type": "object",
   "properties": {}
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_community_opinions`
+
+Consulta opiniones y votaciones públicas de pronosticadores desde OddsPortal mediante OddsHarvester; nunca son probabilidades calculadas ni recomendación independiente.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Deporte OddsHarvester: football, tennis, basketball, baseball, etc."
+    }
+  },
+  "required": [
+    "sport"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_credential_ask`
+
+Ante proveedor deportivo relevante sin clave o 401/403: Ask pide permiso UNA vez y señala Conectores > APIs deportivas para introducirla en un password seguro conectado a la bóveda. No recibe el secreto en Ask ni chat y respeta no volver a preguntar.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "status | request | mute | unmute | mute-all | unmute-all"
+    },
+    "ref": {
+      "type": "string",
+      "description": "Nombre exacto de la variable, NO la clave. Por ejemplo THE_ODDS_API_KEY."
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_daily_market_shortlist`
+
+Investiga mercados alternativos por partido ANTES de seleccionar 5 a 6 patas, entre NBA, WNBA, MLB, NFL, NHL y Soccer; coteja cuotas reales de ganador, hándicap y totales con partidos ESPN, y opcionalmente investiga H2H, forma, descansos, bajas, prensa, estadio y clima. Compara las dos opciones del mercado, no solo al favorito. No promete victorias ni coloca apuestas.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD en Santo Domingo, defecto hoy."
+    },
+    "count": {
+      "type": "integer",
+      "description": "Objetivo de 5 o 6 candidatos; por defecto cinco."
+    },
+    "deep": {
+      "type": "boolean",
+      "description": "Investigar evidencias del partido y comparar varias ofertas por evento (defecto true). false para un primer escaneo rápido de cuotas."
+    },
+    "winnerOnly": {
+      "type": "boolean",
+      "description": "true para apuestas SOLO al ganador directo h2h; sin totals ni spreads."
+    },
+    "sports": {
+      "type": "array",
+      "description": "Deportes a investigar; omitir ligas de deportes no solicitados.",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_daily_research_cache`
+
+Prepara y consulta la memoria deportiva diaria persistente por siete días. Lista por disciplina qué investigar, precarga calendarios y respaldos públicos y limita cuotas API-Sports por API/UTC. No obtiene cuotas comerciales, no certifica porteros, lesiones ni pronósticos.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD local RD; defecto hoy"
+    },
+    "statusOnly": {
+      "type": "boolean",
+      "description": "true: leer estado y agenda sin gastar API; false: precargar fuentes admitidas, defecto true."
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_daily_scan`
+
+Barrido rápido con plazo por fuente de NBA, WNBA, MLB, NFL, NHL, fútbol y tenis. Las ligas lentas se marcan unavailable, se conservan partidos verificados del resto y siempre se devuelve diagnóstico; NO predice resultados ni cuotas.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Día local AAAA-MM-DD; defecto hoy"
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Máximo 1-36 eventos para investigar; por defecto 30 para cubrir más candidatos del ticket de 4-6 patas."
+    },
+    "sports": {
+      "type": "array",
+      "description": "Deportes solicitados; opcional. Valores como basketball, hockey, football, baseball, soccer, tennis. Evita consultar ligas de otros deportes.",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_deep_research`
+
+Investiga un partido ESPN confirmado: noticias relacionadas, partes médicos, plantillas, estadísticas verificadas de jugadores y confirmación independiente MLB/NHL. Nunca inventa titulares ni probabilidades.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Deporte ESPN, p. ej. hockey, basketball, soccer, football o baseball."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga ESPN comprobada, p. ej. nhl, nba, eng.1 o mlb."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID exacto del evento obtenido de la cartelera ESPN."
+    }
+  },
+  "required": [
+    "sport",
+    "league",
+    "eventId"
+  ]
 }
 ```
 
@@ -2241,9 +3481,575 @@ Descubre competiciones adicionales directamente en el catálogo público ESPN, s
 
 Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
 
+### `sports_chat_editorial_discovery`
+
+Descubre TITULARES públicos recientes indexados de Covers, VegasInsider, ScoresAndOdds y OddsPortal mediante RSS sindicalizado. No extrae sus páginas, picks de pago, cuotas ni cifras no verificadas.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Equipos o cruce real, mínimo tres caracteres."
+    },
+    "source": {
+      "type": "string",
+      "description": "cubre covers | vegasinsider | scoresandodds | oddsportal; omitir para todos."
+    }
+  },
+  "required": [
+    "query"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_espn_core`
+
+Lee de ESPN Core público SIN API key: odds por partido/proveedor, movimiento, enfrentamientos, ATS, futures, past-performances, odds-records, probabilities, predictor y providers. Resuelve pocas referencias y devuelve el JSON relevante limitado, con estado real de acceso.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "description": "odds | provider | movement | head_to_heads | ats | futures | past_performances | odds_records | probabilities | predictor | providers"
+    },
+    "sport": {
+      "type": "string",
+      "description": "Slug de deporte ESPN: football, basketball, baseball, hockey, soccer..."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga ESPN: nfl, nba, mlb, nhl, usa.1, eng.1..."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID real de partido ESPN para odds, provider, movement, head_to_heads, probabilities, predictor"
+    },
+    "competitionId": {
+      "type": "string",
+      "description": "ID competition real, por defecto eventId (ESPN a menudo usa ambos iguales)"
+    },
+    "teamId": {
+      "type": "string",
+      "description": "ID ESPN de equipo para ats, odds_records y past_performances"
+    },
+    "providerId": {
+      "type": "string",
+      "description": "ID ESPN de proveedor (obtener con mode=providers), obligatorio para provider/movement/head_to_heads/past_performances"
+    },
+    "season": {
+      "type": "integer",
+      "description": "Temporada 1900..2100, requerida para ats, odds_records y futures"
+    },
+    "seasonType": {
+      "type": "integer",
+      "description": "0..4; ATS por defecto 2 (regular), odds_records por defecto 0"
+    },
+    "movementType": {
+      "type": "integer",
+      "description": "Solo mode=movement: 0 moneyline, 1 spread según endpoints comunitarios. Por defecto 0"
+    },
+    "limit": {
+      "type": "integer",
+      "description": "1..100, por defecto 25. Hasta 12 muestras y 6 referencias resueltas"
+    },
+    "page": {
+      "type": "integer",
+      "description": "Página ESPN 1..1000, por defecto 1"
+    },
+    "resolveRefs": {
+      "type": "boolean",
+      "description": "Resolver hasta 6 referencias Core del mismo deporte y liga, por defecto true"
+    }
+  },
+  "required": [
+    "mode",
+    "sport",
+    "league"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_espn_core_catalog`
+
+Lista las 11 familias de endpoints Core ESPN para cuotas, historial, ATS, futuros, movimientos de mercado, pronósticos y proveedores. No se realiza red ni se gasta cuota.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_espn_explore`
+
+ESPN universal: perfiles de equipos/jugadores, estadísticas por temporada, registros partido a partido, splits, clasificaciones, noticias, líderes, encuentros y búsqueda. Devuelve un panel dinámico seguro con logos, fotos y fuentes, dentro del chat. IDs deben provenir de ESPN.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Disciplina ESPN, como basketball, soccer, hockey, baseball o football."
+    },
+    "league": {
+      "type": "string",
+      "description": "Slug ESPN real: nba, nhl, eng.1, mlb, nfl, etc."
+    },
+    "view": {
+      "type": "string",
+      "description": "team | player | event | standings | news | leaders | search"
+    },
+    "teamId": {
+      "type": "string",
+      "description": "ID numérico confirmado de equipo para view=team."
+    },
+    "athleteId": {
+      "type": "string",
+      "description": "ID numérico confirmado de deportista para view=player."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID numérico confirmado de partido para view=event."
+    },
+    "season": {
+      "type": "integer",
+      "description": "Año de temporada, cuando se solicita uno."
+    },
+    "query": {
+      "type": "string",
+      "description": "Texto a buscar en ESPN, solo para view=search."
+    }
+  },
+  "required": [
+    "sport",
+    "league",
+    "view"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_espn_extended`
+
+Acceso read-only a rutas ESPN permitidas para temporada, equipo, atleta, partidos, lesiones, noticias, jugadas y estadísticas. Usa IDs reales de sports_chat_games; controla formato, errores y salida limitada.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "description": "Consulta sports_chat_espn_extended_catalog para los modos admitidos."
+    },
+    "sport": {
+      "type": "string",
+      "description": "Disciplina ESPN, p. ej. football, basketball, soccer."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga ESPN, p. ej. nfl, nba, eng.1."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID real del evento desde la cartelera."
+    },
+    "competitionId": {
+      "type": "string",
+      "description": "ID real de la competición, obligatorio en rutas de juego."
+    },
+    "teamId": {
+      "type": "string",
+      "description": "ID ESPN real del equipo."
+    },
+    "athleteId": {
+      "type": "string",
+      "description": "ID ESPN real del atleta."
+    },
+    "season": {
+      "type": "integer",
+      "description": "Temporada YYYY requerida en rutas season."
+    },
+    "seasonType": {
+      "type": "integer",
+      "description": "Tipo 0..4, regular por defecto 2."
+    },
+    "week": {
+      "type": "integer",
+      "description": "Semana de la temporada."
+    },
+    "providerId": {
+      "type": "string",
+      "description": "ID real del proveedor para cuotas y props Core."
+    },
+    "groupId": {
+      "type": "string",
+      "description": "ID real de conferencia o grupo."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha YYYYMMDD para site_scoreboard."
+    },
+    "query": {
+      "type": "string",
+      "description": "Término (2..80 caracteres) para search_entities."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Límite entre 1 y 200 para rutas con paginación."
+    }
+  },
+  "required": [
+    "mode",
+    "sport",
+    "league"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_espn_extended_catalog`
+
+Catálogo completo de rutas ESPN extendidas con parámetros seguros para equipos, jugadores, lesiones, juegos, stats, movimientos y noticias. El catálogo NO significa que todos los endpoints respondan.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_espn_historical_odds`
+
+Recupera precios HISTÓRICOS ESPN de una fecha: scoreboard diario, Core odds por encuentro y summary/pickcenter, siguiendo pocas $ref seguras. Útil para retrospectiva/backtest, NUNCA para tickets actuales.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Deporte ESPN: baseball, basketball, football, hockey, soccer, etc."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga ESPN: mlb, nba, nfl, nhl, eng.1, etc."
+    },
+    "date": {
+      "type": "string",
+      "description": "Día anterior AAAA-MM-DD"
+    },
+    "days": {
+      "type": "integer",
+      "description": "Número de días consecutivos, 1..3, por defecto 1"
+    },
+    "eventsPerDay": {
+      "type": "integer",
+      "description": "Encuentros estudiados por día, 1..8 (por defecto 6)"
+    }
+  },
+  "required": [
+    "sport",
+    "league",
+    "date"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_espn_injuries`
+
+Consulta el parte público de lesiones ESPN para NBA, WNBA, NFL, NHL o MLB, cotejando local y visitante y separando reporte reciente de datos incompletos. Consulta el JSON de ESPN aunque su web en español requiera JavaScript. No confunde lesión, inactivo, lineup ni un reporte oficial definitivo.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "basketball, football, hockey o baseball."
+    },
+    "league": {
+      "type": "string",
+      "description": "nba, wnba, nfl, nhl o mlb."
+    },
+    "home": {
+      "type": "string",
+      "description": "Equipo local exacto según el scoreboard."
+    },
+    "away": {
+      "type": "string",
+      "description": "Equipo visitante exacto según el scoreboard."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD de ESPN; permite consulta por equipo."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID numérico ESPN del partido, opcional para comprobar los IDs de equipos."
+    },
+    "kickoff": {
+      "type": "string",
+      "description": "Hora ISO UTC validada del partido, opcional."
+    }
+  },
+  "required": [
+    "sport",
+    "league",
+    "home",
+    "away"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_espn_route_audit`
+
+Prueba realmente todas las rutas ESPN EXTENDIDAS registradas (90+ modos) usando IDs oficiales ya confirmados. Devuelve para CADA ruta data/ref_only/empty/error/skipped y nunca simula disponibilidad. Consulta costosa: solo en auditorías explícitas, no por partido rutinario.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Disciplina ESPN verificable."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga ESPN del evento."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID real ESPN, recomendado."
+    },
+    "competitionId": {
+      "type": "string",
+      "description": "ID de competición real; no asumir igual a eventId."
+    },
+    "teamId": {
+      "type": "string",
+      "description": "ID real de un equipo de ese partido."
+    },
+    "athleteId": {
+      "type": "string",
+      "description": "ID real de un atleta incluido en la plantilla."
+    },
+    "season": {
+      "type": "integer",
+      "description": "Temporada ESPN 1900-2100."
+    },
+    "seasonType": {
+      "type": "integer",
+      "description": "Regular 2 por defecto."
+    },
+    "week": {
+      "type": "integer",
+      "description": "Semana verificable para ligas semanales."
+    },
+    "providerId": {
+      "type": "string",
+      "description": "Proveedor real para odds y props."
+    },
+    "groupId": {
+      "type": "string",
+      "description": "Grupo ESPN obtenido de la temporada."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha YYYYMMDD para scoreboard."
+    },
+    "query": {
+      "type": "string",
+      "description": "Búsqueda para search_entities."
+    }
+  },
+  "required": [
+    "sport",
+    "league"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_event_market_menu`
+
+Explora opciones reales de apuestas adicionales por partido en The Odds API v4 autorizado: líneas alternativas, primeras cinco entradas, períodos, props NBA/WNBA/MLB/NFL/NHL y algunos mercados Soccer según disponibilidad. Requiere el eventId DE LA CASA/API (nunca el ESPN eventId). No convierte estadística en apuesta ni coloca apuestas.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sportKey": {
+      "type": "string",
+      "description": "Identificador REAL del proveedor, por ejemplo basketball_nba, baseball_mlb, icehockey_nhl, soccer_epl."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID de evento del proveedor The Odds API v4, no el eventId ESPN."
+    },
+    "maxMarkets": {
+      "type": "integer",
+      "description": "Máximo 1-12 mercados por exploración, por defecto ocho; las consultas consumen créditos según proveedor."
+    }
+  },
+  "required": [
+    "sportKey",
+    "eventId"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_follow_receipts`
+
+Genera un ÚNICO panel universal con las tarjetas de cada boleto real y todas sus patas. Captura automáticamente las selecciones de recibos del usuario, valida partidos ESPN individualmente, y en el cliente actualiza el marcador, objetivo de la pata y total acumulado sin formularios. No registra apuestas en la banca.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "receipts": {
+      "type": "array",
+      "description": "Uno a cinco comprobantes del usuario, cada uno con todas sus patas y operador. No inventar datos.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ticketReference": {
+            "type": "string",
+            "description": "Confirmación exacta visible en el comprobante."
+          },
+          "date": {
+            "type": "string",
+            "description": "Fecha de las selecciones AAAA-MM-DD Santo Domingo."
+          },
+          "bookmaker": {
+            "type": "string",
+            "description": "Casa indicada en comprobante."
+          },
+          "stake": {
+            "type": "number",
+            "description": "Importe en DOP si aparece."
+          },
+          "reportedReturn": {
+            "type": "number",
+            "description": "Retorno potencial en DOP, si aparece."
+          },
+          "legs": {
+            "type": "array",
+            "description": "Patas con selección y mercado exactos, hasta doce.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "sport": {
+                  "type": "string",
+                  "description": "Identificador ESPN de deporte: hockey, soccer, basketball etc."
+                },
+                "league": {
+                  "type": "string",
+                  "description": "Liga ESPN, ej. nhl, nba, usa.1."
+                },
+                "date": {
+                  "type": "string",
+                  "description": "Fecha de la pata si difiere de la del boleto."
+                },
+                "eventId": {
+                  "type": "string",
+                  "description": "ID ESPN solo si está verificado."
+                },
+                "team": {
+                  "type": "string",
+                  "description": "Nombre exacto del equipo seleccionado o uno del partido si mercado total."
+                },
+                "opponent": {
+                  "type": "string",
+                  "description": "Rival exacto, requerido en apuestas de total."
+                },
+                "market": {
+                  "type": "string",
+                  "description": "moneyline | spread | total | three-way"
+                },
+                "side": {
+                  "type": "string",
+                  "description": "over/under del total, draw si empate; home/away se obtiene de ESPN."
+                },
+                "line": {
+                  "type": "number",
+                  "description": "Línea exacta con signo para hándicap o total."
+                },
+                "americanOdds": {
+                  "type": "integer",
+                  "description": "Cuota estadounidense del recibo si se lee."
+                }
+              },
+              "required": [
+                "sport",
+                "league",
+                "team",
+                "market"
+              ]
+            }
+          }
+        },
+        "required": [
+          "ticketReference",
+          "date",
+          "bookmaker",
+          "legs"
+        ]
+      }
+    }
+  },
+  "required": [
+    "receipts"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_free_sources_probe`
+
+Comprueba seis fuentes gratuitas y rápidas: ESPN NBA/NFL/Liga MX, MLB StatsAPI, NHL Web API y TheSportsDB. Informa accesible, vacío, bloqueado, latencia y registros sin API key; NO genera cuotas ni boletos.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha local dominicana AAAA-MM-DD; defecto hoy"
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
 ### `sports_chat_games`
 
-Eventos reales en el chat: liga, horario, estadio, equipos y estadísticas verificables. Devuelve tarjetas renderizables.
+Cartelera compacta, tarjetas por partido y marcadores en vivo con actualizaciones automáticas sin tokens. Usa liveOnly=true para eventos que están jugando.
 
 ```json
 {
@@ -2260,11 +4066,209 @@ Eventos reales en el chat: liga, horario, estadio, equipos y estadísticas verif
     "date": {
       "type": "string",
       "description": "Fecha AAAA-MM-DD, opcional: hoy en Santo Domingo."
+    },
+    "team": {
+      "type": "string",
+      "description": "Nombre del equipo buscado; opcional para consulta individual."
+    },
+    "opponent": {
+      "type": "string",
+      "description": "Segundo equipo si se busca un cruce concreto."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID de evento exacto obtenido de ESPN o MLB; opcional."
+    },
+    "liveOnly": {
+      "type": "boolean",
+      "description": "Mostrar solamente partidos en juego ahora. La tarjeta seguirá actualizándose desde ESPN."
     }
   },
   "required": [
     "sport",
     "league"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_historical_odds`
+
+Históricos por fecha: archivos gratuitos SBR/MLB y observaciones auténticas que PHOENIX capturó de proveedores desde su instalación. Nunca cuotas actuales.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "nba, mlb, nfl, nhl para los archivos públicos; otros deportes requieren observaciones locales."
+    },
+    "sportKey": {
+      "type": "string",
+      "description": "Clave de mercado para snapshots: basketball_nba, baseball_mlb, americanfootball_nfl, soccer_epl, etc."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha histórica AAAA-MM-DD. Para snapshots es la fecha UTC de OBSERVACIÓN, no fecha del encuentro."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Límite de filas (máximo 500), por defecto 100"
+    },
+    "leagueSlug": {
+      "type": "string",
+      "description": "Liga OddsHarvester histórica (ej. england-premier-league), opcional."
+    },
+    "season": {
+      "type": "string",
+      "description": "Temporada de OddsHarvester, por ejemplo 2024-2025 o 2025."
+    },
+    "market": {
+      "type": "string",
+      "description": "Mercado histórico, ej. 1x2, moneyline u over_under."
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_hockey_slate`
+
+Cartelera NHL oficial por fecha, equipo, NHL gameId, hora y estatus; calendario sin resultados ficticios.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha calendario AAAA-MM-DD de NHL."
+    }
+  },
+  "required": [
+    "date"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_market_intelligence`
+
+Compara mercados reales vigentes por bookmaker: ganador, doble oportunidad, totales, ambos marcan y handicap cuando la fuente los publicó. Solo calcula probabilidad IMPLÍCITA del precio, nunca probabilidad de acierto propia.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sportKey": {
+      "type": "string",
+      "description": "Clave de mercado: soccer_epl, icehockey_nhl, basketball_nba, baseball_mlb, etc."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha YYYY-MM-DD en Santo Domingo para scraping local, por defecto hoy."
+    }
+  },
+  "required": [
+    "sportKey"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_market_source_catalog`
+
+Catálogo SIN RED de ScoresAndOdds, Covers, VegasInsider y OddsPortal para comparar líneas, movimientos y contexto con ESPN. Retorna URL, capacidades, límites y flujo de comprobación; no asegura conexión ni permisos de extracción.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_matchup_factors`
+
+Investigación universal de ventaja deportiva por evento ESPN confirmado: forma de ambos equipos, H2H, descansos, localía/estadio, contexto de noticias/lesiones y cuotas reconciliadas. En MLB desglosa referencias de carreras en 3, 5, 9 innings y consulta abridores probables y sus últimas salidas. Ninguna cifra es probabilidad calibrada; clima no verificado permanece pendiente.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Disciplina ESPN: baseball, basketball, soccer, football, hockey, tennis, etc."
+    },
+    "league": {
+      "type": "string",
+      "description": "Slug real de liga del catálogo ESPN."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID real ESPN obtenido de sports_chat_games."
+    },
+    "date": {
+      "type": "string",
+      "description": "Día de cartelera del evento, AAAA-MM-DD."
+    },
+    "lookbackDays": {
+      "type": "integer",
+      "description": "Ventana histórica de 3 a 28 días, por defecto 14."
+    },
+    "includeOdds": {
+      "type": "boolean",
+      "description": "Consulta mercados actuales por proveedor si existe; por defecto true."
+    }
+  },
+  "required": [
+    "sport",
+    "league",
+    "eventId",
+    "date"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_mlb_investigate`
+
+Investigación MLB paso a paso: sin gamePk entrega cartelera oficial verificable; con gamePk recupera roster por jugador, estadísticas de bateo/lanzamiento, abridores, bullpen, matrices bateador×pitchers, forma local/visita, estadio, clima, escenarios y mercados cotejados si existen. No inventa probabilidades ni tickets.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha local AAAA-MM-DD del partido MLB."
+    },
+    "gamePk": {
+      "type": "integer",
+      "description": "GamePk numérico auténtico de MLB Stats API; omitir para ver la cartelera."
+    },
+    "includeOdds": {
+      "type": "boolean",
+      "description": "Si hay gamePk, cotejar cuotas verificadas de la misma jornada. Por defecto true."
+    },
+    "matchupOffset": {
+      "type": "integer",
+      "description": "Página de cruces bateador×pitcher; índice 0 por defecto."
+    },
+    "matchupLimit": {
+      "type": "integer",
+      "description": "Máximo de cruces a devolver por llamada, entre 1 y 80; defecto 40."
+    }
+  },
+  "required": [
+    "date"
   ]
 }
 ```
@@ -2297,9 +4301,166 @@ Analiza rotación y bullpen de MLB por equipo, ERA, WHIP, entradas y ponches con
 
 Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
 
+### `sports_chat_nba_intelligence`
+
+Expediente NBA/WNBA basado en partido real: forma, roster, cinco titulares, estadísticas individuales, matchups defensivos, lesiones, noticias, escenarios Q1-Q4, mercados de casas y contradicciones.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD de juego futuro."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID ESPN del encuentro en la liga seleccionada."
+    },
+    "maxPlayers": {
+      "type": "integer",
+      "description": "Atletas investigados por club, de 1 a 20; defecto 15."
+    },
+    "matchupOffset": {
+      "type": "integer",
+      "description": "Página de duelos, desde índice 0."
+    },
+    "includeOdds": {
+      "type": "boolean",
+      "description": "Consultar cuotas reales actuales de la liga, por defecto sí."
+    }
+  },
+  "required": [
+    "date",
+    "eventId"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_nba_research`
+
+Investiga la forma NBA con marcadores FINALIZADOS de las últimas fechas: últimos resultados, márgenes de puntos, descanso, calidad de muestra y evidencia ausente. No infiere lesiones, cuotas ni probabilidades.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha del partido en Santo Domingo, AAAA-MM-DD; defecto hoy."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID real ESPN NBA; si se omite investiga hasta seis encuentros futuros."
+    },
+    "lookbackDays": {
+      "type": "integer",
+      "description": "Histórico diario, 1-21 días; por defecto 14. Una consulta por fecha compartida entre los encuentros."
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_nfl_investigate`
+
+Expediente NFL por evento real pregame: roster completo, QB/WR/RB/TE/OL/defensa, 11 titulares por unidad si confirmados, stats individuales, descanso, clima, lesiones y cuotas auténticas con contradicciones.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD de NFL, partido futuro."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID ESPN de la cartelera de NFL."
+    },
+    "maxPlayers": {
+      "type": "integer",
+      "description": "Hasta 20 atletas por club con estadísticas individuales profundas, defecto 20. El roster completo se consulta aparte."
+    },
+    "matchupOffset": {
+      "type": "integer",
+      "description": "Inicio de la página de enfrentamientos, desde cero."
+    },
+    "includeOdds": {
+      "type": "boolean",
+      "description": "Consultar líneas reales de NFL si la casa las proporciona, defecto sí."
+    }
+  },
+  "required": [
+    "date",
+    "eventId"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_nfl_slate`
+
+Consulta NFL calendario oficial por fecha con identificadores, hora, estado y equipos reales, sin inventar juegos.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD de la cartelera NFL."
+    }
+  },
+  "required": [
+    "date"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_nhl_investigate`
+
+Investigar NHL por NHL gameId de cartelera: rosters, candidatos a portero, skaters, stats individuales, tabla, duelos posibles, períodos, cuotas y argumentos contra. No inventa starting goalie ni probabilidades.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha del partido AAAA-MM-DD."
+    },
+    "gameId": {
+      "type": "string",
+      "description": "NHL gameId oficial obtenido de sports_chat_hockey_slate."
+    },
+    "maxSkaters": {
+      "type": "integer",
+      "description": "Número de forwards por equipo a investigar en detalle, entre 1 y 15; defecto 8."
+    },
+    "includeOdds": {
+      "type": "boolean",
+      "description": "Consultar cuotas NHL observadas si proveedor disponible; por defecto sí."
+    }
+  },
+  "required": [
+    "date",
+    "gameId"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
 ### `sports_chat_odds`
 
-Busca cuotas públicas ESPN sin clave o The Odds API si está configurada; puede devolver vacío cuando ESPN no publica precios.
+Consulta cuotas ESPN Scoreboard/Core/Summary. Si sourcePolicy=all y se aportan eventId ESPN + fecha exacta, investiga además proveedores autorizados y solo acepta precios que coinciden en ambos equipos, hora y mercado. Mantiene IDs propios de cada fuente. Sin bookmaker ni timestamp no hay cuota cotizable.
 
 ```json
 {
@@ -2312,6 +4473,18 @@ Busca cuotas públicas ESPN sin clave o The Odds API si está configurada; puede
     "markets": {
       "type": "string",
       "description": "h2h, totals o spreads. Por defecto h2h."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID ESPN real de un encuentro futuro; restringe la búsqueda a ese evento."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD del partido, obtenida del scoreboard."
+    },
+    "sourcePolicy": {
+      "type": "string",
+      "description": "espn (por defecto) o all (comparar proveedores autorizados; con eventId+date exige cotejo exacto ESPN)."
     }
   },
   "required": [
@@ -2322,9 +4495,590 @@ Busca cuotas públicas ESPN sin clave o The Odds API si está configurada; puede
 
 Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
 
+### `sports_chat_odds_keyless`
+
+Cuotas multideporte sin API key desde OddsHarvester local autorizado: 11 deportes, mercados de prepartido, precios por casa con fuente y antigüedad. No promete acceso ilimitado.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "football, basketball, baseball, american-football, tennis, ice-hockey, rugby-league, rugby-union, handball, volleyball o cricket."
+    },
+    "market": {
+      "type": "string",
+      "description": "Mercado compatible con deporte: 1x2, double_chance, btts, moneyline, home_away, match_winner, over_under, total_games_over_under, total_sets_over_under o total_points_over_under."
+    },
+    "date": {
+      "type": "string",
+      "description": "Día AAAA-MM-DD en Santo Domingo; predeterminado hoy."
+    }
+  },
+  "required": [
+    "sport",
+    "market"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_odds_scan`
+
+Comprueba sistemáticamente los 11 deportes de OddsHarvester sin omitir tenis, soccer, baseball, basketball NBA/WNBA, rugby, volleyball, cricket y handball. Rondas de cuatro deportes, paginación por offset 0, 4 y 8. No inventa precios ni asigna ligas sin evidencia.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Disciplina opcional (football, basketball, baseball, american-football, ice-hockey, tennis, handball, volleyball, rugby-league, rugby-union, cricket). Vacío recorre las 11."
+    },
+    "offset": {
+      "type": "integer",
+      "description": "Índice inicial: 0, 4 u 8 al revisar todos."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Máximo cuatro deportes por ronda; por defecto 4."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD de los partidos, por defecto hoy en República Dominicana."
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_predict`
+
+Produce estimación PRELIMINAR propia de PHOENIX para un evento ESPN verificado y futuro, basada en resultados previos de ambos equipos. Se abstiene si la muestra es insuficiente; NO es un predictor calibrado ni prueba EV positivo. Contrasta noticias, cuotas y opiniones aparte.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Disciplina ESPN: soccer, basketball, baseball, football, hockey."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga ESPN validada: nfl, nba, mlb, nhl, eng.1, etc."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "Identificador real obtenido de sports_chat_games."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD del encuentro en Santo Domingo."
+    },
+    "lookbackDays": {
+      "type": "integer",
+      "description": "3..28 días de resultados previos, por defecto 28."
+    },
+    "includeExternalResearch": {
+      "type": "boolean",
+      "description": "Descubrir titulares públicos relacionados al juego en cuatro medios indexados; activado por defecto."
+    }
+  },
+  "required": [
+    "sport",
+    "league",
+    "eventId",
+    "date"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_public_odds_pages`
+
+Consulta ESPN Odds, CuotasAhora, Yahoo Sports, Oddspedia fútbol, Oddschecker y ScoresAndOdds como fuentes públicas de contraste; coteja equipos, mercados, precios referenciales, URLs y bloqueos. NUNCA presenta HTML de comparador sin bookmaker/updatedAt como cuota cotizable. Sin CAPTCHA bypass ni scraping no autorizado.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sportKey": {
+      "type": "string",
+      "description": "Clave de liga de mercados: basketball_nba, americanfootball_nfl, icehockey_nhl, baseball_mlb, soccer_epl, soccer_spain_la_liga, etc."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha local dominicana AAAA-MM-DD para identificar un objetivo de investigación; no filtra fechas de la web."
+    },
+    "home": {
+      "type": "string",
+      "description": "Nombre completo del equipo local, desde el evento ESPN verificado."
+    },
+    "away": {
+      "type": "string",
+      "description": "Nombre completo del equipo visitante, desde el evento ESPN verificado."
+    }
+  },
+  "required": [
+    "sportKey"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_register_receipt`
+
+Lee el comprobante aportado por el usuario y vincula automáticamente cada selección al partido verificado de ESPN para mostrar su objetivo y progreso en la cartelera. Puede mezclar NHL, NBA y MLS en el mismo boleto. Nunca apuesta ni confirma pago. NO se requiere formulario de apuestas en cada juego.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "ticketReference": {
+      "type": "string",
+      "description": "Número de confirmación visible en el comprobante del usuario, no inventarlo."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha local Santo Domingo AAAA-MM-DD de los eventos; cada pata puede tener fecha particular."
+    },
+    "bookmaker": {
+      "type": "string",
+      "description": "Operador tal como aparece en el comprobante, p. ej. Juancito Sport."
+    },
+    "stake": {
+      "type": "number",
+      "description": "Monto en DOP indicado por el usuario (si se lee)."
+    },
+    "reportedReturn": {
+      "type": "number",
+      "description": "Retorno potencial expresado en DOP en el recibo (si se lee)."
+    },
+    "legs": {
+      "type": "array",
+      "description": "Patas EXACTAS del recibo, sin inventar equipos ni líneas. Entre 1 y 12, pueden ser ligas diferentes.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sport": {
+            "type": "string",
+            "description": "Deporte ESPN: basketball, hockey, soccer, football o baseball."
+          },
+          "league": {
+            "type": "string",
+            "description": "Slug oficial ESPN: nba, nhl, usa.1, etc."
+          },
+          "date": {
+            "type": "string",
+            "description": "Fecha local de esta pata AAAA-MM-DD, si difiere de la del boleto."
+          },
+          "eventId": {
+            "type": "string",
+            "description": "ID ESPN REAL si se conoce, no la ID de otra casa ni MLB Stats gamePk."
+          },
+          "team": {
+            "type": "string",
+            "description": "Equipo de la selección, para total se puede usar un participante del partido."
+          },
+          "opponent": {
+            "type": "string",
+            "description": "Rival del evento, obligatorio para total de puntos/goles."
+          },
+          "market": {
+            "type": "string",
+            "description": "moneyline | spread | total | three-way"
+          },
+          "side": {
+            "type": "string",
+            "description": "over/under para total; draw para empate 1X2. Para ganador y spread se determina equipo home/away con ESPN."
+          },
+          "line": {
+            "type": "number",
+            "description": "Línea exacta con signo para spread, o umbral para total. +1.5 no es -1.5."
+          },
+          "americanOdds": {
+            "type": "integer",
+            "description": "Cuota americana aportada en recibo, solo cuando es legible."
+          }
+        },
+        "required": [
+          "sport",
+          "league",
+          "team",
+          "market"
+        ]
+      }
+    }
+  },
+  "required": [
+    "ticketReference",
+    "date",
+    "bookmaker",
+    "legs"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_research`
+
+Analiza TODOS los deportes del catálogo ESPN por liga: marcadores terminados, victorias/derrotas/empates, medias anotadas/recibidas, descanso y falta de evidencias. No transforma forma en probabilidad.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "soccer, basketball, baseball, football, hockey, etc."
+    },
+    "league": {
+      "type": "string",
+      "description": "ID real ESPN del catálogo: nba, mlb, eng.1, usa.1, nfl, nhl, etc."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD; por defecto hoy."
+    },
+    "lookbackDays": {
+      "type": "integer",
+      "description": "Días históricos por liga, 1 a 28; por defecto 14."
+    }
+  },
+  "required": [
+    "sport",
+    "league"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_research_provider_status`
+
+Muestra por deporte qué estadística requiere el expediente y las fuentes gratuitas, complementarias o aún no integradas. Revisa en la bóveda únicamente SI existen las API keys, sin leerlas ni transmitirlas al modelo. La ausencia nunca bloquea el ticket.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Filtrar basketball, hockey, baseball, football, soccer o tennis; vacío para todas las disciplinas."
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_soccer_daily`
+
+Cartelera de soccer verificada por fecha para 1-12 ligas ESPNs concretas, con IDs, estados, sede y zonas horarias. No escanea miles de ligas sin filtro.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD en el calendario de la liga."
+    },
+    "leagues": {
+      "type": "array",
+      "description": "1-12 códigos verificados de sports_chat_soccer_leagues, como eng.1, esp.1 o usa.1.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "date",
+    "leagues"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_soccer_investigate`
+
+Expediente profundo de fútbol por evento real: equipos, forma local/visita, roster y once confirmado, duelos ofensivos-defensivos, lesiones, noticias, estadio, árbitro, clima, escenarios y cotejo de cuotas verificadas. Sin probabilidades inventadas.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha de la cartelera AAAA-MM-DD."
+    },
+    "league": {
+      "type": "string",
+      "description": "Código de liga ESPN confirmado, p. ej. usa.1, esp.1."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID verificado del partido, obtenido de sports_chat_soccer_daily."
+    },
+    "includeOdds": {
+      "type": "boolean",
+      "description": "Intentar consultar cuotas actuales de la liga, cuando hay proveedor. Predeterminado sí."
+    },
+    "duelOffset": {
+      "type": "integer",
+      "description": "Índice de paginación de duelos individuales, inicial 0."
+    },
+    "duelLimit": {
+      "type": "integer",
+      "description": "Cantidad de duelos por respuesta, de 1 a 30."
+    }
+  },
+  "required": [
+    "date",
+    "league",
+    "eventId"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_soccer_leagues`
+
+Descubre competiciones mundiales de fútbol reconocidas por el catálogo público ESPN. La presencia no garantiza estadísticas, xG, cuotas ni partidos en cada fecha. Paginación de hasta 500 ligas.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "offset": {
+      "type": "integer",
+      "description": "Posición inicial en el catálogo, desde 0."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Cantidad de ligas que se muestra, entre 1 y 60."
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_soccer_players`
+
+Investiga jugadores por ID de roster de un partido real de fútbol: estadísticas de temporada, gamelog, splits y datos faltantes. Disponible cuando ESPN Common v3 ofrece datos en esa liga. No confirma titulares ni genera probabilidades.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD de un encuentro futuro."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga ESPN identificada por sports_chat_soccer_daily."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID ESPN real del evento investigado."
+    },
+    "maxPlayers": {
+      "type": "integer",
+      "description": "Jugadores máximos por club para esta investigación, entre 1 y 20; por defecto 11."
+    }
+  },
+  "required": [
+    "date",
+    "league",
+    "eventId"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_soccer_world_scan`
+
+Escanea por páginas de hasta 24 ligas del catálogo mundial ESPN para una fecha. Entrega partidos verificados y nextOffset; no afirma cobertura de todo el planeta ni inventa ligas.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD de cartelera."
+    },
+    "offset": {
+      "type": "integer",
+      "description": "Posición del catálogo desde 0; usar nextOffset de la página anterior."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Número de ligas por página, entre 1 y 24; defecto 24."
+    }
+  },
+  "required": [
+    "date"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_source_resilience`
+
+Auditoría de fuentes gratuitas y de respaldo para el ticket diario: capacidades realmente integradas frente a enlaces, estado por partido, controles de identidad y carencias de lesiones/cuotas. Sin prometer ganadores ni extraer datos restringidos.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Disciplina si se desea cotejar un partido concreto."
+    },
+    "league": {
+      "type": "string",
+      "description": "Código ESPN de liga para cotejo exacto."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID ESPN verificable del encuentro."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD del encuentro."
+    },
+    "home": {
+      "type": "string",
+      "description": "Equipo local observado en cartelera principal."
+    },
+    "away": {
+      "type": "string",
+      "description": "Equipo visitante observado en cartelera principal."
+    },
+    "kickoff": {
+      "type": "string",
+      "description": "Hora UTC ISO8601 ya verificada en ESPN."
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_sources_health`
+
+Audita configuración/instalación de proveedores deportivos; verifyLive=true comprueba realmente mercados, fecha y respuestas de fuentes en una liga concreta. Una clave instalada NO demuestra cuotas actuales.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "verifyLive": {
+      "type": "boolean",
+      "description": "true para ejecutar un sondeo REAL de cuotas; consume la cuota del proveedor. Por defecto false."
+    },
+    "sportKey": {
+      "type": "string",
+      "description": "Liga para probar con verifyLive: basketball_nba, icehockey_nhl, americanfootball_nfl, baseball_mlb o basketball_wnba."
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_sources_repair`
+
+Reparar de forma autónoma y sin bloquear el chat los tres proveedores deportivos opcionales: OddsHarvester/Chromium y dos repositorios históricos. Devuelve el estado del lanzador y archivo de errores. No promete cuotas.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_tennis_investigate`
+
+Expediente de tenis ATP/WTA por matchId con perfiles, ranking si se observa, servicio y devolución, últimos partidos verificables, superficie, formato y cuotas con reglas de retiro.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "tour": {
+      "type": "string",
+      "description": "atp o wta explícito."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD."
+    },
+    "matchId": {
+      "type": "string",
+      "description": "matchId real devuelto por la cartelera del mismo tour y día."
+    },
+    "includeOdds": {
+      "type": "boolean",
+      "description": "Consultar cuotas reales ATP/WTA, defecto sí."
+    }
+  },
+  "required": [
+    "tour",
+    "date",
+    "matchId"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_tennis_slate`
+
+Cartelera ATP o WTA con matchId, eventId, dos jugadores por ID, torneo, hora y estado; omite partidos sin identificador o horario individual verificable.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "tour": {
+      "type": "string",
+      "description": "Circuito ATP o WTA, minúsculas atp/ wta."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha YYYY-MM-DD de la cartelera."
+    }
+  },
+  "required": [
+    "tour",
+    "date"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
 ### `sports_chat_ticket`
 
-Genera un ticket visual SIMULADO con selecciones verificadas nuevamente en cuotas reales. No ejecuta apuestas.
+COTIZADOR MANUAL de selecciones ya dadas por el usuario, NO generador de pronósticos: verifica 1-10 precios auténticos y una sola casa, pero NO investiga equipos, bajas, quarterbacks ni modelos. Para pedir ticket ganador usa sports_chat_ticket_evidence_priced_auto o sports_chat_daily_market_shortlist(deep=true), nunca esta vía de cotización.
 
 ```json
 {
@@ -2336,14 +5090,14 @@ Genera un ticket visual SIMULADO con selecciones verificadas nuevamente en cuota
     },
     "sportKeys": {
       "type": "array",
-      "description": "Claves para ticket multisport, máximo cuatro.",
+      "description": "Claves deportivas para boleto multideporte, máximo seis: NBA, WNBA, MLB, NHL, NFL y Soccer.",
       "items": {
         "type": "string"
       }
     },
     "markets": {
       "type": "string",
-      "description": "h2h, totals o spreads, mismo mercado de las selecciones."
+      "description": "Lista de mercados h2h,spreads,totals según cuotas reales; por defecto se consultan los tres para cada liga."
     },
     "selections": {
       "type": "array",
@@ -2378,7 +5132,7 @@ Genera un ticket visual SIMULADO con selecciones verificadas nuevamente en cuota
     },
     "stake": {
       "type": "number",
-      "description": "Importe ficticio para simular el retorno; no es una operación financiera."
+      "description": "Importe que el usuario desea consultar en RD$, solo para calcular retorno; no transfiere dinero."
     }
   },
   "required": [
@@ -2386,6 +5140,74 @@ Genera un ticket visual SIMULADO con selecciones verificadas nuevamente en cuota
   ]
 }
 ```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_ticket_evidence_auto`
+
+PRESELECCIÓN HISTÓRICA sin expediente completo del especialista. Ticket multideporte de 1 a 6 patas, obtenido de marcadores finales verificables de varias ligas (no solo récords). Selecciones independientes por partido; sin probabilidades calibradas ni precios inventados. Incompleto si no hay suficientes.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "count": {
+      "type": "integer",
+      "description": "Número exacto solicitado: 5 o 6, entre 1 y 6."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD, por defecto hoy."
+    },
+    "sport": {
+      "type": "string",
+      "description": "Limitar a soccer, basketball, baseball, football, hockey o tennis; omitir para multideporte."
+    }
+  },
+  "required": [
+    "count"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_ticket_evidence_priced_auto`
+
+Investiga de 4 a 6 eventos y recupera cuotas por ESPN Site/Core con consulta exacta por evento y fecha UTC; si faltan precios consulta páginas públicas ESPN/Oddschecker/ScoresAndOdds y añade referencias web claramente no cotizables. Solo arma cuota combinada de una misma casa con updatedAt real; entrega borrador condicional si no se comprueba. No repetir mensajes vacíos de progreso.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "count": {
+      "type": "integer",
+      "description": "Patas deseadas: objetivo diario 5, rango preferente 4-6 (admite 1 a 6)."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD; por defecto hoy."
+    },
+    "sport": {
+      "type": "string",
+      "description": "Limita a soccer, baseball, basketball, football, hockey o tennis; omite para varios deportes."
+    },
+    "stake": {
+      "type": "number",
+      "description": "Monto de simulación; 0 por defecto. No compra apuestas."
+    },
+    "marketPreference": {
+      "type": "string",
+      "description": "winner: ganador directo; double_chance: 1X/X2 para encuentros de fútbol con cuota verificable."
+    }
+  },
+  "required": [
+    "count"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
 
 ### `sports_chat_ticket_research`
 
@@ -2398,6 +5220,10 @@ GENERA UN TICKET VISUAL REALMENTE RENDERIZABLE de pronósticos para encuentros f
     "date": {
       "type": "string",
       "description": "Fecha de los eventos AAAA-MM-DD; por defecto hoy en Santo Domingo."
+    },
+    "requestedLegs": {
+      "type": "integer",
+      "description": "Cantidad exacta de patas solicitada por el usuario: 5 cuando pide 5; de 1 a 6."
     },
     "legs": {
       "type": "array",
@@ -2437,12 +5263,161 @@ GENERA UN TICKET VISUAL REALMENTE RENDERIZABLE de pronósticos para encuentros f
     }
   },
   "required": [
+    "requestedLegs",
     "legs"
   ]
 }
 ```
 
 Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_ticket_research_auto`
+
+PRESELECCIÓN HEURÍSTICA: para NBA exige además resultados completos, margen y descanso, pero NO es probabilidad calibrada ni análisis de lesiones o cuotas; para otros deportes usa récords descriptivos. Respeta el número de patas y marca faltantes.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "count": {
+      "type": "integer",
+      "description": "Número de patas que pidió el usuario: de 1 a 6; por ejemplo 5 si pidió un ticket de 5 patas."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha de los partidos AAAA-MM-DD; por defecto hoy en Santo Domingo."
+    }
+  },
+  "required": [
+    "count"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_ticket_track`
+
+Seguimiento de un ticket con eventos ESPN reales y mercados explícitos, devuelve estado provisional por pata, push, potencial retorno y riesgo de anulación. No acredita aceptación ni pago de la banca; cotejar siempre con su recibo.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Deporte ESPN de los eventos, p. ej. baseball."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga ESPN, p. ej. mlb."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha del evento AAAA-MM-DD."
+    },
+    "stake": {
+      "type": "number",
+      "description": "Monto efectivamente indicado por el usuario; no transfiere fondos."
+    },
+    "ticketReference": {
+      "type": "string",
+      "description": "Folio registrado por la banca según el usuario (no verificado mediante API de operador)."
+    },
+    "legs": {
+      "type": "array",
+      "description": "Selecciones de la misma casa. IDs ESPN de cada encuentro, cuotas exactas, mercado, línea y equipo/jugador.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "eventId": {
+            "type": "string"
+          },
+          "bookmaker": {
+            "type": "string"
+          },
+          "market": {
+            "type": "string",
+            "description": "moneyline | h2h | 1x2 | run_line | spread | total | team_total | first_3_total | first_5_total | first_3_spread | first_5_spread | player_prop"
+          },
+          "selection": {
+            "type": "string",
+            "description": "home | away | draw | over | under | yes | no"
+          },
+          "price": {
+            "type": "number"
+          },
+          "line": {
+            "type": "number",
+            "description": "Línea firmada (ej. -1.5), valor de total o prop; necesaria en totales y spreads."
+          },
+          "team": {
+            "type": "string",
+            "description": "home | away para total del equipo"
+          },
+          "playerId": {
+            "type": "string",
+            "description": "ID oficial de jugador para props"
+          }
+        },
+        "required": [
+          "eventId",
+          "bookmaker",
+          "market",
+          "selection",
+          "price"
+        ]
+      }
+    }
+  },
+  "required": [
+    "sport",
+    "league",
+    "date",
+    "stake",
+    "legs"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_wnba_intelligence`
+
+Expediente NBA/WNBA basado en partido real: forma, roster, cinco titulares, estadísticas individuales, matchups defensivos, lesiones, noticias, escenarios Q1-Q4, mercados de casas y contradicciones.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD de juego futuro."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID ESPN del encuentro en la liga seleccionada."
+    },
+    "maxPlayers": {
+      "type": "integer",
+      "description": "Atletas investigados por club, de 1 a 20; defecto 15."
+    },
+    "matchupOffset": {
+      "type": "integer",
+      "description": "Página de duelos, desde índice 0."
+    },
+    "includeOdds": {
+      "type": "boolean",
+      "description": "Consultar cuotas reales actuales de la liga, por defecto sí."
+    }
+  },
+  "required": [
+    "date",
+    "eventId"
+  ]
+}
+```
 
 Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
 
@@ -2530,6 +5505,50 @@ A fixed foreground workflow starts one fresh structured child per round; the mod
 <a id="phoenix-aidsh-tool-skill"></a>
 
 ## `@phoenix-ai/dsh-tool-skill`
+
+### `openclaw_plugin_catalog`
+
+List the exact external OpenClaw plugin tools approved by the owner in PHOENIX Settings. The tools are provided by a separate OpenClaw Gateway; this does not grant access to other plugins.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/skill/tool-skill/src/index.ts`](../packages/skill/tool-skill/src/index.ts)
+
+### `openclaw_plugin_invoke`
+
+Invoke a specific OpenClaw plugin tool already authorized in PHOENIX Connectors. First consult openclaw_plugin_catalog; use only for an explicit user request. Tool permissions, runtime ownership, and Gateway policy are checked again on each call.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "plugin_id": {
+      "type": "string",
+      "description": "Exact approved plugin ID"
+    },
+    "tool_name": {
+      "type": "string",
+      "description": "Exact approved tool name"
+    },
+    "arguments_json": {
+      "type": "string",
+      "description": "JSON object of arguments for the selected plugin tool."
+    }
+  },
+  "required": [
+    "plugin_id",
+    "tool_name",
+    "arguments_json"
+  ]
+}
+```
+
+Source: [`packages/skill/tool-skill/src/index.ts`](../packages/skill/tool-skill/src/index.ts)
 
 ### `skill`
 
@@ -2623,6 +5642,24 @@ Search Phoenix cognitive memory with bounded provenance, layers, project, tempor
         "prospective",
         "associative",
         "temporal"
+      ]
+    },
+    "kind": {
+      "type": "string",
+      "description": "Exact memory category. Use decision for Kira previous predictions and selections.",
+      "enum": [
+        "decision",
+        "fact",
+        "preference",
+        "lesson",
+        "skill",
+        "pending",
+        "mission",
+        "error",
+        "success",
+        "conversation",
+        "event",
+        "interaction"
       ]
     },
     "from": {
@@ -3146,6 +6183,32 @@ The kind-agnostic background-job controller: background bash commands, PTY sends
 <a id="phoenix-aidsh-tool-agent-team"></a>
 
 ## `@phoenix-ai/dsh-tool-agent-team`
+
+### `fenix_consult`
+
+FÉNIX quality consultation: request at most one independent Terra review per turn, only after a REAL Team message reports a concrete contradiction, failed verification, missing requirement or integration risk. Kira stays on Luna Max. Do not use for routine progress, ordinary success or second opinions without evidence.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "evidence_id": {
+      "type": "string",
+      "description": "Exact id of a delivered specialist Team message that reports a genuine unresolved problem in this turn."
+    },
+    "question": {
+      "type": "string",
+      "description": "One narrow decision for Terra to review, maximum 500 characters. No full histories or new planning."
+    }
+  },
+  "required": [
+    "evidence_id",
+    "question"
+  ]
+}
+```
+
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `followup_task`
 
@@ -3770,13 +6833,250 @@ Límites: se aplican topes de concurrencia y de agentes totales; no hay acceso a
 
 Source: [`packages/workflow/tool-workflow/src/index.ts`](../packages/workflow/tool-workflow/src/index.ts)
 
+<a id="phoenix-aidsh-tool-voice"></a>
+
+## `@phoenix-ai/dsh-tool-voice`
+
+### `phoenix_audio_file_listen`
+
+Transcribe un archivo local de audio aportado/autorizado por el usuario dentro de PHOENIX_AUDIO_ALLOWED_DIRS (rutas separadas por punto y coma). Solo lectura; faster-whisper local. Soporta WAV, MP3, M4A, OGG, FLAC, WebM, MP4; tamaño máximo 32 MiB. No escanea rutas ni accede a carpetas no autorizadas.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Ruta absoluta exacta de un archivo autorizado; no una carpeta ni URL."
+    }
+  },
+  "required": [
+    "path"
+  ]
+}
+```
+
+Source: [`packages/voice/tool-voice/src/index.ts`](../packages/voice/tool-voice/src/index.ts)
+
+### `phoenix_audio_listen`
+
+ESCUCHAR AUDIO REAL del dispositivo de salida predeterminado de Windows durante 3 a 12 segundos. Windows solicita permiso visible al principio; el usuario puede autorizar una fuente durante 15 minutos solo para esta conversación, sin repetir la selección. Transcribe con faster-whisper local y elimina el WAV temporal. No utiliza microfono ni escucha continua. Si el usuario pide analizar la voz o sonido que sale de sus aplicaciones, usar aqui; no inventar lo no capturado.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "seconds": {
+      "type": "integer",
+      "description": "Segundos enteros de captura, 3 a 12; por defecto 8. No sirve para escucha continua."
+    },
+    "source": {
+      "type": "string",
+      "description": "output escucha altavoces/aplicaciones; microphone capta sonido de microfono por autorizacion. Defecto output.",
+      "enum": [
+        "output",
+        "microphone"
+      ]
+    }
+  }
+}
+```
+
+Source: [`packages/voice/tool-voice/src/index.ts`](../packages/voice/tool-voice/src/index.ts)
+
+### `phoenix_audio_status`
+
+Consulta si PHOENIX Desktop en Windows puede escuchar la salida WASAPI del equipo. No inicia grabacion, no requiere microfono. Aclara si el dispositivo realmente esta disponible.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/voice/tool-voice/src/index.ts`](../packages/voice/tool-voice/src/index.ts)
+
+### `phoenix_senses_status`
+
+Informa el estado real de los sentidos digitales de PHOENIX: voz y proveedor, dispositivos de audio de Windows, visores nativos Desktop Live/MiniBrowser e identidad de origen de observaciones. No activa microfono, grabacion o pantalla. No confundir visor visible con fotograma recibido.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/voice/tool-voice/src/index.ts`](../packages/voice/tool-voice/src/index.ts)
+
+### `phoenix_voice_speak`
+
+REPRODUCIR AUDIO AHORA. Kira debe llamar esta herramienta cuando el usuario le diga habla, di algo, lee en voz alta, quiero escucharte, prueba tu voz o ¿me escuchas bien?; usa Codex Live si hay sesión autorizada y activa; si no, sintetiza audio real usando voz local de PHOENIX en el idioma seleccionado. Responde con el proveedor y resultado verificables. No requiere micrófono. No usar para narrar cada paso ni simular reproducción.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string",
+      "description": "Frase corta, natural y pronunciable en el idioma configurado, máximo 300 caracteres. No incluir identificadores ni secretos."
+    },
+    "language": {
+      "type": "string",
+      "description": "Idioma BCP-47 de la interfaz, por ejemplo es-DO. Omitir para usar PHOENIX_VOICE_LANGUAGE (es-DO)."
+    }
+  },
+  "required": [
+    "text"
+  ]
+}
+```
+
+Source: [`packages/voice/tool-voice/src/index.ts`](../packages/voice/tool-voice/src/index.ts)
+
+### `phoenix_voice_status`
+
+Comprueba la voz de Kira y sus motores reales: habilitación, proveedor local, cola, voz Codex Live disponible y motivo de desconexión. No activa micrófono ni reproduce audio. Usa antes de una prueba cuando sea necesario diagnosticar.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/voice/tool-voice/src/index.ts`](../packages/voice/tool-voice/src/index.ts)
+
+Speech is an explicit user-requested output side channel. A provider receipt is not proof that speakers were audible; this catalog boot never plays audio.
+
 <a id="phoenix-aidsh-tool-web"></a>
 
 ## `@phoenix-ai/dsh-tool-web`
 
+### `research_catalog`
+
+Consulta el catálogo de 100 bases científicas y datos oficiales de PHOENIX. Filtra por disciplina y distingue acceso anónimo confirmado documentalmente de fuentes condicionales o que requieren credenciales. No equipares un catálogo con una API funcional. Para artículos utiliza research_federated o research_scholar.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "discipline": {
+      "type": "string",
+      "description": "Tema o disciplina: medicina, economía, física, software, biodiversidad, educación, derecho, etc."
+    },
+    "mode": {
+      "type": "string",
+      "description": "anonymous (por defecto, solo documentación de lectura sin clave) o all (también condicionadas)."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Número máximo de fuentes, de 1 a 100; por defecto 25."
+    }
+  }
+}
+```
+
+Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
+
+### `research_federated`
+
+Busca artículos y productos académicos reales EN PARALELO en Europe PMC, Crossref, OpenAlex, DataCite y Semantic Scholar sin API key. Deduplica DOI/PMID/título, conserva fuentes y reporta fallos por proveedor. Para medicina complementa con research_scholar/MeSH y ensayos clínicos. Metadatos NO son evidencia verificada. Consulta research_catalog para otras disciplinas y bases oficiales.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Pregunta académica concisa o concepto científico 3–350 caracteres."
+    },
+    "per_source": {
+      "type": "integer",
+      "description": "Resultados por proveedor, 1–15; por defecto 6."
+    },
+    "sources": {
+      "type": "array",
+      "description": "Proveedores opcionales: europepmc, crossref, openalex, datacite, semanticscholar.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "query"
+  ]
+}
+```
+
+Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
+
+### `research_health_series`
+
+Obtiene series OFICIALES del Banco Mundial API v2 sin clave, con años null, unidades, procedencia y advertencias. Indicadores permitidos: mortalidad infantil SP.DYN.IMRT.IN, menores de 5 SH.DYN.MORT, cobertura UHC SH_UHC_SCI, gasto en salud PIB SH.XPD.CHEX.GD.ZS, gasto de bolsillo SH.XPD.OOPC.CH.ZS y médicos por 1000 SH.MED.PHYS.ZS. País DOM y años 2015–2025 por defecto. Comparar años y metodologías; no interpolar 2025 ni inferir causalidad sobre APS.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "indicator": {
+      "type": "string",
+      "description": "Uno de HEALTH_INDICATORS; códigos World Bank autorizados."
+    },
+    "country": {
+      "type": "string",
+      "description": "ISO2 o ISO3, por defecto DOM"
+    },
+    "start_year": {
+      "type": "integer",
+      "description": "Primer año; por defecto 2015"
+    },
+    "end_year": {
+      "type": "integer",
+      "description": "Último año; por defecto 2025"
+    }
+  },
+  "required": [
+    "indicator"
+  ]
+}
+```
+
+Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
+
+### `research_investigate`
+
+Investigación universal integral: planifica consultas concisas, busca fuentes gratuitas o conectadas, filtra tema/geografía, abre documentos con web_fetch seguro, detecta CAPTCHA y devuelve fragmentos trazables. Profundidad standard, deep o expert; no inventa conclusiones ni omite errores.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "question": {
+      "type": "string",
+      "description": "Una pregunta de investigación concreta (idealmente máximo 500 caracteres). Para tareas largas, divide en subpreguntas sobre guías, ensayos o cálculos. El ejecutor condensará entradas extensas preservando entidades, fechas y unidades."
+    },
+    "domain": {
+      "type": "string",
+      "description": "Opcional: sports, public_health, medicine, science, fx, economics, software, etc."
+    },
+    "depth": {
+      "type": "string",
+      "description": "standard (rápida), deep o expert (más fuentes independientes), con presupuestos limitados."
+    }
+  },
+  "required": [
+    "question"
+  ]
+}
+```
+
+Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
+
 ### `research_scholar`
 
-Busca metadatos científicos REALES mediante la API pública oficial Europe PMC: PubMed, PubMed Central, artículos, preprints y otras fuentes indexadas. Devuelve autor, título, año, revista, DOI/PMID/PMCID, URL original, resumen cuando exista y fecha de consulta. Úsala antes de redactar informes biomédicos o al verificar referencias; NO implica que el artículo tenga revisión por pares, texto completo disponible o evidencia clínica sólida. Búsqueda de máximo 10 registros, sin claves API inventadas. La herramienta devuelve estado unavailable si el proveedor falla.
+Consulta metadatos REALES de Europe PMC (PubMed/PMC y otros índices). Devuelve DOI/PMID, autores, título, revista, fecha y URL. Busca por SUBTEMA, diseño y período; recupera hasta 30 por lote y usa cursor_mark=nextCursorMark de la respuesta para continuar hasta alcanzar cobertura bibliográfica suficiente de tesis. Deduplica globalmente entre lotes por DOI/PMID. NO confundir metadatos con evidencia clínica verificada o texto completo. Sin API key; unavailable si el proveedor falla.
 
 ```json
 {
@@ -3788,7 +7088,11 @@ Busca metadatos científicos REALES mediante la API pública oficial Europe PMC:
     },
     "limit": {
       "type": "integer",
-      "description": "Resultados 1 a 10, por defecto 5."
+      "description": "Resultados 1 a 30 por lote, por defecto 5."
+    },
+    "cursor_mark": {
+      "type": "string",
+      "description": "Cursor devuelto como nextCursorMark por el lote anterior; permite paginar sin perder fuentes."
     }
   },
   "required": [
@@ -3801,7 +7105,7 @@ Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/inde
 
 ### `research_search`
 
-Run bounded multidisciplinary live web research with domain-aware source-scoped queries, deduplication and partial failure recovery. Returns source leads and provenance, not directly verified API data.
+Búsqueda interdisciplinaria de evidencia por lotes de dos instituciones. Para APS/salud pública RD utiliza domain=public_health y batch=0,1,2,3 hasta cubrir OPS, Banco Mundial, ONE, MSP, SNS, SISALRIL y OMS. Filtra indicios irrelevantes y muestra los lotes restantes; no certifica fuentes. Para tesis complementa con research_scholar paginado y phoenix_research_verify_sources; nunca tomes 15 registros como tope global.
 
 ```json
 {
@@ -3812,7 +7116,11 @@ Run bounded multidisciplinary live web research with domain-aware source-scoped 
     },
     "domain": {
       "type": "string",
-      "description": "Optional source domain. Call research_sources to list valid values."
+      "description": "Optional research domain; APS and health systems use public_health."
+    },
+    "batch": {
+      "type": "integer",
+      "description": "Zero-based source batch; continue 0,1,... totalBatches-1."
     }
   },
   "required": [

@@ -100,6 +100,8 @@ export interface Config {
   autoContinueMaxSegments?: AgentLoopConfig['autoContinueMaxSegments']
   /** Provider route IDs eligible for automatic output-limit continuation. */
   autoContinueProviders?: AgentLoopConfig['autoContinueProviders']
+  /** Allow the same user-requested conversation style as the system prompt. */
+  matureConversation?: SystemPromptConfig['matureConversation']
   /** Whether the system prompt includes the fixed Harness identity (default true). */
   includeHarnessIdentity?: SystemPromptConfig['includeHarnessIdentity']
   /** Whether model history includes dynamic runtime-context snapshots (default true). */

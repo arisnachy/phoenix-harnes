@@ -165,7 +165,7 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   // also shares its generated FFI code through a hashed runtime chunk.
   '@phoenix-ai/dsh-sandbox-windows-acl': ['lib/runner.js', 'lib/types-*.js'],
   // The Chrome connector's standalone bin and plugin entry share a hashed server chunk.
-  '@phoenix-ai/dsh-chrome-connector': ['lib/server-*.js'],
+  '@phoenix-ai/dsh-chrome-connector': ['lib/server-*.js', 'bin/cli.mjs'],
   // SQLite loads every statement from immutable package resources at runtime.
   '@phoenix-ai/dsh-session-persistence-sqlite': ['resources/sql/**/*.sql'],
   '@phoenix-ai/dsh-skill-badge': ['assets'],
