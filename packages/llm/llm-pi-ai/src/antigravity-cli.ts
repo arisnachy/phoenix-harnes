@@ -122,7 +122,7 @@ export class GoogleAccountCliAdapter extends LlmAdapter {
   override async listModels(): Promise<readonly LlmModelInfo[]> {
     try {
       const slugs = parseGoogleModels(await runGoogleCli(['models']))
-      return slugs.map(id => ({ provider: GOOGLE_ACCOUNT_PROVIDER, id, name: 'Gemini · ' + id, inputModalities: ['text'] }))
+      return slugs.map(id => ({ provider: GOOGLE_ACCOUNT_PROVIDER, id, name: 'Gemini · ' + id, inputModalities: ['text'] as const }))
     } catch { return [] }
   }
   override async *stream(request: GenerateOptions): AsyncIterable<StreamChunk> {
