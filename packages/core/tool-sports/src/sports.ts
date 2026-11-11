@@ -122,7 +122,7 @@ export const hasSportsPermission=(provider:'espn'|'mlb'|'odds',env:NodeJS.Proces
  */
 export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise<T> {
   const u=new URL(url)
-  if(u.protocol!=='https:'||u.username||u.password||!['site.api.espn.com','site.web.api.espn.com','sports.core.api.espn.com','cdn.espn.com','lm-api-reads.fantasy.espn.com','now.core.api.espn.com','statsapi.mlb.com','api-web.nhle.com','api.the-odds-api.com','api.open-meteo.com','www.thesportsdb.com','cdn.nba.com','api.openligadb.de','raw.githubusercontent.com'].includes(u.hostname))throw Error('Host no permitido')
+  if(u.protocol!=='https:'||u.username||u.password||!['site.api.espn.com','site.web.api.espn.com','sports.core.api.espn.com','cdn.espn.com','lm-api-reads.fantasy.espn.com','now.core.api.espn.com','statsapi.mlb.com','api-web.nhle.com','api.nhle.com','api.the-odds-api.com','api.open-meteo.com','www.thesportsdb.com','cdn.nba.com','api.openligadb.de','raw.githubusercontent.com'].includes(u.hostname))throw Error('Host no permitido')
   // Restrict unauthenticated ESPN Fantasy player views to 40 candidates.
   // No session cookies, user tokens or private league access.
   const headers:Record<string,string>={accept:'application/json'}

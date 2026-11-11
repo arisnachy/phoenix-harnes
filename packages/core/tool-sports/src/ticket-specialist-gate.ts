@@ -227,8 +227,17 @@ export async function investigateTicketSpecialist(
       observed('rosters',teams,'Jugadores NHL por club')
       mark('goalies',d.goalieCandidates.home.length&&d.goalieCandidates.away.length?
         'partial':'missing','Porteros candidatos: ninguno confirmado como titular')
-      mark('xg','missing','xG 5v5/GSAx sin fuente verificable en este expediente')
-      mark('special','missing','Unidades PP/PK y enfrentamientos sin métricas verificadas')
+      // Expected goals and GSAx are different from NHL shots and save percentage.
+      // Keep the unobserved private metric missing; the compact research
+      // checklist treats it as an advanced uncertainty, not a hard stop.
+      mark('xg','missing','5v5 xG/GSAx no publicados en las fuentes consultadas; no inferirlos de tiros')
+      const metrics=d.specialTeams
+      const observedCount=[metrics.home.powerPlayPct,metrics.home.penaltyKillPct,
+        metrics.away.powerPlayPct,metrics.away.penaltyKillPct]
+        .filter(value=>value!==null).length
+      mark('special',metrics.complete?'verified':observedCount?'partial':'missing',
+        'NHL Stats REST: PP/PK oficiales '+observedCount+'/4 métricas de ambos clubes'+
+        (metrics.complete?'; no equivale a xG ni confirma líneas':' · datos incompletos'))
       mark('market',d.markets.length?'partial':'missing',
         'Precios observados; reglas de OT y shootout pendientes')
     }else if(game.sport==='baseball'&&game.league==='mlb'){
@@ -303,14 +312,13 @@ export async function investigateTicketSpecialist(
       if(injury.status==='verified'||injury.status==='partial'){
         // A feed can identify reported injuries, but never guarantees a final
         // inactive list, starting lineup or availability at tipoff/kickoff.
-        mark('injuries',injury.status==='verified'&&injury.home.matched&&
-          injury.away.matched?'verified':'partial',
+        mark('injuries','partial',
           'ESPN reporte bilateral '+injury.status+
           ' · '+(injury.feedUpdatedAt??'sin hora')+
           ' · local '+injury.home.injuries.length+' y visitante '+
           injury.away.injuries.length+' registros; sin confirmar quinteto final')
-        // A verified ESPN league injury record is credible evidence of the
-        // reported status, not a definitive NBA/NFL inactive list.
+        // ESPN day-to-day/questionable is an uncertain availability report,
+        // never a confirmed absence or a definitive NBA/NFL inactive list.
         const injured=[...injury.home.injuries,...injury.away.injuries]
         const note=injured.slice(0,8).map(x=>x.athlete+' ('+x.status+
           ', '+(x.reportedAt??'sin fecha')+')').join('; ')

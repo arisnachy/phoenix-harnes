@@ -458,3 +458,26 @@ test('matched bookmaker price closes only the compact market step on second pass
   assert.equal(result.card.props.dataCounts.quotedLegs,5)
   assert.equal(result.approvedLegs,0)
 })
+
+test('complete ESPN-style 1X2 menu clears draw review but never approves the wager',async()=>{
+  const withFullSoccer=async()=>(await mkQuotes()()).flatMap(q=>[
+    q,{...q,selection:q.away,price:2.40},
+    {...q,selection:'Draw',price:3.50},
+  ])
+  const reviewer=async games=>(await stubSpecialists(games)).map(x=>({
+    ...x,checklist:{...x.checklist,verified:1,partial:2,complete:false,
+      steps:[...x.checklist.steps,
+        {key:'market',title:'Cuota y mercado',critical:true,state:'partial',
+          detail:'Pendiente hasta cotejar casa',sources:['ESPN']},
+        {key:'draw',title:'Empate y liquidación 90 minutos',critical:true,
+          state:'partial',detail:'Falta 1X2 íntegro',sources:['ESPN']}],
+      criticalPending:['Cuota y mercado','Empate y liquidación 90 minutos']},
+  }))
+  const result=await evidencePricedTicket(5,date,'soccer',0,now,enabled,feed,
+    withFullSoccer,'winner',reviewer)
+  assert.equal(result.quotedLegs,5)
+  assert.ok(result.specialistChecks.every(x=>x.checklist.steps.some(s=>
+    s.key==='draw'&&s.state==='verified')))
+  assert.equal(result.approvedForBetting,false)
+  assert.equal(result.approvedLegs,0)
+})

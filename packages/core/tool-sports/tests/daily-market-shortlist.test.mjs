@@ -196,3 +196,28 @@ test('women Champions League fixtures are routed to their own ESPN odds league, 
   assert.equal(dailyOddsSportKey('soccer','uefa.wchampions'),'soccer_uefa_womens_champions_league')
   assert.equal(dailyOddsSportKey('soccer','uefa.champions'),'soccer_uefa_champs_league')
 })
+
+test('ESPN website markets use fresh observation without inventing bookmaker update',()=>{
+  const rows=pair(0).map(q=>({...q,updatedAt:'',observedAt:observed,
+    source:'ESPN Site/Core · DraftKings'}))
+  const result=shortlistDailyMarkets(fixtures,rows,4,now)
+  assert.equal(result.selected.length,1)
+  assert.equal(result.selected[0].quoteUpdatedAt,'')
+  assert.equal(result.selected[0].observedAt,observed)
+  assert.equal(result.selected[0].timestampSource,'espn-observation')
+  const stale=shortlistDailyMarkets(fixtures,rows.map(q=>({
+    ...q,observedAt:'2026-11-06T15:45:00Z'
+  })),4,now)
+  assert.equal(stale.selected.length,0)
+  assert.equal(stale.rejectedQuotes,2)
+})
+test('ESPN soccer prices without draw remain rejected even with fresh observation',()=>{
+  const rows=pair(5).map(q=>({...q,updatedAt:'',observedAt:observed,
+    source:'ESPN Site/Core'}))
+  assert.equal(shortlistDailyMarkets(fixtures,rows,4,now).selected.length,0)
+  const approved=shortlistDailyMarkets(fixtures,[...rows,{
+    ...price(5,'Draw'),source:'ESPN Site/Core',updatedAt:'',observedAt:observed,
+    price:3.5
+  }],4,now)
+  assert.equal(approved.selected.length,1)
+})

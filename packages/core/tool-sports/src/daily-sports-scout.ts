@@ -8,6 +8,11 @@ type Event = { id?:string|number, date?:string,
   status?:{type?:{state?:string}},
   competitions?:Array<{competitors?:Side[]}> }
 type Board = { events?:Event[] }
+/** Cache is scoped to a transport, exact league and UTC partition; never
+ * promote yesterday's fixtures or a different adapter into live ESPN data. */
+const scoreboardCache=new WeakMap<typeof fetch,Map<string,{at:number;board:Board}>>()
+const SCOREBOARD_CACHE_MS=5*60_000
+
 type Schedule = {sport:string,league:string}
 const schedule:Schedule[]=[
   {sport:'basketball',league:'nba'}, {sport:'basketball',league:'wnba'},
@@ -69,7 +74,7 @@ export async function scoutDailySports(
 ):Promise<{date:string,checkedAt:string,events:DailySportsEvent[],
   totalEligible:number,coverage:DailySportsCoverage[],
   diagnostics:{elapsedMs:number;requestTimeoutMs:number;requestedPartitions:number;
-    partialLeagues:number;unavailableLeagues:number},
+    partialLeagues:number;unavailableLeagues:number;cachedPartitions:number},
   warning:string}>{
   if(!dateValid(date))throw Error('Fecha inválida, usar AAAA-MM-DD')
   if(!Number.isInteger(limit)||limit<1||limit>36)throw Error('Límite de 1 a 36 eventos')
@@ -84,8 +89,30 @@ export async function scoutDailySports(
   const requestedMs=Number(env.PHOENIX_SPORTS_SCAN_TIMEOUT_MS)
   const requestTimeoutMs=Number.isInteger(requestedMs)&&requestedMs>=30&&requestedMs<=6000
     ?requestedMs:4_500
+  const cache=scoreboardCache.get(fetcher)??new Map<string,{at:number;board:Board}>()
+  scoreboardCache.set(fetcher,cache)
+  const readPartition=async(item:Schedule,partition:string)=>{
+    const key=item.sport+'|'+item.league+'|'+partition
+    try{
+      const board=await settleWithin(fetchEspnScoreboardWithFallback(
+        item.sport,item.league,partition,
+        uri=>getFeed<Board>(uri,fetcher)),requestTimeoutMs)
+      if(Array.isArray(board.events)){
+        // Keep only a bounded set of recent, same-provider partitions.
+        if(cache.size>=100)cache.delete(cache.keys().next().value!)
+        cache.set(key,{at:now,board})
+      }
+      return{board,cached:false}
+    }catch(error){
+      const prior=cache.get(key)
+      if(prior&&now>=prior.at&&now-prior.at<=SCOREBOARD_CACHE_MS)
+        return{board:prior.board,cached:true}
+      throw error
+    }
+  }
   const coverage:DailySportsCoverage[]=[]
   const all:DailySportsEvent[]=[]
+  let cachedPartitions=0
   const seen=new Set<string>()
   // The target is a Santo Domingo calendar day (UTC-4). Late local games
   // can fall on the following UTC date, so query both ESPN date partitions.
@@ -100,24 +127,25 @@ export async function scoutDailySports(
     const batch=scanPlan.slice(offset,offset+8)
     const reports=await Promise.allSettled(batch.map(async item=>{
       if(!sportsCatalog[item.sport]?.includes(item.league))throw Error('Liga fuera del catálogo')
-      return Promise.allSettled(partitions.map(day=>settleWithin(
-        fetchEspnScoreboardWithFallback(item.sport,item.league,day,
-          uri=>getFeed<Board>(uri,fetcher)),requestTimeoutMs)))
+      return Promise.allSettled(partitions.map(day=>readPartition(item,day)))
     }))
     for(let i=0;i<batch.length;i++){
       const item=batch[i]
       const report=reports[i]
       if(!item||!report)continue
       const partitionsRead=report.status==='fulfilled'?report.value:[]
-      const boards=partitionsRead.filter((partition):partition is PromiseFulfilledResult<Board>=>
-        partition.status==='fulfilled'&&Array.isArray(partition.value.events))
+      const boards=partitionsRead.filter((partition):partition is PromiseFulfilledResult<{
+        board:Board;cached:boolean
+      }>=>
+        partition.status==='fulfilled'&&Array.isArray(partition.value.board.events))
+      cachedPartitions+=boards.filter(board=>board.value.cached).length
       if(!boards.length){
         coverage.push({...item,status:'unavailable',futureEvents:0,
           reason:'Sin cartelera verificable desde ESPN en ambos días UTC'})
         continue
       }
       let valid=0
-      for(const board of boards)for(const event of (board.value.events??[]).slice(0,150)){
+      for(const board of boards)for(const event of (board.value.board.events??[]).slice(0,150)){
         if(event.status?.type?.state!=='pre')continue
         const at=Date.parse(event.date??'')
         const id=String(event.id??'')
@@ -136,9 +164,11 @@ export async function scoutDailySports(
           home,away,source:'ESPN Site API',status:'scheduled'})
       }
       const full=boards.length===partitions.length
-      coverage.push({...item,status:valid?'available':full?'empty':'unavailable',
-        futureEvents:valid,reason:full?
-          (valid?'Participantes y evento futuro confirmados':'Sin futuros verificables'):
+      const cached=boards.some(x=>x.value.cached)
+      coverage.push({...item,status:valid?'available':full&&!cached?'empty':'unavailable',
+        futureEvents:valid,reason:cached?
+          'Cobertura parcial: partición recuperada de caché local menor a 5 minutos; requiere revalidación en ESPN':
+          full?(valid?'Participantes y evento futuro confirmados':'Sin futuros verificables'):
           'Cobertura parcial: falta una partición UTC; los partidos recuperados sí se conservan'})
     }
   }
@@ -164,7 +194,8 @@ export async function scoutDailySports(
     coverage,diagnostics:{elapsedMs:Date.now()-startedAt,requestTimeoutMs,
       requestedPartitions:scanPlan.length*partitions.length,
       partialLeagues:coverage.filter(x=>x.reason.startsWith('Cobertura parcial')).length,
-      unavailableLeagues:coverage.filter(x=>x.status==='unavailable').length},
+      unavailableLeagues:coverage.filter(x=>x.status==='unavailable').length,
+      cachedPartitions},
     warning:'Lista de partidos verificables, NO ranking de ganancias ni probabilidades. '
       +'Investiga estadísticas, bajas, titulares, noticias y cuotas por mercado solo para '
       +'los candidatos priorizados. Sin precio fechado no hay selección cotizada.'}
