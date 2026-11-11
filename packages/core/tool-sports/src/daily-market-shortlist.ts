@@ -19,6 +19,9 @@ export type DailyMarketShortlist={
   goal:number;range:[number,number];complete:boolean;bookmaker:string|null
   matchesInSlate:number;eligibleMarkets:number;selected:DailyMarketCandidate[]
   alternatives:DailyMarketCandidate[];rejectedQuotes:number;warning:string
+  matchDiagnostics:{invalidQuote:number;unmatchedFixture:number;
+    incompleteMarket:number;timestampConflict:number;invalidMarketSides:number;
+    unsupportedCandidatePrice:number}
 }
 const providerKeys:Readonly<Record<string,string>>={
   'basketball|nba':'basketball_nba',
@@ -93,6 +96,8 @@ export function shortlistDailyMarkets(
     throw Error('Reserva de investigación desde objetivo hasta 16 eventos')
   const groups=new Map<string,{fixture:Fixture;quotes:MarketOutcome[]}>()
   let rejectedQuotes=0
+  const matchDiagnostics={invalidQuote:0,unmatchedFixture:0,incompleteMarket:0,
+    timestampConflict:0,invalidMarketSides:0,unsupportedCandidatePrice:0}
   const matchedGames=new Set<string>()
   for(const quote of quotes.slice(0,2000)){
     const time=Date.parse(quote.timeIso??quote.time),at=quoteClock(quote)
@@ -101,13 +106,15 @@ export function shortlistDailyMarkets(
       !Number.isFinite(quote.price)||quote.price<=1||quote.price>1000||
       !Number.isFinite(at)||at>now||now-at>(quote.source?.startsWith('ESPN')?30:60)*60_000||
       !Number.isFinite(time)||time<=now||!quote.sportKey){
-      rejectedQuotes++;continue
+      rejectedQuotes++;matchDiagnostics.invalidQuote++;continue
     }
     const matches=fixtures.filter(game=>dailyOddsSportKey(game.sport,game.league)===quote.sportKey
       &&normal(game.home.name)===normal(quote.home)
       &&normal(game.away.name)===normal(quote.away)
       &&Math.abs(Date.parse(game.kickoff)-time)<=45*60_000)
-    if(matches.length!==1){rejectedQuotes++;continue}
+    if(matches.length!==1){
+      rejectedQuotes++;matchDiagnostics.unmatchedFixture++;continue
+    }
     const fixture=matches[0]!
     const key=groupKey(fixture,quote)
     const group=groups.get(key)??{fixture,quotes:[]}
@@ -118,9 +125,11 @@ export function shortlistDailyMarkets(
   }
   const candidates:DailyMarketCandidate[]=[]
   for(const {fixture,quotes:rows} of groups.values()){
-    if(rows.length<2||rows.length>3)continue
+    if(rows.length<2||rows.length>3){matchDiagnostics.incompleteMarket++;continue}
     const stamps=rows.map(quoteClock)
-    if(Math.max(...stamps)-Math.min(...stamps)>10*60_000)continue
+    if(Math.max(...stamps)-Math.min(...stamps)>10*60_000){
+      matchDiagnostics.timestampConflict++;continue
+    }
     const market=rows[0]!.market
     const home=normal(fixture.home.name),away=normal(fixture.away.name)
     const labels=rows.map(q=>normal(q.selection))
@@ -139,14 +148,16 @@ export function shortlistDailyMarkets(
       valid=rows.length===2&&rows[0]!.point!==null
         &&rows[0]!.point!==undefined&&rows[0]!.point===rows[1]!.point
         &&labels.includes('over')&&labels.includes('under')
-    if(!valid)continue
+    if(!valid){matchDiagnostics.invalidMarketSides++;continue}
     const inverse=rows.map(q=>1/q.price),sum=inverse.reduce((a,b)=>a+b,0)
     if(!Number.isFinite(sum)||sum<=0)continue
     const options=rows.map((q,i)=>({quote:q,share:(inverse[i]??0)/sum}))
-      .filter(x=>x.quote.price>=1.20&&x.quote.price<=4)
+      // Very short genuine favorites remain research candidates; value/risk
+      // is assessed later, not silently erased by an arbitrary odds floor.
+      .filter(x=>x.quote.price>=1.01&&x.quote.price<=4)
       .sort((a,b)=>b.share-a.share||a.quote.selection.localeCompare(b.quote.selection))
     const choice=options[0]
-    if(!choice)continue
+    if(!choice){matchDiagnostics.unsupportedCandidatePrice++;continue}
     const q=choice.quote
     candidates.push({
       sport:fixture.sport,league:fixture.league,espnEventId:fixture.eventId,
@@ -227,5 +238,6 @@ export function shortlistDailyMarkets(
   return {goal,range:[4,6],complete:selected.length>=goal,
     bookmaker:best?.bookmaker??null,matchesInSlate:matchedGames.size,
     eligibleMarkets:candidates.length,selected,alternatives,rejectedQuotes,
+    matchDiagnostics,
     warning:'Solo preselección del mercado: marketNoVigShare procede de cuotas, NO de un modelo de acierto ni de valor esperado. Antes de proponer un ticket final confirma alineaciones, lesiones, titulares, porteros, contexto, reglas y probabilidad calibrada cuando exista. Si hay menos de cuatro ofertas válidas, informa la falta sin fabricar patas. No se ha realizado ninguna apuesta.'}
 }

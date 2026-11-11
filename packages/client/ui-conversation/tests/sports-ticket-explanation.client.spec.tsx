@@ -57,7 +57,8 @@ const dossier={
   weather:{status:'not-applicable',description:'Baloncesto bajo techo',source:null},
   imagery:{imageUrl:null,articleUrl:null,attribution:null},
   percentage:{value:null,kind:'unavailable',warning:'Sin calibración'},
-  sources:[],explanationForChat:'Investigar las lesiones antes de apostar',
+  sources:[{name:'ESPN NBA · resumen',status:'verified',url:'https://www.espn.com/nba/'}],
+  explanationForChat:'Investigar las lesiones antes de apostar',
 }
 describe('actual ESPN observation and transparent step-by-step research',()=>{
   it('renders verified injury stats, per-step sources and an undated ESPN price',()=>{
@@ -73,5 +74,9 @@ describe('actual ESPN observation and transparent step-by-step research',()=>{
     expect(screen.getByText(/Checklist de investigación/)).toBeTruthy()
     expect(screen.getByText(/Lesiones NBA/)).toBeTruthy()
     expect(screen.getByText(/4 bajas de Cleveland/)).toBeTruthy()
+    expect(screen.getByText('A favor de esta elección')).toBeTruthy()
+    expect(screen.getByText('Historial verificado')).toBeTruthy()
+    expect(screen.getByRole('link',{name:'ESPN NBA · resumen'}).getAttribute('href'))
+      .toBe('https://www.espn.com/nba/')
   })
 })
