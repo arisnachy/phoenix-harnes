@@ -1092,6 +1092,67 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'healthia',
+    summary: 'Service definition for Phoenix\'s longitudinal health record.',
+    description: 'Service definition for Phoenix\'s longitudinal health record.\n\nProviders own persistence/encryption. Consumers never write a session log and pretend it is a medical record.',
+    methods: [
+      {
+        signature: 'abstract listPatients(): Promise<readonly HealthPatient[]>',
+        description: 'List isolated patient profiles without returning clinical records.',
+        parameters: [],
+        returns: 'Patient profiles only, never clinical record contents.',
+      },
+      {
+        signature: 'abstract getPatient(id: HealthPatientId): Promise<HealthPatient | undefined>',
+        description: 'Resolve one patient profile or undefined.',
+        parameters: [{ name: 'id', description: 'Patient identifier scoped to the owner-local record.' }],
+        returns: 'The matching patient profile or undefined if it does not exist.',
+      },
+      {
+        signature: 'abstract createPatient(input: CreateHealthPatientInput): Promise<HealthPatient>',
+        description: 'Create one patient profile.',
+        parameters: [{ name: 'input', description: 'Validated demographics and identity fields for the new profile.' }],
+        returns: 'The newly persisted profile.',
+      },
+      {
+        signature: 'abstract updatePatient(id: HealthPatientId, input: UpdateHealthPatientInput): Promise<HealthPatient>',
+        description: 'Update demographics without changing patient identity.',
+        parameters: [{ name: 'id', description: 'Immutable patient identity.' }, { name: 'input', description: 'Allowed demographic updates.' }],
+        returns: 'Updated durable patient profile.',
+      },
+      {
+        signature: 'abstract addRecord(input: AddHealthRecordInput): Promise<HealthRecord>',
+        description: 'Append one provenance-bearing canonical fact.',
+        parameters: [{ name: 'input', description: 'Patient-scoped fact and its provenance.' }],
+        returns: 'Persisted canonical record with assigned identity.',
+      },
+      {
+        signature: 'abstract listRecords(id: HealthPatientId, query?: HealthRecordQuery): Promise<readonly HealthRecord[]>',
+        description: 'Query facts belonging only to the named patient.',
+        parameters: [{ name: 'id', description: 'Patient whose records may be read.' }, { name: 'query', description: 'Optional bounded filters for the record query.' }],
+        returns: 'Patient-scoped clinical facts matching the query.',
+      },
+      {
+        signature: 'abstract openEpisode(input: OpenHealthEpisodeInput): Promise<HealthEpisode>',
+        description: 'Open one longitudinal patient episode.',
+        parameters: [{ name: 'input', description: 'Initial episode details tied to a patient.' }],
+        returns: 'Persisted open episode.',
+      },
+      {
+        signature: 'abstract updateEpisode(id: HealthEpisodeId, input: UpdateHealthEpisodeInput): Promise<HealthEpisode>',
+        description: 'Update an existing episode.',
+        parameters: [{ name: 'id', description: 'Identity of the longitudinal episode.' }, { name: 'input', description: 'Authorized changes to the episode.' }],
+        returns: 'Updated durable episode.',
+      },
+      {
+        signature: 'abstract snapshot(id: HealthPatientId, options?: HealthSnapshotOptions): Promise<HealthPatientSnapshot>',
+        description: 'Return a bounded longitudinal projection for reasoning.',
+        parameters: [{ name: 'id', description: 'Patient identity to scope the snapshot.' }, { name: 'options', description: 'Maximum record and episode counts.' }],
+        returns: 'Patient-specific bounded clinical history snapshot.',
+      },
+    ],
+  },
+  {
     key: 'home',
     summary: 'Cordis service owner for the Home Assistant gateway.',
     description: 'Cordis service owner for the Home Assistant gateway.',
@@ -1254,6 +1315,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Read the project used to isolate automatic model recall.',
         parameters: [],
         returns: 'The current project identifier, when the active session has one.',
+      },
+      {
+        signature: 'projectIdForSession(sessionId: string): string | undefined',
+        description: 'Resolve the project for the owning session, never another active chat.',
+        parameters: [{ name: 'sessionId', description: 'Root human conversation or mission session.' }],
+        returns: 'Project scope to use when assembling its model context.',
       },
       {
         signature: 'remember(input: MemoryRecordInput): Promise<MemoryRecord>',
@@ -3214,6 +3281,30 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'payload', description: '.change - fresh current projection or clear tombstone.' }],
   },
   {
+    name: 'healthia/episode',
+    mode: 'emit',
+    signature: '\'healthia/episode\'(episode: Readonly<HealthEpisode>): void',
+    summary: 'A clinical episode was opened or updated.',
+    description: 'A clinical episode was opened or updated.',
+    parameters: [{ name: 'episode', description: 'The persisted clinical episode after the change.' }],
+  },
+  {
+    name: 'healthia/patient',
+    mode: 'emit',
+    signature: '\'healthia/patient\'(patient: Readonly<HealthPatient>): void',
+    summary: 'A patient profile was created or updated.',
+    description: 'A patient profile was created or updated.',
+    parameters: [{ name: 'patient', description: 'The persisted patient profile after the change.' }],
+  },
+  {
+    name: 'healthia/record',
+    mode: 'emit',
+    signature: '\'healthia/record\'(record: Readonly<HealthRecord>): void',
+    summary: 'A canonical patient fact was durably recorded.',
+    description: 'A canonical patient fact was durably recorded.',
+    parameters: [{ name: 'record', description: 'The durable clinical record emitted after storage.' }],
+  },
+  {
     name: 'llm/adapters-updated',
     mode: 'emit',
     signature: '\'llm/adapters-updated\'(): void',
@@ -3480,6 +3571,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'AddForgeWorkRequest',
     declaration: 'export interface AddForgeWorkRequest {\n    readonly role: ForgeRole;\n    readonly title: string;\n    readonly status: ForgeWorkStatus;\n    readonly strategyId?: string;\n    readonly failureFingerprint?: string;\n    readonly evidence?: readonly string[];\n}',
+  },
+  {
+    name: 'AddHealthRecordInput',
+    declaration: 'export interface AddHealthRecordInput {\n    readonly id?: string;\n    readonly patientId: string;\n    readonly category: HealthRecordCategory;\n    readonly effectiveAt?: string;\n    readonly code?: string;\n    readonly display: string;\n    readonly value?: HealthJson;\n    readonly unit?: string;\n    readonly notes?: string;\n    readonly provenance: Omit<HealthProvenance, \'recordedAt\'> & {\n        readonly recordedAt?: string;\n    };\n}',
   },
   {
     name: 'AddSpecialistExperimentRequest',
@@ -3775,7 +3870,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'CognitiveMemoryQuery',
-    declaration: 'export interface CognitiveMemoryQuery {\n    readonly query?: string;\n    readonly layers?: readonly CognitiveMemoryLayer[];\n    readonly projectId?: string;\n    readonly sessionId?: string;\n    readonly entity?: string;\n    readonly from?: number;\n    readonly to?: number;\n    readonly includeHistory?: boolean;\n    readonly limit?: number;\n}',
+    declaration: 'export interface CognitiveMemoryQuery {\n    readonly query?: string;\n    readonly kind?: CognitiveMemoryKind;\n    readonly layers?: readonly CognitiveMemoryLayer[];\n    readonly projectId?: string;\n    readonly sessionId?: string;\n    readonly entity?: string;\n    readonly from?: number;\n    readonly to?: number;\n    readonly includeHistory?: boolean;\n    readonly limit?: number;\n}',
   },
   {
     name: 'CognitiveMemoryRecord',
@@ -3932,6 +4027,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CreateGoalResult',
     declaration: 'export interface CreateGoalResult {\n    readonly ref: GoalRef;\n}',
+  },
+  {
+    name: 'CreateHealthPatientInput',
+    declaration: 'export interface CreateHealthPatientInput {\n    readonly id?: string;\n    readonly displayName: string;\n    readonly birthDate?: string;\n    readonly sexAtBirth?: HealthSexAtBirth;\n    readonly genderIdentity?: string;\n}',
   },
   {
     name: 'CreateSessionOptions',
@@ -4266,6 +4365,58 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface GrantRecord {\n    readonly kind: \'grant\';\n    readonly payload: unknown;\n}',
   },
   {
+    name: 'HealthEpisode',
+    declaration: 'export interface HealthEpisode {\n    readonly id: HealthEpisodeId;\n    readonly patientId: HealthPatientId;\n    readonly kind: string;\n    readonly title: string;\n    readonly status: \'open\' | \'resolved\' | \'cancelled\';\n    readonly openedAt: string;\n    readonly updatedAt: string;\n    readonly closedAt?: string;\n    readonly summary?: string;\n}',
+  },
+  {
+    name: 'HealthEpisodeId',
+    declaration: 'export type HealthEpisodeId = string & {\n    readonly __healthEpisodeId: unique symbol;\n};',
+  },
+  {
+    name: 'HealthJson',
+    declaration: 'export type HealthJson = null | boolean | number | string | HealthJson[] | {\n    readonly [key: string]: HealthJson;\n};',
+  },
+  {
+    name: 'HealthPatient',
+    declaration: 'export interface HealthPatient {\n    readonly id: HealthPatientId;\n    readonly displayName: string;\n    readonly birthDate?: string;\n    readonly sexAtBirth?: HealthSexAtBirth;\n    readonly genderIdentity?: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+  },
+  {
+    name: 'HealthPatientId',
+    declaration: 'export type HealthPatientId = string & {\n    readonly __healthPatientId: unique symbol;\n};',
+  },
+  {
+    name: 'HealthPatientSnapshot',
+    declaration: 'export interface HealthPatientSnapshot {\n    readonly patient: HealthPatient;\n    readonly records: readonly HealthRecord[];\n    readonly episodes: readonly HealthEpisode[];\n    readonly generatedAt: string;\n}',
+  },
+  {
+    name: 'HealthProvenance',
+    declaration: 'export interface HealthProvenance {\n    readonly sourceKind: \'user\' | \'device\' | \'document\' | \'clinician\' | \'connector\' | \'system\';\n    readonly sourceId?: string;\n    readonly sourceRef?: string;\n    readonly recordedAt: string;\n    readonly confidence?: number;\n}',
+  },
+  {
+    name: 'HealthRecord',
+    declaration: 'export interface HealthRecord {\n    readonly id: HealthRecordId;\n    readonly patientId: HealthPatientId;\n    readonly category: HealthRecordCategory;\n    readonly recordedAt: string;\n    readonly effectiveAt?: string;\n    readonly code?: string;\n    readonly display: string;\n    readonly value?: HealthJson;\n    readonly unit?: string;\n    readonly notes?: string;\n    readonly provenance: HealthProvenance;\n}',
+  },
+  {
+    name: 'HealthRecordCategory',
+    declaration: 'export type HealthRecordCategory = \'symptom\' | \'vital\' | \'lab\' | \'condition\' | \'medication\' | \'allergy\' | \'procedure\' | \'immunization\' | \'imaging\' | \'device\' | \'nutrition\' | \'activity\' | \'sleep\' | \'mental-health\' | \'social\' | \'appointment\' | \'document\' | \'goal\' | \'care-plan\' | \'other\';',
+  },
+  {
+    name: 'HealthRecordId',
+    declaration: 'export type HealthRecordId = string & {\n    readonly __healthRecordId: unique symbol;\n};',
+  },
+  {
+    name: 'HealthRecordQuery',
+    declaration: 'export interface HealthRecordQuery {\n    readonly categories?: readonly HealthRecordCategory[];\n    readonly since?: string;\n    readonly until?: string;\n    readonly limit?: number;\n}',
+  },
+  {
+    name: 'HealthSexAtBirth',
+    declaration: 'export type HealthSexAtBirth = \'female\' | \'male\' | \'intersex\' | \'unknown\';',
+  },
+  {
+    name: 'HealthSnapshotOptions',
+    declaration: 'export interface HealthSnapshotOptions {\n    readonly recordLimit?: number;\n    readonly episodeLimit?: number;\n}',
+  },
+  {
     name: 'HomeControlRequest',
     declaration: 'export interface HomeControlRequest {\n    readonly entityId: string;\n    readonly service: string;\n    readonly data: Record<string, JsonValue>;\n}',
   },
@@ -4479,7 +4630,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmDiscoveredModel',
-    declaration: 'export interface LlmDiscoveredModel {\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n}',
+    declaration: 'export interface LlmDiscoveredModel {\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n    reasoning?: {\n        efforts: Array<{\n            id: string;\n            name: string;\n            description?: string;\n        }>;\n        defaultEffort?: string;\n    };\n}',
   },
   {
     name: 'LlmFailure',
@@ -4732,6 +4883,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'OneShotSubagentDescriptorData',
     declaration: 'export interface OneShotSubagentDescriptorData extends SubagentDescriptorBase {\n    readonly mode: \'one-shot\';\n    readonly label?: string;\n}',
+  },
+  {
+    name: 'OpenHealthEpisodeInput',
+    declaration: 'export interface OpenHealthEpisodeInput {\n    readonly id?: string;\n    readonly patientId: string;\n    readonly kind: string;\n    readonly title: string;\n    readonly openedAt?: string;\n    readonly summary?: string;\n}',
   },
   {
     name: 'OrganizationForgeAtlasEntry',
@@ -6042,6 +6197,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface UniversalMissionSnapshot {\n    readonly id: string;\n    readonly teamId: TeamId;\n    readonly userMessageId: string;\n    readonly lastHumanMessageId?: string;\n    readonly objective: string;\n    readonly origin: \'chat\' | \'voice\' | \'telegram\' | \'schedule\' | \'connector\' | \'api\';\n    readonly phase: UniversalMissionPhase;\n    readonly revision: number;\n    readonly cancellationEpoch: number;\n    readonly maxTeammates: number;\n    readonly evidenceIds: readonly string[];\n    readonly blockers: readonly string[];\n    readonly verified: boolean;\n}',
   },
   {
+    name: 'UpdateHealthEpisodeInput',
+    declaration: 'export interface UpdateHealthEpisodeInput {\n    readonly status?: HealthEpisode[\'status\'];\n    readonly summary?: string | null;\n}',
+  },
+  {
+    name: 'UpdateHealthPatientInput',
+    declaration: 'export interface UpdateHealthPatientInput {\n    readonly displayName?: string;\n    readonly birthDate?: string | null;\n    readonly sexAtBirth?: HealthSexAtBirth | null;\n    readonly genderIdentity?: string | null;\n}',
+  },
+  {
     name: 'UpdateTeamTaskRequest',
     declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: string;\n}',
   },
@@ -6051,15 +6214,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'UserProfileConsented',
-    declaration: 'export interface UserProfileConsented {\n    preferredName?: string;\n    age?: number;\n    gender?: string;\n    pronouns?: string;\n    tone?: string;\n    family?: UserProfileFamilyMember[];\n}',
+    declaration: 'export interface UserProfileConsented {\n    preferredName?: string;\n    profession?: string;\n    professionalTitle?: string;\n    addressingMode?: UserAddressMode;\n    age?: number;\n    gender?: string;\n    pronouns?: string;\n    tone?: string;\n    family?: UserProfileFamilyMember[];\n}',
   },
   {
     name: 'UserProfileRedacted',
-    declaration: 'export interface UserProfileRedacted {\n    hasPreferredName: boolean;\n    hasDateOfBirth: boolean;\n    hasGender: boolean;\n    hasPronouns: boolean;\n    hasTone: boolean;\n    familyCount: number;\n    consent: UserProfileConsent;\n}',
+    declaration: 'export interface UserProfileRedacted {\n    hasPreferredName: boolean;\n    hasProfession: boolean;\n    hasProfessionalTitle: boolean;\n    hasDateOfBirth: boolean;\n    hasGender: boolean;\n    hasPronouns: boolean;\n    hasTone: boolean;\n    familyCount: number;\n    specialDateCount: number;\n    hasCountryCode: boolean;\n    consent: UserProfileConsent;\n}',
   },
   {
     name: 'UserProfileUpdate',
-    declaration: 'export interface UserProfileUpdate {\n    assistantName?: string | null;\n    assistantGender?: AssistantGender | null;\n    assistantGenderSource?: AssistantGenderSource | null;\n    modelProviderOrder?: string[] | null;\n    preferredName?: string | null;\n    dateOfBirth?: string | null;\n    gender?: string | null;\n    pronouns?: string | null;\n    tone?: string | null;\n    family?: UserProfileFamilyMember[] | null;\n    consent?: Partial<UserProfileConsent>;\n}',
+    declaration: 'export interface UserProfileUpdate {\n    assistantName?: string | null;\n    assistantGender?: AssistantGender | null;\n    assistantGenderSource?: AssistantGenderSource | null;\n    modelProviderOrder?: string[] | null;\n    preferredName?: string | null;\n    profession?: string | null;\n    professionalTitle?: string | null;\n    addressingMode?: UserAddressMode | null;\n    dateOfBirth?: string | null;\n    gender?: string | null;\n    pronouns?: string | null;\n    tone?: string | null;\n    family?: UserProfileFamilyMember[] | null;\n    countryCode?: string | null;\n    momentsTimeZone?: string | null;\n    specialDates?: PersonalMoment[] | null;\n    consent?: Partial<UserProfileConsent>;\n}',
   },
   {
     name: 'UserProfileView',

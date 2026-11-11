@@ -7,6 +7,10 @@ A service can be a core spine service, a swappable capability seam, or a bundle/
 
 ```mermaid
 flowchart LR
+  pkg_healthia["healthia"]
+  svc_healthia["ctx.healthia<br/>Owner-local longitudinal patient record service"]
+  pkg_healthia_local["healthia-local"]
+  pkg_tool_healthia["tool-healthia"]
   pkg_attachment["attachment"]
   svc_attachments["ctx.attachments<br/>Durable binary attachment storage"]
   pkg_attachment_local["attachment-local"]
@@ -267,6 +271,8 @@ flowchart LR
   pkg_fs_local --> svc_fs
   pkg_fs_sandbox --> svc_fs
   pkg_goal --> svc_goals
+  pkg_healthia --> svc_healthia
+  pkg_healthia_local --> svc_healthia
   pkg_home_gateway --> svc_home
   pkg_invariants --> svc_invariants
   pkg_jobs --> svc_jobs
@@ -371,6 +377,7 @@ flowchart LR
   svc_e2b --> pkg_subprocess_e2b
   svc_fs --> pkg_tool_fs
   svc_googleApi --> pkg_tool_google_workspace
+  svc_healthia --> pkg_tool_healthia
   svc_home --> pkg_tool_home_gateway
   svc_invariants --> pkg_agent
   svc_invariants --> pkg_agent_loop
@@ -474,6 +481,7 @@ flowchart LR
 
 | ctx key | Role | Owner | Implementations | Direct consumers | Companion plugins | Note |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.healthia` | `seam` | [`healthia`](../packages/health/healthia) | [`healthia-local`](../packages/health/healthia-local) | [`tool-healthia`](../packages/health/tool-healthia) | - | Encrypted local records and patient-scoped access are provided by healthia-local; the model-facing tool requires explicit authorized activation. |
 | `ctx.attachments` | `seam` | [`attachment`](../packages/attachment/attachment) | [`attachment-local`](../packages/attachment/attachment-local) | `host-runtime`, [`llm-pi-ai`](../packages/llm/llm-pi-ai) | - | The host commits accepted images before session events; provider adapters resolve authorized durable references into provider-native content. |
 | `ctx.llm` | `seam` | [`llm`](../packages/llm/llm) | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-replay`](../packages/test-support/llm-replay) | [`agent-loop`](../packages/core/agent-loop), [`compaction-basic`](../packages/compaction/compaction-basic) | - | Adapters register provider implementations; the loop and compaction call the provider-neutral stream service. |
 | `ctx.tokenMeter` | `core` | [`token-meter`](../packages/llm/token-meter) | - | [`compaction-basic`](../packages/compaction/compaction-basic) | - | Owns isolated per-session replay folds; pressure consumers share immutable revisioned measurements. |
