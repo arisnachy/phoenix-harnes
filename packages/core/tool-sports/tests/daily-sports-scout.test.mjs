@@ -180,3 +180,24 @@ test('calendar-first scan limits calls to requested sports and recognizes womens
   await assert.rejects(()=>scoutDailySports(day,5,targeted,now,{},['bad-sport']),
     /fuera del calendario/)
 })
+
+test('same-provider short cache restores only the exact failed ESPN partition, with disclosure',async()=>{
+  let fail=false
+  const flaky=async url=>{
+    if(fail)throw Error('ESPN temporarily unavailable')
+    return new Response(JSON.stringify({events:
+      String(url).includes('/basketball/nba/')&&String(url).includes('dates=20261102')
+        ?[game(845)]:[]}))
+  }
+  const first=await scoutDailySports(day,5,flaky,now,{},['basketball'])
+  assert.ok(first.events.some(x=>x.eventId==='845'))
+  assert.equal(first.diagnostics.cachedPartitions,0)
+  fail=true
+  const recovered=await scoutDailySports(day,5,flaky,now+30_000,{},['basketball'])
+  assert.ok(recovered.events.some(x=>x.eventId==='845'))
+  assert.ok(recovered.diagnostics.cachedPartitions>=1)
+  assert.match(recovered.coverage.find(x=>x.league==='nba').reason,/caché local/)
+  const expired=await scoutDailySports(day,5,flaky,now+360_000,{},['basketball'])
+  assert.ok(!expired.events.some(x=>x.eventId==='845'))
+  assert.equal(expired.coverage.find(x=>x.league==='nba').status,'unavailable')
+})

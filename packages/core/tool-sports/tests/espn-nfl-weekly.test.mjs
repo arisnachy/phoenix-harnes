@@ -8,6 +8,7 @@ test('recovers exact NFL event using ESPN weekly fallback',async()=>{
       [{id:'401999001',date:'2026-11-11T01:00:00Z'}]:[]}},'401999001')
   assert.equal(result.events.length,1)
   assert.ok(calls.some(uri=>uri.includes('seasontype=2&week=')))
+  assert.ok(calls.some(uri=>uri.includes('&season=2026&limit=100')))
 })
 test('rejects wrong NFL day and wrong ID',async()=>{
   const result=await fetchEspnScoreboardWithFallback('football','nfl','20261110',

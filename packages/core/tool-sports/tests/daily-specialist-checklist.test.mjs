@@ -52,3 +52,16 @@ test('unsupported sport, invalid clock and invented step cannot become complete'
     state:'verified',detail:'made up'}},now)
   assert.equal(review.verified,0)
 })
+
+test('missing private NHL xG is still disclosed but does not block the research-only checklist',()=>{
+  const base=auditSportChecklist('hockey',{},now)
+  const signals=Object.fromEntries(base.steps.map(step=>[step.key,
+    {state:'verified',detail:'Official public statistic from both teams'}]))
+  signals.xg={state:'missing',detail:'No public 5v5 xG or GSAx'}
+  const audit=auditSportChecklist('hockey',signals,now)
+  assert.equal(audit.steps.find(x=>x.key==='xg').critical,false)
+  assert.equal(audit.steps.find(x=>x.key==='xg').state,'missing')
+  assert.equal(audit.criticalPending.length,0)
+  assert.equal(audit.complete,true)
+  assert.equal(audit.fullComplete,false)
+})
