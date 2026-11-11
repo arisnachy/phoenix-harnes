@@ -187,6 +187,13 @@
           openai-codex: {}
           openrouter:
             apiKeyEnv: OPENROUTER_API_KEY
+          # Google Gemini is an independent Kira model provider. It uses the
+          # standard PHOENIX tool/session pipeline, never the Codex Eclipse
+          # router or Google Workspace OAuth scopes. Gemini API free tier can
+          # work without paid billing, but requires a Gemini API key; consumer
+          # Antigravity CLI OAuth is not a permitted generic model credential.
+          google:
+            apiKeyEnv: GEMINI_API_KEY
           # Optional local ChatGPT Web bridge. It exposes selectable bridge
           # models immediately; requests remain loopback-only and fail clearly
           # until the user configures PHOENIX_CHATGPT_WEB_COMMAND and starts it.
