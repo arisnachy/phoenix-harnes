@@ -42,6 +42,10 @@ flowchart LR
   cfg --> plugin_dsh_base_tool_business
   plugin_dsh_base_tool_sports["tool-sports<br/>@phoenix-ai/dsh-tool-sports"]
   cfg --> plugin_dsh_base_tool_sports
+  plugin_dsh_base_tool_oracle["tool-oracle<br/>@phoenix-ai/dsh-tool-oracle"]
+  cfg --> plugin_dsh_base_tool_oracle
+  plugin_dsh_base_tool_health["tool-health<br/>@phoenix-ai/dsh-tool-health"]
+  cfg --> plugin_dsh_base_tool_health
   plugin_dsh_base_llm_retry["llm-retry<br/>@phoenix-ai/dsh-llm-retry"]
   cfg --> plugin_dsh_base_llm_retry
   plugin_dsh_base_settings["settings<br/>@phoenix-ai/dsh-settings-file"]
@@ -52,6 +56,10 @@ flowchart LR
   cfg --> plugin_dsh_base_credentials
   plugin_dsh_base_secret_vault["secret-vault<br/>@phoenix-ai/dsh-secret-vault"]
   cfg --> plugin_dsh_base_secret_vault
+  plugin_dsh_base_healthia_local["healthia-local<br/>@phoenix-ai/dsh-healthia-local"]
+  cfg --> plugin_dsh_base_healthia_local
+  plugin_dsh_base_tool_healthia["tool-healthia<br/>@phoenix-ai/dsh-tool-healthia"]
+  cfg --> plugin_dsh_base_tool_healthia
   plugin_dsh_base_authorization["authorization<br/>@phoenix-ai/dsh-authorization"]
   cfg --> plugin_dsh_base_authorization
   plugin_dsh_base_authorization_google["authorization-google<br/>@phoenix-ai/dsh-authorization/google"]
@@ -72,6 +80,8 @@ flowchart LR
   cfg --> plugin_dsh_base_voice
   plugin_dsh_base_voice_local["voice-local<br/>@phoenix-ai/dsh-voice-local"]
   cfg --> plugin_dsh_base_voice_local
+  plugin_dsh_base_tool_voice["tool-voice<br/>@phoenix-ai/dsh-tool-voice"]
+  cfg --> plugin_dsh_base_tool_voice
   plugin_dsh_base_attachment_local["attachment-local<br/>@phoenix-ai/dsh-attachment-local"]
   cfg --> plugin_dsh_base_attachment_local
   plugin_dsh_base_session_query_sqlite["session-query-sqlite<br/>@phoenix-ai/dsh-session-query-sqlite"]
@@ -247,11 +257,15 @@ flowchart LR
 | `tool-living` | `@phoenix-ai/dsh-tool-living` |
 | `tool-business` | `@phoenix-ai/dsh-tool-business` |
 | `tool-sports` | `@phoenix-ai/dsh-tool-sports` |
+| `tool-oracle` | `@phoenix-ai/dsh-tool-oracle` |
+| `tool-health` | `@phoenix-ai/dsh-tool-health` |
 | `llm-retry` | `@phoenix-ai/dsh-llm-retry` |
 | `settings` | `@phoenix-ai/dsh-settings-file` |
 | `user-profile` | `@phoenix-ai/dsh-user-profile` |
 | `credentials` | `@phoenix-ai/dsh-credentials-local` |
 | `secret-vault` | `@phoenix-ai/dsh-secret-vault` |
+| `healthia-local` | `@phoenix-ai/dsh-healthia-local` |
+| `tool-healthia` | `@phoenix-ai/dsh-tool-healthia` |
 | `authorization` | `@phoenix-ai/dsh-authorization` |
 | `authorization-google` | `@phoenix-ai/dsh-authorization/google` |
 | `tool-google-workspace` | `@phoenix-ai/dsh-tool-google-workspace` |
@@ -262,6 +276,7 @@ flowchart LR
 | `cognitive-runtime` | `@phoenix-ai/dsh-cognitive-runtime` |
 | `voice` | `@phoenix-ai/dsh-voice` |
 | `voice-local` | `@phoenix-ai/dsh-voice-local` |
+| `tool-voice` | `@phoenix-ai/dsh-tool-voice` |
 | `attachment-local` | `@phoenix-ai/dsh-attachment-local` |
 | `session-query-sqlite` | `@phoenix-ai/dsh-session-query-sqlite` |
 | `session-projection` | `@phoenix-ai/dsh-session-projection` |
