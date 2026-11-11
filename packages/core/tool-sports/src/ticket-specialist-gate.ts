@@ -121,8 +121,8 @@ export async function investigateTicketSpecialist(
         d.matchups.length+' enfrentamientos de candidatos; disponibilidad actual por confirmar')
       mark('weather',d.weather?.timestamp?'partial':'missing',
         'Datos meteorológicos disponibles; horario y estadio requieren cotejo')
-      mark('market',d.markets.length?'verified':'missing',
-        d.markets.length+' líneas y mercado cotejado')
+      mark('market',d.markets.length?'partial':'missing',
+        d.markets.length+' líneas observadas; cotejo de casa, regla y timestamp pendiente')
     }else if(game.sport==='basketball'&&(game.league==='nba'||game.league==='wnba')){
       specialist='NBA/WNBA: jugadores, quintetos, eficiencia y bajas'
       const d=await researchBasketballCase(game.league,game.date,game.eventId,
@@ -159,8 +159,8 @@ export async function investigateTicketSpecialist(
       observed('schedule',d.context.restHours.home!==null&&d.context.restHours.away!==null,
         'Descanso local '+(d.context.restHours.home?.toFixed(1)??'?')+
         ' h; visitante '+(d.context.restHours.away?.toFixed(1)??'?')+' h')
-      mark('market',d.markets.length?'verified':'missing',
-        d.markets.length+' opciones y mercado cotejado')
+      mark('market',d.markets.length?'partial':'missing',
+        d.markets.length+' opciones observadas; cotejo de casa, regla y timestamp pendiente')
     }else if(game.sport==='soccer'){
       specialist='Fútbol: once, xG, forma local/visita, lesiones y empate'
       const d=await investigateSoccer(game.date,game.league,game.eventId,
@@ -190,8 +190,8 @@ export async function investigateTicketSpecialist(
         'Bajas observadas; sin reporte completo de ambos clubes no se certifica disponibilidad')
       mark('draw',d.markets.some(m=>m.market==='1x2')?'partial':'missing',
         'Riesgo de empate y reglas reglamentarias de 90 minutos por validar')
-      mark('market',d.markets.length?'verified':'missing',
-        'Mercados observados y comprobados')
+      mark('market',d.markets.length?'partial':'missing',
+        'Mercados observados; cotejo de casa, regla y timestamp pendiente')
     }else if(game.sport==='hockey'&&game.league==='nhl'){
       specialist='NHL: porteros, forma, tiros y unidades especiales'
       const slate=await nhlSlate(game.date,fetcher,now)
@@ -215,8 +215,8 @@ export async function investigateTicketSpecialist(
         'partial':'missing','Porteros candidatos: ninguno confirmado como titular')
       mark('xg','missing','xG 5v5/GSAx sin fuente verificable en este expediente')
       mark('special','missing','Unidades PP/PK y enfrentamientos sin métricas verificadas')
-      mark('market',d.markets.length?'verified':'missing',
-        'Precios observados para hockey')
+      mark('market',d.markets.length?'partial':'missing',
+        'Precios observados; cotejo de casa, regla y timestamp pendiente')
     }else if(game.sport==='baseball'&&game.league==='mlb'){
       specialist='MLB: abridores, bullpen, bateadores, clima y parque'
       const slate=await discoverMlbDay(game.date,fetcher,now)
@@ -278,8 +278,8 @@ export async function investigateTicketSpecialist(
         'Estadísticas de servicio y devolución de ambos tenistas')
       mark('fatigue',d.players.some(p=>p.lastMatches.length>0)?'partial':'missing',
         'Últimos partidos observados, pero fatiga y desplazamientos no verificados')
-      mark('market',d.markets.length?'verified':'missing',
-        'Mercado de tenis cotejado')
+      mark('market',d.markets.length?'partial':'missing',
+        'Mercado observado; cotejo de casa, regla y timestamp pendiente')
     }else return errorResult(game,'Sin especialista integrado para esta liga; no promover a ticket final')
     if(['nfl','nba','wnba','nhl','mlb'].includes(game.league)){
       // Read the public ESPN injury feed after the discipline-specific dossier;
