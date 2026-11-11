@@ -345,7 +345,7 @@ export type MarketOutcome = MarketSelection & { price:number;home:string;away:st
  * @returns Normalized quotes with bookmaker names and update times.
  */
 export type OddsResearchObservation=MarketOutcome&{reason:'sin_fecha'|'antigua'|'proveedor_sin_nombre'|'fecha_futura';
-  endpointSource?:'scoreboard'|'core'|'summary';nonCotizable:true}
+  endpointSource?:'scoreboard'|'core'|'summary'|'website';nonCotizable:true}
 export type OddsSourceAttempt={provider:string;status:'observed'|'empty'|'unconfigured'|'error';
   count:number;detail:string;rawCount?:number;startedOddsEntries?:number;
   undatedOutcomes?:number;expiredOutcomes?:number}
