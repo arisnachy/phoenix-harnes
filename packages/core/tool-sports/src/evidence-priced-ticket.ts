@@ -310,7 +310,7 @@ export async function evidencePricedTicket(
         market:event.sport==='soccer'?'1x2':'h2h',
         selection:q.selection,point:q.point??null,price:q.price,
         home:q.home,away:q.away,time,updatedAt:q.updatedAt,
-        ...(currentSnapshot&&q.observedAt?{observedAt:q.observedAt}:{}),
+        ...(q.observedAt?{observedAt:q.observedAt}:{}),
         source:q.source??'Proveedor de cuotas público',sportKey,
       }] satisfies KeylessQuote[]
     })
