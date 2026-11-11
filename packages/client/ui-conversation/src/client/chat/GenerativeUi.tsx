@@ -979,6 +979,21 @@ function SportsTicketResearchNarrative({value,index}:{value:SportsTicketNarrativ
       <span>{value.status==='documented'?'Expediente documentado':'Análisis condicional'}</span>
     </div>
     <p className={css.sportsTicketNarrativeWhy}>{value.selectionWhy}</p>
+    {value.favorable.length>0&&<div className={css.sportsTicketNarrativeEvidence}>
+      <strong>A favor de esta elección</strong>
+      <ul>{value.favorable.slice(0,4).map((item,i)=><li key={i}>{item}</li>)}</ul>
+    </div>}
+    {value.contradictions.length>0&&<div className={css.sportsTicketNarrativeRisks}>
+      <strong>Riesgos y datos por confirmar</strong>
+      <ul>{value.contradictions.slice(0,5).map((x,i)=><li key={i}>{x}</li>)}</ul>
+    </div>}
+    {value.sources.some(s=>s.url!==null&&s.status!=='missing')&&
+      <nav className={css.sportsTicketNarrativeSources} aria-label="Fuentes de esta selección">
+        <strong>Fuentes comprobables</strong>
+        {value.sources.filter(s=>s.url!==null&&s.status!=='missing').slice(0,3)
+          .map((source,i)=><a key={i} href={source.url??undefined}
+            target="_blank" rel="noopener noreferrer">{source.name}</a>)}
+      </nav>}
     <details className={css.sportsTicketNarrativeMore}>
       <summary>Checklist de investigación · {(value.researchSteps??[]).filter(x=>
         x.state==='verified').length}/{value.researchSteps?.length??0} pasos verificados</summary>
@@ -1047,10 +1062,6 @@ function SportsTicketResearchNarrative({value,index}:{value:SportsTicketNarrativ
           {' '}· {item.publisher} · titular indexado, no pronóstico verificado.
         </p>)}
       </details>}
-    {value.contradictions.length>0&&<div className={css.sportsTicketNarrativeRisks}>
-      <strong>Riesgos y datos por confirmar</strong>
-      <ul>{value.contradictions.slice(0,5).map((x,i)=><li key={i}>{x}</li>)}</ul>
-    </div>}
     {value.sources.length>0&&<details className={css.sportsTicketNarrativeMore}>
       <summary>Fuentes y trazabilidad ({value.sources.length})</summary>
       <ul>{value.sources.map((source,i)=><li key={i}>
