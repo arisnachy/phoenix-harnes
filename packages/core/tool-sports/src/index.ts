@@ -12,6 +12,7 @@ import { sportsCatalog, discoverEspnLeagues, hasSportsPermission, chatGames, com
 import { getMlbPitcherReport } from './mlb.ts'
 import { researchTicket, autoResearchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { sportsPromptNeeded } from './sports-prompt.ts'
+import { SPORTS_OPEN_RESEARCH_GUIDANCE } from './sports-open-research-guidance.ts'
 import { researchNbaSlate } from './nba-research.ts'
 import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets} from './daily-market-shortlist.ts'
 import {assessDailyMarketEvidence,unavailableMarketEvidence} from './daily-market-evidence.ts'
@@ -85,6 +86,7 @@ const boundedDailyTool=<T>(operation:Promise<T>,ms:number):Promise<T>=>{
   })
 }
 const GUIDANCE = [
+  SPORTS_OPEN_RESEARCH_GUIDANCE,
   'LIMITE DE BUSQUEDA PARA TICKETS: si ya existen cinco o seis eventos prepartido con IDs y fechas verificados en NBA/NHL/otras ligas, NO recorrer 220 ligas de soccer para resolver una ausencia de cuotas. Resolver las cuotas por esos IDs, mostrar precios ESPN/DraftKings observados recientemente COMO CUOTAS USABLES EN EL TICKET DE INVESTIGACIÓN aunque lastUpdated no exista; observedAt es hora de consulta, no de cambio del bookmaker, y entregar inmediatamente el borrador fundamentado. Solo ampliar soccer_world_scan cuando FALTEN partidos verificados, en grupos limitados; el número de fuentes de cuotas vacías nunca justifica reiniciar el catálogo de encuentros. Tras una pasada de recuperación por evento, finalizar respuesta al usuario, sin ciclos de mensajes de progreso. ',
   'CALENDARIO PRIMERO: al recibir ticket para fecha y deportes definidos, comienza con sports_chat_daily_scan(sports=[basketball,hockey,football,soccer] según lo solicitado). Usa coverage.available/empty/unavailable para descartar ligas sin juegos, pero empty no significa temporada cancelada y unavailable exige respaldo. Filtra partidos por día local Santo Domingo e IDs. No recorres las 220 ligas del catálogo de fútbol antes de investigar los encuentros ya confirmados; amplía páginas solo si faltan candidatos y detente cuando el expediente tenga suficientes partidos. Nunca infieras cuotas desde una fecha de calendario. ',
   'RESCATE DE CUOTAS: para el boleto diario de 5 o 6 GANADORES, el orden obligatorio es sports_chat_daily_market_shortlist(deep=true,winnerOnly=true,count=5 o 6) para cotejar hasta 10-12 eventos y reemplazar descartadas, ANTES de seleccionar patas definitivas. Si es insuficiente, usa sports_chat_ticket_evidence_priced_auto como recuperación por evento exacto de ESPN y coteja las fuentes por ID, equipo, fecha y casa; ESPN observedAt reciente es precio observado útil para investigación aunque no haya bookmaker updatedAt. Entrega UNA tarjeta final de investigación solo con exactamente las patas verificadas; si no hay cinco precios genuinos, muestra la evidencia parcial y las razones, sin inventarlos, y termina sin bucle de progreso.',
