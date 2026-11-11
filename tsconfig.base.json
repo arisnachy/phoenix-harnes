@@ -41,6 +41,8 @@
       "@phoenix-ai/dsh-invariants": ["./packages/runtime-diagnostics/invariants/src/index.ts"],
       "@phoenix-ai/dsh-hardness": ["./packages/hardness/hardness/src"],
       "@phoenix-ai/dsh-hardness-adapters": ["./packages/hardness/adapters/src"],
+      "@phoenix-ai/dsh-healthia-local": ["./packages/health/healthia-local/src/index.ts"],
+      "@phoenix-ai/dsh-tool-healthia": ["./packages/health/tool-healthia/src/index.ts"],
       "@phoenix-ai/dsh-voice": ["./packages/voice/voice/src/index.ts"],
       "@phoenix-ai/dsh-voice/invariant": ["./packages/voice/voice/src/invariant.ts"],
       "@phoenix-ai/dsh-voice-local": ["./packages/voice/voice-local/src/index.ts"],
