@@ -64,6 +64,16 @@ PHOENIX starts with the `openrouter/free` model route selected. Create an [OpenR
 
 The provider, key, endpoint, model catalog, and active model are managed from the Web UI. Free models are intended for testing and remain subject to OpenRouter availability and rate limits.
 
+### Use Google Gemini inside Kira (independent provider)
+
+PHOENIX includes the `google` model route through the existing `llm-pi-ai` adapter. Pick a supported Gemini model from the normal chat model selector; Kira retains the PHOENIX conversation history, shared tool pipeline, approvals, voice/UI integration, and model-independent features. This route does **not** use Codex's Eclipse router or Google Workspace OAuth permissions.
+
+1. Generate a **Gemini API key** in [Google AI Studio](https://aistudio.google.com/apikey), choosing a project with no billing enabled if you want Google's eligible free-tier limits only.
+2. Open **Settings → Models → Google** in PHOENIX, add the Gemini key using the secure credential interface (or configure `GEMINI_API_KEY` in the host environment), and save.
+3. Use the chat composer model selector to choose `google` and a model from the adapter's installed catalog. The actual supported models and quotas depend on the provider and account; a catalog entry is not proof that a given account may use that model.
+
+A Google/Antigravity **personal account subscription** is not interchangeable with a Gemini Developer API credential: Google's consumer terms disallow wrapping `agy -p` or its account OAuth to provide models to arbitrary third-party agents such as PHOENIX. PHOENIX does not import Antigravity account tokens, bypass product restrictions, or silently switch to paid billing. For development-focused editor ACP integration, use the separately documented Google-supported `agy acp` protocol in an eligible editor context.
+
 ### Connect ChatGPT / Codex
 
 PHOENIX keeps OpenAI API-key authentication separate from ChatGPT subscription authentication. The native Codex bridge uses the official Codex app-server managed ChatGPT login, so Codex owns OAuth persistence and token refresh. PHOENIX does not ask for a ChatGPT password and does not parse, copy, or persist ChatGPT OAuth tokens.
