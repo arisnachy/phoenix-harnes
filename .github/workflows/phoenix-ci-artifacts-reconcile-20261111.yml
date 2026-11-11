@@ -1,4 +1,5 @@
 name: PHOENIX CI generated artifacts (one-shot repair)
+# Reconcile HealthIA Cordis subsystem partition ownership
 # Replay source-derived catalog generation after HealthIA contract fixes.
 on:
   push:
