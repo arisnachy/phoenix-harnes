@@ -280,7 +280,7 @@ export async function evidencePricedTicket(
       const updated=Date.parse(q.updatedAt)
       const delayedSource=q.source==='TheRundown'||q.source==='SportsGameOdds'
       const observedAt=Date.parse(q.observedAt??'')
-      const espnObserved=q.source?.startsWith('ESPN Site/Core')===true
+      const espnObserved=q.source?.startsWith('ESPN ')===true
       const currentSnapshot=Number.isFinite(observedAt)&&observedAt<=now&&
         now-observedAt<=15*60_000&&(delayedSource||espnObserved)
       const validBookTime=Number.isFinite(updated)&&updated<=now&&
@@ -364,7 +364,7 @@ export async function evidencePricedTicket(
     const expectedMarket=doubleChance?'double_chance':event.sport==='soccer'?'1x2':'h2h'
     return all.filter(q=>{
       const updated=Date.parse(q.updatedAt),quoteKickoff=Date.parse(q.time)
-      const espnObserved=q.source?.startsWith('ESPN Site/Core')===true
+      const espnObserved=q.source?.startsWith('ESPN ')===true
       const observedAt=Date.parse(q.observedAt??'')
       const snapshotValid=Number.isFinite(observedAt)&&observedAt<=now&&
         now-observedAt<=15*60_000

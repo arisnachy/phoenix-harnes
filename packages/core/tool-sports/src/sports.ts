@@ -1,5 +1,7 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
 import { fetchPublicEspnOddsDetailed } from './espn-odds.ts'
+import {fetchEspnScoreboardWithFallback} from './espn-nfl-weekly.ts'
+import {fetchEspnWebsiteOdds} from './espn-website-odds.ts'
 import { fetchTheOddsApi } from './free-odds.ts'
 import {fetchTheRundownOdds,fetchSportsGameOdds,rundownSupports,sportsGameSupports} from './open-odds-providers.ts'
 import { keylessEnabled, keylessOdds, type KeylessSport } from './keyless-odds.ts'
@@ -264,7 +266,8 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
     }
   }else{
     if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración PHOENIX_SPORTS_ESPN_DISABLED=1.')
-    const feed=await getFeed<{ events?:FeedEvent[] }>('https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+'/scoreboard?dates='+day.replaceAll('-',''),fetcher)
+    const feed=await fetchEspnScoreboardWithFallback(sport,league,day.replaceAll('-',''),
+      uri=>getFeed<{events?:FeedEvent[]}>(uri,fetcher))
     if(!Array.isArray(feed.events))throw Error('Respuesta ESPN no válida')
     for(const e of feed.events.slice(0,25)){
       const comp=e.competitions?.[0],home=comp?.competitors?.find(x=>x.homeAway==='home'),away=comp?.competitors?.find(x=>x.homeAway==='away')
@@ -502,6 +505,35 @@ export async function marketOddsDetailed(
       ...(provider==='ESPN Site/Core'?{rawCount:espnRawCount,
         startedOddsEntries:espnStarted,undatedOutcomes:espnUndated,
         expiredOutcomes:espnExpired}:{})})
+  }
+  // Last-resort public ESPN Website reader: only structured, sportsbook-named
+  // markets reconciled to the official future event become observable odds.
+  if(hasSportsPermission('espn',env)&&env.PHOENIX_SPORTS_ESPN_WEB_DISABLED!=='1'&&
+    markets.split(',').some(m=>!merged.some(q=>
+      q.source?.startsWith('ESPN Site/Core')&&q.market===m))){
+    try{
+      const web=await fetchEspnWebsiteOdds(sportKey,markets,fetcher,
+        <T>(uri:string)=>getFeed<T>(uri,fetcher),now)
+      let count=0
+      for(const quote of web.quotes){
+        if(!quote.eventId||!quote.bookmaker||!quote.selection||
+          !Number.isFinite(quote.price)||quote.price<=1||quote.price>=1000)continue
+        const key=[sportKey,quote.eventId,quote.bookmaker,
+          quote.market,quote.selection,quote.point??''].join('|')
+        if(identity.has(key))continue
+        identity.add(key)
+        merged.push({...quote,sportKey,source:'ESPN Website (HTML cotejado)',
+          observedAt:web.checkedAt})
+        count++
+      }
+      sources.push({provider:'ESPN Website',count,
+        status:count?'observed':web.status==='blocked'||web.status==='unavailable'?
+          'error':'empty',
+        detail:(web.detail+' · '+(web.url??'')).slice(0,340)})
+    }catch(error){
+      sources.push({provider:'ESPN Website',count:0,status:'error',
+        detail:String(error instanceof Error?error.message:error).slice(0,340)})
+    }
   }
   for(const name of names)if(!configured.has(name)){
     sources.push({provider:name,status:'unconfigured',count:0,

@@ -1,3 +1,4 @@
+import {fetchEspnScoreboardWithFallback} from './espn-nfl-weekly.ts'
 /**
  * Keyless ESPN betting-market observations.
  * These are informal publicly reachable ESPN JSON fields, not a sportsbook API.
@@ -17,7 +18,7 @@ export interface EspnMarketQuote {
   updatedAt: string
   /** Successful ESPN feed observation. NEVER substitute for last price change. */
   observedAt?: string
-  endpointSource?:'scoreboard'|'core'|'summary'
+  endpointSource?:'scoreboard'|'core'|'summary'|'website'
 }
 type QuotedPrice=number|string|{american?:string|number;decimal?:string|number;
   value?:string|number;alternateDisplayValue?:string|number}
@@ -377,7 +378,8 @@ export async function fetchPublicEspnOddsDetailed(
     diagnostics.datesQueried.push(date)
     let board:ESPNBoard
     try{
-      board=await read(siteBase+'scoreboard?dates='+date) as ESPNBoard
+      board=await fetchEspnScoreboardWithFallback(route[0],route[1],date,
+          url=>read(url) as Promise<ESPNBoard>,options.eventId)
       diagnostics.scoreboards++
       if(!Array.isArray(board.events))throw Error('Scoreboard ESPN sin lista events')
     }catch(error){reportFailure('Scoreboard '+date,error);continue}

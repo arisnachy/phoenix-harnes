@@ -58,7 +58,7 @@ export function quoteSideNoVig(
   const outcomes=['h2h','home_away','moneyline','match_winner'].includes(offered.market)?2:
     offered.market==='1x2'?3:0
   if(!outcomes)return null
-  const isEspn=offered.source.startsWith('ESPN Site/Core')
+  const isEspn=offered.source.startsWith('ESPN ')
   const at=Date.parse(isEspn?(offered.observedAt??''):offered.updatedAt)
   const kickoff=Date.parse(offered.time)
   if(!Number.isFinite(at)||!Number.isFinite(kickoff)||at>now||kickoff<=now||
