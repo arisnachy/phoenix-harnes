@@ -76,3 +76,37 @@ test('does not falsely attribute stale league injury to a team after athlete tra
   assert.equal(report.injuries[0].status,'Day-to-day')
   assert.ok(report.limitations.some(x=>x.includes('plantilla actual')))
 })
+
+test('NBA deep research returns verified ESPN roster headshots without guessing avatars',async()=>{
+  const nba='https://site.api.espn.com/apis/site/v2/sports/basketball/nba/'
+  const fetcher=async url=>{
+    const u=String(url)
+    if(u===nba+'summary?event=8888')return new Response(JSON.stringify({
+      header:{competitions:[{date:'2026-11-11T23:00:00Z',competitors:[
+        {team:{id:'2',displayName:'Boston Celtics',abbreviation:'BOS'}},
+        {team:{id:'15',displayName:'Milwaukee Bucks',abbreviation:'MIL'}},
+      ]}]},
+    }))
+    if(u===nba+'teams/2/roster')return new Response(JSON.stringify({athletes:[
+      {id:'4066354',displayName:'Payton Pritchard',position:{abbreviation:'G'},
+        headshot:{href:'https://a.espncdn.com/i/headshots/nba/players/full/4066354.png'}},
+      {id:'1111',displayName:'Player without photo'},
+      {id:'3333',displayName:'Injected portrait',headshot:{href:'https://not-espn.example/steal.png'}},
+    ]}))
+    if(u===nba+'teams/15/roster')return new Response(JSON.stringify({athletes:[
+      {id:'9999',displayName:'Bucks athlete',headshot:{href:'https://a.espncdn.com/i/headshots/nba/players/full/9999.png'}},
+    ]}))
+    return new Response(JSON.stringify({}))
+  }
+  const report=await investigateEventDeep('basketball','nba','8888',fetcher,now)
+  assert.equal(report.teams.length,2)
+  const boston=report.teams.find(x=>x.id==='2')
+  assert.equal(boston?.rosterPortraits.length,3)
+  assert.equal(boston?.rosterPortraits[0]?.id,'4066354')
+  assert.equal(boston?.rosterPortraits[0]?.headshot,
+    'https://a.espncdn.com/i/headshots/nba/players/full/4066354.png')
+  assert.equal(boston?.rosterPortraits[1]?.headshot,null)
+  assert.equal(boston?.rosterPortraits[2]?.headshot,null)
+  assert.equal(report.teams.find(x=>x.id==='15')?.rosterPortraits.length,1)
+  assert.deepEqual(report.injuries,[])
+})
