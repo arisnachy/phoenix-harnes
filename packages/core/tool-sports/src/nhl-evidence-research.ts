@@ -28,7 +28,13 @@ export type HockeyMarket={bookmaker:string;market:string;selection:string;point:
 export type HockeyTeamForm={games:number;wins:number;losses:number;
   homeGames:number;awayGames:number;restHours:number|null;
   last10:Array<{date:string;opponent:string;goalsFor:number;goalsAgainst:number}>}
+export type NhlSpecialTeamsSide={powerPlayPct:number|null;penaltyKillPct:number|null}
+export type NhlSpecialTeams={
+  home:NhlSpecialTeamsSide;away:NhlSpecialTeamsSide
+  complete:boolean;source:'NHL Stats REST';checkedAt:string
+}
 export type HockeyDossier={fixture:HockeyFixture;checkedAt:string;sources:HockeyEvidenceSource[];
+  specialTeams:NhlSpecialTeams;
   players:{home:HockeyPlayer[];away:HockeyPlayer[]};
   goalieCandidates:{home:HockeyPlayer[];away:HockeyPlayer[]};
   possibleMatchups:Array<{attackerId:string;attacker:string;againstGoalies:string[];source:'roster-only'}>;
@@ -74,6 +80,36 @@ export async function nhlSlate(date:string,fetcher:typeof fetch=fetch,now=Date.n
   const unique=new Map(games.map(g=>[g.id,g]))
   return{date,games:[...unique.values()].sort((a,b)=>a.date.localeCompare(b.date)),
     sources,globalCoverage:false}
+}
+/** Only league-reported percentages count; shots, roster entries and goals
+ * do NOT substitute for PP/PK or for private 5v5 xG / GSAx.
+ */
+export function parseNhlSpecialTeams(
+  fixture:Pick<HockeyFixture,'home'|'away'>,
+  powerplay:unknown,penaltykill:unknown,now=Date.now(),
+):NhlSpecialTeams{
+  const metric=(payload:unknown,teamId:string,names:readonly string[]):number|null=>{
+    const record=arr(o(payload).data).map(o).find(item=>id(item.teamId)===teamId)
+    if(!record)return null
+    for(const name of names){
+      const value=record[name]
+      if(typeof value!=='string'&&typeof value!=='number')continue
+      const numeric=Number(value)
+      if(!Number.isFinite(numeric)||numeric<0||numeric>100)continue
+      return Number((numeric<=1?numeric*100:numeric).toFixed(2))
+    }
+    return null
+  }
+  const side=(teamId:string):NhlSpecialTeamsSide=>({
+    powerPlayPct:metric(powerplay,teamId,['powerPlayPct','ppPct']),
+    penaltyKillPct:metric(penaltykill,teamId,['penaltyKillPct','pkPct']),
+  })
+  const home=side(fixture.home.id),away=side(fixture.away.id)
+  return{home,away,complete:[
+    home.powerPlayPct,home.penaltyKillPct,
+    away.powerPlayPct,away.penaltyKillPct,
+  ].every(value=>value!==null),source:'NHL Stats REST',
+    checkedAt:new Date(now).toISOString()}
 }
 function teamRoster(v:unknown,team:string):HockeyPlayer[]{
   const players=new Map<string,HockeyPlayer>()
@@ -168,6 +204,14 @@ function dashboard(d:Omit<HockeyDossier,'uiBlock'>):HockeyDossier['uiBlock']{
       label:p.team+' · '+p.name,value:'Candidato en roster (no confirmado)',
       detail:Object.entries(p.stats).map(([k,v])=>k+': '+v).slice(0,6).join(' · ')||
         'Estadísticas no disponibles'+(p.last5.length?' · reciente: '+p.last5[0]?.summary:'')})))
+  add('Unidades especiales · estadísticas oficiales NHL',
+    (['home','away'] as const).map(side=>{
+      const team=d.fixture[side],v=d.specialTeams[side]
+      return{label:team.name,value:
+        'PP '+(v.powerPlayPct===null?'no verificado':v.powerPlayPct+'%')+
+        ' · PK '+(v.penaltyKillPct===null?'no verificado':v.penaltyKillPct+'%'),
+        detail:'NHL Stats REST · temporada de este encuentro; no es xG ni predicción'}
+    }))
   add('Tabla NHL',[{label:d.fixture.home.name,value:d.standings.home},
     {label:d.fixture.away.name,value:d.standings.away}])
   add('Últimos partidos y descanso',(['home','away'] as const).map(side=>{
@@ -209,13 +253,20 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
   if(!['FUT','PRE'].includes(fixture.state)||Date.parse(fixture.date)<=now)
     throw Error('El expediente pregame necesita juego futuro sin iniciar')
   const sources=slate.sources,base='https://api-web.nhle.com/v1/'
-  const [h,a,standings,homeSchedule,awaySchedule]=await Promise.all([
+  const season=/^\d{8}$/u.test(fixture.season)?fixture.season:null
+  const statsQuery=season?'?cayenneExp='+encodeURIComponent(
+    'seasonId='+season+' and gameTypeId=2')+'&limit=100':null
+  const stats='https://api.nhle.com/stats/rest/en/team/'
+  const [h,a,standings,homeSchedule,awaySchedule,pp,pk]=await Promise.all([
     source<unknown>(base+'roster/'+fixture.home.abbrev+'/current',fetcher,sources,now),
     source<unknown>(base+'roster/'+fixture.away.abbrev+'/current',fetcher,sources,now),
     source<unknown>(base+'standings/'+date,fetcher,sources,now),
     source<unknown>(base+'club-schedule-season/'+fixture.home.abbrev+'/now',fetcher,sources,now),
     source<unknown>(base+'club-schedule-season/'+fixture.away.abbrev+'/now',fetcher,sources,now),
+    statsQuery?source<unknown>(stats+'powerplay'+statsQuery,fetcher,sources,now):Promise.resolve(null),
+    statsQuery?source<unknown>(stats+'penaltykill'+statsQuery,fetcher,sources,now):Promise.resolve(null),
   ])
+  const specialTeams=parseNhlSpecialTeams(fixture,pp,pk,now)
   const players={home:teamRoster(h,fixture.home.abbrev),
     away:teamRoster(a,fixture.away.abbrev)}
   const selected=[...(['home','away'] as const).flatMap(side=>{
@@ -258,7 +309,9 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
     'Ningún portero confirmado por una fuente de alineación o morning skate',
     'Líneas 1–4 y parejas defensivas sin evidencia de shifts',
     '5v5 xG, calidad de tiros, GSAx y cara a cara reales sin fuente autorizada',
-    'Power play y penalty kill por unidad no verificados',
+    ...(!specialTeams.complete?[
+      'Power play y penalty kill oficiales: faltan porcentajes PP/PK de uno o ambos equipos',
+    ]:[]),
     'Lesiones, scratches y suspensiones sin reporte oficial reciente',
     'Fatiga individual de porteros, desplazamientos y carga de turnos sin fuente completa',
     'Liquidación 60 min, OT y shootout depende de las reglas de cada casa',
@@ -272,7 +325,7 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
     goalies.home.length>0&&goalies.away.length>0
   const dossier:Omit<HockeyDossier,'uiBlock'>={fixture,checkedAt:new Date(now).toISOString(),
     sources,players,goalieCandidates:goalies,possibleMatchups,standings:viewStandings,form,
-    markets,scenarios,missingEvidence,
+    specialTeams,markets,scenarios,missingEvidence,
     opportunity:{sport:'hockey',league:'nhl',eventId:fixture.id,
       decision:ready?'investigate':'abstain',eligibleForTicket:false,
       calibratedProbability:false}}

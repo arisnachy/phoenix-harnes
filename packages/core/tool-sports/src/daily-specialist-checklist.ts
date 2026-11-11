@@ -37,7 +37,7 @@ const definitions:Readonly<Record<string,readonly Requirement[]>>={
   hockey:[...common,
     {key:'rosters',title:'Jugadores y defensa de ambos equipos',critical:true},
     {key:'goalies',title:'Dos porteros titulares CONFIRMADOS (no candidatos)',critical:true},
-    {key:'xg',title:'xG 5 contra 5, tiros de calidad y GSAx',critical:true},
+    {key:'xg',title:'xG 5 contra 5, tiros de calidad y GSAx (investigación avanzada)',critical:false},
     {key:'special',title:'Power play, penalty kill y enfrentamientos',critical:true},
     {key:'injuries',title:'Lesiones, scratches y suspensiones actuales',critical:true}],
   baseball:[...common,

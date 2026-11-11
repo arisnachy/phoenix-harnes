@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {nhlSlate,investigateNhl} from '../src/nhl-evidence-research.ts'
+import {nhlSlate,investigateNhl,parseNhlSpecialTeams} from '../src/nhl-evidence-research.ts'
 import {settleNhlMarket} from '../src/nhl-market-settlement.ts'
 const now=Date.parse('2026-11-02T11:00:00Z'),date='2026-11-05'
 const game={id:2026020201,startTimeUTC:'2026-11-05T23:00:00Z',gameState:'FUT',
@@ -15,7 +15,7 @@ const mkRoster=(abbr,offset)=>({
   goalies:Array.from({length:2},(_,i)=>({id:offset+50+i,firstName:{default:'Goalie'},
     lastName:{default:abbr+' '+i},positionCode:'G'})),
 })
-function fake({started=false,missingAway=false,empty=false}={}){
+function fake({started=false,missingAway=false,empty=false,withSpecial=false}={}){
   const calls=[]
   const fetcher=async x=>{
     const url=String(x),u=new URL(url);calls.push(url)
@@ -35,6 +35,13 @@ function fake({started=false,missingAway=false,empty=false}={}){
     }else if(u.pathname==='/v1/standings/'+date)
       body={standings:[{teamAbbrev:{default:'TOR'},wins:11,losses:4,otLosses:2},
         {teamAbbrev:{default:'MTL'},wins:9,losses:6,otLosses:1}]}
+    else if(u.hostname==='api.nhle.com'&&withSpecial){
+      const powerplay=u.pathname.endsWith('/powerplay')
+      body={data:[{teamId:10,[powerplay?'powerPlayPct':'penaltyKillPct']:
+        powerplay?0.251:0.838},
+        {teamId:20,[powerplay?'powerPlayPct':'penaltyKillPct']:
+          powerplay?0.19:0.77}]}
+    }
     else if(u.pathname.includes('/player/')&&u.pathname.endsWith('/landing'))
       body={featuredStats:{regularSeason:{subSeason:{goals:10,assists:7,
         points:17,shots:42,savePctg:0.916,goalsAgainstAvg:2.4}}},
@@ -118,4 +125,30 @@ test('puck line and totals handle regulation period and half/whole lines',()=>{
     pick:'home',line:-1.5}).status,'loss')
   assert.throws(()=>settleNhlMarket(final,{kind:'total',period:'regulation',
     pick:'over',line:4.25}),/Línea/)
+})
+
+test('NHL official season PP and PK are measured for both teams without inventing xG',async()=>{
+  const api=fake({withSpecial:true})
+  const result=await investigateNhl(date,'2026020201',api.fetcher,now,[],2)
+  assert.equal(result.specialTeams.complete,true)
+  assert.equal(result.specialTeams.home.powerPlayPct,25.1)
+  assert.equal(result.specialTeams.home.penaltyKillPct,83.8)
+  assert.equal(result.specialTeams.away.powerPlayPct,19)
+  assert.equal(result.specialTeams.away.penaltyKillPct,77)
+  assert.ok(api.calls.some(u=>u.includes('/team/powerplay?')))
+  assert.ok(api.calls.some(u=>u.includes('/team/penaltykill?')))
+  assert.ok(result.missingEvidence.some(x=>x.includes('5v5 xG')))
+  assert.equal(result.goalieCandidates.home[0].starterConfirmed,false)
+})
+test('NHL special-teams metrics require same official team ids and all four values',()=>{
+  const fixture={home:{id:'10'},away:{id:'20'}}
+  const report=parseNhlSpecialTeams(fixture,
+    {data:[{teamId:10,powerPlayPct:0.25},{teamId:99,powerPlayPct:0.9}]},
+    {data:[{teamId:20,penaltyKillPct:0.78}]},now)
+  assert.equal(report.complete,false)
+  assert.equal(report.home.powerPlayPct,25)
+  assert.equal(report.away.powerPlayPct,null)
+  assert.equal(report.home.penaltyKillPct,null)
+  assert.equal(report.away.penaltyKillPct,78)
+  assert.equal(parseNhlSpecialTeams(fixture,null,null,now).complete,false)
 })
