@@ -4,6 +4,23 @@ English | [中文](README.zh.md)
 
 Native chat-only sports tools for Kira: sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, and sports_chat_ticket. Sports questions use the existing conversation, not a menu. The assistant receives attributed data and declarative sports_game_card or sports_ticket_card blocks to show inside validated generative-ui fences.
 
+## Open web research and editorial ticket
+
+Sports-only system guidance in `src/sports-open-research-guidance.ts` treats ESPN,
+official league feeds, sports APIs, and the configured sports source registry as
+starting points rather than a closed list. If general web search and web reading
+tools are available in the active agent session, Kira can discover other lawful,
+relevant sources per fixture and check conflicting facts independently. This
+guidance does not silently create a search connector, override source access
+restrictions, or assert that an indexed headline has been read.
+
+The native `sports_ticket_card` keeps the verified machine-readable legs,
+prices, team identities and `chatNarrative`. The client surfaces each leg's
+individual rationale, favorable and adverse evidence, and up to three linked
+verified or partial sources before the detailed expandable research checklist.
+A missing source URL is not turned into a clickable citation. An unpriced
+research ticket never becomes a bookmaker-confirmed wager.
+
 ## ESPN Core / historial de cuotas
 
 Manual de las 14 rutas, movimiento, históricos y procedimientos de Kira: [ESPN_HISTORICOS.md](ESPN_HISTORICOS.md). El recuperador por fecha usa sports_chat_espn_historical_odds y nunca mezcla cuotas antiguas con apuestas vigentes.
