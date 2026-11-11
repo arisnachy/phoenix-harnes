@@ -72,6 +72,9 @@ test('rejects stale odds, wrong sports, noncomplementary spreads and started fix
   assert.equal(result.complete,false)
   assert.equal(result.selected.length,0)
   assert.ok(result.rejectedQuotes>=6)
+  assert.equal(result.matchDiagnostics.invalidQuote,4)
+  assert.equal(result.matchDiagnostics.unmatchedFixture,2)
+  assert.equal(result.matchDiagnostics.invalidMarketSides,1)
 })
 
 test('soccer h2h requires a real draw quote and never turns 1x2 into two outcomes',()=>{
