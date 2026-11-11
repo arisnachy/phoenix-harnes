@@ -68,10 +68,12 @@ test('six-legged evidence path quotes only same bookmaker and preserves the requ
   assert.equal(complete.complete,true)
   assert.equal(complete.priced,true)
   assert.equal(complete.approvedLegs,0,'uncalibrated specialists cannot approve bets')
+  assert.equal(complete.candidateLegs,5)
+  assert.equal(complete.ticketReadyForReview,true)
   assert.equal(complete.researchedLegs,5)
   assert.equal(complete.decisionAudit.legs.length,5)
-  assert.ok(complete.decisionAudit.legs.every(x=>x.verdict==='hold'))
-  assert.equal(complete.card.props.legs[0].decisionReview.verdict,'hold')
+  assert.ok(complete.decisionAudit.legs.every(x=>x.verdict==='caution'))
+  assert.equal(complete.card.props.legs[0].decisionReview.verdict,'caution')
   assert.equal(complete.card.props.decisionAudit.approvedForBetting,false)
   assert.equal(complete.card.props.legs.length,5)
   assert.equal(complete.card.props.legs[0].legProbabilitySource,'exploratory-recent-form')
@@ -332,8 +334,10 @@ test('missing specialist data creates a visible conditional ticket when ESPN and
   assert.equal(result.specialistChecks.length,5)
   assert.ok(result.specialistChecks.some(x=>x.status!=='researched'))
   assert.ok(result.card.props.legs.every(x=>x.researchStatus==='conditional'))
-  assert.match(result.card.props.subtitle,/TICKET CONDICIONAL/)
-  assert.match(result.explanation,/TICKET CONDICIONAL/)
+  assert.match(result.card.props.subtitle,/BOLETO DE INVESTIGACIÓN/)
+  assert.match(result.explanation,/ADVERTENCIA DE INVESTIGACIÓN/)
+  assert.equal(result.candidateLegs,5)
+  assert.equal(result.ticketReadyForReview,true)
 })
 test('explicit team identity conflict still blocks attaching odds to the wrong fixture',async()=>{
   const wrongTeams=async games=>games.map(game=>({
@@ -432,7 +436,7 @@ test('partial 4/5 ticket recomputes market evidence and separate counts after qu
   assert.equal(result.decisionAudit.legs[4].bookmakerBreakEvenPct,null)
   assert.deepEqual(result.card.props.dataCounts,{
     eventsFound:5,quotedLegs:4,researchedLegs:5,
-    conditionalLegs:5,approvedForBetting:0,
+    candidateLegs:4,conditionalLegs:5,approvedForBetting:0,
   })
   assert.deepEqual(result.card.props.decisionAudit,result.decisionAudit)
 })

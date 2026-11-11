@@ -73,14 +73,21 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
     if(input.modelStatus==='contradiction'){
       verdict='hold'
       reasons.push('ESPERAR: un modelo externo discrepa del ganador; investigar la contradicción.')
+    }else if(breakEven===null){
+      verdict='hold'
+      reasons.push('ESPERAR: falta una cuota positiva cotejada para esta selección.')
     }else if(input.specialistStatus!=='researched'||!input.checklistComplete||
       input.criticalPending.length>0){
-      verdict='hold'
-      reasons.push('ESPERAR: expediente especializado incompleto ('+
-        input.criticalPending.length+' pasos críticos pendientes).')
-    }else if(share===null||breakEven===null){
-      verdict='hold'
-      reasons.push('ESPERAR: faltan ambas caras del mercado de la misma casa y cuota vigente.')
+      // A genuinely matched price remains viewable as a RESEARCH candidate.
+      // Missing lineups/statistics require caution, not an invented fifth leg
+      // or an automatic veto of the entire quoted study ticket.
+      verdict='caution'
+      reasons.push('PRECAUCIÓN: cuota observada, expediente especializado incompleto ('+
+        input.criticalPending.length+' pasos críticos pendientes); confirmar antes de apostar.')
+    }else if(share===null){
+      verdict='caution'
+      reasons.push('PRECAUCIÓN: existe cuota cotejada pero falta la cara contraria '+
+        'de la misma casa para calcular la participación sin margen.')
     }else if(share<policy.excludeBelow){
       verdict='caution'
       reasons.push('PRECAUCIÓN ALTA: cuota con '+pct(share)+
@@ -93,6 +100,10 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
       verdict='candidate'
       reasons.push('CANDIDATA A COMPARACIÓN: investigación documentada; precio no demuestra valor.')
     }
+    if(share!==null&&share<policy.excludeBelow&&
+      !reasons.some(reason=>reason.includes('PRECAUCIÓN ALTA')))
+      reasons.push('PRECAUCIÓN ALTA: participación de mercado sin margen '+
+        pct(share)+'%; este umbral es descriptivo, no una predicción calibrada.')
     if(input.modelStatus==='unavailable')
       reasons.push('Sin segunda opinión de modelo externo verificada.')
     if(input.sport==='hockey'&&input.criticalPending.some(step=>/portero|goalie/iu.test(step)))
