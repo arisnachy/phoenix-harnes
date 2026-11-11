@@ -66,3 +66,21 @@ test('verified research works for soccer and includes draws, margins, rest, miss
   assert.match(out.note,/no cuotas/)
   await assert.rejects(()=>researchSport('soccer','fake',today,mock,now),/catálogo/)
 })
+
+test('future final-looking soccer results in a historical partition cannot leak into pregame form',async()=>{
+  const now=Date.parse('2026-10-28T12:00:00Z')
+  const mock=async url=>{
+    const day=String(url).split('dates=')[1]
+    const events=day==='20261028'?
+      [match(999,'2026-10-28T23:00:00Z','pre',null,null)]:
+      day==='20261027'?
+        [match(700,'2026-10-28T19:00:00Z','post',9,0),
+          match(701,'2026-10-27T19:00:00Z','post',2,1)]:[]
+    return new Response(JSON.stringify({events}))
+  }
+  const out=await researchSport('soccer','eng.1','2026-10-28',mock,now,{},2)
+  assert.equal(out.matches.length,1)
+  assert.equal(out.matches[0].home.completedGames,1)
+  assert.equal(out.matches[0].home.wins,1)
+  assert.ok(out.matches[0].home.lastResults.every(g=>Date.parse(g.date)<now))
+})
