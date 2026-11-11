@@ -16,6 +16,10 @@ const MARKET_SET=new Set(['h2h','1x2','double_chance','totals','spreads','btts',
 const key=(row:MarketOutcome)=>[row.sportKey??'',row.eventId,row.bookmaker,
   row.market.toLowerCase(),row.market.toLowerCase()==='spreads'&&typeof row.point==='number'
     ?Math.abs(row.point):row.point??''].join('|')
+/** ESPN publication time is observation, not proof a bookmaker accepts the bet. */
+const observedTime=(row:MarketOutcome):number=>
+  row.source?.startsWith('ESPN')&&row.observedAt?
+    Date.parse(row.observedAt):Date.parse(row.updatedAt)
 export function compareBettingMarkets(
   source:readonly MarketOutcome[],now=Date.now(),maxAgeMs=60*60*1000,
 ):{markets:MarketComparison[];rejected:number;warning:string}{
@@ -23,7 +27,7 @@ export function compareBettingMarkets(
   let rejected=0
   for(const row of source.slice(0,1500)){
     const market=row.market.toLowerCase()
-    const at=Date.parse(row.updatedAt),kickoff=Date.parse(row.timeIso??row.time)
+    const at=observedTime(row),kickoff=Date.parse(row.timeIso??row.time)
     if(!MARKET_SET.has(market)||!Number.isFinite(row.price)
       ||row.price<=1||row.price>1000||!row.bookmaker.trim()||!row.selection.trim()
       ||!Number.isFinite(at)||at>now||now-at>maxAgeMs
@@ -38,7 +42,7 @@ export function compareBettingMarkets(
   for(const rows of groups.values()){
     const initial=rows[0]
     if(!initial)continue
-    const stamps=rows.map(r=>Date.parse(r.updatedAt))
+    const stamps=rows.map(observedTime)
     // A pair is not a simultaneous quoted market if its two prices were
     // captured far apart. Reject rather than fabricate a coherent no-vig pair.
     if(Math.max(...stamps)-Math.min(...stamps)>10*60_000){rejected+=rows.length;continue}
@@ -76,7 +80,7 @@ export function compareBettingMarkets(
       event:initial.away+' vs '+initial.home,market:initial.market,
       bookmaker:initial.bookmaker,source:initial.source??'',
       selections:shares,totalBookOverround:complete?Number((sum-1).toFixed(5)):null,
-      freshnessMinutes:Number(((now-Date.parse(initial.updatedAt))/60000).toFixed(1)),
+      freshnessMinutes:Number(((now-observedTime(initial))/60000).toFixed(1)),
       observation:'market-pricing-only',
     })
   }

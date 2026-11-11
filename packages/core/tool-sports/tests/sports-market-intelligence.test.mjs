@@ -85,3 +85,23 @@ test('never derive no-vig percentages from separated quotes or mixed providers',
   assert.equal(coherent.markets[0].selections.length,2)
   assert.ok(coherent.markets[0].selections.every(q=>q.noVigShare!==null))
 })
+
+
+test('ESPN fresh observation is accepted without bookmaker updatedAt',()=>{
+  const espn={...base,source:'ESPN Site/Core',market:'h2h',point:null,
+    updatedAt:'',observedAt:'2026-10-29T13:59:00Z'}
+  const data=compareBettingMarkets([
+    {...espn,selection:'Home',price:1.65},
+    {...espn,selection:'Away',price:2.3},
+  ],now)
+  assert.equal(data.markets.length,1)
+  assert.equal(data.markets[0].freshnessMinutes,1)
+  assert.equal(data.rejected,0)
+  assert.ok(data.markets[0].selections.every(x=>x.noVigShare!==null))
+  const old=compareBettingMarkets([
+    {...espn,observedAt:'2026-10-28T10:00:00Z',selection:'Home',price:1.65},
+    {...espn,observedAt:'2026-10-28T10:00:00Z',selection:'Away',price:2.3},
+  ],now)
+  assert.equal(old.markets.length,0)
+  assert.equal(old.rejected,2)
+})
