@@ -1,4 +1,5 @@
 name: PHOENIX CI generated artifacts (one-shot repair)
+# Replay source-derived catalog generation after HealthIA contract fixes.
 on:
   push:
     branches:
