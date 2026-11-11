@@ -209,11 +209,20 @@ declare module '@phoenix-ai/cordis' {
   }
 
   interface Events {
-    /** A patient profile was created or updated. */
+    /** A patient profile was created or updated.
+     * @mode emit
+     * @param patient - The persisted patient profile after the change.
+     */
     'healthia/patient'(patient: Readonly<HealthPatient>): void
-    /** A canonical patient fact was durably recorded. */
+    /** A canonical patient fact was durably recorded.
+     * @mode emit
+     * @param record - The durable clinical record emitted after storage.
+     */
     'healthia/record'(record: Readonly<HealthRecord>): void
-    /** A clinical episode was opened or updated. */
+    /** A clinical episode was opened or updated.
+     * @mode emit
+     * @param episode - The persisted clinical episode after the change.
+     */
     'healthia/episode'(episode: Readonly<HealthEpisode>): void
   }
 }
@@ -232,23 +241,53 @@ export abstract class HealthiaService extends Service {
     super(ctx, 'healthia')
   }
 
-  /** List isolated patient profiles without returning clinical records. */
+  /** List isolated patient profiles without returning clinical records.
+   * @returns Patient profiles only, never clinical record contents.
+   */
   abstract listPatients(): Promise<readonly HealthPatient[]>
-  /** Resolve one patient profile or undefined. */
+  /** Resolve one patient profile or undefined.
+   * @param id - Patient identifier scoped to the owner-local record.
+   * @returns The matching patient profile or undefined if it does not exist.
+   */
   abstract getPatient(id: HealthPatientId): Promise<HealthPatient | undefined>
-  /** Create one patient profile. */
+  /** Create one patient profile.
+   * @param input - Validated demographics and identity fields for the new profile.
+   * @returns The newly persisted profile.
+   */
   abstract createPatient(input: CreateHealthPatientInput): Promise<HealthPatient>
-  /** Update demographics without changing patient identity. */
+  /** Update demographics without changing patient identity.
+   * @param id - Immutable patient identity.
+   * @param input - Allowed demographic updates.
+   * @returns Updated durable patient profile.
+   */
   abstract updatePatient(id: HealthPatientId, input: UpdateHealthPatientInput): Promise<HealthPatient>
-  /** Append one provenance-bearing canonical fact. */
+  /** Append one provenance-bearing canonical fact.
+   * @param input - Patient-scoped fact and its provenance.
+   * @returns Persisted canonical record with assigned identity.
+   */
   abstract addRecord(input: AddHealthRecordInput): Promise<HealthRecord>
-  /** Query facts belonging only to the named patient. */
+  /** Query facts belonging only to the named patient.
+   * @param id - Patient whose records may be read.
+   * @param query - Optional bounded filters for the record query.
+   * @returns Patient-scoped clinical facts matching the query.
+   */
   abstract listRecords(id: HealthPatientId, query?: HealthRecordQuery): Promise<readonly HealthRecord[]>
-  /** Open one longitudinal patient episode. */
+  /** Open one longitudinal patient episode.
+   * @param input - Initial episode details tied to a patient.
+   * @returns Persisted open episode.
+   */
   abstract openEpisode(input: OpenHealthEpisodeInput): Promise<HealthEpisode>
-  /** Update an existing episode. */
+  /** Update an existing episode.
+   * @param id - Identity of the longitudinal episode.
+   * @param input - Authorized changes to the episode.
+   * @returns Updated durable episode.
+   */
   abstract updateEpisode(id: HealthEpisodeId, input: UpdateHealthEpisodeInput): Promise<HealthEpisode>
-  /** Return a bounded longitudinal projection for reasoning. */
+  /** Return a bounded longitudinal projection for reasoning.
+   * @param id - Patient identity to scope the snapshot.
+   * @param options - Maximum record and episode counts.
+   * @returns Patient-specific bounded clinical history snapshot.
+   */
   abstract snapshot(id: HealthPatientId, options?: HealthSnapshotOptions): Promise<HealthPatientSnapshot>
 }
 

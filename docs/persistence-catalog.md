@@ -96,6 +96,17 @@ Sources: [`packages/core/session/src/types.ts:345`](../packages/core/session/src
 
 ### `agent/*`
 
+<a id="agentfenix-consult--log-only"></a>
+
+#### `agent/fenix-consult` — log-only
+
+```ts persistence-catalog
+/** One real bounded FÉNIX consultation per turn, durable across restarts. */
+'agent/fenix-consult': { readonly turn: number; readonly evidenceId: string; readonly teammateName: string }
+```
+
+Source: [`packages/subagent/tool-agent-team/src/index.ts:185`](../packages/subagent/tool-agent-team/src/index.ts)
+
 <a id="agentinboxspliced--log-only"></a>
 
 #### `agent/inbox/spliced` — log-only
@@ -129,7 +140,7 @@ Source: [`packages/core/agent/src/types.ts:19`](../packages/core/agent/src/types
 'agent/model-selection': ModelSelectionPreference
 ```
 
-Source: [`packages/core/agent/src/model-selection.ts:94`](../packages/core/agent/src/model-selection.ts)
+Source: [`packages/core/agent/src/model-selection.ts:95`](../packages/core/agent/src/model-selection.ts)
 
 ### `agent-preset/*`
 

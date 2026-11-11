@@ -100,7 +100,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/agent-default-model/src/index.ts:41`](../packages/core/agent-default-model/src/index.ts)
+Source: [`packages/core/agent-default-model/src/index.ts:137`](../packages/core/agent-default-model/src/index.ts)
 
 <a id="phoenix-aidsh-agent-instructions"></a>
 
@@ -148,6 +148,10 @@ export interface Config {
   maxParallelToolCalls?: number
   /** Maximum model/tool iterations in one turn; omission defaults to 64. */
   maxStepsPerTurn?: number
+  /** Output-limit continuations per human request (0 disables); default 3. */
+  autoContinueMaxSegments?: number
+  /** Provider route IDs eligible for automatic output-limit continuation. */
+  autoContinueProviders?: string[]
   /** Agents created or resumed at plugin startup. */
   agents: (AgentOptions & {
     /** Stable config label used in logs and as the fresh combined-id prefix. */
@@ -164,7 +168,7 @@ export interface Config {
 
 Depends on: [`AgentOptions`](subsystems/core.md) · [`SessionId`](subsystems/core.md)
 
-Source: [`packages/core/agent-loop/src/index.ts:266`](../packages/core/agent-loop/src/index.ts)
+Source: [`packages/core/agent-loop/src/index.ts:282`](../packages/core/agent-loop/src/index.ts)
 
 <a id="phoenix-aidsh-agent-presets"></a>
 
@@ -239,6 +243,12 @@ export interface Config {
   maxParallelToolCalls?: AgentLoopConfig['maxParallelToolCalls']
   /** Maximum model/tool steps in one turn before explicit continuation is required. */
   maxStepsPerTurn?: AgentLoopConfig['maxStepsPerTurn']
+  /** Number of automatic output-limit continuations allowed per human request. */
+  autoContinueMaxSegments?: AgentLoopConfig['autoContinueMaxSegments']
+  /** Provider route IDs eligible for automatic output-limit continuation. */
+  autoContinueProviders?: AgentLoopConfig['autoContinueProviders']
+  /** Allow the same user-requested conversation style as the system prompt. */
+  matureConversation?: SystemPromptConfig['matureConversation']
   /** Whether the system prompt includes the fixed Harness identity (default true). */
   includeHarnessIdentity?: SystemPromptConfig['includeHarnessIdentity']
   /** Whether model history includes dynamic runtime-context snapshots (default true). */
@@ -789,7 +799,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/hardness/adapters/src/index.ts:188`](../packages/hardness/adapters/src/index.ts)
+Source: [`packages/hardness/adapters/src/index.ts:205`](../packages/hardness/adapters/src/index.ts)
 
 <a id="phoenix-aidsh-headless"></a>
 
@@ -806,6 +816,24 @@ export interface Config {
 ```
 
 Source: [`packages/bundle/headless/src/index.ts:31`](../packages/bundle/headless/src/index.ts)
+
+<a id="phoenix-aidsh-healthia-local"></a>
+
+## `@phoenix-ai/dsh-healthia-local`
+
+Requires: `credentials`
+
+```ts config-catalog
+/** Local encrypted-store configuration. */
+export interface Config {
+  /** Owner-private encrypted HealthIA document. */
+  path: string
+  /** Credential reference containing the encryption secret. */
+  keyRef?: string
+}
+```
+
+Source: [`packages/health/healthia-local/src/index.ts:46`](../packages/health/healthia-local/src/index.ts)
 
 <a id="phoenix-aidsh-home-gateway"></a>
 
@@ -1392,7 +1420,7 @@ export type PiAiThinkingFormat = NonNullable<OpenAICompletionsCompat['thinkingFo
 
 Depends on: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`)
 
-Source: [`packages/llm/llm-pi-ai/src/config.ts:263`](../packages/llm/llm-pi-ai/src/config.ts)
+Source: [`packages/llm/llm-pi-ai/src/config.ts:283`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="phoenix-aidsh-llm-replay"></a>
 
@@ -1618,7 +1646,7 @@ export interface ReconnectConfig {
 }
 ```
 
-Source: [`packages/mcp/mcp-client/src/index.ts:151`](../packages/mcp/mcp-client/src/index.ts)
+Source: [`packages/mcp/mcp-client/src/index.ts:152`](../packages/mcp/mcp-client/src/index.ts)
 
 <a id="phoenix-aidsh-message-feedback"></a>
 
@@ -2242,6 +2270,8 @@ export interface Config {
   agentsHome?: string
   /** Additional skill roots scanned after project roots and before user roots. */
   customSkillDirs?: string[]
+  /** Optional OpenClaw managed Skills root; defaults to the owner's OpenClaw state directory. */
+  openClawSkillsDir?: string
   /** Whether host-local skill roots are watched for catalog changes. */
   watch?: boolean
   /** Whether Chokidar uses polling instead of native filesystem events. */
@@ -2259,7 +2289,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/skill/skill-filesystem/src/index.ts:49`](../packages/skill/skill-filesystem/src/index.ts)
+Source: [`packages/skill/skill-filesystem/src/index.ts:51`](../packages/skill/skill-filesystem/src/index.ts)
 
 <a id="phoenix-aidsh-spill-local"></a>
 
@@ -2623,6 +2653,8 @@ export interface Config {
    * `deployment:persona` shadows it; `{{variable}}` references are strict.
    */
   persona?: string
+  /** Permit user-initiated adult conversations in a warmer, more open tone (default false). */
+  matureConversation?: boolean
   /**
    * Model-facing tool names in order, with {@link TOOL_ORDER_REST} exactly once.
    * Invalid fields fail at load and unknown names fail at assembly; known names
@@ -2761,7 +2793,7 @@ export interface TeamModelProfile {
 }
 ```
 
-Source: [`packages/subagent/tool-agent-team/src/index.ts:41`](../packages/subagent/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts:190`](../packages/subagent/tool-agent-team/src/index.ts)
 
 <a id="phoenix-aidsh-tool-bash"></a>
 
@@ -2923,7 +2955,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/goal/tool-goal/src/index.ts:33`](../packages/goal/tool-goal/src/index.ts)
+Source: [`packages/goal/tool-goal/src/index.ts:34`](../packages/goal/tool-goal/src/index.ts)
 
 <a id="phoenix-aidsh-tool-jobs"></a>
 
@@ -2978,6 +3010,21 @@ export interface Config {
 ```
 
 Source: [`packages/lsp/tool-lsp/src/index.ts:58`](../packages/lsp/tool-lsp/src/index.ts)
+
+<a id="phoenix-aidsh-tool-oracle"></a>
+
+## `@phoenix-ai/dsh-tool-oracle`
+
+Requires: `tools` · `systemPrompt` · `web`
+
+```ts config-catalog
+export interface Config {
+  /** Owner-local path for the append-only forecast and calibration ledger. */
+  path: string
+}
+```
+
+Source: [`packages/core/tool-oracle/src/index.ts:17`](../packages/core/tool-oracle/src/index.ts)
 
 <a id="phoenix-aidsh-tool-pwsh"></a>
 
@@ -3096,7 +3143,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/skill/tool-skill/src/index.ts:67`](../packages/skill/tool-skill/src/index.ts)
+Source: [`packages/skill/tool-skill/src/index.ts:70`](../packages/skill/tool-skill/src/index.ts)
 
 <a id="phoenix-aidsh-tool-str-replace-editor"></a>
 
@@ -3288,7 +3335,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/web/tool-web/src/index.ts:43`](../packages/web/tool-web/src/index.ts)
+Source: [`packages/web/tool-web/src/index.ts:51`](../packages/web/tool-web/src/index.ts)
 
 <a id="phoenix-aidsh-tool-workflow"></a>
 
@@ -3337,9 +3384,9 @@ export interface Config {
    */
   maxParallelSubCalls?: number
   /**
-   * Number of visible `mcp__*` tools at which native presentation switches to
-   * deferred discovery. Native tools remain in the prompt; MCP schemas are
-   * returned by `tool_search` and become visible only for the calling agent.
+   * Number of MCP tools at which an agent receives deferred discovery.
+   * Native tools remain available; the Code Mode SDK shows tool_search
+   * before full MCP signatures, which are admitted per agent on demand.
    * Must be a positive integer.
    */
   mcpToolLazyThreshold?: number
@@ -3349,7 +3396,7 @@ export interface Config {
 export type ToolPresentationMode = 'native' | 'code' | 'both'
 ```
 
-Source: [`packages/core/tools/src/index.ts:794`](../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts:797`](../packages/core/tools/src/index.ts)
 
 <a id="phoenix-aidsh-typert-loader"></a>
 
@@ -3528,7 +3575,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/bundle/web-app/src/index.ts:43`](../packages/bundle/web-app/src/index.ts)
+Source: [`packages/bundle/web-app/src/index.ts:45`](../packages/bundle/web-app/src/index.ts)
 
 <a id="phoenix-aidsh-web-fetch-http"></a>
 
@@ -3553,10 +3600,12 @@ export interface Config {
   userAgent?: string
   /** Only for isolated local fixtures; never enable for untrusted requests. */
   allowPrivateNetworks?: boolean
+  /** Respect public-site robots.txt directives by default. */
+  respectRobots?: boolean
 }
 ```
 
-Source: [`packages/web/web-fetch-http/src/index.ts:34`](../packages/web/web-fetch-http/src/index.ts)
+Source: [`packages/web/web-fetch-http/src/index.ts:35`](../packages/web/web-fetch-http/src/index.ts)
 
 <a id="phoenix-aidsh-web-search-deepseek"></a>
 
@@ -3626,7 +3675,7 @@ export interface Config {
 }
 
 /** Public HTML search engine supported by the keyless provider. */
-export type FreeSearchEngine = 'bing' | 'duckduckgo'
+export type FreeSearchEngine = 'bing' | 'duckduckgo' | 'wikipedia'
 ```
 
 Source: [`packages/web/web-search-free/src/index.ts:13`](../packages/web/web-search-free/src/index.ts)
@@ -3795,9 +3844,13 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@phoenix-ai/dsh-tool-business` — requires `tools` · `systemPrompt` ([`packages/core/tool-business/src/index.ts`](../packages/core/tool-business/src/index.ts))
 - `@phoenix-ai/dsh-tool-cordis` — requires `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect` ([`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts))
 - `@phoenix-ai/dsh-tool-google-workspace` — requires `tools` · `googleApi` ([`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts))
+- `@phoenix-ai/dsh-tool-health` — requires `tools` · `systemPrompt` · `userQuestions` ([`packages/core/tool-health/src/index.ts`](../packages/core/tool-health/src/index.ts))
+- `@phoenix-ai/dsh-tool-healthia` — requires `tools` · `healthia` · `systemPrompt` ([`packages/health/tool-healthia/src/index.ts`](../packages/health/tool-healthia/src/index.ts))
 - `@phoenix-ai/dsh-tool-home-gateway` — requires `tools` · `home` · `systemPrompt` ([`packages/home/tool-home-gateway/src/index.ts`](../packages/home/tool-home-gateway/src/index.ts))
 - `@phoenix-ai/dsh-tool-living` — requires `living` · `tools` · `systemPrompt` ([`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts))
+- `@phoenix-ai/dsh-tool-sports` — requires `tools` · `systemPrompt` ([`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts))
 - `@phoenix-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))
+- `@phoenix-ai/dsh-tool-voice` — requires `tools` · `voice` · `systemPrompt` ([`packages/voice/tool-voice/src/index.ts`](../packages/voice/tool-voice/src/index.ts))
 - `@phoenix-ai/dsh-user-profile` — requires `settings` · `systemPrompt` ([`packages/profile/user-profile/src/index.ts`](../packages/profile/user-profile/src/index.ts))
 - `@phoenix-ai/dsh-workspace` — requires `storageDomain` · `sessionPersistence` ([`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts))
 
@@ -3811,6 +3864,7 @@ Abstract service classes — a deployment loads a concrete implementation packag
 - `@phoenix-ai/dsh-credentials` — abstract `CredentialProvider` ([`packages/credentials/credentials/src/index.ts`](../packages/credentials/credentials/src/index.ts))
 - `@phoenix-ai/dsh-file-reference` — abstract `FileReferenceService` ([`packages/context/file-reference/src/index.ts`](../packages/context/file-reference/src/index.ts))
 - `@phoenix-ai/dsh-fs` — abstract `FileSystem` ([`packages/fs/fs/src/index.ts`](../packages/fs/fs/src/index.ts))
+- `@phoenix-ai/dsh-healthia` — abstract `HealthiaService` ([`packages/health/healthia/src/index.ts`](../packages/health/healthia/src/index.ts))
 - `@phoenix-ai/dsh-host-directory-picker` — abstract `DirectoryPicker` ([`packages/host/directory-picker/src/index.ts`](../packages/host/directory-picker/src/index.ts))
 - `@phoenix-ai/dsh-jobs` — abstract `JobRegistry` ([`packages/jobs/jobs/src/index.ts`](../packages/jobs/jobs/src/index.ts))
 - `@phoenix-ai/dsh-living` — abstract `LivingRegistry` ([`packages/core/living/src/index.ts`](../packages/core/living/src/index.ts))

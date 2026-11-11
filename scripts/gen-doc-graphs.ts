@@ -98,6 +98,15 @@ const GROUP_ORDER = [
 
 const SERVICE_ROLES: ServiceRole[] = [
   {
+    key: 'healthia',
+    pkg: 'healthia',
+    title: 'Owner-local longitudinal patient record service',
+    mode: 'seam',
+    implementations: ['healthia-local'],
+    consumers: ['tool-healthia'],
+    note: 'Encrypted local records and patient-scoped access are provided by healthia-local; the model-facing tool requires explicit authorized activation.',
+  },
+  {
     key: 'attachments',
     pkg: 'attachment',
     title: 'Durable binary attachment storage',

@@ -5,14 +5,19 @@
   ],
   "ignoreBinaries": [
     "bwrap",
+    "cmd.exe",
     "codex",
     "icacls",
     "musl-gcc",
+    "pdftotext",
+    "playwright",
     "powershell.exe",
+    "psql",
     "python3",
     "sandbox-exec",
     "tar",
     "taskkill",
+    "vite",
     "where.exe"
   ],
   "ignoreWorkspaces": [
@@ -702,6 +707,22 @@
       "project": [
         "src/**/*.ts",
         "tests/**/*.mjs"
+      ]
+    },
+    "packages/core/tool-oracle": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/health/healthia": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
       ]
     }
   }

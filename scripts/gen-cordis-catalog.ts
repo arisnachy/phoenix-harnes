@@ -54,6 +54,7 @@ export { REGION_BEGIN, REGION_END }
  * errors, so the partition can never silently drift from the service API.
  */
 export const SERVICE_PAGE: Record<string, string> = {
+  healthia: 'storage.md',
   agentLoop: 'core.md',
   agentDefaultModel: 'core.md',
   agentPresets: 'core.md',
@@ -182,6 +183,7 @@ export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
  * {@link EVENT_WALK_EXEMPTIONS} names each one with its documentation owner.
  */
 export const EVENT_SCOPE_PAGE: Record<string, string> = {
+  healthia: 'storage.md',
   'agent': 'core.md',
   'agent-loop': 'core.md',
   'agent-preset': 'core.md',
@@ -601,6 +603,19 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 
 /** Project types deliberately documented outside the subsystems catalog. */
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
+  HealthPatient: 'HealthIA patient entity contract is documented by packages/health/healthia/README.md and src/index.ts',
+  HealthPatientId: 'HealthIA patient identifier contract is owned by packages/health/healthia/src/index.ts',
+  HealthEpisodeId: 'HealthIA episode identifier contract is owned by packages/health/healthia/src/index.ts',
+  CreateHealthPatientInput: 'HealthIA creation input contract is owned by packages/health/healthia/src/index.ts',
+  UpdateHealthPatientInput: 'HealthIA update input contract is owned by packages/health/healthia/src/index.ts',
+  AddHealthRecordInput: 'HealthIA canonical fact input is owned by packages/health/healthia/src/index.ts',
+  HealthRecordQuery: 'HealthIA record-query contract is owned by packages/health/healthia/src/index.ts',
+  OpenHealthEpisodeInput: 'HealthIA episode-opening input is owned by packages/health/healthia/src/index.ts',
+  UpdateHealthEpisodeInput: 'HealthIA episode-update input is owned by packages/health/healthia/src/index.ts',
+  HealthSnapshotOptions: 'HealthIA bounded history options are owned by packages/health/healthia/src/index.ts',
+  HealthPatientSnapshot: 'HealthIA bounded clinical history projection is owned by packages/health/healthia/src/index.ts',
+  HealthRecord: 'HealthIA canonical record contract is documented by packages/health/healthia/README.md and src/index.ts',
+  HealthEpisode: 'HealthIA episode contract is documented by packages/health/healthia/README.md and src/index.ts',
   UniversalMissionSnapshot: 'durable UME mission snapshot is owned by packages/subagent/agent-team/src/universal-mission.ts',
   z: 'schemastery schema constructor is owned by vendor/schemastery (vendored upstream)',
   WakeEvent: 'Phoenix wake-event payload is owned by packages/hardness/adapters/README.md',

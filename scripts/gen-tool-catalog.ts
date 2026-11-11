@@ -44,6 +44,9 @@ import * as ToolLiving from '@phoenix-ai/dsh-tool-living'
 import * as ToolBusiness from '@phoenix-ai/dsh-tool-business'
 import * as ToolSports from '@phoenix-ai/dsh-tool-sports'
 import * as ToolHealth from '@phoenix-ai/dsh-tool-health'
+import * as ToolHealthia from '@phoenix-ai/dsh-tool-healthia'
+import type { HealthiaService } from '@phoenix-ai/dsh-healthia'
+import * as ToolOracle from '@phoenix-ai/dsh-tool-oracle'
 import * as ToolAskUser from '@phoenix-ai/dsh-tool-ask-user'
 import * as ToolBash from '@phoenix-ai/dsh-tool-bash'
 import * as ToolPwsh from '@phoenix-ai/dsh-tool-pwsh'
@@ -477,6 +480,32 @@ const TOOL_PACKAGES: ToolPackage[] = [
       await ctx.plugin(ToolHealth)
     },
     note: 'Clinician-driven sensitive ASK prompts and de-identified planning; no patient data, signing, or clinical record writes.',
+  },
+  {
+    pkg: '@phoenix-ai/dsh-tool-healthia',
+    dir: 'tool-healthia',
+    source: 'packages/health/tool-healthia/src/index.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.healthia (real provider at execution time)'],
+    writes: ['tool/call', 'healthia agent-scoped registration after explicit activation', 'tool/result'],
+    async mount(ctx) {
+      // The global activator only registers a schema; it never reads patient data
+      // at catalog build time. The mock service is not a usable patient provider.
+      ctx.provide('healthia', {} as HealthiaService)
+      await ctx.plugin(ToolHealthia)
+    },
+    note: 'Only the explicit clinical activator is global. Real patient tools are scoped to an authorized agent and require a live provider; this catalog never opens one.',
+  },
+  {
+    pkg: '@phoenix-ai/dsh-tool-oracle',
+    dir: 'tool-oracle',
+    source: 'packages/core/tool-oracle/src/index.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.web', 'owner-local forecast ledger at execution time'],
+    writes: ['tool/call', 'tool/result', 'forecast ledger only on invocation'],
+    async mount(ctx) {
+      await ctx.plugin(WebRuntime)
+      await ctx.plugin(ToolOracle, { path: resolve(root, '.tmp/tool-catalog-oracle.jsonl') })
+    },
+    note: 'Research-first forecasting; a published percentage requires measurable evidence and calibration. Schema collection performs no forecasting or external requests.',
   },
   {
     pkg: '@phoenix-ai/dsh-tool-sports',
