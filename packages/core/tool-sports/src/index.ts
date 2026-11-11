@@ -12,6 +12,7 @@ import { sportsCatalog, discoverEspnLeagues, hasSportsPermission, chatGames, com
 import { getMlbPitcherReport } from './mlb.ts'
 import { researchTicket, autoResearchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { sportsPromptNeeded } from './sports-prompt.ts'
+import {ESPN_NBA_PUBLIC_PAGES,ESPN_NBA_API_STARTING_POINTS} from './espn-nba-public-pages.ts'
 import { SPORTS_OPEN_RESEARCH_GUIDANCE } from './sports-open-research-guidance.ts'
 import { researchNbaSlate } from './nba-research.ts'
 import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets} from './daily-market-shortlist.ts'
@@ -885,8 +886,11 @@ export function apply(ctx: Context): void {
         summary:report.title+' · '+report.subtitle,
         sources:report.sources,
         limitations:report.limitations,
+        ...(args.sport==='basketball'&&args.league==='nba'?{
+          nbaPublicPages:ESPN_NBA_PUBLIC_PAGES,
+          nbaApiStartingPoints:ESPN_NBA_API_STARTING_POINTS}:{}),
         uiBlock:report.uiBlock,
-        instruction:'El panel ESPN ya se muestra en el chat. No repitas su JSON ni inventes secciones que la fuente no confirmó. Si falta una estadística, explícalo; partido, plantillas y cuotas se verifican por separado.',
+        instruction:'El panel ESPN ya se muestra en el chat y contiene imágenes obtenidas de headshot.href cuando ESPN las publica. No repitas su JSON ni inventes secciones que la fuente no confirmó. Las páginas de ESPN RD son enlaces de referencia, NO evidencia comprobada hasta abrirlas realmente. Si falta una estadística, explícalo; partido, plantillas, lesiones y cuotas se verifican por separado.',
       })
     },
     presentCall:()=>({card:'generic',title:'Explorar estadísticas, jugadores, equipos y noticias ESPN',kind:'read' as const}),
@@ -903,7 +907,11 @@ export function apply(ctx: Context): void {
     isConcurrencySafe:()=>true,
     async execute(args){
       const result=await investigateEventDeep(args.sport,args.league,args.eventId,fetch,Date.now(),await sportsEnv(ctx))
-      return JSON.stringify({...result,instruction:'Identifica qué noticias hablan realmente de los equipos. Los recuentos de lesiones y las plantillas NO confirman alineaciones. Si la fuente no aporta estadísticas individuales no atribuyas rendimiento ni pronósticos. Contrasta por separado mercados de cuotas reales.'})
+      return JSON.stringify({...result,
+        ...(args.sport==='basketball'&&args.league==='nba'?{
+          nbaPublicPages:ESPN_NBA_PUBLIC_PAGES,
+          nbaApiStartingPoints:ESPN_NBA_API_STARTING_POINTS}:{}),
+        instruction:'Usa rosterPortraits con headshots verificados por ESPN cuando existen; para una tarjeta visual con fotos llama sports_chat_espn_explore(view=team,teamId=ID oficial). Los enlaces de ESPN RD son referencias, no pruebas de lectura. Identifica noticias sobre los dos equipos y coteja bajas con fuentes oficiales; una plantilla NO confirma titulares ni ausencia de lesiones. No atribuyas rendimiento que la fuente no aporta. Contrasta cuotas por separado.'})
     },
     presentCall:()=>({card:'generic',title:'Investigar noticias, estadísticas y bajas de un evento',kind:'read' as const}),
   }))
