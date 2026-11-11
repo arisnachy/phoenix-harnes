@@ -10,6 +10,51 @@ import type {KeylessQuote} from './keyless-odds.ts'
 
 const norm=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
+/** Exact NHL franchise aliases. No city-only match: New York/Los Angeles
+ * alone is ambiguous; NHL event ID and kickoff must still be verified. */
+const NHL_ALIASES=new Map<string,string>(([
+  ['Anaheim Ducks','Ducks'],
+  ['Boston Bruins','Bruins'],
+  ['Buffalo Sabres','Sabres'],
+  ['Calgary Flames','Flames'],
+  ['Carolina Hurricanes','Hurricanes'],
+  ['Chicago Blackhawks','Blackhawks'],
+  ['Colorado Avalanche','Avalanche'],
+  ['Columbus Blue Jackets','Blue Jackets'],
+  ['Dallas Stars','Stars'],
+  ['Detroit Red Wings','Red Wings'],
+  ['Edmonton Oilers','Oilers'],
+  ['Florida Panthers','Panthers'],
+  ['Los Angeles Kings','Kings'],
+  ['Minnesota Wild','Wild'],
+  ['Montreal Canadiens','Canadiens'],
+  ['Nashville Predators','Predators'],
+  ['New Jersey Devils','Devils'],
+  ['New York Islanders','Islanders'],
+  ['New York Rangers','Rangers'],
+  ['Ottawa Senators','Senators'],
+  ['Philadelphia Flyers','Flyers'],
+  ['Pittsburgh Penguins','Penguins'],
+  ['San Jose Sharks','Sharks'],
+  ['Seattle Kraken','Kraken'],
+  ['St. Louis Blues','Blues'],
+  ['Tampa Bay Lightning','Lightning'],
+  ['Toronto Maple Leafs','Maple Leafs'],
+  ['Utah Mammoth','Mammoth'],
+  ['Vancouver Canucks','Canucks'],
+  ['Vegas Golden Knights','Golden Knights'],
+  ['Washington Capitals','Capitals'],
+  ['Winnipeg Jets','Jets'],
+] as Array<[string,string]>).flatMap(([full,nickname]):Array<readonly [string,string]>=>[
+  [norm(full),norm(full)],[norm(nickname),norm(full)],
+]))
+/** Match full NHL franchise names or unambiguous club nicknames only. */
+export function sameEspnTeam(a:string,b:string,sportKey:string):boolean{
+  if(norm(a)===norm(b))return true
+  if(sportKey!=='icehockey_nhl')return false
+  const left=NHL_ALIASES.get(norm(a)),right=NHL_ALIASES.get(norm(b))
+  return left!==undefined&&left===right
+}
 const validDate=(day:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(day)&&
   !Number.isNaN(Date.parse(day+'T00:00:00Z'))&&
   new Date(day+'T00:00:00Z').toISOString().slice(0,10)===day
@@ -53,8 +98,10 @@ export async function lookupExactEspnWinner(
     // observation, but never a certified currently executable bookmaker line.
     result.referenceOdds=scanned.observations.filter(q=>
       q.eventId===target.eventId&&q.market==='h2h'&&q.point===null&&
-      norm(q.home)===norm(target.home)&&norm(q.away)===norm(target.away)&&
-      [norm(target.home),norm(target.away),'draw'].includes(norm(q.selection))&&
+      sameEspnTeam(q.home,target.home,target.sportKey)&&
+      sameEspnTeam(q.away,target.away,target.sportKey)&&
+      (sameEspnTeam(q.selection,target.home,target.sportKey)||
+      sameEspnTeam(q.selection,target.away,target.sportKey)||norm(q.selection)==='draw')&&
       Math.abs(Date.parse(q.timeIso)-kickoff)<=90_000&&
       q.price>1&&q.price<1000&&
       !q.bookmaker.startsWith('ESPN proveedor #'))
@@ -62,8 +109,10 @@ export async function lookupExactEspnWinner(
     const soccer=target.sportKey.startsWith('soccer_')
     const valid=scanned.quotes.filter(q=>
       q.eventId===target.eventId&&q.market==='h2h'&&q.point===null&&
-      norm(q.home)===norm(target.home)&&norm(q.away)===norm(target.away)&&
-      [norm(target.home),norm(target.away),'draw'].includes(norm(q.selection))&&
+      sameEspnTeam(q.home,target.home,target.sportKey)&&
+      sameEspnTeam(q.away,target.away,target.sportKey)&&
+      (sameEspnTeam(q.selection,target.home,target.sportKey)||
+      sameEspnTeam(q.selection,target.away,target.sportKey)||norm(q.selection)==='draw')&&
       Math.abs(Date.parse(q.timeIso)-kickoff)<=90_000&&
       Number.isFinite(Date.parse(q.observedAt??''))&&
       Date.parse(q.observedAt!)<=now&&

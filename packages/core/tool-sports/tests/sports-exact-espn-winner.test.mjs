@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {lookupExactEspnWinner} from '../src/sports-exact-espn-winner.ts'
+import {lookupExactEspnWinner,sameEspnTeam} from '../src/sports-exact-espn-winner.ts'
 
 const now=Date.parse('2026-11-09T18:45:00Z')
 const target={
@@ -142,4 +142,31 @@ test('dynamic soccer route cannot be used with unsafe league slugs',async()=>{
   assert.equal(result.attempted,false)
   assert.equal(result.quotes.length,0)
   assert.equal(result.referenceOdds.length,0)
+})
+
+test('known NHL nickname aliases reconcile to the exact franchise, never a wrong club',()=>{
+  assert.equal(sameEspnTeam('Pittsburgh Penguins','Penguins','icehockey_nhl'),true)
+  assert.equal(sameEspnTeam('San Jose Sharks','Sharks','icehockey_nhl'),true)
+  assert.equal(sameEspnTeam('Vegas Golden Knights','Golden Knights','icehockey_nhl'),true)
+  assert.equal(sameEspnTeam('Pittsburgh Penguins','Sharks','icehockey_nhl'),false)
+  assert.equal(sameEspnTeam('New York Rangers','New York','icehockey_nhl'),false)
+  assert.equal(sameEspnTeam('Boston Celtics','Celtics','basketball_nba'),false)
+})
+test('exact NHL ESPN event pricing accepts team nicknames but rejects wrong rival',async()=>{
+  const hockey={...target,sportKey:'icehockey_nhl',eventId:'401892695',
+    home:'Pittsburgh Penguins',away:'San Jose Sharks'}
+  const nhlEvent={id:hockey.eventId,date:hockey.kickoff,competitions:[{
+    id:hockey.eventId,competitors:[
+      {homeAway:'home',team:{displayName:'Penguins'}},
+      {homeAway:'away',team:{displayName:'Sharks'}},
+    ],odds:[{provider:{name:'DraftKings'},
+      homeTeamOdds:{moneyLine:'-135'},awayTeamOdds:{moneyLine:'+114'}}],
+  }]}
+  const fake=async url=>url.includes('scoreboard?dates=20261110')?
+    {events:[nhlEvent]}:url.includes('scoreboard?')?{events:[]}:{items:[]}
+  const found=await lookupExactEspnWinner(hockey,fake,now)
+  assert.equal(found.quotes.length,2)
+  assert.ok(found.quotes.every(q=>q.bookmaker==='DraftKings'&&q.observedAt))
+  assert.equal((await lookupExactEspnWinner({...hockey,home:'Vegas Golden Knights'},
+    fake,now)).quotes.length,0)
 })

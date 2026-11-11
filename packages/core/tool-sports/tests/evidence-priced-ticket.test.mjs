@@ -67,6 +67,9 @@ test('six-legged evidence path quotes only same bookmaker and preserves the requ
   const complete=await withSpecialists(5,date,'soccer',100,now,enabled,feed,mkQuotes())
   assert.equal(complete.complete,true)
   assert.equal(complete.priced,true)
+  assert.equal(complete.card.props.presentationStatus,'final-research')
+  assert.match(complete.card.props.subtitle,/TICKET FINAL DE INVESTIGACIÓN/)
+  assert.doesNotMatch(complete.card.props.subtitle,/hold|CONDICIONAL/i)
   assert.equal(complete.approvedLegs,0,'uncalibrated specialists cannot approve bets')
   assert.equal(complete.candidateLegs,5)
   assert.equal(complete.ticketReadyForReview,true)
@@ -334,7 +337,7 @@ test('missing specialist data creates a visible conditional ticket when ESPN and
   assert.equal(result.specialistChecks.length,5)
   assert.ok(result.specialistChecks.some(x=>x.status!=='researched'))
   assert.ok(result.card.props.legs.every(x=>x.researchStatus==='conditional'))
-  assert.match(result.card.props.subtitle,/BOLETO DE INVESTIGACIÓN/)
+  assert.match(result.card.props.subtitle,/TICKET FINAL DE INVESTIGACIÓN/)
   assert.match(result.explanation,/ADVERTENCIA DE INVESTIGACIÓN/)
   assert.equal(result.candidateLegs,5)
   assert.equal(result.ticketReadyForReview,true)
@@ -484,4 +487,27 @@ test('complete ESPN-style 1X2 menu clears draw review but never approves the wag
     s.key==='draw'&&s.state==='verified')))
   assert.equal(result.approvedForBetting,false)
   assert.equal(result.approvedLegs,0)
+})
+
+test('final five-leg research ticket remains visible when provisional lineups are noted',async()=>{
+  const pending=async games=>(await stubSpecialists(games)).map(g=>({
+    ...g,status:'incomplete',
+    checklist:{...g.checklist,complete:false,
+      criticalPending:['Quintetos o titulares no confirmados']},
+    pendingSteps:['Quintetos o titulares no confirmados'],
+  }))
+  const result=await evidencePricedTicket(5,date,'soccer',0,now,enabled,feed,
+    mkQuotes(),'winner',pending)
+  assert.equal(result.priced,true)
+  assert.equal(result.quotedLegs,5)
+  assert.equal(result.candidateLegs,5)
+  assert.equal(result.ticketReadyForReview,true)
+  assert.equal(result.approvedForBetting,false)
+  assert.equal(result.card.props.presentationStatus,'final-research')
+  assert.match(result.card.props.subtitle,/TICKET FINAL DE INVESTIGACIÓN/)
+  assert.ok(result.card.props.legs.every(x=>
+    x.displayStatus==='research-selection'&&
+    x.pendingEvidence.some(note=>note.includes('titulares'))))
+  assert.equal(result.decisionAudit.approvedForBetting,false)
+  assert.equal(result.decisionAudit.legs.length,5)
 })
