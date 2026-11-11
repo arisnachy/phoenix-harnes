@@ -1819,7 +1819,8 @@ export function apply(ctx: Context): void {
         const message=error instanceof Error?error.message:'Tiempo de espera agotado'
         return JSON.stringify({
           status:'research-timeout',priced:false,placed:false,approvedLegs:0,
-          requestedLegs:args.count,verifiedEvents:0,quotedLegs:0,
+          requestedLegs:args.count,verifiedEvents:0,eventsFound:0,
+          quotedLegs:0,conditionalLegs:0,approvedForBetting:false,
           uiBlock:{component:'sports_ticket_card',version:1,props:{
             title:'PHOENIX · Investigación no completada',
             subtitle:'Tiempo de espera · reanudar por fuentes independientes',
@@ -1845,7 +1846,9 @@ export function apply(ctx: Context): void {
         elapsedMs:Date.now()-requestedAt,
         complete:result.complete,priced:result.priced,placed:false,
         conditional:result.conditional,dossierComplete:result.dossierComplete,
-        verifiedEvents:result.verifiedEvents,quotedLegs:result.quotedLegs,
+        verifiedEvents:result.verifiedEvents,eventsFound:result.eventsFound,
+        quotedLegs:result.quotedLegs,conditionalLegs:result.conditionalLegs,
+        approvedForBetting:result.approvedForBetting,
         missingQuotes:result.missingQuotes,approvedLegs:result.approvedLegs,
         multisportSatisfied:result.multisportSatisfied,sourceAudit:result.sourceAudit,
         specialistChecks:result.specialistChecks,researchedLegs:result.researchedLegs,

@@ -11,6 +11,8 @@ export type DailyMarketCandidate={
   selection:string;line:number|null;decimalOdds:number;marketNoVigShare:number
   outcomes:Array<{selection:string;line:number|null;decimalOdds:number;noVigShare:number}>
   bookmakerOverround:number;quoteUpdatedAt:string;source:string
+  /** Public ESPN observation, distinct from a verified bookmaker update. */
+  observedAt:string;timestampSource:'espn-observation'|'bookmaker-update'
   assessment:'quote-only-research-pending'
 }
 export type DailyMarketShortlist={
@@ -64,6 +66,10 @@ const normal=(value:string):string=>{
   return aliases[key]??key
 }
 const isDraw=(name:string)=>/^(draw|empate|tie|x)$/u.test(name.toLowerCase())
+const quoteClock=(quote:MarketOutcome):number=>{
+  const espn=quote.source?.startsWith('ESPN')===true
+  return Date.parse(espn&&quote.observedAt?quote.observedAt:quote.updatedAt)
+}
 const groupKey=(fixture:Fixture,quote:MarketOutcome):string=>[
   fixture.sport,fixture.league,fixture.eventId,quote.bookmaker,quote.eventId,
   quote.market,quote.market==='spreads'&&typeof quote.point==='number'
@@ -89,11 +95,11 @@ export function shortlistDailyMarkets(
   let rejectedQuotes=0
   const matchedGames=new Set<string>()
   for(const quote of quotes.slice(0,2000)){
-    const time=Date.parse(quote.timeIso??quote.time),at=Date.parse(quote.updatedAt)
+    const time=Date.parse(quote.timeIso??quote.time),at=quoteClock(quote)
     if(!quote.bookmaker?.trim()||!quote.source?.trim()||
       !['h2h','spreads','totals'].includes(quote.market)||
       !Number.isFinite(quote.price)||quote.price<=1||quote.price>1000||
-      !Number.isFinite(at)||at>now||now-at>60*60_000||
+      !Number.isFinite(at)||at>now||now-at>(quote.source?.startsWith('ESPN')?30:60)*60_000||
       !Number.isFinite(time)||time<=now||!quote.sportKey){
       rejectedQuotes++;continue
     }
@@ -113,7 +119,7 @@ export function shortlistDailyMarkets(
   const candidates:DailyMarketCandidate[]=[]
   for(const {fixture,quotes:rows} of groups.values()){
     if(rows.length<2||rows.length>3)continue
-    const stamps=rows.map(q=>Date.parse(q.updatedAt))
+    const stamps=rows.map(quoteClock)
     if(Math.max(...stamps)-Math.min(...stamps)>10*60_000)continue
     const market=rows[0]!.market
     const home=normal(fixture.home.name),away=normal(fixture.away.name)
@@ -154,6 +160,9 @@ export function shortlistDailyMarkets(
       })),
       bookmakerOverround:Number((sum-1).toFixed(5)),
       quoteUpdatedAt:q.updatedAt,source:q.source??'',
+      observedAt:new Date(quoteClock(q)).toISOString(),
+      timestampSource:q.source?.startsWith('ESPN')&&q.observedAt?
+        'espn-observation':'bookmaker-update',
       assessment:'quote-only-research-pending',
     })
   }
@@ -167,7 +176,7 @@ export function shortlistDailyMarkets(
       h2h:0,totals:1,spreads:2,
     }
     const sorted=[...rows].sort((a,b)=>
-      b.quoteUpdatedAt.localeCompare(a.quoteUpdatedAt)||
+      b.observedAt.localeCompare(a.observedAt)||
       a.fixture.localeCompare(b.fixture)||
       marketPriority[a.market]-marketPriority[b.market])
     const used=new Set<string>(),chosen:DailyMarketCandidate[]=[]
@@ -203,7 +212,7 @@ export function shortlistDailyMarkets(
     const eligible=(perBook.get(best!.bookmaker)??[])
       .filter(x=>eventKey(x)===eventKey(chosen)&&x!==chosen)
       .sort((a,b)=>Number(a.market===chosen.market)-Number(b.market===chosen.market)||
-        b.quoteUpdatedAt.localeCompare(a.quoteUpdatedAt)||
+        b.observedAt.localeCompare(a.observedAt)||
         a.market.localeCompare(b.market))
     const lines=new Set([chosen.market+'|'+String(chosen.line)])
     const extra:DailyMarketCandidate[]=[]

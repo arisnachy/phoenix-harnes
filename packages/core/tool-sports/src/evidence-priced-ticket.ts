@@ -184,6 +184,9 @@ export async function evidencePricedTicket(
   ].join(' · ')
   const preliminaryLegs=Array.isArray(research.card.props.legs)?research.card.props.legs:[]
   const researchCard:ChatBlock={...research.card,props:{...research.card.props,
+    dataCounts:{eventsFound:research.verifiedEvents,quotedLegs:0,researchedLegs,
+      conditionalLegs:specialistChecks.filter(x=>x.checklist?.complete!==true).length,
+      approvedForBetting:0},
     legs:preliminaryLegs.map((row,index)=>{
       const leg=row!==null&&typeof row==='object'&&!Array.isArray(row)?
         row as Record<string,unknown>:{}
@@ -216,14 +219,15 @@ export async function evidencePricedTicket(
     audited('SportsGameOdds',env.SPORTSGAMEODDS_API_KEY?.trim()?'attempted':'not-configured',0,
       'Gratis con clave y límites del plan; fuente por bookmaker.'),
     audited('ESPN Site/Core',env.PHOENIX_SPORTS_ESPN_DISABLED==='1'?'disabled':'attempted',0,
-      'Solo se acepta precio identificado y con actualización verificable.'),
+      'Se acepta cuota observada por ESPN con casa, mercado, evento y observedAt reciente; no implica aceptación en la casa.'),
     audited('SportsbookReview/MLB GitHub históricos','not-applicable',0,
       'NO se consultan como cuota en vivo ni permiten generar combinadas actuales.'),
   ]
   const base={card:researchCard,priced:false as boolean,placed:false as const,
     complete:research.complete&&specialistComplete,verifiedEvents:research.verifiedEvents,
     quotedLegs:0,missingQuotes:count,eventsFound:research.verifiedEvents,
-    conditionalLegs:0,approvedForBetting:false as const,sourceAudit:initialSources,
+    conditionalLegs:specialistChecks.filter(x=>x.checklist?.complete!==true).length,
+    approvedForBetting:false as const,sourceAudit:initialSources,
     specialistChecks,researchedLegs,modelAudit,trackingEvents,
     decisionAudit:preliminaryDecisionAudit,reviewedBeforeSelection,removedConflicts,conditional:!checklistComplete,
     dossierComplete:checklistComplete,
@@ -394,11 +398,16 @@ export async function evidencePricedTicket(
     const prior=current.checklist
     if(!prior.steps.some(step=>step.key==='market'))continue
     const quote=rows[0]!
+    const validSoccerDraw=research.events[index]?.sport==='soccer'&&
+      quote.market==='1x2'&&quoteSideNoVig(quote,all,now)!==null
     const steps=prior.steps.map(step=>step.key==='market'?{
       ...step,state:'verified' as const,
       detail:'Precio publicado observado en '+quote.source+' · '+quote.bookmaker+
         ' · '+quote.market+' · '+quote.selection+' · '+quote.price+
         '. Evento, rivales, inicio y selección cotejados; confirmar aceptación en la casa.',
+    }:step.key==='draw'&&validSoccerDraw?{
+      ...step,state:'verified' as const,
+      detail:'1X2 íntegro con empate, misma casa y ventana temporal; riesgo de empate no desaparece.',
     }:step)
     const criticalPending=steps.filter(step=>step.critical&&step.state!=='verified')
       .map(step=>step.title)
