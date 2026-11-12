@@ -14,7 +14,7 @@ import { researchTicket, autoResearchTicket, type ResearchTicketLeg } from './re
 import { sportsPromptNeeded } from './sports-prompt.ts'
 import {ESPN_NBA_PUBLIC_PAGES,ESPN_NBA_API_STARTING_POINTS} from './espn-nba-public-pages.ts'
 import { SPORTS_OPEN_RESEARCH_GUIDANCE } from './sports-open-research-guidance.ts'
-import { researchNbaSlate } from './nba-research.ts'
+import { researchNbaWithSpecialists } from './nba-specialist-supervisor.ts'
 import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets,espnQuoteNeedsRecheck} from './daily-market-shortlist.ts'
 import {assessDailyMarketEvidence,unavailableMarketEvidence} from './daily-market-evidence.ts'
 import {selectDailyResearchedMarkets} from './daily-market-selection.ts'
@@ -1357,23 +1357,23 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_nba_research',
-    description:'Investiga la forma NBA con marcadores FINALIZADOS de las últimas fechas: últimos resultados, márgenes de puntos, descanso, calidad de muestra y evidencia ausente. No infiere lesiones, cuotas ni probabilidades.',
+    description:'Investiga NBA con marcadores FINALIZADOS y expedientes bilaterales de ambos equipos: 22 pasos auditables, lesiones ESPN, estadísticas, rosters, quintetos, fuentes alternativas y endpoints consultados. Marca explícitamente las métricas pendientes; no inventa cuotas ni probabilidades.',
     parameters:{
       date:{ type:'string',description:'Fecha del partido en Santo Domingo, AAAA-MM-DD; defecto hoy.' },
       eventId:{ type:'string',description:'ID real ESPN NBA; si se omite investiga hasta seis encuentros futuros.' },
-      lookbackDays:{ type:'integer',description:'Histórico diario, 1-21 días; por defecto 14. Una consulta por fecha compartida entre los encuentros.' },
+      lookbackDays:{ type:'integer',description:'Histórico diario, 1-21 días; por defecto 14. El dossier especializado intenta cubrir 5/10/20 sin atribuir datos ausentes.' },
     },
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
-      const report=await researchNbaSlate(args.date,args.eventId,fetch,Date.now(),process.env,args.lookbackDays??14)
+      const report=await researchNbaWithSpecialists(args.date,args.eventId,fetch,Date.now(),process.env,args.lookbackDays??14)
       return JSON.stringify({ ...report,
         matches:report.matches.map(m=>({
           ...m,
           home:{ ...m.home,recentResults:m.home.recentResults.slice(0,5) },
           away:{ ...m.away,recentResults:m.away.recentResults.slice(0,5) },
         })),
-        instruction:'Datos calculados desde partidos concluidos, NO una predicción de acierto. Evalúa lesiones confirmadas, titulares, eficiencia, cuotas actuales y valor esperado antes de elegir; las ausencias de evidencia permanecen explícitas. No atribuyas nombres de jugadores sin comprobar su plantilla.',
+        instruction:'Analiza specialistResearch.checklist.fullSteps (10 generales + 12 NBA), endpointAudit, sourceChecks e injuryAudit en CADA partido. Mostrar los datos disponibles y los pasos pendientes con URL consultada. Recuperación ESPN/otras fuentes solo acredita lo que realmente respondió. Para las cuotas llama sports_chat_odds por evento y casa, sin inventar mercado. La investigación incompleta NO bloquea la tarjeta de investigación del ticket; un conflicto grave de identidad sí obliga a reemplazar esa pata. Ninguna cifra aquí equivale a una predicción calibrada.',
       })
     },
     presentCall:()=>({ card:'generic',title:'Investigar forma y descanso NBA',kind:'read' as const }),
