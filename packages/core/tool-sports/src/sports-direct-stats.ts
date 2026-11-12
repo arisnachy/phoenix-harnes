@@ -94,9 +94,10 @@ const extract=(raw:unknown,max=10):DirectMetric[]=>{
 export const parseEspnDepthChart=(raw:unknown,max=60):DirectMetric[]=>{
   const root=obj(raw),rows:DirectMetric[]=[],seen=new Set<string>()
   const cap=Math.max(1,Math.min(100,max))
-  const charts=[...arr(root.depthCharts),...arr(root.depthcharts)]
-  if(root.depthchart)charts.push(root.depthchart)
-  if(root.depthChart)charts.push(root.depthChart)
+  const charts=[...arr(root.depthCharts),...arr(root.depthcharts),
+    ...arr(root.depthchart),...arr(root.depthChart)]
+  if(root.depthchart&&!Array.isArray(root.depthchart))charts.push(root.depthchart)
+  if(root.depthChart&&!Array.isArray(root.depthChart))charts.push(root.depthChart)
   if(!charts.length)charts.push(root)
   const explore=(data:unknown,depth:number):void=>{
     if(depth>3||rows.length>=cap)return
