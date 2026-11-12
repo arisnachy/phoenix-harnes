@@ -88,6 +88,15 @@ export function planClinicalTwinScene(input:ClinicalTwinSceneInput){
   if(typeof input.sourceReviewed!=='boolean')throw new Error('Revisión fuente no declarada')
   const sourceKind=oneOf(input.sourceKind,
     ['image','pdf','dicom','waveform','numeric','wsi','report','unknown'],'sourceKind')
+  // Report/PDF sources are representations of findings, not original pixels.
+  // Never treat incompatible structured sources as if a modality had been inspected.
+  const family=study.family
+  const compatible=sourceKind==='report'||sourceKind==='pdf'||(
+    family==='ecg'?['waveform','image'].includes(sourceKind):
+    ['laboratory','hematology','microbiology','molecular'].includes(family)?['numeric','image'].includes(sourceKind):
+    ['cytology','histopathology'].includes(family)?['wsi','image'].includes(sourceKind):
+    ['neurophysiology','physiology','sleep'].includes(family)?['waveform','numeric','image'].includes(sourceKind):
+    ['image','dicom'].includes(sourceKind))
   const evidenceKind=oneOf(input.evidenceKind,
     ['observed','reported','hypothesis','none'],'evidenceKind')
   const completeness=input.sourceCompleteness===undefined?'unknown':
@@ -104,6 +113,7 @@ export function planClinicalTwinScene(input:ClinicalTwinSceneInput){
   const hasLocation=sourceLocation.length>0&&affectedStructure.length>0
   const view=familyView(study.family)
   const decision=!sourceReady?'BLOCK_SOURCE_NOT_REVIEWED':
+    !compatible?'BLOCK_SOURCE_MODALITY_MISMATCH':
     !hasFinding?'BLOCK_NO_SOURCE_FINDING':
       !hasLocation?'NEEDS_ANATOMIC_LOCALIZATION':'ILLUSTRATION_SPEC_READY'
   const permitted=decision==='ILLUSTRATION_SPEC_READY'
@@ -158,6 +168,7 @@ export function planClinicalTwinScene(input:ClinicalTwinSceneInput){
     patientSpecificGeometryValidated:false,diagnosticAccuracyValidated:false,
     requiresClinicianReview:true,renderPrompt:prompt,forbiddenClaims:modalityRestrictions,
     nextAction:!sourceReady?'Inspeccionar realmente el estudio original con un motor compatible.':
+      !compatible?'Corregir la incompatibilidad entre modalidad y tipo de fuente; no generar una lesión.':
       !hasFinding?'Documentar hallazgos objetivos y su procedencia.':
       !hasLocation?'Identificar estructura y localización antes de señalar una lesión.':
       'Ejecutar generador raster disponible y comprobar su salida visual; marcar como atlas docente y cotejar anatomía, rótulos y lesión con la fuente.',
