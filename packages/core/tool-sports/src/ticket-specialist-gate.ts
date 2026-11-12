@@ -13,6 +13,7 @@ import {nflDeepSignals,nhlDeepSignals,mlbDeepSignals,
   soccerDeepSignals,tennisDeepSignals} from './sports-granular-bridge.ts'
 import {investigateSoccer} from './soccer-worldwide-dossier.ts'
 import {nhlSlate,investigateNhl} from './nhl-evidence-research.ts'
+import {sameEspnTeam} from './sports-exact-espn-winner.ts'
 import {discoverMlbDay,researchMlbCase} from './mlb-evidence-research.ts'
 import {tennisSlate,investigateTennis,type TennisTour} from './tennis-evidence-research.ts'
 
@@ -49,8 +50,13 @@ const closeTime=(a:string,b:string)=>
 export function resolveNhlTicketMatch<T extends {
   id:string;date:string;home:{name:string};away:{name:string}
 }>(slate:readonly T[],target:Pick<SpecialistFixture,'home'|'away'|'kickoff'>):T|null{
-  const matches=slate.filter(x=>identities(x.home.name,x.away.name,target.home,target.away)
-    &&closeTime(x.date,target.kickoff))
+  // Official NHL score feeds may expose unambiguous nicknames only (e.g.
+  // "Kraken" vs ESPN "Seattle Kraken"). Use the existing exact NHL franchise
+  // alias table; still require BOTH teams and a matching kickoff, exactly once.
+  const matches=slate.filter(x=>
+    sameEspnTeam(x.home.name,target.home,'icehockey_nhl')&&
+    sameEspnTeam(x.away.name,target.away,'icehockey_nhl')&&
+    closeTime(x.date,target.kickoff))
   return matches.length===1?matches[0]!:null
 }
 
