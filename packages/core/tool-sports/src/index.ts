@@ -342,7 +342,7 @@ export function apply(ctx: Context): void {
     isConcurrencySafe:()=>true,
     async execute(args){
       const report=await scoutDailySports(args.date,args.limit??30,
-        dailyResearchFetcher(fetch,process.env),Date.now(),process.env,args.sports)
+        fetch,Date.now(),await sportsEnv(ctx),args.sports)
       return JSON.stringify({...report,instruction:'Este barrido tiene plazo limitado: si diagnostics.unavailableLeagues>0, investiga las demás disciplinas y usa respaldos MLB/NHL/NBA/Soccer cuando corresponda, sin llamar a la misma fuente bloqueada repetidamente. Primer filtro para construir 5-6 propuestas (objetivo 5), NO ranking predictivo. Investiga a fondo estos eventos; si no alcanzan, amplía Soccer mundial por páginas. Para cada candidato compara H2H, bajas, clima, jugadores y mercados reales h2h, spreads, totales, períodos y props si la fuente los publica. No inventes cuotas, modelos ni estadísticas; las propuestas sin cotización comprobada no son apuestas aprobadas.'})
     },
     presentCall:()=>({card:'generic',title:'Escanear deportes y partidos de la jornada',kind:'read' as const}),
@@ -1858,6 +1858,10 @@ export function apply(ctx: Context): void {
         complete:result.complete,priced:result.priced,placed:false,
         conditional:result.conditional,dossierComplete:result.dossierComplete,
         verifiedEvents:result.verifiedEvents,eventsFound:result.eventsFound,
+        discoveredEvents:result.discoveredEvents,
+        discoveryAudit:result.discoveryAudit,
+        candidateLegs:result.candidateLegs,
+        ticketReadyForReview:result.ticketReadyForReview,
         quotedLegs:result.quotedLegs,conditionalLegs:result.conditionalLegs,
         approvedForBetting:result.approvedForBetting,
         missingQuotes:result.missingQuotes,approvedLegs:result.approvedLegs,
