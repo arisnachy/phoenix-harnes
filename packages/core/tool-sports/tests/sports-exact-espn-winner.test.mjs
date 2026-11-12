@@ -170,3 +170,14 @@ test('exact NHL ESPN event pricing accepts team nicknames but rejects wrong riva
   assert.equal((await lookupExactEspnWinner({...hockey,home:'Vegas Golden Knights'},
     fake,now)).quotes.length,0)
 })
+
+test('exact ESPN accepts a very old bookmaker update when freshly fetched, never changes the observed timestamp',async()=>{
+  const ancient=event('2026-10-01T02:00:00Z')
+  const report=await lookupExactEspnWinner(target,async url=>
+    url.includes('scoreboard?dates=20261110')?{events:[ancient]}:
+      url.includes('scoreboard?')?{events:[]}:{items:[]},now)
+  assert.equal(report.quotes.length,2)
+  assert.ok(report.quotes.every(q=>q.updatedAt==='2026-10-01T02:00:00Z'))
+  assert.ok(report.quotes.every(q=>q.observedAt===new Date(now).toISOString()))
+  assert.equal(report.attempted,true)
+})

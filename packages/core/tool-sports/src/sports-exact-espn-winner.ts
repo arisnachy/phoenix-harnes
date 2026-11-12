@@ -94,8 +94,9 @@ export async function lookupExactEspnWinner(
       {date:day,days:2,eventId:target.eventId,now,cache:false,
         ...(target.sportKey==='soccer_espn_dynamic'?{espnLeague:target.espnLeague}:{})},
     )
-    // An official ESPN sportsbook price with no updatedAt is an authentic
-    // observation, but never a certified currently executable bookmaker line.
+    // This function explicitly re-fetches ESPN with cache:false. Its recorded
+    // observedAt is the moment of this read; bookmaker updatedAt is optional
+    // and has no maximum age. Never imply bookmaker execution/acceptance.
     result.referenceOdds=scanned.observations.filter(q=>
       q.eventId===target.eventId&&q.market==='h2h'&&q.point===null&&
       sameEspnTeam(q.home,target.home,target.sportKey)&&
@@ -116,7 +117,6 @@ export async function lookupExactEspnWinner(
       Math.abs(Date.parse(q.timeIso)-kickoff)<=90_000&&
       Number.isFinite(Date.parse(q.observedAt??''))&&
       Date.parse(q.observedAt!)<=now&&
-      now-Date.parse(q.observedAt!)<=15*60_000&&
       q.price>1&&q.price<1000&&!q.bookmaker.startsWith('ESPN proveedor #'))
     const soccerBooks=new Set(valid.filter(q=>norm(q.selection)==='draw')
       .map(q=>q.bookmaker))
