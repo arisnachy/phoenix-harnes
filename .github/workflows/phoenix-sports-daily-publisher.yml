@@ -59,6 +59,9 @@ jobs:
       PHOENIX_SPORTS_NOTIFY_TO: ${{ secrets.PHOENIX_SPORTS_NOTIFY_TO }}
       PHOENIX_SPORTS_NOTIFY_FROM: ${{ secrets.PHOENIX_SPORTS_NOTIFY_FROM }}
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      THE_ODDS_API_KEY: ${{ secrets.THE_ODDS_API_KEY }}
+      SPORTSGAMEODDS_API_KEY: ${{ secrets.SPORTSGAMEODDS_API_KEY }}
+      PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED: ${{ vars.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED || '0' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
