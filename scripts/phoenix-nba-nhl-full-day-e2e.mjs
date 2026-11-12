@@ -205,6 +205,8 @@ await Promise.all(Array.from({length:3},async()=>{
       console.log('FULL_DAY_EVENT '+JSON.stringify({
         eventId:row.game.eventId,league,home:row.game.home,away:row.game.away,
         rosters:row.stats?.teams?.map(t=>t.rosterFound),
+        logs:row.stats?.teams?.map(t=>t.athletes.filter(x=>x.lastGamesCount>0).length),
+        splits:row.stats?.teams?.map(t=>t.athletes.filter(x=>x.splitsCount>0).length),
         odds:row.odds?.entries,books:row.odds?.bookmakers,
         injuries:row.injuries?.status,errors:row.errors.length,
       }))
@@ -272,6 +274,7 @@ try{
     sourceChecks:x.sourceChecks?.map(v=>({provider:v.provider,status:v.status}))??[],
     endpointAudit:x.endpointAudit?.map(v=>({url:v.url,status:v.status}))??[],
     injuryStatus:x.injuryAudit?.status??'not-checked',
+    playerHistoryAudit:x.playerHistoryAudit??null,
     pendingSteps:x.pendingSteps?.slice(0,10)??[],
   }))
 }catch(e){work.notes.push('Specialist execution failed: '+clean(e))}
