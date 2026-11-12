@@ -18,12 +18,11 @@ const evidenceOnly=(match:NbaMatchResearch,now:number):SportChecklist=>{
     form:{state:sample?'partial':'missing',detail:
       match.home.team+' '+match.home.gamesObserved+' resultados; '+
       match.away.team+' '+match.away.gamesObserved+' resultados. Muestra y calendario por cotejar'},
-    B02:{state:'partial',detail:'Historial disponible: local '+
+    B02:{state:sample?'partial':'missing',detail:'Historial disponible: local '+
       match.home.gamesObserved+', visitante '+match.away.gamesObserved+
       '; no se acreditan automáticamente 5/10/20 completos'},
-    B03:{state:'partial',detail:'Forma histórica; rival ajustado y local/visita no verificados'},
+    B03:{state:sample?'partial':'missing',detail:'Forma histórica; rival ajustado y local/visita no verificados'},
   }
-  if(!sample){observation.B02.state='missing';observation.B03.state='missing'}
   return auditSportChecklist('basketball',observation,now)
 }
 /** Build one chronological checklist for every discovered NBA fixture.
