@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import type { InjectFace } from '@phoenix-ai/dsh-client-ui-slots'
 import { ModelsSection } from './ModelsSection.tsx'
 import type { ModelsSectionInjected } from './ModelsSection.tsx'
+import { CodexResetsPanel } from './CodexResetsPanel.tsx'
 import { PhoenixLocalPanel } from './PhoenixLocalPanel.tsx'
 import type { PhoenixLocalModelClient } from './PhoenixLocalPanel.tsx'
 import type { PhoenixLocalKey } from './phoenix-local-locales.ts'
@@ -16,10 +17,11 @@ export type ModelsWithLocalSectionProps = Partial<InjectFace<ModelsWithLocalSect
 
 /** Keep the existing provider page intact and append Phoenix Local to that same Settings page. */
 export function ModelsWithLocalSection(props: ModelsWithLocalSectionProps): ReactNode {
-  const { localModel, localT } = props
+  const { localModel, localT, t } = props
   return (
     <>
       <ModelsSection {...props} />
+      {t === undefined ? null : <CodexResetsPanel t={t} />}
       {localModel === undefined || localT === undefined
         ? null
         : <PhoenixLocalPanel client={localModel} t={localT} />}
