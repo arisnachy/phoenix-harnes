@@ -55,6 +55,20 @@ test('NBA splits retain HOME and AWAY duplicates independently',()=>{
   assert.equal(x.find(y=>y.name==='Away · PTS')?.value,'18.0')
   assert.equal(x.find(y=>y.name==='Away · AST')?.value,'8.9')
 })
+test('real ESPN NBA v3 root displayNames with numeric Home/Road stats extract correctly',()=>{
+  const sample={displayName:'2025-26 Splits',
+    labels:['GP','PTS','REB'],displayNames:['Games Played','Points Per Game','Rebounds Per Game'],
+    splitCategories:[{name:'split',displayName:'split',splits:[
+      {displayName:'All Splits',stats:['71','7.7','4.8']},
+      {displayName:'Home',stats:['35','7.5','4.3']},
+      {displayName:'Road',stats:['36','7.9','5.3']}]}]}
+  const rows=parseEspnSplits(sample)
+  assert.equal(rows.find(x=>x.name==='split · Home · Points Per Game')?.value,'7.5')
+  assert.equal(rows.find(x=>x.name==='split · Road · Points Per Game')?.value,'7.9')
+  assert.equal(rows.find(x=>x.name==='split · Road · Rebounds Per Game')?.value,'5.3')
+  assert.deepEqual(parseEspnSplits({splitCategories:[
+    {name:'byLocation',displayName:'Location'}]}),[])
+})
 test('nested NHL/ESPN situational splits preserve category and cap records',()=>{
   const x=parseEspnSplits({splitCategories:[
     {displayName:'Home/Road',splits:[
