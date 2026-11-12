@@ -87,6 +87,47 @@ const extract=(raw:unknown,max=10):DirectMetric[]=>{
   }
   return found
 }
+/** ESPN depth charts are positional player tables, NOT numeric team statistics.
+ * Keep each rank and name explicitly; ranks are projected depth, never starters.
+ * Site API may publish depthchart (NBA) or depthCharts (NFL).
+ */
+export const parseEspnDepthChart=(raw:unknown,max=60):DirectMetric[]=>{
+  const root=obj(raw),rows:DirectMetric[]=[],seen=new Set<string>()
+  const cap=Math.max(1,Math.min(100,max))
+  const charts=[...arr(root.depthCharts),...arr(root.depthcharts)]
+  if(root.depthchart)charts.push(root.depthchart)
+  if(root.depthChart)charts.push(root.depthChart)
+  if(!charts.length)charts.push(root)
+  const explore=(data:unknown,depth:number):void=>{
+    if(depth>3||rows.length>=cap)return
+    const chart=obj(data)
+    const positions=chart.positions
+    const slots=Array.isArray(positions)?
+      positions.map((v,i):[string,unknown]=>[String(i),v]):
+      Object.entries(obj(positions))
+    for(const [key,rawSlot] of slots){
+      const slot=obj(rawSlot),p=obj(slot.position)
+      const position=word(p.abbreviation??p.name??slot.abbreviation??
+        slot.displayName??key,35)
+      const athletes=arr(slot.athletes??slot.players??slot.items)
+      for(const [index,value] of athletes.entries()){
+        const item=obj(value),athlete=obj(item.athlete??item.player??value)
+        const name=word(athlete.displayName??athlete.fullName??athlete.name,90)
+        const rank=word(item.rank??item.depth??index+1,5)
+        const label=(position+(rank?' #'+rank:'')).slice(0,45)
+        const unique=label+'|'+name
+        if(name&&!seen.has(unique)&&rows.length<cap){
+          seen.add(unique);rows.push({name:label,value:name})
+        }
+      }
+    }
+    for(const child of arr(chart.items))explore(child,depth+1)
+    for(const child of arr(chart.depthCharts??chart.depthcharts))explore(child,depth+1)
+  }
+  for(const chart of charts)explore(chart,0)
+  // Older payloads can contain an explicit displayName/displayValue table.
+  return rows.length?rows:extract(raw,10)
+}
 type Task={url:string;destination:(value:unknown|null)=>void;type:string}
 const cache=new Map<string,{at:number;value:unknown|null}>()
 async function fetchBounded(url:string,fetcher:typeof fetch,now:number):Promise<unknown|null>{
@@ -142,7 +183,7 @@ export async function collectDirectEspnStats(
         status:value===null?'unavailable':team.stats.length?'available':'empty'})
     })
     add(root+'depthcharts','team_depthcharts',value=>{
-      team.depthChart=extract(value,10)
+      team.depthChart=parseEspnDepthChart(value,60)
       team.coverage.push({endpoint:'team_depthcharts',
         status:value===null?'unavailable':team.depthChart.length?'available':'empty'})
     })
