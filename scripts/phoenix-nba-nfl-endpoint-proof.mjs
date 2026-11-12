@@ -4,9 +4,11 @@
  */
 import {writeFile} from 'node:fs/promises'
 import {collectDirectEspnStats} from '../packages/core/tool-sports/src/sports-direct-stats.ts'
-const date=process.argv[2]??new Intl.DateTimeFormat('en-CA',{
+const calendar=new Intl.DateTimeFormat('en-US',{
   timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit'
-}).format(new Date()).replaceAll('-','')
+}).formatToParts(new Date())
+const date=process.argv[2]??['year','month','day'].map(part=>
+  calendar.find(x=>x.type===part)?.value??'').join('')
 if(!/^20\d{6}$/.test(date))throw Error('Expected YYYYMMDD date')
 const report={date,checkedAt:new Date().toISOString(),leagues:{},errors:[]}
 const accept={'accept':'application/json','user-agent':'PhoenixSportsEvidenceProbe/1.0'}
@@ -44,14 +46,17 @@ const athletes=raw=>{
   return [...seen].map(([id,name])=>({id,name}))
 }
 const depthCount=raw=>{
-  const root=obj(raw)
-  const charts=[...arr(root.depthCharts),...arr(root.depthcharts)]
-  if(root.depthchart)charts.push(root.depthchart)
-  if(!charts.length)charts.push(root)
-  let n=0
-  for(const value of charts){
-    for(const pos of Object.values(obj(obj(value).positions)))
-      n+=arr(obj(pos).athletes??obj(pos).players).length
+  const root=obj(raw),queue=[...arr(root.depthCharts),...arr(root.depthcharts)]
+  if(root.depthchart)queue.push(root.depthchart)
+  if(!queue.length)queue.push(root)
+  let n=0,examined=0
+  while(queue.length&&examined++<200){
+    const chart=obj(queue.shift())
+    const positions=chart.positions
+    const slots=Array.isArray(positions)?positions:Object.values(obj(positions))
+    for(const pos of slots)n+=arr(obj(pos).athletes??obj(pos).players).length
+    for(const child of arr(chart.items))queue.push(child)
+    for(const child of arr(chart.depthCharts??chart.depthcharts))queue.push(child)
   }
   return n
 }
