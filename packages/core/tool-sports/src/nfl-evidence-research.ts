@@ -4,6 +4,7 @@
 import {getFeed,hasSportsPermission,type MarketOutcome} from './sports.ts'
 import {collectDirectEspnStats,type DirectTeam} from './sports-direct-stats.ts'
 import {readHistoricalScoreboard} from './sports-historical-scoreboard.ts'
+import {fetchEspnScoreboardWithFallback} from './espn-nfl-weekly.ts'
 import {isVerifiedRegularSeason} from './sports-regular-season.ts'
 import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
 type Row=Record<string,unknown>
@@ -93,8 +94,12 @@ export async function nflSlate(date:string,fetcher:typeof fetch=fetch,
   if(!validNflDate(date))throw Error('Fecha NFL inválida')
   if(!hasSportsPermission('espn',env))throw Error('Fuente ESPN deshabilitada')
   const sources:NflSource[]=[]
-  const data=await read<{events?:unknown[]}>('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates='+
-    date.replaceAll('-',''),fetcher,sources,now)
+  const data=await fetchEspnScoreboardWithFallback('football','nfl',
+    date.replaceAll('-',''),async url=>{
+      const result=await read<{events?:unknown[]}>(url,fetcher,sources,now)
+      if(!result)throw Error('ESPN NFL no respondió a '+url)
+      return result
+    })
   const found=arr(data?.events).flatMap(x=>{const g=parseGame(x);return g?[g]:[]})
   const unique=new Map(found.map(x=>[x.eventId,x]))
   return{date,games:[...unique.values()].sort((x,y)=>x.scheduledAt.localeCompare(y.scheduledAt)),
