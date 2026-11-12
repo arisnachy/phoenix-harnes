@@ -32,7 +32,7 @@ jobs:
         run: |
           node --check scripts/phoenix-sports-endpoint-audit.mjs
           node --check scripts/phoenix-nba-nhl-full-day-e2e.mjs
-          node --experimental-strip-types --test packages/core/tool-sports/tests/ticket-specialist-gate.test.mjs packages/core/tool-sports/tests/sports-direct-stats.test.mjs packages/core/tool-sports/tests/free-sports-source-audit.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/ticket-specialist-gate.test.mjs packages/core/tool-sports/tests/sports-direct-stats.test.mjs packages/core/tool-sports/tests/free-sports-source-audit.test.mjs packages/core/tool-sports/tests/evidence-ticket.test.mjs
       - name: Check every registered route family with real HTTP requests
         run: node scripts/phoenix-sports-endpoint-audit.mjs
       - name: Publish inspectable network observations
