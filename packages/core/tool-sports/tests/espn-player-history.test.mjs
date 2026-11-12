@@ -150,3 +150,33 @@ test('full 82-game season preserves the most recent twenty games, not first twen
   assert.equal(result[0].name,'Game #81')
   assert.equal(result[19].name,'Game #62')
 })
+
+
+test('NBA recovers season-scoped gamelog and splits when default 200 is empty',async()=>{
+  const calls=[]
+  const fetcher=async url=>{
+    const u=String(url);calls.push(u)
+    let body={}
+    if(u.endsWith('/teams/20/roster'))
+      body={athletes:[{id:'123',displayName:'Verified Player',position:{abbreviation:'G'}}]}
+    else if(u.endsWith('/athletes/123/stats'))
+      body={categories:[{labels:['PTS'],totals:['21.0']}]}
+    else if(u.endsWith('/athletes/123/gamelog?season=2027'))
+      body={labels:['PTS'],events:{'900':{gameDate:'2026-11-05T23:00:00Z',
+        name:'Prior played game'}},seasonTypes:[{categories:[{
+          events:[{eventId:'900',stats:['21']}]}]}]}
+    else if(u.endsWith('/athletes/123/splits?season=2027'))
+      body={categories:[{displayName:'Home',labels:['PTS'],totals:['24']},
+        {displayName:'Away',labels:['PTS'],totals:['19']}]}
+    return new Response(JSON.stringify(body))
+  }
+  const d=await collectDirectEspnStats('basketball','nba',
+    [{id:'20',name:'Philadelphia 76ers'}],fetcher,now,1)
+  const a=d.teams[0].athletes[0]
+  assert.equal(a.lastGames.length,1)
+  assert.equal(a.splits.length,2)
+  assert.equal(a.verifiedSources.includes('gamelog:season=2027'),true)
+  assert.equal(a.verifiedSources.includes('splits:season=2027'),true)
+  assert.ok(calls.some(x=>x.endsWith('/gamelog?season=2027')))
+  assert.ok(calls.some(x=>x.endsWith('/splits?season=2027')))
+})
