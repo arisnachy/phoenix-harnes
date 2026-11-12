@@ -13,6 +13,11 @@ on:
       - 'packages/core/tool-sports/src/espn-odds.ts'
       - 'packages/core/tool-sports/src/espn-injury-backup.ts'
       - 'packages/core/tool-sports/src/sports-direct-stats.ts'
+      - 'packages/core/tool-sports/tests/nhl-evidence-research.test.mjs'
+      - 'packages/core/tool-sports/src/sports.ts'
+      - 'packages/core/tool-sports/src/espn-player-history.ts'
+      - 'packages/core/tool-sports/src/nhl-evidence-research.ts'
+      - 'scripts/phoenix-nhl-2026-live-probe.mjs'
       - 'packages/core/tool-sports/src/daily-specialist-checklist.ts'
   workflow_dispatch:
 permissions:
@@ -46,6 +51,18 @@ jobs:
         with:
           name: phoenix-nba-nfl-endpoint-proof
           path: phoenix-nba-nfl-endpoint-proof.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Test 2026 NHL roster, schedule, player and NBA depthchart endpoints over real HTTP
+        run: |
+          node --check scripts/phoenix-nhl-2026-live-probe.mjs
+          node scripts/phoenix-nhl-2026-live-probe.mjs
+      - name: Preserve exact 2026 NHL HTTP statuses and redirected final URLs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-nhl-2026-live-urls
+          path: phoenix-nhl-2026-live-probe.json
           if-no-files-found: warn
           retention-days: 30
       - name: Check every registered route family with real HTTP requests

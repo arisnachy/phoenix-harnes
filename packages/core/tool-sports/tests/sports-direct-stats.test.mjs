@@ -191,3 +191,23 @@ test('real live ESPN depthchart array delivers NBA and NFL ranked player entries
     assert.equal(dossier.teams[0].coverage.find(x=>x.endpoint==='team_depthcharts')?.status,'available')
   }
 })
+
+test('NBA Core depthcharts fallback is used only after empty Site response',async()=>{
+  const attempts=[]
+  const transport=async url=>{
+    const u=String(url);attempts.push(u)
+    const payload=u.endsWith('/roster')?
+      {athletes:[{id:'101',displayName:'Known Player'}]}:
+      u.includes('sports.core.api.espn.com')?
+      {depthchart:{items:[{displayName:'PG rotation',
+        displayValue:'Player X (not confirmed starter)'}]}}:{}
+    return new Response(JSON.stringify(payload),{status:200})
+  }
+  const result=await collectDirectEspnStats('basketball','nba',
+    [{id:'27',name:'Washington Wizards'}],transport,now,1)
+  const team=result.teams[0]
+  assert.equal(team.depthChart[0]?.name,'PG rotation')
+  assert.equal(team.coverage.find(x=>x.endpoint==='team_depthcharts')?.status,'empty')
+  assert.equal(team.coverage.find(x=>x.endpoint==='team_depthcharts_core')?.status,'available')
+  assert.ok(attempts.includes('https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/seasons/2027/teams/27/depthcharts'))
+})

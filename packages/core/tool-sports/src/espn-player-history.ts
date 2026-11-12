@@ -141,6 +141,67 @@ export function parseEspnSplits(raw:unknown,limit=48):HistoryMetric[]{
   }
   return out
 }
+/** Compute home/away season splits from individually played games ONLY when
+ * ESPN identifies the venue for that athlete/game. No "vs" name guessing,
+ * no fabricated home flag, and no season averages passed off as game logs.
+ */
+export function parseEspnVenueSplitsFromGameLog(raw:unknown,now=Date.now()):HistoryMetric[]{
+  const root=obj(raw),metadata=obj(root.events)
+  type VenueRow={venue:'Home'|'Away';stats:Map<string,number>}
+  const rows=new Map<string,VenueRow>()
+  const allowed=/^(?:PTS|REB|AST|STL|BLK|TO|OREB|DREB|FGA|FGM|FTA|FTM|3PA|3PM|PF)$/u
+  const add=(input:unknown,headers:Row)=>{
+    const e=obj(input),eid=eventId(e.eventId??e.id),meta=obj(metadata[eid])
+    if(!eid)return
+    const stamp=date(meta.gameDate??meta.date??e.gameDate??e.date)
+    if(!stamp||stamp>now)return
+    const tag=word(meta.homeAway??meta.homeRoadFlag??meta.atVs??
+      e.homeAway??e.homeRoadFlag??e.atVs,15).toLowerCase()
+    const venue:VenueRow['venue']|null=
+      ['home','h','vs'].includes(tag)?'Home':
+      ['away','a','r','at','@'].includes(tag)?'Away':null
+    if(!venue)return
+    const values=arr(e.stats??e.statistics),labels=matchedLabels(headers,root,values.length)
+    if(!labels.length)return
+    const metrics=new Map<string,number>()
+    for(let i=0;i<labels.length;i++){
+      const key=word(labels[i],30).toUpperCase(),value=word(values[i],20)
+      if(!allowed.test(key)||!/^[-+]?\d+(?:\.\d+)?$/u.test(value))continue
+      const numeric=Number(value)
+      if(Number.isFinite(numeric))metrics.set(key,numeric)
+    }
+    if(!metrics.size)return
+    const existing=rows.get(eid)
+    if(existing&&existing.venue!==venue)return // conflicting venue: never guess
+    if(existing)for(const [key,val] of metrics)existing.stats.set(key,val)
+    else rows.set(eid,{venue,stats:metrics})
+  }
+  for(const item of arr(root.events).slice(0,180))add(item,root)
+  for(const season of arr(root.seasonTypes).slice(0,6))
+    for(const category of arr(obj(season).categories).slice(0,18))
+      for(const item of arr(obj(category).events).slice(0,110))
+        add(item,obj(category))
+  const home=[...rows.values()].filter(r=>r.venue==='Home')
+  const away=[...rows.values()].filter(r=>r.venue==='Away')
+  if(!home.length||!away.length)return []
+  const out:HistoryMetric[]=[
+    {name:'Home · GP',value:String(home.length)},
+    {name:'Away · GP',value:String(away.length)},
+  ]
+  for(const key of ['PTS','REB','AST','STL','BLK','TO','OREB','DREB','FGA','FGM','FTA','FTM','3PA','3PM','PF']){
+    const avg=(games:VenueRow[]):string|null=>{
+      const values=games.flatMap(r=>r.stats.has(key)?[r.stats.get(key)!]:[])
+      return values.length===games.length?
+        String(Number((values.reduce((a,b)=>a+b,0)/values.length).toFixed(2))):null
+    }
+    const h=avg(home),a=avg(away)
+    if(h!==null&&a!==null){
+      out.push({name:'Home · '+key,value:h},{name:'Away · '+key,value:a})
+    }
+  }
+  return out.length>2?out:[]
+}
+
 /** Official NHL player landing is a valid *different provider* for last5.
  * Do not equate NHL athlete IDs with ESPN athlete IDs or infer game starters.
  */
