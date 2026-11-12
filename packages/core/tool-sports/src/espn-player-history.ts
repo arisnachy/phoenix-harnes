@@ -87,6 +87,10 @@ const scalar=(v:unknown):string=>{
 export function parseEspnSplits(raw:unknown,limit=48):HistoryMetric[]{
   const root=obj(raw),out:HistoryMetric[]=[],used=new Set<string>()
   const max=Math.max(1,Math.min(limit,80))
+  // Live ESPN Common v3 keeps labels at the ROOT, while Home/Road has
+  // only a stats[] array of strings nested under splitCategories[].splits[].
+  const rootLabels=arr(root.displayNames).length?arr(root.displayNames):
+    arr(root.labels).length?arr(root.labels):arr(root.names)
   const queue:Array<{data:unknown;path:string;depth:number}>=[
     ...arr(root.categories).map(x=>({data:x,path:'',depth:0})),
     ...arr(root.splitCategories).map(x=>({data:x,path:'',depth:0})),
@@ -99,11 +103,17 @@ export function parseEspnSplits(raw:unknown,limit=48):HistoryMetric[]{
     const title=categoryName(node)
     const path=next.path?title?next.path+' · '+title:next.path:
       title||'Total'
-    const labels=arr(node.labels).length?arr(node.labels):
-      arr(node.displayNames).length?arr(node.displayNames):arr(node.names)
     const values=arr(node.totals).length?arr(node.totals):
       arr(node.displayValues).length?arr(node.displayValues):
-      arr(node.values)
+      arr(node.values).length?arr(node.values):
+      // Numeric ESPN split rows use stats[]; the row objects below are
+      // handled separately and are never treated as scalar statistics.
+      arr(node.stats).every(x=>typeof x==='string'||typeof x==='number')?
+        arr(node.stats):[]
+    const labels=arr(node.labels).length===values.length&&values.length?arr(node.labels):
+      arr(node.displayNames).length===values.length&&values.length?arr(node.displayNames):
+      arr(node.names).length===values.length&&values.length?arr(node.names):
+      rootLabels.length===values.length?rootLabels:[]
     if(labels.length&&labels.length===values.length){
       for(let i=0;i<labels.length&&out.length<max;i++){
         const stat=word(labels[i],45),value=scalar(values[i])
