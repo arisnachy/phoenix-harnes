@@ -178,6 +178,14 @@ export async function collectDirectEspnStats(
       // for athletes whose first probe yields actual records or the top three
       // whose gamelog may exist independently of season stats.
       const early=team.athletes.length<=3
+      // The explicit ESPN season is a safety-net for incomplete Common-v3
+      // defaults. NBA and NHL use season-ending years; summer WNBA uses the
+      // calendar year. A prior season is NOT silently labeled current form.
+      const observed=new Date(now)
+      const calendarYear=observed.getUTCFullYear()
+      const seasonYear=calendarYear+
+        (((league==='nba'||league==='nhl')&&observed.getUTCMonth()>=6)?1:0)
+      const explicitSeason='?season='+seasonYear
       const recorded=(path:string,value:unknown|null,found:number)=>
         athlete.coverage.push({endpoint:path,url:uri+path,
           status:value===null?'unavailable':found?'available':'empty'})
@@ -193,6 +201,16 @@ export async function collectDirectEspnStats(
             athlete.lastGames=parseEspnGameLog(data,now,20)
             recorded('gamelog',data,athlete.lastGames.length)
             if(athlete.lastGames.length)athlete.verifiedSources.push('gamelog')
+            else if(early&&athlete.stats.length) {
+              // Retry only a bounded roster-verified sample. Never use season
+              // averages as a substitute for event-specific player histories.
+              add(uri+'gamelog'+explicitSeason,'athlete_gamelog_season',season=>{
+                athlete.lastGames=parseEspnGameLog(season,now,20)
+                recorded('gamelog'+explicitSeason,season,athlete.lastGames.length)
+                if(athlete.lastGames.length)
+                  athlete.verifiedSources.push('gamelog:season='+seasonYear)
+              })
+            }
           })
         }
         // ESPN may publish splits even when season totals are empty. Probe
@@ -203,6 +221,14 @@ export async function collectDirectEspnStats(
             athlete.splits=parseEspnSplits(data,48)
             recorded('splits',data,athlete.splits.length)
             if(athlete.splits.length)athlete.verifiedSources.push('splits')
+            else if(early&&athlete.stats.length){
+              add(uri+'splits'+explicitSeason,'athlete_splits_season',season=>{
+                athlete.splits=parseEspnSplits(season,48)
+                recorded('splits'+explicitSeason,season,athlete.splits.length)
+                if(athlete.splits.length)
+                  athlete.verifiedSources.push('splits:season='+seasonYear)
+              })
+            }
           })
         }
       })
