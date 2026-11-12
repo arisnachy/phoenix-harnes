@@ -105,15 +105,18 @@ test('five-leg automatic scout verifies ESPN summaries and injury coverage witho
   assert.match(result.card.props.note,/Accesible NO equivale a bajas o titulares verificados/)
   assert.match(result.card.props.legs[0].rationale,/titulares pendientes/)
 })
-test('three different scoreboards per team remain insufficient for a stronger auto ticket',async()=>{
+test('three different games per team yield conditional research, not an automatic strong ticket',async()=>{
   const threeOnly=async url=>{
     const key=String(url).match(/dates=([0-9]{8})/u)?.[1]
     return new Response(JSON.stringify(fixture(url,
       ['20261028','20261027','20261026','20261025'].includes(key))))
   }
   const result=await evidenceTicket(5,day,'soccer',threeOnly,now)
-  assert.equal(result.complete,false)
-  assert.equal(result.verifiedEvents,0)
+  assert.equal(result.verifiedEvents,5)
+  assert.ok(result.discoveryAudit.discoveredEvents>=5)
+  assert.ok(result.card.props.legs.every(x=>/MUESTRA REDUCIDA/.test(x.rationale)))
+  assert.ok(result.card.props.legs.every(x=>!/Probabilidad individual exploratoria/.test(x.rationale)))
+  assert.equal(result.modelProbabilities,false)
 })
 
 test('a failed expert dossier is excluded before five-leg selection and replaced with the next real game',async()=>{
@@ -183,4 +186,16 @@ test('women Champions League enters automated ticket research after calendar dis
   assert.ok(result.events.every(x=>x.league==='uefa.wchampions'))
   assert.equal(result.priced,false)
   assert.equal(result.card.props.combinedOdds,'No disponible')
+})
+
+test('one verified historical game per rival never invents a winner',async()=>{
+  const oneOnly=async url=>{
+    const key=String(url).match(/dates=([0-9]{8})/u)?.[1]
+    return new Response(JSON.stringify(fixture(url,
+      ['20261028','20261027'].includes(key))))
+  }
+  const result=await evidenceTicket(5,day,'soccer',oneOnly,now)
+  assert.equal(result.discoveryAudit.discoveredEvents,6)
+  assert.equal(result.verifiedEvents,0)
+  assert.equal(result.selections.length,0)
 })

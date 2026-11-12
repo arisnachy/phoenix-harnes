@@ -352,8 +352,11 @@ export async function evidencePricedTicket(
     const sportKey=leagueSportKey[event.league]??
       (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
     if(!sportKey)return [] as KeylessQuote[]
+    // Wrap the transport to disable the in-process ESPN odds cache for
+    // ticket construction: preserve a fresh feed READ, not an old snapshot.
+    const directFetcher:typeof fetch=(input,init)=>fetcher(input,init)
     const report=await boundedPriced(marketOddsDetailed(
-      sportKey,'h2h',env,fetcher,now),7_000)
+      sportKey,'h2h',env,directFetcher,now),7_000)
     fallbackSources.push(...report.sources)
     // ESPN may omit updatedAt. Its fresh observedAt marks a published
     // comparison price, NOT a bookmaker-accepted executable offer.
@@ -366,7 +369,7 @@ export async function evidencePricedTicket(
       const observedAt=Date.parse(q.observedAt??'')
       const espnObserved=q.source?.startsWith('ESPN ')===true
       const currentSnapshot=Number.isFinite(observedAt)&&observedAt<=now&&
-        now-observedAt<=15*60_000&&(delayedSource||espnObserved)
+        (espnObserved||now-observedAt<=15*60_000&&delayedSource)
       const validBookTime=Number.isFinite(updated)&&updated<=now&&
         now-updated<=3_600_000
       if(!Number.isFinite(Date.parse(time))||
@@ -437,7 +440,7 @@ export async function evidencePricedTicket(
       status:rawExactCount?'observed':'empty',count:rawExactCount,
       detail:'Consulta por ID real de '+exactTargets.length+
         ' partidos, incluyendo el siguiente día UTC; '+
-        rawExactCount+' moneylines vigentes y '+rawExactReferences+
+        rawExactCount+' moneylines observadas y '+rawExactReferences+
         ' referencias sin nombre de casa o con inconsistencias; ESPN no exige updatedAt.',
     })
   }
@@ -451,7 +454,7 @@ export async function evidencePricedTicket(
       const espnObserved=q.source?.startsWith('ESPN ')===true
       const observedAt=Date.parse(q.observedAt??'')
       const snapshotValid=Number.isFinite(observedAt)&&observedAt<=now&&
-        now-observedAt<=15*60_000
+        (espnObserved||now-observedAt<=15*60_000)
       const quoteAge=now-updated
       const acceptableAge=espnObserved?snapshotValid:
         Number.isFinite(updated)&&quoteAge>=0&&quoteAge<=3_600_000
