@@ -8,6 +8,7 @@
  */
 import {getFeed,sportsCatalog} from './sports.ts'
 import {recoverEspnRoster,type EspnRosterPerson} from './espn-public-roster.ts'
+import {parseEspnGameLog,parseEspnSplits} from './espn-player-history.ts'
 
 type Obj=Record<string,unknown>
 const obj=(x:unknown):Obj=>x!==null&&typeof x==='object'&&!Array.isArray(x)?x as Obj:{}
@@ -21,6 +22,8 @@ export type DirectAthlete={
   id:string;name:string;teamId:string;position:string;jersey:string;headshot:string|null
   stats:DirectMetric[];lastGames:DirectMetric[];splits:DirectMetric[]
   status:'verified'|'partial'|'unavailable';verifiedSources:string[]
+  /** Per-athlete fetch state; empty 200 differs from unavailable endpoint. */
+  coverage:Array<{endpoint:string;url:string;status:'available'|'empty'|'unavailable'}>
 }
 export type DirectTeam={
   id:string;name:string;athleteCount:number;selectedCount:number
@@ -83,36 +86,6 @@ const extract=(raw:unknown,max=10):DirectMetric[]=>{
     }
   }
   return found
-}
-/** A gamelog is a sequence of event-level observations, not generic
- * season totals. Preserve the event/date and the provider's stat labels.
- * @param raw - ESPN Common v3 athlete gamelog response.
- * @returns Up to eight actual event stat rows with source labels.
- */
-function gameLog(raw:unknown):DirectMetric[]{
-  const root=obj(raw),events=obj(root.events)
-  const results:DirectMetric[]=[]
-  const queue:Array<{v:unknown;depth:number}>=[{v:raw,depth:0}]
-  let examined=0
-  while(queue.length&&examined++<70&&results.length<8){
-    const next=queue.shift()!,node=obj(next.v),labels=arr(node.labels)
-    for(const event of arr(node.events).slice(0,12)){
-      const e=obj(event),values=arr(e.stats),eventId=id(e.eventId)
-      if(!eventId||!values.length||labels.length!==values.length)continue
-      const game=obj(events[eventId])
-      const title=word(game.shortName??game.name??e.displayName??eventId,90)
-      const facts=labels.slice(0,6).map((label,i)=>
-        word(label,18)+': '+word(values[i],18)).join(' · ')
-      if(title&&facts)results.push({name:title,value:facts.slice(0,175)})
-      if(results.length>=8)break
-    }
-    if(next.depth>=4)continue
-    for(const field of ['seasonTypes','categories','tables'])
-      for(const child of arr(node[field]).slice(0,15))queue.push({v:child,depth:next.depth+1})
-  }
-  // No event-specific observations means no verified gamelog; season averages
-  // MUST NOT be relabeled as last games.
-  return results
 }
 type Task={url:string;destination:(value:unknown|null)=>void;type:string}
 const cache=new Map<string,{at:number;value:unknown|null}>()
@@ -197,7 +170,7 @@ export async function collectDirectEspnStats(
     team.selectedCount=chosen.length
     for(const person of chosen){
       const athlete:DirectAthlete={...person,teamId:t.id,stats:[],lastGames:[],
-        splits:[],status:'unavailable',verifiedSources:[]}
+        splits:[],status:'unavailable',verifiedSources:[],coverage:[]}
       team.athletes.push(athlete)
       const uri=web+'athletes/'+person.id+'/'
       // Avoid 60-100 redundant player endpoints when ESPN returns empty
@@ -205,12 +178,20 @@ export async function collectDirectEspnStats(
       // for athletes whose first probe yields actual records or the top three
       // whose gamelog may exist independently of season stats.
       const early=team.athletes.length<=3
+      const recorded=(path:string,value:unknown|null,found:number)=>
+        athlete.coverage.push({endpoint:path,url:uri+path,
+          status:value===null?'unavailable':found?'available':'empty'})
       add(uri+'stats','athlete_stats',value=>{
         athlete.stats=extract(value,12)
+        recorded('stats',value,athlete.stats.length)
         if(athlete.stats.length)athlete.verifiedSources.push('stats')
-        if(athlete.stats.length||early||priority(person)===0){
+        // NHL Common v3 frequently replies 404 for gamelog. NHL's official
+        // player/{NHL-id}/game-log endpoint is handled by investigateNhl()
+        // using the NHL roster namespace; never pass an ESPN ID there.
+        if(league!=='nhl'&&(athlete.stats.length||early||priority(person)===0)){
           add(uri+'gamelog','athlete_gamelog',data=>{
-            athlete.lastGames=gameLog(data)
+            athlete.lastGames=parseEspnGameLog(data,now,20)
+            recorded('gamelog',data,athlete.lastGames.length)
             if(athlete.lastGames.length)athlete.verifiedSources.push('gamelog')
           })
         }
@@ -219,7 +200,8 @@ export async function collectDirectEspnStats(
         // solely because a provider returned an empty stats payload.
         if(athlete.stats.length&&(priority(person)===0||early)||early){
           add(uri+'splits','athlete_splits',data=>{
-            athlete.splits=extract(data,6)
+            athlete.splits=parseEspnSplits(data,48)
+            recorded('splits',data,athlete.splits.length)
             if(athlete.splits.length)athlete.verifiedSources.push('splits')
           })
         }
