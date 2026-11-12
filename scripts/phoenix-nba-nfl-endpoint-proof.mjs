@@ -7,7 +7,7 @@ import {collectDirectEspnStats} from '../packages/core/tool-sports/src/sports-di
 const date=process.argv[2]??new Intl.DateTimeFormat('en-CA',{
   timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit'
 }).format(new Date()).replaceAll('-','')
-if(!/^20\\d{6}$/.test(date))throw Error('Expected YYYYMMDD date')
+if(!/^20\d{6}$/.test(date))throw Error('Expected YYYYMMDD date')
 const report={date,checkedAt:new Date().toISOString(),leagues:{},errors:[]}
 const accept={'accept':'application/json','user-agent':'PhoenixSportsEvidenceProbe/1.0'}
 const http=async(url)=>{
@@ -37,7 +37,7 @@ const athletes=raw=>{
   let traversed=0
   while(queue.length&&traversed++<220){
     const x=obj(queue.shift())
-    if(/^\\d+$/.test(String(x.id??''))&&x.displayName)
+    if(/^\d+$/.test(String(x.id??''))&&x.displayName)
       seen.set(String(x.id),String(x.displayName))
     for(const child of arr(x.items??x.athletes))queue.push(child)
   }
@@ -81,7 +81,7 @@ for(const [sport,league,fallback] of [
   }
   const match=candidates.find(x=>arr(obj(arr(obj(x).competitions)[0]).competitors).length===2)
   const teams=arr(obj(arr(obj(match).competitions)[0]).competitors).map(x=>obj(obj(x).team))
-  const ids=teams.map(t=>String(t.id??'')).filter(x=>/^\\d+$/.test(x))
+  const ids=teams.map(t=>String(t.id??'')).filter(x=>/^\d+$/.test(x))
   const chosen=[...new Set([...ids,...fallback])].slice(0,2)
   const teamRows=[]
   for(const teamId of chosen){
