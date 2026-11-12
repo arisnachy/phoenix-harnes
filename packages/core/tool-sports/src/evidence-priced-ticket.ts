@@ -1,7 +1,7 @@
 /** Quote only when independently researched fixtures match fresh, same-bookmaker prices.
  * No combined-odds claims across different bookmakers or historical sources.
  */
-import { evidenceTicket, type TicketPreselectReviewer } from './evidence-ticket.ts'
+import { evidenceTicket,type TicketDiscoveryAudit,type TicketPreselectReviewer } from './evidence-ticket.ts'
 import {dailyResearchFetcher} from './sports-daily-preload.ts'
 import {auditTicketDecisions,readDecisionPolicy,type TicketDecisionAudit} from './sports-ticket-decision.ts'
 import {auditTicketMarketRisk,quoteSideNoVig,type TicketMarketRisk} from './ticket-risk-audit.ts'
@@ -66,6 +66,7 @@ export async function evidencePricedTicket(
   sourceAudit:OddsAuditRow[];approvedLegs:number;candidateLegs:number;
   ticketReadyForReview:boolean;multisportSatisfied:boolean;
   specialistChecks:SpecialistGate[];researchedLegs:number;
+  discoveredEvents:number;discoveryAudit:TicketDiscoveryAudit;
   modelAudit:Array<{eventId:string;status:'support'|'contradiction'|'unavailable';
     prediction:ModelForecast|null}>;
   conditional:boolean;dossierComplete:boolean;
@@ -118,7 +119,8 @@ export async function evidencePricedTicket(
         priority,reason}
     })
   }
-  const research=await evidenceTicket(count,date,sport,researchFetcher,now,env,
+  // Interactive fixture lookup bypasses the persisted research cache.
+  const research=await evidenceTicket(count,date,sport,fetcher,now,env,
     reviewCandidates)
   // Full specialist reassessment is retained for a preliminary timeout or
   // unavailable dossier. Never treat a short preflight as completed research.
@@ -188,6 +190,7 @@ export async function evidencePricedTicket(
   ].join(' · ')
   const preliminaryLegs=Array.isArray(research.card.props.legs)?research.card.props.legs:[]
   const researchCard:ChatBlock={...research.card,props:{...research.card.props,
+    discoveryAudit:research.discoveryAudit,
     dataCounts:{eventsFound:research.verifiedEvents,quotedLegs:0,researchedLegs,
       candidateLegs:0,
       conditionalLegs:specialistChecks.filter(x=>x.checklist?.complete!==true).length,
@@ -234,12 +237,25 @@ export async function evidencePricedTicket(
     conditionalLegs:specialistChecks.filter(x=>x.checklist?.complete!==true).length,
     approvedForBetting:false as const,sourceAudit:initialSources,
     candidateLegs:0,ticketReadyForReview:false,
+    discoveredEvents:research.discoveryAudit.discoveredEvents,
+    discoveryAudit:research.discoveryAudit,
     specialistChecks,researchedLegs,modelAudit,trackingEvents,
     decisionAudit:preliminaryDecisionAudit,reviewedBeforeSelection,removedConflicts,conditional:!checklistComplete,
     dossierComplete:checklistComplete,
     multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
     explanation:'Preselección ESPN, cuotas todavía NO verificadas: '+quoteAccess+
       '. Los archivos históricos no ofrecen precios para apostar hoy.'}
+  // No selected candidate means no odds adapter ran, not no odds in ESPN.
+  if(!research.events.length){
+    return{...base,conditional:true,
+      sourceAudit:initialSources.map(row=>({...row,
+        status:row.status==='attempted'?'not-applicable' as const:row.status,
+        note:row.note+' No se consultaron cuotas por falta de candidatos.',
+      })),
+      explanation:'ESPN descubrió '+research.discoveryAudit.discoveredEvents+
+        ' partidos pero cero picks pasaron los filtros de historial. '+
+        'No se consultaron casas ni cuotas: verificar discoveryAudit primero.'}
+  }
   // If research already consumed the wall-clock budget, return the actual
   // verified preselection now instead of starting more independent quote scans.
   // In particular, do not make Kira lose a valid draft to the outer watchdog.

@@ -72,6 +72,8 @@ test('six-legged evidence path quotes only same bookmaker and preserves the requ
   assert.doesNotMatch(complete.card.props.subtitle,/hold|CONDICIONAL/i)
   assert.equal(complete.approvedLegs,0,'uncalibrated specialists cannot approve bets')
   assert.equal(complete.candidateLegs,5)
+  assert.ok(complete.discoveredEvents>=5)
+  assert.ok(complete.discoveryAudit.eligibleLeagues>=1)
   assert.equal(complete.ticketReadyForReview,true)
   assert.equal(complete.researchedLegs,5)
   assert.equal(complete.decisionAudit.legs.length,5)
@@ -510,4 +512,22 @@ test('final five-leg research ticket remains visible when provisional lineups ar
     x.pendingEvidence.some(note=>note.includes('titulares'))))
   assert.equal(result.decisionAudit.approvedForBetting,false)
   assert.equal(result.decisionAudit.legs.length,5)
+})
+
+test('empty ranked slate preserves verified fixtures and does not query odds',async()=>{
+  let oddsCalls=0
+  const noHistory=async url=>{
+    const u=String(url)
+    if(u.includes('api.the-odds-api.com')||u.includes('/odds?'))oddsCalls++
+    if(/dates=202610(?!28)/u.test(u))return new Response(JSON.stringify({events:[]}))
+    return feed(url)
+  }
+  const report=await withSpecialists(5,date,'soccer',0,now,enabled,noHistory,
+    async()=>{oddsCalls++;return []})
+  assert.equal(report.verifiedEvents,0)
+  assert.ok(report.discoveredEvents>=5)
+  assert.equal(report.quotedLegs,0)
+  assert.equal(oddsCalls,0)
+  assert.match(report.explanation,/No se consultaron casas ni cuotas/)
+  assert.ok(report.sourceAudit.some(x=>x.source==='ESPN Site/Core'&&x.status==='not-applicable'))
 })

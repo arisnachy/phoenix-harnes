@@ -29,6 +29,8 @@ test('one bounded daily scan covers the real leagues and diversifies sports',asy
   assert.ok(calls.length>=report.coverage.length*2)
   assert.equal(report.totalEligible,7)
   assert.equal(report.events.length,5)
+  assert.ok(report.coverage.find(x=>x.league==='nba').rawEvents>=3)
+  assert.ok(report.coverage.find(x=>x.league==='nba').pregameOnDate>=3)
   assert.equal(new Set(report.events.map(x=>x.sport)).size,4)
   assert.ok(report.events.every(x=>x.status==='scheduled'&&x.source==='ESPN Site API'))
   assert.ok(report.events.every(x=>x.home.id&&x.away.id&&x.eventId))
@@ -70,6 +72,7 @@ test('one provider error cannot be promoted as an empty or verified league',asyn
   const report=await scoutDailySports(day,3,partial,now)
   assert.equal(report.events.length,0)
   assert.equal(report.coverage.find(x=>x.league==='eng.1')?.status,'unavailable')
+  assert.equal(report.coverage.find(x=>x.league==='eng.1')?.failedPartitions,2)
   assert.equal(report.coverage.find(x=>x.league==='nba')?.status,'empty')
 })
 test('daily market search keeps as many as 36 real upcoming candidates, not only 12',async()=>{
