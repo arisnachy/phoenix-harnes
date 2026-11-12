@@ -574,6 +574,161 @@ export async function readCodexAccountSnapshot(
   }
 }
 
+
+/** Opaque reset metadata returned by the Codex app-server; no credential material. */
+export interface CodexResetCredit {
+  readonly id: string
+  readonly status: string
+  readonly resetType: string
+  readonly expiresAt?: number
+  readonly title?: string
+}
+
+/** Native reset eligibility is tentative; Codex is authoritative on redemption. */
+export interface CodexResetState {
+  readonly connected: boolean
+  readonly availableCount?: number
+  readonly credits: readonly CodexResetCredit[]
+  readonly primary?: AuthorizationRateLimitWindow
+  readonly secondary?: AuthorizationRateLimitWindow
+  readonly checkedAt: number
+}
+
+/** One native Codex redemption and a fresh observation of remaining allowances. */
+export interface CodexResetReceipt {
+  readonly outcome: 'reset' | 'alreadyRedeemed' | 'nothingToReset' | 'noCredit'
+  readonly state?: CodexResetState
+}
+
+/** Explicit, idempotent reset request, never a password or OAuth token. */
+export interface CodexResetRequest {
+  readonly idempotencyKey: string
+  readonly creditId?: string
+}
+
+function codexResetState(rateResponse: unknown, connected: boolean): CodexResetState {
+  const response = maybeObject(rateResponse)
+  const buckets = maybeObject(response?.rateLimitsByLimitId)
+  const limits = maybeObject(buckets?.codex) ?? maybeObject(response?.rateLimits)
+  const resetCredits = maybeObject(response?.rateLimitResetCredits)
+  const available = optionalNumber(resetCredits?.availableCount)
+  const rawRows = Array.isArray(resetCredits?.credits) ? resetCredits.credits : []
+  const credits = rawRows.flatMap((item): CodexResetCredit[] => {
+    const credit = maybeObject(item)
+    const id = optionalString(credit?.id)
+    const status = optionalString(credit?.status)
+    const resetType = optionalString(credit?.resetType)
+    if (id === undefined || status === undefined || resetType === undefined) return []
+    const expiresAt = optionalNumber(credit?.expiresAt)
+    const title = optionalString(credit?.title)
+    return [{
+      id, status, resetType,
+      ...expiresAt === undefined ? {} : { expiresAt },
+      ...title === undefined ? {} : { title },
+    }]
+  })
+  const primary = limitWindow(limits?.primary)
+  const secondary = limitWindow(limits?.secondary)
+  return {
+    connected, credits, checkedAt: Date.now(),
+    ...available === undefined || !Number.isInteger(available) || available < 0
+      ? {} : { availableCount: available },
+    ...primary === undefined ? {} : { primary },
+    ...secondary === undefined ? {} : { secondary },
+  }
+}
+
+async function readNativeResetState(connection: CodexAccountConnection, signal: AbortSignal): Promise<CodexResetState> {
+  const account = await readAccount(connection, signal)
+  if (maybeObject(account.account)?.type !== 'chatgpt') {
+    return codexResetState(undefined, false)
+  }
+  const response = await Promise.race([
+    connection.request('account/rateLimits/read', {}, signal),
+    connection.processEnded(),
+  ])
+  return codexResetState(response, true)
+}
+
+/**
+ * Read banked reset availability and primary/secondary usage with the native Codex session.
+ * @param ctx - PHOENIX Host context with the subprocess service.
+ * @param config - Native Codex app-server runtime configuration.
+ * @param signal - Cancellation of the current account operation.
+ * @returns Only secret-free reset and usage metadata.
+ */
+export async function readCodexResetState(
+  ctx: Context,
+  config: CodexAccountBridgeConfig,
+  signal: AbortSignal = new AbortController().signal,
+): Promise<CodexResetState> {
+  const connection = await openConnection(ctx, config, signal, true)
+  try {
+    return await readNativeResetState(connection, signal)
+  } finally {
+    await connection.close()
+  }
+}
+
+/**
+ * Redeem at most one saved credit using the official idempotent Codex method.
+ * @param ctx - PHOENIX Host context with the subprocess service.
+ * @param config - Native Codex app-server runtime configuration.
+ * @param request - UUID-like idempotency key and optional credit from the last rate-limit read.
+ * @param signal - Cancellation of the current request.
+ * @returns The server-declared outcome and freshly queried remaining allowances when possible.
+ */
+export async function consumeCodexReset(
+  ctx: Context,
+  config: CodexAccountBridgeConfig,
+  request: CodexResetRequest,
+  signal: AbortSignal = new AbortController().signal,
+): Promise<CodexResetReceipt> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(request.idempotencyKey)) {
+    throw new Error('codex reset: a valid UUID idempotency key is required')
+  }
+  if (request.creditId !== undefined && request.creditId.trim().length === 0) {
+    throw new Error('codex reset: creditId must not be empty')
+  }
+  const connection = await openConnection(ctx, config, signal, true)
+  try {
+    const before = await readNativeResetState(connection, signal)
+    if (!before.connected) throw new Error('codex reset: ChatGPT account authorization required')
+    if (before.availableCount === 0) return { outcome: 'noCredit', state: before }
+    if (before.availableCount === undefined) {
+      throw new Error('codex reset: the server did not report saved reset availability')
+    }
+    if (request.creditId !== undefined && before.credits.length > 0
+      && !before.credits.some(c => c.id === request.creditId && c.status === 'available')) {
+      throw new Error('codex reset: selected credit is no longer available')
+    }
+    const result = object(await Promise.race([
+      connection.request('account/rateLimitResetCredit/consume', {
+        idempotencyKey: request.idempotencyKey,
+        ...request.creditId === undefined ? {} : { creditId: request.creditId },
+      }, signal),
+      connection.processEnded(),
+    ]), 'rateLimitResetCredit/consume response')
+    const outcome = result.outcome
+    if (outcome !== 'reset' && outcome !== 'alreadyRedeemed'
+      && outcome !== 'nothingToReset' && outcome !== 'noCredit') {
+      throw new Error('codex reset: unexpected server redemption outcome')
+    }
+    // The provider's outcome is authoritative. If post-read fails, do not
+    // manufacture a restored allowance or retry redemption with a new key.
+    let state: CodexResetState | undefined
+    try {
+      state = await readNativeResetState(connection, signal)
+    } catch (error) {
+      ctx.logger.warn('codex reset: post-redemption quota refresh unavailable')
+      ctx.logger.warn(error)
+    }
+    return { outcome, ...state === undefined ? {} : { state } }
+  } finally {
+    await connection.close()
+  }
+}
+
 async function commitManagedAccountMarker(ctx: Context): Promise<void> {
   await ctx.credentials.modifyRecord(CODEX_ACCOUNT_KEY, () => Promise.resolve({ kind: 'api-key' }))
 }
