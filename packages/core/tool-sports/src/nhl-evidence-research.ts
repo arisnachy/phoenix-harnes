@@ -2,6 +2,7 @@
  * Odds do not imply a calibrated forecast or a bet approved for a ticket.
  */
 import {getFeed,type MarketOutcome} from './sports.ts'
+import {recoverEspnRoster} from './espn-public-roster.ts'
 type R=Record<string,unknown>
 const o=(x:unknown):R=>x!==null&&typeof x==='object'&&!Array.isArray(x)?x as R:{}
 const arr=(x:unknown):unknown[]=>Array.isArray(x)?x:[]
@@ -20,7 +21,7 @@ export type HockeyFixture={id:string;date:string;state:string;season:string;
   venue:string}
 export type HockeyPlayer={id:string;team:string;name:string;role:'forward'|'defense'|'goalie';
   stats:Record<string,string>;last5:Array<{date:string;summary:string}>;
-  starterConfirmed:false}
+  starterConfirmed:false;idProvider?:'NHL'|'ESPN'}
 export type HockeyEvidenceSource={url:string;status:'verified'|'missing'|'error';checkedAt:string;
   error?:string}
 export type HockeyMarket={bookmaker:string;market:string;selection:string;point:number|null;
@@ -120,7 +121,7 @@ function teamRoster(v:unknown,team:string):HockeyPlayer[]{
       const p=o(item),playerId=id(p.id)
       const name=[localized(p.firstName),localized(p.lastName)].filter(Boolean).join(' ')
       if(!playerId||!name)continue
-      players.set(playerId,{id:playerId,team,name,role,stats:{},last5:[],starterConfirmed:false})
+      players.set(playerId,{id:playerId,team,name,role,stats:{},last5:[],starterConfirmed:false,idProvider:'NHL'})
     }
   }
   return[...players.values()]
@@ -269,6 +270,46 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
   const specialTeams=parseNhlSpecialTeams(fixture,pp,pk,now)
   const players={home:teamRoster(h,fixture.home.abbrev),
     away:teamRoster(a,fixture.away.abbrev)}
+  // An unavailable NHL Web API roster does not mean there are no players.
+  // Match BOTH sides and kickoff against the ESPN day scoreboard before
+  // resolving the corresponding ESPN team IDs. Never reuse NHL IDs as ESPN IDs.
+  if(!players.home.length||!players.away.length){
+    const day=validHockeyDate(date)?date.replaceAll('-',''):''
+    const espnBoard=await source<unknown>(
+      'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates='+day,
+      fetcher,sources,now)
+    const same=(a:string,b:string)=>normalize(a)===normalize(b)
+    const candidates=arr(o(espnBoard).events).map(o).filter(event=>{
+      const gameTime=Date.parse(txt(event.date,55))
+      const competition=o(arr(event.competitions)[0])
+      const teams=arr(competition.competitors).map(o)
+      const home=teams.find(x=>x.homeAway==='home')
+      const away=teams.find(x=>x.homeAway==='away')
+      const hName=txt(o(home?.team).displayName??o(home?.team).name)
+      const aName=txt(o(away?.team).displayName??o(away?.team).name)
+      return id(event.id)&&Number.isFinite(gameTime)&&
+        Math.abs(gameTime-Date.parse(fixture.date))<=90*60_000&&
+        same(hName,fixture.home.name)&&same(aName,fixture.away.name)
+    })
+    if(candidates.length===1){
+      const competitors=arr(o(arr(candidates[0]!.competitions)[0]).competitors).map(o)
+      for(const side of ['home','away'] as const){
+        if(players[side].length)continue
+        const row=competitors.find(x=>x.homeAway===side)
+        const team=o(row?.team),teamId=id(team.id)
+        if(!teamId)continue
+        const recovered=await recoverEspnRoster('hockey','nhl',
+          {id:teamId,name:fixture[side].name},
+          url=>source<unknown>(url,fetcher,sources,now))
+        players[side]=recovered.people.map(p=>({
+          id:p.id,name:p.name,team:fixture[side].abbrev,
+          role:/^g$/iu.test(p.position)?'goalie' as const:
+            /^d$/iu.test(p.position)?'defense' as const:'forward' as const,
+          stats:{},last5:[],starterConfirmed:false as const,idProvider:'ESPN' as const,
+        }))
+      }
+    }
+  }
   const selected=[...(['home','away'] as const).flatMap(side=>{
     const team=players[side]
     return[...team.filter(p=>p.role==='goalie').slice(0,3),
@@ -279,6 +320,8 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
   await Promise.all(Array.from({length:Math.min(4,selected.length)},async()=>{
     while(next<selected.length){
       const p=selected[next++]!
+      // ESPN and NHL player IDs belong to different namespaces.
+      if(p.idProvider==='ESPN')continue
       const data=await source<unknown>(base+'player/'+p.id+'/landing',fetcher,sources,now)
       p.stats=observedStats(data)
       p.last5=arr(o(data).last5Games).slice(0,5).map(v=>{
@@ -315,7 +358,9 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
     'Lesiones, scratches y suspensiones sin reporte oficial reciente',
     'Fatiga individual de porteros, desplazamientos y carga de turnos sin fuente completa',
     'Liquidación 60 min, OT y shootout depende de las reglas de cada casa',
-    ...(!h||!a?['Uno o ambos rosters oficiales no disponibles']:[])]
+    ...(!players.home.length||!players.away.length?['Uno o ambos rosters NHL/ESPN no disponibles']:[]),
+    ...(players.home.some(p=>p.idProvider==='ESPN')||players.away.some(p=>p.idProvider==='ESPN')?
+      ['Rosters recuperados de ESPN: membresía observada, pero IDs ESPN no son IDs NHL y no acreditan líneas/porteros titulares']:[])]
   const scenarios=[
     'P1: contrastar portero confirmado, tiros 5v5, forecheck y ritmo de cambios.',
     'P2: analizar unidades reales PP/PK, tiros de alto peligro y fatiga defensiva.',
