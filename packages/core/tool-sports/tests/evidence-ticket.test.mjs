@@ -199,3 +199,29 @@ test('one verified historical game per rival never invents a winner',async()=>{
   assert.equal(result.verifiedEvents,0)
   assert.equal(result.selections.length,0)
 })
+
+
+test('exact NBA+NHL day filter scans neither soccer nor unrelated sports',async()=>{
+  const urls=[]
+  const game=(id,day)=>({id,date:day+'T23:00:00Z',
+    status:{type:{state:'pre'}},competitions:[{competitors:[
+      {homeAway:'home',team:{id:'20',displayName:'Home Team'}},
+      {homeAway:'away',team:{id:'28',displayName:'Away Team'}},
+    ]}]})
+  const fetcher=async url=>{
+    const s=String(url);urls.push(s)
+    const live=s.includes('dates=20261028')&&s.includes('/scoreboard')
+    return new Response(JSON.stringify(live?{
+      events:[game(s.includes('/hockey/')?'2000':'1000','2026-10-28')]
+    }:{events:[]}),{status:200})
+  }
+  const r=await evidenceTicket(5,day,'basketball,hockey',fetcher,now,{})
+  assert.equal(r.discoveryAudit.discoveredEvents,2)
+  assert.equal(r.discoveryAudit.scanCoverage.filter(x=>x.sport==='nba').length,0)
+  assert.ok(r.discoveryAudit.scanCoverage.every(x=>
+    ['basketball','hockey'].includes(x.sport)))
+  assert.ok(!urls.some(x=>x.includes('/soccer/')||x.includes('/baseball/')
+    ||x.includes('/football/')||x.includes('/tennis/')))
+  await assert.rejects(()=>evidenceTicket(5,day,
+    'basketball,hockey,evil-source',fetcher,now,{}),/Filtro de deportes/)
+})
