@@ -73,25 +73,29 @@ const descriptiveRank=(match:Awaited<ReturnType<typeof researchSport>>['matches'
   const rank=0.55*winDiff+0.40*marginDiff+0.05*restDiff
   return Math.abs(rank)>=0.16?rank:null
 }
-/** A lower tier for real fixtures with sufficient historical samples but
- * disagreeing or modest form signals. These are candidates to challenge,
- * NEVER promoted to strong findings or calibrated recommendations.
+/** Research-stage ranking, never a five-game admission gate.
+ * At least two DISTINCT published finishes per rival are needed for a
+ * directional form-only pick; one/no game is retained for event/odds research
+ * but cannot justify a winner from win-loss form alone.
+ * Anything below five games (NFL three) remains explicitly conditional.
  */
 const conditionalRank=(match:Awaited<ReturnType<typeof researchSport>>['matches'][number])=>{
   const {home,away,sport}=match
-  const min=sport==='football'?3:5
-  if(match.evidence!=='descriptive'||home.completedGames<min||
-    away.completedGames<min||home.averageMargin===null||
-    away.averageMargin===null)return null
+  const min=2
+  if(home.completedGames<min||away.completedGames<min||
+    home.averageMargin===null||away.averageMargin===null)return null
   const winDiff=percent(home.wins,home.completedGames)-
     percent(away.wins,away.completedGames)
   const marginDiff=home.averageMargin-away.averageMargin
   const direction=Math.abs(winDiff)>0.03?Math.sign(winDiff):Math.sign(marginDiff)
   if(!direction)return null
-  // A conditional score stays below every qualifying strong score.
+  // Diminish thin-sample rankings; strong classification still requires
+  // complete form and directional agreement. Scores are NOT probabilities.
+  const target=sport==='football'?3:5
+  const coverage=Math.min(1,Math.min(home.completedGames,away.completedGames)/target)
   const raw=0.01+Math.min(0.07,Math.abs(winDiff)*0.1+
     Math.abs(marginDiff)*0.002)
-  return direction*raw
+  return direction*raw*coverage
 }
 export async function evidenceTicket(
   count:number,date=dayNow(),sportFilter?:string,fetcher:typeof fetch=fetch,
@@ -141,7 +145,7 @@ export async function evidenceTicket(
     // Stop costly expansion only after enough independently researched,
     // directionally consistent picks are available; an HTTP error is not a vote.
     const viable=reports.flatMap(x=>x.status==='fulfilled'?x.value.matches:[])
-      .filter(x=>descriptiveRank(x)!==null)
+      .filter(x=>descriptiveRank(x)!==null||conditionalRank(x)!==null)
     const diversified=sportFilter!==undefined||new Set(viable.map(x=>x.sport)).size>=2
     // First-pass quality matters: do not end the league scan as soon as
     // exactly five provisional winners appear. Compare a wider rival pool.
@@ -159,16 +163,18 @@ export async function evidenceTicket(
     if(report.status!=='fulfilled')continue
     for(const match of report.value.matches){
       evaluated++
-      // Three different fixtures are a lower bound for descriptive research,
-      // NOT enough to sell a high-confidence 5/6-leg multi-sport parlay.
-      // Only NFL retains 3 because a league schedule has one match per week.
-      // Keep the same, testable descriptive filter during expansion and choice.
+      // Historical thresholds classify strength, not access to research.
+      // Two independent completed games per opponent allow a LOW-CONFIDENCE
+      // provisional form ranking; no data or a flat signal cannot choose a side.
       const strongest=descriptiveRank(match)
       const provisional=strongest===null?conditionalRank(match):null
       const rank=strongest??provisional
       if(rank===null){insufficientEvidence++;continue}
       const level=strongest===null?'conditional' as const:'strong' as const
       const home=match.home,away=match.away
+      const targetGames=match.sport==='football'?3:5
+      const limitedHistory=home.completedGames<targetGames||
+        away.completedGames<targetGames
       const favorite=rank>0?home:away,opponent=rank>0?away:home
       const sportRisks:Record<string,string>={
         soccer:'once/lesiones y xG',basketball:'lesiones y rotaciones',
@@ -193,7 +199,7 @@ export async function evidenceTicket(
           date:g.date,scored:g.scored,allowed:g.allowed}))},
       },now)
       const selectedProbability=rank>0?forecast.probabilityHome:forecast.probabilityAway
-      const estimatedPct=forecast.status==='exploratory'&&
+      const estimatedPct=!limitedHistory&&forecast.status==='exploratory'&&
         selectedProbability!==null?Number((selectedProbability*100).toFixed(1)):null
       const canonical=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
         .toLowerCase().replace(/[^a-z0-9]/gu,'')
@@ -220,6 +226,9 @@ export async function evidenceTicket(
           'Probabilidad individual exploratoria '+estimatedPct+
             '% (NO calibrada; no garantiza acierto). ')+
           (level==='conditional'?'CANDIDATA CONDICIONAL. ':'')+
+          (limitedHistory?'MUESTRA REDUCIDA '+home.completedGames+'/'+
+            away.completedGames+' partidos verificados (objetivo '+
+            targetGames+'). Incertidumbre elevada. ':'')+
           rationale).slice(0,480),
       }})
     }
@@ -316,7 +325,7 @@ export async function evidenceTicket(
       insufficientEvidence,pregameSummariesVerified:0,injuryFeedsVerified:0,
       deepContextChecked:0,newsMatched:0,playerStatsChecked:0,
       multisportSatisfied,scannedSports,selectedSports,
-      researchStandard:'Sin candidatos con cinco partidos distintos por equipo (NFL tres) y tendencia contrastable. Deportes evaluados: '+scannedSports+'.'+
+      researchStandard:'Sin dirección suficientemente documentada con al menos dos partidos distintos por rival; fuentes y partidos permanecen en discoveryAudit. Deportes evaluados: '+scannedSports+'.'+
         (budgetExhausted?' Búsqueda detenida por presupuesto de tiempo; quedan ligas sin investigar.':''),
       modelProbabilities:false,priced:false,placed:false,discoveryAudit,selections:[],
       events:[]}
@@ -469,7 +478,7 @@ export async function evidenceTicket(
     deepContextChecked,newsMatched,playerStatsChecked,
     multisportSatisfied,scannedSports,selectedSports,
     researchStandard:'Preselección de '+chosen.length+' partidos reales, incluyendo '+
-      candidatesConditional+' candidatos CONDICIONALES; historial mínimo 5 por club (NFL 3). Se exploraron '+scannedSports+' deportes; seleccionados: '+(selectedSports.join(', ')||'ninguno')+'. Diversidad '+(multisportSatisfied?'cumplida':'NO cumplida')+'. Lesiones, titulares y cuotas siguen sin verificación específica.'+
+      candidatesConditional+' candidatos CONDICIONALES; muestras desde 2 por rival se investigan con incertidumbre; 5 por club (NFL 3) es objetivo de muestra fuerte, NO una puerta de entrada. Se exploraron '+scannedSports+' deportes; seleccionados: '+(selectedSports.join(', ')||'ninguno')+'. Diversidad '+(multisportSatisfied?'cumplida':'NO cumplida')+'. Lesiones, titulares y cuotas siguen sin verificación específica.'+
       (budgetExhausted?' Búsqueda detenida por presupuesto de tiempo; quedan ligas sin investigar.':''),
     modelProbabilities:false,priced:false,placed:false,discoveryAudit,selections:documented,
     events:selected.map(x=>({eventId:x.pick.eventId,home:x.home,away:x.away,kickoff:x.kickoff,
