@@ -2,6 +2,7 @@
  * No fabricated scores, probabilities, athlete participation or betting recommendations.
  */
 import {type MarketOutcome} from './sports.ts'
+import {espnAthleteId} from './espn-public-roster.ts'
 import {collectDirectEspnStats,type DirectTeam} from './sports-direct-stats.ts'
 import {readHistoricalScoreboard} from './sports-historical-scoreboard.ts'
 import {isVerifiedRegularSeason} from './sports-regular-season.ts'
@@ -248,7 +249,7 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
     const side=tid===fixture.home.id?teams.home:tid===fixture.away.id?teams.away:null
     if(!side)return []
     return values(group.injuries??group.items).flatMap(y=>{
-      const entry=record(y),pid=id(record(entry.athlete).id??entry.athleteId)
+      const entry=record(y),pid=id(espnAthleteId(entry.athlete,entry))
       const athlete=side.roster.find(p=>p.id===pid)
       const status=label(entry.status??entry.description)
       return athlete&&status?[{teamId:side.id,name:athlete.name,playerId:pid,
