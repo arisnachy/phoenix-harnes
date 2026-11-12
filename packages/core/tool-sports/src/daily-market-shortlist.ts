@@ -14,6 +14,8 @@ export type DailyMarketCandidate={
   /** Public ESPN observation, distinct from a verified bookmaker update. */
   observedAt:string;timestampSource:'espn-observation'|'bookmaker-update'
   assessment:'quote-only-research-pending'
+  /** An older ESPN observation is visible, but needs a new price read before completion. */
+  requiresRecheck?:boolean;observationAgeMinutes?:number
 }
 export type DailyMarketShortlist={
   goal:number;range:[number,number];complete:boolean;bookmaker:string|null
@@ -21,7 +23,7 @@ export type DailyMarketShortlist={
   alternatives:DailyMarketCandidate[];rejectedQuotes:number;warning:string
   matchDiagnostics:{invalidQuote:number;unmatchedFixture:number;
     incompleteMarket:number;timestampConflict:number;invalidMarketSides:number;
-    unsupportedCandidatePrice:number}
+    unsupportedCandidatePrice:number;requiresRefresh:number}
 }
 const providerKeys:Readonly<Record<string,string>>={
   'basketball|nba':'basketball_nba',
@@ -73,6 +75,14 @@ const quoteClock=(quote:MarketOutcome):number=>{
   const espn=quote.source?.startsWith('ESPN')===true
   return Date.parse(espn&&quote.observedAt?quote.observedAt:quote.updatedAt)
 }
+/** A previous ESPN read may remain visible, but must be refetched by exact
+ * event ID before an automatically issued complete research ticket.
+ */
+export const espnQuoteNeedsRecheck=(quote:MarketOutcome,now=Date.now()):boolean=>{
+  if(quote.source?.startsWith('ESPN')!==true)return false
+  const observed=Date.parse(quote.observedAt??'')
+  return !Number.isFinite(observed)||observed>now||now-observed>30*60_000
+}
 const groupKey=(fixture:Fixture,quote:MarketOutcome):string=>[
   fixture.sport,fixture.league,fixture.eventId,quote.bookmaker,quote.eventId,
   quote.market,quote.market==='spreads'&&typeof quote.point==='number'
@@ -97,18 +107,25 @@ export function shortlistDailyMarkets(
   const groups=new Map<string,{fixture:Fixture;quotes:MarketOutcome[]}>()
   let rejectedQuotes=0
   const matchDiagnostics={invalidQuote:0,unmatchedFixture:0,incompleteMarket:0,
-    timestampConflict:0,invalidMarketSides:0,unsupportedCandidatePrice:0}
+    timestampConflict:0,invalidMarketSides:0,unsupportedCandidatePrice:0,requiresRefresh:0}
   const matchedGames=new Set<string>()
   for(const quote of quotes.slice(0,2000)){
     const time=Date.parse(quote.timeIso??quote.time),at=quoteClock(quote)
+    const espnObservation=quote.source?.startsWith('ESPN')===true&&
+      Number.isFinite(Date.parse(quote.observedAt??''))
+    // Never age out a published ESPN observation solely because it is old.
+    // Old observations are explicitly marked for a live recheck downstream.
+    const expired=!espnObservation&&now-at>60*60_000
     if(!quote.bookmaker?.trim()||!quote.source?.trim()||
       !['h2h','spreads','totals'].includes(quote.market)||
       !Number.isFinite(quote.price)||quote.price<=1||quote.price>1000||
-      !Number.isFinite(at)||at>now||now-at>(quote.source?.startsWith('ESPN')?30:60)*60_000||
+      !Number.isFinite(at)||at>now||expired||
       !Number.isFinite(time)||time<=now||!quote.sportKey){
       rejectedQuotes++;matchDiagnostics.invalidQuote++;continue
     }
-    const matches=fixtures.filter(game=>dailyOddsSportKey(game.sport,game.league)===quote.sportKey
+    const matches=fixtures.filter(game=>(dailyOddsSportKey(game.sport,game.league)===quote.sportKey||
+      (game.sport==='soccer'&&quote.sportKey==='soccer_espn_dynamic'&&
+        /^\d{1,16}$/u.test(quote.eventId)&&quote.eventId===game.eventId))
       &&normal(game.home.name)===normal(quote.home)
       &&normal(game.away.name)===normal(quote.away)
       &&Math.abs(Date.parse(game.kickoff)-time)<=45*60_000)
@@ -118,8 +135,11 @@ export function shortlistDailyMarkets(
     const fixture=matches[0]!
     const key=groupKey(fixture,quote)
     const group=groups.get(key)??{fixture,quotes:[]}
-    if(!group.quotes.some(q=>q.selection===quote.selection&&q.point===quote.point))
-      group.quotes.push(quote)
+    const previous=group.quotes.findIndex(q=>
+      q.selection===quote.selection&&q.point===quote.point)
+    if(previous<0)group.quotes.push(quote)
+    else if(quoteClock(quote)>quoteClock(group.quotes[previous]!))
+      group.quotes[previous]=quote
     groups.set(key,group)
     matchedGames.add(fixture.sport+'|'+fixture.league+'|'+fixture.eventId)
   }
@@ -159,7 +179,10 @@ export function shortlistDailyMarkets(
     const choice=options[0]
     if(!choice){matchDiagnostics.unsupportedCandidatePrice++;continue}
     const q=choice.quote
+    const requiresRecheck=rows.some(row=>espnQuoteNeedsRecheck(row,now))
+    if(requiresRecheck)matchDiagnostics.requiresRefresh++
     candidates.push({
+      requiresRecheck,observationAgeMinutes:Number(((now-quoteClock(q))/60_000).toFixed(1)),
       sport:fixture.sport,league:fixture.league,espnEventId:fixture.eventId,
       bookmakerEventId:q.eventId,fixture:fixture.away.name+' vs '+fixture.home.name,
       kickoff:fixture.kickoff,bookmaker:q.bookmaker,market:market as DailyMarketCandidate['market'],
@@ -239,5 +262,5 @@ export function shortlistDailyMarkets(
     bookmaker:best?.bookmaker??null,matchesInSlate:matchedGames.size,
     eligibleMarkets:candidates.length,selected,alternatives,rejectedQuotes,
     matchDiagnostics,
-    warning:'Solo preselección del mercado: marketNoVigShare procede de cuotas, NO de un modelo de acierto ni de valor esperado. Antes de proponer un ticket final confirma alineaciones, lesiones, titulares, porteros, contexto, reglas y probabilidad calibrada cuando exista. Si hay menos de cuatro ofertas válidas, informa la falta sin fabricar patas. No se ha realizado ninguna apuesta.'}
+    warning:'Las observaciones ESPN antiguas se conservan para estudio, pero requieren nueva lectura antes del boleto final. Solo preselección del mercado: marketNoVigShare procede de cuotas, NO de un modelo de acierto ni de valor esperado. Antes de proponer un ticket final confirma alineaciones, lesiones, titulares, porteros, contexto, reglas y probabilidad calibrada cuando exista. Si hay menos de cuatro ofertas válidas, informa la falta sin fabricar patas. No se ha realizado ninguna apuesta.'}
 }

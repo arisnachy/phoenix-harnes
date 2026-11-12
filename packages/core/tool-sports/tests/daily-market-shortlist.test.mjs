@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets} from '../src/daily-market-shortlist.ts'
+import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets,espnQuoteNeedsRecheck} from '../src/daily-market-shortlist.ts'
 
 const now=Date.parse('2026-11-06T17:00:00Z')
 const kickoff='2026-11-07T00:00:00Z'
@@ -211,8 +211,10 @@ test('ESPN website markets use fresh observation without inventing bookmaker upd
   const stale=shortlistDailyMarkets(fixtures,rows.map(q=>({
     ...q,observedAt:'2026-11-06T15:45:00Z'
   })),4,now)
-  assert.equal(stale.selected.length,0)
-  assert.equal(stale.rejectedQuotes,2)
+  assert.equal(stale.selected.length,1)
+  assert.equal(stale.selected[0].requiresRecheck,true)
+  assert.equal(stale.matchDiagnostics.requiresRefresh,1)
+  assert.equal(stale.rejectedQuotes,0)
 })
 test('ESPN soccer prices without draw remain rejected even with fresh observation',()=>{
   const rows=pair(5).map(q=>({...q,updatedAt:'',observedAt:observed,
@@ -241,4 +243,43 @@ test('genuine sub-1.20 NBA winner prices survive shortlist discovery',()=>{
   assert.equal(result.selected[0].decimalOdds,1.08333)
   assert.equal(result.selected[0].selection,'Home 0')
   assert.equal(result.selected[0].timestampSource,'espn-observation')
+})
+
+test('old bookmaker update remains valid when ESPN was consulted now',()=>{
+  const es=pair(0).map(q=>({...q,source:'ESPN Site/Core (evento exacto)',
+    updatedAt:'2026-11-01T11:00:00Z',observedAt:new Date(now).toISOString()}))
+  const found=shortlistDailyMarkets(fixtures,es,4,now)
+  assert.equal(found.selected.length,1)
+  assert.equal(found.selected[0].requiresRecheck,false)
+})
+test('an older ESPN observation stays visible for recheck, not counted as fresh',()=>{
+  const es=pair(0).map(q=>({...q,source:'ESPN Site/Core (evento exacto)',
+    updatedAt:'2026-11-01T11:00:00Z',observedAt:'2026-11-06T15:00:00Z'}))
+  const found=shortlistDailyMarkets(fixtures,es,4,now)
+  assert.equal(found.selected.length,1)
+  assert.equal(found.selected[0].requiresRecheck,true)
+  assert.equal(found.matchDiagnostics.requiresRefresh,1)
+})
+test('verified world soccer league matches by exact official ESPN ID only',()=>{
+  const game={...fixtures[5],league:'por.2',eventId:'77778'}
+  const es=[...pair(5),{...price(5,'Draw'),price:3.45}]
+    .map(q=>({...q,source:'ESPN Site/Core (evento exacto)',
+      eventId:'77778',sportKey:'soccer_espn_dynamic',
+      observedAt:new Date(now).toISOString()}))
+  const good=shortlistDailyMarkets([game],es,4,now)
+  assert.equal(good.selected.length,1)
+  const bad=shortlistDailyMarkets([game],es.map(q=>({...q,eventId:'77779'})),4,now)
+  assert.equal(bad.selected.length,0)
+})
+
+test('a fresh ESPN event snapshot replaces a stale quote for the same bookmaker and market',()=>{
+  const previous=pair(0).map(q=>({...q,source:'ESPN Site/Core (evento exacto)',
+    updatedAt:'2026-11-01T11:00:00Z',observedAt:'2026-11-06T15:00:00Z'}))
+  const latest=previous.map(q=>({...q,observedAt:new Date(now).toISOString()}))
+  assert.equal(espnQuoteNeedsRecheck(previous[0],now),true)
+  assert.equal(espnQuoteNeedsRecheck(latest[0],now),false)
+  const report=shortlistDailyMarkets(fixtures,[...previous,...latest],4,now)
+  assert.equal(report.selected.length,1)
+  assert.equal(report.selected[0].requiresRecheck,false)
+  assert.equal(report.matchDiagnostics.requiresRefresh,0)
 })

@@ -119,3 +119,13 @@ test('five verified selections from one provider survive two opposing auxiliary 
   assert.equal(result.selected.length,5)
   assert.equal(result.completed,true)
 })
+
+test('older ESPN quote can be investigated but not complete final supported ticket',()=>{
+  const reviews=[1,2,3,4,5].map(n=>({
+    ...review(n),candidate:{...candidate(n),requiresRecheck:n===1},
+  }))
+  const result=selectDailyResearchedMarkets(reviews,5)
+  assert.equal(result.selected.length,5)
+  assert.equal(result.supportedLegs,4)
+  assert.equal(result.completed,false)
+})
