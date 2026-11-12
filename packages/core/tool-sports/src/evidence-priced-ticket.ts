@@ -252,7 +252,11 @@ export async function evidencePricedTicket(
         status:row.status==='attempted'?'not-applicable' as const:row.status,
         note:row.note+' No se consultaron cuotas por falta de candidatos.',
       })),
-      explanation:'ESPN descubrió '+research.discoveryAudit.discoveredEvents+
+      explanation:removedConflicts>0||identityConflict?
+        'Borrador CONFLICTIVO: '+removedConflicts+
+        ' identidades contradichas por los especialistas; no se asociaron '+
+        'cuotas a equipos o partidos equivocados.':
+        'ESPN descubrió '+research.discoveryAudit.discoveredEvents+
         ' partidos pero cero picks pasaron los filtros de historial. '+
         'No se consultaron casas ni cuotas: verificar discoveryAudit primero.'}
   }
@@ -770,6 +774,8 @@ export async function evidencePricedTicket(
     askPrompt:'Kira, razona cada pata de forma individual: estimación con origen, datos favorables y contradicciones, lesionados y titulares. No mostrar probabilidad conjunta del boleto; no inventar valor esperado ni afirmar ticket ganador.',
   }}
   return{card,priced:true,placed:false,complete:true,
+    discoveredEvents:research.discoveryAudit.discoveredEvents,
+    discoveryAudit:research.discoveryAudit,
     conditional:!checklistComplete||elevatedMarketRisk,dossierComplete:checklistComplete,
     marketRisk,decisionAudit,reviewedBeforeSelection,removedConflicts,
     verifiedEvents:research.verifiedEvents,eventsFound:research.verifiedEvents,
