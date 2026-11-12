@@ -2,8 +2,8 @@
  * Stronger than simple win-loss record sorting, but intentionally NOT a calibrated
  * probability model. Event existence and kickoff are re-verified by researchTicket.
  */
-import { getFeed,hasSportsPermission,sportsCatalog, type ChatBlock } from './sports.ts'
-import {fetchEspnScoreboardWithFallback} from './espn-nfl-weekly.ts'
+import { hasSportsPermission,sportsCatalog, type ChatBlock } from './sports.ts'
+import {scoutDailySports} from './daily-sports-scout.ts'
 import {estimateEvidenceForecast} from './sports-forecast.ts'
 import { researchSport } from './multi-sport-research.ts'
 import { researchTicket, type ResearchTicketLeg } from './research-ticket.ts'
@@ -20,6 +20,16 @@ export type TicketPreselectCandidate={
 export type TicketPreselectVerdict={
   eventId:string;excluded:boolean;priority:number;reason:string
 }
+/** Distinguish provider-confirmed fixtures from fully ranked research legs. */
+export type TicketDiscoveryAudit={
+  discoveredEvents:number;eligibleLeagues:number;researchedLeagues:number;
+  candidatesEvaluated:number;rejectedForEvidence:number;
+  shortlistedCandidates:number;leaguesNotResearched:number;
+  scanCoverage:Array<{sport:string;league:string;status:string;
+    futureEvents:number;rawEvents:number;pregameOnDate:number;
+    failedPartitions:number;reason:string}>;
+  researchErrors:Array<{sport:string;league:string;reason:string}>;
+}
 export type TicketPreselectReviewer=(
   candidates:readonly TicketPreselectCandidate[],
 )=>Promise<readonly TicketPreselectVerdict[]>
@@ -27,7 +37,7 @@ export type TicketPreselectReviewer=(
 // all known ESPN soccer leagues, instead of unrelated tennis/campus sports.
 const defaultLeagues:ReadonlyArray<readonly [string,string]>=[
   ['basketball','nba'],['basketball','wnba'],['baseball','mlb'],
-  ['football','nfl'],['hockey','nhl'],
+  ['football','nfl'],['hockey','nhl'],['tennis','atp'],['tennis','wta'],
   ...(sportsCatalog.soccer??[]).map(league=>['soccer',league] as const),
 ]
 export function boundedTicket<T>(task:Promise<T>,ms:number):Promise<T>{
@@ -45,9 +55,6 @@ const validDate=(day:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(day)
   &&Number.isFinite(Date.parse(day+'T00:00:00Z'))
   &&new Date(day+'T00:00:00Z').toISOString().slice(0,10)===day
 const percent=(w:number,g:number)=>(w+1)/(g+2)
-const localDay=(stamp:number)=>new Intl.DateTimeFormat('en-CA',{
-  timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit',
-}).format(new Date(stamp))
 /** Ranks descriptive agreement only. It is NOT an outcome probability. */
 const descriptiveRank=(match:Awaited<ReturnType<typeof researchSport>>['matches'][number]):number|null=>{
   const home=match.home,away=match.away
@@ -93,38 +100,19 @@ export async function evidenceTicket(
   pregameSummariesVerified:number;injuryFeedsVerified:number;
   deepContextChecked:number;newsMatched:number;playerStatsChecked:number;
   multisportSatisfied:boolean;scannedSports:number;selectedSports:string[];
+  discoveryAudit:TicketDiscoveryAudit;
   selections:ResearchTicketLeg[];events:Array<{eventId:string;home:string;away:string;kickoff:string;sport:string;league:string;pick:'home'|'away'}>}>{
   if(!Number.isInteger(count)||count<1||count>6)throw Error('El ticket requiere entre 1 y 6 patas')
   if(!validDate(date))throw Error('Fecha de ticket inválida')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por el operador')
   const leagues=defaultLeagues.filter(([sport])=>!sportFilter||sport===sportFilter)
   if(!leagues.length)throw Error('Disciplina sin cobertura para ticket automático')
-  // Keep historical screening separate from full specialist investigations.
-  // A stalled provider must not block the ticket; failures retain their state.
-  const slate:Array<PromiseSettledResult<{sport:string;league:string;active:number}>>=[]
-  for(let offset=0;offset<leagues.length;offset+=8){
-    const batch=await Promise.allSettled(leagues.slice(offset,offset+8).map(async([sport,league])=>{
-    // Search both ESPN UTC date partitions for the requested local (RD) day.
-    const next=new Date(Date.parse(date+'T00:00:00Z')+86_400_000)
-      .toISOString().slice(0,10).replaceAll('-','')
-    const partitions=await Promise.allSettled([date.replaceAll('-',''),next].map(day=>
-      boundedTicket(fetchEspnScoreboardWithFallback(sport,league,day,
-        uri=>getFeed<{events?:Array<{id?:string|number;date?:string;status?:{type?:{state?:string}}}>}>(
-          uri,fetcher)),4_000)))
-    const observed=partitions.flatMap(x=>x.status==='fulfilled'&&Array.isArray(x.value.events)
-      ?x.value.events:[])
-    if(!partitions.some(x=>x.status==='fulfilled'&&Array.isArray(x.value.events)))
-      throw Error('Cartelera no verificada')
-    const active=new Set(observed.filter(e=>{
-      const at=Date.parse(e.date??'')
-      return Number.isFinite(at)&&at>now&&localDay(at)===date
-        &&(e.status?.type?.state??'pre')==='pre'
-    }).map(e=>String(e.id??'')).filter(id=>/^\d{1,20}$/u.test(id))).size
-    return{sport,league,active}
-    }))
-    slate.push(...batch)
-  }
-  const eligible=slate.flatMap(r=>r.status==='fulfilled'&&r.value.active>0?[r.value]:[])
+  // Unified calendar inventory: zero ranked picks never means zero fixtures.
+  const scan=await scoutDailySports(date,36,fetcher,now,env,
+    sportFilter?[sportFilter]:undefined)
+  const eligible=scan.coverage.filter(x=>x.futureEvents>0).map(x=>({
+    sport:x.sport,league:x.league,active:x.futureEvents,
+  }))
   eligible.sort((a,b)=>b.active-a.active||a.sport.localeCompare(b.sport))
   // Investigate in four-league batches. Do not stop at the first six leagues
   // when their evidence is weak: expand into verified Portugal/Italy/etc slates.
@@ -288,15 +276,34 @@ export async function evidenceTicket(
   const candidatesConditional=selected.filter(x=>x.level==='conditional').length
   const scannedSports=new Set(shortlist.map(x=>x.sport)).size
   const selectedSports=[...new Set(selected.map(x=>x.pick.sport))]
+  const discoveryAudit:TicketDiscoveryAudit={
+    discoveredEvents:scan.totalEligible,eligibleLeagues:eligible.length,
+    researchedLeagues:reports.filter(x=>x.status==='fulfilled').length,
+    candidatesEvaluated:evaluated,rejectedForEvidence:insufficientEvidence,
+    shortlistedCandidates:candidateLegs.length,
+    leaguesNotResearched:Math.max(0,shortlist.length-reports.length),
+    scanCoverage:scan.coverage.map(x=>({...x})),
+    researchErrors:reports.flatMap((result,index)=>result.status==='rejected'?[{
+      sport:shortlist[index]?.sport??'unknown',
+      league:shortlist[index]?.league??'unknown',
+      reason:String(result.reason).slice(0,180),
+    }]:[]),
+  }
   if(!chosen.length){
     // A zero-leg draft is useful and honest: Kira must not say that a 5-leg
     // wager was prepared when every candidate failed evidence requirements.
     const card:ChatBlock={component:'sports_ticket_card',version:1,props:{
       title:'PHOENIX · Investigación insuficiente',
-      subtitle:'No hay selecciones respaldadas para completar el ticket',
+      subtitle:'Partidos descubiertos: '+scan.totalEligible+
+        ' · candidatos respaldados: 0/'+count,
       requestedLegs:count,legs:[],combinedOdds:'No disponible',
       source:'ESPN Site API · resultados comprobados '+new Date(now).toISOString(),
-      note:'TICKET INCOMPLETO: 0 de '+count+' eventos superaron la auditoría de muestra, coherencia y disponibilidad. No se inventan favoritos, precios ni probabilidades. Verificar otra fecha o ampliar ligas antes de apostar.',
+      discoveryAudit,
+      note:'TICKET INCOMPLETO: '+scan.totalEligible+' partidos encontrados; '+
+        evaluated+' expedientes evaluados; '+insufficientEvidence+
+        ' rechazados por evidencia; '+discoveryAudit.researchErrors.length+
+        ' fallos históricos. Cero picks NO significa cero partidos. '+
+        'No se inventan favoritos, precios ni probabilidades.',
     }}
     return{card,complete:false,verifiedEvents:0,candidatesEvaluated:evaluated,
       researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
@@ -305,7 +312,7 @@ export async function evidenceTicket(
       multisportSatisfied,scannedSports,selectedSports,
       researchStandard:'Sin candidatos con cinco partidos distintos por equipo (NFL tres) y tendencia contrastable. Deportes evaluados: '+scannedSports+'.'+
         (budgetExhausted?' Búsqueda detenida por presupuesto de tiempo; quedan ligas sin investigar.':''),
-      modelProbabilities:false,priced:false,placed:false,selections:[],
+      modelProbabilities:false,priced:false,placed:false,discoveryAudit,selections:[],
       events:[]}
   }
   // One bounded memoized HTTP request for a repeated ESPN event summary
@@ -440,7 +447,7 @@ export async function evidenceTicket(
     }
   })
   const card:ChatBlock={...ticket.card,props:{...ticket.card.props,
-    legs:enrichedLegs,
+    discoveryAudit,legs:enrichedLegs,
     chatNarrative:enrichedLegs.map(x=>x.narrative).filter(Boolean),
     narrativeInstruction:'Kira debe acompañar cada pata en el chat con su análisis documentado, noticias enlazadas, riesgos, estadio, clima y árbitro si realmente están confirmados. Si algo falta, declararlo sin completar con imaginación. Fotografías de la noticia solo con URL HTTPS y fuente atribuida.',
     subtitle:'Preselección de '+chosen.length+' eventos · '+
@@ -458,7 +465,7 @@ export async function evidenceTicket(
     researchStandard:'Preselección de '+chosen.length+' partidos reales, incluyendo '+
       candidatesConditional+' candidatos CONDICIONALES; historial mínimo 5 por club (NFL 3). Se exploraron '+scannedSports+' deportes; seleccionados: '+(selectedSports.join(', ')||'ninguno')+'. Diversidad '+(multisportSatisfied?'cumplida':'NO cumplida')+'. Lesiones, titulares y cuotas siguen sin verificación específica.'+
       (budgetExhausted?' Búsqueda detenida por presupuesto de tiempo; quedan ligas sin investigar.':''),
-    modelProbabilities:false,priced:false,placed:false,selections:documented,
+    modelProbabilities:false,priced:false,placed:false,discoveryAudit,selections:documented,
     events:selected.map(x=>({eventId:x.pick.eventId,home:x.home,away:x.away,kickoff:x.kickoff,
       sport:x.pick.sport,league:x.pick.league,pick:x.pick.pick==='home'?'home' as const:'away' as const}))}
 }

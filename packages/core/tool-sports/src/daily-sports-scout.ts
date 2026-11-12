@@ -71,6 +71,7 @@ type DailySportsEvent = {
 type DailySportsCoverage = {
   sport:string,league:string,status:'available'|'empty'|'unavailable',
   futureEvents:number,reason:string
+  rawEvents:number;pregameOnDate:number;failedPartitions:number
 }
 
 /**
@@ -152,6 +153,8 @@ export async function scoutDailySports(
       const report=reports[i]
       if(!item||!report)continue
       const partitionsRead=report.status==='fulfilled'?report.value:[]
+      const failedPartitions=partitionsRead.filter(x=>x.status==='rejected').length+
+        (report.status==='rejected'?partitions.length:0)
       const boards=partitionsRead.filter((partition):partition is PromiseFulfilledResult<{
         board:Board;cached:boolean
       }>=>
@@ -159,16 +162,19 @@ export async function scoutDailySports(
       cachedPartitions+=boards.filter(board=>board.value.cached).length
       if(!boards.length){
         coverage.push({...item,status:'unavailable',futureEvents:0,
+          rawEvents:0,pregameOnDate:0,failedPartitions,
           reason:'Sin cartelera verificable desde ESPN en ambos días UTC'})
         continue
       }
-      let valid=0
+      let valid=0,rawEvents=0,pregameOnDate=0
       for(const board of boards)for(const event of (board.value.board.events??[]).slice(0,150)){
+        rawEvents++
         if(event.status?.type?.state!=='pre')continue
         const at=Date.parse(event.date??'')
         const id=String(event.id??'')
-        if(!Number.isFinite(at)||at<=now||!/^\d{1,20}$/u.test(id)
-          ||localDay(new Date(at))!==date)continue
+        if(!Number.isFinite(at)||at<=now||localDay(new Date(at))!==date)continue
+        pregameOnDate++
+        if(!/^\d{1,20}$/u.test(id))continue
         const sides=event.competitions?.[0]?.competitors
         if(!Array.isArray(sides))continue
         const home=participant(sides.find(s=>s.homeAway==='home'))
@@ -184,9 +190,11 @@ export async function scoutDailySports(
       const full=boards.length===partitions.length
       const cached=boards.some(x=>x.value.cached)
       coverage.push({...item,status:valid?'available':full&&!cached?'empty':'unavailable',
-        futureEvents:valid,reason:cached?
+        futureEvents:valid,rawEvents,pregameOnDate,failedPartitions,reason:cached?
           'Cobertura parcial: partición recuperada de caché local menor a 5 minutos; requiere revalidación en ESPN':
-          full?(valid?'Participantes y evento futuro confirmados':'Sin futuros verificables'):
+          full?(valid?'Participantes y evento futuro confirmados':
+            'Sin futuros verificables: '+rawEvents+' registros ESPN; '+
+            pregameOnDate+' prepartido del día local'):
           'Cobertura parcial: falta una partición UTC; los partidos recuperados sí se conservan'})
     }
   }
