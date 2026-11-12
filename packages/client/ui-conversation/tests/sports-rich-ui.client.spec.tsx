@@ -536,3 +536,73 @@ describe('Deep sports dashboard section limits',()=>{
     expect(parseGenerativeUiBlock({...unsafe,props:{...unsafe.props,onclick:'evil()'}})).toBeNull()
   })
 })
+
+
+describe('Actual PHOENIX priced-ticket producer and native renderer contract',()=>{
+  const audit={
+    discoveredEvents:15,eligibleLeagues:2,researchedLeagues:2,
+    candidatesEvaluated:15,rejectedForEvidence:4,shortlistedCandidates:11,
+    leaguesNotResearched:0,scanCoverage:[
+      {sport:'basketball',league:'nba',status:'available',futureEvents:4,
+        rawEvents:4,pregameOnDate:4,failedPartitions:0,reason:''},
+      {sport:'hockey',league:'nhl',status:'available',futureEvents:11,
+        rawEvents:11,pregameOnDate:11,failedPartitions:0,reason:''},
+    ],researchErrors:[],fixtureSample:[{
+      eventId:'401909976',sport:'basketball',league:'nba',
+      home:'Philadelphia 76ers',away:'Toronto Raptors',
+      kickoff:'2026-11-13T00:00:00Z',
+    }],
+  }
+  const base={
+    component:'sports_ticket_card',version:1,props:{
+      title:'PHOENIX · Ticket de investigación',source:'ESPN Site/Core',
+      subtitle:'5 cuotas de investigación observadas',requestedLegs:5,
+      combinedOdds:'No disponible',
+      note:'Ticket de investigación sin aprobación de apuestas',
+      presentationStatus:'final-research',
+      dataCounts:{eventsFound:15,quotedLegs:1,researchedLegs:1,
+        candidateLegs:1,conditionalLegs:1,approvedForBetting:0},
+      discoveryAudit:audit,
+      legs:[{event:'Toronto Raptors vs Philadelphia 76ers',
+        selection:'Philadelphia 76ers',bookmaker:'DraftKings',
+        price:'1.29',sport:'basketball',league:'nba',
+        eventId:'401909976',researchStatus:'conditional',
+        displayStatus:'research-selection',
+        riskNotes:['Lesiones y titulares por confirmar'],
+        pendingEvidence:['Informe oficial de quinteto incompleto'],
+      }],
+    },
+  }
+  it('renders the exact backend metadata instead of silently rejecting the researched ticket',()=>{
+    const block=parseGenerativeUiBlock(base)
+    expect(block).not.toBeNull()
+    if(!block)throw Error('Backend ticket was silently discarded')
+    render(<GenerativeUi block={block}/>)
+    expect(screen.getByText('Philadelphia 76ers')).toBeTruthy()
+  })
+  it('keeps unpriced tickets with verified fixture provenance and price preview',()=>{
+    const partial={...base,props:{...base.props,
+      presentationStatus:undefined,
+      combinedOdds:'No disponible',legs:[],
+      note:'TICKET INCOMPLETO · fuentes auditadas, precios pendientes',
+      pricePreview:[{eventId:'401909976',sport:'basketball',league:'nba',
+        home:'Philadelphia 76ers',away:'Toronto Raptors',
+        kickoff:'2026-11-13T00:00:00Z',attempted:true,
+        options:[{bookmaker:'DraftKings',selection:'Philadelphia 76ers',
+          market:'h2h',price:1.29,observedAt:'2026-11-12T16:00:00Z',updatedAt:null}],
+        notes:['Precio observado; no aceptación del bookmaker']}],
+      pricePreviewOffers:1,pricePreviewEvents:1,
+    }}
+    expect(parseGenerativeUiBlock(partial)).not.toBeNull()
+  })
+  it('rejects unknown HTML fields, oversized previews and poisoned decision counts',()=>{
+    expect(parseGenerativeUiBlock({...base,props:{...base.props,
+      html:'<script>alert(1)</script>'}})).toBeNull()
+    expect(parseGenerativeUiBlock({...base,props:{...base.props,
+      dataCounts:{...base.props.dataCounts,quotedLegs:-1}}})).toBeNull()
+    expect(parseGenerativeUiBlock({...base,props:{...base.props,
+      legs:base.props.legs.map(x=>({...x,riskNotes:['x'.repeat(500)]}))}})).toBeNull()
+    expect(parseGenerativeUiBlock({...base,props:{...base.props,
+      pricePreview:Array.from({length:20},()=>({}))}})).toBeNull()
+  })
+})

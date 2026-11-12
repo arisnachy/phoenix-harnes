@@ -112,11 +112,20 @@ export async function evidenceTicket(
   if(!Number.isInteger(count)||count<1||count>6)throw Error('El ticket requiere entre 1 y 6 patas')
   if(!validDate(date))throw Error('Fecha de ticket inválida')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por el operador')
-  const leagues=defaultLeagues.filter(([sport])=>!sportFilter||sport===sportFilter)
+  // A bounded comma-separated sport set lets a daily NBA+NHL request use both
+  // leagues without scanning unrelated world soccer or crossing bookmakers.
+  const sportFilters=sportFilter?.split(',').map(x=>x.trim()).filter(Boolean)
+  if(sportFilters&&(sportFilters.length<1||sportFilters.length>6||
+    new Set(sportFilters).size!==sportFilters.length||
+    sportFilters.some(x=>!defaultLeagues.some(([sport])=>sport===x))))
+    throw Error('Filtro de deportes de ticket inválido')
+  const singleSport=Boolean(sportFilters?.length===1)
+  const leagues=defaultLeagues.filter(([sport])=>
+    !sportFilters||sportFilters.includes(sport))
   if(!leagues.length)throw Error('Disciplina sin cobertura para ticket automático')
   // Unified calendar inventory: zero ranked picks never means zero fixtures.
   const scan=await scoutDailySports(date,36,fetcher,now,env,
-    sportFilter?[sportFilter]:undefined)
+    sportFilters)
   const eligible=scan.coverage.filter(x=>x.futureEvents>0).map(x=>({
     sport:x.sport,league:x.league,active:x.futureEvents,
   }))
@@ -124,7 +133,7 @@ export async function evidenceTicket(
   // Investigate in four-league batches. Do not stop at the first six leagues
   // when their evidence is weak: expand into verified Portugal/Italy/etc slates.
   // Only verified, future ESPN event IDs can become selections.
-  const shortlist=sportFilter?eligible:diversifiedSportsShortlist(eligible,eligible.length)
+  const shortlist=singleSport?eligible:diversifiedSportsShortlist(eligible,eligible.length)
   const reports:Array<PromiseSettledResult<Awaited<ReturnType<typeof researchSport>>>>=[]
   const researchStarted=Date.now()
   let budgetExhausted=false
@@ -146,7 +155,7 @@ export async function evidenceTicket(
     // directionally consistent picks are available; an HTTP error is not a vote.
     const viable=reports.flatMap(x=>x.status==='fulfilled'?x.value.matches:[])
       .filter(x=>descriptiveRank(x)!==null||conditionalRank(x)!==null)
-    const diversified=sportFilter!==undefined||new Set(viable.map(x=>x.sport)).size>=2
+    const diversified=singleSport||new Set(viable.map(x=>x.sport)).size>=2
     // First-pass quality matters: do not end the league scan as soon as
     // exactly five provisional winners appear. Compare a wider rival pool.
     if(offset+4>=8&&viable.length>=Math.max(12,count*3)&&diversified)break
@@ -278,7 +287,7 @@ export async function evidenceTicket(
     }
   }
   const {chosen:selected,diversitySatisfied:multisportSatisfied}=
-    diversifiedSportsPicks(candidateLegs,count,!sportFilter)
+    diversifiedSportsPicks(candidateLegs,count,!singleSport)
   const chosen=selected.map(x=>({
     ...x.pick,
     rationale:(String(x.pick.rationale??'')+
