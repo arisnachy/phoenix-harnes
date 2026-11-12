@@ -279,3 +279,34 @@ test('TheSportsDB timezone-less timestamps are partial, never host-local verifie
   assert.equal(reports.find(x=>x.provider==='TheSportsDB')?.status,'partial')
   assert.match(reports.find(x=>x.provider==='TheSportsDB')?.detail??'',/UTC verificable/)
 })
+
+
+test('shares identical backup calls across all daily legs and caches 429 only as unavailable',async()=>{
+  const time=Date.parse('2026-11-12T16:00:00Z')
+  let requests=0
+  const blocked=async url=>{
+    requests++
+    if(String(url).includes('thesportsdb'))return reply({},429)
+    return reply({scoreboard:{games:[]}})
+  }
+  const fixtures=[game,{...game,eventId:'401909977',home:'Washington Wizards',
+    away:'Detroit Pistons'}]
+  const reports=await Promise.all(fixtures.map(item=>
+    crosscheckFreeFixture(item,blocked,time,{})))
+  assert.equal(reports.length,2)
+  assert.equal(reports[0][0].status,'unavailable')
+  assert.equal(reports[1][0].status,'unavailable')
+  // The same fetch transport must not flood independent source hosts when
+  // asked to investigate all fifteen games in the same ticket.
+  assert.ok(requests<=2,'cached 403/429/503 must prevent repeated identical reads')
+})
+test('separate mock fetch transports do not inherit cached provider failures',async()=>{
+  const time=Date.parse('2026-11-12T16:00:00Z')
+  const old=await crosscheckFreeFixture(game,async()=>reply({},429),time,{})
+  const good=await crosscheckFreeFixture(game,async url=>
+    String(url).includes('thesportsdb')?reply({events:[{
+      strHomeTeam:game.home,strAwayTeam:game.away,
+      strTimestamp:game.kickoff}]}) :reply({scoreboard:{games:[]}}),time,{})
+  assert.equal(old[0].status,'unavailable')
+  assert.equal(good[0].status,'verified')
+})
