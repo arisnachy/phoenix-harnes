@@ -21,7 +21,7 @@ test('priced five-leg report retains real quotes, risk notes and transparent sta
       legProbabilitySource:'bookmaker-market-no-vig',
       researchStatus:'conditional',rationale:'Expediente parcial.',
       riskNotes:['Titulares pendientes'],
-    }))}}},
+    }))}}
   }
   const report=formatDailyReport(ticket,args)
   assert.equal(report.status,'priced-research-ticket')
