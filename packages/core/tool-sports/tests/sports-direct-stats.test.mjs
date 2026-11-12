@@ -40,7 +40,8 @@ test('directly fetches ESPN player stats, gamelog and splits without a prompt ac
   assert.match(player.lastGames[0].value,/Points: 26.*Assists: 7/)
   assert.equal(player.splits[0].value,'27.0')
   assert.ok(player.verifiedSources.includes('gamelog'))
-  assert.ok(calls.every(u=>u.startsWith(site)||u.startsWith(web)))
+  assert.ok(calls.every(u=>u.startsWith(site)||u.startsWith(web)||
+    u.startsWith('https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/')))
   assert.ok(calls.every(u=>!u.includes('undefined')))
 })
 test('does not invent metrics from blank endpoints or athlete names not on team roster',async()=>{
@@ -128,4 +129,24 @@ test('preserves ALL 17 roster identities while probing only two players to save 
   assert.equal(team.roster[16].name,'Verified Player 16')
   assert.ok(team.roster.every(x=>/^3100/.test(x.id)))
   assert.equal(team.athletes[0].status,'unavailable')
+})
+
+test('NBA Core depthcharts fallback is used only after empty Site response',async()=>{
+  const attempts=[]
+  const transport=async url=>{
+    const u=String(url);attempts.push(u)
+    const payload=u.endsWith('/roster')?
+      {athletes:[{id:'101',displayName:'Known Player'}]}:
+      u.includes('sports.core.api.espn.com')?
+      {depthchart:{items:[{displayName:'PG rotation',
+        displayValue:'Player X (not confirmed starter)'}]}}:{}
+    return new Response(JSON.stringify(payload),{status:200})
+  }
+  const result=await collectDirectEspnStats('basketball','nba',
+    [{id:'27',name:'Washington Wizards'}],transport,now,1)
+  const team=result.teams[0]
+  assert.equal(team.depthChart[0]?.name,'PG rotation')
+  assert.equal(team.coverage.find(x=>x.endpoint==='team_depthcharts')?.status,'empty')
+  assert.equal(team.coverage.find(x=>x.endpoint==='team_depthcharts_core')?.status,'available')
+  assert.ok(attempts.includes('https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/seasons/2027/teams/27/depthcharts'))
 })
