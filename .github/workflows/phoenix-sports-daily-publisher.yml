@@ -1,0 +1,87 @@
+name: PHOENIX Sports Daily Ticket Publisher
+on:
+  # GitHub cron runs in UTC; Santo Domingo remains UTC-4 year-round.
+  schedule:
+    - cron: '5 10 * * *'  # 06:05 morning RD
+    - cron: '5 20 * * *'  # 16:05 evening RD, recheck late games
+  workflow_dispatch:
+    inputs:
+      day:
+        description: 'Local Santo Domingo YYYY-MM-DD (empty = today)'
+        type: string
+        required: false
+      slot:
+        description: 'Reporting session'
+        type: choice
+        default: manual
+        options: [manual, morning, evening]
+      count:
+        description: 'Target count of researched fixtures'
+        type: choice
+        default: '5'
+        options: ['5', '6']
+  pull_request:
+    paths:
+      - '.github/workflows/phoenix-sports-daily-publisher.yml'
+      - 'packages/core/tool-sports/scripts/daily-ticket-format.mjs'
+      - 'packages/core/tool-sports/scripts/publish-daily-ticket.mjs'
+      - 'packages/core/tool-sports/tests/daily-ticket-publication.test.mjs'
+permissions:
+  contents: read
+concurrency:
+  group: phoenix-sports-daily-${{ github.ref }}-${{ github.event.schedule || github.run_id }}
+  cancel-in-progress: false
+jobs:
+  publication-contract:
+    name: Validate daily ticket publication
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify publisher syntax and partial report invariants
+        run: |
+          node --check packages/core/tool-sports/scripts/publish-daily-ticket.mjs
+          node --check packages/core/tool-sports/scripts/daily-ticket-format.mjs
+          node --test packages/core/tool-sports/tests/daily-ticket-publication.test.mjs
+  publish:
+    name: Deliver researched ticket (not a real-money wager)
+    needs: publication-contract
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    env:
+      PHOENIX_PUBLISH_DATE: ${{ inputs.day || '' }}
+      PHOENIX_PUBLISH_SLOT: ${{ inputs.slot || (github.event.schedule == '5 10 * * *' && 'morning' || 'evening') }}
+      PHOENIX_PUBLISH_COUNT: ${{ inputs.count || '5' }}
+      PHOENIX_SPORTS_NOTIFY_TO: ${{ secrets.PHOENIX_SPORTS_NOTIFY_TO }}
+      PHOENIX_SPORTS_NOTIFY_FROM: ${{ secrets.PHOENIX_SPORTS_NOTIFY_FROM }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      THE_ODDS_API_KEY: ${{ secrets.THE_ODDS_API_KEY }}
+      SPORTSGAMEODDS_API_KEY: ${{ secrets.SPORTSGAMEODDS_API_KEY }}
+      PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED: ${{ vars.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install locked workspace
+        run: pnpm install --frozen-lockfile
+      - name: Research daily slate and publish auditable report
+        run: node --experimental-strip-types packages/core/tool-sports/scripts/publish-daily-ticket.mjs
+      - name: Preserve the real ticket or partial research for manual review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-daily-ticket
+          path: |
+            phoenix-sports-daily-ticket.json
+            phoenix-sports-daily-ticket.md
+          if-no-files-found: warn
+          retention-days: 30

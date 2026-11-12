@@ -15,7 +15,7 @@ import { sportsPromptNeeded } from './sports-prompt.ts'
 import {ESPN_NBA_PUBLIC_PAGES,ESPN_NBA_API_STARTING_POINTS} from './espn-nba-public-pages.ts'
 import { SPORTS_OPEN_RESEARCH_GUIDANCE } from './sports-open-research-guidance.ts'
 import { researchNbaSlate } from './nba-research.ts'
-import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets} from './daily-market-shortlist.ts'
+import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets,espnQuoteNeedsRecheck} from './daily-market-shortlist.ts'
 import {assessDailyMarketEvidence,unavailableMarketEvidence} from './daily-market-evidence.ts'
 import {selectDailyResearchedMarkets} from './daily-market-selection.ts'
 import {auditTicketMarketRisk} from './ticket-risk-audit.ts'
@@ -32,6 +32,7 @@ import { researchSport } from './multi-sport-research.ts'
 import { communityOpinions } from './sports-community.ts'
 import { evidenceTicket } from './evidence-ticket.ts'
 import { evidencePricedTicket } from './evidence-priced-ticket.ts'
+import {lookupExactEspnWinner} from './sports-exact-espn-winner.ts'
 import { ensureSportsSourcesStarted,hydrateSportsSources,managedSportsInstallStatus,sportsSourcesHealth } from './sports-source-health.ts'
 import { investigateEventDeep } from './sports-deep-context.ts'
 import { auditUniversalMatchup } from './universal-matchup-factors.ts'
@@ -390,6 +391,38 @@ export function apply(ctx: Context): void {
               count:0,detail:String(result?.reason instanceof Error?
                 result.reason.message:result?.reason??'unknown').slice(0,150)})
           }
+        }
+      }
+      // Event-ID rescue includes verified world-soccer leagues outside fixed
+      // odds providerKeys. An exact ESPN event lookup never invents a league.
+      if(args.winnerOnly===true){
+        const key=(name:string)=>name.normalize('NFD')
+          .replace(/[\u0300-\u036f]/gu,'').toLowerCase().replace(/[^a-z0-9]/gu,'')
+        const missing=daily.events.filter(game=>!quotes.some(q=>
+          key(q.home)===key(game.home.name)&&key(q.away)===key(game.away.name)&&
+          Math.abs(Date.parse(q.timeIso??q.time)-Date.parse(game.kickoff))<=45*60_000&&
+          !espnQuoteNeedsRecheck(q,now)))
+          .slice(0,Math.min(10,count*2))
+        const exact=await Promise.allSettled(missing.map(async game=>{
+          const sportKey=dailyOddsSportKey(game.sport,game.league)??(
+            game.sport==='soccer'?'soccer_espn_dynamic':null)
+          if(!sportKey)return null
+          const checked=await boundedDailyTool(lookupExactEspnWinner({
+            sportKey,eventId:game.eventId,date:daily.date,
+            home:game.home.name,away:game.away.name,kickoff:game.kickoff,
+            ...(sportKey==='soccer_espn_dynamic'?{espnLeague:game.league}:{}),
+          },<T>(url:string)=>getFeed<T>(url,fetch),now),7_000)
+          return{game,checked,sportKey}
+        }))
+        for(const result of exact){
+          if(result.status!=='fulfilled'||!result.value)continue
+          const {checked,sportKey}=result.value
+          const accepted=checked.quotes.filter(q=>q.market==='1x2'||q.market==='h2h')
+          quotes.push(...accepted.map(q=>({...q,market:'h2h' as const,
+            sportKey,source:'ESPN Site/Core (evento exacto)',timeIso:q.time,
+          })))
+          attempts.push({sportKey,status:accepted.length?'observed':'empty',
+            count:accepted.length})
         }
       }
       // Winner research must not be hostage to unavailable sportsbook prices.

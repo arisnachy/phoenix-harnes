@@ -101,6 +101,7 @@ export function selectDailyResearchedMarkets(
     selected.push(chosen)
   }
   const supportedLegs=selected.filter(r=>r.status==='descriptive-support'&&
+    r.candidate.requiresRecheck!==true&&
     r.priceAudit?.classification!=='negative-value').length
   return {
     selected,eventChoices:unique.size,marketsReviewed:reviews.length,
