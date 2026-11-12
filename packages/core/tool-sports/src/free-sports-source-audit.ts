@@ -55,18 +55,31 @@ function compare(home:string,away:string,when:string,input:FreeFixture,
   return partial?'partial':'verified'
 }
 type EventRow={home:string;away:string;when:string}
-const cache=new Map<string,{until:number;value:Promise<unknown>}>()
-/** Cached only for the production transport. Unit tests with an injected fetch
- * never share cached values. Bounded cache prevents duplicated multi-leg calls.
+type PublicCacheRecord={until:number;value:Promise<unknown>}
+const fetchCaches=new WeakMap<typeof fetch,Map<string,PublicCacheRecord>>()
+/** One cache per transport identity: prevents redundant requests across all
+ * legs but never leaks data between injected test clients. HTTP 403/429/503
+ * enter a short cooldown without becoming verified negative match evidence.
+ * Network failures other than those statuses remain retryable immediately.
  */
 async function publicJson(url:string,fetcher:typeof fetch,now:number):Promise<unknown>{
-  if(fetcher!==fetch)return getFeed<unknown>(url,fetcher)
-  const existing=cache.get(url)
-  if(existing&&existing.until>now)return existing.value
-  if(cache.size>64)cache.clear()
-  const value=getFeed<unknown>(url,fetcher).catch(err=>{cache.delete(url);throw err})
-  cache.set(url,{until:now+10*60_000,value})
-  return value
+  let entries=fetchCaches.get(fetcher)
+  if(!entries){entries=new Map();fetchCaches.set(fetcher,entries)}
+  const old=entries.get(url)
+  if(old&&old.until>now)return old.value
+  if(entries.size>96)entries.clear()
+  const cache=entries
+  const promise=getFeed<unknown>(url,fetcher).catch(error=>{
+    const message=error instanceof Error?error.message:String(error)
+    // Never interpret blocked/rate-limited providers as an empty game list.
+    if(/\\b(?:HTTP\\s*)?(?:403|429|503)\\b/iu.test(message)){
+      const active=cache.get(url)
+      if(active?.value===promise)active.until=now+3*60_000
+    }else if(cache.get(url)?.value===promise)cache.delete(url)
+    throw error
+  })
+  cache.set(url,{until:now+10*60_000,value:promise})
+  return promise
 }
 async function probe(provider:BackupFinding['provider'],url:string,
   rows:(json:unknown)=>unknown[],interpret:(r:unknown)=>EventRow,
