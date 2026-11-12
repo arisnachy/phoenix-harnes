@@ -4,6 +4,7 @@ on:
     paths:
       - 'scripts/phoenix-sports-endpoint-audit.mjs'
       - 'scripts/phoenix-sports-adapter-live-probe.mjs'
+      - 'scripts/phoenix-nba-nhl-full-day-e2e.mjs'
       - 'scripts/phoenix-sports-three-source-step-audit.mjs'
       - '.github/workflows/phoenix-sports-endpoint-audit.yml'
       - 'packages/core/tool-sports/src/espn-odds.ts'
@@ -16,12 +17,17 @@ permissions:
 jobs:
   endpoint-matrix:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - name: Install locked sports workspace
+        run: pnpm install --frozen-lockfile
       - name: Validate source probe syntax
         run: node --check scripts/phoenix-sports-endpoint-audit.mjs
       - name: Check every registered route family with real HTTP requests
@@ -56,3 +62,15 @@ jobs:
             phoenix-3-source-step-audit.md
           if-no-files-found: warn
           retention-days: 21
+      - name: Audit ALL games today NBA and NHL through native PHOENIX tools and ticket builder
+        run: node --experimental-strip-types scripts/phoenix-nba-nhl-full-day-e2e.mjs
+      - name: Preserve full-day event, roster, injuries, Core odds and ticket records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-nba-nhl-full-day-e2e
+          path: |
+            phoenix-nba-nhl-full-day-e2e.json
+            phoenix-nba-nhl-full-day-e2e.md
+          if-no-files-found: warn
+          retention-days: 30
