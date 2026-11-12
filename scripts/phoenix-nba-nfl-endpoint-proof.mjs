@@ -151,7 +151,7 @@ for(const [sport,league,fallback] of [
         depthChartSample:t.depthChart.slice(0,6),teamMetrics:t.stats.length,
         coverage:t.coverage,athletes:t.athletes.map(p=>({
           id:p.id,name:p.name,stats:p.stats.length,gamelog:p.lastGames.length,
-          splits:p.splits.length,coverage:p.coverage
+          splits:p.splits.length,verifiedSources:p.verifiedSources,coverage:p.coverage
         }))
       }))}
   }catch(e){adapter={error:String(e?.message??e).slice(0,260)}}
@@ -171,7 +171,9 @@ for(const [sport,league,fallback] of [
       depthChartPlayers:t.depthChart.recordCount,
       statsHttp:t.teamStatistics.httpStatus})),
     adapter:adapter?.teams?.map(t=>({id:t.id,roster:t.rosterCount,
-      depth:t.depthChartRows,playerSplits:t.athletes.map(p=>p.splits)}))
+      depth:t.depthChartRows,playerSplits:t.athletes.map(p=>p.splits),
+      splitSeasonSources:t.athletes.map(p=>p.verifiedSources.filter(x=>
+        x.startsWith('splits')))}))
   }))
 }
 const file='phoenix-nba-nfl-endpoint-proof.json'
