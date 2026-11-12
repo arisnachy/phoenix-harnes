@@ -21,7 +21,8 @@ const history={events:[{id:'401998001',date:'2026-10-30T18:00:00Z',
   status:{type:{state:'post',completed:true}},season:{type:2},competitions:[{competitors:[
     {homeAway:'home',team:{id:'10',displayName:'Home Eagles'},score:'27'},
     {homeAway:'away',team:{id:'20',displayName:'Away Ravens'},score:'20'}]}]}]}
-function mock({started=false,noRoster=false,offseason=false,officialEleven=true}={}){
+function mock({started=false,noRoster=false,offseason=false,officialEleven=true,
+  weeklyFallback=false}={}){
   const calls=[]
   const fetcher=async input=>{
     const url=String(input),u=new URL(url);calls.push(url)
@@ -31,8 +32,9 @@ function mock({started=false,noRoster=false,offseason=false,officialEleven=true}
     let payload={}
     if(u.pathname.endsWith('/scoreboard')){
       const dates=u.searchParams.get('dates')??''
-      payload=dates==='20261108'?{events:offseason?[]:
-        [started?{...game,status:{type:{state:'in'}}}:game]}:history
+      payload=dates==='20261108'?{events:offseason||weeklyFallback?[]:
+        [started?{...game,status:{type:{state:'in'}}}:game]}:
+        weeklyFallback?{events:[game]}:history
     }else if(u.pathname.endsWith('/summary')){
       const roster=team=>athletes(team).map((p,i)=>({
         athlete:{id:p.id},starter:officialEleven,
@@ -74,6 +76,14 @@ test('NFL verified slate never creates games during source-confirmed offseason',
   const empty=await nflSlate(date,mock({offseason:true}).fetcher,now,{})
   assert.equal(empty.games.length,0)
   assert.equal(empty.noGamesReported,true)
+})
+test('NFL slate recovers a real dated game from a week-scoped ESPN response',async()=>{
+  const api=mock({weeklyFallback:true})
+  const result=await nflSlate(date,api.fetcher,now,{})
+  assert.equal(result.games.length,1)
+  assert.equal(result.games[0].eventId,'401999001')
+  assert.ok(api.calls.some(x=>x.includes('week=')&&x.includes('seasontype=2')))
+  assert.ok(result.sources.some(x=>x.url.includes('week=')))
 })
 test('NFL full rosters support 11 offense + 11 defense per team, stats bounded to budget',async()=>{
   const api=mock()
