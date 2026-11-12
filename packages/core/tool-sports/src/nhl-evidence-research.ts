@@ -384,12 +384,20 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
   // A sparse/empty season response is not proof that a team has no matches.
   // Recover the requested month and its predecessor with exact month IDs.
   const formWithBackup=async(schedule:unknown,code:string):Promise<HockeyTeamForm|null>=>{
-    const initial=formFromSchedule(schedule,fixture,code)
+    // Season-specific URL can 404 or produce an empty cache entry; the
+    // legacy alias is safe now because getFeed follows SAME-HOST NHL 307.
+    let selected=schedule
+    if(!arr(o(selected).games).length){
+      const current=await source<unknown>(
+        base+'club-schedule-season/'+code+'/now',fetcher,sources,now)
+      if(arr(o(current).games).length)selected=current
+    }
+    const initial=formFromSchedule(selected,fixture,code)
     if((initial?.games??0)>=5)return initial
     const d=new Date(Date.parse(date+'T12:00:00Z'))
     d.setUTCMonth(d.getUTCMonth()-1)
     const months=[date.slice(0,7),d.toISOString().slice(0,7)]
-    const recovered=[...arr(o(schedule).games)]
+    const recovered=[...arr(o(selected).games)]
     for(const month of months){
       const payload=await source<unknown>(
         base+'club-schedule/'+code+'/month/'+month,fetcher,sources,now)

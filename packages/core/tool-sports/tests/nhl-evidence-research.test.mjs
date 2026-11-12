@@ -101,6 +101,8 @@ test('roster forwards/defense/goalies stay distinct; no starting goalie asserted
   assert.equal(d.markets.length,1)
   assert.equal(d.markets[0].approved,false)
   assert.equal(d.standings.home,'11 V · 4 D · 2 OT')
+  assert.ok(d.form.home,'NHL schedule sources: '+JSON.stringify(
+    d.sources.filter(x=>x.url.includes('schedule'))))
   assert.equal(d.form.home.wins,1)
   assert.equal(d.form.away.losses,1)
   assert.equal(d.form.home.homeGames,1)
