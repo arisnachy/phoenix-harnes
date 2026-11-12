@@ -42,6 +42,16 @@ function fake({started=false,missingAway=false,empty=false,withSpecial=false}={}
         {teamId:20,[powerplay?'powerPlayPct':'penaltyKillPct']:
           powerplay?0.19:0.77}]}
     }
+    else if(u.pathname.includes('/player/')&&
+      u.pathname.includes('/game-log/20262027/2'))
+      body={gameLog:[
+        {gameId:2026020101,gameDate:'2026-11-01',homeRoadFlag:'H',
+          opponentAbbrev:'BOS',goals:1,assists:1,points:2,shots:4,
+          shotsAgainst:35,saves:32,savePctg:0.914,goalsAgainst:3},
+        {gameId:2026020090,gameDate:'2026-10-27',homeRoadFlag:'R',
+          opponentAbbrev:'NYR',goals:0,assists:2,points:2,shots:2,
+          shotsAgainst:30,saves:29,savePctg:0.966,goalsAgainst:1},
+      ]}
     else if(u.pathname.includes('/player/')&&u.pathname.endsWith('/landing'))
       body={featuredStats:{regularSeason:{subSeason:{goals:10,assists:7,
         points:17,shots:42,savePctg:0.916,goalsAgainstAvg:2.4}}},
@@ -77,6 +87,11 @@ test('roster forwards/defense/goalies stay distinct; no starting goalie asserted
   assert.equal(d.goalieCandidates.away.length,2)
   assert.ok(d.goalieCandidates.home.every(g=>g.starterConfirmed===false))
   assert.ok(d.goalieCandidates.home[0].last5[0].summary.includes('saves: 32'))
+  assert.equal(d.goalieCandidates.home[0].last20.length,2)
+  assert.equal(d.goalieCandidates.home[0].homeRoadSplits.home.games,1)
+  assert.equal(d.goalieCandidates.home[0].homeRoadSplits.away.games,1)
+  assert.equal(d.goalieCandidates.home[0].homeRoadSplits.home.averages.saves,32)
+  assert.ok(api.calls.some(u=>u.includes('/game-log/20262027/2')))
   assert.ok(d.players.home.some(p=>p.stats.goals==='10'))
   assert.equal(d.possibleMatchups.length,20)
   assert.ok(d.possibleMatchups.every(x=>Number(x.attackerId)<20000?
