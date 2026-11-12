@@ -408,8 +408,8 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
     return formFromSchedule({games:recovered},fixture,code)
   }
   const [homeForm,awayForm]=await Promise.all([
-    formWithBackup(homeSchedule,fixture,fixture.home.abbrev),
-    formWithBackup(awaySchedule,fixture,fixture.away.abbrev),
+    formWithBackup(homeSchedule,fixture.home.abbrev),
+    formWithBackup(awaySchedule,fixture.away.abbrev),
   ])
   const form={home:homeForm,away:awayForm}
   const possibleMatchups=[
