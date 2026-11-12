@@ -213,6 +213,50 @@ await Promise.all(Array.from({length:3},async()=>{
     await save()
   }
 }))
+// Diagnose missing player gamelog/splits from the exact current ESPN payload.
+// No invented values: emit shape and minimal structural samples, not raw data.
+try{
+  const nba=work.checks.find(x=>x.game?.league==='nba'&&
+    x.stats?.teams?.some(t=>t.athletes.length))
+  const nhl=work.checks.find(x=>x.game?.league==='nhl'&&
+    x.stats?.teams?.some(t=>t.athletes.length))
+  work.playerShape={}
+  const summarize=(d)=>{
+    const r=d&&typeof d==='object'?d:{}
+    const seasons=Array.isArray(r.seasonTypes)?r.seasonTypes:[]
+    const season=seasons[0]??{}
+    const categories=Array.isArray(season.categories)?season.categories:[]
+    const category=categories[0]??{}
+    const splits=Array.isArray(r.splitCategories)?r.splitCategories:[]
+    return{keys:Object.keys(r).slice(0,25),
+      eventsType:typeof r.events,eventCount:r.events&&typeof r.events==='object'?
+        Object.keys(r.events).length:0,
+      seasonTypes:seasons.length,seasonKeys:Object.keys(season).slice(0,20),
+      categories:categories.length,categoryKeys:Object.keys(category).slice(0,22),
+      categoryEvents:category.events?.length??0,
+      eventFirstKeys:Object.keys(category.events?.[0]??{}).slice(0,18),
+      categoryLabels:category.labels?.slice?.(0,10)??null,
+      splitCategories:splits.length,splitKeys:Object.keys(splits[0]??{}).slice(0,20),
+      splitFirstKeys:Object.keys(splits[0]?.splits?.[0]??{}).slice(0,20),
+    }
+  }
+  for(const candidate of [nba,nhl]){
+    if(!candidate)continue
+    const sport=candidate.game.sport,league=candidate.game.league
+    const person=candidate.stats.teams.find(t=>t.athletes.length)?.athletes[0]
+    if(!person)continue
+    const root='https://site.web.api.espn.com/apis/common/v3/sports/'+sport+
+      '/'+league+'/athletes/'+person.id+'/'
+    const result={}
+    for(const suffix of ['gamelog','splits']){
+      try{result[suffix]=summarize(await json(root+suffix))}
+      catch(e){result[suffix]={error:clean(e)}}
+    }
+    work.playerShape[league]={athleteId:person.id,...result}
+  }
+  console.log('FULL_DAY_PLAYER_SHAPES '+JSON.stringify(work.playerShape))
+}catch(e){work.notes.push('Player shape probe: '+clean(e))}
+await save()
 const specialists=work.checks.filter(x=>x.game?.home&&x.game?.away).map(x=>({
   sport:x.game.sport,league:x.game.league,eventId:x.game.eventId,
   date,home:x.game.home,away:x.game.away,kickoff:x.game.kickoff,
