@@ -242,3 +242,30 @@ test('genuine sub-1.20 NBA winner prices survive shortlist discovery',()=>{
   assert.equal(result.selected[0].selection,'Home 0')
   assert.equal(result.selected[0].timestampSource,'espn-observation')
 })
+
+test('old bookmaker update remains valid when ESPN was consulted now',()=>{
+  const es=pair(0).map(q=>({...q,source:'ESPN Site/Core (evento exacto)',
+    updatedAt:'2026-11-01T11:00:00Z',observedAt:new Date(now).toISOString()}))
+  const found=shortlistDailyMarkets(fixtures,es,4,now)
+  assert.equal(found.selected.length,1)
+  assert.equal(found.selected[0].requiresRecheck,false)
+})
+test('an older ESPN observation stays visible for recheck, not counted as fresh',()=>{
+  const es=pair(0).map(q=>({...q,source:'ESPN Site/Core (evento exacto)',
+    updatedAt:'2026-11-01T11:00:00Z',observedAt:'2026-11-06T15:00:00Z'}))
+  const found=shortlistDailyMarkets(fixtures,es,4,now)
+  assert.equal(found.selected.length,1)
+  assert.equal(found.selected[0].requiresRecheck,true)
+  assert.equal(found.matchDiagnostics.requiresRefresh,1)
+})
+test('verified world soccer league matches by exact official ESPN ID only',()=>{
+  const game={...fixtures[5],league:'por.2',eventId:'77778'}
+  const es=[...pair(5),{...price(5,'Draw'),price:3.45}]
+    .map(q=>({...q,source:'ESPN Site/Core (evento exacto)',
+      eventId:'77778',sportKey:'soccer_espn_dynamic',
+      observedAt:new Date(now).toISOString()}))
+  const good=shortlistDailyMarkets([game],es,4,now)
+  assert.equal(good.selected.length,1)
+  const bad=shortlistDailyMarkets([game],es.map(q=>({...q,eventId:'77779'})),4,now)
+  assert.equal(bad.selected.length,0)
+})
