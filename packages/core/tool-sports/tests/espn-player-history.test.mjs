@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {parseEspnGameLog,parseEspnSplits,parseNhlLast5}
+import {parseEspnGameLog,parseEspnSplits,parseNhlLast5,parseEspnVenueSplitsFromGameLog}
   from '../src/espn-player-history.ts'
 import {parseNhlSeasonGameLog} from '../src/nhl-player-game-history.ts'
 import {collectDirectEspnStats} from '../src/sports-direct-stats.ts'
@@ -179,4 +179,27 @@ test('NBA recovers season-scoped gamelog and splits when default 200 is empty',a
   assert.equal(a.verifiedSources.includes('splits:season=2027'),true)
   assert.ok(calls.some(x=>x.endsWith('/gamelog?season=2027')))
   assert.ok(calls.some(x=>x.endsWith('/splits?season=2027')))
+})
+
+test('NBA game logs with explicit home/away tags recover independently sourced venue splits',()=>{
+  const payload={labels:['PTS','AST','REB'],events:{
+    '800001':{gameDate:'2026-11-02T02:00:00Z',homeAway:'home'},
+    '800002':{gameDate:'2026-11-04T02:00:00Z',homeAway:'away'},
+    '800003':{gameDate:'2026-11-05T02:00:00Z',homeAway:'home'},
+    '800004':{gameDate:'2026-11-14T02:00:00Z',homeAway:'away'},
+  },seasonTypes:[{categories:[{events:[
+    {eventId:'800001',stats:['30','5','7']},
+    {eventId:'800002',stats:['20','7','8']},
+    {eventId:'800003',stats:['10','9','6']},
+    {eventId:'800004',stats:['99','99','99']},
+  ]}]}]}
+  const rows=parseEspnVenueSplitsFromGameLog(payload,now)
+  assert.equal(rows.find(x=>x.name==='Home · GP')?.value,'2')
+  assert.equal(rows.find(x=>x.name==='Away · GP')?.value,'1')
+  assert.equal(rows.find(x=>x.name==='Home · PTS')?.value,'20')
+  assert.equal(rows.find(x=>x.name==='Away · PTS')?.value,'20')
+  assert.equal(rows.find(x=>x.name==='Home · AST')?.value,'7')
+  assert.deepEqual(parseEspnVenueSplitsFromGameLog(
+    {...payload,events:Object.fromEntries(Object.entries(payload.events).map(([k,v])=>
+      [k,{...v,homeAway:undefined}]))},now),[])
 })

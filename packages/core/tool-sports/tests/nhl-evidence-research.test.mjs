@@ -2,6 +2,7 @@ import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {nhlSlate,investigateNhl,parseNhlSpecialTeams} from '../src/nhl-evidence-research.ts'
 import {settleNhlMarket} from '../src/nhl-market-settlement.ts'
+import {getFeed} from '../src/sports.ts'
 const now=Date.parse('2026-11-02T11:00:00Z'),date='2026-11-05'
 const game={id:2026020201,startTimeUTC:'2026-11-05T23:00:00Z',gameState:'FUT',
   season:20262027,homeTeam:{id:10,abbrev:'TOR',name:{default:'Toronto Maple Leafs'}},
@@ -22,8 +23,8 @@ function fake({started=false,missingAway=false,empty=false,withSpecial=false}={}
     let body
     if(u.pathname==='/v1/score/'+date)
       body={games:empty?[]:[started?{...game,gameState:'LIVE'}:game]}
-    else if(u.pathname==='/v1/roster/TOR/current')body=mkRoster('TOR',10000)
-    else if(u.pathname==='/v1/roster/MTL/current'){
+    else if((u.pathname==='/v1/roster/TOR/current'||u.pathname==='/v1/roster/TOR/20262027'))body=mkRoster('TOR',10000)
+    else if((u.pathname==='/v1/roster/MTL/current'||u.pathname==='/v1/roster/MTL/20262027')){
       if(missingAway)return new Response('unavailable',{status:503})
       body=mkRoster('MTL',20000)
     }else if(u.pathname.includes('/v1/club-schedule-season/')){
@@ -166,4 +167,34 @@ test('NHL special-teams metrics require same official team ids and all four valu
   assert.equal(report.home.penaltyKillPct,null)
   assert.equal(report.away.penaltyKillPct,78)
   assert.equal(parseNhlSpecialTeams(fixture,null,null,now).complete,false)
+})
+
+test('NHL pregame requests use season-resolved URLs and preserve two team rosters',async()=>{
+  const api=fake()
+  const d=await investigateNhl(date,'2026020201',api.fetcher,now,[],2)
+  assert.equal(d.players.home.length,20)
+  assert.equal(d.players.away.length,20)
+  assert.ok(api.calls.includes('https://api-web.nhle.com/v1/roster/TOR/20262027'))
+  assert.ok(api.calls.includes('https://api-web.nhle.com/v1/roster/MTL/20262027'))
+  assert.ok(api.calls.includes('https://api-web.nhle.com/v1/club-schedule-season/TOR/20262027'))
+  assert.ok(api.calls.includes('https://api-web.nhle.com/v1/club-schedule-season/MTL/20262027'))
+  assert.ok(!api.calls.some(u=>u.endsWith('/current')||u.endsWith('/now')))
+})
+test('NHL 307 follows only same-host HTTPS season path, never redirects to foreign hosts',async()=>{
+  const calls=[]
+  const fetcher=async url=>{
+    calls.push(String(url))
+    return calls.length===1?new Response(null,{status:307,headers:{
+      location:'/v1/roster/TBL/20262027'}}):
+      new Response(JSON.stringify({forwards:[{id:1}]}),{status:200})
+  }
+  const x=await getFeed('https://api-web.nhle.com/v1/roster/TBL/current',fetcher)
+  assert.equal(x.forwards[0].id,1)
+  assert.equal(calls.length,2)
+  assert.equal(calls[1],'https://api-web.nhle.com/v1/roster/TBL/20262027')
+  let attempts=0
+  await assert.rejects(()=>getFeed('https://api-web.nhle.com/v1/roster/TBL/current',
+    async()=>{attempts++;return new Response(null,{status:307,headers:{
+      location:'https://127.0.0.1/private'}})}),/Redirección NHL fuera/)
+  assert.equal(attempts,1)
 })

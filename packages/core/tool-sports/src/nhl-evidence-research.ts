@@ -2,6 +2,7 @@
  * Odds do not imply a calibrated forecast or a bet approved for a ticket.
  */
 import {getFeed,type MarketOutcome} from './sports.ts'
+import {sameEspnTeam} from './sports-exact-espn-winner.ts'
 import {recoverEspnRoster} from './espn-public-roster.ts'
 import {parseNhlSeasonGameLog,type NhlGameHistory,type NhlGameSplits} from './nhl-player-game-history.ts'
 type R=Record<string,unknown>
@@ -12,8 +13,6 @@ const txt=(x:unknown,n=120):string=>typeof x==='string'||typeof x==='number'?
 const id=(x:unknown)=>/^\d{1,18}$/u.test(String(x??''))?String(x):''
 const abbr=(x:unknown)=>/^[A-Z]{2,4}$/u.test(String(x??''))?String(x):''
 const localized=(x:unknown)=>txt(o(x).default??o(x).en??x)
-const normalize=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
-  .toLowerCase().replace(/[^a-z0-9]/gu,'')
 export const validHockeyDate=(s:string):boolean=>/^\d{4}-\d{2}-\d{2}$/u.test(s)&&
   Number.isFinite(Date.parse(s+'T00:00:00Z'))&&
   new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s
@@ -150,11 +149,15 @@ function observedStats(v:unknown):Record<string,string>{
   return result
 }
 
+/** A returned event appears once even if season and monthly backup overlap. */
 function formFromSchedule(data:unknown,game:HockeyFixture,teamAbbr:string):HockeyTeamForm|null{
   if(!data)return null
-  const cutoff=Date.parse(game.date)
+  const cutoff=Date.parse(game.date),seen=new Set<string>()
   const found=arr(o(data).games).flatMap(v=>{
     const r=o(v),date=txt(r.startTimeUTC??r.gameDate,45)
+    const gameId=id(r.id)
+    if(gameId&&seen.has(gameId))return []
+    if(gameId)seen.add(gameId)
     const timestamp=Date.parse(date.length===10?date+'T12:00:00Z':date)
     if(!Number.isFinite(timestamp)||timestamp>=cutoff||
       !['OFF','FINAL'].includes(txt(r.gameState,15)))return []
@@ -264,15 +267,29 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
   const statsQuery=season?'?cayenneExp='+encodeURIComponent(
     'seasonId='+season+' and gameTypeId=2')+'&limit=100':null
   const stats='https://api.nhle.com/stats/rest/en/team/'
-  const [h,a,standings,homeSchedule,awaySchedule,pp,pk]=await Promise.all([
-    source<unknown>(base+'roster/'+fixture.home.abbrev+'/current',fetcher,sources,now),
-    source<unknown>(base+'roster/'+fixture.away.abbrev+'/current',fetcher,sources,now),
-    source<unknown>(base+'standings/'+date,fetcher,sources,now),
-    source<unknown>(base+'club-schedule-season/'+fixture.home.abbrev+'/now',fetcher,sources,now),
-    source<unknown>(base+'club-schedule-season/'+fixture.away.abbrev+'/now',fetcher,sources,now),
-    statsQuery?source<unknown>(stats+'powerplay'+statsQuery,fetcher,sources,now):Promise.resolve(null),
-    statsQuery?source<unknown>(stats+'penaltykill'+statsQuery,fetcher,sources,now):Promise.resolve(null),
-  ])
+  // Explicit season paths avoid /current and /now redirects on pregame runs.
+  // A bounded three-worker pool prevents bursts when researching four NHL
+  // fixtures concurrently; failures are recorded per exact URL.
+  const rosterPath=(code:string)=>base+'roster/'+code+'/'+(season??'current')
+  const schedulePath=(code:string)=>base+'club-schedule-season/'+code+'/'+(season??'now')
+  const requests:Array<()=>Promise<unknown|null>>=[
+    ()=>source<unknown>(rosterPath(fixture.home.abbrev),fetcher,sources,now),
+    ()=>source<unknown>(rosterPath(fixture.away.abbrev),fetcher,sources,now),
+    ()=>source<unknown>(base+'standings/'+date,fetcher,sources,now),
+    ()=>source<unknown>(schedulePath(fixture.home.abbrev),fetcher,sources,now),
+    ()=>source<unknown>(schedulePath(fixture.away.abbrev),fetcher,sources,now),
+    ()=>statsQuery?source<unknown>(stats+'powerplay'+statsQuery,fetcher,sources,now):Promise.resolve(null),
+    ()=>statsQuery?source<unknown>(stats+'penaltykill'+statsQuery,fetcher,sources,now):Promise.resolve(null),
+  ]
+  let index=0
+  const response:Array<unknown|null>=Array(requests.length).fill(null)
+  await Promise.all(Array.from({length:3},async()=>{
+    while(index<requests.length){
+      const n=index++
+      response[n]=await requests[n]!()
+    }
+  }))
+  const [h,a,standings,homeSchedule,awaySchedule,pp,pk]=response
   const specialTeams=parseNhlSpecialTeams(fixture,pp,pk,now)
   const players={home:teamRoster(h,fixture.home.abbrev),
     away:teamRoster(a,fixture.away.abbrev)}
@@ -284,7 +301,7 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
     const espnBoard=await source<unknown>(
       'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates='+day,
       fetcher,sources,now)
-    const same=(a:string,b:string)=>normalize(a)===normalize(b)
+    const same=(a:string,b:string)=>sameEspnTeam(a,b,'icehockey_nhl')
     const candidates=arr(o(espnBoard).events).map(o).filter(event=>{
       const gameTime=Date.parse(txt(event.date,55))
       const competition=o(arr(event.competitions)[0])
@@ -364,8 +381,29 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
   const find=(code:string)=>rows.find(x=>localized(x.teamAbbrev)===code)
   const viewStandings={home:standingRecord(find(fixture.home.abbrev)),
     away:standingRecord(find(fixture.away.abbrev))}
-  const form={home:formFromSchedule(homeSchedule,fixture,fixture.home.abbrev),
-    away:formFromSchedule(awaySchedule,fixture,fixture.away.abbrev)}
+  // A sparse/empty season response is not proof that a team has no matches.
+  // Recover the requested month and its predecessor with exact month IDs.
+  const formWithBackup=async(schedule:unknown,code:string):Promise<HockeyTeamForm|null>=>{
+    const initial=formFromSchedule(schedule,fixture,code)
+    if((initial?.games??0)>=5)return initial
+    const d=new Date(Date.parse(date+'T12:00:00Z'))
+    d.setUTCMonth(d.getUTCMonth()-1)
+    const months=[date.slice(0,7),d.toISOString().slice(0,7)]
+    const recovered=[...arr(o(schedule).games)]
+    for(const month of months){
+      const payload=await source<unknown>(
+        base+'club-schedule/'+code+'/month/'+month,fetcher,sources,now)
+      recovered.push(...arr(o(payload).games))
+      const candidate=formFromSchedule({games:recovered},fixture,code)
+      if((candidate?.games??0)>=5)return candidate
+    }
+    return formFromSchedule({games:recovered},fixture,code)
+  }
+  const [homeForm,awayForm]=await Promise.all([
+    formWithBackup(homeSchedule,fixture,fixture.home.abbrev),
+    formWithBackup(awaySchedule,fixture,fixture.away.abbrev),
+  ])
+  const form={home:homeForm,away:awayForm}
   const possibleMatchups=[
     ...players.home.filter(p=>p.role==='forward').slice(0,10).map(p=>({
       attackerId:p.id,attacker:p.name,againstGoalies:goalies.away.map(x=>x.name),

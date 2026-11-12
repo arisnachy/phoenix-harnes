@@ -8,7 +8,7 @@
  */
 import {getFeed,sportsCatalog} from './sports.ts'
 import {recoverEspnRoster,type EspnRosterPerson} from './espn-public-roster.ts'
-import {parseEspnGameLog,parseEspnSplits} from './espn-player-history.ts'
+import {parseEspnGameLog,parseEspnSplits,parseEspnVenueSplitsFromGameLog} from './espn-player-history.ts'
 
 type Obj=Record<string,unknown>
 const obj=(x:unknown):Obj=>x!==null&&typeof x==='object'&&!Array.isArray(x)?x as Obj:{}
@@ -121,7 +121,7 @@ export async function collectDirectEspnStats(
     throw Error('IDs ESPN o presupuesto de atletas inválidos')
   const site='https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+'/'
   const web='https://site.web.api.espn.com/apis/common/v3/sports/'+sport+'/'+league+'/'
-  const result:DirectTeam[]=[],jobs:Task[]=[]
+  const result:DirectTeam[]=[],jobs:Task[]=[],splitFallback=new Map<DirectAthlete,unknown>()
   let requests=0,errors=0
   const add=(url:string,type:string,destination:(value:unknown|null)=>void)=>
     jobs.push({url,type,destination})
@@ -200,15 +200,20 @@ export async function collectDirectEspnStats(
           add(uri+'gamelog','athlete_gamelog',data=>{
             athlete.lastGames=parseEspnGameLog(data,now,20)
             recorded('gamelog',data,athlete.lastGames.length)
-            if(athlete.lastGames.length)athlete.verifiedSources.push('gamelog')
+            if(athlete.lastGames.length){
+              athlete.verifiedSources.push('gamelog')
+              splitFallback.set(athlete,data)
+            }
             else if(early&&athlete.stats.length) {
               // Retry only a bounded roster-verified sample. Never use season
               // averages as a substitute for event-specific player histories.
               add(uri+'gamelog'+explicitSeason,'athlete_gamelog_season',season=>{
                 athlete.lastGames=parseEspnGameLog(season,now,20)
                 recorded('gamelog'+explicitSeason,season,athlete.lastGames.length)
-                if(athlete.lastGames.length)
+                if(athlete.lastGames.length){
                   athlete.verifiedSources.push('gamelog:season='+seasonYear)
+                  splitFallback.set(athlete,season)
+                }
               })
             }
           })
@@ -247,6 +252,18 @@ export async function collectDirectEspnStats(
     }
   }))
   for(const team of result)for(const person of team.athletes){
+    // ESPN /splits may be absent even when an actual venue-tagged game log
+    // exists. Derive strictly from played home/away games, with source proof.
+    if(!person.splits.length&&splitFallback.has(person)){
+      const observed=parseEspnVenueSplitsFromGameLog(splitFallback.get(person),now)
+      if(observed.length){
+        person.splits=observed
+        person.verifiedSources.push('splits:venue-tagged-gamelog')
+        person.coverage.push({endpoint:'splits_from_gamelog',
+          url:'ESPN game log (observed homeAway/atVs)',
+          status:'available'})
+      }
+    }
     const count=person.verifiedSources.length
     person.status=count===0?'unavailable':count>=2?'verified':'partial'
   }

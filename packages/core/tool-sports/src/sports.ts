@@ -129,7 +129,24 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
   if(u.hostname==='lm-api-reads.fantasy.espn.com'&&u.pathname.endsWith('/players'))
     headers['X-Fantasy-Filter']=JSON.stringify({players:{limit:40,
       sortPercOwned:{sortPriority:1,sortAsc:false}}})
-  const response=await fetcher(u.toString(),{ headers,redirect:'error',signal:AbortSignal.timeout(9000) })
+  // NHL /current and /now issue 307 redirects to the exact season. Resolve
+  // at most two hops on the SAME NHL host and under /v1; never follow arbitrary
+  // Location headers or allow private-network / cross-provider redirects.
+  let next=u.toString(),response:Response|undefined
+  for(let hops=0;hops<=2;hops++){
+    response=await fetcher(next,{headers,redirect:'manual',signal:AbortSignal.timeout(9000)})
+    if(![301,302,303,307,308].includes(response.status))break
+    if(hops===2||u.hostname!=='api-web.nhle.com')
+      throw Error('Redirección de proveedor no permitida')
+    const location=response.headers.get('location')
+    if(!location)throw Error('Redirección NHL sin Location')
+    const target=new URL(location,next)
+    if(target.protocol!=='https:'||target.host!==u.host||
+      target.username||target.password||!target.pathname.startsWith('/v1/'))
+      throw Error('Redirección NHL fuera del host o ruta autorizada')
+    next=target.toString()
+  }
+  if(!response)throw Error('Proveedor no respondió')
   if(!response.ok)throw Error(`Proveedor HTTP ${response.status}`)
   if(Number(response.headers.get('content-length')||0)>4_000_000)throw Error('Respuesta supera 4 MB')
   const text=await response.text()
