@@ -531,3 +531,22 @@ test('empty ranked slate preserves verified fixtures and does not query odds',as
   assert.match(report.explanation,/No se consultaron casas ni cuotas/)
   assert.ok(report.sourceAudit.some(x=>x.source==='ESPN Site/Core'&&x.status==='not-applicable'))
 })
+
+test('zero ranked picks still probe official ESPN event odds without inventing legs',async()=>{
+  const noHistory=async url=>{
+    const u=String(url)
+    if(/dates=202610(?!28)/u.test(u))
+      return new Response(JSON.stringify({events:[]}))
+    return feed(url)
+  }
+  const report=await withSpecialists(5,date,'soccer',0,now,enabled,noHistory)
+  assert.equal(report.verifiedEvents,0)
+  assert.ok(report.discoveredEvents>=5)
+  assert.ok(report.card.props.pricePreviewEvents>0)
+  assert.ok(report.card.props.pricePreview.every(x=>x.eventId&&x.home&&x.away))
+  assert.equal(report.quotedLegs,0)
+  assert.equal(report.priced,false)
+  assert.equal(report.approvedLegs,0)
+  assert.match(report.explanation,/Se consultaron/)
+  assert.equal(report.sourceAudit.find(x=>x.source==='ESPN Site/Core').status,'empty')
+})

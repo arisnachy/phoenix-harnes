@@ -245,20 +245,72 @@ export async function evidencePricedTicket(
     multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
     explanation:'Preselección ESPN, cuotas todavía NO verificadas: '+quoteAccess+
       '. Los archivos históricos no ofrecen precios para apostar hoy.'}
-  // No selected candidate means no odds adapter ran, not no odds in ESPN.
+  // If historical evidence rejects every candidate, still probe a bounded
+  // list of verified *fixtures* by their official ESPN IDs. These are market
+  // observations, not selections or specialist-backed recommendations.
   if(!research.events.length){
-    return{...base,conditional:true,
-      sourceAudit:initialSources.map(row=>({...row,
+    const fixtures=!quotesProvider&&env.PHOENIX_SPORTS_ESPN_DISABLED!=='1'&&
+      removedConflicts===0&&!identityConflict?
+      research.discoveryAudit.fixtureSample.slice(0,6):[]
+    const scanned=await Promise.allSettled(fixtures.map(async item=>{
+      const sportKey=leagueSportKey[item.league]??
+        (item.sport==='soccer'?'soccer_espn_dynamic':routing[item.sport]?.oddsSportKey)
+      if(!sportKey)return{item,attempted:false,options:[] as Array<{
+        bookmaker:string;selection:string;market:string;price:number;
+        observedAt:string|null;updatedAt:string|null}>,notes:['Sin adaptador ESPN conocido']}
+      const report=await boundedPriced(lookupExactEspnWinner({
+        sportKey,eventId:item.eventId,date:day,
+        home:item.home,away:item.away,kickoff:item.kickoff,
+        ...(sportKey==='soccer_espn_dynamic'?{espnLeague:item.league}:{}),
+      },<T>(url:string)=>getFeed<T>(url,fetcher),now),7_000)
+      return{item,attempted:report.attempted,
+        options:report.quotes.slice(0,6).map(q=>({
+          bookmaker:q.bookmaker,selection:q.selection,market:q.market,
+          price:q.price,observedAt:q.observedAt??null,updatedAt:q.updatedAt??null,
+        })),notes:report.notes.slice(0,3)}
+    }))
+    const pricePreview=scanned.flatMap((row,index)=>{
+      if(row.status==='fulfilled')return [{
+        ...row.value.item,attempted:row.value.attempted,
+        options:row.value.options,notes:row.value.notes,
+      }]
+      const item=fixtures[index]
+      return item?[{...item,attempted:true,
+        options:[] as Array<unknown>,
+        notes:[String(row.reason).slice(0,180)]}]:[]
+    })
+    const pricePreviewOffers=pricePreview.reduce((n,row)=>n+row.options.length,0)
+    const priceAttempts=pricePreview.filter(row=>row.attempted).length
+    const auditSources=initialSources.map(row=>{
+      if(row.source==='ESPN Site/Core'&&priceAttempts){
+        return audited(row.source,pricePreviewOffers?'observed':'empty',
+          pricePreviewOffers,'Consulta exacta por ID para '+priceAttempts+
+          ' partidos reales; '+pricePreviewOffers+
+          ' opciones de ESPN observadas, no son picks recomendados.')
+      }
+      return {...row,
         status:row.status==='attempted'?'not-applicable' as const:row.status,
-        note:row.note+' No se consultaron cuotas por falta de candidatos.',
-      })),
+        note:row.note+' No se consultaron cuotas de esta fuente.'}
+    })
+    const reportCard:ChatBlock={...researchCard,props:{...researchCard.props,
+      pricePreview,pricePreviewOffers,pricePreviewEvents:priceAttempts,
+      note:('Partidos verificados: '+research.discoveryAudit.discoveredEvents+
+        '. ESPN cotejó '+priceAttempts+' encuentros por ID con '+
+        pricePreviewOffers+' opciones de cuotas. No hay pronósticos '+
+        'respaldados por el historial disponible. '+
+        String(researchCard.props.note??'')).slice(0,1000),
+    }}
+    return{...base,card:reportCard,sourceAudit:auditSources,conditional:true,
       explanation:removedConflicts>0||identityConflict?
         'Borrador CONFLICTIVO: '+removedConflicts+
-        ' identidades contradichas por los especialistas; no se asociaron '+
-        'cuotas a equipos o partidos equivocados.':
+        ' identidades contradichas por especialistas; no se atribuyeron cuotas.':
         'ESPN descubrió '+research.discoveryAudit.discoveredEvents+
-        ' partidos pero cero picks pasaron los filtros de historial. '+
-        'No se consultaron casas ni cuotas: verificar discoveryAudit primero.'}
+        ' partidos; el filtro histórico no aprobó ninguna selección. '+
+        (priceAttempts?'Se consultaron '+priceAttempts+
+          ' eventos reales por ID y se observaron '+pricePreviewOffers+
+          ' opciones de mercado. No equivalen a una selección investigada. ':
+          'No se consultaron casas ni cuotas: verificar discoveryAudit primero. ')+
+        'No se inventó ninguna pata.'}
   }
   // If research already consumed the wall-clock budget, return the actual
   // verified preselection now instead of starting more independent quote scans.
