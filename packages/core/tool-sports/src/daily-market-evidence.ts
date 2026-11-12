@@ -62,14 +62,18 @@ export function assessDailyMarketEvidence(
   const minGames=candidate.sport==='football'?3:5
   const missing:string[]=[]
   const verified=evidence.coverage.filter(c=>c.status==='verified').length
-  if(h.games<minGames||a.games<minGames)
-    missing.push('Historial insuficiente: se requieren '+minGames+' resultados finalizados de cada equipo')
+  const sampleCoverage=Math.min(1,Math.min(h.games,a.games)/minGames)
+  const partialSample=sampleCoverage<1
+  if(partialSample)
+    missing.push('MUESTRA REDUCIDA: '+h.games+'/'+a.games+
+      ' juegos verificados; '+minGames+' por rival es objetivo de respaldo fuerte, '+
+      'NO requisito para investigar. Cualquier dirección queda condicional.')
   if(evidence.rosterNewsInjuries===null)
     missing.push('Noticias, plantillas y lesiones sin confirmación')
   else missing.push('Las bajas ESPN no sustituyen el último informe oficial ni confirman el once')
   const core=[h.scoredPerGame,h.allowedPerGame,a.scoredPerGame,a.allowedPerGame]
   const valid=core.every(v=>v!==null&&Number.isFinite(v))
-    &&h.games>=minGames&&a.games>=minGames
+    &&h.games>=2&&a.games>=2
   let home:number|null=null,away:number|null=null,total:number|null=null,diff:number|null=null
   let variability:number|null=null
   let side:DailyMarketCandidate['outcomes'][number]|null=null
@@ -113,8 +117,8 @@ export function assessDailyMarketEvidence(
       side=options.find(x=>normalize(x.selection)===label)??null
       direction=side?side.selection+' favorecido por producción reciente':'ganador no resuelto por forma reciente'
     }
-    status=side?'descriptive-support':'uncertain'
-  }else missing.push('No hay medias de ataque/defensa suficientemente verificadas para este mercado')
+    status=side&&!partialSample?'descriptive-support':'uncertain'
+  }else missing.push('No hay al menos dos partidos independientes y medias de ataque/defensa verificadas para este mercado')
   const old=normalize(candidate.selection)
   if(status==='descriptive-support'&&side&&normalize(side.selection)!==old)
     missing.push('La dirección de la investigación difiere del favorito inicial por precio; selección corregida')
@@ -178,6 +182,10 @@ export function assessDailyMarketEvidence(
         'consistentemente el mismo hándicap/total a esta línea.')
     }
   }
+  if(candidate.requiresRecheck){
+    status='uncertain'
+    missing.push('Precio ESPN observado anteriormente: requiere nueva lectura del mercado exacto antes de considerar el boleto completo.')
+  }
   const priceAudit=auditMarketPrice(candidate,side)
   if(priceAudit.breakEvenPercent!==null)
     missing.push('Cuota de la selección exige '+priceAudit.breakEvenPercent+
@@ -209,9 +217,9 @@ export function assessDailyMarketEvidence(
   // a market-specific probability distribution.
   const relativeSignal=lineDistance!==null&&variability!==null?
     round(lineDistance/Math.max(1,variability)):null
-  const rankingScore=side&&valid?round(
+  const rankingScore=side&&valid?round((
     4*Math.min(8,relativeSignal??0)+Math.min(verified,8)/10+
-    Math.min(h.games+a.games,20)/100):0
+    Math.min(h.games+a.games,20)/100)*sampleCoverage):0
   const report:MarketResearchReview={
     candidate,researchedAt:evidence.checkedAt,status,
     scoreDifference:diff,projectedHome:home,projectedAway:away,projectedTotal:total,

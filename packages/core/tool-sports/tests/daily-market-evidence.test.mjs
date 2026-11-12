@@ -56,11 +56,23 @@ test('moneyline is not confused with odds-implied selection',()=>{
   assert.equal(review.selectedOutcome.selection,'Away')
   assert.equal(review.status,'descriptive-support')
 })
-test('short histories produce uncertainty rather than an artificial pick',()=>{
+test('two verified games produce a conditional market direction with an uncertainty warning',()=>{
   const review=assessDailyMarketEvidence(market(),evidence(111,96,2))
+  assert.equal(review.status,'uncertain')
+  assert.equal(review.selectedOutcome.selection,'Under')
+  assert.match(review.warnings.join(' '),/MUESTRA REDUCIDA/)
+  assert.ok(review.rankingScore>0)
+  assert.ok(review.rankingScore<assessDailyMarketEvidence(market(),evidence()).rankingScore)
+})
+test('one historical match cannot fabricate a directional pick',()=>{
+  const review=assessDailyMarketEvidence(market(),evidence(111,96,1))
   assert.equal(review.status,'unavailable')
   assert.equal(review.selectedOutcome,null)
-  assert.match(review.warnings.join(' '),/Historial insuficiente/)
+})
+test('stale ESPN price stays in research but never becomes a fully supported recommendation',()=>{
+  const review=assessDailyMarketEvidence({...market(),requiresRecheck:true},evidence())
+  assert.notEqual(review.status,'descriptive-support')
+  assert.match(review.warnings.join(' '),/nueva lectura/)
 })
 test('wrong fixture cannot reuse another game evidence',()=>{
   assert.throws(()=>assessDailyMarketEvidence(market(),{...evidence(),eventId:'991'}),/no corresponde/)
