@@ -210,7 +210,7 @@ function dashboard(d:Omit<HockeyDossier,'uiBlock'>):HockeyDossier['uiBlock']{
         'Estadísticas no disponibles'+(p.last5.length?' · reciente: '+p.last5[0]?.summary:'')+
         (p.last20?.length?' · historial oficial '+p.last20.length+' partidos':'')+
         (p.homeRoadSplits?.home?' · local '+p.homeRoadSplits.home.games+' encuentros':'')+
-        (p.homeRoadSplits?.away?' · visita '+p.homeRoadSplits.away.games+' encuentros')})))
+        (p.homeRoadSplits?.away?' · visita '+p.homeRoadSplits.away.games+' encuentros':'')})))
   add('Unidades especiales · estadísticas oficiales NHL',
     (['home','away'] as const).map(side=>{
       const team=d.fixture[side],v=d.specialTeams[side]
