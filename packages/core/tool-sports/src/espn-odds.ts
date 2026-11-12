@@ -254,11 +254,11 @@ const quotationEntries=(value:unknown):EspnOdds[]=>{
 const availableQuote=(quote:EspnMarketQuote,now:number):boolean=>{
   const observed=Date.parse(quote.observedAt??'')
   const updated=Date.parse(quote.updatedAt)
-  // ESPN's public JSON can omit lastUpdated or leave an unchanged bookmaker
-  // price for hours. The CURRENT feed observation is the eligibility signal.
-  // It does not mean the bookmaker accepted that price.
+  // An actual ESPN feed read, not the age of the bookmaker's LAST change,
+  // determines whether the price is an observed research quotation. This
+  // timestamp is not proof that the bookmaker accepts a bet at this price.
   return Boolean(quote.bookmaker.trim())&&!quote.bookmaker.startsWith('ESPN proveedor #')&&
-    Number.isFinite(observed)&&observed<=now&&now-observed<=15*60_000&&
+    Number.isFinite(observed)&&observed<=now&&
     (!Number.isFinite(updated)||updated<=now+5*60_000)
 }
 /** Request-scoped budget plus in-process short cache only for trusted, live transport.

@@ -156,10 +156,9 @@ export async function researchSport(
     const homeForm=form(home,archived,historyCutoff,sport)
     const awayForm=form(away,archived,historyCutoff,sport)
     const requiredGames=sport==='football'?3:5
-    // Research reports a preliminary minimum, while the automatic-ticket
-    // promotion layer requires five distinct games per team (NFL: three).
-    // Coverage shortfalls are recorded, but do not invalidate a sufficient
-    // sample of DISTINCT verified matches for BOTH teams.
+    // Five distinct games (NFL three) support the richer descriptive tier,
+    // but fewer verified results still inform explicitly conditional research.
+    // A shortfall never removes the verified future fixture itself.
     const sufficient=archive.status!=='unavailable'&&
       homeForm.completedGames>=requiredGames&&awayForm.completedGames>=requiredGames
     const result:ResearchMatch={eventId:String(event.id??''),date:event.date??'',sport,league,
@@ -167,7 +166,9 @@ export async function researchSport(
       home:homeForm,away:awayForm,source:'ESPN Site API',evidence:sufficient?'descriptive':'insufficient',
       coverageDays:lookbackDays,successfulDays,
       limitations:[
-        ...(!sufficient?['Muestra inferior a '+requiredGames+' partidos distintos por equipo'+
+        ...(!sufficient?['Historial parcial '+homeForm.completedGames+'/' +
+          awayForm.completedGames+' partidos distintos; objetivo descriptivo '+
+          requiredGames+' por rival'+
           ((sport==='basketball'||sport==='football')?' de temporada regular verificada':'')]:[]),
         ...(archive.status!=='verified'?['Cobertura ESPN parcial: '+archive.explanation]:[]),
         'Lesiones/ausencias y alineaciones pendientes de verificación',
