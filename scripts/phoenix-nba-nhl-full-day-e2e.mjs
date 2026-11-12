@@ -276,7 +276,7 @@ try{
   }))
 }catch(e){work.notes.push('Specialist execution failed: '+clean(e))}
 await save()
-for(const sport of ['basketball','hockey']){
+for(const sport of ['basketball','hockey','basketball,hockey']){
   try{
     const t=await evidencePricedTicket(5,date,sport,0,now,{
       ...process.env,PHOENIX_SPORTS_DAILY_PRELOAD_AUTO:'0',
