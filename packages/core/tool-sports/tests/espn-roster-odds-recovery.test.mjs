@@ -26,6 +26,17 @@ test('ESPN roster parses flat NBA athletes and group NHL/NFL rosters with link-o
   assert.equal(espnAthleteId({displayName:'No ID'},
     {links:[{href:'https://www.espn.com/nba/player/_/id/411000/a'}]}),'411000')
 })
+test('NFL retains all 84 ESPN roster players without truncating at 55',()=>{
+  const roster={athletes:[
+    {position:'Offense',items:Array.from({length:48},(_,i)=>({
+      id:String(6000+i),displayName:'Offense '+i,position:{abbreviation:'WR'}}))},
+    {position:'Defense',items:Array.from({length:36},(_,i)=>({
+      id:String(7000+i),displayName:'Defense '+i,position:{abbreviation:'DB'}}))}
+  ]}
+  const parsed=parseEspnRoster(roster)
+  assert.equal(parsed.length,84)
+  assert.equal(parsed[83].id,'7035')
+})
 test('numbered team roster empty -> only SAME verified team abbreviation may be retried',async()=>{
   const routes=[]
   const read=async(url)=>{routes.push(url)

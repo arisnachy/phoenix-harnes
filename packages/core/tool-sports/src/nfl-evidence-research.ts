@@ -4,6 +4,7 @@
 import {getFeed,hasSportsPermission,type MarketOutcome} from './sports.ts'
 import {collectDirectEspnStats,type DirectTeam} from './sports-direct-stats.ts'
 import {readHistoricalScoreboard} from './sports-historical-scoreboard.ts'
+import {fetchEspnScoreboardWithFallback,type ScoreBoard} from './espn-nfl-weekly.ts'
 import {isVerifiedRegularSeason} from './sports-regular-season.ts'
 import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
 type Row=Record<string,unknown>
@@ -35,7 +36,8 @@ type Result={date:string;opponent:string;pts:number;allowed:number;homeAway:'hom
 export type NflSide={id:string;name:string;record:string|null;roster:NflPlayer[];
   recent:Result[];wins:number;losses:number;restHours:number|null;
   offenseConfirmed:number;defenseConfirmed:number;
-  teamStats:Array<{name:string;value:string}>;sourceCoverage:DirectTeam['coverage']}
+  teamStats:Array<{name:string;value:string}>;depthChart?:DirectTeam['depthChart'];
+  sourceCoverage:DirectTeam['coverage']}
 export type NflMatchup={attacker:string;attackerId:string;against:string;
   candidates:Array<{id:string;name:string;role:string}>;
   limitations:string[]}
@@ -92,8 +94,12 @@ export async function nflSlate(date:string,fetcher:typeof fetch=fetch,
   if(!validNflDate(date))throw Error('Fecha NFL inválida')
   if(!hasSportsPermission('espn',env))throw Error('Fuente ESPN deshabilitada')
   const sources:NflSource[]=[]
-  const data=await read<{events?:unknown[]}>('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates='+
-    date.replaceAll('-',''),fetcher,sources,now)
+  const data=await fetchEspnScoreboardWithFallback('football','nfl',
+    date.replaceAll('-',''),async url=>{
+      const result=await read<ScoreBoard>(url,fetcher,sources,now)
+      if(!result)throw Error('ESPN NFL no respondió a '+url)
+      return result
+    })
   const found=arr(data?.events).flatMap(x=>{const g=parseGame(x);return g?[g]:[]})
   const unique=new Map(found.map(x=>[x.eventId,x]))
   return{date,games:[...unique.values()].sort((x,y)=>x.scheduledAt.localeCompare(y.scheduledAt)),
@@ -215,6 +221,11 @@ function panel(d:Omit<NflDossier,'uiBlock'>):NflDossier['uiBlock']{
       .slice(0,12).map(p=>({label:p.name,value:p.position+
         (p.confirmedDefense||p.confirmedOffense?' · titular confirmado':' · sin titularidad confirmada'),
         detail:d.teams[side].name}))))
+  add('Depth chart ESPN: rangos orientativos, NO titulares confirmados',
+    (['home','away'] as const).flatMap(side=>
+      (d.teams[side].depthChart??[]).slice(0,22).map(x=>({
+        label:d.teams[side].name+' · '+x.name,value:x.value,
+        detail:'La posición en depth chart no verifica disponibilidad en el partido'}))))
   add('Enfrentamientos por posición',d.matchups.slice(0,20).map(m=>({
     label:m.attacker+' vs '+m.against,value:m.candidates.length+' posibles defensores',
     detail:m.candidates.slice(0,5).map(x=>x.name).join(', ')})))
@@ -291,7 +302,7 @@ export async function investigateNfl(date:string,eventId:string,fetcher:typeof f
       restHours:last?Math.max(0,(Date.parse(event.scheduledAt)-Date.parse(last.date))/3_600_000):null,
       offenseConfirmed:roster.filter(p=>p.confirmedOffense).length,
       defenseConfirmed:roster.filter(p=>p.confirmedDefense).length,
-      teamStats:e?.stats??[],sourceCoverage:e?.coverage??[]}
+      teamStats:e?.stats??[],depthChart:e?.depthChart??[],sourceCoverage:e?.coverage??[]}
   }
   const teams={home:make('home'),away:make('away')}
   const injuries=arr(obj(injuryData).injuries).flatMap(v=>{
