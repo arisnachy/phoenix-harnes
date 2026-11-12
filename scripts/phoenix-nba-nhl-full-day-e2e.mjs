@@ -9,7 +9,8 @@ import {collectDirectEspnStats} from '../packages/core/tool-sports/src/sports-di
 import {parseEspnRoster} from '../packages/core/tool-sports/src/espn-public-roster.ts'
 import {fetchEspnInjuryBackup} from '../packages/core/tool-sports/src/espn-injury-backup.ts'
 import {fetchPublicEspnOddsDetailed} from '../packages/core/tool-sports/src/espn-odds.ts'
-import {investigateTicketSpecialists} from '../packages/core/tool-sports/src/ticket-specialist-gate.ts'
+import {investigateTicketSpecialists,resolveNhlTicketMatch} from '../packages/core/tool-sports/src/ticket-specialist-gate.ts'
+import {nhlSlate} from '../packages/core/tool-sports/src/nhl-evidence-research.ts'
 import {evidencePricedTicket} from '../packages/core/tool-sports/src/evidence-priced-ticket.ts'
 
 const localDay=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
@@ -170,6 +171,27 @@ for(const [sport,league,key] of config){
     fixtures.push(...rows.map(event=>({event,sport,league,key})))
   }catch(e){work.leagueCounts[league]={error:clean(e)}}
 }
+try{
+  const slate=await nhlSlate(date,request,now)
+  const espnHockey=fixtures.filter(x=>x.league==='nhl').map(x=>{
+    const c=x.event.competitions?.[0]
+    const h=c?.competitors?.find(y=>y.homeAway==='home')?.team
+    const a=c?.competitors?.find(y=>y.homeAway==='away')?.team
+    const target={home:h?.displayName??'',away:a?.displayName??'',kickoff:x.event.date??''}
+    const exact=resolveNhlTicketMatch(slate.games,target)
+    const near=slate.games.map(g=>({
+      officialId:g.id,home:g.home.name,away:g.away.name,
+      kickoff:g.date,homeAbbrev:g.home.abbrev,awayAbbrev:g.away.abbrev,
+    })).filter(g=>Math.abs(Date.parse(g.kickoff)-Date.parse(target.kickoff))<60*60_000)
+    return{eventId:String(x.event.id),espn:target,officialMatch:exact?.id??null,
+      nearby:near.slice(0,5)}
+  })
+  work.nhlIdentity={officialGames:slate.games.length,espenGames:espnHockey.length,
+    officialSample:slate.games.slice(0,6).map(g=>({
+      id:g.id,home:g.home,away:g.away,date:g.date})),
+    compare:espnHockey}
+  console.log('FULL_DAY_NHL_IDENTITIES '+JSON.stringify(work.nhlIdentity).slice(0,18000))
+}catch(e){work.nhlIdentity={error:clean(e)}}
 console.log('FULL_DAY_DISCOVERY '+JSON.stringify(work.leagueCounts))
 await save()
 const rows=[]
