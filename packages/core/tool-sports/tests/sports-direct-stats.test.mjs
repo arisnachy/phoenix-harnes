@@ -129,3 +129,41 @@ test('preserves ALL 17 roster identities while probing only two players to save 
   assert.ok(team.roster.every(x=>/^3100/.test(x.id)))
   assert.equal(team.athletes[0].status,'unavailable')
 })
+
+test('NBA depthchart carries players and ranks instead of being misclassified as empty',async()=>{
+  const fetcher=async url=>{
+    const u=String(url)
+    const payload=u.endsWith('/roster')?{athletes:[{id:'101',displayName:'Starter'}]}:
+      u.endsWith('/depthcharts')?{depthchart:{positions:{pointGuard:{
+        position:{abbreviation:'PG'},athletes:[
+          {rank:1,athlete:{id:'101',displayName:'Starter'}},
+          {rank:2,athlete:{id:'102',displayName:'Reserve'}}]}}}}:{}
+    return new Response(JSON.stringify(payload),{status:200})
+  }
+  const d=await collectDirectEspnStats('basketball','nba',
+    [{id:'18',name:'NBA Team'}],fetcher,now,1)
+  assert.deepEqual(d.teams[0].depthChart,[
+    {name:'PG #1',value:'Starter'},{name:'PG #2',value:'Reserve'}])
+  assert.ok(d.teams[0].coverage.some(c=>
+    c.endpoint==='team_depthcharts'&&c.status==='available'))
+})
+
+test('NFL grouped depthCharts expose QB candidates without inventing confirmed starters',async()=>{
+  const calls=[]
+  const fetcher=async url=>{
+    const u=String(url);calls.push(u)
+    const payload=u.endsWith('/roster')?{athletes:[{position:'Quarterback',
+      items:[{id:'3054211',displayName:'Quarterback A',position:{abbreviation:'QB'}}]}]}:
+      u.endsWith('/depthcharts')?{depthCharts:[{name:'Offense',positions:{
+        quarterback:{position:{name:'Quarterback',abbreviation:'QB'},
+          athletes:[{rank:1,athlete:{id:'3054211',displayName:'Quarterback A'}},
+            {rank:2,athlete:{id:'4360310',displayName:'Quarterback B'}}]}}}]}:{}
+    return new Response(JSON.stringify(payload),{status:200})
+  }
+  const d=await collectDirectEspnStats('football','nfl',
+    [{id:'6',name:'Dallas Cowboys'}],fetcher,now,1)
+  assert.deepEqual(d.teams[0].depthChart,[
+    {name:'QB #1',value:'Quarterback A'},{name:'QB #2',value:'Quarterback B'}])
+  assert.equal(d.teams[0].athletes.length,1)
+  assert.ok(calls.includes('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/6/depthcharts'))
+})
