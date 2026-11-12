@@ -19,7 +19,8 @@ try{
     ...env,PHOENIX_SPORTS_DAILY_PRELOAD_AUTO:'0',
   },fetch,undefined,'winner')
 }catch(reason){
-  error=reason instanceof Error?reason.name+': '+reason.message.slice(0,180):'Error en investigación'
+  // Never publish arbitrary transport error messages: URLs may contain provider keys.
+  error=reason instanceof Error?reason.name:'Error en investigación'
 }
 const report=formatDailyReport(ticket,{
   date,slot,goal:count,checkedAt:new Date(now).toISOString(),error,
