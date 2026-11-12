@@ -37,6 +37,8 @@ export type SpecialistGate={
   /** Actual source URLs and their results; a 200 without data is not verified. */
   endpointAudit?:Array<{url:string;status:'verified'|'empty'|'error';
     checkedAt:string;detail:string}>
+  playerHistoryAudit?:{provider:string;rosterPlayers:number;inspectedPlayers:number;
+    gameLogsFound:number;homeAwaySplitsFound:number;note:string}
 }
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
@@ -115,6 +117,7 @@ export async function investigateTicketSpecialist(
     let specialist='',level:'A'|'B'|'C'|'D'|null=null
     let steps:string[]=[],pending:string[]=[],teams=false
     let endpointAudit:SpecialistGate['endpointAudit']
+    let playerHistoryAudit:SpecialistGate['playerHistoryAudit']
     let rosterIds:Record<'home'|'away',Set<string>>|undefined
     if(game.sport==='football'&&game.league==='nfl'){
       specialist='NFL: QB, 44 titulares, OL/pass rush, lesiones y clima'
@@ -166,6 +169,19 @@ export async function investigateTicketSpecialist(
         }))),
       ]
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
+      const inspected=[...d.teams.home.roster,...d.teams.away.roster]
+      const observedPlayers=[...d.teams.home.roster,...d.teams.away.roster]
+        .filter(p=>p.lastGames.length>0||p.splits.length>0)
+      playerHistoryAudit={
+        provider:'ESPN Common v3',rosterPlayers:inspected.length,
+        inspectedPlayers:inspected.length,
+        gameLogsFound:observedPlayers.filter(p=>p.lastGames.length>0).length,
+        homeAwaySplitsFound:observedPlayers.filter(p=>
+          p.splits.some(x=>/home|local/iu.test(x.name))&&
+          p.splits.some(x=>/away|road|visit/iu.test(x.name))).length,
+        note:'Cada jugador contiene hasta 20 partidos y sus splits por sede; '+ 
+          'una respuesta vacía no se declara verificada.',
+      }
       rosterIds={home:new Set(d.teams.home.roster.map(p=>p.id)),
         away:new Set(d.teams.away.roster.map(p=>p.id))}
       steps=['Jugadores en roster '+d.coverage.players,
@@ -243,11 +259,25 @@ export async function investigateTicketSpecialist(
         throw Error('NHL: informe de porteros pertenece a otro partido; datos descartados')
       level=d.opportunity.decision==='investigate'?'B':'C'
       teams=d.players.home.length>0&&d.players.away.length>0
+      const playerSet=[...d.players.home,...d.players.away]
+      playerHistoryAudit={
+        provider:'NHL Web API (IDs oficiales NHL)',
+        rosterPlayers:playerSet.length,
+        inspectedPlayers:playerSet.filter(p=>p.last20!==undefined).length,
+        gameLogsFound:playerSet.filter(p=>(p.last20?.length??0)>0).length,
+        homeAwaySplitsFound:playerSet.filter(p=>p.homeRoadSplits?.home&&
+          p.homeRoadSplits?.away).length,
+        note:'Game-log de temporada por ID NHL, máximo 20 juegos por atleta. '+
+          'Promedios local/visita calculados únicamente con sede informada.',
+      }
       steps=['Rosters '+(d.players.home.length+d.players.away.length),
         'Porteros candidatos '+(d.goalieCandidates.home.length+d.goalieCandidates.away.length),
         'Forma local/visita '+(d.form.home?.games??0)+'/'+(d.form.away?.games??0)]
       pending=d.missingEvidence
       Object.assign(signals,nhlDeepSignals(d))
+      steps.push('NHL jugadores con historial '+playerHistoryAudit.gameLogsFound+
+        '/'+playerHistoryAudit.inspectedPlayers+
+        ' · con splits local/visita '+playerHistoryAudit.homeAwaySplitsFound)
       observed('fixture',closeTime(match.date,game.kickoff),
         'NHL Web API: equipos y hora cotejados')
       observed('form',(d.form.home?.games??0)>=5&&(d.form.away?.games??0)>=5,
@@ -398,6 +428,7 @@ export async function investigateTicketSpecialist(
     return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
       sourceChecks,checklist,...(injuryAudit?{injuryAudit}:{}),
       ...(endpointAudit?{endpointAudit}:{}),
+      ...(playerHistoryAudit?{playerHistoryAudit}:{}),
       checkedAt:new Date(now).toISOString()}
   }catch(error){
     return errorResult(game,(error instanceof Error?error.message:String(error)))
