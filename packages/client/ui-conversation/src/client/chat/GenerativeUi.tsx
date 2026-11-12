@@ -200,11 +200,15 @@ type SportsTicketCard = {
       webOddsResearch?:Array<{provider:string;url:string;status:string;
         pageObservedAt:string;quoteUpdatedAt:null;bookmakerVerified:false;
         referenceMoneylines:unknown[]}>;
-      oddsReferenceNote?:string }>
+      oddsReferenceNote?:string;displayStatus?:'research-selection';riskNotes?:string[] }>
     requestedLegs?:number; combinedOdds: string; stake?: string; grossReturn?: string; note: string
     ticketReference?:string
     askPrompt?: string;chatNarrative?:SportsTicketNarrative[];
     narrativeInstruction?:string
+    /** Transparent backend research metadata, preserved even for partial tickets. */
+    discoveryAudit?:unknown;dataCounts?:Record<string,number>;
+    pricePreview?:unknown[];pricePreviewOffers?:number;pricePreviewEvents?:number;
+    presentationStatus?:'final-research'
   }
 }
 
@@ -545,12 +549,73 @@ const sportsTicketNarrative=(v:unknown):v is SportsTicketNarrative=>{
     ['verified','partial','missing'].includes(String(x.status))&&nullableSportsLink(x.url))
 }
 
+/** Validate backend ticket evidence, never erase it just to make a card render.
+ * The top-level/leg allowlists still reject arbitrary UI markup and attributes.
+ */
+const ticketCount=(v:unknown,max=1_000_000)=>typeof v==='number'&&
+  Number.isInteger(v)&&v>=0&&v<=max
+const ticketAudit=(v:unknown):boolean=>{
+  if(!isRecord(v)||!hasOnlyKeys(v,['discoveredEvents','eligibleLeagues',
+    'researchedLeagues','candidatesEvaluated','rejectedForEvidence',
+    'shortlistedCandidates','leaguesNotResearched','scanCoverage',
+    'researchErrors','fixtureSample']))return false
+  const nums=['discoveredEvents','eligibleLeagues','researchedLeagues',
+    'candidatesEvaluated','rejectedForEvidence','shortlistedCandidates',
+    'leaguesNotResearched']
+  if(!nums.every(k=>ticketCount(v[k])))return false
+  if(!Array.isArray(v.scanCoverage)||v.scanCoverage.length>500||
+     !Array.isArray(v.researchErrors)||v.researchErrors.length>500||
+     !Array.isArray(v.fixtureSample)||v.fixtureSample.length>80)return false
+  const coverage=(x:unknown)=>isRecord(x)&&hasOnlyKeys(x,['sport','league',
+    'status','futureEvents','rawEvents','pregameOnDate','failedPartitions','reason'])&&
+    boundedSportsText(x.sport,45)&&boundedSportsText(x.league,90)&&
+    boundedSportsText(x.status,50)&&boundedSportsText(x.reason,300)&&
+    ['futureEvents','rawEvents','pregameOnDate','failedPartitions'].every(k=>ticketCount(x[k]))
+  const error=(x:unknown)=>isRecord(x)&&hasOnlyKeys(x,['sport','league','reason'])&&
+    boundedSportsText(x.sport,45)&&boundedSportsText(x.league,90)&&
+    boundedSportsText(x.reason,300)
+  const fixture=(x:unknown)=>isRecord(x)&&hasOnlyKeys(x,
+    ['eventId','sport','league','home','away','kickoff'])&&
+    boundedSportsText(x.eventId,40)&&boundedSportsText(x.sport,45)&&
+    boundedSportsText(x.league,90)&&boundedSportsText(x.home,120)&&
+    boundedSportsText(x.away,120)&&boundedSportsText(x.kickoff,50)
+  return v.scanCoverage.every(coverage)&&v.researchErrors.every(error)&&
+    v.fixtureSample.every(fixture)
+}
+const ticketDataCounts=(v:unknown)=>isRecord(v)&&hasOnlyKeys(v,[
+  'eventsFound','quotedLegs','researchedLegs','candidateLegs',
+  'conditionalLegs','approvedForBetting'])&&
+  ['eventsFound','quotedLegs','researchedLegs','candidateLegs',
+    'conditionalLegs','approvedForBetting'].every(k=>ticketCount(v[k]))
+const ticketPreview=(v:unknown)=>Array.isArray(v)&&v.length<=12&&v.every(x=>
+  isRecord(x)&&hasOnlyKeys(x,['eventId','sport','league','home','away','kickoff',
+    'attempted','options','notes'])&&
+  ['eventId','sport','league','home','away','kickoff'].every(k=>
+    boundedSportsText(x[k],180))&&typeof x.attempted==='boolean'&&
+  Array.isArray(x.options)&&x.options.length<=6&&x.options.every(q=>
+    isRecord(q)&&hasOnlyKeys(q,['bookmaker','selection','market','price',
+      'observedAt','updatedAt'])&&
+    boundedSportsText(q.bookmaker,100)&&boundedSportsText(q.selection,130)&&
+    boundedSportsText(q.market,60)&&typeof q.price==='number'&&
+    Number.isFinite(q.price)&&q.price>1&&q.price<1000&&
+    nullableSportsText(q.observedAt,60)&&nullableSportsText(q.updatedAt,60))&&
+  Array.isArray(x.notes)&&x.notes.length<=5&&x.notes.every(t=>
+    boundedSportsText(t,300)))
+
 const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
     ['title','subtitle','source','legs','requestedLegs','combinedOdds','stake','grossReturn','note','askPrompt','ticketReference',
       'cloudFollowUp','modelAudit','marketRisk','decisionAudit','chatNarrative','narrativeInstruction','specialistChecks',
-      'reviewedBeforeSelection','removedConflicts'])) return false
+      'reviewedBeforeSelection','removedConflicts','discoveryAudit','dataCounts',
+      'pricePreview','pricePreviewOffers','pricePreviewEvents',
+      'presentationStatus'])) return false
   const p = value.props
+  if(p.discoveryAudit!==undefined&&!ticketAudit(p.discoveryAudit))return false
+  if(p.dataCounts!==undefined&&!ticketDataCounts(p.dataCounts))return false
+  if(p.pricePreview!==undefined&&!ticketPreview(p.pricePreview))return false
+  if(p.pricePreviewOffers!==undefined&&!ticketCount(p.pricePreviewOffers))return false
+  if(p.pricePreviewEvents!==undefined&&!ticketCount(p.pricePreviewEvents))return false
+  if(p.presentationStatus!==undefined&&p.presentationStatus!=='final-research')return false
   return isText(p.title) && optionalText(p.subtitle) && isText(p.source,320)
     && isText(p.combinedOdds,40) && optionalText(p.ticketReference,25)
     && (p.ticketReference===undefined||/^[a-zA-Z0-9-]{1,25}$/u.test(p.ticketReference))
@@ -570,7 +635,7 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
       'homeLogo','awayLogo','homeTeam','awayTeam','eventId','eventDate','providerLeague','trackedBet',
       'narrative','legWinProbabilityPercent','legProbabilitySource','legProbabilityWarning','marketNoVigPercent',
       'marketRiskTier','decisionReview','specialistResearch','researchStatus','pendingEvidence',
-      'preliminaryEvidenceTier','referenceOdds','webOddsResearch','oddsReferenceNote'])
+      'preliminaryEvidenceTier','referenceOdds','webOddsResearch','oddsReferenceNote','displayStatus','riskNotes'])
       && isText(x.event) && isText(x.selection) && isText(x.price,32)
       && isText(x.bookmaker) && optionalText(x.when) && trustedPortrait(x.image)
       && trustedPortrait(x.homeLogo) && trustedPortrait(x.awayLogo)
@@ -602,6 +667,9 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
          (x.referenceOdds.source===undefined||boundedSportsText(x.referenceOdds.source,40))&&
          x.referenceOdds.nonCotizable===true))
        && optionalText(x.oddsReferenceNote,500)
+       && (x.displayStatus===undefined||x.displayStatus==='research-selection')
+       && (x.riskNotes===undefined||Array.isArray(x.riskNotes)&&
+         x.riskNotes.length<=8&&x.riskNotes.every(y=>isText(y,260)))
        && (x.webOddsResearch===undefined||(Array.isArray(x.webOddsResearch)&&
          x.webOddsResearch.length<=12&&x.webOddsResearch.every(y=>isRecord(y)&&
            ['ESPN','Oddschecker','ScoresAndOdds'].includes(String(y.provider))&&
