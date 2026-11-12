@@ -15,18 +15,26 @@ const mkRoster=(abbr,offset)=>({
   goalies:Array.from({length:2},(_,i)=>({id:offset+50+i,firstName:{default:'Goalie'},
     lastName:{default:abbr+' '+i},positionCode:'G'})),
 })
-function fake({started=false,missingAway=false,empty=false,withSpecial=false}={}){
+function fake({started=false,missingAway=false,empty=false,withSpecial=false,
+  seasonRoutesOnly=false}={}){
   const calls=[]
   const fetcher=async x=>{
     const url=String(x),u=new URL(url);calls.push(url)
     let body
     if(u.pathname==='/v1/score/'+date)
       body={games:empty?[]:[started?{...game,gameState:'LIVE'}:game]}
+    else if(seasonRoutesOnly&&u.pathname==='/v1/roster/TOR/20262027')
+      body=mkRoster('TOR',10000)
+    else if(seasonRoutesOnly&&u.pathname==='/v1/roster/MTL/20262027'){
+      if(missingAway)return new Response('unavailable',{status:503})
+      body=mkRoster('MTL',20000)
+    }
     else if(u.pathname==='/v1/roster/TOR/current')body=mkRoster('TOR',10000)
     else if(u.pathname==='/v1/roster/MTL/current'){
       if(missingAway)return new Response('unavailable',{status:503})
       body=mkRoster('MTL',20000)
-    }else if(u.pathname.includes('/v1/club-schedule-season/')){
+    }else if(u.pathname.includes('/v1/club-schedule-season/')&&
+      (!seasonRoutesOnly||u.pathname.endsWith('/20262027'))){
       body={games:[{id:2026020101,startTimeUTC:'2026-11-01T23:00:00Z',
         gameState:'OFF',homeTeam:{abbrev:'TOR',score:4},
         awayTeam:{abbrev:'MTL',score:2}},
@@ -108,6 +116,20 @@ test('roster forwards/defense/goalies stay distinct; no starting goalie asserted
   assert.equal(d.opportunity.eligibleForTicket,false)
   assert.equal(d.opportunity.calibratedProbability,false)
   assert.equal(d.uiBlock.component,'sports_espn_dashboard')
+})
+test('season-specific NHL roster and calendar recover all players and game forms',async()=>{
+  const api=fake({seasonRoutesOnly:true})
+  const d=await investigateNhl(date,'2026020201',api.fetcher,now,[],2)
+  assert.equal(d.players.home.length,20)
+  assert.equal(d.players.away.length,20)
+  assert.equal(d.form.home.last5.length,1)
+  assert.equal(d.form.home.last10.length,1)
+  assert.equal(d.form.home.last20.length,1)
+  assert.equal(d.form.home.last20[0].location,'home')
+  assert.ok(api.calls.includes('https://api-web.nhle.com/v1/roster/TOR/20262027'))
+  assert.ok(api.calls.includes('https://api-web.nhle.com/v1/club-schedule-season/MTL/20262027'))
+  assert.equal(api.calls.some(x=>x.includes('/roster/TOR/current')),false)
+  assert.equal(api.calls.some(x=>x.includes('/club-schedule-season/TOR/now')),false)
 })
 test('missing opponent roster triggers explicit abstention and source error',async()=>{
   const d=await investigateNhl(date,'2026020201',fake({missingAway:true}).fetcher,now,[],2)
