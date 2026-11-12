@@ -3,6 +3,7 @@
  * list and an old report cannot confirm that an athlete will miss tonight.
  */
 import {getFeed} from './sports.ts'
+import {espnAthleteId} from './espn-public-roster.ts'
 
 export type InjuryFixture={sport:string;league:string;home:string;away:string;
   date?:string;eventId?:string;kickoff?:string}
@@ -86,7 +87,7 @@ function parseGroups(payload:unknown,source:string):ParsedGroup[]{
       const description=str(details?.type??details?.detail??i.shortComment,240)
       individuals.push({
         team,athlete:athleteName,
-        athleteId:validId(athlete.id),status:injuryStatus,
+        athleteId:validId(athlete.id)??validId(espnAthleteId(athlete,i)),status:injuryStatus,
         reportedAt:date(i.date??i.updatedAt),details:description,
         returnDate:date(details?.returnDate),
         source,
