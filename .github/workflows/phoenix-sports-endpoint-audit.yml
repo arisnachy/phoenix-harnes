@@ -28,8 +28,11 @@ jobs:
           version: 11.7.0
       - name: Install locked sports workspace
         run: pnpm install --frozen-lockfile
-      - name: Validate source probe syntax
-        run: node --check scripts/phoenix-sports-endpoint-audit.mjs
+      - name: Validate source probe syntax and NHL/ESPN no-loss regressions
+        run: |
+          node --check scripts/phoenix-sports-endpoint-audit.mjs
+          node --check scripts/phoenix-nba-nhl-full-day-e2e.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/ticket-specialist-gate.test.mjs packages/core/tool-sports/tests/sports-direct-stats.test.mjs
       - name: Check every registered route family with real HTTP requests
         run: node scripts/phoenix-sports-endpoint-audit.mjs
       - name: Publish inspectable network observations
