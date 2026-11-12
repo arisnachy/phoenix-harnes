@@ -91,9 +91,17 @@ function confirmedStarters(summary:unknown,teamId:string,roster:BasketballAthlet
   return true
 }
 function resolvePlayers(team:DirectTeam):BasketballAthlete[]{
-  return team.athletes.map(x=>({id:x.id,name:x.name,teamId:team.id,
-    position:x.position,status:x.status,confirmedStarter:false,
-    stats:x.stats,lastGames:x.lastGames,splits:x.splits}))
+  // Keep EVERY player from ESPN's verified team roster. The full player
+  // list must not disappear merely because only 12 expensive stats requests
+  // are budgeted. Uninspected players retain explicit unavailable metrics.
+  const sampled=new Map(team.athletes.map(p=>[p.id,p]))
+  return team.roster.map(person=>{
+    const stats=sampled.get(person.id)
+    return{id:person.id,name:person.name,teamId:team.id,
+      position:person.position,status:stats?.status??'unavailable' as const,
+      confirmedStarter:false,stats:stats?.stats??[],
+      lastGames:stats?.lastGames??[],splits:stats?.splits??[]}
+  })
 }
 const category=(position:string)=>{
   const p=position.toUpperCase()

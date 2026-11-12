@@ -110,3 +110,22 @@ test('live ESPN results and singular depthchart objects are not discarded',async
     &&x.status==='available'))
   assert.ok(calls.some(x=>x.endsWith('/teams/18/statistics')))
 })
+
+
+test('preserves ALL 17 roster identities while probing only two players to save traffic',async()=>{
+  const payload={athletes:Array.from({length:17},(_,i)=>({
+    id:String(310000+i),displayName:'Verified Player '+i,
+    position:{abbreviation:i%2?'F':'G'}}))}
+  const transport=async url=>new Response(JSON.stringify(
+    String(url).endsWith('/roster')?payload:{}))
+  const result=await collectDirectEspnStats('basketball','nba',
+    [{id:'20',name:'Philadelphia 76ers'}],transport,now,2)
+  const team=result.teams[0]
+  assert.equal(team.athleteCount,17)
+  assert.equal(team.roster.length,17)
+  assert.equal(team.athletes.length,2)
+  assert.equal(team.roster[16].id,'310016')
+  assert.equal(team.roster[16].name,'Verified Player 16')
+  assert.ok(team.roster.every(x=>/^3100/.test(x.id)))
+  assert.equal(team.athletes[0].status,'unavailable')
+})

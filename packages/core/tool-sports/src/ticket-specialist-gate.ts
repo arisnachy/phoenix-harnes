@@ -13,6 +13,7 @@ import {nflDeepSignals,nhlDeepSignals,mlbDeepSignals,
   soccerDeepSignals,tennisDeepSignals} from './sports-granular-bridge.ts'
 import {investigateSoccer} from './soccer-worldwide-dossier.ts'
 import {nhlSlate,investigateNhl} from './nhl-evidence-research.ts'
+import {sameEspnTeam} from './sports-exact-espn-winner.ts'
 import {discoverMlbDay,researchMlbCase} from './mlb-evidence-research.ts'
 import {tennisSlate,investigateTennis,type TennisTour} from './tennis-evidence-research.ts'
 
@@ -36,6 +37,8 @@ export type SpecialistGate={
   /** Actual source URLs and their results; a 200 without data is not verified. */
   endpointAudit?:Array<{url:string;status:'verified'|'empty'|'error';
     checkedAt:string;detail:string}>
+  playerHistoryAudit?:{provider:string;rosterPlayers:number;inspectedPlayers:number;
+    gameLogsFound:number;homeAwaySplitsFound:number;note:string}
 }
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
@@ -49,8 +52,13 @@ const closeTime=(a:string,b:string)=>
 export function resolveNhlTicketMatch<T extends {
   id:string;date:string;home:{name:string};away:{name:string}
 }>(slate:readonly T[],target:Pick<SpecialistFixture,'home'|'away'|'kickoff'>):T|null{
-  const matches=slate.filter(x=>identities(x.home.name,x.away.name,target.home,target.away)
-    &&closeTime(x.date,target.kickoff))
+  // Official NHL score feeds may expose unambiguous nicknames only (e.g.
+  // "Kraken" vs ESPN "Seattle Kraken"). Use the existing exact NHL franchise
+  // alias table; still require BOTH teams and a matching kickoff, exactly once.
+  const matches=slate.filter(x=>
+    sameEspnTeam(x.home.name,target.home,'icehockey_nhl')&&
+    sameEspnTeam(x.away.name,target.away,'icehockey_nhl')&&
+    closeTime(x.date,target.kickoff))
   return matches.length===1?matches[0]!:null
 }
 
@@ -109,6 +117,8 @@ export async function investigateTicketSpecialist(
     let specialist='',level:'A'|'B'|'C'|'D'|null=null
     let steps:string[]=[],pending:string[]=[],teams=false
     let endpointAudit:SpecialistGate['endpointAudit']
+    let playerHistoryAudit:SpecialistGate['playerHistoryAudit']
+    let rosterIds:Record<'home'|'away',Set<string>>|undefined
     if(game.sport==='football'&&game.league==='nfl'){
       specialist='NFL: QB, 44 titulares, OL/pass rush, lesiones y clima'
       const d=await investigateNfl(game.date,game.eventId,fetcher,now,env,quotes)
@@ -159,6 +169,21 @@ export async function investigateTicketSpecialist(
         }))),
       ]
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
+      const inspected=[...d.teams.home.roster,...d.teams.away.roster]
+      const observedPlayers=[...d.teams.home.roster,...d.teams.away.roster]
+        .filter(p=>p.lastGames.length>0||p.splits.length>0)
+      playerHistoryAudit={
+        provider:'ESPN Common v3',rosterPlayers:inspected.length,
+        inspectedPlayers:inspected.length,
+        gameLogsFound:observedPlayers.filter(p=>p.lastGames.length>0).length,
+        homeAwaySplitsFound:observedPlayers.filter(p=>
+          p.splits.some(x=>/home|local/iu.test(x.name))&&
+          p.splits.some(x=>/away|road|visit/iu.test(x.name))).length,
+        note:'Cada jugador contiene hasta 20 partidos y sus splits por sede; '+ 
+          'una respuesta vacía no se declara verificada.',
+      }
+      rosterIds={home:new Set(d.teams.home.roster.map(p=>p.id)),
+        away:new Set(d.teams.away.roster.map(p=>p.id))}
       steps=['Jugadores en roster '+d.coverage.players,
         'Resultados recientes '+d.coverage.formGames,
         'Quintetos confirmados '+d.coverage.starters+'/10',
@@ -228,16 +253,31 @@ export async function investigateTicketSpecialist(
       // NHL IDs are not ESPN IDs. Validate again after fetching the official
       // dossier to prevent a goalie report from a different game entering it.
       if(d.fixture.id!==match.id||
-        !identities(d.fixture.home.name,d.fixture.away.name,game.home,game.away)||
+        !(sameEspnTeam(d.fixture.home.name,game.home,'icehockey_nhl')&&
+          sameEspnTeam(d.fixture.away.name,game.away,'icehockey_nhl'))||
         !closeTime(d.fixture.date,game.kickoff))
         throw Error('NHL: informe de porteros pertenece a otro partido; datos descartados')
       level=d.opportunity.decision==='investigate'?'B':'C'
       teams=d.players.home.length>0&&d.players.away.length>0
+      const playerSet=[...d.players.home,...d.players.away]
+      playerHistoryAudit={
+        provider:'NHL Web API (IDs oficiales NHL)',
+        rosterPlayers:playerSet.length,
+        inspectedPlayers:playerSet.filter(p=>p.last20!==undefined).length,
+        gameLogsFound:playerSet.filter(p=>(p.last20?.length??0)>0).length,
+        homeAwaySplitsFound:playerSet.filter(p=>p.homeRoadSplits?.home&&
+          p.homeRoadSplits?.away).length,
+        note:'Game-log de temporada por ID NHL, máximo 20 juegos por atleta. '+
+          'Promedios local/visita calculados únicamente con sede informada.',
+      }
       steps=['Rosters '+(d.players.home.length+d.players.away.length),
         'Porteros candidatos '+(d.goalieCandidates.home.length+d.goalieCandidates.away.length),
         'Forma local/visita '+(d.form.home?.games??0)+'/'+(d.form.away?.games??0)]
       pending=d.missingEvidence
       Object.assign(signals,nhlDeepSignals(d))
+      steps.push('NHL jugadores con historial '+playerHistoryAudit.gameLogsFound+
+        '/'+playerHistoryAudit.inspectedPlayers+
+        ' · con splits local/visita '+playerHistoryAudit.homeAwaySplitsFound)
       observed('fixture',closeTime(match.date,game.kickoff),
         'NHL Web API: equipos y hora cotejados')
       observed('form',(d.form.home?.games??0)>=5&&(d.form.away?.games??0)>=5,
@@ -338,7 +378,24 @@ export async function investigateTicketSpecialist(
         // ESPN day-to-day/questionable is an uncertain availability report,
         // never a confirmed absence or a definitive NBA/NFL inactive list.
         const injured=[...injury.home.injuries,...injury.away.injuries]
-        const note=injured.slice(0,8).map(x=>x.athlete+' ('+x.status+
+        // ESPN's league feed can include a past transaction, a player outside
+        // today's active roster or ambiguous team affiliation. Preserve every
+        // original record in injuryAudit but do not promote it to a confirmed
+        // absence for the selected team's current roster.
+        const unmatched=rosterIds?(['home','away'] as const).flatMap(side=>
+          injury[side].injuries.filter(x=>!x.athleteId||
+            !rosterIds![side].has(x.athleteId))):[]
+        if(unmatched.length){
+          injury.notes.push('ESPN lesiones: '+unmatched.length+
+            ' registros NO conciliados con roster de ambos clubes; '+
+            'conservar como referencia, NO usarlos como bajas confirmadas')
+          pending.push('Conciliación de lesiones pendiente: '+unmatched.length+
+            ' atletas fuera del roster vigente o sin ID verificado')
+        }
+        const verifiedRosterInjuries=rosterIds?injured.filter(x=>
+          (injury.home.injuries.includes(x)&&x.athleteId&&rosterIds!.home.has(x.athleteId))||
+          (injury.away.injuries.includes(x)&&x.athleteId&&rosterIds!.away.has(x.athleteId))):injured
+        const note=verifiedRosterInjuries.slice(0,8).map(x=>x.athlete+' ('+x.status+
           ', '+(x.reportedAt??'sin fecha')+')').join('; ')
         const detail='ESPN '+injury.source+'; local '+
           injury.home.injuries.length+', visitante '+
@@ -352,7 +409,7 @@ export async function investigateTicketSpecialist(
         steps.push('ESPN lesiones '+injury.status+': local '+
           injury.home.injuries.length+' · visitante '+injury.away.injuries.length+
           ' · fuente '+injury.source)
-        for(const item of [...injury.home.injuries,...injury.away.injuries].slice(0,12))
+        for(const item of verifiedRosterInjuries.slice(0,12))
           steps.push('ESPN baja · '+item.team+' · '+item.athlete+
             ' · '+item.status+' · '+(item.reportedAt??'sin fecha'))
       }else pending.push('ESPN lesiones '+injury.status+': '+injury.source)
@@ -371,6 +428,7 @@ export async function investigateTicketSpecialist(
     return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
       sourceChecks,checklist,...(injuryAudit?{injuryAudit}:{}),
       ...(endpointAudit?{endpointAudit}:{}),
+      ...(playerHistoryAudit?{playerHistoryAudit}:{}),
       checkedAt:new Date(now).toISOString()}
   }catch(error){
     return errorResult(game,(error instanceof Error?error.message:String(error)))
