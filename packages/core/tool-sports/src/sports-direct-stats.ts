@@ -258,7 +258,7 @@ export async function collectDirectEspnStats(
         // Common v3 defaults may silently select last season. Always request
         // the season matching the date first; then try the unscoped feed only
         // as a historical fallback when the season-scoped rows are absent.
-        if(athlete.stats.length&&(priority(person)===0||early)||early){
+        // Do not issue two split requests for an empty season-stat probe.\n        // ESPN otherwise amplifies a blank roster into redundant traffic.\n        if(athlete.stats.length&&(priority(person)===0||early)){
           add(uri+'splits'+explicitSeason,'athlete_splits_season',season=>{
             const scoped=parseEspnSplits(season,48)
             const filter=arr(obj(season).filters).map(obj)
