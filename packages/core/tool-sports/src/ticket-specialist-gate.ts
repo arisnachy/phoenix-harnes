@@ -115,6 +115,7 @@ export async function investigateTicketSpecialist(
     let specialist='',level:'A'|'B'|'C'|'D'|null=null
     let steps:string[]=[],pending:string[]=[],teams=false
     let endpointAudit:SpecialistGate['endpointAudit']
+    let rosterIds:Record<'home'|'away',Set<string>>|undefined
     if(game.sport==='football'&&game.league==='nfl'){
       specialist='NFL: QB, 44 titulares, OL/pass rush, lesiones y clima'
       const d=await investigateNfl(game.date,game.eventId,fetcher,now,env,quotes)
@@ -165,6 +166,8 @@ export async function investigateTicketSpecialist(
         }))),
       ]
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
+      rosterIds={home:new Set(d.teams.home.roster.map(p=>p.id)),
+        away:new Set(d.teams.away.roster.map(p=>p.id))}
       steps=['Jugadores en roster '+d.coverage.players,
         'Resultados recientes '+d.coverage.formGames,
         'Quintetos confirmados '+d.coverage.starters+'/10',
@@ -345,7 +348,24 @@ export async function investigateTicketSpecialist(
         // ESPN day-to-day/questionable is an uncertain availability report,
         // never a confirmed absence or a definitive NBA/NFL inactive list.
         const injured=[...injury.home.injuries,...injury.away.injuries]
-        const note=injured.slice(0,8).map(x=>x.athlete+' ('+x.status+
+        // ESPN's league feed can include a past transaction, a player outside
+        // today's active roster or ambiguous team affiliation. Preserve every
+        // original record in injuryAudit but do not promote it to a confirmed
+        // absence for the selected team's current roster.
+        const unmatched=rosterIds?(['home','away'] as const).flatMap(side=>
+          injury[side].injuries.filter(x=>!x.athleteId||
+            !rosterIds![side].has(x.athleteId))):[]
+        if(unmatched.length){
+          injury.notes.push('ESPN lesiones: '+unmatched.length+
+            ' registros NO conciliados con roster de ambos clubes; '+
+            'conservar como referencia, NO usarlos como bajas confirmadas')
+          pending.push('Conciliación de lesiones pendiente: '+unmatched.length+
+            ' atletas fuera del roster vigente o sin ID verificado')
+        }
+        const verifiedRosterInjuries=rosterIds?injured.filter(x=>
+          (injury.home.injuries.includes(x)&&x.athleteId&&rosterIds!.home.has(x.athleteId))||
+          (injury.away.injuries.includes(x)&&x.athleteId&&rosterIds!.away.has(x.athleteId))):injured
+        const note=verifiedRosterInjuries.slice(0,8).map(x=>x.athlete+' ('+x.status+
           ', '+(x.reportedAt??'sin fecha')+')').join('; ')
         const detail='ESPN '+injury.source+'; local '+
           injury.home.injuries.length+', visitante '+
@@ -359,7 +379,7 @@ export async function investigateTicketSpecialist(
         steps.push('ESPN lesiones '+injury.status+': local '+
           injury.home.injuries.length+' · visitante '+injury.away.injuries.length+
           ' · fuente '+injury.source)
-        for(const item of [...injury.home.injuries,...injury.away.injuries].slice(0,12))
+        for(const item of verifiedRosterInjuries.slice(0,12))
           steps.push('ESPN baja · '+item.team+' · '+item.athlete+
             ' · '+item.status+' · '+(item.reportedAt??'sin fecha'))
       }else pending.push('ESPN lesiones '+injury.status+': '+injury.source)
