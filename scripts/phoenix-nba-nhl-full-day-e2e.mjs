@@ -129,8 +129,13 @@ const one=async(event,sport,league,key)=>{
     for(const t of row.stats.teams){
       const raw=row.rosters?.find(x=>x.side===(t.id===game.homeId?'home':'away'))
       if(raw?.players>t.rosterFound)work.audit.lostRosters++
-      work.audit.missingGamelogs+=t.athletes.filter(x=>x.lastGamesCount===0).length
-      work.audit.missingSplits+=t.athletes.filter(x=>x.splitsCount===0).length
+      // For NHL, player gamelogs are retrieved through its own official ID
+      // namespace in the specialist. ESPN Common-v3 gamelog commonly 404s,
+      // so zeros there are NOT missing official NHL game history.
+      if(league!=='nhl'){
+        work.audit.missingGamelogs+=t.athletes.filter(x=>x.lastGamesCount===0).length
+        work.audit.missingSplits+=t.athletes.filter(x=>x.splitsCount===0).length
+      }
     }
   }else row.errors.push('Stats: '+clean(stats.reason))
   if(injuries.status==='fulfilled'){
@@ -308,6 +313,14 @@ work.audit.withH2HOdds=work.checks.filter(x=>x.odds?.h2h?.length>=2).length
 work.audit.withBilateralInjuries=work.checks.filter(x=>
   x.injuries?.homeMatched&&x.injuries?.awayMatched).length
 work.audit.specialistAudited=work.specialists.length
+work.audit.nhlOfficialPlayersWithGames=work.specialists.filter(x=>x.league==='nhl')
+  .reduce((n,x)=>n+(x.playerHistoryAudit?.gameLogsFound??0),0)
+work.audit.nhlOfficialPlayersWithBothSplits=work.specialists.filter(x=>x.league==='nhl')
+  .reduce((n,x)=>n+(x.playerHistoryAudit?.homeAwaySplitsFound??0),0)
+work.audit.nbaRosterPlayersWithGames=work.specialists.filter(x=>x.league==='nba')
+  .reduce((n,x)=>n+(x.playerHistoryAudit?.gameLogsFound??0),0)
+work.audit.nbaRosterPlayersWithBothSplits=work.specialists.filter(x=>x.league==='nba')
+  .reduce((n,x)=>n+(x.playerHistoryAudit?.homeAwaySplitsFound??0),0)
 work.audit.completeCards=work.ticketEngine.filter(x=>x.complete).length
 await save()
 const markdown=[
