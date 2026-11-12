@@ -24,6 +24,6 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify NHL roster, goalie, markets and settlement
-        run: node --experimental-strip-types --test packages/core/tool-sports/tests/nhl-evidence-research.test.mjs
+        run: node --experimental-strip-types --test packages/core/tool-sports/tests/nhl-evidence-research.test.mjs packages/core/tool-sports/tests/nhl-espn-roster-recovery.test.mjs
       - name: Verify TypeScript host compilation
         run: pnpm exec tsc -b tsconfig.host.json --pretty false
