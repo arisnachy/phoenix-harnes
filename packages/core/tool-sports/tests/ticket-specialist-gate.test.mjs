@@ -78,3 +78,37 @@ test('official NHL nicknames match ESPN full franchise names only with both side
   assert.equal(resolveNhlTicketMatch(slate,{...target,kickoff:'2026-11-12T22:00:00Z'}),null)
   assert.equal(resolveNhlTicketMatch([slate[0],slate[0]],target),null)
 })
+
+
+test('NHL actual specialist accepts official nickname at both checks, no cross-provider ID reuse',async()=>{
+  const now=Date.parse('2026-11-02T12:00:00Z'),date='2026-11-05'
+  const kickoff='2026-11-05T23:00:00Z'
+  const event={id:2026020201,startTimeUTC:kickoff,season:20262027,
+    gameState:'FUT',
+    homeTeam:{id:10,abbrev:'TOR',name:{default:'Maple Leafs'}},
+    awayTeam:{id:20,abbrev:'MTL',name:{default:'Canadiens'}},
+    venue:{default:'Test Arena'}}
+  const mkRoster=(abbr,id)=>({
+    forwards:[{id,firstName:{default:'Test'},lastName:{default:abbr+' Player'}}],
+    goalies:[{id:id+1,firstName:{default:'Test'},lastName:{default:abbr+' Goalie'}}],
+  })
+  const transport=async input=>{
+    const url=String(input),u=new URL(url)
+    let body={}
+    if(u.pathname==='/v1/score/'+date)body={games:[event]}
+    else if(u.pathname==='/v1/roster/TOR/current')body=mkRoster('TOR',10100)
+    else if(u.pathname==='/v1/roster/MTL/current')body=mkRoster('MTL',20100)
+    else if(u.pathname==='/v1/standings/'+date)body={standings:[]}
+    else if(u.pathname.includes('/player/')&&u.pathname.endsWith('/landing'))
+      body={featuredStats:{regularSeason:{subSeason:{gamesPlayed:10}}},last5Games:[]}
+    return new Response(JSON.stringify(body),{status:200})
+  }
+  const result=await investigateTicketSpecialist({
+    sport:'hockey',league:'nhl',eventId:'401892696',date,
+    home:'Toronto Maple Leafs',away:'Montreal Canadiens',kickoff,
+  },transport,now,{},[])
+  assert.notEqual(result.status,'unavailable')
+  assert.ok(result.checklist?.fullSteps?.length>=12)
+  assert.ok(result.verifiedSteps.some(x=>x.includes('Rosters')))
+  assert.ok(!result.pendingSteps.some(x=>x.includes('otro partido')))
+})
