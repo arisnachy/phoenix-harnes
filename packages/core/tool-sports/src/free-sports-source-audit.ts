@@ -72,7 +72,7 @@ async function publicJson(url:string,fetcher:typeof fetch,now:number):Promise<un
   const promise=getFeed<unknown>(url,fetcher).catch(error=>{
     const message=error instanceof Error?error.message:String(error)
     // Never interpret blocked/rate-limited providers as an empty game list.
-    if(/\\b(?:HTTP\\s*)?(?:403|429|503)\\b/iu.test(message)){
+    if(/\b(?:HTTP\s*)?(?:403|429|503)\b/iu.test(message)){
       const active=cache.get(url)
       if(active?.value===promise)active.until=now+3*60_000
     }else if(cache.get(url)?.value===promise)cache.delete(url)
