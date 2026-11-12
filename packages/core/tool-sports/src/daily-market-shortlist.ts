@@ -75,6 +75,14 @@ const quoteClock=(quote:MarketOutcome):number=>{
   const espn=quote.source?.startsWith('ESPN')===true
   return Date.parse(espn&&quote.observedAt?quote.observedAt:quote.updatedAt)
 }
+/** A previous ESPN read may remain visible, but must be refetched by exact
+ * event ID before an automatically issued complete research ticket.
+ */
+export const espnQuoteNeedsRecheck=(quote:MarketOutcome,now=Date.now()):boolean=>{
+  if(quote.source?.startsWith('ESPN')!==true)return false
+  const observed=Date.parse(quote.observedAt??'')
+  return !Number.isFinite(observed)||observed>now||now-observed>30*60_000
+}
 const groupKey=(fixture:Fixture,quote:MarketOutcome):string=>[
   fixture.sport,fixture.league,fixture.eventId,quote.bookmaker,quote.eventId,
   quote.market,quote.market==='spreads'&&typeof quote.point==='number'
@@ -127,8 +135,11 @@ export function shortlistDailyMarkets(
     const fixture=matches[0]!
     const key=groupKey(fixture,quote)
     const group=groups.get(key)??{fixture,quotes:[]}
-    if(!group.quotes.some(q=>q.selection===quote.selection&&q.point===quote.point))
-      group.quotes.push(quote)
+    const previous=group.quotes.findIndex(q=>
+      q.selection===quote.selection&&q.point===quote.point)
+    if(previous<0)group.quotes.push(quote)
+    else if(quoteClock(quote)>quoteClock(group.quotes[previous]!))
+      group.quotes[previous]=quote
     groups.set(key,group)
     matchedGames.add(fixture.sport+'|'+fixture.league+'|'+fixture.eventId)
   }
@@ -168,8 +179,7 @@ export function shortlistDailyMarkets(
     const choice=options[0]
     if(!choice){matchDiagnostics.unsupportedCandidatePrice++;continue}
     const q=choice.quote
-    const requiresRecheck=rows.some(row=>row.source?.startsWith('ESPN')&&
-      now-quoteClock(row)>30*60_000)
+    const requiresRecheck=rows.some(row=>espnQuoteNeedsRecheck(row,now))
     if(requiresRecheck)matchDiagnostics.requiresRefresh++
     candidates.push({
       requiresRecheck,observationAgeMinutes:Number(((now-quoteClock(q))/60_000).toFixed(1)),
