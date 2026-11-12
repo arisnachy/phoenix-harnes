@@ -150,7 +150,7 @@ export async function collectDirectEspnStats(
   let requests=0,errors=0
   const add=(url:string,type:string,destination:(value:unknown|null)=>void)=>
     jobs.push({url,type,destination})
-  for(const t of teams){
+  await Promise.all(teams.map(async t=>{
     const team:DirectTeam={id:t.id,name:word(t.name),athleteCount:0,
       selectedCount:0,stats:[],depthChart:[],athletes:[],coverage:[]}
     result.push(team)
@@ -222,7 +222,7 @@ export async function collectDirectEspnStats(
         }
       })
     }
-  }
+  }))
   // Strict maximum of five concurrent first-party GET operations, no arbitrary
   // redirects or URLs provided by the model.
   let cursor=0
