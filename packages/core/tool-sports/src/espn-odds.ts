@@ -445,7 +445,8 @@ export async function fetchPublicEspnOddsDetailed(
       // absent, never invent a bookmaker or infer a price from a predictor.
       for(const summaryBase of [siteBase,
         'https://site.web.api.espn.com/apis/site/v2/sports/'+route[0]+'/'+route[1]+'/']){
-        if(markets.every(m=>observedMarkets().has(m))||budget.used>=MAX_REQUESTS)break
+        if((!targeted&&markets.every(m=>observedMarkets().has(m)))||
+          budget.used>=MAX_REQUESTS)break
         try{
           const summary=await read(summaryBase+'summary?event='+eventId)
           const entries=quotationEntries(summary)
