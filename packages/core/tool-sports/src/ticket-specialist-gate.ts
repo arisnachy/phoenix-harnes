@@ -33,6 +33,9 @@ export type SpecialistGate={
   /** Snapshot of both teams' reported availability; source freshness does not
    * establish starter confirmation or an official pre-tipoff inactive list. */
   injuryAudit?:InjuryBackup
+  /** Actual source URLs and their results; a 200 without data is not verified. */
+  endpointAudit?:Array<{url:string;status:'verified'|'empty'|'error';
+    checkedAt:string;detail:string}>
 }
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
@@ -105,6 +108,7 @@ export async function investigateTicketSpecialist(
   try{
     let specialist='',level:'A'|'B'|'C'|'D'|null=null
     let steps:string[]=[],pending:string[]=[],teams=false
+    let endpointAudit:SpecialistGate['endpointAudit']
     if(game.sport==='football'&&game.league==='nfl'){
       specialist='NFL: QB, 44 titulares, OL/pass rush, lesiones y clima'
       const d=await investigateNfl(game.date,game.eventId,fetcher,now,env,quotes)
@@ -144,6 +148,16 @@ export async function investigateTicketSpecialist(
         ||!closeTime(d.opportunity.scheduledAt,game.kickoff))
         throw Error('NBA/WNBA: identidad u horario del evento no coinciden')
       level=d.coverage.level
+      endpointAudit=[
+        ...d.sources.map(x=>({url:x.url,status:x.status,checkedAt:x.observedAt,
+          detail:x.reason??'ESPN: respuesta y datos clasificados por la fuente'})),
+        ...(['home','away'] as const).flatMap(side=>d.teams[side].sourceCoverage.map(x=>({
+          url:x.endpoint,checkedAt:d.checkedAt,
+          status:x.status==='available'?'verified' as const:
+            x.status==='empty'?'empty' as const:'error' as const,
+          detail:'ESPN estadísticas '+d.teams[side].name+' · '+x.status,
+        }))),
+      ]
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
       steps=['Jugadores en roster '+d.coverage.players,
         'Resultados recientes '+d.coverage.formGames,
@@ -356,6 +370,7 @@ export async function investigateTicketSpecialist(
         checklist.criticalPending.slice(0,3).join('; '))
     return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
       sourceChecks,checklist,...(injuryAudit?{injuryAudit}:{}),
+      ...(endpointAudit?{endpointAudit}:{}),
       checkedAt:new Date(now).toISOString()}
   }catch(error){
     return errorResult(game,(error instanceof Error?error.message:String(error)))
