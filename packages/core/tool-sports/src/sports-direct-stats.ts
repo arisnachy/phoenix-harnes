@@ -255,22 +255,29 @@ export async function collectDirectEspnStats(
             }
           })
         }
-        // ESPN may publish splits even when season totals are empty. Probe
-        // the first three roster-verified athletes, but never all 30+ players
-        // solely because a provider returned an empty stats payload.
+        // Common v3 defaults may silently select last season. Always request
+        // the season matching the date first; then try the unscoped feed only
+        // as a historical fallback when the season-scoped rows are absent.
         if(athlete.stats.length&&(priority(person)===0||early)||early){
-          add(uri+'splits','athlete_splits',data=>{
-            athlete.splits=parseEspnSplits(data,48)
-            recorded('splits',data,athlete.splits.length)
-            if(athlete.splits.length)athlete.verifiedSources.push('splits')
-            else if(early&&athlete.stats.length){
-              add(uri+'splits'+explicitSeason,'athlete_splits_season',season=>{
-                athlete.splits=parseEspnSplits(season,48)
-                recorded('splits'+explicitSeason,season,athlete.splits.length)
-                if(athlete.splits.length)
-                  athlete.verifiedSources.push('splits:season='+seasonYear)
-              })
-            }
+          add(uri+'splits'+explicitSeason,'athlete_splits_season',season=>{
+            const scoped=parseEspnSplits(season,48)
+            const filter=arr(obj(season).filters).map(obj)
+              .find(v=>v.name==='season')
+            const published=word(filter?.value,8)
+            const correct=!published||published===String(seasonYear)
+            athlete.splits=correct?scoped:[]
+            recorded('splits'+explicitSeason,season,athlete.splits.length)
+            if(athlete.splits.length)
+              athlete.verifiedSources.push('splits:season='+seasonYear)
+            else add(uri+'splits','athlete_splits',data=>{
+              athlete.splits=parseEspnSplits(data,48)
+              recorded('splits',data,athlete.splits.length)
+              const published=word(arr(obj(data).filters).map(obj)
+                .find(v=>v.name==='season')?.value,8)
+              if(athlete.splits.length)
+                athlete.verifiedSources.push(published&&published!==String(seasonYear)?
+                  'splits:historical-season='+published:'splits')
+            })
           })
         }
       })
