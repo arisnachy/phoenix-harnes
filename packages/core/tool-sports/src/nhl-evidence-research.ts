@@ -3,6 +3,7 @@
  */
 import {getFeed,type MarketOutcome} from './sports.ts'
 import {recoverEspnRoster} from './espn-public-roster.ts'
+import {sameEspnTeam} from './sports-exact-espn-winner.ts'
 import {parseNhlSeasonGameLog,type NhlGameHistory,type NhlGameSplits} from './nhl-player-game-history.ts'
 type R=Record<string,unknown>
 const o=(x:unknown):R=>x!==null&&typeof x==='object'&&!Array.isArray(x)?x as R:{}
@@ -12,8 +13,6 @@ const txt=(x:unknown,n=120):string=>typeof x==='string'||typeof x==='number'?
 const id=(x:unknown)=>/^\d{1,18}$/u.test(String(x??''))?String(x):''
 const abbr=(x:unknown)=>/^[A-Z]{2,4}$/u.test(String(x??''))?String(x):''
 const localized=(x:unknown)=>txt(o(x).default??o(x).en??x)
-const normalize=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
-  .toLowerCase().replace(/[^a-z0-9]/gu,'')
 export const validHockeyDate=(s:string):boolean=>/^\d{4}-\d{2}-\d{2}$/u.test(s)&&
   Number.isFinite(Date.parse(s+'T00:00:00Z'))&&
   new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s
@@ -211,8 +210,8 @@ function quotedMarkets(game:HockeyFixture,quotes:MarketOutcome[],now:number):Hoc
   return quotes.filter(q=>{
     const dt=Date.parse(q.timeIso??q.time),updated=Date.parse(q.updatedAt)
     return q.sportKey==='icehockey_nhl'&&
-      normalize(q.home)===normalize(game.home.name)&&
-      normalize(q.away)===normalize(game.away.name)&&
+      sameEspnTeam(q.home,game.home.name,'icehockey_nhl')&&
+      sameEspnTeam(q.away,game.away.name,'icehockey_nhl')&&
       Number.isFinite(dt)&&Math.abs(dt-Date.parse(game.date))<=3_600_000&&
       Number.isFinite(updated)&&updated<=now&&now-updated<=3_600_000&&
       q.price>1&&Number.isFinite(q.price)&&!!q.bookmaker.trim()
@@ -334,7 +333,7 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
     const espnBoard=await source<unknown>(
       'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates='+day,
       fetcher,sources,now)
-    const same=(a:string,b:string)=>normalize(a)===normalize(b)
+    const same=(a:string,b:string)=>sameEspnTeam(a,b,'icehockey_nhl')
     const candidates=arr(o(espnBoard).events).map(o).filter(event=>{
       const gameTime=Date.parse(txt(event.date,55))
       const competition=o(arr(event.competitions)[0])
