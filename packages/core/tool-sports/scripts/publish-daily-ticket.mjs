@@ -16,9 +16,7 @@ const now=Date.now()
 let ticket=null,error=null
 try{
   ticket=await evidencePricedTicket(count,date,undefined,0,now,{
-    ...env,PHOENIX_SPORTS_ESPN_DISABLED:'0',
-    PHOENIX_SPORTS_DAILY_PRELOAD_AUTO:'0',
-    PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0',
+    ...env,PHOENIX_SPORTS_DAILY_PRELOAD_AUTO:'0',
   },fetch,undefined,'winner')
 }catch(reason){
   error=reason instanceof Error?reason.name+': '+reason.message.slice(0,180):'Error en investigación'
