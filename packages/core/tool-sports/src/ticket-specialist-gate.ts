@@ -234,7 +234,8 @@ export async function investigateTicketSpecialist(
       // NHL IDs are not ESPN IDs. Validate again after fetching the official
       // dossier to prevent a goalie report from a different game entering it.
       if(d.fixture.id!==match.id||
-        !identities(d.fixture.home.name,d.fixture.away.name,game.home,game.away)||
+        !(sameEspnTeam(d.fixture.home.name,game.home,'icehockey_nhl')&&
+          sameEspnTeam(d.fixture.away.name,game.away,'icehockey_nhl'))||
         !closeTime(d.fixture.date,game.kickoff))
         throw Error('NHL: informe de porteros pertenece a otro partido; datos descartados')
       level=d.opportunity.decision==='investigate'?'B':'C'
