@@ -145,6 +145,23 @@ export async function collectDirectEspnStats(
       team.depthChart=extract(value,10)
       team.coverage.push({endpoint:'team_depthcharts',
         status:value===null?'unavailable':team.depthChart.length?'available':'empty'})
+      // ESPN Site may return an empty 200 for NBA rotations. Resolve the
+      // *same team ID* through ESPN Core with explicit NBA season only if
+      // this first source contains no actual depth-chart metrics. A Core
+      // collection of mere $refs is still reported empty until resolved.
+      if(league==='nba'&&!team.depthChart.length){
+        const observed=new Date(now)
+        const season=observed.getUTCFullYear()+
+          (observed.getUTCMonth()>=6?1:0)
+        const backup='https://sports.core.api.espn.com/v2/sports/basketball/'+
+          'leagues/nba/seasons/'+season+'/teams/'+t.id+'/depthcharts'
+        add(backup,'team_depthcharts_core',core=>{
+          const found=extract(core,12)
+          if(found.length)team.depthChart=found
+          team.coverage.push({endpoint:'team_depthcharts_core',
+            status:core===null?'unavailable':found.length?'available':'empty'})
+        })
+      }
     })
     // Resolve only the verified scoreboard team ID. When ESPN returns an empty
     // numeric roster, ask the SAME team's metadata for its abbreviation and
