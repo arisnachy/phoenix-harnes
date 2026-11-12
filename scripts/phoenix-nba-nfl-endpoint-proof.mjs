@@ -102,6 +102,21 @@ for(const [sport,league,fallback] of [
     const personProbes=sample?await Promise.all(['stats','gamelog','splits'].map(route=>
       http('https://site.web.api.espn.com/apis/common/v3/sports/'+sport+
         '/'+league+'/athletes/'+sample.id+'/'+route))):[]
+    if(teamRows.length===0){
+      // Public JSON shapes only: cap bytes; no odds, secrets or full medical records.
+      console.log('PHOENIX_ESPN_PUBLIC_SHAPE '+JSON.stringify({
+        league,teamId,depthHttp:depth.httpStatus,depthJson:depth.body,
+        rosterGroups:arr(obj(roster.body).athletes).slice(0,2).map(x=>({
+          keys:Object.keys(obj(x)),name:obj(x).position,
+          itemCount:arr(obj(x).items).length,
+          first:arr(obj(x).items).slice(0,1)})),
+        athleteId:sample?.id,
+        splitsHttp:personProbes[2]?.httpStatus,
+        splitsJson:personProbes[2]?.body,
+        gamelogHttp:personProbes[1]?.httpStatus,
+        gamelogKeys:personProbes[1]?.topLevelKeys
+      }).slice(0,11500))
+    }
     teamRows.push({
       teamId,roster:compact(roster,rosterPeople.length),rosterSample:rosterPeople.slice(0,3),
       depthChart:compact(depth,depthCount(depth.body)),
