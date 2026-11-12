@@ -7,6 +7,7 @@
  * Failures are reported per endpoint, never converted into fictional stats.
  */
 import {getFeed,sportsCatalog} from './sports.ts'
+import {recoverEspnRoster} from './espn-public-roster.ts'
 
 type Obj=Record<string,unknown>
 const obj=(x:unknown):Obj=>x!==null&&typeof x==='object'&&!Array.isArray(x)?x as Obj:{}
@@ -30,12 +31,6 @@ export type DirectDossier={
   source:'ESPN public Site/Common v3';checkedAt:string;sport:string;league:string
   teams:DirectTeam[];requests:number;errors:number
   limitations:string[]
-}
-const safePhoto=(x:unknown)=>{
-  const raw=word(x,480)
-  try{const url=new URL(raw);return url.protocol==='https:'&&
-    url.hostname==='a.espncdn.com'&&!url.username&&!url.password?url.toString():null}
-  catch{return null}
 }
 const extract=(raw:unknown,max=10):DirectMetric[]=>{
   const found:DirectMetric[]=[]
@@ -117,22 +112,6 @@ function gameLog(raw:unknown):DirectMetric[]{
   // MUST NOT be relabeled as last games.
   return results
 }
-function rosterRows(raw:unknown):Array<{id:string;name:string;position:string;jersey:string;headshot:string|null}>{
-  const listed=arr(obj(raw).athletes).flatMap(group=>{
-    const r=obj(group)
-    return arr(r.items).length?arr(r.items):[group]
-  })
-  const seen=new Set<string>()
-  return listed.flatMap(entry=>{
-    const row=obj(entry),athlete=obj(row.athlete),person=Object.keys(athlete).length?athlete:row
-    const athleteId=id(person.id??row.id),name=word(person.displayName??person.fullName??person.name,90)
-    if(!athleteId||!name||seen.has(athleteId))return []
-    seen.add(athleteId)
-    return [{id:athleteId,name,position:word(obj(person.position).abbreviation??
-      obj(person.position).displayName??person.position,35),
-      jersey:word(person.jersey,8),headshot:safePhoto(obj(person.headshot).href??person.headshot)}]
-  }).slice(0,55)
-}
 type Task={url:string;destination:(value:unknown|null)=>void;type:string}
 const cache=new Map<string,{at:number;value:unknown|null}>()
 async function fetchBounded(url:string,fetcher:typeof fetch,now:number):Promise<unknown|null>{
@@ -171,7 +150,7 @@ export async function collectDirectEspnStats(
   let requests=0,errors=0
   const add=(url:string,type:string,destination:(value:unknown|null)=>void)=>
     jobs.push({url,type,destination})
-  for(const t of teams){
+  await Promise.all(teams.map(async t=>{
     const team:DirectTeam={id:t.id,name:word(t.name),athleteCount:0,
       selectedCount:0,stats:[],depthChart:[],athletes:[],coverage:[]}
     result.push(team)
@@ -192,12 +171,20 @@ export async function collectDirectEspnStats(
       team.coverage.push({endpoint:'team_depthcharts',
         status:value===null?'unavailable':team.depthChart.length?'available':'empty'})
     })
-    // Rosters are fetched first: unverified athlete IDs never reach Web v3.
-    const roster=await fetchBounded(root+'roster',fetcher,now);requests++
-    const people=rosterRows(roster)
+    // Resolve only the verified scoreboard team ID. When ESPN returns an empty
+    // numeric roster, ask the SAME team's metadata for its abbreviation and
+    // retry /teams/{abbreviation}/roster (NBA, NHL, NFL, MLB, WNBA, soccer).
+    const recovered=await recoverEspnRoster(sport,league,t,async url=>{
+      const value=await fetchBounded(url,fetcher,now)
+      requests++
+      if(value===null)errors++
+      return value
+    })
+    const people=recovered.people
     team.athleteCount=people.length
-    team.coverage.push({endpoint:'team_roster',status:roster===null?'unavailable':
-      people.length?'available':'empty'})
+    for(const [i,attempt] of recovered.attempts.entries())
+      team.coverage.push({endpoint:i===0?'team_roster':attempt.url,
+        status:attempt.status})
     // Goalies/pitchers/QBs before generic roster order; do NOT call them
     // confirmed starters solely because of position.
     const priority=(a:typeof people[number])=>
@@ -235,7 +222,7 @@ export async function collectDirectEspnStats(
         }
       })
     }
-  }
+  }))
   // Strict maximum of five concurrent first-party GET operations, no arbitrary
   // redirects or URLs provided by the model.
   let cursor=0

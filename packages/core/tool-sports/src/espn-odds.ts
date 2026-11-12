@@ -126,7 +126,7 @@ export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[],
     const provider=bookmakerName(odd)
     if(!provider)continue
     const updatedAt=odd.lastUpdated||odd.lastUpdate||odd.updatedAt||'No indicada por ESPN'
-    for(const [selection,value] of [[homeName,odd.homeTeamOdds?.moneyline??odd.homeTeamOdds?.moneyLine??odd.homeTeamOdds?.current?.moneyline??odd.homeTeamOdds?.current?.moneyLine],[awayName,odd.awayTeamOdds?.moneyline??odd.awayTeamOdds?.moneyLine??odd.awayTeamOdds?.current?.moneyline??odd.awayTeamOdds?.current?.moneyLine]] as const){
+    for(const [selection,value] of [[homeName,odd.homeTeamOdds?.current?.moneyline??odd.homeTeamOdds?.current?.moneyLine??odd.homeTeamOdds?.moneyline??odd.homeTeamOdds?.moneyLine],[awayName,odd.awayTeamOdds?.current?.moneyline??odd.awayTeamOdds?.current?.moneyLine??odd.awayTeamOdds?.moneyline??odd.awayTeamOdds?.moneyLine]] as const){
       const price=priceToDecimal(value)
       if(price!==null)result.push({ eventId:id,bookmaker:str(provider),market:'h2h',selection:str(selection),point:null,price,home:str(homeName),away:str(awayName),time:localTime(event.date||''),timeIso:kickoff.toISOString(),updatedAt:str(updatedAt) })
     }
@@ -440,11 +440,19 @@ export async function fetchPublicEspnOddsDetailed(
       }catch(error){reportFailure('Core odds de '+eventId,error)}
       if(!targeted&&markets.every(m=>observedMarkets().has(m)))continue
       if(budget.used>=MAX_REQUESTS)break
-      try{
-        const summary=await read(siteBase+'summary?event='+eventId)
-        const entries=quotationEntries(summary)
-        remember(event,entries,'summary')
-      }catch(error){reportFailure('Summary/pickcenter de '+eventId,error)}
+      // Site v2 and Site Web v2 sometimes expose different pickcenter blocks.
+      // Both are public ESPN hosts: fall back only when requested markets remain
+      // absent, never invent a bookmaker or infer a price from a predictor.
+      for(const summaryBase of [siteBase,
+        'https://site.web.api.espn.com/apis/site/v2/sports/'+route[0]+'/'+route[1]+'/']){
+        if(((!targeted||summaryBase!==siteBase)&&
+          markets.every(m=>observedMarkets().has(m)))||budget.used>=MAX_REQUESTS)break
+        try{
+          const summary=await read(summaryBase+'summary?event='+eventId)
+          const entries=quotationEntries(summary)
+          remember(event,entries,'summary')
+        }catch(error){reportFailure('Summary/pickcenter '+summaryBase+' '+eventId,error)}
+      }
     }
     if(options.eventId&&diagnostics.eventMatched)break
     if(quoteMap.size>=80)break
