@@ -13,7 +13,7 @@ const date=(x:unknown):number=>{
   const val=Date.parse(word(x,50));return Number.isFinite(val)?val:0
 }
 const matchedLabels=(node:Row,root:Row,count:number):string[]=>{
-  for(const item of [node.labels,node.displayNames,root.labels,root.displayNames]){
+  for(const item of [node.labels,node.displayNames,node.names,root.labels,root.displayNames,root.names]){
     const labels=arr(item).map(x=>word(x,36))
     if(labels.length===count)return labels
     // Some ESPN views prepend date/opponent/result to the statistical columns.
@@ -30,7 +30,7 @@ function addGame(rows:Map<string,GameRow>,raw:unknown,headers:Row,root:Row,
   metadata:Row,now:number):void{
   const e=obj(raw),eid=eventId(e.eventId??e.id)
   const values=arr(e.stats??e.statistics)
-  if(!eid||!values.length||rows.size>=45&&!rows.has(eid))return
+  if(!eid||!values.length||rows.size>=180&&!rows.has(eid))return
   const labels=matchedLabels(headers,root,values.length)
   if(!labels.length)return
   const stamp=date(metadata.gameDate??metadata.date??e.gameDate??e.date)
@@ -54,14 +54,14 @@ export function parseEspnGameLog(raw:unknown,now=Date.now(),limit=20):HistoryMet
   const root=obj(raw)
   const metadata=obj(root.events),rows=new Map<string,GameRow>()
   // ESPN returns both events: {id:metadata} and events: [{id,stats}].
-  for(const item of arr(root.events).slice(0,50)){
+  for(const item of arr(root.events).slice(0,180)){
     const e=obj(item);addGame(rows,item,root,root,e,now)
   }
   for(const season of arr(root.seasonTypes).slice(0,6)){
     const s=obj(season)
     for(const category of arr(s.categories).slice(0,18)){
       const c=obj(category)
-      for(const item of arr(c.events).slice(0,35)){
+      for(const item of arr(c.events).slice(0,110)){
         const e=obj(item),eid=eventId(e.eventId??e.id)
         const meta=obj(metadata[eid])
         addGame(rows,item,c,root,meta,now)
@@ -90,6 +90,7 @@ export function parseEspnSplits(raw:unknown,limit=48):HistoryMetric[]{
   const queue:Array<{data:unknown;path:string;depth:number}>=[
     ...arr(root.categories).map(x=>({data:x,path:'',depth:0})),
     ...arr(root.splitCategories).map(x=>({data:x,path:'',depth:0})),
+    ...arr(root.splits).map(x=>({data:x,path:'',depth:0})),
   ]
   if(!queue.length)queue.push({data:root,path:'',depth:0})
   let visited=0
