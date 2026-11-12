@@ -7,7 +7,7 @@
  * Failures are reported per endpoint, never converted into fictional stats.
  */
 import {getFeed,sportsCatalog} from './sports.ts'
-import {recoverEspnRoster} from './espn-public-roster.ts'
+import {recoverEspnRoster,type EspnRosterPerson} from './espn-public-roster.ts'
 
 type Obj=Record<string,unknown>
 const obj=(x:unknown):Obj=>x!==null&&typeof x==='object'&&!Array.isArray(x)?x as Obj:{}
@@ -25,6 +25,8 @@ export type DirectAthlete={
 export type DirectTeam={
   id:string;name:string;athleteCount:number;selectedCount:number
   stats:DirectMetric[];depthChart:DirectMetric[];athletes:DirectAthlete[]
+  /** Entire verified team roster; costly stats are fetched for a bounded subset. */
+  roster:EspnRosterPerson[]
   coverage:Array<{endpoint:string;status:'available'|'empty'|'unavailable'}>
 }
 export type DirectDossier={
@@ -152,7 +154,7 @@ export async function collectDirectEspnStats(
     jobs.push({url,type,destination})
   await Promise.all(teams.map(async t=>{
     const team:DirectTeam={id:t.id,name:word(t.name),athleteCount:0,
-      selectedCount:0,stats:[],depthChart:[],athletes:[],coverage:[]}
+      selectedCount:0,stats:[],depthChart:[],athletes:[],roster:[],coverage:[]}
     result.push(team)
     const root=site+'teams/'+t.id+'/'
     add(root+'statistics','team_statistics',value=>{
@@ -181,6 +183,7 @@ export async function collectDirectEspnStats(
       return value
     })
     const people=recovered.people
+    team.roster=[...people]
     team.athleteCount=people.length
     for(const [i,attempt] of recovered.attempts.entries())
       team.coverage.push({endpoint:i===0?'team_roster':attempt.url,
