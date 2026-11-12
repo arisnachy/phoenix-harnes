@@ -29,9 +29,11 @@ export type HockeyEvidenceSource={url:string;status:'verified'|'missing'|'error'
   error?:string}
 export type HockeyMarket={bookmaker:string;market:string;selection:string;point:number|null;
   odds:number;updatedAt:string;verifiedEvent:true;approved:false;reason:string}
+export type HockeyTeamGame={date:string;opponent:string;goalsFor:number;
+  goalsAgainst:number;outcome:'REG'|'OT'|'SO'|'unknown';location:'home'|'away'}
 export type HockeyTeamForm={games:number;wins:number;losses:number;
   homeGames:number;awayGames:number;restHours:number|null;
-  last10:Array<{date:string;opponent:string;goalsFor:number;goalsAgainst:number}>}
+  last5:HockeyTeamGame[];last10:HockeyTeamGame[];last20:HockeyTeamGame[]}
 export type NhlSpecialTeamsSide={powerPlayPct:number|null;penaltyKillPct:number|null}
 export type NhlSpecialTeams={
   home:NhlSpecialTeamsSide;away:NhlSpecialTeamsSide
@@ -170,7 +172,8 @@ function formFromSchedule(data:unknown,game:HockeyFixture,teamAbbr:string):Hocke
     const r=o(v),date=txt(r.startTimeUTC??r.gameDate,45)
     const timestamp=Date.parse(date.length===10?date+'T12:00:00Z':date)
     if(!Number.isFinite(timestamp)||timestamp>=cutoff||
-      !['OFF','FINAL'].includes(txt(r.gameState,15)))return []
+      !['OFF','FINAL'].includes(txt(r.gameState,15))||
+      (r.gameType!==undefined&&Number(r.gameType)!==2))return []
     const home=o(r.homeTeam),away=o(r.awayTeam)
     const isHome=abbr(home.abbrev)===teamAbbr
     const isAway=abbr(away.abbrev)===teamAbbr
@@ -178,10 +181,12 @@ function formFromSchedule(data:unknown,game:HockeyFixture,teamAbbr:string):Hocke
     const scored=Number(isHome?home.score:away.score)
     const conceded=Number(isHome?away.score:home.score)
     if(!Number.isSafeInteger(scored)||!Number.isSafeInteger(conceded))return []
-    return[{date,stamp:timestamp,isHome,
+    const period=txt(o(r.gameOutcome).lastPeriodType,10)
+    const outcome=period==='REG'||period==='OT'||period==='SO'?period:'unknown'
+    return[{date,stamp:timestamp,isHome,outcome,
       opponent:isHome?abbr(away.abbrev):abbr(home.abbrev),
       goalsFor:scored,goalsAgainst:conceded}]
-  }).sort((a,b)=>b.stamp-a.stamp).slice(0,10)
+  }).sort((a,b)=>b.stamp-a.stamp).slice(0,20)
   if(!found.length)return null
   const last=found[0]
   return{games:found.length,wins:found.filter(x=>x.goalsFor>x.goalsAgainst).length,
@@ -189,8 +194,13 @@ function formFromSchedule(data:unknown,game:HockeyFixture,teamAbbr:string):Hocke
     homeGames:found.filter(x=>x.isHome).length,
     awayGames:found.filter(x=>!x.isHome).length,
     restHours:last?Math.max(0,(cutoff-last.stamp)/3_600_000):null,
-    last10:found.map(x=>({date:x.date,opponent:x.opponent,
-      goalsFor:x.goalsFor,goalsAgainst:x.goalsAgainst}))}
+    ...(()=>{
+      const games=found.map(x=>({date:x.date,opponent:x.opponent,
+        goalsFor:x.goalsFor,goalsAgainst:x.goalsAgainst,
+        outcome:x.outcome as HockeyTeamGame['outcome'],
+        location:(x.isHome?'home':'away') as HockeyTeamGame['location']}))
+      return{last5:games.slice(0,5),last10:games.slice(0,10),last20:games}
+    })()}
 }
 const standingRecord=(x:unknown)=>{
   const p=o(x),w=p.wins,l=p.losses,ot=p.otLosses
@@ -238,8 +248,11 @@ function dashboard(d:Omit<HockeyDossier,'uiBlock'>):HockeyDossier['uiBlock']{
     const form=d.form[side],name=d.fixture[side].name
     return{label:name,value:form?form.wins+'V '+form.losses+'D en '+form.games+' juegos':
       'Historial sin verificar',detail:form?'Local '+form.homeGames+' · Visitante '+
-      form.awayGames+' · descanso '+(form.restHours===null?'sin datos':
-        form.restHours.toFixed(1)+' horas'):'Calendario del club no disponible'}
+      form.awayGames+' · cortes 5/10/20: '+form.last5.length+' / '+
+      form.last10.length+' / '+form.last20.length+
+      ' · REG/OT/SO cuando está publicado · descanso '+
+      (form.restHours===null?'sin datos':form.restHours.toFixed(1)+' horas'):
+      'Calendario del club no disponible'}
   }))
   add('Skaters y rendimiento',[
     ...d.players.home.filter(p=>p.role!=='goalie').slice(0,11),
