@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets} from '../src/daily-market-shortlist.ts'
+import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets,espnQuoteNeedsRecheck} from '../src/daily-market-shortlist.ts'
 
 const now=Date.parse('2026-11-06T17:00:00Z')
 const kickoff='2026-11-07T00:00:00Z'
@@ -268,4 +268,16 @@ test('verified world soccer league matches by exact official ESPN ID only',()=>{
   assert.equal(good.selected.length,1)
   const bad=shortlistDailyMarkets([game],es.map(q=>({...q,eventId:'77779'})),4,now)
   assert.equal(bad.selected.length,0)
+})
+
+test('a fresh ESPN event snapshot replaces a stale quote for the same bookmaker and market',()=>{
+  const previous=pair(0).map(q=>({...q,source:'ESPN Site/Core (evento exacto)',
+    updatedAt:'2026-11-01T11:00:00Z',observedAt:'2026-11-06T15:00:00Z'}))
+  const latest=previous.map(q=>({...q,observedAt:new Date(now).toISOString()}))
+  assert.equal(espnQuoteNeedsRecheck(previous[0],now),true)
+  assert.equal(espnQuoteNeedsRecheck(latest[0],now),false)
+  const report=shortlistDailyMarkets(fixtures,[...previous,...latest],4,now)
+  assert.equal(report.selected.length,1)
+  assert.equal(report.selected[0].requiresRecheck,false)
+  assert.equal(report.matchDiagnostics.requiresRefresh,0)
 })

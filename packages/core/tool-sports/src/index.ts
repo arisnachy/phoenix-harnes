@@ -15,7 +15,7 @@ import { sportsPromptNeeded } from './sports-prompt.ts'
 import {ESPN_NBA_PUBLIC_PAGES,ESPN_NBA_API_STARTING_POINTS} from './espn-nba-public-pages.ts'
 import { SPORTS_OPEN_RESEARCH_GUIDANCE } from './sports-open-research-guidance.ts'
 import { researchNbaSlate } from './nba-research.ts'
-import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets} from './daily-market-shortlist.ts'
+import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets,espnQuoteNeedsRecheck} from './daily-market-shortlist.ts'
 import {assessDailyMarketEvidence,unavailableMarketEvidence} from './daily-market-evidence.ts'
 import {selectDailyResearchedMarkets} from './daily-market-selection.ts'
 import {auditTicketMarketRisk} from './ticket-risk-audit.ts'
@@ -400,7 +400,8 @@ export function apply(ctx: Context): void {
           .replace(/[\u0300-\u036f]/gu,'').toLowerCase().replace(/[^a-z0-9]/gu,'')
         const missing=daily.events.filter(game=>!quotes.some(q=>
           key(q.home)===key(game.home.name)&&key(q.away)===key(game.away.name)&&
-          Math.abs(Date.parse(q.timeIso??q.time)-Date.parse(game.kickoff))<=45*60_000))
+          Math.abs(Date.parse(q.timeIso??q.time)-Date.parse(game.kickoff))<=45*60_000&&
+          !espnQuoteNeedsRecheck(q,now)))
           .slice(0,Math.min(10,count*2))
         const exact=await Promise.allSettled(missing.map(async game=>{
           const sportKey=dailyOddsSportKey(game.sport,game.league)??(
