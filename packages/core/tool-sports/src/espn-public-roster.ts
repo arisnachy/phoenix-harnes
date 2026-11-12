@@ -53,7 +53,7 @@ export function parseEspnRoster(raw:unknown):EspnRosterPerson[]{
   for(const item of roots.slice(0,80)){
     const group=rec(item),children=[...arr(group.items),...arr(group.athletes),
       ...arr(group.entries),...arr(group.players)]
-    if(children.length)rows.push(...children.slice(0,70))
+    if(children.length)rows.push(...children.slice(0,128))
     else rows.push(item)
   }
   const seen=new Set<string>()
@@ -69,7 +69,7 @@ export function parseEspnRoster(raw:unknown):EspnRosterPerson[]{
       position:str(position.abbreviation??position.displayName??person.position,35),
       jersey:str(person.jersey,8),
       headshot:photo(rec(person.headshot).href??person.headshot)}]
-  }).slice(0,55)
+  }).slice(0,128)
 }
 /** Read exact numeric team roster, then recover by abbreviation obtained from
  * the SAME team ID and display name, not from a user-provided guessed alias. */
