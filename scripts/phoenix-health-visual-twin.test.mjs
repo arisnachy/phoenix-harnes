@@ -79,9 +79,26 @@ test('unsupported modality, invalid evidence status and injected markup are reje
 test('catalogue breadth is recognized without claiming that a diagnostic model ran',()=>{
   for(const modality of ['ct_angiography','mri_brain','eeg','complete_blood_count',
     'histopathology','ultrasound_doppler','retinal_fundus','dermoscopy']){
-    const r=planClinicalTwinScene({...baseline,modality})
+    const sourceKind=['histopathology'].includes(modality)?'wsi':
+      ['eeg'].includes(modality)?'waveform':
+      ['complete_blood_count'].includes(modality)?'numeric':'image'
+    const r=planClinicalTwinScene({...baseline,modality,sourceKind})
     assert.equal(r.modality,modality)
     assert.equal(r.imageGenerated,false)
     assert.equal(r.diagnosticAccuracyValidated,false)
+  }
+})
+
+
+test('mismatched clinical source modality blocks rendering instead of implying source inspection',()=>{
+  for(const [modality,sourceKind] of [
+    ['ecg','numeric'],['ct','waveform'],['chemistry_panel','dicom'],
+    ['cytology','numeric'],['histopathology','waveform'],
+  ]){
+    const r=planClinicalTwinScene({...baseline,modality,sourceKind})
+    assert.equal(r.status,'BLOCK_SOURCE_MODALITY_MISMATCH')
+    assert.equal(r.renderPrompt,null)
+    assert.equal(r.annotations.length,0)
+    assert.equal(r.imageGenerated,false)
   }
 })
