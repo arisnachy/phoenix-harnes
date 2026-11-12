@@ -46,6 +46,7 @@ jobs:
         run: |
           node --experimental-strip-types --test packages/core/tool-sports/tests/espn-core-intelligence.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/espn-odds-multiroute.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/espn-roster-odds-recovery.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/espn-odds-history.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/espn-extra-intelligence.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/sports-espn-route-probe.test.mjs

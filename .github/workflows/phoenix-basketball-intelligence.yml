@@ -26,6 +26,6 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify NBA and WNBA research with isolated fixtures
-        run: node --experimental-strip-types --test packages/core/tool-sports/tests/basketball-evidence-research.test.mjs packages/core/tool-sports/tests/basketball-player-market.test.mjs
+        run: node --experimental-strip-types --test packages/core/tool-sports/tests/basketball-evidence-research.test.mjs packages/core/tool-sports/tests/basketball-player-market.test.mjs packages/core/tool-sports/tests/sports-direct-stats.test.mjs packages/core/tool-sports/tests/espn-injury-backup.test.mjs
       - name: Verify TypeScript host composite graph
         run: pnpm exec tsc -b tsconfig.host.json --pretty false
