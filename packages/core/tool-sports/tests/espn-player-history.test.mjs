@@ -132,3 +132,21 @@ test('ESPN NHL 404 gamelog route is not retried as if athlete ID were an NHL ID'
   assert.ok(calls.every(u=>!u.includes('/athletes/801/gamelog')))
   assert.ok(calls.every(u=>!u.includes('/v1/player/801/')))
 })
+
+
+test('full 82-game season preserves the most recent twenty games, not first twenty returned',()=>{
+  const base=Date.parse('2026-09-01T00:00:00Z')
+  const eightyTwo=Array.from({length:82},(_,i)=>{
+    const when=new Date(base+i*86400000).toISOString()
+    return{eventId:String(600000000+i),stats:[String(i)]}
+  })
+  const meta=Object.fromEntries(eightyTwo.map((x,i)=>[x.eventId,{
+    name:'Game #'+i,date:new Date(base+i*86400000).toISOString(),
+  }]))
+  const result=parseEspnGameLog({labels:['PTS'],events:meta,
+    seasonTypes:[{categories:[{events:eightyTwo}]}]},
+    Date.parse('2026-12-31T00:00:00Z'))
+  assert.equal(result.length,20)
+  assert.equal(result[0].name,'Game #81')
+  assert.equal(result[19].name,'Game #62')
+})
