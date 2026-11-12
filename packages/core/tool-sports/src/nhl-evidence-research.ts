@@ -51,16 +51,29 @@ export type HockeyDossier={fixture:HockeyFixture;checkedAt:string;sources:Hockey
     kind:'list';items:Array<{label:string;value:string;detail?:string}>}>;note:string}}
 }
 async function source<T>(url:string,fetcher:typeof fetch,log:HockeyEvidenceSource[],
-  now:number):Promise<T|null>{
+  now:number,usable?:(v:T)=>boolean):Promise<T|null>{
   try{
     const data=await getFeed<T>(url,fetcher)
-    log.push({url,status:data==null?'missing':'verified',checkedAt:new Date(now).toISOString()})
-    return data
+    const ok=data!==null&&(!usable||usable(data))
+    log.push({url,status:ok?'verified':'missing',checkedAt:new Date(now).toISOString(),
+      ...(!ok?{error:'El JSON no contiene registros utilizables para este control'}:{})})
+    return ok?data:null
   }catch(e){
     log.push({url,status:'error',checkedAt:new Date(now).toISOString(),
       error:e instanceof Error?e.message.slice(0,160):'Error desconocido'})
     return null
   }
+}
+/** Fallbacks are strictly ordered and schema-checked. No speculative data:
+ * the requested season is primary, /current or /now is a last resort.
+ */
+async function recoverOfficial(urls:readonly string[],fetcher:typeof fetch,
+  log:HockeyEvidenceSource[],now:number,usable:(v:unknown)=>boolean):Promise<unknown|null>{
+  for(const url of [...new Set(urls)]){
+    const result=await source<unknown>(url,fetcher,log,now,usable)
+    if(result!==null)return result
+  }
+  return null
 }
 function parseTeam(v:unknown){
   const x=o(v),teamAbbrev=abbr(x.abbrev)
@@ -264,15 +277,39 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
   const statsQuery=season?'?cayenneExp='+encodeURIComponent(
     'seasonId='+season+' and gameTypeId=2')+'&limit=100':null
   const stats='https://api.nhle.com/stats/rest/en/team/'
-  const [h,a,standings,homeSchedule,awaySchedule,pp,pk]=await Promise.all([
-    source<unknown>(base+'roster/'+fixture.home.abbrev+'/current',fetcher,sources,now),
-    source<unknown>(base+'roster/'+fixture.away.abbrev+'/current',fetcher,sources,now),
-    source<unknown>(base+'standings/'+date,fetcher,sources,now),
-    source<unknown>(base+'club-schedule-season/'+fixture.home.abbrev+'/now',fetcher,sources,now),
-    source<unknown>(base+'club-schedule-season/'+fixture.away.abbrev+'/now',fetcher,sources,now),
-    statsQuery?source<unknown>(stats+'powerplay'+statsQuery,fetcher,sources,now):Promise.resolve(null),
-    statsQuery?source<unknown>(stats+'penaltykill'+statsQuery,fetcher,sources,now):Promise.resolve(null),
-  ])
+  const roster=(code:string)=>recoverOfficial([
+    ...(season?[base+'roster/'+code+'/'+season]:[]),
+    base+'roster/'+code+'/current'],fetcher,sources,now,
+    data=>arr(o(data).forwards).length+arr(o(data).defensemen).length+
+      arr(o(data).goalies).length>0)
+  const schedule=(code:string)=>recoverOfficial([
+    ...(season?[base+'club-schedule-season/'+code+'/'+season]:[]),
+    base+'club-schedule-season/'+code+'/now',
+    base+'club-schedule/'+code+'/month/now'],fetcher,sources,now,
+    data=>arr(o(data).games).length>0)
+  // Three simultaneous NHL requests at most. This avoids a burst of seven
+  // requests before the player-level research begins.
+  const jobs:Array<()=>Promise<unknown|null>>=[
+    ()=>roster(fixture.home.abbrev),
+    ()=>roster(fixture.away.abbrev),
+    ()=>source<unknown>(base+'standings/'+date,fetcher,sources,now,
+      data=>arr(o(data).standings).length>0),
+    ()=>schedule(fixture.home.abbrev),
+    ()=>schedule(fixture.away.abbrev),
+    ()=>statsQuery?source<unknown>(stats+'powerplay'+statsQuery,fetcher,sources,now,
+      data=>arr(o(data).data).length>0):Promise.resolve(null),
+    ()=>statsQuery?source<unknown>(stats+'penaltykill'+statsQuery,fetcher,sources,now,
+      data=>arr(o(data).data).length>0):Promise.resolve(null),
+  ]
+  const results:Array<unknown|null>=Array(jobs.length).fill(null)
+  let cursor=0
+  await Promise.all(Array.from({length:Math.min(3,jobs.length)},async()=>{
+    while(cursor<jobs.length){
+      const i=cursor++
+      results[i]=await jobs[i]!()
+    }
+  }))
+  const [h,a,standings,homeSchedule,awaySchedule,pp,pk]=results
   const specialTeams=parseNhlSpecialTeams(fixture,pp,pk,now)
   const players={home:teamRoster(h,fixture.home.abbrev),
     away:teamRoster(a,fixture.away.abbrev)}
@@ -323,19 +360,17 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
       ...team.filter(p=>p.role==='defense').slice(0,4)]
   })]
   let next=0
-  await Promise.all(Array.from({length:Math.min(4,selected.length)},async()=>{
+  await Promise.all(Array.from({length:Math.min(3,selected.length)},async()=>{
     while(next<selected.length){
       const p=selected[next++]!
       // ESPN and NHL player IDs belong to different namespaces.
       if(p.idProvider==='ESPN')continue
-      const [data,history]=await Promise.all([
-        source<unknown>(base+'player/'+p.id+'/landing',fetcher,sources,now),
-        // NHL Web is the supported source for game logs; the ESPN NHL
-        // Common-v3 /gamelog often returns HTTP 404.
-        season?source<unknown>(
-          base+'player/'+p.id+'/game-log/'+season+'/2',fetcher,sources,now):
-          Promise.resolve(null),
-      ])
+      const data=await source<unknown>(base+'player/'+p.id+'/landing',fetcher,sources,now)
+      // NHL player history is queried in the NHL ID namespace, not ESPN's.
+      // Sequential within each worker limits provider concurrency to three.
+      const history=season?await source<unknown>(
+        base+'player/'+p.id+'/game-log/'+season+'/2',fetcher,sources,now):
+        null
       p.stats=observedStats(data)
       const official=parseNhlSeasonGameLog(history,Math.min(now,Date.parse(fixture.date)),20)
       p.last20=official.games
