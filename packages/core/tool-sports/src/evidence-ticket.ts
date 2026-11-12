@@ -29,6 +29,9 @@ export type TicketDiscoveryAudit={
     futureEvents:number;rawEvents:number;pregameOnDate:number;
     failedPartitions:number;reason:string}>;
   researchErrors:Array<{sport:string;league:string;reason:string}>;
+  /** Verified future fixtures are retained even when ranking finds no picks. */
+  fixtureSample:Array<{eventId:string;sport:string;league:string;
+    home:string;away:string;kickoff:string}>;
 }
 export type TicketPreselectReviewer=(
   candidates:readonly TicketPreselectCandidate[],
@@ -283,6 +286,9 @@ export async function evidenceTicket(
     shortlistedCandidates:candidateLegs.length,
     leaguesNotResearched:Math.max(0,shortlist.length-reports.length),
     scanCoverage:scan.coverage.map(x=>({...x})),
+    fixtureSample:scan.events.slice(0,12).map(x=>({eventId:x.eventId,
+      sport:x.sport,league:x.league,home:x.home.name,
+      away:x.away.name,kickoff:x.kickoff})),
     researchErrors:reports.flatMap((result,index)=>result.status==='rejected'?[{
       sport:shortlist[index]?.sport??'unknown',
       league:shortlist[index]?.league??'unknown',
