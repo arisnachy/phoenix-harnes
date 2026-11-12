@@ -35,7 +35,8 @@ type Result={date:string;opponent:string;pts:number;allowed:number;homeAway:'hom
 export type NflSide={id:string;name:string;record:string|null;roster:NflPlayer[];
   recent:Result[];wins:number;losses:number;restHours:number|null;
   offenseConfirmed:number;defenseConfirmed:number;
-  teamStats:Array<{name:string;value:string}>;sourceCoverage:DirectTeam['coverage']}
+  teamStats:Array<{name:string;value:string}>;depthChart?:DirectTeam['depthChart'];
+  sourceCoverage:DirectTeam['coverage']}
 export type NflMatchup={attacker:string;attackerId:string;against:string;
   candidates:Array<{id:string;name:string;role:string}>;
   limitations:string[]}
@@ -215,6 +216,11 @@ function panel(d:Omit<NflDossier,'uiBlock'>):NflDossier['uiBlock']{
       .slice(0,12).map(p=>({label:p.name,value:p.position+
         (p.confirmedDefense||p.confirmedOffense?' · titular confirmado':' · sin titularidad confirmada'),
         detail:d.teams[side].name}))))
+  add('Depth chart ESPN: rangos orientativos, NO titulares confirmados',
+    (['home','away'] as const).flatMap(side=>
+      (d.teams[side].depthChart??[]).slice(0,22).map(x=>({
+        label:d.teams[side].name+' · '+x.name,value:x.value,
+        detail:'La posición en depth chart no verifica disponibilidad en el partido'}))))
   add('Enfrentamientos por posición',d.matchups.slice(0,20).map(m=>({
     label:m.attacker+' vs '+m.against,value:m.candidates.length+' posibles defensores',
     detail:m.candidates.slice(0,5).map(x=>x.name).join(', ')})))
@@ -291,7 +297,7 @@ export async function investigateNfl(date:string,eventId:string,fetcher:typeof f
       restHours:last?Math.max(0,(Date.parse(event.scheduledAt)-Date.parse(last.date))/3_600_000):null,
       offenseConfirmed:roster.filter(p=>p.confirmedOffense).length,
       defenseConfirmed:roster.filter(p=>p.confirmedDefense).length,
-      teamStats:e?.stats??[],sourceCoverage:e?.coverage??[]}
+      teamStats:e?.stats??[],depthChart:e?.depthChart??[],sourceCoverage:e?.coverage??[]}
   }
   const teams={home:make('home'),away:make('away')}
   const injuries=arr(obj(injuryData).injuries).flatMap(v=>{
