@@ -191,8 +191,8 @@ function quotedMarkets(game:HockeyFixture,quotes:MarketOutcome[],now:number):Hoc
   return quotes.filter(q=>{
     const dt=Date.parse(q.timeIso??q.time),updated=Date.parse(q.updatedAt)
     return q.sportKey==='icehockey_nhl'&&
-      normalize(q.home)===normalize(game.home.name)&&
-      normalize(q.away)===normalize(game.away.name)&&
+      sameEspnTeam(q.home,game.home.name,'icehockey_nhl')&&
+      sameEspnTeam(q.away,game.away.name,'icehockey_nhl')&&
       Number.isFinite(dt)&&Math.abs(dt-Date.parse(game.date))<=3_600_000&&
       Number.isFinite(updated)&&updated<=now&&now-updated<=3_600_000&&
       q.price>1&&Number.isFinite(q.price)&&!!q.bookmaker.trim()

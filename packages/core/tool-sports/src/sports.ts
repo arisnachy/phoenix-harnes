@@ -134,7 +134,7 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
   // Location headers or allow private-network / cross-provider redirects.
   let next=u.toString(),response:Response|undefined
   for(let hops=0;hops<=2;hops++){
-    response=await fetcher(next,{headers,redirect:'manual',signal:AbortSignal.timeout(9000)})
+    response=await fetcher(next,{headers,redirect:u.hostname==='api-web.nhle.com'?'manual':'error',signal:AbortSignal.timeout(9000)})
     if(![301,302,303,307,308].includes(response.status))break
     if(hops===2||u.hostname!=='api-web.nhle.com')
       throw Error('Redirección de proveedor no permitida')
