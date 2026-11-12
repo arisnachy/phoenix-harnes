@@ -211,8 +211,10 @@ test('ESPN website markets use fresh observation without inventing bookmaker upd
   const stale=shortlistDailyMarkets(fixtures,rows.map(q=>({
     ...q,observedAt:'2026-11-06T15:45:00Z'
   })),4,now)
-  assert.equal(stale.selected.length,0)
-  assert.equal(stale.rejectedQuotes,2)
+  assert.equal(stale.selected.length,1)
+  assert.equal(stale.selected[0].requiresRecheck,true)
+  assert.equal(stale.matchDiagnostics.requiresRefresh,1)
+  assert.equal(stale.rejectedQuotes,0)
 })
 test('ESPN soccer prices without draw remain rejected even with fresh observation',()=>{
   const rows=pair(5).map(q=>({...q,updatedAt:'',observedAt:observed,
