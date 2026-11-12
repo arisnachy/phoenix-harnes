@@ -15,7 +15,7 @@ const past=(day)=>({id:'8'+day.replaceAll('-',''),date:day+'T23:00:00Z',
     {homeAway:'away',team:{id:'11',displayName:'Miami Heat'},score:'101'},
   ]}]})
 const mocked=async url=>{
-  const u=String(url),match=u.match(/scoreboard\\?dates=(\\d{8})/)
+  const u=String(url),match=u.match(/scoreboard\?dates=(\d{8})/)
   if(match){
     const d=match[1],day=d.slice(0,4)+'-'+d.slice(4,6)+'-'+d.slice(6,8)
     return new Response(JSON.stringify(d==='20261028'?fixture:
