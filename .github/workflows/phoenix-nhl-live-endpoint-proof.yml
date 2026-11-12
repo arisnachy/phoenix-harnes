@@ -1,0 +1,33 @@
+name: PHOENIX NHL live endpoint proof
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/phoenix-nhl-live-endpoint-proof.yml'
+      - 'scripts/phoenix-nhl-live-endpoint-proof.mjs'
+      - 'packages/core/tool-sports/src/nhl-evidence-research.ts'
+      - 'packages/core/tool-sports/tests/nhl-evidence-research.test.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify script syntax
+        run: node --check scripts/phoenix-nhl-live-endpoint-proof.mjs
+      - name: Call actual NHL HTTP endpoints with bounded concurrency
+        env:
+          PHOENIX_NHL_PROOF_STRICT: '1'
+        run: node scripts/phoenix-nhl-live-endpoint-proof.mjs 2026-11-12
+      - name: Upload machine-readable response matrix
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-nhl-live-endpoint-proof
+          path: phoenix-nhl-live-endpoint-proof.json
+          retention-days: 30

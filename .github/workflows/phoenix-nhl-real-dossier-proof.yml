@@ -1,0 +1,36 @@
+name: PHOENIX NHL real dossier evidence
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/phoenix-nhl-real-dossier-proof.yml'
+      - 'scripts/phoenix-nhl-adapter-live-proof.mjs'
+      - 'packages/core/tool-sports/src/nhl-evidence-research.ts'
+      - 'packages/core/tool-sports/src/nhl-player-game-history.ts'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dossier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - run: pnpm install --frozen-lockfile
+      - name: Research one future NHL fixture through PHOENIX actual tool
+        env:
+          PHOENIX_NHL_ADAPTER_PROOF_STRICT: '1'
+        run: node --experimental-strip-types scripts/phoenix-nhl-adapter-live-proof.mjs 2026-11-12
+      - name: Preserve per-player extraction and source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-nhl-real-dossier-proof
+          path: phoenix-nhl-adapter-live-proof.json
+          if-no-files-found: warn
+          retention-days: 30
