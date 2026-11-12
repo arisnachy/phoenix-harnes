@@ -167,3 +167,27 @@ test('NFL grouped depthCharts expose QB candidates without inventing confirmed s
   assert.equal(d.teams[0].athletes.length,1)
   assert.ok(calls.includes('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/6/depthcharts'))
 })
+
+
+test('real live ESPN depthchart array delivers NBA and NFL ranked player entries',async()=>{
+  for(const [sport,league] of [['basketball','nba'],['football','nfl']]){
+    const base='https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league
+    const fetcher=async url=>{
+      const u=String(url)
+      return new Response(JSON.stringify(
+        u.endsWith('/roster')?{athletes:[{id:'4431678',displayName:'Player One'}]}:
+        u.endsWith('/depthcharts')?{depthchart:[{id:'1',name:'Depth Chart',
+          positions:{pg:{athletes:[
+            {id:'4431678',displayName:'Player One'},
+            {id:'4351851',displayName:'Player Two'}],
+            position:{abbreviation:'PG',displayName:'Point Guard'}}}}]}:{}
+      ),{status:200})
+    }
+    const dossier=await collectDirectEspnStats(sport,league,
+      [{id:'20',name:'Demo Team'}],fetcher,now,1)
+    assert.equal(dossier.teams[0].depthChart.length,2)
+    assert.deepEqual(dossier.teams[0].depthChart[0],
+      {name:'PG #1',value:'Player One'})
+    assert.equal(dossier.teams[0].coverage.find(x=>x.endpoint==='team_depthcharts')?.status,'available')
+  }
+})
