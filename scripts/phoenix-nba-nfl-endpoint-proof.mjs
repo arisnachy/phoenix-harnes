@@ -46,8 +46,9 @@ const athletes=raw=>{
   return [...seen].map(([id,name])=>({id,name}))
 }
 const depthCount=raw=>{
-  const root=obj(raw),queue=[...arr(root.depthCharts),...arr(root.depthcharts)]
-  if(root.depthchart)queue.push(root.depthchart)
+  const root=obj(raw),queue=[...arr(root.depthCharts),...arr(root.depthcharts),
+    ...arr(root.depthchart),...arr(root.depthChart)]
+  if(root.depthchart&&!Array.isArray(root.depthchart))queue.push(root.depthchart)
   if(!queue.length)queue.push(root)
   let n=0,examined=0
   while(queue.length&&examined++<200){
@@ -104,18 +105,26 @@ for(const [sport,league,fallback] of [
         '/'+league+'/athletes/'+sample.id+'/'+route))):[]
     if(teamRows.length===0){
       // Public JSON shapes only: cap bytes; no odds, secrets or full medical records.
+      const shapeDepth=obj(depth.body)
+      const groups=[...arr(shapeDepth.depthchart),...arr(shapeDepth.depthCharts)]
+      const first=groups[0]??shapeDepth.depthchart??shapeDepth
+      const positionEntries=Object.entries(obj(obj(first).positions))
       console.log('PHOENIX_ESPN_PUBLIC_SHAPE '+JSON.stringify({
-        league,teamId,depthHttp:depth.httpStatus,depthJson:depth.body,
+        league,teamId,depthHttp:depth.httpStatus,
+        depthKeys:depth.topLevelKeys,depthGroups:groups.length,
+        positionCount:positionEntries.length,
+        samplePositions:positionEntries.slice(0,2).map(([code,slot])=>({
+          code,keys:Object.keys(obj(slot)),playerCount:arr(obj(slot).athletes).length,
+          names:arr(obj(slot).athletes).slice(0,3).map(x=>obj(x).displayName)})),
         rosterGroups:arr(obj(roster.body).athletes).slice(0,2).map(x=>({
-          keys:Object.keys(obj(x)),name:obj(x).position,
-          itemCount:arr(obj(x).items).length,
-          first:arr(obj(x).items).slice(0,1)})),
+          keys:Object.keys(obj(x)),itemCount:arr(obj(x).items).length})),
         athleteId:sample?.id,
         splitsHttp:personProbes[2]?.httpStatus,
+        splitsKeys:personProbes[2]?.topLevelKeys,
         splitsJson:personProbes[2]?.body,
         gamelogHttp:personProbes[1]?.httpStatus,
         gamelogKeys:personProbes[1]?.topLevelKeys
-      }).slice(0,11500))
+      }).slice(0,5500))
     }
     teamRows.push({
       teamId,roster:compact(roster,rosterPeople.length),rosterSample:rosterPeople.slice(0,3),
