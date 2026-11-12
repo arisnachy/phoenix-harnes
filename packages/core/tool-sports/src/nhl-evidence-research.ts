@@ -3,6 +3,7 @@
  */
 import {getFeed,type MarketOutcome} from './sports.ts'
 import {recoverEspnRoster} from './espn-public-roster.ts'
+import {parseNhlSeasonGameLog,type NhlGameHistory,type NhlGameSplits} from './nhl-player-game-history.ts'
 type R=Record<string,unknown>
 const o=(x:unknown):R=>x!==null&&typeof x==='object'&&!Array.isArray(x)?x as R:{}
 const arr=(x:unknown):unknown[]=>Array.isArray(x)?x:[]
@@ -21,7 +22,9 @@ export type HockeyFixture={id:string;date:string;state:string;season:string;
   venue:string}
 export type HockeyPlayer={id:string;team:string;name:string;role:'forward'|'defense'|'goalie';
   stats:Record<string,string>;last5:Array<{date:string;summary:string}>;
-  starterConfirmed:false;idProvider?:'NHL'|'ESPN'}
+  starterConfirmed:false;idProvider?:'NHL'|'ESPN';
+  /** NHL athlete ID only, never ESPN ID: up to 20 regular-season games. */
+  last20?:NhlGameHistory[];homeRoadSplits?:NhlGameSplits}
 export type HockeyEvidenceSource={url:string;status:'verified'|'missing'|'error';checkedAt:string;
   error?:string}
 export type HockeyMarket={bookmaker:string;market:string;selection:string;point:number|null;
@@ -204,7 +207,10 @@ function dashboard(d:Omit<HockeyDossier,'uiBlock'>):HockeyDossier['uiBlock']{
     ...d.goalieCandidates.home,...d.goalieCandidates.away].map(p=>({
       label:p.team+' · '+p.name,value:'Candidato en roster (no confirmado)',
       detail:Object.entries(p.stats).map(([k,v])=>k+': '+v).slice(0,6).join(' · ')||
-        'Estadísticas no disponibles'+(p.last5.length?' · reciente: '+p.last5[0]?.summary:'')})))
+        'Estadísticas no disponibles'+(p.last5.length?' · reciente: '+p.last5[0]?.summary:'')+
+        (p.last20?.length?' · historial oficial '+p.last20.length+' partidos':'')+
+        (p.homeRoadSplits?.home?' · local '+p.homeRoadSplits.home.games+' encuentros':'')+
+        (p.homeRoadSplits?.away?' · visita '+p.homeRoadSplits.away.games+' encuentros')})))
   add('Unidades especiales · estadísticas oficiales NHL',
     (['home','away'] as const).map(side=>{
       const team=d.fixture[side],v=d.specialTeams[side]
@@ -322,15 +328,34 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
       const p=selected[next++]!
       // ESPN and NHL player IDs belong to different namespaces.
       if(p.idProvider==='ESPN')continue
-      const data=await source<unknown>(base+'player/'+p.id+'/landing',fetcher,sources,now)
+      const [data,history]=await Promise.all([
+        source<unknown>(base+'player/'+p.id+'/landing',fetcher,sources,now),
+        // NHL Web is the supported source for game logs; the ESPN NHL
+        // Common-v3 /gamelog often returns HTTP 404.
+        season?source<unknown>(
+          base+'player/'+p.id+'/game-log/'+season+'/2',fetcher,sources,now):
+          Promise.resolve(null),
+      ])
       p.stats=observedStats(data)
-      p.last5=arr(o(data).last5Games).slice(0,5).map(v=>{
+      const official=parseNhlSeasonGameLog(history,Math.min(now,Date.parse(fixture.date)),20)
+      p.last20=official.games
+      p.homeRoadSplits=official.splits
+      // Preserve a full official game history if present. Landing's last5 is
+      // a truthful fallback when season-level game logs are empty/blocked.
+      p.last5=official.games.length?official.games.slice(0,5).map(x=>({
+        date:x.date,summary:x.summary,
+      })):arr(o(data).last5Games).slice(0,5).map(v=>{
         const r=o(v),goalie=p.role==='goalie'
         const fields=goalie?['shotsAgainst','saves','savePctg','goalsAgainst','decision']:
           ['goals','assists','shots','timeOnIce']
         return{date:txt(r.gameDate,20),summary:fields.map(key=>key+': '+txt(r[key],15))
           .filter(text=>!text.endsWith(': ')).join(' · ')}
       })
+      if(season&&history&&!official.games.length){
+        sources.push({url:base+'player/'+p.id+'/game-log/'+season+'/2',
+          status:'missing',checkedAt:new Date(now).toISOString(),
+          error:'La respuesta no contiene partidos individuales verificables'})
+      }
     }
   }))
   const goalies={home:players.home.filter(p=>p.role==='goalie'),
