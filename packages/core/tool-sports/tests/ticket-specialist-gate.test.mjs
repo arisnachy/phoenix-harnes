@@ -63,3 +63,18 @@ test('NHL gameId cannot cross from Devils-Jets to Panthers-Columbus',()=>{
   assert.equal(resolveNhlTicketMatch([slate[1],slate[1]],target),null)
   assert.equal(resolveNhlTicketMatch(slate,{...target,kickoff:'2026-11-11T07:00:00Z'}),null)
 })
+
+
+test('official NHL nicknames match ESPN full franchise names only with both sides and kickoff',()=>{
+  const slate=[{id:'2026020101',date:'2026-11-12T17:00:00Z',
+    home:{name:'Kraken'},away:{name:'Hurricanes'}},
+    {id:'2026020102',date:'2026-11-12T21:00:00Z',
+    home:{name:'Islanders'},away:{name:'Kings'}}]
+  const target={home:'Seattle Kraken',away:'Carolina Hurricanes',
+    kickoff:'2026-11-12T17:00:00Z'}
+  assert.equal(resolveNhlTicketMatch(slate,target)?.id,'2026020101')
+  assert.equal(resolveNhlTicketMatch(slate,{...target,home:'New York'}),null)
+  assert.equal(resolveNhlTicketMatch(slate,{...target,away:'Columbus Blue Jackets'}),null)
+  assert.equal(resolveNhlTicketMatch(slate,{...target,kickoff:'2026-11-12T22:00:00Z'}),null)
+  assert.equal(resolveNhlTicketMatch([slate[0],slate[0]],target),null)
+})
