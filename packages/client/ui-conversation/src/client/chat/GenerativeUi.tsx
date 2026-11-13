@@ -1297,11 +1297,13 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         {(get,meta)=>{
           const live=get(p)
           const hasStarted=(live?.phase??p.phase)==='in'||(live?.phase??p.phase)==='post'
-          return <section className={css.sportsCard+' '+css.sportsGameCompact} data-generative-ui="sports_game_card">
+          const periods=live?.periods?.length?live.periods:p.periods
+          return <section className={css.sportsCard+' '+css.sportsGameCompact} data-generative-ui="sports_game_card"
+            aria-label={sportsDisplayText(p.title)}>
             <header className={css.sportsHeadline}>
-              <div><span className={css.sportsKicker}>PHOENIX / {p.sport?.toUpperCase()??'DEPORTES'}</span>
-                {(p.country||p.league)&&<div className={css.sportsCompetition}>{[p.country,p.league].filter(Boolean).join(' · ')}</div>}
-                <h3>{sportsDisplayText(p.title)}</h3>{p.subtitle&&<p>{sportsDisplayText(p.subtitle)}</p>}</div>
+              <div><span className={css.sportsKicker}>{sportsDisplayText(
+                [p.league??p.sport?.toUpperCase()??'DEPORTES',p.country].filter(Boolean).join(' · '))}</span>
+                <h3 className={css.sportsGameTitleSr}>{sportsDisplayText(p.title)}</h3></div>
               {(live?.status??p.status)&&<span className={css.sportsStatus}>{live?.status??p.status}</span>}
             </header>
             <small className={css.sportsGameWhen}>◷ {p.when}</small>
@@ -1311,6 +1313,9 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
               hasStarted={hasStarted} favorite={p.favorite??p.research?.favorite}
               trackedBets={p.trackedBets} sport={p.sport} league={p.providerLeague??p.league}
               date={p.eventDate} eventId={live?.id??p.eventId}/>
+            {periods?.length?<div className={css.sportsGamePeriodStrip} aria-label="Marcador por períodos">
+              {periods.slice(-4).map((period,i)=><span key={i}>{period.label}: {period.away}–{period.home}</span>)}
+            </div>:null}
             <SportsLiveFacts game={live} meta={meta} sport={p.sport} compact/>
             <SportsWinProbability sport={p.sport} league={p.providerLeague??p.league}
               eventId={live?.id??p.eventId} competitionId={live?.competitionId}
@@ -1324,11 +1329,11 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             <details className={css.sportsExtra}><summary>Ver estadísticas y análisis</summary>
               <div className={css.sportsVenue}><span>⌖ {p.venue||'Sede sin confirmar'}</span>
                 {p.broadcast&&<span>TV · {p.broadcast}</span>}</div>
-              {!(live?.periods?.length)&&p.periods?.length?<section className={css.sportsDetailSection} aria-label="Parciales del partido">
+              {periods?.length?<section className={css.sportsDetailSection} aria-label="Parciales del partido">
                 <h4>Marcador por período</h4><div className={css.sportsTableScroll}><table className={css.sportsTable}>
-                  <thead><tr><th>Equipo</th>{p.periods.map((period,i)=><th key={i}>{period.label}</th>)}</tr></thead>
-                  <tbody><tr><th>{p.away.label}</th>{p.periods.map((period,i)=><td key={i}>{period.away}</td>)}</tr>
-                    <tr><th>{p.home.label}</th>{p.periods.map((period,i)=><td key={i}>{period.home}</td>)}</tr></tbody>
+                  <thead><tr><th>Equipo</th>{periods.map((period,i)=><th key={i}>{period.label}</th>)}</tr></thead>
+                  <tbody><tr><th>{p.away.label}</th>{periods.map((period,i)=><td key={i}>{period.away}</td>)}</tr>
+                    <tr><th>{p.home.label}</th>{periods.map((period,i)=><td key={i}>{period.home}</td>)}</tr></tbody>
                 </table></div></section>:null}
               {p.pitchers?.length?<section className={css.sportsDetailSection} aria-label="Lanzadores probables">
                 <h4>Abridores probables</h4>
@@ -1355,8 +1360,8 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             </details>
             <footer className={css.sportsSourceBar}>
               <SportsLiveStamp meta={meta}/>
-              {p.note&&<small>{sportsDisplayText(p.note)}</small>}
-
+              {p.note&&<details className={css.sportsGameNotes}><summary>Notas de la fuente</summary>
+                <small>{sportsDisplayText(p.note)}</small></details>}
             </footer>
           </section>}}
       </SportsLiveProvider>
