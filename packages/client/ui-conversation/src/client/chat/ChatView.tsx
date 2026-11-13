@@ -343,13 +343,19 @@ export function ChatView({
    *  scroll-driven at-bottom chrome re-render (which would snap inertial
    *  scrolls the rest of the way to the floor). */
   const followSigRef = useRef<string | null>(null)
+  /** Only a new local composer submit may repin a reader viewing older turns. */
+  const lastLocalSubmitRef = useRef<number | null>(null)
+  /** Debounce the gap before Session.loadingOlder changes. */
+  const olderRequestRef = useRef(false)
+  const olderBusySeenRef = useRef(false)
+  const olderRequestedHeadRef = useRef<number | null>(null)
 
   const firstKey = order[0]
   const firstSeq = firstKey === undefined ? null : nodeStore.get(firstKey)?.anchorSeq ?? null
   const lastKey = order.at(-1) ?? null
-  const lastNode = lastKey === null ? undefined : nodeStore.get(lastKey)
   const lastSteeringId = visiblePendingSteering[visiblePendingSteering.length - 1]?.id ?? null
-  const followSig = `${openState}:${firstSeq}:${lastKey}:${order.length}:${running ? 1 : 0}:${optimisticSubmit?.startedAt ?? ''}:${lastSteeringId ?? ''}`
+  // Prepending historical rows changes firstSeq/order.length, not the flow tip.
+  const followSig = `${openState}:${lastKey}:${running ? 1 : 0}:${optimisticSubmit?.startedAt ?? ''}:${lastSteeringId ?? ''}`
 
   const toBottom = (el: HTMLElement): void => {
     anchorRef.current = null
@@ -391,36 +397,56 @@ export function ChatView({
       followSigRef.current = followSig
       return
     }
-    // Prepend (head seq decreased): preserve the same settled row at the
-    // position established by the reader's latest scroll. This excludes
-    // unrelated tail/composer growth while the request was in flight.
-    if (anchorRef.current !== null && firstSeq !== null && firstSeqRef.current !== null && firstSeq < firstSeqRef.current) {
+    // A prepend can happen while the reader is at an old row OR after they
+    // explicitly returned to the bottom. Preserve whichever position they chose.
+    if (firstSeq !== null && firstSeqRef.current !== null && firstSeq < firstSeqRef.current) {
       const anchor = anchorRef.current
       anchorRef.current = null
-      const row = anchorElement(local, anchor.key)
-      if (row !== null) el.scrollTop += flowTop(row, el) - anchor.top
+      if (anchor !== null) {
+        const row = anchorElement(local, anchor.key)
+        if (row !== null) el.scrollTop += flowTop(row, el) - anchor.top
+      } else if (atBottomRef.current) {
+        // A late page after "Ir al final" must keep the requested latest turn
+        // visible; prepend-only updates still must not claim follow ownership.
+        toBottom(el)
+      }
       observedTopRef.current = el.scrollTop
       firstSeqRef.current = firstSeq
-      /* v8 ignore next -- ?? arm: a prepend adds nodes, so the flow list here is never empty. */
       lastKeyRef.current = lastKey
       lastSteeringIdRef.current = lastSteeringId
       followSigRef.current = followSig
       return
     }
     firstSeqRef.current = firstSeq
-    // Own words must be visible: a new trailing user node force-scrolls
-    // (send lives in the composer, so arrival is detected here, not armed there).
-    const appendedUser = lastKey !== lastKeyRef.current && lastNode?.kind === 'user'
-    const appendedSteering = lastSteeringId !== null && lastSteeringId !== lastSteeringIdRef.current
+    // Incoming durable/remote nodes must not pull the reader away from history.
+    // A genuinely new local submission is the only explicit repin gesture.
+    const submittedAt = pendingSubmit?.startedAt ?? null
+    const ownNewSubmission = submittedAt !== null && submittedAt !== lastLocalSubmitRef.current
+    if (ownNewSubmission) lastLocalSubmitRef.current = submittedAt
     const tipMoved = followSigRef.current !== followSig
     lastKeyRef.current = lastKey
     lastSteeringIdRef.current = lastSteeringId
     followSigRef.current = followSig
-    // Follow new flow content while pinned; do NOT re-pin on every render
-    // merely because atBottomRef is true (scroll threshold → setState → snap).
-    if (appendedUser || appendedSteering || (tipMoved && atBottomRef.current)) toBottom(el)
+    if (ownNewSubmission || (tipMoved && atBottomRef.current)) toBottom(el)
   })
 
+  /** One anchored request path for the fallback button and upward scrolling. */
+  const loadOlderAnchored = (): void => {
+    if (openState !== 'open' || !hasMore || loadingOlder || olderRequestRef.current) return
+    const local = listRef.current
+    if (local === null) return
+    const el = scrollerOf(local)
+    const row = pagingAnchor(local, el)
+    if (row?.dataset.chatAnchorKey !== undefined) {
+      anchorRef.current = { key: row.dataset.chatAnchorKey, top: flowTop(row, el) }
+    }
+    olderRequestRef.current = true
+    olderRequestedHeadRef.current = firstSeq
+    loadOlder()
+  }
+
+  const requestOlderRef = useRef<(() => void) | null>(null)
+  requestOlderRef.current = loadOlderAnchored
   const onScrollRef = useRef(() => {})
   onScrollRef.current = () => {
     const local = listRef.current
@@ -435,12 +461,14 @@ export function ChatView({
     // programmatic deliveries land on the ledger itself, so both preserve
     // the current ownership state.
     const floor = Math.max(0, el.scrollHeight - el.clientHeight)
-    const movedByReader = Math.abs(el.scrollTop - Math.min(observedTopRef.current, floor)) > 0.5
+    const previousTop = observedTopRef.current
+    const movedByReader = Math.abs(el.scrollTop - Math.min(previousTop, floor)) > 0.5
     const isAtBottom = movedByReader
       ? floor - el.scrollTop <= FOLLOW_THRESHOLD + 1
       : atBottomRef.current
     if (!movedByReader && isAtBottom) {
-      toBottom(el)
+      // Delayed programmatic events and browser clamps do not justify a jump.
+      observedTopRef.current = el.scrollTop
       return
     }
     atBottomRef.current = isAtBottom
@@ -456,6 +484,9 @@ export function ChatView({
     if (isAtBottom) chatScroll.save(null)
     else if (position !== null) chatScroll.save(position)
     observedTopRef.current = el.scrollTop
+    // A page request follows only a genuine upward move into the loaded head.
+    if (movedByReader && el.scrollTop < previousTop - 1
+      && el.scrollTop <= 240) requestOlderRef.current?.()
   }
 
   // Bind the scroll listener on the resolved scrollport once per mount;
@@ -467,9 +498,25 @@ export function ChatView({
     if (local === null) return
     const el = scrollerOf(local)
     const onScroll = (): void => { onScrollRef.current() }
+    // When the short transcript already starts at 0, wheel-up cannot emit
+    // a native scroll event. It should still request the previous page.
+    const onWheel = (event: WheelEvent): void => {
+      if (event.deltaY < 0 && el.scrollTop <= 240) requestOlderRef.current?.()
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const target = event.target
+      if (target instanceof HTMLElement &&
+        (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/u.test(target.tagName))) return
+      if (['ArrowUp', 'PageUp', 'Home'].includes(event.key) && el.scrollTop <= 240)
+        requestOlderRef.current?.()
+    }
     el.addEventListener('scroll', onScroll, { passive: true })
+    el.addEventListener('wheel', onWheel, { passive: true })
+    el.addEventListener('keydown', onKeyDown)
     return () => {
       el.removeEventListener('scroll', onScroll)
+      el.removeEventListener('wheel', onWheel)
+      el.removeEventListener('keydown', onKeyDown)
     }
   }, [])
 
@@ -500,27 +547,26 @@ export function ChatView({
     return () => { observer.disconnect() }
   }, [])
 
-  // A failed/empty page leaves the head unchanged. Once the request leaves
-  // its busy state there is no future prepend for the saved anchor to own.
+  // Release the request latch after a new head lands, or once the backend
+  // finishes an unsuccessful/empty request. No uncontrolled pagination loop.
   useEffect(() => {
-    if (!loadingOlder) anchorRef.current = null
-  }, [loadingOlder])
-
-  const loadOlderAnchored = (): void => {
-    const local = listRef.current
-    /* v8 ignore next -- ref-null guard: the paging button renders inside the list tree. */
-    if (local !== null) {
-      const el = scrollerOf(local)
-      const row = pagingAnchor(local, el)
-      if (row !== null && row.dataset.chatAnchorKey !== undefined) {
-        anchorRef.current = {
-          key: row.dataset.chatAnchorKey,
-          top: flowTop(row, el),
-        }
-      }
+    if (olderRequestRef.current && olderRequestedHeadRef.current !== firstSeq) {
+      olderRequestRef.current = false
+      olderRequestedHeadRef.current = null
     }
-    loadOlder()
-  }
+  }, [firstSeq])
+  useEffect(() => {
+    if (loadingOlder) {
+      olderBusySeenRef.current = true
+    } else {
+      if (olderBusySeenRef.current) {
+        olderRequestRef.current = false
+        olderRequestedHeadRef.current = null
+        olderBusySeenRef.current = false
+      }
+      anchorRef.current = null
+    }
+  }, [loadingOlder])
 
   return (
     <div className={css.root}>
