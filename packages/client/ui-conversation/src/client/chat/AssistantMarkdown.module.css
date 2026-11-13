@@ -56,3 +56,23 @@
   /* Optical align with 28px icon hit targets that pad 6px past the glyph. */
   margin-left: -6px;
 }
+
+
+/* Native sports game cards share a two-column scoreboard board in the SAME
+ * assistant turn. All narration, tables and ticket cards keep full width. */
+.body:has(> [data-generative-ui="sports_game_card"]){
+  display:grid;
+  width:min(100%,850px);
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));
+  align-items:start;
+  gap:9px 10px;
+}
+.body:has(> [data-generative-ui="sports_game_card"]) > :not([data-generative-ui="sports_game_card"]){
+  grid-column:1 / -1;
+  min-width:0;
+}
+.body > [data-generative-ui="sports_game_card"]{
+  min-width:0;
+  width:100%;
+  margin:0;
+}
