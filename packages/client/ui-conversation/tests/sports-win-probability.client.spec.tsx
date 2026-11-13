@@ -47,12 +47,32 @@ describe('ESPN game predictor + in-play win probability',()=>{
     await waitFor(()=>expect(screen.getByText('60,0 %')).toBeTruthy())
     expect(calls.some(url=>url.includes('/summary?event=401234'))).toBe(true)
     expect(calls.some(url=>url.includes('/predictor'))).toBe(true)
-    expect(screen.getByText(/no son cuotas ni garantizan resultados/)).toBeTruthy()
+    expect(screen.getByText(/Estimaciones, no cuotas/)).toBeTruthy()
   })
-  it('shows unavailable rather than fabricated percentages when ESPN has no probabilities',async()=>{
-    vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({}),{status:200})))
-    render(<SportsWinProbability sport="soccer" league="usa.1" eventId="123456" phase="in"/>)
-    await waitFor(()=>expect(screen.getByText(/ESPN no publicó datos para este juego/)).toBeTruthy())
+  it('omits empty ESPN probability modules so NHL and soccer cards stay compact',async()=>{
+    const fetcher=vi.fn(async()=>new Response(JSON.stringify({}),{status:200}))
+    vi.stubGlobal('fetch',fetcher)
+    const {container}=render(<SportsWinProbability sport="hockey" league="NHL"
+      eventId="4012345" phase="post"/>)
+    await waitFor(()=>expect(fetcher).toHaveBeenCalled())
+    expect(container.querySelector('section')).toBeNull()
+    expect(screen.queryByText(/No disponible en ESPN/)).toBeNull()
     expect(screen.queryByText(/50,0 %/)).toBeNull()
+  })
+  it('keeps the live probability chart collapsed by default',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(url:RequestInfo|URL)=>{
+      if(String(url).includes('/summary?'))return new Response(JSON.stringify({
+        winprobability:[
+          {homeWinPercentage:0.5,awayWinPercentage:0.5},
+          {homeWinPercentage:0.7,awayWinPercentage:0.3},
+        ],
+      }),{status:200})
+      return new Response(JSON.stringify({}),{status:200})
+    }))
+    render(<SportsWinProbability sport="basketball" league="NBA"
+      eventId="401234" phase="in"/>)
+    await waitFor(()=>expect(screen.getByText('70,0 %')).toBeTruthy())
+    expect(screen.getByText('Ver evolución de probabilidad')).toBeTruthy()
+    expect(screen.getByText('Ver evolución de probabilidad').closest('details')?.open).toBe(false)
   })
 })
