@@ -234,6 +234,14 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
     setAuthRefresh(value => value + 1)
     void controller.load()
   })
+  const {
+    attempt: googleAttempt, answer: googleAnswer, setAnswer: setGoogleAnswer,
+    failure: googleAuthFailure, preparingKey: googlePreparingKey,
+    begin: beginGoogleAuthorization, submitAnswer: submitGoogleAnswer, cancel: cancelGoogleAuthorization,
+  } = useAuthorizationAttempt(api.authorization, () => {
+    setAuthRefresh(value => value + 1)
+    void controller.load()
+  })
   const [reordering, setReordering] = useState(false)
   const [orderFailure, setOrderFailure] = useState<string | undefined>(undefined)
 
@@ -382,6 +390,31 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
         </section>
       )}
       {codexAuthFailure === undefined ? null : <p role="alert" className={styles['error']}>{codexAuthFailure}</p>}
+      <section className={styles['setupCard']} aria-label="Cuenta Google Gemini">
+        <h3>Google Gemini · Cuenta personal (Antigravity CLI)</h3>
+        <p>Para consumir la cuota de Google Free, Pro o Ultra usa la CLI oficial agy. Gemini CLI tradicional ya no admite OAuth personal. Los tokens permanecen en Windows, fuera de PHOENIX.</p>
+        <p>Instala las CLI oficiales desde PowerShell con el archivo <code>scripts/phoenix-google-account-setup.ps1</code> del repositorio; ejecuta <code>agy</code> para iniciar sesión con Google y <code>agy models</code> para consultar los modelos disponibles.</p>
+        {accountFlowFor('google-account')?.connected
+          ? <p role="status">Cuenta Google verificada anteriormente. Si caduca la sesión, vuelve a verificarla.</p>
+          : <p>Sesión de Google no verificada en PHOENIX.</p>}
+        <button type="button" className={styles['secondaryButton']}
+          disabled={api.authorization === undefined || accountFlowFor('google-account') === undefined
+            || googlePreparingKey === 'llm-pi-ai/google-account' || googleAttempt?.status === 'pending'}
+          onClick={() => {
+            const flow = accountFlowFor('google-account')
+            if (flow !== undefined) beginGoogleAuthorization(flow.key, 'cli')
+          }}>
+          {googlePreparingKey === 'llm-pi-ai/google-account' || googleAttempt?.status === 'pending'
+            ? t('signingIn') : 'Verificar acceso con Google'}
+        </button>
+        {googleAttempt?.key !== 'llm-pi-ai/google-account' ? null : (
+          <AuthorizationAttemptProgress
+            attempt={googleAttempt} answer={googleAnswer} setAnswer={setGoogleAnswer}
+            submitAnswer={submitGoogleAnswer} cancel={cancelGoogleAuthorization} t={t}
+          />
+        )}
+        {googleAuthFailure === undefined ? null : <p role="alert" className={styles['error']}>{googleAuthFailure}</p>}
+      </section>
       <ul className={styles['rows']}>
         {configured.map((row, index) => {
           const target = targetOf(row)

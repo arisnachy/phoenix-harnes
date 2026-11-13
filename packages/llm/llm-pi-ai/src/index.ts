@@ -59,6 +59,7 @@ import { assertUsableApiKey, LlmError } from '@phoenix-ai/dsh-llm'
 import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigurableProvider } from '@phoenix-ai/dsh-llm'
 import { deepEqualJson, installSettingsSection, settingsNamespace } from '@phoenix-ai/dsh-settings'
 import { PiAiAdapter } from './adapter.ts'
+import { registerGoogleAccountCli } from './antigravity-cli.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProviderIds } from './catalog.ts'
 import { CODEX_PROVIDER, CodexLiveCatalog } from './codex-live-catalog.ts'
@@ -208,6 +209,8 @@ export function apply(ctx: Context, config: Config): void {
     })
     return
   }
+
+  registerGoogleAccountCli(ctx)
 
   const openCodeCatalog = createOpenCodeFreeCatalog()
   let openCodeCatalogRevision = 0
