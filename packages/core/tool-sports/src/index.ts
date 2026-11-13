@@ -1696,7 +1696,7 @@ export function apply(ctx: Context): void {
       // They retain their own IDs; market identity is verified separately.
       const exactFallback=args.sourcePolicy==='all'&&args.eventId&&args.date
         ?await withNhlDeadline(signal=>exactAlternativeOdds(
-          args.sportKey,args.eventId,args.date,args.markets??'h2h',
+          args.sportKey,args.eventId!,args.date!,args.markets??'h2h',
           env,nhlAbortableFetch(signal),observedAt),20_000).catch(()=>null):null
       const extraQuotes=(exactFallback?.quotes??[]).map(q=>({
         ...q,providerEventId:q.eventId,espnEventId:args.eventId,
