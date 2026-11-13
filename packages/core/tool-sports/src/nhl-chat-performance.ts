@@ -15,8 +15,10 @@ export async function withNhlDeadline<T>(
   let timer:ReturnType<typeof setTimeout>|undefined
   const timeout=new Promise<never>((_resolve,reject)=>{
     timer=setTimeout(()=>{
-      controller.abort()
+      // Reject first: abort listeners may resolve work synchronously.
+      // A timed-out operation must NEVER win its own Promise.race.
       reject(Error('NHL_TIMEOUT: plazo de '+limitMs+' ms agotado'))
+      controller.abort()
     },limitMs)
   })
   try{return await Promise.race([Promise.resolve().then(()=>work(controller.signal)),timeout])}
