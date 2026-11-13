@@ -690,6 +690,69 @@ export function apply(ctx: Context): void {
         await registerCloudMarkets(cloudLegs,env):
         {status:'disabled',issueNumber:null,
           reason:'No se registró: falta ticket completo o mercado verificable.'}
+      // Always return a native ticket card. A shortage of complete reviewed
+      // offers is NOT permission to erase the slate or invent five winners.
+      // Show independently verified events in numbered research slots, with
+      // unsupported sides explicitly left pending.
+      const draftSeen=new Set<string>()
+      const draftCandidates=[...best.map(review=>review.candidate),...pool.selected]
+        .filter(candidate=>{
+          const id=candidate.sport+'|'+candidate.league+'|'+candidate.espnEventId
+          if(draftSeen.has(id))return false
+          draftSeen.add(id)
+          return true
+        }).slice(0,count)
+      const draftLegs=draftCandidates.map(candidate=>{
+        const review=best.find(item=>item.candidate.espnEventId===candidate.espnEventId&&
+          item.candidate.sport===candidate.sport&&item.candidate.league===candidate.league)
+        const side=review?.status==='descriptive-support'?
+          review.selectedOutcome:null
+        const supported=side!==null&&side!==undefined&&
+          review?.priceAudit.classification!=='negative-value'
+        const pending=(review?.warnings??[
+          'Partido y mercado verificados: falta conclusión del especialista',
+        ]).slice(0,5).map(note=>note.slice(0,250))
+        return{
+          event:candidate.fixture,
+          selection:supported?side.selection:'Ganador por determinar',
+          price:supported?side.decimalOdds.toFixed(5):'Por verificar',
+          bookmaker:supported?candidate.bookmaker:'Sin cotización seleccionada',
+          sport:candidate.sport,league:candidate.league,
+          eventId:candidate.espnEventId,eventDate:daily.date,
+          when:candidate.kickoff,
+          market:candidate.market==='h2h'?'Ganador directo':
+            candidate.market==='spreads'?'Hándicap':'Total',
+          researchStatus:supported?'researched':'conditional',
+          displayStatus:'research-selection',
+          rationale:(supported?
+            'Apoyo descriptivo provisional: '+(review?.marketDirection??'')+
+            '. Cuota observada de '+candidate.bookmaker+'.':
+            'Partido y mercado encontrados. Sin ganador con apoyo descriptivo suficiente; '+
+            'no afirmar que existe una apuesta seleccionada.').slice(0,480),
+          pendingEvidence:pending,
+          riskNotes:pending.slice(0,4),
+        }
+      })
+      const draftTicket={
+        component:'sports_ticket_card' as const,version:1 as const,
+        props:{
+          title:'PHOENIX · Ticket diario en investigación',
+          subtitle:'Cartelera '+daily.date+' · '+daily.totalEligible+
+            ' encuentros descubiertos · '+ticketQuoted.length+'/'+count+
+            ' cotizaciones respaldadas',
+          source:'ESPN Site/Core y mercados con evento y casa cotejados',
+          requestedLegs:count,legs:draftLegs,combinedOdds:'No disponible',
+          dataCounts:{eventsFound:daily.totalEligible,quotedLegs:ticketQuoted.length,
+            researchedLegs:specialistChecks.filter(check=>check.status==='researched').length,
+            candidateLegs:draftLegs.length,
+            conditionalLegs:draftLegs.filter(leg=>leg.researchStatus==='conditional').length,
+            approvedForBetting:0},
+          note:'TICKET INCOMPLETO: '+ticketQuoted.length+'/'+count+
+            ' patas cuentan con selección y cuota estudiadas, no existe una combinada completa. '+
+            'Cada posición pendiente muestra su encuentro exacto o un espacio vacío en la UI. '+
+            'La cuota publicada no es una apuesta aceptada y no es una predicción calibrada.',
+        },
+      }
       return JSON.stringify({
         cloudFollowUp,
         goal:count,range:[4,6],complete:args.deep===false?pool.selected.length>=count:
@@ -718,7 +781,9 @@ export function apply(ctx: Context): void {
         priceAuditState:'umbrales-cotizados-sin-modelo-calibrado-por-mercado',
         selected:args.deep===false?pool.selected.slice(0,count):best,
         ...(ticket?{uiBlock:{...ticket,
-          props:{...ticket.props,cloudFollowUp}}}:{status:'borrador-sin-cuatro-precios-validados'}),
+          props:{...ticket.props,cloudFollowUp}}}:{uiBlock:{...draftTicket,
+            props:{...draftTicket.props,cloudFollowUp}},
+          status:'borrador-con-tarjeta-nativa'}),
         rejectedQuotes:pool.rejectedQuotes,
         date:daily.date,checkedAt:new Date(now).toISOString(),
         eventsScanned:daily.totalEligible,fixturesConsidered:daily.events.length,
