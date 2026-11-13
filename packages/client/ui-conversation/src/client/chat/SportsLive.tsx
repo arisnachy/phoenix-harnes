@@ -20,7 +20,7 @@ const normalized=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/g
 const score=(v:Obj)=>str(v.score,15)||undefined
 const fullTeam=(v:Obj)=>str(object(v.team).displayName)||str(object(v.team).name)
 export type PhoenixLiveGame={
-  id:string;home:string;away:string;homeScore?:string|undefined;awayScore?:string|undefined
+  id:string;competitionId?:string;home:string;away:string;homeScore?:string|undefined;awayScore?:string|undefined
   phase:'pre'|'in'|'post';status:string;clock?:string|undefined;period?:number|undefined
   lastPlay?:string|undefined;outs?:number|undefined;balls?:number|undefined;strikes?:number|undefined
   bases?:[boolean,boolean,boolean]|undefined;down?:string|undefined;possession?:string|undefined
@@ -89,7 +89,7 @@ export function parseEspnLiveScoreboard(payload:unknown):PhoenixLiveGame[]{
       ?awayPeriods.slice(0,12).map((v,i)=>({ label:String(i+1),away:str(v.displayValue??v.value,25)||'—',
         home:str(homePeriods[i]?.displayValue??homePeriods[i]?.value,25)||'—' })):[]
     return [{
-      id:str(event.id,50),home:fullTeam(home),away:fullTeam(away),
+      id:str(event.id,50),...(str(comp.id,50)?{ competitionId:str(comp.id,50) }:{}),home:fullTeam(home),away:fullTeam(away),
       ...(score(home)?{ homeScore:score(home) }:{}),...(score(away)?{ awayScore:score(away) }:{}),
       phase,status:fieldText(type,'shortDetail','description','detail')||str(status.displayClock)||'Sin estado',
       ...(str(status.displayClock)?{ clock:str(status.displayClock,35) }:{}),
