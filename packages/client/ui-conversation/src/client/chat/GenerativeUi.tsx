@@ -1384,6 +1384,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
       const requested = p.requestedLegs ?? p.legs.length
       const incomplete = p.legs.length < requested
       const unpriced = p.combinedOdds === 'No disponible'
+      const quotedLegs=p.dataCounts?.quotedLegs??(unpriced?0:p.legs.length)
       const receipt=Boolean(p.ticketReference)
       if(receipt)return <SportsTicketLiveTracker props={p}/>
       // Keep only attributed competition taxonomy; do not infer unnamed leagues.
@@ -1397,7 +1398,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         <header className={css.sportsTicketHeading}>
           <div className={css.sportsTicketRibbon}>
             <span className={css.sportsKicker}>PHOENIX / ANÁLISIS DEPORTIVO</span>
-            <span className={css.sportsStatus}>{receipt?'RECIBO APORTADO · PAGO NO CONFIRMADO':incomplete?'BORRADOR INCOMPLETO':unpriced?'PRONÓSTICOS · SIN COTIZAR':'COTIZACIÓN REAL · SIN ACEPTACIÓN CONFIRMADA'}</span>
+            <span className={css.sportsStatus}>{receipt?'RECIBO APORTADO · PAGO NO CONFIRMADO':incomplete?'BORRADOR INCOMPLETO':unpriced?(quotedLegs>0?'COTIZACIÓN PARCIAL · REVISAR':'PRONÓSTICOS · SIN COTIZAR'):'COTIZACIÓN REAL · SIN ACEPTACIÓN CONFIRMADA'}</span>
           </div>
           <div className={css.sportsTicketIntro}>
             <div><h3>{sportsDisplayText(p.title)}</h3>{p.subtitle&&<p>{sportsDisplayText(p.subtitle)}</p>}</div>
@@ -1409,7 +1410,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           </div>
           <ForecastTicketSummary/>
           {incomplete&&<p className={css.sportsTicketMissing}>Faltan {requested-p.legs.length} selecciones por verificar. Esto no es un ticket completo.</p>}
-          {unpriced&&!receipt&&<p className={css.sportsTicketMissing}>0 / {requested} selecciones con cuotas de una misma casa confirmadas. Los partidos visibles son hipótesis de investigación, no apuestas aprobadas.</p>}
+          {unpriced&&!receipt&&<p className={css.sportsTicketMissing}>{quotedLegs} / {requested} selecciones con precio y dirección investigados; falta una combinada completa y verificable. Los partidos pendientes son hipótesis, no apuestas aprobadas.</p>}
         </header>
         <div className={css.sportsTicketGroups}>{[...groups].map(([heading,legs])=>
           <section key={heading} className={css.sportsTicketGroup} aria-label={heading}>
@@ -1467,6 +1468,20 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
               <ForecastTicketLegStatus leg={leg} index={p.legs.indexOf(leg)}/>
             </article>})}</div>
           </section>)}</div>
+        {incomplete&&<section className={css.sportsTicketGroup} aria-label="Selecciones pendientes">
+          <h4>Selecciones pendientes · {requested-p.legs.length}</h4>
+          <div className={css.sportsLegs}>
+            {Array.from({length:requested-p.legs.length},(_,i)=><article
+              key={'pending-'+i} className={css.sportsLeg}
+              aria-label={'Pata '+(p.legs.length+i+1)+' pendiente'}>
+              <span className={css.sportsTicketLegNumber}>{String(p.legs.length+i+1).padStart(2,'0')}</span>
+              <div className={css.sportsTicketLegMain}>
+                <strong>Investigación pendiente</strong>
+                <small>Sin partido/ganador y cuota aprobados para esta posición</small>
+              </div>
+            </article>)}
+          </div>
+        </section>}
         {p.chatNarrative?.length? <section className={css.sportsTicketNarrative}
           aria-label="Justificación de Kira para cada pata">
           <h4>Kira · Por qué elegí cada selección</h4>
