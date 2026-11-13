@@ -93,6 +93,24 @@ test('daily market search keeps as many as 36 real upcoming candidates, not only
   assert.ok(report.events.every(x=>Date.parse(x.kickoff)===Date.parse(kickoff)))
 })
 
+test('full slate inventory keeps more than 36 NBA/NHL candidates before ranking',async()=>{
+  const provider=async url=>{
+    const u=String(url)
+    const events=u.includes('/basketball/nba/')?
+      Array.from({length:55},(_,i)=>game(300+i)):
+      u.includes('/hockey/nhl/')?
+        Array.from({length:40},(_,i)=>game(400+i)):[]
+    return new Response(JSON.stringify({events}),{status:200})
+  }
+  const report=await scoutDailySports(day,120,provider,now)
+  assert.equal(report.totalEligible,95)
+  assert.equal(report.events.length,95)
+  assert.equal(report.truncated,false)
+  assert.equal(report.eligibleBySport.basketball,55)
+  assert.equal(report.eligibleBySport.hockey,40)
+  assert.ok(report.events.some(e=>e.league==='nba'&&e.eventId==='354'))
+  assert.ok(report.events.some(e=>e.league==='nhl'&&e.eventId==='439'))
+})
 test('the requested day is Santo Domingo local, including games after UTC midnight',async()=>{
   const boundary=async url=>{
     const events=String(url).includes('/basketball/nba/')?[
