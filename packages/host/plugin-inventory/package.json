@@ -74,7 +74,6 @@
     "@phoenix-ai/dsh-brand": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-typert-protocol": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^",
-    "@phoenix-ai/dsh-subagent-codex": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }
