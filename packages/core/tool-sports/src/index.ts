@@ -15,7 +15,7 @@ import { sportsPromptNeeded } from './sports-prompt.ts'
 import {ESPN_NBA_PUBLIC_PAGES,ESPN_NBA_API_STARTING_POINTS} from './espn-nba-public-pages.ts'
 import { SPORTS_OPEN_RESEARCH_GUIDANCE } from './sports-open-research-guidance.ts'
 import { researchNbaWithSpecialists } from './nba-specialist-supervisor.ts'
-import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets,espnQuoteNeedsRecheck} from './daily-market-shortlist.ts'
+import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets,espnQuoteNeedsRecheck,planDailyOddsLeagueKeys} from './daily-market-shortlist.ts'
 import {assessDailyMarketEvidence,unavailableMarketEvidence} from './daily-market-evidence.ts'
 import {selectDailyResearchedMarkets} from './daily-market-selection.ts'
 import {auditTicketMarketRisk} from './ticket-risk-audit.ts'
@@ -91,7 +91,7 @@ const boundedDailyTool=<T>(operation:Promise<T>,ms:number):Promise<T>=>{
 const GUIDANCE = [
   SPORTS_OPEN_RESEARCH_GUIDANCE,
   'LIMITE DE BUSQUEDA PARA TICKETS: si ya existen cinco o seis eventos prepartido con IDs y fechas verificados en NBA/NHL/otras ligas, NO recorrer 220 ligas de soccer para resolver una ausencia de cuotas. Resolver las cuotas por esos IDs, mostrar precios ESPN/DraftKings observados recientemente COMO CUOTAS USABLES EN EL TICKET DE INVESTIGACIÓN aunque lastUpdated no exista; observedAt es hora de consulta, no de cambio del bookmaker, y entregar inmediatamente el borrador fundamentado. Solo ampliar soccer_world_scan cuando FALTEN partidos verificados, en grupos limitados; el número de fuentes de cuotas vacías nunca justifica reiniciar el catálogo de encuentros. Tras una pasada de recuperación por evento, finalizar respuesta al usuario, sin ciclos de mensajes de progreso. ',
-  'CALENDARIO PRIMERO: al recibir ticket para fecha y deportes definidos, comienza con sports_chat_daily_scan(sports=[basketball,hockey,football,soccer] según lo solicitado). Usa coverage.available/empty/unavailable para descartar ligas sin juegos, pero empty no significa temporada cancelada y unavailable exige respaldo. Filtra partidos por día local Santo Domingo e IDs. No recorres las 220 ligas del catálogo de fútbol antes de investigar los encuentros ya confirmados; amplía páginas solo si faltan candidatos y detente cuando el expediente tenga suficientes partidos. Nunca infieras cuotas desde una fecha de calendario. ',
+  'CALENDARIO PRIMERO: sin filtro explícito del usuario investiga simultáneamente NBA, WNBA, MLB, NFL, NHL y las ligas de fútbol verificables del día. Si el usuario limita disciplinas respeta ese filtro. Antes de elegir cinco evalúa TODOS los deportes activos y compara 12 o más candidatos cuando existan. Comienza con sports_chat_daily_scan(sports=[basketball,hockey,football,soccer] según lo solicitado). Usa coverage.available/empty/unavailable para descartar ligas sin juegos, pero empty no significa temporada cancelada y unavailable exige respaldo. Filtra partidos por día local Santo Domingo e IDs. No recorres las 220 ligas del catálogo de fútbol antes de investigar los encuentros ya confirmados; amplía páginas solo si faltan candidatos y detente cuando el expediente tenga suficientes partidos. Nunca infieras cuotas desde una fecha de calendario. ',
   'RESCATE DE CUOTAS: para el boleto diario de 5 o 6 GANADORES, el orden obligatorio es sports_chat_daily_market_shortlist(deep=true,winnerOnly=true,count=5 o 6) para cotejar hasta 10-12 eventos y reemplazar descartadas, ANTES de seleccionar patas definitivas. Si es insuficiente, usa sports_chat_ticket_evidence_priced_auto como recuperación por evento exacto de ESPN y coteja las fuentes por ID, equipo, fecha y casa; ESPN observedAt reciente es precio observado útil para investigación aunque no haya bookmaker updatedAt. Entrega UNA tarjeta final de investigación solo con exactamente las patas verificadas; si no hay cinco precios genuinos, muestra la evidencia parcial y las razones, sin inventarlos, y termina sin bucle de progreso.',
 
   'SEGUIMIENTO CLOUD: al crear un ticket de investigación, registrar automáticamente solo si PHOENIX_SPORTS_CLOUD_TRACKING_ENABLED=1 y las credenciales GitHub/AES están en la bóveda. Devolver cloudFollowUp con su estado real, no afirmar que habrá correo cuando status sea disabled, needs-configuration o error. El cifrado mantiene ocultos los eventos en un issue público, pero los metadatos de issue sí son visibles. Cuando los encuentros terminen, un workflow remoto revisará marcadores y enviará correo únicamente si RESEND_API_KEY, correo destinatario, remitente y clave AES están configurados en GitHub Actions. Nunca afirmar que la banca confirmó pago ni que un correo salió sin prueba. ',
@@ -337,7 +337,7 @@ export function apply(ctx: Context): void {
     description:'Barrido rápido con plazo por fuente de NBA, WNBA, MLB, NFL, NHL, fútbol y tenis. Las ligas lentas se marcan unavailable, se conservan partidos verificados del resto y siempre se devuelve diagnóstico; NO predice resultados ni cuotas.',
     parameters:{
       date:{type:'string',description:'Día local AAAA-MM-DD; defecto hoy'},
-      limit:{type:'integer',description:'Máximo 1-36 eventos para investigar; por defecto 30 para cubrir más candidatos del ticket de 4-6 patas.'},
+      limit:{type:'integer',description:'Máximo 1-128 eventos verificables; por defecto 30 en vista rápida, 120 en búsqueda integral para 5-6 patas.'},
       sports:{type:'array',description:'Deportes solicitados; opcional. Valores como basketball, hockey, football, baseball, soccer, tennis. Evita consultar ligas de otros deportes.',items:{type:'string'}},
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
@@ -365,9 +365,8 @@ export function apply(ctx: Context): void {
       const now=Date.now(),env=await sportsEnv(ctx),count=args.count??5
       if(!Number.isInteger(count)||count<5||count>6)
         throw Error('Se requieren 5 o 6 candidatas para el ticket diario')
-      const daily=await scoutDailySports(args.date,36,dailyResearchFetcher(fetch,env),now,env,args.sports)
-      const keys=[...new Set(daily.events.map(event=>dailyOddsSportKey(event.sport,event.league))
-        .filter((key):key is string=>typeof key==='string'))].slice(0,12)
+      const daily=await scoutDailySports(args.date,120,dailyResearchFetcher(fetch,env),now,env,args.sports)
+      const keys=planDailyOddsLeagueKeys(daily.events,18)
       const attempts:Array<{sportKey:string;status:'observed'|'empty'|'error';count:number}>=[]
       const providerHealth:Array<{sportKey:string;provider:string;status:string;count:number;detail:string}>=[]
       const quotes:Awaited<ReturnType<typeof marketOdds>>=[]
@@ -403,7 +402,7 @@ export function apply(ctx: Context): void {
           key(q.home)===key(game.home.name)&&key(q.away)===key(game.away.name)&&
           Math.abs(Date.parse(q.timeIso??q.time)-Date.parse(game.kickoff))<=45*60_000&&
           !espnQuoteNeedsRecheck(q,now)))
-          .slice(0,Math.min(10,count*2))
+          .slice(0,Math.min(18,count*3))
         const exact=await Promise.allSettled(missing.map(async game=>{
           const sportKey=dailyOddsSportKey(game.sport,game.league)??(
             game.sport==='soccer'?'soccer_espn_dynamic':null)
@@ -464,7 +463,7 @@ export function apply(ctx: Context): void {
       }
       // Evaluate a small extra pool rather than settling prematurely for the
       // bookmaker's cheapest outcomes as if that were an independent prediction.
-      const researchPool=Math.min(12,count+5)
+      const researchPool=Math.min(16,count+7)
       const pool=shortlistDailyMarkets(daily.events,quotes,count,now,researchPool)
       const research=await (async()=>{
         if(args.deep===false)return []
