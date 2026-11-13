@@ -102,3 +102,19 @@ test('mismatched clinical source modality blocks rendering instead of implying s
     assert.equal(r.imageGenerated,false)
   }
 })
+
+test('report and PDF cannot impersonate observed primary evidence',()=>{
+  for(const sourceKind of ['report','pdf']){
+    const blocked=planClinicalTwinScene({...baseline,sourceKind,evidenceKind:'observed'})
+    assert.equal(blocked.status,'BLOCK_PRIMARY_EVIDENCE_REQUIRED')
+    assert.equal(blocked.renderPrompt,null)
+    assert.deepEqual(blocked.annotations,[])
+    assert.equal(blocked.imageGenerated,false)
+    assert.match(blocked.nextAction,/reportados/)
+    const attributed=planClinicalTwinScene({...baseline,sourceKind,evidenceKind:'reported'})
+    assert.equal(attributed.status,'ILLUSTRATION_SPEC_READY')
+    assert.match(attributed.renderPrompt,/hallazgo atribuido al informe/)
+    assert.equal(attributed.source.evidenceKind,'reported')
+    assert.equal(attributed.patientSpecificGeometryValidated,false)
+  }
+})
