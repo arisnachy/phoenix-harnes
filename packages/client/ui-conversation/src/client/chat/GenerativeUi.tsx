@@ -14,6 +14,7 @@ import { parseVisualIntelligence, type VisualIntelligenceSpec } from './VisualIn
 import css from './GenerativeUi.module.css'
 import { SportsLiveProvider,SportsLiveFacts,SportsLiveStamp } from './SportsLive.tsx'
 import { SportsGameCenter } from './SportsGameCenter.tsx'
+import { SportsWinProbability } from './SportsWinProbability.tsx'
 import { SportsBetProgress,validTrackedPick,type SportsTrackedPick } from './SportsBetProgress.tsx'
 import { SportsTicketLiveTracker } from './SportsTicketLiveTracker.tsx'
 import {SportsLeagueBadge} from './SportsLeagueIdentity.tsx'
@@ -1311,6 +1312,9 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
               trackedBets={p.trackedBets} sport={p.sport} league={p.providerLeague??p.league}
               date={p.eventDate} eventId={live?.id??p.eventId}/>
             <SportsLiveFacts game={live} meta={meta} sport={p.sport} compact/>
+            <SportsWinProbability sport={p.sport} league={p.providerLeague??p.league}
+              eventId={live?.id??p.eventId} competitionId={live?.competitionId}
+              phase={live?.phase??p.phase} game={live}/>
             <SportsBetProgress sport={p.sport??''} league={p.providerLeague??p.league??''}
               date={p.eventDate??''} home={p.home.label} away={p.away.label}
               eventId={live?.id??p.eventId} game={live} meta={meta}
@@ -1352,8 +1356,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             <footer className={css.sportsSourceBar}>
               <SportsLiveStamp meta={meta}/>
               {p.note&&<small>{sportsDisplayText(p.note)}</small>}
-              {p.askPrompt&&onAction&&<button type="button" onClick={() => { if (p.askPrompt) onAction(p.askPrompt, 'draft') }}>
-                Investigar análisis y mercados</button>}
+
             </footer>
           </section>}}
       </SportsLiveProvider>
