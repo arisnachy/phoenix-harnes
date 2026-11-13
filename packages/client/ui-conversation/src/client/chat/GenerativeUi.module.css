@@ -723,3 +723,7 @@
   .sportsGameCompact .sportsSlateMatch strong{font-size:10px}
   .sportsGameCompact .sportsSlateMatch>div>b{font-size:20px}
 }
+
+
+/* The compact daily slate also stays two-across, never three microscopic tiles. */
+.sportsSlateGrid{grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:9px}
