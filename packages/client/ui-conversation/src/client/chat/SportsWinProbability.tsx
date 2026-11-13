@@ -146,8 +146,8 @@ const empty:FeedState={key:'',predictor:null,live:null,at:0,error:false}
 
 /** Data only: pregame forecasts are frozen model outputs, not updated live odds. */
 export function SportsWinProbability({sport,league,eventId,competitionId,phase,game}:{
-  sport?:string;league?:string;eventId?:string;competitionId?:string
-  phase?:'pre'|'in'|'post';game?:PhoenixLiveGame
+  sport?:string|undefined;league?:string|undefined;eventId?:string|undefined;competitionId?:string|undefined
+  phase?:'pre'|'in'|'post'|undefined;game?:PhoenixLiveGame|undefined
 }):ReactNode{
   const verifiedId=game?.id??(sport==='baseball'?undefined:eventId)
   const verifiedCompetition=game?.competitionId??competitionId??verifiedId
