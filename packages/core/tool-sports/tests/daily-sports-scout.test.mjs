@@ -60,7 +60,7 @@ test('unconfirmed games, started games, malformed IDs and incomplete participant
 
 test('provider permission and malformed scan controls are enforced',async()=>{
   await assert.rejects(()=>scoutDailySports('2026-02-30',5,fetcher,now),/Fecha inválida/)
-  await assert.rejects(()=>scoutDailySports(day,37,fetcher,now),/1 a 36/)
+  await assert.rejects(()=>scoutDailySports(day,129,fetcher,now),/1 a 128/)
   await assert.rejects(()=>scoutDailySports(day,5,fetcher,now,{PHOENIX_SPORTS_ESPN_DISABLED:'1'}),/ESPN deshabilitado/)
 })
 
