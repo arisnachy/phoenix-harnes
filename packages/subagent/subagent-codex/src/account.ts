@@ -606,7 +606,13 @@ export interface CodexResetRequest {
   readonly creditId?: string
 }
 
-function codexResetState(rateResponse: unknown, connected: boolean): CodexResetState {
+/**
+ * Project only documented reset and quota fields from an untrusted Codex RPC response.
+ * @param rateResponse - The official account/rateLimits/read response.
+ * @param connected - Whether native ChatGPT authentication was verified.
+ * @returns Browser-safe reset availability with no token or account identifier.
+ */
+export function projectCodexResetState(rateResponse: unknown, connected: boolean): CodexResetState {
   const response = maybeObject(rateResponse)
   const buckets = maybeObject(response?.rateLimitsByLimitId)
   const limits = maybeObject(buckets?.codex) ?? maybeObject(response?.rateLimits)
@@ -641,13 +647,13 @@ function codexResetState(rateResponse: unknown, connected: boolean): CodexResetS
 async function readNativeResetState(connection: CodexAccountConnection, signal: AbortSignal): Promise<CodexResetState> {
   const account = await readAccount(connection, signal)
   if (maybeObject(account.account)?.type !== 'chatgpt') {
-    return codexResetState(undefined, false)
+    return projectCodexResetState(undefined, false)
   }
   const response = await Promise.race([
     connection.request('account/rateLimits/read', {}, signal),
     connection.processEnded(),
   ])
-  return codexResetState(response, true)
+  return projectCodexResetState(response, true)
 }
 
 /**
@@ -694,13 +700,8 @@ export async function consumeCodexReset(
   try {
     const before = await readNativeResetState(connection, signal)
     if (!before.connected) throw new Error('codex reset: ChatGPT account authorization required')
-    if (before.availableCount === 0) return { outcome: 'noCredit', state: before }
     if (before.availableCount === undefined) {
       throw new Error('codex reset: the server did not report saved reset availability')
-    }
-    if (request.creditId !== undefined && before.credits.length > 0
-      && !before.credits.some(c => c.id === request.creditId && c.status === 'available')) {
-      throw new Error('codex reset: selected credit is no longer available')
     }
     const result = object(await Promise.race([
       connection.request('account/rateLimitResetCredit/consume', {
