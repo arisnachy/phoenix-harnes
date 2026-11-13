@@ -5743,9 +5743,6 @@ importers:
       '@phoenix-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
-      '@phoenix-ai/dsh-subagent-codex':
-        specifier: workspace:^
-        version: link:../../subagent/subagent-codex
       '@phoenix-ai/dsh-typert-protocol':
         specifier: workspace:^
         version: link:../../typert/protocol
