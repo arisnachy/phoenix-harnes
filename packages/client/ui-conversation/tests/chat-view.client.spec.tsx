@@ -1444,7 +1444,7 @@ describe('ChatView', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('prepend preserves a semantic row; a trailing user node force-scrolls', () => {
+  it('prepend preserves a semantic row; remote user messages do not steal reader position', () => {
     const h = makeHarness({ nodes: [user(5, 'later'), assistant(6, 'a')], hasMore: true })
     const view = render(<h.ChatView {...h.props} />)
     const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
@@ -1463,8 +1463,11 @@ describe('ChatView', () => {
     anchoredTop = 700
     act(() => { h.set({ nodes: [user(1, 'old'), assistant(2, 'b'), user(5, 'later'), assistant(6, 'a')] }) })
     expect(scroller.scrollTop).toBe(680) // reader offset 80 + the anchored row's 600px shift
-    // A new trailing user bubble (own words) force-scrolls to the bottom.
-    act(() => { h.set({ nodes: [user(1, 'old'), assistant(2, 'b'), user(5, 'later'), assistant(6, 'a'), user(9, 'mine')] }) })
+    // An incoming durable user node must not drag someone reading old content.
+    act(() => { h.set({ nodes: [user(1, 'old'), assistant(2, 'b'), user(5, 'later'), assistant(6, 'a'), user(9, 'remote')] }) })
+    expect(scroller.scrollTop).toBe(680)
+    // A real local submission still takes the user to the most recent turn.
+    act(() => { h.setInput({ pendingSubmit: { text: 'mine', startedAt: Date.now() }, phase: 'submitting' }) })
     expect(scroller.scrollTop).toBe(1600)
   })
 
@@ -1692,6 +1695,66 @@ describe('ChatView', () => {
     } finally {
       host.remove()
     }
+  })
+
+  it('automatically loads older history when the reader scrolls upward near the head', () => {
+    const h = makeHarness({ nodes: [user(5, 'older head'), assistant(6, 'visible')], hasMore: true })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
+    Object.defineProperty(scroller, 'scrollHeight', { value: 1_200, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 300, configurable: true })
+    // Scrolling DOWN toward the start must not request a previous page.
+    readerScroll(scroller, 560)
+    expect(h.loadOlder).toHaveBeenCalledTimes(0)
+    // The first genuinely upward reader movement near the head triggers once.
+    readerScroll(scroller, 180)
+    expect(h.loadOlder).toHaveBeenCalledTimes(1)
+    fireEvent.scroll(scroller)
+    readerScroll(scroller, 120)
+    expect(h.loadOlder).toHaveBeenCalledTimes(1)
+    // Once the backend finished, the next upward gesture may fetch another page.
+    act(() => { h.set({ loadingOlder: true }) })
+    act(() => { h.set({ loadingOlder: false }) })
+    readerScroll(scroller, 90)
+    expect(h.loadOlder).toHaveBeenCalledTimes(2)
+  })
+
+  it('wheel-up at scrollTop zero auto-paginates short chats and debounces requests', () => {
+    const h = makeHarness({ nodes: [user(5, 'one loaded message')], hasMore: true })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
+    fireEvent.wheel(scroller, { deltaY: -90 })
+    fireEvent.wheel(scroller, { deltaY: -90 })
+    expect(h.loadOlder).toHaveBeenCalledTimes(1)
+    act(() => { h.set({ loadingOlder: true }) })
+    act(() => { h.set({ loadingOlder: false }) })
+    fireEvent.wheel(scroller, { deltaY: -90 })
+    expect(h.loadOlder).toHaveBeenCalledTimes(2)
+  })
+
+  it('upward keyboard navigation can load history but typing in the composer cannot', () => {
+    const h = makeHarness({ nodes: [user(5, 'last page')], hasMore: true })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
+    const input = document.createElement('textarea')
+    scroller.appendChild(input)
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(h.loadOlder).toHaveBeenCalledTimes(0)
+    fireEvent.keyDown(scroller, { key: 'PageUp' })
+    expect(h.loadOlder).toHaveBeenCalledTimes(1)
+  })
+
+  it('prepending a page does not follow-scroll a reader with an inactive paging anchor', () => {
+    const h = makeHarness({ nodes: [user(5, 'latest')], hasMore: true })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
+    Object.defineProperty(scroller, 'scrollHeight', { value: 1_000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 300, configurable: true })
+    readerScroll(scroller, 300)
+    // Another subsystem may deliver a history prepend even without this view
+    // explicitly asking; it must not trigger a snap to the newest message.
+    act(() => { h.set({ nodes: [user(1, 'old history'), user(5, 'latest')] }) })
+    expect(scroller.scrollTop).toBe(300)
   })
 
   it('paging button loads older and shows its busy label', () => {

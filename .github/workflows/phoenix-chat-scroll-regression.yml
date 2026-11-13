@@ -1,0 +1,41 @@
+name: PHOENIX chat scroll and history
+
+on:
+  pull_request:
+    branches: [main, stable]
+    paths:
+      - 'packages/client/ui-conversation/src/client/chat/ChatView.tsx'
+      - 'packages/client/ui-conversation/src/client/chat/ChatView.module.css'
+      - 'packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css'
+      - 'packages/client/ui-conversation/tests/chat-view.client.spec.tsx'
+      - '.github/workflows/phoenix-chat-scroll-regression.yml'
+  push:
+    branches: [main, stable]
+    paths:
+      - 'packages/client/ui-conversation/src/client/chat/ChatView.tsx'
+      - 'packages/client/ui-conversation/src/client/chat/ChatView.module.css'
+      - 'packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css'
+      - 'packages/client/ui-conversation/tests/chat-view.client.spec.tsx'
+      - '.github/workflows/phoenix-chat-scroll-regression.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  anchored-history:
+    name: Chat scroll / anchored history
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Verify history paging and scroll stability
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/chat-view.client.spec.tsx --maxWorkers=2
