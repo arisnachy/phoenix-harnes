@@ -2,6 +2,7 @@ import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {nhlSlate,investigateNhl,parseNhlSpecialTeams} from '../src/nhl-evidence-research.ts'
 import {settleNhlMarket} from '../src/nhl-market-settlement.ts'
+import {withNhlDeadline,compactNhlChatDossier} from '../src/nhl-chat-performance.ts'
 import {getFeed} from '../src/sports.ts'
 const now=Date.parse('2026-11-02T11:00:00Z'),date='2026-11-05'
 const game={id:2026020201,startTimeUTC:'2026-11-05T23:00:00Z',gameState:'FUT',
@@ -199,4 +200,37 @@ test('NHL 307 follows only same-host HTTPS season path, never redirects to forei
     async()=>{attempts++;return new Response(null,{status:307,headers:{
       location:'https://127.0.0.1/private'}})}),/Redirección NHL fuera/)
   assert.equal(attempts,1)
+})
+
+test('NHL chat deadline cancels pending work instead of trapping Kira',async()=>{
+  let aborted=false
+  await assert.rejects(()=>withNhlDeadline(signal=>new Promise(resolve=>{
+    signal.addEventListener('abort',()=>{aborted=true;resolve('late')},{once:true})
+  }),15),/NHL_TIMEOUT/)
+  assert.equal(aborted,true)
+  assert.equal(await withNhlDeadline(async()=>42,250),42)
+})
+
+test('NHL player research stops optional requests at budget but retains team evidence',async()=>{
+  const api=fake()
+  const d=await investigateNhl(date,'2026020201',api.fetcher,now,[],15,Date.now()-1)
+  assert.equal(d.standings.home,'11 V · 4 D · 2 OT')
+  assert.equal(d.players.home.length,20)
+  assert.equal(d.form.home.wins,1)
+  assert.equal(api.calls.some(u=>u.includes('/player/')),false)
+  assert.equal(d.opportunity.calibratedProbability,false)
+})
+
+test('NHL model-facing report is compact; full game logs remain internal',async()=>{
+  const api=fake({withSpecial:true})
+  const d=await investigateNhl(date,'2026020201',api.fetcher,now,Promise.resolve([]),6)
+  const c=compactNhlChatDossier(d)
+  assert.equal(c.uiBlock.component,'sports_espn_dashboard')
+  assert.equal(c.standings.home,d.standings.home)
+  assert.equal(c.goalieCandidates.home[0].starterConfirmed,false)
+  assert.equal(c.specialTeams.home.powerPlayPct,25.1)
+  assert.ok(c.players.home.length<=12)
+  assert.ok(c.uiBlock.props.sections.every(s=>s.items.length<=12))
+  assert.ok(c.players.home.every(p=>!Object.hasOwn(p,'last20')))
+  assert.ok(JSON.stringify(c).length*2<JSON.stringify(d).length)
 })
