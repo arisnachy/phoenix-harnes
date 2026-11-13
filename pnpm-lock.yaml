@@ -5718,9 +5718,6 @@ importers:
       '@phoenix-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
-      '@phoenix-ai/dsh-subagent-codex':
-        specifier: workspace:^
-        version: link:../../subagent/subagent-codex
       '@phoenix-ai/dsh-atomic-write':
         specifier: workspace:^
         version: link:../../util/atomic-write
