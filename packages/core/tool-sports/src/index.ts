@@ -702,37 +702,46 @@ export function apply(ctx: Context): void {
           draftSeen.add(id)
           return true
         }).slice(0,count)
-      const draftLegs=draftCandidates.map(candidate=>{
-        const review=best.find(item=>item.candidate.espnEventId===candidate.espnEventId&&
-          item.candidate.sport===candidate.sport&&item.candidate.league===candidate.league)
-        const side=review?.status==='descriptive-support'?
-          review.selectedOutcome:null
-        const supported=side!==null&&side!==undefined&&
-          review?.priceAudit.classification!=='negative-value'
-        const pending=(review?.warnings??[
-          'Partido y mercado verificados: falta conclusión del especialista',
-        ]).slice(0,5).map(note=>note.slice(0,250))
+      // Count only actually selected, exact-bookmaker quoted legs as ticket
+      // positions. Unresolved fixtures are shown separately as alternatives.
+      const draftLegs=ticketQuoted.map(({review})=>{
+        const candidate=review.candidate
+        const side=review.selectedOutcome!
+        const pending=review.warnings.slice(0,5).map(note=>note.slice(0,250))
         return{
           event:candidate.fixture,
-          selection:supported?side.selection:'Ganador por determinar',
-          price:supported?side.decimalOdds.toFixed(5):'Por verificar',
-          bookmaker:supported?candidate.bookmaker:'Sin cotización seleccionada',
+          selection:side.selection,
+          price:side.decimalOdds.toFixed(5),
+          bookmaker:candidate.bookmaker,
           sport:candidate.sport,league:candidate.league,
           eventId:candidate.espnEventId,eventDate:daily.date,
           when:candidate.kickoff,
           market:candidate.market==='h2h'?'Ganador directo':
             candidate.market==='spreads'?'Hándicap':'Total',
-          researchStatus:supported?'researched':'conditional',
+          researchStatus:'conditional',
           displayStatus:'research-selection',
-          rationale:(supported?
-            'Apoyo descriptivo provisional: '+(review?.marketDirection??'')+
-            '. Cuota observada de '+candidate.bookmaker+'.':
-            'Partido y mercado encontrados. Sin ganador con apoyo descriptivo suficiente; '+
-            'no afirmar que existe una apuesta seleccionada.').slice(0,480),
+          rationale:('Apoyo descriptivo provisional: '+review.marketDirection+
+            '. Cuota observada de '+candidate.bookmaker+
+            '. Investigación especializada no equivale a aprobación.').slice(0,480),
           pendingEvidence:pending,
           riskNotes:pending.slice(0,4),
         }
       })
+      const pricePreview=draftCandidates.filter(candidate=>!ticketQuoted.some(item=>
+        item.review.candidate.sport===candidate.sport&&
+        item.review.candidate.league===candidate.league&&
+        item.review.candidate.espnEventId===candidate.espnEventId))
+        .slice(0,12).map(candidate=>{
+          const fixture=daily.events.find(event=>event.sport===candidate.sport&&
+            event.league===candidate.league&&event.eventId===candidate.espnEventId)
+          return{
+            eventId:candidate.espnEventId,sport:candidate.sport,league:candidate.league,
+            home:fixture?.home.name??'Local no disponible',
+            away:fixture?.away.name??'Visitante no disponible',
+            kickoff:candidate.kickoff,attempted:true,options:[],
+            notes:['Evento comprobado; sin ganador y cuota con apoyo suficiente para una pata final'],
+          }
+        })
       const draftTicket={
         component:'sports_ticket_card' as const,version:1 as const,
         props:{
@@ -741,7 +750,7 @@ export function apply(ctx: Context): void {
             ' encuentros descubiertos · '+ticketQuoted.length+'/'+count+
             ' cotizaciones respaldadas',
           source:'ESPN Site/Core y mercados con evento y casa cotejados',
-          requestedLegs:count,legs:draftLegs,combinedOdds:'No disponible',
+          requestedLegs:count,legs:draftLegs,pricePreview,combinedOdds:'No disponible',
           dataCounts:{eventsFound:daily.totalEligible,quotedLegs:ticketQuoted.length,
             researchedLegs:specialistChecks.filter(check=>check.status==='researched').length,
             candidateLegs:draftLegs.length,
