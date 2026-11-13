@@ -124,7 +124,7 @@ export async function evidenceTicket(
     !sportFilters||sportFilters.includes(sport))
   if(!leagues.length)throw Error('Disciplina sin cobertura para ticket automático')
   // Unified calendar inventory: zero ranked picks never means zero fixtures.
-  const scan=await scoutDailySports(date,36,fetcher,now,env,
+  const scan=await scoutDailySports(date,120,fetcher,now,env,
     sportFilters)
   const eligible=scan.coverage.filter(x=>x.futureEvents>0).map(x=>({
     sport:x.sport,league:x.league,active:x.futureEvents,
@@ -151,14 +151,9 @@ export async function evidenceTicket(
         Math.min(8_500,allowance))
     }))
     reports.push(...batch)
-    // Stop costly expansion only after enough independently researched,
-    // directionally consistent picks are available; an HTTP error is not a vote.
-    const viable=reports.flatMap(x=>x.status==='fulfilled'?x.value.matches:[])
-      .filter(x=>descriptiveRank(x)!==null||conditionalRank(x)!==null)
-    const diversified=singleSport||new Set(viable.map(x=>x.sport)).size>=2
-    // First-pass quality matters: do not end the league scan as soon as
-    // exactly five provisional winners appear. Compare a wider rival pool.
-    if(offset+4>=8&&viable.length>=Math.max(12,count*3)&&diversified)break
+    // Never stop merely because five or twelve historical favorites appeared.
+    // Every still-active sport/league must have an opportunity to compete
+    // within the explicit research budget; incomplete coverage is reported.
   }
   const candidateLegs:Array<{pick:ResearchTicketLeg;rank:number;home:string;away:string;
     kickoff:string;verifiedEvent:Awaited<ReturnType<typeof researchSport>>['matches'][number]['verifiedEvent'];
@@ -304,7 +299,7 @@ export async function evidenceTicket(
     shortlistedCandidates:candidateLegs.length,
     leaguesNotResearched:Math.max(0,shortlist.length-reports.length),
     scanCoverage:scan.coverage.map(x=>({...x})),
-    fixtureSample:scan.events.slice(0,12).map(x=>({eventId:x.eventId,
+    fixtureSample:scan.events.slice(0,60).map(x=>({eventId:x.eventId,
       sport:x.sport,league:x.league,home:x.home.name,
       away:x.away.name,kickoff:x.kickoff})),
     researchErrors:reports.flatMap((result,index)=>result.status==='rejected'?[{
