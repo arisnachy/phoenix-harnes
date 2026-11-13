@@ -514,7 +514,7 @@ export async function marketOddsDetailed(
       const key=[q.sportKey??sportKey,q.eventId,q.bookmaker,q.market,q.selection,q.point??''].join('|')
       if(identity.has(key))continue
       identity.add(key)
-      merged.push(q);count++
+      merged.push({...q,observedAt:q.observedAt??new Date(now).toISOString()});count++
       if(merged.length>=1500)break
     }
     sources.push({provider,status:count?'observed':'empty',count,
@@ -608,9 +608,9 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
       quotes.some(q=>q.source==='TheOddsAPI')?'TheOddsAPI · cuotas de casas identificadas':
       'The Odds API · precios de las casas indicadas',note:
       (quotes.some(q=>q.source?.startsWith('ESPN Site/Core'))?
-        'ESPN: PRECIOS OBSERVADOS EN UN FEED PÚBLICO, NO OFERTA EJECUTABLE. '+
-        'La hora de observación NO es la hora de actualización de la casa. ':
-        'COTIZACIÓN COMERCIAL CONSULTADA; PENDIENTE DE ACEPTACIÓN EN LA CASA. ')+
+        'ESPN: CUOTAS PUBLICADAS CONSULTADAS, UTILIZABLES PARA ARMAR EL TICKET SIN updatedAt DE LA CASA. '+
+        'La aceptación definitiva se comprueba al presentar la apuesta en la casa. ':
+        'CUOTA COMERCIAL CONSULTADA Y UTILIZABLE EN EL TICKET; PENDIENTE DE ACEPTACIÓN EN LA CASA. ')+
       warning+' Comprobar precio, fecha, mercado y reglas antes de apostar. No existe garantía de ganar.',
     askPrompt:'Kira, revisa este ticket con datos actuales, riesgos, ausencias y correlaciones antes de recomendar nada.',
   } } }
