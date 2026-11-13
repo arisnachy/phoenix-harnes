@@ -1297,11 +1297,12 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         {(get,meta)=>{
           const live=get(p)
           const hasStarted=(live?.phase??p.phase)==='in'||(live?.phase??p.phase)==='post'
-          return <section className={css.sportsCard+' '+css.sportsGameCompact} data-generative-ui="sports_game_card">
+          return <section className={css.sportsCard+' '+css.sportsGameCompact} data-generative-ui="sports_game_card"
+            aria-label={sportsDisplayText(p.title)}>
             <header className={css.sportsHeadline}>
-              <div><span className={css.sportsKicker}>PHOENIX / {p.sport?.toUpperCase()??'DEPORTES'}</span>
-                {(p.country||p.league)&&<div className={css.sportsCompetition}>{[p.country,p.league].filter(Boolean).join(' · ')}</div>}
-                <h3>{sportsDisplayText(p.title)}</h3>{p.subtitle&&<p>{sportsDisplayText(p.subtitle)}</p>}</div>
+              <div><span className={css.sportsKicker}>{sportsDisplayText(
+                [p.league??p.sport?.toUpperCase()??'DEPORTES',p.country].filter(Boolean).join(' · '))}</span>
+                <h3 className={css.sportsGameTitleSr}>{sportsDisplayText(p.title)}</h3></div>
               {(live?.status??p.status)&&<span className={css.sportsStatus}>{live?.status??p.status}</span>}
             </header>
             <small className={css.sportsGameWhen}>◷ {p.when}</small>
@@ -1355,8 +1356,8 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             </details>
             <footer className={css.sportsSourceBar}>
               <SportsLiveStamp meta={meta}/>
-              {p.note&&<small>{sportsDisplayText(p.note)}</small>}
-
+              {p.note&&<details className={css.sportsGameNotes}><summary>Notas de la fuente</summary>
+                <small>{sportsDisplayText(p.note)}</small></details>}
             </footer>
           </section>}}
       </SportsLiveProvider>
