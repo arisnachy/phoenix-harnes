@@ -68,6 +68,14 @@ test('six sports can supply a five-leg same-bookmaker priced market research poo
   assert.match(result.warning,/NO de un modelo/)
 })
 
+test('fresh provider observation is eligible without bookmaker updatedAt',()=>{
+  const quotes=pair(0).map(q=>({...q,observedAt:observed,updatedAt:'No indicada por la casa'}))
+  const result=shortlistDailyMarkets(fixtures,quotes,4,now)
+  assert.equal(result.selected.length,1)
+  assert.equal(result.selected[0].bookmaker,'Book A')
+  assert.equal(result.matchDiagnostics.invalidQuote,0)
+})
+
 test('never combines different bookmakers to fake four available legs',()=>{
   const quotes=[...pair(0),...pair(1),...pair(2),...pair(3,'h2h','Book B'),
     ...pair(4,'h2h','Book B')]
