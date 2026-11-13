@@ -217,6 +217,7 @@ test('NHL player research stops optional requests at budget but retains team evi
   assert.equal(d.standings.home,'11 V · 4 D · 2 OT')
   assert.equal(d.players.home.length,20)
   assert.equal(d.form.home.wins,1)
+  assert.equal(d.form.home.last10.length,1)
   assert.equal(api.calls.some(u=>u.includes('/player/')),false)
   assert.equal(d.opportunity.calibratedProbability,false)
 })
