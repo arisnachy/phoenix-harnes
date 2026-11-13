@@ -1,3 +1,39 @@
+
+/** Sanitized Codex limit window for Settings. */
+export interface CodexResetLimitWindow {
+  readonly usedPercent: number
+  readonly windowDurationMins?: number
+  readonly resetsAt?: number
+}
+
+/** Available native earned resets; no account tokens or keys. */
+export interface CodexResetState {
+  readonly connected: boolean
+  readonly availableCount?: number
+  readonly credits: readonly {
+    readonly id: string
+    readonly status: string
+    readonly resetType: string
+    readonly expiresAt?: number
+    readonly title?: string
+  }[]
+  readonly primary?: CodexResetLimitWindow
+  readonly secondary?: CodexResetLimitWindow
+  readonly checkedAt: number
+}
+
+/** Human-confirmed, idempotent request. */
+export interface CodexResetRequest {
+  readonly idempotencyKey: string
+  readonly creditId?: string
+}
+
+/** Official server outcome; refreshed allowances are optional after an outage. */
+export interface CodexResetReceipt {
+  readonly outcome: 'reset' | 'alreadyRedeemed' | 'nothingToReset' | 'noCredit'
+  readonly state?: CodexResetState
+}
+
 /** Read-only Blender Lab host prerequisites; never evidence of executed tools. */
 export interface BlenderLocalState {
   readonly blenderDetected: boolean
