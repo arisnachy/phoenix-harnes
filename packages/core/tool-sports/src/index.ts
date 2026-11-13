@@ -1651,10 +1651,23 @@ export function apply(ctx: Context): void {
             quotes:[],observations:[],sources:[{provider:'ESPN Site/Core',status:'unconfigured' as const,
               count:0,detail:'ESPN deshabilitado por el operador'}],
           }
-          const result=await fetchPublicEspnOddsDetailed(args.sportKey,args.markets??'h2h',
-            <T>(url:string)=>getFeed<T>(url),
-            {now:observedAt,cache:true,...(args.eventId?{eventId:args.eventId}:{}),
-              ...(args.date?{date:args.date}:{}),days:args.date?1:args.eventId?7:3})
+          let result:Awaited<ReturnType<typeof fetchPublicEspnOddsDetailed>>
+          try{
+            // One NHL event requires a bounded ESPN lookup. Without a deadline,
+            // parallel NHL investigate + odds calls can retain the agent turn.
+            result=await withNhlDeadline(signal=>fetchPublicEspnOddsDetailed(
+              args.sportKey,args.markets??'h2h',
+              <T>(url:string)=>getFeed<T>(url,nhlAbortableFetch(signal)),
+              {now:observedAt,cache:true,...(args.eventId?{eventId:args.eventId}:{}),
+                ...(args.date?{date:args.date}:{}),days:args.date?1:args.eventId?7:3}),
+              args.sportKey==='icehockey_nhl'?18_000:35_000)
+          }catch(error){
+            return{quotes:[],observations:[],sources:[{
+              provider:'ESPN Site/Core',status:'error' as const,count:0,
+              detail:'Consulta acotada; proveedor interrumpido: '+
+                (error instanceof Error?error.message.slice(0,130):'sin respuesta'),
+            }]}
+          }
           return{
             quotes:result.quotes.map(q=>({...q,sportKey:args.sportKey,
               source:'ESPN '+q.endpointSource+' (sin clave)'})),
@@ -1682,8 +1695,9 @@ export function apply(ctx: Context): void {
       // An ESPN eventId must NOT suppress authorized alternative providers.
       // They retain their own IDs; market identity is verified separately.
       const exactFallback=args.sourcePolicy==='all'&&args.eventId&&args.date
-        ?await exactAlternativeOdds(args.sportKey,args.eventId,args.date,
-          args.markets??'h2h',env,fetch,observedAt):null
+        ?await withNhlDeadline(signal=>exactAlternativeOdds(
+          args.sportKey,args.eventId,args.date,args.markets??'h2h',
+          env,nhlAbortableFetch(signal),observedAt),20_000).catch(()=>null):null
       const extraQuotes=(exactFallback?.quotes??[]).map(q=>({
         ...q,providerEventId:q.eventId,espnEventId:args.eventId,
         source:q.source+' · coincidente con evento ESPN',
