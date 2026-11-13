@@ -277,7 +277,8 @@ function dashboard(d:Omit<HockeyDossier,'uiBlock'>):HockeyDossier['uiBlock']{
 }
 /** Investigate only a future NHL game ID appearing in official same-day slate. */
 export async function investigateNhl(date:string,gameId:string,fetcher:typeof fetch=fetch,
-  now=Date.now(),quotes:MarketOutcome[]=[],maxSkaters=8):Promise<HockeyDossier>{
+  now=Date.now(),quotes:MarketOutcome[]|Promise<MarketOutcome[]>=[],maxSkaters=8,
+  deadlineAt=Number.POSITIVE_INFINITY):Promise<HockeyDossier>{
   if(!id(gameId)||!Number.isSafeInteger(maxSkaters)||maxSkaters<1||maxSkaters>15)
     throw Error('Juego o límite de jugadores inválido')
   const slate=await nhlSlate(date,fetcher,now),fixture=slate.games.find(g=>g.id===gameId)
@@ -374,6 +375,9 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
   let next=0
   await Promise.all(Array.from({length:Math.min(3,selected.length)},async()=>{
     while(next<selected.length){
+      // Stop launching optional player histories once the chat budget is spent.
+      // Still return the team/goalie evidence already collected.
+      if(Date.now()>=deadlineAt)break
       const p=selected[next++]!
       // ESPN and NHL player IDs belong to different namespaces.
       if(p.idProvider==='ESPN')continue
@@ -437,7 +441,7 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
     'P1: contrastar portero confirmado, tiros 5v5, forecheck y ritmo de cambios.',
     'P2: analizar unidades reales PP/PK, tiros de alto peligro y fatiga defensiva.',
     'P3: empty-net, goalie pulled, empate a 60, OT y shootout según torneo y casa.']
-  const markets=quotedMarkets(fixture,quotes,now)
+  const markets=quotedMarkets(fixture,await quotes,now)
   const ready=players.home.length>=10&&players.away.length>=10&&
     goalies.home.length>0&&goalies.away.length>0
   const dossier:Omit<HockeyDossier,'uiBlock'>={fixture,checkedAt:new Date(now).toISOString(),
