@@ -1482,6 +1482,16 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             </article>)}
           </div>
         </section>}
+        {p.pricePreview?.length?<details className={css.sportsTicketReason}
+          aria-label="Alternativas sin selección final">
+          <summary>Otros partidos verificados · {p.pricePreview.length} en investigación</summary>
+          <ul>{p.pricePreview.map((item,i)=>isRecord(item)?<li key={i}>
+            <strong>{String(item.away)} vs {String(item.home)}</strong>
+            <span> · {String(item.sport).toUpperCase()} / {String(item.league)}</span>
+            {Array.isArray(item.notes)&&item.notes.length>0&&
+              <small> · {item.notes.slice(0,2).join(' · ')}</small>}
+          </li>:null)}</ul>
+        </details>:null}
         {p.chatNarrative?.length? <section className={css.sportsTicketNarrative}
           aria-label="Justificación de Kira para cada pata">
           <h4>Kira · Por qué elegí cada selección</h4>
