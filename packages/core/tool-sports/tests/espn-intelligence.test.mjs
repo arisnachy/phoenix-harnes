@@ -36,8 +36,9 @@ test('team explorer produces responsive cards with only actual roster, news, log
   assert.ok(data.sections.some(s=>s.heading==='Noticias del equipo'&&s.items[0].href?.startsWith('https://www.espn.com/')))
   assert.ok(urls.some(u=>u.includes('/athletes/991/stats')))
   assert.ok(urls.some(u=>u.includes('/athletes/991/gamelog')))
-  // Team overview uses bounded direct stats/gamelog; situational splits belong to the player view.
-  assert.ok(!urls.some(u=>u.includes('/athletes/991/splits')))
+  // Direct team evidence may include situational splits; only roster-verified IDs are queried.
+  assert.ok(urls.some(u=>u.includes('/athletes/991/splits')))
+  assert.ok(!urls.some(u=>u.includes('/athletes/990/')))
   assert.equal(data.sources.filter(s=>s.status==='available').length,4)
   assert.ok(data.sections.some(s=>s.heading.includes('Disponibilidad')&&s.items[0].value==='Day-to-day'))
 })
