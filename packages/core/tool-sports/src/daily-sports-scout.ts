@@ -88,7 +88,8 @@ export async function scoutDailySports(
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
   onlySports:readonly string[]|undefined=undefined,
 ):Promise<{date:string,checkedAt:string,events:DailySportsEvent[],
-  totalEligible:number,coverage:DailySportsCoverage[],
+  totalEligible:number;truncated:boolean;eligibleBySport:Record<string,number>;
+  coverage:DailySportsCoverage[],
   diagnostics:{elapsedMs:number;requestTimeoutMs:number;requestedPartitions:number;
     partialLeagues:number;unavailableLeagues:number;cachedPartitions:number},
   warning:string}>{
