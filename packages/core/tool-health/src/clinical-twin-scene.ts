@@ -112,7 +112,9 @@ export function planClinicalTwinScene(input:ClinicalTwinSceneInput){
   // an LLM claim of source review is not a registered patient lesion mask.
   const hasLocation=sourceLocation.length>0&&affectedStructure.length>0
   const view=familyView(study.family)
+  const secondarySource=sourceKind==='report'||sourceKind==='pdf'
   const decision=!sourceReady?'BLOCK_SOURCE_NOT_REVIEWED':
+    secondarySource&&evidenceKind==='observed'?'BLOCK_PRIMARY_EVIDENCE_REQUIRED':
     !compatible?'BLOCK_SOURCE_MODALITY_MISMATCH':
     !hasFinding?'BLOCK_NO_SOURCE_FINDING':
       !hasLocation?'NEEDS_ANATOMIC_LOCALIZATION':'ILLUSTRATION_SPEC_READY'
@@ -121,7 +123,7 @@ export function planClinicalTwinScene(input:ClinicalTwinSceneInput){
     &&!['ecg','laboratory','hematology','microbiology','molecular','cytology','histopathology'].includes(study.family)
     &&evidenceKind!=='hypothesis'
   const neuralAllowed=permitted&&neuralFinding.length>0&&evidenceKind!=='hypothesis'
-  const evidenceLabel=evidenceKind==='observed'?'hallazgo descrito tras revisión de la fuente':
+  const evidenceLabel=evidenceKind==='observed'?'hallazgo observado en fuente primaria declarada':
     evidenceKind==='reported'?'hallazgo atribuido al informe':
     evidenceKind==='hypothesis'?'HIPÓTESIS NO CONFIRMADA':'sin hallazgos'
   const annotations=permitted?[
@@ -169,6 +171,7 @@ export function planClinicalTwinScene(input:ClinicalTwinSceneInput){
     requiresClinicianReview:true,renderPrompt:prompt,forbiddenClaims:modalityRestrictions,
     nextAction:!sourceReady?'Inspeccionar realmente el estudio original con un motor compatible.':
       !compatible?'Corregir la incompatibilidad entre modalidad y tipo de fuente; no generar una lesión.':
+      secondarySource&&evidenceKind==='observed'?'Clasificar los hallazgos del informe/PDF como reportados; no afirmar inspección primaria.':
       !hasFinding?'Documentar hallazgos objetivos y su procedencia.':
       !hasLocation?'Identificar estructura y localización antes de señalar una lesión.':
       'Ejecutar generador raster disponible y comprobar su salida visual; marcar como atlas docente y cotejar anatomía, rótulos y lesión con la fuente.',
