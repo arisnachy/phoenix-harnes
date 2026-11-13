@@ -71,6 +71,8 @@ import {researchBasketballCase} from './basketball-evidence-dossier.ts'
 
 import {nflSlate,investigateNfl} from './nfl-evidence-research.ts'
 import {nhlSlate,investigateNhl} from './nhl-evidence-research.ts'
+import {compactNhlChatDossier,nhlAbortableFetch,withNhlDeadline,
+  NHL_CHAT_ODDS_BUDGET_MS,NHL_CHAT_RESEARCH_BUDGET_MS} from './nhl-chat-performance.ts'
 
 import {tennisSlate,investigateTennis,type TennisTour} from './tennis-evidence-research.ts'
 
@@ -1649,10 +1651,23 @@ export function apply(ctx: Context): void {
             quotes:[],observations:[],sources:[{provider:'ESPN Site/Core',status:'unconfigured' as const,
               count:0,detail:'ESPN deshabilitado por el operador'}],
           }
-          const result=await fetchPublicEspnOddsDetailed(args.sportKey,args.markets??'h2h',
-            <T>(url:string)=>getFeed<T>(url),
-            {now:observedAt,cache:true,...(args.eventId?{eventId:args.eventId}:{}),
-              ...(args.date?{date:args.date}:{}),days:args.date?1:args.eventId?7:3})
+          let result:Awaited<ReturnType<typeof fetchPublicEspnOddsDetailed>>
+          try{
+            // One NHL event requires a bounded ESPN lookup. Without a deadline,
+            // parallel NHL investigate + odds calls can retain the agent turn.
+            result=await withNhlDeadline(signal=>fetchPublicEspnOddsDetailed(
+              args.sportKey,args.markets??'h2h',
+              <T>(url:string)=>getFeed<T>(url,nhlAbortableFetch(signal)),
+              {now:observedAt,cache:true,...(args.eventId?{eventId:args.eventId}:{}),
+                ...(args.date?{date:args.date}:{}),days:args.date?1:args.eventId?7:3}),
+              args.sportKey==='icehockey_nhl'?18_000:35_000)
+          }catch(error){
+            return{quotes:[],observations:[],sources:[{
+              provider:'ESPN Site/Core',status:'error' as const,count:0,
+              detail:'Consulta acotada; proveedor interrumpido: '+
+                (error instanceof Error?error.message.slice(0,130):'sin respuesta'),
+            }]}
+          }
           return{
             quotes:result.quotes.map(q=>({...q,sportKey:args.sportKey,
               source:'ESPN '+q.endpointSource+' (sin clave)'})),
@@ -1680,8 +1695,9 @@ export function apply(ctx: Context): void {
       // An ESPN eventId must NOT suppress authorized alternative providers.
       // They retain their own IDs; market identity is verified separately.
       const exactFallback=args.sourcePolicy==='all'&&args.eventId&&args.date
-        ?await exactAlternativeOdds(args.sportKey,args.eventId,args.date,
-          args.markets??'h2h',env,fetch,observedAt):null
+        ?await withNhlDeadline(signal=>exactAlternativeOdds(
+          args.sportKey,args.eventId!,args.date!,args.markets??'h2h',
+          env,nhlAbortableFetch(signal),observedAt),20_000).catch(()=>null):null
       const extraQuotes=(exactFallback?.quotes??[]).map(q=>({
         ...q,providerEventId:q.eventId,espnEventId:args.eventId,
         source:q.source+' · coincidente con evento ESPN',
@@ -2554,21 +2570,70 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const now=Date.now(),env=await sportsEnv(ctx)
-      let quotes:Awaited<ReturnType<typeof marketOddsDetailed>>['quotes']=[]
-      let oddsSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
-      if(args.includeOdds!==false){
-        try{
-          const r=await marketOddsDetailed('icehockey_nhl','h2h,spreads,totals',env,fetch,now)
-          quotes=r.quotes;oddsSources=r.sources
-        }catch{/* Source absent is not a synthetic quote. */}
+      const started=Date.now(),now=started,env=await sportsEnv(ctx)
+      // Ticket-research calls need winner h2h prices. A full OddsHarvester
+      // scrape takes up to 65 seconds per market and must never gate NHL facts.
+      // The separate keyless tool remains available for explicit deep scraping.
+      const fastEnv={...env,PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'}
+      const oddsPromise=args.includeOdds===false?
+        Promise.resolve({quotes:[],sources:[],observations:[]} as
+          Awaited<ReturnType<typeof marketOddsDetailed>>):
+        withNhlDeadline(signal=>marketOddsDetailed('icehockey_nhl','h2h',
+          fastEnv,nhlAbortableFetch(signal),now),NHL_CHAT_ODDS_BUDGET_MS)
+          .catch(error=>({
+            quotes:[],observations:[],sources:[{
+              provider:'NHL odds',status:'error' as const,count:0,
+              detail:error instanceof Error?error.message.slice(0,160):'Cuotas agotaron el plazo',
+            }],
+          }))
+      try{
+        // Odds and roster/statistics run IN PARALLEL, not as two sequential gates.
+        // Expensive individual game logs stop within the voluntary budget;
+        // the hard deadline also cancels remaining HTTP through AbortSignal.
+        const d=await withNhlDeadline(signal=>
+          investigateNhl(args.date,args.gameId,nhlAbortableFetch(signal),now,
+            oddsPromise.then(r=>r.quotes),args.maxSkaters??6,
+            Date.now()+35_000),NHL_CHAT_RESEARCH_BUDGET_MS)
+        const oddsSources=(await oddsPromise).sources
+        return JSON.stringify({...compactNhlChatDossier(d),
+          status:'researched',durationMs:Date.now()-started,
+          sourceAudit:{
+            verified:d.sources.filter(x=>x.status==='verified').length,
+            failures:d.sources.filter(x=>x.status==='error')
+              .slice(0,6).map(x=>({...x,error:x.error?.slice(0,110)})),
+            sampleUrls:d.sources.filter(x=>x.status==='verified')
+              .slice(0,8).map(x=>x.url),
+          },
+          oddsSources:oddsSources.map(x=>({...x,detail:x.detail.slice(0,180)})),
+          instruction:'Expediente NHL resumido para evitar bloqueos de contexto. '+
+            'Porteros y líneas son candidatos, NO titulares confirmados. '+
+            'Las cuotas h2h son precios observados, no aceptación de casa. '+
+            'Contrastar lesiones y mercado del evento exacto; continuar al siguiente partido '+
+            'sin repetir investigaciones largas si falta una fuente.',
+        })
+      }catch(error){
+        const message=error instanceof Error?error.message.slice(0,180):'Investigación no disponible'
+        return JSON.stringify({status:'research-timeout',date:args.date,
+          gameId:args.gameId,durationMs:Date.now()-started,priced:false,
+          eligibleForTicket:false,goalieConfirmed:false,
+          error:message,
+          uiBlock:{component:'sports_espn_dashboard',version:1,props:{
+            view:'event',title:'PHOENIX NHL · investigación limitada por tiempo',
+            subtitle:'La investigación continúa con otros encuentros',
+            source:'NHL/ESPN · plazo de seguridad',
+            checkedAt:new Date().toISOString(),
+            sections:[{heading:'Estado del encuentro',kind:'list',items:[
+              {label:'NHL gameId',value:args.gameId},
+              {label:'Estado',value:'Tiempo agotado; sin ganador ni portero confirmado'},
+            ]}],
+            note:'Se interrumpió la investigación costosa para evitar bloquear a Kira. '+
+              'Los datos no verificados no deben convertirse en selección.',
+          }},
+          instruction:'No volver a invocar en bucle la investigación NHL costosa. '+
+            'Recuperar únicamente el marcador/mercado exacto mediante ESPN si falta, '+
+            'y continuar otros candidatos del ticket.',
+        })
       }
-      const d=await investigateNhl(args.date,args.gameId,fetch,now,quotes,args.maxSkaters??8)
-      return JSON.stringify({...d,sources:undefined,
-        sourceAudit:{verified:d.sources.filter(s=>s.status==='verified').length,
-          failures:d.sources.filter(s=>s.status==='error').slice(0,20)},
-        oddsSources,
-        instruction:'Kira: no afirmar portero confirmado, lineup fijo, duelo real, xG/GSAx ni valor esperado sin fuente. Examina porteros y skaters versus el rival, PP/PK, descanso y lesiones pendientes. Distingue mercados 60 minutos, OT y shootout; abstenerse si falta evidencia.'})
     },
     presentCall:()=>({card:'generic',title:'Investigar NHL · porteros y mercados',kind:'read' as const}),
   }))
