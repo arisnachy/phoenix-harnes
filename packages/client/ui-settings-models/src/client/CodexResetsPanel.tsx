@@ -22,6 +22,7 @@ export interface CodexResetSnapshot {
   readonly checkedAt: number
 }
 
+/** The Host RPC adapter used by the reset card. */
 export interface CodexResetClient {
   state(): Promise<CodexResetSnapshot>
   redeem(request: { idempotencyKey: string; creditId?: string }): Promise<{
@@ -30,6 +31,7 @@ export interface CodexResetClient {
   }>
 }
 
+/** Native reset card dependency injection. */
 interface CodexResetsPanelProps {
   t: (key: ModelsKey) => string
   client?: CodexResetClient
