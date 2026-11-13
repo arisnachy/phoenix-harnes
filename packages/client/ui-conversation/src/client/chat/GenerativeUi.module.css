@@ -638,3 +638,37 @@
 }
 .sportsTicketNarrativeSources strong{font-weight:700}
 .sportsTicketNarrativeSources a{overflow-wrap:anywhere}
+
+
+/* Pearl Light sports scoreboard: a premium, restrained live card across leagues. */
+.sportsCard.sportsGameCompact{
+  width:100%;max-width:830px;padding:14px 16px;border-radius:17px;
+  border:1px solid var(--dsw-alias-border-subtle,rgba(111,128,154,.23));
+  background:var(--dsw-alias-bg-primary,#fff);
+  box-shadow:0 5px 22px rgba(35,56,86,.065);
+}
+.sportsGameCompact .sportsHeadline{align-items:center;padding-bottom:3px}
+.sportsGameCompact .sportsHeadline h3{font-size:clamp(15px,2vw,19px);font-weight:820;letter-spacing:-.015em}
+.sportsGameCompact .sportsStatus{padding:5px 10px;border-radius:999px}
+.sportsGameCompact .sportsSlateMatch{
+  margin-top:8px;display:grid;gap:5px;border-radius:12px;
+  padding:9px 11px;background:var(--dsw-alias-interactive-bg-hover,rgba(49,96,164,.038));
+  border:1px solid var(--dsw-alias-border-subtle,rgba(110,130,153,.13));
+}
+.sportsGameCompact .sportsSlateMatch>div{
+  display:flex;align-items:center;gap:10px;min-width:0;
+}
+.sportsGameCompact .sportsSlateMatch>div>span{flex:1;min-width:0}
+.sportsGameCompact .sportsSlateMatch>div>b{
+  margin-left:auto;font-size:clamp(23px,3.2vw,31px);line-height:1.1;font-weight:850;
+  font-variant-numeric:tabular-nums;letter-spacing:-.025em
+}
+.sportsGameCompact .sportsSlateMatch .sportsPortrait{width:34px;height:34px;flex-shrink:0}
+.sportsGameCompact .sportsSlateMatch strong{font-size:12px}
+.sportsGameCompact .sportsExtra{margin-top:8px;padding-top:8px}
+.sportsGameCompact .sportsSourceBar{margin-top:8px;padding-top:8px}
+@media(max-width:520px){
+  .sportsCard.sportsGameCompact{padding:11px 12px;border-radius:14px}
+  .sportsGameCompact .sportsSlateMatch{padding:8px}
+  .sportsGameCompact .sportsSlateMatch>div>b{font-size:24px}
+}
