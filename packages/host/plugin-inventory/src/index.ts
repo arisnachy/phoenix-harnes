@@ -29,7 +29,6 @@ import { readOpenClawRouting, setOpenClawRoutingPermission, setOpenClawPluginEna
 import { prepareLocalOpenClawGateway } from './openclaw-gateway-setup.ts'
 import { readClawHubCatalog } from './clawhub-catalog.ts'
 import { clawHubInstall, clawHubState, prepareClawHubCli } from './clawhub-marketplace.ts'
-import { readCodexResetState, consumeCodexReset } from '@phoenix-ai/dsh-subagent-codex'
 import { TokenTelemetryCollector } from './telemetry.ts'
 import { PluginEnablementStore } from './plugin-enablement.ts'
 import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
@@ -374,21 +373,23 @@ export class PluginInventoryGateway extends TypertRemoteService {
   /** Read earned Codex reset availability from the official local account bridge. */
   @Remote('codexResetState')
   async codexResetState(): Promise<CodexResetState> {
-    if (this.ctx.get('subprocess') === undefined) {
-      throw new Error('Codex reset controls require a configured local subprocess service')
-    }
-    return readCodexResetState(this.ctx, { env: {}, disposeGraceMs: 3_000 })
+    const service = (this.ctx.get as (name: string) => unknown)('codexResetControl') as
+      | { state(): Promise<CodexResetState> }
+      | undefined
+    if (service === undefined) throw new Error('Native Codex reset service is unavailable')
+    return service.state()
   }
 
   /** Redeem only an explicitly confirmed UI attempt; never expose ChatGPT tokens. */
   @Remote('codexResetRedeem')
   async codexResetRedeem(request: CodexResetRequest): Promise<CodexResetReceipt> {
-    if (this.ctx.get('subprocess') === undefined) {
-      throw new Error('Codex reset controls require a configured local subprocess service')
-    }
+    const service = (this.ctx.get as (name: string) => unknown)('codexResetControl') as
+      | { redeem(request: CodexResetRequest): Promise<CodexResetReceipt> }
+      | undefined
+    if (service === undefined) throw new Error('Native Codex reset service is unavailable')
     const existing = this.codexResetInFlight.get(request.idempotencyKey)
     if (existing !== undefined) return existing
-    const pending = consumeCodexReset(this.ctx, { env: {}, disposeGraceMs: 3_000 }, request)
+    const pending = service.redeem(request)
     this.codexResetInFlight.set(request.idempotencyKey, pending)
     try {
       return await pending
