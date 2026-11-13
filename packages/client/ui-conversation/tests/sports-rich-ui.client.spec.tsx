@@ -595,6 +595,19 @@ describe('Actual PHOENIX priced-ticket producer and native renderer contract',()
     }}
     expect(parseGenerativeUiBlock(partial)).not.toBeNull()
   })
+  it('shows native missing-leg slots and the real number of researched prices',()=>{
+    const partial={...base,props:{...base.props,presentationStatus:undefined,
+      dataCounts:{...base.props.dataCounts,quotedLegs:2},
+      note:'TICKET INCOMPLETO · faltan 4 patas y oferta de casa',
+    }}
+    const card=parseGenerativeUiBlock(partial)
+    expect(card).not.toBeNull()
+    if(!card)throw Error('Partial ticket card rejected')
+    render(<GenerativeUi block={card}/>)
+    expect(screen.getByText(/2 \/ 5 selecciones con precio/)).toBeTruthy()
+    expect(screen.getByRole('region',{name:'Selecciones pendientes'})).toBeTruthy()
+    expect(screen.getByLabelText('Pata 5 pendiente')).toBeTruthy()
+  })
   it('rejects unknown HTML fields, oversized previews and poisoned decision counts',()=>{
     expect(parseGenerativeUiBlock({...base,props:{...base.props,
       html:'<script>alert(1)</script>'}})).toBeNull()

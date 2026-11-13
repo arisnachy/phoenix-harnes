@@ -32,6 +32,22 @@ test('selects two qualified sports ahead of redundant same-sport candidates',()=
   assert.equal(result.diversitySatisfied,true)
   assert.equal(result.chosen[1].pick.sport,'soccer')
 })
+test('a comparable NBA candidate displaces the fourth hockey leg, but weak alternatives do not',()=>{
+  const rows=[
+    ...[0.95,0.94,0.93,0.92,0.91].map((rank,i)=>({
+      rank,pick:{sport:'hockey',league:'nhl',eventId:'h'+i},
+    })),
+    {rank:0.86,pick:{sport:'basketball',league:'nba',eventId:'n1'}},
+    {rank:0.84,pick:{sport:'football',league:'nfl',eventId:'f1'}},
+  ]
+  const mixed=diversifiedSportsPicks(rows,5,true)
+  assert.equal(mixed.chosen.length,5)
+  assert.ok(mixed.chosen.filter(x=>x.pick.sport==='hockey').length<=3)
+  assert.ok(mixed.chosen.some(x=>x.pick.eventId==='f1'))
+  const weak=diversifiedSportsPicks(rows.map(x=>x.pick.sport==='football'?{
+    ...x,rank:0.01}:x),5,true)
+  assert.equal(weak.chosen.length,5)
+})
 test('all-hockey cannot be mislabeled complete for multi-sport request',()=>{
   const rows=Array.from({length:5},(_,i)=>({
     rank:1-i/10,pick:{sport:'hockey',league:'nhl',eventId:String(i)},

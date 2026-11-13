@@ -50,6 +50,39 @@ const providerKeys:Readonly<Record<string,string>>={
 export const dailyOddsSportKey=(sport:string,league:string):string|null=>
   providerKeys[sport+'|'+league]??null
 
+/** Audit all active quote-supported leagues before deciding which sports to investigate.
+ * A league with more verified games receives inventory priority, but EVERY
+ * active sport gets a first pass. This plans research, not betting picks.
+ */
+export function planDailyOddsLeagueKeys(fixtures:readonly Fixture[],limit=18):string[]{
+  if(!Number.isInteger(limit)||limit<1||limit>32)
+    throw Error('Límite de 1 a 32 ligas de cuotas')
+  const leagues=new Map<string,{key:string;sport:string;games:number;first:string}>()
+  for(const fixture of fixtures){
+    const key=dailyOddsSportKey(fixture.sport,fixture.league)
+    if(!key)continue
+    const entry=leagues.get(key)??{key,sport:fixture.sport,games:0,first:fixture.kickoff}
+    entry.games++
+    if(fixture.kickoff<entry.first)entry.first=fixture.kickoff
+    leagues.set(key,entry)
+  }
+  const ranked=[...leagues.values()].sort((a,b)=>
+    b.games-a.games||a.first.localeCompare(b.first)||a.key.localeCompare(b.key))
+  const chosen:string[]=[]
+  const represented=new Set<string>()
+  for(const row of ranked){
+    if(represented.has(row.sport))continue
+    chosen.push(row.key);represented.add(row.sport)
+    if(chosen.length===limit)return chosen
+  }
+  for(const row of ranked){
+    if(chosen.length>=limit)break
+    if(!chosen.includes(row.key))chosen.push(row.key)
+  }
+  return chosen
+}
+
+
 /** Winner-only analysis must not ask free bookmakers for premium spreads/totals.
  * The absence of a bookmaker response does not affect fixture research.
  */
@@ -209,10 +242,13 @@ export function shortlistDailyMarkets(
     const marketPriority:Record<DailyMarketCandidate['market'],number>={
       h2h:0,totals:1,spreads:2,
     }
+    // Provider fetch order is not sporting merit. Audit moneylines first,
+    // then paired/fresh market favorites; specialist evidence decides later.
     const sorted=[...rows].sort((a,b)=>
-      b.observedAt.localeCompare(a.observedAt)||
-      a.fixture.localeCompare(b.fixture)||
-      marketPriority[a.market]-marketPriority[b.market])
+      Number(a.requiresRecheck)-Number(b.requiresRecheck)||
+      marketPriority[a.market]-marketPriority[b.market]||
+      b.marketNoVigShare-a.marketNoVigShare||
+      a.kickoff.localeCompare(b.kickoff)||a.fixture.localeCompare(b.fixture))
     const used=new Set<string>(),chosen:DailyMarketCandidate[]=[]
     const take=(p:DailyMarketCandidate)=>{
       const event=p.sport+'|'+p.league+'|'+p.espnEventId
