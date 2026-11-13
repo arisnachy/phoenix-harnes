@@ -29,6 +29,7 @@ import { readOpenClawRouting, setOpenClawRoutingPermission, setOpenClawPluginEna
 import { prepareLocalOpenClawGateway } from './openclaw-gateway-setup.ts'
 import { readClawHubCatalog } from './clawhub-catalog.ts'
 import { clawHubInstall, clawHubState, prepareClawHubCli } from './clawhub-marketplace.ts'
+import { readCodexResetState, consumeCodexReset } from '@phoenix-ai/dsh-subagent-codex'
 import { TokenTelemetryCollector } from './telemetry.ts'
 import { PluginEnablementStore } from './plugin-enablement.ts'
 import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
@@ -49,6 +50,7 @@ import {
 } from './mcp-managed.ts'
 import type {
   BlenderLocalState,
+  CodexResetState, CodexResetRequest, CodexResetReceipt,
   AnatomyConnectorSnapshot, AnatomyConnectorInstallRequest, AnatomyConnectorInstallReceipt,
   ChatGptWebSnapshot,
   BusinessLibrarySnapshot,
@@ -164,6 +166,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
   private readonly telegram: TelegramInbox
   private readonly telemetry: TokenTelemetryCollector
   private readonly pluginPreferences = new PluginEnablementStore()
+  private readonly codexResetInFlight = new Map<string, Promise<CodexResetReceipt>>()
 
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
@@ -365,6 +368,33 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('businessLibrary')
   async businessLibrary(): Promise<BusinessLibrarySnapshot> {
     return readBusinessLibrarySnapshot()
+  }
+
+
+  /** Read earned Codex reset availability from the official local account bridge. */
+  @Remote('codexResetState')
+  async codexResetState(): Promise<CodexResetState> {
+    if (this.ctx.get('subprocess') === undefined) {
+      throw new Error('Codex reset controls require a configured local subprocess service')
+    }
+    return readCodexResetState(this.ctx, { env: {}, disposeGraceMs: 3_000 })
+  }
+
+  /** Redeem only an explicitly confirmed UI attempt; never expose ChatGPT tokens. */
+  @Remote('codexResetRedeem')
+  async codexResetRedeem(request: CodexResetRequest): Promise<CodexResetReceipt> {
+    if (this.ctx.get('subprocess') === undefined) {
+      throw new Error('Codex reset controls require a configured local subprocess service')
+    }
+    const existing = this.codexResetInFlight.get(request.idempotencyKey)
+    if (existing !== undefined) return existing
+    const pending = consumeCodexReset(this.ctx, { env: {}, disposeGraceMs: 3_000 }, request)
+    this.codexResetInFlight.set(request.idempotencyKey, pending)
+    try {
+      return await pending
+    } finally {
+      this.codexResetInFlight.delete(request.idempotencyKey)
+    }
   }
 
   @Remote('localModelState')
