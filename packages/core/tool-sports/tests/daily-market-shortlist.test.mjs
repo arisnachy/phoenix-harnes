@@ -1,6 +1,21 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets,espnQuoteNeedsRecheck} from '../src/daily-market-shortlist.ts'
+import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets,espnQuoteNeedsRecheck,planDailyOddsLeagueKeys} from '../src/daily-market-shortlist.ts'
+
+test('quote discovery gives each active sport a first-pass league before extra soccer leagues',()=>{
+  const games=[
+    ...Array.from({length:12},(_,i)=>({sport:'soccer',league:'eng.1',kickoff:'2026-11-13T18:00:00Z'})),
+    ...Array.from({length:10},(_,i)=>({sport:'soccer',league:'esp.1',kickoff:'2026-11-13T19:00:00Z'})),
+    {sport:'basketball',league:'nba',kickoff:'2026-11-13T23:00:00Z'},
+    {sport:'hockey',league:'nhl',kickoff:'2026-11-13T23:00:00Z'},
+    {sport:'football',league:'nfl',kickoff:'2026-11-13T23:00:00Z'},
+  ]
+  const keys=planDailyOddsLeagueKeys(games,4)
+  assert.deepEqual(new Set(keys),new Set(['soccer_epl','basketball_nba',
+    'icehockey_nhl','americanfootball_nfl']))
+  assert.equal(planDailyOddsLeagueKeys(games,5).length,5)
+  assert.throws(()=>planDailyOddsLeagueKeys(games,33),/1 a 32/)
+})
 
 const now=Date.parse('2026-11-06T17:00:00Z')
 const kickoff='2026-11-07T00:00:00Z'
