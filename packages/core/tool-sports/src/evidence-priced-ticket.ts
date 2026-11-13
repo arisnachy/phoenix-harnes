@@ -339,7 +339,10 @@ export async function evidencePricedTicket(
         keylessOdds(route.sport,market,day,env,now),6_000):[]
     return {category,quotes}
   }))
-  const keyless=sources.flatMap(s=>s.status==='fulfilled'?s.value.quotes:[])
+  // These prices were fetched during this request: observation time is valid
+  // even when the provider omits its last-change timestamp.
+  const keyless=sources.flatMap(s=>s.status==='fulfilled'?
+    s.value.quotes.map(q=>({...q,observedAt:q.observedAt??new Date(now).toISOString()})):[])
   // Use the existing public ESPN and optional authenticated Odds API adapters
   // as a real second LIVE source, never the two historical GitHub archives.
   // Explicit double-chance selections are only supplied by a verified 1X/X2
