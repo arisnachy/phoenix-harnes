@@ -59,14 +59,17 @@ export function quoteSideNoVig(
     offered.market==='1x2'?3:0
   if(!outcomes)return null
   const isEspn=offered.source.startsWith('ESPN ')
-  const at=Date.parse(isEspn?(offered.observedAt??''):offered.updatedAt)
+  const observed=Date.parse(offered.observedAt??'')
+  const at=Number.isFinite(observed)?observed:Date.parse(offered.updatedAt)
   const kickoff=Date.parse(offered.time)
   if(!Number.isFinite(at)||!Number.isFinite(kickoff)||at>now||kickoff<=now||
-    (isEspn&&now-at>15*60_000))return null
+    (Number.isFinite(observed)?now-at>15*60_000:isEspn))return null
   const validLabels=[normal(offered.home),normal(offered.away),
     ...(outcomes===3?['draw']:[])]
   const selected=quotes.filter(q=>{
-    const stamp=Date.parse(isEspn?(q.observedAt??''):q.updatedAt),start=Date.parse(q.time)
+    const observation=Date.parse(q.observedAt??'')
+    const stamp=Number.isFinite(observation)?observation:Date.parse(q.updatedAt)
+    const start=Date.parse(q.time)
     const selection=normal(q.selection)
     return q.eventId===offered.eventId&&q.bookmaker===offered.bookmaker&&
       q.market===offered.market&&q.source===offered.source&&

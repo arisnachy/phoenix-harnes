@@ -29,6 +29,11 @@ export function explainOddsEligibility(q:QuoteGateInput,now=Date.now()):QuoteGat
     return Number.isFinite(observed)&&observed<=now&&now-observed<=15*60_000?
       'espn_observed':'espn_observation_missing_or_old'
   }
+  // A fresh provider read is sufficient; the bookmaker last-change time is optional.
+  const observed=Date.parse(q.observedAt??'')
+  if(Number.isFinite(observed))return observed<=now&&now-observed<=15*60_000?
+    'provider_recent':'provider_timestamp_missing_or_old'
+  // Compatible fallback for providers supplying only a recent last-change time.
   return Number.isFinite(updated)&&updated<=now&&now-updated<=60*60_000?
     'provider_recent':'provider_timestamp_missing_or_old'
 }

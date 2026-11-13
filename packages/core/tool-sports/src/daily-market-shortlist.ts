@@ -105,8 +105,9 @@ const normal=(value:string):string=>{
 }
 const isDraw=(name:string)=>/^(draw|empate|tie|x)$/u.test(name.toLowerCase())
 const quoteClock=(quote:MarketOutcome):number=>{
-  const espn=quote.source?.startsWith('ESPN')===true
-  return Date.parse(espn&&quote.observedAt?quote.observedAt:quote.updatedAt)
+  // Query observation time takes precedence over optional bookmaker last update.
+  const observed=Date.parse(quote.observedAt??'')
+  return Number.isFinite(observed)?observed:Date.parse(quote.updatedAt)
 }
 /** A previous ESPN read may remain visible, but must be refetched by exact
  * event ID before an automatically issued complete research ticket.
@@ -144,11 +145,9 @@ export function shortlistDailyMarkets(
   const matchedGames=new Set<string>()
   for(const quote of quotes.slice(0,2000)){
     const time=Date.parse(quote.timeIso??quote.time),at=quoteClock(quote)
-    const espnObservation=quote.source?.startsWith('ESPN')===true&&
-      Number.isFinite(Date.parse(quote.observedAt??''))
     // Never age out a published ESPN observation solely because it is old.
     // Old observations are explicitly marked for a live recheck downstream.
-    const expired=!espnObservation&&now-at>60*60_000
+    const expired=quote.source?.startsWith('ESPN')!==true&&now-at>60*60_000
     if(!quote.bookmaker?.trim()||!quote.source?.trim()||
       !['h2h','spreads','totals'].includes(quote.market)||
       !Number.isFinite(quote.price)||quote.price<=1||quote.price>1000||

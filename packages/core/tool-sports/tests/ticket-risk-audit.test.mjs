@@ -42,6 +42,16 @@ test('no-vig market share requires BOTH live sides at same book and event',()=>{
   assert.equal(quoteSideNoVig(home,[home,{...away,eventId:'101'}],now),null)
   assert.equal(quoteSideNoVig(home,[home,{...away,updatedAt:'2026-11-08T18:50:00Z'}],now),null)
 })
+test('same-book two-sided markets use recent observation time without provider updatedAt',()=>{
+  const now=Date.parse('2026-11-08T21:00:00Z')
+  const home={eventId:'300',bookmaker:'Book',market:'h2h',selection:'Home',
+    price:1.65,home:'Home',away:'Away',time:'2026-11-08T23:00:00Z',
+    updatedAt:'No indicada',observedAt:'2026-11-08T20:55:00Z',source:'The Odds API'}
+  const away={...home,selection:'Away',price:2.35}
+  assert.equal(quoteSideNoVig(home,[home,away],now),
+    Number(((1/1.65)/(1/1.65+1/2.35)).toFixed(5)))
+})
+
 test('soccer three way pricing requires a DRAW rather than normalizing a two-way result',()=>{
   const now=Date.parse('2026-11-08T21:00:00Z')
   const base={eventId:'20',bookmaker:'Book',market:'1x2',selection:'Home',

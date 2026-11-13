@@ -35,7 +35,14 @@ test('ESPN observations must be genuinely read during this request, not stale sn
   assert.equal(explainOddsEligibility({...base,observedAt:'2026-11-11T22:00:00Z'},now),
     'espn_observation_missing_or_old')
 })
-test('other odds providers preserve their independent bookmaker timestamp policy',()=>{
+test('newly fetched provider quote is usable without a bookmaker timestamp',()=>{
+  const q={...base,source:'The Odds API',updatedAt:'No indicada por la casa'}
+  assert.equal(explainOddsEligibility(q,now),'provider_recent')
+  assert.equal(eligibleOddsForResearch(q,now),true)
+  assert.equal(explainOddsEligibility({...q,observedAt:'2026-11-11T21:00:00Z'},now),
+    'provider_timestamp_missing_or_old')
+})
+test('other providers retain timestamp fallback without observedAt',()=>{
   const external={...base,source:'The Odds API',updatedAt:'2026-11-12T21:55:00Z',
     observedAt:undefined}
   assert.equal(explainOddsEligibility(external,now),'provider_recent')
