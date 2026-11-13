@@ -21,6 +21,7 @@ import {SportsLeagueBadge} from './SportsLeagueIdentity.tsx'
 import {ForecastTicketScope,ForecastTicketSummary,ForecastTicketLegStatus} from './SportsForecastLive.tsx'
 import {PHOENIX_TICKET_UPDATE,importSportsReceipt,readSportsReceiptGoals,type SportsReceiptFixture} from './SportsTicketAutoLink.ts'
 import { SportsNewsPanel } from './SportsNewsPanel.tsx'
+import { SportsOddsDisplay } from './SportsOddsDisplay.tsx'
 
 const MAX_UI_BLOCKS = 6
 const MAX_TEXT = 1200
@@ -1366,19 +1367,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           </section>}}
       </SportsLiveProvider>
     }
-    case 'sports_odds_card': {
-      const p=block.props
-      return <section className={css.sportsCard} data-generative-ui="sports_odds_card">
-        <header className={css.sportsHeadline}><div><span className={css.sportsKicker}>PHOENIX / CUOTAS OBSERVADAS · CONSULTAR VIGENCIA</span>
-          <h3>{sportsDisplayText(p.title)}</h3>{p.subtitle&&<p>{sportsDisplayText(p.subtitle)}</p>}</div></header>
-        <div className={css.sportsTableScroll}><table className={css.sportsTable}>
-          <thead><tr><th>Partido</th><th>Mercado</th><th>Selección</th><th>Casa</th><th>Cuota decimal</th></tr></thead>
-          <tbody>{p.rows.map((r,i)=><tr key={i}><th>{r.event}</th><td>{r.market}</td>
-            <td>{r.selection}{r.point?' · '+r.point:''}</td><td>{r.bookmaker}</td><td><strong>{r.price}</strong></td>
-          </tr>)}</tbody></table></div>
-        <footer className={css.sportsSourceBar}><small>{sportsDisplayText(p.note)}</small><small>Sin hora de actualización confirmada, las cuotas son referencias, no cotizaciones operables.</small></footer>
-      </section>
-    }
+    case 'sports_odds_card': return <SportsOddsDisplay {...block.props} />
     case 'sports_ticket_bundle_card': {
       return <section data-generative-ui="sports_ticket_bundle_card" aria-label={block.props.title}>
         {block.props.tickets.map(ticket=><SportsTicketLiveTracker key={ticket.ticketReference} props={ticket}/>)}
