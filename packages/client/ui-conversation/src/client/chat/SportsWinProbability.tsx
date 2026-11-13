@@ -210,17 +210,23 @@ export function SportsWinProbability({sport,league,eventId,competitionId,phase,g
   const predictor=valid?state.predictor:null,live=valid?state.live:null
   const home=game?.home??'Local',away=game?.away??'Visitante'
   const stale=!valid||!state.at||Date.now()-state.at>90_000||state.error
-  return <section className={css.wrap} aria-label="Probabilidades deportivas de ESPN">
-    {predictor?<div className={css.panel}>
-      <div className={css.heading}><span>◉ Predictor prepartido</span><small>ESPN · antes del inicio</small></div>
-      <ProbabilityPair value={predictor} home={home} away={away}/>
-    </div>:<div className={css.unavailable}>Predictor prepartido · {valid&&state.at?'No disponible en ESPN':'Consultando ESPN…'}</div>}
-    {currentPhase==='in'&&(live?<div className={css.panel}>
-      <div className={css.heading}><span>● Probabilidad de ganar en vivo</span>
-        <small>{stale?'Última estimación recibida':'ESPN · por jugada'}</small></div>
+  // ESPN does not publish predictor/probabilities consistently across leagues:
+  // suppress missing panels rather than spend half a match tile on a dashed box.
+  if(!predictor&&!live)return null
+  return <section className={css.wrap} aria-label="Probabilidades deportivas observadas en ESPN">
+    {currentPhase==='in'&&live&&<div className={css.panel}>
+      <div className={css.heading}><span>● Victoria en vivo · ESPN</span>
+        <small>{stale?'Último dato':'Por jugada'}</small></div>
       <ProbabilityPair value={live.snapshot} home={home} away={away}/>
-      <Trend history={live.history}/>
-    </div>:<div className={css.unavailable}>Probabilidad en vivo · {valid&&state.at?'ESPN no publicó datos para este juego':'Consultando ESPN…'}</div>)}
-    {valid&&state.at>0&&<small className={css.note}>ESPN · consulta {new Date(state.at).toLocaleTimeString('es-DO',{hour:'2-digit',minute:'2-digit'})} · Probabilidades del modelo; no son cuotas ni garantizan resultados.</small>}
+      {live.history.length>1&&<details className={css.history}>
+        <summary>Ver evolución de probabilidad</summary>
+        <Trend history={live.history}/>
+      </details>}
+    </div>}
+    {predictor&&<div className={css.panel+' '+css.pregame}>
+      <div className={css.heading}><span>◉ Predictor previo · ESPN</span></div>
+      <ProbabilityPair value={predictor} home={home} away={away}/>
+    </div>}
+    {valid&&state.at>0&&<small className={css.note}>ESPN · {new Date(state.at).toLocaleTimeString('es-DO',{hour:'2-digit',minute:'2-digit'})} · Estimaciones, no cuotas.</small>}
   </section>
 }
