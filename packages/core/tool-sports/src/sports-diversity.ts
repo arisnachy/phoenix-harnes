@@ -37,6 +37,19 @@ export function diversifiedSportsPicks<T extends RankedSportsCandidate>(
     const other=sorted.find(row=>row.pick.sport!==chosen[0]?.pick.sport)
     if(other)chosen.push(other)
   }
+  // Avoid four hockey picks when a comparably ranked NBA/NFL/soccer
+  // candidate is still available. Do not substitute a much weaker pick just
+  // to satisfy a quota; fill remaining slots from rank order afterward.
+  const maxComparablePerSport=Math.ceil(count/2)
+  for(const row of sorted){
+    if(chosen.length>=count)break
+    if(chosen.includes(row))continue
+    const sameSport=chosen.filter(x=>x.pick.sport===row.pick.sport).length
+    const comparableAlternative=sorted.some(other=>!chosen.includes(other)&&
+      other.pick.sport!==row.pick.sport&&other.rank>=row.rank*0.8)
+    if(multisport&&sameSport>=maxComparablePerSport&&comparableAlternative)continue
+    chosen.push(row)
+  }
   for(const row of sorted){
     if(chosen.length>=count)break
     if(!chosen.includes(row))chosen.push(row)

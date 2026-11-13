@@ -77,7 +77,7 @@ type DailySportsCoverage = {
 /**
  * Scan a limited set of known ESPN leagues cheaply before expensive matchup research.
  * @param date - Target date, YYYY-MM-DD in the ESPN request.
- * @param limit - Maximum diverse future fixtures to return, from 1 to 36.
+ * @param limit - Maximum diverse future fixtures to return, from 1 to 128.
  * @param fetcher - Injected HTTP adapter for deterministic tests.
  * @param now - Observation time; only fixtures with kickoffs after now survive.
  * @param env - Provider permissions, including ESPN opt-out.
@@ -88,12 +88,13 @@ export async function scoutDailySports(
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
   onlySports:readonly string[]|undefined=undefined,
 ):Promise<{date:string,checkedAt:string,events:DailySportsEvent[],
-  totalEligible:number,coverage:DailySportsCoverage[],
+  totalEligible:number;truncated:boolean;eligibleBySport:Record<string,number>;
+  coverage:DailySportsCoverage[],
   diagnostics:{elapsedMs:number;requestTimeoutMs:number;requestedPartitions:number;
     partialLeagues:number;unavailableLeagues:number;cachedPartitions:number},
   warning:string}>{
   if(!dateValid(date))throw Error('Fecha inválida, usar AAAA-MM-DD')
-  if(!Number.isInteger(limit)||limit<1||limit>36)throw Error('Límite de 1 a 36 eventos')
+  if(!Number.isInteger(limit)||limit<1||limit>128)throw Error('Límite de 1 a 128 eventos')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración')
   const requested=onlySports?.map(value=>typeof value==='string'?
     normalizeDailySelection(value):null)
@@ -217,6 +218,8 @@ export async function scoutDailySports(
     if(!progressed)break
   }
   return{date,checkedAt:new Date(now).toISOString(),events,totalEligible:all.length,
+    truncated:events.length<all.length,
+    eligibleBySport:Object.fromEntries(sports.map(sport=>[sport,all.filter(event=>event.sport===sport).length])),
     coverage,diagnostics:{elapsedMs:Date.now()-startedAt,requestTimeoutMs,
       requestedPartitions:scanPlan.length*partitions.length,
       partialLeagues:coverage.filter(x=>x.reason.startsWith('Cobertura parcial')).length,
