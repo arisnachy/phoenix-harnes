@@ -26,7 +26,7 @@ import {
   type CodexPermissionMode,
   type CodexRunSpec,
 } from './run.ts'
-import { observeCodexRateLimitsUpdate, registerCodexAccountFlow } from './account.ts'
+import { observeCodexRateLimitsUpdate, registerCodexAccountFlow, readCodexResetState, consumeCodexReset } from './account.ts'
 
 export { CODEX_ACCOUNT_KEY, readCodexAccountSnapshot, readCodexResetState, consumeCodexReset } from './account.ts'
 export type { CodexResetCredit, CodexResetState, CodexResetReceipt, CodexResetRequest } from './account.ts'
@@ -152,6 +152,12 @@ export function apply(ctx: Context, config: Config): void {
         env: resolved.env,
         disposeGraceMs: resolved.disposeGraceMs,
       })
+      const resetConfig = { env: resolved.env, disposeGraceMs: resolved.disposeGraceMs }
+      authorized.effect(() => authorized.provide('codexResetControl', {
+        state: () => readCodexResetState(authorized, resetConfig, AbortSignal.timeout(45_000)),
+        redeem: (request: { idempotencyKey: string; creditId?: string }) =>
+          consumeCodexReset(authorized, resetConfig, request, AbortSignal.timeout(45_000)),
+      }), 'native Codex reset control')
     })
   }
 }
