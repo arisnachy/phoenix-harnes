@@ -23,7 +23,7 @@ describe('Codex reset controls', () => {
     const link = screen.getByRole<HTMLAnchorElement>('link', { name: es.codexResetsOpenUsage })
     expect(link.href).toBe('https://chatgpt.com/codex/settings/usage')
     expect(link.rel).toContain('noopener')
-    expect(screen.getByRole('button', { name: es.codexResetsActivate })).toBeDisabled()
+    expect(screen.getByRole('button', { name: es.codexResetsActivate })).toHaveProperty('disabled', true)
     expect(screen.getByText(es.codexResetsSafety)).toBeTruthy()
   })
 
@@ -56,7 +56,7 @@ describe('Codex reset controls', () => {
     })), redeem: vi.fn() }
     render(<CodexResetsPanel t={t} client={client} />)
     await screen.findByText(`${es.codexResetsAvailable}: 2`)
-    expect(screen.getByRole('button', { name: es.codexResetsActivate })).toBeDisabled()
+    expect(screen.getByRole('button', { name: es.codexResetsActivate })).toHaveProperty('disabled', true)
     expect(client.redeem).not.toHaveBeenCalled()
   })
 
@@ -68,7 +68,7 @@ describe('Codex reset controls', () => {
     render(<CodexResetsPanel t={t} client={client} />)
     await screen.findByText(es.codexResetsUnavailable)
     expect(screen.getByRole('link', { name: es.codexResetsOpenUsage })).toBeTruthy()
-    expect(screen.getByRole('button', { name: es.codexResetsActivate })).toBeDisabled()
+    expect(screen.getByRole('button', { name: es.codexResetsActivate })).toHaveProperty('disabled', true)
   })
 
   it('renders the English copy without loading account data if no client exists', () => {
