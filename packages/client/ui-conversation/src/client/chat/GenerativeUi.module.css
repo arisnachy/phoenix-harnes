@@ -640,35 +640,86 @@
 .sportsTicketNarrativeSources a{overflow-wrap:anywhere}
 
 
-/* Pearl Light sports scoreboard: a premium, restrained live card across leagues. */
-.sportsCard.sportsGameCompact{
-  width:100%;max-width:830px;padding:14px 16px;border-radius:17px;
-  border:1px solid var(--dsw-alias-border-subtle,rgba(111,128,154,.23));
-  background:var(--dsw-alias-bg-primary,#fff);
-  box-shadow:0 5px 22px rgba(35,56,86,.065);
+/* PHOENIX Sports scoreboard — DENSE Pearl Light 2-up tiles.
+ * A game is a scoreboard tile, not an article-sized report. */
+.sportsGameTitleSr{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0
 }
-.sportsGameCompact .sportsHeadline{align-items:center;padding-bottom:3px}
-.sportsGameCompact .sportsHeadline h3{font-size:clamp(15px,2vw,19px);font-weight:820;letter-spacing:-.015em}
-.sportsGameCompact .sportsStatus{padding:5px 10px;border-radius:999px}
+.sportsCard.sportsGameCompact{
+  box-sizing:border-box;width:100%;max-width:420px;min-width:0;
+  margin:0;padding:10px 11px;border-radius:12px;
+  border:1px solid var(--dsw-alias-border-subtle,rgba(110,129,156,.22));
+  background:var(--dsw-alias-bg-primary,#fff);
+  box-shadow:0 2px 8px rgba(23,44,83,.042);
+  font-size:11px;line-height:1.3
+}
+.sportsGameCompact .sportsHeadline{
+  display:flex;align-items:center;justify-content:space-between;gap:7px;
+  min-width:0;padding:0;margin:0
+}
+.sportsGameCompact .sportsHeadline>div{min-width:0;flex:1}
+.sportsGameCompact .sportsKicker{
+  font-size:10px;font-weight:780;letter-spacing:.045em;
+  color:var(--dsw-alias-label-secondary,#667083);
+}
+.sportsGameCompact .sportsCompetition,.sportsGameCompact .sportsHeadline p{display:none}
+.sportsGameCompact .sportsStatus{
+  max-width:47%;white-space:normal;text-align:right;
+  font-size:10px;font-weight:750;padding:3px 7px;
+  border-radius:99px;line-height:1.15
+}
+.sportsGameCompact .sportsGameWhen{
+  display:block;margin:1px 0 5px;color:var(--dsw-alias-label-secondary,#737c89);
+  font-size:9px;line-height:1.3
+}
 .sportsGameCompact .sportsSlateMatch{
-  margin-top:8px;display:grid;gap:5px;border-radius:12px;
-  padding:9px 11px;background:var(--dsw-alias-interactive-bg-hover,rgba(49,96,164,.038));
-  border:1px solid var(--dsw-alias-border-subtle,rgba(110,130,153,.13));
+  display:grid;grid-template-columns:minmax(0,1fr);gap:2px;
+  margin:0;padding:6px 8px;border-radius:9px;
+  border:1px solid var(--dsw-alias-border-subtle,rgba(110,130,153,.12));
+  background:var(--dsw-alias-interactive-bg-hover,rgba(49,96,164,.035));
 }
 .sportsGameCompact .sportsSlateMatch>div{
-  display:flex;align-items:center;gap:10px;min-width:0;
+  display:flex;align-items:center;gap:7px;padding:2px 0;
+  min-width:0;min-height:30px
 }
-.sportsGameCompact .sportsSlateMatch>div>span{flex:1;min-width:0}
+.sportsGameCompact .sportsSlateMatch>div>span{
+  display:flex;flex:1;flex-direction:column;min-width:0;gap:1px
+}
+.sportsGameCompact .sportsSlateMatch strong{
+  font-size:11px;font-weight:730;line-height:1.2;
+  min-width:0;overflow-wrap:anywhere
+}
 .sportsGameCompact .sportsSlateMatch>div>b{
-  margin-left:auto;font-size:clamp(23px,3.2vw,31px);line-height:1.1;font-weight:850;
-  font-variant-numeric:tabular-nums;letter-spacing:-.025em
+  font-size:21px;line-height:1;font-weight:820;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;margin-left:auto;
+  flex-shrink:0
 }
-.sportsGameCompact .sportsSlateMatch .sportsPortrait{width:34px;height:34px;flex-shrink:0}
-.sportsGameCompact .sportsSlateMatch strong{font-size:12px}
-.sportsGameCompact .sportsExtra{margin-top:8px;padding-top:8px}
-.sportsGameCompact .sportsSourceBar{margin-top:8px;padding-top:8px}
-@media(max-width:520px){
-  .sportsCard.sportsGameCompact{padding:11px 12px;border-radius:14px}
-  .sportsGameCompact .sportsSlateMatch{padding:8px}
-  .sportsGameCompact .sportsSlateMatch>div>b{font-size:24px}
+.sportsGameCompact .sportsSlateMatch .sportsPortrait{
+  width:26px;height:26px;flex:0 0 26px
+}
+.sportsGameCompact .sportsSlateMatch small{font-size:9px;line-height:1.1}
+.sportsGameCompact .sportsSlateMatch .sportsFavoriteTag{font-size:8px}
+.sportsGameCompact .sportsSlateMatch>div.sportsMarkedFavorite{
+  padding-left:5px;margin-left:-6px;border-left-width:2px
+}
+.sportsGameCompact .sportsSlateVs{font-size:9px}
+.sportsGameCompact .sportsExtra{
+  margin-top:5px;padding-top:5px;border-top:1px solid var(--dsw-alias-border-subtle,rgba(111,129,152,.16))
+}
+.sportsGameCompact .sportsExtra>summary{font-size:10px;font-weight:650}
+.sportsGameCompact .sportsSourceBar{
+  margin-top:5px;padding-top:5px;
+  display:flex;align-items:center;gap:3px 9px;
+  border-top:1px solid var(--dsw-alias-border-subtle,rgba(111,129,152,.14));
+}
+.sportsGameCompact .sportsSourceBar small{flex:0 1 auto;font-size:9px}
+.sportsGameNotes summary{
+  cursor:pointer;font-size:9px;color:var(--dsw-alias-label-secondary,#748092)
+}
+.sportsGameNotes small{display:block;padding-top:4px;font-size:9px;line-height:1.35}
+@media(max-width:480px){
+  .sportsCard.sportsGameCompact{padding:9px;border-radius:11px}
+  .sportsGameCompact .sportsSlateMatch strong{font-size:10px}
+  .sportsGameCompact .sportsSlateMatch>div>b{font-size:20px}
 }
