@@ -70,7 +70,7 @@ export function espnWinCoreUrl(sport?:string,league?:string,eventId?:string,
   competitionId?:string,mode:'predictor'|'probabilities'='predictor'):string|null{
   const summary=espnLiveSummaryUrl(sport,league,eventId)
   const comp=competitionId??eventId
-  if(!summary||!comp||!/^\\d{1,18}$/u.test(comp))return null
+  if(!summary||!comp||!/^\d{1,18}$/u.test(comp))return null
   const url=new URL(summary)
   const match=url.pathname.match(/^\/apis\/site\/v2\/sports\/([a-z-]+)\/([a-z0-9._-]+)\/summary$/u)
   if(!match)return null
@@ -93,7 +93,7 @@ async function json(url:string,signal:AbortSignal):Promise<unknown>{
 /** Core often returns $ref records. Resolve only the last record from a pinned ESPN URL. */
 async function coreWinFallback(url:string,signal:AbortSignal):Promise<WinSeries|null>{
   let payload=obj(await json(url,signal))
-  const pages=number(obj(payload.pageCount).valueOf?.()??payload.pageCount)
+  const pages=number(payload.pageCount)
   if(pages!==null&&Number.isInteger(pages)&&pages>1&&pages<=500){
     const pageUrl=new URL(url)
     pageUrl.searchParams.set('page',String(pages))
@@ -167,7 +167,7 @@ export function SportsWinProbability({sport,league,eventId,competitionId,phase,g
       if(lastFetch&&Date.now()-lastFetch<(currentPhase==='in'?25_000:600_000))return
       lastFetch=Date.now();busy=true
       const record=(patch:Partial<FeedState>)=>{
-        if(active&&!controller.signal.aborted)setState(old=>({...old.key===key?old:{...empty,key},...patch}))
+        if(active&&!controller.signal.aborted)setState(old=>({...(old.key===key?old:{...empty,key}),...patch}))
       }
       try{
         // For running games request the single-call summary first; other phases
