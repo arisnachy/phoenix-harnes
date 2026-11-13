@@ -59,8 +59,7 @@
     "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-atomic-write": "workspace:^",
-    "@phoenix-ai/dsh-home-paths": "workspace:^",
-    "@phoenix-ai/dsh-subagent-codex": "workspace:^"
+    "@phoenix-ai/dsh-home-paths": "workspace:^"
   },
   "peerDependencies": {
     "@phoenix-ai/cordis-plugin-loader": "workspace:^",
