@@ -727,3 +727,10 @@
 
 /* The compact daily slate also stays two-across, never three microscopic tiles. */
 .sportsSlateGrid{grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:9px}
+
+.sportsGameCompact .sportsGamePeriodStrip{
+  display:flex;flex-wrap:wrap;gap:3px 8px;
+  margin:4px 1px 2px;color:var(--dsw-alias-label-secondary,#697688);
+  font-size:9px;font-variant-numeric:tabular-nums;
+}
+.sportsGameCompact .sportsGamePeriodStrip span{white-space:nowrap}
