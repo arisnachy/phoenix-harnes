@@ -87,6 +87,9 @@ const conditionalRank=(match:Awaited<ReturnType<typeof researchSport>>['matches'
   const winDiff=percent(home.wins,home.completedGames)-
     percent(away.wins,away.completedGames)
   const marginDiff=home.averageMargin-away.averageMargin
+  // A winning-record edge contradicted by scoring margin is a risk signal,
+  // not a reason to promote an uninvestigated favorite.
+  if(Math.abs(winDiff)>0.03&&Math.sign(winDiff)!==Math.sign(marginDiff))return null
   const direction=Math.abs(winDiff)>0.03?Math.sign(winDiff):Math.sign(marginDiff)
   if(!direction)return null
   // Diminish thin-sample rankings; strong classification still requires
