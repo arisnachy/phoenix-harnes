@@ -85,6 +85,9 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
           for (let j = 0; j < presentation.length; j++) {
             const part = presentation[j]
             if (!part) continue
+            // Whitespace between consecutive declarative sports cards must not
+            // become a full-width grid row that prevents a two-up scoreboard.
+            if (part.kind === 'markdown' && !part.text.trim()) continue
             rendered.push(part.kind === 'formatted'
               ? <PlainOutputFormatter key={first+':formatted:'+index+':'+j} card={part.card} />
               : <MarkdownText key={first+':markdown:'+index+':'+j}
