@@ -145,8 +145,6 @@ export function shortlistDailyMarkets(
   const matchedGames=new Set<string>()
   for(const quote of quotes.slice(0,2000)){
     const time=Date.parse(quote.timeIso??quote.time),at=quoteClock(quote)
-    const espnObservation=quote.source?.startsWith('ESPN')===true&&
-      Number.isFinite(Date.parse(quote.observedAt??''))
     // Never age out a published ESPN observation solely because it is old.
     // Old observations are explicitly marked for a live recheck downstream.
     const expired=quote.source?.startsWith('ESPN')!==true&&now-at>60*60_000
