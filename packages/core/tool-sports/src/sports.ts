@@ -15,7 +15,7 @@ export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
     'uefa.europa.conf','conmebol.libertadores','conmebol.sudamericana',
     'concacaf.champions','concacaf.nations.league','fifa.cwc','uefa.euro','uefa.nations','conmebol.america',
     'fifa.worldq.concacaf','fifa.worldq.conmebol','col.1','ecu.1','chi.1','par.1',
-    'uru.1','per.1','jpn.1','ksa.1','aus.1','afc.champions',
+    'uru.1','per.1','jpn.1','ksa.1','aus.1','afc.champions'],
   basketball: ['nba','wnba','mens-college-basketball'],
   baseball: ['mlb','dominican-winter-league','caribbean-series'],
   football: ['nfl','college-football'],
