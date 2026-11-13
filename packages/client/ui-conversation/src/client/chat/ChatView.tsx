@@ -397,17 +397,21 @@ export function ChatView({
       followSigRef.current = followSig
       return
     }
-    // Prepend (head seq decreased): preserve the same settled row at the
-    // position established by the reader's latest scroll. This excludes
-    // unrelated tail/composer growth while the request was in flight.
-    if (anchorRef.current !== null && firstSeq !== null && firstSeqRef.current !== null && firstSeq < firstSeqRef.current) {
+    // A prepend can happen while the reader is at an old row OR after they
+    // explicitly returned to the bottom. Preserve whichever position they chose.
+    if (firstSeq !== null && firstSeqRef.current !== null && firstSeq < firstSeqRef.current) {
       const anchor = anchorRef.current
       anchorRef.current = null
-      const row = anchorElement(local, anchor.key)
-      if (row !== null) el.scrollTop += flowTop(row, el) - anchor.top
+      if (anchor !== null) {
+        const row = anchorElement(local, anchor.key)
+        if (row !== null) el.scrollTop += flowTop(row, el) - anchor.top
+      } else if (atBottomRef.current) {
+        // A late page after "Ir al final" must keep the requested latest turn
+        // visible; prepend-only updates still must not claim follow ownership.
+        toBottom(el)
+      }
       observedTopRef.current = el.scrollTop
       firstSeqRef.current = firstSeq
-      /* v8 ignore next -- ?? arm: a prepend adds nodes, so the flow list here is never empty. */
       lastKeyRef.current = lastKey
       lastSteeringIdRef.current = lastSteeringId
       followSigRef.current = followSig
