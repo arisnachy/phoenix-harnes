@@ -44,6 +44,13 @@
   min-height: auto;
 }
 
+/* The composer lives AFTER the transcript in the outer scrollport, so its
+   height is already accounted for. The local HTML-artifact padding belonged
+   to standalone ChatView and created a misleading blank tail in PHOENIX. */
+:global([data-conversation-scroll]) .scroll:has([data-artifact-kind='html']) {
+  padding-bottom: 16px;
+}
+
 /* Message column: shared chat width (ConversationRoot --dsh-chat-content-width),
    centered on the same axis as the input box (which caps at chat + 16px); the
    scroller itself stays full-bleed. */
