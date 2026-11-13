@@ -6,9 +6,18 @@ on:
     paths:
       - 'packages/core/agent/src/model-selection.ts'
       - 'packages/core/agent/tests/visual-analysis-routing.spec.ts'
+      - 'packages/core/agent/src/**'
+      - 'packages/core/agent/tests/**'
       - 'packages/core/tool-health/src/**'
-      - 'packages/core/tool-health/tests/clinical-evidence-quality.spec.ts'
-      - 'scripts/phoenix-health-visual-twin.test.mjs'
+      - 'packages/core/tool-health/tests/**'
+      - 'packages/**/image-generation/**'
+      - 'packages/**/image_generation/**'
+      - 'packages/**/image*generation*'
+      - 'packages/**/health*/**'
+      - 'apps/**/health*/**'
+      - 'apps/**/image-generation/**'
+      - 'apps/**/image_generation/**'
+      - 'scripts/phoenix-health-*.mjs'
       - '.github/workflows/clinical-visual-diagnostic-integrity.yml'
   workflow_dispatch:
 
