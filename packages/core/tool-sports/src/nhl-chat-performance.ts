@@ -52,7 +52,7 @@ export function compactNhlChatDossier(d:HockeyDossier){
   const form=(side:HockeyDossier['form']['home'])=>side?{
     games:side.games,wins:side.wins,losses:side.losses,
     homeGames:side.homeGames,awayGames:side.awayGames,
-    restHours:side.restHours,last5:side.last5.slice(0,5),
+    restHours:side.restHours,last5:side.last10.slice(0,5),
   }:null
   const uiBlock={...d.uiBlock,props:{...d.uiBlock.props,
     sections:d.uiBlock.props.sections.slice(0,10).map(s=>({
