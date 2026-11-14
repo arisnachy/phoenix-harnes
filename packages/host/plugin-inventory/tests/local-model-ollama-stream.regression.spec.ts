@@ -1,5 +1,5 @@
 import { once } from 'node:events'
-import { createServer, type Server } from 'node:http'
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import { startPhoenixLocalProxy } from '../src/local-model/proxy.js'
@@ -11,7 +11,7 @@ function port(server: Server): number {
   return (server.address() as AddressInfo).port
 }
 
-async function serve(handler: Parameters<typeof createServer>[0]): Promise<Server> {
+async function serve(handler: (request: IncomingMessage, response: ServerResponse) => void): Promise<Server> {
   const server = createServer(handler)
   servers.push(server)
   server.listen(0, '127.0.0.1')
