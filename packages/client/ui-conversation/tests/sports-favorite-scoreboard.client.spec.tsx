@@ -34,7 +34,7 @@ describe('favorite visible on live scoreboard',()=>{
     expect(marked[0]?.textContent).toContain('★ Favorito PHOENIX')
     expect(marked[0]?.textContent).toContain('14')
   })
-  it('shows a linked winner ticket instead of the analytic favorite',async()=>{
+  it('shows the linked winner ticket and analytic favorite independently',async()=>{
     const {container}=show(game({favorite:'Buffalo Bills'}))
     expect(importSportsReceipt([{sport:'football',providerLeague:'nfl',eventDate:'2026-11-09',
       eventId:'401777123',homeTeam:'Minnesota Vikings',awayTeam:'Buffalo Bills',
@@ -43,7 +43,8 @@ describe('favorite visible on live scoreboard',()=>{
       const marked=container.querySelectorAll('[data-selected-favorite="true"]')
       expect(marked).toHaveLength(1)
       expect(marked[0]?.textContent).toContain('Minnesota Vikings')
-      expect(marked[0]?.textContent).toContain('★ Tu selección')
+      expect(marked[0]?.textContent).toContain('✓ Tu selección · boleto')
+      expect(container.querySelector('[data-analytical-favorite="true"]')?.textContent).toContain('Buffalo Bills')
     })
   })
   it('marks only the chosen game in a multiple-game slate',()=>{
