@@ -6,6 +6,7 @@ import {dailyResearchFetcher} from './sports-daily-preload.ts'
 import {auditTicketDecisions,readDecisionPolicy,type TicketDecisionAudit} from './sports-ticket-decision.ts'
 import {auditTicketMarketRisk,quoteSideNoVig,type TicketMarketRisk} from './ticket-risk-audit.ts'
 import {investigateTicketSpecialists,type SpecialistGate} from './ticket-specialist-gate.ts'
+import {summarizeTicketSpecialist} from './ticket-specialist-summary.ts'
 import { keylessEnabled,keylessOdds,type KeylessQuote } from './keyless-odds.ts'
 import {lookupExactEspnWinner,sameEspnTeam} from './sports-exact-espn-winner.ts'
 import {researchPublicOddsWebsites} from './sports-public-odds-pages.ts'
@@ -88,8 +89,10 @@ export async function evidencePricedTicket(
       sport:c.sport,league:c.league,eventId:c.eventId,date:day,
       home:c.home,away:c.away,kickoff:c.kickoff,
     }))
+    // A 5s preflight is only candidate screening, never the final NBA dossier.
+    // Do not abort the entire ticket if the broad preliminary scan times out.
     const checks=await boundedPriced(specialistResearcher(games,researchFetcher,
-      now,env,[],5_000),11_000)
+      now,env,[],5_000),11_000).catch(()=>[] as SpecialistGate[])
     reviewedBeforeSelection=checks.length
     return checks.map((check,index)=>{
       const fixture=candidates[index]!
@@ -122,23 +125,34 @@ export async function evidencePricedTicket(
   // Interactive fixture lookup bypasses the persisted research cache.
   const research=await evidenceTicket(count,date,sport,fetcher,now,env,
     reviewCandidates)
-  // Full specialist reassessment is retained for a preliminary timeout or
-  // unavailable dossier. Never treat a short preflight as completed research.
+  // Never promote the short preflight to a final NBA dossier. Recheck all
+  // selected NBA/WNBA cases that were not fully documented; retry only failed
+  // preflights for other sports. Small parallel batches avoid a long waterfall.
   const pendingGames=research.events.filter(e=>{
     const existing=preview.get(e.eventId)
-    // A genuine incomplete dossier is evidence, not a retryable outage.
-    // Re-evaluating it with a new subset may falsely promote a missing lineup.
-    return !existing||existing.status==='unavailable'
-  })
-    .map(e=>({sport:e.sport,league:e.league,eventId:e.eventId,
-      date:day,home:e.home,away:e.away,kickoff:e.kickoff}))
-  const retried=await boundedPriced(specialistResearcher(
-    pendingGames,researchFetcher,now,env,[],7_000),15_000).catch(()=>[])
+    return !existing||existing.status==='unavailable'||
+      (e.sport==='basketball'&&existing.checklist?.complete!==true)
+  }).map(e=>({sport:e.sport,league:e.league,eventId:e.eventId,
+    date:day,home:e.home,away:e.away,kickoff:e.kickoff}))
+  const batches=Array.from({length:Math.ceil(pendingGames.length/3)},(_,i)=>
+    pendingGames.slice(i*3,i*3+3))
+  const attempts=await Promise.allSettled(batches.map(async batch=>{
+    const nba=batch.some(game=>game.sport==='basketball')
+    // NBA requires multiple team/athlete reads; 7s cannot establish coverage.
+    return boundedPriced(specialistResearcher(batch,researchFetcher,now,env,
+      [],nba?18_000:9_000),nba?21_000:12_000)
+  }))
+  const retried=attempts.flatMap(a=>a.status==='fulfilled'?a.value:[])
   const byId=new Map(retried.map(x=>[x.eventId,x]))
-  const specialistChecks:SpecialistGate[]=research.events.map(e=>byId.get(e.eventId)??preview.get(e.eventId)??{
+  const specialistChecks:SpecialistGate[]=research.events.map(e=>{
+    const previous=preview.get(e.eventId),latest=byId.get(e.eventId)
+    // A failed retry cannot erase actual evidence from the preliminary read.
+    return (latest?.status==='unavailable'&&previous?.status!=='unavailable'?
+      previous:latest??previous)??{
     sport:e.sport,league:e.league,eventId:e.eventId,specialist:'unavailable',
     status:'unavailable' as const,verifiedSteps:[],pendingSteps:['Sin expediente verificado'],
     approvedForBetting:false as const,checkedAt:new Date(now).toISOString(),
+    }
   })
   const trackingEvents=research.events.map(e=>({
     eventId:e.eventId,sport:e.sport,league:e.league,date:day,
@@ -765,11 +779,19 @@ export async function evidencePricedTicket(
       marketRiskTier:marketRisk.legs[index]?.relativeRisk??'unknown',
       decisionReview:decisionAudit.legs[index]??null,
       specialistResearch:specialistChecks[index]??null,
+      researchEvidenceState:summarizeTicketSpecialist(
+        specialistChecks[index],research.events[index]?.sport??'').state,
+      researchDetail:summarizeTicketSpecialist(
+        specialistChecks[index],research.events[index]?.sport??'').detail,
       researchStatus:specialistChecks[index]?.status==='researched'
         &&specialistChecks[index]?.checklist?.complete===true?'documented':'conditional',
       displayStatus:'research-selection',
       riskNotes:specialistChecks[index]?.checklist?.criticalPending.slice(0,5)??[],
-      pendingEvidence:specialistChecks[index]?.pendingSteps.slice(0,5)??[],
+      pendingEvidence:[...new Set([
+        ...summarizeTicketSpecialist(specialistChecks[index],
+          research.events[index]?.sport??'').pendingEvidence,
+        ...(specialistChecks[index]?.pendingSteps??[]),
+      ])].slice(0,8),
       ...Object.fromEntries(['homeTeam','awayTeam','homeLogo','awayLogo','sport',
         'league','country','rationale','when'].filter(k=>typeof prior[k]==='string')
         .map(k=>[k,prior[k]])),
