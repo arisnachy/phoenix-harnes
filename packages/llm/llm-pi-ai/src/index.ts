@@ -129,10 +129,10 @@ export const PHOENIX_LOCAL_MODEL = 'phoenix-local'
 export const PHOENIX_LOCAL_BASE_URL = 'http://127.0.0.1:17842/v1'
 /** Non-secret marker that satisfies pi-ai's OpenAI-compatible auth preflight for the loopback-only route. */
 export const PHOENIX_LOCAL_AUTHORIZATION = 'Bearer phoenix-local'
-/** Conservative shared context advertised by the selectable Phoenix Local route. */
-export const PHOENIX_LOCAL_CONTEXT_WINDOW = 131_072
-/** Default output budget shared by supported local models. */
-export const PHOENIX_LOCAL_MAX_TOKENS = 2_048
+/** Conservative shared budget that also fits CPU-first Ollama Qwen 2B. */
+export const PHOENIX_LOCAL_CONTEXT_WINDOW = 4_096
+/** Limit long responses on older CPU-first Windows devices. */
+export const PHOENIX_LOCAL_MAX_TOKENS = 256
 
 /** Built-in route injected independently of user settings or cloud credentials. */
 function phoenixLocalProfile(): PiAiProviderProfile {
