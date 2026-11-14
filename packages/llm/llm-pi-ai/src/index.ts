@@ -144,6 +144,9 @@ function phoenixLocalProfile(): PiAiProviderProfile {
     defaultMaxTokens: PHOENIX_LOCAL_MAX_TOKENS,
     defaultInput: ['text'],
     headers: { Authorization: PHOENIX_LOCAL_AUTHORIZATION },
+    // Ollama's OpenAI-compatible /chat/completions consumes max_tokens.
+    // Do not let pi-ai's generic OpenAI compatibility choose a different field.
+    compat: { maxTokensField: 'max_tokens', supportsStore: false },
     // CPU-first Ollama Qwen should fail explicitly, not silently wait for five
     // minutes and repeat the same stalled 'hola' with another retry.
     timeoutMs: 90_000,
