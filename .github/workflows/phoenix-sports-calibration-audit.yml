@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - 'scripts/phoenix-sports-chronological-backtest.mjs'
+      - 'scripts/phoenix-sports-research-backtest.mjs'
+      - 'packages/core/tool-sports/src/sports-pregame-research.ts'
+      - 'packages/core/tool-sports/tests/sports-pregame-research.test.mjs'
       - 'packages/core/tool-sports/src/sports-calibration.ts'
       - 'packages/core/tool-sports/src/sports-forecast.ts'
       - 'packages/core/tool-sports/src/sports-historical-scoreboard.ts'
@@ -26,6 +29,9 @@ jobs:
         run: |
           node --check scripts/phoenix-sports-chronological-backtest.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/sports-calibration.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-pregame-research.test.mjs
+      - name: Replay verified historical injury snapshots (hypothesis, not historical prediction)
+        run: node --experimental-strip-types scripts/phoenix-sports-research-backtest.mjs --demo > phoenix-sports-source-research-replay.json
       - name: Audit genuine ESPN prior-to-kickoff histories
         run: node --experimental-strip-types scripts/phoenix-sports-chronological-backtest.mjs
         env:
@@ -38,5 +44,6 @@ jobs:
           path: |
             phoenix-sports-chronological-backtest.json
             phoenix-sports-chronological-backtest.md
+            phoenix-sports-source-research-replay.json
           if-no-files-found: warn
           retention-days: 28
