@@ -29,6 +29,21 @@ describe('market evidence and strategy research',()=>{
     const reverse=rows();reverse[10][0]=reverse[9][0];
     assert.throws(()=>parseKlines(reverse,NOW,H),/invalid-bars/);
   });
+  it('recognizes a confirmed moderate 15m trend and leaves risk sizing to the portfolio guard',()=>{
+    const bars=Array.from({length:80},(_,i)=>{
+      const close=100+i*.05+Math.sin(i*.62)*.3+(i===79?.5:0);
+      return {time:i*H,closeTime:(i+1)*H-1,
+        open:close,close,high:close+.45,low:close-.45,volume:i===79?16:10};
+    });
+    const signal=analyze('SOLUSDT',bars);
+    assert.equal(signal.regime,'uptrend');
+    assert.equal(signal.action,'buy');
+    assert.equal(signal.strategy,'ema-pullback');
+    assert.ok(signal.score>=70);
+    const state=freshState();state.enabled=true;
+    const budget=riskBudget(state,signal,{});
+    assert.ok(budget>0&&budget<=state.equity*.05);
+  });
   it('evaluates real closed candles without inventing an unavoidable buy',()=>{
     const signal=analyze('BTCUSDT',parseKlines(rows(),NOW,H));
     assert.equal(signal.symbol,'BTCUSDT');
@@ -90,6 +105,27 @@ describe('isolated simulated ledger and deterministic risk',()=>{
     assert.equal(Object.keys(state.positions).length,0);
     assert.equal(state.journal.length,3);
     assert.throws(()=>paperFill(state,{...tp1,id:'run4'}),/virtual-oversell/);
+  });
+  it('permits four independently journaled PAPER positions but not a fifth',()=>{
+    let state=freshState();state.enabled=true;
+    const names=['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT'];
+    for(const [index,symbol] of names.entries()){
+      const signal={symbol,action:'buy',score:80};
+      const marks=Object.fromEntries(Object.keys(state.positions).map(name=>[name,100]));
+      const budget=riskBudget(state,signal,marks);
+      assert.ok(budget>=10);
+      state=paperFill(state,{id:'multi-'+index,at:NOW+index,symbol,side:'buy',
+        price:100,quantity:budget/(100*(1+0.001)),
+        strategy:index%2?'ema-pullback':'donchian-breakout',
+        reason:'deterministic paper test',plan:exitPlan(100,1.5,'test')});
+      const total=Object.values(state.positions).reduce((sum,p)=>sum+p.quantity*100,0);
+      const equity=state.cash+total;
+      assert.ok(total<=equity*0.20+0.01);
+    }
+    assert.equal(Object.keys(state.positions).length,4);
+    assert.equal(state.journal.length,4);
+    assert.equal(riskBudget(state,{symbol:'XRPUSDT',action:'buy',score:90},
+      Object.fromEntries(names.map(name=>[name,100]))),0);
   });
   it('marks PnL and limits exposure, open positions, drawdown and daily losses',()=>{
     let state=freshState();state.enabled=true;

@@ -46,6 +46,21 @@ function broker(kinds: Record<string, 'breakout' | 'pullback' | 'downtrend' | 'f
 }
 
 describe('adaptive Binance strategy selection', () => {
+  it('does not misclassify a moderate 15-minute uptrend as sideways', () => {
+    const QUARTER_HOUR = 900_000
+    const bars = candles('flat').map((bar, index) => {
+      const close = 100 + index * 0.045
+      return { ...bar,
+        openTime: index * QUARTER_HOUR, closeTime: (index + 1) * QUARTER_HOUR - 1,
+        open: close, high: close * 1.005, low: close * 0.995, close,
+        volume: index === 79 ? 12 : 10 }
+    })
+    expect(evaluateBinanceAdaptiveSignal('SOLUSDT', bars,
+      QUARTER_HOUR, 80 * QUARTER_HOUR)).toMatchObject({
+      regime: 'uptrend', strategy: 'trend-pullback', action: 'buy', score: 75,
+    })
+  })
+
   it('recognizes closed-volume breakout with a reproducible score', () => {
     expect(evaluateBinanceAdaptiveSignal('BTCUSDT', candles(), HOUR, NOW)).toMatchObject({
       regime: 'uptrend', strategy: 'breakout', action: 'buy', score: 80,
@@ -56,6 +71,53 @@ describe('adaptive Binance strategy selection', () => {
     expect(evaluateBinanceAdaptiveSignal('BTCUSDT', candles('pullback'), HOUR, NOW)).toMatchObject({
       regime: 'uptrend', strategy: 'trend-pullback', action: 'buy',
     })
+  })
+
+  it('promotes a recovered uptrend only when candle volume confirms the recovery', () => {
+    const weak = candles('pullback')
+    const low = evaluateBinanceAdaptiveSignal('BTCUSDT', weak, HOUR, NOW)
+    expect(low).toMatchObject({ strategy: 'trend-pullback', action: 'buy', score: 65 })
+    const confirmed = candles('pullback')
+    confirmed[79] = { ...confirmed[79]!, volume: 12 }
+    const high = evaluateBinanceAdaptiveSignal('BTCUSDT', confirmed, HOUR, NOW)
+    expect(high).toMatchObject({ strategy: 'trend-pullback', action: 'buy' })
+    expect(high.score).toBeGreaterThanOrEqual(75)
+  })
+
+  it('detects confirmed trend momentum without falsely requiring a breakout volume spike', () => {
+    const bars = candles('pullback')
+    const close = bars[79]!.close * 1.02
+    bars[79] = { ...bars[79]!, open: close, close,
+      high: close * 1.005, low: close * 0.995, volume: 10.8 }
+    expect(evaluateBinanceAdaptiveSignal('LTCUSDT', bars, HOUR, NOW)).toMatchObject({
+      strategy: 'momentum-continuation', action: 'buy', score: 75,
+    })
+  })
+
+  it('records a confirmed volume-backed virtual entry rather than showing BUY without filling', async () => {
+    const feed = market({ LTCUSDT: 'pullback' })
+    const original = feed.candles.bind(feed)
+    const boosted: BinancePublicMarket = {
+      price: feed.price.bind(feed), prices: feed.prices.bind(feed),
+      async candles(symbol, interval, limit) {
+        const bars = await original(symbol, interval, limit)
+        bars[79] = { ...bars[79]!, volume: 12 }
+        return bars
+      },
+    }
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-recovery-fill-'))
+    temporary.push(root)
+    const paper = new BinancePaperBroker(join(root, 'paper.json'), boosted)
+    const cycle = await runBinanceAdaptiveCycle(paper, {
+      mode: 'paper-step', symbols: ['LTCUSDT'],
+    }, NOW)
+    expect(cycle.trade).toMatchObject({
+      symbol: 'LTCUSDT', side: 'buy', strategyId: 'adaptive-trend-pullback-v1',
+    })
+    expect(cycle.execution).toContainEqual(expect.objectContaining({
+      symbol: 'LTCUSDT', status: 'executed',
+    }))
+    expect((await paper.journal()).map(row => row.id)).toContain(cycle.trade!.id)
   })
 
   it('identifies a bearish regime as a defensive sell, not an automatic short', () => {
@@ -111,6 +173,27 @@ describe('adaptive Binance paper cycle', () => {
     expect(result.account.tradeCount).toBe(1)
   })
 
+  it('tries the next ranked qualified market when Binance marks the first Spot pair ineligible', async () => {
+    const feed = market({ BTCUSDT: 'breakout', LTCUSDT: 'breakout' })
+    const guarded: BinancePublicMarket = {
+      price: feed.price.bind(feed), prices: feed.prices.bind(feed),
+      candles: feed.candles.bind(feed),
+      async eligible(symbol) { return symbol !== 'BTCUSDT' },
+    }
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-spot-fallback-'))
+    temporary.push(root)
+    const paper = new BinancePaperBroker(join(root, 'paper.json'), guarded)
+    const cycle = await runBinanceAdaptiveCycle(paper, {
+      mode: 'paper-step', symbols: ['BTCUSDT', 'LTCUSDT'],
+    }, NOW)
+    expect(cycle.trade).toMatchObject({ symbol: 'LTCUSDT', side: 'buy' })
+    expect(cycle.execution.find(item => item.symbol === 'BTCUSDT'))
+      .toMatchObject({ status: 'blocked' })
+    expect(cycle.execution.find(item => item.symbol === 'LTCUSDT'))
+      .toMatchObject({ status: 'executed' })
+    expect((await paper.journal()).map(row => row.symbol)).toEqual(['LTCUSDT'])
+  })
+
   it('does not confuse a weak BUY indicator with an autonomous PAPER fill', async () => {
     const paper = broker({ ETHUSDT: 'pullback' })
     const result = await runBinanceAdaptiveCycle(paper, {
@@ -140,28 +223,38 @@ describe('adaptive Binance paper cycle', () => {
     expect((await paper.journal()).at(-1)?.id).toBe(cycle.trade?.id)
   })
 
-  it('explains a blocked entry when portfolio slots are already occupied', async () => {
-    const paper = broker({ BTCUSDT: 'breakout', ETHUSDT: 'breakout', SOLUSDT: 'breakout' })
-    await paper.order({ symbol: 'BTCUSDT', side: 'buy', quoteAmountUsdt: 100 })
-    await paper.order({ symbol: 'ETHUSDT', side: 'buy', quoteAmountUsdt: 100 })
+  it('blocks a fifth simultaneous PAPER position without weakening the 20% exposure fence', async () => {
+    const kinds = { BTCUSDT: 'breakout', ETHUSDT: 'breakout', SOLUSDT: 'breakout',
+      BNBUSDT: 'breakout', XRPUSDT: 'breakout' } as const
+    const paper = broker(kinds)
+    for (const symbol of ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT']) {
+      await paper.order({ symbol, side: 'buy', quoteAmountUsdt: 100 })
+    }
     const result = await runBinanceAdaptiveCycle(paper, {
-      mode: 'paper-step', symbols: ['SOLUSDT'],
+      mode: 'paper-step', symbols: ['XRPUSDT'],
     }, NOW)
     expect(result.execution[0]).toMatchObject({ status: 'blocked' })
-    expect(result.execution[0]?.explanation).toContain('posiciones simultáneas')
+    expect(result.execution[0]?.explanation).toContain('4 posiciones simultáneas')
     expect(result.rationale).toContain('posiciones abiertas')
     expect(result.trade).toBeUndefined()
+    expect(result.account.tradeCount).toBe(4)
   })
 
-  it('holds after both virtual portfolio slots are occupied', async () => {
-    const paper = broker({ BTCUSDT: 'breakout', ETHUSDT: 'breakout', SOLUSDT: 'breakout' })
-    await paper.order({ symbol: 'BTCUSDT', side: 'buy', quoteAmountUsdt: 100 })
-    await paper.order({ symbol: 'ETHUSDT', side: 'buy', quoteAmountUsdt: 100 })
-    const result = await runBinanceAdaptiveCycle(paper, {
-      mode: 'paper-step', symbols: ['SOLUSDT'],
-    }, NOW)
-    expect(result.decision).toBe('hold')
-    expect(result.account.tradeCount).toBe(2)
+  it('confirms four distinct autonomous PAPER entries across cycles under one portfolio limit', async () => {
+    const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT']
+    const paper = broker(Object.fromEntries(symbols.map(symbol => [symbol, 'breakout'])))
+    for (const symbol of symbols) {
+      const cycle = await runBinanceAdaptiveCycle(paper, { mode: 'paper-step',
+        symbols: [symbol] }, NOW)
+      expect(cycle.trade).toMatchObject({ symbol, side: 'buy',
+        strategyId: 'adaptive-breakout-v1' })
+    }
+    const account = await paper.account()
+    expect(account.tradeCount).toBe(4)
+    expect(account.positions).toHaveLength(4)
+    const exposure = account.positions.reduce((sum, position) => sum + position.marketValueUsdt, 0)
+    expect(exposure).toBeLessThanOrEqual(account.equityUsdt * 0.20 + 0.02)
+    expect((await paper.journal()).map(trade => trade.symbol)).toEqual(symbols)
   })
 
   it('prioritizes defensive liquidation of an existing virtual position', async () => {
@@ -199,6 +292,37 @@ describe('adaptive Binance paper cycle', () => {
       action: 'hold', score: 0,
     })
     expect(result.trade).toBeUndefined()
+  })
+
+  it('scans public candles concurrently without exceeding four Binance requests', async () => {
+    const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT',
+      'ADAUSDT', 'AVAXUSDT', 'DOTUSDT', 'LTCUSDT']
+    const underlying = market(Object.fromEntries(symbols.map(symbol => [symbol, 'flat' as const])))
+    let active = 0
+    let peak = 0
+    const feed: BinancePublicMarket = {
+      price: underlying.price.bind(underlying),
+      prices: underlying.prices.bind(underlying),
+      async candles(symbol, interval, limit) {
+        active += 1
+        peak = Math.max(peak, active)
+        try {
+          await Promise.resolve()
+          return await underlying.candles(symbol, interval, limit)
+        } finally {
+          active -= 1
+        }
+      },
+    }
+    const paper = new BinancePaperBroker(
+      join(mkdtempSync(join(tmpdir(), 'phoenix-bounded-scan-')), 'paper.json'),
+      feed,
+    )
+    const result = await runBinanceAdaptiveCycle(paper, { mode: 'scan', symbols }, NOW)
+    expect(peak).toBe(4)
+    expect(result.signals).toHaveLength(symbols.length)
+    expect(result.trade).toBeUndefined()
+    expect(result.account.tradeCount).toBe(0)
   })
 
   it('persists TP1 partial execution exactly once and exits remaining units at TP2', async () => {
@@ -239,6 +363,29 @@ describe('adaptive Binance paper cycle', () => {
     expect((await paper.journal()).map(row => row.reason)).toEqual([
       undefined, 'paper-tp1', 'paper-tp2',
     ])
+  })
+
+  it('services a marked stop before requesting candles for any unrelated entry symbol', async () => {
+    let mark = 100
+    let candleCalls = 0
+    const feed: BinancePublicMarket = {
+      async price() { return mark },
+      async prices(symbols) { return Object.fromEntries(symbols.map(symbol => [symbol, mark])) },
+      async candles() { candleCalls++; throw new Error('Market candle provider unavailable') },
+    }
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-priority-risk-'))
+    temporary.push(root)
+    const paper = new BinancePaperBroker(join(root, 'paper.json'), feed)
+    await paper.order({ symbol: 'BTCUSDT', side: 'buy', quoteAmountUsdt: 100,
+      strategyId: 'adaptive-breakout-v1' })
+    mark = 97
+    const result = await runBinanceAdaptiveCycle(paper, {
+      mode: 'paper-step', symbols: ['ETHUSDT'],
+    }, NOW)
+    expect(result.trade).toMatchObject({ symbol: 'BTCUSDT', side: 'sell', reason: 'paper-stop-loss' })
+    expect(result.account.positions).toHaveLength(0)
+    expect(candleCalls).toBe(0)
+    expect((await paper.journal()).map(row => row.side)).toEqual(['buy', 'sell'])
   })
 
   it('exits legacy positions on a marked stop even if excluded from the watchlist', async () => {

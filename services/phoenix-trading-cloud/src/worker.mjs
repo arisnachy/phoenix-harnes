@@ -1,4 +1,4 @@
-import {MAX_PER_TICK, MAX_UNIVERSE, SIMULATED_SLIPPAGE, FEE_RATE,
+import {MAX_PER_TICK, MAX_UNIVERSE, MAX_POSITIONS, SIMULATED_SLIPPAGE, FEE_RATE,
   analyze, exitPlan, freshState, marketValue, paperFill, parseKlines,
   pickUniverse, riskBudget} from './strategy.mjs';
 import {knownAssetRisk,spotAssetRisk,RISK_COVERAGE,RISK_SNAPSHOT_DATE} from './asset-risk.mjs';
@@ -102,9 +102,9 @@ async function cycle(env,now=Date.now()){
     const day=new Date(now).toISOString().slice(0,10);
     if(day!==state.day){state.day=day;state.dayLoss=0;state.dayStartEquity=state.equity;}
     state.lastAttempt=now;
-    await discover(state,now);
+    // Price and protect held PAPER positions before refreshing the entry universe.
+    // An exchangeInfo / 24h-ticker outage must not delay a verified stop/TP exit.
     const names=Object.keys(state.positions);
-    const selected=select(state);
     const quotesRaw=names.length?await market('/api/v3/ticker/price?symbols='+
       encodeURIComponent(JSON.stringify(names))):[];
     const quotes=Object.fromEntries(quotesRaw.map(q=>[q.symbol,Number(q.price)]));
@@ -134,6 +134,8 @@ async function cycle(env,now=Date.now()){
       break;
     }
     if(decision==='hold'){
+      await discover(state,now);
+      const selected=select(state);
       const scanned=await Promise.allSettled(selected.map(symbol=>market(
         '/api/v3/klines?symbol='+symbol+'&interval=15m&limit=80').then(raw=>
           analyze(symbol,parseKlines(raw,now,900_000)))));
@@ -193,7 +195,7 @@ async function cycle(env,now=Date.now()){
         }else{
           const positions=Object.keys(state.positions).length;
           state.lastDecisionReason=state.halted?'risk-circuit-breaker'
-            :positions>=2?'maximum-open-positions'
+            :positions>=MAX_POSITIONS?'maximum-open-positions'
             :state.positions[candidate.symbol]?'existing-position'
             :state.cash<10?'insufficient-virtual-cash'
             :state.equity<=state.maxEquity*.95?'maximum-drawdown'
