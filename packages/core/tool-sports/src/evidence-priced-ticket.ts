@@ -89,13 +89,20 @@ export async function evidencePricedTicket(
       sport:c.sport,league:c.league,eventId:c.eventId,date:day,
       home:c.home,away:c.away,kickoff:c.kickoff,
     }))
-    // A 5s preflight is only candidate screening, never the final NBA dossier.
-    // Do not abort the entire ticket if the broad preliminary scan times out.
-    const checks=await boundedPriced(specialistResearcher(games,researchFetcher,
-      now,env,[],5_000),11_000).catch(()=>[] as SpecialistGate[])
+    // Screen candidate batches concurrently. The specialist itself cancels each
+    // short probe after 5s; a 10-game serial preflight otherwise exceeds the
+    // 12s reviewer budget and leaves all NBA cases without a dossier.
+    const batches=Array.from({length:Math.ceil(games.length/3)},(_,i)=>
+      games.slice(i*3,i*3+3))
+    const attempts=await Promise.allSettled(batches.map(batch=>
+      boundedPriced(specialistResearcher(batch,researchFetcher,
+        now,env,[],5_000),8_000)))
+    const checks=attempts.flatMap(a=>a.status==='fulfilled'?a.value:[])
     reviewedBeforeSelection=checks.length
-    return checks.map((check,index)=>{
-      const fixture=candidates[index]!
+    const fixtureById=new Map(candidates.map(c=>[c.eventId,c]))
+    return checks.flatMap(check=>{
+      const fixture=fixtureById.get(check.eventId)
+      if(!fixture)return []
       preview.set(fixture.eventId,check)
       const conflicts=check.pendingSteps.some(step=>
         /equipos no coinciden|conflicto de cartelera|identidad contradictoria|identidad u horario|horario.*no coinciden/iu.test(step))
@@ -118,8 +125,8 @@ export async function evidencePricedTicket(
         '; lesiones '+(injury?.status??'sin fuente')+
         (absences.length?'; elegido: '+absences.join(', '):'')+
         (conflicts?'; conflicto de identidad':'')
-      return{eventId:fixture.eventId,excluded:conflicts,
-        priority,reason}
+      return[{eventId:fixture.eventId,excluded:conflicts,
+        priority,reason}]
     })
   }
   // Interactive fixture lookup bypasses the persisted research cache.
