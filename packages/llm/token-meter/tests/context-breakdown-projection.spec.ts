@@ -227,6 +227,48 @@ describe('contextBreakdown session projection', () => {
       ))
   })
 
+  it('replays a legacy oversized shadow price without hiding the conversation', async () => {
+    const { ctx, session } = await harness()
+    const first = appendUser(session, 'important original historical message')
+    const replacement = createUserMessage({
+      content: [{ type: 'text', text: 'compacted summary remains visible' }],
+      source: { kind: 'plugin', plugin: 'test' },
+    })
+    // Existing persisted logs can carry a metering claim larger than the
+    // bounded projection total. These old logs must remain readable as-is.
+    session.append('compaction/summary', {
+      compactionId: CompactionId('legacy-negative-breakdown'),
+      summary: [{ type: 'text', text: 'compacted summary remains visible' }],
+      shadowedRange: { start: first, end: first },
+      shadowedSeqs: [first],
+      shadowedTokenCount: 50_000,
+      provider: 'mock',
+      model: 'mock',
+    })
+    session.append('user/message', replacement, {
+      surfaceOp: { op: 'replace', start: first, end: first },
+      sourceEventSeqs: [first],
+    })
+    const expected = estimateMessage(replacement)
+    expect(projected(ctx, session).messageTokens).toBe(expected)
+    expect(ctx.sessionProjections.checkpoint(session).contextBreakdown?.ver).toBe(3)
+    // Recovery folds the original log, not a rewritten or truncated history.
+    const originalEvents = session.events.map(event => event.seq)
+    const replay = ctx.sessionProjections.restore({}, session.events, 0)
+    expect(replay.snapshot.values.contextBreakdown?.messageTokens).toBe(expected)
+    expect(session.events.map(event => event.seq)).toEqual(originalEvents)
+
+    // An old negative cached value is invalidated by version and refolded.
+    const legacy = { ...replay.checkpoint, contextBreakdown: {
+      ver: 2, seq: session.seq - 1,
+      val: { systemTokens: 0, toolsTokens: 0, messageTokens: -500 },
+    } }
+    expect(ctx.sessionProjections.restoreFloor(legacy)).toBe(0)
+    expect(ctx.sessionProjections.viewCheckpoint(legacy)).not.toHaveProperty('contextBreakdown')
+    expect(ctx.sessionProjections.restore(legacy, session.events, 0).snapshot.values.contextBreakdown?.messageTokens)
+      .toBe(expected)
+  })
+
   it('keeps the persisted checkpoint O(1) as the surface grows and compacts', async () => {
     const { ctx, session } = await harness()
     const first = appendUser(session, 'the first of many messages')
