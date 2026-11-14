@@ -101,22 +101,6 @@ type SportsPitcher = { team:string;name:string;id?:number;image?:string;stats?:s
 type SportsLineup = { team:string;confirmed:boolean;players:SportsPlayer[] }
 type SportsBullpen = { team:string;pitchers:SportsPlayer[];note:string }
 type SportsResearch = { favorite:string;method:string;source:string;evidence:string[] }
-/** A favorite only highlights one unambiguous team, never both rivals. */
-export function sportsFavoriteSide(favorite:string|undefined,away:string,home:string):'away'|'home'|undefined {
-  if(!favorite)return undefined
-  const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'').toLowerCase()
-    .replace(/[^a-z0-9]+/gu,' ').trim()
-  const phrase=norm(favorite)
-  if(!phrase)return undefined
-  const contains=(name:string)=>phrase===name||phrase.startsWith(name+' ')
-    ||phrase.endsWith(' '+name)||phrase.includes(' '+name+' ')
-  const matches=(name:string)=>{
-    const team=norm(name),nickname=team.split(' ').at(-1)??''
-    return !!team&&(contains(team)||(nickname.length>=4&&contains(nickname)))
-  }
-  const a=matches(away),h=matches(home)
-  return a===h?undefined:a?'away':'home'
-}
 type SportsGameCard = {
   component: 'sports_game_card'; version: 1
   props: {
