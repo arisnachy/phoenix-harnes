@@ -135,6 +135,20 @@ describe('Phoenix Local text-only small-model fallback', () => {
     expect(fitted.options.system).toBe(big)
   })
 
+  it('does not answer an older greeting when the latest message contains an image', () => {
+    const oldGreeting = user([{ type: 'text', text: 'hola' }])
+    const imageRequest = user([{ type: 'image', attachment: ref }])
+    const options: GenerateOptions = {
+      ...request([oldGreeting, imageRequest]),
+      provider: 'phoenix-local',
+      model: 'phoenix-local',
+      system: big,
+    }
+    const fitted = fitPhoenixLocalTextTurn(options, 4096, 256)
+    expect(fitted.estimatedTokens).toBeGreaterThan(fitted.inputBudgetTokens)
+    expect(fitted.options.messages.at(-1)).toBe(imageRequest)
+  })
+
   it('does not silently truncate an oversized latest human message', () => {
     const latest = user([{ type: 'text', text: 'x'.repeat(20_000) }])
     const options: GenerateOptions = {
