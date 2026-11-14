@@ -36,6 +36,7 @@ interface NativeBridgeRequest {
   readonly model: string
 }
 
+/** Classified native Ollama conversion error with an HTTP status and stable code. */
 export class NativeOllamaChatError extends Error {
   constructor(
     message: string,
@@ -97,7 +98,12 @@ function toolCallsOf(value: unknown): Array<Record<string, unknown>> {
   })
 }
 
-/** Convert the stable OpenAI chat envelope to the native Ollama wire. */
+/**
+ * Convert the stable OpenAI chat envelope to the native Ollama wire.
+ * @param raw - Incoming JSON bytes from pi-ai.
+ * @param model - Selected locally installed Ollama catalog entry.
+ * @returns Validated native Ollama chat request with hard-disabled thinking.
+ */
 export function toNativeOllamaChat(
   raw: Uint8Array<ArrayBuffer> | undefined,
   model: LocalModelCatalogEntry,
@@ -208,7 +214,7 @@ function emptyResult(): never {
 }
 
 /** Build a non-streaming OpenAI-compatible response from native Ollama data. */
-export function nativeOllamaCompletion(chunk: NativeChatChunk, model: string): Record<string, unknown> {
+function nativeOllamaCompletion(chunk: NativeChatChunk, model: string): Record<string, unknown> {
   const calls = openAiTools(chunk.message?.tool_calls ?? [])
   const content = chunk.message?.content ?? ''
   if (!content.trim() && calls.length === 0) emptyResult()
@@ -247,6 +253,10 @@ function sendSse(response: ServerResponse, payload: unknown): void {
  * Adapt Ollama native NDJSON stream to OpenAI SSE for pi-ai without holding
  * entire generation in memory. Empty reasoning-only results become explicit
  * errors rather than misleading max-token success.
+ * @param upstream - Native Ollama HTTP response with JSON or NDJSON body.
+ * @param downstream - Phoenix's OpenAI-compatible loopback HTTP response.
+ * @param request - Validated request metadata and streaming preference.
+ * @returns Once the complete translated response has been sent.
  */
 export async function relayNativeOllamaChat(
   upstream: Response,
