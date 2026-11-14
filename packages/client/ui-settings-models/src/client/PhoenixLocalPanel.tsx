@@ -233,7 +233,7 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
             onClick={() => {
               if (selected !== undefined) void run(() => client.install(selected.id), 'installing')
             }}
-          >{snapshot.phase === 'installing' ? t('installing') : selected.backend === 'ollama' ? t('connectOllama') : t('install')}</button>
+          >{snapshot.phase === 'installing' ? t('installing') : selected?.backend === 'ollama' ? t('connectOllama') : t('install')}</button>
         ) : null}
 
         {installed && snapshot.phase !== 'running' ? (
