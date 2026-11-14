@@ -106,6 +106,21 @@ describe('Phoenix Local text-only small-model fallback', () => {
     expect(options.tools?.length).toBe(1)
   })
 
+  it('leaves headroom by dropping long prior text from a small local turn', () => {
+    const older = user([{ type: 'text', text: 'z'.repeat(15_000) }])
+    const latest = user([{ type: 'text', text: 'hola' }])
+    const options: GenerateOptions = {
+      ...request([older, latest]),
+      system: 'global'.repeat(50_000),
+      provider: 'phoenix-local',
+      model: 'phoenix-local',
+    }
+    const fitted = fitPhoenixLocalTextTurn(options, 4096, 256)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(1_024)
+    expect(fitted.options.messages).toEqual([latest])
+    expect(fitted.options.tools).toEqual([])
+  })
+
   it('retains the original latest user message and only bounded prior chat', () => {
     const previous = user([{ type: 'text', text: 'Qué tal' }])
     const assistant = history('assistant', [{ type: 'text', text: 'Bien' }])
