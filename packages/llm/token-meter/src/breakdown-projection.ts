@@ -9,7 +9,7 @@ import { z } from 'zod'
 import { canonicalHeader } from '@phoenix-ai/dsh-session'
 import type { ProjectionDefinition } from '@phoenix-ai/dsh-session-projection'
 import { estimateSystemTokens, estimateToolsTokens } from './estimate.ts'
-import { foldSurfaceProjection } from './surface-projection.ts'
+import { foldSurfaceProjection, nonNegativeSurfaceTotal } from './surface-projection.ts'
 // Import for the `contextBreakdown` SessionProjectionStateMap key merge.
 import type {} from './projection.ts'
 
@@ -54,7 +54,7 @@ const breakdownSchema = z.object({
  */
 export const contextBreakdownProjectionDefinition = {
   key: 'contextBreakdown',
-  stateVersion: 2,
+  stateVersion: 3,
   stateSchema: contextBreakdownStateSchema,
   init: () => ({ systemTokens: 0, toolsTokens: 0, messageTokens: 0 }),
   apply: (state, event) => {
@@ -74,7 +74,9 @@ export const contextBreakdownProjectionDefinition = {
     return {
       systemTokens,
       toolsTokens,
-      messageTokens: state.messageTokens + fold.deltaTokens,
+      // A stale/historical shadow price may exceed this bounded estimator.
+      // Preserve the summary's price; never reject history for a usage-only counter.
+      messageTokens: nonNegativeSurfaceTotal(state.messageTokens, state.claim, event, fold),
       ...fold.claim === undefined ? {} : { claim: fold.claim },
     }
   },

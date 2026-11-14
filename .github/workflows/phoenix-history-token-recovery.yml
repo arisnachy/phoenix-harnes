@@ -1,0 +1,37 @@
+name: PHOENIX history token recovery
+
+on:
+  pull_request:
+    branches: [main, stable]
+    paths:
+      - 'packages/llm/token-meter/src/**'
+      - 'packages/llm/token-meter/tests/**'
+      - '.github/workflows/phoenix-history-token-recovery.yml'
+  push:
+    branches: [main, stable]
+    paths:
+      - 'packages/llm/token-meter/src/**'
+      - 'packages/llm/token-meter/tests/**'
+      - '.github/workflows/phoenix-history-token-recovery.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  recover-historical-usage:
+    name: Replay legacy sessions without history loss
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Replay token projection and history regressions
+        run: pnpm exec vitest run packages/llm/token-meter/tests/context-breakdown-projection.spec.ts packages/llm/token-meter/tests/token-usage-projection.spec.ts packages/llm/token-meter/tests/token-meter.spec.ts --maxWorkers=2

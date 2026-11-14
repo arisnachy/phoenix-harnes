@@ -92,3 +92,30 @@ export function foldSurfaceProjection(
   }
   return { deltaTokens: tokens - claim.tokens, claim: undefined }
 }
+
+
+/**
+ * Keep a presentation-only surface estimate non-negative while replaying
+ * previously recorded shadow prices. A historical claim can exceed the
+ * bounded projection's running total (for example, after a legacy or missing
+ * metering edge). That inconsistency must never invalidate the durable
+ * conversation or hide its messages.
+ *
+ * For a claimed replacement, retain the newly projected message's full cost
+ * even if the historical shadowed portion exceeded the estimate. The session
+ * events and the shadow-price payload stay unchanged. Replaying them is
+ * deterministic, and checkpoint versions are bumped at the calling units so
+ * stale negative states are re-folded.
+ */
+export function nonNegativeSurfaceTotal(
+  currentTokens: number,
+  priorClaim: ShadowPriceClaim | undefined,
+  event: SessionEvent,
+  fold: SurfaceTokensFold,
+): number {
+  if (priorClaim !== undefined && isSurfaceEvent(event) && event.surfaceOp !== 'append') {
+    const replacementTokens = fold.deltaTokens + priorClaim.tokens
+    return Math.max(0, currentTokens - priorClaim.tokens) + replacementTokens
+  }
+  return Math.max(0, currentTokens + fold.deltaTokens)
+}
