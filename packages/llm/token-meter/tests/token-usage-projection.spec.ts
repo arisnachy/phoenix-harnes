@@ -477,6 +477,43 @@ describe('contextPressure session projection', () => {
     expect(pressure(ctx, session)).toEqual(before)
   })
 
+  it('keeps contextPressure history readable when a legacy shadow claim exceeds its total', async () => {
+    const { ctx, session } = await harness()
+    recordContext(session, 'large', 128_000)
+    const first = appendUser(session, 'A durable conversation entry')
+    const summary = createUserMessage({
+      content: [{ type: 'text', text: 'A short recovered summary' }],
+      source: { kind: 'plugin', plugin: 'test' },
+    })
+    session.append('compaction/summary', {
+      compactionId: CompactionId('legacy-negative-pressure'),
+      summary: [{ type: 'text', text: 'A short recovered summary' }],
+      shadowedRange: { start: first, end: first },
+      shadowedSeqs: [first],
+      shadowedTokenCount: 100_000,
+      provider: 'mock',
+      model: 'mock',
+    })
+    session.append('user/message', summary, {
+      surfaceOp: { op: 'replace', start: first, end: first },
+      sourceEventSeqs: [first],
+    })
+    const checkpoint = ctx.sessionProjections.checkpoint(session)
+    expect(checkpoint.contextPressure?.ver).toBe(5)
+    expect((checkpoint.contextPressure?.val as { surfaceTokens: number }).surfaceTokens)
+      .toBe(ctx.tokenMeter.measure(session).surfaceTokens)
+    expect(pressure(ctx, session)).toEqual({ contextWindow: 128_000 })
+
+    // Old cached state must not suppress a complete history replay.
+    const prior = { ...checkpoint, contextPressure: { ver: 4, seq: session.seq - 1,
+      val: { surfaceTokens: -98_000 } } }
+    expect(ctx.sessionProjections.restoreFloor(prior)).toBe(0)
+    const restored = ctx.sessionProjections.restore(prior, session.events, 0)
+    expect(restored.snapshot.values.contextPressure).toEqual({ contextWindow: 128_000 })
+    expect((restored.checkpoint.contextPressure?.val as { surfaceTokens: number }).surfaceTokens)
+      .toBe(ctx.tokenMeter.measure(session).surfaceTokens)
+  })
+
   it('clamps a projection that heuristic error drove below zero', async () => {
     const { ctx, session } = await harness()
     recordContext(session, 'large', 128_000)
