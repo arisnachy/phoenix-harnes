@@ -40,7 +40,8 @@ test('directly fetches ESPN player stats, gamelog and splits without a prompt ac
   assert.match(player.lastGames[0].value,/Points: 26.*Assists: 7/)
   assert.equal(player.splits[0].value,'27.0')
   assert.ok(player.verifiedSources.includes('gamelog'))
-  assert.ok(calls.every(u=>u.startsWith(site)||u.startsWith(web)))
+  const core='https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/'
+  assert.ok(calls.every(u=>u.startsWith(site)||u.startsWith(web)||u.startsWith(core)))
   assert.ok(calls.every(u=>!u.includes('undefined')))
 })
 test('does not invent metrics from blank endpoints or athlete names not on team roster',async()=>{
