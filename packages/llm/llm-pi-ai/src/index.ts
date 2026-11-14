@@ -144,6 +144,11 @@ function phoenixLocalProfile(): PiAiProviderProfile {
     defaultMaxTokens: PHOENIX_LOCAL_MAX_TOKENS,
     defaultInput: ['text'],
     headers: { Authorization: PHOENIX_LOCAL_AUTHORIZATION },
+    // CPU-first Ollama Qwen should fail explicitly, not silently wait for five
+    // minutes and repeat the same stalled 'hola' with another retry.
+    timeoutMs: 90_000,
+    streamIdleTimeoutMs: 90_000,
+    retryPolicy: { mode: 'normal', maxRetries: 0, retryableCodes: ['TIMEOUT', 'TRANSPORT', 'SERVER'] },
     models: [{
       id: PHOENIX_LOCAL_MODEL,
       name: 'Phoenix Local · Device model',
