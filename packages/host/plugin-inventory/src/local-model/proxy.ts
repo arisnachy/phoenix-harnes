@@ -166,6 +166,7 @@ async function forward(
 /**
  * Start the lightweight loopback gateway that lazily wakes the heavy model.
  * @param managerPromise - host-owned runtime manager promise.
+ * @param options - Optional loopback port/deadline injection for integration tests.
  * @returns the listening unreferenced HTTP server.
  */
 export async function startPhoenixLocalProxy(
