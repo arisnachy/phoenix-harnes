@@ -96,6 +96,7 @@ async function forward(
   manager: LocalModelRuntimeManager,
   request: IncomingMessage,
   response: ServerResponse,
+  ollamaDeadlineMs = OLLAMA_REQUEST_DEADLINE_MS,
 ): Promise<void> {
   try {
     const backendBaseUrl = await manager.ensureRunning()
@@ -111,7 +112,7 @@ async function forward(
     response.once('close', () => { clientClosed.abort() })
     // Stop an unresponsive Ollama request even when upstream has accepted
     // the HTTP request but has not produced any SSE chunks.
-    const deadline = AbortSignal.timeout(isOllama ? OLLAMA_REQUEST_DEADLINE_MS : 10 * 60_000)
+    const deadline = AbortSignal.timeout(isOllama ? ollamaDeadlineMs : 10 * 60_000)
     const signal = AbortSignal.any([clientClosed.signal, deadline])
     const started = Date.now()
     const upstream = await fetch(`${backendBaseUrl}${suffix}`, {
@@ -169,14 +170,15 @@ async function forward(
  */
 export async function startPhoenixLocalProxy(
   managerPromise: Promise<LocalModelRuntimeManager>,
+  options: { port?: number; ollamaDeadlineMs?: number } = {},
 ): Promise<Server> {
   const manager = await managerPromise
   const server = createServer((request, response) => {
-    void forward(manager, request, response)
+    void forward(manager, request, response, options.ollamaDeadlineMs)
   })
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
-    server.listen(PHOENIX_LOCAL_PROXY_PORT, '127.0.0.1', () => {
+    server.listen(options.port ?? PHOENIX_LOCAL_PROXY_PORT, '127.0.0.1', () => {
       server.off('error', reject)
       resolve()
     })
