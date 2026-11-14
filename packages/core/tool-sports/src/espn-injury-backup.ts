@@ -231,8 +231,8 @@ export async function fetchEspnInjuryBackup(
       '. Contrastar contra el informe NBA oficial con sello horario.')
   notes.push('Una baja ESPN no es alineación titular ni informe oficial de inactivos')
   return{...base,status,feedUpdatedAt,
-    availabilityWatch:watch?{requiresReevaluation:watch.requiresReevaluation,
-      unresolved,changes:watch.changes.length}:undefined,
+    ...(watch?{availabilityWatch:{requiresReevaluation:watch.requiresReevaluation,
+      unresolved,changes:watch.changes.length}}:{}),
     home:{name:fixture.home,matched:!!h,injuries:h?.athletes.slice(0,30)??[]},
     away:{name:fixture.away,matched:!!a,injuries:a?.athletes.slice(0,30)??[]},
     notes}
