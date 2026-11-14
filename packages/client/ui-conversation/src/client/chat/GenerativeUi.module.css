@@ -734,3 +734,64 @@
   font-size:9px;font-variant-numeric:tabular-nums;
 }
 .sportsGameCompact .sportsGamePeriodStrip span{white-space:nowrap}
+
+
+/* PHOENIX pick tracker: small, legible and inside the game card, not a second
+   giant results panel. A picked team is BLUE; analytic favorite is SEPARATE. */
+.sportsSlateMatch>div.sportsPickedRow{
+  background:rgba(48,105,214,.085);
+  border-left:3px solid #3474e2;
+  padding-left:6px;margin-left:-6px;border-radius:6px
+}
+.sportsSlateMatch>div.sportsAnalyticalRow:not(.sportsPickedRow){
+  border-left:2px solid #d4a145;
+  padding-left:6px;margin-left:-6px;border-radius:5px
+}
+.sportsSlateMatch .sportsPickTag{
+  display:block;color:#2263bc;font-size:9px;line-height:1.25;font-weight:780
+}
+.sportsSlateMatch .sportsAnalyticalRow .sportsFavoriteTag{
+  color:#94600e;font-weight:720
+}
+.sportsPickPanel{
+  box-sizing:border-box;display:grid;gap:5px;min-width:0;
+  padding:6px 8px;margin:5px 0 0;
+  border:1px solid var(--dsw-alias-border-subtle,rgba(121,140,164,.2));
+  border-radius:9px;background:var(--dsw-alias-interactive-bg-hover,rgba(75,109,166,.045));
+  color:var(--dsw-alias-label-primary,#252d39)
+}
+.sportsPickLine{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+  gap:3px 9px;min-width:0
+}
+.sportsPickLine+.sportsPickLine{padding-top:5px;border-top:1px solid var(--dsw-alias-border-subtle,rgba(122,139,163,.15))}
+.sportsPickGoal{display:flex;flex:1 1 145px;min-width:0;align-items:baseline;gap:3px 7px;flex-wrap:wrap}
+.sportsPickGoal strong{font-size:11px;font-weight:780;line-height:1.25;overflow-wrap:anywhere}
+.sportsPickGoal small{font-size:9px;font-weight:680;color:var(--dsw-alias-label-secondary,#667385)}
+.sportsPickResult{
+  padding:3px 7px;border-radius:99px;border:1px solid var(--dsw-alias-border-subtle,rgba(122,139,163,.22));
+  color:var(--dsw-alias-label-secondary,#637083);
+  font-size:10px;line-height:1.25;font-weight:780
+}
+.sportsPickLine[data-pick-status="leading"] .sportsPickResult,
+.sportsPickLine[data-pick-status="won"] .sportsPickResult{
+  background:rgba(31,143,88,.1);border-color:rgba(31,143,88,.2);color:#188351
+}
+.sportsPickLine[data-pick-status="trailing"] .sportsPickResult,
+.sportsPickLine[data-pick-status="lost"] .sportsPickResult{
+  background:rgba(215,61,82,.09);border-color:rgba(215,61,82,.2);color:#cb374f
+}
+.sportsPickLine[data-pick-status="review"] .sportsPickResult,
+.sportsPickLine[data-pick-status="push"] .sportsPickResult{
+  background:rgba(191,127,34,.08);border-color:rgba(191,127,34,.2);color:#936310
+}
+.sportsPickDetail{flex:1 0 100%;color:var(--dsw-alias-label-secondary,#657180);
+  font-size:9px;line-height:1.3}
+.sportsPickDisclaimer{color:var(--dsw-alias-label-secondary,#657180);
+  font-size:9px;line-height:1.25}
+.sportsSlateEvent .sportsPickGoal strong{font-size:10px}
+.sportsGameCompact .sportsPickPanel{padding:5px 7px}
+@media(max-width:390px){
+  .sportsPickGoal{flex-basis:100%}
+  .sportsPickResult{margin-left:0}
+}
