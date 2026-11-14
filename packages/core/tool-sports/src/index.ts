@@ -652,8 +652,7 @@ export function apply(ctx: Context): void {
                   'no evaluable como hándicap/total')+
                 '. Expediente obligatorio: '+(specialistFor(ticketQuoted[index]!.review)?.specialist??'no disponible')+
                 '. Estado: '+summarizeTicketSpecialist(
-                  specialistFor(ticketQuoted[index]!.review),'basketball'===
-                  ticketQuoted[index]!.review.candidate.sport?'basketball':
+                  specialistFor(ticketQuoted[index]!.review),
                   ticketQuoted[index]!.review.candidate.sport).detail+
                 '. Pendientes: '+(specialistFor(ticketQuoted[index]!.review)?.pendingSteps.slice(0,3).join('; ')??'sin evidencia')+
                 '. Acierto mínimo exigido '+ticketQuoted[index]!.review.priceAudit.breakEvenPercent+
