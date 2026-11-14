@@ -11,6 +11,17 @@ export function choosePhoenix3DPipeline(request: string):
     : level === 'studio' ? 'blender-studio' : 'preview'
 }
 
+/** Anatomical digital twins are image-first; neither primitives nor generic atlases
+ * constitute a patient-specific reconstruction.
+ */
+export function isAnatomicalVisualRequest(request: string): boolean {
+  const text=request.normalize('NFKD').replace(/[\u0300-\u036f]/gu,'').toLowerCase()
+  const anatomical=/\b(?:anatom\w*|neuroanatom\w*|histolog\w*|fisiolog\w*|physiolog\w*|sistema\s+(?:nervios\w*|cardiovascular|respiratorio|urinario|digestivo)|human\s+anatomy|organos?\s+humanos?|human\s+organs?)\b/u.test(text)
+  const organs=/\b(?:corazon|cardiac\w*|heart|cerebro|brain|encefalo|espina\w*|medula|spinal|pulmon\w*|lungs?|rinon(?:es)?|kidneys?|higado|liver|pancreas|uter\w*|prostata|aorta|coronari\w*|arteri\w*|venas?|neuron\w*|esqueleto|skeleton|bladder|vejiga|organos?\s+humanos?)\b/u.test(text)
+  const visual=/\b(?:3d|tridimensional|gemel\w*|digital\s+twins?|model\w*|imagen(?:es)?|images?|render\w*|ilustr\w*|visualiz\w*|reconstr\w*|simul\w*|atlas|muestr\w*|crea\w*|dibuj\w*|disen\w*)\b/u.test(text)
+  return anatomical || (organs && visual)
+}
+
 /** Deterministic media choice for Phoenix apps: 3D only adds value for spatial interaction. */
 export type DesignMedium='scene3d'|'image'|'chart'|'app'|'undetermined'
 /** Classify the requested artifact medium using explicit spatial and UI intent.
@@ -26,6 +37,10 @@ export function choosePhoenixDesignMedium(request:string):DesignMedium{
   const staticImage=/\b(?:png|jpg|jpeg|fotograf\w*|foto|poster|flyer|banner|portada|imagen|render|ilustracion)\b/u.test(text)
   const data=/\b(?:grafic\w*|grafica|dashboard|analitic\w*|estadistic\w*|diagrama\s+de\s+barras|velas|pie\s+chart)\b/u.test(text)
   const ui=/\b(?:formulario|login|tabla|panel\s+de\s+control|botones|pagina\s+web|pagina\s+de\s+inicio)\b/u.test(text)
+  // For anatomical visuals, a 3D keyword means a realistic image, never a primitive GLB.
+  // Actual software/UI authoring remains an app request.
+  if(isAnatomicalVisualRequest(request)
+    && !/\b(?:formulario|dashboard|aplicacion|app|sitio|pagina\s+web|editor|software)\b/u.test(text))return 'image'
   // The explicit data/UI intent wins over incidental "3D" unless a spatial model is requested.
   if(data&&!interactive)return 'chart'
   if(staticImage&&!interactive&&!(app&&appSpatial))return 'image'
@@ -38,6 +53,10 @@ export function choosePhoenixDesignMedium(request:string):DesignMedium{
 /** Instructions preventing accidental 3D renders for non-spatial tasks. */
 export const PHOENIX_3D_ROUTING_PROTOCOL =
   'Phoenix design routing: select the artifact medium based on user intent and spatial value, not visual fashion. '+
+  'MEDICAL ANATOMY OVERRIDE: For anatomical digital twins, organs, neural structures and clinical physiology use image_generation with backend=auto for a detailed anatomical raster image, even when the user says 3D. '+
+  'Never fabricate patient-specific anatomy from ECG, X-ray, clinical text or unreviewed scans; label generic output educational. '+
+  'No primitive-sphere/cylinder GLB anatomy and no fake raster or SVG fallback when image generation fails. '+
+  'Only inspect a real patient-derived volumetric mesh in the dedicated research viewer when source images, segmentation, review and explicit 3D intent exist. '+
   'Use phoenix_3d when a request needs orbit/zoom/rotation, spatial volume, a walkable/showroom/product configurator, '+
   'reusable 3D assets in an application, or explicit .gltf/.glb; use native portable scene geometry, not image_generation. '+
   'For a still photograph, poster, concept render or moodboard use image generation; for graphs use phoenix_visualize; '+
