@@ -214,6 +214,10 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
         </div>
       )}
 
+      {selected?.backend === 'ollama' ? (
+        <p className={styles['muted']}>{t('ollamaLiteMode')}</p>
+      ) : null}
+
       {snapshot.phase === 'installing' && snapshot.progress !== undefined ? (
         <div className={styles['progressBlock']}>
           <div className={styles['progressLabel']}>
