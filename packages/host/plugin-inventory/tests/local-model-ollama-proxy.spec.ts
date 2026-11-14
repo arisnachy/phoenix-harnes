@@ -29,7 +29,7 @@ describe('Phoenix Local Ollama proxy', () => {
     expect(result).toMatchObject({
       model: 'qwen3.5:2b-q4_K_M',
       stream: true,
-      max_tokens: 256,
+      max_tokens: 768,
       reasoning_effort: 'none',
       tools,
     })
@@ -43,7 +43,7 @@ describe('Phoenix Local Ollama proxy', () => {
       max_tokens: 256,
       stream: true,
     }), qwen))
-    expect(result.max_tokens).toBe(256)
+    expect(result.max_tokens).toBe(768)
     expect(result).not.toHaveProperty('max_completion_tokens')
     expect(result.reasoning_effort).toBe('none')
   })
@@ -70,7 +70,7 @@ describe('Phoenix Local Ollama proxy', () => {
     expect(response).toMatchObject({
       model: 'qwen3.5:2b-q4_K_M',
       think: false,
-      max_output_tokens: 256,
+      max_output_tokens: 512,
       reasoning: { effort: 'none' },
     })
   })
