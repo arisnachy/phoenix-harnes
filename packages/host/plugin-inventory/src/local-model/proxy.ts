@@ -60,7 +60,7 @@ export function rewriteOllamaOpenAiBody(
   }
   const request = original as Record<string, unknown>
   const limitField = route === '/responses' ? 'max_output_tokens' : 'max_tokens'
-  const requested = request[limitField]
+  const requested = request[limitField] ?? (route === '/chat/completions' ? request['max_completion_tokens'] : undefined)
   const maxTokens = typeof requested === 'number' && Number.isFinite(requested) && requested > 0
     ? Math.min(Math.floor(requested), model.maxTokens)
     : model.maxTokens
@@ -70,6 +70,10 @@ export function rewriteOllamaOpenAiBody(
     [limitField]: maxTokens,
   }
   if (route === '/chat/completions') {
+    // The Ollama OpenAI-compatible endpoint documents max_tokens, not
+    // max_completion_tokens. Do not send two conflicting output budgets.
+    delete adapted['max_completion_tokens']
+    delete adapted['max_output_tokens']
     adapted['reasoning_effort'] = 'none'
     delete adapted['reasoning']
   } else {

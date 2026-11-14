@@ -579,7 +579,9 @@ export class PiAiAdapter extends LlmAdapter {
           }
           : {},
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
-        ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
+        ...options.provider === 'phoenix-local'
+          ? { maxTokens: options.maxTokens ?? model.maxTokens }
+          : options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are
@@ -596,7 +598,7 @@ export class PiAiAdapter extends LlmAdapter {
         requiresFunctionSchemaProjection ? surfaceRejectedCodexSchemaEvent(events) : events,
         model.contextWindow,
         desiredMaxOutput,
-        options.provider === 'openrouter',
+        options.provider === 'openrouter' || options.provider === 'phoenix-local',
         isNonCodexRecoveryModel(options.provider, options.model),
       )[Symbol.asyncIterator]()
       let exhausted = false

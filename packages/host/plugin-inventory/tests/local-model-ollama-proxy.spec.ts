@@ -35,6 +35,27 @@ describe('Phoenix Local Ollama proxy', () => {
     })
   })
 
+  it('does not forward a competing max_completion_tokens cap to Ollama', () => {
+    const result = decode(rewriteOllamaOpenAiBody('/chat/completions', encode({
+      model: 'phoenix-local',
+      messages: [{ role: 'user', content: 'hola' }],
+      max_completion_tokens: 1,
+      max_tokens: 256,
+      stream: true,
+    }), qwen))
+    expect(result.max_tokens).toBe(256)
+    expect(result).not.toHaveProperty('max_completion_tokens')
+    expect(result.reasoning_effort).toBe('none')
+  })
+
+  it('maps an OpenAI-only max_completion_tokens setting into the Ollama field', () => {
+    const result = decode(rewriteOllamaOpenAiBody('/chat/completions', encode({
+      model: 'phoenix-local', messages: [], max_completion_tokens: 96,
+    }), qwen))
+    expect(result.max_tokens).toBe(96)
+    expect(result).not.toHaveProperty('max_completion_tokens')
+  })
+
   it('respects a stricter client limit rather than expanding short responses', () => {
     const response = decode(rewriteOllamaOpenAiBody('/chat/completions', encode({
       model: 'placeholder', max_tokens: 80, messages: [],
