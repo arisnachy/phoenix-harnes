@@ -41,19 +41,19 @@ function client(initial = snapshot()): PhoenixLocalModelClient & { calls: Record
   const calls = {
     state: vi.fn(async () => current),
     install: vi.fn(async (modelId: string) => {
-      current = snapshot({ selectedModelId: modelId, installedModelIds: [modelId], phase: 'ready' })
+      current = snapshot({ ...current, selectedModelId: modelId, installedModelIds: [modelId], phase: 'ready' })
       return current
     }),
     start: vi.fn(async () => {
-      current = snapshot({ installedModelIds: [current.selectedModelId], phase: 'running' })
+      current = snapshot({ ...current, installedModelIds: [current.selectedModelId], phase: 'running' })
       return current
     }),
     stop: vi.fn(async () => {
-      current = snapshot({ installedModelIds: [current.selectedModelId], phase: 'ready' })
+      current = snapshot({ ...current, installedModelIds: [current.selectedModelId], phase: 'ready' })
       return current
     }),
     uninstall: vi.fn(async (modelId: string) => {
-      current = snapshot({ selectedModelId: modelId, installedModelIds: [], phase: 'not-installed' })
+      current = snapshot({ ...current, selectedModelId: modelId, installedModelIds: [], phase: 'not-installed' })
       return current
     }),
     setMode: vi.fn(async (mode: PhoenixLocalModelSnapshot['mode']) => {
@@ -78,6 +78,29 @@ describe('PhoenixLocalPanel', () => {
     expect(screen.getAllByRole('option').map(option => option.textContent)).toContain('Qwen3.5-4B Q4_K_M')
     expect(screen.getByRole('button', { name: localEn.install })).toBeTruthy()
     expect(screen.getByText(localEn.noInstalled)).toBeTruthy()
+  })
+
+  it('connects an existing Ollama Qwen model and warns that unlinking will not delete it', async () => {
+    const qwenId = 'qwen3.5-2b-ollama-q4-k-m'
+    const local = client(snapshot({
+      selectedModelId: qwenId,
+      catalog: [{
+        id: qwenId,
+        displayName: 'Qwen 3.5 2B Q4_K_M · Ollama',
+        backend: 'ollama',
+        sizeBytes: 2_000_000_000,
+        estimatedRamBytes: 3_500_000_000,
+        contextWindow: 4096,
+        maxTokens: 256,
+        recommended: true,
+      }],
+    }))
+    render(<PhoenixLocalPanel client={local} t={t} />)
+    expect(await screen.findByText(localEn.ollamaExisting)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: localEn.connectOllama }))
+    await waitFor(() =>{  expect(local.calls.install).toHaveBeenCalledWith(qwenId) })
+    fireEvent.click(await screen.findByRole('button', { name: localEn.disconnectOllama }))
+    expect(screen.getByText(localEn.disconnectOllamaQuestion)).toBeTruthy()
   })
 
   it('persists mode changes through the Host client', async () => {
