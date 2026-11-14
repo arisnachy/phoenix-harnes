@@ -24,12 +24,12 @@ describe('Phoenix Local state', () => {
 
     await expect(store.load()).resolves.toEqual({
       mode: 'on-demand',
-      selectedModelId: 'gemma-4-e2b-it-q4-0',
+      selectedModelId: 'qwen3.5-2b-ollama-q4-k-m',
       installedModelIds: [],
     })
   })
 
-  it('migrates the unused legacy Qwen default to Gemma 4', async () => {
+  it('migrates the unused legacy Qwen default to Ollama Qwen 2B', async () => {
     const store = createLocalModelStateStore({
       statePath: '/phoenix/local-models/state.json',
       readFile: vi.fn().mockResolvedValue(JSON.stringify({
@@ -44,8 +44,45 @@ describe('Phoenix Local state', () => {
 
     await expect(store.load()).resolves.toEqual({
       mode: 'on-demand',
-      selectedModelId: 'gemma-4-e2b-it-q4-0',
+      selectedModelId: 'qwen3.5-2b-ollama-q4-k-m',
       installedModelIds: [],
+    })
+  })
+
+  it('migrates an unused Gemma default without removing its files', async () => {
+    const store = createLocalModelStateStore({
+      statePath: '/phoenix/local-models/state.json',
+      readFile: vi.fn().mockResolvedValue(JSON.stringify({
+        schema: 2,
+        mode: 'always-on',
+        selectedModelId: 'gemma-4-e2b-it-q4-0',
+        installedModelIds: [],
+      })),
+      writeFile: vi.fn(),
+      rename: vi.fn(),
+      mkdir: vi.fn(),
+    })
+    await expect(store.load()).resolves.toMatchObject({
+      selectedModelId: 'qwen3.5-2b-ollama-q4-k-m',
+    })
+  })
+
+  it('preserves an installed Gemma selection to avoid silently replacing user data', async () => {
+    const store = createLocalModelStateStore({
+      statePath: '/phoenix/local-models/state.json',
+      readFile: vi.fn().mockResolvedValue(JSON.stringify({
+        schema: 2,
+        mode: 'on-demand',
+        selectedModelId: 'gemma-4-e2b-it-q4-0',
+        installedModelIds: ['gemma-4-e2b-it-q4-0'],
+      })),
+      writeFile: vi.fn(),
+      rename: vi.fn(),
+      mkdir: vi.fn(),
+    })
+    await expect(store.load()).resolves.toMatchObject({
+      selectedModelId: 'gemma-4-e2b-it-q4-0',
+      installedModelIds: ['gemma-4-e2b-it-q4-0'],
     })
   })
 
@@ -104,7 +141,7 @@ describe('Phoenix Local state', () => {
 
     await store.save({
       mode: 'off',
-      selectedModelId: 'gemma-4-e2b-it-q4-0',
+      selectedModelId: 'qwen3.5-2b-ollama-q4-k-m',
       installedModelIds: [],
     })
 

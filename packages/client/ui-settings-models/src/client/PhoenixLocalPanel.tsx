@@ -16,6 +16,7 @@ export type PhoenixLocalModelPhase =
 export interface PhoenixLocalModelCatalogEntry {
   readonly id: string
   readonly displayName: string
+  readonly backend?: 'ollama' | 'llama-server'
   readonly sizeBytes: number
   readonly estimatedRamBytes: number
   readonly contextWindow: number
@@ -178,6 +179,7 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
           disabled={busy || TRANSIENT_PHASES.has(snapshot.phase)}
           onChange={(event) => {
             const modelId = event.currentTarget.value
+            setConfirmUninstall(false)
             void run(() => client.setDefaultModel(modelId))
           }}
         >
@@ -206,7 +208,7 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
 
       {selected === undefined ? null : (
         <div className={styles['facts']}>
-          <span><b>{t('download')}:</b> {formatBytes(selected.sizeBytes)}</span>
+          <span><b>{t('download')}:</b> {selected.backend === 'ollama' ? t('ollamaExisting') : formatBytes(selected.sizeBytes)}</span>
           <span><b>{t('ram')}:</b> {formatBytes(selected.estimatedRamBytes)}</span>
           <span><b>{t('context')}:</b> {selected.contextWindow.toLocaleString()} tokens</span>
         </div>
@@ -231,7 +233,7 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
             onClick={() => {
               if (selected !== undefined) void run(() => client.install(selected.id), 'installing')
             }}
-          >{snapshot.phase === 'installing' ? t('installing') : t('install')}</button>
+          >{snapshot.phase === 'installing' ? t('installing') : selected?.backend === 'ollama' ? t('connectOllama') : t('install')}</button>
         ) : null}
 
         {installed && snapshot.phase !== 'running' ? (
@@ -258,13 +260,13 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
             className={styles['danger']}
             disabled={busy || TRANSIENT_PHASES.has(snapshot.phase)}
             onClick={() => { setConfirmUninstall(true) }}
-          >{t('uninstall')}</button>
+          >{selected.backend === 'ollama' ? t('disconnectOllama') : t('uninstall')}</button>
         ) : null}
       </div>
 
       {confirmUninstall && selected !== undefined ? (
         <div className={styles['confirm']} role="alertdialog" aria-label={t('uninstallQuestion')}>
-          <p>{t('uninstallQuestion')}</p>
+          <p>{selected.backend === 'ollama' ? t('disconnectOllamaQuestion') : t('uninstallQuestion')}</p>
           <div className={styles['actions']}>
             <button type="button" className={styles['secondary']} onClick={() => { setConfirmUninstall(false) }}>{t('cancel')}</button>
             <button
@@ -274,7 +276,7 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
                 setConfirmUninstall(false)
                 void run(() => client.uninstall(selected.id))
               }}
-            >{t('uninstallConfirm')}</button>
+            >{selected.backend === 'ollama' ? t('disconnectOllama') : t('uninstallConfirm')}</button>
           </div>
         </div>
       ) : null}

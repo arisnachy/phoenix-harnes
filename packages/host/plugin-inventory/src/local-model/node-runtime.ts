@@ -119,6 +119,39 @@ async function probeHealth(baseUrl: string, timeoutMs: number): Promise<void> {
 }
 
 /**
+ * Check only the loopback Ollama daemon and the exact local model tag.
+ * No remote hosts, cloud APIs, implicit pulls, or user-owned file writes.
+ */
+async function probeInstalledOllamaModel(modelTag: string): Promise<void> {
+  let response: Response
+  try {
+    response = await fetch('http://127.0.0.1:11434/api/tags', {
+      signal: AbortSignal.timeout(3_000),
+    })
+  } catch (error) {
+    throw new LocalModelRuntimeFault(
+      'ollama-unavailable',
+      'No se puede conectar con Ollama. Inícialo en esta computadora y comprueba el puerto 11434.',
+      { cause: error },
+    )
+  }
+  if (!response.ok) {
+    throw new LocalModelRuntimeFault('ollama-unavailable', `Ollama respondió HTTP ${String(response.status)}.`)
+  }
+  const payload = await response.json() as { models?: Array<{ name?: string; model?: string }> }
+  const wanted = modelTag.toLowerCase()
+  const installed = Array.isArray(payload.models) && payload.models.some(entry =>
+    entry.name?.toLowerCase() === wanted || entry.model?.toLowerCase() === wanted
+  )
+  if (!installed) {
+    throw new LocalModelRuntimeFault(
+      'ollama-model-missing',
+      `No se encontró ${modelTag} en Ollama. Ejecuta: ollama pull ${modelTag}`,
+    )
+  }
+}
+
+/**
  * Create the production Phoenix Local runtime manager for this Host process.
  * The heavy llama-server receives an ephemeral loopback port and stays hidden
  * behind Phoenix's stable proxy; no model is downloaded until Settings asks.
@@ -146,6 +179,7 @@ export async function createNodeLocalModelRuntimeManager(): Promise<LocalModelRu
     allocatePort: allocateLoopbackPort,
     spawnServer: spawnLocalServer,
     probeHealth,
+    probeOllamaModel: probeInstalledOllamaModel,
     freeMemoryBytes: freemem,
   })
 }

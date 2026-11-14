@@ -101,8 +101,8 @@ describe('llm-pi-ai built-in route lifecycle', () => {
       LlmPiAi.PHOENIX_LOCAL_PROVIDER,
       LlmPiAi.PHOENIX_LOCAL_MODEL,
     )).resolves.toMatchObject({
-      context: { contextWindow: 131_072 },
-      defaultMaxTokens: 2_048,
+      context: { contextWindow: 4_096 },
+      defaultMaxTokens: 256,
     })
   })
 })

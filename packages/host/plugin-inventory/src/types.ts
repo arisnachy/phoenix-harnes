@@ -467,6 +467,7 @@ export type PhoenixLocalModelPhase =
 export interface PhoenixLocalModelCatalogEntry {
   readonly id: string
   readonly displayName: string
+  readonly backend: 'ollama' | 'llama-server'
   readonly sizeBytes: number
   readonly estimatedRamBytes: number
   readonly contextWindow: number

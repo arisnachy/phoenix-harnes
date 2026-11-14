@@ -36,6 +36,7 @@ describe('Phoenix Local runtime exit cleanup', () => {
         return server
       }),
       probeHealth: vi.fn(async () => undefined),
+      probeOllamaModel: vi.fn(async () => undefined),
       freeMemoryBytes: vi.fn(() => 16_000_000_000),
     }
     const manager = await createLocalModelRuntimeManager(dependencies)
