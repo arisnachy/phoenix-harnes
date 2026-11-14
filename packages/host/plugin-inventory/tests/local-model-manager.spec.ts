@@ -31,6 +31,7 @@ function harness(initial?: Partial<LocalModelPersistentState>) {
     allocatePort: vi.fn(async () => 17842),
     spawnServer: vi.fn(() => server),
     probeHealth: vi.fn(async () => undefined),
+    probeOllamaModel: vi.fn(async () => undefined),
     freeMemoryBytes: vi.fn(() => 16_000_000_000),
   }
   return { dependencies, server, readState: () => persisted }
@@ -50,6 +51,34 @@ describe('LocalModelRuntimeManager', () => {
     expect(readState().installedModelIds).toEqual(['gemma-4-e2b-it-q4-0'])
     expect(dependencies.downloadArtifact).toHaveBeenCalledTimes(2)
     expect(dependencies.extractArchive).toHaveBeenCalledTimes(1)
+  })
+
+  it('connects Qwen 2B from existing Ollama without downloading artifacts or spawning a child', async () => {
+    const modelId = 'qwen3.5-2b-ollama-q4-k-m'
+    const { dependencies, readState } = harness()
+    const manager = await createLocalModelRuntimeManager(dependencies)
+    await manager.install(modelId)
+    expect(dependencies.probeOllamaModel).toHaveBeenCalledWith('qwen3.5:2b-q4_K_M')
+    expect(dependencies.downloadArtifact).not.toHaveBeenCalled()
+    expect(readState().selectedModelId).toBe(modelId)
+    await expect(manager.ensureRunning()).resolves.toBe('http://127.0.0.1:11434/v1')
+    expect(manager.snapshot()).toMatchObject({ phase: 'running', port: 11434 })
+    expect(dependencies.spawnServer).not.toHaveBeenCalled()
+    await manager.stop()
+    expect(manager.snapshot().baseUrl).toBeUndefined()
+    await manager.uninstall(modelId)
+    expect(dependencies.remove).not.toHaveBeenCalled()
+    expect(readState().installedModelIds).not.toContain(modelId)
+  })
+
+  it('fails with a clear Ollama error if the requested tag is absent', async () => {
+    const { dependencies } = harness()
+    dependencies.probeOllamaModel = vi.fn(async () => { throw new Error('missing Qwen') })
+    const manager = await createLocalModelRuntimeManager(dependencies)
+    await expect(manager.install('qwen3.5-2b-ollama-q4-k-m')).rejects.toMatchObject({
+      code: 'ollama-unavailable',
+    })
+    expect(dependencies.downloadArtifact).not.toHaveBeenCalled()
   })
 
   it('starts llama-server on loopback and returns the OpenAI-compatible v1 endpoint', async () => {

@@ -19,6 +19,7 @@ export interface LocalModelStateStore {
 }
 
 const LEGACY_DEFAULT_LOCAL_MODEL_ID = 'qwen3.5-4b-q4-k-m'
+const PREVIOUS_DEFAULT_LOCAL_MODEL_ID = 'gemma-4-e2b-it-q4-0'
 const STATE_SCHEMA_VERSION = 2
 
 const DEFAULT_STATE: Readonly<LocalModelPersistentState> = Object.freeze({
@@ -41,13 +42,14 @@ function normalizeState(value: unknown, migrateLegacyDefault = false): LocalMode
   const installedModelIds = Array.isArray(record['installedModelIds'])
     ? [...new Set(record['installedModelIds'].filter((entry): entry is string => typeof entry === 'string' && entry.length > 0))]
     : []
-  // Older Phoenix builds preselected Qwen even before any local artifact existed.
-  // Migrate only that empty legacy default; a Qwen model already installed or
-  // explicitly in use remains selected and can be switched/uninstalled by the user.
-  const selectedModelId = migrateLegacyDefault
-    && record['schema'] !== STATE_SCHEMA_VERSION
+  // Switch only unused previous defaults to the lighter Ollama Qwen.
+  // Never override an installed Gemma or an explicitly selected Qwen 4B.
+  const unusedLegacyQwen = record['schema'] !== STATE_SCHEMA_VERSION
     && selectedModelIdRaw === LEGACY_DEFAULT_LOCAL_MODEL_ID
+  const unusedGemmaDefault = selectedModelIdRaw === PREVIOUS_DEFAULT_LOCAL_MODEL_ID
+  const selectedModelId = migrateLegacyDefault
     && installedModelIds.length === 0
+    && (unusedLegacyQwen || unusedGemmaDefault)
     ? DEFAULT_STATE.selectedModelId
     : selectedModelIdRaw
   return { mode, selectedModelId, installedModelIds }
