@@ -111,3 +111,31 @@ export async function resolvedClientLocation(
   inFlight = job
   return job
 }
+
+/**
+ * Best-effort browser position for chat submission.
+ *
+ * Location is optional provenance, never a prerequisite for accepting the
+ * user's message. Some browsers leave Permissions.query() pending indefinitely
+ * despite a bounded getCurrentPosition timeout. Let the observation continue
+ * in the background, but release the admission path after a short budget.
+ * A late, permission-approved observation warms the normal 60-second cache.
+ */
+export function resolvedPromptClientLocation(
+  signal?: AbortSignal,
+): Promise<BrowserClientLocation | undefined> {
+  const existing = usableCached(Date.now())
+  if (existing !== undefined || signal?.aborted) return Promise.resolve(existing)
+  const budgetMs = 75
+  return new Promise((resolve) => {
+    let finished = false
+    const finish = (value: BrowserClientLocation | undefined): void => {
+      if (finished) return
+      finished = true
+      clearTimeout(timer)
+      resolve(value)
+    }
+    const timer = setTimeout(() => { finish(undefined) }, budgetMs)
+    void resolvedClientLocation(signal).then(finish, () => { finish(undefined) })
+  })
+}
