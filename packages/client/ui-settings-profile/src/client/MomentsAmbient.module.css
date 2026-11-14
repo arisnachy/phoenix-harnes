@@ -1,28 +1,172 @@
-/* The ambient is a small, accessible, light-theme-first accessory, never a modal. */
+/* Only the small badge is themed: preserve PHOENIX's underlying light/dark UI. */
 .ambient {
+  --moment-accent: #c99244;
+  --moment-tint: #fff8ed;
   position: fixed;
-  top: 72px;
-  right: 20px;
+  top: 82px;
+  right: 22px;
   z-index: 9;
-  pointer-events: none;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  max-width: min(260px, 45vw);
-  padding: 6px 11px;
-  border: 1px solid var(--dsw-alias-border-l2, #ddd);
+  justify-content: center;
+  gap: 5px;
+  box-sizing: border-box;
+  width: auto;
+  max-width: min(160px, 42vw);
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--moment-accent) 40%, var(--dsw-alias-border-l2, #ddd));
   border-radius: 999px;
-  color: var(--dsw-alias-label-secondary, #555);
-  background: var(--dsw-alias-bg-layer-1, #fff);
-  box-shadow: 0 3px 14px rgb(0 0 0 / 5%);
+  color: var(--dsw-alias-label-primary, #32302d);
+  background: linear-gradient(110deg, var(--moment-tint), var(--dsw-alias-bg-layer-1, #fff) 84%);
+  box-shadow: 0 2px 9px rgb(61 40 17 / 6%);
+  font: inherit;
   font-size: 11px;
-  opacity: .96;
+  line-height: 1;
+  cursor: pointer;
+  transition: box-shadow 150ms ease, border-color 150ms ease;
 }
-.label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.symbol { font-size: 15px; }
-.spark { color: #d69b38; }
-.ambient[data-variant="1"] { border-style: dashed; }
-.ambient[data-variant="2"] .spark { color: #9c79b9; }
-.ambient[data-phoenix-moment="solemn"] .spark { display: none; }
-@media (max-width: 700px) { .ambient { top: 61px; right: 8px; max-width: 145px; } }
-@media (prefers-reduced-motion: reduce) { .ambient { animation: none !important; transition: none !important; } }
+.ambient:hover { box-shadow: 0 3px 12px rgb(61 40 17 / 10%); }
+.ambient:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #e65e2b); outline-offset: 2px; }
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.symbol { flex: 0 0 auto; font-size: 14px; line-height: 1; }
+.spark { flex: 0 0 auto; font-size: 10px; color: var(--moment-accent); }
+/* Small edge-of-header ornaments, never a hero banner or an overlay. */
+.ambient::before {
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  pointer-events: none;
+}
+.ambient[data-phoenix-theme="halloween"] {
+  --moment-accent: #ed852e;
+  --moment-tint: #fff6ea;
+}
+.ambient[data-phoenix-theme="halloween"]::before { content: '🦇'; }
+.ambient[data-phoenix-theme="winter"] {
+  --moment-accent: #548e86;
+  --moment-tint: #eefaf5;
+}
+.ambient[data-phoenix-theme="winter"]::before { content: '❄'; color: #548e86; }
+.ambient[data-phoenix-theme="birthday"] {
+  --moment-accent: #d48b50;
+  --moment-tint: #fff3e9;
+}
+.ambient[data-phoenix-theme="birthday"]::before { content: '✧'; color: #d48b50; }
+.ambient[data-phoenix-theme="patriotic"] {
+  --moment-accent: #6483b0;
+  --moment-tint: #f4f7fd;
+}
+.ambient[data-phoenix-theme="patriotic"]::before { content: '✦'; color: #6483b0; }
+.ambient[data-phoenix-theme="love"] {
+  --moment-accent: #b96c88;
+  --moment-tint: #fff3f5;
+}
+.ambient[data-phoenix-theme="love"]::before { content: '♡'; color: #b96c88; }
+.ambient[data-phoenix-theme="nature"] {
+  --moment-accent: #60916a;
+  --moment-tint: #f0f9ed;
+}
+.ambient[data-phoenix-theme="nature"]::before { content: '✧'; color: #60916a; }
+.ambient[data-phoenix-theme="solemn"] {
+  --moment-accent: #a7a19a;
+  --moment-tint: #f7f5f2;
+  box-shadow: none;
+}
+.ambient[data-phoenix-theme="solemn"]::before,
+.ambient[data-phoenix-theme="solemn"] .spark { display: none; }
+/* Four real, small variations; clicking the badge cycles them for today's occasion. */
+.ambient[data-variant="1"] {
+  background: var(--dsw-alias-bg-layer-1, #fff);
+  border-color: var(--moment-accent);
+}
+.ambient[data-variant="2"] {
+  border-color: var(--dsw-alias-border-l2, #ddd);
+  box-shadow: inset 0 -2px 0 var(--moment-accent), 0 2px 9px rgb(61 40 17 / 6%);
+}
+.ambient[data-variant="3"] {
+  border-style: dashed;
+  border-color: var(--moment-accent);
+  background: var(--moment-tint);
+  box-shadow: none;
+}
+/* Worldwide visual families. Decorations stay inside the tiny badge margin. */
+.ambient[data-phoenix-theme="lunar"] { --moment-accent: #c7503a; --moment-tint: #fff2e9; }
+.ambient[data-phoenix-theme="lunar"]::before { content: '✧'; color: #c7503a; }
+.ambient[data-phoenix-theme="lights"] { --moment-accent: #c49a35; --moment-tint: #fff9e9; }
+.ambient[data-phoenix-theme="lights"]::before { content: '✦'; color: #c49a35; }
+.ambient[data-phoenix-theme="spring"] { --moment-accent: #d77f9c; --moment-tint: #fff2f8; }
+.ambient[data-phoenix-theme="spring"]::before { content: '❀'; color: #d77f9c; }
+.ambient[data-phoenix-theme="harvest"] { --moment-accent: #ba8a3e; --moment-tint: #fff8e9; }
+.ambient[data-phoenix-theme="harvest"]::before { content: '✿'; color: #ba8a3e; }
+.ambient[data-phoenix-theme="water"] { --moment-accent: #4a99ba; --moment-tint: #eefaff; }
+.ambient[data-phoenix-theme="water"]::before { content: '◦'; color: #4a99ba; }
+
+.ambient[data-phoenix-theme="islamic"] { --moment-accent: #4b9d86; --moment-tint: #eefaf5; }
+.ambient[data-phoenix-theme="islamic"]::before { content: '✧'; color: #4b9d86; }
+.ambient[data-phoenix-theme="jewish"] { --moment-accent: #608ac1; --moment-tint: #eff6ff; }
+.ambient[data-phoenix-theme="jewish"]::before { content: '✦'; color: #608ac1; }
+.ambient[data-phoenix-theme="buddhist"] { --moment-accent: #c48e5a; --moment-tint: #fff7eb; }
+.ambient[data-phoenix-theme="buddhist"]::before { content: '✿'; color: #c48e5a; }
+.ambient[data-phoenix-theme="christian"] { --moment-accent: #7c92bc; --moment-tint: #f2f7fe; }
+.ambient[data-phoenix-theme="christian"]::before { content: '✧'; color: #7c92bc; }
+.ambient[data-phoenix-theme="spiritual"] { --moment-accent: #9872bd; --moment-tint: #f9f1ff; }
+.ambient[data-phoenix-theme="spiritual"]::before { content: '✧'; color: #9872bd; }
+.ambient[data-phoenix-theme="heritage"] { --moment-accent: #b47557; --moment-tint: #fff6f0; }
+.ambient[data-phoenix-theme="heritage"]::before { content: '✦'; color: #b47557; }
+.ambient[data-phoenix-theme="music"] { --moment-accent: #8b7bb8; --moment-tint: #f5f2ff; }
+.ambient[data-phoenix-theme="music"]::before { content: '♫'; color: #8b7bb8; }
+.ambient[data-phoenix-theme="health"] { --moment-accent: #3e9e90; --moment-tint: #eefaf7; }
+.ambient[data-phoenix-theme="health"]::before { content: '+'; color: #3e9e90; }
+.ambient[data-phoenix-theme="education"] { --moment-accent: #6485b5; --moment-tint: #f3f6ff; }
+.ambient[data-phoenix-theme="education"]::before { content: '✦'; color: #6485b5; }
+.ambient[data-phoenix-theme="science"] { --moment-accent: #7187c4; --moment-tint: #f0f5ff; }
+.ambient[data-phoenix-theme="science"]::before { content: '✧'; color: #7187c4; }
+.ambient[data-phoenix-theme="family"] { --moment-accent: #c48491; --moment-tint: #fff3f5; }
+.ambient[data-phoenix-theme="family"]::before { content: '♡'; color: #c48491; }
+.ambient[data-phoenix-theme="peace"] { --moment-accent: #799aae; --moment-tint: #f1f9fd; }
+.ambient[data-phoenix-theme="peace"]::before { content: '✦'; color: #799aae; }
+.ambient[data-phoenix-theme="sports"] { --moment-accent: #ad924a; --moment-tint: #fff8ec; }
+.ambient[data-phoenix-theme="sports"]::before { content: '★'; color: #ad924a; }
+.ambient[data-phoenix-theme="community"] { --moment-accent: #66978d; --moment-tint: #eff9f6; }
+.ambient[data-phoenix-theme="community"]::before { content: '✧'; color: #66978d; }
+.ambient[data-phoenix-theme="newyear"] { --moment-accent: #ba8b55; --moment-tint: #fff7ec; }
+.ambient[data-phoenix-theme="newyear"]::before { content: '✦'; color: #ba8b55; }
+.ambient[data-phoenix-theme="festival"] { --moment-accent: #c27c9b; --moment-tint: #fff1f8; }
+.ambient[data-phoenix-theme="festival"]::before { content: '✧'; color: #c27c9b; }
+/* Eight low-noise compositions, allowing local variation on every occasion. */
+.ambient[data-variant="4"] {
+  border-color: var(--moment-accent);
+  border-radius: 10px;
+  background: var(--moment-tint);
+  box-shadow: none;
+}
+.ambient[data-variant="5"] {
+  border: 1px solid var(--dsw-alias-border-l2, #ddd);
+  background: var(--dsw-alias-bg-layer-1, #fff);
+  box-shadow: inset 3px 0 var(--moment-accent);
+}
+.ambient[data-variant="6"] {
+  border-color: color-mix(in srgb, var(--moment-accent) 55%, transparent);
+  background: linear-gradient(90deg, var(--dsw-alias-bg-layer-1, #fff), var(--moment-tint));
+  box-shadow: 0 1px 7px rgb(0 0 0 / 4%);
+}
+.ambient[data-variant="7"] {
+  border: 1px solid var(--dsw-alias-border-l2, #ddd);
+  background: var(--moment-tint);
+  box-shadow: inset 0 2px var(--moment-accent);
+}
+@media (max-width: 700px) {
+  .ambient { top: 62px; right: 8px; max-width: 116px; height: 26px; padding: 0 7px; }
+  .ambient::before { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ambient { animation: none !important; transition: none !important; }
+}

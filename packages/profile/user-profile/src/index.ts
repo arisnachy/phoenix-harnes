@@ -8,7 +8,7 @@ import {
   deriveAge, mergeUserProfile, validateUserProfile, validateUserProfileUpdate,
 } from './schema.ts'
 import { inferAssistantGenderFromUserMessage } from './inference.ts'
-import { detectPersonalMoment, fetchPublicHolidays, renderMomentContext } from './moments.ts'
+import { calendarDay, detectPersonalMoment, fetchPublicHolidays, renderMomentContext } from './moments.ts'
 import type { PublicHoliday } from './moments.ts'
 import type {
   AssistantIdentity, UserProfileConsented, UserProfileRedacted, UserProfileSettings, UserProfileUpdate, UserProfileView,
@@ -227,7 +227,8 @@ export class UserProfileService extends Service {
       this.holidayKey = ''
       return
     }
-    const year = new Date().getFullYear()
+    // Match the year of the user's local civil day, including New Year's rollover.
+    const year = Number(calendarDay(new Date(), profile.momentsTimeZone).slice(0, 4))
     const key = `${country}:${year}`
     if (key === this.holidayKey || key === this.holidayLoading) return
     this.holidayLoading = key
