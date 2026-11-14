@@ -10,7 +10,7 @@ import type {
 } from '@phoenix-ai/dsh-attachment'
 import { CallId, createMessage, createUserMessage, OFFLOADED_IMAGE_TEXT } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, Message } from '@phoenix-ai/dsh-llm'
-import { estimateGenerateOptionsTokens, fitGenerateOptionsToContext, toPiContext } from '../src/context.ts'
+import { estimateGenerateOptionsTokens, fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, toPiContext } from '../src/context.ts'
 import { toPiAssistant } from '../src/replay.ts'
 
 const ref: ImageAttachmentRef = {
@@ -83,6 +83,82 @@ function user(content: ContentBlock[]): Message {
 function history(role: 'system' | 'assistant', content: ContentBlock[]): Message {
   return createMessage({ role, content, source: { kind: 'plugin', plugin: 'test' } })
 }
+
+describe('Phoenix Local text-only small-model fallback', () => {
+  const big = 'a'.repeat(400_000)
+  it('lets Qwen answer hola despite 100k tokens of global instructions', () => {
+    const latest = user([{ type: 'text', text: 'hola' }])
+    const options: GenerateOptions = {
+      ...request([latest]),
+      provider: 'phoenix-local',
+      model: 'phoenix-local',
+      system: big,
+    }
+    const normal = fitGenerateOptionsToContext(options, 4096, 256)
+    expect(normal.estimatedTokens).toBeGreaterThan(100_000)
+    const fitted = fitPhoenixLocalTextTurn(options, 4096, 256)
+    expect(fitted.estimatedTokens).toBeLessThan(fitted.inputBudgetTokens)
+    expect(fitted.options.messages).toEqual([latest])
+    expect(fitted.options.tools).toEqual([])
+    expect(fitted.options.system?.length).toBeLessThan(700)
+    expect(fitted.compacted).toBe(true)
+    expect(options.system).toBe(big)
+    expect(options.tools?.length).toBe(1)
+  })
+
+  it('retains the original latest user message and only bounded prior chat', () => {
+    const previous = user([{ type: 'text', text: 'Qué tal' }])
+    const assistant = history('assistant', [{ type: 'text', text: 'Bien' }])
+    const last = user([{ type: 'text', text: 'hola' }])
+    const options: GenerateOptions = {
+      ...request([previous, assistant, last]),
+      provider: 'phoenix-local',
+      model: 'phoenix-local',
+      system: big,
+    }
+    const fitted = fitPhoenixLocalTextTurn(options, 4096, 256)
+    expect(fitted.options.messages).toEqual([previous, assistant, last])
+    expect(fitted.options.messages.at(-1)).toBe(last)
+  })
+
+  it('does not discard in-flight tool cycles to hide a context failure', () => {
+    const latest = user([{ type: 'text', text: 'ejecuta la herramienta' }])
+    const toolActivity = history('assistant', [{ type: 'text', text: 'Call underway' }])
+    const options: GenerateOptions = {
+      ...request([latest, toolActivity]),
+      provider: 'phoenix-local',
+      model: 'phoenix-local',
+      system: big,
+    }
+    const fitted = fitPhoenixLocalTextTurn(options, 4096, 256)
+    expect(fitted.estimatedTokens).toBeGreaterThan(fitted.inputBudgetTokens)
+    expect(fitted.options.system).toBe(big)
+  })
+
+  it('does not silently truncate an oversized latest human message', () => {
+    const latest = user([{ type: 'text', text: 'x'.repeat(20_000) }])
+    const options: GenerateOptions = {
+      ...request([latest]),
+      provider: 'phoenix-local',
+      model: 'phoenix-local',
+      system: big,
+    }
+    const fitted = fitPhoenixLocalTextTurn(options, 4096, 256)
+    expect(fitted.estimatedTokens).toBeGreaterThan(fitted.inputBudgetTokens)
+    expect(fitted.options.messages.at(-1)).toBe(latest)
+  })
+
+  it('leaves a fitting local request untouched with tools available', () => {
+    const options: GenerateOptions = {
+      ...request([user([{ type: 'text', text: 'sumar 17 y 25' }])]),
+      provider: 'phoenix-local',
+      model: 'phoenix-local',
+    }
+    const fitted = fitPhoenixLocalTextTurn(options, 4096, 256)
+    expect(fitted.options).toBe(options)
+    expect(fitted.compacted).toBe(false)
+  })
+})
 
 describe('pi-ai request context conversion', () => {
   it('reserves usable prompt space for a 4096-token local Qwen model', () => {
