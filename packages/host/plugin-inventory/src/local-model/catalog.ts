@@ -1,8 +1,26 @@
 import type { LocalModelCatalogEntry, LocalRuntimeManifest } from './types.js'
 
+/**
+ * Small CPU-first Ollama model already installed by the user.
+ * Phoenix connects to the existing local Ollama service; it must never
+ * re-download the model or delete it when the user disconnects Phoenix.
+ */
+const QWEN_35_2B_OLLAMA: LocalModelCatalogEntry = Object.freeze({
+  id: 'qwen3.5-2b-ollama-q4-k-m',
+  displayName: 'Qwen 3.5 2B Q4_K_M · Ollama',
+  backend: 'ollama',
+  ollamaModel: 'qwen3.5:2b-q4_K_M',
+  sizeBytes: 2_000_000_000,
+  estimatedRamBytes: 3_500_000_000,
+  contextWindow: 4_096,
+  maxTokens: 256,
+  recommended: true,
+})
+
 const GEMMA_4_E2B_IT_Q4_0: LocalModelCatalogEntry = Object.freeze({
   id: 'gemma-4-e2b-it-q4-0',
   displayName: 'Gemma 4 E2B-it Q4_0',
+  backend: 'llama-server',
   modelFileName: 'gemma-4-E2B-it-Q4_0.gguf',
   sourceUrl: 'https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/64ef033dc9f85a88f88e70cceb0a7457366bea64/gemma-4-E2B-it-Q4_0.gguf?download=true',
   sha256: '8e30dff3ac4c8434c49a7036fa15564bdbb6044e42bf04550bf1a096ad7e6a52',
@@ -10,12 +28,13 @@ const GEMMA_4_E2B_IT_Q4_0: LocalModelCatalogEntry = Object.freeze({
   estimatedRamBytes: 6_000_000_000,
   contextWindow: 131_072,
   maxTokens: 2_048,
-  recommended: true,
+  recommended: false,
 })
 
 const QWEN_35_4B_Q4_K_M: LocalModelCatalogEntry = Object.freeze({
   id: 'qwen3.5-4b-q4-k-m',
   displayName: 'Qwen3.5-4B Q4_K_M',
+  backend: 'llama-server',
   modelFileName: 'Qwen_Qwen3.5-4B-Q4_K_M.gguf',
   sourceUrl: 'https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/ba06320255db2dbec194dad738d066be90dabf29/Qwen_Qwen3.5-4B-Q4_K_M.gguf?download=true',
   sha256: '13c16f426047e2de38cd075bdade4a7bcbc8c774384876f677740cda65f8a983',
@@ -36,12 +55,13 @@ const WINDOWS_X64_LLAMA_CPP: LocalRuntimeManifest = Object.freeze({
 })
 
 const LOCAL_MODEL_CATALOG: readonly LocalModelCatalogEntry[] = Object.freeze([
+  QWEN_35_2B_OLLAMA,
   GEMMA_4_E2B_IT_Q4_0,
   QWEN_35_4B_Q4_K_M,
 ])
 
 /** Stable id of the model Phoenix Local selects on first use. */
-export const DEFAULT_LOCAL_MODEL_ID = GEMMA_4_E2B_IT_Q4_0.id
+export const DEFAULT_LOCAL_MODEL_ID = QWEN_35_2B_OLLAMA.id
 
 /**
  * Return Phoenix's immutable catalog of supported local models.

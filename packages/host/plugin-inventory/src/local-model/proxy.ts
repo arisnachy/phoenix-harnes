@@ -1,5 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { LocalModelRuntimeManager } from './manager.js'
+import { getLocalModel } from './catalog.js'
+import type { LocalModelCatalogEntry } from './types.js'
 
 /** Stable loopback port exposed to the normal Phoenix LLM provider. */
 export const PHOENIX_LOCAL_PROXY_PORT = 17_842
@@ -36,6 +38,48 @@ function requestHeaders(request: IncomingMessage): Headers {
   return headers
 }
 
+/**
+ * Adapt Phoenix's stable provider model name to the model already in Ollama.
+ * Disable explicit thinking and cap verbose CPU-first answers, preserving a
+ * smaller caller-supplied limit and all tool declarations and streaming flags.
+ * The rewritten request never leaves 127.0.0.1.
+ */
+export function rewriteOllamaOpenAiBody(
+  suffix: string,
+  body: Uint8Array<ArrayBuffer> | undefined,
+  model: LocalModelCatalogEntry | undefined,
+): Uint8Array<ArrayBuffer> | undefined {
+  if (body === undefined || model?.backend !== 'ollama' || !model.ollamaModel) return body
+  const route = suffix.split('?')[0]
+  if (route !== '/chat/completions' && route !== '/responses') return body
+  const original = JSON.parse(Buffer.from(body).toString('utf8')) as unknown
+  if (typeof original !== 'object' || original === null || Array.isArray(original)) {
+    throw new Error('Invalid Phoenix Local JSON request.')
+  }
+  const request = original as Record<string, unknown>
+  const limitField = route === '/responses' ? 'max_output_tokens' : 'max_tokens'
+  const requested = request[limitField]
+  const maxTokens = typeof requested === 'number' && Number.isFinite(requested) && requested > 0
+    ? Math.min(Math.floor(requested), model.maxTokens)
+    : model.maxTokens
+  const adapted: Record<string, unknown> = {
+    ...request,
+    model: model.ollamaModel,
+    [limitField]: maxTokens,
+  }
+  if (route === '/chat/completions') {
+    adapted['reasoning_effort'] = 'none'
+    delete adapted['reasoning']
+  } else {
+    adapted['think'] = false
+    adapted['reasoning'] = { effort: 'none' }
+  }
+  const encoded = Buffer.from(JSON.stringify(adapted), 'utf8')
+  const copy = new Uint8Array(new ArrayBuffer(encoded.length))
+  copy.set(encoded)
+  return copy
+}
+
 function responseHeaders(source: Headers, target: ServerResponse): void {
   source.forEach((value, name) => {
     if (name.toLowerCase() === 'content-encoding' || name.toLowerCase() === 'content-length') return
@@ -53,10 +97,13 @@ async function forward(
     const incomingPath = request.url ?? '/v1'
     const suffix = incomingPath.startsWith('/v1') ? incomingPath.slice(3) : incomingPath
     const body = await readBody(request)
+    const forwardedBody = request.method === 'POST'
+      ? rewriteOllamaOpenAiBody(suffix, body, getLocalModel(manager.snapshot().selectedModelId))
+      : body
     const upstream = await fetch(`${backendBaseUrl}${suffix}`, {
       method: request.method ?? 'POST',
       headers: requestHeaders(request),
-      ...(body === undefined ? {} : { body }),
+      ...(forwardedBody === undefined ? {} : { body: forwardedBody }),
       signal: AbortSignal.timeout(10 * 60_000),
     })
     response.statusCode = upstream.status

@@ -130,6 +130,7 @@ function publicLocalSnapshot(snapshot: LocalModelRuntimeSnapshot): PhoenixLocalM
     catalog: getLocalModelCatalog().map(model => ({
       id: model.id,
       displayName: model.displayName,
+      backend: model.backend,
       sizeBytes: model.sizeBytes,
       estimatedRamBytes: model.estimatedRamBytes,
       contextWindow: model.contextWindow,
