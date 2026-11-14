@@ -6,7 +6,7 @@ import {dailyResearchFetcher} from './sports-daily-preload.ts'
 import {auditTicketDecisions,readDecisionPolicy,type TicketDecisionAudit} from './sports-ticket-decision.ts'
 import {auditTicketMarketRisk,quoteSideNoVig,type TicketMarketRisk} from './ticket-risk-audit.ts'
 import {investigateTicketSpecialists,type SpecialistGate} from './ticket-specialist-gate.ts'
-import {summarizeTicketSpecialist} from './ticket-specialist-summary.ts'
+import {summarizeTicketSpecialist,needsSelectedSpecialistRecheck} from './ticket-specialist-summary.ts'
 import { keylessEnabled,keylessOdds,type KeylessQuote } from './keyless-odds.ts'
 import {lookupExactEspnWinner,sameEspnTeam} from './sports-exact-espn-winner.ts'
 import {researchPublicOddsWebsites} from './sports-public-odds-pages.ts'
@@ -130,8 +130,7 @@ export async function evidencePricedTicket(
   // preflights for other sports. Small parallel batches avoid a long waterfall.
   const pendingGames=research.events.filter(e=>{
     const existing=preview.get(e.eventId)
-    return !existing||existing.status==='unavailable'||
-      (e.sport==='basketball'&&existing.checklist?.complete!==true)
+    return needsSelectedSpecialistRecheck(e,existing)
   }).map(e=>({sport:e.sport,league:e.league,eventId:e.eventId,
     date:day,home:e.home,away:e.away,kickoff:e.kickoff}))
   const batches=Array.from({length:Math.ceil(pendingGames.length/3)},(_,i)=>
