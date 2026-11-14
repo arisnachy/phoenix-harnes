@@ -22,6 +22,8 @@ export function isExpectedStdioBrokenPipe(error) {
 }
 
 const WINDOWS_COMMAND_SHIMS = new Set(['corepack', 'npm', 'npx', 'pnpm', 'yarn'])
+// Give the MCP server time to drain requests and close its transport before killing it.
+const MCP_CHILD_SHUTDOWN_GRACE_MS = 1_500
 const stdioGuardUrl = new URL('./mcp-stdio-epipe-guard.mjs', import.meta.url).href
 
 export function childEnvironment(env = process.env) {
@@ -114,11 +116,29 @@ async function main() {
     ...childSpawnOptions(command),
   })
   let downstreamClosed = false
+  let shutdownRequested = false
+  let shutdownTimer
+  const stopChild = () => {
+    if (shutdownRequested) return
+    shutdownRequested = true
+    if (child.exitCode !== null || child.signalCode !== null) return
+    // On Windows child.kill() terminates the process abruptly. Offer stdin EOF
+    // first so Rust rmcp and other MCP transports can finish their close tasks.
+    try {
+      if (!child.stdin.destroyed && !child.stdin.writableEnded) child.stdin.end()
+    } catch { /* The server has already closed stdin. */ }
+    shutdownTimer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill()
+    }, MCP_CHILD_SHUTDOWN_GRACE_MS)
+    shutdownTimer.unref?.()
+  }
   const closeChild = () => {
     if (downstreamClosed) return
     downstreamClosed = true
-    child.stdout.pause()
-    if (child.exitCode === null) child.kill()
+    // Drain the output rather than pausing it: a full pipe can stall shutdown.
+    child.stdout.removeAllListeners('data')
+    child.stdout.resume()
+    stopChild()
   }
 
   const stdoutError = (error) => {
@@ -135,9 +155,6 @@ async function main() {
   })
   forward(child.stdout, process.stdout, closeChild)
 
-  const stopChild = () => {
-    if (child.exitCode === null) child.kill()
-  }
   process.once('SIGINT', stopChild)
   process.once('SIGTERM', stopChild)
 
@@ -150,12 +167,14 @@ async function main() {
 
   await new Promise((resolve) => {
     child.once('error', () => {
+      clearTimeout(shutdownTimer)
       stopInputForwarding()
       cleanupToken()
       process.exitCode = 1
       resolve()
     })
     child.once('exit', (code, signal) => {
+      clearTimeout(shutdownTimer)
       stopInputForwarding()
       cleanupToken()
       process.exitCode = code ?? (signal === null ? 1 : 0)
