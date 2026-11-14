@@ -11,23 +11,30 @@ export type LocalModelPhase =
   | 'stopping'
   | 'error'
 
-/** Immutable metadata for one supported local model artifact. */
-export interface LocalModelCatalogEntry {
+/** Shared metadata of a local device model, regardless of inference backend. */
+interface LocalModelMetadata {
   id: string
   displayName: string
-  /** Native GGUF runner or an existing Ollama installation. */
-  backend: 'llama-server' | 'ollama'
-  /** Exact Ollama tag; only applies to the Ollama backend. */
-  ollamaModel?: string
-  modelFileName: string
-  sourceUrl: string
-  sha256: string
   sizeBytes: number
   estimatedRamBytes: number
   contextWindow: number
   maxTokens: number
   recommended: boolean
 }
+
+/** Distinguish an already installed Ollama model from a managed GGUF artifact. */
+export type LocalModelCatalogEntry = LocalModelMetadata & (
+  | {
+    backend: 'ollama'
+    ollamaModel: string
+  }
+  | {
+    backend: 'llama-server'
+    modelFileName: string
+    sourceUrl: string
+    sha256: string
+  }
+)
 
 /** Pinned native inference runtime artifact for one platform target. */
 export interface LocalRuntimeManifest {
