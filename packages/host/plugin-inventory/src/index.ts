@@ -49,6 +49,7 @@ import {
 } from './mcp-managed.ts'
 import type {
   BlenderLocalState,
+  CodexResetState, CodexResetRequest, CodexResetReceipt,
   AnatomyConnectorSnapshot, AnatomyConnectorInstallRequest, AnatomyConnectorInstallReceipt,
   ChatGptWebSnapshot,
   BusinessLibrarySnapshot,
@@ -164,6 +165,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
   private readonly telegram: TelegramInbox
   private readonly telemetry: TokenTelemetryCollector
   private readonly pluginPreferences = new PluginEnablementStore()
+  private readonly codexResetInFlight = new Map<string, Promise<CodexResetReceipt>>()
 
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
@@ -365,6 +367,35 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('businessLibrary')
   async businessLibrary(): Promise<BusinessLibrarySnapshot> {
     return readBusinessLibrarySnapshot()
+  }
+
+
+  /** Read earned Codex reset availability from the official local account bridge. */
+  @Remote('codexResetState')
+  async codexResetState(): Promise<CodexResetState> {
+    const service = (this.ctx.get as (name: string) => unknown)('codexResetControl') as
+      | { state(): Promise<CodexResetState> }
+      | undefined
+    if (service === undefined) throw new Error('Native Codex reset service is unavailable')
+    return service.state()
+  }
+
+  /** Redeem only an explicitly confirmed UI attempt; never expose ChatGPT tokens. */
+  @Remote('codexResetRedeem')
+  async codexResetRedeem(request: CodexResetRequest): Promise<CodexResetReceipt> {
+    const service = (this.ctx.get as (name: string) => unknown)('codexResetControl') as
+      | { redeem(request: CodexResetRequest): Promise<CodexResetReceipt> }
+      | undefined
+    if (service === undefined) throw new Error('Native Codex reset service is unavailable')
+    const existing = this.codexResetInFlight.get(request.idempotencyKey)
+    if (existing !== undefined) return existing
+    const pending = service.redeem(request)
+    this.codexResetInFlight.set(request.idempotencyKey, pending)
+    try {
+      return await pending
+    } finally {
+      this.codexResetInFlight.delete(request.idempotencyKey)
+    }
   }
 
   @Remote('localModelState')

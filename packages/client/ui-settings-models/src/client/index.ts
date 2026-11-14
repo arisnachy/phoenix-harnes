@@ -14,6 +14,7 @@ import type {} from '@phoenix-ai/dsh-api-remotes/client'
 import type { ModelsSectionInjected } from './ModelsSection.tsx'
 import { ModelsWithLocalSection } from './ModelsWithLocalSection.tsx'
 import type { ModelsWithLocalSectionInjected } from './ModelsWithLocalSection.tsx'
+import type { CodexResetClient, CodexResetSnapshot } from './CodexResetsPanel.tsx'
 import { EclipseRoutingPanel } from './EclipseRoutingPanel.tsx'
 import type { EclipseCatalogChoice } from './EclipseRoutingPanel.tsx'
 import type {
@@ -112,6 +113,14 @@ export async function loadEclipseCodexCatalog(
 type PluginInventoryRemoteResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: { code: string; message: string } }
+
+type PluginInventoryCodexResetRemote = {
+  codexResetState(): Promise<PluginInventoryRemoteResult<CodexResetSnapshot>>
+  codexResetRedeem(request: { idempotencyKey: string; creditId?: string }): Promise<PluginInventoryRemoteResult<{
+    outcome: 'reset' | 'alreadyRedeemed' | 'nothingToReset' | 'noCredit'
+    state?: CodexResetSnapshot
+  }>>
+}
 
 type PluginInventoryChatGptWebRemote = {
   chatGptWebState(): Promise<PluginInventoryRemoteResult<ChatGptWebSnapshot>>
@@ -261,6 +270,19 @@ type PluginInventoryLocalRemote = {
 function unwrapPluginInventory<T>(operation: string, result: PluginInventoryRemoteResult<T>): T {
   if (result.ok) return result.value
   throw new Error(`pluginInventory.${operation} failed: ${result.error.code}: ${result.error.message}`)
+}
+
+/** Codex reset controls stay behind the trusted Host RPC, never a generic agent tool. */
+function codexResetClient(ctx: ClientContext): CodexResetClient {
+  const remote = (): PluginInventoryCodexResetRemote => {
+    const value = ctx.get('remote.pluginInventory') as PluginInventoryCodexResetRemote | undefined
+    if (value === undefined) throw new Error('Codex reset control is unavailable on this Host')
+    return value
+  }
+  return {
+    state: async () => unwrapPluginInventory('codexResetState', await remote().codexResetState()),
+    redeem: async request => unwrapPluginInventory('codexResetRedeem', await remote().codexResetRedeem(request)),
+  }
 }
 
 /** Resolve the optional Phoenix Local Remote without making it a plugin load dependency. */
@@ -425,6 +447,7 @@ export function apply(ctx: ClientContext): void {
   const localT = ctx.locale.bind(LOCAL_NS) as ModelsWithLocalSectionInjected['localT']
   const connectorT = ctx.locale.bind(CONNECTORS_NS) as ConnectorsSettingsSectionProps['connectorT']
   const localModel = localModelClient(ctx)
+  const codexReset = codexResetClient(ctx)
   const mcpRegistry = mcpRegistryClient(ctx)
   const telegram = telegramBotClient(ctx)
   const oddsApi = theOddsApiClient(ctx)
@@ -438,6 +461,7 @@ export function apply(ctx: ClientContext): void {
     t,
     localModel,
     localT,
+    codexReset,
   })
   const eclipseInjected = () => ({
     controller,
