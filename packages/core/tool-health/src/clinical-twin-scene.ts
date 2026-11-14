@@ -123,6 +123,7 @@ export function planClinicalTwinScene(input:ClinicalTwinSceneInput){
     &&!['ecg','laboratory','hematology','microbiology','molecular','cytology','histopathology'].includes(study.family)
     &&evidenceKind!=='hypothesis'
   const neuralAllowed=permitted&&neuralFinding.length>0&&evidenceKind!=='hypothesis'
+    &&!['ecg','laboratory','hematology','microbiology','molecular','cytology','histopathology'].includes(study.family)
   const evidenceLabel=evidenceKind==='observed'?'hallazgo observado en fuente primaria declarada':
     evidenceKind==='reported'?'hallazgo atribuido al informe':
     evidenceKind==='hypothesis'?'HIPÓTESIS NO CONFIRMADA':'sin hallazgos'
