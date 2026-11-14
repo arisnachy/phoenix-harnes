@@ -21,6 +21,7 @@ import {selectDailyResearchedMarkets} from './daily-market-selection.ts'
 import {auditTicketMarketRisk} from './ticket-risk-audit.ts'
 import {researchNhlOfficialMatch,type DailyNhlSpecialist} from './daily-nhl-specialist.ts'
 import {investigateTicketSpecialists} from './ticket-specialist-gate.ts'
+import {summarizeTicketSpecialist} from './ticket-specialist-summary.ts'
 import {readSportsEventMarketMenu,eventMarketCatalog} from './sports-event-market-menu.ts'
 import {researchDailySpecialMarkets} from './daily-special-market-research.ts'
 
@@ -92,6 +93,7 @@ const boundedDailyTool=<T>(operation:Promise<T>,ms:number):Promise<T>=>{
 }
 const GUIDANCE = [
   SPORTS_OPEN_RESEARCH_GUIDANCE,
+  'ESTADO NBA POR PARTIDO: el motor de ticket DEBE exponer researchEvidenceState, researchDetail y pendingEvidence a partir de los pasos reales de specialistChecks; la primera inspección rápida no equivale al expediente final. Cuando existan roster, forma o fuentes consultadas, indicar INVESTIGACIÓN PARCIAL y los datos específicos aún pendientes. No repetir «Sin expediente especializado, lesiones y quintetos verificados para esta pata» en cada juego: «sin expediente» solo si realmente no se obtuvo evidencia; lesiones ESPN verificadas como reporte no equivalen a quinteto confirmado ni a parte oficial definitivo. Si el especialista agota tiempo, informar el timeout concreto sin ocultar datos anteriores. ',
   'CUOTAS UTILIZABLES PARA EL TICKET: acepta un precio publicado por ESPN o un proveedor autorizado tras una consulta reciente, con evento futuro, equipos, casa identificada, mercado y selección exactos. La falta de updatedAt/lastUpdated de la casa NO lo convierte en mera referencia ni bloquea su inclusión en un ticket cotizado. observedAt registra cuándo PHOENIX consultó la fuente; no equivale a una actualización de la casa. No digas «Sin hora de actualización confirmada, las cuotas son referencias, no cotizaciones operables». Si faltan casa, identidad, precio o mercado, el partido ya comenzó o la consulta es antigua, no lo promociones. El ticket es utilizable para apostar manualmente sujeto al precio que acepte la banca; jamás afirmar que la apuesta fue ejecutada. ',
   'LIMITE DE BUSQUEDA PARA TICKETS: si ya existen cinco o seis eventos prepartido con IDs y fechas verificados en NBA/NHL/otras ligas, NO recorrer 220 ligas de soccer para resolver una ausencia de cuotas. Resolver las cuotas por esos IDs, mostrar precios ESPN/DraftKings observados recientemente COMO CUOTAS USABLES EN EL TICKET DE INVESTIGACIÓN aunque lastUpdated no exista; observedAt es hora de consulta, no de cambio del bookmaker, y entregar inmediatamente el borrador fundamentado. Solo ampliar soccer_world_scan cuando FALTEN partidos verificados, en grupos limitados; el número de fuentes de cuotas vacías nunca justifica reiniciar el catálogo de encuentros. Tras una pasada de recuperación por evento, finalizar respuesta al usuario, sin ciclos de mensajes de progreso. ',
   'CALENDARIO PRIMERO: sin filtro explícito del usuario investiga simultáneamente NBA, WNBA, MLB, NFL, NHL y las ligas de fútbol verificables del día. Si el usuario limita disciplinas respeta ese filtro. Antes de elegir cinco evalúa TODOS los deportes activos y compara 12 o más candidatos cuando existan. Comienza con sports_chat_daily_scan(sports=[basketball,hockey,football,soccer] según lo solicitado). Usa coverage.available/empty/unavailable para descartar ligas sin juegos, pero empty no significa temporada cancelada y unavailable exige respaldo. Filtra partidos por día local Santo Domingo e IDs. No recorres las 220 ligas del catálogo de fútbol antes de investigar los encuentros ya confirmados; amplía páginas solo si faltan candidatos y detente cuando el expediente tenga suficientes partidos. Nunca infieras cuotas desde una fecha de calendario. ',
@@ -626,6 +628,15 @@ export function apply(ctx: Context): void {
             specialistChecks,marketRisk,
             legs:legs.map((leg,index)=>({
               ...(leg!==null&&typeof leg==='object'?leg:{}),
+              researchEvidenceState:summarizeTicketSpecialist(
+                specialistFor(ticketQuoted[index]!.review),
+                ticketQuoted[index]!.review.candidate.sport).state,
+              researchDetail:summarizeTicketSpecialist(
+                specialistFor(ticketQuoted[index]!.review),
+                ticketQuoted[index]!.review.candidate.sport).detail,
+              pendingEvidence:summarizeTicketSpecialist(
+                specialistFor(ticketQuoted[index]!.review),
+                ticketQuoted[index]!.review.candidate.sport).pendingEvidence,
               rationale:ticketQuoted[index]?.review.status==='descriptive-support'?
                 'Apoyo descriptivo ('+ticketQuoted[index]!.review.sampleGames.home+'/'+
                 ticketQuoted[index]!.review.sampleGames.away+' partidos). '+
@@ -640,9 +651,12 @@ export function apply(ctx: Context): void {
                     ticketQuoted[index]!.review.marketOutcomeDiagnostic!.opponent.losses)+')':
                   'no evaluable como hándicap/total')+
                 '. Expediente obligatorio: '+(specialistFor(ticketQuoted[index]!.review)?.specialist??'no disponible')+
+                '. Estado: '+summarizeTicketSpecialist(
+                  specialistFor(ticketQuoted[index]!.review),
+                  ticketQuoted[index]!.review.candidate.sport).detail+
                 '. Pendientes: '+(specialistFor(ticketQuoted[index]!.review)?.pendingSteps.slice(0,3).join('; ')??'sin evidencia')+
                 '. Acierto mínimo exigido '+ticketQuoted[index]!.review.priceAudit.breakEvenPercent+
-                '%. Frecuencias históricas no son probabilidades calibradas; bajas y titulares pendientes.':
+                '%. Frecuencias históricas no son probabilidades calibradas.':
                 'Candidata CONDICIONAL: no existe una señal independiente suficiente. '+
                 'Verificar lesiones, titulares y reglas antes de considerar.',
             })),
@@ -710,6 +724,7 @@ export function apply(ctx: Context): void {
       const draftLegs=ticketQuoted.map(({review})=>{
         const candidate=review.candidate
         const side=review.selectedOutcome!
+        const summary=summarizeTicketSpecialist(specialistFor(review),candidate.sport)
         const pending=review.warnings.slice(0,5).map(note=>note.slice(0,250))
         return{
           event:candidate.fixture,
@@ -722,11 +737,13 @@ export function apply(ctx: Context): void {
           market:candidate.market==='h2h'?'Ganador directo':
             candidate.market==='spreads'?'Hándicap':'Total',
           researchStatus:'conditional',
+          researchEvidenceState:summary.state,
+          researchDetail:summary.detail,
           displayStatus:'research-selection',
           rationale:('Apoyo descriptivo provisional: '+review.marketDirection+
             '. Cuota observada de '+candidate.bookmaker+
-            '. Investigación especializada no equivale a aprobación.').slice(0,480),
-          pendingEvidence:pending,
+            '. '+summary.detail+'. Investigación especializada no equivale a aprobación.').slice(0,480),
+          pendingEvidence:[...new Set([...summary.pendingEvidence,...pending])].slice(0,8),
           riskNotes:pending.slice(0,4),
         }
       })

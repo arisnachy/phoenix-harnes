@@ -270,7 +270,7 @@ test('soccer two-outcome API prices cannot be mislabeled 1X2 without a draw outc
   assert.equal(result.priced,false)
   assert.equal(result.quotedLegs,0)
 })
-test('stale bookmaker quotes do not receive a fresh ticket label',async()=>{
+test('old bookmaker last-change time does not reject a quote fetched during this request',async()=>{
   const stale=async url=>{
     if(String(url).includes('api.the-odds-api.com'))return new Response(JSON.stringify(
       Array.from({length:5},(_,i)=>({
@@ -282,8 +282,10 @@ test('stale bookmaker quotes do not receive a fresh ticket label',async()=>{
   }
   const result=await withSpecialists(5,date,'soccer',100,now,
     {THE_ODDS_API_KEY:'mock-secret'},stale)
-  assert.equal(result.priced,false)
-  assert.equal(result.missingQuotes,5)
+  assert.equal(result.priced,true)
+  assert.equal(result.missingQuotes,0)
+  assert.equal(result.quotedLegs,5)
+  assert.equal(result.placed,false)
 })
 
 test('a four-of-five slate still audits real provider prices and cannot be called a priced parlay',async()=>{
@@ -402,7 +404,7 @@ test('fresh ESPN odds without lastUpdated complete an observed same-bookmaker re
   assert.ok(Number(result.card.props.combinedOdds)>1)
   assert.ok(result.card.props.legs.every(x=>x.bookmaker==='ESPN Reference Book'))
   assert.match(result.card.props.subtitle,/precios observados en ESPN/)
-  assert.match(result.card.props.note,/No se confirmó que la casa acepte ese precio/)
+  assert.match(result.card.props.note,/El precio definitivo se comprueba al presentar la apuesta en la casa/)
   assert.equal(result.placed,false)
 })
 
