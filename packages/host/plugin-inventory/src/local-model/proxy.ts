@@ -10,6 +10,8 @@ export const PHOENIX_LOCAL_PROXY_PORT = 17_842
 export const PHOENIX_LOCAL_PROXY_BASE_URL = `http://127.0.0.1:${String(PHOENIX_LOCAL_PROXY_PORT)}/v1`
 
 const MAX_REQUEST_BYTES = 16 * 1024 * 1024
+/** A local 2B model should not leave the chat stalled for a 5-minute idle watchdog. */
+const OLLAMA_REQUEST_DEADLINE_MS = 90_000
 
 async function readBody(request: IncomingMessage): Promise<Uint8Array<ArrayBuffer> | undefined> {
   if (request.method === 'GET' || request.method === 'HEAD') return undefined
@@ -82,7 +84,10 @@ export function rewriteOllamaOpenAiBody(
 
 function responseHeaders(source: Headers, target: ServerResponse): void {
   source.forEach((value, name) => {
-    if (name.toLowerCase() === 'content-encoding' || name.toLowerCase() === 'content-length') return
+    if (name.toLowerCase() === 'content-encoding'
+      || name.toLowerCase() === 'content-length'
+      || name.toLowerCase() === 'transfer-encoding'
+      || name.toLowerCase() === 'connection') return
     target.setHeader(name, value)
   })
 }
@@ -91,20 +96,30 @@ async function forward(
   manager: LocalModelRuntimeManager,
   request: IncomingMessage,
   response: ServerResponse,
+  ollamaDeadlineMs = OLLAMA_REQUEST_DEADLINE_MS,
 ): Promise<void> {
   try {
     const backendBaseUrl = await manager.ensureRunning()
     const incomingPath = request.url ?? '/v1'
     const suffix = incomingPath.startsWith('/v1') ? incomingPath.slice(3) : incomingPath
     const body = await readBody(request)
+    const selected = getLocalModel(manager.snapshot().selectedModelId)
+    const isOllama = selected?.backend === 'ollama'
     const forwardedBody = request.method === 'POST'
-      ? rewriteOllamaOpenAiBody(suffix, body, getLocalModel(manager.snapshot().selectedModelId))
+      ? rewriteOllamaOpenAiBody(suffix, body, selected)
       : body
+    const clientClosed = new AbortController()
+    response.once('close', () => { clientClosed.abort() })
+    // Stop an unresponsive Ollama request even when upstream has accepted
+    // the HTTP request but has not produced any SSE chunks.
+    const deadline = AbortSignal.timeout(isOllama ? ollamaDeadlineMs : 10 * 60_000)
+    const signal = AbortSignal.any([clientClosed.signal, deadline])
+    const started = Date.now()
     const upstream = await fetch(`${backendBaseUrl}${suffix}`, {
       method: request.method ?? 'POST',
       headers: requestHeaders(request),
       ...(forwardedBody === undefined ? {} : { body: forwardedBody }),
-      signal: AbortSignal.timeout(10 * 60_000),
+      signal,
     })
     response.statusCode = upstream.status
     responseHeaders(upstream.headers, response)
@@ -113,10 +128,16 @@ async function forward(
       return
     }
     const reader = upstream.body.getReader()
+    let firstByte = true
     try {
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
+        if (firstByte) {
+          firstByte = false
+          // The request text, tool schemas, and model context are never logged.
+          if (isOllama) response.setHeader('x-phoenix-local-first-byte-ms', String(Date.now() - started))
+        }
         response.write(Buffer.from(value))
       }
     } finally {
@@ -128,12 +149,15 @@ async function forward(
       response.destroy(error instanceof Error ? error : new Error(String(error)))
       return
     }
-    response.statusCode = 503
+    const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
+    response.statusCode = timedOut ? 504 : 503
     response.setHeader('content-type', 'application/json; charset=utf-8')
     response.end(JSON.stringify({
       error: {
-        message: error instanceof Error ? error.message : String(error),
-        type: 'phoenix_local_unavailable',
+        message: timedOut
+          ? 'PHOENIX Local: Ollama no envió una respuesta antes del límite local. Prueba /api/chat directamente y comprueba ollama ps; no se repetirá esta solicitud automáticamente.'
+          : error instanceof Error ? error.message : String(error),
+        type: timedOut ? 'phoenix_local_timeout' : 'phoenix_local_unavailable',
       },
     }))
   }
@@ -146,14 +170,15 @@ async function forward(
  */
 export async function startPhoenixLocalProxy(
   managerPromise: Promise<LocalModelRuntimeManager>,
+  options: { port?: number; ollamaDeadlineMs?: number } = {},
 ): Promise<Server> {
   const manager = await managerPromise
   const server = createServer((request, response) => {
-    void forward(manager, request, response)
+    void forward(manager, request, response, options.ollamaDeadlineMs)
   })
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
-    server.listen(PHOENIX_LOCAL_PROXY_PORT, '127.0.0.1', () => {
+    server.listen(options.port ?? PHOENIX_LOCAL_PROXY_PORT, '127.0.0.1', () => {
       server.off('error', reject)
       resolve()
     })
