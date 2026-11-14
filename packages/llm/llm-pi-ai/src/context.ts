@@ -30,6 +30,8 @@ const PI_CONTEXT_SAFETY_TOKENS = 4096
 const MAX_RESPONSE_RESERVE_TOKENS = 4096
 const PRESSURE_TOOL_DESCRIPTION_MAX_CHARS = 160
 const PRESSURE_SKILL_CATALOG_MAX_CHARS = 12_000
+/** Conservative text-only fallback room for Ollama Qwen 2B on a 4096-token context. */
+const LOCAL_LITE_MAX_INPUT_TOKENS = 1_024
 const SCHEMA_DECORATION_KEYS = new Set([
   'description',
   'title',
@@ -447,7 +449,7 @@ export function fitPhoenixLocalTextTurn(
   let fit = fitGenerateOptionsToContext(reduced, contextWindow, desiredMaxOutput)
   // The current human message is never clipped; if it cannot fit alone,
   // return the original oversized error instead.
-  if (fit.estimatedTokens > fit.inputBudgetTokens) return regular
+  if (fit.estimatedTokens > Math.min(fit.inputBudgetTokens, LOCAL_LITE_MAX_INPUT_TOKENS)) return regular
 
   // Keep only a few complete plain-text messages that fit. Durable history
   // and current model selection are not changed by this request projection.
@@ -460,7 +462,7 @@ export function fitPhoenixLocalTextTurn(
       messages: [previous, ...recent, currentUser],
     }
     const evaluated = fitGenerateOptionsToContext(candidate, contextWindow, desiredMaxOutput)
-    if (evaluated.estimatedTokens > evaluated.inputBudgetTokens) break
+    if (evaluated.estimatedTokens > Math.min(evaluated.inputBudgetTokens, LOCAL_LITE_MAX_INPUT_TOKENS)) break
     recent.unshift(previous)
     fit = evaluated
   }
