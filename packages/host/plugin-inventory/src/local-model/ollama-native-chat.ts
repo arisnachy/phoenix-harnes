@@ -263,6 +263,9 @@ export async function relayNativeOllamaChat(
   downstream: ServerResponse,
   request: NativeBridgeRequest,
 ): Promise<void> {
+  // Diagnostic marker: distinguish a freshly updated native bridge from an
+  // old Phoenix runtime still forwarding to Ollama's /v1 endpoint.
+  downstream.setHeader('x-phoenix-local-backend', 'ollama-native')
   if (!upstream.ok) {
     const detail = (await upstream.text()).slice(0, 800)
     throw new NativeOllamaChatError(
