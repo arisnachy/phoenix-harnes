@@ -586,7 +586,13 @@ export class PiAiAdapter extends LlmAdapter {
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.
-        headers: requestHeaders(profile.provider, profile.headers),
+        headers: {
+          ...requestHeaders(profile.provider, profile.headers),
+          // An ordinary local chat may complete one native Ollama length stop.
+          // An explicit per-request token cap must remain authoritative.
+          ...options.provider === 'phoenix-local' && options.maxTokens === undefined
+            ? { 'x-phoenix-local-auto-continue': '1' } : {},
+        },
       }
       const events = platformKeyFallback
         // The collection dispatches the codex route to the Codex wire no
