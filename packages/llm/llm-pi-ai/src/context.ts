@@ -407,7 +407,8 @@ export function fitPhoenixLocalTextTurn(
   const findCurrentUser = (requireHuman: boolean): number => {
     for (let index = messages.length - 1; index >= 0; index--) {
       const message = messages[index]
-      if (message?.role !== 'user' || !isPlainLocalTextMessage(message)) continue
+      if (message?.role !== 'user') continue
+      if (message.source.kind === 'tool' || message.source.kind === 'skill-catalog') continue
       if (requireHuman && message.source.kind !== 'user') continue
       return index
     }
@@ -419,13 +420,17 @@ export function fitPhoenixLocalTextTurn(
   })()
   if (currentUserIndex < 0) return regular
   const currentUser = messages[currentUserIndex]
-  if (currentUser === undefined) return regular
+  // The latest human request must be plain text; never silently substitute an
+  // earlier greeting for a newer image, file, or tool-bearing request.
+  if (currentUser === undefined || !isPlainLocalTextMessage(currentUser)) return regular
 
   // Never drop an in-flight tool call/result, even when these are encoded as
   // user/assistant messages. Skill catalogs are auxiliary and may be omitted.
   if (messages.slice(currentUserIndex + 1).some(message =>
     message.content.some(block => block.type === 'tool-call' || block.type === 'tool-result')
+    || message.source.kind === 'tool'
     || message.role === 'assistant'
+    || (message.role === 'user' && message.source.kind !== 'skill-catalog')
   )) return regular
 
   const reduced: GenerateOptions = {
