@@ -118,3 +118,15 @@ test('report and PDF cannot impersonate observed primary evidence',()=>{
     assert.equal(attributed.patientSpecificGeometryValidated,false)
   }
 })
+
+
+test('ECG, laboratory and histopathology never depict unsupported neural lesions',()=>{
+  for(const [modality,sourceKind] of [['ecg','waveform'],['chemistry_panel','numeric'],['histopathology','wsi']]){
+    const r=planClinicalTwinScene({...baseline,modality,sourceKind,
+      neuralFinding:'Lesión focal del nervio no demostrada por este estudio'})
+    assert.equal(r.status,'ILLUSTRATION_SPEC_READY')
+    assert.equal(r.neuralChangeDepicted,false)
+    assert.equal(r.annotations.length,1)
+    assert.doesNotMatch(r.renderPrompt,/Lesión focal del nervio/)
+  }
+})
