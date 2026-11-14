@@ -90,6 +90,7 @@ describe('Phoenix Local Ollama native chat compatibility', () => {
     })
     expect(result.status).toBe(200)
     expect(result.headers.get('content-type')).toContain('text/event-stream')
+    expect(result.headers.get('x-phoenix-local-backend')).toBe('ollama-native')
     const sse = await result.text()
     expect(sse).toContain('¡Hola!')
     expect(sse).toContain('data: [DONE]')
