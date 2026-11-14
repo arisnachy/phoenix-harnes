@@ -85,6 +85,21 @@ function history(role: 'system' | 'assistant', content: ContentBlock[]): Message
 }
 
 describe('pi-ai request context conversion', () => {
+  it('reserves usable prompt space for a 4096-token local Qwen model', () => {
+    const options = request([user([{ type: 'text', text: 'hola' }])])
+    const fitted = fitGenerateOptionsToContext(options, 4096, 256)
+    expect(fitted.inputBudgetTokens).toBe(3328)
+    expect(fitted.estimatedTokens).toBeLessThan(fitted.inputBudgetTokens)
+    expect(fitted.options).toBe(options)
+    expect(fitted.compacted).toBe(false)
+  })
+
+  it('limits response reserve on a compact context rather than leaving only one input token', () => {
+    const options = request([user([{ type: 'text', text: 'Saluda en una oración' }])])
+    const fitted = fitGenerateOptionsToContext(options, 4096, 4096)
+    expect(fitted.inputBudgetTokens).toBe(2560)
+    expect(fitted.estimatedTokens).toBeLessThan(fitted.inputBudgetTokens)
+  })
 
   it('compacts auxiliary catalog and tool schema prose before output room collapses', () => {
     const huge = 'x'.repeat(20_000)
