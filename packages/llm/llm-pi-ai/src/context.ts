@@ -321,13 +321,20 @@ export function fitGenerateOptionsToContext(
       compacted: false,
     }
   }
+  // A fixed 4096-token safety allowance completely starved 4096-token
+  // local models: even "hola" was assigned a one-token input budget.
+  // Scale safety/output reserves for small contexts while retaining the
+  // existing 4096-token guard on large cloud models.
+  const capacity = Math.floor(contextWindow)
+  const safetyReserve = Math.min(PI_CONTEXT_SAFETY_TOKENS, Math.floor(capacity / 8))
   const responseReserve = Math.min(
     Math.max(0, Math.floor(desiredMaxOutput)),
     MAX_RESPONSE_RESERVE_TOKENS,
+    Math.floor(capacity / 4),
   )
   const inputBudgetTokens = Math.max(
     1,
-    Math.floor(contextWindow) - PI_CONTEXT_SAFETY_TOKENS - responseReserve,
+    capacity - safetyReserve - responseReserve,
   )
   const estimatedTokens = estimateGenerateOptionsTokens(options)
   if (estimatedTokens <= inputBudgetTokens) {
