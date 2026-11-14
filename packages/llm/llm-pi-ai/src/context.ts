@@ -360,6 +360,113 @@ export function fitGenerateOptionsToContext(
     compacted: true,
   }
 }
+/**
+ * A 2B, 4K-window model cannot ingest the full agent harness transcript.
+ * When an oversized request is a new, ordinary text turn, use a separate
+ * explicitly TEXT-ONLY local conversation envelope. The model receives no
+ * tools or old system/plugin instructions it cannot fully honor, and cannot
+ * claim agentic operations. A current tool cycle or attachment must instead
+ * use the normal fit/error path: never truncate a pending tool result or
+ * the user's actual request.
+ */
+const LOCAL_LITE_SYSTEM = [
+  'You are Phoenix Local, a brief offline conversational assistant.',
+  'This turn uses a reduced view of recent conversation, not full agent memory.',
+  'You have no tool, file, browser, or system access in this lightweight turn.',
+  'Never claim to perform an action, see an unprovided file, or remember omitted details.',
+  'If a task requires tools, full history or long context, explain that the user',
+  'should use a lightweight agent preset or a larger/cloud model.',
+  'Answer the latest user request concisely in its language.',
+].join(' ')
+
+function isAuxiliarySkillCatalog(message: Message): boolean {
+  // Skill-catalog is a runtime-augmented source not yet in the core Source union.
+  return (message.source as { kind?: unknown }).kind === 'skill-catalog'
+}
+
+function isPlainLocalTextMessage(message: Message): boolean {
+  if (message.role !== 'user' && message.role !== 'assistant') return false
+  if (isAuxiliarySkillCatalog(message) || message.source.kind === 'tool') return false
+  return message.content.length > 0
+    && message.content.every(block => block.type === 'text')
+}
+
+/**
+ * Fall back to a *text-only* view of the current user request when the full
+ * agent prompt exceeds the device model. Never modify the durable session.
+ * Full-context agent actions still require an appropriately scoped preset.
+ * @param options - Original agent request, including full instructions and tools.
+ * @param contextWindow - Local model's actual context window.
+ * @param desiredMaxOutput - Requested response budget.
+ * @returns The ordinary fit or a bounded, explicitly non-agentic view.
+ */
+export function fitPhoenixLocalTextTurn(
+  options: GenerateOptions,
+  contextWindow: number,
+  desiredMaxOutput: number,
+): ContextBudgetFit {
+  const regular = fitGenerateOptionsToContext(options, contextWindow, desiredMaxOutput)
+  if (regular.estimatedTokens <= regular.inputBudgetTokens) return regular
+
+  const messages = options.messages
+  const findCurrentUser = (requireHuman: boolean): number => {
+    for (let index = messages.length - 1; index >= 0; index--) {
+      const message = messages[index]
+      if (message?.role !== 'user') continue
+      if (message.source.kind === 'tool' || isAuxiliarySkillCatalog(message)) continue
+      if (requireHuman && message.source.kind !== 'user') continue
+      return index
+    }
+    return -1
+  }
+  const currentUserIndex = (() => {
+    const human = findCurrentUser(true)
+    return human >= 0 ? human : findCurrentUser(false)
+  })()
+  if (currentUserIndex < 0) return regular
+  const currentUser = messages[currentUserIndex]
+  // The latest human request must be plain text; never silently substitute an
+  // earlier greeting for a newer image, file, or tool-bearing request.
+  if (currentUser === undefined || !isPlainLocalTextMessage(currentUser)) return regular
+
+  // Never drop an in-flight tool call/result, even when these are encoded as
+  // user/assistant messages. Skill catalogs are auxiliary and may be omitted.
+  if (messages.slice(currentUserIndex + 1).some(message =>
+    message.content.some(block => block.type === 'tool-call' || block.type === 'tool-result')
+    || message.source.kind === 'tool'
+    || message.role === 'assistant'
+    || (message.role === 'user' && !isAuxiliarySkillCatalog(message))
+  )) return regular
+
+  const reduced: GenerateOptions = {
+    ...options,
+    system: LOCAL_LITE_SYSTEM,
+    messages: [currentUser],
+    tools: [],
+  }
+  let fit = fitGenerateOptionsToContext(reduced, contextWindow, desiredMaxOutput)
+  // The current human message is never clipped; if it cannot fit alone,
+  // return the original oversized error instead.
+  if (fit.estimatedTokens > fit.inputBudgetTokens) return regular
+
+  // Keep only a few complete plain-text messages that fit. Durable history
+  // and current model selection are not changed by this request projection.
+  const recent: Message[] = []
+  for (let index = currentUserIndex - 1; index >= 0 && recent.length < 4; index--) {
+    const previous = messages[index]
+    if (previous === undefined || !isPlainLocalTextMessage(previous)) continue
+    const candidate: GenerateOptions = {
+      ...reduced,
+      messages: [previous, ...recent, currentUser],
+    }
+    const evaluated = fitGenerateOptionsToContext(candidate, contextWindow, desiredMaxOutput)
+    if (evaluated.estimatedTokens > evaluated.inputBudgetTokens) break
+    recent.unshift(previous)
+    fit = evaluated
+  }
+  return { ...fit, compacted: true }
+}
+
 /** Join the text blocks of a harness message. */
 function flattenText(message: Message): string {
   return message.content
