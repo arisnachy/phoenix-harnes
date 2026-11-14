@@ -1,0 +1,50 @@
+name: PHOENIX Genesis Native Chat Tools
+
+on:
+  pull_request:
+    branches: [main, stable]
+    paths:
+      - 'packages/core/tool-genesis/**'
+      - 'packages/bundle/base/cordis.patch.yml'
+      - 'packages/bundle/base/package.json'
+      - 'package.json'
+      - '.github/workflows/phoenix-genesis-native-tools.yml'
+  push:
+    branches: [main, stable]
+    paths:
+      - 'packages/core/tool-genesis/**'
+      - 'packages/bundle/base/cordis.patch.yml'
+      - 'packages/bundle/base/package.json'
+      - 'package.json'
+      - '.github/workflows/phoenix-genesis-native-tools.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-genesis:
+    name: Kira tool registry and real Genesis SQLite receipts / Node 24
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate native tools package source
+        run: node --experimental-strip-types --check packages/core/tool-genesis/src/index.ts && node --experimental-strip-types --check packages/core/tool-genesis/src/runtime.ts
+      - name: Exercise real synthetic hospital, organization writes, catalog, POA and strict demo isolation
+        run: node --experimental-strip-types --test packages/core/tool-genesis/tests/native-genesis.test.mjs
+      - name: Assert Genesis is advertised in PHOENIX base Cordis tool catalog
+        run: |
+          node --input-type=module -e "
+            import {readFileSync} from 'node:fs';
+            const y=readFileSync('packages/bundle/base/cordis.patch.yml','utf8');
+            const deps=JSON.parse(readFileSync('packages/bundle/base/package.json','utf8'));
+            const tools=readFileSync('packages/core/tool-genesis/src/index.ts','utf8');
+            const names=['genesis_status','genesis_demo_create','genesis_organization_list','genesis_organization_create','genesis_organization_report','genesis_catalog_search','genesis_area_assess','genesis_unit_register'];
+            if(!y.includes('id: tool-genesis')||!y.includes('@phoenix-ai/dsh-tool-genesis'))process.exit(1);
+            if(!deps.dependencies['@phoenix-ai/dsh-tool-genesis'])process.exit(2);
+            for(const name of names)if(!tools.includes(name))process.exit(3);
+          "

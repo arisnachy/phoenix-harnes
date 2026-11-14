@@ -213,6 +213,7 @@
     { "path": "./packages/core/living-local" },
     { "path": "./packages/core/tool-living" },
     { "path": "./packages/core/tool-business" },
+    { "path": "./packages/core/tool-genesis" },
     { "path": "./packages/core/tool-oracle" },
     { "path": "./packages/core/tool-sports" },
     { "path": "./packages/core/tool-health" },
