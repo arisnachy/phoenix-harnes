@@ -272,3 +272,65 @@ describe('adaptive Binance paper cycle', () => {
       .rejects.toThrow('Unsupported Binance adaptive interval')
   })
 })
+
+describe('optional Kronos gate: PAPER only, no invented outcomes', () => {
+  it('blocks a technically qualified entry when projected return fails fee and slippage hurdle', async () => {
+    const paper = broker({ BTCUSDT: 'breakout' })
+    const cycle = await runBinanceAdaptiveCycle(paper, {
+      mode: 'paper-step', symbols: ['BTCUSDT'],
+      predictor: async (_symbol, bars, interval) => ({
+        source: 'kronos', model: 'mini', symbol: 'BTCUSDT', interval,
+        forecastAt: bars.at(-1)!.closeTime, horizonBars: 6,
+        baseClose: bars.at(-1)!.close, projectedClose: bars.at(-1)!.close * 1.002,
+        projectedReturnPct: 0.2, maxDownsidePct: -1,
+      }),
+    }, NOW)
+    expect(cycle.decision).toBe('hold')
+    expect(cycle.forecastStatus).toBe('rejected')
+    expect(cycle.execution[0]).toMatchObject({ status: 'blocked' })
+    expect((await paper.account()).tradeCount).toBe(0)
+  })
+
+  it('allows exactly one persisted virtual buy only after a qualifying Kronos forecast', async () => {
+    const paper = broker({ BTCUSDT: 'breakout' })
+    const cycle = await runBinanceAdaptiveCycle(paper, {
+      mode: 'paper-step', symbols: ['BTCUSDT'],
+      predictor: async (_symbol, bars, interval) => ({
+        source: 'kronos', model: 'mini', symbol: 'BTCUSDT', interval,
+        forecastAt: bars.at(-1)!.closeTime, horizonBars: 6,
+        baseClose: bars.at(-1)!.close, projectedClose: bars.at(-1)!.close * 1.03,
+        projectedReturnPct: 3, maxDownsidePct: -1,
+      }),
+    }, NOW)
+    expect(cycle.forecastStatus).toBe('accepted')
+    expect(cycle.trade).toMatchObject({ symbol: 'BTCUSDT', side: 'buy' })
+    expect((await paper.account()).tradeCount).toBe(1)
+  })
+
+  it('fails closed when the predictor is unavailable; never guesses a fill', async () => {
+    const paper = broker({ BTCUSDT: 'breakout' })
+    const cycle = await runBinanceAdaptiveCycle(paper, {
+      mode: 'paper-step', symbols: ['BTCUSDT'],
+      predictor: async () => { throw new Error('model offline') },
+    }, NOW)
+    expect(cycle.forecastStatus).toBe('unavailable')
+    expect(cycle.decision).toBe('hold')
+    expect(cycle.trade).toBeUndefined()
+    expect((await paper.journal()).length).toBe(0)
+  })
+
+  it('sells an exposed bearish position before evaluating the entry predictor', async () => {
+    const paper = broker({ BTCUSDT: 'downtrend', ETHUSDT: 'breakout' })
+    await paper.order({ symbol: 'BTCUSDT', side: 'buy', quoteAmountUsdt: 100 })
+    let predictorCalled = false
+    const cycle = await runBinanceAdaptiveCycle(paper, {
+      mode: 'paper-step', symbols: ['BTCUSDT', 'ETHUSDT'],
+      predictor: async () => {
+        predictorCalled = true
+        throw new Error('Predictor must not block a protective exit')
+      },
+    }, NOW)
+    expect(cycle.decision).toBe('sell')
+    expect(predictorCalled).toBe(false)
+  })
+})

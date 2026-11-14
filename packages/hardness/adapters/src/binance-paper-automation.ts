@@ -5,6 +5,7 @@ import { BinancePaperBroker } from './binance-paper.ts'
 import { runBinanceAdaptiveCycle, type BinanceAdaptiveCycle } from './binance-adaptive.ts'
 import { discoverBinanceSpotMarkets } from './binance-market-discovery.ts'
 import { binanceKnownAssetRisk } from './binance-asset-risk.ts'
+import { binanceKronosStatus, forecastBinanceKronos } from './binance-kronos.ts'
 
 const POLL_MIN_MS = 60_000
 const POLL_MAX_MS = 3_600_000
@@ -29,6 +30,7 @@ export interface BinancePaperAutomationConfig {
   readonly interval: '15m' | '1h' | '4h' | '1d'
   readonly pollMs: number
   readonly autoDiscover: boolean
+  readonly predictionEnabled?: boolean
 }
 
 /** Host-side activity used by the read-only in-chat trading viewer. */
@@ -52,6 +54,7 @@ export interface BinancePaperAutomationView {
   readonly account: Awaited<ReturnType<BinancePaperBroker['account']>>
   readonly markedAt: string
   readonly recentTrades: Awaited<ReturnType<BinancePaperBroker['journal']>>
+  readonly predictor: ReturnType<typeof binanceKronosStatus>
 }
 
 /**
@@ -65,6 +68,7 @@ export function binancePaperAutomationConfig(input: {
   interval?: BinancePaperAutomationConfig['interval']
   pollMs?: number
   autoDiscover?: boolean
+  predictionEnabled?: boolean
 }, enabled = true): BinancePaperAutomationConfig {
   const symbols = input.symbols.map(item => item.trim().toUpperCase())
   if (symbols.length < 1 || symbols.length > 12 || new Set(symbols).size !== symbols.length
@@ -80,7 +84,11 @@ export function binancePaperAutomationConfig(input: {
   if (input.autoDiscover !== undefined && typeof input.autoDiscover !== 'boolean') {
     throw new Error('Invalid auto discovery setting')
   }
-  return { schema: 1, enabled, symbols, interval, pollMs, autoDiscover: input.autoDiscover ?? false }
+  if (input.predictionEnabled !== undefined && typeof input.predictionEnabled !== 'boolean') {
+    throw new Error('Invalid Kronos prediction setting')
+  }
+  return { schema: 1, enabled, symbols, interval, pollMs, autoDiscover: input.autoDiscover ?? false,
+    ...(input.predictionEnabled === true ? { predictionEnabled: true } : {}) }
 }
 
 /** Token-free Host runner: one virtual cycle at a time; no real Binance credential route. */
@@ -153,8 +161,8 @@ export class BinancePaperAutomation {
     const available = Math.max(0, MAX_SCAN_SYMBOLS - pinned.length)
     const rotating = choices.length === 0 ? [] : Array.from(
       { length: Math.min(available, choices.length) },
-      (_, i) => choices[(this.universeCursor + i) % choices.length]!,
-    )
+      (_, i) => choices[(this.universeCursor + i) % choices.length],
+    ).filter((symbol): symbol is string => symbol !== undefined)
     this.universeCursor = choices.length ? (this.universeCursor + rotating.length) % choices.length : 0
     return [...pinned, ...rotating]
   }
@@ -212,6 +220,7 @@ export class BinancePaperAutomation {
         interval: record.interval as BinancePaperAutomationConfig['interval'],
         pollMs: record.pollMs,
         autoDiscover: record.autoDiscover === true,
+        predictionEnabled: record.predictionEnabled === true,
       }, record.enabled)
       if (this.config.enabled) {
         this.schedule()
@@ -234,6 +243,7 @@ export class BinancePaperAutomation {
     interval?: BinancePaperAutomationConfig['interval']
     pollMs?: number
     autoDiscover?: boolean
+    predictionEnabled?: boolean
   }): Promise<void> {
     const next = binancePaperAutomationConfig(input)
     await this.control(async () => {
@@ -312,7 +322,10 @@ export class BinancePaperAutomation {
         const { interval } = this.config
         const symbols = await this.scanSymbols()
         this.lastScannedSymbols = symbols
-        const cycle = await runBinanceAdaptiveCycle(this.broker, { symbols, interval, mode: 'paper-step' })
+        const cycle = await runBinanceAdaptiveCycle(this.broker, {
+          symbols, interval, mode: 'paper-step',
+          ...(this.config.predictionEnabled === true ? { predictor: forecastBinanceKronos } : {}),
+        })
         result = cycle
         this.lastCycle = cycle
         this.lastSuccessAt = new Date().toISOString()
@@ -395,6 +408,7 @@ export class BinancePaperAutomation {
       account,
       markedAt: new Date().toISOString(),
       recentTrades: trades,
+      predictor: binanceKronosStatus(),
     }
   }
 
