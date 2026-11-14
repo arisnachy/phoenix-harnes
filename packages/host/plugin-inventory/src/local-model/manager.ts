@@ -36,6 +36,8 @@ export interface LocalModelRuntimeManagerDependencies {
   allocatePort(): Promise<number>
   spawnServer(executable: string, args: string[], onExit: (error?: Error) => void): LocalServerHandle
   probeHealth(baseUrl: string, timeoutMs: number): Promise<void>
+  /** Validate that an exact local Ollama model tag is present; never pull implicitly. */
+  probeOllamaModel(modelTag: string): Promise<void>
   freeMemoryBytes(): number
 }
 
@@ -120,6 +122,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
   private modelPath(modelId: string): string {
     const model = getLocalModel(modelId)
     if (model === undefined) throw new LocalModelRuntimeFault('unknown-model', `Modelo local desconocido: ${modelId}`)
+    if (model.backend !== 'llama-server') throw new LocalModelRuntimeFault('invalid-runtime', 'Este modelo pertenece a Ollama, no a llama-server.')
     const target = apiFor(this.dependencies.platform).join(this.dependencies.paths.modelsDir, model.modelFileName)
     return assertManagedLocalModelPath(this.dependencies.paths, target)
   }
@@ -151,6 +154,23 @@ class RuntimeManager implements LocalModelRuntimeManager {
   async install(modelId: string): Promise<LocalModelRuntimeSnapshot> {
     const model = getLocalModel(modelId)
     if (model === undefined) throw new LocalModelRuntimeFault('unknown-model', `Modelo local desconocido: ${modelId}`)
+    if (model.backend === 'ollama') {
+      if (this.current.phase === 'running') await this.stop()
+      this.publishPhase('installing')
+      try {
+        if (!model.ollamaModel) throw new LocalModelRuntimeFault('invalid-model', 'Falta el identificador de Ollama.')
+        await this.dependencies.probeOllamaModel(model.ollamaModel)
+        const installedModelIds = [...new Set([...this.persistent.installedModelIds, modelId])]
+        await this.savePersistent({ ...this.persistent, selectedModelId: modelId, installedModelIds })
+        this.publishPhase('ready')
+        if (this.current.mode === 'always-on') await this.start()
+        return this.snapshot()
+      } catch (error) {
+        const runtimeError = fault(error, 'ollama-unavailable', 'No fue posible conectar con el Qwen instalado en Ollama.')
+        this.publishError(runtimeError)
+        throw runtimeError
+      }
+    }
     const runtime = getRuntimeManifest(this.dependencies.platform, this.dependencies.arch)
     if (runtime === undefined) {
       throw new LocalModelRuntimeFault(
@@ -201,7 +221,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
   }
 
   async start(): Promise<LocalModelRuntimeSnapshot> {
-    if (this.current.phase === 'running' && this.server !== undefined) return this.snapshot()
+    if (this.current.phase === 'running' && (this.server !== undefined || getLocalModel(this.persistent.selectedModelId)?.backend === 'ollama')) return this.snapshot()
     if (this.persistent.mode === 'off') {
       throw new LocalModelRuntimeFault('local-model-disabled', 'Phoenix Local está apagado en Settings.')
     }
@@ -209,6 +229,24 @@ class RuntimeManager implements LocalModelRuntimeManager {
     if (model === undefined) throw new LocalModelRuntimeFault('unknown-model', 'El modelo local seleccionado ya no existe en el catálogo.')
     if (!this.persistent.installedModelIds.includes(model.id)) {
       throw new LocalModelRuntimeFault('model-not-installed', 'Phoenix Local no está instalado. Instálalo desde Settings → Models.')
+    }
+    if (model.backend === 'ollama') {
+      this.publishPhase('starting')
+      try {
+        if (!model.ollamaModel) throw new LocalModelRuntimeFault('invalid-model', 'Falta el identificador de Ollama.')
+        await this.dependencies.probeOllamaModel(model.ollamaModel)
+        this.publish({
+          ...this.current,
+          phase: 'running',
+          port: 11_434,
+          baseUrl: 'http://127.0.0.1:11434/v1',
+        })
+        return this.snapshot()
+      } catch (error) {
+        const runtimeError = fault(error, 'ollama-unavailable', 'Ollama no está disponible en 127.0.0.1:11434.')
+        this.publishError(runtimeError)
+        throw runtimeError
+      }
     }
     const { executablePath } = this.runtimePaths()
     const modelPath = this.modelPath(model.id)
@@ -270,13 +308,15 @@ class RuntimeManager implements LocalModelRuntimeManager {
     if (this.persistent.mode === 'off') {
       throw new LocalModelRuntimeFault('local-model-disabled', 'Phoenix Local está apagado en Settings.')
     }
-    if (this.current.phase === 'running' && this.server !== undefined && this.current.baseUrl !== undefined) {
+    if (this.current.phase === 'running' && this.current.baseUrl !== undefined
+      && (this.server !== undefined || getLocalModel(this.persistent.selectedModelId)?.backend === 'ollama')) {
       return this.current.baseUrl
     }
     if (this.ensureRunningPromise !== undefined) return this.ensureRunningPromise
 
     const operation = (async (): Promise<string> => {
-      if (this.current.phase !== 'running' || this.server === undefined || this.current.baseUrl === undefined) {
+      if (this.current.phase !== 'running' || this.current.baseUrl === undefined
+        || (this.server === undefined && getLocalModel(this.persistent.selectedModelId)?.backend !== 'ollama')) {
         await this.start()
       }
       const baseUrl = this.current.baseUrl
@@ -294,8 +334,10 @@ class RuntimeManager implements LocalModelRuntimeManager {
   async stop(): Promise<LocalModelRuntimeSnapshot> {
     const handle = this.server
     if (handle === undefined) {
+      // Ollama is an external user-owned service: disconnect without killing it.
       const phase = this.persistent.installedModelIds.includes(this.persistent.selectedModelId) ? 'ready' : 'not-installed'
-      this.publish({ ...this.current, phase })
+      const { pid: _pid, port: _port, baseUrl: _baseUrl, error: _error, progress: _progress, ...rest } = this.current
+      this.publish({ ...rest, phase })
       return this.snapshot()
     }
     this.publishPhase('stopping')
@@ -313,7 +355,15 @@ class RuntimeManager implements LocalModelRuntimeManager {
   async uninstall(modelId: string): Promise<LocalModelRuntimeSnapshot> {
     const model = getLocalModel(modelId)
     if (model === undefined) throw new LocalModelRuntimeFault('unknown-model', `Modelo local desconocido: ${modelId}`)
-    if (modelId === this.persistent.selectedModelId && this.server !== undefined) await this.stop()
+    if (modelId === this.persistent.selectedModelId && this.current.phase === 'running') await this.stop()
+    if (model.backend === 'ollama') {
+      // Unlink Phoenix only; never delete or modify a user-owned Ollama model.
+      const installedModelIds = this.persistent.installedModelIds.filter(id => id !== modelId)
+      await this.savePersistent({ ...this.persistent, installedModelIds })
+      const phase = installedModelIds.includes(this.persistent.selectedModelId) ? 'ready' : 'not-installed'
+      this.publish({ ...this.current, phase })
+      return this.snapshot()
+    }
     const modelPath = this.modelPath(modelId)
     await this.dependencies.remove(assertManagedLocalModelPath(this.dependencies.paths, modelPath), { force: true })
     const installedModelIds = this.persistent.installedModelIds.filter(id => id !== modelId)
@@ -339,7 +389,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
 
   async setDefaultModel(modelId: string): Promise<LocalModelRuntimeSnapshot> {
     if (getLocalModel(modelId) === undefined) throw new LocalModelRuntimeFault('unknown-model', `Modelo local desconocido: ${modelId}`)
-    if (this.server !== undefined) await this.stop()
+    if (this.current.phase === 'running' || this.server !== undefined) await this.stop()
     await this.savePersistent({ ...this.persistent, selectedModelId: modelId })
     const phase = this.persistent.installedModelIds.includes(modelId) ? 'ready' : 'not-installed'
     this.publish({ ...this.current, phase })
