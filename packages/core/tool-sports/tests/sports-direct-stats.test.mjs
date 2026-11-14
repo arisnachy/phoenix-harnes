@@ -5,6 +5,7 @@ import {collectDirectEspnStats} from '../src/sports-direct-stats.ts'
 const now=Date.parse('2026-11-02T18:00:00Z')
 const site='https://site.api.espn.com/apis/site/v2/sports/basketball/nba/'
 const web='https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/'
+const core='https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/'
 test('directly fetches ESPN player stats, gamelog and splits without a prompt action',async()=>{
   const calls=[]
   const fetcher=async url=>{
@@ -40,7 +41,7 @@ test('directly fetches ESPN player stats, gamelog and splits without a prompt ac
   assert.match(player.lastGames[0].value,/Points: 26.*Assists: 7/)
   assert.equal(player.splits[0].value,'27.0')
   assert.ok(player.verifiedSources.includes('gamelog'))
-  assert.ok(calls.every(u=>u.startsWith(site)||u.startsWith(web)))
+  assert.ok(calls.every(u=>u.startsWith(site)||u.startsWith(web)||u.startsWith(core)))
   assert.ok(calls.every(u=>!u.includes('undefined')))
 })
 test('does not invent metrics from blank endpoints or athlete names not on team roster',async()=>{

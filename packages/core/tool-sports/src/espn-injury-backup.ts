@@ -4,6 +4,7 @@
  */
 import {getFeed} from './sports.ts'
 import {espnAthleteId} from './espn-public-roster.ts'
+import {auditInjuryTimeline} from './sports-pregame-research.ts'
 
 export type InjuryFixture={sport:string;league:string;home:string;away:string;
   date?:string;eventId?:string;kickoff?:string}
@@ -15,7 +16,9 @@ export type InjuryBackup={status:'verified'|'partial'|'stale'|'unavailable'|'uns
   source:string;officialSource:string|null;
   home:{name:string;matched:boolean;injuries:InjuryRecord[]};
   away:{name:string;matched:boolean;injuries:InjuryRecord[]};
-  notes:string[]}
+  notes:string[];
+  /** ESPN league watch only: independent official confirmation remains necessary. */
+  availabilityWatch?:{requiresReevaluation:boolean;unresolved:string[];changes:number}}
 const sources:Readonly<Record<string,{sport:string;league:string;official:string|null}>>={
   'basketball|nba':{sport:'basketball',league:'nba',
     official:'https://official.nba.com/nba-injury-report-2026-27-season/'},
@@ -211,8 +214,25 @@ export async function fetchEspnInjuryBackup(
   if(fixture.kickoff&&Date.parse(fixture.kickoff)<=now)
     notes.push('Partido iniciado: el parte NO confirma una baja prepartido actual')
   if(route.official)notes.push('NBA: cotejar estatus definitivos en '+route.official)
+  // Detect unresolved player status now; use original report dates rather than
+  // pretending a fetch timestamp is a historical injury publication.
+  const pregame=!!fixture.kickoff&&Number.isFinite(Date.parse(fixture.kickoff))&&
+    Date.parse(fixture.kickoff)>now
+  const all=[...(h?.athletes??[]),...(a?.athletes??[])]
+  const watch=pregame&&status!=='stale'&&status!=='unavailable'?
+    auditInjuryTimeline(all.filter(x=>x.reportedAt).map(x=>({
+      team:x.team,athlete:x.athlete,status:x.status,publishedAt:x.reportedAt!,
+      capturedAt:nowStamp(now),url:x.source,
+    })),{decisionAt:nowStamp(now),kickoffAt:fixture.kickoff!,
+      mode:'prospective'}):null
+  const unresolved=watch?.pending.map(x=>x.team+' / '+x.athlete+' ('+x.status+')')??[]
+  if(unresolved.length)
+    notes.push('Reconsulta prepartido requerida: '+unresolved.slice(0,6).join('; ')+
+      '. Contrastar contra el informe NBA oficial con sello horario.')
   notes.push('Una baja ESPN no es alineación titular ni informe oficial de inactivos')
   return{...base,status,feedUpdatedAt,
+    ...(watch?{availabilityWatch:{requiresReevaluation:watch.requiresReevaluation,
+      unresolved,changes:watch.changes.length}}:{}),
     home:{name:fixture.home,matched:!!h,injuries:h?.athletes.slice(0,30)??[]},
     away:{name:fixture.away,matched:!!a,injuries:a?.athletes.slice(0,30)??[]},
     notes}
