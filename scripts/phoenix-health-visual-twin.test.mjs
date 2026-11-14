@@ -79,9 +79,54 @@ test('unsupported modality, invalid evidence status and injected markup are reje
 test('catalogue breadth is recognized without claiming that a diagnostic model ran',()=>{
   for(const modality of ['ct_angiography','mri_brain','eeg','complete_blood_count',
     'histopathology','ultrasound_doppler','retinal_fundus','dermoscopy']){
-    const r=planClinicalTwinScene({...baseline,modality})
+    const sourceKind=['histopathology'].includes(modality)?'wsi':
+      ['eeg'].includes(modality)?'waveform':
+      ['complete_blood_count'].includes(modality)?'numeric':'image'
+    const r=planClinicalTwinScene({...baseline,modality,sourceKind})
     assert.equal(r.modality,modality)
     assert.equal(r.imageGenerated,false)
     assert.equal(r.diagnosticAccuracyValidated,false)
+  }
+})
+
+
+test('mismatched clinical source modality blocks rendering instead of implying source inspection',()=>{
+  for(const [modality,sourceKind] of [
+    ['ecg','numeric'],['ct','waveform'],['chemistry_panel','dicom'],
+    ['cytology','numeric'],['histopathology','waveform'],
+  ]){
+    const r=planClinicalTwinScene({...baseline,modality,sourceKind})
+    assert.equal(r.status,'BLOCK_SOURCE_MODALITY_MISMATCH')
+    assert.equal(r.renderPrompt,null)
+    assert.equal(r.annotations.length,0)
+    assert.equal(r.imageGenerated,false)
+  }
+})
+
+test('report and PDF cannot impersonate observed primary evidence',()=>{
+  for(const sourceKind of ['report','pdf']){
+    const blocked=planClinicalTwinScene({...baseline,sourceKind,evidenceKind:'observed'})
+    assert.equal(blocked.status,'BLOCK_PRIMARY_EVIDENCE_REQUIRED')
+    assert.equal(blocked.renderPrompt,null)
+    assert.deepEqual(blocked.annotations,[])
+    assert.equal(blocked.imageGenerated,false)
+    assert.match(blocked.nextAction,/reportados/)
+    const attributed=planClinicalTwinScene({...baseline,sourceKind,evidenceKind:'reported'})
+    assert.equal(attributed.status,'ILLUSTRATION_SPEC_READY')
+    assert.match(attributed.renderPrompt,/hallazgo atribuido al informe/)
+    assert.equal(attributed.source.evidenceKind,'reported')
+    assert.equal(attributed.patientSpecificGeometryValidated,false)
+  }
+})
+
+
+test('ECG, laboratory and histopathology never depict unsupported neural lesions',()=>{
+  for(const [modality,sourceKind] of [['ecg','waveform'],['chemistry_panel','numeric'],['histopathology','wsi']]){
+    const r=planClinicalTwinScene({...baseline,modality,sourceKind,
+      neuralFinding:'Lesión focal del nervio no demostrada por este estudio'})
+    assert.equal(r.status,'ILLUSTRATION_SPEC_READY')
+    assert.equal(r.neuralChangeDepicted,false)
+    assert.equal(r.annotations.length,1)
+    assert.doesNotMatch(r.renderPrompt,/Lesión focal del nervio/)
   }
 })
