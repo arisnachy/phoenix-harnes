@@ -131,6 +131,7 @@ export function pickFocusedVisionReader(
  * @param ctx - host context carrying the `llm` service.
  * @param current - the session's active (text-only) selection.
  * @param config - the deployment's fallback configuration.
+ * @param focusedClinical - require discovery of a non-Terra visual reader for clinical sources when no eligible explicit route is pinned.
  * @returns the resolved route, or undefined when fallback is disabled or no
  *   image-capable catalog entry is reachable.
  */
