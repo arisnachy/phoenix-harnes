@@ -17,7 +17,7 @@ export type DailySpecialMarketObservation={
   warnings:string[]
 }
 export type DailySpecialMarketReport={
-  status:'observed'|'empty'|'unconfigured';eventsChecked:number
+  status:'observed'|'empty'|'error'|'unconfigured';eventsChecked:number
   observations:DailySpecialMarketObservation[]
   warning:string
 }
@@ -91,6 +91,7 @@ export async function researchDailySpecialMarkets(
       })
     })
   }
-  return {status:observations.some(x=>x.status==='observed')?'observed':'empty',
+  return {status:observations.some(x=>x.status==='observed')?'observed':
+    observations.some(x=>x.status==='error')?'error':'empty',
     eventsChecked:observations.length,observations,warning}
 }
