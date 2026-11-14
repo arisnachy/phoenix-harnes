@@ -7,7 +7,7 @@ import type { TokenUsage } from '@phoenix-ai/dsh-llm'
 import type { SessionEvent } from '@phoenix-ai/dsh-session'
 import type { ProjectionDefinition } from '@phoenix-ai/dsh-session-projection'
 import type { ContextPressureProjection, TokenUsageProjection } from './projection.ts'
-import { foldSurfaceProjection } from './surface-projection.ts'
+import { foldSurfaceProjection, nonNegativeSurfaceTotal } from './surface-projection.ts'
 
 const zeroBuckets = (): TokenUsageProjection => ({
   uncachedInputTokens: 0,
@@ -183,7 +183,7 @@ export const tokenUsageProjectionDefinition = {
  */
 export const contextPressureProjectionDefinition = {
   key: 'contextPressure',
-  stateVersion: 4,
+  stateVersion: 5,
   stateSchema: contextPressureStateSchema,
   init: () => ({ surfaceTokens: 0 }),
   apply: (state, event) => {
@@ -208,7 +208,7 @@ export const contextPressureProjectionDefinition = {
       }
     }
     if (fold.deltaTokens !== 0) {
-      next = { ...next, surfaceTokens: next.surfaceTokens + fold.deltaTokens }
+      next = { ...next, surfaceTokens: nonNegativeSurfaceTotal(next.surfaceTokens, state.claim, event, fold) }
     }
     // A defined fold.claim is always freshly built, so presence decides claim
     // bookkeeping: no claim before or after this event leaves `next` as is.
