@@ -71,7 +71,7 @@ import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { CODEX_PROVIDER } from './codex-live-catalog.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
 import { applyMondayCodexMembrane, normalizeCodexToolSchemas, recoverRejectedCodexFunctionSchema, scopeCodexToolsForPaint, normalizeOpenAiFunctionToolPayload, surfaceRejectedCodexSchemaEvent, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
-import { fitGenerateOptionsToContext, toPiContext } from './context.ts'
+import { fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 import { isNonCodexRecoveryModel } from './provider-recovery.ts'
 
@@ -519,11 +519,16 @@ export class PiAiAdapter extends LlmAdapter {
 
     try {
       const desiredMaxOutput = options.maxTokens ?? model.maxTokens
-      const fitted = fitGenerateOptionsToContext(options, model.contextWindow, desiredMaxOutput)
+      const fitted = options.provider === 'phoenix-local'
+        ? fitPhoenixLocalTextTurn(options, model.contextWindow, desiredMaxOutput)
+        : fitGenerateOptionsToContext(options, model.contextWindow, desiredMaxOutput)
       if (fitted.estimatedTokens > fitted.inputBudgetTokens) {
         throw new LlmError(
-          `pi-ai request for "${model.id}" still needs ~${fitted.estimatedTokens} input tokens after context fitting; `
-          + `the safe input budget is ${fitted.inputBudgetTokens} tokens`,
+          options.provider === 'phoenix-local'
+            ? `Phoenix Local no puede procesar ${fitted.estimatedTokens} tokens con un presupuesto de ${fitted.inputBudgetTokens}. `
+              + 'El mensaje o una operación de herramientas activa excede la memoria local; utiliza una sesión local nueva, un preajuste ligero o un modelo de mayor contexto.'
+            : `pi-ai request for "${model.id}" still needs ~${fitted.estimatedTokens} input tokens after context fitting; `
+              + `the safe input budget is ${fitted.inputBudgetTokens} tokens`,
           CONTEXT_WINDOW_EXCEEDED_CODE,
         )
       }
