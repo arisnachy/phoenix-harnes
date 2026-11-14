@@ -1,0 +1,44 @@
+name: PHOENIX scoreboard selected picks
+
+on:
+  pull_request:
+    branches: [main, stable]
+    paths:
+      - 'packages/client/ui-conversation/src/client/chat/SportsMarkedMatch.tsx'
+      - 'packages/client/ui-conversation/src/client/chat/SportsForecastAutoLink.ts'
+      - 'packages/client/ui-conversation/src/client/chat/GenerativeUi.tsx'
+      - 'packages/client/ui-conversation/src/client/chat/GenerativeUi.module.css'
+      - 'packages/client/ui-conversation/tests/sports-scoreboard-pick-status.client.spec.tsx'
+      - 'packages/client/ui-conversation/tests/sports-favorite-scoreboard.client.spec.tsx'
+      - '.github/workflows/phoenix-scoreboard-picks.yml'
+  push:
+    branches: [main, stable]
+    paths:
+      - 'packages/client/ui-conversation/src/client/chat/SportsMarkedMatch.tsx'
+      - 'packages/client/ui-conversation/src/client/chat/SportsForecastAutoLink.ts'
+      - 'packages/client/ui-conversation/src/client/chat/GenerativeUi.tsx'
+      - 'packages/client/ui-conversation/src/client/chat/GenerativeUi.module.css'
+      - 'packages/client/ui-conversation/tests/sports-scoreboard-pick-status.client.spec.tsx'
+      - '.github/workflows/phoenix-scoreboard-picks.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-matched-picks:
+    name: Ticket and Kira pick markers in live cards
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Test selected side and provisional status
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-scoreboard-pick-status.client.spec.tsx packages/client/ui-conversation/tests/sports-favorite-scoreboard.client.spec.tsx packages/client/ui-conversation/tests/sports-bet-progress.client.spec.tsx packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx --maxWorkers=2
