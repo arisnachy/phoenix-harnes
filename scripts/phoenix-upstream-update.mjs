@@ -229,7 +229,7 @@ export function pruneObsoleteTransactionBackups(home) {
     removed += 1
   }
   if (removed > 0) {
-    console.error(`[PHOENIX UPSTREAM UPDATE] removed ${String(removed)} obsolete transaction backup(s) from DSH_HOME.`)
+    console.info(`[PHOENIX UPSTREAM UPDATE] removed ${String(removed)} obsolete transaction backup(s) from DSH_HOME.`)
   }
   return { removed }
 }
