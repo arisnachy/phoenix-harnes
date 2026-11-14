@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { LocalModelRuntimeManager } from './manager.js'
 import { getLocalModel } from './catalog.js'
 import type { LocalModelCatalogEntry } from './types.js'
+import { NativeOllamaChatError, relayNativeOllamaChat, toNativeOllamaChat } from './ollama-native-chat.js'
 
 /** Stable loopback port exposed to the normal Phoenix LLM provider. */
 export const PHOENIX_LOCAL_PROXY_PORT = 17_842
@@ -109,9 +110,21 @@ async function forward(
     const body = await readBody(request)
     const selected = getLocalModel(manager.snapshot().selectedModelId)
     const isOllama = selected?.backend === 'ollama'
-    const forwardedBody = request.method === 'POST'
-      ? rewriteOllamaOpenAiBody(suffix, body, selected)
-      : body
+    // Native Ollama /api/chat is the authoritative way to disable Qwen
+    // reasoning. Its /v1 compatibility route has produced 64/64 hidden
+    // reasoning tokens with an empty visible answer on some Ollama versions.
+    const nativeChat = request.method === 'POST' && suffix.split('?')[0] === '/chat/completions'
+      && selected?.backend === 'ollama'
+      ? toNativeOllamaChat(body, selected)
+      : undefined
+    const forwardedBody = nativeChat === undefined
+      ? request.method === 'POST' ? rewriteOllamaOpenAiBody(suffix, body, selected) : body
+      : (() => {
+        const encoded = Buffer.from(JSON.stringify(nativeChat.payload), 'utf8')
+        const copy = new Uint8Array(new ArrayBuffer(encoded.length))
+        copy.set(encoded)
+        return copy
+      })()
     const clientClosed = new AbortController()
     response.once('close', () => { clientClosed.abort() })
     // Stop an unresponsive Ollama request even when upstream has accepted
@@ -119,12 +132,18 @@ async function forward(
     const deadline = AbortSignal.timeout(isOllama ? ollamaDeadlineMs : 10 * 60_000)
     const signal = AbortSignal.any([clientClosed.signal, deadline])
     const started = Date.now()
-    const upstream = await fetch(`${backendBaseUrl}${suffix}`, {
+    const upstream = await fetch(nativeChat === undefined
+      ? `${backendBaseUrl}${suffix}`
+      : new URL('/api/chat', backendBaseUrl), {
       method: request.method ?? 'POST',
       headers: requestHeaders(request),
       ...(forwardedBody === undefined ? {} : { body: forwardedBody }),
       signal,
     })
+    if (nativeChat !== undefined) {
+      await relayNativeOllamaChat(upstream, response, nativeChat)
+      return
+    }
     response.statusCode = upstream.status
     responseHeaders(upstream.headers, response)
     if (upstream.body === null) {
@@ -154,14 +173,15 @@ async function forward(
       return
     }
     const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
-    response.statusCode = timedOut ? 504 : 503
+    const nativeError = error instanceof NativeOllamaChatError ? error : undefined
+    response.statusCode = nativeError?.statusCode ?? (timedOut ? 504 : 503)
     response.setHeader('content-type', 'application/json; charset=utf-8')
     response.end(JSON.stringify({
       error: {
         message: timedOut
           ? 'PHOENIX Local: Ollama no envió una respuesta antes del límite local. Prueba /api/chat directamente y comprueba ollama ps; no se repetirá esta solicitud automáticamente.'
           : error instanceof Error ? error.message : String(error),
-        type: timedOut ? 'phoenix_local_timeout' : 'phoenix_local_unavailable',
+        type: nativeError?.code ?? (timedOut ? 'phoenix_local_timeout' : 'phoenix_local_unavailable'),
       },
     }))
   }

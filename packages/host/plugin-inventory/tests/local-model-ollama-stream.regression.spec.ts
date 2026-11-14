@@ -31,6 +31,24 @@ function manager(url: string): LocalModelRuntimeManager {
   } as LocalModelRuntimeManager
 }
 
+async function startProxy(ollama: Server, deadline = 2_000): Promise<Server> {
+  const proxy = await startPhoenixLocalProxy(Promise.resolve(manager(
+    `http://127.0.0.1:${port(ollama)}/v1`,
+  )), { port: 0, ollamaDeadlineMs: deadline })
+  servers.push(proxy)
+  return proxy
+}
+
+async function captureRequest(request: IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = []
+  for await (const chunk of request) chunks.push(Buffer.from(chunk as Buffer))
+  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>
+}
+
+function route(proxy: Server): string {
+  return `http://127.0.0.1:${port(proxy)}/v1/chat/completions`
+}
+
 afterEach(async () => {
   for (const server of servers.splice(0)) {
     server.closeAllConnections()
@@ -38,60 +56,186 @@ afterEach(async () => {
   }
 })
 
-describe('Phoenix Local Ollama streaming regression', () => {
-  it('forwards a real streaming request to local Ollama with thinking disabled', async () => {
+describe('Phoenix Local Ollama native chat compatibility', () => {
+  it('streams a visible hola from native Ollama and never spends 64 tokens on hidden thinking', async () => {
     let forwarded: Record<string, unknown> | undefined
+    let path: string | undefined
     const ollama = await serve(async (request, response) => {
-      const chunks: Buffer[] = []
-      for await (const chunk of request) chunks.push(Buffer.from(chunk as Buffer))
-      forwarded = JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>
-      response.writeHead(200, { 'content-type': 'text/event-stream' })
-      response.write('data: {"choices":[{"delta":{"content":"Hola"},"index":0}]}\n\n')
-      response.end('data: [DONE]\n\n')
+      path = request.url
+      forwarded = await captureRequest(request)
+      response.writeHead(200, { 'content-type': 'application/x-ndjson' })
+      response.write(JSON.stringify({
+        message: { role: 'assistant', content: '¡Hola!' },
+        done: false,
+      }) + '\n')
+      response.end(JSON.stringify({
+        message: { role: 'assistant', content: '' },
+        done: true,
+        done_reason: 'stop',
+        prompt_eval_count: 18,
+        eval_count: 5,
+      }) + '\n')
     })
-    const proxy = await startPhoenixLocalProxy(Promise.resolve(manager(
-      `http://127.0.0.1:${port(ollama)}/v1`,
-    )), { port: 0, ollamaDeadlineMs: 2_000 })
-    servers.push(proxy)
-
-    const result = await fetch(`http://127.0.0.1:${port(proxy)}/v1/chat/completions`, {
+    const proxy = await startProxy(ollama)
+    const result = await fetch(route(proxy), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         model: 'phoenix-local',
-        messages: [{ role: 'user', content: 'Hola' }],
+        messages: [{ role: 'user', content: 'hola' }],
         stream: true,
-        max_tokens: 48,
+        max_tokens: 64,
+        reasoning_effort: 'high',
       }),
     })
-
     expect(result.status).toBe(200)
-    expect(result.headers.get('x-phoenix-local-first-byte-ms')).not.toBeNull()
-    expect(await result.text()).toContain('Hola')
+    expect(result.headers.get('content-type')).toContain('text/event-stream')
+    expect(result.headers.get('x-phoenix-local-backend')).toBe('ollama-native')
+    const sse = await result.text()
+    expect(sse).toContain('¡Hola!')
+    expect(sse).toContain('data: [DONE]')
+    expect(sse).toContain('"completion_tokens":5')
+    expect(path).toBe('/api/chat')
     expect(forwarded).toMatchObject({
       model: 'qwen3.5:2b-q4_K_M',
-      reasoning_effort: 'none',
+      think: false,
       stream: true,
-      max_tokens: 48,
+      options: { num_ctx: 4096, num_predict: 64 },
+    })
+    expect(forwarded).not.toHaveProperty('reasoning_effort')
+  })
+
+  it('translates a nonstreaming native reply into a complete OpenAI response', async () => {
+    const ollama = await serve(async (request, response) => {
+      await captureRequest(request)
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({
+        message: { role: 'assistant', content: 'Hola.' },
+        done: true,
+        done_reason: 'stop',
+        prompt_eval_count: 21,
+        eval_count: 4,
+      }))
+    })
+    const proxy = await startProxy(ollama)
+    const result = await fetch(route(proxy), {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'phoenix-local',
+        messages: [{ role: 'user', content: 'Responde solo Hola' }],
+        stream: false,
+        max_tokens: 64,
+      }),
+    })
+    expect(result.status).toBe(200)
+    const data = await result.json() as Record<string, unknown>
+    expect(data).toMatchObject({
+      object: 'chat.completion',
+      choices: [{ message: { content: 'Hola.' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 21, completion_tokens: 4 },
     })
   })
 
-  it('reports a bounded diagnostic instead of leaving silent responses for 5 minutes', async () => {
+  it('reports an explicit error if the model produces only hidden reasoning', async () => {
+    const ollama = await serve(async (request, response) => {
+      await captureRequest(request)
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({
+        message: { role: 'assistant', content: '', thinking: 'invisible analysis' },
+        done: true,
+        done_reason: 'length',
+        eval_count: 64,
+      }))
+    })
+    const proxy = await startProxy(ollama)
+    const result = await fetch(route(proxy), {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'phoenix-local', stream: false, max_tokens: 64,
+        messages: [{ role: 'user', content: 'hola' }],
+      }),
+    })
+    expect(result.status).toBe(502)
+    const data = await result.json() as { error: { type: string } }
+    expect(data.error.type).toBe('ollama_no_visible_output')
+  })
+
+  it('bridges native tool calls and maps the next OpenAI tool result back by call ID', async () => {
+    const seen: Record<string, unknown>[] = []
+    const ollama = await serve(async (request, response) => {
+      const body = await captureRequest(request)
+      seen.push(body)
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify(seen.length === 1 ? {
+        message: {
+          role: 'assistant', content: '',
+          tool_calls: [{ function: { name: 'sumar', arguments: { a: 17, b: 25 } } }],
+        },
+        done: true,
+        done_reason: 'stop',
+        prompt_eval_count: 40, eval_count: 15,
+      } : {
+        message: { role: 'assistant', content: '17 + 25 = 42' },
+        done: true, done_reason: 'stop', prompt_eval_count: 60, eval_count: 10,
+      }))
+    })
+    const proxy = await startProxy(ollama)
+    const headers = { 'content-type': 'application/json' }
+    const first = await fetch(route(proxy), {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        model: 'phoenix-local', stream: false,
+        messages: [{ role: 'user', content: 'Usa sumar para 17 y 25' }],
+        tools: [{ type: 'function', function: { name: 'sumar', parameters: { type: 'object' } } }],
+      }),
+    })
+    expect(first.status).toBe(200)
+    const data = await first.json() as { choices: Array<{
+      finish_reason: string
+      message: { tool_calls: Array<{ id: string; function: { name: string; arguments: string } }> }
+    }> }
+    expect(data.choices[0]?.finish_reason).toBe('tool_calls')
+    const call = data.choices[0]?.message.tool_calls[0]
+    expect(call?.function.name).toBe('sumar')
+    expect(JSON.parse(call?.function.arguments ?? '{}')).toEqual({ a: 17, b: 25 })
+    const second = await fetch(route(proxy), {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        model: 'phoenix-local', stream: false,
+        messages: [
+          { role: 'user', content: 'Usa sumar para 17 y 25' },
+          { role: 'assistant', content: null, tool_calls: data.choices[0]?.message.tool_calls },
+          { role: 'tool', tool_call_id: call?.id, content: '42' },
+        ],
+      }),
+    })
+    expect(second.status).toBe(200)
+    expect((await second.json() as { choices: Array<{ message: { content: string } }> }).choices[0]?.message.content)
+      .toBe('17 + 25 = 42')
+    expect(seen[1]).toMatchObject({
+      messages: [
+        { role: 'user' },
+        { role: 'assistant', tool_calls: [{ function: { name: 'sumar', arguments: { a: 17, b: 25 } } }] },
+        { role: 'tool', tool_name: 'sumar', content: '42' },
+      ],
+      think: false,
+    })
+  })
+
+  it('returns a bounded timeout error rather than waiting five minutes on a hung native service', async () => {
     const ollama = await serve((_request, _response) => {
       // Simulate an Ollama daemon accepting a request without returning headers.
     })
-    const proxy = await startPhoenixLocalProxy(Promise.resolve(manager(
-      `http://127.0.0.1:${port(ollama)}/v1`,
-    )), { port: 0, ollamaDeadlineMs: 100 })
-    servers.push(proxy)
-    const result = await fetch(`http://127.0.0.1:${port(proxy)}/v1/chat/completions`, {
+    const proxy = await startProxy(ollama, 100)
+    const result = await fetch(route(proxy), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'phoenix-local', messages: [{ role: 'user', content: 'Hola' }] }),
+      body: JSON.stringify({
+        model: 'phoenix-local', messages: [{ role: 'user', content: 'hola' }],
+      }),
     })
     expect(result.status).toBe(504)
-    const error = await result.json() as { error: { type: string; message: string } }
+    const error = await result.json() as { error: { type: string } }
     expect(error.error.type).toBe('phoenix_local_timeout')
-    expect(error.error.message).toContain('Ollama')
   })
 })
