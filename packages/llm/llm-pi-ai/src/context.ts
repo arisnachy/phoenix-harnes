@@ -379,9 +379,14 @@ const LOCAL_LITE_SYSTEM = [
   'Answer the latest user request concisely in its language.',
 ].join(' ')
 
+function isAuxiliarySkillCatalog(message: Message): boolean {
+  // Skill-catalog is a runtime-augmented source not yet in the core Source union.
+  return (message.source as { kind?: unknown }).kind === 'skill-catalog'
+}
+
 function isPlainLocalTextMessage(message: Message): boolean {
   if (message.role !== 'user' && message.role !== 'assistant') return false
-  if (message.source.kind === 'skill-catalog' || message.source.kind === 'tool') return false
+  if (isAuxiliarySkillCatalog(message) || message.source.kind === 'tool') return false
   return message.content.length > 0
     && message.content.every(block => block.type === 'text')
 }
@@ -408,7 +413,7 @@ export function fitPhoenixLocalTextTurn(
     for (let index = messages.length - 1; index >= 0; index--) {
       const message = messages[index]
       if (message?.role !== 'user') continue
-      if (message.source.kind === 'tool' || message.source.kind === 'skill-catalog') continue
+      if (message.source.kind === 'tool' || isAuxiliarySkillCatalog(message)) continue
       if (requireHuman && message.source.kind !== 'user') continue
       return index
     }
@@ -430,7 +435,7 @@ export function fitPhoenixLocalTextTurn(
     message.content.some(block => block.type === 'tool-call' || block.type === 'tool-result')
     || message.source.kind === 'tool'
     || message.role === 'assistant'
-    || (message.role === 'user' && message.source.kind !== 'skill-catalog')
+    || (message.role === 'user' && !isAuxiliarySkillCatalog(message))
   )) return regular
 
   const reduced: GenerateOptions = {
