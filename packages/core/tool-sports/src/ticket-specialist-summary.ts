@@ -10,6 +10,14 @@ export type TicketSpecialistSummary={
   missing:number
 }
 
+/** A short candidate preflight is not definitive for selected NBA/WNBA games. */
+export function needsSelectedSpecialistRecheck(
+  game:Pick<SpecialistGate,'sport'>,previous?:SpecialistGate,
+):boolean{
+  return !previous||previous.status==='unavailable'||
+    (game.sport==='basketball'&&previous.checklist?.complete!==true)
+}
+
 /** Separate partial NBA research from a genuinely unavailable specialist dossier. */
 export function summarizeTicketSpecialist(
   check:SpecialistGate|undefined,
