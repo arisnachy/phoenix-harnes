@@ -97,6 +97,7 @@ describe('PhoenixLocalPanel', () => {
     }))
     render(<PhoenixLocalPanel client={local} t={t} />)
     expect(await screen.findByText(localEn.ollamaExisting)).toBeTruthy()
+    expect(screen.getByText(localEn.ollamaLiteMode)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: localEn.connectOllama }))
     await waitFor(() =>{  expect(local.calls.install).toHaveBeenCalledWith(qwenId) })
     fireEvent.click(await screen.findByRole('button', { name: localEn.disconnectOllama }))
