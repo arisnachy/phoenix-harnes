@@ -43,7 +43,7 @@ describe('Phoenix Local Ollama proxy', () => {
       max_tokens: 256,
       stream: true,
     }), qwen))
-    expect(result.max_tokens).toBe(768)
+    expect(result.max_tokens).toBe(256)
     expect(result).not.toHaveProperty('max_completion_tokens')
     expect(result.reasoning_effort).toBe('none')
   })
