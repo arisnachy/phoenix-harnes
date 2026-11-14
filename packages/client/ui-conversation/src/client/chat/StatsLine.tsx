@@ -2,7 +2,7 @@
 // Mounted on 'conversation.composer.dock' so it sticks with the composer in the
 // active conversation scrollport (see ConversationRoot data-conversation-scroll).
 
-import { Fragment, memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Tooltip } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ConversationSnapshot, UseProjection } from '@phoenix-ai/dsh-client-runtime/client'
 import type { SnapshotSelectorHook } from '@phoenix-ai/dsh-client-ui-slots'
@@ -208,6 +208,38 @@ export interface StatsLineProps {
   t: ComposerBarProps['t']
 }
 
+
+type StatIconKind = 'counts' | 'llm' | 'tools' | 'ttft' | 'speed' | 'cache' | 'input' | 'output'
+
+/** Simple monochrome icons, inheriting the native chat color in every theme. */
+const STAT_ICON_PATHS: Record<StatIconKind, string> = {
+  counts: 'M3 4h14v11H7l-4 2V4ZM6 8h8M6 11h5',
+  llm: 'M6 6h8v8H6zM8 2v4M12 2v4M8 14v4M12 14v4M2 8h4M14 8h4M2 12h4M14 12h4',
+  tools: 'M13 3a4 4 0 0 0-5 5l-5 5a2.3 2.3 0 0 0 3 3l5-5a4 4 0 0 0 5-5l-3 3-3-3 3-3Z',
+  ttft: 'M11 2 4 11h6l-1 7 7-10h-6l1-6Z',
+  speed: 'M3 15a7 7 0 1 1 14 0M10 12l4-5M7 15h6',
+  cache: 'M3 5c0-3 14-3 14 0s-14 3-14 0ZM3 5v10c0 3 14 3 14 0V5M3 10c0 3 14 3 14 0',
+  input: 'M10 2v10m-4-4 4 4 4-4M3 14v3h14v-3',
+  output: 'M10 12V2M6 6l4-4 4 4M3 14v3h14v-3',
+}
+const VISIBILITY_KEY = 'phoenix.composer.stats.visible.v1'
+
+function initialStatsVisibility(): boolean {
+  try {
+    return typeof window === 'undefined' || window.localStorage.getItem(VISIBILITY_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
+
+function StatIcon({ kind }: { kind: StatIconKind }) {
+  return <svg className={css.icon} viewBox="0 0 20 20" fill="none" stroke="currentColor"
+    strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+    focusable="false" data-stat-icon={kind}>
+    <path d={STAT_ICON_PATHS[kind]} />
+  </svg>
+}
+
 export const StatsLine = memo(function StatsLine({ useSession, useProjection, t }: StatsLineProps) {
   const settledNodes = useSession(s => s.chat.legacy.nodes)
   const usage = useProjection('tokenUsage')
@@ -217,41 +249,41 @@ export const StatsLine = memo(function StatsLine({ useSession, useProjection, t 
   // while no projection value is served.
   const projected = useProjection('sessionStats')
   const stats = useMemo(() => projected ?? deriveStats(settledNodes), [projected, settledNodes])
-  // Pipe-separated groups (figma stats strip); a group with no data drops out whole.
-  const groups: string[] = []
+  const [visible, setVisible] = useState(initialStatsVisibility)
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(VISIBILITY_KEY, String(visible))
+    } catch {
+      // Storage may be blocked: the UI remains functional in this session.
+    }
+  }, [visible])
+
+  // Presentation only: whole-session calculations and projection fallbacks
+  // stay untouched. Every metric now has a distinct quiet pictogram.
+  const metrics: Array<{ icon: StatIconKind; label: string }> = []
+  const add = (icon: StatIconKind, label: string): void => { metrics.push({ icon, label }) }
   if (stats.steps > 0) {
-    groups.push(t('stats.counts', { turns: stats.turns, steps: stats.steps }))
-    const durations: string[] = []
-    if (stats.llmMs > 0) durations.push(t('stats.llm', { duration: formatDuration(stats.llmMs) }))
-    if (stats.toolMs > 0) durations.push(t('stats.toolCall', { duration: formatDuration(stats.toolMs) }))
-    if (durations.length > 0) groups.push(durations.join(' · '))
-    const speeds: string[] = []
+    add('counts', t('stats.counts', { turns: stats.turns, steps: stats.steps }))
+    if (stats.llmMs > 0) add('llm', t('stats.llm', { duration: formatDuration(stats.llmMs) }))
+    if (stats.toolMs > 0) add('tools', t('stats.toolCall', { duration: formatDuration(stats.toolMs) }))
     if (stats.ttftSteps > 0) {
-      speeds.push(t('stats.ttftAverage', { duration: formatDuration(stats.ttftMs / stats.ttftSteps) }))
+      add('ttft', t('stats.ttftAverage', { duration: formatDuration(stats.ttftMs / stats.ttftSteps) }))
     }
     if (stats.decodeMs > 0) {
-      speeds.push(t('stats.tokensPerSecond', {
+      add('speed', t('stats.tokensPerSecond', {
         throughput: formatTokensPerSecond(stats.decodeTokens / (stats.decodeMs / 1_000)),
       }))
     }
-    if (speeds.length > 0) groups.push(speeds.join(' · '))
   }
-  // Context occupancy deliberately lives on the composer's ContextMeter ring,
-  // not here — one home per fact.
-  // Billing rides the durable projection, so these survive paging and
-  // compaction. Gated on actual token activity: a session whose steps all
-  // settled without billing (e.g. every request failed) shows its counts
-  // without a zero-token group.
+  // Context occupancy stays on its own ring; no duplicate value.
   if (usage !== undefined
     && (billedInputTokens(usage) > 0 || usage.outputTokens > 0)) {
     const cacheHit = cacheHitPercent(usage)
-    if (cacheHit !== null) groups.push(t('stats.cacheHit', { percent: cacheHit }))
-    groups.push(t('stats.tokens', {
-      input: formatTokens(billedInputTokens(usage)),
-      output: formatTokens(usage.outputTokens),
-    }))
+    if (cacheHit !== null) add('cache', t('stats.cacheHit', { percent: cacheHit }))
+    add('input', t('stats.input', { input: formatTokens(billedInputTokens(usage)) }))
+    add('output', t('stats.output', { output: formatTokens(usage.outputTokens) }))
   }
-  const line = groups.join(' | ')
+  const line = metrics.map(metric => metric.label).join(' | ')
   // The row elides with ellipsis when overlong; a delayed hover tooltip carries
   // the full line, enabled only while content is actually clipped.
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -265,18 +297,36 @@ export const StatsLine = memo(function StatsLine({ useSession, useProjection, t 
     const observer = new ResizeObserver(measure)
     observer.observe(el)
     return () => { observer.disconnect() }
-  }, [line])
-  if (groups.length === 0) return null
+  }, [line, visible])
+  if (metrics.length === 0) return null
+  const visibilityLabel = t(visible ? 'stats.hide' : 'stats.show')
   return (
-    <Tooltip label={line} side="top" delayMs={500} disabled={!truncated}>
-      <div ref={rootRef} className={css.root}>
-        {groups.map((group, i) => (
-          <Fragment key={group}>
-            {i > 0 && <><span className={css.sep} aria-hidden>|</span>{' '}</>}
-            <span>{group}</span>
-          </Fragment>
-        ))}
-      </div>
-    </Tooltip>
+    <div className={css.shell} data-composer-stats="" data-visible={visible ? 'true' : 'false'}>
+      {visible && (
+        <Tooltip label={line} side="top" delayMs={500} disabled={!truncated}>
+          <div ref={rootRef} className={css.root} data-stats-track="">
+            {metrics.map((metric, i) => (
+              <span className={css.metric} key={metric.icon}>
+                {i > 0 && <><span className={css.sep} aria-hidden="true">|</span>{' '}</>}
+                <StatIcon kind={metric.icon} />
+                <span>{metric.label}</span>
+              </span>
+            ))}
+          </div>
+        </Tooltip>
+      )}
+      <Tooltip label={visibilityLabel} side="top" delayMs={350}>
+        <button type="button" className={css.visibility} aria-label={visibilityLabel}
+          aria-expanded={visible} onClick={() => { setVisible(value => !value) }}>
+          <svg viewBox="0 0 20 20" width="16" height="16" fill="none"
+            stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
+            strokeLinejoin="round" aria-hidden="true">
+            <path d="M2 10s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5Z" />
+            <circle cx="10" cy="10" r="2.5" />
+            {!visible && <path d="M3 3 17 17" />}
+          </svg>
+        </button>
+      </Tooltip>
+    </div>
   )
 })
