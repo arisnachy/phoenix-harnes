@@ -15,6 +15,10 @@ export type LocalModelPhase =
 export interface LocalModelCatalogEntry {
   id: string
   displayName: string
+  /** Native GGUF runner or an existing Ollama installation. */
+  backend: 'llama-server' | 'ollama'
+  /** Exact Ollama tag; only applies to the Ollama backend. */
+  ollamaModel?: string
   modelFileName: string
   sourceUrl: string
   sha256: string
