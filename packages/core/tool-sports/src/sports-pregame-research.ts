@@ -37,7 +37,7 @@ export function nbaOfficialInjuryPdf(day:string,timeET:string):string{
     new Date(day+'T00:00:00Z').toISOString().slice(0,10)!==day||
     !/^([01]\d|2[0-3]):(00|15|30|45)$/u.test(timeET))
     throw Error('Fecha u hora de reporte NBA inválidas')
-  const [h,m]=timeET.split(':').map(Number)
+  const h=Number(timeET.slice(0,2)),m=Number(timeET.slice(3,5))
   return 'https://ak-static.cms.nba.com/referee/injury/Injury-Report_'+day+
     '_'+String(h%12||12).padStart(2,'0')+'_'+String(m).padStart(2,'0')+
     (h>=12?'PM':'AM')+'.pdf'
