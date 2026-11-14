@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import {beforeEach,afterEach,describe,expect,it} from 'vitest'
+import {beforeEach,afterEach,describe,expect,it,vi} from 'vitest'
 import {cleanup,render,waitFor} from '@testing-library/react'
 import {SportsMarkedMatch} from '../src/client/chat/SportsMarkedMatch.tsx'
 import {importSportsReceipt} from '../src/client/chat/SportsTicketAutoLink.ts'
@@ -17,8 +17,8 @@ const props={sport:'basketball',league:'nba',date:'2026-11-13',eventId:'40112345
 const receipt={sport:'basketball',providerLeague:'nba',eventDate:'2026-11-13',
   eventId:'401123456',awayTeam:'New York Knicks',homeTeam:'Indiana Pacers',
   trackedBet:{receipt:'12140939',market:'moneyline',side:'away'}}
-beforeEach(()=>localStorage.clear())
-afterEach(()=>{cleanup();localStorage.clear()})
+beforeEach(()=>{localStorage.clear();vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({events:[]}),{status:200})))})
+afterEach(()=>{cleanup();localStorage.clear();vi.unstubAllGlobals()})
 
 describe('PHOENIX inline scoreboard pick tracking',()=>{
   it('marks the receipt pick separately from the analytic favorite and displays a provisional loss',()=>{
