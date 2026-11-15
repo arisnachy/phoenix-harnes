@@ -17,7 +17,10 @@ interface LocalModelMetadata {
   displayName: string
   sizeBytes: number
   estimatedRamBytes: number
+  /** Runtime-allocated request context, not the upstream model's maximum. */
   contextWindow: number
+  /** Native architecture limit, if independently known. */
+  nativeContextWindow?: number
   maxTokens: number
   recommended: boolean
 }
