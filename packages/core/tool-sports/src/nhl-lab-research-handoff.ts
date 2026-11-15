@@ -20,32 +20,32 @@ const observed=(value:unknown):EvidenceState=>value?'partial':'missing'
 
 /** One observed or missing A-Q domain with explicit sources and gaps. */
 export type NhlResearchModule={
-  topic:string;state:EvidenceState;data:unknown;missing:string[];sourceUrls:string[]
+  topic:string,state:EvidenceState,data:unknown,missing:string[],sourceUrls:string[]
 }
 /** Source-directed task for a missing NHL research field. */
 export type NhlResearchTask={
-  event_id:string;module:ModuleLetter;missing_fields:string[];route:string
+  event_id:string,module:ModuleLetter,missing_fields:string[],route:string
 }
 /** Read-only gate: the research snapshot never approves a bet. */
 export type NhlResearchGate={
-  researchOnly:true;eligibleForTicket:false;quotedOddsLive:false
-  modelCalibrated:false;expectedValue:null;recommendation:'investigate'
+  researchOnly:true,eligibleForTicket:false,quotedOddsLive:false
+  modelCalibrated:false,expectedValue:null,recommendation:'investigate'
 }
 /** Immutable research context for one NHL event. */
 export type NhlResearchGame={
-  eventId:string;sport:'hockey';league:'nhl'
-  home:{ id:string;abbrev:string;name:string };away:{ id:string;abbrev:string;name:string }
-  scheduledUtc:string;snapshotCreatedUtc:string;snapshotState:string
+  eventId:string,sport:'hockey',league:'nhl'
+  home:{ id:string,abbrev:string,name:string },away:{ id:string,abbrev:string,name:string }
+  scheduledUtc:string,snapshotCreatedUtc:string,snapshotState:string
   captureBeforeTipoff:boolean
   evidenceModules:Record<ModuleLetter,NhlResearchModule>
   checklistObservations:Record<string,StepObservation>
   missingResearch:NhlResearchTask[]
-  sourceRecords:Array<{ url:string;status:'verified'|'missing'|'error';checkedAt:string }>
+  sourceRecords:Array<{ url:string,status:'verified'|'missing'|'error',checkedAt:string }>
   gate:NhlResearchGate
 }
 /** Versioned, archived NHL handoff payload. */
 export type NhlResearchHandoff={
-  schema:'phoenix.nhl.read-model.v1';operational:false;referenceDate:string
+  schema:'phoenix.nhl.read-model.v1',operational:false,referenceDate:string
   games:NhlResearchGame[]
   note:string
 }
