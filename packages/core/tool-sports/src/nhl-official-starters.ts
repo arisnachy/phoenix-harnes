@@ -33,7 +33,7 @@ export async function probeNhlOfficialStarters(args:{
     Date.parse(args.kickoff)<=now)return{...result,state:'not-pregame',
       note:'No usar boxscore posterior al inicio ni identificador NHL inválido'}
   try{
-    const response=await fetcher(url,{signal:AbortSignal.timeout(2_500),
+    const response=await fetcher(url,{signal:AbortSignal.timeout(4_500),
       headers:{Accept:'application/json'}})
     if(!response.ok)throw Error('HTTP '+response.status)
     const data=obj(await response.json())
