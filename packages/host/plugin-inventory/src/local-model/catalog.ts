@@ -13,7 +13,9 @@ const QWEN_35_2B_OLLAMA: LocalModelCatalogEntry = Object.freeze({
   sizeBytes: 2_000_000_000,
   estimatedRamBytes: 3_500_000_000,
   contextWindow: 4_096,
-  maxTokens: 256,
+  // Qwen's old 256-token default truncated otherwise healthy normal replies.
+  // Local streaming may complete one extra pass; hosted providers are unchanged.
+  maxTokens: 768,
   recommended: true,
 })
 
