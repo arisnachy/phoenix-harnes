@@ -470,7 +470,7 @@ test('matched bookmaker price closes only the compact market step on second pass
   assert.equal(result.approvedLegs,0)
 })
 
-test('complete ESPN-style 1X2 menu clears draw review but never approves the wager',async()=>{
+test('complete ESPN-style 1X2 menu prices market but does not certify draw review',async()=>{
   const withFullSoccer=async()=>(await mkQuotes()()).flatMap(q=>[
     q,{...q,selection:q.away,price:2.40},
     {...q,selection:'Draw',price:3.50},
@@ -488,7 +488,7 @@ test('complete ESPN-style 1X2 menu clears draw review but never approves the wag
     withFullSoccer,'winner',reviewer)
   assert.equal(result.quotedLegs,5)
   assert.ok(result.specialistChecks.every(x=>x.checklist.steps.some(s=>
-    s.key==='draw'&&s.state==='verified')))
+    s.key==='draw'&&s.state==='partial')))
   assert.equal(result.approvedForBetting,false)
   assert.equal(result.approvedLegs,0)
 })
@@ -555,8 +555,8 @@ test('zero ranked picks still probe official ESPN event odds without inventing l
 
 
 test('a complete 1X2 price never marks draw-risk analytical verification as complete',async()=>{
-  const specialists=async games=>games.map(g=>({
-    ...stubSpecialists([g])[0],
+  const specialists=async games=>(await stubSpecialists(games)).map(g=>({
+    ...g,
     checklist:{sport:'soccer',checkedAt:new Date(now).toISOString(),
       steps:[
         {key:'fixture',title:'Identity',critical:true,state:'verified',detail:'match'},
