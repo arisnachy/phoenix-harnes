@@ -74,6 +74,8 @@ export async function evidencePricedTicket(
   explanation:string;reviewedBeforeSelection:number;removedConflicts:number;
   trackingEvents:Array<{eventId:string;sport:string;league:string;date:string;
     pick:'home'|'away';kickoff:string}>;
+  researchFixtures:Array<{eventId:string;sport:string;league:string;
+    date:string;home:string;away:string;kickoff:string}>;
   marketRisk?:TicketMarketRisk;
   decisionAudit:TicketDecisionAudit}>{
   const researchFetcher=fetcher===fetch?dailyResearchFetcher(fetcher,env):fetcher
@@ -136,6 +138,12 @@ export async function evidencePricedTicket(
   // Interactive fixture lookup bypasses the persisted research cache.
   const research=await evidenceTicket(count,date,sport,fetcher,now,env,
     reviewCandidates)
+  // Exact ESPN fixture identities allow Kira to recheck ONLY unfinished cases,
+  // rather than repeating a broad daily discovery/price scan.
+  const researchFixtures=research.events.map(e=>({
+    eventId:e.eventId,sport:e.sport,league:e.league,date:day,
+    home:e.home,away:e.away,kickoff:e.kickoff,
+  }))
   const leagues=[...new Map(research.events.map(e=>[e.league,e])).values()]
   const fallbackSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
   const espnReferenceOdds:OddsResearchObservation[]=[]
@@ -317,7 +325,7 @@ export async function evidencePricedTicket(
     candidateLegs:0,ticketReadyForReview:false,
     discoveredEvents:research.discoveryAudit.discoveredEvents,
     discoveryAudit:research.discoveryAudit,
-    specialistChecks,researchedLegs,modelAudit,trackingEvents,
+    specialistChecks,researchedLegs,modelAudit,trackingEvents,researchFixtures,
     decisionAudit:preliminaryDecisionAudit,reviewedBeforeSelection,removedConflicts,conditional:!checklistComplete,
     dossierComplete:checklistComplete,
     multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
@@ -936,7 +944,7 @@ export async function evidencePricedTicket(
     conditionalLegs:decisionAudit.legs.filter(x=>
       x.verdict==='hold'||x.verdict==='caution').length,
     approvedForBetting:false,
-    specialistChecks,researchedLegs,modelAudit,trackingEvents,
+    specialistChecks,researchedLegs,modelAudit,trackingEvents,researchFixtures,
     multisportSatisfied:research.multisportSatisfied,
     explanation:'Las '+count+' selecciones tienen '+
       (espnOnlyObserved?'precio observado en ESPN, pendiente de confirmación en la casa':
