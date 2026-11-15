@@ -353,7 +353,6 @@ export async function evidencePricedTicket(
   }
   // Even an incomplete 4/5 slate must audit the four real events for quotes;
   // otherwise 'no prices available' falsely implies the sources were checked.
-  const categories=[...new Set(research.events.map(e=>e.sport))]
   // ESPN is queried before any optional bookmaker adapter. Do not launch
   // OddsHarvester or consume API quotas when the five ESPN legs are priced.
   const sources:PromiseSettledResult<{category:string;quotes:KeylessQuote[]}>[]=[]
