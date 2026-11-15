@@ -622,7 +622,7 @@ export async function evidencePricedTicket(
   for(const q of all)observed.set(attributed(q.source),(observed.get(attributed(q.source))??0)+1)
   for(const group of groups)for(const q of group)
     matched.set(attributed(q.source),(matched.get(attributed(q.source))??0)+1)
-  const actualKeyless=sources.length>0
+  const actualKeyless=sources.length>0&&keylessEnabled(env)&&!quotesProvider
   const keylessFailures=sources.filter(s=>s.status==='rejected').length
   const fallbackEligible=!quotesProvider&&fallbackSources.some(x=>
     x.provider!=='ESPN Site/Core'&&x.status!=='unconfigured')
@@ -633,7 +633,8 @@ export async function evidencePricedTicket(
     if(offers)return{...row,status:'observed',offers,
       note:'Se observaron '+offers+' precios publicados; '+evidence+
         ' coinciden con selecciones investigadas (no son garantías).'}
-    const providerAttempts=fallbackSources.filter(x=>x.provider===row.source)
+    const providerAttempts=fallbackSources.filter(x=>x.provider===row.source&&
+      x.status!=='unconfigured')
     if(providerAttempts.length&&row.source!=='OddsHarvester'){
       const failure=providerAttempts.find(x=>x.status==='error')
       const attempted=providerAttempts.some(x=>x.status==='empty'||x.status==='observed')
