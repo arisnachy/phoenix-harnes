@@ -61,8 +61,10 @@ test('selected NBA receives a full pass after short incomplete preflight',()=>{
   assert.equal(needsSelectedSpecialistRecheck({sport:'basketball'},nba),true)
   assert.equal(needsSelectedSpecialistRecheck({sport:'basketball'},
     {...nba,checklist:{...nba.checklist,complete:true}}),false)
-  assert.equal(needsSelectedSpecialistRecheck({sport:'hockey'},nba),false)
+  assert.equal(needsSelectedSpecialistRecheck({sport:'hockey'},nba),true)
   assert.equal(needsSelectedSpecialistRecheck({sport:'hockey'},
     {...nba,status:'unavailable'}),true)
+  assert.equal(needsSelectedSpecialistRecheck({sport:'hockey'},
+    {...nba,checklist:{...nba.checklist,complete:true}}),false)
   assert.equal(needsSelectedSpecialistRecheck({sport:'basketball'}),true)
 })
