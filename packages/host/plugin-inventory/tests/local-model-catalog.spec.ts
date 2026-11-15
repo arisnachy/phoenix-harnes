@@ -33,7 +33,7 @@ describe('Phoenix Local catalog', () => {
   })
 
   it('offers safe local context defaults and explicit native-window tuning', () => {
-    expect(resolveQwen35RuntimeContextWindow(undefined)).toBe(16384)
+    expect(resolveQwen35RuntimeContextWindow('')).toBe(16384)
     expect(resolveQwen35RuntimeContextWindow('4096')).toBe(4096)
     expect(resolveQwen35RuntimeContextWindow('32768')).toBe(32768)
     expect(resolveQwen35RuntimeContextWindow('131072')).toBe(131072)
