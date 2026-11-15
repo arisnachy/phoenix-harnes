@@ -108,6 +108,8 @@ export async function evidencePricedTicket(
         /equipos no coinciden|conflicto de cartelera|identidad contradictoria|identidad u horario|horario.*no coinciden/iu.test(step))
         ||check.sourceChecks?.some(source=>source.status==='conflict')===true
       if(conflicts)removedConflicts++
+      const drawConflict=fixture.sport==='soccer'&&
+        check.soccerDrawAudit?.requiresAlternativeReview===true
       const pending=check.checklist?.criticalPending.length??12
       const injury=check.injuryAudit
       const chosen=fixture.pick==='home'?injury?.home:injury?.away
@@ -118,14 +120,17 @@ export async function evidencePricedTicket(
       // evidence that the team is weaker. Only a verified identity conflict
       // excludes a fixture. Do not lower a sports pick merely because an
       // HTTP source returned an incomplete roster or injury report.
-      const priority=check.checklist?.complete===true?0.30:
+      const priority=drawConflict?-0.3:check.checklist?.complete===true?0.30:
         check.status==='researched'?0.15:0
       const reason='Especialista '+check.status+
         '; críticos sin cerrar '+pending+
         '; lesiones '+(injury?.status??'sin fuente')+
         (absences.length?'; elegido: '+absences.join(', '):'')+
+        (check.soccerDrawAudit?'; empate '+check.soccerDrawAudit.tier+
+          ', fuente '+check.soccerDrawAudit.status:'')+
+        (drawConflict?'; descartar 1X2 simple: riesgo de empate observado':'')+
         (conflicts?'; conflicto de identidad':'')
-      return[{eventId:fixture.eventId,excluded:conflicts,
+      return[{eventId:fixture.eventId,excluded:conflicts||drawConflict,
         priority,reason}]
     })
   }
@@ -506,10 +511,8 @@ export async function evidencePricedTicket(
       ...step,state:'verified' as const,
       detail:'Precio publicado observado en '+quote.source+' · '+quote.bookmaker+
         ' · '+quote.market+' · '+quote.selection+' · '+quote.price+
-        '. Evento, rivales, inicio y selección cotejados; confirmar aceptación en la casa.',
-    }:step.key==='draw'&&validSoccerDraw?{
-      ...step,state:'verified' as const,
-      detail:'1X2 íntegro con empate, misma casa y ventana temporal; riesgo de empate no desaparece.',
+        '. Evento, rivales, inicio y selección cotejados; confirmar aceptación en la casa.'+
+        (validSoccerDraw?' Las tres caras del 1X2 existen; el paso estadístico de empate se evalúa por separado.':''),
     }:step)
     const criticalPending=steps.filter(step=>step.critical&&step.state!=='verified')
       .map(step=>step.title)
