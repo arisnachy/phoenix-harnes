@@ -34,6 +34,8 @@ interface NativeBridgeRequest {
   readonly payload: Record<string, unknown>
   readonly stream: boolean
   readonly model: string
+  /** Only an ordinary Phoenix Local chat turn may get one extra native pass. */
+  readonly allowContinuation: boolean
 }
 
 /** Classified native Ollama conversion error with an HTTP status and stable code. */
@@ -107,6 +109,7 @@ function toolCallsOf(value: unknown): Array<Record<string, unknown>> {
 export function toNativeOllamaChat(
   raw: Uint8Array<ArrayBuffer> | undefined,
   model: LocalModelCatalogEntry,
+  allowContinuation = false,
 ): NativeBridgeRequest {
   if (raw === undefined || model.backend !== 'ollama') {
     throw new NativeOllamaChatError('Modelo local incompatible.', 400, 'invalid_model')
@@ -170,6 +173,7 @@ export function toNativeOllamaChat(
   return {
     model: model.ollamaModel,
     stream,
+    allowContinuation,
     payload: {
       model: model.ollamaModel,
       messages,
@@ -198,6 +202,24 @@ function usageOf(chunk: NativeChatChunk): Record<string, number> {
   const input = chunk.prompt_eval_count ?? 0
   const output = chunk.eval_count ?? 0
   return { prompt_tokens: input, completion_tokens: output, total_tokens: input + output }
+}
+
+function continuationPayload(request: NativeBridgeRequest, visibleText: string): Record<string, unknown> {
+  const messages = request.payload['messages'] as Array<Record<string, unknown>>
+  return {
+    ...request.payload,
+    // The ongoing answer stays visible in the same Phoenix turn. The extra
+    // native pass is local-only and never alters the persisted conversation.
+    messages: [
+      ...messages,
+      { role: 'assistant', content: visibleText },
+      {
+        role: 'user',
+        content: 'Continue exactly where you stopped, without repeating completed text. Keep the same language and formatting; do not restart the answer.',
+      },
+    ],
+    think: false,
+  }
 }
 
 function finishReason(chunk: NativeChatChunk, hasTools: boolean): string {
@@ -256,12 +278,14 @@ function sendSse(response: ServerResponse, payload: unknown): void {
  * @param upstream - Native Ollama HTTP response with JSON or NDJSON body.
  * @param downstream - Phoenix's OpenAI-compatible loopback HTTP response.
  * @param request - Validated request metadata and streaming preference.
+ * @param sendContinuation - Same loopback Ollama transport for one bounded extra pass.
  * @returns Once the complete translated response has been sent.
  */
 export async function relayNativeOllamaChat(
   upstream: Response,
   downstream: ServerResponse,
   request: NativeBridgeRequest,
+  sendContinuation: (payload: Record<string, unknown>) => Promise<Response>,
 ): Promise<void> {
   // Diagnostic marker: distinguish a freshly updated native bridge from an
   // old Phoenix runtime still forwarding to Ollama's /v1 endpoint.
@@ -275,7 +299,31 @@ export async function relayNativeOllamaChat(
   }
 
   if (!request.stream) {
-    const raw = await upstream.json() as NativeChatChunk
+    const initial = await upstream.json() as NativeChatChunk
+    let raw = initial
+    if (request.allowContinuation && initial.done_reason === 'length'
+      && (initial.message?.content ?? '').trim()
+      && (initial.message?.tool_calls?.length ?? 0) === 0) {
+      try {
+        const followUp = await sendContinuation(continuationPayload(request, initial.message?.content ?? ''))
+        if (followUp.ok) {
+          const next = await followUp.json() as NativeChatChunk
+          if ((next.message?.content ?? '').trim() || (next.message?.tool_calls?.length ?? 0) > 0) {
+            raw = {
+              ...next,
+              message: {
+                ...next.message,
+                content: (initial.message?.content ?? '') + (next.message?.content ?? ''),
+              },
+              prompt_eval_count: (initial.prompt_eval_count ?? 0) + (next.prompt_eval_count ?? 0),
+              eval_count: (initial.eval_count ?? 0) + (next.eval_count ?? 0),
+            }
+          }
+        }
+      } catch {
+        // Keep the first truthful length stop if the optional follow-up fails.
+      }
+    }
     const result = nativeOllamaCompletion(raw, request.model)
     downstream.statusCode = 200
     downstream.setHeader('content-type', 'application/json; charset=utf-8')
@@ -286,13 +334,11 @@ export async function relayNativeOllamaChat(
     throw new NativeOllamaChatError('Ollama devolvió una transmisión vacía.', 502, 'ollama_empty_stream')
   }
 
-  const reader = upstream.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
   let started = false
   let visibleText = ''
   const toolCalls: NativeToolCall[] = []
   let terminal: NativeChatChunk | undefined
+  const resetTerminal = (): void => { terminal = undefined }
   const responseId = `chatcmpl-${randomUUID()}`
   const created = Math.floor(Date.now() / 1000)
   const frame = (delta: Record<string, unknown>, reason: string | null) => ({
@@ -329,26 +375,56 @@ export async function relayNativeOllamaChat(
     }
     if (chunk.done) terminal = chunk
   }
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      if (buffer.length > 1_048_576) {
-        throw new NativeOllamaChatError('Un evento de Ollama excedió el límite de tamaño.', 502, 'oversized_ollama_event')
-      }
+  let nativeResponse = upstream
+  let totalInput = 0
+  let totalOutput = 0
+  for (let pass = 0; pass < 2; pass++) {
+    const reader = nativeResponse.body?.getReader()
+    if (reader === undefined) {
+      throw new NativeOllamaChatError('Ollama devolvió una transmisión vacía.', 502, 'ollama_empty_stream')
+    }
+    const decoder = new TextDecoder()
+    let buffer = ''
+    resetTerminal()
+    try {
       while (true) {
-        const newline = buffer.indexOf('\n')
-        if (newline < 0) break
-        const line = buffer.slice(0, newline).trim()
-        buffer = buffer.slice(newline + 1)
-        if (line.length > 0) onChunk(JSON.parse(line) as NativeChatChunk)
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        if (buffer.length > 1_048_576) {
+          throw new NativeOllamaChatError('Un evento de Ollama excedió el límite de tamaño.', 502, 'oversized_ollama_event')
+        }
+        while (true) {
+          const newline = buffer.indexOf('\n')
+          if (newline < 0) break
+          const line = buffer.slice(0, newline).trim()
+          buffer = buffer.slice(newline + 1)
+          if (line.length > 0) onChunk(JSON.parse(line) as NativeChatChunk)
+        }
+      }
+      const tail = (buffer + decoder.decode()).trim()
+      if (tail.length > 0) onChunk(JSON.parse(tail) as NativeChatChunk)
+    } finally {
+      reader.releaseLock()
+    }
+    if (terminal === undefined) {
+      throw new NativeOllamaChatError('La transmisión de Ollama terminó sin evento final.', 502, 'ollama_truncated_stream')
+    }
+    totalInput += terminal.prompt_eval_count ?? 0
+    totalOutput += terminal.eval_count ?? 0
+    if (pass === 0 && request.allowContinuation && terminal.done_reason === 'length'
+      && visibleText.trim().length > 0 && toolCalls.length === 0) {
+      try {
+        const followUp = await sendContinuation(continuationPayload(request, visibleText))
+        if (followUp.ok && followUp.body !== null) {
+          nativeResponse = followUp
+          continue
+        }
+      } catch {
+        // An optional continuation must never erase already streamed text.
       }
     }
-    const tail = (buffer + decoder.decode()).trim()
-    if (tail.length > 0) onChunk(JSON.parse(tail) as NativeChatChunk)
-  } finally {
-    reader.releaseLock()
+    break
   }
 
   if (terminal === undefined) {
@@ -363,7 +439,7 @@ export async function relayNativeOllamaChat(
     created,
     model: request.model,
     choices: [],
-    usage: usageOf(terminal),
+    usage: { prompt_tokens: totalInput, completion_tokens: totalOutput, total_tokens: totalInput + totalOutput },
   })
   downstream.end('data: [DONE]\n\n')
 }
