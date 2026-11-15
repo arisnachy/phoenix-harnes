@@ -13,6 +13,8 @@ import {auditBasketballGranularEvidence} from './basketball-granular-evidence.ts
 import {nflDeepSignals,nhlDeepSignals,mlbDeepSignals,
   soccerDeepSignals,tennisDeepSignals} from './sports-granular-bridge.ts'
 import {investigateSoccer} from './soccer-worldwide-dossier.ts'
+import {assessSoccerDrawRisk,type SoccerDrawAudit} from './soccer-draw-risk.ts'
+import {probeNhlOfficialStarters,type NhlStarterProbe} from './nhl-official-starters.ts'
 import {nhlSlate,investigateNhl} from './nhl-evidence-research.ts'
 import {sameEspnTeam} from './sports-exact-espn-winner.ts'
 import {discoverMlbDay,researchMlbCase} from './mlb-evidence-research.ts'
@@ -35,6 +37,10 @@ export type SpecialistGate={
   /** Snapshot of both teams' reported availability; source freshness does not
    * establish starter confirmation or an official pre-tipoff inactive list. */
   injuryAudit?:InjuryBackup
+  /** Independent empirical draw-risk assessment, not proof of 1X2 odds. */
+  soccerDrawAudit?:SoccerDrawAudit
+  /** Official NHL gamecenter starter flags, never inferred from roster. */
+  nhlStarterAudit?:NhlStarterProbe
   /** No-key official-report link and cautious secondary injury observations. */
   freeInjuryChecks?:FreeInjurySource[]
   /** Actual source URLs and their results; a 200 without data is not verified. */
@@ -115,6 +121,8 @@ export async function investigateTicketSpecialist(
   // matching a real quote to the ESPN fixture and selected outcome.
   const signals:Record<string,StepObservation>={}
   let injuryAudit:InjuryBackup|undefined
+  let soccerDrawAudit:SoccerDrawAudit|undefined
+  let nhlStarterAudit:NhlStarterProbe|undefined
   const mark=(key:string,state:StepObservation['state'],detail:string)=>{
     signals[key]={state,detail}
   }
@@ -235,6 +243,18 @@ export async function investigateTicketSpecialist(
         'Onces verificados '+String(d.coverage.lineups),
         'Enfrentamientos individuales '+d.duels.length]
       pending=d.missingEvidence
+      // Both teams' past scoreboards already came from ESPN. Use their
+      // chronological, venue-aware results instead of adding unsupported
+      // calls to an xG vendor for leagues it does not cover.
+      soccerDrawAudit=assessSoccerDrawRisk({
+        home:{name:d.teams.home.name,recent:d.teams.home.recent},
+        away:{name:d.teams.away.name,recent:d.teams.away.recent},
+        kickoff:d.fixture.scheduledAt,statistics:d.teamStatistics,
+      })
+      steps.push(...soccerDrawAudit.indicators)
+      if(soccerDrawAudit.requiresAlternativeReview)
+        pending.push('Empate: indicadores elevados; buscar doble oportunidad o reemplazar ganador 1X2')
+      pending.push(...soccerDrawAudit.unverified)
       Object.assign(signals,soccerDeepSignals(d))
       observed('fixture',closeTime(d.opportunity.scheduledAt,game.kickoff),
         'ESPN fútbol: local, visita y horario cotejados')
@@ -248,8 +268,12 @@ export async function investigateTicketSpecialist(
         'Debe confirmarse xG y xGA para ambos clubes, no una única cifra')
       mark('injuries',d.injuries.length?'partial':'missing',
         'Bajas observadas; sin reporte completo de ambos clubes no se certifica disponibilidad')
-      mark('draw',d.markets.some(m=>m.market==='1x2')?'partial':'missing',
-        'Riesgo de empate y reglas reglamentarias de 90 minutos por validar')
+      mark('draw',soccerDrawAudit.status==='assessed'?'verified':
+        soccerDrawAudit.status==='partial'?'partial':'missing',
+        'Análisis independiente de empate: '+soccerDrawAudit.status+
+        ' · '+soccerDrawAudit.tier+' · promedio histórico '+
+        (soccerDrawAudit.averageHistoricalDrawPct??'?')+
+        '%. No es una probabilidad calibrada ni acredita cuotas 1X2')
       mark('market',d.markets.length?'partial':'missing',
         'Mercados observados; falta comprobar período, casa y fecha')
     }else if(game.sport==='hockey'&&game.league==='nhl'){
@@ -281,7 +305,18 @@ export async function investigateTicketSpecialist(
       steps=['Rosters '+(d.players.home.length+d.players.away.length),
         'Porteros candidatos '+(d.goalieCandidates.home.length+d.goalieCandidates.away.length),
         'Forma local/visita '+(d.form.home?.games??0)+'/'+(d.form.away?.games??0)]
-      pending=d.missingEvidence
+      nhlStarterAudit=await probeNhlOfficialStarters({
+        gameId:match.id,homeAbbrev:match.home.abbrev,awayAbbrev:match.away.abbrev,
+        kickoff:match.date,
+      },fetcher,now)
+      endpointAudit??=[]
+      endpointAudit.push({url:nhlStarterAudit.url,
+        status:nhlStarterAudit.state==='confirmed'?'verified':
+          nhlStarterAudit.state==='unavailable'?'error':'empty',
+        checkedAt:nhlStarterAudit.checkedAt,detail:nhlStarterAudit.note})
+      pending=nhlStarterAudit.state==='confirmed'?
+        d.missingEvidence.filter(x=>!/Ningún portero confirmado/iu.test(x)):
+        d.missingEvidence
       Object.assign(signals,nhlDeepSignals(d))
       steps.push('NHL jugadores con historial '+playerHistoryAudit.gameLogsFound+
         '/'+playerHistoryAudit.inspectedPlayers+
@@ -291,8 +326,13 @@ export async function investigateTicketSpecialist(
       observed('form',(d.form.home?.games??0)>=5&&(d.form.away?.games??0)>=5,
         'Resultados NHL y descanso de ambos clubes')
       observed('rosters',teams,'Jugadores NHL por club')
-      mark('goalies',d.goalieCandidates.home.length&&d.goalieCandidates.away.length?
-        'partial':'missing','Porteros candidatos: ninguno confirmado como titular')
+      mark('goalies',nhlStarterAudit.state==='confirmed'?'verified':
+        d.goalieCandidates.home.length&&d.goalieCandidates.away.length?'partial':'missing',
+        nhlStarterAudit.state==='confirmed'?
+          'NHL oficial: local '+nhlStarterAudit.homeGoalie+
+          ' · visitante '+nhlStarterAudit.awayGoalie+
+          '; titulares explícitos antes del inicio, sujetos a cambio de última hora':
+          'Porteros sin confirmación oficial: '+nhlStarterAudit.note)
       // Expected goals and GSAx are different from NHL shots and save percentage.
       // Keep the unobserved private metric missing; the compact research
       // checklist treats it as an advanced uncertainty, not a hard stop.
@@ -462,6 +502,8 @@ export async function investigateTicketSpecialist(
         checklist.criticalPending.slice(0,3).join('; '))
     return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
       sourceChecks,checklist,...(injuryAudit?{injuryAudit}:{}),
+      ...(soccerDrawAudit?{soccerDrawAudit}:{}),
+      ...(nhlStarterAudit?{nhlStarterAudit}:{}),
       ...(freeInjuryChecks.length?{freeInjuryChecks}:{}),
       ...(endpointAudit?{endpointAudit}:{}),
       ...(playerHistoryAudit?{playerHistoryAudit}:{}),
