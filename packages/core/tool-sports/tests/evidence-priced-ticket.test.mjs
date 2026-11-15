@@ -470,7 +470,7 @@ test('matched bookmaker price closes only the compact market step on second pass
   assert.equal(result.approvedLegs,0)
 })
 
-test('complete ESPN-style 1X2 menu clears draw review but never approves the wager',async()=>{
+test('complete ESPN-style 1X2 menu prices market but does not certify draw review',async()=>{
   const withFullSoccer=async()=>(await mkQuotes()()).flatMap(q=>[
     q,{...q,selection:q.away,price:2.40},
     {...q,selection:'Draw',price:3.50},
@@ -488,7 +488,7 @@ test('complete ESPN-style 1X2 menu clears draw review but never approves the wag
     withFullSoccer,'winner',reviewer)
   assert.equal(result.quotedLegs,5)
   assert.ok(result.specialistChecks.every(x=>x.checklist.steps.some(s=>
-    s.key==='draw'&&s.state==='verified')))
+    s.key==='draw'&&s.state==='partial')))
   assert.equal(result.approvedForBetting,false)
   assert.equal(result.approvedLegs,0)
 })
@@ -551,4 +551,40 @@ test('zero ranked picks still probe official ESPN event odds without inventing l
   assert.equal(report.approvedLegs,0)
   assert.match(report.explanation,/Se consultaron/)
   assert.equal(report.sourceAudit.find(x=>x.source==='ESPN Site/Core').status,'empty')
+})
+
+
+test('a complete 1X2 price never marks draw-risk analytical verification as complete',async()=>{
+  const specialists=async games=>(await stubSpecialists(games)).map(g=>({
+    ...g,
+    checklist:{sport:'soccer',checkedAt:new Date(now).toISOString(),
+      steps:[
+        {key:'fixture',title:'Identity',critical:true,state:'verified',detail:'match'},
+        {key:'market',title:'Quoted price',critical:true,state:'partial',detail:'pending'},
+        {key:'draw',title:'Empate y 90 minutos',critical:true,state:'partial',
+          detail:'No hay muestras local/visitante suficientes'},
+      ],verified:1,partial:2,missing:0,complete:false,
+      criticalPending:['Quoted price','Empate y 90 minutos']},
+  }))
+  const prices=async()=>Array.from({length:5},(_,i)=>[
+    {selection:'Home '+i,price:1.8},
+    {selection:'Away '+i,price:4},
+    {selection:'Draw',price:3.6},
+  ].map(x=>({
+    eventId:'scraper-'+i,bookmaker:'Book A',market:'1x2',
+    selection:x.selection,price:x.price,point:null,
+    home:'Home '+i,away:'Away '+i,
+    time:kick,updatedAt:'2026-10-28T14:30:00Z',
+    source:'Mock bookmaker',sportKey:'football',
+  }))).flat()
+  const r=await evidencePricedTicket(5,date,'soccer',0,now,enabled,feed,prices,
+    'winner',specialists)
+  assert.equal(r.priced,true)
+  assert.equal(r.conditional,true)
+  assert.ok(r.specialistChecks.every(c=>
+    c.checklist.steps.find(s=>s.key==='draw').state==='partial'))
+  assert.ok(r.specialistChecks.every(c=>
+    c.checklist.steps.find(s=>s.key==='market').state==='verified'))
+  assert.ok(r.specialistChecks.every(c=>c.checklist.criticalPending.some(x=>
+    x.includes('Empate'))))
 })

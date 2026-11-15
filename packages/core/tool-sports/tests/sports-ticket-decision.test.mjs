@@ -61,3 +61,17 @@ test('policy validates deployment thresholds and duplicate event IDs',()=>{
   assert.throws(()=>auditTicketDecisions([sample('A',.7),sample('A',.8)],policy),
     /duplicado/)
 })
+
+
+test('held selections are not added to three/four/five-leg recommendation scenarios',()=>{
+  const result=auditTicketDecisions([
+    sample('A',.8),sample('B',.79),sample('C',.78),
+    sample('D',.77,{modelStatus:'contradiction'}),
+    sample('E',.76),
+  ],policy)
+  assert.equal(result.legs.find(x=>x.eventId==='D').verdict,'hold')
+  assert.deepEqual(result.scenarios[0].eventIds,['A','B','C'])
+  assert.deepEqual(result.scenarios[1].eventIds,['A','B','C','E'])
+  assert.equal(result.scenarios[2].marketProductPct,null)
+  assert.ok(!result.scenarios.some(s=>s.eventIds.includes('D')))
+})
