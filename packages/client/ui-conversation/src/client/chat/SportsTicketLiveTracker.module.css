@@ -101,3 +101,19 @@
   .legHead,.teams,.goal,.details{grid-column:1;grid-row:auto}
   .goal{margin-top:0}.titleRow h3{font-size:17px}}
 @media(prefers-reduced-motion:reduce){.progress>span{transition:none}}
+
+/* Daily coverage is not a bet: show research-only fixtures in a compact
+   two-column list, visually distinct from graded ticket selections. */
+.researchBoard{padding:12px 15px;border-top:1px solid var(--dsw-alias-border-subtle,#e5dfd7)}
+.researchTitle{display:flex;align-items:baseline;justify-content:space-between;
+  gap:8px;flex-wrap:wrap;margin-bottom:9px}
+.researchTitle strong{font-size:12px;font-weight:780}
+.researchTitle small{font-size:10px;color:var(--dsw-alias-label-secondary,#776857)}
+.researchItems{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.researchItem{display:grid;gap:4px;min-width:0;border-radius:10px;padding:10px 11px;
+  border:1px solid var(--dsw-alias-border-subtle,#e5dfd7);
+  background:var(--dsw-alias-interactive-bg-hover,rgba(200,160,100,.025))}
+.researchItem span{font-size:11px;font-weight:750;overflow-wrap:anywhere}
+.researchItem small{font-size:10px;color:var(--dsw-alias-label-secondary,#776857)}
+.researchItem b{font-size:10px;color:var(--dsw-alias-label-warning,#9b6927)}
+@media(max-width:600px){.researchItems{grid-template-columns:minmax(0,1fr)}}
