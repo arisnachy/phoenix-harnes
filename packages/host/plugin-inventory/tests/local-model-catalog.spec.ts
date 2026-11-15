@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getLocalModelCatalog, getRuntimeManifest } from '../src/local-model/catalog.js'
+import { getLocalModelCatalog, getRuntimeManifest, resolveQwen35RuntimeContextWindow } from '../src/local-model/catalog.js'
 
 describe('Phoenix Local catalog', () => {
   it('recommends the existing CPU-friendly Ollama Qwen 2B and keeps native GGUF models selectable', () => {
@@ -10,8 +10,9 @@ describe('Phoenix Local catalog', () => {
       displayName: 'Qwen 3.5 2B Q4_K_M · Ollama',
       backend: 'ollama',
       ollamaModel: 'qwen3.5:2b-q4_K_M',
-      contextWindow: 4096,
-      maxTokens: 256,
+      contextWindow: resolveQwen35RuntimeContextWindow(),
+      nativeContextWindow: 262144,
+      maxTokens: 768,
       recommended: true,
     })
     expect(catalog).toEqual(expect.arrayContaining([
@@ -29,6 +30,17 @@ describe('Phoenix Local catalog', () => {
         recommended: false,
       }),
     ]))
+  })
+
+  it('offers safe local context defaults and explicit native-window tuning', () => {
+    expect(resolveQwen35RuntimeContextWindow(undefined)).toBe(16384)
+    expect(resolveQwen35RuntimeContextWindow('4096')).toBe(4096)
+    expect(resolveQwen35RuntimeContextWindow('32768')).toBe(32768)
+    expect(resolveQwen35RuntimeContextWindow('131072')).toBe(131072)
+    expect(resolveQwen35RuntimeContextWindow('262144')).toBe(262144)
+    expect(resolveQwen35RuntimeContextWindow('1010000')).toBe(16384)
+    expect(resolveQwen35RuntimeContextWindow('0')).toBe(16384)
+    expect(resolveQwen35RuntimeContextWindow('invalid')).toBe(16384)
   })
 
   it('pins the verified Windows x64 llama.cpp runtime', () => {
