@@ -114,6 +114,7 @@ describe('LocalModelRuntimeManager', () => {
     const [, args] = vi.mocked(dependencies.spawnServer).mock.calls[0]!
     expect(args).toEqual(expect.arrayContaining([
       '--ctx-size', '262144',
+      '--reasoning', 'off',
       '--model', expect.stringContaining('Qwen_Qwen3.5-4B-Q4_K_M.gguf'),
     ]))
     expect(manager.snapshot().selectedModelId).toBe(qwen)
