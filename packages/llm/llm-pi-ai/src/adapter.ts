@@ -586,7 +586,15 @@ export class PiAiAdapter extends LlmAdapter {
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.
-        headers: requestHeaders(profile.provider, profile.headers),
+        headers: {
+          ...requestHeaders(profile.provider, profile.headers),
+          // Only Phoenix Local gets one native Ollama length continuation.
+          // Keep explicit short caps (e.g. 64 tokens) authoritative; agent
+          // defaults at model capability are eligible too.
+          ...options.provider === 'phoenix-local'
+            && (options.maxTokens === undefined || options.maxTokens >= model.maxTokens)
+            ? { 'x-phoenix-local-auto-continue': '1' } : {},
+        },
       }
       const events = platformKeyFallback
         // The collection dispatches the codex route to the Codex wire no

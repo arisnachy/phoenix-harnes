@@ -222,6 +222,115 @@ describe('Phoenix Local Ollama native chat compatibility', () => {
     })
   })
 
+  it('continues a normal local streaming answer once without changing the other providers', async () => {
+    const requests: Record<string, unknown>[] = []
+    const ollama = await serve(async (request, response) => {
+      const body = await captureRequest(request)
+      requests.push(body)
+      response.writeHead(200, { 'content-type': 'application/x-ndjson' })
+      const first = requests.length === 1
+      response.write(JSON.stringify({
+        message: { role: 'assistant', content: first ? 'La respuesta ' : 'continúa.' },
+        done: false,
+      }) + '\n')
+      response.end(JSON.stringify({
+        message: { role: 'assistant', content: '' },
+        done: true,
+        done_reason: first ? 'length' : 'stop',
+        prompt_eval_count: first ? 20 : 30,
+        eval_count: first ? 768 : 12,
+      }) + '\n')
+    })
+    const proxy = await startProxy(ollama)
+    const result = await fetch(route(proxy), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-phoenix-local-auto-continue': '1',
+      },
+      body: JSON.stringify({
+        model: 'phoenix-local',
+        stream: true,
+        max_tokens: 768,
+        messages: [{ role: 'user', content: 'Explica esto' }],
+      }),
+    })
+    expect(result.status).toBe(200)
+    const sse = await result.text()
+    expect(sse).toContain('La respuesta ')
+    expect(sse).toContain('continúa.')
+    expect(sse).toContain('"finish_reason":"stop"')
+    expect(sse).not.toContain('"finish_reason":"length"')
+    expect(sse).toContain('"completion_tokens":780')
+    expect(sse).toContain('"prompt_tokens":50')
+    expect(requests).toHaveLength(2)
+    expect(requests[0]).toMatchObject({ think: false, options: { num_predict: 768 } })
+    expect(requests[1]).toMatchObject({
+      think: false,
+      messages: [
+        { role: 'user', content: 'Explica esto' },
+        { role: 'assistant', content: 'La respuesta ' },
+        { role: 'user' },
+      ],
+    })
+  })
+
+  it('continues a nonstreaming local response and reports combined usage', async () => {
+    let calls = 0
+    const ollama = await serve(async (request, response) => {
+      await captureRequest(request)
+      calls++
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({
+        message: { role: 'assistant', content: calls === 1 ? 'Primera parte. ' : 'Segunda parte.' },
+        done: true, done_reason: calls === 1 ? 'length' : 'stop',
+        prompt_eval_count: 10, eval_count: calls === 1 ? 768 : 15,
+      }))
+    })
+    const proxy = await startProxy(ollama)
+    const result = await fetch(route(proxy), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-phoenix-local-auto-continue': '1' },
+      body: JSON.stringify({
+        model: 'phoenix-local', stream: false, max_tokens: 768,
+        messages: [{ role: 'user', content: 'Explica esto' }],
+      }),
+    })
+    expect(result.status).toBe(200)
+    expect(await result.json()).toMatchObject({
+      choices: [{ message: { content: 'Primera parte. Segunda parte.' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 20, completion_tokens: 783 },
+    })
+    expect(calls).toBe(2)
+  })
+
+  it('honors an explicit 64-token limit and does not auto-continue', async () => {
+    let calls = 0
+    const ollama = await serve(async (request, response) => {
+      await captureRequest(request)
+      calls++
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({
+        message: { role: 'assistant', content: 'Texto parcial' },
+        done: true, done_reason: 'length', eval_count: 64,
+      }))
+    })
+    const proxy = await startProxy(ollama)
+    const result = await fetch(route(proxy), {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'phoenix-local', stream: false, max_tokens: 64,
+        messages: [{ role: 'user', content: 'Explica esto' }],
+      }),
+    })
+    expect(result.status).toBe(200)
+    expect(await result.json()).toMatchObject({
+      choices: [{ message: { content: 'Texto parcial' }, finish_reason: 'length' }],
+      usage: { completion_tokens: 64 },
+    })
+    expect(calls).toBe(1)
+  })
+
   it('returns a bounded timeout error rather than waiting five minutes on a hung native service', async () => {
     const ollama = await serve((_request, _response) => {
       // Simulate an Ollama daemon accepting a request without returning headers.

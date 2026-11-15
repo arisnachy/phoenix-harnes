@@ -34,7 +34,7 @@ function requestHeaders(request: IncomingMessage): Headers {
   const headers = new Headers()
   for (const [name, value] of Object.entries(request.headers)) {
     if (value === undefined) continue
-    if (name.toLowerCase() === 'host' || name.toLowerCase() === 'content-length') continue
+    if (name.toLowerCase() === 'host' || name.toLowerCase() === 'content-length' || name.toLowerCase() === 'x-phoenix-local-auto-continue') continue
     if (Array.isArray(value)) value.forEach((item) =>{  headers.append(name, item) })
     else headers.set(name, value)
   }
@@ -115,7 +115,7 @@ async function forward(
     // reasoning tokens with an empty visible answer on some Ollama versions.
     const nativeChat = request.method === 'POST' && suffix.split('?')[0] === '/chat/completions'
       && selected?.backend === 'ollama'
-      ? toNativeOllamaChat(body, selected)
+      ? toNativeOllamaChat(body, selected, request.headers['x-phoenix-local-auto-continue'] === '1')
       : undefined
     const forwardedBody = nativeChat === undefined
       ? request.method === 'POST' ? rewriteOllamaOpenAiBody(suffix, body, selected) : body
@@ -141,7 +141,14 @@ async function forward(
       signal,
     })
     if (nativeChat !== undefined) {
-      await relayNativeOllamaChat(upstream, response, nativeChat)
+      await relayNativeOllamaChat(upstream, response, nativeChat, async payload => fetch(
+        new URL('/api/chat', backendBaseUrl), {
+          method: 'POST',
+          headers: requestHeaders(request),
+          body: JSON.stringify(payload),
+          signal,
+        },
+      ))
       return
     }
     response.statusCode = upstream.status
