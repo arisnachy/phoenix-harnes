@@ -14,6 +14,7 @@ import {nflDeepSignals,nhlDeepSignals,mlbDeepSignals,
   soccerDeepSignals,tennisDeepSignals} from './sports-granular-bridge.ts'
 import {investigateSoccer} from './soccer-worldwide-dossier.ts'
 import {assessSoccerDrawRisk,type SoccerDrawAudit} from './soccer-draw-risk.ts'
+import {probeNhlOfficialStarters,type NhlStarterProbe} from './nhl-official-starters.ts'
 import {nhlSlate,investigateNhl} from './nhl-evidence-research.ts'
 import {sameEspnTeam} from './sports-exact-espn-winner.ts'
 import {discoverMlbDay,researchMlbCase} from './mlb-evidence-research.ts'
@@ -38,6 +39,8 @@ export type SpecialistGate={
   injuryAudit?:InjuryBackup
   /** Independent empirical draw-risk assessment, not proof of 1X2 odds. */
   soccerDrawAudit?:SoccerDrawAudit
+  /** Official NHL gamecenter starter flags, never inferred from roster. */
+  nhlStarterAudit?:NhlStarterProbe
   /** No-key official-report link and cautious secondary injury observations. */
   freeInjuryChecks?:FreeInjurySource[]
   /** Actual source URLs and their results; a 200 without data is not verified. */
@@ -119,6 +122,7 @@ export async function investigateTicketSpecialist(
   const signals:Record<string,StepObservation>={}
   let injuryAudit:InjuryBackup|undefined
   let soccerDrawAudit:SoccerDrawAudit|undefined
+  let nhlStarterAudit:NhlStarterProbe|undefined
   const mark=(key:string,state:StepObservation['state'],detail:string)=>{
     signals[key]={state,detail}
   }
@@ -301,7 +305,18 @@ export async function investigateTicketSpecialist(
       steps=['Rosters '+(d.players.home.length+d.players.away.length),
         'Porteros candidatos '+(d.goalieCandidates.home.length+d.goalieCandidates.away.length),
         'Forma local/visita '+(d.form.home?.games??0)+'/'+(d.form.away?.games??0)]
-      pending=d.missingEvidence
+      nhlStarterAudit=await probeNhlOfficialStarters({
+        gameId:match.id,homeAbbrev:match.home.abbrev,awayAbbrev:match.away.abbrev,
+        kickoff:match.date,
+      },fetcher,now)
+      endpointAudit??=[]
+      endpointAudit.push({url:nhlStarterAudit.url,
+        status:nhlStarterAudit.state==='confirmed'?'verified':
+          nhlStarterAudit.state==='unavailable'?'error':'empty',
+        checkedAt:nhlStarterAudit.checkedAt,detail:nhlStarterAudit.note})
+      pending=nhlStarterAudit.state==='confirmed'?
+        d.missingEvidence.filter(x=>!/Ningún portero confirmado/iu.test(x)):
+        d.missingEvidence
       Object.assign(signals,nhlDeepSignals(d))
       steps.push('NHL jugadores con historial '+playerHistoryAudit.gameLogsFound+
         '/'+playerHistoryAudit.inspectedPlayers+
@@ -311,8 +326,13 @@ export async function investigateTicketSpecialist(
       observed('form',(d.form.home?.games??0)>=5&&(d.form.away?.games??0)>=5,
         'Resultados NHL y descanso de ambos clubes')
       observed('rosters',teams,'Jugadores NHL por club')
-      mark('goalies',d.goalieCandidates.home.length&&d.goalieCandidates.away.length?
-        'partial':'missing','Porteros candidatos: ninguno confirmado como titular')
+      mark('goalies',nhlStarterAudit.state==='confirmed'?'verified':
+        d.goalieCandidates.home.length&&d.goalieCandidates.away.length?'partial':'missing',
+        nhlStarterAudit.state==='confirmed'?
+          'NHL oficial: local '+nhlStarterAudit.homeGoalie+
+          ' · visitante '+nhlStarterAudit.awayGoalie+
+          '; titulares explícitos antes del inicio, sujetos a cambio de última hora':
+          'Porteros sin confirmación oficial: '+nhlStarterAudit.note)
       // Expected goals and GSAx are different from NHL shots and save percentage.
       // Keep the unobserved private metric missing; the compact research
       // checklist treats it as an advanced uncertainty, not a hard stop.
@@ -483,6 +503,7 @@ export async function investigateTicketSpecialist(
     return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
       sourceChecks,checklist,...(injuryAudit?{injuryAudit}:{}),
       ...(soccerDrawAudit?{soccerDrawAudit}:{}),
+      ...(nhlStarterAudit?{nhlStarterAudit}:{}),
       ...(freeInjuryChecks.length?{freeInjuryChecks}:{}),
       ...(endpointAudit?{endpointAudit}:{}),
       ...(playerHistoryAudit?{playerHistoryAudit}:{}),
