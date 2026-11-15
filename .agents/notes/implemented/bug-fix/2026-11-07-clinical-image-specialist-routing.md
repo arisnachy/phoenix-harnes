@@ -14,9 +14,13 @@ For a real image supplied in the current human turn, Phoenix Auto skips its init
 
 Remove disease-anchored WPW advice from the universal clinical prompt, diagnostic concordance and educational visualization gate. Keep a general ECG review of rhythm, axis, QRS, ST-T, territorial patterns, recording limitations and competing explanations, while reserving the specialized pre-excitation tool for genuinely supported suspicion. On uncalibrated photos, invalid numerical or confirmed-delta claims yield a structured non-diagnostic `SOURCE_EVIDENCE_MISMATCH` instead of an unhelpful raw tool failure. This does not weaken the calibrated-source requirement in the underlying checker.
 
-## Alternatives and limits
+## Alternatives considered
 
 Always forcing Terra was rejected because account or provider capabilities may be missing. Always using Luna with higher effort does not correct image-reading selection or diagnostic anchoring. The change does not install a new validated ECG interpreter, provide automated infarction confirmation or justify absolute confidence from photographs; acute coronary syndromes require clinical urgency assessment, additional leads, serial ECGs and biomarkers when appropriate. Model routing alone is not evidence of diagnostic accuracy.
+
+## Consequences
+
+The route is constrained by account-advertised visual capabilities, and the ECG output remains provisional rather than diagnostic. Missing calibration or unsupported claims must produce a structured evidence mismatch, not an invented finding. Model selection does not establish clinical accuracy.
 
 ## Verification
 
