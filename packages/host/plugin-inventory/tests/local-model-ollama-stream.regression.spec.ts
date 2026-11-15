@@ -100,7 +100,7 @@ describe('Phoenix Local Ollama native chat compatibility', () => {
       model: 'qwen3.5:2b-q4_K_M',
       think: false,
       stream: true,
-      options: { num_ctx: 4096, num_predict: 64 },
+      options: { num_ctx: 16384, num_predict: 64 },
     })
     expect(forwarded).not.toHaveProperty('reasoning_effort')
   })
