@@ -17,7 +17,7 @@ export const DEFAULT_QWEN_35_2B_RUNTIME_CONTEXT_WINDOW = 16_384
 export function resolveQwen35RuntimeContextWindow(
   configured: string | undefined = process.env['PHOENIX_LOCAL_CONTEXT_TOKENS'],
 ): number {
-  if (configured === undefined || !/^\\d+$/.test(configured.trim())) {
+  if (configured === undefined || !/^\d+$/.test(configured.trim())) {
     return DEFAULT_QWEN_35_2B_RUNTIME_CONTEXT_WINDOW
   }
   const requested = Number(configured.trim())
