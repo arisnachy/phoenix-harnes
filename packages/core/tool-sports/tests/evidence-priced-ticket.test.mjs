@@ -380,9 +380,14 @@ test('one missing lineup remains conditional; four researched legs are retained'
 
 
 test('fresh ESPN odds without lastUpdated complete an observed same-bookmaker research ticket',async()=>{
+  let optionalApiCalls=0
   const read=async url=>{
     const raw=board(url)
     const u=String(url)
+    if(u.includes('api.the-odds-api.com')){
+      optionalApiCalls++
+      throw Error('Optional paid provider must not be queried when ESPN covers the ticket')
+    }
     if(u.includes('/scoreboard?dates=20261028')){
       raw.events=raw.events.map((e,i)=>({...e,competitions:e.competitions.map(c=>({
         ...c,id:e.id,
@@ -395,7 +400,8 @@ test('fresh ESPN odds without lastUpdated complete an observed same-bookmaker re
   }
   const result=await evidencePricedTicket(5,date,'soccer',0,now,
     {PHOENIX_SPORTS_ESPN_DISABLED:'0',
-      PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'},read,
+      PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0',
+      THE_ODDS_API_KEY:'configured-but-unneeded'},read,
     undefined,'winner',stubSpecialists)
   assert.equal(result.verifiedEvents,5)
   assert.equal(result.quotedLegs,5)
@@ -404,6 +410,9 @@ test('fresh ESPN odds without lastUpdated complete an observed same-bookmaker re
   assert.ok(Number(result.card.props.combinedOdds)>1)
   assert.ok(result.card.props.legs.every(x=>x.bookmaker==='ESPN Reference Book'))
   assert.match(result.card.props.subtitle,/precios observados en ESPN/)
+  assert.equal(optionalApiCalls,0)
+  assert.equal(result.sourceAudit.find(row=>row.source==='The Odds API v4').status,
+    'not-applicable')
   assert.match(result.card.props.note,/El precio definitivo se comprueba al presentar la apuesta en la casa/)
   assert.equal(result.placed,false)
 })
