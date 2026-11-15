@@ -115,6 +115,11 @@ export async function investigateTicketSpecialist(
   const freeInjuryTask=eligible?
     inspectKeylessInjurySources(game,fetcher,now).catch(()=>[] as FreeInjurySource[]):
     Promise.resolve([] as FreeInjurySource[])
+  // This used to start only AFTER the expensive NBA/NHL dossier, adding up
+  // to an additional HTTP deadline to every selected leg. Acquire in parallel.
+  const injuryTask=['nfl','nba','wnba','nhl','mlb'].includes(game.league)?
+    fetchEspnInjuryBackup(game,fetcher,now).catch(()=>null):
+    Promise.resolve(null)
   // The first specialist pass receives no selected bookmaker quotes.
   // A provisional market count never proves event/side/period/price. The
   // post-quote pass in evidence-priced-ticket credits 'market' only after
@@ -281,7 +286,15 @@ export async function investigateTicketSpecialist(
       const slate=await nhlSlate(game.date,fetcher,now)
       const match=resolveNhlTicketMatch(slate.games,game)
       if(!match)throw Error('NHL: sin correspondencia oficial de ambos equipos y fecha')
-      const d=await investigateNhl(game.date,match.id,fetcher,now,quotes)
+      // Goalie starter flags and the full player-history dossier are independent
+      // official reads. Parallel acquisition saves the sequential goalie wait.
+      const [d,starterReport]=await Promise.all([
+        investigateNhl(game.date,match.id,fetcher,now,quotes),
+        probeNhlOfficialStarters({
+          gameId:match.id,homeAbbrev:match.home.abbrev,awayAbbrev:match.away.abbrev,
+          kickoff:match.date,
+        },fetcher,now),
+      ])
       // NHL IDs are not ESPN IDs. Validate again after fetching the official
       // dossier to prevent a goalie report from a different game entering it.
       if(d.fixture.id!==match.id||
@@ -305,10 +318,7 @@ export async function investigateTicketSpecialist(
       steps=['Rosters '+(d.players.home.length+d.players.away.length),
         'Porteros candidatos '+(d.goalieCandidates.home.length+d.goalieCandidates.away.length),
         'Forma local/visita '+(d.form.home?.games??0)+'/'+(d.form.away?.games??0)]
-      nhlStarterAudit=await probeNhlOfficialStarters({
-        gameId:match.id,homeAbbrev:match.home.abbrev,awayAbbrev:match.away.abbrev,
-        kickoff:match.date,
-      },fetcher,now)
+      nhlStarterAudit=starterReport
       endpointAudit??=[]
       endpointAudit.push({url:nhlStarterAudit.url,
         status:nhlStarterAudit.state==='confirmed'?'verified':
@@ -413,7 +423,10 @@ export async function investigateTicketSpecialist(
     if(['nfl','nba','wnba','nhl','mlb'].includes(game.league)){
       // Read the public ESPN injury feed after the discipline-specific dossier;
       // fallback failures never erase evidence already collected.
-      const injury=await fetchEspnInjuryBackup(game,fetcher,now)
+      const injury=await injuryTask
+      if(!injury){
+        pending.push('ESPN lesiones: lectura fallida; conservar expediente deportivo')
+      }else{
       injuryAudit=injury
       if(injury.status==='verified'||injury.status==='partial'){
         // A feed can identify reported injuries, but never guarantees a final
@@ -462,6 +475,7 @@ export async function investigateTicketSpecialist(
             ' · '+item.status+' · '+(item.reportedAt??'sin fecha'))
       }else pending.push('ESPN lesiones '+injury.status+': '+injury.source)
       pending.push(...injury.notes.slice(0,4))
+      }
     }
     const freeInjuryChecks=await freeInjuryTask
     if(freeInjuryChecks.length){
