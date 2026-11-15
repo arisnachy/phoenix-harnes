@@ -4,6 +4,7 @@
  */
 import { hasSportsPermission,sportsCatalog, type ChatBlock } from './sports.ts'
 import {scoutDailySports} from './daily-sports-scout.ts'
+import {buildDailyResearchBoard} from './daily-ticket-research-board.ts'
 import {estimateEvidenceForecast} from './sports-forecast.ts'
 import { researchSport } from './multi-sport-research.ts'
 import { researchTicket, type ResearchTicketLeg } from './research-ticket.ts'
@@ -295,6 +296,18 @@ export async function evidenceTicket(
   const candidatesConditional=selected.filter(x=>x.level==='conditional').length
   const scannedSports=new Set(shortlist.map(x=>x.sport)).size
   const selectedSports=[...new Set(selected.map(x=>x.pick.sport))]
+  // The scout keeps only its first 120 diverse fixtures. A later researched
+  // ESPN fixture beyond that cap is still a real, individually verified game;
+  // preserve it rather than losing a legitimate selected leg from the board.
+  const verifiedForBoard=[...scan.events,...selected.map(x=>({
+    sport:x.pick.sport,league:x.pick.league,eventId:x.pick.eventId,
+    kickoff:x.kickoff,home:{name:x.home},away:{name:x.away},
+  }))]
+  const dailyResearchBoard=buildDailyResearchBoard(verifiedForBoard,
+    selected.filter(x=>x.pick.pick!=='draw').map(x=>({
+      sport:x.pick.sport,league:x.pick.league,eventId:x.pick.eventId,
+      pick:x.pick.pick as 'home'|'away',
+    })),count,now)
   const discoveryAudit:TicketDiscoveryAudit={
     discoveredEvents:scan.totalEligible,eligibleLeagues:eligible.length,
     researchedLeagues:reports.filter(x=>x.status==='fulfilled').length,
@@ -320,12 +333,13 @@ export async function evidenceTicket(
         ' · candidatos respaldados: 0/'+count,
       requestedLegs:count,legs:[],combinedOdds:'No disponible',
       source:'ESPN Site API · resultados comprobados '+new Date(now).toISOString(),
-      discoveryAudit,
+      discoveryAudit,dailyResearchBoard,
       note:'TICKET INCOMPLETO: '+scan.totalEligible+' partidos encontrados; '+
         evaluated+' expedientes evaluados; '+insufficientEvidence+
         ' rechazados por evidencia; '+discoveryAudit.researchErrors.length+
         ' fallos históricos. Cero picks NO significa cero partidos. '+
-        'No se inventan favoritos, precios ni probabilidades.',
+        'No se inventan favoritos, precios ni probabilidades. '+
+        dailyResearchBoard.note,
     }}
     return{card,complete:false,verifiedEvents:0,candidatesEvaluated:evaluated,
       researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
@@ -469,14 +483,16 @@ export async function evidenceTicket(
     }
   })
   const card:ChatBlock={...ticket.card,props:{...ticket.card.props,
-    discoveryAudit,legs:enrichedLegs,
+    discoveryAudit,dailyResearchBoard,legs:enrichedLegs,
     chatNarrative:enrichedLegs.map(x=>x.narrative).filter(Boolean),
     narrativeInstruction:'Kira debe acompañar cada pata en el chat con su análisis documentado, noticias enlazadas, riesgos, estadio, clima y árbitro si realmente están confirmados. Si algo falta, declararlo sin completar con imaginación. Fotografías de la noticia solo con URL HTTPS y fuente atribuida.',
-    subtitle:'Preselección de '+chosen.length+' eventos · '+
-      candidatesConditional+' candidatos CONDICIONALES · especialistas después',
+    subtitle:'Preselección de '+chosen.length+'/'+count+
+      ' candidatos · '+dailyResearchBoard.slots.length+'/'+count+
+      ' partidos verificados en lista diaria · '+
+      candidatesConditional+' condicionales',
     note:(note+' Se evaluaron candidatos adicionales antes de formar el ticket. '+
       'Las probabilidades por pata son exploratorias y NO calibradas. '+
-      'Candidatos revisados antes de elegir: '+reviewedCandidates+
+      dailyResearchBoard.note+' Candidatos revisados antes de elegir: '+reviewedCandidates+
       ', descartados por contraindicación: '+rejectedCandidates+'.').slice(0,1250),
   }}
   return{card,complete:ticket.complete,verifiedEvents:ticket.verifiedEvents,

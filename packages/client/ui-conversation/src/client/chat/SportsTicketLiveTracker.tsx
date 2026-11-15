@@ -15,9 +15,18 @@ export type TicketLeg={
   rationale?:string;market?:string;country?:string;
   trackedBet?:SportsTrackedPick
 }
+export type TicketResearchSlot={
+  eventId:string;sport:string;league:string;home:string;away:string;kickoff:string;
+  state:'candidate'|'investigate';selection:string|null;verifiedFixture:true
+}
+export type TicketDailyResearchBoard={
+  requestedLegs:number;selectedCandidates:number;researchOnly:number;
+  slots:TicketResearchSlot[];note?:string
+}
 export type TicketProps={
   ticketReference?:string;title:string;subtitle?:string;source:string;note:string;
-  stake?:string;grossReturn?:string;combinedOdds?:string;legs:TicketLeg[]
+  stake?:string;grossReturn?:string;combinedOdds?:string;legs:TicketLeg[];
+  dailyResearchBoard?:TicketDailyResearchBoard
 }
 export type TicketState=SportsPickGrade['state']
 export type TicketSummary={
@@ -136,17 +145,22 @@ export function SportsTicketLiveTracker({props}:{props:TicketProps}):ReactNode{
   } satisfies SportsReceiptFixture]:[]),[props.legs,receipt])
   useEffect(()=>{importSportsReceipt(linked)},[linked])
   const summary=summarizeTicketGrades(props.legs.map((_,i)=>statuses[i]??'pending'))
+  const researchOnly=props.dailyResearchBoard?.slots.filter(x=>x.state==='investigate')??[]
+  const preliminary=!receipt&&props.dailyResearchBoard!==undefined
   return <section className={css.root} data-generative-ui="sports_ticket_card"
     data-ticket-reference={receipt} aria-label={'Seguimiento del boleto '+receipt}>
     <header className={css.header}>
       <div className={css.eyebrow}><span>PHOENIX / TICKET INTELIGENTE</span><span>ESPN · marcador en vivo</span></div>
       <div className={css.titleRow}>
-        <div><h3>Boleto #{receipt}</h3><p>Seguimiento automático de {summary.total} selecciones · Pearl Light</p></div>
+        <div><h3>{preliminary?props.title:'Boleto #'+receipt}</h3>
+          <p>{preliminary?(props.subtitle??'Investigación deportiva; aún sin apuesta aprobada'):
+            'Seguimiento automático de '+summary.total+' selecciones · Pearl Light'}</p></div>
         <div className={css.ticketCount}><b>{summary.won} / {summary.total}</b><small>Acertadas al final*</small></div>
       </div>
       <strong className={css.summary+' '+(summary.state==='won'?css.positive:
         summary.state==='lost'?css.negative:summary.state==='review'?css.review:css.pending)}
-        data-ticket-state={summary.state}>{summary.label}</strong>
+        data-ticket-state={summary.state}>{preliminary&&summary.total===0?
+          'Solo partidos de investigación: sin ganador ni cuota confirmados':summary.label}</strong>
       <div className={css.metrics}>
         <div><b>{summary.total}</b><small>Patas</small></div>
         <div><b>{summary.won}</b><small>Aciertos finales*</small></div>
@@ -167,6 +181,20 @@ export function SportsTicketLiveTracker({props}:{props:TicketProps}):ReactNode{
     <div className={css.grid}>{props.legs.map((leg,i)=>
       <LiveLeg key={receipt+'-'+i+'-'+(leg.eventId??'sin-id')} leg={leg} index={i}
         receipt={receipt} onGrade={report}/>)}</div>
+    {researchOnly.length>0&&<section className={css.researchBoard}
+      aria-label="Partidos en investigación sin selección deportiva">
+      <div className={css.researchTitle}>
+        <strong>Alternativas reales para completar {props.dailyResearchBoard?.requestedLegs??5} posiciones</strong>
+        <small>{researchOnly.length} partidos sin favorito sustentado · no se contabilizan como apuestas</small>
+      </div>
+      <div className={css.researchItems}>{researchOnly.map(item=>
+        <div className={css.researchItem}
+          key={item.sport+'-'+item.league+'-'+item.eventId}>
+          <span>{item.home} · {item.away}</span>
+          <small>{item.league.toUpperCase()} · {item.kickoff.slice(0,16).replace('T',' ')} UTC</small>
+          <b>Por investigar — sin pick ni cuota</b>
+        </div>)}</div>
+    </section>}
     <footer className={css.footer}>
       <strong>{summary.won} ganadas provisionalmente · {summary.lost} perdidas · {summary.leading} cumpliendo en vivo · {summary.trailing} sin cumplir en vivo · {summary.pending+summary.review+summary.push} pendientes/revisión.</strong>
       <small>* Acertada/fallada significa resultado deportivo provisional basado en ESPN. No significa boleto pagado. El operador confirma aceptación, reglas de hándicap y prórroga, anulaciones, liquidación y pago. Si falta información, PHOENIX deja la pata pendiente de verificación.</small>

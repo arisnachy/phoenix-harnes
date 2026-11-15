@@ -830,6 +830,9 @@ export async function evidencePricedTicket(
     'El precio definitivo se comprueba al presentar la apuesta en la casa. ':''
   const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,modelAudit,marketRisk,decisionAudit,
+    // Retain the five/six verified research fixtures when a quoted ticket
+    // replaces the preliminary card; unpriced alternatives are NOT bets.
+    dailyResearchBoard:research.card.props.dailyResearchBoard,
     dataCounts:{eventsFound:research.verifiedEvents,quotedLegs:count,
       researchedLegs,candidateLegs:count,
       conditionalLegs:decisionAudit.legs.filter(x=>
