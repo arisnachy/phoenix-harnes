@@ -98,6 +98,7 @@ describe('LocalModelRuntimeManager', () => {
       '--cache-type-v', 'q8_0',
       '--model', expect.stringContaining('gemma-4-E2B-it-Q4_0.gguf'),
     ]))
+    expect(args).not.toContain('--reasoning')
     expect(manager.snapshot()).toMatchObject({ phase: 'running', pid: 4242, port: 17842 })
   })
 
@@ -113,6 +114,7 @@ describe('LocalModelRuntimeManager', () => {
     const [, args] = vi.mocked(dependencies.spawnServer).mock.calls[0]!
     expect(args).toEqual(expect.arrayContaining([
       '--ctx-size', '262144',
+      '--reasoning', 'off',
       '--model', expect.stringContaining('Qwen_Qwen3.5-4B-Q4_K_M.gguf'),
     ]))
     expect(manager.snapshot().selectedModelId).toBe(qwen)
