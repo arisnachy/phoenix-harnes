@@ -76,7 +76,6 @@ export async function evidencePricedTicket(
     pick:'home'|'away';kickoff:string}>;
   marketRisk?:TicketMarketRisk;
   decisionAudit:TicketDecisionAudit}>{
-  const pipelineStartedAt=Date.now()
   const researchFetcher=fetcher===fetch?dailyResearchFetcher(fetcher,env):fetcher
   const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
     year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
