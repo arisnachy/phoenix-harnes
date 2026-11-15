@@ -13,6 +13,7 @@ import {auditBasketballGranularEvidence} from './basketball-granular-evidence.ts
 import {nflDeepSignals,nhlDeepSignals,mlbDeepSignals,
   soccerDeepSignals,tennisDeepSignals} from './sports-granular-bridge.ts'
 import {investigateSoccer} from './soccer-worldwide-dossier.ts'
+import {assessSoccerDrawRisk,type SoccerDrawAudit} from './soccer-draw-risk.ts'
 import {nhlSlate,investigateNhl} from './nhl-evidence-research.ts'
 import {sameEspnTeam} from './sports-exact-espn-winner.ts'
 import {discoverMlbDay,researchMlbCase} from './mlb-evidence-research.ts'
@@ -35,6 +36,8 @@ export type SpecialistGate={
   /** Snapshot of both teams' reported availability; source freshness does not
    * establish starter confirmation or an official pre-tipoff inactive list. */
   injuryAudit?:InjuryBackup
+  /** Independent empirical draw-risk assessment, not proof of 1X2 odds. */
+  soccerDrawAudit?:SoccerDrawAudit
   /** No-key official-report link and cautious secondary injury observations. */
   freeInjuryChecks?:FreeInjurySource[]
   /** Actual source URLs and their results; a 200 without data is not verified. */
@@ -115,6 +118,7 @@ export async function investigateTicketSpecialist(
   // matching a real quote to the ESPN fixture and selected outcome.
   const signals:Record<string,StepObservation>={}
   let injuryAudit:InjuryBackup|undefined
+  let soccerDrawAudit:SoccerDrawAudit|undefined
   const mark=(key:string,state:StepObservation['state'],detail:string)=>{
     signals[key]={state,detail}
   }
@@ -235,6 +239,18 @@ export async function investigateTicketSpecialist(
         'Onces verificados '+String(d.coverage.lineups),
         'Enfrentamientos individuales '+d.duels.length]
       pending=d.missingEvidence
+      // Both teams' past scoreboards already came from ESPN. Use their
+      // chronological, venue-aware results instead of adding unsupported
+      // calls to an xG vendor for leagues it does not cover.
+      soccerDrawAudit=assessSoccerDrawRisk({
+        home:{name:d.teams.home.name,recent:d.teams.home.recent},
+        away:{name:d.teams.away.name,recent:d.teams.away.recent},
+        kickoff:d.fixture.scheduledAt,statistics:d.teamStatistics,
+      })
+      steps.push(...soccerDrawAudit.indicators)
+      if(soccerDrawAudit.requiresAlternativeReview)
+        pending.push('Empate: indicadores elevados; buscar doble oportunidad o reemplazar ganador 1X2')
+      pending.push(...soccerDrawAudit.unverified)
       Object.assign(signals,soccerDeepSignals(d))
       observed('fixture',closeTime(d.opportunity.scheduledAt,game.kickoff),
         'ESPN fútbol: local, visita y horario cotejados')
@@ -248,8 +264,12 @@ export async function investigateTicketSpecialist(
         'Debe confirmarse xG y xGA para ambos clubes, no una única cifra')
       mark('injuries',d.injuries.length?'partial':'missing',
         'Bajas observadas; sin reporte completo de ambos clubes no se certifica disponibilidad')
-      mark('draw',d.markets.some(m=>m.market==='1x2')?'partial':'missing',
-        'Riesgo de empate y reglas reglamentarias de 90 minutos por validar')
+      mark('draw',soccerDrawAudit.status==='assessed'?'verified':
+        soccerDrawAudit.status==='partial'?'partial':'missing',
+        'Análisis independiente de empate: '+soccerDrawAudit.status+
+        ' · '+soccerDrawAudit.tier+' · promedio histórico '+
+        (soccerDrawAudit.averageHistoricalDrawPct??'?')+
+        '%. No es una probabilidad calibrada ni acredita cuotas 1X2')
       mark('market',d.markets.length?'partial':'missing',
         'Mercados observados; falta comprobar período, casa y fecha')
     }else if(game.sport==='hockey'&&game.league==='nhl'){
@@ -462,6 +482,7 @@ export async function investigateTicketSpecialist(
         checklist.criticalPending.slice(0,3).join('; '))
     return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
       sourceChecks,checklist,...(injuryAudit?{injuryAudit}:{}),
+      ...(soccerDrawAudit?{soccerDrawAudit}:{}),
       ...(freeInjuryChecks.length?{freeInjuryChecks}:{}),
       ...(endpointAudit?{endpointAudit}:{}),
       ...(playerHistoryAudit?{playerHistoryAudit}:{}),
