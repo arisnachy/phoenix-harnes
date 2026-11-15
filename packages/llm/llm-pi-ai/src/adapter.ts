@@ -588,9 +588,11 @@ export class PiAiAdapter extends LlmAdapter {
         // Harness-owned and therefore win collisions.
         headers: {
           ...requestHeaders(profile.provider, profile.headers),
-          // An ordinary local chat may complete one native Ollama length stop.
-          // An explicit per-request token cap must remain authoritative.
-          ...options.provider === 'phoenix-local' && options.maxTokens === undefined
+          // Only Phoenix Local gets one native Ollama length continuation.
+          // Keep explicit short caps (e.g. 64 tokens) authoritative; agent
+          // defaults at model capability are eligible too.
+          ...options.provider === 'phoenix-local'
+            && (options.maxTokens === undefined || options.maxTokens >= model.maxTokens)
             ? { 'x-phoenix-local-auto-continue': '1' } : {},
         },
       }
