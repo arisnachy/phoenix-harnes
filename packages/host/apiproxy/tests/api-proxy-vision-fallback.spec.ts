@@ -204,16 +204,30 @@ describe('Borrowed-eyes prompt admission', () => {
     await ctx.fiber.dispose()
   })
 
-  it('honors an explicit fallback route override', async () => {
+  it('honors an explicit fallback route override for nonclinical images', async () => {
     const { ctx, sessionId, eyeCalls } = await harness()
     const api = proxy(ctx, { enabled: true, provider: 'eyes', model: 'pinned' })
     const result = await api.sessions.prompt(request({
       sessionId,
       mode: 'queue' as const,
-      content: [IMAGE_PART],
+      content: [IMAGE_PART, { type: 'text', text: 'Diseña un logo minimalista' }],
     }))
     expect(result.result.ok).toBe(true)
     expect(eyeCalls[0]?.model).toBe('pinned')
+    await ctx.fiber.dispose()
+  })
+
+  it('does not trust an unverified explicit pin for a clinical image', async () => {
+    const { ctx, sessionId, eyeCalls } = await harness()
+    const api = proxy(ctx, { enabled: true, provider: 'eyes', model: 'pinned' })
+    const result = await api.sessions.prompt(request({
+      sessionId,
+      mode: 'queue' as const,
+      content: [IMAGE_PART, { type: 'text', text: 'Interpreta este ECG' }],
+    }))
+    expect(result.result.ok).toBe(true)
+    expect(eyeCalls).toHaveLength(1)
+    expect(eyeCalls[0]?.model).toBe('see-1')
     await ctx.fiber.dispose()
   })
 
