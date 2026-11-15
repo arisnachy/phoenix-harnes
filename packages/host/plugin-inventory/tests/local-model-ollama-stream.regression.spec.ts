@@ -331,6 +331,63 @@ describe('Phoenix Local Ollama native chat compatibility', () => {
     expect(calls).toBe(1)
   })
 
+  it('keeps a slow but active Ollama stream open beyond the previous 90-second-style absolute deadline', async () => {
+    const ollama = await serve(async (request, response) => {
+      await captureRequest(request)
+      response.writeHead(200, { 'content-type': 'application/x-ndjson' })
+      for (let part = 0; part < 4; part++) {
+        response.write(JSON.stringify({
+          message: { role: 'assistant', content: String(part) },
+          done: false,
+        }) + '\n')
+        await new Promise<void>(resolve => { setTimeout(resolve, 75) })
+      }
+      response.end(JSON.stringify({
+        message: { role: 'assistant', content: '' },
+        done: true, done_reason: 'stop', prompt_eval_count: 20, eval_count: 4,
+      }) + '\n')
+    })
+    // Each chunk arrives within 180 ms, but the complete answer takes >300 ms.
+    const proxy = await startProxy(ollama, 180)
+    const result = await fetch(route(proxy), {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'phoenix-local', stream: true, max_tokens: 768,
+        messages: [{ role: 'user', content: 'Responde en varias partes' }],
+      }),
+    })
+    expect(result.status).toBe(200)
+    const sse = await result.text()
+    expect(sse).toContain('"content":"0"')
+    expect(sse).toContain('"content":"3"')
+    expect(sse).toContain('"finish_reason":"stop"')
+    expect(sse).toContain('data: [DONE]')
+  })
+
+  it('allows slow non-streaming Ollama inference to exceed the streaming idle threshold', async () => {
+    const ollama = await serve(async (request, response) => {
+      await captureRequest(request)
+      await new Promise<void>(resolve => { setTimeout(resolve, 220) })
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({
+        message: { role: 'assistant', content: 'Respuesta completa.' },
+        done: true, done_reason: 'stop', prompt_eval_count: 20, eval_count: 50,
+      }))
+    })
+    const proxy = await startProxy(ollama, 80)
+    const result = await fetch(route(proxy), {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'phoenix-local', stream: false, max_tokens: 768,
+        messages: [{ role: 'user', content: 'Explica RAM y memoria virtual' }],
+      }),
+    })
+    expect(result.status).toBe(200)
+    expect(await result.json()).toMatchObject({
+      choices: [{ message: { content: 'Respuesta completa.' }, finish_reason: 'stop' }],
+    })
+  })
+
   it('returns a bounded timeout error rather than waiting five minutes on a hung native service', async () => {
     const ollama = await serve((_request, _response) => {
       // Simulate an Ollama daemon accepting a request without returning headers.

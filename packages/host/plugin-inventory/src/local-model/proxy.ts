@@ -11,8 +11,10 @@ export const PHOENIX_LOCAL_PROXY_PORT = 17_842
 export const PHOENIX_LOCAL_PROXY_BASE_URL = `http://127.0.0.1:${String(PHOENIX_LOCAL_PROXY_PORT)}/v1`
 
 const MAX_REQUEST_BYTES = 16 * 1024 * 1024
-/** A local 2B model should not leave the chat stalled for a 5-minute idle watchdog. */
-const OLLAMA_REQUEST_DEADLINE_MS = 90_000
+/** Abort a silent streaming Ollama connection, not an actively generating CPU model. */
+const OLLAMA_STREAM_IDLE_TIMEOUT_MS = 90_000
+/** Bound entire local requests, including non-streaming CPU inference. */
+const LOCAL_REQUEST_MAX_MS = 10 * 60_000
 
 async function readBody(request: IncomingMessage): Promise<Uint8Array<ArrayBuffer> | undefined> {
   if (request.method === 'GET' || request.method === 'HEAD') return undefined
@@ -101,8 +103,9 @@ async function forward(
   manager: LocalModelRuntimeManager,
   request: IncomingMessage,
   response: ServerResponse,
-  ollamaDeadlineMs = OLLAMA_REQUEST_DEADLINE_MS,
+  ollamaDeadlineMs = OLLAMA_STREAM_IDLE_TIMEOUT_MS,
 ): Promise<void> {
+  let clearIdleTimer: (() => void) | undefined
   try {
     const backendBaseUrl = await manager.ensureRunning()
     const incomingPath = request.url ?? '/v1'
@@ -127,10 +130,28 @@ async function forward(
       })()
     const clientClosed = new AbortController()
     response.once('close', () => { clientClosed.abort() })
-    // Stop an unresponsive Ollama request even when upstream has accepted
-    // the HTTP request but has not produced any SSE chunks.
-    const deadline = AbortSignal.timeout(isOllama ? ollamaDeadlineMs : 10 * 60_000)
-    const signal = AbortSignal.any([clientClosed.signal, deadline])
+    // A single 90-second deadline discarded valid 150-second CPU completions.
+    // Refresh the short timeout on every native Ollama stream chunk; a silent
+    // connection still times out, and every request retains a finite hard cap.
+    // Non-streaming /api/chat cannot emit progress; allow its full CPU budget.
+    const useStreamIdle = isOllama && nativeChat?.stream === true
+    const streamIdle = new AbortController()
+    let idleTimer: ReturnType<typeof setTimeout> | undefined
+    const markActivity = (): void => {
+      if (!useStreamIdle || streamIdle.signal.aborted) return
+      if (idleTimer !== undefined) clearTimeout(idleTimer)
+      idleTimer = setTimeout(() => {
+        streamIdle.abort(new DOMException('Ollama stopped streaming', 'TimeoutError'))
+      }, ollamaDeadlineMs)
+      idleTimer.unref()
+    }
+    clearIdleTimer = () => { if (idleTimer !== undefined) clearTimeout(idleTimer) }
+    markActivity()
+    const deadline = AbortSignal.timeout(LOCAL_REQUEST_MAX_MS)
+    const signal = AbortSignal.any([
+      clientClosed.signal, deadline,
+      ...(useStreamIdle ? [streamIdle.signal] : []),
+    ])
     const started = Date.now()
     const upstream = await fetch(nativeChat === undefined
       ? `${backendBaseUrl}${suffix}`
@@ -140,6 +161,7 @@ async function forward(
       ...(forwardedBody === undefined ? {} : { body: forwardedBody }),
       signal,
     })
+    markActivity()
     if (nativeChat !== undefined) {
       await relayNativeOllamaChat(upstream, response, nativeChat, async payload => fetch(
         new URL('/api/chat', backendBaseUrl), {
@@ -148,7 +170,7 @@ async function forward(
           body: JSON.stringify(payload),
           signal,
         },
-      ))
+      ), markActivity)
       return
     }
     response.statusCode = upstream.status
@@ -163,6 +185,7 @@ async function forward(
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
+        if (value.byteLength > 0) markActivity()
         if (firstByte) {
           firstByte = false
           // The request text, tool schemas, and model context are never logged.
@@ -186,11 +209,13 @@ async function forward(
     response.end(JSON.stringify({
       error: {
         message: timedOut
-          ? 'PHOENIX Local: Ollama no envió una respuesta antes del límite local. Prueba /api/chat directamente y comprueba ollama ps; no se repetirá esta solicitud automáticamente.'
+          ? 'PHOENIX Local: Ollama dejó de transmitir o superó el límite máximo de tiempo. Comprueba /api/chat directamente y ollama ps.'
           : error instanceof Error ? error.message : String(error),
         type: nativeError?.code ?? (timedOut ? 'phoenix_local_timeout' : 'phoenix_local_unavailable'),
       },
     }))
+  } finally {
+    clearIdleTimer?.()
   }
 }
 

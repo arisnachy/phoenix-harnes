@@ -288,6 +288,7 @@ export async function relayNativeOllamaChat(
   downstream: ServerResponse,
   request: NativeBridgeRequest,
   sendContinuation: (payload: Record<string, unknown>) => Promise<Response>,
+  onUpstreamActivity?: () => void,
 ): Promise<void> {
   // Diagnostic marker: distinguish a freshly updated native bridge from an
   // old Phoenix runtime still forwarding to Ollama's /v1 endpoint.
@@ -392,6 +393,7 @@ export async function relayNativeOllamaChat(
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
+        if (value.byteLength > 0) onUpstreamActivity?.()
         buffer += decoder.decode(value, { stream: true })
         if (buffer.length > 1_048_576) {
           throw new NativeOllamaChatError('Un evento de Ollama excedió el límite de tamaño.', 502, 'oversized_ollama_event')
