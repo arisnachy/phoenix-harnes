@@ -33,8 +33,8 @@ test('empate: split local/visitante, BTTS, porterías a cero y goles concedidos 
   assert.ok(result.unverified.some(x=>/xG/u.test(x)))
 })
 test('Nacional 6-0-1 vs Albion 4-1-2 is not automatically flagged from form alone',()=>{
-  const home=make('home',[[2,1],[1,0],[3,1],[2,0],[1,0],[2,1],[0,1]])
-  const away=make('away',[[1,0],[2,1],[0,1],[3,0],[1,1],[2,0],[0,1]])
+  const home=make('home',[[3,0],[2,0],[4,0],[2,0],[3,0],[3,0],[0,2]])
+  const away=make('away',[[3,0],[2,0],[0,2],[4,0],[1,1],[3,0],[0,3]])
   const result=assessSoccerDrawRisk({home:{name:'Nacional',recent:home},
     away:{name:'Albion FC',recent:away},kickoff:kick})
   assert.equal(result.status,'assessed')
