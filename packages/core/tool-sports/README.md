@@ -18,6 +18,12 @@ ESPN Site/Core and MLB Stats are queried as publicly reachable read-only sources
 
 Los precios ESPN observados en una lectura reciente, con casa, mercado y evento verificados, son elegibles aunque `updatedAt` esté ausente; no equivalen a aceptación por la casa. El ticket cotizado es una decisión **final de investigación**, no una apuesta colocada ni una estimación de probabilidad calibrada. La falta de confirmación de porteros, lesiones o quintetos permanece visible por selección; los fallos de respaldos opcionales no pueden anular una cotización ESPN válida.
 
+### Recuperación dirigida de expedientes NBA/NHL
+
+El ticket `sports_chat_ticket_evidence_priced_auto` inicia la consulta de cuotas ESPN **en paralelo** con la lectura especializada y devuelve `researchFixtures` con deporte, liga, ID ESPN, rivales, fecha y hora verificadas. Un expediente NBA seleccionado tiene un presupuesto máximo de 35 segundos (frente a los 18 anteriores), y NHL se reevalúa también cuando el primer pase está parcial. Las búsquedas de lesiones ESPN y porteros oficiales NHL se lanzan junto al resto de las consultas; una respuesta deportiva no publicada NO se convierte en una confirmación falsa.
+
+Si falta evidencia crítica, Kira puede llamar `sports_chat_ticket_dossier_recheck(fixtures=[...])` con **solo las patas incompletas copiadas de `researchFixtures`**, sin repetir discovery ni cuotas. Esta lectura tiene presupuesto de 45 segundos por partido, se ejecuta en paralelo, y devuelve `checklist`, `injuryAudit`, `nhlStarterAudit`, URLs de los endpoints, `pendingSteps` y un diagnóstico por evento. Una fuente fallida es distinta de un titular todavía no anunciado. Re-evaluar la selección si cambian los lesionados o porteros; no describir una cuota observada como apuesta aceptada ni pronóstico calibrado.
+
 ## NBA research (source-derived, not calibrated)
 
 `sports_chat_nba_research` reads recent NBA final scoreboards once per date (shared across the slate), computes actual wins, average margins and approximate hours since the previous game, and records archive coverage. `sports_chat_ticket_research_auto` now rejects NBA candidates that have insufficient completed-game evidence. These are descriptive trends **not** win-probability estimates or edge calculations. Official NBA injury reports, roster validation, advanced efficiency metrics and true calibrated model-based predictions remain separate integration requirements; unverified NBA player leaders are temporarily hidden.
