@@ -338,6 +338,7 @@ export async function relayNativeOllamaChat(
   let visibleText = ''
   const toolCalls: NativeToolCall[] = []
   let terminal: NativeChatChunk | undefined
+  const resetTerminal = (): void => { terminal = undefined }
   const responseId = `chatcmpl-${randomUUID()}`
   const created = Math.floor(Date.now() / 1000)
   const frame = (delta: Record<string, unknown>, reason: string | null) => ({
@@ -384,7 +385,7 @@ export async function relayNativeOllamaChat(
     }
     const decoder = new TextDecoder()
     let buffer = ''
-    terminal = undefined
+    resetTerminal()
     try {
       while (true) {
         const { done, value } = await reader.read()
