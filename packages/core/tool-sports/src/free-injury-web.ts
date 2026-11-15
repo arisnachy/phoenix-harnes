@@ -79,10 +79,19 @@ export function parseKeylessInjuryRows(html:string,fixture:FreeInjuryFixture,
     const status=statuses[0]!
     // The name must be an independent, complete cell, not the whole row's
     // free text. Never infer it from the roster or news headline.
-    const names=cells.filter((c,i)=>i!==status.i&&!inTeam(c.all,team))
-      .map(c=>c.visible).filter(playerName)
-    if(names.length!==1)continue
-    const athlete=names[0]!
+    // In FOX-like tables the injury column ("Right knee") can itself
+    // resemble a two-word athlete name. Only consider columns BEFORE status,
+    // prefer the nearest candidate to the explicit team cell and reject ties.
+    const teamIndex=cells.findIndex(c=>inTeam(c.all,team))
+    const names=cells.map((c,i)=>({name:c.visible,i}))
+      .filter(c=>c.i<status.i&&!inTeam(cells[c.i]!.all,team)
+        &&playerName(c.name)
+        &&!/^(?:injury report|health report|player report)$/iu.test(c.name))
+      .sort((a,b)=>Math.abs(a.i-teamIndex)-Math.abs(b.i-teamIndex))
+    if(!names.length||(names.length>1&&
+      Math.abs(names[0]!.i-teamIndex)===Math.abs(names[1]!.i-teamIndex)))
+      continue
+    const athlete=names[0]!.name
     const key=normalized(team)+'|'+normalized(athlete)
     if(seen.has(key))continue
     seen.add(key)
