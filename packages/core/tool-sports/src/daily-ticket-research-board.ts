@@ -79,14 +79,16 @@ export function buildDailyResearchBoard(
   const researchOnly=slots.length-selectedCandidates
   const missingFixtures=requestedLegs-slots.length
   const coverageComplete=missingFixtures===0
+  const visible=slots.map(x=>x.home+' vs '+x.away+' ['+
+    (x.selection??'SIN PICK')+']').join('; ').slice(0,550)
   return{requestedLegs,slots,selectedCandidates,researchOnly,missingFixtures,
     coverageComplete,status:coverageComplete?'research-board-full':'insufficient-fixtures',
     note:coverageComplete?
       'Se muestran '+slots.length+' partidos reales; '+selectedCandidates+
       ' selecciones de investigación y '+researchOnly+
       ' encuentros aún sin selección. NO es un boleto de '+requestedLegs+
-      ' cuotas ni garantiza '+requestedLegs+' apuestas sustentadas.':
+      ' cuotas ni garantiza '+requestedLegs+' apuestas sustentadas. '+visible:
       'Solo '+slots.length+' partidos futuros verificables para '+requestedLegs+
       ' posiciones: faltan '+missingFixtures+
-      '. No inventar eventos, favoritos, cuotas o disponibilidad.'}
+      '. No inventar eventos, favoritos, cuotas o disponibilidad. '+visible}
 }
