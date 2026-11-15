@@ -149,14 +149,10 @@ export async function resolveVisionFallbackRoute(
     ? { provider: config.provider, model: config.model }
     : undefined
   const providers = ctx.llm.listProviders().map(info => info.id)
-  // An explicit pin is honored verbatim: deployments name routes catalogs may
-  // not advertise (adapters accept unlisted ids), and re-validating here would
-  // silently downgrade every pin to discovery.
-  // A legacy deployment may have pinned Terra for every image. That pin is
-  // suitable for nonclinical use, but must not bypass clinical Sol routing.
-  // Resolve a verifiable non-Terra visual reader for clinical sources instead.
-  if (explicit !== undefined && (!focusedClinical
-    || !/-terra(?:$|-)/iu.test(explicit.model))) return explicit
+  // Preserve legacy explicit pins for ordinary images. Clinical sources must
+  // never trust an unverified pin: catalog discovery below validates image
+  // support and ranks compatible reasoning capabilities instead.
+  if (explicit !== undefined && !focusedClinical) return explicit
   // Discovery order: the current provider first (same-vendor eyes), then the rest.
   const ordered = [
     ...providers.filter(provider => provider === current.provider),
