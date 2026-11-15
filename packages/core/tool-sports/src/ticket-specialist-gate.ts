@@ -6,6 +6,7 @@ import type {MarketOutcome} from './sports.ts'
 import {crosscheckFreeFixture,type BackupFinding} from './free-sports-source-audit.ts'
 import {auditSportChecklist,type SportChecklist,type StepObservation} from './daily-specialist-checklist.ts'
 import {fetchEspnInjuryBackup,type InjuryBackup} from './espn-injury-backup.ts'
+import {inspectKeylessInjurySources,type FreeInjurySource} from './free-injury-web.ts'
 import {investigateNfl} from './nfl-evidence-research.ts'
 import {researchBasketballCase} from './basketball-evidence-dossier.ts'
 import {auditBasketballGranularEvidence} from './basketball-granular-evidence.ts'
@@ -34,6 +35,8 @@ export type SpecialistGate={
   /** Snapshot of both teams' reported availability; source freshness does not
    * establish starter confirmation or an official pre-tipoff inactive list. */
   injuryAudit?:InjuryBackup
+  /** No-key official-report link and cautious secondary injury observations. */
+  freeInjuryChecks?:FreeInjurySource[]
   /** Actual source URLs and their results; a 200 without data is not verified. */
   endpointAudit?:Array<{url:string;status:'verified'|'empty'|'error';
     checkedAt:string;detail:string}>
@@ -101,6 +104,11 @@ export async function investigateTicketSpecialist(
   const sourceTask:Promise<BackupFinding[]>=eligible
     ?crosscheckFreeFixture(game,fetcher,now,env).catch(()=>[] as BackupFinding[])
     :Promise.resolve([])
+  // Independent no-key pages run concurrently with the specialist; they do
+  // not replace ESPN IDs or convert a listing into an official inactive list.
+  const freeInjuryTask=eligible?
+    inspectKeylessInjurySources(game,fetcher,now).catch(()=>[] as FreeInjurySource[]):
+    Promise.resolve([] as FreeInjurySource[])
   // The first specialist pass receives no selected bookmaker quotes.
   // A provisional market count never proves event/side/period/price. The
   // post-quote pass in evidence-priced-ticket credits 'market' only after
@@ -415,6 +423,33 @@ export async function investigateTicketSpecialist(
       }else pending.push('ESPN lesiones '+injury.status+': '+injury.source)
       pending.push(...injury.notes.slice(0,4))
     }
+    const freeInjuryChecks=await freeInjuryTask
+    if(freeInjuryChecks.length){
+      endpointAudit??=[]
+      for(const check of freeInjuryChecks){
+        const counted=check.players.length
+        endpointAudit.push({url:check.reportUrl??check.url,checkedAt:new Date(now).toISOString(),
+          status:check.state==='matched'||check.state==='linked'?'verified':
+            check.state==='unavailable'?'error':'empty',
+          detail:check.provider+': '+check.note+'; jugadores '+counted+
+            '. Esta lectura NO confirma el quinteto titular ni el estado final.'})
+        if(check.state==='linked'){
+          steps.push('NBA parte oficial fechado identificado: '+check.reportUrl)
+          pending.push('Leer y conciliar PDF NBA oficial antes del inicio: '+check.reportUrl)
+        }
+        if(check.state==='matched'){
+          steps.push(check.provider+': '+counted+' observaciones de lesiones secundarias')
+          const relevant=check.players.filter(p=>
+            /^(?:Out|Doubtful|Questionable|Day-to-Day)$/u.test(p.status))
+          if(relevant.length)pending.push(check.provider+
+            ': comprobar contra parte oficial / roster: '+
+            relevant.slice(0,4).map(p=>p.team+' / '+p.athlete+
+              ' ('+p.status+')').join('; '))
+        }
+      }
+      if(injuryAudit)injuryAudit.notes.push('Fuentes gratuitas independientes: '+
+        freeInjuryChecks.map(c=>c.provider+' '+c.state).join(' · '))
+    }
     const sourceChecks=await sourceTask
     const mismatches=sourceChecks.filter(s=>s.status==='conflict')
     if(mismatches.length)
@@ -427,6 +462,7 @@ export async function investigateTicketSpecialist(
         checklist.criticalPending.slice(0,3).join('; '))
     return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
       sourceChecks,checklist,...(injuryAudit?{injuryAudit}:{}),
+      ...(freeInjuryChecks.length?{freeInjuryChecks}:{}),
       ...(endpointAudit?{endpointAudit}:{}),
       ...(playerHistoryAudit?{playerHistoryAudit}:{}),
       checkedAt:new Date(now).toISOString()}
