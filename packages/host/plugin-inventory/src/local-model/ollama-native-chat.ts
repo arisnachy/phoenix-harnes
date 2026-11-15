@@ -160,7 +160,9 @@ export function toNativeOllamaChat(
     ? Math.min(model.maxTokens, Math.floor(requested))
     : model.maxTokens
   const options: Record<string, unknown> = {
-    num_ctx: Math.min(model.contextWindow, 4_096),
+    // Use the same configured context that pi-ai budgets against; do not
+    // silently truncate every 256K-capable Qwen request to 4096 tokens.
+    num_ctx: model.contextWindow,
     num_predict: outputTokens,
   }
   if (typeof request['temperature'] === 'number' && Number.isFinite(request['temperature'])) {
