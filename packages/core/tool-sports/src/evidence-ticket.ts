@@ -296,7 +296,14 @@ export async function evidenceTicket(
   const candidatesConditional=selected.filter(x=>x.level==='conditional').length
   const scannedSports=new Set(shortlist.map(x=>x.sport)).size
   const selectedSports=[...new Set(selected.map(x=>x.pick.sport))]
-  const dailyResearchBoard=buildDailyResearchBoard(scan.events,
+  // The scout keeps only its first 120 diverse fixtures. A later researched
+  // ESPN fixture beyond that cap is still a real, individually verified game;
+  // preserve it rather than losing a legitimate selected leg from the board.
+  const verifiedForBoard=[...scan.events,...selected.map(x=>({
+    sport:x.pick.sport,league:x.pick.league,eventId:x.pick.eventId,
+    kickoff:x.kickoff,home:{name:x.home},away:{name:x.away},
+  }))]
+  const dailyResearchBoard=buildDailyResearchBoard(verifiedForBoard,
     selected.map(x=>x.pick),count,now)
   const discoveryAudit:TicketDiscoveryAudit={
     discoveredEvents:scan.totalEligible,eligibleLeagues:eligible.length,
@@ -476,8 +483,10 @@ export async function evidenceTicket(
     discoveryAudit,dailyResearchBoard,legs:enrichedLegs,
     chatNarrative:enrichedLegs.map(x=>x.narrative).filter(Boolean),
     narrativeInstruction:'Kira debe acompañar cada pata en el chat con su análisis documentado, noticias enlazadas, riesgos, estadio, clima y árbitro si realmente están confirmados. Si algo falta, declararlo sin completar con imaginación. Fotografías de la noticia solo con URL HTTPS y fuente atribuida.',
-    subtitle:'Preselección de '+chosen.length+' eventos · '+
-      candidatesConditional+' candidatos CONDICIONALES · especialistas después',
+    subtitle:'Preselección de '+chosen.length+'/'+count+
+      ' candidatos · '+dailyResearchBoard.slots.length+'/'+count+
+      ' partidos verificados en lista diaria · '+
+      candidatesConditional+' condicionales',
     note:(note+' Se evaluaron candidatos adicionales antes de formar el ticket. '+
       'Las probabilidades por pata son exploratorias y NO calibradas. '+
       dailyResearchBoard.note+' Candidatos revisados antes de elegir: '+reviewedCandidates+
