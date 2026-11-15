@@ -15,7 +15,8 @@ export function needsSelectedSpecialistRecheck(
   game:Pick<SpecialistGate,'sport'>,previous?:SpecialistGate,
 ):boolean{
   return !previous||previous.status==='unavailable'||
-    (game.sport==='basketball'&&previous.checklist?.complete!==true)
+    ((game.sport==='basketball'||game.sport==='hockey')&&
+      previous.checklist?.complete!==true)
 }
 
 /** Separate partial NBA research from a genuinely unavailable specialist dossier. */

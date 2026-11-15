@@ -93,6 +93,7 @@ const boundedDailyTool=<T>(operation:Promise<T>,ms:number):Promise<T>=>{
 }
 const GUIDANCE = [
   SPORTS_OPEN_RESEARCH_GUIDANCE,
+  'RECUPERACIÓN DIRIGIDA: después de sports_chat_ticket_evidence_priced_auto, si specialistChecks contiene limitaciones técnicas o datos críticos que pueden publicarse después, usa researchFixtures EXACTAS y llama sports_chat_ticket_dossier_recheck SOLO con esas patas pendientes. No repetir sports_chat_daily_scan ni rehacer toda la cartelera para reintentar lesiones NBA o porteros NHL. Conservar cotizaciones ESPN válidas; distinguir no-publicado del fallo técnico. Si el dato no está publicado, documentar hora, URL y la incertidumbre sin inventar confirmación. ',
   'ESTADO NBA POR PARTIDO: el motor de ticket DEBE exponer researchEvidenceState, researchDetail y pendingEvidence a partir de los pasos reales de specialistChecks; la primera inspección rápida no equivale al expediente final. Cuando existan roster, forma o fuentes consultadas, indicar INVESTIGACIÓN PARCIAL y los datos específicos aún pendientes. No repetir «Sin expediente especializado, lesiones y quintetos verificados para esta pata» en cada juego: «sin expediente» solo si realmente no se obtuvo evidencia; lesiones ESPN verificadas como reporte no equivalen a quinteto confirmado ni a parte oficial definitivo. Si el especialista agota tiempo, informar el timeout concreto sin ocultar datos anteriores. ',
   'CUOTAS UTILIZABLES PARA EL TICKET: acepta un precio publicado por ESPN o un proveedor autorizado tras una consulta reciente, con evento futuro, equipos, casa identificada, mercado y selección exactos. La falta de updatedAt/lastUpdated de la casa NO lo convierte en mera referencia ni bloquea su inclusión en un ticket cotizado. observedAt registra cuándo PHOENIX consultó la fuente; no equivale a una actualización de la casa. No digas «Sin hora de actualización confirmada, las cuotas son referencias, no cotizaciones operables». Si faltan casa, identidad, precio o mercado, el partido ya comenzó o la consulta es antigua, no lo promociones. El ticket es utilizable para apostar manualmente sujeto al precio que acepte la banca; jamás afirmar que la apuesta fue ejecutada. ',
   'LIMITE DE BUSQUEDA PARA TICKETS: si ya existen cinco o seis eventos prepartido con IDs y fechas verificados en NBA/NHL/otras ligas, NO recorrer 220 ligas de soccer para resolver una ausencia de cuotas. Resolver las cuotas por esos IDs, mostrar precios ESPN/DraftKings observados recientemente COMO CUOTAS USABLES EN EL TICKET DE INVESTIGACIÓN aunque lastUpdated no exista; observedAt es hora de consulta, no de cambio del bookmaker, y entregar inmediatamente el borrador fundamentado. Solo ampliar soccer_world_scan cuando FALTEN partidos verificados, en grupos limitados; el número de fuentes de cuotas vacías nunca justifica reiniciar el catálogo de encuentros. Tras una pasada de recuperación por evento, finalizar respuesta al usuario, sin ciclos de mensajes de progreso. ',
@@ -1952,7 +1953,7 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_evidence_priced_auto',
-    description:'Ruta de respaldo especializada: investiga de 4 a 6 eventos y recupera cuotas por ESPN Site/Core con consulta exacta por evento y fecha UTC; si faltan precios consulta páginas públicas ESPN/Oddschecker/ScoresAndOdds y añade referencias web claramente no cotizables. Solo arma cuota combinada de una misma casa con updatedAt real; entrega borrador condicional si no se comprueba. No repetir mensajes vacíos de progreso.',
+    description:'Ticket de investigación 5-6 patas: consulta primero precios ESPN/DraftKings y los especialistas NBA/NHL en paralelo, coteja IDs, fecha, selección y casa. updatedAt del bookmaker es opcional si la observación ESPN es actual. Si faltan lesiones o porteros, entrega researchFixtures para recheck dirigido sin repetir el barrido completo. No coloca apuestas.',
     parameters:{
       count:{type:'integer',required:true,description:'Patas deseadas: objetivo diario 5, rango preferente 4-6 (admite 1 a 6).'},
       date:{type:'string',description:'Fecha AAAA-MM-DD; por defecto hoy.'},
@@ -2013,6 +2014,7 @@ export function apply(ctx: Context): void {
         missingQuotes:result.missingQuotes,approvedLegs:result.approvedLegs,
         multisportSatisfied:result.multisportSatisfied,sourceAudit:result.sourceAudit,
         specialistChecks:result.specialistChecks,researchedLegs:result.researchedLegs,
+        researchFixtures:result.researchFixtures,
         modelAudit:result.modelAudit,
         decisionAudit:result.decisionAudit,marketRisk:result.marketRisk,
         explanation:result.explanation,
@@ -2020,6 +2022,75 @@ export function apply(ctx: Context): void {
         instruction:'Si priced=true y cinco o seis patas tienen cotización genuina y mismo bookmaker, presenta un TICKET FINAL DE INVESTIGACIÓN con selecciones, cuotas y justificación individual, sin un encabezado global hold/condicional. Las incertidumbres siguen en pendingEvidence, decisionAudit y specialistChecks, y jamás implican aprobación de apuesta. Si priced=false, recupera una reserva investigada con sports_chat_daily_market_shortlist(deep=true,winnerOnly=true) antes de emitir un borrador incompleto. Cuota real, selección de mercado y evento verificado permiten mostrar el ticket, no recomiendan apostarlo. Si approvedLegs=0, aclarar 0 apuestas aprobadas. Sin precios auténticos, dibujar preselección sin cuota, nunca inventar una.'})
     },
     presentCall:()=>({card:'generic',title:'Investigar ticket cotizado de 5 o 6 patas',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_ticket_dossier_recheck',
+    description:'RECUPERACIÓN DIRIGIDA DEL TICKET: revisa solo partidos con expediente parcial usando IDs, rivales y hora ESPN ya verificados. No repite el barrido diario ni vuelve a pedir cuotas. Consulta de nuevo lesiones NBA y porteros NHL con plazo suficiente, conserva fuente, checklist y ausencias sin inventar alineaciones.',
+    parameters:{
+      fixtures:{type:'array',required:true,description:'Solo 1-6 fixtures EXACTOS de researchFixtures del ticket anterior con pasos pendientes. Nunca inventar equipos ni IDs.',
+        items:{type:'object',additionalProperties:false,properties:{
+          sport:{type:'string',required:true,description:'basketball o hockey, entre otras disciplinas soportadas.'},
+          league:{type:'string',required:true,description:'Liga ESPN real: nba, nhl, etc.'},
+          eventId:{type:'string',required:true,description:'ID ESPN original del ticket.'},
+          date:{type:'string',required:true,description:'Fecha de evento AAAA-MM-DD en Santo Domingo.'},
+          home:{type:'string',required:true,description:'Equipo local verificado por ESPN.'},
+          away:{type:'string',required:true,description:'Equipo visitante verificado por ESPN.'},
+          kickoff:{type:'string',required:true,description:'Hora ISO exacta que devolvió ESPN.'},
+        }}},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      if(!Array.isArray(args.fixtures)||args.fixtures.length<1||args.fixtures.length>6)
+        throw Error('Revisión dirigida: entre 1 y 6 partidos con IDs verificados')
+      const now=Date.now(),env=await sportsEnv(ctx)
+      const seen=new Set<string>()
+      for(const fixture of args.fixtures){
+        const key=[fixture.sport,fixture.league,fixture.eventId].join('|')
+        if(seen.has(key))throw Error('Partido duplicado en revisión dirigida')
+        seen.add(key)
+      }
+      const feed=dailyResearchFetcher(fetch,env)
+      // Each event gets its OWN specialist budget; all incomplete events run
+      // concurrently so a slow provider cannot delay the rest of the slate.
+      const attempts=await Promise.allSettled(args.fixtures.map(async fixture=>{
+        if(!Number.isFinite(Date.parse(fixture.kickoff))||
+          Date.parse(fixture.kickoff)<=now)
+          throw Error('Partido iniciado o fecha inválida: no reconstruir un informe prepartido')
+        const found=await boundedDailyTool(investigateTicketSpecialists(
+          [fixture],feed,now,env,[],45_000),52_000)
+        return found[0]
+      }))
+      const reports=attempts.map((attempt,index)=>{
+        const fixture=args.fixtures[index]!
+        if(attempt.status!=='fulfilled'||!attempt.value)return{
+          eventId:fixture.eventId,sport:fixture.sport,
+          state:'technical-error',complete:false,
+          reason:String(attempt.status==='rejected'?attempt.reason:
+            'El investigador no devolvió un informe').slice(0,240),
+        }
+        const check=attempt.value,summary=summarizeTicketSpecialist(check,fixture.sport)
+        return{
+          eventId:check.eventId,sport:check.sport,league:check.league,
+          state:summary.state,complete:check.checklist?.complete===true,
+          evidence:summary,verifiedSteps:check.verifiedSteps.slice(0,22),
+          pendingSteps:check.pendingSteps.slice(0,18),
+          checklist:check.checklist??null,
+          injuryAudit:check.injuryAudit??null,
+          nhlStarterAudit:check.nhlStarterAudit??null,
+          playerHistoryAudit:check.playerHistoryAudit??null,
+          endpointAudit:check.endpointAudit?.slice(0,28)??[],
+          sourceChecks:check.sourceChecks?.slice(0,10)??[],
+          freeInjuryChecks:check.freeInjuryChecks?.slice(0,6)??[],
+        }
+      })
+      return JSON.stringify({
+        checkedAt:new Date(now).toISOString(),rechecked:reports.length,reports,
+        priced:false,placed:false,approvedForBetting:false,
+        instruction:'Estos son expedientes especializados RECUPERADOS para las mismas patas, no nuevas cuotas ni un ticket duplicado. Contrastar con la selección anterior: si una baja/portero confirmado contradice al favorito, avisar y buscar sustitución. Si una alineación aún NO ha sido publicada, distinguir ausencia de publicación de fallo técnico y no afirmar que está verificada. No reejecutar toda la búsqueda del día.',
+      })
+    },
+    presentCall:()=>({card:'generic',title:'Recuperar datos pendientes de las patas del ticket',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_evidence_auto',
