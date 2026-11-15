@@ -1,5 +1,32 @@
 import type { LocalModelCatalogEntry, LocalRuntimeManifest } from './types.js'
 
+/** Qwen3.5 2B upstream native context, as published by Qwen and Ollama. */
+export const QWEN_35_2B_NATIVE_CONTEXT_WINDOW = 262_144
+
+/** Conservative default for a laptop until the actual available memory is known. */
+export const DEFAULT_QWEN_35_2B_RUNTIME_CONTEXT_WINDOW = 16_384
+
+/**
+ * Resolve the operational Ollama context from the Phoenix Host environment.
+ *
+ * Native capacity and the RAM-allocated runtime context are different.
+ * The override intentionally never enables >256K/YaRN, which needs a separate
+ * compatible engine/configuration rather than a larger num_ctx alone.
+ * Invalid values fall back to the safe default.
+ */
+export function resolveQwen35RuntimeContextWindow(
+  configured: string | undefined = process.env['PHOENIX_LOCAL_CONTEXT_TOKENS'],
+): number {
+  if (configured === undefined || !/^\d+$/.test(configured.trim())) {
+    return DEFAULT_QWEN_35_2B_RUNTIME_CONTEXT_WINDOW
+  }
+  const requested = Number(configured.trim())
+  return Number.isSafeInteger(requested)
+    && requested >= 4_096 && requested <= QWEN_35_2B_NATIVE_CONTEXT_WINDOW
+    ? requested
+    : DEFAULT_QWEN_35_2B_RUNTIME_CONTEXT_WINDOW
+}
+
 /**
  * Small CPU-first Ollama model already installed by the user.
  * Phoenix connects to the existing local Ollama service; it must never
@@ -12,7 +39,10 @@ const QWEN_35_2B_OLLAMA: LocalModelCatalogEntry = Object.freeze({
   ollamaModel: 'qwen3.5:2b-q4_K_M',
   sizeBytes: 2_000_000_000,
   estimatedRamBytes: 3_500_000_000,
-  contextWindow: 4_096,
+  // Advertise the actual allocated context to pi-ai so context fitting and
+  // Ollama's num_ctx use one number; never promise 262K without allocating it.
+  contextWindow: resolveQwen35RuntimeContextWindow(),
+  nativeContextWindow: QWEN_35_2B_NATIVE_CONTEXT_WINDOW,
   // Qwen's old 256-token default truncated otherwise healthy normal replies.
   // Local streaming may complete one extra pass; hosted providers are unchanged.
   maxTokens: 768,
