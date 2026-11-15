@@ -98,6 +98,7 @@ describe('LocalModelRuntimeManager', () => {
       '--cache-type-v', 'q8_0',
       '--model', expect.stringContaining('gemma-4-E2B-it-Q4_0.gguf'),
     ]))
+    expect(args).not.toContain('--reasoning')
     expect(manager.snapshot()).toMatchObject({ phase: 'running', pid: 4242, port: 17842 })
   })
 
