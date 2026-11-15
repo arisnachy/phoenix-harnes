@@ -229,7 +229,7 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
   const root='https://site.api.espn.com/apis/site/v2/sports/basketball/'+league+'/'
   const sources=board.sources
   const day0=Date.parse(date+'T12:00:00Z')
-  const [summary,historyReport,injuriesData,newsData,players]=await Promise.all([
+  const [summary,historyReport,injuriesData,newsData,players,editorial]=await Promise.all([
     basketballRead<unknown>(root+'summary?event='+eventId,fetcher,sources,now),
     readHistoricalScoreboard(root,new Date(day0-42*86_400_000).toISOString().slice(0,10),
       new Date(day0-86_400_000).toISOString().slice(0,10),
@@ -240,6 +240,8 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
     collectDirectEspnStats('basketball',league,[
       {id:fixture.home.id,name:fixture.home.name},{id:fixture.away.id,name:fixture.away.name}
     ],fetcher,now,maxPlayers),
+    discoverEditorialResearch(fixture.home.name+' '+
+      fixture.away.name,['covers','vegasinsider'],fetcher,now),
   ])
   const history={events:historyReport.events}
   const build=(side:'home'|'away')=>{
@@ -276,8 +278,6 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
       teamKey(headline+' '+description).includes(teamKey(name))))return []
     return[{headline,published:label(n.published,60),source:'ESPN News · titular público'}]
   }).slice(0,16)
-  const editorial=await discoverEditorialResearch(fixture.home.name+' '+
-    fixture.away.name,['covers','vegasinsider'],fetcher,now)
   const headings=editorial.hits.map(x=>({headline:x.headline,publisher:x.publisher,
     date:x.publishedAt,verifiedPick:false as const}))
   const rest=(side:'home'|'away')=>{

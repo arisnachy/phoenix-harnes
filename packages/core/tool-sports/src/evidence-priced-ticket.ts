@@ -74,9 +74,10 @@ export async function evidencePricedTicket(
   explanation:string;reviewedBeforeSelection:number;removedConflicts:number;
   trackingEvents:Array<{eventId:string;sport:string;league:string;date:string;
     pick:'home'|'away';kickoff:string}>;
+  researchFixtures:Array<{eventId:string;sport:string;league:string;
+    date:string;home:string;away:string;kickoff:string}>;
   marketRisk?:TicketMarketRisk;
   decisionAudit:TicketDecisionAudit}>{
-  const pipelineStartedAt=Date.now()
   const researchFetcher=fetcher===fetch?dailyResearchFetcher(fetcher,env):fetcher
   const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
     year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
@@ -137,6 +138,64 @@ export async function evidencePricedTicket(
   // Interactive fixture lookup bypasses the persisted research cache.
   const research=await evidenceTicket(count,date,sport,fetcher,now,env,
     reviewCandidates)
+  // Exact ESPN fixture identities allow Kira to recheck ONLY unfinished cases,
+  // rather than repeating a broad daily discovery/price scan.
+  const researchFixtures=research.events.map(e=>({
+    eventId:e.eventId,sport:e.sport,league:e.league,date:day,
+    home:e.home,away:e.away,kickoff:e.kickoff,
+  }))
+  const leagues=[...new Map(research.events.map(e=>[e.league,e])).values()]
+  const fallbackSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
+  const espnReferenceOdds:OddsResearchObservation[]=[]
+  // Begin ESPN reads as soon as IDs are chosen; overlap them with the long
+  // NBA/NHL specialist pass rather than using the last seconds of the tool.
+  const firstPassOdds=quotesProvider?
+    Promise.resolve([] as PromiseSettledResult<KeylessQuote[]>[]):
+    Promise.allSettled(leagues.map(async event=>{
+    if(event.sport==='soccer'&&marketPreference==='double_chance')return [] as KeylessQuote[]
+    const sportKey=leagueSportKey[event.league]??
+      (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
+    if(!sportKey)return [] as KeylessQuote[]
+    // Wrap the transport to disable the in-process ESPN odds cache for
+    // ticket construction: preserve a fresh feed READ, not an old snapshot.
+    const directFetcher:typeof fetch=(input,init)=>fetcher(input,init)
+    const espnFirstEnv=env.PHOENIX_SPORTS_ESPN_DISABLED==='1'?env:{
+      ...env,THE_ODDS_API_KEY:'',THEODDSAPI_API_KEY:'',
+      THERUNDOWN_API_KEY:'',SPORTSGAMEODDS_API_KEY:'',
+      PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0',
+    }
+    const report=await boundedPriced(marketOddsDetailed(
+      sportKey,'h2h',espnFirstEnv,directFetcher,now),7_000)
+    fallbackSources.push(...report.sources)
+    // A newly fetched provider quote may be included without bookmaker updatedAt.
+    // Ticket quotation is distinct from sportsbook acceptance.
+    espnReferenceOdds.push(...report.observations)
+    const lines=report.quotes
+    return lines.flatMap(q=>{
+      const time=q.timeIso??''
+      const updated=Date.parse(q.updatedAt)
+      const observedAt=Date.parse(q.observedAt??'')
+      const espnObserved=q.source?.startsWith('ESPN ')===true
+      const currentSnapshot=Number.isFinite(observedAt)&&observedAt<=now&&
+        now-observedAt<=15*60_000
+      const validBookTime=Number.isFinite(updated)&&updated<=now&&
+        now-updated<=3_600_000
+      if(!Number.isFinite(Date.parse(time))||
+        !(currentSnapshot||(!espnObserved&&validBookTime)))return []
+      // Soccer 3-way victory must demonstrably include DRAW at this book.
+      if(event.sport==='soccer'&&!lines.some(draw=>
+        draw.eventId===q.eventId&&draw.bookmaker===q.bookmaker
+        &&draw.market===q.market&&/^(?:draw|empate|tie)$/iu.test(draw.selection)))return []
+      return [{
+        eventId:q.eventId,bookmaker:q.bookmaker,
+        market:event.sport==='soccer'?'1x2':'h2h',
+        selection:q.selection,point:q.point??null,price:q.price,
+        home:q.home,away:q.away,time,updatedAt:q.updatedAt,
+        ...(currentSnapshot&&q.observedAt?{observedAt:q.observedAt}:{}),
+        source:q.source??'Proveedor de cuotas público',sportKey,
+      }] satisfies KeylessQuote[]
+    })
+  }))
   // Never promote the short preflight to a final NBA dossier. Recheck all
   // selected NBA/WNBA cases that were not fully documented; retry only failed
   // preflights for other sports. Small parallel batches avoid a long waterfall.
@@ -149,9 +208,11 @@ export async function evidencePricedTicket(
     pendingGames.slice(i*3,i*3+3))
   const attempts=await Promise.allSettled(batches.map(async batch=>{
     const nba=batch.some(game=>game.sport==='basketball')
-    // NBA requires multiple team/athlete reads; 7s cannot establish coverage.
+    // NBA Common v3 player logs + team histories regularly exceed 18 s.
+    // A 35-s selected dossier runs IN PARALLEL with ESPN price acquisition.
+    // NHL retries confirmed starters too; preserve time for exact ESPN pricing.
     return boundedPriced(specialistResearcher(batch,researchFetcher,now,env,
-      [],nba?18_000:9_000),nba?21_000:12_000)
+      [],nba?35_000:18_000),nba?39_000:22_000)
   }))
   const retried=attempts.flatMap(a=>a.status==='fulfilled'?a.value:[])
   const byId=new Map(retried.map(x=>[x.eventId,x]))
@@ -264,7 +325,7 @@ export async function evidencePricedTicket(
     candidateLegs:0,ticketReadyForReview:false,
     discoveredEvents:research.discoveryAudit.discoveredEvents,
     discoveryAudit:research.discoveryAudit,
-    specialistChecks,researchedLegs,modelAudit,trackingEvents,
+    specialistChecks,researchedLegs,modelAudit,trackingEvents,researchFixtures,
     decisionAudit:preliminaryDecisionAudit,reviewedBeforeSelection,removedConflicts,conditional:!checklistComplete,
     dossierComplete:checklistComplete,
     multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
@@ -337,20 +398,8 @@ export async function evidencePricedTicket(
           'No se consultaron casas ni cuotas: verificar discoveryAudit primero. ')+
         'No se inventó ninguna pata.'}
   }
-  // If research already consumed the wall-clock budget, return the actual
-  // verified preselection now instead of starting more independent quote scans.
-  // In particular, do not make Kira lose a valid draft to the outer watchdog.
-  if(Date.now()-pipelineStartedAt>=72_000){
-    return {...base,sourceAudit:initialSources.map(row=>({
-      ...row,status:row.status==='attempted'?'not-applicable' as const:row.status,
-      note:row.note+' Omitido: se alcanzó el presupuesto de tiempo del ticket.',
-    })),conditional:true,
-      explanation:'Tiempo de investigación agotado: se conserva la preselección '+
-        'verificada con '+research.verifiedEvents+' eventos y '+
-        researchedLegs+' expedientes especializados. Falta la verificación '+
-        'de cuotas actuales. Reintentar solo fuentes pendientes, sin rehacer '+
-        'el barrido completo.'}
-  }
+  // The former 72-s cutoff discarded real ESPN prices even when concurrent
+  // reads had succeeded. Preserve selected evidence and finish price matching.
   // Even an incomplete 4/5 slate must audit the four real events for quotes;
   // otherwise 'no prices available' falsely implies the sources were checked.
   // ESPN is queried before any optional bookmaker adapter. Do not launch
@@ -361,54 +410,7 @@ export async function evidencePricedTicket(
   // as a real second LIVE source, never the two historical GitHub archives.
   // Explicit double-chance selections are only supplied by a verified 1X/X2
   // market; do not relabel a winner moneyline as double chance.
-  const leagues=[...new Map(research.events.map(e=>[e.league,e])).values()]
-  const fallbackSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
-  const espnReferenceOdds:OddsResearchObservation[]=[]
-  const additional=quotesProvider?[]:await Promise.allSettled(leagues.map(async event=>{
-    if(event.sport==='soccer'&&marketPreference==='double_chance')return [] as KeylessQuote[]
-    const sportKey=leagueSportKey[event.league]??
-      (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
-    if(!sportKey)return [] as KeylessQuote[]
-    // Wrap the transport to disable the in-process ESPN odds cache for
-    // ticket construction: preserve a fresh feed READ, not an old snapshot.
-    const directFetcher:typeof fetch=(input,init)=>fetcher(input,init)
-    const espnFirstEnv=env.PHOENIX_SPORTS_ESPN_DISABLED==='1'?env:{
-      ...env,THE_ODDS_API_KEY:'',THEODDSAPI_API_KEY:'',
-      THERUNDOWN_API_KEY:'',SPORTSGAMEODDS_API_KEY:'',
-      PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0',
-    }
-    const report=await boundedPriced(marketOddsDetailed(
-      sportKey,'h2h',espnFirstEnv,directFetcher,now),7_000)
-    fallbackSources.push(...report.sources)
-    // A newly fetched provider quote may be included without bookmaker updatedAt.
-    // Ticket quotation is distinct from sportsbook acceptance.
-    espnReferenceOdds.push(...report.observations)
-    const lines=report.quotes
-    return lines.flatMap(q=>{
-      const time=q.timeIso??''
-      const updated=Date.parse(q.updatedAt)
-      const observedAt=Date.parse(q.observedAt??'')
-      const espnObserved=q.source?.startsWith('ESPN ')===true
-      const currentSnapshot=Number.isFinite(observedAt)&&observedAt<=now&&
-        now-observedAt<=15*60_000
-      const validBookTime=Number.isFinite(updated)&&updated<=now&&
-        now-updated<=3_600_000
-      if(!Number.isFinite(Date.parse(time))||
-        !(currentSnapshot||(!espnObserved&&validBookTime)))return []
-      // Soccer 3-way victory must demonstrably include DRAW at this book.
-      if(event.sport==='soccer'&&!lines.some(draw=>
-        draw.eventId===q.eventId&&draw.bookmaker===q.bookmaker
-        &&draw.market===q.market&&/^(?:draw|empate|tie)$/iu.test(draw.selection)))return []
-      return [{
-        eventId:q.eventId,bookmaker:q.bookmaker,
-        market:event.sport==='soccer'?'1x2':'h2h',
-        selection:q.selection,point:q.point??null,price:q.price,
-        home:q.home,away:q.away,time,updatedAt:q.updatedAt,
-        ...(currentSnapshot&&q.observedAt?{observedAt:q.observedAt}:{}),
-        source:q.source??'Proveedor de cuotas público',sportKey,
-      }] satisfies KeylessQuote[]
-    })
-  }))
+  const additional=await firstPassOdds
   const discovered=[...keyless,...additional.flatMap(s=>s.status==='fulfilled'?s.value:[])]
   // A league-level ESPN scan has an eight-game cap. On short nightly slates
   // that cap can miss the requested event entirely, especially when games are
@@ -942,7 +944,7 @@ export async function evidencePricedTicket(
     conditionalLegs:decisionAudit.legs.filter(x=>
       x.verdict==='hold'||x.verdict==='caution').length,
     approvedForBetting:false,
-    specialistChecks,researchedLegs,modelAudit,trackingEvents,
+    specialistChecks,researchedLegs,modelAudit,trackingEvents,researchFixtures,
     multisportSatisfied:research.multisportSatisfied,
     explanation:'Las '+count+' selecciones tienen '+
       (espnOnlyObserved?'precio observado en ESPN, pendiente de confirmación en la casa':
