@@ -211,7 +211,7 @@ export async function evidencePricedTicket(
     env.THEODDSAPI_API_KEY?.trim()?'TheOddsAPI configurada':'TheOddsAPI sin clave',
     env.THERUNDOWN_API_KEY?.trim()?'TheRundown configurado':'TheRundown sin clave',
     env.SPORTSGAMEODDS_API_KEY?.trim()?'SportsGameOdds configurado':'SportsGameOdds sin clave',
-    'ESPN: cuotas solo cuando el proveedor publique mercados con fecha',
+    'ESPN: fuente primaria sin clave; se acepta observedAt actual sin exigir updatedAt',
   ].join(' · ')
   const preliminaryLegs=Array.isArray(research.card.props.legs)?research.card.props.legs:[]
   const researchCard:ChatBlock={...research.card,props:{...research.card.props,
@@ -354,20 +354,10 @@ export async function evidencePricedTicket(
   // Even an incomplete 4/5 slate must audit the four real events for quotes;
   // otherwise 'no prices available' falsely implies the sources were checked.
   const categories=[...new Set(research.events.map(e=>e.sport))]
-  const sources=await Promise.allSettled(categories.map(async category=>{
-    const route=routing[category]
-    if(!route)return {category,quotes:[] as KeylessQuote[]}
-    const market=category==='soccer'&&marketPreference==='double_chance'
-      ?'double_chance':route.market
-    const quotes=quotesProvider?await quotesProvider(route.sport,market,day,env,now):
-      keylessEnabled(env)?await boundedPriced(
-        keylessOdds(route.sport,market,day,env,now),6_000):[]
-    return {category,quotes}
-  }))
-  // These prices were fetched during this request: observation time is valid
-  // even when the provider omits its last-change timestamp.
-  const keyless=sources.flatMap(s=>s.status==='fulfilled'?
-    s.value.quotes.map(q=>({...q,observedAt:q.observedAt??new Date(now).toISOString()})):[])
+  // ESPN is queried before any optional bookmaker adapter. Do not launch
+  // OddsHarvester or consume API quotas when the five ESPN legs are priced.
+  const sources:PromiseSettledResult<{category:string;quotes:KeylessQuote[]}>[]=[]
+  const keyless:KeylessQuote[]=[]
   // Use the existing public ESPN and optional authenticated Odds API adapters
   // as a real second LIVE source, never the two historical GitHub archives.
   // Explicit double-chance selections are only supplied by a verified 1X/X2
@@ -383,8 +373,13 @@ export async function evidencePricedTicket(
     // Wrap the transport to disable the in-process ESPN odds cache for
     // ticket construction: preserve a fresh feed READ, not an old snapshot.
     const directFetcher:typeof fetch=(input,init)=>fetcher(input,init)
+    const espnFirstEnv=env.PHOENIX_SPORTS_ESPN_DISABLED==='1'?env:{
+      ...env,THE_ODDS_API_KEY:'',THEODDSAPI_API_KEY:'',
+      THERUNDOWN_API_KEY:'',SPORTSGAMEODDS_API_KEY:'',
+      PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0',
+    }
     const report=await boundedPriced(marketOddsDetailed(
-      sportKey,'h2h',env,directFetcher,now),7_000)
+      sportKey,'h2h',espnFirstEnv,directFetcher,now),7_000)
     fallbackSources.push(...report.sources)
     // A newly fetched provider quote may be included without bookmaker updatedAt.
     // Ticket quotation is distinct from sportsbook acceptance.
@@ -470,7 +465,78 @@ export async function evidencePricedTicket(
         ' referencias sin nombre de casa o con inconsistencias; ESPN no exige updatedAt.',
     })
   }
-  const all=[...discovered,...specific]
+  const espnQuoted=[...discovered,...specific]
+  const matchesSelection=(event:(typeof research.events)[number],q:KeylessQuote):boolean=>{
+    const kickoff=Date.parse(event.kickoff),quotedKickoff=Date.parse(q.time)
+    return Number.isFinite(kickoff)&&Number.isFinite(quotedKickoff)&&kickoff>now&&
+      Math.abs(kickoff-quotedKickoff)<=3_600_000&&
+      sameTeam(q.home,event.home,event.sport)&&
+      sameTeam(q.away,event.away,event.sport)&&
+      q.market===(event.sport==='soccer'?'1x2':'h2h')&&
+      sameTeam(q.selection,event.pick==='home'?event.home:event.away,event.sport)&&
+      Number.isFinite(q.price)&&q.price>1
+  }
+  // Only investigate optional bookmaker sources for an event ESPN did not quote.
+  // The injectable provider is an explicit caller choice and takes precedence.
+  const missingAfterEspn=research.events.filter(event=>
+    !espnQuoted.some(q=>matchesSelection(event,q)))
+  const optionalAllowed=env.PHOENIX_SPORTS_OPTIONAL_ODDS_FALLBACK!=='0'
+  if(missingAfterEspn.length&&(optionalAllowed||quotesProvider)){
+    const fallbackCategories=[...new Set(missingAfterEspn.map(e=>e.sport))]
+    const attempts=await Promise.allSettled(fallbackCategories.map(async category=>{
+      const route=routing[category]
+      if(!route)return{category,quotes:[] as KeylessQuote[]}
+      const market=category==='soccer'&&marketPreference==='double_chance'?
+        'double_chance':route.market
+      const quotes=quotesProvider?
+        await quotesProvider(route.sport,market,day,env,now):
+        keylessEnabled(env)?await boundedPriced(
+          keylessOdds(route.sport,market,day,env,now),6_000):[]
+      return{category,quotes}
+    }))
+    sources.push(...attempts)
+    keyless.push(...attempts.flatMap(item=>item.status==='fulfilled'?
+      item.value.quotes.map(q=>({...q,
+        observedAt:q.observedAt??new Date(now).toISOString()})):[]))
+  }
+  const pricedBeforeOptional=[...espnQuoted,...keyless]
+  const stillMissing=research.events.filter(event=>
+    !pricedBeforeOptional.some(q=>matchesSelection(event,q)))
+  const optionalConfigured=Boolean(env.THE_ODDS_API_KEY?.trim()||
+    env.THEODDSAPI_API_KEY?.trim()||env.THERUNDOWN_API_KEY?.trim()||
+    env.SPORTSGAMEODDS_API_KEY?.trim())
+  const optionalReports=!quotesProvider&&optionalAllowed&&optionalConfigured?
+    await Promise.allSettled([...new Map(stillMissing.map(e=>[e.league,e])).values()]
+      .map(async event=>{
+        const sportKey=leagueSportKey[event.league]??
+          (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
+        if(!sportKey)return[] as KeylessQuote[]
+        const externalOnlyEnv={...env,PHOENIX_SPORTS_ESPN_DISABLED:'1',
+          PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'}
+        const report=await boundedPriced(marketOddsDetailed(
+          sportKey,'h2h',externalOnlyEnv,fetcher,now),7_000)
+        fallbackSources.push(...report.sources)
+        const candidates=report.quotes
+        return candidates.flatMap(q=>{
+          const time=q.timeIso??''
+          if(!Number.isFinite(Date.parse(time)))return[]
+          if(event.sport==='soccer'&&!candidates.some(draw=>
+            draw.eventId===q.eventId&&draw.bookmaker===q.bookmaker&&
+            draw.market===q.market&&/^(?:draw|empate|tie)$/iu.test(draw.selection)))
+            return[]
+          return[{
+            eventId:q.eventId,bookmaker:q.bookmaker,
+            market:event.sport==='soccer'?'1x2':'h2h',
+            selection:q.selection,point:q.point??null,price:q.price,
+            home:q.home,away:q.away,time,updatedAt:q.updatedAt,
+            observedAt:q.observedAt??new Date(now).toISOString(),
+            source:q.source??'Proveedor alternativo',sportKey,
+          }] satisfies KeylessQuote[]
+        })
+      })):[] 
+  const optionalQuotes=optionalReports.flatMap(item=>
+    item.status==='fulfilled'?item.value:[])
+  const all=[...pricedBeforeOptional,...optionalQuotes]
   const groups:KeylessQuote[][]=research.events.map(event=>{
     const kickoff=Date.parse(event.kickoff)
     const doubleChance=event.sport==='soccer'&&marketPreference==='double_chance'
@@ -556,11 +622,11 @@ export async function evidencePricedTicket(
   for(const q of all)observed.set(attributed(q.source),(observed.get(attributed(q.source))??0)+1)
   for(const group of groups)for(const q of group)
     matched.set(attributed(q.source),(matched.get(attributed(q.source))??0)+1)
-  const actualKeyless=categories.length>0&&(keylessEnabled(env)||Boolean(quotesProvider))
+  const actualKeyless=sources.length>0
   const keylessFailures=sources.filter(s=>s.status==='rejected').length
-  const fallbackEligible=!quotesProvider&&leagues.some(e=>
-    !(e.sport==='soccer'&&marketPreference==='double_chance'))
-  const fallbackFailures=additional.filter(s=>s.status==='rejected').length
+  const fallbackEligible=!quotesProvider&&fallbackSources.some(x=>
+    x.provider!=='ESPN Site/Core'&&x.status!=='unconfigured')
+  const fallbackFailures=fallbackSources.filter(x=>x.status==='error').length
   const sourceAudit:OddsAuditRow[]=initialSources.map(row=>{
     const offers=observed.get(row.source)??0
     const evidence=matched.get(row.source)??0
