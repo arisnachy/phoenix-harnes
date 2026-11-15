@@ -41,8 +41,10 @@ export function buildDailyResearchBoard(
   discovered:readonly DailyTicketFixture[],choices:readonly DailyTicketChoice[],
   requestedLegs:number,now=Date.now(),
 ):DailyCoverageBoard{
-  if(!Number.isInteger(requestedLegs)||requestedLegs<5||requestedLegs>6)
-    throw Error('Ticket diario requiere 5–6 posiciones')
+  // The reusable ticket tool also supports one-off 1–4-game research.
+  // Its DAILY invocation still requests five or six by default.
+  if(!Number.isInteger(requestedLegs)||requestedLegs<1||requestedLegs>6)
+    throw Error('Tablero de investigación requiere entre 1 y 6 posiciones')
   const fixtures=new Map<string,DailyTicketFixture>()
   for(const f of discovered)if(valid(f,now)&&!fixtures.has(identity(f)))
     fixtures.set(identity(f),f)
