@@ -2,9 +2,9 @@
  * Source material is obtained from the existing native NHL specialist; this
  * adapter never promotes rosters, odds or historical reports to approved picks.
  */
-import {investigateNhl, type HockeyDossier} from './nhl-evidence-research.ts'
-import {probeNhlOfficialStarters, type NhlStarterProbe} from './nhl-official-starters.ts'
-import type {StepObservation} from './daily-specialist-checklist.ts'
+import { investigateNhl, type HockeyDossier } from './nhl-evidence-research.ts'
+import { probeNhlOfficialStarters, type NhlStarterProbe } from './nhl-official-starters.ts'
+import type { StepObservation } from './daily-specialist-checklist.ts'
 
 type EvidenceState='verified'|'partial'|'missing'
 type ModuleLetter='A'|'B'|'C'|'D'|'E'|'F'|'G'|'H'|'I'|'J'|'K'|'L'|'M'|'N'|'O'|'P'|'Q'
@@ -18,27 +18,32 @@ const stamp=(x:unknown):number=>Date.parse(str(x))
 const filled=(x:number|null|undefined):x is number=>typeof x==='number'&&Number.isFinite(x)
 const observed=(value:unknown):EvidenceState=>value?'partial':'missing'
 
+/** One observed or missing A-Q domain with explicit sources and gaps. */
 export type NhlResearchModule={
   topic:string;state:EvidenceState;data:unknown;missing:string[];sourceUrls:string[]
 }
+/** Source-directed task for a missing NHL research field. */
 export type NhlResearchTask={
   event_id:string;module:ModuleLetter;missing_fields:string[];route:string
 }
+/** Read-only gate: the research snapshot never approves a bet. */
 export type NhlResearchGate={
   researchOnly:true;eligibleForTicket:false;quotedOddsLive:false
   modelCalibrated:false;expectedValue:null;recommendation:'investigate'
 }
+/** Immutable research context for one NHL event. */
 export type NhlResearchGame={
   eventId:string;sport:'hockey';league:'nhl'
-  home:{id:string;abbrev:string;name:string};away:{id:string;abbrev:string;name:string}
+  home:{ id:string;abbrev:string;name:string };away:{ id:string;abbrev:string;name:string }
   scheduledUtc:string;snapshotCreatedUtc:string;snapshotState:string
   captureBeforeTipoff:boolean
   evidenceModules:Record<ModuleLetter,NhlResearchModule>
   checklistObservations:Record<string,StepObservation>
   missingResearch:NhlResearchTask[]
-  sourceRecords:Array<{url:string;status:'verified'|'missing'|'error';checkedAt:string}>
+  sourceRecords:Array<{ url:string;status:'verified'|'missing'|'error';checkedAt:string }>
   gate:NhlResearchGate
 }
+/** Versioned, archived NHL handoff payload. */
 export type NhlResearchHandoff={
   schema:'phoenix.nhl.read-model.v1';operational:false;referenceDate:string
   games:NhlResearchGame[]
@@ -73,6 +78,9 @@ const make=(topic:string,state:EvidenceState,data:unknown,missing:string[],
 })
 /** Converts ONE genuine NHL dossier to the same 17-stage research grammar used
  * by NBA LAB. A module with one observed field is PARTIAL, not complete.
+ * @param dossier Source-checked NHL dossier for one game.
+ * @param starter Optional independent official pregame starting-goalie result.
+ * @returns Seventeen research modules, missing-field tasks and a safe gate.
  */
 export function buildNhlResearchHandoff(
   dossier:HockeyDossier,starter:NhlStarterProbe|null=null,
@@ -109,16 +117,16 @@ export function buildNhlResearchHandoff(
     'https://api.nhle.com/stats/rest/en/team/penaltykill']
   const modules:Record<ModuleLetter,NhlResearchModule>={
     A:make('Identidad del partido','verified',{
-      fixture,recordedAt:dossier.checkedAt},[],[scoreUrl]),
+      fixture,recordedAt:dossier.checkedAt },[],[scoreUrl]),
     B:make('Forma 5/10/20 y clasificación',observed(bothForm),{
-      standings:dossier.standings,home:formH,away:formA},
+      standings:dossier.standings,home:formH,away:formA },
       ['20 partidos anteriores de ambos equipos y fuerza de los rivales'],urls),
     C:make('Descanso, local/visita y viajes',observed(bothForm),{
       homeRestHours:formH?.restHours??null,awayRestHours:formA?.restHours??null,
-      homeGames:formH?.homeGames??null,awayGames:formA?.awayGames??null},
+      homeGames:formH?.homeGames??null,awayGames:formA?.awayGames??null },
       ['Viaje, cambio horario, back-to-back y factor local verificables'],urls),
     D:make('Goles, diferencial y tiros',observed(bothForm),{
-      homeLast10:formH?.last10??[],awayLast10:formA?.last10??[]},
+      homeLast10:formH?.last10??[],awayLast10:formA?.last10??[] },
       ['Tiros, chances y ritmo ajustados en ambos extremos'],urls),
     E:make('Calidad de rivales','missing',null,
       ['Strength of schedule a fecha y rating del rival']),
@@ -128,14 +136,14 @@ export function buildNhlResearchHandoff(
       candidates,confirmed:goalieConfirmed?{
         home:starter?.homeGoalie,away:starter?.awayGoalie,
         source:starter?.url,checkedAt:starter?.checkedAt}:null,
-      probeState:starter?.state??'not-checked'},
+      probeState:starter?.state??'not-checked' },
       ['Dos porteros titulares oficialmente confirmados antes del partido'],
       starter?[starter.url]:[]),
     H:make('Rendimiento de porteros',observed(anyGoalie),{
-      candidates,requested:['SV%','GAA','last5','GSAx']},
+      candidates,requested:['SV%','GAA','last5','GSAx'] },
       ['SV% y GAA del mismo portero, muestras 5/10/20 y GSAx validado'],urls),
     I:make('Plantillas y forma individual',observed(bothRosters),{
-      home:dossier.players.home,away:dossier.players.away},
+      home:dossier.players.home,away:dossier.players.away },
       ['On-ice xG, lesiones cruzadas y rendimiento de líneas verificables'],urls),
     J:make('Lesiones, scratches, sanciones','missing',null,
       ['Partes oficiales de ambos equipos y lista final de scratches']),
@@ -145,7 +153,7 @@ export function buildNhlResearchHandoff(
       pp,['PP y PK de ambos equipos con temporada, cobertura y contexto'],sportsUrl),
     M:make('Enfrentamientos y head-to-head',
       observed(dossier.possibleMatchups.length>0),{
-        rosterOnlyMatchups:dossier.possibleMatchups},
+        rosterOnlyMatchups:dossier.possibleMatchups },
       ['Cara a cara y emparejamientos reales: NO inferir del roster'],urls),
     N:make('Noticias y contexto','missing',null,
       ['Noticias con fecha de ambas franquicias y verificación adversarial']),
@@ -164,8 +172,8 @@ export function buildNhlResearchHandoff(
   const observation:Record<string,StepObservation>={}
   const put=(key:string,letter:ModuleLetter)=>{
     const mod=modules[letter]
-    observation[key]={state:mod.state,detail:(mod.topic+
-      ': '+(mod.missing.join('; ')||'evidencia observada')).slice(0,500)}
+    observation[key]={ state:mod.state,detail:(mod.topic+
+      ': '+(mod.missing.join('; ')||'evidencia observada')).slice(0,500) }
   }
   for(const [key,letter] of [
     ['fixture','A'],['form','B'],['schedule','C'],['efficiency','F'],
@@ -183,16 +191,18 @@ export function buildNhlResearchHandoff(
     evidenceModules:modules,checklistObservations:observation,
     missingResearch:taskQueue,
     sourceRecords:dossier.sources.map(x=>({
-      url:x.url,status:x.status,checkedAt:x.checkedAt})),
-    gate:{...RESEARCH_GATE},
+      url:x.url,status:x.status,checkedAt:x.checkedAt })),
+    gate:{...RESEARCH_GATE },
   }
-  return{schema:'phoenix.nhl.read-model.v1',operational:false,
+  return{ schema:'phoenix.nhl.read-model.v1',operational:false,
     referenceDate:fixture.date.slice(0,10),games:[game],
     note:'Fuentes observadas y brechas para la investigación nativa de Kira; '+
-      'no implica porteros confirmados, xG/GSAx, EV ni pick aprobado.'}
+      'no implica porteros confirmados, xG/GSAx, EV ni pick aprobado.' }
 }
 /** Strict read-only importer: historical snapshots cannot become live prices or
  * autonomous ticket approvals, even if the outer JSON claims otherwise.
+ * @param value Previously exported NHL research JSON.
+ * @returns Checked archive records, never live betting instructions.
  */
 export function readNhlResearchHandoff(value:unknown):NhlResearchGame[]{
   const root=obj(value)
@@ -232,38 +242,43 @@ export function readNhlResearchHandoff(value:unknown):NhlResearchGame[]{
       const s=obj(raw)
       if(!s||!['verified','partial','missing'].includes(str(s.state)))
         throw new Error('NHL handoff: invalid checklist state')
-      obs[key]={state:s.state as EvidenceState,detail:str(s.detail).slice(0,500)}
+      obs[key]={ state:s.state as EvidenceState,detail:str(s.detail).slice(0,500) }
     }
-    const tasks=arr(g.missingResearch).map(raw=>{
+    const tasks=arr(g.missingResearch).map((raw)=>{
       const t=obj(raw)
       if(!t||!LETTERS.includes(str(t.module) as ModuleLetter))
         throw new Error('NHL handoff: invalid research queue')
-      return{event_id:id,module:t.module as ModuleLetter,
+      return{ event_id:id,module:t.module as ModuleLetter,
         missing_fields:arr(t.missing_fields).map(str).filter(Boolean),
-        route:str(t.route)}
+        route:str(t.route) }
     })
     out.push({
       eventId:id,sport:'hockey',league:'nhl',
-      home:{id:str(home.id),abbrev:str(home.abbrev),name:str(home.name)},
-      away:{id:str(away.id),abbrev:str(away.abbrev),name:str(away.name)},
+      home:{ id:str(home.id),abbrev:str(home.abbrev),name:str(home.name) },
+      away:{ id:str(away.id),abbrev:str(away.abbrev),name:str(away.name) },
       scheduledUtc:str(g.scheduledUtc),snapshotCreatedUtc:str(g.snapshotCreatedUtc),
       snapshotState:str(g.snapshotState),
       captureBeforeTipoff:checked<start&&
         ['FUT','PRE'].includes(str(g.snapshotState))&&g.captureBeforeTipoff===true,
       evidenceModules:modules as Record<ModuleLetter,NhlResearchModule>,
       checklistObservations:obs,missingResearch:tasks,
-      sourceRecords:arr(g.sourceRecords).flatMap(x=>{
+      sourceRecords:arr(g.sourceRecords).flatMap((x)=>{
         const r=obj(x)
         return r&&['verified','missing','error'].includes(str(r.status))?[{
           url:str(r.url),status:r.status as 'verified'|'missing'|'error',
           checkedAt:str(r.checkedAt)}]:[]
-      }),gate:{...RESEARCH_GATE},
+      }),gate:{...RESEARCH_GATE },
     })
   }
   return out
 }
 /** Native acquisition. The pregame specialist itself crosschecks NHL game ID
  * against the dated slate, and the official goalie probe is independent.
+ * @param date NHL local calendar day for the official score endpoint.
+ * @param gameId Official ten-digit NHL game identifier.
+ * @param fetcher Injected HTTP client for live research or offline tests.
+ * @param now Research timestamp in Unix milliseconds.
+ * @returns Evidence collected by the native NHL specialist, read-only.
  */
 export async function collectNhlResearchHandoff(
   date:string,gameId:string,fetcher:typeof fetch=fetch,now=Date.now(),
