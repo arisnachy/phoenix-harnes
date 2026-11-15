@@ -265,6 +265,11 @@ class RuntimeManager implements LocalModelRuntimeManager {
       '--host', '127.0.0.1',
       '--port', String(port),
       '--ctx-size', String(model.contextWindow),
+      // Qwen3.5-4B is a hybrid thinking model. llama-server defaults to
+      // automatic reasoning, which can spend the entire completion budget on
+      // hidden thinking and return no visible answer. Disable it at process
+      // startup for this exact model; leave Gemma and other backends untouched.
+      ...(model.id === 'qwen3.5-4b-q4-k-m' ? ['--reasoning', 'off'] : []),
       // Keep long local contexts affordable on CPU-first machines by halving
       // the default f16 KV-cache footprint without changing model weights.
       '--cache-type-k', 'q8_0',
