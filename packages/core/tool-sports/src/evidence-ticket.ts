@@ -304,7 +304,10 @@ export async function evidenceTicket(
     kickoff:x.kickoff,home:{name:x.home},away:{name:x.away},
   }))]
   const dailyResearchBoard=buildDailyResearchBoard(verifiedForBoard,
-    selected.map(x=>x.pick),count,now)
+    selected.filter(x=>x.pick.pick!=='draw').map(x=>({
+      sport:x.pick.sport,league:x.pick.league,eventId:x.pick.eventId,
+      pick:x.pick.pick as 'home'|'away',
+    })),count,now)
   const discoveryAudit:TicketDiscoveryAudit={
     discoveredEvents:scan.totalEligible,eligibleLeagues:eligible.length,
     researchedLeagues:reports.filter(x=>x.status==='fulfilled').length,
