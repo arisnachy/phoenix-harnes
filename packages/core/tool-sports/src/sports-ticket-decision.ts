@@ -118,7 +118,9 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
       specialistStatus:input.specialistStatus,
       criticalPending:[...input.criticalPending],modelStatus:input.modelStatus}
   })
-  const candidates=legs.filter(l=>l.verdict!=='exclude')
+  // HOLD is not an eligible ticket scenario just because the market quoted it.
+  // Preserve caution as an explicitly labeled research-only scenario.
+  const candidates=legs.filter(l=>l.verdict==='candidate'||l.verdict==='caution')
     .filter(l=>l.marketNoVigPct!==null)
     .sort((a,b)=>b.marketNoVigPct!-a.marketNoVigPct!)
   const scenarios:DecisionScenario[]=[3,4,5].map(n=>{
