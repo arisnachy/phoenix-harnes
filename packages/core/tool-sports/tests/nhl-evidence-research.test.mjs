@@ -18,7 +18,7 @@ const mkRoster=(abbr,offset)=>({
     lastName:{default:abbr+' '+i},positionCode:'G'})),
 })
 function fake({started=false,missingAway=false,empty=false,withSpecial=false,
-  seasonRoutesOnly=false}={}){
+  withClubStats=false,seasonRoutesOnly=false}={}){
   const calls=[]
   const fetcher=async x=>{
     const url=String(x),u=new URL(url);calls.push(url)
@@ -45,6 +45,16 @@ function fake({started=false,missingAway=false,empty=false,withSpecial=false,
     }else if(u.pathname==='/v1/standings/'+date)
       body={standings:[{teamAbbrev:{default:'TOR'},wins:11,losses:4,otLosses:2},
         {teamAbbrev:{default:'MTL'},wins:9,losses:6,otLosses:1}]}
+    else if(u.pathname.includes('/v1/club-stats/')&&withClubStats){
+      const tor=u.pathname.includes('/TOR/')
+      const offset=tor?10000:20000
+      body={skaters:[
+        {playerId:offset+12,points:48,goals:20,assists:28,
+          shots:115,gamesPlayed:21,avgTimeOnIcePerGame:1200},
+        {playerId:offset+1,points:9,goals:2,assists:7,
+          shots:20,gamesPlayed:20,avgTimeOnIcePerGame:620},
+      ]}
+    }
     else if(u.hostname==='api.nhle.com'&&withSpecial){
       if(u.pathname.endsWith('/summary')){
         body={data:[{teamId:10,shotsForPerGame:31.8,shotsAgainstPerGame:27.5,
@@ -306,4 +316,19 @@ test('NHL player landing fallback excludes games after the pregame cutoff',async
   const x=await investigateNhl(date,'2026020201',fetcher,now,[],1)
   assert.equal(x.goalieCandidates.home[0].last5.length,1)
   assert.equal(x.goalieCandidates.home[0].last5[0].date,'2026-11-01')
+})
+
+test('official season club-scoring leaders override alphabetic roster order',async()=>{
+  const api=fake({withClubStats:true})
+  const d=await investigateNhl(date,'2026020201',api.fetcher,now,[],1)
+  assert.equal(d.skaterImpact.home[0].playerId,'10012')
+  assert.equal(d.skaterImpact.away[0].playerId,'20012')
+  assert.equal(d.skaterImpact.home[0].points,48)
+  assert.ok(api.calls.some(x=>x.includes('/club-stats/TOR/20262027/2')))
+  assert.ok(api.calls.some(x=>x.includes('/player/10012/landing')))
+  assert.ok(api.calls.some(x=>x.includes('/player/20012/landing')))
+  assert.equal(d.players.home.find(p=>p.id==='10012').stats.points,'17')
+  assert.equal(d.players.home.find(p=>p.id==='10001').last20,undefined)
+  assert.ok(d.uiBlock.props.sections.some(x=>
+    x.heading.includes('Principales anotadores')))
 })
