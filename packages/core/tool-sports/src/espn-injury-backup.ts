@@ -4,6 +4,7 @@
  */
 import {getFeed} from './sports.ts'
 import {espnAthleteId} from './espn-public-roster.ts'
+import {sameEspnTeam} from './sports-exact-espn-winner.ts'
 import {auditInjuryTimeline} from './sports-pregame-research.ts'
 
 export type InjuryFixture={sport:string;league:string;home:string;away:string;
@@ -43,9 +44,11 @@ const aliases:Readonly<Record<string,string>>={
   okcthunder:'oklahomacitythunder',gswarriors:'goldenstatewarriors',
   brooklynnets:'brooklynnets',
 }
-const same=(a:string,b:string):boolean=>{
+const same=(a:string,b:string,league=''):boolean=>{
   const x=norm(a),y=norm(b)
-  return x.length>3&&y.length>3&&(aliases[x]??x)===(aliases[y]??y)
+  return x.length>3&&y.length>3&&(
+    (aliases[x]??x)===(aliases[y]??y)||
+    league==='nhl'&&sameEspnTeam(a,b,'icehockey_nhl'))
 }
 const validId=(x:unknown):string|null=>/^\d{1,16}$/u.test(String(x??''))?
   String(x):null
@@ -121,8 +124,8 @@ async function officialIds(fixture:InjuryFixture,
     const home=competitors.find(x=>x?.homeAway==='home')
     const away=competitors.find(x=>x?.homeAway==='away')
     const h=row(home?.team),a=row(away?.team)
-    if(!same(str(h?.displayName??h?.name),fixture.home)||
-      !same(str(a?.displayName??a?.name),fixture.away))return null
+    if(!same(str(h?.displayName??h?.name),fixture.home,fixture.league)||
+      !same(str(a?.displayName??a?.name),fixture.away,fixture.league))return null
     const homeId=validId(h?.id),awayId=validId(a?.id)
     return homeId&&awayId?{home:homeId,away:awayId}:null
   }catch{return null}
@@ -170,14 +173,14 @@ export async function fetchEspnInjuryBackup(
     if(!groups.length)notes.push('ESPN liga: sin grupos de lesiones reconocibles')
   }catch(error){notes.push('ESPN lesiones por liga: '+
     (error instanceof Error?error.message:String(error)).slice(0,85))}
-  if(!groups.some(g=>same(g.name,fixture.home))||
-    !groups.some(g=>same(g.name,fixture.away))){
+  if(!groups.some(g=>same(g.name,fixture.home,fixture.league))||
+    !groups.some(g=>same(g.name,fixture.away,fixture.league))){
     const ids=await officialIds(fixture,readJSON)
     if(ids){
       const prefix='https://site.api.espn.com/apis/site/v2/sports/'+
         route.sport+'/'+route.league+'/teams/'
       const targets=[{name:fixture.home,id:ids.home},{name:fixture.away,id:ids.away}]
-        .filter(t=>!groups.some(g=>same(g.name,t.name)))
+        .filter(t=>!groups.some(g=>same(g.name,t.name,fixture.league)))
       const results=await Promise.allSettled(targets.map(t=>
         readJSON<unknown>(prefix+t.id+'/injuries')))
       for(const [idx,item] of results.entries()){
@@ -190,15 +193,15 @@ export async function fetchEspnInjuryBackup(
         const parsed=parseGroups(item.value,prefix+targets[idx]!.id+'/injuries')
         if(parsed.length){
           for(const team of parsed)
-            if(!groups.some(g=>same(g.name,team.name)))groups.push(team)
+            if(!groups.some(g=>same(g.name,team.name,fixture.league)))groups.push(team)
         }else notes.push(targets[idx]!.name+
           ' ruta de equipo vacía: NO demuestra plantilla sana')
         feedUpdatedAt=date(payload?.timestamp)??feedUpdatedAt
       }
     }
   }
-  const h=groups.find(x=>same(x.name,fixture.home))
-  const a=groups.find(x=>same(x.name,fixture.away))
+  const h=groups.find(x=>same(x.name,fixture.home,fixture.league))
+  const a=groups.find(x=>same(x.name,fixture.away,fixture.league))
   const fresh=feedUpdatedAt!==null&&Date.parse(feedUpdatedAt)<=now+15*60_000&&
     now-Date.parse(feedUpdatedAt)<=36*60*60_000
   const stale=feedUpdatedAt!==null&&!fresh
