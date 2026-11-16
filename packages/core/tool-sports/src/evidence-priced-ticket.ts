@@ -802,6 +802,15 @@ export async function evidencePricedTicket(
   })))
   // Second-pass critic: a fragile market favorite is not a justified leg.
   // A non-vig market share cannot be substituted for a calibrated model.
+  const exploratoryForIndex=(index:number):number|null=>{
+    const previous=preliminaryLegs[index]
+    if(!previous||typeof previous!=='object'||Array.isArray(previous))return null
+    const leg=previous as Record<string,unknown>
+    const value=leg.legWinProbabilityPercent
+    return leg.legProbabilitySource==='exploratory-recent-form'&&
+      typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=100?
+        value:null
+  }
   const decisionAudit=auditTicketDecisions(best.choices.map((quote,index)=>({
     eventId:research.events[index]?.eventId??quote.eventId,
     sport:research.events[index]?.sport??'unknown',
@@ -814,6 +823,7 @@ export async function evidencePricedTicket(
     criticalPending:specialistChecks[index]?.checklist?.criticalPending??
       ['Expediente especializado no disponible'],
     modelStatus:modelAudit[index]?.status??'unavailable',
+    exploratoryProbabilityPercent:exploratoryForIndex(index),
   })),decisionPolicy)
   const elevatedMarketRisk=marketRisk.missingQuotes>0||
     marketRisk.legs.some(x=>x.relativeRisk==='elevated')||
@@ -842,6 +852,10 @@ export async function evidencePricedTicket(
         prior.narrative as TicketNarrative|null|undefined,specialistChecks[index],
         marketRisk.legs[index]?.noVigPercent,modelAudit[index]),
       marketNoVigPercent:marketRisk.legs[index]?.noVigPercent??null,
+      exploratoryPriceGapPct:decisionAudit.legs[index]?.exploratoryVsBreakEvenGapPct??null,
+      alternativeReviewRequired:decisionAudit.legs[index]?.alternativeReviewRequired??false,
+      alternativeReviewReasons:decisionAudit.legs[index]?.reasons.filter(x=>
+        /ALERTA DE PRECIO|FAVORITO DE CUOTA EXIGENTE|porteros titulares/iu.test(x))??[],
       // One chance per leg. Prefer a two-sided, same-bookmaker no-vig
       // estimate; otherwise preserve the disclosed exploratory forecast.
       legWinProbabilityPercent:marketRisk.legs[index]?.noVigPercent??
@@ -922,6 +936,8 @@ export async function evidencePricedTicket(
       ?'Fútbol: la doble oportunidad cubre empate (1X/X2), NO asegura ganar. ':'')+
       'Las cuotas consultadas pueden cambiar antes de que la casa acepte la apuesta. '+
       'Riesgos y datos no confirmados detallados individualmente en cada pata. '+
+      'Revisión por cuota frente a la estimación: '+
+      decisionAudit.alternativesToReview+' pata(s). '+
       'Contradicciones de Bet Better: '+modelDisagreements+
       ' (predicción independiente, no cuota). '+
       (marketRisk.weakest?'Pata mas ajustada: '+marketRisk.weakest.selection+
@@ -929,7 +945,7 @@ export async function evidencePricedTicket(
       'Cada porcentaje pertenece únicamente a su pata y su mercado; '+
       'no presentar una probabilidad conjunta del boleto. '+
       'Formas y descanso históricos NO son probabilidades calibradas. El expediente deportivo puede señalar titulares, bajas y estadísticas PENDIENTES; confirmar la casa antes de apostar. '+priced.warning,
-    askPrompt:'Kira, razona cada pata de forma individual: estimación con origen, datos favorables y contradicciones, lesionados y titulares. No mostrar probabilidad conjunta del boleto; no inventar valor esperado ni afirmar ticket ganador.',
+    askPrompt:'Kira, razona cada pata de forma individual: estimación con origen, datos favorables y contradicciones, lesionados y titulares. Si alternativeReviewRequired es true, contrastar otras candidatas cotizadas del ranking antes de recomendarla; una estimación histórica NO es EV ni una predicción calibrada. No mostrar probabilidad conjunta del boleto ni afirmar ticket ganador.',
   }}
   return{card,priced:true,placed:false,complete:true,
     discoveredEvents:research.discoveryAudit.discoveredEvents,
