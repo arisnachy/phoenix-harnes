@@ -82,8 +82,11 @@ export function matchesDailyEspnPrice(
 // A daily ticket searches only the six requested sport families, including
 // all known ESPN soccer leagues, instead of unrelated tennis/campus sports.
 const defaultLeagues:ReadonlyArray<readonly [string,string]>=[
-  ['basketball','nba'],['basketball','wnba'],['baseball','mlb'],
-  ['football','nfl'],['hockey','nhl'],['tennis','atp'],['tennis','wta'],
+  ['basketball','nba'],['basketball','wnba'],
+  ['basketball','mens-college-basketball'],
+  ['baseball','mlb'],['baseball','dominican-winter-league'],
+  ['football','nfl'],['football','college-football'],
+  ['hockey','nhl'],['tennis','atp'],['tennis','wta'],
   ...(sportsCatalog.soccer??[]).map(league=>['soccer',league] as const),
 ]
 export function boundedTicket<T>(task:Promise<T>,ms:number):Promise<T>{

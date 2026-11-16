@@ -287,3 +287,19 @@ test('unnamed ESPN provider cannot be promoted as a preselected bookmaker',async
   assert.equal(scan.totalEligible,1)
   assert.equal(scan.espnQuotes.length,0)
 })
+
+test('full-slate discovery includes NCAA basketball, college football and LIDOM',async()=>{
+  const provider=async url=>{
+    const u=String(url)
+    const events=u.includes('/basketball/mens-college-basketball/')?[game(610)]:
+      u.includes('/football/college-football/')?[game(611)]:
+      u.includes('/baseball/dominican-winter-league/')?[game(612)]:[]
+    return Response.json({events})
+  }
+  const result=await scoutDailySports(day,512,provider,now)
+  assert.equal(result.totalEligible,3)
+  assert.ok(result.events.some(e=>e.league==='mens-college-basketball'))
+  assert.ok(result.events.some(e=>e.league==='college-football'))
+  assert.ok(result.events.some(e=>e.league==='dominican-winter-league'))
+  assert.equal(result.truncated,false)
+})
