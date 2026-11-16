@@ -142,3 +142,29 @@ test('NHL post-snapshot injury report cannot leak into an earlier pregame dossie
   assert.equal(game.evidenceModules.J.state,'missing')
   assert.equal(game.evidenceModules.J.data,null)
 })
+
+test('NHL right-rail scratches enrich injury module without claiming healthy or final lineup',()=>{
+  const scratch={state:'observed',gameId:'2026020255',
+    url:'https://api-web.nhle.com/v1/gamecenter/2026020255/right-rail',
+    checkedAt:'2026-11-15T18:00:00Z',officialFinalLineup:false,publishedAt:null,
+    home:[{id:'8470001',name:'Home A',availability:'scratch-observed'}],
+    away:[],note:'Observed, not certified'}
+  const game=buildNhlResearchHandoff(makeDossier(),null,null,scratch).games[0]
+  assert.equal(game.evidenceModules.J.state,'partial')
+  assert.equal(game.evidenceModules.J.data.pregameScratches.home.length,1)
+  assert.equal(game.evidenceModules.J.data.pregameScratches.finalLineupConfirmed,false)
+  assert.equal(game.evidenceModules.K.state,'missing')
+  assert.equal(game.evidenceModules.G.state,'partial')
+  assert.equal(game.gate.eligibleForTicket,false)
+  assert.ok(game.evidenceModules.J.sourceUrls.includes(scratch.url))
+})
+test('post-snapshot scratch data and mismatched NHL game ID are rejected',()=>{
+  const base={state:'observed',gameId:'2026020255',url:'https://api-web.nhle.com/v1/gamecenter/2026020255/right-rail',
+    checkedAt:'2026-11-15T19:00:00Z',home:[{id:'8470001',name:'Example'}],away:[]}
+  for(const payload of [base,{...base,checkedAt:'2026-11-15T18:00:00Z',
+    gameId:'2026020001'}]){
+    const game=buildNhlResearchHandoff(makeDossier(),null,null,payload).games[0]
+    assert.equal(game.evidenceModules.J.state,'missing')
+    assert.equal(game.evidenceModules.J.data,null)
+  }
+})
