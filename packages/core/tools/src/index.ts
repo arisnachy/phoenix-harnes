@@ -1045,7 +1045,7 @@ export class ToolRuntime extends Service {
    * `both` renders empty: native calls do execute there, so the rule is false.
    * @returns the section registration.
    */
-  private collapseSection(): { name: string; order: number; text: (context: { scope?: ScopeKey }) => string } {
+  private collapseSection(): { name: string; order: number; text: (context: AssembleContext) => string } {
     return {
       name: 'tools:code-only',
       order: COLLAPSE_SECTION_ORDER,
