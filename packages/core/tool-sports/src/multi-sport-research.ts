@@ -127,7 +127,10 @@ export async function researchSport(
       (e.status?.type?.state!==undefined&&e.status.type.state!=='pre'))return false
     known.add(id)
     return true
-  }).slice(0,12)
+  })
+  // Evaluate every ESPN fixture on the chosen local day, not just the first 12.
+  // One league-level historical lookup is shared across all its matchups;
+  // request and time budgets remain inside readHistoricalScoreboard.
   if(!upcoming.length)throw Error('No hay encuentros futuros verificables')
   const starting=Date.parse(date+'T12:00:00Z')
   const first=new Date(starting-lookbackDays*86_400_000).toISOString().slice(0,10)
