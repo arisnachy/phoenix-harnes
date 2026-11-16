@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {boundedTicket,evidenceTicket} from '../src/evidence-ticket.ts'
+import {boundedTicket,evidenceTicket,matchesDailyEspnPrice} from '../src/evidence-ticket.ts'
 
 const day='2026-10-28',now=Date.parse('2026-10-28T15:00:00Z')
 const future='2026-10-28T23:00:00Z'
@@ -229,4 +229,56 @@ test('exact NBA+NHL day filter scans neither soccer nor unrelated sports',async(
     ||x.includes('/football/')||x.includes('/tennis/')))
   await assert.rejects(()=>evidenceTicket(5,day,
     'basketball,hockey,evil-source',fetcher,now,{}),/Filtro de deportes/)
+})
+
+test('daily selection replaces unpriced first-five candidate with sixth ESPN-quoted rival',async()=>{
+  const withSixthPrice=async url=>{
+    const raw=fixture(url,true),u=String(url)
+    if(u.includes('/soccer/eng.1/')&&u.includes('dates=20261028')){
+      const sixth=raw.events.find(e=>String(e.id)==='105')
+      sixth.competitions[0].odds=[{provider:{name:'DraftKings'},
+        homeTeamOdds:{moneyLine:-140},awayTeamOdds:{moneyLine:+115},
+        drawOdds:+290}]
+    }
+    return new Response(JSON.stringify(raw),{status:200})
+  }
+  let screened=0,scoreboardLines=0
+  const preselector=async(candidates,quotes)=>{
+    screened=candidates.length
+    scoreboardLines=quotes.length
+    return quotes.map(q=>({
+      eventId:q.eventId,bookmaker:q.bookmaker,
+      market:'1x2',selection:q.selection,point:null,price:q.price,
+      home:q.home,away:q.away,time:q.timeIso,updatedAt:q.updatedAt,
+      observedAt:q.observedAt,source:'ESPN Site/Core (cartelera)',
+      sportKey:'soccer_epl',
+    }))
+  }
+  const result=await evidenceTicket(5,day,'soccer',withSixthPrice,now,{},undefined,
+    preselector)
+  assert.equal(result.discoveryAudit.discoveredEvents,6)
+  assert.equal(result.quoteScreenedCandidates,6)
+  assert.equal(screened,6,'price screening must inspect all candidates')
+  assert.equal(scoreboardLines,3,'home, away and draw are distinct observed outcomes')
+  assert.equal(result.quoteObservedCandidates,1)
+  assert.equal(result.events.length,5)
+  assert.equal(result.events[0].eventId,'105',
+    'real sixth ESPN-priced candidate replaces an unpriced historical favorite')
+  assert.ok(result.events.some(e=>e.eventId==='105'))
+  assert.equal(result.priced,false,'preselection is not a sportsbook ticket')
+})
+test('price-first never accepts a different event, future timestamp, or partial soccer 1x2',()=>{
+  const c={eventId:'105',sport:'soccer',league:'eng.1',home:'Home 105',
+    away:'Away 105',kickoff:future,pick:'home',rank:.2,level:'strong'}
+  const good={eventId:'105',market:'1x2',point:null,bookmaker:'DraftKings',
+    selection:'Home 105',home:'Home 105',away:'Away 105',price:1.8,
+    time:future,updatedAt:'No indicada por ESPN',observedAt:new Date(now).toISOString(),
+    source:'ESPN Site/Core (cartelera)',sportKey:'soccer_epl'}
+  const draw={...good,selection:'Draw',price:3.5}
+  assert.equal(matchesDailyEspnPrice(c,good,now,[good,draw]),true)
+  assert.equal(matchesDailyEspnPrice(c,{...good,eventId:'106'},now,[good,draw]),false)
+  assert.equal(matchesDailyEspnPrice(c,good,now,[good]),false)
+  assert.equal(matchesDailyEspnPrice(c,{...good,bookmaker:'ESPN proveedor #12'},now,[good,draw]),false)
+  assert.equal(matchesDailyEspnPrice(c,{...good,observedAt:new Date(now+1).toISOString()},now,[good,draw]),false)
+  assert.equal(matchesDailyEspnPrice(c,{...good,home:'Other Home'},now,[good,draw]),false)
 })
