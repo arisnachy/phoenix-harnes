@@ -6,6 +6,8 @@ on:
       - 'scripts/phoenix-nhl-adapter-live-proof.mjs'
       - 'packages/core/tool-sports/src/nhl-evidence-research.ts'
       - 'packages/core/tool-sports/src/nhl-player-game-history.ts'
+      - 'packages/core/tool-sports/src/nhl-goalie-evidence.ts'
+      - 'packages/core/tool-sports/src/nhl-lab-research-handoff.ts'
   workflow_dispatch:
 permissions:
   contents: read
@@ -25,7 +27,7 @@ jobs:
       - name: Research one future NHL fixture through PHOENIX actual tool
         env:
           PHOENIX_NHL_ADAPTER_PROOF_STRICT: '1'
-        run: node --experimental-strip-types scripts/phoenix-nhl-adapter-live-proof.mjs 2026-11-12
+        run: node --experimental-strip-types scripts/phoenix-nhl-adapter-live-proof.mjs
       - name: Preserve per-player extraction and source evidence
         if: always()
         uses: actions/upload-artifact@v4
