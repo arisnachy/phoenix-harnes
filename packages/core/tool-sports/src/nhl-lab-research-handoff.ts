@@ -5,6 +5,8 @@
 import { investigateNhl, type HockeyDossier } from './nhl-evidence-research.ts'
 import { probeNhlOfficialStarters, type NhlStarterProbe } from './nhl-official-starters.ts'
 import type { StepObservation } from './daily-specialist-checklist.ts'
+import {fetchEspnInjuryBackup,type InjuryBackup} from './espn-injury-backup.ts'
+import {nhlGoalieEvidence} from './nhl-goalie-evidence.ts'
 
 type EvidenceState='verified'|'partial'|'missing'
 type ModuleLetter='A'|'B'|'C'|'D'|'E'|'F'|'G'|'H'|'I'|'J'|'K'|'L'|'M'|'N'|'O'|'P'|'Q'
@@ -84,6 +86,7 @@ const make=(topic:string,state:EvidenceState,data:unknown,missing:string[],
  */
 export function buildNhlResearchHandoff(
   dossier:HockeyDossier,starter:NhlStarterProbe|null=null,
+  injuries:InjuryBackup|null=null,
 ):NhlResearchHandoff{
   const fixture=dossier.fixture
   if(!eventId(fixture.id)||!Number.isFinite(stamp(fixture.date))||
@@ -100,6 +103,11 @@ export function buildNhlResearchHandoff(
   const goalieConfirmed=pregame&&starter?.state==='confirmed'&&
     Boolean(starter.homeGoalie)&&Boolean(starter.awayGoalie)&&
     stamp(starter.checkedAt)<=stamp(fixture.date)
+  const injurySnapshot=injuries&&['verified','partial'].includes(injuries.status)&&
+    injuries.feedUpdatedAt!==null&&
+    Number.isFinite(stamp(injuries.feedUpdatedAt))&&
+    stamp(injuries.feedUpdatedAt)<=stamp(dossier.checkedAt)&&
+    stamp(injuries.feedUpdatedAt)<stamp(fixture.date)?injuries:null
   const candidates=dossier.goalieCandidates
   const anyGoalie=candidates.home.length>0&&candidates.away.length>0
   const pp=dossier.specialTeams
@@ -126,8 +134,9 @@ export function buildNhlResearchHandoff(
       homeGames:formH?.homeGames??null,awayGames:formA?.awayGames??null },
       ['Viaje, cambio horario, back-to-back y factor local verificables'],urls),
     D:make('Goles, diferencial y tiros',observed(bothForm),{
-      homeLast10:formH?.last10??[],awayLast10:formA?.last10??[] },
-      ['Tiros, chances y ritmo ajustados en ambos extremos'],urls),
+      homeLast10:formH?.last10??[],awayLast10:formA?.last10??[],
+      seasonShots:dossier.officialShots??null },
+      ['Tiros y ritmo observados, fuerza 5v5 aún no calculada'],urls),
     E:make('Calidad de rivales','missing',null,
       ['Strength of schedule a fecha y rating del rival']),
     F:make('xG, xGA y 5 contra 5','missing',null,
@@ -140,13 +149,22 @@ export function buildNhlResearchHandoff(
       ['Dos porteros titulares oficialmente confirmados antes del partido'],
       starter?[starter.url]:[]),
     H:make('Rendimiento de porteros',observed(anyGoalie),{
-      candidates,requested:['SV%','GAA','last5','GSAx'] },
+      candidates,observedForm:{
+        home:nhlGoalieEvidence(candidates.home,fixture.date),
+        away:nhlGoalieEvidence(candidates.away,fixture.date)},
+      requested:['SV%','GAA','last5','GSAx'] },
       ['SV% y GAA del mismo portero, muestras 5/10/20 y GSAx validado'],urls),
     I:make('Plantillas y forma individual',observed(bothRosters),{
       home:dossier.players.home,away:dossier.players.away },
       ['On-ice xG, lesiones cruzadas y rendimiento de líneas verificables'],urls),
-    J:make('Lesiones, scratches, sanciones','missing',null,
-      ['Partes oficiales de ambos equipos y lista final de scratches']),
+    J:make('Lesiones, scratches, sanciones',
+      injurySnapshot?'partial':'missing',
+      injurySnapshot?{
+        source:injurySnapshot.source,feedUpdatedAt:injurySnapshot.feedUpdatedAt,
+        home:injurySnapshot.home,away:injurySnapshot.away,
+        officialClubConfirmation:false}:null,
+      ['Parte oficial de ambos equipos, scratches definitivos y estado pregame'],
+      injurySnapshot?[injurySnapshot.source]:[]),
     K:make('Líneas y parejas defensivas','missing',null,
       ['Líneas 1–4 y parejas D confirmadas, cambios y matchups']),
     L:make('Power play y penalty kill',ppComplete?'verified':'partial',
@@ -285,9 +303,15 @@ export async function collectNhlResearchHandoff(
 ):Promise<NhlResearchHandoff>{
   const dossier=await investigateNhl(date,gameId,fetcher,now,[],8)
   const f=dossier.fixture
-  const starter=await probeNhlOfficialStarters({
-    gameId:f.id,homeAbbrev:f.home.abbrev,
-    awayAbbrev:f.away.abbrev,kickoff:f.date,
-  },fetcher,now)
-  return buildNhlResearchHandoff(dossier,starter)
+  const [starter,injuries]=await Promise.all([
+    probeNhlOfficialStarters({
+      gameId:f.id,homeAbbrev:f.home.abbrev,
+      awayAbbrev:f.away.abbrev,kickoff:f.date,
+    },fetcher,now),
+    fetchEspnInjuryBackup({
+      sport:'hockey',league:'nhl',home:f.home.name,away:f.away.name,
+      date,eventId:undefined,kickoff:f.date,
+    },fetcher,now).catch(()=>null),
+  ])
+  return buildNhlResearchHandoff(dossier,starter,injuries)
 }
