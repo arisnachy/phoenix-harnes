@@ -64,6 +64,15 @@ export function compactNhlChatDossier(d:HockeyDossier){
     standings:d.standings,specialTeams:d.specialTeams,
     form:{home:form(d.form.home),away:form(d.form.away)},
     rosterCounts:{home:d.players.home.length,away:d.players.away.length},
+    fullRosterCoverage:{
+      home:{players:d.fullRosterAudit.home.count,
+        matchedStats:d.fullRosterAudit.home.matchedStats,
+        missingStats:d.fullRosterAudit.home.missingSeasonStats},
+      away:{players:d.fullRosterAudit.away.count,
+        matchedStats:d.fullRosterAudit.away.matchedStats,
+        missingStats:d.fullRosterAudit.away.missingSeasonStats},
+    },
+    fiveOnFiveAudit:d.fiveOnFiveAudit,
     players:{home:selected(d.players.home),away:selected(d.players.away)},
     goalieCandidates:{
       home:d.goalieCandidates.home.slice(0,3).map(compactPlayer),
