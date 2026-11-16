@@ -67,6 +67,15 @@ try{
     }
     report.specialTeams=d.specialTeams
     report.officialShots=d.officialShots
+    report.fiveOnFiveAudit=d.fiveOnFiveAudit
+    report.fullRosterCoverage={
+      home:{players:d.fullRosterAudit.home.count,
+        withSeasonStats:d.fullRosterAudit.home.matchedStats,
+        missingStats:d.fullRosterAudit.home.missingSeasonStats},
+      away:{players:d.fullRosterAudit.away.count,
+        withSeasonStats:d.fullRosterAudit.away.matchedStats,
+        missingStats:d.fullRosterAudit.away.missingSeasonStats},
+    }
     report.topSkaters=Object.fromEntries(['home','away'].map(side=>[
       side,d.skaterImpact[side].slice(0,5).map(p=>({
         id:p.playerId,name:p.name,points:p.points,goals:p.goals,
