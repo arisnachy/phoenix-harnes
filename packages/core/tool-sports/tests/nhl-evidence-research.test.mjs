@@ -109,6 +109,11 @@ test('roster forwards/defense/goalies stay distinct; no starting goalie asserted
   assert.equal(d.goalieCandidates.home[0].homeRoadSplits.away.games,1)
   assert.equal(d.goalieCandidates.home[0].homeRoadSplits.home.averages.saves,32)
   assert.ok(api.calls.some(u=>u.includes('/game-log/20262027/2')))
+  const firstLanding=api.calls.filter(u=>u.includes('/player/')&&
+    u.endsWith('/landing')).slice(0,3)
+  assert.match(firstLanding[0],/\/player\/10050\/landing$/)
+  assert.match(firstLanding[1],/\/player\/20050\/landing$/)
+  assert.match(firstLanding[2],/\/player\/10051\/landing$/)
   assert.ok(d.players.home.some(p=>p.stats.goals==='10'))
   assert.equal(d.possibleMatchups.length,20)
   assert.ok(d.possibleMatchups.every(x=>Number(x.attackerId)<20000?
