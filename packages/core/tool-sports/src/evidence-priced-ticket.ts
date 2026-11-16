@@ -76,12 +76,23 @@ export function ticketLeagueOddsKey(
     'soccer_espn_dynamic':soccerFallback==='worldwide'?'soccer_worldwide':undefined
   return routing[event.sport]?.oddsSportKey
 }
+/** A partial, same-event ESPN snapshot preserved before long NBA research. */
+export type TicketPricedProgress={
+  stage:'research-screened'|'quoted'
+  card:ChatBlock
+  verifiedEvents:number
+  quotedLegs:number
+  researchFixtures:Array<{eventId:string;sport:string;league:string;
+    date:string;home:string;away:string;kickoff:string}>
+  checkedAt:string
+}
 export async function evidencePricedTicket(
   count:number,date?:string,sport?:string,stake=0,now=Date.now(),
   env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,
   quotesProvider?:(sport:string,market:string,day:string,env:NodeJS.ProcessEnv,now:number)=>Promise<KeylessQuote[]>,
   marketPreference:'winner'|'double_chance'='winner',
   specialistResearcher:typeof investigateTicketSpecialists=investigateTicketSpecialists,
+  onProgress?:(snapshot:TicketPricedProgress)=>void,
 ):Promise<{card:ChatBlock;priced:boolean;placed:false;complete:boolean;
   verifiedEvents:number;eventsFound:number;quotedLegs:number;missingQuotes:number;
   conditionalLegs:number;approvedForBetting:false;
@@ -116,9 +127,15 @@ export async function evidencePricedTicket(
     // 12s reviewer budget and leaves all NBA cases without a dossier.
     const batches=Array.from({length:Math.ceil(games.length/3)},(_,i)=>
       games.slice(i*3,i*3+3))
-    const attempts=await Promise.allSettled(batches.map(batch=>
-      boundedPriced(specialistResearcher(batch,researchFetcher,
-        now,env,[],5_000),8_000)))
+    const attempts:PromiseSettledResult<SpecialistGate[]>[]=[]
+    // Six small batches per wave prevent mass concurrent ESPN timeouts.
+    // Results already collected survive a subsequent provider failure.
+    for(let i=0;i<batches.length;i+=6){
+      const wave=await Promise.allSettled(batches.slice(i,i+6).map(batch=>
+        boundedPriced(specialistResearcher(batch,researchFetcher,
+          now,env,[],8_000),11_000)))
+      attempts.push(...wave)
+    }
     const checks=attempts.flatMap(a=>a.status==='fulfilled'?a.value:[])
     reviewedBeforeSelection=checks.length
     const fixtureById=new Map(candidates.map(c=>[c.eventId,c]))
@@ -179,19 +196,21 @@ export async function evidencePricedTicket(
     const quotes=[...embedded]
     const hasPrice=(c:typeof candidates[number])=>quotes.some(q=>
       matchesDailyEspnPrice(c,q,now,quotes))
-    // Inspect all candidates using one league scoreboard scan, then expand
-    // to exact IDs on up to 36 not-yet-priced fixtures. A wall-clock budget
-    // prevents a stalled or rate-limited ESPN host from freezing Kira.
-    const remaining=candidates.filter(c=>!hasPrice(c)).slice(0,36)
+    // Examine ALL historically eligible fixtures rather than first-36;
+    // stop only when the configured cumulative *provider* budget is consumed.
+    // A stopped sweep reports partial coverage, not 'no prices available'.
+    const remaining=candidates.filter(c=>!hasPrice(c))
+    const budgetInput=Number(env.PHOENIX_SPORTS_ESPN_EXACT_BUDGET_MS)
+    const exactBudget=Number.isInteger(budgetInput)&&budgetInput>=15_000&&
+      budgetInput<=75_000?budgetInput:60_000
     const started=Date.now()
     for(let offset=0;offset<remaining.length;offset+=6){
-      if(Date.now()-started>=14_000||
-        candidates.filter(hasPrice).length>=Math.min(candidates.length,count+3))break
+      if(Date.now()-started>=exactBudget)break
       const wave=remaining.slice(offset,offset+6)
       const report=await Promise.allSettled(wave.map(async c=>{
         const k=sportKey(c)
         if(!k)return null
-        const timeout=AbortSignal.timeout(6_000)
+        const timeout=AbortSignal.timeout(8_000)
         const guarded:typeof fetch=(input,init)=>{
           const signal=init?.signal?AbortSignal.any([init.signal,timeout]):timeout
           return fetcher(input,{...init,signal})
@@ -200,14 +219,14 @@ export async function evidencePricedTicket(
           sportKey:k,eventId:c.eventId,date:day,
           home:c.home,away:c.away,kickoff:c.kickoff,
           ...(k==='soccer_espn_dynamic'?{espnLeague:c.league}:{}),
-        },<T>(url:string)=>getFeed<T>(url,guarded),now),6_200)
+        },<T>(url:string)=>getFeed<T>(url,guarded),now),8_200)
       }))
       for(const r of report)if(r.status==='fulfilled'&&r.value)
         quotes.push(...r.value.quotes)
     }
     // Final screening also re-validates identity and published market sides;
     // the historical list remains intact when ESPN has no valid quotation.
-    return quotes.slice(0,400)
+    return quotes.slice(0,2_400)
   }
   // Interactive fixture lookup bypasses the persisted research cache.
   const research=await evidenceTicket(count,date,sport,fetcher,now,env,
@@ -218,6 +237,29 @@ export async function evidencePricedTicket(
     eventId:e.eventId,sport:e.sport,league:e.league,date:day,
     home:e.home,away:e.away,kickoff:e.kickoff,
   }))
+  // Publish a safe checkpoint BEFORE expensive player-gamelog and lineup
+  // reads. If a source later stalls, Kira keeps the verified fixtures and
+  // any previously matched ESPN prices instead of displaying 0/5.
+  if(onProgress){
+    const initialGroups=research.events.map(e=>research.preselectedQuotes.filter(q=>
+      matchesDailyEspnPrice({...e,rank:0,level:'conditional'},q,
+        now,research.preselectedQuotes)))
+    const preliminary=presentObservedTicketLegs(
+      Array.isArray(research.card.props.legs)?research.card.props.legs:[],
+      initialGroups)
+    const found=initialGroups.filter(group=>group.length>0).length
+    onProgress({stage:'research-screened',
+      card:{...research.card,props:{...research.card.props,
+        legs:preliminary,combinedOdds:'No disponible',
+        dataCounts:{eventsFound:research.verifiedEvents,quotedLegs:found,
+          researchedLegs:0,candidateLegs:found,
+          conditionalLegs:research.verifiedEvents,approvedForBetting:0},
+        note:('RECUPERACIÓN PARCIAL: '+found+'/'+count+
+          ' cuotas ESPN observadas en preselección; expediente NBA/NHL en curso. '+
+          String(research.card.props.note??'')).slice(0,1300),
+      }},verifiedEvents:research.verifiedEvents,quotedLegs:found,
+      researchFixtures,checkedAt:new Date(now).toISOString()})
+  }
   const leagues=[...new Map(research.events.map(e=>[e.league,e])).values()]
   const fallbackSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
   const espnReferenceOdds:OddsResearchObservation[]=[]
@@ -285,7 +327,7 @@ export async function evidencePricedTicket(
     // A 35-s selected dossier runs IN PARALLEL with ESPN price acquisition.
     // NHL retries confirmed starters too; preserve time for exact ESPN pricing.
     return boundedPriced(specialistResearcher(batch,researchFetcher,now,env,
-      [],nba?35_000:18_000),nba?39_000:22_000)
+      [],nba?105_000:45_000),nba?112_000:52_000)
   }))
   const retried=attempts.flatMap(a=>a.status==='fulfilled'?a.value:[])
   const byId=new Map(retried.map(x=>[x.eventId,x]))
@@ -850,6 +892,9 @@ export async function evidencePricedTicket(
       ' referencias adicionales no incorporadas por identidad o consistencia; falta de updatedAt no bloquea cuotas válidas. '+
       String(researchCard.props.note??'')).slice(0,1000),
   }}
+  onProgress?.({stage:'quoted',card:auditCard,
+    verifiedEvents:research.verifiedEvents,quotedLegs,researchFixtures,
+    checkedAt:new Date(now).toISOString()})
   const checked={...base,card:auditCard,sourceAudit,quotedLegs,
     decisionAudit:postQuoteAudit,conditionalLegs,
     specialistChecks,conditional:!checklistComplete,dossierComplete:checklistComplete,
