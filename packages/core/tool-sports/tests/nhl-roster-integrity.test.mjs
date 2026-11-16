@@ -1,6 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {buildNhlFullRosterAudit,reconcileNhlRosterAvailability}
+import {buildNhlFullRosterAudit,reconcileNhlRosterAvailability,
+  applyNhlOfficialScratches}
   from '../src/nhl-roster-integrity.ts'
 const now=Date.parse('2026-11-16T15:00:00Z')
 const kickoff='2026-11-17T01:00:00Z'
@@ -108,4 +109,29 @@ test('conflicting duplicate same-name injury records remain ambiguous',()=>{
   const a=reconcileNhlRosterAvailability(base,doubled,now,kickoff)
   assert.equal(a.home.players[0].availability,'ambiguous-report')
   assert.equal(a.home.reportedOut,0)
+})
+
+test('NHL pregame gamecenter scratch by verified NHL playerId is official absence',()=>{
+  const base=buildNhlFullRosterAudit(roster,raw,null,now,kickoff)
+  const current=reconcileNhlRosterAvailability(base,injury,now,kickoff)
+  const probe={state:'not-published',url:'https://api-web.nhle.com/v1/gamecenter/2026020332/boxscore',
+    checkedAt:new Date(now).toISOString(),homeGoalie:null,awayGoalie:null,
+    note:'goalies not yet published',
+    scratches:{home:[{playerId:'11',name:'Karel Vejmelka'}],
+      away:[{playerId:'10',name:'other club ID'}]}}
+  const result=applyNhlOfficialScratches(current,probe,now,kickoff)
+  assert.equal(result.home.players[1].availability,'official-scratch-observed')
+  assert.equal(result.home.players[1].officialInactiveConfirmed,true)
+  assert.equal(result.home.players[1].availabilitySource,probe.url)
+  assert.equal(result.home.players[0].availability,'reported-out')
+  assert.equal(result.away.players.every(x=>!x.officialInactiveConfirmed),true)
+})
+test('NHL post-kickoff boxscore scratches never rewrite a pregame snapshot',()=>{
+  const base=buildNhlFullRosterAudit(roster,raw,null,now,kickoff)
+  const probe={state:'confirmed',checkedAt:'2026-11-18T12:00:00Z',
+    url:'NHL',homeGoalie:'A',awayGoalie:'B',
+    scratches:{home:[{playerId:'10',name:'Clayton Keller'}],away:[]}}
+  const result=applyNhlOfficialScratches(base,probe,now,kickoff)
+  assert.equal(result.home.players[0].availability,'feed-unavailable')
+  assert.equal(result.home.players[0].officialInactiveConfirmed,false)
 })
