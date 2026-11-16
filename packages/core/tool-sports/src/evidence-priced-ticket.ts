@@ -955,6 +955,8 @@ export async function evidencePricedTicket(
     'El precio definitivo se comprueba al presentar la apuesta en la casa. ':''
   const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,modelAudit,marketRisk,decisionAudit,
+    nhlQuoteAudit:specialistChecks.flatMap(x=>x.nhlMarketReconciliation?
+      [{eventId:x.eventId,...x.nhlMarketReconciliation}]:[]),
     // Retain the five/six verified research fixtures when a quoted ticket
     // replaces the preliminary card; unpriced alternatives are NOT bets.
     dailyResearchBoard:research.card.props.dailyResearchBoard,
