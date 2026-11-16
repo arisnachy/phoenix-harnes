@@ -60,7 +60,7 @@ test('unconfirmed games, started games, malformed IDs and incomplete participant
 
 test('provider permission and malformed scan controls are enforced',async()=>{
   await assert.rejects(()=>scoutDailySports('2026-02-30',5,fetcher,now),/Fecha inválida/)
-  await assert.rejects(()=>scoutDailySports(day,129,fetcher,now),/1 a 128/)
+  await assert.rejects(()=>scoutDailySports(day,513,fetcher,now),/1 a 512/)
   await assert.rejects(()=>scoutDailySports(day,5,fetcher,now,{PHOENIX_SPORTS_ESPN_DISABLED:'1'}),/ESPN deshabilitado/)
 })
 
@@ -240,4 +240,50 @@ test('league names and Spanish sports normalize without discarding the intended 
   assert.ok(soccer.coverage.every(row=>row.sport==='soccer'))
   await assert.rejects(()=>scoutDailySports(day,5,request,now,{},['NBA','crypto']),
     /fuera del calendario/u)
+})
+
+test('whole daily slate includes 200 fixtures without the previous 120-game cutoff',async()=>{
+  const large=async url=>{
+    const u=String(url)
+    const events=u.includes('/basketball/nba/')?
+      Array.from({length:105},(_,i)=>game(1000+i)):
+      u.includes('/hockey/nhl/')?
+        Array.from({length:95},(_,i)=>game(2000+i)):[]
+    return new Response(JSON.stringify({events}))
+  }
+  const scan=await scoutDailySports(day,512,large,now)
+  assert.equal(scan.totalEligible,200)
+  assert.equal(scan.events.length,200)
+  assert.equal(scan.truncated,false)
+  assert.equal(new Set(scan.events.map(e=>e.sport+'|'+e.league+'|'+e.eventId)).size,200)
+})
+test('ESPN embedded moneylines are captured across the full slate without bookmaker updatedAt',async()=>{
+  const withOdds=async url=>{
+    const u=String(url)
+    const events=u.includes('/basketball/nba/')?[game(90),game(91)]:[]
+    if(events.length){
+      events[1].competitions[0].odds=[{provider:{name:'DraftKings'},
+        homeTeamOdds:{moneyLine:-135},awayTeamOdds:{moneyLine:115}}]
+    }
+    return new Response(JSON.stringify({events}))
+  }
+  const scan=await scoutDailySports(day,512,withOdds,now)
+  assert.equal(scan.events.length,2)
+  const lines=scan.espnQuotes.filter(q=>q.eventId==='91')
+  assert.equal(lines.length,2)
+  assert.equal(lines[0].bookmaker,'DraftKings')
+  assert.equal(lines[0].timeIso,kickoff)
+  assert.equal(lines[0].observedAt,new Date(now).toISOString())
+  assert.ok(lines.some(q=>q.price>1))
+})
+test('unnamed ESPN provider cannot be promoted as a preselected bookmaker',async()=>{
+  const unnamed=async url=>{
+    const events=String(url).includes('/hockey/nhl/')?[game(103)]:[]
+    if(events.length)events[0].competitions[0].odds=[{
+      provider:{id:123},homeTeamOdds:{moneyLine:-150}}]
+    return new Response(JSON.stringify({events}))
+  }
+  const scan=await scoutDailySports(day,512,unnamed,now)
+  assert.equal(scan.totalEligible,1)
+  assert.equal(scan.espnQuotes.length,0)
 })
