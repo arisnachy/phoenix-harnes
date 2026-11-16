@@ -1,7 +1,7 @@
 /** Quote only when independently researched fixtures match fresh, same-bookmaker prices.
  * No combined-odds claims across different bookmakers or historical sources.
  */
-import { evidenceTicket,type TicketDiscoveryAudit,type TicketPreselectReviewer } from './evidence-ticket.ts'
+import { evidenceTicket,matchesDailyEspnPrice,type TicketDiscoveryAudit,type TicketPreselectReviewer,type TicketQuotePreselector } from './evidence-ticket.ts'
 import {dailyResearchFetcher} from './sports-daily-preload.ts'
 import {auditTicketDecisions,readDecisionPolicy,type TicketDecisionAudit} from './sports-ticket-decision.ts'
 import {auditTicketMarketRisk,quoteSideNoVig,type TicketMarketRisk} from './ticket-risk-audit.ts'
@@ -55,6 +55,26 @@ const leagueSportKey:Record<string,string>={
   'bra.1':'soccer_brazil_serie_a','arg.1':'soccer_argentina_primera_division',
   'uefa.europa':'soccer_uefa_europa_league','nba':'basketball_nba',
   'wnba':'basketball_wnba','mlb':'baseball_mlb','nfl':'americanfootball_nfl','nhl':'icehockey_nhl',
+  'mens-college-basketball':'basketball_ncaab',
+  'college-football':'americanfootball_ncaaf',
+}
+/** Never query MLB odds for LIDOM or NFL odds for NCAA just because
+ * the fixtures share a sport family; market identity includes the LEAGUE.
+ * @param event Verified ESPN fixture with explicit sport and league.
+ * @param soccerFallback Optional soccer route for open league discovery.
+ * @returns Exact league odds key or undefined when market unsupported.
+ */
+export function ticketLeagueOddsKey(
+  event:{sport:string;league:string},
+  soccerFallback:'dynamic'|'none'|'worldwide'='none',
+):string|undefined{
+  const known=leagueSportKey[event.league]
+  if(known)return known
+  if(event.sport==='baseball'||event.sport==='football'||
+    event.sport==='basketball')return undefined
+  if(event.sport==='soccer')return soccerFallback==='dynamic'?
+    'soccer_espn_dynamic':soccerFallback==='worldwide'?'soccer_worldwide':undefined
+  return routing[event.sport]?.oddsSportKey
 }
 export async function evidencePricedTicket(
   count:number,date?:string,sport?:string,stake=0,now=Date.now(),
@@ -136,9 +156,62 @@ export async function evidencePricedTicket(
         priority,reason}]
     })
   }
+  // Quote-FIRST screening is independent of expert risk ranking: every
+  // historically supported game can earn a ticket slot, not just the first
+  // five by win-loss form. One scoreboard read covers every listed game.
+  // Missing embedded prices trigger bounded ESPN exact-event probes, with
+  // explicit coverage limits, never guessed markets or fabricated odds.
+  const quotePreselector:TicketQuotePreselector=async(candidates,scoreboardQuotes)=>{
+    if(quotesProvider||marketPreference==='double_chance'||
+      env.PHOENIX_SPORTS_ESPN_DISABLED==='1')return[]
+    const byId=new Map(candidates.map(c=>[c.eventId,c]))
+    const sportKey=(c:typeof candidates[number])=>ticketLeagueOddsKey(c,'dynamic')
+    const embedded:KeylessQuote[]=scoreboardQuotes.flatMap(q=>{
+      const c=byId.get(q.eventId)
+      const k=c?sportKey(c):undefined
+      if(!c||!k)return[]
+      return[{eventId:q.eventId,bookmaker:q.bookmaker,
+        market:c.sport==='soccer'?'1x2':'h2h',selection:q.selection,
+        point:q.point,price:q.price,home:q.home,away:q.away,time:q.timeIso,
+        updatedAt:q.updatedAt,...(q.observedAt?{observedAt:q.observedAt}:{}),
+        source:'ESPN Site/Core (cartelera completa)',sportKey:k}] satisfies KeylessQuote[]
+    })
+    const quotes=[...embedded]
+    const hasPrice=(c:typeof candidates[number])=>quotes.some(q=>
+      matchesDailyEspnPrice(c,q,now,quotes))
+    // Inspect all candidates using one league scoreboard scan, then expand
+    // to exact IDs on up to 36 not-yet-priced fixtures. A wall-clock budget
+    // prevents a stalled or rate-limited ESPN host from freezing Kira.
+    const remaining=candidates.filter(c=>!hasPrice(c)).slice(0,36)
+    const started=Date.now()
+    for(let offset=0;offset<remaining.length;offset+=6){
+      if(Date.now()-started>=14_000||
+        candidates.filter(hasPrice).length>=Math.min(candidates.length,count+3))break
+      const wave=remaining.slice(offset,offset+6)
+      const report=await Promise.allSettled(wave.map(async c=>{
+        const k=sportKey(c)
+        if(!k)return null
+        const timeout=AbortSignal.timeout(6_000)
+        const guarded:typeof fetch=(input,init)=>{
+          const signal=init?.signal?AbortSignal.any([init.signal,timeout]):timeout
+          return fetcher(input,{...init,signal})
+        }
+        return boundedPriced(lookupExactEspnWinner({
+          sportKey:k,eventId:c.eventId,date:day,
+          home:c.home,away:c.away,kickoff:c.kickoff,
+          ...(k==='soccer_espn_dynamic'?{espnLeague:c.league}:{}),
+        },<T>(url:string)=>getFeed<T>(url,guarded),now),6_200)
+      }))
+      for(const r of report)if(r.status==='fulfilled'&&r.value)
+        quotes.push(...r.value.quotes)
+    }
+    // Final screening also re-validates identity and published market sides;
+    // the historical list remains intact when ESPN has no valid quotation.
+    return quotes.slice(0,400)
+  }
   // Interactive fixture lookup bypasses the persisted research cache.
   const research=await evidenceTicket(count,date,sport,fetcher,now,env,
-    reviewCandidates)
+    reviewCandidates,quotePreselector)
   // Exact ESPN fixture identities allow Kira to recheck ONLY unfinished cases,
   // rather than repeating a broad daily discovery/price scan.
   const researchFixtures=research.events.map(e=>({
@@ -154,8 +227,7 @@ export async function evidencePricedTicket(
     Promise.resolve([] as PromiseSettledResult<KeylessQuote[]>[]):
     Promise.allSettled(leagues.map(async event=>{
     if(event.sport==='soccer'&&marketPreference==='double_chance')return [] as KeylessQuote[]
-    const sportKey=leagueSportKey[event.league]??
-      (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
+    const sportKey=ticketLeagueOddsKey(event)
     if(!sportKey)return [] as KeylessQuote[]
     // Wrap the transport to disable the in-process ESPN odds cache for
     // ticket construction: preserve a fresh feed READ, not an old snapshot.
@@ -340,8 +412,7 @@ export async function evidencePricedTicket(
       removedConflicts===0&&!identityConflict?
       research.discoveryAudit.fixtureSample.slice(0,6):[]
     const scanned=await Promise.allSettled(fixtures.map(async item=>{
-      const sportKey=leagueSportKey[item.league]??
-        (item.sport==='soccer'?'soccer_espn_dynamic':routing[item.sport]?.oddsSportKey)
+      const sportKey=ticketLeagueOddsKey(item,'dynamic')
       if(!sportKey)return{item,attempted:false,options:[] as Array<{
         bookmaker:string;selection:string;market:string;price:number;
         observedAt:string|null;updatedAt:string|null}>,notes:['Sin adaptador ESPN conocido']}
@@ -412,7 +483,8 @@ export async function evidencePricedTicket(
   // Explicit double-chance selections are only supplied by a verified 1X/X2
   // market; do not relabel a winner moneyline as double chance.
   const additional=await firstPassOdds
-  const discovered=[...keyless,...additional.flatMap(s=>s.status==='fulfilled'?s.value:[])]
+  const discovered=[...research.preselectedQuotes,...keyless,
+    ...additional.flatMap(s=>s.status==='fulfilled'?s.value:[])]
   // A league-level ESPN scan has an eight-game cap. On short nightly slates
   // that cap can miss the requested event entirely, especially when games are
   // grouped under the following UTC day. Retry only exact still-unpriced ESPN
@@ -430,8 +502,7 @@ export async function evidencePricedTicket(
   const exactReports=await Promise.allSettled(exactTargets.map(async event=>{
     // The exact fixture's league is already verified by ESPN; unlike
     // generic league-wide discovery this does not guess an unsupported slug.
-    const sportKey=leagueSportKey[event.league]??
-      (event.sport==='soccer'?'soccer_espn_dynamic':routing[event.sport]?.oddsSportKey)
+    const sportKey=ticketLeagueOddsKey(event,'dynamic')
     if(!sportKey)return null
     const deadline=AbortSignal.timeout(9_000)
     const bounded:typeof fetch=(input,init)=>{
@@ -512,8 +583,7 @@ export async function evidencePricedTicket(
   const optionalReports=!quotesProvider&&optionalAllowed&&optionalConfigured?
     await Promise.allSettled([...new Map(stillMissing.map(e=>[e.league,e])).values()]
       .map(async event=>{
-        const sportKey=leagueSportKey[event.league]??
-          (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
+        const sportKey=ticketLeagueOddsKey(event)
         if(!sportKey)return[] as KeylessQuote[]
         const externalOnlyEnv={...env,PHOENIX_SPORTS_ESPN_DISABLED:'1',
           PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'}
@@ -707,8 +777,7 @@ export async function evidencePricedTicket(
     await Promise.allSettled(unresolved.map(async({event,index})=>{
       // For unknown soccer league pages, use league-independent comparison
       // portals without turning any observed HTML into a dated sportsbook quote.
-      const sportKey=leagueSportKey[event.league]??
-        (event.sport==='soccer'?'soccer_worldwide':routing[event.sport]?.oddsSportKey)
+      const sportKey=ticketLeagueOddsKey(event,'worldwide')
       if(!sportKey)return null
       return{index,report:await boundedPriced(researchPublicOddsWebsites({
         sportKey,date:day,home:event.home,away:event.away,
@@ -752,7 +821,10 @@ export async function evidencePricedTicket(
   // Every price found belongs to a leg, even when no single bookmaker covers
   // the whole ticket. The existing original card kept all prices as pending.
   const quotedDisplayLegs=presentObservedTicketLegs(hintedLegs,groups)
-  const auditSummary=' Cuotas cotejadas: '+quotedLegs+'/'+count+
+  const auditSummary=' Cartelera completa: '+research.discoveryAudit.discoveredEvents+
+    ' partidos; '+research.quoteScreenedCandidates+' candidatos con historial; '+
+    research.quoteObservedCandidates+' con cuota ESPN preseleccionada. '+
+    'Cuotas cotejadas: '+quotedLegs+'/'+count+
     ' selecciones; proveedores: '+sourceAudit.map(x=>x.source+' '+x.status+
     ' ('+x.offers+' observaciones)').join('; ')+'.'
   const auditCard:ChatBlock={...researchCard,props:{...researchCard.props,
