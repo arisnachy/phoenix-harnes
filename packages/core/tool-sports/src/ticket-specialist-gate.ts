@@ -17,6 +17,8 @@ import {assessSoccerDrawRisk,type SoccerDrawAudit} from './soccer-draw-risk.ts'
 import {probeNhlOfficialStarters,type NhlStarterProbe} from './nhl-official-starters.ts'
 import {nhlSlate,investigateNhl,type NhlOfficialShots} from './nhl-evidence-research.ts'
 import {nhlGoalieEvidence,type NhlGoalieForm} from './nhl-goalie-evidence.ts'
+import {reconcileNhlRosterAvailability,type NhlFullRosterAudit} from './nhl-roster-integrity.ts'
+import type {Nhl5v5Audit} from './nhl-five-on-five.ts'
 import type {NhlSkaterImpact} from './nhl-skater-impact.ts'
 import {sameEspnTeam} from './sports-exact-espn-winner.ts'
 import {discoverMlbDay,researchMlbCase} from './mlb-evidence-research.ts'
@@ -47,6 +49,9 @@ export type SpecialistGate={
   nhlGoalieFormAudit?:{home:NhlGoalieForm[];away:NhlGoalieForm[]}
   nhlTeamShotsAudit?:NhlOfficialShots
   nhlSkaterImpactAudit?:{home:NhlSkaterImpact[];away:NhlSkaterImpact[]}
+  /** Every NHL roster member: official season metrics and dated ESPN reports. */
+  nhlRosterAudit?:NhlFullRosterAudit
+  nhlFiveOnFiveAudit?:Nhl5v5Audit
   /** No-key official-report link and cautious secondary injury observations. */
   freeInjuryChecks?:FreeInjurySource[]
   /** Actual source URLs and their results; a 200 without data is not verified. */
@@ -137,6 +142,8 @@ export async function investigateTicketSpecialist(
   let nhlGoalieFormAudit:SpecialistGate['nhlGoalieFormAudit']
   let nhlTeamShotsAudit:NhlOfficialShots|undefined
   let nhlSkaterImpactAudit:SpecialistGate['nhlSkaterImpactAudit']
+  let nhlRosterAudit:NhlFullRosterAudit|undefined
+  let nhlFiveOnFiveAudit:Nhl5v5Audit|undefined
   const mark=(key:string,state:StepObservation['state'],detail:string)=>{
     signals[key]={state,detail}
   }
@@ -318,6 +325,8 @@ export async function investigateTicketSpecialist(
         away:nhlGoalieEvidence(d.goalieCandidates.away,d.fixture.date),
       }
       nhlTeamShotsAudit=d.officialShots
+      nhlRosterAudit=d.fullRosterAudit
+      nhlFiveOnFiveAudit=d.fiveOnFiveAudit
       nhlSkaterImpactAudit={
         home:d.skaterImpact.home.slice(0,10),away:d.skaterImpact.away.slice(0,10),
       }
@@ -345,6 +354,13 @@ export async function investigateTicketSpecialist(
         d.missingEvidence.filter(x=>!/Ningún portero confirmado/iu.test(x)):
         d.missingEvidence
       Object.assign(signals,nhlDeepSignals(d))
+      steps.push('NHL roster completo con stats oficiales: '+
+        d.fullRosterAudit.home.matchedStats+'/'+d.fullRosterAudit.home.count+
+        ' local, '+d.fullRosterAudit.away.matchedStats+'/'+
+        d.fullRosterAudit.away.count+' visitante')
+      steps.push('NHL 5v5 Fenwick real: '+
+        d.fiveOnFiveAudit.home.games+'/'+d.fiveOnFiveAudit.away.games+
+        ' juegos por equipo; no es xG ni GSAx')
       steps.push('NHL anotadores cotejados con roster oficial: '+
         d.skaterImpact.home.length+' local, '+d.skaterImpact.away.length+' visitante')
       steps.push('NHL tiros oficiales '+Number(d.officialShots.complete)+
@@ -367,6 +383,13 @@ export async function investigateTicketSpecialist(
           ' · visitante '+nhlStarterAudit.awayGoalie+
           '; titulares explícitos antes del inicio, sujetos a cambio de última hora':
           'Porteros sin confirmación oficial: '+nhlStarterAudit.note)
+      mark('fiveOnFive',
+        d.fiveOnFiveAudit.home.games>=3&&d.fiveOnFiveAudit.away.games>=3?
+          'verified':
+          d.fiveOnFiveAudit.home.games||d.fiveOnFiveAudit.away.games?
+            'partial':'missing',
+        'Fenwick 5v5 de NHL PBP ('+d.fiveOnFiveAudit.verified+
+          '/'+d.fiveOnFiveAudit.requested+' partidos) · no es xG')
       // Expected goals and GSAx are different from NHL shots and save percentage.
       // Keep the unobserved private metric missing; the compact research
       // checklist treats it as an advanced uncertainty, not a hard stop.
@@ -452,6 +475,25 @@ export async function investigateTicketSpecialist(
         pending.push('ESPN lesiones: lectura fallida; conservar expediente deportivo')
       }else{
       injuryAudit=injury
+      if(nhlRosterAudit&&game.sport==='hockey'){
+        nhlRosterAudit=reconcileNhlRosterAvailability(
+          nhlRosterAudit,injury,now,game.kickoff)
+        const affected=[...nhlRosterAudit.home.players,
+          ...nhlRosterAudit.away.players].filter(p=>[
+            'reported-out','reported-injured-reserve','reported-questionable',
+            'reported-doubtful','reported-day-to-day',
+          ].includes(p.availability))
+        steps.push('NHL disponibilidad conciliada por nombre y equipo: '+
+          affected.length+' reportes en roster')
+        const high=affected.filter(p=>p.impactIfAbsent==='high')
+        if(high.length)pending.push(
+          'NHL revisar impacto de ausencias o dudas de alta producción: '+
+          high.slice(0,8).map(x=>x.name+' ('+x.availability+')').join('; '))
+        const unmatched=nhlRosterAudit.home.unmatchedInjuries.length+
+          nhlRosterAudit.away.unmatchedInjuries.length
+        if(unmatched)pending.push('NHL: '+unmatched+
+          ' reportes ESPN sin identidad segura en el roster; NO confirmar baja')
+      }
       if(injury.status==='verified'||injury.status==='partial'){
         // A feed can identify reported injuries, but never guarantees a final
         // inactive list, starting lineup or availability at tipoff/kickoff.
@@ -545,6 +587,8 @@ export async function investigateTicketSpecialist(
       ...(nhlGoalieFormAudit?{nhlGoalieFormAudit}:{}),
       ...(nhlTeamShotsAudit?{nhlTeamShotsAudit}:{}),
       ...(nhlSkaterImpactAudit?{nhlSkaterImpactAudit}:{}),
+      ...(nhlRosterAudit?{nhlRosterAudit}:{}),
+      ...(nhlFiveOnFiveAudit?{nhlFiveOnFiveAudit}:{}),
       ...(freeInjuryChecks.length?{freeInjuryChecks}:{}),
       ...(endpointAudit?{endpointAudit}:{}),
       ...(playerHistoryAudit?{playerHistoryAudit}:{}),
