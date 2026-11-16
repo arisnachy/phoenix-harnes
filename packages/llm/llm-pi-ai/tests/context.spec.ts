@@ -86,6 +86,53 @@ function history(role: 'system' | 'assistant', content: ContentBlock[]): Message
 
 describe('Phoenix Local text-only small-model fallback', () => {
   const big = 'a'.repeat(400_000)
+  it('prevents the pi-ai fixed 4096-token reserve from shrinking a 768-token local reply to 1', () => {
+    const latest = user([{ type: 'text', text: 'hola' }])
+    const options: GenerateOptions = {
+      ...request([latest]),
+      provider: 'phoenix-local',
+      model: 'phoenix-local',
+      system: 'Kira persona with lots of tools and instructions. '.repeat(850),
+      tools: [],
+    }
+    // The old scaled reserve (2048 at 16K) admitted this nearly-full
+    // prompt, but pi-ai subsequently kept another fixed 4096 and clamped
+    // max_tokens independently, sometimes down to 1.
+    const oldFit = fitGenerateOptionsToContext(options, 16_384, 768)
+    expect(oldFit.compacted).toBe(false)
+    const fitted = fitPhoenixLocalTextTurn(options, 16_384, 768)
+    expect(fitted.compacted).toBe(true)
+    expect(fitted.options.messages).toEqual([latest])
+    expect(fitted.options.tools).toEqual([])
+    expect(fitted.estimatedTokens).toBeLessThan(fitted.inputBudgetTokens)
+    expect(fitted.inputBudgetTokens).toBe(11_008)
+    expect(options.system?.length).toBeGreaterThan(30_000)
+  })
+
+  it('does not discard tools or persona when local input has ample reply room', () => {
+    const options: GenerateOptions = {
+      ...request([user([{ type: 'text', text: 'hola' }])]),
+      provider: 'phoenix-local',
+      model: 'phoenix-local',
+      system: 'Kira responde en español.',
+    }
+    const fitted = fitPhoenixLocalTextTurn(options, 16_384, 768)
+    expect(fitted.options).toBe(options)
+    expect(fitted.compacted).toBe(false)
+    expect(fitted.inputBudgetTokens).toBe(11_008)
+  })
+
+  it('refuses to pretend a 4096-token pi-ai window has answer room after its fixed reserve', () => {
+    const options: GenerateOptions = {
+      ...request([user([{ type: 'text', text: 'hola' }])]),
+      provider: 'phoenix-local',
+      model: 'phoenix-local',
+    }
+    const fitted = fitPhoenixLocalTextTurn(options, 4096, 768)
+    expect(fitted.estimatedTokens).toBeGreaterThan(fitted.inputBudgetTokens)
+    expect(fitted.inputBudgetTokens).toBe(1)
+  })
+
   it('lets Qwen answer hola despite 100k tokens of global instructions', () => {
     const latest = user([{ type: 'text', text: 'hola' }])
     const options: GenerateOptions = {
@@ -96,7 +143,7 @@ describe('Phoenix Local text-only small-model fallback', () => {
     }
     const normal = fitGenerateOptionsToContext(options, 4096, 256)
     expect(normal.estimatedTokens).toBeGreaterThan(100_000)
-    const fitted = fitPhoenixLocalTextTurn(options, 4096, 256)
+    const fitted = fitPhoenixLocalTextTurn(options, 16_384, 256)
     expect(fitted.estimatedTokens).toBeLessThan(fitted.inputBudgetTokens)
     expect(fitted.options.messages).toEqual([latest])
     expect(fitted.options.tools).toEqual([])
@@ -115,7 +162,7 @@ describe('Phoenix Local text-only small-model fallback', () => {
       provider: 'phoenix-local',
       model: 'phoenix-local',
     }
-    const fitted = fitPhoenixLocalTextTurn(options, 4096, 256)
+    const fitted = fitPhoenixLocalTextTurn(options, 16_384, 256)
     expect(fitted.estimatedTokens).toBeLessThanOrEqual(1_024)
     expect(fitted.options.messages).toEqual([latest])
     expect(fitted.options.tools).toEqual([])
@@ -131,7 +178,7 @@ describe('Phoenix Local text-only small-model fallback', () => {
       model: 'phoenix-local',
       system: big,
     }
-    const fitted = fitPhoenixLocalTextTurn(options, 4096, 256)
+    const fitted = fitPhoenixLocalTextTurn(options, 16_384, 256)
     expect(fitted.options.messages).toEqual([previous, assistant, last])
     expect(fitted.options.messages.at(-1)).toBe(last)
   })
@@ -145,7 +192,7 @@ describe('Phoenix Local text-only small-model fallback', () => {
       model: 'phoenix-local',
       system: big,
     }
-    const fitted = fitPhoenixLocalTextTurn(options, 4096, 256)
+    const fitted = fitPhoenixLocalTextTurn(options, 16_384, 256)
     expect(fitted.estimatedTokens).toBeGreaterThan(fitted.inputBudgetTokens)
     expect(fitted.options.system).toBe(big)
   })
@@ -159,7 +206,7 @@ describe('Phoenix Local text-only small-model fallback', () => {
       model: 'phoenix-local',
       system: big,
     }
-    const fitted = fitPhoenixLocalTextTurn(options, 4096, 256)
+    const fitted = fitPhoenixLocalTextTurn(options, 16_384, 256)
     expect(fitted.estimatedTokens).toBeGreaterThan(fitted.inputBudgetTokens)
     expect(fitted.options.messages.at(-1)).toBe(imageRequest)
   })
@@ -172,7 +219,7 @@ describe('Phoenix Local text-only small-model fallback', () => {
       model: 'phoenix-local',
       system: big,
     }
-    const fitted = fitPhoenixLocalTextTurn(options, 4096, 256)
+    const fitted = fitPhoenixLocalTextTurn(options, 16_384, 256)
     expect(fitted.estimatedTokens).toBeGreaterThan(fitted.inputBudgetTokens)
     expect(fitted.options.messages.at(-1)).toBe(latest)
   })
@@ -183,7 +230,7 @@ describe('Phoenix Local text-only small-model fallback', () => {
       provider: 'phoenix-local',
       model: 'phoenix-local',
     }
-    const fitted = fitPhoenixLocalTextTurn(options, 4096, 256)
+    const fitted = fitPhoenixLocalTextTurn(options, 16_384, 256)
     expect(fitted.options).toBe(options)
     expect(fitted.compacted).toBe(false)
   })

@@ -563,7 +563,8 @@ export class PiAiAdapter extends LlmAdapter {
       const providerContext = requiresFunctionSchemaProjection
         ? normalizeOpenAiFunctionToolPayload(context, requiresMondayMembrane) as typeof context
         : context
-      const needsPayloadProjection = requiresFunctionSchemaProjection || codexWireReasoningEffort !== undefined
+      const auditLocalWire = options.provider === 'phoenix-local' && process.env.PHOENIX_TOKEN_AUDIT === '1'
+      const needsPayloadProjection = requiresFunctionSchemaProjection || codexWireReasoningEffort !== undefined || auditLocalWire
       const streamOptions: SimpleStreamOptions = {
         ...profileOptions(profile, reasoning, apiKey),
         ...needsPayloadProjection
@@ -572,9 +573,25 @@ export class PiAiAdapter extends LlmAdapter {
               const projected = requiresFunctionSchemaProjection
                 ? normalizeOpenAiFunctionToolPayload(payload, requiresMondayMembrane)
                 : payload
-              return codexWireReasoningEffort === undefined
+              const wire = codexWireReasoningEffort === undefined
                 ? projected
                 : withCodexReasoningEffort(projected, codexWireReasoningEffort)
+              if (auditLocalWire) {
+                // Only token counts, never the actual prompt, response or tool schemas.
+                const fields = wire as Record<string, unknown>
+                console.info('[PHOENIX LOCAL WIRE BUDGET] ' + JSON.stringify({
+                  provider: options.provider,
+                  model: options.model,
+                  modelContextTokens: model.contextWindow,
+                  modelMaxTokens: model.maxTokens,
+                  requestedMaxTokens: options.maxTokens ?? model.maxTokens,
+                  effectiveMaxTokens: fields['max_tokens'] ?? fields['max_completion_tokens'] ?? null,
+                  estimatedInputTokens: fitted.estimatedTokens,
+                  inputBudgetTokens: fitted.inputBudgetTokens,
+                  compacted: fitted.compacted,
+                }))
+              }
+              return wire
             },
           }
           : {},
