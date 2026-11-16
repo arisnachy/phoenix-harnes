@@ -130,7 +130,10 @@ export async function evidencePricedTicket(
     const attempts:PromiseSettledResult<SpecialistGate[]>[]=[]
     // Six small batches per wave prevent mass concurrent ESPN timeouts.
     // Results already collected survive a subsequent provider failure.
+    const preflightStarted=Date.now()
     for(let i=0;i<batches.length;i+=6){
+      // Return the already reviewed evidence before the outer 65-s gate.
+      if(i>0&&Date.now()-preflightStarted>=50_000)break
       const wave=await Promise.allSettled(batches.slice(i,i+6).map(batch=>
         boundedPriced(specialistResearcher(batch,researchFetcher,
           now,env,[],8_000),11_000)))
@@ -173,6 +176,8 @@ export async function evidencePricedTicket(
         priority,reason}]
     })
   }
+  const quoteSearch={candidates:0,alreadyQuoted:0,exactTotal:0,
+    exactAttempted:0,unattempted:0,stoppedForBudget:false}
   // Quote-FIRST screening is independent of expert risk ranking: every
   // historically supported game can earn a ticket slot, not just the first
   // five by win-loss form. One scoreboard read covers every listed game.
@@ -200,13 +205,20 @@ export async function evidencePricedTicket(
     // stop only when the configured cumulative *provider* budget is consumed.
     // A stopped sweep reports partial coverage, not 'no prices available'.
     const remaining=candidates.filter(c=>!hasPrice(c))
+    quoteSearch.candidates=candidates.length
+    quoteSearch.alreadyQuoted=candidates.length-remaining.length
+    quoteSearch.exactTotal=remaining.length
     const budgetInput=Number(env.PHOENIX_SPORTS_ESPN_EXACT_BUDGET_MS)
     const exactBudget=Number.isInteger(budgetInput)&&budgetInput>=15_000&&
       budgetInput<=75_000?budgetInput:60_000
     const started=Date.now()
     for(let offset=0;offset<remaining.length;offset+=6){
-      if(Date.now()-started>=exactBudget)break
+      if(Date.now()-started>=exactBudget){
+        quoteSearch.stoppedForBudget=true
+        break
+      }
       const wave=remaining.slice(offset,offset+6)
+      quoteSearch.exactAttempted+=wave.length
       const report=await Promise.allSettled(wave.map(async c=>{
         const k=sportKey(c)
         if(!k)return null
@@ -224,6 +236,7 @@ export async function evidencePricedTicket(
       for(const r of report)if(r.status==='fulfilled'&&r.value)
         quotes.push(...r.value.quotes)
     }
+    quoteSearch.unattempted=remaining.length-quoteSearch.exactAttempted
     // Final screening also re-validates identity and published market sides;
     // the historical list remains intact when ESPN has no valid quotation.
     return quotes.slice(0,2_400)
@@ -863,6 +876,14 @@ export async function evidencePricedTicket(
   // Every price found belongs to a leg, even when no single bookmaker covers
   // the whole ticket. The existing original card kept all prices as pending.
   const quotedDisplayLegs=presentObservedTicketLegs(hintedLegs,groups)
+  sourceAudit.push(audited('ESPN escrutinio de candidatos',
+    quoteSearch.exactAttempted?'attempted':'empty',0,
+    'Con historial '+quoteSearch.candidates+
+    ', cotizados en calendario '+quoteSearch.alreadyQuoted+
+    ', consultas exactas '+quoteSearch.exactAttempted+'/'+quoteSearch.exactTotal+
+    ', pendientes no consultados '+quoteSearch.unattempted+
+    (quoteSearch.stoppedForBudget?'; límite de proveedor alcanzado':'')+
+    '. Los pendientes no implican mercados cerrados.'))
   const auditSummary=' Cartelera completa: '+research.discoveryAudit.discoveredEvents+
     ' partidos; '+research.quoteScreenedCandidates+' candidatos con historial; '+
     research.quoteObservedCandidates+' con cuota ESPN preseleccionada. '+
