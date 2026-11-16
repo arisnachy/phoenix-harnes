@@ -402,13 +402,56 @@ function isPlainLocalTextMessage(message: Message): boolean {
  * @param desiredMaxOutput - Requested response budget.
  * @returns The ordinary fit or a bounded, explicitly non-agentic view.
  */
+/**
+ * pi-ai 0.82.x independently reserves a FIXED 4096 tokens and estimates its
+ * context at roughly 3.5 chars/token. The generic budget above instead scales
+ * the reserve to 1/8 of the window and estimates at 4 chars/token. On a 16K
+ * local model that mismatch let near-full prompts reach pi-ai, which silently
+ * clamped maxTokens to as little as 1 despite a requested 768-token answer.
+ * Keep a further 512 tokens for chat-format / schema estimator differences.
+ */
+function fitPhoenixLocalPiHeadroom(
+  options: GenerateOptions,
+  contextWindow: number,
+  desiredMaxOutput: number,
+  compacted: boolean,
+): ContextBudgetFit {
+  const capacity = Math.max(1, Math.floor(contextWindow))
+  const responseTokens = Math.max(1, Math.floor(desiredMaxOutput))
+  return {
+    options,
+    estimatedTokens: Math.ceil(estimateGenerateOptionsTokens(options) * (ESTIMATED_CHARS_PER_TOKEN / 3.5)),
+    inputBudgetTokens: Math.max(1, capacity - PI_CONTEXT_SAFETY_TOKENS - responseTokens - 512),
+    compacted,
+  }
+}
+
 export function fitPhoenixLocalTextTurn(
   options: GenerateOptions,
   contextWindow: number,
   desiredMaxOutput: number,
 ): ContextBudgetFit {
   const regular = fitGenerateOptionsToContext(options, contextWindow, desiredMaxOutput)
-  if (regular.estimatedTokens <= regular.inputBudgetTokens) return regular
+  const localRegular = fitPhoenixLocalPiHeadroom(regular.options, contextWindow, desiredMaxOutput, regular.compacted)
+  if (localRegular.estimatedTokens <= localRegular.inputBudgetTokens) return localRegular
+
+  // Keep the full instructions, real tool signatures and user history whenever
+  // a more conservative, request-only projection can still fit the pi-ai cap.
+  const condensed = compactAuxiliaryContextForPressure(regular.options)
+  // A live tool cycle must retain its known tool names, schemas and results.
+  // Under pressure fail with a clear context error rather than silently
+  // stripping a tool the assistant has already called in this turn.
+  const inFlightToolCycle = options.messages.some(message =>
+    message.source.kind === 'tool'
+    || message.content.some(block => block.type === 'tool-call' || block.type === 'tool-result'))
+  const selected = inFlightToolCycle
+    ? condensed
+    : selectToolsForPressureBudget(
+      condensed,
+      Math.max(1, Math.floor(localRegular.inputBudgetTokens * 3.5 / ESTIMATED_CHARS_PER_TOKEN)),
+    )
+  const localCompacted = fitPhoenixLocalPiHeadroom(selected, contextWindow, desiredMaxOutput, true)
+  if (localCompacted.estimatedTokens <= localCompacted.inputBudgetTokens) return localCompacted
 
   const messages = options.messages
   const findCurrentUser = (requireHuman: boolean): number => {
@@ -425,11 +468,11 @@ export function fitPhoenixLocalTextTurn(
     const human = findCurrentUser(true)
     return human >= 0 ? human : findCurrentUser(false)
   })()
-  if (currentUserIndex < 0) return regular
+  if (currentUserIndex < 0) return localCompacted
   const currentUser = messages[currentUserIndex]
   // The latest human request must be plain text; never silently substitute an
   // earlier greeting for a newer image, file, or tool-bearing request.
-  if (currentUser === undefined || !isPlainLocalTextMessage(currentUser)) return regular
+  if (currentUser === undefined || !isPlainLocalTextMessage(currentUser)) return localCompacted
 
   // Never drop an in-flight tool call/result, even when these are encoded as
   // user/assistant messages. Skill catalogs are auxiliary and may be omitted.
@@ -438,7 +481,7 @@ export function fitPhoenixLocalTextTurn(
     || message.source.kind === 'tool'
     || message.role === 'assistant'
     || (message.role === 'user' && !isAuxiliarySkillCatalog(message))
-  )) return regular
+  )) return localCompacted
 
   const reduced: GenerateOptions = {
     ...options,
@@ -446,10 +489,10 @@ export function fitPhoenixLocalTextTurn(
     messages: [currentUser],
     tools: [],
   }
-  let fit = fitGenerateOptionsToContext(reduced, contextWindow, desiredMaxOutput)
+  let fit = fitPhoenixLocalPiHeadroom(reduced, contextWindow, desiredMaxOutput, true)
   // The current human message is never clipped; if it cannot fit alone,
   // return the original oversized error instead.
-  if (fit.estimatedTokens > Math.min(fit.inputBudgetTokens, LOCAL_LITE_MAX_INPUT_TOKENS)) return regular
+  if (fit.estimatedTokens > Math.min(fit.inputBudgetTokens, LOCAL_LITE_MAX_INPUT_TOKENS)) return localCompacted
 
   // Keep only a few complete plain-text messages that fit. Durable history
   // and current model selection are not changed by this request projection.
@@ -461,7 +504,7 @@ export function fitPhoenixLocalTextTurn(
       ...reduced,
       messages: [previous, ...recent, currentUser],
     }
-    const evaluated = fitGenerateOptionsToContext(candidate, contextWindow, desiredMaxOutput)
+    const evaluated = fitPhoenixLocalPiHeadroom(candidate, contextWindow, desiredMaxOutput, true)
     if (evaluated.estimatedTokens > Math.min(evaluated.inputBudgetTokens, LOCAL_LITE_MAX_INPUT_TOKENS)) break
     recent.unshift(previous)
     fit = evaluated
