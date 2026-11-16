@@ -1,4 +1,5 @@
 import {test} from 'node:test'
+import {readFileSync} from 'node:fs'
 import assert from 'node:assert/strict'
 import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets,espnQuoteNeedsRecheck,planDailyOddsLeagueKeys} from '../src/daily-market-shortlist.ts'
 
@@ -305,4 +306,20 @@ test('a fresh ESPN event snapshot replaces a stale quote for the same bookmaker 
   assert.equal(report.selected.length,1)
   assert.equal(report.selected[0].requiresRecheck,false)
   assert.equal(report.matchDiagnostics.requiresRefresh,0)
+})
+
+test('daily shortlist provides independent selected-dossier deadline and visible timeout audit',()=>{
+  const source=readFileSync(new URL('../src/index.ts',import.meta.url),'utf8')
+  const start=source.indexOf("name:'sports_chat_daily_market_shortlist'")
+  const next=source.indexOf("ctx.tools.register(defineTool({",start+10)
+  assert.ok(start>0&&next>start,'shortlist registration exists')
+  const route=source.slice(start,next)
+  assert.match(route,/PHOENIX_SPORTS_DAILY_SHORTLIST_DOSSIER_BUDGET_MS/)
+  assert.match(route,/requestedDossierBudget:120_000/)
+  assert.match(route,/investigateTicketSpecialists\(group,fetch,now,env,quotes,selectedDossierBudget\)/)
+  assert.match(route,/for\(let offset=0;offset<candidates.length;offset\+=4\)/)
+  assert.match(route,/shortlistTimingAudit:\{marketEvidenceMs,dossierElapsedMs/)
+  assert.match(route,/timedOutDossiers/)
+  assert.doesNotMatch(route,/\}\)\),fetch,now,env,quotes\)/,
+    'shortlist must not fall back to 20-second generic specialist deadline')
 })
