@@ -5,19 +5,32 @@
 import {writeFile} from 'node:fs/promises'
 import {nhlSlate,investigateNhl} from '../packages/core/tool-sports/src/nhl-evidence-research.ts'
 const now=Date.now()
-const date=process.argv[2]??'2026-11-12'
-const report={checkedAt:new Date(now).toISOString(),date,stage:'not-run',event:null}
+const specified=process.argv[2]
+if(specified&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(specified))
+  throw Error('Fecha NHL inválida')
+const candidates=specified?[specified]:
+  Array.from({length:8},(_,i)=>new Date(now+i*86_400_000).toISOString().slice(0,10))
+const report={checkedAt:new Date(now).toISOString(),
+  date:specified??null,scannedDates:[],stage:'not-run',event:null}
 try{
-  const slate=await nhlSlate(date,fetch,now)
-  const prospective=slate.games.filter(x=>['FUT','PRE'].includes(x.state)&&
-    Date.parse(x.date)>now+10_000)
+  const prospective=[]
+  for(const day of candidates){
+    const slate=await nhlSlate(day,fetch,now)
+    report.scannedDates.push({date:day,games:slate.games.length,
+      sources:slate.sources.map(x=>({url:x.url,status:x.status}))})
+    prospective.push(...slate.games.filter(x=>['FUT','PRE'].includes(x.state)&&
+      Date.parse(x.date)>now+10_000).map(x=>({...x,slateDate:day})))
+    if(prospective.length)break
+  }
   if(!prospective.length){
     report.stage='no-future-game'
-    report.reason='No future game is available for real pregame adapter exercise'
+    report.reason='No future NHL game within the next seven calendar days; never replay postgame boxscores as pregame'
   }else{
     // Prefer an eventual late start so this test does not race the game clock.
     const fixture=prospective.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date))[0]
-    const d=await investigateNhl(date,fixture.id,fetch,Date.now(),[],1)
+    report.date=fixture.slateDate
+    const d=await investigateNhl(fixture.slateDate,fixture.id,fetch,Date.now(),
+      [],1,Date.now()+55_000)
     report.stage='investigated'
     report.event={id:fixture.id,home:fixture.home.name,away:fixture.away.name,
       kickoff:fixture.date}
@@ -53,6 +66,12 @@ try{
       samples:d.sources.slice(0,25)
     }
     report.specialTeams=d.specialTeams
+    report.officialShots=d.officialShots
+    report.goalieForms=Object.fromEntries(['home','away'].map(side=>[
+      side,d.goalieCandidates[side].map(p=>({
+        name:p.name,idProvider:p.idProvider,last20:p.last20?.length??0,
+        savePctg:p.stats.savePctg??null})),
+    ]))
     report.opportunity=d.opportunity
   }
 }catch(e){
