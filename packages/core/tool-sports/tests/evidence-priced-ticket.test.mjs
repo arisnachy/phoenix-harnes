@@ -602,3 +602,66 @@ test('a complete 1X2 price never marks draw-risk analytical verification as comp
   assert.ok(r.specialistChecks.every(c=>c.checklist.criticalPending.some(x=>
     x.includes('Empate'))))
 })
+
+test('ESPN 1/5 partial ticket preserves actual price, bookmaker and source in visible leg',async()=>{
+  const read=async url=>{
+    const data=board(url),u=String(url)
+    if(u.includes('/soccer/eng.1/scoreboard?dates=20261028')){
+      data.events=data.events.map((event,i)=>i===0?{
+        ...event,competitions:event.competitions.map(comp=>({
+          ...comp,id:event.id,
+          odds:[{provider:{name:'DraftKings'},homeTeamOdds:{moneyLine:-125},
+            awayTeamOdds:{moneyLine:+110},drawOdds:+260}],
+        })),
+      }:event)
+    }
+    return new Response(JSON.stringify(data),{status:200})
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',0,now,{
+    PHOENIX_SPORTS_ESPN_DISABLED:'0',
+    PHOENIX_SPORTS_ESPN_WEB_DISABLED:'1',
+    PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0',
+    PHOENIX_SPORTS_OPTIONAL_ODDS_FALLBACK:'0',
+  },read,undefined,'winner',stubSpecialists)
+  assert.equal(result.verifiedEvents,5)
+  assert.equal(result.quotedLegs,1)
+  assert.equal(result.missingQuotes,4)
+  assert.equal(result.priced,false)
+  assert.equal(result.card.props.combinedOdds,'No disponible')
+  assert.equal(result.card.props.legs[0].price,'1.8')
+  assert.equal(result.card.props.legs[0].bookmaker,'DraftKings')
+  assert.equal(result.card.props.legs[0].quoteStatus,'espn-observed')
+  assert.match(result.card.props.legs[0].quoteSource,/ESPN/)
+  assert.equal(result.card.props.legs[0].quoteAcceptedByBookmaker,false)
+  assert.equal(result.card.props.legs[1].price,'Por verificar')
+  assert.equal(result.card.props.individualQuotes[0].price,'1.8')
+  assert.equal(result.card.props.individualQuotes.filter(q=>q.status==='unpriced').length,4)
+  assert.match(result.card.props.subtitle,/1\/5 cuotas verificadas/)
+  assert.equal(result.approvedLegs,0)
+})
+test('1/5 explicitly provided bookmaker quote remains visible even without a parlay',async()=>{
+  const onlyOne=async()=>[{
+    eventId:'scraper-0',bookmaker:'Book A',market:'1x2',selection:'Home 0',
+    price:1.72,point:null,home:'Home 0',away:'Away 0',time:kick,
+    updatedAt:'2026-10-28T14:15:00Z',source:'OddsHarvester/OddsPortal (sin API key)',
+    sportKey:'football',
+  }]
+  const result=await withSpecialists(5,date,'soccer',100,now,enabled,feed,onlyOne)
+  assert.equal(result.quotedLegs,1)
+  assert.equal(result.card.props.legs[0].price,'1.72')
+  assert.equal(result.card.props.legs[0].bookmaker,'Book A')
+  assert.equal(result.card.props.legs[0].quoteStatus,'provider-observed')
+  assert.equal(result.card.props.legs[1].price,'Por verificar')
+  assert.equal(result.priced,false)
+})
+test('ESPN quote from another event ID cannot be assigned just by same participants and kickoff',async()=>{
+  const dishonest=async()=>[{
+    eventId:'999999',bookmaker:'DraftKings',market:'1x2',selection:'Home 0',
+    price:1.72,point:null,home:'Home 0',away:'Away 0',time:kick,
+    updatedAt:'No indicada por ESPN',observedAt:new Date(now).toISOString(),
+    source:'ESPN Site/Core (evento exacto, sin clave)',sportKey:'football',
+  }]
+  const result=await withSpecialists(5,date,'soccer',0,now,enabled,feed,dishonest)
+  assert.equal(result.quotedLegs,0)
+  assert.equal(result.card.props.legs[0].price,'Por verificar')
+})
