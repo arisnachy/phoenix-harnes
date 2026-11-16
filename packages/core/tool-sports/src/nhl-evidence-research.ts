@@ -286,6 +286,16 @@ function dashboard(d:Omit<HockeyDossier,'uiBlock'>):HockeyDossier['uiBlock']{
         ' · PK '+(v.penaltyKillPct===null?'no verificado':v.penaltyKillPct+'%'),
         detail:'NHL Stats REST · temporada de este encuentro; no es xG ni predicción'}
     }))
+  add('Tiros y goles por partido · NHL Stats REST',
+    (['home','away'] as const).map(side=>{
+      const team=d.fixture[side],v=d.officialShots[side]
+      return{label:team.name,
+        value:'Tiros a favor '+(v.shotsForPerGame??'sin dato')+
+          ' · contra '+(v.shotsAgainstPerGame??'sin dato'),
+        detail:'Goles a favor '+(v.goalsForPerGame??'sin dato')+
+          ' · contra '+(v.goalsAgainstPerGame??'sin dato')+
+          ' · temporada completa; NO 5v5 xG'}
+    }))
   add('Tabla NHL',[{label:d.fixture.home.name,value:d.standings.home},
     {label:d.fixture.away.name,value:d.standings.away}])
   add('Últimos partidos y descanso',(['home','away'] as const).map(side=>{
@@ -414,12 +424,17 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
       }
     }
   }
-  const selected=[...(['home','away'] as const).flatMap(side=>{
+  // Alternate teams so the away goalies are not blocked behind all
+  // home skaters on a short tool budget.
+  const queues=(['home','away'] as const).map(side=>{
     const team=players[side]
     return[...team.filter(p=>p.role==='goalie').slice(0,3),
       ...team.filter(p=>p.role==='forward').slice(0,maxSkaters),
       ...team.filter(p=>p.role==='defense').slice(0,4)]
-  })]
+  })
+  const selected:HockeyPlayer[]=[]
+  for(let i=0;i<Math.max(...queues.map(x=>x.length));i++)
+    for(const queue of queues)if(queue[i])selected.push(queue[i]!)
   let next=0
   await Promise.all(Array.from({length:Math.min(3,selected.length)},async()=>{
     while(next<selected.length){
@@ -429,12 +444,12 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
       const p=selected[next++]!
       // ESPN and NHL player IDs belong to different namespaces.
       if(p.idProvider==='ESPN')continue
-      const data=await source<unknown>(base+'player/'+p.id+'/landing',fetcher,sources,now)
-      // NHL player history is queried in the NHL ID namespace, not ESPN's.
-      // Sequential within each worker limits provider concurrency to three.
-      const history=season?await source<unknown>(
-        base+'player/'+p.id+'/game-log/'+season+'/2',fetcher,sources,now):
-        null
+      // Independent NHL requests, bounded to three athletes at once.
+      const [data,history]=await Promise.all([
+        source<unknown>(base+'player/'+p.id+'/landing',fetcher,sources,now),
+        season?source<unknown>(base+'player/'+p.id+'/game-log/'+season+'/2',
+          fetcher,sources,now):Promise.resolve(null),
+      ])
       p.stats=observedStats(data)
       const official=parseNhlSeasonGameLog(history,Math.min(now,Date.parse(fixture.date)),20)
       p.last20=official.games
@@ -443,7 +458,11 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
       // a truthful fallback when season-level game logs are empty/blocked.
       p.last5=official.games.length?official.games.slice(0,5).map(x=>({
         date:x.date,summary:x.summary,
-      })):arr(o(data).last5Games).slice(0,5).map(v=>{
+      })):arr(o(data).last5Games).filter(v=>{
+        // Never leak later games from the current landing into an as-of ticket.
+        const t=Date.parse(txt(o(v).gameDate,40))
+        return Number.isFinite(t)&&t<Math.min(now,Date.parse(fixture.date))
+      }).slice(0,5).map(v=>{
         const r=o(v),goalie=p.role==='goalie'
         const fields=goalie?['shotsAgainst','saves','savePctg','goalsAgainst','decision']:
           ['goals','assists','shots','timeOnIce']
