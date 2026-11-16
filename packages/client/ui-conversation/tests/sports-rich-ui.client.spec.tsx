@@ -187,6 +187,49 @@ describe('Five-leg Phoenix ticket completion and compact progress',()=>{
     expect(screen.queryByText('Sin casa confirmada')).toBeNull()
     expect(screen.getByText('Pendientes de confirmar')).toBeTruthy()
   })
+
+  it('keeps 1/5 ESPN price visible without presenting a five-leg quoted parlay',()=>{
+    const legs=Array.from({length:5},(_,i)=>({
+      ...makeLeg(i+1),
+      ...(i===0?{price:'1.80',bookmaker:'DraftKings',
+        quoteStatus:'espn-observed',quoteSource:'ESPN Site/Core (sin clave)',
+        quoteSelection:'Home 1',quoteMarket:'h2h',quoteEventId:'401100001',
+        quoteObservedAt:'2026-11-16T16:00:00Z',
+        bookmakerUpdatedAt:null,quoteAcceptedByBookmaker:false}:{}),
+    }))
+    const fixture={component:'sports_ticket_card',version:1,props:{
+      title:'ESPN parcial',source:'ESPN Site API',
+      requestedLegs:5,combinedOdds:'No disponible',
+      note:'Cotización parcial: solo una pata tiene cuota ESPN.',
+      legs,dataCounts:{eventsFound:5,quotedLegs:1,researchedLegs:1,
+        candidateLegs:1,conditionalLegs:5,approvedForBetting:0},
+      individualQuotes:legs.map((leg,i)=>({
+        eventId:'40110000'+(i+1),selection:leg.selection,
+        price:i===0?'1.80':null,bookmaker:i===0?'DraftKings':null,
+        source:i===0?'ESPN Site/Core (sin clave)':null,
+        observedAt:i===0?'2026-11-16T16:00:00Z':null,
+        status:i===0?'espn-observed':'unpriced',
+      })),
+    }}
+    const card=parseGenerativeUiBlock(fixture)
+    expect(card).not.toBeNull()
+    if(!card)throw Error('Valid partial ESPN ticket dropped by schema')
+    render(<GenerativeUi block={card}/>)
+    expect(screen.getByLabelText('Cuota 1.80')).toBeTruthy()
+    expect(screen.getAllByText('DraftKings')).toHaveLength(1)
+    expect(screen.getAllByLabelText('Partido verificado')).toHaveLength(4)
+    expect(screen.getByText(/1 \/ 5 selecciones con precio/)).toBeTruthy()
+    expect(screen.queryByText('7.50')).toBeNull()
+  })
+  it('rejects false claims of bookmaker acceptance on a partial ESPN line',()=>{
+    const leg={...makeLeg(1),price:'1.80',bookmaker:'DraftKings',
+      quoteStatus:'espn-observed',quoteAcceptedByBookmaker:true}
+    const card={component:'sports_ticket_card',version:1,props:{
+      title:'Dato inválido',source:'ESPN',requestedLegs:5,
+      combinedOdds:'No disponible',note:'No aprobado',legs:[leg]}}
+    expect(parseGenerativeUiBlock(card)).toBeNull()
+  })
+
   it('marks an incomplete ticket clearly and rejects mismatched overfilled counts',()=>{
     const props={ title:'Borrador',source:'ESPN',combinedOdds:'No disponible',
       requestedLegs:5,note:'Incompleto',legs:[makeLeg(1)] }
