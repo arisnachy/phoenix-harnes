@@ -16,6 +16,8 @@ export type DecisionInput={
   checklistComplete:boolean
   criticalPending:readonly string[]
   modelStatus:'support'|'contradiction'|'unavailable'
+  /** Derived from last games, NEVER a calibrated probability or edge. */
+  exploratoryProbabilityPercent?:number|null
 }
 export type DecisionVerdict='exclude'|'hold'|'caution'|'candidate'
 export type DecisionLeg={
@@ -26,11 +28,14 @@ export type DecisionLeg={
   modelProbabilityPct:null;expectedValue:null;edgePct:null
   specialistStatus:DecisionInput['specialistStatus']
   criticalPending:string[];modelStatus:DecisionInput['modelStatus']
+  exploratoryProbabilityPct:number|null
+  exploratoryVsBreakEvenGapPct:number|null
+  alternativeReviewRequired:boolean
 }
 export type DecisionScenario={count:3|4|5;eventIds:string[];marketProductPct:number|null}
 export type TicketDecisionAudit={
   legs:DecisionLeg[];excludedEvents:string[];heldEvents:string[]
-  alternativesNeeded:number;scenarios:DecisionScenario[]
+  alternativesNeeded:number;alternativesToReview:number;scenarios:DecisionScenario[]
   calibrated:false;approvedForBetting:false;marketOnly:true
   warning:string;recommendation:string
 }
@@ -68,6 +73,21 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
     const price=input.quotedPrice
     const breakEven=typeof price==='number'&&Number.isFinite(price)&&price>1&&price<1000
       ?pct(1/price):null
+    const exploratory=typeof input.exploratoryProbabilityPercent==='number'&&
+      Number.isFinite(input.exploratoryProbabilityPercent)&&
+      input.exploratoryProbabilityPercent>=0&&
+      input.exploratoryProbabilityPercent<=100?
+        input.exploratoryProbabilityPercent:null
+    // Descriptive historical forecasts cannot establish EV. Their *conflict*
+    // with the break-even threshold is still useful for deciding what to audit.
+    const gap=breakEven!==null&&exploratory!==null?
+      Number((breakEven-exploratory).toFixed(2)):null
+    const largeExploratoryConflict=gap!==null&&gap>=5
+    const expensiveFavorite=breakEven!==null&&breakEven>=80
+    const goalieUnconfirmed=input.sport==='hockey'&&
+      input.criticalPending.some(step=>/portero|goalie/iu.test(step))
+    const alternativeReviewRequired=largeExploratoryConflict||
+      expensiveFavorite||goalieUnconfirmed
     const reasons:string[]=[]
     let verdict:DecisionVerdict
     if(input.modelStatus==='contradiction'){
@@ -106,6 +126,20 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
         pct(share)+'%; este umbral es descriptivo, no una predicción calibrada.')
     if(input.modelStatus==='unavailable')
       reasons.push('Sin segunda opinión de modelo externo verificada.')
+    if(largeExploratoryConflict){
+      reasons.push('ALERTA DE PRECIO: cuota exige '+breakEven+
+        '% de acierto pero la estimación histórica exploratoria es '+
+        exploratory+'% (brecha '+gap+
+        ' puntos). NO representa EV negativo calculado ni predicción calibrada. '+
+        'Investigar y comparar reemplazo antes de cerrar la pata.')
+      if(verdict==='candidate')verdict='caution'
+    }
+    if(expensiveFavorite){
+      reasons.push('FAVORITO DE CUOTA EXIGENTE: necesita '+breakEven+
+        '% para equilibrio; récord 10 partidos y mercado no prueban valor. '+
+        'Contrastar fuente independiente y alternativas.')
+      if(verdict==='candidate')verdict='caution'
+    }
     if(input.sport==='hockey'&&input.criticalPending.some(step=>/portero|goalie/iu.test(step)))
       reasons.push('NHL: confirmar ambos porteros titulares antes de decidir.')
     if(breakEven!==null&&share!==null)
@@ -116,7 +150,10 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
       marketNoVigPct:share===null?null:pct(share),
       modelProbabilityPct:null,expectedValue:null,edgePct:null,
       specialistStatus:input.specialistStatus,
-      criticalPending:[...input.criticalPending],modelStatus:input.modelStatus}
+      criticalPending:[...input.criticalPending],modelStatus:input.modelStatus,
+      exploratoryProbabilityPct:exploratory,
+      exploratoryVsBreakEvenGapPct:gap,
+      alternativeReviewRequired}
   })
   // HOLD is not an eligible ticket scenario just because the market quoted it.
   // Preserve caution as an explicitly labeled research-only scenario.
@@ -132,13 +169,15 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
   const excludedEvents=legs.filter(l=>l.verdict==='exclude').map(l=>l.eventId)
   const heldEvents=legs.filter(l=>l.verdict==='hold').map(l=>l.eventId)
   const alternativesNeeded=legs.filter(l=>l.verdict==='exclude'||l.verdict==='hold').length
+  const alternativesToReview=legs.filter(l=>l.alternativeReviewRequired).length
   const recommendation=excludedEvents.length?
     'Descartar '+excludedEvents.length+' pata(s) frágiles y buscar otras fechas/partidos, '+
       'sin rellenar el objetivo de cinco o seis a cualquier coste.':
     heldEvents.length?'Revisar '+heldEvents.length+
       ' pata(s) condicionadas antes de proponer el boleto final.':
       'Comparar las candidatas con otros partidos; ninguna queda aprobada para apostar.'
-  return{legs,excludedEvents,heldEvents,alternativesNeeded,scenarios,
+  return{legs,excludedEvents,heldEvents,alternativesNeeded,
+    alternativesToReview,scenarios,
     calibrated:false,approvedForBetting:false,marketOnly:true,
     warning:'Filtro heurístico del mercado (configurable), no modelo predictivo calibrado. '+
       'Productos combinados suponen independencia, no corrigen correlaciones ni demuestran EV. '+
