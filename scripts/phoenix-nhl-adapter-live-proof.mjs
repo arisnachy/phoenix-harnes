@@ -67,6 +67,16 @@ try{
     }
     report.specialTeams=d.specialTeams
     report.officialShots=d.officialShots
+    report.topSkaters=Object.fromEntries(['home','away'].map(side=>[
+      side,d.skaterImpact[side].slice(0,5).map(p=>({
+        id:p.playerId,name:p.name,points:p.points,goals:p.goals,
+        assists:p.assists,gamesPlayed:p.gamesPlayed,
+      })),
+    ]))
+    report.scorerCoverage={
+      home:d.skaterImpact.home.length,away:d.skaterImpact.away.length,
+      checkedAt:d.checkedAt,
+    }
     report.goalieForms=Object.fromEntries(['home','away'].map(side=>[
       side,d.goalieCandidates[side].map(p=>({
         name:p.name,idProvider:p.idProvider,last20:p.last20?.length??0,
