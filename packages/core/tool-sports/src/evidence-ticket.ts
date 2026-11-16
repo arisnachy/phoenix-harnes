@@ -358,8 +358,17 @@ export async function evidenceTicket(
   // preference through that second sort without changing the sports signals.
   const pricedRanked=candidateLegs.map(c=>({...c,
     rank:c.rank+(quotedIds.has(c.pick.eventId)?1_000:0)}))
-  const {chosen:selected,diversitySatisfied:multisportSatisfied}=
-    diversifiedSportsPicks(pricedRanked,count,!singleSport)
+  const quoteSports=new Set(candidateLegs.filter(c=>
+    quotedIds.has(c.pick.eventId)).map(c=>c.pick.sport))
+  // Do not deliberately replace a fifth REAL priced leg with an unquoted
+  // sport merely to meet a cosmetic multi-sport requirement. Preserve honest
+  // diversity reporting when ESPN prices exist only in one discipline.
+  const preferDiversity=!singleSport&&
+    (quotedIds.size===0||quoteSports.size>=2)
+  const {chosen:selected}=diversifiedSportsPicks(
+    pricedRanked,count,preferDiversity)
+  const multisportSatisfied=singleSport||count<=1||
+    new Set(selected.map(x=>x.pick.sport)).size>=2
   const chosen=selected.map(x=>({
     ...x.pick,
     rationale:(String(x.pick.rationale??'')+
