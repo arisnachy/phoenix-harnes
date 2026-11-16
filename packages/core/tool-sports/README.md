@@ -30,6 +30,12 @@ El resultado del ticket de 15-nov-2026 fue **3/5**, con derrotas de Nashville y 
 
 Para NHL, el último 10 no reemplaza la ventana reciente: si el rival ganó al menos 2 de 3 a pesar de no superar 4 de sus últimos 10, se marca `uncertain` y una alerta de repunte para evaluar porteros, alineaciones y oposición. Esta regla no demuestra que el favorito pierda ni que el rival sea mejor; evita que una racha agregada o un precio corto oculten factores de revisión. La marca no modifica la cuota ESPN autenticada ni convierte recomendaciones en apuestas aprobadas.
 
+### Integridad de datos NHL — auditoría 16-nov-2026
+
+[Auditoría NHL de endpoints, cobertura, riesgos y pruebas](NHL_DATA_SOURCE_AUDIT_2026-11-16.md). El motor NHL ahora consulta tiros y goles oficiales por partido (NHL Stats REST `team/summary`), diferencia REG/OT/SO, prioriza histories de ambos porteros de manera alterna, computa SV% reciente a partir de saves/SA observados y evita el uso retrospectivo de partidos futuros. El ticket especializado expone `nhlGoalieFormAudit` y `nhlTeamShotsAudit` por selección; el handoff A–Q añade datos de lesiones ESPN fechadas como **parciales**, no bajas oficiales definitivas. Un 404/204 del boxscore pregame significa «no publicado». El probe de GitHub toma un partido futuro y registra las fuentes reales.
+
+Estos datos son complementarios, no xG/GSAx 5v5 ni modelo calibrado. MoneyPuck publica exportaciones de xG bajo términos gratuitos para usos no comerciales; una integración persistente requiere validar licencia y atribución antes de habilitarla. Porteros probables y líneas no pueden promoverse a confirmados sin evidencia explícita previa al partido.
+
 ## NBA research (source-derived, not calibrated)
 
 `sports_chat_nba_research` reads recent NBA final scoreboards once per date (shared across the slate), computes actual wins, average margins and approximate hours since the previous game, and records archive coverage. `sports_chat_ticket_research_auto` now rejects NBA candidates that have insufficient completed-game evidence. These are descriptive trends **not** win-probability estimates or edge calculations. Official NBA injury reports, roster validation, advanced efficiency metrics and true calibrated model-based predictions remain separate integration requirements; unverified NBA player leaders are temporarily hidden.
