@@ -552,6 +552,18 @@ export class ReactLoopAgent implements Agent {
     const { turn, step, abort: { signal } } = this.phase
     signal.throwIfAborted()
     const system = renderCacheFriendlyPrompt(assembly)
+    if (process.env.PHOENIX_TOKEN_AUDIT === '1') {
+      // Section names and sizes reveal accidental prompt bloat without
+      // exposing system instructions, user data or tool schema contents.
+      const largestSections = assembly.sections
+        .map(section => ({ name: section.name, rawChars: section.text.length }))
+        .sort((a, b) => b.rawChars - a.rawChars)
+        .slice(0, 10)
+      console.info('[PHOENIX SYSTEM SECTION SIZES] ' + JSON.stringify({
+        sectionCount: assembly.sections.length,
+        largestSections,
+      }))
+    }
 
     while (true) {
       const derived = this.session.deriveMessages()
