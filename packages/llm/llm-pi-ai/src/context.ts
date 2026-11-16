@@ -438,10 +438,18 @@ export function fitPhoenixLocalTextTurn(
   // Keep the full instructions, real tool signatures and user history whenever
   // a more conservative, request-only projection can still fit the pi-ai cap.
   const condensed = compactAuxiliaryContextForPressure(regular.options)
-  const selected = selectToolsForPressureBudget(
-    condensed,
-    Math.max(1, Math.floor(localRegular.inputBudgetTokens * 3.5 / ESTIMATED_CHARS_PER_TOKEN)),
-  )
+  // A live tool cycle must retain its known tool names, schemas and results.
+  // Under pressure fail with a clear context error rather than silently
+  // stripping a tool the assistant has already called in this turn.
+  const inFlightToolCycle = options.messages.some(message =>
+    message.source.kind === 'tool'
+    || message.content.some(block => block.type === 'tool-call' || block.type === 'tool-result'))
+  const selected = inFlightToolCycle
+    ? condensed
+    : selectToolsForPressureBudget(
+      condensed,
+      Math.max(1, Math.floor(localRegular.inputBudgetTokens * 3.5 / ESTIMATED_CHARS_PER_TOKEN)),
+    )
   const localCompacted = fitPhoenixLocalPiHeadroom(selected, contextWindow, desiredMaxOutput, true)
   if (localCompacted.estimatedTokens <= localCompacted.inputBudgetTokens) return localCompacted
 
