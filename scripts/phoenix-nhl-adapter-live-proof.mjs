@@ -6,7 +6,7 @@ import {writeFile} from 'node:fs/promises'
 import {nhlSlate,investigateNhl} from '../packages/core/tool-sports/src/nhl-evidence-research.ts'
 const now=Date.now()
 const specified=process.argv[2]
-if(specified&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(specified))
+if(specified&&!/^\d{4}-\d{2}-\d{2}$/.test(specified))
   throw Error('Fecha NHL inválida')
 const candidates=specified?[specified]:
   Array.from({length:8},(_,i)=>new Date(now+i*86_400_000).toISOString().slice(0,10))
