@@ -1,6 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {boundedPriced,evidencePricedTicket} from '../src/evidence-priced-ticket.ts'
+import {boundedPriced,evidencePricedTicket,nhlQuotePeriodVerified} from '../src/evidence-priced-ticket.ts'
+import {getFeed} from '../src/sports.ts'
 
 const date='2026-10-28',now=Date.parse('2026-10-28T15:00:00Z')
 const kick='2026-10-28T23:00:00Z'
@@ -601,4 +602,31 @@ test('a complete 1X2 price never marks draw-risk analytical verification as comp
     c.checklist.steps.find(s=>s.key==='market').state==='verified'))
   assert.ok(r.specialistChecks.every(c=>c.checklist.criticalPending.some(x=>
     x.includes('Empate'))))
+})
+
+test('NHL market period cannot be inferred from generic ESPN or 60-minute 1x2',()=>{
+  assert.equal(nhlQuotePeriodVerified('ESPN Site/Core (sin clave)','h2h'),false)
+  assert.equal(nhlQuotePeriodVerified('DraftKings via ESPN','h2h'),false)
+  assert.equal(nhlQuotePeriodVerified('OddsHarvester/OddsPortal (sin API key)','h2h'),true)
+  assert.equal(nhlQuotePeriodVerified('OddsHarvester/OddsPortal (sin API key)','1x2'),false)
+})
+
+test('sports feed failures retain endpoint, HTTP code, and redact query secrets',async()=>{
+  const endpoint='https://api-web.nhle.com/v1/gamecenter/2026020314/boxscore?apiKey=secret'
+  await assert.rejects(
+    getFeed(endpoint,async()=>new Response('rate limit',{status:429})),
+    error=>{
+      assert.match(error.message,/HTTP 429/)
+      assert.match(error.message,/api-web.nhle.com\/v1\/gamecenter\/2026020314\/boxscore/)
+      assert.doesNotMatch(error.message,/secret|apiKey/)
+      return true
+    })
+  await assert.rejects(
+    getFeed(endpoint,async()=>{throw new DOMException('timeout','TimeoutError')}),
+    error=>{
+      assert.match(error.message,/TimeoutError/)
+      assert.match(error.message,/gamecenter\/2026020314\/boxscore/)
+      assert.doesNotMatch(error.message,/secret|apiKey/)
+      return true
+    })
 })
