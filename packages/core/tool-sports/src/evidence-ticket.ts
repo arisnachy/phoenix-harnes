@@ -304,7 +304,7 @@ export async function evidenceTicket(
   const observed=quotePreselector&&quotePool.length?
     await boundedTicket(quotePreselector(quotePool,scan.espnQuotes),85_000)
       .catch(()=>[] as readonly KeylessQuote[]):[]
-  const preselectedQuotes:KeylessQuote[]=observed.slice(0,400).filter(q=>
+  const preselectedQuotes:KeylessQuote[]=observed.slice(0,2_400).filter(q=>
     q!==null&&typeof q==='object'&&
     typeof q.source==='string'&&q.source.startsWith('ESPN '))
   const quotedIds=new Set(quotePool.filter(c=>preselectedQuotes.some(q=>
