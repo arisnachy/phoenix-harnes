@@ -175,12 +175,17 @@ export async function resolveVisionFallbackRoute(
     for(const model of matching){
       try {
         const info=await ctx.llm.resolveModelInfo(candidate,model.id)
-        resolvedClinical.push(info)
+        // A catalog advertisement alone is not enough for a clinical source.
+        // Require the resolved identity and image capability to agree before
+        // dispatching patient-derived content to this route.
+        if(info.provider===candidate && info.id===model.id
+          && info.inputModalities?.includes('image')===true){
+          resolvedClinical.push(info)
+        }
       }catch{
-        // Advertised image input remains useful even when detailed capability
-        // resolution fails; never assume High effort from a bare model name.
-        resolvedClinical.push({provider:candidate,id:model.id,name:model.id,
-          inputModalities:['image']})
+        // Fail closed when detailed clinical image capabilities cannot be
+        // verified; do not synthesize a visual capability from a catalog hint.
+        continue
       }
     }
   }
