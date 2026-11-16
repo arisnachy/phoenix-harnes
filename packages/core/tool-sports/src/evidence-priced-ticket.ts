@@ -55,6 +55,26 @@ const leagueSportKey:Record<string,string>={
   'bra.1':'soccer_brazil_serie_a','arg.1':'soccer_argentina_primera_division',
   'uefa.europa':'soccer_uefa_europa_league','nba':'basketball_nba',
   'wnba':'basketball_wnba','mlb':'baseball_mlb','nfl':'americanfootball_nfl','nhl':'icehockey_nhl',
+  'mens-college-basketball':'basketball_ncaab',
+  'college-football':'americanfootball_ncaaf',
+}
+/** Never query MLB odds for LIDOM or NFL odds for NCAA just because
+ * the fixtures share a sport family; market identity includes the LEAGUE.
+ * @param event Verified ESPN fixture with explicit sport and league.
+ * @param soccerFallback Optional soccer route for open league discovery.
+ * @returns Exact league odds key or undefined when market unsupported.
+ */
+export function ticketLeagueOddsKey(
+  event:{sport:string;league:string},
+  soccerFallback:'dynamic'|'none'|'worldwide'='none',
+):string|undefined{
+  const known=leagueSportKey[event.league]
+  if(known)return known
+  if(event.sport==='baseball'||event.sport==='football'||
+    event.sport==='basketball')return undefined
+  if(event.sport==='soccer')return soccerFallback==='dynamic'?
+    'soccer_espn_dynamic':soccerFallback==='worldwide'?'soccer_worldwide':undefined
+  return routing[event.sport]?.oddsSportKey
 }
 export async function evidencePricedTicket(
   count:number,date?:string,sport?:string,stake=0,now=Date.now(),
@@ -145,8 +165,7 @@ export async function evidencePricedTicket(
     if(quotesProvider||marketPreference==='double_chance'||
       env.PHOENIX_SPORTS_ESPN_DISABLED==='1')return[]
     const byId=new Map(candidates.map(c=>[c.eventId,c]))
-    const sportKey=(c:typeof candidates[number])=>leagueSportKey[c.league]??
-      (c.sport==='soccer'?'soccer_espn_dynamic':routing[c.sport]?.oddsSportKey)
+    const sportKey=(c:typeof candidates[number])=>ticketLeagueOddsKey(c,'dynamic')
     const embedded:KeylessQuote[]=scoreboardQuotes.flatMap(q=>{
       const c=byId.get(q.eventId)
       const k=c?sportKey(c):undefined
@@ -208,8 +227,7 @@ export async function evidencePricedTicket(
     Promise.resolve([] as PromiseSettledResult<KeylessQuote[]>[]):
     Promise.allSettled(leagues.map(async event=>{
     if(event.sport==='soccer'&&marketPreference==='double_chance')return [] as KeylessQuote[]
-    const sportKey=leagueSportKey[event.league]??
-      (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
+    const sportKey=ticketLeagueOddsKey(event)
     if(!sportKey)return [] as KeylessQuote[]
     // Wrap the transport to disable the in-process ESPN odds cache for
     // ticket construction: preserve a fresh feed READ, not an old snapshot.
@@ -394,8 +412,7 @@ export async function evidencePricedTicket(
       removedConflicts===0&&!identityConflict?
       research.discoveryAudit.fixtureSample.slice(0,6):[]
     const scanned=await Promise.allSettled(fixtures.map(async item=>{
-      const sportKey=leagueSportKey[item.league]??
-        (item.sport==='soccer'?'soccer_espn_dynamic':routing[item.sport]?.oddsSportKey)
+      const sportKey=ticketLeagueOddsKey(item,'dynamic')
       if(!sportKey)return{item,attempted:false,options:[] as Array<{
         bookmaker:string;selection:string;market:string;price:number;
         observedAt:string|null;updatedAt:string|null}>,notes:['Sin adaptador ESPN conocido']}
@@ -485,8 +502,7 @@ export async function evidencePricedTicket(
   const exactReports=await Promise.allSettled(exactTargets.map(async event=>{
     // The exact fixture's league is already verified by ESPN; unlike
     // generic league-wide discovery this does not guess an unsupported slug.
-    const sportKey=leagueSportKey[event.league]??
-      (event.sport==='soccer'?'soccer_espn_dynamic':routing[event.sport]?.oddsSportKey)
+    const sportKey=ticketLeagueOddsKey(event,'dynamic')
     if(!sportKey)return null
     const deadline=AbortSignal.timeout(9_000)
     const bounded:typeof fetch=(input,init)=>{
@@ -567,8 +583,7 @@ export async function evidencePricedTicket(
   const optionalReports=!quotesProvider&&optionalAllowed&&optionalConfigured?
     await Promise.allSettled([...new Map(stillMissing.map(e=>[e.league,e])).values()]
       .map(async event=>{
-        const sportKey=leagueSportKey[event.league]??
-          (event.sport==='soccer'?undefined:routing[event.sport]?.oddsSportKey)
+        const sportKey=ticketLeagueOddsKey(event)
         if(!sportKey)return[] as KeylessQuote[]
         const externalOnlyEnv={...env,PHOENIX_SPORTS_ESPN_DISABLED:'1',
           PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'}
@@ -762,8 +777,7 @@ export async function evidencePricedTicket(
     await Promise.allSettled(unresolved.map(async({event,index})=>{
       // For unknown soccer league pages, use league-independent comparison
       // portals without turning any observed HTML into a dated sportsbook quote.
-      const sportKey=leagueSportKey[event.league]??
-        (event.sport==='soccer'?'soccer_worldwide':routing[event.sport]?.oddsSportKey)
+      const sportKey=ticketLeagueOddsKey(event,'worldwide')
       if(!sportKey)return null
       return{index,report:await boundedPriced(researchPublicOddsWebsites({
         sportKey,date:day,home:event.home,away:event.away,
