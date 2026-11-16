@@ -665,3 +665,53 @@ test('ESPN quote from another event ID cannot be assigned just by same participa
   assert.equal(result.quotedLegs,0)
   assert.equal(result.card.props.legs[0].price,'Por verificar')
 })
+
+test('full-slate ESPN discovery replaces an unpriced top-five leg with a quoted sixth',async()=>{
+  const read=async url=>{
+    const raw=board(url),u=String(url)
+    if(u.includes('/soccer/eng.1/')){
+      const part=u.match(/dates=(\d{6,8})/u)?.[1]
+      if(part==='20261028'){
+        raw.events.push({
+          id:'505',date:kick,status:{type:{state:'pre'}},
+          competitions:[{id:'505',competitors:[
+            {homeAway:'home',team:{id:'51',displayName:'Home 5'}},
+            {homeAway:'away',team:{id:'52',displayName:'Away 5'}},
+          ],odds:[{provider:{name:'DraftKings'},
+            homeTeamOdds:{moneyLine:-110},awayTeamOdds:{moneyLine:105},
+            drawOdds:325}]}],
+        })
+      }else if(part==='202610'||['20261027','20261026','20261025',
+        '20261024','20261023'].includes(part??'')){
+        const hist=part==='202610'?['20261027','20261026','20261025',
+          '20261024','20261023']:[part]
+        for(const stamp of hist){
+          raw.events.push({id:String(505+Number(stamp.slice(-2))*1000),
+            date:'2026-'+stamp.slice(4,6)+'-'+stamp.slice(6,8)+'T21:00:00Z',
+            status:{type:{state:'post'}},competitions:[{competitors:[
+              {homeAway:'home',team:{id:'51',displayName:'Home 5'},score:'3'},
+              {homeAway:'away',team:{id:'52',displayName:'Away 5'},score:'0'},
+            ]}]})
+        }
+      }
+    }
+    return Response.json(raw)
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',0,now,{
+    PHOENIX_SPORTS_ESPN_DISABLED:'0',
+    PHOENIX_SPORTS_OPTIONAL_ODDS_FALLBACK:'0',
+    PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0',
+  },read,undefined,'winner',stubSpecialists)
+  assert.equal(result.verifiedEvents,5)
+  assert.ok(result.discoveryAudit.discoveredEvents>=6)
+  assert.ok(result.researchFixtures.some(x=>x.eventId==='505'))
+  assert.equal(result.card.props.legs[0].eventId,'505')
+  assert.equal(result.card.props.legs[0].bookmaker,'DraftKings')
+  assert.equal(result.card.props.legs[0].quoteStatus,'espn-observed')
+  assert.ok(Math.abs(Number(result.card.props.legs[0].price)-1.90909)<0.001)
+  assert.equal(result.quotedLegs,1)
+  assert.equal(result.missingQuotes,4)
+  assert.equal(result.priced,false)
+  assert.equal(result.approvedLegs,0)
+  assert.match(result.card.props.note,/Cartelera completa:/)
+})
