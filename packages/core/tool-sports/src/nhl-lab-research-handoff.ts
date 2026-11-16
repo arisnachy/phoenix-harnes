@@ -7,7 +7,8 @@ import { probeNhlOfficialStarters, type NhlStarterProbe } from './nhl-official-s
 import type { StepObservation } from './daily-specialist-checklist.ts'
 import {fetchEspnInjuryBackup,type InjuryBackup} from './espn-injury-backup.ts'
 import {nhlGoalieEvidence} from './nhl-goalie-evidence.ts'
-import {reconcileNhlRosterAvailability} from './nhl-roster-integrity.ts'
+import {buildNhlFullRosterAudit,reconcileNhlRosterAvailability} from './nhl-roster-integrity.ts'
+import {aggregateNhl5v5} from './nhl-five-on-five.ts'
 
 type EvidenceState='verified'|'partial'|'missing'
 type ModuleLetter='A'|'B'|'C'|'D'|'E'|'F'|'G'|'H'|'I'|'J'|'K'|'L'|'M'|'N'|'O'|'P'|'Q'
@@ -109,8 +110,17 @@ export function buildNhlResearchHandoff(
     Number.isFinite(stamp(injuries.feedUpdatedAt))&&
     stamp(injuries.feedUpdatedAt)<=stamp(dossier.checkedAt)&&
     stamp(injuries.feedUpdatedAt)<stamp(fixture.date)?injuries:null
+  // The v1 handoff reader must still accept older replay dossiers that
+  // predate full-roster and play-by-play research; absence is UNKNOWN, not zero.
+  const fullRosterBase=dossier.fullRosterAudit??buildNhlFullRosterAudit(
+    dossier.players,{home:null,away:null},null,
+    Date.parse(dossier.checkedAt),fixture.date)
+  const fiveOnFive=dossier.fiveOnFiveAudit??aggregateNhl5v5({
+    home:{teamId:fixture.home.id,gameIds:[]},
+    away:{teamId:fixture.away.id,gameIds:[]},games:[],
+  })
   const fullRoster=reconcileNhlRosterAvailability(
-    dossier.fullRosterAudit,injurySnapshot,
+    fullRosterBase,injurySnapshot,
     Date.parse(dossier.checkedAt),fixture.date)
   const candidates=dossier.goalieCandidates
   const anyGoalie=candidates.home.length>0&&candidates.away.length>0
@@ -140,14 +150,14 @@ export function buildNhlResearchHandoff(
     D:make('Goles, diferencial y tiros',observed(bothForm),{
       homeLast10:formH?.last10??[],awayLast10:formA?.last10??[],
       seasonShots:dossier.officialShots??null,
-      fiveOnFive:dossier.fiveOnFiveAudit??null },
+      fiveOnFive:fiveOnFive },
       ['Tiros 5v5 reales via Fenwick; xG y calidad de tiro siguen sin modelo'],urls),
     E:make('Calidad de rivales','missing',null,
       ['Strength of schedule a fecha y rating del rival']),
     F:make('xG, xGA y 5 contra 5',
-      dossier.fiveOnFiveAudit.home.games>0&&
-        dossier.fiveOnFiveAudit.away.games>0?'partial':'missing',{
-        fiveOnFive:dossier.fiveOnFiveAudit,
+      fiveOnFive.home.games>0&&
+        fiveOnFive.away.games>0?'partial':'missing',{
+        fiveOnFive,
         xGoals:null,xGoalsAgainst:null,goalieGSAx:null,
         note:'Fenwick no estima calidad de tiro' },
       ['xG/xGA/GSAx aún requieren fuente/modelo autorizados'],
