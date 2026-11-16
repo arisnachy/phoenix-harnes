@@ -162,7 +162,7 @@ export function SportsMarkedMatch({away,home,hasStarted,favorite,trackedBets=[],
           <span><strong>{team.label}</strong>
             {chosenUser&&<small className={css.sportsPickTag}>✓ Tu elección</small>}
             {chosenReceipt&&<small className={css.sportsPickTag}>✓ Tu selección · boleto</small>}
-            {chosenKira&&<small className={css.sportsKiraPickTag}>✦ PHOENIX eligió</small>}
+            {chosenKira&&<small className={css.sportsKiraPickTag}>✦ PHOENIX eligió · Pronóstico Kira</small>}
             {analytic&&<small className={css.sportsFavoriteTag}>★ Favorito PHOENIX</small>}
             {team.meta&&<small>{team.meta}</small>}</span>
           {hasStarted&&team.score!==undefined&&<b>{team.score}</b>}
@@ -196,8 +196,8 @@ export function SportsMarkedMatch({away,home,hasStarted,favorite,trackedBets=[],
       })}
       {picks.length>5&&<small>+{picks.length-5} selecciones adicionales.</small>}
       <small className={css.sportsPickDisclaimer}>
-        Estado deportivo según ESPN; ninguna selección manual implica una apuesta.
-        La casa liquida los boletos por sus propias reglas.
+        Estado deportivo según ESPN; ninguna selección manual implica una apuesta;
+        solo la casa liquida apuestas.
       </small>
     </div>}
   </>
