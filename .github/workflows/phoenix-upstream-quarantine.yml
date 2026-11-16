@@ -69,11 +69,22 @@ jobs:
         shell: bash
         run: |
           forbidden='DSH Local Build|Into the Unknown|Deep diving'
-          if rg -n "$forbidden" packages/client packages/bundle apps; then
+          # Ubuntu runners do not guarantee ripgrep; use portable GNU grep.
+          # Exit 1 means no forbidden match; grep errors must still fail closed.
+          if grep -ERn --exclude-dir=node_modules --exclude-dir=.git "$forbidden" packages/client packages/bundle apps; then
             echo 'Upstream candidate reintroduced a retired product identity.' >&2
             exit 1
+          else
+            status=$?
+            if [ "$status" -ne 1 ]; then
+              echo "Product identity scan failed (grep exit $status)." >&2
+              exit "$status"
+            fi
           fi
-          rg -n 'PHOENIX' packages/client/web packages/client/ui-brand-official >/dev/null
+          if ! grep -ERq --exclude-dir=node_modules --exclude-dir=.git 'PHOENIX' packages/client/web packages/client/ui-brand-official; then
+            echo 'PHOENIX product identity marker missing or unreadable.' >&2
+            exit 1
+          fi
 
       - name: Install and run the static acceptance gate
         if: steps.candidate.outputs.exists == 'false'
