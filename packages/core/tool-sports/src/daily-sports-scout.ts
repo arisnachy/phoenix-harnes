@@ -198,9 +198,16 @@ export async function scoutDailySports(
         // Do not promote fallback CACHE prices, guesses or unknown providers.
         const odds=event.competitions?.[0]?.odds
         if(!board.value.cached&&Array.isArray(odds)&&odds.length){
-          const current=normalizeEspnMarkets(
-            event as Parameters<typeof normalizeEspnMarkets>[0],
-            odds as Parameters<typeof normalizeEspnMarkets>[1],{now})
+          // Provider arrays may contain null or malformed entries. A broken
+          // bookmaker object cannot invalidate a real official game listing.
+          const entries=odds.filter(x=>x!==null&&typeof x==='object'&&
+            !Array.isArray(x))
+          let current:EspnMarketQuote[]=[]
+          try{
+            current=normalizeEspnMarkets(
+              event as Parameters<typeof normalizeEspnMarkets>[0],
+              entries as Parameters<typeof normalizeEspnMarkets>[1],{now})
+          }catch{current=[]}
           for(const q of current){
             if(q.market!=='h2h'||q.point!==null||q.eventId!==id||
               !q.bookmaker.trim()||q.bookmaker.startsWith('ESPN proveedor #')||
