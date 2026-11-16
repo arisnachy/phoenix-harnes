@@ -591,7 +591,7 @@ export async function investigateTicketSpecialists(
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
   quotes:MarketOutcome[]=[],deadlineMs=20_000,
 ):Promise<SpecialistGate[]>{
-  if(!Number.isInteger(deadlineMs)||deadlineMs<10||deadlineMs>90_000)
+  if(!Number.isInteger(deadlineMs)||deadlineMs<10||deadlineMs>240_000)
     throw Error('Presupuesto por expediente fuera de rango')
   const inspect=async(game:SpecialistFixture):Promise<SpecialistGate>=>{
     const controller=new AbortController()
@@ -602,7 +602,7 @@ export async function investigateTicketSpecialists(
       return fetcher(input,{...init,signal})
     }
     try{
-      return await Promise.race([
+      const result=await Promise.race([
         investigateTicketSpecialist(game,guardedFetch,now,env,quotes),
         new Promise<SpecialistGate>(resolve=>{
           timer=setTimeout(()=>{
@@ -612,6 +612,45 @@ export async function investigateTicketSpecialists(
           },deadlineMs)
         }),
       ])
+      if(!result.pendingSteps.some(x=>x.includes('Límite de investigación')))
+        return result
+      // A late NBA Common v3/roster request must not erase the separately
+      // available ESPN injury report. Recover the fast bilateral source on a
+      // fresh, bounded connection even when the expensive dossier timed out.
+      if(!['nba','wnba','nhl','nfl','mlb'].includes(game.league))
+        return result
+      const fallbackController=new AbortController()
+      const rescueFetch:typeof fetch=(input,init)=>{
+        const signal=init?.signal?
+          AbortSignal.any([init.signal,fallbackController.signal]):
+          fallbackController.signal
+        return fetcher(input,{...init,signal})
+      }
+      let rescueTimer:ReturnType<typeof setTimeout>|undefined
+      try{
+        const injury=await Promise.race([
+          fetchEspnInjuryBackup(game,rescueFetch,now).catch(()=>null),
+          new Promise<null>(resolve=>{
+            rescueTimer=setTimeout(()=>{
+              fallbackController.abort()
+              resolve(null)
+            },8_000)
+          }),
+        ])
+        if(!injury||!['verified','partial'].includes(injury.status))
+          return result
+        return{...result,status:'incomplete',
+          specialist:game.sport+' · datos parciales recuperados',
+          verifiedSteps:['ESPN reporte de lesiones '+injury.status+
+            ' · local '+injury.home.injuries.length+
+            ', visitante '+injury.away.injuries.length],
+          pendingSteps:[...result.pendingSteps,
+            'Investigar roster, titulares y métricas restantes sin descartar el parte ESPN',
+            ...injury.notes.slice(0,3)],
+          injuryAudit:injury,approvedForBetting:false}
+      }finally{
+        if(rescueTimer!==undefined)clearTimeout(rescueTimer)
+      }
     }finally{if(timer!==undefined)clearTimeout(timer)}
   }
   const audited:SpecialistGate[]=[]
