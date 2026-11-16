@@ -110,6 +110,12 @@ export function buildNhlResearchHandoff(
     stamp(injuries.feedUpdatedAt)<stamp(fixture.date)?injuries:null
   const candidates=dossier.goalieCandidates
   const anyGoalie=candidates.home.length>0&&candidates.away.length>0
+  const advanced=dossier.advanced
+  const has5v5=advanced?.status==='verified'&&
+    advanced.teams.home!==null&&advanced.teams.away!==null
+  const hasGsaX=advanced?.status==='verified'&&
+    advanced.goalies.home.length>0&&advanced.goalies.away.length>0
+  const advancedUrls=advanced?.status==='verified'?advanced.urls:[]
   const pp=dossier.specialTeams
   const ppComplete=pp.complete&&[pp.home.powerPlayPct,pp.home.penaltyKillPct,
     pp.away.powerPlayPct,pp.away.penaltyKillPct].every(filled)
@@ -139,8 +145,10 @@ export function buildNhlResearchHandoff(
       ['Tiros y ritmo observados, fuerza 5v5 aún no calculada'],urls),
     E:make('Calidad de rivales','missing',null,
       ['Strength of schedule a fecha y rating del rival']),
-    F:make('xG, xGA y 5 contra 5','missing',null,
-      ['xG 5v5 por ambos equipos, shot quality y fuente metodológica']),
+    F:make('xG, xGA y 5 contra 5',has5v5?'verified':'missing',
+      has5v5?{teams:advanced!.teams,updatedAt:advanced!.updatedAt,
+        attribution:advanced!.attribution,source:'MoneyPuck',situation:'5on5'}:null,
+      ['xG 5v5 por ambos equipos y calidad de tiros por evento'],advancedUrls),
     G:make('Porteros titulares',goalieConfirmed?'verified':observed(anyGoalie),{
       candidates,confirmed:goalieConfirmed?{
         home:starter?.homeGoalie,away:starter?.awayGoalie,
@@ -152,8 +160,11 @@ export function buildNhlResearchHandoff(
       candidates,observedForm:{
         home:nhlGoalieEvidence(candidates.home,fixture.date),
         away:nhlGoalieEvidence(candidates.away,fixture.date)},
+      moneyPuckGSAx:hasGsaX?advanced!.goalies:null,
+      moneyPuckUpdatedAt:hasGsaX?advanced!.updatedAt:null,
       requested:['SV%','GAA','last5','GSAx'] },
-      ['SV% y GAA del mismo portero, muestras 5/10/20 y GSAx validado'],urls),
+      ['SV% y GAA del mismo portero, muestras 5/10/20',
+        ...(!hasGsaX?['GSAx validado de ambos clubes']:[])],[...urls,...advancedUrls]),
     I:make('Plantillas y forma individual',observed(bothRosters),{
       home:dossier.players.home,away:dossier.players.away,
       officialScoringLeaders:dossier.skaterImpact??null },
