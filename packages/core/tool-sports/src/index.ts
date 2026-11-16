@@ -32,7 +32,7 @@ import { oddsDisciplines,coveredSportKeys,scanOddsDisciplines,belongsToLeague } 
 import { researchSport } from './multi-sport-research.ts'
 import { communityOpinions } from './sports-community.ts'
 import { evidenceTicket } from './evidence-ticket.ts'
-import { evidencePricedTicket } from './evidence-priced-ticket.ts'
+import { evidencePricedTicket,type TicketPricedProgress } from './evidence-priced-ticket.ts'
 import {lookupExactEspnWinner} from './sports-exact-espn-winner.ts'
 import {explainOddsEligibility,eligibleOddsForResearch} from './espn-odds-observation-gate.ts'
 import { ensureSportsSourcesStarted,hydrateSportsSources,managedSportsInstallStatus,sportsSourcesHealth } from './sports-source-health.ts'
@@ -97,7 +97,7 @@ const GUIDANCE = [
   'AUDITORÍA CONTRA PRECIOS ANTES DEL TICKET: comparar por pata 100/cuota con el porcentaje exploratorio histórico, SOLO si existe. Si la estimación NO calibrada queda 5 puntos o más por debajo del equilibrio, marcar alternativeReviewRequired y buscar otras selecciones reales y cotizadas. También revisar favoritos con precio que exija >=80% sin modelo validado y partidas NHL cuyos rivales ganaron al menos 2 de 3 encuentros recientes pese a un mal último-diez. No tratar estas alertas heurísticas como probabilidades verdaderas ni como EV; no declarar que el resultado posterior era predecible. Registrar el estado de porteros, lesionados, descansos y la hora de cada fuente ANTES del comienzo. ',
   'ESTADO NBA POR PARTIDO: el motor de ticket DEBE exponer researchEvidenceState, researchDetail y pendingEvidence a partir de los pasos reales de specialistChecks; la primera inspección rápida no equivale al expediente final. Cuando existan roster, forma o fuentes consultadas, indicar INVESTIGACIÓN PARCIAL y los datos específicos aún pendientes. No repetir «Sin expediente especializado, lesiones y quintetos verificados para esta pata» en cada juego: «sin expediente» solo si realmente no se obtuvo evidencia; lesiones ESPN verificadas como reporte no equivalen a quinteto confirmado ni a parte oficial definitivo. Si el especialista agota tiempo, informar el timeout concreto sin ocultar datos anteriores. ',
   'CUOTAS UTILIZABLES PARA EL TICKET: acepta un precio publicado por ESPN o un proveedor autorizado tras una consulta reciente, con evento futuro, equipos, casa identificada, mercado y selección exactos. La falta de updatedAt/lastUpdated de la casa NO lo convierte en mera referencia ni bloquea su inclusión en un ticket cotizado. observedAt registra cuándo PHOENIX consultó la fuente; no equivale a una actualización de la casa. No digas «Sin hora de actualización confirmada, las cuotas son referencias, no cotizaciones operables». Si faltan casa, identidad, precio o mercado, el partido ya comenzó o la consulta es antigua, no lo promociones. El ticket es utilizable para apostar manualmente sujeto al precio que acepte la banca; jamás afirmar que la apuesta fue ejecutada. ',
-  'LIMITE DE BUSQUEDA PARA TICKETS: si ya existen cinco o seis eventos prepartido con IDs y fechas verificados en NBA/NHL/otras ligas, NO recorrer 220 ligas de soccer para resolver una ausencia de cuotas. Resolver las cuotas por esos IDs, mostrar precios ESPN/DraftKings observados recientemente COMO CUOTAS USABLES EN EL TICKET DE INVESTIGACIÓN aunque lastUpdated no exista; observedAt es hora de consulta, no de cambio del bookmaker, y entregar inmediatamente el borrador fundamentado. Solo ampliar soccer_world_scan cuando FALTEN partidos verificados, en grupos limitados; el número de fuentes de cuotas vacías nunca justifica reiniciar el catálogo de encuentros. Tras una pasada de recuperación por evento, finalizar respuesta al usuario, sin ciclos de mensajes de progreso. ',
+  'CARTELERA COMPLETA Y RECUPERACIÓN PROGRESIVA: un ticket no termina por descubrir cinco juegos. Primero examinar todas las ligas activas y los candidatos verificables, priorizar precios ESPN con ID y casa cotejada y seguir investigando alternativas hasta agotar el catálogo disponible o el presupuesto del proveedor. No declarar que una liga sin respuesta está vacía; conservar cuotas obtenidas y el estado de investigación individual. Los plazos HTTP son protección de fuentes y NO motivo para descartar evidencia ya recuperada; si hay research-partial-timeout usar uiBlock.researchFixtures para recuperación dirigida sin rehacer todo el calendario. No confundir cuota observada con apuesta aceptada. ',
   'CALENDARIO PRIMERO: sin filtro explícito del usuario investiga simultáneamente NBA, WNBA, MLB, NFL, NHL y las ligas de fútbol verificables del día. Si el usuario limita disciplinas respeta ese filtro. Antes de elegir cinco evalúa TODOS los deportes activos y compara 12 o más candidatos cuando existan. Comienza con sports_chat_daily_scan(sports=[basketball,hockey,football,soccer] según lo solicitado). Usa coverage.available/empty/unavailable para descartar ligas sin juegos, pero empty no significa temporada cancelada y unavailable exige respaldo. Filtra partidos por día local Santo Domingo e IDs. No recorres las 220 ligas del catálogo de fútbol antes de investigar los encuentros ya confirmados; amplía páginas solo si faltan candidatos y detente cuando el expediente tenga suficientes partidos. Nunca infieras cuotas desde una fecha de calendario. ',
   'RESCATE DE CUOTAS: para el boleto diario de 5 o 6 GANADORES, el orden obligatorio es sports_chat_daily_market_shortlist(deep=true,winnerOnly=true,count=5 o 6) para cotejar hasta 10-12 eventos y reemplazar descartadas, ANTES de seleccionar patas definitivas. Si es insuficiente, usa sports_chat_ticket_evidence_priced_auto como recuperación por evento exacto de ESPN y coteja las fuentes por ID, equipo, fecha y casa; ESPN observedAt reciente es precio observado útil para investigación aunque no haya bookmaker updatedAt. Entrega UNA tarjeta final de investigación solo con exactamente las patas verificadas; si no hay cinco precios genuinos, muestra la evidencia parcial y las razones, sin inventarlos, y termina sin bucle de progreso.',
 
@@ -1970,25 +1970,45 @@ export function apply(ctx: Context): void {
       const env=await sportsEnv(ctx)
       const requestedAt=Date.now()
       let result:Awaited<ReturnType<typeof evidencePricedTicket>>
+      let lastSnapshot:TicketPricedProgress|null=null
+      // Research runs long by design: screening the *whole* local slate,
+      // then 5-6 full dossiers is not a 95-second task. Safety remains at
+      // each source. Most importantly, a deadline cannot erase a 1/5 quote.
+      const requestedBudget=Number(env.PHOENIX_SPORTS_TICKET_BUDGET_MS)
+      const ticketBudget=Number.isInteger(requestedBudget)&&
+        requestedBudget>=120_000&&requestedBudget<=900_000?
+        requestedBudget:420_000
       try{
         result=await boundedDailyTool(evidencePricedTicket(
           args.count,args.date,args.sport,args.stake??0,
-          requestedAt,env,fetch,undefined,preference),95_000)
+          requestedAt,env,fetch,undefined,preference,undefined,
+          snapshot=>{lastSnapshot=snapshot}),ticketBudget)
       }catch(error){
         const message=error instanceof Error?error.message:'Tiempo de espera agotado'
+        const recovered=lastSnapshot as TicketPricedProgress|null
         return JSON.stringify({
-          status:'research-timeout',priced:false,placed:false,approvedLegs:0,
-          requestedLegs:args.count,verifiedEvents:0,eventsFound:0,
-          quotedLegs:0,conditionalLegs:0,approvedForBetting:false,
-          uiBlock:{component:'sports_ticket_card',version:1,props:{
+          status:recovered?'research-partial-timeout':'research-timeout',
+          priced:false,placed:false,approvedLegs:0,
+          requestedLegs:args.count,
+          verifiedEvents:recovered?.verifiedEvents??0,
+          eventsFound:recovered?.verifiedEvents??0,
+          quotedLegs:recovered?.quotedLegs??0,
+          conditionalLegs:recovered?.verifiedEvents??0,
+          approvedForBetting:false,
+          recoveredStage:recovered?.stage??null,
+          researchFixtures:recovered?.researchFixtures??[],
+          uiBlock:recovered?.card??{component:'sports_ticket_card',version:1,props:{
             title:'PHOENIX · Investigación no completada',
-            subtitle:'Tiempo de espera · reanudar por fuentes independientes',
-            requestedLegs:args.count,legs:[],combinedOdds:'No disponible',
-            note:'Ningún ganador se confirma sin datos suficientes. '+message+
-              '. Consultar sports_chat_daily_scan y fuentes de respaldo; '+
-              'no volver a ejecutar automáticamente el flujo costoso.',
+            subtitle:'Fuente sin respuesta · datos parciales no disponibles',
+            source:'PHOENIX · investigación deportiva',requestedLegs:args.count,
+            legs:[],combinedOdds:'No disponible',
+            note:'TICKET INCOMPLETO. '+message+
+              '. Consultar datos por partido sin inventar precios.',
           }},
-          instruction:'No repetir indefinidamente esta llamada. Entregar al usuario el estado y, en una nueva consulta ligera, presentar solo datos verificables de la cartelera.',
+          instruction:'Preservar precios y eventos que contiene uiBlock. '+
+            'No declarar 0/5 si recoveredStage confirma otra cifra. '+
+            'Revisar únicamente las researchFixtures pendientes con '+
+            'sports_chat_ticket_dossier_recheck, no repetir todo el escaneo.',
         })
       }
       const cloudFollowUp=result.trackingEvents.length?
@@ -2058,8 +2078,14 @@ export function apply(ctx: Context): void {
         if(!Number.isFinite(Date.parse(fixture.kickoff))||
           Date.parse(fixture.kickoff)<=now)
           throw Error('Partido iniciado o fecha inválida: no reconstruir un informe prepartido')
+        // The old 45-s NBA cutoff discarded valid injuries/rotations when
+        // Common v3 returned slowly. Per-game budget is configurable while
+        // each individual HTTP call retains its own bounded deadline.
+        const requested=Number(env.PHOENIX_SPORTS_DOSSIER_BUDGET_MS)
+        const dossierBudget=Number.isInteger(requested)&&
+          requested>=20_000&&requested<=240_000?requested:180_000
         const found=await boundedDailyTool(investigateTicketSpecialists(
-          [fixture],feed,now,env,[],45_000),52_000)
+          [fixture],feed,now,env,[],dossierBudget),dossierBudget+12_000)
         return found[0]
       }))
       const reports=attempts.map((attempt,index)=>{

@@ -112,3 +112,45 @@ test('NHL actual specialist accepts official nickname at both checks, no cross-p
   assert.ok(result.verifiedSteps.some(x=>x.includes('Rosters')))
   assert.ok(!result.pendingSteps.some(x=>x.includes('otro partido')))
 })
+
+test('deep dossier budgets above old 90s cap are accepted without broadening approvals',async()=>{
+  const result=await investigateTicketSpecialists([
+    fixture('golf','pga','540'),fixture('cricket','test','541'),
+  ],async()=>{throw Error('never fetch unknown league')},
+  Date.parse('2026-11-08T17:00:00Z'),{},[],180_000)
+  assert.deepEqual(result.map(x=>x.eventId),['540','541'])
+  assert.ok(result.every(x=>x.approvedForBetting===false))
+  await assert.rejects(()=>investigateTicketSpecialists([
+    fixture('golf','pga')],fetch,Date.now(),{},[],240_001),/fuera de rango/)
+})
+test('timed out NBA dossier recovers fresh bilateral injury evidence independently',async()=>{
+  const at=Date.parse('2026-11-08T21:00:00Z')
+  const game={sport:'basketball',league:'nba',eventId:'401909949',
+    date:'2026-11-08',home:'Boston Celtics',away:'Milwaukee Bucks',
+    kickoff:'2026-11-09T02:00:00Z'}
+  const injury=(name,status,team)=>({status,date:'2026-11-08T19:48:00Z',
+    athlete:{id:team==='Boston Celtics'?'123':'456',displayName:name,
+      team:{displayName:team}}})
+  const fetcher=async input=>{
+    const url=String(input)
+    if(url.endsWith('/basketball/nba/injuries'))return Response.json({
+      timestamp:'2026-11-08T20:12:00Z',injuries:[
+        {id:'2',displayName:'Boston Celtics',injuries:[
+          injury('Player Alpha','Questionable','Boston Celtics')]},
+        {id:'15',displayName:'Milwaukee Bucks',injuries:[
+          injury('Player Beta','Out','Milwaukee Bucks')]},
+      ],
+    })
+    // Simulate a provider that ignores AbortSignal for the expensive NBA
+    // slate/roster; the tool must still surface the independent injury feed.
+    return new Promise(()=>{})
+  }
+  const [result]=await investigateTicketSpecialists([game],fetcher,at,{},[],45)
+  assert.equal(result.status,'incomplete')
+  assert.equal(result.injuryAudit.status,'verified')
+  assert.equal(result.injuryAudit.home.injuries[0].athlete,'Player Alpha')
+  assert.equal(result.injuryAudit.away.injuries[0].status,'Out')
+  assert.equal(result.approvedForBetting,false)
+  assert.match(result.pendingSteps.join(' '),/Límite de investigación/)
+  assert.ok(result.verifiedSteps.some(x=>/ESPN reporte de lesiones/.test(x)))
+})

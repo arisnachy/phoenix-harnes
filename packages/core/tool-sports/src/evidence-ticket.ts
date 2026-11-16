@@ -190,7 +190,7 @@ export async function evidenceTicket(
   const researchStarted=Date.now()
   const budgetInput=Number(env.PHOENIX_SPORTS_FULL_SLATE_BUDGET_MS)
   const researchBudget=Number.isInteger(budgetInput)&&budgetInput>=20_000&&
-    budgetInput<=120_000?budgetInput:60_000
+    budgetInput<=300_000?budgetInput:115_000
   let budgetExhausted=false
   for(let offset=0;offset<shortlist.length;offset+=4){
     if(offset>0&&Date.now()-researchStarted>=researchBudget){budgetExhausted=true;break}
@@ -302,9 +302,9 @@ export async function evidenceTicket(
     rank:c.rank,level:c.level,
   }))
   const observed=quotePreselector&&quotePool.length?
-    await boundedTicket(quotePreselector(quotePool,scan.espnQuotes),18_000)
+    await boundedTicket(quotePreselector(quotePool,scan.espnQuotes),85_000)
       .catch(()=>[] as readonly KeylessQuote[]):[]
-  const preselectedQuotes:KeylessQuote[]=observed.slice(0,400).filter(q=>
+  const preselectedQuotes:KeylessQuote[]=observed.slice(0,2_400).filter(q=>
     q!==null&&typeof q==='object'&&
     typeof q.source==='string'&&q.source.startsWith('ESPN '))
   const quotedIds=new Set(quotePool.filter(c=>preselectedQuotes.some(q=>
@@ -321,14 +321,21 @@ export async function evidenceTicket(
   let reviewedCandidates=0,rejectedCandidates=0
   const reviewNotes=new Map<string,string>()
   if(reviewCandidates&&candidateLegs.length){
-    const pool=candidateLegs.slice(0,Math.min(10,Math.max(count+4,7)))
+    // The first ten favorites must not monopolize specialist research when
+    // twenty or more lower-ranked teams publish usable ESPN moneylines.
+    // Cover quoted candidates first, then an expanding reserve. This budget
+    // is configurable but never bypasses provider-specific network safety.
+    const reviewInput=Number(env.PHOENIX_SPORTS_REVIEW_CANDIDATES)
+    const reviewCap=Number.isInteger(reviewInput)&&reviewInput>=12&&
+      reviewInput<=256?reviewInput:Math.min(96,candidateLegs.length)
+    const pool=candidateLegs.slice(0,Math.max(count+4,reviewCap))
     const input=pool.map(c=>({
       eventId:c.pick.eventId,sport:c.pick.sport,league:c.pick.league,
       home:c.home,away:c.away,kickoff:c.kickoff,pick:c.pick.pick,
       rank:c.rank,level:c.level,
     }))
     try{
-      const findings=await boundedTicket(reviewCandidates(input),12_000)
+      const findings=await boundedTicket(reviewCandidates(input),65_000)
       const known=new Set(input.map(x=>x.eventId))
       const seen=new Set<string>()
       const decisions=new Map<string,TicketPreselectVerdict>()
@@ -577,14 +584,15 @@ export async function evidenceTicket(
       ' candidatos · '+dailyResearchBoard.slots.length+'/'+count+
       ' partidos verificados en lista diaria · '+
       candidatesConditional+' condicionales',
-    note:(note+' Cartelera explorada: '+scan.events.length+'/'+scan.totalEligible+
+    note:('Candidatos revisados antes de elegir: '+reviewedCandidates+
+      ', descartados por contraindicación: '+rejectedCandidates+'. '+
+      note+' Cartelera explorada: '+scan.events.length+'/'+scan.totalEligible+
       ' futuros; '+quotePool.length+' candidatos con historial; '+quotedIds.size+
       ' con cuota ESPN cotejada antes de elegir. '+
       (scan.truncated?'INVENTARIO TRUNCADO: no declarar cobertura total. ':'')+
       'Se evaluaron candidatos adicionales antes de formar el ticket. '+
       'Las probabilidades por pata son exploratorias y NO calibradas. '+
-      dailyResearchBoard.note+' Candidatos revisados antes de elegir: '+reviewedCandidates+
-      ', descartados por contraindicación: '+rejectedCandidates+'.').slice(0,1250),
+      dailyResearchBoard.note).slice(0,1250),
   }}
   return{card,complete:ticket.complete,verifiedEvents:ticket.verifiedEvents,
     candidatesEvaluated:evaluated,researchLeagues:reports.filter(r=>r.status==='fulfilled').length,

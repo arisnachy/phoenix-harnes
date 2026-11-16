@@ -28,6 +28,7 @@ export type BasketballCase={
       pts:number;allowed:number;location:'home'|'away'}>;
     wins:number;losses:number;homeRecord:string;awayRecord:string;
     roster:BasketballAthlete[];teamStats:Array<{name:string;value:string}>;
+    depthChart?:DirectTeam['depthChart'];
     quintetConfirmed:boolean;sourceCoverage:DirectTeam['coverage']}>;
   matchups:BasketballDuel[];injuries:Array<{teamId:string;name:string;playerId:string;
     status:string;source:string}>;
@@ -166,6 +167,11 @@ function panel(d:Omit<BasketballCase,'uiBlock'>):BasketballCase['uiBlock']{
       value:p.confirmedStarter?'Titular oficial verificado':'Roster (no titular confirmado)',
       detail:p.position+' · '+p.stats.slice(0,3).map(f=>f.name+': '+f.value).join(' · ')+
         ' · recientes: '+p.lastGames.slice(0,2).map(f=>f.name+': '+f.value).join(' · ')}))))
+  add('Profundidad publicada por ESPN (NO quinteto confirmado)',
+    (['home','away'] as const).flatMap(side=>
+      (d.teams[side].depthChart??[]).slice(0,22).map(x=>({
+        label:d.teams[side].name+' · '+x.name,value:x.value,
+        detail:'Jerarquía indicativa del equipo, no prueba de presencia o titularidad'}))))
   add('Descanso y enfrentamientos',[
     {label:'Descanso local',value:d.context.restHours.home===null?'No verificado':
       d.context.restHours.home.toFixed(1)+' horas',
@@ -211,7 +217,7 @@ function panel(d:Omit<BasketballCase,'uiBlock'>):BasketballCase['uiBlock']{
 }
 export async function researchBasketballCase(league:BasketballLeague,date:string,eventId:string,
   fetcher:typeof fetch=fetch,now=Date.now(),env:NodeJS.ProcessEnv=process.env,
-  quotes:MarketOutcome[]=[],maxPlayers=15):Promise<BasketballCase>{
+  quotes:MarketOutcome[]=[],maxPlayers=20):Promise<BasketballCase>{
   if(!id(eventId))throw Error('ID de partido no verificable')
   if(!Number.isInteger(maxPlayers)||maxPlayers<1||maxPlayers>20)
     throw Error('Límite de jugadores inválido')
@@ -249,7 +255,7 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
       g.filter(x=>x.pts<x.allowed).length
     return{id:team.id,name:team.name,record:team.record,lastGames:games,
       wins:win,losses:lose,homeRecord:fmt(home),awayRecord:fmt(away),
-      roster,teamStats:raw?.stats??[],quintetConfirmed:confirmedStarters(summary,team.id,roster),
+      roster,teamStats:raw?.stats??[],depthChart:raw?.depthChart??[],quintetConfirmed:confirmedStarters(summary,team.id,roster),
       sourceCoverage:raw?.coverage??[]}
   }
   const teams={home:build('home'),away:build('away')}
