@@ -15,6 +15,7 @@ import {nflDeepSignals,nhlDeepSignals,mlbDeepSignals,
 import {investigateSoccer} from './soccer-worldwide-dossier.ts'
 import {assessSoccerDrawRisk,type SoccerDrawAudit} from './soccer-draw-risk.ts'
 import {probeNhlOfficialStarters,type NhlStarterProbe} from './nhl-official-starters.ts'
+import {probeNhlPregameScratches,type NhlScratchProbe} from './nhl-pregame-scratches.ts'
 import {nhlSlate,investigateNhl,type NhlOfficialShots} from './nhl-evidence-research.ts'
 import {nhlGoalieEvidence,type NhlGoalieForm} from './nhl-goalie-evidence.ts'
 import type {NhlSkaterImpact} from './nhl-skater-impact.ts'
@@ -43,6 +44,8 @@ export type SpecialistGate={
   soccerDrawAudit?:SoccerDrawAudit
   /** Official NHL gamecenter starter flags, never inferred from roster. */
   nhlStarterAudit?:NhlStarterProbe
+  /** NHL right-rail observations; never a certified final lineup. */
+  nhlScratchAudit?:NhlScratchProbe
   /** Actual appearances / weighted save fraction, not a starter prediction. */
   nhlGoalieFormAudit?:{home:NhlGoalieForm[];away:NhlGoalieForm[]}
   nhlTeamShotsAudit?:NhlOfficialShots
@@ -134,6 +137,7 @@ export async function investigateTicketSpecialist(
   let injuryAudit:InjuryBackup|undefined
   let soccerDrawAudit:SoccerDrawAudit|undefined
   let nhlStarterAudit:NhlStarterProbe|undefined
+  let nhlScratchAudit:NhlScratchProbe|undefined
   let nhlGoalieFormAudit:SpecialistGate['nhlGoalieFormAudit']
   let nhlTeamShotsAudit:NhlOfficialShots|undefined
   let nhlSkaterImpactAudit:SpecialistGate['nhlSkaterImpactAudit']
@@ -297,9 +301,13 @@ export async function investigateTicketSpecialist(
       if(!match)throw Error('NHL: sin correspondencia oficial de ambos equipos y fecha')
       // Goalie starter flags and the full player-history dossier are independent
       // official reads. Parallel acquisition saves the sequential goalie wait.
-      const [d,starterReport]=await Promise.all([
+      const [d,starterReport,scratchReport]=await Promise.all([
         investigateNhl(game.date,match.id,fetcher,now,quotes),
         probeNhlOfficialStarters({
+          gameId:match.id,homeAbbrev:match.home.abbrev,awayAbbrev:match.away.abbrev,
+          kickoff:match.date,
+        },fetcher,now),
+        probeNhlPregameScratches({
           gameId:match.id,homeAbbrev:match.home.abbrev,awayAbbrev:match.away.abbrev,
           kickoff:match.date,
         },fetcher,now),
@@ -336,11 +344,17 @@ export async function investigateTicketSpecialist(
         'Porteros candidatos '+(d.goalieCandidates.home.length+d.goalieCandidates.away.length),
         'Forma local/visita '+(d.form.home?.games??0)+'/'+(d.form.away?.games??0)]
       nhlStarterAudit=starterReport
+      nhlScratchAudit=scratchReport
       endpointAudit??=[]
       endpointAudit.push({url:nhlStarterAudit.url,
         status:nhlStarterAudit.state==='confirmed'?'verified':
           nhlStarterAudit.state==='unavailable'?'error':'empty',
         checkedAt:nhlStarterAudit.checkedAt,detail:nhlStarterAudit.note})
+      endpointAudit.push({url:nhlScratchAudit.url,
+        status:nhlScratchAudit.state==='observed'?'verified':
+          nhlScratchAudit.state==='unavailable'?'error':'empty',
+        checkedAt:nhlScratchAudit.checkedAt,
+        detail:nhlScratchAudit.note+'; jamás confirma la planilla final'})
       pending=nhlStarterAudit.state==='confirmed'?
         d.missingEvidence.filter(x=>!/Ningún portero confirmado/iu.test(x)):
         d.missingEvidence
@@ -370,7 +384,23 @@ export async function investigateTicketSpecialist(
       // Expected goals and GSAx are different from NHL shots and save percentage.
       // Keep the unobserved private metric missing; the compact research
       // checklist treats it as an advanced uncertainty, not a hard stop.
-      mark('xg','missing','5v5 xG/GSAx no publicados en las fuentes consultadas; no inferirlos de tiros')
+      const advancedOk=d.advanced?.status==='verified'&&
+        d.advanced.teams.home!==null&&d.advanced.teams.away!==null
+      mark('xg',advancedOk?'verified':'missing',advancedOk?
+        'MoneyPuck 5v5 ambos clubes, xG/xGA verificados al corte '+
+          d.advanced.updatedAt+'; GSAx por portero disponible por separado':
+        '5v5 xG/xGA no verificados: '+(d.advanced?.reason??'fuente ausente'))
+      mark('scratches',nhlScratchAudit.state==='observed'?'partial':'missing',
+        nhlScratchAudit.state==='observed'?
+          'NHL right-rail: '+nhlScratchAudit.home.length+' local / '+
+          nhlScratchAudit.away.length+' visitante; no garantiza planilla final':
+          'NHL scratches sin publicación pregame: '+nhlScratchAudit.note)
+      if(nhlScratchAudit.state==='observed')
+        steps.push('NHL scratches observados: local '+nhlScratchAudit.home.length+
+          ', visitante '+nhlScratchAudit.away.length+
+          '; estado lesión/suspensión por cotejar')
+      else pending.push('Scratches NHL no verificados antes del inicio: '+
+        nhlScratchAudit.note)
       const metrics=d.specialTeams
       const observedCount=[metrics.home.powerPlayPct,metrics.home.penaltyKillPct,
         metrics.away.powerPlayPct,metrics.away.penaltyKillPct]
@@ -542,6 +572,7 @@ export async function investigateTicketSpecialist(
       sourceChecks,checklist,...(injuryAudit?{injuryAudit}:{}),
       ...(soccerDrawAudit?{soccerDrawAudit}:{}),
       ...(nhlStarterAudit?{nhlStarterAudit}:{}),
+      ...(nhlScratchAudit?{nhlScratchAudit}:{}),
       ...(nhlGoalieFormAudit?{nhlGoalieFormAudit}:{}),
       ...(nhlTeamShotsAudit?{nhlTeamShotsAudit}:{}),
       ...(nhlSkaterImpactAudit?{nhlSkaterImpactAudit}:{}),
