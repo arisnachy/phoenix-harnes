@@ -6,6 +6,7 @@ import {recoverEspnRoster} from './espn-public-roster.ts'
 import {sameEspnTeam} from './sports-exact-espn-winner.ts'
 import {parseNhlSeasonGameLog,type NhlGameHistory,type NhlGameSplits} from './nhl-player-game-history.ts'
 import {prioritizeNhlSkaters,type NhlSkaterImpact} from './nhl-skater-impact.ts'
+import {buildNhlFullRosterAudit,type NhlFullRosterAudit} from './nhl-roster-integrity.ts'
 type R=Record<string,unknown>
 const o=(x:unknown):R=>x!==null&&typeof x==='object'&&!Array.isArray(x)?x as R:{}
 const arr=(x:unknown):unknown[]=>Array.isArray(x)?x:[]
@@ -49,6 +50,7 @@ export type NhlOfficialShots={home:NhlTeamShots;away:NhlTeamShots;
 export type HockeyDossier={fixture:HockeyFixture;checkedAt:string;sources:HockeyEvidenceSource[];
   specialTeams:NhlSpecialTeams;officialShots:NhlOfficialShots;
   skaterImpact:{home:NhlSkaterImpact[];away:NhlSkaterImpact[]};
+  fullRosterAudit:NhlFullRosterAudit;
   players:{home:HockeyPlayer[];away:HockeyPlayer[]};
   goalieCandidates:{home:HockeyPlayer[];away:HockeyPlayer[]};
   possibleMatchups:Array<{attackerId:string;attacker:string;againstGoalies:string[];source:'roster-only'}>;
@@ -319,6 +321,14 @@ function dashboard(d:Omit<HockeyDossier,'uiBlock'>):HockeyDossier['uiBlock']{
         detail:p.gamesPlayed+' partidos; posición '+p.role+
           ' · temporada del club, no confirma disponibilidad ni líneas',
       }))))
+  add('Cobertura estadística de rosters NHL',
+    (['home','away'] as const).map(side=>{
+      const x=d.fullRosterAudit[side]
+      return{label:d.fixture[side].name,
+        value:x.matchedStats+'/'+x.count+' jugadores con estadísticas de temporada',
+        detail:'Cobertura '+x.statCoveragePct+
+          '% · lesiones no informadas no equivalen a disponibles'}
+    }))
   add('Skaters y rendimiento',[
     ...d.players.home.filter(p=>p.role!=='goalie').slice(0,11),
     ...d.players.away.filter(p=>p.role!=='goalie').slice(0,11)].map(p=>({
@@ -442,6 +452,8 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
   }
   // The NHL club-stats ranking is identity-checked against the roster.
   // It only orders research: a high-scoring skater may be injured or scratched.
+  const fullRosterAudit=buildNhlFullRosterAudit(players,{
+    home:homeClubStats,away:awayClubStats},null,now,fixture.date)
   const rankedHome=prioritizeNhlSkaters(players.home,homeClubStats)
   const rankedAway=prioritizeNhlSkaters(players.away,awayClubStats)
   const skaterImpact={home:rankedHome.leaders,away:rankedAway.leaders}
@@ -455,6 +467,18 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
         gamesPlayed:String(score.gamesPlayed),goals:String(score.goals),
         assists:String(score.assists),points:String(score.points),
         shots:String(score.shots)}
+    }
+  }
+  // Every rostered player already has all available club-stats season data.
+  // Deep per-game histories remain priority/budget-limited, not team aggregates.
+  for(const side of ['home','away'] as const){
+    const lookup=new Map(fullRosterAudit[side].players.map(p=>[p.playerId,p]))
+    for(const player of players[side]){
+      const source=lookup.get(player.id)
+      if(source?.seasonStatStatus!=='matched')continue
+      player.stats={...player.stats,
+        ...Object.fromEntries(Object.entries(source.seasonMetrics)
+          .map(([k,v])=>[k,String(v)]))}
     }
   }
   // Alternate teams so away goalies are not starved after home skaters.
@@ -527,6 +551,11 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
     'Ningún portero confirmado por una fuente de alineación o morning skate',
     'Líneas 1–4 y parejas defensivas sin evidencia de shifts',
     '5v5 xG, calidad de tiros, GSAx y cara a cara reales sin fuente autorizada',
+    ...(!fullRosterAudit.allPlayerStatsCovered?[
+      'Estadísticas por jugador no disponibles para '+
+        (fullRosterAudit.home.missingSeasonStats+
+        fullRosterAudit.away.missingSeasonStats)+' miembros de roster',
+    ]:[]),
     ...(!skaterImpact.home.length||!skaterImpact.away.length?[
       'Ranking de anotadores NHL club-stats ausente en uno o ambos equipos',
     ]:[]),
@@ -550,7 +579,8 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
   const ready=players.home.length>=10&&players.away.length>=10&&
     goalies.home.length>0&&goalies.away.length>0
   const dossier:Omit<HockeyDossier,'uiBlock'>={fixture,checkedAt:new Date(now).toISOString(),
-    sources,players,skaterImpact,goalieCandidates:goalies,possibleMatchups,
+    sources,players,skaterImpact,fullRosterAudit,goalieCandidates:goalies,
+    possibleMatchups,
     standings:viewStandings,form,
     specialTeams,officialShots,markets,scenarios,missingEvidence,
     opportunity:{sport:'hockey',league:'nhl',eventId:fixture.id,
