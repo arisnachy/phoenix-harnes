@@ -17,7 +17,8 @@ import {assessSoccerDrawRisk,type SoccerDrawAudit} from './soccer-draw-risk.ts'
 import {probeNhlOfficialStarters,type NhlStarterProbe} from './nhl-official-starters.ts'
 import {nhlSlate,investigateNhl,type NhlOfficialShots} from './nhl-evidence-research.ts'
 import {nhlGoalieEvidence,type NhlGoalieForm} from './nhl-goalie-evidence.ts'
-import {reconcileNhlRosterAvailability,type NhlFullRosterAudit} from './nhl-roster-integrity.ts'
+import {reconcileNhlRosterAvailability,applyNhlOfficialScratches,
+  type NhlFullRosterAudit} from './nhl-roster-integrity.ts'
 import type {Nhl5v5Audit} from './nhl-five-on-five.ts'
 import type {NhlSkaterImpact} from './nhl-skater-impact.ts'
 import {sameEspnTeam} from './sports-exact-espn-winner.ts'
@@ -541,6 +542,19 @@ export async function investigateTicketSpecialist(
             ' · '+item.status+' · '+(item.reportedAt??'sin fecha'))
       }else pending.push('ESPN lesiones '+injury.status+': '+injury.source)
       pending.push(...injury.notes.slice(0,4))
+      }
+    }
+    if(nhlRosterAudit&&nhlStarterAudit){
+      nhlRosterAudit=applyNhlOfficialScratches(
+        nhlRosterAudit,nhlStarterAudit,now,game.kickoff)
+      const scratched=[...nhlRosterAudit.home.players,
+        ...nhlRosterAudit.away.players].filter(x=>
+          x.availability==='official-scratch-observed')
+      if(scratched.length){
+        steps.push('NHL scratches pregame oficiales: '+
+          scratched.map(x=>x.name+' ('+x.team+')').join('; '))
+        if(scratched.some(x=>x.impactIfAbsent==='high'))pending.push(
+          'Revaluar el favorito: scratch oficial de jugador con alto uso/producción')
       }
     }
     const freeInjuryChecks=await freeInjuryTask
