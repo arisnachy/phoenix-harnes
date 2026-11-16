@@ -183,3 +183,52 @@ export function buildNhlFullRosterAudit(
       'Métricas del club son acumulados de la temporada al momento de consulta, no archivo histórico punto-en-tiempo.',
     ]}
 }
+
+/** Reconcile a fetched ESPN report without re-fetching club stats or NHL IDs. */
+export function reconcileNhlRosterAvailability(
+  base:NhlFullRosterAudit,report:InjuryBackup|null,now:number,kickoff:string,
+):NhlFullRosterAudit{
+  const sides=['home','away'] as const
+  const asof=Math.min(now,Date.parse(kickoff))
+  const feedAt=Date.parse(report?.feedUpdatedAt??'')
+  const valid=!!report&&['verified','partial'].includes(report.status)&&
+    Number.isFinite(asof)&&Number.isFinite(feedAt)&&feedAt<=asof
+  const result={...base,checkedAt:new Date(now).toISOString(),
+    injurySource:report?.source??null,
+    notes:[...base.notes]}
+  for(const key of sides){
+    const prior=base[key],records=valid?(report?.[key].injuries??[]):[]
+    const matchedNames=new Set<string>()
+    const players=prior.players.map(p=>{
+      const matches=records.filter(x=>normalized(x.athlete)===normalized(p.name)&&
+        (!x.reportedAt||Date.parse(x.reportedAt)<=asof))
+      const statuses=[...new Set(matches.map(x=>x.status.toLowerCase()))]
+      const match=matches[0]
+      if(match)matchedNames.add(normalized(p.name))
+      const state:NhlAvailability=!valid?'feed-unavailable':!matches.length?
+        'not-reported':statuses.length>1?'ambiguous-report':
+        availability(match!.status)
+      return{...p,availability:state,
+        availabilitySource:match?.source??null,
+        availabilityPublishedAt:match?.reportedAt??null,
+        availabilityDetail:match?.details??null,
+      }
+    })
+    const unmatchedInjuries=records.filter(x=>
+      !matchedNames.has(normalized(x.athlete))).map(x=>({
+        athlete:x.athlete,status:x.status,
+        reason:'Nombre o fecha sin correspondencia segura en este roster NHL',
+      }))
+    result[key]={...prior,players,unmatchedInjuries,
+      reportedOut:players.filter(p=>['reported-out','reported-injured-reserve']
+        .includes(p.availability)).length,
+      reportedQuestionable:players.filter(p=>[
+        'reported-questionable','reported-doubtful','reported-day-to-day',
+      ].includes(p.availability)).length,
+      injuryFeedStatus:report?.status??null}
+  }
+  if(!valid)result.notes.push('Reporte ESPN no publicado o no vigente antes del corte: no confirmar bajas')
+  if(result.home.unmatchedInjuries.length||result.away.unmatchedInjuries.length)
+    result.notes.push('Reportes sin coincidencia por nombre: no convertir en bajas del roster')
+  return result
+}
