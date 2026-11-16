@@ -19,7 +19,7 @@ import { validTrackedPick,type SportsTrackedPick } from './SportsBetProgress.tsx
 import { SportsTicketLiveTracker,type TicketDailyResearchBoard } from './SportsTicketLiveTracker.tsx'
 import {SportsLeagueBadge} from './SportsLeagueIdentity.tsx'
 import {ForecastTicketScope,ForecastTicketSummary,ForecastTicketLegStatus} from './SportsForecastLive.tsx'
-import {SportsMarkedMatch} from './SportsMarkedMatch.tsx'
+import {SportsMarkedMatch,SportsUserHistorySummary} from './SportsMarkedMatch.tsx'
 import {importSportsForecast} from './SportsForecastAutoLink.ts'
 export {sportsFavoriteSide} from './SportsMarkedMatch.tsx'
 import { SportsNewsPanel } from './SportsNewsPanel.tsx'
@@ -1233,7 +1233,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           aria-label={p.title}>
           <header className={css.sportsSlateHeader}>
             <div><span className={css.sportsKicker}>PHOENIX / {sportName} · {p.league?.toLocaleUpperCase('es')??'CARTELERA'}</span>
-              <h3>{p.league?`${p.league} · ${sportsDisplayText(p.title)}`:sportsDisplayText(p.title)}</h3><small>{sportName} · {p.date}</small></div>
+              <h3>{p.league?`${p.league} · ${sportsDisplayText(p.title)}`:sportsDisplayText(p.title)}</h3><small>{sportName} · {p.date}</small><SportsUserHistorySummary/></div>
             <span className={css.sportsSlateCount}>{p.events.length} {p.events.length===1?'juego':'juegos'}</span>
           </header>
           <div className={css.sportsSlateGrid}>{p.events.map((e,i)=>{
