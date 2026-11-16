@@ -261,7 +261,8 @@ function quotedMarkets(game:HockeyFixture,quotes:MarketOutcome[],now:number):Hoc
       q.price>1&&Number.isFinite(q.price)&&!!q.bookmaker.trim()
   }).slice(0,30).map(q=>({bookmaker:q.bookmaker,market:q.market,
     selection:q.selection,point:q.point??null,odds:q.price,
-    updatedAt:observedFresh?q.observedAt!:q.updatedAt,
+    updatedAt:q.source?.startsWith('ESPN ')&&q.observedAt?
+      q.observedAt:q.updatedAt,
     verifiedEvent:true as const,approved:false as const,
     reason:'Portero titular, reglas 60min/OT/SO y ventaja sobre cuota pendientes'}))
 }
