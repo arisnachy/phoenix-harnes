@@ -46,6 +46,14 @@ export type SpecialistGate={
   soccerDrawAudit?:SoccerDrawAudit
   /** Official NHL gamecenter starter flags, never inferred from roster. */
   nhlStarterAudit?:NhlStarterProbe
+  /** NHL bookmaker rows: raw event references are not matched, period-verified prices. */
+  nhlMarketReconciliation?:{
+    rawEventPriceRows:number;matchedPriceRows:number;
+    status:'no-matched-price'|'observed-period-unverified'|'observed-period-verified';
+    selected:{bookmaker:string;selection:string;market:string;price:number;
+      observedAt:string|null;source:string;settlement:'including-ot'|'unverified'}|null;
+    note:string;
+  }
   /** Actual appearances / weighted save fraction, not a starter prediction. */
   nhlGoalieFormAudit?:{home:NhlGoalieForm[];away:NhlGoalieForm[]}
   nhlTeamShotsAudit?:NhlOfficialShots
