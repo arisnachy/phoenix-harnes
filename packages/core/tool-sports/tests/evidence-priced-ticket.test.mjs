@@ -1,6 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {boundedPriced,evidencePricedTicket} from '../src/evidence-priced-ticket.ts'
+import {boundedPriced,evidencePricedTicket,nhlQuotePeriodVerified,reconcileNhlMatchedMarkets} from '../src/evidence-priced-ticket.ts'
+import {getFeed} from '../src/sports.ts'
 
 const date='2026-10-28',now=Date.parse('2026-10-28T15:00:00Z')
 const kick='2026-10-28T23:00:00Z'
@@ -601,4 +602,52 @@ test('a complete 1X2 price never marks draw-risk analytical verification as comp
     c.checklist.steps.find(s=>s.key==='market').state==='verified'))
   assert.ok(r.specialistChecks.every(c=>c.checklist.criticalPending.some(x=>
     x.includes('Empate'))))
+})
+
+test('NHL market period cannot be inferred from generic ESPN or 60-minute 1x2',()=>{
+  assert.equal(nhlQuotePeriodVerified('ESPN Site/Core (sin clave)','h2h'),false)
+  assert.equal(nhlQuotePeriodVerified('DraftKings via ESPN','h2h'),false)
+  assert.equal(nhlQuotePeriodVerified('OddsHarvester/OddsPortal (sin API key)','h2h'),true)
+  assert.equal(nhlQuotePeriodVerified('OddsHarvester/OddsPortal (sin API key)','1x2'),false)
+})
+
+test('sports feed failures retain endpoint, HTTP code, and redact query secrets',async()=>{
+  const endpoint='https://api-web.nhle.com/v1/gamecenter/2026020314/boxscore?apiKey=secret'
+  await assert.rejects(
+    getFeed(endpoint,async()=>new Response('rate limit',{status:429})),
+    error=>{
+      assert.match(error.message,/HTTP 429/)
+      assert.match(error.message,/api-web.nhle.com\/v1\/gamecenter\/2026020314\/boxscore/)
+      assert.doesNotMatch(error.message,/secret|apiKey/)
+      return true
+    })
+  await assert.rejects(
+    getFeed(endpoint,async()=>{throw new DOMException('timeout','TimeoutError')}),
+    error=>{
+      assert.match(error.message,/TimeoutError/)
+      assert.match(error.message,/gamecenter\/2026020314\/boxscore/)
+      assert.doesNotMatch(error.message,/secret|apiKey/)
+      return true
+    })
+})
+
+test('NHL reconciles three event prices with zero matching selections as zero',()=>{
+  const result=reconcileNhlMatchedMarkets(3,[])
+  assert.equal(result.rawEventPriceRows,3)
+  assert.equal(result.matchedPriceRows,0)
+  assert.equal(result.status,'no-matched-price')
+  assert.equal(result.selected,null)
+})
+
+test('NHL period certification cannot leak across bookmakers',()=>{
+  const base={bookmaker:'Book',selection:'Vegas Golden Knights',market:'h2h',
+    price:1.6,source:'ESPN Site/Core (sin clave)',observedAt:'2026-11-16T12:00:00Z'}
+  const current=reconcileNhlMatchedMarkets(3,[base])
+  assert.equal(current.status,'observed-period-unverified')
+  assert.equal(current.selected.settlement,'unverified')
+  const proven={...base,source:'OddsHarvester/OddsPortal (sin API key)'}
+  assert.equal(reconcileNhlMatchedMarkets(3,[proven]).status,'observed-period-verified')
+  assert.equal(reconcileNhlMatchedMarkets(3,[proven,base]).status,
+    'observed-period-unverified')
+  assert.equal(nhlQuotePeriodVerified('OddsHarvester/OddsPortal (histórico, no vigente)','h2h'),false)
 })

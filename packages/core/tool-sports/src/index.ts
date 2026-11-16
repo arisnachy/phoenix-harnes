@@ -6,6 +6,8 @@ import {preloadDailyResearch,dailyResearchStatus,dailyResearchFetcher,santoDomin
 import {crosscheckFreeFixture,freeOfficialFollowUps,freeSourceInventory,freeSourceCoverageForSport} from './free-sports-source-audit.ts'
 import {nflverseInjuryReport} from './nflverse-injury-report.ts'
 import {fetchEspnInjuryBackup,espnInjuryCatalog} from './espn-injury-backup.ts'
+import {reconcileNhlRosterAvailability,applyNhlOfficialScratches} from './nhl-roster-integrity.ts'
+import {probeNhlOfficialStarters} from './nhl-official-starters.ts'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import { sportsCatalog, discoverEspnLeagues, hasSportsPermission, chatGames, compactSportsSchedule, marketOdds, marketOddsDetailed, pricedTicket, getFeed, type MarketSelection } from './sports.ts'
@@ -113,7 +115,7 @@ const GUIDANCE = [
   'AUDITORÍA DE RIESGO DEL TICKET: para pedir 5 a 6 ganadores, preselecciona por cuotas y evidencia usando sports_chat_daily_market_shortlist(deep=true,winnerOnly=true) y solo completa con especialistas o recuperación exacta. El auditor técnico puede mantener hold en el informe interno de aprobación de apuestas: NO es el estado de presentación del TICKET FINAL DE INVESTIGACIÓN. En el chat muestra las 5 selecciones elegidas, cuota y casa por pata, histórico y evidencia favorable y adversa; los pendientes se describen con precisión dentro de cada análisis. Un umbral heurístico del 55% no excluye automáticamente; la discrepancia de modelo o identidad sí exige revisión/alternativa real. No inferir EV ni probabilidad calibrada desde cuotas no-vig.',
   'REGLA OBLIGATORIA PARA TICKETS GANADORES: PRIMERO usa sports_chat_daily_market_shortlist(deep=true,winnerOnly=true,count=5) y su reserva de hasta 10-12 encuentros; usa sports_chat_ticket_evidence_priced_auto para investigación y rescate por evento si faltan cuotas. No selecciones cinco partidos antes de comprobar si tienen mercado; evita el bucle 3/5 causado por posponer las cuotas. SOLO si cinco mercados del mismo bookmaker están verificados en el partido correcto y 5 selecciones descriptivamente defendibles existe TICKET FINAL DE INVESTIGACIÓN (nunca apuesta aprobada). Un portero probable, questionable/day-to-day o ausencia de xG no se considera verificado, pero se documenta dentro de la pata sin bloquear la tarjeta cotizada. Si no existen cinco partidos y precios auténticos, informa faltantes sin inventarlos.',
   'MERCADOS DE TOTAL Y HÁNDICAP: ganar un partido no demuestra cubrir -1.5/+1.5 o una línea over/under. Antes de considerar un total o spread con sports_chat_daily_market_shortlist(deep=true), coteja la línea EXACTA contra resultados previos de AMBOS clubes, separa aciertos, fallos y pushes, y exige dirección consistente en los dos historiales. Si marketOutcomeDiagnostic.status es mixed, insufficient o adverse, etiquetar CONDICIONAL/CONTRAINDICADA y no ponerla como pata cotizada; nunca conviertas frecuencia histórica en probabilidad futura o EV. Para NHL añade portero y reglas OT/SO; para NBA pace, eficiencia y lesiones siguen pendientes si no fueron medidos. La meta de 5–6 patas no autoriza inventar una probabilidad ni rellenar selecciones sin respaldo. ',
-  'NHL ESPECIALIZADO: para NHL consulta sports_chat_hockey_slate y sports_chat_nhl_investigate con gameId oficial NHL, no ID ESPN. Recupera rosters y estadísticas observadas de skaters/porteros; distingue portero candidato del titular confirmado y ganador a 60 minutos del ganador con OT/SO. No infieras xG/GSAx, alineaciones definitivas o probabilidades no calibradas, no descartar cuotas ESPN por ausencia de lastUpdated cuando observedAt es reciente; cotejar partido, casa, mercado y porteros. No afirmar portero titular sin fuente. En +1.5/-1.5 evalúa el riesgo de caer por dos goles, los márgenes recientes de ambos equipos, la probabilidad de equilibrio del precio, porteros, descanso, empty-net y OT. Sin titular y modelo de cobertura calibrado, clasifica como CONDICIONAL o CONTRAINDICADA. ',
+  'NHL ESPECIALIZADO: para NHL consulta sports_chat_hockey_slate y sports_chat_nhl_investigate con gameId oficial NHL, no ID ESPN. Para TODOS los jugadores, sus estadísticas y reportes de lesiones por atleta consulta includeFullRoster=true. Distingue reported-out, reported-questionable y not-reported (no significa sano); Fenwick oficial 5v5 NO es xG ni GSAx.  Recupera rosters y estadísticas observadas de skaters/porteros; distingue portero candidato del titular confirmado y ganador a 60 minutos del ganador con OT/SO. No infieras xG/GSAx, alineaciones definitivas o probabilidades no calibradas, no descartar cuotas ESPN por ausencia de lastUpdated cuando observedAt es reciente; cotejar partido, casa, mercado y porteros. No afirmar portero titular sin fuente. En +1.5/-1.5 evalúa el riesgo de caer por dos goles, los márgenes recientes de ambos equipos, la probabilidad de equilibrio del precio, porteros, descanso, empty-net y OT. Sin titular y modelo de cobertura calibrado, clasifica como CONDICIONAL o CONTRAINDICADA. ',
   'TENNIS INTELLIGENCE ATP/WTA: investiga con sports_chat_tennis_slate(tour=atp|wta,date) y sports_chat_tennis_investigate(tour,date,matchId) tras cotejar matchId y participantes exactos, superficie y formato oficial. Valorar primer y segundo servicio vs devolución, break points, fatigue, H2H por superficie, indoor/outdoor y cambios de calendario solo cuando se dispone de fuentes; jamás declarar ranking, H2H, best-of-5, lesiones, cuota o resultado sintético. ATP/WTA son circuitos diferentes; distinguir singles/doubles, retiro, walkover y match-tiebreak en mercados. Si no hay datos suficientes, abstenerse. ',
   'NFL AMERICAN FOOTBALL INTELLIGENCE: consulta sports_chat_nfl_slate para fecha/eventId real y sports_chat_nfl_investigate para investigar quarterback, roster completo de ambos clubes, ofensiva, defensiva, OL vs pass rush, WR/TE vs CB/LB, RB vs front seven, descanso, lesiones, clima, cuartos y cotizaciones auténticas. Los 11 titulares ofensivos y los 11 defensivos de CADA club se confirman por IDs explícitos y unidad; no infieras titularidad del roster o profundidad. NFL no es fútbol soccer ni NCAA. No inventes QB titular, rutas, snaps, EPA, probabilidades, prices ni props; confirma evento/casa/mercado/período y abstente si falta evidencia. ',
   'INVESTIGACIÓN MLB POR PARTIDO: usa sports_chat_mlb_investigate para obtener primero la cartelera por fecha y luego el expediente mediante gamePk de MLB Stats API (no confundir con eventId ESPN). Investiga las estadísticas de cada jugador y la matriz bateador×abridor/bullpen, localía, parque, meteorología, últimas salidas y precios cotejados. El expediente marca como PENDIENTES los enfrentamientos BvP, fatiga, lesiones, alineaciones y expertos que no estén confirmados; no interpretes una fila de roster como un bateador titular ni inventes simulaciones probabilísticas. La conclusión se fundamenta en evidencia favorable Y contradictoria y en escenarios por entradas; si matchupNextOffset no es null hay cruces adicionales consultables. No vendas el expediente como una apuesta aprobada. ',
@@ -2079,6 +2081,8 @@ export function apply(ctx: Context): void {
           checklist:check.checklist??null,
           injuryAudit:check.injuryAudit??null,
           nhlStarterAudit:check.nhlStarterAudit??null,
+           nhlRosterAudit:check.nhlRosterAudit??null,
+           nhlFiveOnFiveAudit:check.nhlFiveOnFiveAudit??null,
           playerHistoryAudit:check.playerHistoryAudit??null,
           endpointAudit:check.endpointAudit?.slice(0,28)??[],
           sourceChecks:check.sourceChecks?.slice(0,10)??[],
@@ -2650,12 +2654,13 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_nhl_investigate',
-    description:'Investigar NHL por NHL gameId de cartelera: rosters, candidatos a portero, skaters, stats individuales, tabla, duelos posibles, períodos, cuotas y argumentos contra. No inventa starting goalie ni probabilidades.',
+    description:'Investigar NHL por NHL gameId: ficha de TODOS los jugadores del roster si includeFullRoster=true, métricas oficiales completas, lesiones ESPN reconciliadas y 5v5 Fenwick real. No inventa xG, titularidad ni disponibilidad.',
     parameters:{
       date:{type:'string',required:true,description:'Fecha del partido AAAA-MM-DD.'},
       gameId:{type:'string',required:true,description:'NHL gameId oficial obtenido de sports_chat_hockey_slate.'},
       maxSkaters:{type:'integer',description:'Número de forwards por equipo a investigar en detalle, entre 1 y 15; defecto 8.'},
       includeOdds:{type:'boolean',description:'Consultar cuotas NHL observadas si proveedor disponible; por defecto sí.'},
+      includeFullRoster:{type:'boolean',description:'Si true, incluye cada atleta y todas sus estadísticas NHL de temporada, reportes ESPN de bajas con sello temporal, faltantes y cobertura de dos plantillas.'},
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
@@ -2685,7 +2690,25 @@ export function apply(ctx: Context): void {
             oddsPromise.then(r=>r.quotes),args.maxSkaters??6,
             Date.now()+35_000),NHL_CHAT_RESEARCH_BUDGET_MS)
         const oddsSources=(await oddsPromise).sources
+        const injury=args.includeFullRoster===true?
+          await fetchEspnInjuryBackup({
+            sport:'hockey',league:'nhl',home:d.fixture.home.name,
+            away:d.fixture.away.name,date:args.date,kickoff:d.fixture.date,
+          },fetch,now).catch(()=>null):null
+        const official=args.includeFullRoster===true?
+          await probeNhlOfficialStarters({
+            gameId:d.fixture.id,homeAbbrev:d.fixture.home.abbrev,
+            awayAbbrev:d.fixture.away.abbrev,kickoff:d.fixture.date,
+          },fetch,Date.now()).catch(()=>null):null
+        const fullRoster=args.includeFullRoster===true?
+          applyNhlOfficialScratches(
+            reconcileNhlRosterAvailability(
+              d.fullRosterAudit,injury,Date.now(),d.fixture.date),
+            official,Date.now(),d.fixture.date):null
         return JSON.stringify({...compactNhlChatDossier(d),
+          ...(official?{nhlStarterAudit:official}:{}),
+          ...(fullRoster?{fullRosterAudit:fullRoster}:{}),
+          ...(injury?{injuryAudit:injury}:{}),
           status:'researched',durationMs:Date.now()-started,
           sourceAudit:{
             verified:d.sources.filter(x=>x.status==='verified').length,
