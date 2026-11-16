@@ -219,9 +219,9 @@ test('exact NBA+NHL day filter scans neither soccer nor unrelated sports',async(
     }:{events:[]}),{status:200})
   }
   const r=await evidenceTicket(5,day,'basketball,hockey',fetcher,now,{})
-  // Both NBA and WNBA are valid basketball leagues. This mock creates one
-  // fixture in each plus NHL: three discovered events, not two.
-  assert.equal(r.discoveryAudit.discoveredEvents,3)
+  // NBA, WNBA and NCAA are all catalogued basketball leagues. This mock
+  // creates one fixture in each plus NHL: four verified discovered events.
+  assert.equal(r.discoveryAudit.discoveredEvents,4)
   assert.equal(r.discoveryAudit.scanCoverage.filter(x=>x.sport==='nba').length,0)
   assert.ok(r.discoveryAudit.scanCoverage.every(x=>
     ['basketball','hockey'].includes(x.sport)))

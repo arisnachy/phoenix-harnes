@@ -464,3 +464,19 @@ test('ESPN recognizes external provider soccer league key aliases without misrou
    assert.ok(urls[0]?.includes('/soccer/'+league+'/scoreboard?'))
  }
 })
+
+test('ESPN full slate retains embedded bookmaker odds from events beyond old 30-game cutoff',async()=>{
+  const all=Array.from({length:64},(_,i)=>event([priced()],String(401140000+i)))
+  const urls=[]
+  const data=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',
+    async url=>{
+      urls.push(url)
+      if(!url.includes('/scoreboard?'))
+        throw Error('embedded fully priced event must not request Core/summary')
+      return {events:all}
+    },{now,days:1})
+  assert.equal(data.diagnostics.games,64)
+  assert.equal(data.quotes.length,128)
+  assert.ok(data.quotes.some(q=>q.eventId==='401140063'&&q.bookmaker==='DraftKings'))
+  assert.equal(urls.length,1)
+})

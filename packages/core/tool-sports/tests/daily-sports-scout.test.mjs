@@ -272,7 +272,7 @@ test('ESPN embedded moneylines are captured across the full slate without bookma
   const lines=scan.espnQuotes.filter(q=>q.eventId==='91')
   assert.equal(lines.length,2)
   assert.equal(lines[0].bookmaker,'DraftKings')
-  assert.equal(lines[0].timeIso,kickoff)
+  assert.equal(Date.parse(lines[0].timeIso),Date.parse(kickoff))
   assert.equal(lines[0].observedAt,new Date(now).toISOString())
   assert.ok(lines.some(q=>q.price>1))
 })

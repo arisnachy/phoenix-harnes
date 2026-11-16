@@ -214,9 +214,11 @@ export type EspnOddsDiagnostics = {
 export type EspnOddsObservation=EspnMarketQuote & {reason:'sin_fecha'|'antigua'|'proveedor_sin_nombre'|'fecha_futura'}
 export type EspnOddsResult={quotes:EspnMarketQuote[];observations:EspnOddsObservation[];diagnostics:EspnOddsDiagnostics}
 const MAX_QUOTE_AGE_MS=60*60*1000 // Diagnostic of unchanged bookmaker price, not an ESPN rejection gate.
-const MAX_REQUESTS=28
-const MAX_GAMES_PER_DAY=8
-const MAX_REFS_PER_GAME=3
+// Limits bound HTTP pressure, not candidate discovery. Embedded lines are
+// inspected for EVERY returned future event; Core fallback is independent.
+const MAX_REQUESTS=120
+const MAX_GAMES_PER_DAY=36
+const MAX_REFS_PER_GAME=5
 const oddsCache=new Map<string,{until:number;value:unknown}>()
 const oddsInflight=new Map<string,Promise<unknown>>()
 const dayInDR=(value:number)=>new Intl.DateTimeFormat('en-CA',{
@@ -398,7 +400,7 @@ export async function fetchPublicEspnOddsDetailed(
       safeId(event.id)!==null&&Date.parse(event.date??'')>now&&
       (!options.eventId||safeId(event.id)===options.eventId))
       .sort((a,b)=>Date.parse(a.date??'')-Date.parse(b.date??''))
-      .slice(0,30)
+      .slice(0,512)
     let fallbackEvents=0
     for(const event of candidates){
       const eventId=safeId(event.id),competition=event.competitions?.[0]
@@ -415,7 +417,8 @@ export async function fetchPublicEspnOddsDetailed(
       if(!targeted&&markets.every(m=>observedMarkets().has(m)))continue
       // Embedded odds are checked for every scoreboard event; expensive Core
       // and summary probes are capped separately to protect ESPN's rate limits.
-      if(fallbackEvents>=MAX_GAMES_PER_DAY||!competitionId)continue
+      if(fallbackEvents>=MAX_GAMES_PER_DAY||!competitionId||
+        budget.used>=MAX_REQUESTS)continue
       fallbackEvents++
       const corePath=coreBase+eventId+'/competitions/'+competitionId+'/odds'
       try{
@@ -439,7 +442,7 @@ export async function fetchPublicEspnOddsDetailed(
         }
       }catch(error){reportFailure('Core odds de '+eventId,error)}
       if(!targeted&&markets.every(m=>observedMarkets().has(m)))continue
-      if(budget.used>=MAX_REQUESTS)break
+      if(budget.used>=MAX_REQUESTS)continue
       // Site v2 and Site Web v2 sometimes expose different pickcenter blocks.
       // Both are public ESPN hosts: fall back only when requested markets remain
       // absent, never invent a bookmaker or infer a price from a predictor.
@@ -455,7 +458,7 @@ export async function fetchPublicEspnOddsDetailed(
       }
     }
     if(options.eventId&&diagnostics.eventMatched)break
-    if(quoteMap.size>=80)break
+    if(quoteMap.size>=2_000)break
   }
   if(diagnostics.scoreboards===0&&diagnostics.failures>0)
     throw Error('ESPN Scoreboard no disponible: '+(firstError??'respuesta inválida'))
@@ -474,7 +477,10 @@ export async function fetchPublicEspnOddsDetailed(
             ?'Se encontraron próximos partidos, pero ESPN no publicó cuotas para los mercados solicitados'
             :'No se localizaron próximos encuentros en el período consultado')
   }
-  return {quotes:[...quoteMap.values()].slice(0,160),observations:[...observationMap.values()].slice(0,120),diagnostics}
+  if(budget.used>=MAX_REQUESTS&&diagnostics.notes.length<7)
+    diagnostics.notes.push('Se agotó el presupuesto de Core/summary; precios embebidos del inventario consultado se conservan. Reanudar por eventId, nunca declarar sin cuotas globalmente.')
+  return {quotes:[...quoteMap.values()].slice(0,2_000),
+    observations:[...observationMap.values()].slice(0,500),diagnostics}
 }
 /** Compatibility facade: preserves the original two-stage API for callers. */
 export async function fetchPublicEspnOdds(

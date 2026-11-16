@@ -217,7 +217,7 @@ function panel(d:Omit<BasketballCase,'uiBlock'>):BasketballCase['uiBlock']{
 }
 export async function researchBasketballCase(league:BasketballLeague,date:string,eventId:string,
   fetcher:typeof fetch=fetch,now=Date.now(),env:NodeJS.ProcessEnv=process.env,
-  quotes:MarketOutcome[]=[],maxPlayers=15):Promise<BasketballCase>{
+  quotes:MarketOutcome[]=[],maxPlayers=20):Promise<BasketballCase>{
   if(!id(eventId))throw Error('ID de partido no verificable')
   if(!Number.isInteger(maxPlayers)||maxPlayers<1||maxPlayers>20)
     throw Error('Límite de jugadores inválido')
