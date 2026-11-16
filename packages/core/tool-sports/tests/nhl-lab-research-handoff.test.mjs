@@ -119,3 +119,26 @@ test('invalid official NHL ID and dates are rejected',()=>{
   bad.checkedAt='not-a-time'
   assert.throws(()=>buildNhlResearchHandoff(bad),/timestamps/)
 })
+
+test('NHL league injury report becomes dated PARTIAL evidence, never club-confirmed',()=>{
+  const injuries={status:'verified',source:'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/injuries',
+    feedUpdatedAt:'2026-11-15T15:00:00Z',checkedAt:'2026-11-15T18:00:00Z',
+    home:{name:'New Jersey Devils',matched:true,injuries:[
+      {athlete:'Player H',status:'Out',reportedAt:'2026-11-15T14:00:00Z'}]},
+    away:{name:'Toronto Maple Leafs',matched:true,injuries:[
+      {athlete:'Player A',status:'Questionable',reportedAt:'2026-11-15T14:00:00Z'}]}}
+  const game=buildNhlResearchHandoff(makeDossier(),null,injuries).games[0]
+  assert.equal(game.evidenceModules.J.state,'partial')
+  assert.equal(game.evidenceModules.J.data.officialClubConfirmation,false)
+  assert.equal(game.evidenceModules.J.data.home.injuries[0].athlete,'Player H')
+  assert.equal(game.checklistObservations.injuries.state,'partial')
+  assert.equal(game.gate.eligibleForTicket,false)
+})
+test('NHL post-snapshot injury report cannot leak into an earlier pregame dossier',()=>{
+  const injuries={status:'verified',source:'ESPN NHL',
+    feedUpdatedAt:'2026-11-15T20:30:00Z',checkedAt:'2026-11-15T20:30:00Z',
+    home:{matched:true,injuries:[]},away:{matched:true,injuries:[]}}
+  const game=buildNhlResearchHandoff(makeDossier(),null,injuries).games[0]
+  assert.equal(game.evidenceModules.J.state,'missing')
+  assert.equal(game.evidenceModules.J.data,null)
+})
