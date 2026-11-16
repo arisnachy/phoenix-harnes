@@ -795,3 +795,23 @@
   .sportsPickGoal{flex-basis:100%}
   .sportsPickResult{margin-left:0}
 }
+/* Three independent selections stay inside each compact two-column game tile. */
+.sportsSlateMatch .sportsChooseFavorite{
+  flex:0 0 auto;padding:3px 6px;border:1px solid var(--dsw-alias-border-subtle,rgba(122,139,163,.3));
+  background:transparent;color:var(--dsw-alias-label-secondary,#667385);
+  border-radius:7px;font:700 9px/1.25 inherit;cursor:pointer;white-space:nowrap
+}
+.sportsSlateMatch .sportsChooseFavorite[aria-pressed="true"]{
+  background:rgba(48,105,214,.12);border-color:rgba(48,105,214,.32);color:#2263bc
+}
+.sportsSlateMatch .sportsChooseFavorite:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(122,139,163,.1))}
+.sportsSlateMatch .sportsChooseFavorite:focus-visible{outline:2px solid var(--dsw-alias-accent-primary,#df5c1d);outline-offset:2px}
+.sportsSlateMatch .sportsKiraPickTag{display:block;color:#7751aa;font-size:9px;line-height:1.25;font-weight:780}
+.sportsSlateMatch .sportsFavoriteTag{display:block;font-size:9px;line-height:1.25}
+.sportsPickResultIcon{display:inline-grid;place-items:center;width:13px;margin-right:4px;font-size:12px;font-weight:900}
+.sportsUserHistory{display:block;margin-top:4px;color:var(--dsw-alias-label-secondary,#667385);font-size:10px}
+.sportsUserHistory strong{color:var(--dsw-alias-label-primary,#263443)}
+@media(max-width:420px){
+  .sportsSlateMatch .sportsChooseFavorite{padding:3px 5px;font-size:9px}
+  .sportsUserHistory span{display:block}
+}
