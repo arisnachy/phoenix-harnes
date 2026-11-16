@@ -41,7 +41,14 @@ export async function researchNbaWithSpecialists(
   }))
   // The existing gate performs real provider reads and produces the full
   // original basketball protocol. Timeouts are per event, not a global hold.
-  const audits=await investigateTicketSpecialists(fixtures,fetcher,now,env,[],20_000)
+  // A 20-s ceiling is insufficient for twenty NBA players per club plus
+  // gamelogs, current injuries and lineup verification. The limits below
+  // protect against a dead HTTP provider, never rank the game as losing.
+  const requested=Number(env.PHOENIX_SPORTS_NBA_RESEARCH_BUDGET_MS)
+  const dossierBudget=Number.isInteger(requested)&&requested>=20_000&&
+    requested<=240_000?requested:120_000
+  const audits=await investigateTicketSpecialists(
+    fixtures,fetcher,now,env,[],dossierBudget)
   const matches:NbaSupervisedMatch[]=form.matches.map((match,index)=>{
     const audit=audits[index]
     const checklist=audit?.checklist??evidenceOnly(match,now)
