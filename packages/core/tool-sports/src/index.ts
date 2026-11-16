@@ -472,6 +472,7 @@ export function apply(ctx: Context): void {
       // bookmaker's cheapest outcomes as if that were an independent prediction.
       const researchPool=Math.min(16,count+7)
       const pool=shortlistDailyMarkets(daily.events,quotes,count,now,researchPool)
+      const marketEvidenceStartedAt=Date.now()
       const research=await (async()=>{
         if(args.deep===false)return []
         const candidates=pool.selected
@@ -488,16 +489,16 @@ export function apply(ctx: Context): void {
           if(!pending){pending=fetch(input,init);cached.set(url,pending)}
           return pending.then(response=>response.clone())
         }) as typeof fetch
-        for(let offset=0;offset<candidates.length;offset+=2){
-          const batch=candidates.slice(offset,offset+2)
+        for(let offset=0;offset<candidates.length;offset+=4){
+          const batch=candidates.slice(offset,offset+4)
           const results=await Promise.allSettled(batch.map(async candidate=>{
-            const evidence=await auditUniversalMatchup({
+            const evidence=await boundedDailyTool(auditUniversalMatchup({
               sport:candidate.sport,league:candidate.league,
               eventId:candidate.espnEventId,date:daily.date,
               lookbackDays:candidate.sport==='football'||candidate.sport==='hockey'?28:
                 candidate.sport==='soccer'||candidate.sport==='basketball'?21:14,
               includeOdds:false,
-            },sharedFetch,now,env)
+            },sharedFetch,now,env),45_000)
             let official:DailyNhlSpecialist|null=null
             if(candidate.sport==='hockey'){
               const key=candidate.espnEventId
@@ -509,7 +510,7 @@ export function apply(ctx: Context): void {
                 },sharedFetch,now)
                 nhlResearch.set(key,pending)
               }
-              if(pending)official=await pending
+              if(pending)official=await boundedDailyTool(pending,12_000).catch(()=>null)
             }
             const alternatives=pool.alternatives.filter(other=>
               other.sport===candidate.sport&&other.league===candidate.league&&
@@ -556,6 +557,7 @@ export function apply(ctx: Context): void {
       })()
       // Research chooses among real winner, total and spread offers *after*
       // auditing each game. Never add a second leg from the same game.
+      const marketEvidenceMs=Date.now()-marketEvidenceStartedAt
       const candidateReviews=args.winnerOnly===true?
         research.filter(review=>review.candidate.market==='h2h'):research
       const evaluated=selectDailyResearchedMarkets(candidateReviews,count)
@@ -568,16 +570,37 @@ export function apply(ctx: Context): void {
       })))
       // Mandatory specialist dossiers: do NOT convert general ESPN form or an odds
       // quotation into an approved daily ticket without each sport's investigation.
-      const specialistChecks=args.deep===false?[]:await investigateTicketSpecialists(
-        best.map(review=>({
-          sport:review.candidate.sport,league:review.candidate.league,
-          eventId:review.candidate.espnEventId,date:daily.date,
-          home:daily.events.find(x=>x.eventId===review.candidate.espnEventId&&
-            x.sport===review.candidate.sport&&x.league===review.candidate.league)?.home.name??'',
-          away:daily.events.find(x=>x.eventId===review.candidate.espnEventId&&
-            x.sport===review.candidate.sport&&x.league===review.candidate.league)?.away.name??'',
-          kickoff:review.candidate.kickoff,
-        })),fetch,now,env,quotes)
+      // The shortlist formerly inherited the 20-second generic probe deadline.
+      // Full selected dossiers need their own budget; run the two small groups
+      // in parallel so one slow NBA/NHL case cannot delay the other group.
+      const requestedDossierBudget=Number(env.PHOENIX_SPORTS_DAILY_SHORTLIST_DOSSIER_BUDGET_MS)
+      const selectedDossierBudget=Number.isInteger(requestedDossierBudget)&&
+        requestedDossierBudget>=20_000&&requestedDossierBudget<=240_000?
+          requestedDossierBudget:120_000
+      const selectedFixtures=best.map(review=>({
+        sport:review.candidate.sport,league:review.candidate.league,
+        eventId:review.candidate.espnEventId,date:daily.date,
+        home:daily.events.find(x=>x.eventId===review.candidate.espnEventId&&
+          x.sport===review.candidate.sport&&x.league===review.candidate.league)?.home.name??'',
+        away:daily.events.find(x=>x.eventId===review.candidate.espnEventId&&
+          x.sport===review.candidate.sport&&x.league===review.candidate.league)?.away.name??'',
+        kickoff:review.candidate.kickoff,
+      }))
+      const specialistBatches=[selectedFixtures.slice(0,3),selectedFixtures.slice(3,6)]
+        .filter(group=>group.length>0)
+      const dossierStartedAt=Date.now()
+      const specialistResults=args.deep===false?[]:
+        await Promise.allSettled(specialistBatches.map(group=>
+          investigateTicketSpecialists(group,fetch,now,env,quotes,selectedDossierBudget)))
+      const specialistChecks=specialistResults.flatMap(result=>
+        result.status==='fulfilled'?result.value:[])
+      const dossierElapsedMs=Date.now()-dossierStartedAt
+      const specialistBatchErrors=specialistResults.flatMap((result,index)=>
+        result.status==='rejected'?[{batch:index+1,
+          reason:String(result.reason instanceof Error?result.reason.message:
+            result.reason).slice(0,180)}]:[])
+      const timedOutDossiers=specialistChecks.filter(check=>
+        check.pendingSteps.some(step=>step.includes('Límite de investigación'))).length
       const specialistFor=(review:(typeof best)[number])=>
         specialistChecks.find(check=>check.sport===review.candidate.sport&&
           check.league===review.candidate.league&&
@@ -794,6 +817,10 @@ export function apply(ctx: Context): void {
         ticketStatus:ticket?'final-research':'research-draft',
         specialistChecks,specialistResearched:specialistChecks.filter(x=>x.status==='researched').length,
         specialistIncomplete:specialistChecks.filter(x=>x.status!=='researched').length,
+        shortlistTimingAudit:{marketEvidenceMs,dossierElapsedMs,
+          dossierBudgetMs:selectedDossierBudget,timedOutDossiers,
+          specialistReported:specialistChecks.length,specialistBatchErrors,
+          note:'El plazo técnico no equivale a ausencia de lesiones o titulares publicados.'},
         approvedForBetting:0,
         quotedCandidates:pool.selected.length,researchPool,
         marketCandidates:pool.eligibleMarkets,matchedGames:pool.matchesInSlate,
