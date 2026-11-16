@@ -216,7 +216,7 @@ describe('Five-leg Phoenix ticket completion and compact progress',()=>{
     if(!card)throw Error('Valid partial ESPN ticket dropped by schema')
     render(<GenerativeUi block={card}/>)
     expect(screen.getByLabelText('Cuota 1.80')).toBeTruthy()
-    expect(screen.getAllByText('DraftKings')).toHaveLength(1)
+    expect(screen.getByText(/Ganador · Pronóstico · DraftKings/)).toBeTruthy()
     expect(screen.getAllByLabelText('Partido verificado')).toHaveLength(4)
     expect(screen.getByText(/1 \/ 5 selecciones con precio/)).toBeTruthy()
     expect(screen.queryByText('7.50')).toBeNull()
