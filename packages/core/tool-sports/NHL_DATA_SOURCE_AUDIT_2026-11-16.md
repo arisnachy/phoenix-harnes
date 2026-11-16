@@ -10,6 +10,7 @@ Esta auditoría inspecciona los **adaptadores existentes en PHOENIX** y contrast
 |---|---|---|---|
 | Calendario por fecha | `https://api-web.nhle.com/v1/score/{YYYY-MM-DD}` | IDs NHL reales, localía y hora UTC | No usar ID ESPN como ID NHL; unión por ambos equipos + hora |
 | Estadísticas por plantilla | `https://api-web.nhle.com/v1/roster/{TEAM}/{SEASON}` | Porteros candidatos, defensa y ataque | Lista del roster ≠ titulares, lesiones o líneas |
+| Anotadores y creadores clave | `https://api-web.nhle.com/v1/club-stats/{TEAM}/{SEASON}/2` | Ordenar skaters por puntos y TOI real para inspeccionar primero a los líderes de ambos equipos | Solo playerId NHL **presente en el roster verificado**; NO demuestra que vaya a jugar ni que integre la línea 1 |
 | Historial del club | `https://api-web.nhle.com/v1/club-schedule-season/{TEAM}/{SEASON}` | Ventanas 5/10/20, descanso, local/visita, REG/OT/SO | Solo partidos terminados antes del kickoff; no mezclar OT/SO con regulación |
 | Tiros / goles de temporada | `https://api.nhle.com/stats/rest/en/team/summary?cayenneExp=seasonId={SEASON}%20and%20gameTypeId=2&limit=100` | Tiros a favor y concedidos por juego, GF/GA | Verificar teamId, temporada, datos numéricos; **no es 5v5 xG** |
 | PP / PK | `https://api.nhle.com/stats/rest/en/team/powerplay` y `.../penaltykill` con filtro temporada | Unidades especiales de ambos equipos | 4 métricas separadas, sin inventar cero si no hay registro |
@@ -31,6 +32,7 @@ Esta auditoría inspecciona los **adaptadores existentes en PHOENIX** y contrast
 5. **Leakage de datos futuros:** `player/landing.last5Games` se usaba como fallback sin cutoff. Ahora se filtra por `min(capture_time,kickoff)`.
 6. **Confusión entre dato no publicado y fallo:** 404/204 pregame del boxscore es `not-published`; no `unavailable`, permitiendo reconsulta dirigida.
 7. **Módulo de lesiones A-Q vacío:** `nhl-lab-research-handoff.ts` no incorporaba datos ESPN aun cuando `espn-injury-backup.ts` ya los descargaba para ticket. Ahora se integra sólo cuando `feedUpdatedAt` es anterior al snapshot, estado `partial`, nunca salud/lineup definitiva.
+9. **Anotadores estrella omitidos por orden del roster:** el investigador elegía los primeros 8 delanteros de la respuesta NHL, no a los más productivos. Ahora consulta `club-stats` de ambos equipos, cruza IDs exclusivamente con el roster y prioriza por puntos y tiempo en hielo. Si no hay club-stats válida, conserva el orden anterior y registra la fuente ausente.
 8. **Test de endpoints obsoleto:** `phoenix-nhl-adapter-live-proof.mjs` buscaba por defecto el 12-nov-2026 y el workflow lo forzaba. Ahora recorre próximos ocho días, elige un juego `FUT/PRE` y captura JSON auditable de cobertura; otro workflow consulta la fecha actual.
 
 ## Calidad y pruebas de regresión

@@ -155,7 +155,8 @@ export function buildNhlResearchHandoff(
       requested:['SV%','GAA','last5','GSAx'] },
       ['SV% y GAA del mismo portero, muestras 5/10/20 y GSAx validado'],urls),
     I:make('Plantillas y forma individual',observed(bothRosters),{
-      home:dossier.players.home,away:dossier.players.away },
+      home:dossier.players.home,away:dossier.players.away,
+      officialScoringLeaders:dossier.skaterImpact??null },
       ['On-ice xG, lesiones cruzadas y rendimiento de líneas verificables'],urls),
     J:make('Lesiones, scratches, sanciones',
       injurySnapshot?'partial':'missing',

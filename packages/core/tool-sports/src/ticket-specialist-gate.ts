@@ -17,6 +17,7 @@ import {assessSoccerDrawRisk,type SoccerDrawAudit} from './soccer-draw-risk.ts'
 import {probeNhlOfficialStarters,type NhlStarterProbe} from './nhl-official-starters.ts'
 import {nhlSlate,investigateNhl,type NhlOfficialShots} from './nhl-evidence-research.ts'
 import {nhlGoalieEvidence,type NhlGoalieForm} from './nhl-goalie-evidence.ts'
+import type {NhlSkaterImpact} from './nhl-skater-impact.ts'
 import {sameEspnTeam} from './sports-exact-espn-winner.ts'
 import {discoverMlbDay,researchMlbCase} from './mlb-evidence-research.ts'
 import {tennisSlate,investigateTennis,type TennisTour} from './tennis-evidence-research.ts'
@@ -45,6 +46,7 @@ export type SpecialistGate={
   /** Actual appearances / weighted save fraction, not a starter prediction. */
   nhlGoalieFormAudit?:{home:NhlGoalieForm[];away:NhlGoalieForm[]}
   nhlTeamShotsAudit?:NhlOfficialShots
+  nhlSkaterImpactAudit?:{home:NhlSkaterImpact[];away:NhlSkaterImpact[]}
   /** No-key official-report link and cautious secondary injury observations. */
   freeInjuryChecks?:FreeInjurySource[]
   /** Actual source URLs and their results; a 200 without data is not verified. */
@@ -134,6 +136,7 @@ export async function investigateTicketSpecialist(
   let nhlStarterAudit:NhlStarterProbe|undefined
   let nhlGoalieFormAudit:SpecialistGate['nhlGoalieFormAudit']
   let nhlTeamShotsAudit:NhlOfficialShots|undefined
+  let nhlSkaterImpactAudit:SpecialistGate['nhlSkaterImpactAudit']
   const mark=(key:string,state:StepObservation['state'],detail:string)=>{
     signals[key]={state,detail}
   }
@@ -315,6 +318,9 @@ export async function investigateTicketSpecialist(
         away:nhlGoalieEvidence(d.goalieCandidates.away,d.fixture.date),
       }
       nhlTeamShotsAudit=d.officialShots
+      nhlSkaterImpactAudit={
+        home:d.skaterImpact.home.slice(0,10),away:d.skaterImpact.away.slice(0,10),
+      }
       const playerSet=[...d.players.home,...d.players.away]
       playerHistoryAudit={
         provider:'NHL Web API (IDs oficiales NHL)',
@@ -339,6 +345,8 @@ export async function investigateTicketSpecialist(
         d.missingEvidence.filter(x=>!/Ningún portero confirmado/iu.test(x)):
         d.missingEvidence
       Object.assign(signals,nhlDeepSignals(d))
+      steps.push('NHL anotadores cotejados con roster oficial: '+
+        d.skaterImpact.home.length+' local, '+d.skaterImpact.away.length+' visitante')
       steps.push('NHL tiros oficiales '+Number(d.officialShots.complete)+
         '/1 pareja de equipos · son shots, NO xG 5v5')
       steps.push('NHL porteros con datos de sus últimas 5 apariciones: '+
@@ -536,6 +544,7 @@ export async function investigateTicketSpecialist(
       ...(nhlStarterAudit?{nhlStarterAudit}:{}),
       ...(nhlGoalieFormAudit?{nhlGoalieFormAudit}:{}),
       ...(nhlTeamShotsAudit?{nhlTeamShotsAudit}:{}),
+      ...(nhlSkaterImpactAudit?{nhlSkaterImpactAudit}:{}),
       ...(freeInjuryChecks.length?{freeInjuryChecks}:{}),
       ...(endpointAudit?{endpointAudit}:{}),
       ...(playerHistoryAudit?{playerHistoryAudit}:{}),
