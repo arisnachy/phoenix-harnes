@@ -522,6 +522,27 @@ export class PiAiAdapter extends LlmAdapter {
       const fitted = options.provider === 'phoenix-local'
         ? fitPhoenixLocalTextTurn(options, model.contextWindow, desiredMaxOutput)
         : fitGenerateOptionsToContext(options, model.contextWindow, desiredMaxOutput)
+      if (options.provider === 'phoenix-local' && process.env.PHOENIX_TOKEN_AUDIT === '1') {
+        // The agent-loop INPUT audit measures the assembled request BEFORE the
+        // local context fitter. This counterpoint explains what is retained.
+        // Never log actual messages, instructions, schemas or credentials.
+        console.info('[PHOENIX LOCAL CONTEXT FIT] ' + JSON.stringify({
+          provider: options.provider,
+          model: options.model,
+          modelContextTokens: model.contextWindow,
+          requestedOutputTokens: desiredMaxOutput,
+          initialSystemChars: options.system?.length ?? 0,
+          fittedSystemChars: fitted.options.system?.length ?? 0,
+          initialMessageCount: options.messages.length,
+          fittedMessageCount: fitted.options.messages.length,
+          initialToolCount: options.tools?.length ?? 0,
+          fittedToolCount: fitted.options.tools?.length ?? 0,
+          estimatedInputTokens: fitted.estimatedTokens,
+          safeInputBudgetTokens: fitted.inputBudgetTokens,
+          compacted: fitted.compacted,
+          textOnlyFallback: fitted.options.system !== options.system,
+        }))
+      }
       if (fitted.estimatedTokens > fitted.inputBudgetTokens) {
         throw new LlmError(
           options.provider === 'phoenix-local'
