@@ -3,7 +3,9 @@
  * Pre-faceoff availability is NOT guaranteed. An observed scratch does not
  * prove injury, suspension or "healthy" status without another dated source.
  */
+/** NHL player excluded from the observed game-day lineup, reason unverified. */
 export type NhlScratchPlayer={id:string;name:string;availability:'scratch-observed'}
+/** Timestamped, non-final scratch observation for one official NHL game. */
 export type NhlScratchProbe={
   state:'observed'|'not-published'|'unavailable'|'not-pregame'|'identity-conflict'
   url:string;checkedAt:string;note:string;gameId:string
@@ -34,6 +36,12 @@ function list(value:unknown):NhlScratchPlayer[]|null{
   }
   return out
 }
+/** Parse both NHL team scratch arrays only for an exact pregame fixture.
+ * @param payload NHL right-rail response.
+ * @param args Official NHL game ID, club abbreviations and kickoff.
+ * @param now Research observation timestamp in milliseconds.
+ * @returns Dated per-team scratches or a specific unavailable status.
+ */
 export function parseNhlRightRailScratches(
   payload:unknown,args:{gameId:string;homeAbbrev:string;awayAbbrev:string;
     kickoff:string},now=Date.now(),
@@ -66,6 +74,12 @@ export function parseNhlRightRailScratches(
   return{...blank,home,away,state:'observed',
     note:'Lista NHL observada, no confirma alineación final ni motivo de baja'}
 }
+/** Read one bounded official right-rail response without inferring final lineup.
+ * @param args Official NHL game ID, club abbreviations and kickoff.
+ * @param fetcher Injected or native HTTP fetch implementation.
+ * @param now Research observation timestamp in milliseconds.
+ * @returns Source-backed scratch observation or a safe missing/error status.
+ */
 export async function probeNhlPregameScratches(
   args:{gameId:string;homeAbbrev:string;awayAbbrev:string;kickoff:string},
   fetcher:typeof fetch=fetch,now=Date.now(),
