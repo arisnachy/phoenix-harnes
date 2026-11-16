@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {boundedPriced,evidencePricedTicket,nhlQuotePeriodVerified} from '../src/evidence-priced-ticket.ts'
+import {boundedPriced,evidencePricedTicket,nhlQuotePeriodVerified,reconcileNhlMatchedMarkets} from '../src/evidence-priced-ticket.ts'
 import {getFeed} from '../src/sports.ts'
 
 const date='2026-10-28',now=Date.parse('2026-10-28T15:00:00Z')
@@ -629,4 +629,25 @@ test('sports feed failures retain endpoint, HTTP code, and redact query secrets'
       assert.doesNotMatch(error.message,/secret|apiKey/)
       return true
     })
+})
+
+test('NHL reconciles three event prices with zero matching selections as zero',()=>{
+  const result=reconcileNhlMatchedMarkets(3,[])
+  assert.equal(result.rawEventPriceRows,3)
+  assert.equal(result.matchedPriceRows,0)
+  assert.equal(result.status,'no-matched-price')
+  assert.equal(result.selected,null)
+})
+
+test('NHL period certification cannot leak across bookmakers',()=>{
+  const base={bookmaker:'Book',selection:'Vegas Golden Knights',market:'h2h',
+    price:1.6,source:'ESPN Site/Core (sin clave)',observedAt:'2026-11-16T12:00:00Z'}
+  const current=reconcileNhlMatchedMarkets(3,[base])
+  assert.equal(current.status,'observed-period-unverified')
+  assert.equal(current.selected.settlement,'unverified')
+  const proven={...base,source:'OddsHarvester/OddsPortal (sin API key)'}
+  assert.equal(reconcileNhlMatchedMarkets(3,[proven]).status,'observed-period-verified')
+  assert.equal(reconcileNhlMatchedMarkets(3,[proven,base]).status,
+    'observed-period-unverified')
+  assert.equal(nhlQuotePeriodVerified('OddsHarvester/OddsPortal (histórico, no vigente)','h2h'),false)
 })
