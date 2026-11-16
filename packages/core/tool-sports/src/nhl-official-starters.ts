@@ -35,6 +35,11 @@ export async function probeNhlOfficialStarters(args:{
   try{
     const response=await fetcher(url,{signal:AbortSignal.timeout(4_500),
       headers:{Accept:'application/json'}})
+    // A 404/204 before faceoff normally means the NHL has not published a
+    // boxscore yet. It is not proof that the provider is down or the team lacks a goalie.
+    if(response.status===404||response.status===204)return{...result,
+      state:'not-published',note:'Gamecenter sin boxscore pregame publicado (HTTP '+
+        response.status+'); reconsultar cerca del inicio'}
     if(!response.ok)throw Error('HTTP '+response.status)
     const data=obj(await response.json())
     if(String(data.id??'')!==args.gameId)return{...result,state:'identity-conflict',
