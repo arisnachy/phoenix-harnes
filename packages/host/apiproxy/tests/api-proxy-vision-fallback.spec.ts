@@ -489,3 +489,44 @@ describe('regression: focused reading of marked medical studies',()=>{
     await ctx.fiber.dispose()
   })
 })
+
+describe('clinical route capability verification fails closed',()=> {
+  const current={provider:'plain',model:'text-only'}
+  const catalog=[{id:'gpt-6.1-sol',inputModalities:['image']}]
+  const context=(resolve:()=>Promise<unknown>)=>({
+    llm:{
+      listProviders:()=>[{id:'openai-codex'}],
+      listModels:async()=>catalog,
+      resolveModelInfo:resolve,
+    },
+  }) as unknown as Context
+
+  it('refuses an image catalog hint when detailed resolution fails',async()=>{
+    const ctx=context(async()=>{throw new Error('capability lookup unavailable')})
+    await expect(resolveVisionFallbackRoute(ctx,current,{enabled:true},true))
+      .resolves.toBeUndefined()
+  })
+
+  it('refuses conflicting detailed image modalities and model identities',async()=>{
+    for(const info of [
+      {provider:'openai-codex',id:'gpt-6.1-sol',inputModalities:['text']},
+      {provider:'openai-codex',id:'different-model',inputModalities:['image']},
+      {provider:'other-provider',id:'gpt-6.1-sol',inputModalities:['image']},
+    ]){
+      const ctx=context(async()=>info)
+      await expect(resolveVisionFallbackRoute(ctx,current,{enabled:true},true))
+        .resolves.toBeUndefined()
+    }
+  })
+
+  it('selects verified Sol High only when resolved capabilities support it',async()=>{
+    const ctx=context(async()=>({
+      provider:'openai-codex',id:'gpt-6.1-sol',name:'Sol',
+      inputModalities:['text','image'],
+      reasoning:{efforts:[{id:ReasoningEffortId('high'),name:'High'}]},
+    }))
+    await expect(resolveVisionFallbackRoute(ctx,current,{enabled:true},true))
+      .resolves.toEqual({provider:'openai-codex',model:'gpt-6.1-sol',
+        reasoningEffort:ReasoningEffortId('high')})
+  })
+})
