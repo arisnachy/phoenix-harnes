@@ -5,6 +5,13 @@ on:
       - 'packages/core/tool-sports/src/nhl-evidence-research.ts'
       - 'packages/core/tool-sports/src/nhl-market-settlement.ts'
       - 'packages/core/tool-sports/tests/nhl-evidence-research.test.mjs'
+      - 'packages/core/tool-sports/src/nhl-goalie-evidence.ts'
+      - 'packages/core/tool-sports/src/nhl-official-starters.ts'
+      - 'packages/core/tool-sports/src/nhl-lab-research-handoff.ts'
+      - 'packages/core/tool-sports/src/ticket-specialist-gate.ts'
+      - 'packages/core/tool-sports/tests/nhl-goalie-evidence.test.mjs'
+      - 'packages/core/tool-sports/tests/nhl-lab-research-handoff.test.mjs'
+      - 'packages/core/tool-sports/tests/nhl-official-starters.test.mjs'
       - 'packages/core/tool-sports/src/index.ts'
       - '.github/workflows/phoenix-nhl-hockey-intelligence.yml'
   workflow_dispatch:
@@ -24,6 +31,6 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify NHL roster, goalie, markets and settlement
-        run: node --experimental-strip-types --test packages/core/tool-sports/tests/nhl-evidence-research.test.mjs packages/core/tool-sports/tests/nhl-espn-roster-recovery.test.mjs
+        run: node --experimental-strip-types --test packages/core/tool-sports/tests/nhl-evidence-research.test.mjs packages/core/tool-sports/tests/nhl-espn-roster-recovery.test.mjs packages/core/tool-sports/tests/nhl-goalie-evidence.test.mjs packages/core/tool-sports/tests/nhl-official-starters.test.mjs packages/core/tool-sports/tests/nhl-lab-research-handoff.test.mjs
       - name: Verify TypeScript host compilation
         run: pnpm exec tsc -b tsconfig.host.json --pretty false
