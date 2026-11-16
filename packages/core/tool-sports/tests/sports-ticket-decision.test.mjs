@@ -75,3 +75,42 @@ test('held selections are not added to three/four/five-leg recommendation scenar
   assert.equal(result.scenarios[2].marketProductPct,null)
   assert.ok(!result.scenarios.some(s=>s.eventIds.includes('D')))
 })
+
+test('Nov 15 forensic: exploratory 59/62.5/65.1 cannot justify quoted break-even prices',()=>{
+  const entries=[
+    {eventId:'BOS',price:1.10309,exploratory:59,sport:'basketball'},
+    {eventId:'HOU',price:1.28986,exploratory:62.5,sport:'basketball'},
+    {eventId:'EDM',price:1.67568,exploratory:60,sport:'hockey'},
+    {eventId:'NSH',price:1.58824,exploratory:68.6,sport:'hockey'},
+    {eventId:'VGK',price:1.24390,exploratory:65.1,sport:'hockey'},
+  ]
+  const inputs=entries.map(x=>sample(x.eventId,.7,{
+    sport:x.sport,quotedPrice:x.price,
+    exploratoryProbabilityPercent:x.exploratory,
+  }))
+  const audit=auditTicketDecisions(inputs,policy)
+  assert.deepEqual(audit.legs.map(x=>x.alternativeReviewRequired),
+    [true,true,false,false,true])
+  assert.equal(audit.alternativesToReview,3)
+  assert.equal(audit.legs[0].bookmakerBreakEvenPct,90.65)
+  assert.equal(audit.legs[0].exploratoryVsBreakEvenGapPct,31.65)
+  assert.equal(audit.legs[1].bookmakerBreakEvenPct,77.53)
+  assert.equal(audit.legs[4].bookmakerBreakEvenPct,80.39)
+  for(const index of [0,1,4]){
+    const leg=audit.legs[index]
+    assert.equal(leg.verdict,'caution')
+    assert.match(leg.reasons.join(' '),/ALERTA DE PRECIO/)
+    assert.equal(leg.modelProbabilityPct,null)
+    assert.equal(leg.expectedValue,null)
+  }
+  assert.equal(audit.approvedForBetting,false)
+})
+test('missing exploratory model cannot be treated as evidence of a cheap favorite',()=>{
+  const audit=auditTicketDecisions([sample('Vegas',.83,{
+    quotedPrice:1.2,exploratoryProbabilityPercent:null,
+  })],policy)
+  assert.equal(audit.legs[0].alternativeReviewRequired,true)
+  assert.equal(audit.legs[0].verdict,'caution')
+  assert.match(audit.legs[0].reasons.join(' '),/FAVORITO DE CUOTA EXIGENTE/)
+  assert.equal(audit.legs[0].exploratoryVsBreakEvenGapPct,null)
+})
