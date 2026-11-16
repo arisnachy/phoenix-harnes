@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {nhlSlate,investigateNhl,parseNhlSpecialTeams} from '../src/nhl-evidence-research.ts'
+import {nhlSlate,investigateNhl,parseNhlSpecialTeams,parseNhlOfficialShots} from '../src/nhl-evidence-research.ts'
 import {settleNhlMarket} from '../src/nhl-market-settlement.ts'
 import {withNhlDeadline,compactNhlChatDossier} from '../src/nhl-chat-performance.ts'
 import {getFeed} from '../src/sports.ts'
@@ -17,18 +17,26 @@ const mkRoster=(abbr,offset)=>({
   goalies:Array.from({length:2},(_,i)=>({id:offset+50+i,firstName:{default:'Goalie'},
     lastName:{default:abbr+' '+i},positionCode:'G'})),
 })
-function fake({started=false,missingAway=false,empty=false,withSpecial=false}={}){
+function fake({started=false,missingAway=false,empty=false,withSpecial=false,
+  seasonRoutesOnly=false}={}){
   const calls=[]
   const fetcher=async x=>{
     const url=String(x),u=new URL(url);calls.push(url)
     let body
     if(u.pathname==='/v1/score/'+date)
       body={games:empty?[]:[started?{...game,gameState:'LIVE'}:game]}
-    else if((u.pathname==='/v1/roster/TOR/current'||u.pathname==='/v1/roster/TOR/20262027'))body=mkRoster('TOR',10000)
-    else if((u.pathname==='/v1/roster/MTL/current'||u.pathname==='/v1/roster/MTL/20262027')){
+    else if(seasonRoutesOnly&&u.pathname==='/v1/roster/TOR/20262027')
+      body=mkRoster('TOR',10000)
+    else if(seasonRoutesOnly&&u.pathname==='/v1/roster/MTL/20262027'){
       if(missingAway)return new Response('unavailable',{status:503})
       body=mkRoster('MTL',20000)
-    }else if(u.pathname.includes('/v1/club-schedule-season/')){
+    }
+    else if(u.pathname==='/v1/roster/TOR/current')body=mkRoster('TOR',10000)
+    else if(u.pathname==='/v1/roster/MTL/current'){
+      if(missingAway)return new Response('unavailable',{status:503})
+      body=mkRoster('MTL',20000)
+    }else if(u.pathname.includes('/v1/club-schedule-season/')&&
+      (!seasonRoutesOnly||u.pathname.endsWith('/20262027'))){
       body={games:[{id:2026020101,startTimeUTC:'2026-11-01T23:00:00Z',
         gameState:'OFF',homeTeam:{abbrev:'TOR',score:4},
         awayTeam:{abbrev:'MTL',score:2}},
@@ -38,11 +46,18 @@ function fake({started=false,missingAway=false,empty=false,withSpecial=false}={}
       body={standings:[{teamAbbrev:{default:'TOR'},wins:11,losses:4,otLosses:2},
         {teamAbbrev:{default:'MTL'},wins:9,losses:6,otLosses:1}]}
     else if(u.hostname==='api.nhle.com'&&withSpecial){
+      if(u.pathname.endsWith('/summary')){
+        body={data:[{teamId:10,shotsForPerGame:31.8,shotsAgainstPerGame:27.5,
+          goalsForPerGame:3.6,goalsAgainstPerGame:2.4},
+          {teamId:20,shotsForPerGame:28.4,shotsAgainstPerGame:30.2,
+            goalsForPerGame:2.6,goalsAgainstPerGame:3.1}]}
+      }else{
       const powerplay=u.pathname.endsWith('/powerplay')
       body={data:[{teamId:10,[powerplay?'powerPlayPct':'penaltyKillPct']:
         powerplay?0.251:0.838},
         {teamId:20,[powerplay?'powerPlayPct':'penaltyKillPct']:
           powerplay?0.19:0.77}]}
+      }
     }
     else if(u.pathname.includes('/player/')&&
       u.pathname.includes('/game-log/20262027/2'))
@@ -94,6 +109,11 @@ test('roster forwards/defense/goalies stay distinct; no starting goalie asserted
   assert.equal(d.goalieCandidates.home[0].homeRoadSplits.away.games,1)
   assert.equal(d.goalieCandidates.home[0].homeRoadSplits.home.averages.saves,32)
   assert.ok(api.calls.some(u=>u.includes('/game-log/20262027/2')))
+  const firstLanding=api.calls.filter(u=>u.includes('/player/')&&
+    u.endsWith('/landing')).slice(0,3)
+  assert.match(firstLanding[0],/\/player\/10050\/landing$/)
+  assert.match(firstLanding[1],/\/player\/20050\/landing$/)
+  assert.match(firstLanding[2],/\/player\/10051\/landing$/)
   assert.ok(d.players.home.some(p=>p.stats.goals==='10'))
   assert.equal(d.possibleMatchups.length,20)
   assert.ok(d.possibleMatchups.every(x=>Number(x.attackerId)<20000?
@@ -102,8 +122,6 @@ test('roster forwards/defense/goalies stay distinct; no starting goalie asserted
   assert.equal(d.markets.length,1)
   assert.equal(d.markets[0].approved,false)
   assert.equal(d.standings.home,'11 V · 4 D · 2 OT')
-  assert.ok(d.form.home,'NHL schedule sources: '+JSON.stringify(
-    d.sources.filter(x=>x.url.includes('schedule'))))
   assert.equal(d.form.home.wins,1)
   assert.equal(d.form.away.losses,1)
   assert.equal(d.form.home.homeGames,1)
@@ -112,6 +130,20 @@ test('roster forwards/defense/goalies stay distinct; no starting goalie asserted
   assert.equal(d.opportunity.eligibleForTicket,false)
   assert.equal(d.opportunity.calibratedProbability,false)
   assert.equal(d.uiBlock.component,'sports_espn_dashboard')
+})
+test('season-specific NHL roster and calendar recover all players and game forms',async()=>{
+  const api=fake({seasonRoutesOnly:true})
+  const d=await investigateNhl(date,'2026020201',api.fetcher,now,[],2)
+  assert.equal(d.players.home.length,20)
+  assert.equal(d.players.away.length,20)
+  assert.equal(d.form.home.last5.length,1)
+  assert.equal(d.form.home.last10.length,1)
+  assert.equal(d.form.home.last20.length,1)
+  assert.equal(d.form.home.last20[0].location,'home')
+  assert.ok(api.calls.includes('https://api-web.nhle.com/v1/roster/TOR/20262027'))
+  assert.ok(api.calls.includes('https://api-web.nhle.com/v1/club-schedule-season/MTL/20262027'))
+  assert.equal(api.calls.some(x=>x.includes('/roster/TOR/current')),false)
+  assert.equal(api.calls.some(x=>x.includes('/club-schedule-season/TOR/now')),false)
 })
 test('missing opponent roster triggers explicit abstention and source error',async()=>{
   const d=await investigateNhl(date,'2026020201',fake({missingAway:true}).fetcher,now,[],2)
@@ -172,17 +204,6 @@ test('NHL special-teams metrics require same official team ids and all four valu
   assert.equal(parseNhlSpecialTeams(fixture,null,null,now).complete,false)
 })
 
-test('NHL pregame requests use season-resolved URLs and preserve two team rosters',async()=>{
-  const api=fake()
-  const d=await investigateNhl(date,'2026020201',api.fetcher,now,[],2)
-  assert.equal(d.players.home.length,20)
-  assert.equal(d.players.away.length,20)
-  assert.ok(api.calls.includes('https://api-web.nhle.com/v1/roster/TOR/20262027'))
-  assert.ok(api.calls.includes('https://api-web.nhle.com/v1/roster/MTL/20262027'))
-  assert.ok(api.calls.includes('https://api-web.nhle.com/v1/club-schedule-season/TOR/20262027'))
-  assert.ok(api.calls.includes('https://api-web.nhle.com/v1/club-schedule-season/MTL/20262027'))
-  assert.ok(!api.calls.some(u=>u.endsWith('/current')||u.endsWith('/now')))
-})
 test('NHL 307 follows only same-host HTTPS season path, never redirects to foreign hosts',async()=>{
   const calls=[]
   const fetcher=async url=>{
@@ -234,4 +255,55 @@ test('NHL model-facing report is compact; full game logs remain internal',async(
   assert.ok(c.uiBlock.props.sections.every(s=>s.items.length<=12))
   assert.ok(c.players.home.every(p=>!Object.hasOwn(p,'last20')))
   assert.ok(JSON.stringify(c).length*2<JSON.stringify(d).length)
+})
+
+test('official NHL team summary supplies actual shot rates, never synthetic xGoals',async()=>{
+  const api=fake({withSpecial:true})
+  const d=await investigateNhl(date,'2026020201',api.fetcher,now,[],1)
+  assert.equal(d.officialShots.complete,true)
+  assert.equal(d.officialShots.home.shotsForPerGame,31.8)
+  assert.equal(d.officialShots.away.shotsAgainstPerGame,30.2)
+  assert.ok(api.calls.some(x=>x.includes('/team/summary?')))
+  assert.ok(d.uiBlock.props.sections.some(x=>x.heading.includes('Tiros y goles')))
+  assert.ok(d.missingEvidence.some(x=>x.includes('5v5 xG')))
+})
+test('official shot parser rejects missing teams and corrupt numbers',()=>{
+  const fixture={home:{id:'10'},away:{id:'20'}}
+  const report=parseNhlOfficialShots(fixture,{data:[
+    {teamId:10,shotsForPerGame:'29.3',shotsAgainstPerGame:28},
+    {teamId:99,shotsForPerGame:40,shotsAgainstPerGame:35},
+  ]},now)
+  assert.equal(report.home.shotsForPerGame,29.3)
+  assert.equal(report.away.shotsForPerGame,null)
+  assert.equal(report.complete,false)
+})
+test('NHL accepts recent ESPN observed moneyline without bookmaker updatedAt',async()=>{
+  const api=fake()
+  const q={eventId:'bookgame',sportKey:'icehockey_nhl',
+    bookmaker:'DraftKings',home:'Toronto Maple Leafs',away:'Montreal Canadiens',
+    time:game.startTimeUTC,timeIso:game.startTimeUTC,
+    source:'ESPN Site/Core',observedAt:new Date(now-20_000).toISOString(),
+    updatedAt:'',market:'h2h',selection:'Toronto Maple Leafs',
+    price:1.69,point:null}
+  const x=await investigateNhl(date,'2026020201',api.fetcher,now,[q],1)
+  assert.equal(x.markets.length,1)
+  assert.equal(x.markets[0].odds,1.69)
+  assert.equal(x.markets[0].approved,false)
+  const stale=await investigateNhl(date,'2026020201',api.fetcher,now,[
+    {...q,observedAt:new Date(now-20*60_000).toISOString()}],1)
+  assert.equal(stale.markets.length,0)
+})
+test('NHL player landing fallback excludes games after the pregame cutoff',async()=>{
+  const base=fake()
+  const fetcher=async url=>{
+    if(String(url).includes('/game-log/'))throw Error('NHL game log unavailable')
+    if(String(url).endsWith('/landing'))return new Response(JSON.stringify({
+      last5Games:[{gameDate:'2026-11-08',goals:9},
+        {gameDate:'2026-11-01',goals:2}],
+    }),{status:200})
+    return base.fetcher(url)
+  }
+  const x=await investigateNhl(date,'2026020201',fetcher,now,[],1)
+  assert.equal(x.goalieCandidates.home[0].last5.length,1)
+  assert.equal(x.goalieCandidates.home[0].last5[0].date,'2026-11-01')
 })
