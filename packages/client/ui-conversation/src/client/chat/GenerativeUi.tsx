@@ -16,7 +16,7 @@ import { SportsLiveProvider,SportsLiveFacts,SportsLiveStamp } from './SportsLive
 import { SportsGameCenter } from './SportsGameCenter.tsx'
 import { SportsWinProbability } from './SportsWinProbability.tsx'
 import { validTrackedPick,type SportsTrackedPick } from './SportsBetProgress.tsx'
-import { SportsTicketLiveTracker } from './SportsTicketLiveTracker.tsx'
+import { SportsTicketLiveTracker,type TicketDailyResearchBoard } from './SportsTicketLiveTracker.tsx'
 import {SportsLeagueBadge} from './SportsLeagueIdentity.tsx'
 import {ForecastTicketScope,ForecastTicketSummary,ForecastTicketLegStatus} from './SportsForecastLive.tsx'
 import {SportsMarkedMatch} from './SportsMarkedMatch.tsx'
@@ -199,7 +199,7 @@ type SportsTicketCard = {
     narrativeInstruction?:string
     /** Transparent backend research metadata, preserved even for partial tickets. */
     discoveryAudit?:unknown;dataCounts?:Record<string,number>;
-    dailyResearchBoard?:unknown;individualQuotes?:unknown[];
+    dailyResearchBoard?:TicketDailyResearchBoard;individualQuotes?:unknown[];
     pricePreview?:unknown[];pricePreviewOffers?:number;pricePreviewEvents?:number;
     presentationStatus?:'final-research'
   }
