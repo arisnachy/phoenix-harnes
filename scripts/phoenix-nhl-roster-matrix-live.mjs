@@ -27,15 +27,53 @@ const norm=x=>String(x??'').normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
 const object=x=>x&&typeof x==='object'&&!Array.isArray(x)?x:{}
 const arr=x=>Array.isArray(x)?x:[]
+// NHL limits burst traffic. Across the entire 32-team scan, reserve one
+// NHL HTTP slot every 1.5 seconds, including retries and both endpoint types.
+// ESPN has its own host and is not bound to the NHL request calendar.
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))
+let nextNhlSlot=Date.now()
+async function scheduledNhlRequest(url){
+  if(!url.startsWith(urlBase))return
+  const slot=Math.max(Date.now(),nextNhlSlot)
+  nextNhlSlot=slot+1_500
+  await sleep(Math.max(0,slot-Date.now()))
+}
 const read=async url=>{
   const t=Date.now()
-  try{
-    const r=await fetch(url,{headers:{accept:'application/json'},
-      signal:AbortSignal.timeout(9000),redirect:'error'})
-    const json=r.ok?await r.json():null
-    return{url,http:r.status,data:json,ok:r.ok&&!!json,elapsedMs:Date.now()-t}
-  }catch(e){return{url,http:null,data:null,ok:false,
-    error:String(e?.message??e).slice(0,180),elapsedMs:Date.now()-t}}
+  let last={url,http:null,data:null,ok:false,
+    error:'No response obtained',elapsedMs:0}
+  for(let attempt=1;attempt<=4;attempt++){
+    await scheduledNhlRequest(url)
+    try{
+      const r=await fetch(url,{headers:{accept:'application/json'},
+        signal:AbortSignal.timeout(9000),redirect:'error'})
+      if(r.status===429){
+        const retryHeader=r.headers.get('retry-after')??''
+        const retrySeconds=Number(retryHeader)
+        const backoff=Number.isFinite(retrySeconds)&&retrySeconds>0?
+          Math.min(90_000,retrySeconds*1000):Math.min(75_000,15_000*attempt)
+        last={url,http:429,data:null,ok:false,attempt,
+          error:'NHL rate limited HTTP 429, waiting for retry',
+          elapsedMs:Date.now()-t}
+        if(attempt<4){await sleep(backoff);continue}
+        return last
+      }
+      const json=r.ok?await r.json():null
+      const result={url,http:r.status,data:json,ok:r.ok&&!!json,
+        attempt,elapsedMs:Date.now()-t}
+      if(r.status>=500&&attempt<4){
+        await sleep(Math.min(20_000,2000*attempt))
+        continue
+      }
+      return result
+    }catch(e){
+      last={url,http:null,data:null,ok:false,attempt,
+        error:String(e?.message??e).slice(0,180),
+        elapsedMs:Date.now()-t}
+      if(attempt<4){await sleep(1500*attempt);continue}
+    }
+  }
+  return last
 }
 const leagueFeed=await read(espn)
 const injuryGroups=arr(object(leagueFeed.data).injuries).map(object)
@@ -45,7 +83,7 @@ const feedFresh=leagueFeed.ok&&Number.isFinite(published)&&
   published<=now+15*60_000&&now-published<=36*60*60_000
 const captures=new Array(clubs.length)
 let cursor=0
-await Promise.all(Array.from({length:4},async()=>{
+await Promise.all(Array.from({length:2},async()=>{
   while(cursor<clubs.length){
     const i=cursor++,[code,name]=clubs[i]
     const rosterUrl=urlBase+'roster/'+code+'/'+season
@@ -142,4 +180,4 @@ console.log('NHL_ROSTER_MATRIX '+JSON.stringify({
       statHttp:x.statsHttp,players:x.count})),
 }))
 if(process.env.PHOENIX_NHL_ROSTER_STRICT==='1'&&
-  (teams<28||statTeams<28))process.exitCode=1
+  (teams!==clubs.length||statTeams!==clubs.length))process.exitCode=1
