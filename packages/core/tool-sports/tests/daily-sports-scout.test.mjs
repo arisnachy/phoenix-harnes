@@ -303,3 +303,19 @@ test('full-slate discovery includes NCAA basketball, college football and LIDOM'
   assert.ok(result.events.some(e=>e.league==='dominican-winter-league'))
   assert.equal(result.truncated,false)
 })
+
+test('malformed ESPN bookmaker rows cannot erase a future fixture',async()=>{
+  const provider=async url=>{
+    const events=String(url).includes('/hockey/nhl/')?[game(930)]:[]
+    if(events.length)events[0].competitions[0].odds=[
+      null,'provider broken',{provider:{name:'DraftKings'},
+        homeTeamOdds:{moneyLine:-150}},
+    ]
+    return Response.json({events})
+  }
+  const scan=await scoutDailySports(day,512,provider,now)
+  assert.equal(scan.totalEligible,1)
+  assert.equal(scan.events[0].eventId,'930')
+  assert.equal(scan.espnQuotes.length,1)
+  assert.equal(scan.espnQuotes[0].bookmaker,'DraftKings')
+})
