@@ -63,7 +63,7 @@ describe('PHOENIX independent favorite tracking',()=>{
     expect(document.querySelector('[data-pick-origin="user"]')?.getAttribute('data-pick-status')).toBe('won')
     expect(sportsUserHistory()).toMatchObject({won:1,lost:0,pending:0,accuracy:100})
     expect(screen.getByText(/Mis favoritos:/)).toBeTruthy()
-    expect(screen.getByText(/Acertó · resultado deportivo/)).toBeTruthy()
+    expect(screen.getByText(/Acertó · provisional/)).toBeTruthy()
     expect(screen.queryByRole('button',{name:/Elegir mi favorito/})).toBeNull()
   })
   it('never grades a mismatched ESPN event or counts choices first made in-play',()=>{
