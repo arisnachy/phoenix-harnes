@@ -1,0 +1,69 @@
+name: PHOENIX NHL full roster, availability and 5v5 audit
+on:
+  pull_request:
+    paths:
+      - 'packages/core/tool-sports/src/nhl-roster-integrity.ts'
+      - 'packages/core/tool-sports/src/nhl-five-on-five.ts'
+      - 'packages/core/tool-sports/src/nhl-evidence-research.ts'
+      - 'packages/core/tool-sports/src/espn-injury-backup.ts'
+      - 'packages/core/tool-sports/src/ticket-specialist-gate.ts'
+      - 'packages/core/tool-sports/src/nhl-lab-research-handoff.ts'
+      - 'packages/core/tool-sports/src/nhl-chat-performance.ts'
+      - 'packages/core/tool-sports/src/index.ts'
+      - 'packages/core/tool-sports/tests/nhl-roster-integrity.test.mjs'
+      - 'packages/core/tool-sports/tests/nhl-five-on-five.test.mjs'
+      - 'scripts/phoenix-nhl-roster-matrix-live.mjs'
+      - '.github/workflows/phoenix-nhl-full-roster-5v5.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '5 13 * * *'
+permissions:
+  contents: read
+jobs:
+  integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Test all player stats, injury states and NHL 5v5 game parsing
+        run: |
+          node --experimental-strip-types --test \
+            packages/core/tool-sports/tests/nhl-roster-integrity.test.mjs \
+            packages/core/tool-sports/tests/nhl-five-on-five.test.mjs \
+            packages/core/tool-sports/tests/nhl-evidence-research.test.mjs \
+            packages/core/tool-sports/tests/nhl-lab-research-handoff.test.mjs \
+            packages/core/tool-sports/tests/espn-injury-backup.test.mjs
+      - name: Check TypeScript host
+        run: pnpm exec tsc -b tsconfig.host.json --pretty false
+  league-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check roster probe
+        run: node --check scripts/phoenix-nhl-roster-matrix-live.mjs
+      - name: Probe all 32 NHL season rosters, player metrics and ESPN injury feed
+        env:
+          PHOENIX_NHL_ROSTER_STRICT: '1'
+        run: node --experimental-strip-types scripts/phoenix-nhl-roster-matrix-live.mjs
+      - name: Preserve real per-player snapshots and source coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-nhl-full-roster-matrix
+          path: |
+            phoenix-nhl-full-roster-matrix.json
+            phoenix-nhl-full-roster-matrix.md
+          if-no-files-found: warn
+          retention-days: 30
