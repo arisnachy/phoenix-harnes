@@ -170,3 +170,34 @@ test('consistent NBA over is still descriptive, with separate line audit and no 
   assert.equal(review.marketOutcomeDiagnostic.eligibleForEV,false)
   assert.equal(review.priceAudit.expectedValuePercent,null)
 })
+
+test('Nov 15 Nashville scenario: weak last-ten rival that rebounded 2 of last 3 must be investigated',()=>{
+  const original=market('h2h','Home',null)
+  const candidate={...original,sport:'hockey',league:'nhl',
+    outcomes:[
+      {selection:'Home',line:null,decimalOdds:1.58824,noVigShare:.6},
+      {selection:'Away',line:null,decimalOdds:2.45,noVigShare:.4},
+    ]}
+  const base=evidence()
+  const opponentGames=[
+    {scored:4,allowed:2},{scored:3,allowed:1},
+    {scored:2,allowed:3},{scored:2,allowed:1},
+    ...Array.from({length:6},()=>({scored:2,allowed:4})),
+  ]
+  const matchup={...base,sport:'hockey',league:'nhl',
+    home:{name:'Home',form:{games:10,scoredPerGame:3.5,allowedPerGame:2.1},
+      lastGames:Array.from({length:10},()=>({scored:4,allowed:2}))},
+    away:{name:'Away',form:{games:10,scoredPerGame:2.3,allowedPerGame:3.1},
+      lastGames:opponentGames}}
+  const review=assessDailyMarketEvidence(candidate,matchup)
+  assert.equal(review.selectedOutcome.selection,'Home')
+  assert.equal(review.status,'uncertain')
+  assert.match(review.warnings.join(' '),/ALERTA DE REPUNTE NHL/)
+  assert.match(review.warnings.join(' '),/ganó 2\/3 recientes/)
+  assert.equal(review.priceAudit.modelProbabilityPercent,null)
+  // Same ten-game wins but NO recent recovery: don't manufacture this signal.
+  const stable={...matchup,away:{...matchup.away,
+    lastGames:[...opponentGames.slice(4),...opponentGames.slice(0,4)]}}
+  const control=assessDailyMarketEvidence(candidate,stable)
+  assert.ok(!control.warnings.some(x=>x.includes('ALERTA DE REPUNTE NHL')))
+})
