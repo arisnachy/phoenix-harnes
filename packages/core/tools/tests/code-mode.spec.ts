@@ -223,6 +223,30 @@ describe('token-efficient MCP schema admission', () => {
 })
 
 describe('mode-aware wire contribution', () => {
+  it.each(['code', 'both'] as const)('keeps %s SDK catalogs out of tool-free local greetings', async mode => {
+    const { ctx, systemPrompt } = await setup({ mode })
+    for (let index = 0; index < 30; index++) registerEcho(ctx, `mcp__long_catalog__action_${index}`)
+
+    // A genuine agent step still exposes its SDK/catalog to the model.
+    const normal = await systemPrompt.assemble()
+    expect(normal.sections.find(section => section.name === 'tools:sdk')?.text)
+      .toContain('mcp__long_catalog__action_29:')
+
+    // The greeting fast path turns off tools BEFORE system-prompt assembly.
+    // Previously, the serialized SDK remained in the system text and could
+    // exceed a laptop model's usable context even with zero wire tools.
+    const greeting = await systemPrompt.assemble({ omitTools: true, omitRuntimeContext: true })
+    expect(greeting.tools).toEqual([])
+    expect(greeting.sections.find(section => section.name === 'tools:sdk')?.text).toBe('')
+    expect(greeting.sections.find(section => section.name === 'tools:code-only')?.text ?? '').toBe('')
+    expect(renderPrompt(greeting)).not.toContain('mcp__long_catalog__action_29')
+
+    // Suppression is per-request; the next agentic step gets the full catalog.
+    const resumed = await systemPrompt.assemble()
+    expect(resumed.sections.find(section => section.name === 'tools:sdk')?.text)
+      .toContain('mcp__long_catalog__action_29:')
+  })
+
   it.each(['native', 'code'] as const)('keeps project and publication tools for illustrated deliverables in %s', async (mode) => {
     const { ctx, systemPrompt } = await setup({ mode })
     for (const name of ['image_generation', 'read', 'pwsh', 'phoenix_comic', 'phoenix_scene_map', 'phoenix_geo_map']) registerEcho(ctx, name)
