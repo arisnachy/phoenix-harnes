@@ -6,7 +6,8 @@ import {preloadDailyResearch,dailyResearchStatus,dailyResearchFetcher,santoDomin
 import {crosscheckFreeFixture,freeOfficialFollowUps,freeSourceInventory,freeSourceCoverageForSport} from './free-sports-source-audit.ts'
 import {nflverseInjuryReport} from './nflverse-injury-report.ts'
 import {fetchEspnInjuryBackup,espnInjuryCatalog} from './espn-injury-backup.ts'
-import {reconcileNhlRosterAvailability} from './nhl-roster-integrity.ts'
+import {reconcileNhlRosterAvailability,applyNhlOfficialScratches} from './nhl-roster-integrity.ts'
+import {probeNhlOfficialStarters} from './nhl-official-starters.ts'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import { sportsCatalog, discoverEspnLeagues, hasSportsPermission, chatGames, compactSportsSchedule, marketOdds, marketOddsDetailed, pricedTicket, getFeed, type MarketSelection } from './sports.ts'
@@ -2694,10 +2695,18 @@ export function apply(ctx: Context): void {
             sport:'hockey',league:'nhl',home:d.fixture.home.name,
             away:d.fixture.away.name,date:args.date,kickoff:d.fixture.date,
           },fetch,now).catch(()=>null):null
+        const official=args.includeFullRoster===true?
+          await probeNhlOfficialStarters({
+            gameId:d.fixture.id,homeAbbrev:d.fixture.home.abbrev,
+            awayAbbrev:d.fixture.away.abbrev,kickoff:d.fixture.date,
+          },fetch,Date.now()).catch(()=>null):null
         const fullRoster=args.includeFullRoster===true?
-          reconcileNhlRosterAvailability(
-            d.fullRosterAudit,injury,now,d.fixture.date):null
+          applyNhlOfficialScratches(
+            reconcileNhlRosterAvailability(
+              d.fullRosterAudit,injury,Date.now(),d.fixture.date),
+            official,Date.now(),d.fixture.date):null
         return JSON.stringify({...compactNhlChatDossier(d),
+          ...(official?{nhlStarterAudit:official}:{}),
           ...(fullRoster?{fullRosterAudit:fullRoster}:{}),
           ...(injury?{injuryAudit:injury}:{}),
           status:'researched',durationMs:Date.now()-started,
