@@ -4,9 +4,10 @@
  */
 import type {HockeyPlayer} from './nhl-evidence-research.ts'
 import type {InjuryBackup,InjuryRecord} from './espn-injury-backup.ts'
+import type {NhlStarterProbe} from './nhl-official-starters.ts'
 export type NhlAvailability='reported-out'|'reported-doubtful'|
   'reported-questionable'|'reported-day-to-day'|'reported-probable'|
-  'reported-injured-reserve'|'other-report'|'not-reported'|'feed-unavailable'|
+  'reported-injured-reserve'|'official-scratch-observed'|'other-report'|'not-reported'|'feed-unavailable'|
   'ambiguous-report'|'report-after-snapshot'
 export type NhlRosterPlayerAudit={
   playerId:string;team:string;name:string;role:HockeyPlayer['role'];
@@ -17,7 +18,7 @@ export type NhlRosterPlayerAudit={
   availabilityDetail:string|null;
   impactIfAbsent:'high'|'moderate'|'unquantified';
   /** ESPN report status is NOT a final game-day scratch or club confirmation. */
-  officialInactiveConfirmed:false
+  officialInactiveConfirmed:boolean
 }
 export type NhlRosterSideAudit={
   players:NhlRosterPlayerAudit[];count:number;matchedStats:number;
@@ -144,7 +145,7 @@ function side(roster:readonly HockeyPlayer[],payload:unknown,
       availabilityPublishedAt:reportedAt,
       availabilityDetail:list[0]?.details??null,
       impactIfAbsent:impact(seasonMetrics,p.role),
-      officialInactiveConfirmed:false as const,
+      officialInactiveConfirmed:false,
     }
   })
   const matchedNames=new Set(players.map(p=>normalized(p.name)))
@@ -230,5 +231,42 @@ export function reconcileNhlRosterAvailability(
   if(!valid)result.notes.push('Reporte ESPN no publicado o no vigente antes del corte: no confirmar bajas')
   if(result.home.unmatchedInjuries.length||result.away.unmatchedInjuries.length)
     result.notes.push('Reportes sin coincidencia por nombre: no convertir en bajas del roster')
+  return result
+}
+
+/** The official pregame Gamecenter may explicitly list a scratch by NHL ID.
+ * An empty or unavailable list never establishes the rest of the roster active.
+ */
+export function applyNhlOfficialScratches(
+  audit:NhlFullRosterAudit,probe:NhlStarterProbe|null,now:number,kickoff:string,
+):NhlFullRosterAudit{
+  const captured=Date.parse(probe?.checkedAt??'')
+  const valid=!!probe?.scratches&&
+    !['identity-conflict','not-pregame','unavailable'].includes(probe.state)&&
+    Number.isFinite(captured)&&captured<=now&&
+    Number.isFinite(Date.parse(kickoff))&&captured<Date.parse(kickoff)
+  if(!valid)return audit
+  const result={...audit,notes:[...audit.notes,
+    'NHL Gamecenter scratches verificados por ID oficial en captura pregame']}
+  for(const key of ['home','away'] as const){
+    const byId=new Set(probe!.scratches![key].map(x=>x.playerId))
+    const previous=audit[key]
+    const players=previous.players.map(p=>byId.has(p.playerId)&&
+      p.seasonStatStatus!=='foreign-namespace'?{
+        ...p,availability:'official-scratch-observed' as const,
+        officialInactiveConfirmed:true,
+        availabilitySource:probe!.url,
+        availabilityPublishedAt:probe!.checkedAt,
+        availabilityDetail:'NHL boxscore pregame scratch observado por playerId',
+      }:p)
+    result[key]={...previous,players,
+      reportedOut:players.filter(p=>[
+        'reported-out','reported-injured-reserve','official-scratch-observed',
+      ].includes(p.availability)).length}
+    const unmatched=[...byId].filter(id=>!players.some(p=>
+      p.playerId===id&&p.officialInactiveConfirmed))
+    if(unmatched.length)result.notes.push(key+': '+unmatched.length+
+      ' NHL scratches con ID ausente del roster; no asignados')
+  }
   return result
 }
