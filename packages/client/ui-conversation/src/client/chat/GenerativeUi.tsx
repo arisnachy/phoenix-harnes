@@ -1433,7 +1433,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
               {unpriced&&!receipt&&!legQuoted
                 ? <span className={css.sportsTicketVerified} aria-label="Partido verificado">✓ Evento</span>
                 : <div className={css.sportsTicketPrice}>
-                  <small>{receipt?'CUOTA DEL RECIBO':unpriced?'ESPN / OBSERVADA':'CUOTA'}</small>
+                  <small>{receipt?'CUOTA DEL RECIBO':unpriced?(leg.quoteStatus==='espn-observed'?'ESPN OBSERVADA':'CUOTA OBSERVADA'):'CUOTA'}</small>
                   <b aria-label={`Cuota ${leg.price}`}>{leg.price}</b>
                   {leg.quoteSource&&<small title={leg.quoteSource}>
                     {sportsDisplayText(leg.quoteSource)}</small>}
