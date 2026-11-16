@@ -17,7 +17,9 @@ const SCOREBOARD_CACHE_MS=5*60_000
 type Schedule = {sport:string,league:string}
 const schedule:Schedule[]=[
   {sport:'basketball',league:'nba'}, {sport:'basketball',league:'wnba'},
-  {sport:'baseball',league:'mlb'}, {sport:'football',league:'nfl'},
+  {sport:'basketball',league:'mens-college-basketball'},
+  {sport:'baseball',league:'mlb'}, {sport:'baseball',league:'dominican-winter-league'},
+  {sport:'football',league:'nfl'}, {sport:'football',league:'college-football'},
   {sport:'hockey',league:'nhl'},
   {sport:'tennis',league:'atp'}, {sport:'tennis',league:'wta'},
   ...(sportsCatalog.soccer??[]).map(league=>({sport:'soccer',league})),
