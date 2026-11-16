@@ -212,3 +212,31 @@ test('NBA Core depthcharts fallback is used only after empty Site response',asyn
   assert.equal(team.coverage.find(x=>x.endpoint==='team_depthcharts_core')?.status,'available')
   assert.ok(attempts.includes('https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/seasons/2027/teams/27/depthcharts'))
 })
+
+test('twenty NBA roster athletes can be requested and first-party reads run in bounded parallel',async()=>{
+  const root='https://site.api.espn.com/apis/site/v2/sports/basketball/nba/'
+  let active=0,peak=0
+  const fetcher=async url=>{
+    active++;peak=Math.max(active,peak)
+    await new Promise(resolve=>setTimeout(resolve,2))
+    active--
+    const u=String(url)
+    const payload=u.endsWith('/roster')?{athletes:[{items:
+      Array.from({length:20},(_,i)=>({
+        id:String(900001+i),displayName:'Player '+i,
+        position:{abbreviation:'G'}})),
+    }]}:{}
+    return Response.json(payload)
+  }
+  const result=await collectDirectEspnStats('basketball','nba',
+    [{id:'5',name:'Boston Celtics'}],fetcher,
+    Date.parse('2026-11-16T20:00:00Z'),20)
+  const team=result.teams[0]
+  assert.equal(team.roster.length,20)
+  assert.equal(team.selectedCount,20)
+  assert.equal(team.athletes.length,20)
+  assert.ok(peak>=4,'player endpoints must not all wait serially')
+  assert.ok(peak<=6,'source concurrency is bounded despite full roster')
+  assert.ok(team.athletes.every(p=>p.status==='unavailable'),
+    'an empty ESPN 200 may not become fabricated athlete statistics')
+})
