@@ -6,6 +6,7 @@
  */
 import { diagnosticInputById } from './diagnostic-catalog.ts'
 
+/** De-identified source metadata for an illustrative clinical atlas scene. */
 export interface ClinicalTwinSceneInput {
   readonly modality: unknown
   readonly sourceKind: unknown
@@ -81,6 +82,11 @@ const oneOf=(value:unknown,allowed:readonly string[],label:string)=>{
 /** A verified anatomical reconstruction must be authorized by the clinical
  * imaging server after reviewing image series, registration and masks.
  * This LLM-facing metadata helper intentionally has no such authorization.
+ */
+/**
+ * Prepare a source-bounded educational scene without diagnosing or rendering.
+ * @param input - Untrusted, de-identified clinical source metadata.
+ * @returns A gated illustration specification; never a patient reconstruction.
  */
 export function planClinicalTwinScene(input:ClinicalTwinSceneInput){
   const study=diagnosticInputById(input.modality)
