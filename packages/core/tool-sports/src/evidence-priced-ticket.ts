@@ -59,7 +59,34 @@ const leagueSportKey:Record<string,string>={
  * requested period and parsed row; a generic ESPN h2h quote has no per-book
  * settlement terms and stays visible but conditional until checked. */
 export function nhlQuotePeriodVerified(source:string,market:string):boolean{
-  return market==='h2h'&&source.includes('OddsHarvester/OddsPortal')
+  return market==='h2h'&&source.includes('OddsHarvester/OddsPortal')&&
+    !source.includes('histórico')
+}
+/** Preserve the provider-vs-matched quote discrepancy even when ZERO legs are priced.
+ * A mixed group is never certified for all bookmaker settlement periods. */
+export function reconcileNhlMatchedMarkets(
+  rawEventPriceRows:number,
+  rows:readonly Pick<KeylessQuote,
+    'bookmaker'|'selection'|'market'|'price'|'observedAt'|'source'>[],
+):NonNullable<SpecialistGate['nhlMarketReconciliation']>{
+  const selected=rows[0]??null
+  const periodVerified=rows.length>0&&
+    rows.every(q=>nhlQuotePeriodVerified(q.source,q.market))
+  return{
+    rawEventPriceRows,matchedPriceRows:rows.length,
+    status:selected===null?'no-matched-price':
+      periodVerified?'observed-period-verified':'observed-period-unverified',
+    selected:selected?{
+      bookmaker:selected.bookmaker,selection:selected.selection,
+      market:selected.market,price:selected.price,
+      observedAt:selected.observedAt??null,source:selected.source,
+      settlement:nhlQuotePeriodVerified(selected.source,selected.market)?
+        'including-ot':'unverified',
+    }:null,
+    note:selected===null?'Sin cuota asociada a evento, selección y mercado NHL':
+      periodVerified?'OddsHarvester: período FullIncludingOT validado por adaptador':
+        'Precios observados pero al menos una casa no acredita liquidación 60 minutos frente a OT/SO',
+  }
 }
 export async function evidencePricedTicket(
   count:number,date?:string,sport?:string,stake=0,now=Date.now(),
@@ -580,23 +607,9 @@ export async function evidencePricedTicket(
       Math.abs(Date.parse(q.time)-Date.parse(event.kickoff))<=3_600_000&&
       sameTeam(q.home,event.home,event.sport)&&
       sameTeam(q.away,event.away,event.sport))
-    const rows=groups[index]??[],selected=rows[0]??null
-    const periodVerified=selected!==null&&
-      nhlQuotePeriodVerified(selected.source,selected.market)
-    specialistChecks[index]={...current,nhlMarketReconciliation:{
-      rawEventPriceRows:raw.length,matchedPriceRows:rows.length,
-      status:selected===null?'no-matched-price':
-        periodVerified?'observed-period-verified':'observed-period-unverified',
-      selected:selected?{
-        bookmaker:selected.bookmaker,selection:selected.selection,
-        market:selected.market,price:selected.price,
-        observedAt:selected.observedAt??null,source:selected.source,
-        settlement:periodVerified?'including-ot':'unverified',
-      }:null,
-      note:selected===null?'Sin cuota asociada a evento, selección y mercado NHL':
-        periodVerified?'OddsHarvester: período FullIncludingOT validado por adaptador':
-          'Precio observado y conservado; la regla 60 minutos frente a OT/SO de esta casa no está acreditada',
-    }}
+    const rows=groups[index]??[]
+    specialistChecks[index]={...current,nhlMarketReconciliation:
+      reconcileNhlMatchedMarkets(raw.length,rows)}
   }
   // Post-quote reassessment: close only proven steps, not market-settlement
   // identity, lineup confirmation, or a missing calibrated model.
@@ -607,7 +620,7 @@ export async function evidencePricedTicket(
     if(!prior.steps.some(step=>step.key==='market'))continue
     const quote=rows[0]!
     const isNhlPeriodUnknown=research.events[index]?.league==='nhl'&&
-      !nhlQuotePeriodVerified(quote.source,quote.market)
+      rows.some(item=>!nhlQuotePeriodVerified(item.source,item.market))
     const validSoccerDraw=research.events[index]?.sport==='soccer'&&
       quote.market==='1x2'&&quoteSideNoVig(quote,all,now)!==null
     const steps=prior.steps.map(step=>step.key==='market'?{
