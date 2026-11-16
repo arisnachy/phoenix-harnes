@@ -11,7 +11,9 @@ export type NhlAdvancedTeam = {
 }
 export type NhlAdvancedGoalie = {
   playerId:string; games:number; xGoalsAgainst:number; goalsAgainst:number;
-  gsaX:number; highDangerGoals:number|null; highDangerShots:number|null
+  gsaX:number; lowDangerGoals:number|null; lowDangerShots:number|null;
+  mediumDangerGoals:number|null; mediumDangerShots:number|null;
+  highDangerGoals:number|null; highDangerShots:number|null
 }
 export type NhlMoneyPuckEvidence = {
   status:'verified'|'disabled'|'stale'|'missing'|'error'
@@ -94,6 +96,10 @@ export function parseMoneyPuckAdvanced(
       if(games===null||xg===null||ga===null)continue
       out.push({playerId:id,games,xGoalsAgainst:rounded(xg),
         goalsAgainst:rounded(ga),gsaX:rounded(xg-ga),
+        lowDangerGoals:numeric(r.lowDangerGoals),
+        lowDangerShots:numeric(r.lowDangerShots),
+        mediumDangerGoals:numeric(r.mediumDangerGoals),
+        mediumDangerShots:numeric(r.mediumDangerShots),
         highDangerGoals:numeric(r.highDangerGoals),
         highDangerShots:numeric(r.highDangerShots)})
     }
@@ -155,6 +161,13 @@ export async function fetchNhlMoneyPuckEvidence(args:{
       row={checked:args.decisionAt,updatedAt,teams,goalies}
       cache.set(year,row)
     }
+    // Cache reuse must re-check publication time against this specific decision.
+    // A snapshot which was fresh 10 minutes ago may now be over the 48h limit.
+    const seen=Date.parse(row.updatedAt)
+    if(seen>args.decisionAt||seen>=kickoff)return blank('missing',
+      'CSV en caché posterior al instante pregame',urls,row.updatedAt)
+    if(args.decisionAt-seen>MAX_AGE)return blank('stale',
+      'MoneyPuck en caché supera 48 horas',urls,row.updatedAt)
     const advanced=parseMoneyPuckAdvanced(row.teams,row.goalies,args)
     if(!advanced.teams.home||!advanced.teams.away)
       return {...blank('missing','CSV sin las dos filas 5v5 verificadas',urls,row.updatedAt),

@@ -9,10 +9,10 @@ const teams=[
   'TOR,all,16,50,45,0.526,0.51,0.50',
 ].join('\n')
 const goalies=[
-  'playerId,situation,games_played,xGoals,goals,highDangerGoals,highDangerShots',
-  '8471111,all,12,28.8,23,8,70',
-  '8472222,all,11,30.5,36,16,74',
-  '8471111,5on5,12,22,19,5,49',
+  'playerId,situation,games_played,xGoals,goals,highDangerGoals,highDangerShots,lowDangerGoals,lowDangerShots,mediumDangerGoals,mediumDangerShots',
+  '8471111,all,12,28.8,23,8,70,4,50,5,25',
+  '8472222,all,11,30.5,36,16,74,6,45,10,31',
+  '8471111,5on5,12,22,19,5,49,2,34,3,20',
 ].join('\n')
 const ids={homeAbbrev:'TOR',awayAbbrev:'MTL',homeGoalieIds:['8471111'],
   awayGoalieIds:['8472222']}
@@ -44,6 +44,8 @@ test('MoneyPuck 5v5 team rows differ from all-situation data; GSAx uses NHL play
   assert.equal(result.goalies.home[0].gsaX,5.8)
   assert.equal(result.goalies.away[0].gsaX,-5.5)
   assert.equal(result.goalies.home[0].highDangerShots,70)
+  assert.equal(result.goalies.home[0].mediumDangerShots,25)
+  assert.equal(result.goalies.home[0].lowDangerGoals,4)
   assert.deepEqual(parseMoneyPuckAdvanced(teams,goalies,
     {...ids,awayGoalieIds:['9999999']}).goalies.away,[])
 })
@@ -85,4 +87,16 @@ test('old or corrupted export cannot silently turn into usable xG',async()=>{
 test('ambiguous team rows are not trusted',()=>{
   const v=parseMoneyPuckAdvanced(teams+'\nTOR,5on5,16,50,10,0.8,0.7,0.7',goalies,ids)
   assert.equal(v.teams.home,null)
+})
+
+test('cache crossing freshness deadline is rejected without reusing stale metrics',async()=>{
+  const api=fake('2026-11-14 07:00:00.000000-05:00')
+  const base={...args,season:'20222023',kickoff:'2026-11-16T15:00:00Z'}
+  const first=await fetchNhlMoneyPuckEvidence({
+    ...base,decisionAt:Date.parse('2026-11-16T11:55:00Z')},api.fetcher)
+  assert.equal(first.status,'verified')
+  const second=await fetchNhlMoneyPuckEvidence({
+    ...base,decisionAt:Date.parse('2026-11-16T12:05:00Z')},api.fetcher)
+  assert.equal(second.status,'stale')
+  assert.equal(api.calls.length,3)
 })
