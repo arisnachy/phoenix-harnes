@@ -4,9 +4,12 @@
  */
 import {writeFile} from 'node:fs/promises'
 
-const date=process.argv[2]??'2026-11-12'
+const date=process.argv[2]??new Date().toISOString().slice(0,10)
 if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw Error('Date must be YYYY-MM-DD')
-const season='20262027',base='https://api-web.nhle.com/v1/'
+const yyyy=Number(date.slice(0,4)),month=Number(date.slice(5,7))
+const startYear=month>=7?yyyy:yyyy-1
+const season=String(startYear)+String(startYear+1)
+const base='https://api-web.nhle.com/v1/'
 const teams=['CBJ','TBL','BUF','CHI','WPG','DAL','NYI','LAK']
 const games=['2026020304','2026020305','2026020306','2026020308']
 const urls=[
@@ -30,6 +33,11 @@ const urls=[
     url:'https://api.nhle.com/stats/rest/en/team/powerplay?cayenneExp='+encodeURIComponent('seasonId='+season+' and gameTypeId=2')+'&limit=100'},
   {group:'stats-rest',type:'penaltykill',
     url:'https://api.nhle.com/stats/rest/en/team/penaltykill?cayenneExp='+encodeURIComponent('seasonId='+season+' and gameTypeId=2')+'&limit=100'},
+  {group:'stats-rest',type:'shot-summary',
+    url:'https://api.nhle.com/stats/rest/en/team/summary?cayenneExp='+
+      encodeURIComponent('seasonId='+season+' and gameTypeId=2')+'&limit=100'},
+  {group:'espn',type:'nhl-injuries',
+    url:'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/injuries'},
 ]
 const arr=x=>Array.isArray(x)?x:[]
 const obj=x=>x!==null&&typeof x==='object'&&!Array.isArray(x)?x:{}
@@ -98,7 +106,8 @@ const matrix=teams.map(team=>{
 console.log('NHL_PROOF_SUMMARY '+JSON.stringify({date,success:summary.success,
   transportErrors:summary.transportErrors,teams:matrix}))
 if(process.env.PHOENIX_NHL_PROOF_STRICT==='1'&&
-  (!results.find(x=>x.type==='score'&&x.counts?.games>0)||
+  (!results.find(x=>x.type==='score'&&x.ok&&
+      (x.counts?.keys??0)>0)||
   !teams.every(team=>results.some(x=>x.group===team&&
     x.type.startsWith('roster')&&
     (x.counts?.forwards??0)+(x.counts?.defensemen??0)+(x.counts?.goalies??0)>0))))
