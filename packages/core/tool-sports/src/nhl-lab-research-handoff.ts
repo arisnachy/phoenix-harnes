@@ -310,7 +310,7 @@ export async function collectNhlResearchHandoff(
     },fetcher,now),
     fetchEspnInjuryBackup({
       sport:'hockey',league:'nhl',home:f.home.name,away:f.away.name,
-      date,eventId:undefined,kickoff:f.date,
+      date,kickoff:f.date,
     },fetcher,now).catch(()=>null),
   ])
   return buildNhlResearchHandoff(dossier,starter,injuries)
