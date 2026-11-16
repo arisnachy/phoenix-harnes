@@ -13,6 +13,7 @@ import {researchPublicOddsWebsites} from './sports-public-odds-pages.ts'
 import { getFeed,marketOddsDetailed,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome,type OddsResearchObservation } from './sports.ts'
 import {fetchBetBetterModels,findModelOpinion,type ModelForecast} from './betbetter-model-evidence.ts'
 import {enrichSpecialistNarrative,type TicketNarrative} from './sports-ticket-narrative.ts'
+import {presentObservedTicketLegs} from './ticket-quote-presentation.ts'
 
 export type OddsAuditRow={
   source:string
@@ -422,6 +423,7 @@ export async function evidencePricedTicket(
       return Number.isFinite(kickoff)&&kickoff>now&&!discovered.some(q=>
         sameTeam(q.home,event.home,event.sport)&&
         sameTeam(q.away,event.away,event.sport)&&
+        (q.source?.startsWith('ESPN ')!==true||q.eventId===event.eventId)&&
         Math.abs(Date.parse(q.time)-kickoff)<=3_600_000&&
         q.market===(event.sport==='soccer'?'1x2':'h2h'))
     }).slice(0,6)
@@ -473,6 +475,7 @@ export async function evidencePricedTicket(
       Math.abs(kickoff-quotedKickoff)<=3_600_000&&
       sameTeam(q.home,event.home,event.sport)&&
       sameTeam(q.away,event.away,event.sport)&&
+      (q.source?.startsWith('ESPN ')!==true||q.eventId===event.eventId)&&
       q.market===(event.sport==='soccer'?'1x2':'h2h')&&
       sameTeam(q.selection,event.pick==='home'?event.home:event.away,event.sport)&&
       Number.isFinite(q.price)&&q.price>1
@@ -552,6 +555,7 @@ export async function evidencePricedTicket(
       const acceptableAge=snapshotValid||(!espnObserved&&
         Number.isFinite(updated)&&quoteAge>=0&&quoteAge<=3_600_000)
       return Number.isFinite(kickoff)&&Number.isFinite(quoteKickoff)
+        &&(q.source?.startsWith('ESPN ')!==true||q.eventId===event.eventId)
         &&Math.abs(kickoff-quoteKickoff)<=3_600_000
         &&acceptableAge
         &&typeof q.bookmaker==='string'&&q.bookmaker.trim().length>0
@@ -745,11 +749,25 @@ export async function evidencePricedTicket(
     'Se inspeccionaron '+siteResearch.length+' partidos con '+webObserved+
     ' menciones próximas de equipos; las cifras HTML son referencia sin '+
     'bookmaker ni hora de actualización, NO cuotas elegibles.'))
+  // Every price found belongs to a leg, even when no single bookmaker covers
+  // the whole ticket. The existing original card kept all prices as pending.
+  const quotedDisplayLegs=presentObservedTicketLegs(hintedLegs,groups)
   const auditSummary=' Cuotas cotejadas: '+quotedLegs+'/'+count+
     ' selecciones; proveedores: '+sourceAudit.map(x=>x.source+' '+x.status+
     ' ('+x.offers+' observaciones)').join('; ')+'.'
   const auditCard:ChatBlock={...researchCard,props:{...researchCard.props,
-    legs:hintedLegs,
+    legs:quotedDisplayLegs,
+    // Unlike a proposed parlay, each row below is independently observed.
+    // Kira/UI must show its source and house even when only 1/5 match.
+    individualQuotes:quotedDisplayLegs.map((leg,index)=>({
+      eventId:research.events[index]?.eventId??null,
+      selection:research.events[index]?.pick==='home'?
+        research.events[index]?.home:research.events[index]?.away,
+      price:leg.quoteStatus==='unpriced'?null:leg.price,
+      bookmaker:leg.quoteStatus==='unpriced'?null:leg.bookmaker,
+      source:leg.quoteSource??null,observedAt:leg.quoteObservedAt??null,
+      status:leg.quoteStatus,
+    })),
     decisionAudit:postQuoteAudit,
     dataCounts:{eventsFound:research.verifiedEvents,quotedLegs,
       researchedLegs,candidateLegs:quotedLegs,conditionalLegs,approvedForBetting:0},
