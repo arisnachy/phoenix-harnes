@@ -53,3 +53,15 @@ test('no gamecenter record is unavailable, not a healthy or confirmed team',asyn
   const r=await probeNhlOfficialStarters(opts,async()=>new Response('error',{status:503}),now)
   assert.equal(r.state,'unavailable')
 })
+
+test('HTTP 404 pregame NHL boxscore is not published, NOT a network outage',async()=>{
+  const fixture={gameId:'2026020314',homeAbbrev:'TOR',awayAbbrev:'EDM',
+    kickoff:'2026-11-20T23:00:00Z'}
+  const read=async()=>new Response('No boxscore before faceoff',{status:404})
+  const result=await probeNhlOfficialStarters(fixture,read,
+    Date.parse('2026-11-16T13:00:00Z'))
+  assert.equal(result.state,'not-published')
+  assert.match(result.note,/404/)
+  assert.equal(result.homeGoalie,null)
+  assert.equal(result.awayGoalie,null)
+})
