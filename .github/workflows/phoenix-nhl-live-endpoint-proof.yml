@@ -6,6 +6,8 @@ on:
       - 'scripts/phoenix-nhl-live-endpoint-proof.mjs'
       - 'packages/core/tool-sports/src/nhl-evidence-research.ts'
       - 'packages/core/tool-sports/tests/nhl-evidence-research.test.mjs'
+      - 'packages/core/tool-sports/src/nhl-goalie-evidence.ts'
+      - 'packages/core/tool-sports/src/nhl-lab-research-handoff.ts'
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,7 +25,7 @@ jobs:
       - name: Call actual NHL HTTP endpoints with bounded concurrency
         env:
           PHOENIX_NHL_PROOF_STRICT: '1'
-        run: node scripts/phoenix-nhl-live-endpoint-proof.mjs 2026-11-12
+        run: node scripts/phoenix-nhl-live-endpoint-proof.mjs
       - name: Upload machine-readable response matrix
         if: always()
         uses: actions/upload-artifact@v4
