@@ -305,10 +305,11 @@ export async function collectDirectEspnStats(
       })
     }
   }))
-  // Strict maximum of five concurrent first-party GET operations, no arbitrary
-  // redirects or URLs provided by the model.
+  // Six bounded parallel first-party GETs shorten NBA all-player collection;
+  // per-endpoint deadlines, roster ID checks and provider-failure tracking
+  // remain intact. Do not run the dozens of gamelogs serially after a 45s gate.
   let cursor=0
-  await Promise.all(Array.from({length:Math.min(3,jobs.length)},async()=>{
+  await Promise.all(Array.from({length:Math.min(6,jobs.length)},async()=>{
     while(cursor<jobs.length){
       const task=jobs[cursor++]!
       const response=await fetchBounded(task.url,fetcher,now)
