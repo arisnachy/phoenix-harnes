@@ -88,7 +88,7 @@ await Promise.all(Array.from({length:4},async()=>{
       {home:stats.data,away:null},null,now)
     const audit=reconcileNhlRosterAvailability(base,backup,now,
       new Date(now+36*60*60_000).toISOString()).home
-    captures[i]={team:code,name,season,rosterUrl,statsUrl,
+    captures[i]={team:code,name,season,rosterUrl,statsUrl:statUrl,
       rosterHttp:roster.http,statsHttp:stats.http,
       rosterError:roster.error??null,statsError:stats.error??null,
       count:audit.count,statCoveragePct:audit.statCoveragePct,
