@@ -697,11 +697,20 @@ test('full-slate ESPN discovery replaces an unpriced top-five leg with a quoted 
     }
     return Response.json(raw)
   }
+  const snapshots=[]
   const result=await evidencePricedTicket(5,date,'soccer',0,now,{
     PHOENIX_SPORTS_ESPN_DISABLED:'0',
     PHOENIX_SPORTS_OPTIONAL_ODDS_FALLBACK:'0',
     PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0',
-  },read,undefined,'winner',stubSpecialists)
+  },read,undefined,'winner',stubSpecialists,p=>snapshots.push(p))
+  assert.equal(snapshots[0].stage,'research-screened')
+  assert.equal(snapshots[0].verifiedEvents,5)
+  assert.equal(snapshots[0].quotedLegs,1)
+  assert.equal(snapshots[0].card.props.legs[0].price,'1.90909')
+  assert.equal(snapshots[0].card.props.legs[0].bookmaker,'DraftKings')
+  assert.equal(snapshots[0].card.props.combinedOdds,'No disponible')
+  assert.equal(snapshots[0].researchFixtures[0].eventId,'505')
+  assert.ok(snapshots.some(p=>p.stage==='quoted'))
   assert.equal(result.verifiedEvents,5)
   assert.ok(result.discoveryAudit.discoveredEvents>=6)
   assert.ok(result.researchFixtures.some(x=>x.eventId==='505'))
