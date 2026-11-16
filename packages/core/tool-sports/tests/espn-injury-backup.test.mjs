@@ -129,3 +129,25 @@ test('explicit Active status remains Active and is not reinterpreted as Out',asy
   assert.equal(result.home.injuries[0].status,'Active')
   assert.equal(result.status,'verified')
 })
+
+test('NHL nickname-only schedule joins ESPN full franchise names, not other clubs',async()=>{
+  const report={timestamp:'2026-11-08T20:12:00Z',injuries:[
+    {displayName:'Utah Mammoth',injuries:[
+      injury('Utah Player','Out','Utah Mammoth')]},
+    {displayName:'Vancouver Canucks',injuries:[
+      injury('Vancouver Player','Questionable','Vancouver Canucks')]},
+    {displayName:'Vegas Golden Knights',injuries:[
+      injury('Vegas Player','Out','Vegas Golden Knights')]},
+  ]}
+  const f={sport:'hockey',league:'nhl',home:'Mammoth',away:'Canucks',
+    kickoff:'2026-11-09T02:00:00Z'}
+  const x=await fetchEspnInjuryBackup(f,async url=>{
+    assert.equal(String(url),espnInjuryFeedUrl('hockey','nhl'))
+    return json(report)
+  },now)
+  assert.equal(x.status,'verified')
+  assert.equal(x.home.injuries.length,1)
+  assert.equal(x.home.injuries[0].athlete,'Utah Player')
+  assert.equal(x.away.injuries[0].athlete,'Vancouver Player')
+  assert.equal(x.home.injuries.some(p=>p.athlete==='Vegas Player'),false)
+})
