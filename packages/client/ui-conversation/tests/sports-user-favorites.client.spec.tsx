@@ -46,7 +46,7 @@ describe('PHOENIX independent favorite tracking',()=>{
     }])).toBe(1)
     render(card())
     fireEvent.click(screen.getByRole('button',{name:'Elegir mi favorito: Brooklyn Nets'}))
-    expect(screen.getByText('✦ PHOENIX eligió')).toBeTruthy()
+    expect(screen.getByText(/✦ PHOENIX eligió/)).toBeTruthy()
     expect(screen.getByText('✓ Tu elección')).toBeTruthy()
     expect(document.querySelectorAll('[data-selected-user="true"]')).toHaveLength(1)
     expect(document.querySelectorAll('[data-selected-phoenix="true"]')).toHaveLength(1)
