@@ -31,7 +31,7 @@ export function sportsFavoriteSide(favorite:string|undefined,away:string,home:st
 const key=(p:SportsTrackedPick)=>[p.receipt,p.market,p.side,p.line??''].join(':')
 const label:Record<PickState,string>={
   pending:'Pendiente',leading:'Va acertando',trailing:'Va fallando',
-  won:'Acertó · resultado deportivo',lost:'Falló · resultado deportivo',
+  won:'Acertó · provisional',lost:'Falló · provisional',
   review:'Por verificar',push:'Línea exacta · revisar',
 }
 const icon:Record<PickState,string>={
@@ -151,7 +151,7 @@ export function SportsMarkedMatch({away,home,hasStarted,favorite,trackedBets=[],
         const chosenKira=kiraSide===side
         const chosen=chosenUser||chosenReceipt||chosenKira
         const analytic=analyticSide===side
-        const marked=chosen||analytic
+        const marked=chosen||(!(userChoice||receiptSide||kiraSide)&&analytic)
         return <div key={side} data-selected-favorite={marked?'true':undefined}
           data-selected-pick={chosen?'true':undefined}
           data-selected-user={chosenUser?'true':undefined}
@@ -163,7 +163,7 @@ export function SportsMarkedMatch({away,home,hasStarted,favorite,trackedBets=[],
             {chosenUser&&<small className={css.sportsPickTag}>✓ Tu elección</small>}
             {chosenReceipt&&<small className={css.sportsPickTag}>✓ Tu selección · boleto</small>}
             {chosenKira&&<small className={css.sportsKiraPickTag}>✦ PHOENIX eligió</small>}
-            {analytic&&<small className={css.sportsFavoriteTag}>★ Favorito analítico</small>}
+            {analytic&&<small className={css.sportsFavoriteTag}>★ Favorito PHOENIX</small>}
             {team.meta&&<small>{team.meta}</small>}</span>
           {hasStarted&&team.score!==undefined&&<b>{team.score}</b>}
           {canChoose&&<button type="button" className={css.sportsChooseFavorite}
@@ -174,7 +174,8 @@ export function SportsMarkedMatch({away,home,hasStarted,favorite,trackedBets=[],
       })}
       {!hasStarted&&<span className={css.sportsSlateVs}>{pendingLabel}</span>}
     </div>
-    {picks.length>0&&<div className={css.sportsPickPanel} aria-label="Estado de la selección">
+    {picks.length>0&&<div className={css.sportsPickPanel} aria-label="Estado de la selección"
+      data-pick-source={ticketPicks.length?'receipt':forecasts.length?'forecast':'user'}>
       {picks.slice(0,5).map(({pick:p,origin})=>{
         const grade=evaluateSportsPick(p,verifiedGame,sport)
         const state=verifiedGame?.phase==='in'&&stale?'review':grade.state
@@ -195,7 +196,7 @@ export function SportsMarkedMatch({away,home,hasStarted,favorite,trackedBets=[],
       })}
       {picks.length>5&&<small>+{picks.length-5} selecciones adicionales.</small>}
       <small className={css.sportsPickDisclaimer}>
-        Acierto deportivo estimado por marcador oficial; ninguna selección manual implica una apuesta.
+        Estado deportivo según ESPN; ninguna selección manual implica una apuesta.
         La casa liquida los boletos por sus propias reglas.
       </small>
     </div>}
