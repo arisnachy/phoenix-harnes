@@ -136,7 +136,16 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
   // Location headers or allow private-network / cross-provider redirects.
   let next=u.toString(),response:Response|undefined
   for(let hops=0;hops<=2;hops++){
-    response=await fetcher(next,{headers,redirect:u.hostname==='api-web.nhle.com'?'manual':'error',signal:AbortSignal.timeout(9000)})
+    try{
+      response=await fetcher(next,{headers,
+        redirect:u.hostname==='api-web.nhle.com'?'manual':'error',
+        signal:AbortSignal.timeout(9000)})
+    }catch(error){
+      // Never log query parameters: bookmaker keys may be embedded in URLs.
+      const route=new URL(next)
+      const kind=error instanceof Error?error.name:'NetworkError'
+      throw Error('Proveedor '+kind+' en '+route.hostname+route.pathname)
+    }
     if(![301,302,303,307,308].includes(response.status))break
     if(hops===2||u.hostname!=='api-web.nhle.com')
       throw Error('Redirección de proveedor no permitida')
@@ -149,7 +158,11 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
     next=target.toString()
   }
   if(!response)throw Error('Proveedor no respondió')
-  if(!response.ok)throw Error(`Proveedor HTTP ${response.status}`)
+  if(!response.ok){
+    const route=new URL(next)
+    throw Error('Proveedor HTTP '+response.status+' en '+
+      route.hostname+route.pathname)
+  }
   if(Number(response.headers.get('content-length')||0)>4_000_000)throw Error('Respuesta supera 4 MB')
   const text=await response.text()
   if(text.length>4_000_000)throw Error('Respuesta supera 4 MB')
