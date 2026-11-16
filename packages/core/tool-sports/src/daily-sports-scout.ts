@@ -1,12 +1,13 @@
 /** Bounded daily multi-sport discovery. Scheduling availability is NOT a prediction. */
 import { getFeed,hasSportsPermission,sportsCatalog } from './sports.ts'
 import {fetchEspnScoreboardWithFallback} from './espn-nfl-weekly.ts'
+import {normalizeEspnMarkets,type EspnMarketQuote} from './espn-odds.ts'
 
 type Side = { homeAway?:string, team?:{id?:string|number,displayName?:string,name?:string},
   athlete?:{id?:string|number,displayName?:string,name?:string} }
 type Event = { id?:string|number, date?:string,
   status?:{type?:{state?:string}},
-  competitions?:Array<{competitors?:Side[]}> }
+  competitions?:Array<{competitors?:Side[];odds?:unknown}> }
 type Board = { events?:Event[] }
 /** Cache is scoped to a transport, exact league and UTC partition; never
  * promote yesterday's fixtures or a different adapter into live ESPN data. */
@@ -77,7 +78,7 @@ type DailySportsCoverage = {
 /**
  * Scan a limited set of known ESPN leagues cheaply before expensive matchup research.
  * @param date - Target date, YYYY-MM-DD in the ESPN request.
- * @param limit - Maximum diverse future fixtures to return, from 1 to 128.
+ * @param limit - Maximum diverse future fixtures to return, from 1 to 512.
  * @param fetcher - Injected HTTP adapter for deterministic tests.
  * @param now - Observation time; only fixtures with kickoffs after now survive.
  * @param env - Provider permissions, including ESPN opt-out.
@@ -89,12 +90,14 @@ export async function scoutDailySports(
   onlySports:readonly string[]|undefined=undefined,
 ):Promise<{date:string,checkedAt:string,events:DailySportsEvent[],
   totalEligible:number;truncated:boolean;eligibleBySport:Record<string,number>;
+  /** Fresh, named ESPN scoreboard moneylines across the full discovered slate. */
+  espnQuotes:EspnMarketQuote[];
   coverage:DailySportsCoverage[],
   diagnostics:{elapsedMs:number;requestTimeoutMs:number;requestedPartitions:number;
     partialLeagues:number;unavailableLeagues:number;cachedPartitions:number},
   warning:string}>{
   if(!dateValid(date))throw Error('Fecha inválida, usar AAAA-MM-DD')
-  if(!Number.isInteger(limit)||limit<1||limit>128)throw Error('Límite de 1 a 128 eventos')
+  if(!Number.isInteger(limit)||limit<1||limit>512)throw Error('Límite de 1 a 512 eventos')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración')
   const requested=onlySports?.map(value=>typeof value==='string'?
     normalizeDailySelection(value):null)
@@ -132,6 +135,8 @@ export async function scoutDailySports(
   }
   const coverage:DailySportsCoverage[]=[]
   const all:DailySportsEvent[]=[]
+  const espnQuotes:EspnMarketQuote[]=[]
+  const observedOdds=new Set<string>()
   let cachedPartitions=0
   const seen=new Set<string>()
   // The target is a Santo Domingo calendar day (UTC-4). Late local games
@@ -168,7 +173,7 @@ export async function scoutDailySports(
         continue
       }
       let valid=0,rawEvents=0,pregameOnDate=0
-      for(const board of boards)for(const event of (board.value.board.events??[]).slice(0,150)){
+      for(const board of boards)for(const event of (board.value.board.events??[]).slice(0,512)){
         rawEvents++
         if(event.status?.type?.state!=='pre')continue
         const at=Date.parse(event.date??'')
@@ -187,6 +192,26 @@ export async function scoutDailySports(
         valid++
         all.push({...item,eventId:id,kickoff:new Date(at).toISOString(),
           home,away,source:'ESPN Site API',status:'scheduled'})
+        // The same fresh scoreboard read can contain named bookmaker quotes.
+        // Do not promote fallback CACHE prices, guesses or unknown providers.
+        const odds=event.competitions?.[0]?.odds
+        if(!board.value.cached&&Array.isArray(odds)&&odds.length){
+          const current=normalizeEspnMarkets(
+            event as Parameters<typeof normalizeEspnMarkets>[0],
+            odds as Parameters<typeof normalizeEspnMarkets>[1],{now})
+          for(const q of current){
+            if(q.market!=='h2h'||q.point!==null||q.eventId!==id||
+              !q.bookmaker.trim()||q.bookmaker.startsWith('ESPN proveedor #')||
+              !Number.isFinite(q.price)||q.price<=1||q.price>=1000||
+              Date.parse(q.updatedAt)>now+5*60_000)continue
+            const unique=[item.sport,item.league,q.eventId,q.bookmaker,
+              q.selection,q.price].join('|')
+            if(observedOdds.has(unique))continue
+            observedOdds.add(unique)
+            espnQuotes.push({...q,observedAt:new Date(now).toISOString(),
+              endpointSource:'scoreboard'})
+          }
+        }
       }
       const full=boards.length===partitions.length
       const cached=boards.some(x=>x.value.cached)
@@ -217,7 +242,10 @@ export async function scoutDailySports(
     }
     if(!progressed)break
   }
-  return{date,checkedAt:new Date(now).toISOString(),events,totalEligible:all.length,
+  const returned=new Set(events.map(e=>e.eventId+'|'+e.home.name+'|'+e.away.name))
+  const visibleQuotes=espnQuotes.filter(q=>returned.has(q.eventId+'|'+q.home+'|'+q.away))
+  return{date,checkedAt:new Date(now).toISOString(),events,
+    espnQuotes:visibleQuotes,totalEligible:all.length,
     truncated:events.length<all.length,
     eligibleBySport:Object.fromEntries(sports.map(sport=>[sport,all.filter(event=>event.sport===sport).length])),
     coverage,diagnostics:{elapsedMs:Date.now()-startedAt,requestTimeoutMs,
@@ -226,6 +254,7 @@ export async function scoutDailySports(
       unavailableLeagues:coverage.filter(x=>x.status==='unavailable').length,
       cachedPartitions},
     warning:'Lista de partidos verificables, NO ranking de ganancias ni probabilidades. '
-      +'Investiga estadísticas, bajas, titulares, noticias y cuotas por mercado solo para '
-      +'los candidatos priorizados. Sin precio fechado no hay selección cotizada.'}
+      +'Se inspeccionan todos los eventos ESPN accesibles hasta el límite visible; '
+      +'las ligas sin respuesta y los recortes se informan por separado. '
+      +'Las cotizaciones observadas en ESPN no prueban aceptación en la casa.'}
 }
