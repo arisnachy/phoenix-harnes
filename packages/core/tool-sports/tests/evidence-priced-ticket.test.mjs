@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {boundedPriced,evidencePricedTicket} from '../src/evidence-priced-ticket.ts'
+import {boundedPriced,evidencePricedTicket,ticketLeagueOddsKey} from '../src/evidence-priced-ticket.ts'
 
 const date='2026-10-28',now=Date.parse('2026-10-28T15:00:00Z')
 const kick='2026-10-28T23:00:00Z'
@@ -714,4 +714,18 @@ test('full-slate ESPN discovery replaces an unpriced top-five leg with a quoted 
   assert.equal(result.priced,false)
   assert.equal(result.approvedLegs,0)
   assert.match(result.card.props.note,/Cartelera completa:/)
+})
+
+test('NCAA uses ESPN college markets; Dominican winter baseball cannot inherit MLB odds',()=>{
+  assert.equal(ticketLeagueOddsKey({sport:'basketball',league:'mens-college-basketball'}),
+    'basketball_ncaab')
+  assert.equal(ticketLeagueOddsKey({sport:'football',league:'college-football'}),
+    'americanfootball_ncaaf')
+  assert.equal(ticketLeagueOddsKey({sport:'baseball',league:'dominican-winter-league'}),
+    undefined)
+  assert.equal(ticketLeagueOddsKey({sport:'baseball',league:'mlb'}),'baseball_mlb')
+  assert.equal(ticketLeagueOddsKey({sport:'football',league:'nfl'}),
+    'americanfootball_nfl')
+  assert.equal(ticketLeagueOddsKey({sport:'soccer',league:'uru.1'},'dynamic'),
+    'soccer_espn_dynamic')
 })
