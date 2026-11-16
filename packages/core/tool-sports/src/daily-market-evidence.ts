@@ -182,6 +182,31 @@ export function assessDailyMarketEvidence(
         'consistentemente el mismo hándicap/total a esta línea.')
     }
   }
+  // A poor last-ten record can hide a material *recent* recovery. This is a
+  // retrospective audit trigger (3 vs 10 games), not a validated NHL edge.
+  // A selected favorite must be compared with alternatives when its opponent
+  // won at least two of its last three despite winning four or fewer of ten.
+  if(candidate.sport==='hockey'&&candidate.market==='h2h'&&side&&
+    status==='descriptive-support'){
+    const opponent=normalize(side.selection)===normalize(evidence.home.name)?
+      evidence.away:evidence.home
+    const games=opponent.lastGames.slice(0,10).filter(g=>
+      Number.isFinite(g.scored)&&Number.isFinite(g.allowed))
+    if(games.length>=8){
+      const recent=games.slice(0,3)
+      const wins10=games.filter(g=>g.scored>g.allowed).length
+      const wins3=recent.filter(g=>g.scored>g.allowed).length
+      if(recent.length===3&&wins10<=4&&wins3>=2){
+        status='uncertain'
+        missing.push('ALERTA DE REPUNTE NHL: '+opponent.name+
+          ' ganó '+wins3+'/3 recientes pese a solo '+wins10+'/'+
+          games.length+' en la muestra; revisar alineaciones, porteros, '+
+          'calidad de los rivales y mercado antes de elegir el favorito.')
+        direction='Rival con repunte reciente: la muestra de diez partidos '+
+          'no justifica sola esta elección.'
+      }
+    }
+  }
   if(candidate.requiresRecheck){
     status='uncertain'
     missing.push('Precio ESPN observado anteriormente: requiere nueva lectura del mercado exacto antes de considerar el boleto completo.')
