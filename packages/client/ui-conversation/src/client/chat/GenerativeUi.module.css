@@ -799,7 +799,7 @@
 .sportsSlateMatch .sportsChooseFavorite{
   flex:0 0 auto;padding:3px 6px;border:1px solid var(--dsw-alias-border-subtle,rgba(122,139,163,.3));
   background:transparent;color:var(--dsw-alias-label-secondary,#667385);
-  border-radius:7px;font:700 9px/1.25 inherit;cursor:pointer;white-space:nowrap
+  border-radius:7px;font-size:9px;line-height:1.25;font-weight:700;font-family:inherit;cursor:pointer;white-space:nowrap
 }
 .sportsSlateMatch .sportsChooseFavorite[aria-pressed="true"]{
   background:rgba(48,105,214,.12);border-color:rgba(48,105,214,.32);color:#2263bc
