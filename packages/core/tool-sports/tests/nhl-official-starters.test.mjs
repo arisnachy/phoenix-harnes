@@ -65,3 +65,15 @@ test('HTTP 404 pregame NHL boxscore is not published, NOT a network outage',asyn
   assert.equal(result.homeGoalie,null)
   assert.equal(result.awayGoalie,null)
 })
+
+test('pregame NHL boxscore scratches preserve team-scoped official NHL IDs',async()=>{
+  const payload=template()
+  payload.playerByGameStats.homeTeam.scratches=[
+    {playerId:8478402,firstName:{default:'Connor'},lastName:{default:'McDavid'}}]
+  payload.playerByGameStats.awayTeam.scratches=[8481234]
+  const x=await probeNhlOfficialStarters(opts,get(payload),now)
+  assert.equal(x.state,'not-published','goalies remain unconfirmed')
+  assert.deepEqual(x.scratches.home,[{playerId:'8478402',name:'Connor McDavid'}])
+  assert.deepEqual(x.scratches.away,[{playerId:'8481234',name:null}])
+  assert.equal(x.homeGoalie,null)
+})
