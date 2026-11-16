@@ -7,7 +7,8 @@ import { probeNhlOfficialStarters, type NhlStarterProbe } from './nhl-official-s
 import type { StepObservation } from './daily-specialist-checklist.ts'
 import {fetchEspnInjuryBackup,type InjuryBackup} from './espn-injury-backup.ts'
 import {nhlGoalieEvidence} from './nhl-goalie-evidence.ts'
-import {buildNhlFullRosterAudit,reconcileNhlRosterAvailability} from './nhl-roster-integrity.ts'
+import {buildNhlFullRosterAudit,reconcileNhlRosterAvailability,
+  applyNhlOfficialScratches} from './nhl-roster-integrity.ts'
 import {aggregateNhl5v5} from './nhl-five-on-five.ts'
 
 type EvidenceState='verified'|'partial'|'missing'
@@ -119,9 +120,10 @@ export function buildNhlResearchHandoff(
     home:{teamId:fixture.home.id,gameIds:[]},
     away:{teamId:fixture.away.id,gameIds:[]},games:[],
   })
-  const fullRoster=reconcileNhlRosterAvailability(
-    fullRosterBase,injurySnapshot,
-    Date.parse(dossier.checkedAt),fixture.date)
+  const fullRoster=applyNhlOfficialScratches(
+    reconcileNhlRosterAvailability(
+      fullRosterBase,injurySnapshot,Date.parse(dossier.checkedAt),fixture.date),
+    starter,Date.parse(dossier.checkedAt),fixture.date)
   const candidates=dossier.goalieCandidates
   const anyGoalie=candidates.home.length>0&&candidates.away.length>0
   const pp=dossier.specialTeams
