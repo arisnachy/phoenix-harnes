@@ -109,7 +109,11 @@ export function unrenderedSportsCards(
   const added=new Set<string>(),output:GenerativeUiBlock[]=[]
   // The requested ticket must never disappear behind six earlier fixtures
   // from the same research round. Preserve original order inside each tier.
-  const prioritized=[...cards].sort((a,b)=>
+  // When Kira is publishing the six evidence stages, preserve their
+  // chronological research order; the final ticket belongs AFTER the tables.
+  // Ordinary quick-ticket responses retain legacy ticket-first behavior.
+  const hasProgressiveStages=cards.some(card=>card.component==='sports_research_table')
+  const prioritized=hasProgressiveStages?[...cards]:[...cards].sort((a,b)=>
     Number(b.component==='sports_ticket_card')-Number(a.component==='sports_ticket_card'))
   for(const card of prioritized){
     if(output.length>=MAX_SPORTS_CARDS)break
