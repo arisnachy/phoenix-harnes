@@ -71,7 +71,7 @@ import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { CODEX_PROVIDER } from './codex-live-catalog.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
 import { applyMondayCodexMembrane, normalizeCodexToolSchemas, recoverRejectedCodexFunctionSchema, scopeCodexToolsForPaint, normalizeOpenAiFunctionToolPayload, surfaceRejectedCodexSchemaEvent, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
-import { fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, toPiContext } from './context.ts'
+import { fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, phoenixLocalSdkContextWindow, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 import { isNonCodexRecoveryModel } from './provider-recovery.ts'
 
@@ -502,9 +502,15 @@ export class PiAiAdapter extends LlmAdapter {
         'AUTH',
       )
     }
-    const providerWireModel = options.provider === 'deepseek' && model.id === 'deepseek-v4.1-flash'
-      ? { ...model, id: 'deepseek-flash' }
-      : model
+    // pi-ai subtracts a fixed 4096-token reserve even from 4K local models.
+    // Only the SDK-facing descriptor receives virtual accounting headroom.
+    // Preflight fitting, public model metadata, usage checks and Ollama num_ctx
+    // continue using the true allocated window: no extra KV RAM is promised.
+    const providerWireModel = options.provider === 'phoenix-local'
+      ? { ...model, contextWindow: phoenixLocalSdkContextWindow(model.contextWindow) }
+      : options.provider === 'deepseek' && model.id === 'deepseek-v4.1-flash'
+        ? { ...model, id: 'deepseek-flash' }
+        : model
     const wireModel = platformKeyFallback
       ? codexPlatformFallbackModel(model, profile.baseURL)
       : providerWireModel
@@ -518,7 +524,9 @@ export class PiAiAdapter extends LlmAdapter {
     let emittedChunk = false
 
     try {
-      const desiredMaxOutput = options.maxTokens ?? model.maxTokens
+      const desiredMaxOutput = options.provider === 'phoenix-local'
+        ? Math.min(options.maxTokens ?? model.maxTokens, model.maxTokens)
+        : options.maxTokens ?? model.maxTokens
       const fitted = options.provider === 'phoenix-local'
         ? fitPhoenixLocalTextTurn(options, model.contextWindow, desiredMaxOutput)
         : fitGenerateOptionsToContext(options, model.contextWindow, desiredMaxOutput)
@@ -624,7 +632,7 @@ export class PiAiAdapter extends LlmAdapter {
           : {},
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.provider === 'phoenix-local'
-          ? { maxTokens: options.maxTokens ?? model.maxTokens }
+          ? { maxTokens: desiredMaxOutput }
           : options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
         signal: watchdog.signal,
