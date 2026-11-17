@@ -23,8 +23,22 @@ const danger=(status:string):number=>{
   if(/^(?:doubtful|questionable|day.to.day|day-to-day|gtd)$/u.test(clean))return .35
   return 0
 }
-const weighted=(rows:readonly Injury[],now:number,kickoff:number):number=>
-  rows.reduce((sum,row)=>sum+(validPregame(row,now,kickoff)?danger(row.status):0),0)
+const weighted=(rows:readonly Injury[],now:number,kickoff:number):number=>{
+  // ESPN team and league feeds may repeat the same player. Use only the
+  // latest pregame report per athlete, including a later healthy status.
+  const latest=new Map<string,{at:number;impact:number}>()
+  for(const row of rows){
+    if(!validPregame(row,now,kickoff))continue
+    const at=Date.parse(row.reportedAt!)
+    const key=row.athlete.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
+      .trim().toLowerCase()
+    const previous=latest.get(key)
+    if(previous&&previous.at>at)continue
+    const value=danger(row.status)
+    latest.set(key,{at,impact:previous?.at===at?Math.max(previous.impact,value):value})
+  }
+  return [...latest.values()].reduce((sum,row)=>sum+row.impact,0)
+}
 
 /** Compare bilateral, current availability and schedule BEFORE selecting a parlay leg.
  * @param candidate - Exact future game and the form-based initial favorite.
