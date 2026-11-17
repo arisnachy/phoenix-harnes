@@ -10,7 +10,7 @@ import type {
 } from '@phoenix-ai/dsh-attachment'
 import { CallId, createMessage, createUserMessage, OFFLOADED_IMAGE_TEXT } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, Message } from '@phoenix-ai/dsh-llm'
-import { estimateGenerateOptionsTokens, fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, toPiContext } from '../src/context.ts'
+import { estimateGenerateOptionsTokens, fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, phoenixLocalSdkContextWindow, toPiContext } from '../src/context.ts'
 import { toPiAssistant } from '../src/replay.ts'
 
 const ref: ImageAttachmentRef = {
@@ -92,7 +92,7 @@ describe('Phoenix Local text-only small-model fallback', () => {
       ...request([latest]),
       provider: 'phoenix-local',
       model: 'phoenix-local',
-      system: 'Kira persona with lots of tools and instructions. '.repeat(850),
+      system: 'Kira persona with lots of tools and instructions. '.repeat(1000),
       tools: [],
     }
     // The old scaled reserve (2048 at 16K) admitted this nearly-full
@@ -105,7 +105,7 @@ describe('Phoenix Local text-only small-model fallback', () => {
     expect(fitted.options.messages).toEqual([latest])
     expect(fitted.options.tools).toEqual([])
     expect(fitted.estimatedTokens).toBeLessThan(fitted.inputBudgetTokens)
-    expect(fitted.inputBudgetTokens).toBe(11_008)
+    expect(fitted.inputBudgetTokens).toBe(13_056)
     expect(options.system?.length).toBeGreaterThan(30_000)
   })
 
@@ -119,18 +119,21 @@ describe('Phoenix Local text-only small-model fallback', () => {
     const fitted = fitPhoenixLocalTextTurn(options, 16_384, 768)
     expect(fitted.options).toBe(options)
     expect(fitted.compacted).toBe(false)
-    expect(fitted.inputBudgetTokens).toBe(11_008)
+    expect(fitted.inputBudgetTokens).toBe(13_056)
   })
 
-  it('refuses to pretend a 4096-token pi-ai window has answer room after its fixed reserve', () => {
+  it('keeps a genuine 4K local context while granting pi-ai virtual SDK reserve headroom', () => {
     const options: GenerateOptions = {
       ...request([user([{ type: 'text', text: 'hola' }])]),
       provider: 'phoenix-local',
       model: 'phoenix-local',
     }
     const fitted = fitPhoenixLocalTextTurn(options, 4096, 768)
-    expect(fitted.estimatedTokens).toBeGreaterThan(fitted.inputBudgetTokens)
-    expect(fitted.inputBudgetTokens).toBe(1)
+    expect(phoenixLocalSdkContextWindow(4096)).toBe(8192)
+    expect(phoenixLocalSdkContextWindow(16_384)).toBe(20_480)
+    expect(fitted.options).toBe(options)
+    expect(fitted.estimatedTokens).toBeLessThan(fitted.inputBudgetTokens)
+    expect(fitted.inputBudgetTokens).toBe(2304)
   })
 
   it('lets Qwen answer hola despite 100k tokens of global instructions', () => {
