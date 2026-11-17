@@ -82,3 +82,17 @@ test('a team-only NBA injury report still lowers risk without claiming opponent 
   assert.match(risk.reasons.join(' '),/sin parte bilateral/u)
   assert.equal(risk.needsRecheck,true)
 })
+
+test('four fresh ESPN injury alerts still trigger review when roster endpoint times out',()=>{
+  const risk=assessPregamePreselectionRisk(fixture(),check({
+    status:'incomplete',
+    injuryAudit:{status:'partial',
+      home:{matched:false,injuries:[]},
+      away:{matched:true,injuries:[
+        row('A','Out'),row('B','Out'),row('C','Out'),row('D','Out')]}},
+    restHours:{home:72,away:24},
+  }),now)
+  assert.ok(risk.priority<=-.95)
+  assert.equal(risk.needsRecheck,true)
+  assert.match(risk.reasons.join(' '),/ALERTA PROVISIONAL/u)
+})
