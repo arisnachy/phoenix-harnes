@@ -127,7 +127,11 @@ export function planIndependentSportsFallback(input:{
   const targets:IndependentResearchTarget[]=[]
   if(league==='nhl'||league==='hockey'){
     targets.push(target('NHL oficial','https://www.nhl.com/news',
-      'Parte oficial y proyección de alineaciones; buscar por equipos y fecha'))
+      'Parte oficial de lesiones; buscar por ambos equipos y fecha'))
+    if(date>='2026-10-01'&&date<='2027-06-30')
+      targets.push(target('NHL alineaciones',
+        'https://www.nhl.com/news/nhl-lineup-projections-2026-27-season',
+        'Artículo oficial 2026-27 con líneas, porteros y scratches; comprobar fecha y estado'))
     if(date)targets.push(target('Daily Faceoff',
       'https://www.dailyfaceoff.com/starting-goalies/'+date,
       'Comprobar confirmado versus probable, hora y fuente del portero'))
