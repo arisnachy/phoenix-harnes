@@ -1,0 +1,21 @@
+/* Inline research table: deliberately no framed cards or generated winner score. */
+.root{width:100%;max-width:100%;min-width:0;margin:12px 0 22px;color:var(--dsw-alias-label-primary,inherit);font:inherit}
+.top{margin-bottom:10px}
+.step{display:flex;justify-content:space-between;gap:12px;font-size:11px;color:var(--dsw-alias-label-secondary,#777);font-weight:650;letter-spacing:.04em}
+.step small{font-size:11px;font-weight:500;letter-spacing:0}
+.top h3{font-size:15px;font-weight:650;margin:6px 0 0;line-height:1.4}
+.scroll{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}
+.table{width:100%;min-width:480px;border-collapse:collapse;font-size:12px}
+.table th,.table td{border-bottom:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.18));padding:9px 11px;vertical-align:top;text-align:left;overflow-wrap:anywhere}
+.table thead th{background:var(--dsw-alias-surface-secondary,transparent);font-size:12px;font-weight:650}
+.table tbody th{width:29%;max-width:220px;font-weight:550;color:var(--dsw-alias-label-secondary,#777)}
+.table tbody td{width:35%}
+.club{display:inline-flex;align-items:center;gap:6px}
+.club img{width:25px;height:25px;object-fit:contain}
+.avatar{width:28px;height:28px;object-fit:cover;border-radius:50%;vertical-align:middle;margin-right:6px}
+.fact{display:block;color:var(--dsw-alias-label-primary,inherit)}
+.sourceState{display:block;font-size:10px;font-weight:450;opacity:.75}
+.table a{display:inline-block;margin-top:3px;font-size:10px;text-decoration:underline;text-underline-offset:2px}
+.missing{font-size:11px;margin:9px 0;color:var(--dsw-alias-label-secondary,#777);overflow-wrap:anywhere}
+.footer{font-size:10px;margin-top:8px;color:var(--dsw-alias-label-secondary,#777);overflow-wrap:anywhere}
+@media(max-width:540px){.table{min-width:440px}.table th,.table td{padding:7px 8px}}
