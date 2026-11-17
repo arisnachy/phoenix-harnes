@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {progressiveSportsStage} from '../src/sports-progressive-chat.ts'
+import {progressiveSportsStage,summarizeSportsPlayer} from '../src/sports-progressive-chat.ts'
 const now=Date.parse('2026-11-17T15:00:00Z')
 const fixture={sport:'basketball',league:'nba',eventId:'4010001',
   date:'2026-11-17',home:'Home Team',away:'Away Team',
@@ -47,4 +47,19 @@ test('invalid stage and unverified IDs cannot be used to invent a table',async()
     {...fixture,eventId:'fake'},'teams',undefined,source,now,{}),/ID ESPN/)
   await assert.rejects(progressiveSportsStage(
     fixture,'winner-scores',undefined,source,now,{}),/ID ESPN/)
+})
+
+test('athlete rows expose original stats, verified starter state and home/away splits',()=>{
+  const value=summarizeSportsPlayer({
+    name:'Jugador Oficial',role:'PG',dataStatus:'Disponible en roster',
+    starterConfirmed:false,
+    stats:[{name:'PTS',value:'21'},{name:'AST',value:'7'},
+      {name:'REB',value:'5'},{name:'MIN',value:'32'}],
+    splits:[{name:'Home PTS',value:'24'},{name:'Away PTS',value:'19'}],
+    recent:[{name:'Game 1',value:'23 PTS'}],
+  })
+  assert.match(value,/titular sin confirmar/)
+  for(const expected of ['PTS: 21','AST: 7','REB: 5','MIN: 32',
+    'Home PTS: 24','Away PTS: 19','Game 1: 23 PTS'])
+    assert.ok(value.includes(expected),'falta '+expected)
 })
