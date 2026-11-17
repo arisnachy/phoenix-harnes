@@ -1164,7 +1164,7 @@ export async function evidencePricedTicket(
       'Cada porcentaje pertenece únicamente a su pata y su mercado; '+
       'no presentar una probabilidad conjunta del boleto. '+
       'Formas y descanso históricos NO son probabilidades calibradas. El expediente deportivo puede señalar titulares, bajas y estadísticas PENDIENTES; confirmar la casa antes de apostar. '+priced.warning,
-    askPrompt:'Kira, NO aceptes automáticamente estas patas. Compara por ti misma el roster, roles, minutos, lesiones, métricas de ambos equipos, descanso y rivales de modelComparisonBriefs. Busca noticias y estadísticas verificables adicionales, razona contradicciones, sustituye favoritos débiles y explica el dictamen. Ningún factor recibe puntos o pesos numéricos arbitrarios; las cuotas son precios, no tu conclusión. Si necesitas construir otro pronóstico con IDs ya verificados, usa sports_chat_ticket_research.',
+    askPrompt:'Kira, NO aceptes automáticamente estas patas. Compara por ti misma el roster, roles, minutos, lesiones, métricas de ambos equipos, descanso y rivales de modelComparisonBriefs. Busca noticias y estadísticas verificables adicionales, razona contradicciones, sustituye favoritos débiles y explica el dictamen. Ningún factor recibe puntos o pesos numéricos arbitrarios; las cuotas son precios, no tu conclusión. Después del análisis debes construir TU ticket mediante sports_chat_ticket_research utilizando IDs verificados, incluso cuando coincidas con las patas provisionales.',
   }}
   return{card,priced:true,placed:false,complete:true,
     discoveredEvents:research.discoveryAudit.discoveredEvents,
