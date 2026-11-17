@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "¿Qué herramienta usas para hacer un ticket de ganador con investigación completa y precios ESPN actuales?" }
-  ]
-}
