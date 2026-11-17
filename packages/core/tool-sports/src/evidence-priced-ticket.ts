@@ -359,6 +359,15 @@ export async function evidencePricedTicket(
     approvedForBetting:false as const,checkedAt:new Date(now).toISOString(),
     }
   })
+  // Use the same point-in-time caution score both before and after quotation.
+  // A severe documented injury/fatigue cluster cannot be renamed a final bet
+  // merely because an ESPN bookmaker price became available.
+  const pregameRiskAt=(index:number):number|null=>{
+    const event=research.events[index],check=specialistChecks[index]
+    return event&&check?assessPregamePreselectionRisk({
+      sport:event.sport,pick:event.pick,kickoff:event.kickoff,
+    },check,now).priority:null
+  }
   const trackingEvents=research.events.map(e=>({
     eventId:e.eventId,sport:e.sport,league:e.league,date:day,
     pick:e.pick,kickoff:e.kickoff,
@@ -397,6 +406,7 @@ export async function evidencePricedTicket(
     criticalPending:specialistChecks[index]?.checklist?.criticalPending??
       ['Expediente especializado no disponible'],
     modelStatus:modelAudit[index]?.status??'unavailable',
+    pregameRiskPriority:pregameRiskAt(index),
   })),decisionPolicy)
   const quoteAccess=[
     keylessEnabled(env)?'OddsHarvester habilitado (sujeto al acceso del sitio)':
@@ -745,6 +755,7 @@ export async function evidencePricedTicket(
       criticalPending:specialistChecks[index]?.checklist?.criticalPending??
         ['Expediente especializado no disponible'],
       modelStatus:modelAudit[index]?.status??'unavailable',
+    pregameRiskPriority:pregameRiskAt(index),
     }
   }),decisionPolicy)
   const conditionalLegs=postQuoteAudit.legs.filter(leg=>
@@ -984,6 +995,7 @@ export async function evidencePricedTicket(
     criticalPending:specialistChecks[index]?.checklist?.criticalPending??
       ['Expediente especializado no disponible'],
     modelStatus:modelAudit[index]?.status??'unavailable',
+    pregameRiskPriority:pregameRiskAt(index),
     exploratoryProbabilityPercent:exploratoryForIndex(index),
   })),decisionPolicy)
   const elevatedMarketRisk=marketRisk.missingQuotes>0||
