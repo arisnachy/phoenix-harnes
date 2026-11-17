@@ -20,7 +20,7 @@
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import {
-  existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, statfsSync, unlinkSync,
+  existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, statfsSync, unlinkSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
@@ -339,16 +339,55 @@ function waitForFetchRetry(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }
 
+/**
+ * Repair only a corrupt, updater-owned temporary loose Git ref that Git itself
+ * names in a failed fetch. Never modify main/stable, packed refs, user refs or
+ * a temporary ref whose object is still valid.
+ */
+function repairCorruptUpdateFetchRef(root, stderr) {
+  const match = /bad object (refs\/phoenix\/update\/fetch-[A-Za-z0-9._-]+)/u.exec(stderr ?? '')
+  if (!match) return false
+  const refName = match[1]
+  const discovered = git(root, ['rev-parse', '--git-path', refName], { allowFailure: true })
+  if (!discovered.ok || !discovered.stdout) return false
+  const target = resolve(root, discovered.stdout)
+  const trusted = join(controlDirectory(root), 'refs', 'phoenix', 'update')
+  const suffix = relative(trusted, target)
+  if (!suffix || suffix.startsWith('..') || isAbsolute(suffix)
+    || suffix.includes('/') || suffix.includes('\\')) return false
+  try {
+    const info = lstatSync(target)
+    if (!info.isFile() || info.size > 1024) return false
+    const oid = readFileSync(target, 'utf8').trim()
+    if (/^[0-9a-f]{40}$/iu.test(oid)
+      && git(root, ['cat-file', '-e', `${oid}^{commit}`], { allowFailure: true }).ok) return false
+    const backup = join(controlDirectory(root),
+      `phoenix-quarantined-${suffix}-${String(process.pid)}-${String(Date.now())}.txt`)
+    renameSync(target, backup)
+    console.error(`[PHOENIX UPDATE] quarantined broken temporary Git ref ${refName}; retrying fetch without touching local changes.`)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function fetchBranchCommit(root, branch, label, attempts = FETCH_ATTEMPTS, timeoutMs) {
   const safeLabel = label.replace(/[^A-Za-z0-9._-]/gu, '-')
   const localRef = `refs/phoenix/update/fetch-${String(process.pid)}-${safeLabel}`
   let lastFailure
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const result = git(root, [
+    let result = git(root, [
       'fetch', '--quiet', REMOTE,
       `+refs/heads/${branch}:${localRef}`,
     ], { allowFailure: true, timeoutMs })
+    // Even a one-attempt background poll can recover a stale corrupt ref.
+    if (!result.ok && repairCorruptUpdateFetchRef(root, result.stderr)) {
+      result = git(root, [
+        'fetch', '--quiet', REMOTE,
+        `+refs/heads/${branch}:${localRef}`,
+      ], { allowFailure: true, timeoutMs })
+    }
     if (result.ok) {
       const commit = git(root, ['rev-parse', `${localRef}^{commit}`]).stdout
       git(root, ['update-ref', '-d', localRef], { allowFailure: true })
