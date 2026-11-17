@@ -56,6 +56,9 @@ export type SpecialistGate={
   /** Published/indexed headlines; none is verification of the article body. */
   newsFindings?:Array<{title:string;publisher:string;publishedAt:string|null;
     status:'reported-headline'|'indexed-headline-only'}>
+  /** Opponent-specific evidence: potential positional duels are NOT historical matchups. */
+  playerMatchups?:Array<{athlete:string;opponent:string;detail:string;
+    status:'observed'|'candidate';source:string}>
   /** Independent empirical draw-risk assessment, not proof of 1X2 odds. */
   soccerDrawAudit?:SoccerDrawAudit
   /** Official NHL gamecenter starter flags, never inferred from roster. */
@@ -155,6 +158,7 @@ export async function investigateTicketSpecialist(
   let restHours:SpecialistGate['restHours']
   let teamComparison:SpecialistGate['teamComparison']
   let newsFindings:SpecialistGate['newsFindings']
+  let playerMatchups:SpecialistGate['playerMatchups']
   let soccerDrawAudit:SoccerDrawAudit|undefined
   let nhlStarterAudit:NhlStarterProbe|undefined
   let nhlScratchAudit:NhlScratchProbe|undefined
@@ -190,6 +194,10 @@ export async function investigateTicketSpecialist(
           stats:p.statistics,recent:p.lastGames,splits:[]})),
       })
       teamComparison={home:comparative('home'),away:comparative('away')}
+      playerMatchups=d.matchups.slice(0,16).map(x=>({athlete:x.attacker,
+        opponent:x.against,detail:'Duelo posicional posible: '+
+          x.candidates.slice(0,3).map(p=>p.name+' ('+p.role+')').join(', '),
+        status:'candidate' as const,source:'Roster NFL; sin jugadas directas confirmadas'}))
       newsFindings=[...d.news.map(x=>({title:x.title,publisher:x.source,
         publishedAt:x.published,status:'reported-headline' as const})),
         ...d.editorial.map(x=>({title:x.title,publisher:x.publisher,
@@ -237,6 +245,16 @@ export async function investigateTicketSpecialist(
           stats:p.stats,recent:p.lastGames,splits:p.splits})),
       })
       teamComparison={home:comparative('home'),away:comparative('away')}
+      playerMatchups=d.matchups.slice(0,16).map(x=>({athlete:x.attacker,
+        opponent:x.opponents.slice(0,3).map(p=>p.name).join(', '),detail:x.note,
+        status:'candidate' as const,
+        source:'Duelo de roster NBA/WNBA, no histórico directo documentado'}))
+      playerMatchups=d.matchups.slice(0,18).map(x=>({athlete:x.batter,
+        opponent:x.pitcher,detail:x.bvp?Object.entries(x.bvp).map(([key,value])=>
+          key+': '+value).join('; '):x.observations.slice(0,2).join('; '),
+        status:x.bvp?'observed' as const:'candidate' as const,
+        source:x.bvp?'MLB Stats API · enfrentamiento BvP observado':
+          'Cruce de rol bateador-lanzador, historial BvP no disponible'}))
       newsFindings=[...d.news.map(x=>({title:x.headline,publisher:x.source,
         publishedAt:x.published,status:'reported-headline' as const})),
         ...d.editorial.map(x=>({title:x.headline,publisher:x.publisher,
@@ -315,6 +333,10 @@ export async function investigateTicketSpecialist(
           stats:p.facts.map(f=>({name:f.label,value:f.value})),recent:[],splits:[]})),
       })
       teamComparison={home:comparativeSoccer('home'),away:comparativeSoccer('away')}
+      playerMatchups=d.duels.slice(0,16).map(x=>({athlete:x.attacker,
+        opponent:x.opponents.slice(0,3).map(p=>p.name).join(', '),
+        detail:x.limitations.slice(0,2).join('; '),status:'candidate' as const,
+        source:'Fútbol: formación de roster, sin enfrentamiento directo comprobado'}))
       newsFindings=[...d.headlines.map(x=>({title:x.title,publisher:x.source,
         publishedAt:x.published,status:'reported-headline' as const})),
         ...d.editorial.map(x=>({title:x.title,publisher:x.publisher,
@@ -697,6 +719,7 @@ export async function investigateTicketSpecialist(
       ...(restHours?{restHours}:{}),
       ...(teamComparison?{teamComparison}:{}),
       ...(newsFindings?{newsFindings}:{}),
+      ...(playerMatchups?{playerMatchups}:{}),
       ...(soccerDrawAudit?{soccerDrawAudit}:{}),
       ...(nhlStarterAudit?{nhlStarterAudit}:{}),
       ...(nhlScratchAudit?{nhlScratchAudit}:{}),
