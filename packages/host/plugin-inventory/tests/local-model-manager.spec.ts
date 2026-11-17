@@ -38,6 +38,22 @@ function harness(initial?: Partial<LocalModelPersistentState>) {
 }
 
 describe('LocalModelRuntimeManager', () => {
+  it('accepts only thinking modes discovered in local Ollama metadata', async () => {
+    const id = 'qwen3.5-2b-ollama-q4-k-m'
+    const { dependencies, readState } = harness({ selectedModelId: id, thinking: false })
+    dependencies.readOllamaThinking = vi.fn(async () => ({
+      values: [false, true, 'medium'], default: false,
+    }))
+    const manager = await createLocalModelRuntimeManager(dependencies)
+    await manager.refreshThinking()
+    expect(manager.snapshot().thinkingCapabilities?.values).toEqual([false, true, 'medium'])
+    await expect(manager.setThinking('high')).rejects.toThrow(/Ollama/)
+    await manager.setThinking('medium')
+    expect(readState().thinking).toBe('medium')
+    await manager.setThinking(null)
+    expect(readState().thinking).toBeNull()
+  })
+
   it('installs the pinned runtime and recommended model with visible lifecycle phases', async () => {
     const { dependencies, readState } = harness()
     const manager = await createLocalModelRuntimeManager(dependencies)
