@@ -34,11 +34,11 @@ export function isFirstPartySportsTool(name: unknown): boolean {
   return /^sports_chat_[a-z][a-z0-9_]{0,80}$/u.test(direct)
 }
 const ALLOWED_COMPONENTS = new Set([
-  'sports_game_card','sports_schedule_card','sports_ticket_card','sports_odds_card','sports_espn_dashboard','comparison','smart_card',
+  'sports_game_card','sports_schedule_card','sports_ticket_card','sports_odds_card','sports_espn_dashboard','sports_research_table','comparison','smart_card',
 ])
 const MAX_TEXT_BYTES = 1_000_000
-const MAX_SPORTS_CARDS = 6
-const MAX_NODES = 128
+const MAX_SPORTS_CARDS = 36
+const MAX_NODES = 384
 
 /** Distinguish a validated first-party sports card from arbitrary model JSON. */
 function verifiedCard(value: unknown): GenerativeUiBlock | null {
