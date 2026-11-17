@@ -16,6 +16,9 @@ test('team explorer produces responsive cards with only actual roster, news, log
       {items:[{id:'991',displayName:'Verified Player A',position:{displayName:'Guard'},
         headshot:{href:'https://a.espncdn.com/i/headshots/nba/players/full/1.png'},injuries:[{status:'Day-to-day',date:'2026-10-29'}]}]},
     ]}
+    if(u.includes('/athletes/991/stats'))return{categories:[{stats:[
+      {name:'pointsPerGame',displayName:'Points per game',displayValue:'12.0'},
+    ]}]}
     if(u.includes('/teams/456/schedule'))return{events:[{name:'City A vs City B',date:'2026-11-02'}]}
     if(u.includes('/teams/456/news'))return{articles:[{headline:'City A injury update',
       published:'2026-10-29',description:'Roster update',links:{web:{href:'https://www.espn.com/nhl/story/_/id/123/team-news'}}}]}
@@ -37,7 +40,7 @@ test('team explorer produces responsive cards with only actual roster, news, log
   assert.ok(urls.some(u=>u.includes('/athletes/991/stats')))
   assert.ok(urls.some(u=>u.includes('/athletes/991/gamelog')))
   assert.ok(urls.some(u=>u.includes('/athletes/991/splits')))
-  assert.equal(data.sources.filter(s=>s.status==='available').length,4)
+  assert.equal(data.sources.filter(s=>s.status==='available').length,5)
   assert.ok(data.sections.some(s=>s.heading.includes('Disponibilidad')&&s.items[0].value==='Day-to-day'))
 })
 test('player explorer handles statistics, gamelog and splits as distinct sections',async()=>{
