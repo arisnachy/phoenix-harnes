@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import type { ServerResponse } from 'node:http'
-import type { LocalModelCatalogEntry } from './types.js'
+import type { LocalModelCatalogEntry, LocalThinking } from './types.js'
 
 /**
  * Ollama Qwen 3.5 is more reliable using its native /api/chat than the
- * OpenAI-compatible endpoint: native `think: false` reliably disables
- * hidden reasoning that can consume all output tokens.
+ * OpenAI-compatible endpoint: native `think` respects the user's selection
+ * and only uses named levels explicitly advertised by /api/show.
  *
  * Keep the Phoenix/pi-ai contract OpenAI-compatible at the loopback proxy.
  * Never send content to a cloud model, and never silently discard nontext
@@ -104,12 +104,13 @@ function toolCallsOf(value: unknown): Array<Record<string, unknown>> {
  * Convert the stable OpenAI chat envelope to the native Ollama wire.
  * @param raw - Incoming JSON bytes from pi-ai.
  * @param model - Selected locally installed Ollama catalog entry.
- * @returns Validated native Ollama chat request with hard-disabled thinking.
+ * @returns Validated native Ollama chat request honoring the selected thinking mode.
  */
 export function toNativeOllamaChat(
   raw: Uint8Array<ArrayBuffer> | undefined,
   model: LocalModelCatalogEntry,
   allowContinuation = false,
+  thinking: LocalThinking = false,
 ): NativeBridgeRequest {
   if (raw === undefined || model.backend !== 'ollama') {
     throw new NativeOllamaChatError('Modelo local incompatible.', 400, 'invalid_model')
@@ -159,10 +160,17 @@ export function toNativeOllamaChat(
   const outputTokens = typeof requested === 'number' && Number.isFinite(requested) && requested > 0
     ? Math.min(model.maxTokens, Math.floor(requested))
     : model.maxTokens
+  // Allocate only the prompt size that is actually needed, rounded upward
+  // to 4K blocks. The pi-ai fitter retains authority over the maximum window.
+  // This prevents both a wasteful full 256K CPU KV cache and a silent 4K clip.
+  const promptChars = JSON.stringify(messages).length
+    + (Array.isArray(request['tools']) ? JSON.stringify(request['tools']).length : 0)
+  const requiredTokens = Math.ceil(promptChars / 3.5) + outputTokens + 4_608
+  const adaptiveContext = Math.min(model.contextWindow, Math.max(
+    4_096, Math.ceil(requiredTokens / 4_096) * 4_096,
+  ))
   const options: Record<string, unknown> = {
-    // Use the same configured context that pi-ai budgets against; do not
-    // silently truncate every 256K-capable Qwen request to 4096 tokens.
-    num_ctx: model.contextWindow,
+    num_ctx: adaptiveContext,
     num_predict: outputTokens,
   }
   if (typeof request['temperature'] === 'number' && Number.isFinite(request['temperature'])) {
@@ -181,7 +189,7 @@ export function toNativeOllamaChat(
       messages,
       ...Array.isArray(request['tools']) && request['tools'].length > 0 ? { tools: request['tools'] } : {},
       stream,
-      think: false,
+      ...(thinking === null ? {} : { think: thinking }),
       options,
       keep_alive: '30m',
     },
@@ -220,7 +228,6 @@ function continuationPayload(request: NativeBridgeRequest, visibleText: string):
         content: 'Continue exactly where you stopped, without repeating completed text. Keep the same language and formatting; do not restart the answer.',
       },
     ],
-    think: false,
   }
 }
 
