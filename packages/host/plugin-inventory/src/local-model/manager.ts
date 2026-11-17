@@ -12,6 +12,8 @@ import type {
   LocalModelPersistentState,
   LocalModelRuntimeError,
   LocalModelRuntimeSnapshot,
+  LocalThinking,
+  LocalThinkingCapabilities,
 } from './types.js'
 
 export { LocalModelRuntimeFault } from './download.js'
@@ -38,6 +40,8 @@ export interface LocalModelRuntimeManagerDependencies {
   probeHealth(baseUrl: string, timeoutMs: number): Promise<void>
   /** Validate that an exact local Ollama model tag is present; never pull implicitly. */
   probeOllamaModel(modelTag: string): Promise<void>
+  /** Optional metadata; old Ollama releases may omit thinking support. */
+  readOllamaThinking?(modelTag: string): Promise<LocalThinkingCapabilities | undefined>
   freeMemoryBytes(): number
 }
 
@@ -52,6 +56,8 @@ export interface LocalModelRuntimeManager {
   uninstall(modelId: string): Promise<LocalModelRuntimeSnapshot>
   setMode(mode: LocalModelMode): Promise<LocalModelRuntimeSnapshot>
   setDefaultModel(modelId: string): Promise<LocalModelRuntimeSnapshot>
+  refreshThinking(): Promise<LocalModelRuntimeSnapshot>
+  setThinking(thinking: LocalThinking): Promise<LocalModelRuntimeSnapshot>
   dispose(): Promise<void>
 }
 
@@ -91,6 +97,35 @@ class RuntimeManager implements LocalModelRuntimeManager {
 
   snapshot(): LocalModelRuntimeSnapshot {
     return cloneSnapshot(this.current)
+  }
+
+  /** Probe only Ollama's local /api/show metadata, never assume named thinking levels. */
+  async refreshThinking(): Promise<LocalModelRuntimeSnapshot> {
+    const model = getLocalModel(this.persistent.selectedModelId)
+    if (model?.backend !== 'ollama' || this.dependencies.readOllamaThinking === undefined) {
+      return this.snapshot()
+    }
+    try {
+      const thinkingCapabilities = await this.dependencies.readOllamaThinking(model.ollamaModel)
+      if (thinkingCapabilities !== undefined) this.publish({ ...this.current, thinkingCapabilities })
+    } catch {
+      // Older Ollama installations remain usable without thinking metadata.
+    }
+    return this.snapshot()
+  }
+
+  /** Persist only a value actually advertised by the selected Ollama model. */
+  async setThinking(thinking: LocalThinking): Promise<LocalModelRuntimeSnapshot> {
+    const model = getLocalModel(this.persistent.selectedModelId)
+    if (model?.backend !== 'ollama') {
+      throw new LocalModelRuntimeFault('invalid-thinking', 'El modelo seleccionado no utiliza Ollama.')
+    }
+    if (thinking !== null && !this.current.thinkingCapabilities?.values.some(value => value === thinking)) {
+      throw new LocalModelRuntimeFault('unsupported-thinking', 'Este nivel de razonamiento no está confirmado por Ollama /api/show.')
+    }
+    await this.savePersistent({ ...this.persistent, thinking })
+    this.publish({ ...this.current, thinking })
+    return this.snapshot()
   }
 
   subscribe(listener: (snapshot: LocalModelRuntimeSnapshot) => void): () => void {
@@ -395,9 +430,9 @@ class RuntimeManager implements LocalModelRuntimeManager {
   async setDefaultModel(modelId: string): Promise<LocalModelRuntimeSnapshot> {
     if (getLocalModel(modelId) === undefined) throw new LocalModelRuntimeFault('unknown-model', `Modelo local desconocido: ${modelId}`)
     if (this.current.phase === 'running' || this.server !== undefined) await this.stop()
-    await this.savePersistent({ ...this.persistent, selectedModelId: modelId })
+    await this.savePersistent({ ...this.persistent, selectedModelId: modelId, thinking: null })
     const phase = this.persistent.installedModelIds.includes(modelId) ? 'ready' : 'not-installed'
-    this.publish({ ...this.current, phase })
+    this.publish({ ...this.current, phase, thinkingCapabilities: undefined })
     if (this.persistent.mode === 'always-on' && phase === 'ready') return this.start()
     return this.snapshot()
   }
