@@ -2122,9 +2122,9 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_dossier_recheck',
-    description:'RECUPERACIÓN DIRIGIDA DEL TICKET: revisa solo partidos con expediente parcial usando IDs, rivales y hora ESPN ya verificados. No repite el barrido diario ni vuelve a pedir cuotas. Consulta de nuevo lesiones NBA y porteros NHL con plazo suficiente, conserva fuente, checklist y ausencias sin inventar alineaciones.',
+    description:'RECUPERACIÓN DIRIGIDA O INVESTIGACIÓN AUTÓNOMA DE ALTERNATIVAS: Kira solicita datos originales de cualquier partido futuro verificado con ID, ambos equipos y horario ESPN, incluso si no estaba en el primer ticket. Devuelve rosters bilaterales, estadísticas por jugador, calendario, lesiones, evidencia y fuentes sin puntuar equipos. No vuelve a explorar toda la cartelera ni fabrica cuotas.',
     parameters:{
-      fixtures:{ type:'array',required:true,description:'Solo 1-6 fixtures EXACTOS de researchFixtures del ticket anterior con pasos pendientes. Nunca inventar equipos ni IDs.',
+      fixtures:{ type:'array',required:true,description:'De 1 a 6 fixtures VERIFICADOS mediante researchFixtures, modelComparisonBriefs o sports_chat_games; se permiten reemplazos elegidos por Kira, no partidos ni IDs inventados.',
         items:{ type:'object',additionalProperties:false,properties:{
           sport:{ type:'string',required:true,description:'basketball o hockey, entre otras disciplinas soportadas.' },
           league:{ type:'string',required:true,description:'Liga ESPN real: nba, nhl, etc.' },
@@ -2184,6 +2184,9 @@ export function apply(ctx: Context): void {
           pendingSteps:check.pendingSteps.slice(0,18),
           checklist:check.checklist??null,
           injuryAudit:check.injuryAudit??null,
+          rosterMatchedInjuries:check.rosterMatchedInjuries??null,
+          restHours:check.restHours??null,
+          teamComparison:check.teamComparison??null,
           nhlStarterAudit:check.nhlStarterAudit??null,
           playerHistoryAudit:check.playerHistoryAudit??null,
           endpointAudit:check.endpointAudit?.slice(0,28)??[],
@@ -2194,7 +2197,7 @@ export function apply(ctx: Context): void {
       return JSON.stringify({
         checkedAt:new Date(now).toISOString(),rechecked:reports.length,reports,
         priced:false,placed:false,approvedForBetting:false,
-        instruction:'Estos son expedientes especializados RECUPERADOS para las mismas patas, no nuevas cuotas ni un ticket duplicado. Contrastar con la selección anterior: si una baja/portero confirmado contradice al favorito, avisar y buscar sustitución. Si una alineación aún NO ha sido publicada, distinguir ausencia de publicación de fallo técnico y no afirmar que está verificada. No reejecutar toda la búsqueda del día.',
+        instruction:'Kira: estos son datos originales de ambos equipos y jugadores para comparar por tu cuenta, incluso para ALTERNATIVAS que tú descubriste con IDs ESPN válidos. No conviertas las estadísticas en puntos, penalizaciones ni fórmula para elegir. Si te falta noticia, jugador, estatus o informe, usa sports_chat_autonomous_sources con TU pregunta y contrasta el contenido de una fuente oficial o medio independiente. Diferencia roster, titularidad y lesión; no repitas el barrido del calendario ni inventes cuotas. Elige tú y razona cada pata.',
       })
     },
     presentCall:()=>({ card:'generic',title:'Recuperar datos pendientes de las patas del ticket',kind:'read' as const }),
