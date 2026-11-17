@@ -84,13 +84,19 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
       Number((breakEven-exploratory).toFixed(2)):null
     const largeExploratoryConflict=gap!==null&&gap>=5
     const expensiveFavorite=breakEven!==null&&breakEven>=80
+    const quarterbackUnconfirmed=input.sport==='football'&&
+      input.criticalPending.some(step=>/\bqb\b|quarterback|mariscal/iu.test(step))
     const goalieUnconfirmed=input.sport==='hockey'&&
       input.criticalPending.some(step=>/portero|goalie/iu.test(step))
     const alternativeReviewRequired=largeExploratoryConflict||
-      expensiveFavorite||goalieUnconfirmed
+      expensiveFavorite||goalieUnconfirmed||quarterbackUnconfirmed
     const reasons:string[]=[]
     let verdict:DecisionVerdict
-    if(input.modelStatus==='contradiction'){
+    if(quarterbackUnconfirmed){
+      verdict='hold'
+      reasons.push('RETENER NFL: quarterback titular sin confirmación en expediente; ' +
+        'no cerrar la pata hasta comprobar al titular y revisar las bajas ofensivas.')
+    }else if(input.modelStatus==='contradiction'){
       verdict='hold'
       reasons.push('ESPERAR: un modelo externo discrepa del ganador; investigar la contradicción.')
     }else if(breakEven===null){
