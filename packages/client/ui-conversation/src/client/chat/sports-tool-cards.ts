@@ -37,8 +37,8 @@ const ALLOWED_COMPONENTS = new Set([
   'sports_game_card','sports_schedule_card','sports_ticket_card','sports_odds_card','sports_espn_dashboard','sports_research_table','comparison','smart_card',
 ])
 const MAX_TEXT_BYTES = 1_000_000
-const MAX_SPORTS_CARDS = 36
-const MAX_NODES = 384
+const MAX_SPORTS_CARDS = 96
+const MAX_NODES = 768
 
 /** Distinguish a validated first-party sports card from arbitrary model JSON. */
 function verifiedCard(value: unknown): GenerativeUiBlock | null {
@@ -62,7 +62,7 @@ export function sportsCardsFromToolResult(root: unknown): GenerativeUiBlock[] {
     visited++
     if(!isRecord(tool))continue
     if(depth<10){
-      for(const child of unknownArray(tool.subCalls).slice(0,24).reverse()){
+      for(const child of unknownArray(tool.subCalls).slice(0,96).reverse()){
         if(isRecord(child))stack.push([child,depth+1])
       }
     }
