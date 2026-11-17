@@ -13,3 +13,13 @@ test('sports ticket compares evidence, validates live ESPN quotes, and ends once
   assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/sports_ticket_card/u)
   assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/no permite garantizar un ganador/u)
 })
+
+test('independent discovery and decisive NBA/NFL pregame checks are mandatory guidance',()=>{
+  assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/NUNCA el límite de la búsqueda/u)
+  assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/por iniciativa propia fuentes públicas/u)
+  assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/segunda fuente independiente/u)
+  assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/back-to-back/u)
+  assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/quarterback titular y sustituto confirmados/u)
+  assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/mejor razón por la que podría PERDER/u)
+  assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/NO lo llames definitivo/u)
+})
