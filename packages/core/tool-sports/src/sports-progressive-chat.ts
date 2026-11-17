@@ -148,13 +148,13 @@ export async function progressiveSportsStage(
       data?String(data.away.players.length)+' jugadores publicados':'Sin plantilla',Boolean(data))]
     if(data){
       const stats=[...new Set([...data.home.teamStats.map(x=>x.name),
-        ...data.away.teamStats.map(x=>x.name)])].slice(0,12)
+        ...data.away.teamStats.map(x=>x.name)])].slice(0,8)
       for(const key of stats){
         rows.push(pair(text(key,120),
           data.home.teamStats.find(x=>x.name===key)?.value??'No publicado',
           data.away.teamStats.find(x=>x.name===key)?.value??'No publicado'))
       }
-      const athletes=Math.min(46,Math.max(data.home.players.length,data.away.players.length))
+      const athletes=Math.min(54,Math.max(data.home.players.length,data.away.players.length))
       for(let i=0;i<athletes;i++){
         const home=data.home.players[i],away=data.away.players[i]
         const homeImage=home?rosterPortrait(deep,fixture.home,home.name):undefined
