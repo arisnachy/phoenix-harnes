@@ -25,7 +25,7 @@ import {tennisSlate,investigateTennis,type TennisTour} from './tennis-evidence-r
 
 export type ComparativeTeam={name:string;recentResults:string[];
   teamStats:Array<{name:string;value:string}>;
-  players:Array<{name:string;role:string;availability:string;
+  players:Array<{name:string;role:string;dataStatus:string;
     starterConfirmed:boolean;stats:Array<{name:string;value:string}>;
     recent:Array<{name:string;value:string}>;
     splits:Array<{name:string;value:string}>}>}
@@ -182,7 +182,7 @@ export async function investigateTicketSpecialist(
           ' '+x.pts+'-'+x.allowed+' '+x.homeAway),
         teamStats:d.teams[side].teamStats,
         players:d.teams[side].roster.map(p=>({name:p.name,role:p.role,
-          availability:p.status,starterConfirmed:p.confirmedOffense||p.confirmedDefense,
+          dataStatus:p.status,starterConfirmed:p.confirmedOffense||p.confirmedDefense,
           stats:p.statistics,recent:p.lastGames,splits:[]})),
       })
       teamComparison={home:comparative('home'),away:comparative('away')}
@@ -225,7 +225,7 @@ export async function investigateTicketSpecialist(
           ' '+g.pts+'-'+g.allowed+' '+g.location),
         teamStats:d.teams[side].teamStats,
         players:d.teams[side].roster.map(p=>({name:p.name,role:p.position,
-          availability:p.status,starterConfirmed:p.confirmedStarter,
+          dataStatus:p.status,starterConfirmed:p.confirmedStarter,
           stats:p.stats,recent:p.lastGames,splits:p.splits})),
       })
       teamComparison={home:comparative('home'),away:comparative('away')}
@@ -365,7 +365,7 @@ export async function investigateTicketSpecialist(
         teamStats:Object.entries(d.officialShots[side]).map(([name,value])=>({
           name,value:value===null?'no disponible':String(value)})),
         players:d.players[side].map(p=>({name:p.name,role:p.role,
-          availability:'sin inactivos oficiales confirmados',
+          dataStatus:'estadísticas de roster; disponibilidad física no inferida',
           starterConfirmed:p.starterConfirmed,
           stats:Object.entries(p.stats).map(([name,value])=>({name,value})),
           recent:p.last5.map(g=>({name:g.date,value:g.summary})),splits:[]})),
