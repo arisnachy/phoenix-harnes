@@ -420,6 +420,11 @@ export async function investigateTicketSpecialist(
           recent:p.last5.map(g=>({name:g.date,value:g.summary})),splits:[]})),
       })
       teamComparison={home:comparative('home'),away:comparative('away')}
+      playerMatchups=d.possibleMatchups.slice(0,14).map(x=>({
+        athlete:x.attacker,opponent:x.againstGoalies.join(', '),
+        detail:'Candidatos según roster; sin enfrentamiento histórico publicado',
+        status:'candidate' as const,source:'NHL roster · no implica portero titular',
+      }))
       nhlGoalieFormAudit={
         home:nhlGoalieEvidence(d.goalieCandidates.home,d.fixture.date),
         away:nhlGoalieEvidence(d.goalieCandidates.away,d.fixture.date),
