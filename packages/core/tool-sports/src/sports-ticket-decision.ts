@@ -190,3 +190,13 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
       'Una candidata fuerte puede tener cuota desfavorable. No ejecutar apuestas.',
     recommendation}
 }
+
+/** A fully quoted ticket may be reviewed only if no selection is held or excluded.
+ * Warnings on research candidates remain visible; readiness never means bet approval.
+ * @param audit - Individual, post-quote ticket decision findings.
+ * @returns Whether every shown leg is reviewable, not whether it is safe to wager.
+ */
+export function ticketIsReadyForReview(audit:TicketDecisionAudit):boolean{
+  return audit.legs.length>0&&audit.legs.every(leg=>
+    leg.verdict!=='hold'&&leg.verdict!=='exclude')
+}
