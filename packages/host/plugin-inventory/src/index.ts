@@ -71,6 +71,7 @@ import type {
   ClawHubCatalogRequest, ClawHubCatalogSnapshot, ClawHubInstallRequest, ClawHubInstallReceipt, ClawHubState,
   PhoenixLocalEndpointReceipt,
   PhoenixLocalModeRequest,
+  PhoenixLocalThinkingRequest,
   PhoenixLocalModelRequest,
   PhoenixLocalModelSnapshot,
   PhoenixUpdateRestartReceipt,
@@ -124,6 +125,8 @@ function publicLocalSnapshot(snapshot: LocalModelRuntimeSnapshot): PhoenixLocalM
     mode: snapshot.mode,
     selectedModelId: snapshot.selectedModelId,
     installedModelIds: [...snapshot.installedModelIds],
+    thinking: snapshot.thinking ?? null,
+    ...(snapshot.thinkingCapabilities === undefined ? {} : { thinkingCapabilities: snapshot.thinkingCapabilities }),
     phase: snapshot.phase,
     ...snapshot.progress === undefined ? {} : { progress: { ...snapshot.progress } },
     ...snapshot.error === undefined ? {} : { error: { ...snapshot.error } },
@@ -370,7 +373,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
 
   @Remote('localModelState')
   async localModelState(): Promise<PhoenixLocalModelSnapshot> {
-    return publicLocalSnapshot((await this.localModel).snapshot())
+    return publicLocalSnapshot(await (await this.localModel).refreshThinking())
   }
 
 
@@ -990,6 +993,12 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * @param request - Requested default local model.
    * @returns Updated sanitized Phoenix Local state.
    */
+  /** Apply only a thinking value supported by Ollama's live model metadata. */
+  @Remote('setLocalModelThinking')
+  async setLocalModelThinking(request: PhoenixLocalThinkingRequest): Promise<PhoenixLocalModelSnapshot> {
+    return publicLocalSnapshot(await (await this.localModel).setThinking(request.thinking))
+  }
+
   @Remote('setDefaultLocalModel')
   async setDefaultLocalModel(request: PhoenixLocalModelRequest): Promise<PhoenixLocalModelSnapshot> {
     return publicLocalSnapshot(await (await this.localModel).setDefaultModel(request.modelId))
