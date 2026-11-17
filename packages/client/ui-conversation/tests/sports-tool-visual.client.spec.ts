@@ -165,6 +165,27 @@ describe('native sports chat presentation fallback',()=>{
     expect(observed.filter(c=>c.component==='sports_game_card')).toHaveLength(6)
     expect(observed.filter(c=>c.component==='sports_ticket_card')).toHaveLength(1)
   })
+  it('preserves sixty chronological research stages and the final ticket',()=>{
+    const stages=['teams','rosters','availability','context','news','odds'] as const
+    const tables=Array.from({length:10},(_,i)=>stages.map(stage=>({
+      component:'sports_research_table',version:1,props:{
+        sport:'basketball',league:'nba',eventId:String(400001+i),stage,
+        title:'Away '+i+' vs Home '+i,checkedAt:'2026-11-17T15:00:00Z',
+        source:'ESPN Site API',note:'Datos observados',
+        home:{name:'Home '+i},away:{name:'Away '+i},
+        rows:[{label:'Últimos juegos',home:'5',away:'6'}],missing:[],
+      },
+    }))).flat()
+    const recovered=sportsCardsFromToolResult(tool('sports_chat_research_stage',{
+      uiBlocks:[...tables,ticket],
+    }))
+    expect(recovered).toHaveLength(61)
+    const visible=unrenderedSportsCards(recovered,[])
+    expect(visible).toHaveLength(61)
+    expect(visible[0]).toEqual(tables[0])
+    expect(visible[60]).toEqual(ticket)
+    expect(visible.filter(c=>c.component==='sports_research_table')).toHaveLength(60)
+  })
   it('deduplicates validated assistant-rendered cards and repeated tool results',()=>{
     const fence=String.fromCharCode(96).repeat(3)
     const answer=fence+'generative-ui\n'+JSON.stringify(sportsGame)+'\n'+fence
