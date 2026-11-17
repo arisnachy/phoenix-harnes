@@ -2,6 +2,7 @@ import { once } from 'node:events'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
+import { getLocalModel } from '../src/local-model/catalog.js'
 import type { LocalModelRuntimeManager } from '../src/local-model/manager.js'
 import {
   PHOENIX_LOCAL_METADATA_PATH,
@@ -50,7 +51,7 @@ async function startProxy(manager: LocalModelRuntimeManager): Promise<Server> {
 afterEach(async () => {
   for (const server of servers.splice(0)) {
     server.closeAllConnections()
-    await new Promise<void>((resolve) => { server.close(() => resolve()) })
+    await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
   }
 })
 
@@ -68,8 +69,8 @@ describe('Phoenix Local proxy metadata and model fencing', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
       selectedModelId: QWEN_ID,
-      contextWindow: expect.any(Number),
-      maxTokens: expect.any(Number),
+      contextWindow: getLocalModel(QWEN_ID)?.contextWindow,
+      maxTokens: getLocalModel(QWEN_ID)?.maxTokens,
     })
     expect(startCalls).toBe(0)
   })
