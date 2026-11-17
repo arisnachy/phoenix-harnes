@@ -345,7 +345,7 @@ function waitForFetchRetry(ms) {
  * a temporary ref whose object is still valid.
  */
 function repairCorruptUpdateFetchRef(root, stderr) {
-  const match = /bad object (refs\\/phoenix\\/update\\/fetch-[A-Za-z0-9._-]+)/u.exec(stderr ?? '')
+  const match = /bad object (refs\/phoenix\/update\/fetch-[A-Za-z0-9._-]+)/u.exec(stderr ?? '')
   if (!match) return false
   const refName = match[1]
   const discovered = git(root, ['rev-parse', '--git-path', refName], { allowFailure: true })
@@ -354,7 +354,7 @@ function repairCorruptUpdateFetchRef(root, stderr) {
   const trusted = join(controlDirectory(root), 'refs', 'phoenix', 'update')
   const suffix = relative(trusted, target)
   if (!suffix || suffix.startsWith('..') || isAbsolute(suffix)
-    || suffix.includes('/') || suffix.includes('\\\\')) return false
+    || suffix.includes('/') || suffix.includes('\\')) return false
   try {
     const info = lstatSync(target)
     if (!info.isFile() || info.size > 1024) return false
