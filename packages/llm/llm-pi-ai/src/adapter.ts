@@ -522,11 +522,37 @@ export class PiAiAdapter extends LlmAdapter {
       const fitted = options.provider === 'phoenix-local'
         ? fitPhoenixLocalTextTurn(options, model.contextWindow, desiredMaxOutput)
         : fitGenerateOptionsToContext(options, model.contextWindow, desiredMaxOutput)
+      if (options.provider === 'phoenix-local' && process.env.PHOENIX_TOKEN_AUDIT === '1') {
+        // The INPUT audit measures the raw assembled request before local fitting.
+        // Log only dimensions, never prompts, schemas or credentials.
+        console.info('[PHOENIX LOCAL CONTEXT FIT] ' + JSON.stringify({
+          provider: options.provider,
+          model: options.model,
+          modelContextTokens: model.contextWindow,
+          requestedOutputTokens: desiredMaxOutput,
+          initialSystemChars: options.system?.length ?? 0,
+          fittedSystemChars: fitted.options.system?.length ?? 0,
+          initialMessageCount: options.messages.length,
+          fittedMessageCount: fitted.options.messages.length,
+          initialToolCount: options.tools?.length ?? 0,
+          fittedToolCount: fitted.options.tools?.length ?? 0,
+          estimatedInputTokens: fitted.estimatedTokens,
+          safeInputBudgetTokens: fitted.inputBudgetTokens,
+          compacted: fitted.compacted,
+          textOnlyFallback: fitted.options.system !== options.system,
+        }))
+      }
       if (fitted.estimatedTokens > fitted.inputBudgetTokens) {
         throw new LlmError(
           options.provider === 'phoenix-local'
-            ? `Phoenix Local no puede procesar ${fitted.estimatedTokens} tokens con un presupuesto de ${fitted.inputBudgetTokens}. `
-              + 'El mensaje o una operación de herramientas activa excede la memoria local; utiliza una sesión local nueva, un preajuste ligero o un modelo de mayor contexto.'
+            ? fitted.inputBudgetTokens <= 1
+              ? `Phoenix Local tiene una ventana declarada de ${model.contextWindow} tokens, insuficiente para este adaptador: pi-ai reserva 4096 tokens más espacio para responder y seguridad, y el presupuesto de entrada se reduce a 1. `
+                + `La solicitud aún requiere aproximadamente ${fitted.estimatedTokens} tokens. `
+                + 'No es un error de GPT-6 Luna. Si pretendías usar Luna, selecciona explícitamente OpenAI Codex / GPT-6 Luna y verifica que la ruta no cambie a Phoenix Local. '
+                + 'Para conversaciones locales pequeñas, configura PHOENIX_LOCAL_CONTEXT_TOKENS=16384 solo si el equipo dispone de suficiente memoria y reinicia el Host de PHOENIX; esto no hace caber tareas grandes en el modelo local.'
+              : `Phoenix Local no puede procesar ${fitted.estimatedTokens} tokens con un presupuesto seguro de ${fitted.inputBudgetTokens} (ventana ${model.contextWindow}). `
+                + 'No se eliminarán instrucciones ni resultados de herramientas activos para ocultar el desbordamiento. '
+                + 'Continúa la tarea compleja con el modelo Codex seleccionado, o reduce deliberadamente el alcance para un modelo local; no basta con repetir la misma petición.'
             : `pi-ai request for "${model.id}" still needs ~${fitted.estimatedTokens} input tokens after context fitting; `
               + `the safe input budget is ${fitted.inputBudgetTokens} tokens`,
           CONTEXT_WINDOW_EXCEEDED_CODE,

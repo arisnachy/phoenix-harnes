@@ -223,6 +223,25 @@ describe('token-efficient MCP schema admission', () => {
 })
 
 describe('mode-aware wire contribution', () => {
+  it.each(['code', 'both'] as const)('keeps %s SDK catalogs out of tool-free local greetings', async mode => {
+    const { ctx, systemPrompt } = await setup({ mode })
+    for (let index = 0; index < 30; index++) registerEcho(ctx, `mcp__long_catalog__action_${index}`)
+
+    const normal = await systemPrompt.assemble()
+    expect(normal.sections.find(section => section.name === 'tools:sdk')?.text)
+      .toContain('mcp__long_catalog__action_29:')
+
+    const greeting = await systemPrompt.assemble({ omitTools: true, omitRuntimeContext: true })
+    expect(greeting.tools).toEqual([])
+    expect(greeting.sections.find(section => section.name === 'tools:sdk')?.text).toBe('')
+    expect(greeting.sections.find(section => section.name === 'tools:code-only')?.text ?? '').toBe('')
+    expect(renderPrompt(greeting)).not.toContain('mcp__long_catalog__action_29')
+
+    const resumed = await systemPrompt.assemble()
+    expect(resumed.sections.find(section => section.name === 'tools:sdk')?.text)
+      .toContain('mcp__long_catalog__action_29:')
+  })
+
   it.each(['native', 'code'] as const)('keeps project and publication tools for illustrated deliverables in %s', async (mode) => {
     const { ctx, systemPrompt } = await setup({ mode })
     for (const name of ['image_generation', 'read', 'pwsh', 'phoenix_comic', 'phoenix_scene_map', 'phoenix_geo_map']) registerEcho(ctx, name)
