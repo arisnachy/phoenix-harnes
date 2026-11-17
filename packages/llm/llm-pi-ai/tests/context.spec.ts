@@ -122,15 +122,34 @@ describe('Phoenix Local text-only small-model fallback', () => {
     expect(fitted.inputBudgetTokens).toBe(11_008)
   })
 
-  it('refuses to pretend a 4096-token pi-ai window has answer room after its fixed reserve', () => {
+  it('provides answer room for a short turn in a 4096-token local window', () => {
     const options: GenerateOptions = {
       ...request([user([{ type: 'text', text: 'hola' }])]),
       provider: 'phoenix-local',
       model: 'phoenix-local',
     }
     const fitted = fitPhoenixLocalTextTurn(options, 4096, 768)
-    expect(fitted.estimatedTokens).toBeGreaterThan(fitted.inputBudgetTokens)
-    expect(fitted.inputBudgetTokens).toBe(1)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.inputBudgetTokens).toBe(1_792)
+    expect(fitted.compacted).toBe(false)
+  })
+
+  it('keeps a latest text request above the optional-history cap when the local envelope still fits it', () => {
+    const latest = user([{ type: 'text', text: 'z'.repeat(6_000) }])
+    const options: GenerateOptions = {
+      ...request([latest]),
+      provider: 'phoenix-local',
+      model: 'phoenix-local',
+      system: 'Phoenix agent instructions and tool catalog. '.repeat(2_000),
+      tools: [],
+    }
+
+    const fitted = fitPhoenixLocalTextTurn(options, 16_384, 768)
+
+    expect(fitted.compacted).toBe(true)
+    expect(fitted.options.messages).toEqual([latest])
+    expect(fitted.estimatedTokens).toBeGreaterThan(1_024)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
   })
 
   it('lets Qwen answer hola despite 100k tokens of global instructions', () => {
@@ -212,7 +231,7 @@ describe('Phoenix Local text-only small-model fallback', () => {
   })
 
   it('does not silently truncate an oversized latest human message', () => {
-    const latest = user([{ type: 'text', text: 'x'.repeat(20_000) }])
+    const latest = user([{ type: 'text', text: 'x'.repeat(80_000) }])
     const options: GenerateOptions = {
       ...request([latest]),
       provider: 'phoenix-local',
@@ -254,7 +273,7 @@ describe('pi-ai request context conversion', () => {
   })
 
   it('compacts auxiliary catalog and tool schema prose before output room collapses', () => {
-    const huge = 'x'.repeat(20_000)
+    const huge = 'x'.repeat(100_000)
     const catalog = createUserMessage({
       content: [{ type: 'text', text: huge }],
       source: {

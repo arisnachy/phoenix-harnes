@@ -58,7 +58,7 @@ import { launchEnvironmentOf } from '@phoenix-ai/dsh-launch-environment'
 import { assertUsableApiKey, LlmError } from '@phoenix-ai/dsh-llm'
 import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigurableProvider } from '@phoenix-ai/dsh-llm'
 import { deepEqualJson, installSettingsSection, settingsNamespace } from '@phoenix-ai/dsh-settings'
-import { PiAiAdapter } from './adapter.ts'
+import { PiAiAdapter, type PhoenixLocalModelMetadata } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProviderIds } from './catalog.ts'
 import { CODEX_PROVIDER, CodexLiveCatalog } from './codex-live-catalog.ts'
@@ -133,6 +133,42 @@ export const PHOENIX_LOCAL_AUTHORIZATION = 'Bearer phoenix-local'
 export const PHOENIX_LOCAL_CONTEXT_WINDOW = 4_096
 /** Limit long responses on older CPU-first Windows devices. */
 export const PHOENIX_LOCAL_MAX_TOKENS = 256
+
+/** Read selection from the built-in Host without starting the inference backend. */
+async function resolvePhoenixLocalModel(
+  profile: ResolvedPiAiProviderProfile,
+  signal?: AbortSignal,
+): Promise<PhoenixLocalModelMetadata | undefined> {
+  if (profile.baseURL !== PHOENIX_LOCAL_BASE_URL) return undefined
+  const deadline = AbortSignal.timeout(2_000)
+  try {
+    const response = await fetch(`${PHOENIX_LOCAL_BASE_URL}/phoenix-local/metadata`, {
+      headers: { Authorization: PHOENIX_LOCAL_AUTHORIZATION },
+      redirect: 'error',
+      signal: signal === undefined ? deadline : AbortSignal.any([signal, deadline]),
+    })
+    if (!response.ok) {
+      await response.body?.cancel()
+      return undefined
+    }
+    const metadata = await response.json() as Partial<PhoenixLocalModelMetadata> | null
+    if (metadata === null || typeof metadata.selectedModelId !== 'string'
+      || !/^[a-z0-9][a-z0-9-]*$/u.test(metadata.selectedModelId)
+      || typeof metadata.contextWindow !== 'number' || !Number.isSafeInteger(metadata.contextWindow)
+      || metadata.contextWindow < 4_096
+      || typeof metadata.maxTokens !== 'number' || !Number.isSafeInteger(metadata.maxTokens)
+      || metadata.maxTokens < 1 || metadata.maxTokens >= metadata.contextWindow) return undefined
+    return {
+      selectedModelId: metadata.selectedModelId,
+      contextWindow: metadata.contextWindow,
+      maxTokens: metadata.maxTokens,
+    }
+  } catch {
+    // Earlier or unavailable Hosts still use the bounded built-in fallback.
+    signal?.throwIfAborted()
+    return undefined
+  }
+}
 
 /** Built-in route injected independently of user settings or cloud credentials. */
 function phoenixLocalProfile(): PiAiProviderProfile {
@@ -318,6 +354,7 @@ export function apply(ctx: Context, config: Config): void {
       if (configured?.reasoningEfforts === false) return undefined
       return codexCatalog.reasoningForModel(model)
     },
+    resolveLocalModel: resolvePhoenixLocalModel,
     resolveAttachments: () => ctx.get('attachments'),
     onReplayDegrade: ({ provider, model, reason }) => {
       ctx.logger.warn(
