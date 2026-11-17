@@ -71,7 +71,7 @@ describe('FÉNIX coding acceptance quality', () => {
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 1, signal: new AbortController().signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }),
-      )).resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('high') })
+      )).resolves.toMatchObject({ model: 'gpt-6.2-sol', reasoningEffort: ReasoningEffortId('high') })
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 2, signal: new AbortController().signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }),
@@ -180,9 +180,9 @@ describe('installModelSelection()', () => {
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 1, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }),
-      )).resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('low') })
+      )).resolves.toMatchObject({ model: 'gpt-6.2-sol', reasoningEffort: ReasoningEffortId('low') })
       events.push({ type: 'assistant/message', data: { turn: 1, step: 1,
-        message: { source: { model: 'gpt-6.1-sol' },
+        message: { source: { model: 'gpt-6.2-sol' },
           content: [{ type: 'text', text: 'Estrategia alternativa: inspeccionar la causa y corregirla.' }] },
       } })
       await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
@@ -215,7 +215,7 @@ describe('installModelSelection()', () => {
         content: [{ type: 'text', text: 'Continue the same survey objective.' }],
       } },
       { type: 'assistant/message', data: { turn: 7, step: 3,
-        message: { source: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
+        message: { source: { provider: 'openai-codex', model: 'gpt-6.2-sol' },
           content: [{ type: 'text', text: '3TB is confirmed. I will now enter the association and finish the remaining fields.' }] },
       } },
     ]
@@ -266,7 +266,7 @@ describe('installModelSelection()', () => {
         kind: 'goal', goalId: 'survey-1', revision: 1, round: 5,
       }, content: [{ type: 'text', text: 'Continue.' }] } },
       { type: 'assistant/message', data: { turn: 7, step: 3,
-        message: { source: { model: 'gpt-6.1-sol' }, content: [
+        message: { source: { model: 'gpt-6.2-sol' }, content: [
           { type: 'text', text: 'I will now finish the remaining ratings.' },
         ] } },
       },
@@ -312,9 +312,9 @@ describe('installModelSelection()', () => {
       await ctx.systemPrompt.assemble()
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 1, step: 1, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
-        .resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('low') })
+        .resolves.toMatchObject({ model: 'gpt-6.2-sol', reasoningEffort: ReasoningEffortId('low') })
       events.push({ type: 'agent/model-selection', data: {
-        selection: { provider: 'openai-codex', model: 'gpt-6.1-sol' }, source: 'explicit',
+        selection: { provider: 'openai-codex', model: 'gpt-6.2-sol' }, source: 'explicit',
       } })
       await ctx.systemPrompt.assemble()
       // Stale assembly may retain an earlier route, but a new assembly must
@@ -346,7 +346,7 @@ describe('installModelSelection()', () => {
         content: [{ type: 'text', text: 'Continue.' }],
       } },
       { type: 'assistant/message', data: { turn: 7, step: 3,
-        message: { source: { model: 'gpt-6.1-sol' }, content: [
+        message: { source: { model: 'gpt-6.2-sol' }, content: [
           { type: 'text', text: 'I will now fill the form.' },
         ] } },
       },
@@ -376,7 +376,7 @@ describe('installModelSelection()', () => {
     expect(isKiraCodexAutoLead(auto, child)).toBe(false)
     expect(isKiraCodexAutoLead(luna, child)).toBe(false)
     expect(isKiraCodexAutoLead({ provider: 'deepseek', model: 'deepseek-v4-pro' }, root)).toBe(false)
-    expect(isKiraCodexAutoLead({ provider: 'openai-codex', model: 'gpt-6.1-sol' }, root)).toBe(false)
+    expect(isKiraCodexAutoLead({ provider: 'openai-codex', model: 'gpt-6.2-sol' }, root)).toBe(false)
   })
 
   it('permits four strategy rescues on distinct fresh execution failures and rejects stale retries', async () => {
@@ -399,7 +399,7 @@ describe('installModelSelection()', () => {
       return result.model
     }
     try {
-      expect(await modelAt(1)).toBe('gpt-6.1-sol')
+      expect(await modelAt(1)).toBe('gpt-6.2-sol')
       for (let index = 0; index < 4; index += 1) {
         const step = 3 + index * 2
         for (let repeat = 0; repeat < 2; repeat += 1) {
@@ -408,7 +408,7 @@ describe('installModelSelection()', () => {
             message: { content: [{ type: 'text', text: `Distinct blocker ${index}` }] },
           } })
         }
-        expect(await modelAt(step)).toBe('gpt-6.1-sol')
+        expect(await modelAt(step)).toBe('gpt-6.2-sol')
         expect(await modelAt(step + 1)).toBe('gpt-6-luna')
       }
       events.push({ type: 'tool/result', data: { turn: 1, step: 11,
@@ -464,9 +464,9 @@ describe('installModelSelection()', () => {
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 3, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }),
-      )).resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('low') })
+      )).resolves.toMatchObject({ model: 'gpt-6.2-sol', reasoningEffort: ReasoningEffortId('low') })
       events.push({ type: 'assistant/message', data: { turn: 1, step: 3,
-        message: { source: { model: 'gpt-6.1-sol' },
+        message: { source: { model: 'gpt-6.2-sol' },
           content: [{ type: 'text', text: 'Estrategia: aislar el error y corregir su origen.' }] } } })
       await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
       expect(steered).toHaveLength(2)
@@ -505,7 +505,7 @@ describe('installModelSelection()', () => {
       session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Fix router.ts.' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
       await ctx.systemPrompt.assemble()
       const signal = new AbortController().signal
-      await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({ model: 'gpt-6.1-sol' })
+      await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({ model: 'gpt-6.2-sol' })
       expect(session.events.filter(event => event.type === 'agent/model-selection').map(event => event.data)).toEqual([
         { selection: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, source: 'default' },
       ])
@@ -551,7 +551,7 @@ describe('installModelSelection()', () => {
         'agent/request', { turn: 1, step: 1, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }),
       )).resolves.toMatchObject({
-        provider: 'openai-codex', model: 'gpt-6.1-sol',
+        provider: 'openai-codex', model: 'gpt-6.2-sol',
         reasoningEffort: ReasoningEffortId('low'),
       })
       session.append('step/start', { turn: 1, step: 1 })
@@ -578,7 +578,7 @@ describe('installModelSelection()', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const session = Session.create(SessionId('selected-kira-orchestrator'))
-    const selected = { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('xhigh') }
+    const selected = { provider: 'openai-codex', model: 'gpt-6.2-sol', reasoningEffort: ReasoningEffortId('xhigh') }
     persistModelSelectionPreference(session, selected, 'explicit')
     session.append('turn/start', { turn: 1 })
     session.append('user/message', createUserMessage({
@@ -605,7 +605,7 @@ describe('installModelSelection()', () => {
 
   it('restores explicit planner preference independently of the serving Luna request header', () => {
     const session = Session.create(SessionId('explicit-preference'))
-    const selected = { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('xhigh') }
+    const selected = { provider: 'openai-codex', model: 'gpt-6.2-sol', reasoningEffort: ReasoningEffortId('xhigh') }
     expect(latestModelSelectionPreference(session)).toBeUndefined()
     expect(persistModelSelectionPreference(session, selected, 'explicit')).toBe(true)
     expect(persistModelSelectionPreference(session, { ...selected }, 'explicit')).toBe(false)
@@ -784,7 +784,7 @@ describe('installModelSelection()', () => {
       expect(complex.tools).toEqual([])
       await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 2, step: 1, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({
-        provider: 'openai-codex', model: 'gpt-6.1-sol',
+        provider: 'openai-codex', model: 'gpt-6.2-sol',
       })
 
       const boundedTask = [
@@ -941,7 +941,7 @@ describe('installModelSelection()', () => {
       { type: 'user/message', data: { source: { kind: 'user' },
         content: [{ type: 'text', text: 'quiero verte en accion con tu equipo haz una pequeña prueba' }] } },
       { type: 'assistant/message', data: { turn: 1, step: 1, message: {
-        source: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
+        source: { provider: 'openai-codex', model: 'gpt-6.2-sol' },
         content: [{ type: 'text', text: '**Plan:** Haré una pequeña prueba; asignaré una verificación y compartiré evidencia.' }],
       } } },
     ]
@@ -995,7 +995,7 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6.1-sol',
+      model: 'gpt-6.2-sol',
       reasoningEffort: ReasoningEffortId('low'),
     })
     await expect(agentEvents(ctx, agent).waterfall(
@@ -1046,7 +1046,7 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6.1-sol',
+      model: 'gpt-6.2-sol',
       reasoningEffort: ReasoningEffortId('medium'),
     })
 
@@ -1108,7 +1108,7 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 2, step: 1, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6.1-sol',
+      model: 'gpt-6.2-sol',
       reasoningEffort: ReasoningEffortId('low'),
     })
     // One blocker briefly consults Sol at low effort; Kira then returns to Luna Max.
@@ -1158,7 +1158,7 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6.1-sol',
+      model: 'gpt-6.2-sol',
       reasoningEffort: ReasoningEffortId('low'),
     })
     events.push({
@@ -1167,7 +1167,7 @@ describe('installModelSelection()', () => {
         turn: 1,
         step: 1,
         message: {
-          source: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
+          source: { provider: 'openai-codex', model: 'gpt-6.2-sol' },
           content: [{ type: 'text', text: 'Primero revisaré el router y después ejecutaré las pruebas.' }],
         },
       },
@@ -1228,7 +1228,7 @@ describe('installModelSelection()', () => {
         turn: 1,
         step: 1,
         message: {
-          source: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
+          source: { provider: 'openai-codex', model: 'gpt-6.2-sol' },
           content: [{ type: 'text', text: 'Voy a revisar primero los archivos relevantes.' }],
         },
       },
@@ -1257,7 +1257,7 @@ describe('installModelSelection()', () => {
           turn: 1,
           step: 3,
           message: {
-            source: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
+            source: { provider: 'openai-codex', model: 'gpt-6.2-sol' },
             content: [{
               type: 'text',
               text: 'Para ir más rápido, usaré la vía directa para cada tarea y haré pruebas focalizadas.',
@@ -1273,7 +1273,7 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 4, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6.1-sol',
+      model: 'gpt-6.2-sol',
       reasoningEffort: ReasoningEffortId('low'),
     })
 
@@ -1307,7 +1307,7 @@ describe('installModelSelection()', () => {
           turn: 1,
           step: 1,
           message: {
-            source: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
+            source: { provider: 'openai-codex', model: 'gpt-6.2-sol' },
             content: [
               { type: 'text', text: 'Ahora comprobaré la interfaz.' },
               { type: 'tool-call', id: 'call-1', name: 'browser_open', arguments: '{"url":"http://127.0.0.1:3080"}' },
@@ -1434,7 +1434,7 @@ describe('installModelSelection()', () => {
     } })
     await expect(agentEvents(ctx, agent).waterfall('agent/request',
       { turn: 1, step: 1, signal }, () => Promise.resolve(seed))).resolves.toMatchObject({
-      model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('low'),
+      model: 'gpt-6.2-sol', reasoningEffort: ReasoningEffortId('low'),
     })
     dispose()
     await ctx.fiber.dispose()
@@ -1687,7 +1687,7 @@ describe('installModelSelection()', () => {
       { type: 'user/message', data: { source: { kind: 'user' },
         content: [{ type: 'text', text: 'Prueba la interfaz de Phoenix.' }] } },
       { type: 'assistant/message', data: { turn: 1, step: 1,
-        message: { source: { model: 'gpt-6.1-sol' },
+        message: { source: { model: 'gpt-6.2-sol' },
           content: [{ type: 'text', text: 'Tarea completada. No hay nada pendiente.' }] } } },
     ]
     const steered: unknown[] = []
@@ -1700,7 +1700,7 @@ describe('installModelSelection()', () => {
       events.push({ type: 'turn/start', data: { turn: 2 } }, { type: 'user/message', data: {
         source: { kind: 'user' }, content: [{ type: 'text', text: 'Prueba la interfaz de Phoenix otra vez.' }],
       } }, { type: 'assistant/message', data: { turn: 2, step: 1, message: {
-        source: { model: 'gpt-6.1-sol' }, content: [{ type: 'text', text: '**Plan:** comprobar interfaz y verificar.' }],
+        source: { model: 'gpt-6.2-sol' }, content: [{ type: 'text', text: '**Plan:** comprobar interfaz y verificar.' }],
       } } })
       await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 2, signal })
       expect(steered).toHaveLength(1)
@@ -1854,7 +1854,7 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 4, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6.1-sol',
+      model: 'gpt-6.2-sol',
       reasoningEffort: ReasoningEffortId('low'),
     })
     await expect(agentEvents(ctx, agent).waterfall(
@@ -1922,7 +1922,7 @@ describe('installModelSelection()', () => {
     await ctx.plugin(SystemPrompt)
     const selected = {
       provider: 'openai-codex',
-      model: 'gpt-6.1-sol',
+      model: 'gpt-6.2-sol',
       reasoningEffort: ReasoningEffortId('xhigh'),
     } as const
     const selection: ModelSelectionRef = { current: selected, assembled: undefined }
@@ -2230,7 +2230,7 @@ describe('installModelSelection()', () => {
     }
   })
 
-  it.each(['gpt-5.6-sol', 'gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-luna', 'custom-codex-model'])('hands selected Codex %s to the active Luna worker at Max', (model) => {
+  it.each(['gpt-5.6-sol', 'gpt-6.2-sol', 'gpt-6-astra', 'gpt-6-luna', 'custom-codex-model'])('hands selected Codex %s to the active Luna worker at Max', (model) => {
     expect(defaultExecutionHandoff({ provider: 'openai-codex', model })).toEqual({
       afterStep: 1,
       selection: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') },
