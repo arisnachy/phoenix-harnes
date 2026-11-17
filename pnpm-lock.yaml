@@ -738,6 +738,9 @@ importers:
       '@phoenix-ai/dsh-tool-skill':
         specifier: workspace:*
         version: link:../packages/skill/tool-skill
+      '@phoenix-ai/dsh-tool-sports':
+        specifier: workspace:*
+        version: link:../packages/core/tool-sports
       '@phoenix-ai/dsh-tool-str-replace-editor':
         specifier: workspace:*
         version: link:../packages/fs/tool-str-replace-editor
