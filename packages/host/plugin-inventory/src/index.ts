@@ -137,6 +137,7 @@ function publicLocalSnapshot(snapshot: LocalModelRuntimeSnapshot): PhoenixLocalM
       sizeBytes: model.sizeBytes,
       estimatedRamBytes: model.estimatedRamBytes,
       contextWindow: model.contextWindow,
+      ...(model.nativeContextWindow === undefined ? {} : { nativeContextWindow: model.nativeContextWindow }),
       maxTokens: model.maxTokens,
       recommended: model.recommended,
     })),
