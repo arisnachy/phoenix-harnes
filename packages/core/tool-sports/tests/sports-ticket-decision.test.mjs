@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {auditTicketDecisions,readDecisionPolicy} from '../src/sports-ticket-decision.ts'
+import {auditTicketDecisions,readDecisionPolicy,ticketIsReadyForReview} from '../src/sports-ticket-decision.ts'
 
 const policy=readDecisionPolicy({})
 const sample=(eventId,share,overrides={})=>({
@@ -129,4 +129,15 @@ test('Nov 16 Ravens regression: missing starting QB blocks a definitive NFL leg'
   assert.deepEqual(audit.heldEvents,['LAC-BAL'])
   assert.ok(audit.scenarios.every(s=>!s.eventIds.includes('LAC-BAL')))
   assert.equal(audit.approvedForBetting,false)
+})
+
+test('held quoted picks keep their research record but are not a final reviewable ticket',()=>{
+  const caution=auditTicketDecisions([sample('NBA',.72,{
+    sport:'basketball',checklistComplete:false,
+    criticalPending:['Quintetos pendientes']})],policy)
+  assert.equal(ticketIsReadyForReview(caution),true)
+  const hold=auditTicketDecisions([sample('NFL',.75,{
+    sport:'football',criticalPending:['QB titular sin confirmar']})],policy)
+  assert.equal(ticketIsReadyForReview(hold),false)
+  assert.equal(hold.legs[0].verdict,'hold')
 })
