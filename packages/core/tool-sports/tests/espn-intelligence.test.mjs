@@ -16,6 +16,9 @@ test('team explorer produces responsive cards with only actual roster, news, log
       {items:[{id:'991',displayName:'Verified Player A',position:{displayName:'Guard'},
         headshot:{href:'https://a.espncdn.com/i/headshots/nba/players/full/1.png'},injuries:[{status:'Day-to-day',date:'2026-10-29'}]}]},
     ]}
+    if(u.includes('/athletes/991/stats'))return{categories:[{stats:[
+      {name:'pointsPerGame',displayName:'Points per game',displayValue:'12.0'},
+    ]}]}
     if(u.includes('/teams/456/schedule'))return{events:[{name:'City A vs City B',date:'2026-11-02'}]}
     if(u.includes('/teams/456/news'))return{articles:[{headline:'City A injury update',
       published:'2026-10-29',description:'Roster update',links:{web:{href:'https://www.espn.com/nhl/story/_/id/123/team-news'}}}]}
@@ -37,7 +40,7 @@ test('team explorer produces responsive cards with only actual roster, news, log
   assert.ok(urls.some(u=>u.includes('/athletes/991/stats')))
   assert.ok(urls.some(u=>u.includes('/athletes/991/gamelog')))
   assert.ok(urls.some(u=>u.includes('/athletes/991/splits')))
-  assert.equal(data.sources.filter(s=>s.status==='available').length,4)
+  assert.equal(data.sources.filter(s=>s.status==='available').length,5)
   assert.ok(data.sections.some(s=>s.heading.includes('Disponibilidad')&&s.items[0].value==='Day-to-day'))
 })
 test('player explorer handles statistics, gamelog and splits as distinct sections',async()=>{
@@ -79,6 +82,31 @@ test('odds references and empty 200 are not published as prices or facts',async(
   assert.equal(d.sources.filter(x=>x.status==='available').length,0)
   assert.ok(!d.sections.some(s=>s.heading.includes('Cuotas publicadas')))
   assert.ok(d.sections.some(s=>s.heading==='Disponibilidad'))
+})
+test('event view uses the same request instant to label a fresh ESPN Core price eligible',async()=>{
+  const now=Date.now(),kickoff=new Date(now+2*60*60_000).toISOString()
+  const eventId='99887766',urls=[]
+  const fetcher=async url=>{
+    const u=String(url);urls.push(u)
+    if(u.includes('/summary?event='))return new Response(JSON.stringify({
+      header:{shortName:'Boston Celtics at Miami Heat',competitions:[{
+        id:eventId,date:kickoff,competitors:[
+          {homeAway:'home',team:{displayName:'Miami Heat'}},
+          {homeAway:'away',team:{displayName:'Boston Celtics'}},
+        ]},]},
+    }),{status:200})
+    if(u.includes('/odds?'))return new Response(JSON.stringify({items:[{
+      provider:{id:'41',name:'DraftKings'},
+      homeTeamOdds:{moneyLine:-120},awayTeamOdds:{moneyLine:105},
+    }]}),{status:200})
+    return new Response(JSON.stringify({count:0,items:[]}),{status:200})
+  }
+  const result=await exploreEspn({sport:'basketball',league:'nba',view:'event',eventId},
+    fetcher,{},now)
+  const odds=result.sections.find(section=>section.heading==='Cuotas y mercados')
+  assert.ok(odds)
+  assert.ok(odds.items.some(row=>/aceptación\/vigencia en la casa no confirmada/u.test(row.detail)))
+  assert.ok(urls.some(url=>url.includes('/events/'+eventId+'/competitions/'+eventId+'/odds')))
 })
 test('validation rejects injected segments and disables transport before HTTP',async()=>{
   let calls=0

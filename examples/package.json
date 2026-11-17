@@ -107,6 +107,7 @@
     "@phoenix-ai/dsh-tool-ralph": "workspace:*",
     "@phoenix-ai/dsh-tool-session-query": "workspace:*",
     "@phoenix-ai/dsh-tool-skill": "workspace:*",
+    "@phoenix-ai/dsh-tool-sports": "workspace:*",
     "@phoenix-ai/dsh-tool-str-replace-editor": "workspace:*",
     "@phoenix-ai/dsh-tool-subagent": "workspace:*",
     "@phoenix-ai/dsh-tool-subagent-control": "workspace:*",

@@ -3,39 +3,62 @@
  * probability model. Event existence and kickoff are re-verified by researchTicket.
  */
 import { hasSportsPermission,sportsCatalog, type ChatBlock } from './sports.ts'
-import {scoutDailySports} from './daily-sports-scout.ts'
-import {buildDailyResearchBoard} from './daily-ticket-research-board.ts'
-import {estimateEvidenceForecast} from './sports-forecast.ts'
+import { scoutDailySports } from './daily-sports-scout.ts'
+import { buildDailyResearchBoard } from './daily-ticket-research-board.ts'
+import { estimateEvidenceForecast } from './sports-forecast.ts'
 import { researchSport } from './multi-sport-research.ts'
 import { researchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { investigatePregame } from './pregame-investigation.ts'
 import { investigateEventDeep } from './sports-deep-context.ts'
 import { diversifiedSportsPicks,diversifiedSportsShortlist } from './sports-diversity.ts'
-import {composeTicketLegNarrative} from './sports-ticket-narrative.ts'
-import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
-import {discoverGdeltTicketNews,type GdeltReport} from './sports-gdelt-editorial.ts'
-import {sameEspnTeam} from './sports-exact-espn-winner.ts'
-import type {KeylessQuote} from './keyless-odds.ts'
-import type {EspnMarketQuote} from './espn-odds.ts'
+import { composeTicketLegNarrative } from './sports-ticket-narrative.ts'
+import { discoverEditorialResearch } from './sports-editorial-discovery.ts'
+import { discoverGdeltTicketNews,type GdeltReport } from './sports-gdelt-editorial.ts'
+import { sameEspnTeam } from './sports-exact-espn-winner.ts'
+import type { KeylessQuote } from './keyless-odds.ts'
+import type { EspnMarketQuote } from './espn-odds.ts'
 export type TicketPreselectCandidate={
-  eventId:string;sport:string;league:string;home:string;away:string;
-  kickoff:string;pick:'home'|'away'|'draw';rank:number;level:'strong'|'conditional'
+  eventId:string
+  sport:string
+  league:string
+  home:string
+  away:string
+  kickoff:string
+  pick:'home'|'away'|'draw'
+  rank:number
+  level:'strong'|'conditional'
 }
 export type TicketPreselectVerdict={
-  eventId:string;excluded:boolean;priority:number;reason:string
+  eventId:string
+  excluded:boolean
+  priority:number
+  reason:string
 }
 /** Distinguish provider-confirmed fixtures from fully ranked research legs. */
 export type TicketDiscoveryAudit={
-  discoveredEvents:number;eligibleLeagues:number;researchedLeagues:number;
-  candidatesEvaluated:number;rejectedForEvidence:number;
-  shortlistedCandidates:number;leaguesNotResearched:number;
-  scanCoverage:Array<{sport:string;league:string;status:string;
-    futureEvents:number;rawEvents:number;pregameOnDate:number;
-    failedPartitions:number;reason:string}>;
-  researchErrors:Array<{sport:string;league:string;reason:string}>;
+  discoveredEvents:number
+  eligibleLeagues:number
+  researchedLeagues:number
+  candidatesEvaluated:number
+  rejectedForEvidence:number
+  shortlistedCandidates:number
+  leaguesNotResearched:number
+  scanCoverage:Array<{ sport:string
+    league:string
+    status:string
+    futureEvents:number
+    rawEvents:number
+    pregameOnDate:number
+    failedPartitions:number
+    reason:string }>
+  researchErrors:Array<{ sport:string;league:string;reason:string }>
   /** Verified future fixtures are retained even when ranking finds no picks. */
-  fixtureSample:Array<{eventId:string;sport:string;league:string;
-    home:string;away:string;kickoff:string}>;
+  fixtureSample:Array<{ eventId:string
+    sport:string
+    league:string
+    home:string
+    away:string
+    kickoff:string }>
 }
 export type TicketPreselectReviewer=(
   candidates:readonly TicketPreselectCandidate[],
@@ -98,8 +121,8 @@ export function boundedTicket<T>(task:Promise<T>,ms:number):Promise<T>{
     if(timer!==undefined)clearTimeout(timer)
   })
 }
-const dayNow=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
-  year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
+const dayNow=()=>new Intl.DateTimeFormat('en-CA',{ timeZone:'America/Santo_Domingo',
+  year:'numeric',month:'2-digit',day:'2-digit' }).format(new Date())
 const validDate=(day:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(day)
   &&Number.isFinite(Date.parse(day+'T00:00:00Z'))
   &&new Date(day+'T00:00:00Z').toISOString().slice(0,10)===day
@@ -126,7 +149,7 @@ const descriptiveRank=(match:Awaited<ReturnType<typeof researchSport>>['matches'
  * Anything below five games (NFL three) remains explicitly conditional.
  */
 const conditionalRank=(match:Awaited<ReturnType<typeof researchSport>>['matches'][number])=>{
-  const {home,away,sport}=match
+  const { home,away,sport }=match
   const min=2
   if(home.completedGames<min||away.completedGames<min||
     home.averageMargin===null||away.averageMargin===null)return null
@@ -151,16 +174,30 @@ export async function evidenceTicket(
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
   reviewCandidates?:TicketPreselectReviewer,
   quotePreselector?:TicketQuotePreselector,
-):Promise<{card:ChatBlock;complete:boolean;verifiedEvents:number;
-  candidatesEvaluated:number;researchLeagues:number;modelProbabilities:false;priced:false;placed:false;
-  insufficientEvidence:number;researchStandard:string;
-  pregameSummariesVerified:number;injuryFeedsVerified:number;
-  deepContextChecked:number;newsMatched:number;playerStatsChecked:number;
-  multisportSatisfied:boolean;scannedSports:number;selectedSports:string[];
-  discoveryAudit:TicketDiscoveryAudit;
-  selections:ResearchTicketLeg[];events:Array<{eventId:string;home:string;away:string;kickoff:string;sport:string;league:string;pick:'home'|'away'}>;
-  preselectedQuotes:KeylessQuote[];quoteScreenedCandidates:number;
-  quoteObservedCandidates:number}>{
+):Promise<{ card:ChatBlock
+  complete:boolean
+  verifiedEvents:number
+  candidatesEvaluated:number
+  researchLeagues:number
+  modelProbabilities:false
+  priced:false
+  placed:false
+  insufficientEvidence:number
+  researchStandard:string
+  pregameSummariesVerified:number
+  injuryFeedsVerified:number
+  deepContextChecked:number
+  newsMatched:number
+  playerStatsChecked:number
+  multisportSatisfied:boolean
+  scannedSports:number
+  selectedSports:string[]
+  discoveryAudit:TicketDiscoveryAudit
+  selections:ResearchTicketLeg[]
+  events:Array<{ eventId:string;home:string;away:string;kickoff:string;sport:string;league:string;pick:'home'|'away' }>
+  preselectedQuotes:KeylessQuote[]
+  quoteScreenedCandidates:number
+  quoteObservedCandidates:number }>{
   if(!Number.isInteger(count)||count<1||count>6)throw Error('El ticket requiere entre 1 y 6 patas')
   if(!validDate(date))throw Error('Fecha de ticket inválida')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por el operador')
@@ -195,27 +232,37 @@ export async function evidenceTicket(
   for(let offset=0;offset<shortlist.length;offset+=4){
     if(offset>0&&Date.now()-researchStarted>=researchBudget){budgetExhausted=true;break}
     const allowance=Math.max(750,researchBudget-(Date.now()-researchStarted))
-    const batch=await Promise.allSettled(shortlist.slice(offset,offset+4).map(({sport,league})=>{
+    const batch=await Promise.allSettled(shortlist.slice(offset,offset+4).map(({ sport,league })=>{
       const deadline=AbortSignal.timeout(Math.min(8_500,allowance))
       const guarded:typeof fetch=(input,init)=>{
         const signal=init?.signal?AbortSignal.any([init.signal,deadline]):deadline
-        return fetcher(input,{...init,signal})
+        return fetcher(input,{ ...init,signal })
       }
       return boundedTicket(researchSport(sport,league,date,guarded,now,env,
         sport==='football'?35:sport==='soccer'?56:sport==='tennis'?42:28),
-        Math.min(8_500,allowance))
+      Math.min(8_500,allowance))
     }))
     reports.push(...batch)
     // Never stop merely because five or twelve historical favorites appeared.
     // Every still-active sport/league must have an opportunity to compete
     // within the explicit research budget; incomplete coverage is reported.
   }
-  const candidateLegs:Array<{pick:ResearchTicketLeg;rank:number;home:string;away:string;
-    kickoff:string;verifiedEvent:Awaited<ReturnType<typeof researchSport>>['matches'][number]['verifiedEvent'];
-    level:'strong'|'conditional';estimatedPct:number|null;
-    historicalContext:{opponentGames:number;opponentWins:number;opponentLosses:number;
-      venueName:string;venueGames:number;venueWins:number;venueLosses:number;
-      scannedRecent:number}}> = []
+  const candidateLegs:Array<{ pick:ResearchTicketLeg
+    rank:number
+    home:string
+    away:string
+    kickoff:string
+    verifiedEvent:Awaited<ReturnType<typeof researchSport>>['matches'][number]['verifiedEvent']
+    level:'strong'|'conditional'
+    estimatedPct:number|null
+    historicalContext:{ opponentGames:number
+      opponentWins:number
+      opponentLosses:number
+      venueName:string
+      venueGames:number
+      venueWins:number
+      venueLosses:number
+      scannedRecent:number } }> = []
   let evaluated=0
   let insufficientEvidence=0
   for(const report of reports){
@@ -250,12 +297,12 @@ export async function evidenceTicket(
         '; descanso '+(favorite.restHours??'?')+'h. '+
         'POR VERIFICAR: '+(sportRisks[match.sport]??'titulares')+
         ' y cuota; sin probabilidad validada.').slice(0,395)
-      const forecast=estimateEvidenceForecast({sport:match.sport,phase:'pre',
+      const forecast=estimateEvidenceForecast({ sport:match.sport,phase:'pre',
         eventDate:match.date,
-        home:{name:home.name,lastGames:home.lastResults.map(g=>({
-          date:g.date,scored:g.scored,allowed:g.allowed}))},
-        away:{name:away.name,lastGames:away.lastResults.map(g=>({
-          date:g.date,scored:g.scored,allowed:g.allowed}))},
+        home:{ name:home.name,lastGames:home.lastResults.map(g=>({
+          date:g.date,scored:g.scored,allowed:g.allowed })) },
+        away:{ name:away.name,lastGames:away.lastResults.map(g=>({
+          date:g.date,scored:g.scored,allowed:g.allowed })) },
       },now)
       const selectedProbability=rank>0?forecast.probabilityHome:forecast.probabilityAway
       const estimatedPct=!limitedHistory&&forecast.status==='exploratory'&&
@@ -268,34 +315,33 @@ export async function evidenceTicket(
         match.verifiedEvent.competitions?.[0]?.venue?.name??'').trim().slice(0,100)
       const previousAtVenue=currentVenue?favorite.lastResults.filter(g=>
         canonical(g.venue??'')===canonical(currentVenue)):[]
-      const history={opponentGames:previousVsOpponent.length,
+      const history={ opponentGames:previousVsOpponent.length,
         opponentWins:previousVsOpponent.filter(g=>g.scored>g.allowed).length,
         opponentLosses:previousVsOpponent.filter(g=>g.scored<g.allowed).length,
         venueName:currentVenue,venueGames:previousAtVenue.length,
         venueWins:previousAtVenue.filter(g=>g.scored>g.allowed).length,
         venueLosses:previousAtVenue.filter(g=>g.scored<g.allowed).length,
-        scannedRecent:favorite.lastResults.length}
-      candidateLegs.push({rank:Math.abs(rank),level,estimatedPct,historicalContext:history,
+        scannedRecent:favorite.lastResults.length }
+      candidateLegs.push({ rank:Math.abs(rank),level,estimatedPct,historicalContext:history,
         verifiedEvent:match.verifiedEvent,
         home:home.name,away:away.name,kickoff:match.date,pick:{
-        sport:match.sport,league:match.league,eventId:match.eventId,
-        pick:rank>0?'home':'away',
-        rationale:((estimatedPct===null?
-          'Probabilidad de esta pata: no estimable con los datos disponibles. ':
-          'Probabilidad individual exploratoria '+estimatedPct+
+          sport:match.sport,league:match.league,eventId:match.eventId,
+          pick:rank>0?'home':'away',
+          rationale:((estimatedPct===null?
+            'Probabilidad de esta pata: no estimable con los datos disponibles. ':
+            'Probabilidad individual exploratoria '+estimatedPct+
             '% (NO calibrada; no garantiza acierto). ')+
           (level==='conditional'?'CANDIDATA CONDICIONAL. ':'')+
           (limitedHistory?'MUESTRA REDUCIDA '+home.completedGames+'/'+
             away.completedGames+' partidos verificados (objetivo '+
             targetGames+'). Incertidumbre elevada. ':'')+
           rationale).slice(0,480),
-      }})
+        } })
     }
   }
   candidateLegs.sort((a,b)=>b.rank-a.rank||a.pick.eventId.localeCompare(b.pick.eventId))
-  // Every historically qualified fixture is screened for ESPN prices before
-  // the FINAL 5/6 are chosen. A missing line is not an identity or injury
-  // contradiction, but a quoted equivalent must rank ahead for ticket research.
+  // Price observations are gathered for the researched slate, but they do not
+  // reorder candidates or decide which outcome the sports evidence supports.
   const quotePool=candidateLegs.map(c=>({
     eventId:c.pick.eventId,sport:c.pick.sport,league:c.pick.league,
     home:c.home,away:c.away,kickoff:c.kickoff,pick:c.pick.pick,
@@ -307,13 +353,18 @@ export async function evidenceTicket(
   const preselectedQuotes:KeylessQuote[]=observed.slice(0,2_400).filter(q=>
     q!==null&&typeof q==='object'&&
     typeof q.source==='string'&&q.source.startsWith('ESPN '))
-  const quotedIds=new Set(quotePool.filter(c=>preselectedQuotes.some(q=>
-    matchesDailyEspnPrice(c,q,now,preselectedQuotes))).map(c=>c.eventId))
-  const priceFirst=(a:typeof candidateLegs[number],
+  const bookmakersByEvent=new Map<string,Set<string>>()
+  for(const candidate of quotePool){
+    const books=new Set(preselectedQuotes.filter(q=>
+      matchesDailyEspnPrice(candidate,q,now,preselectedQuotes))
+      .map(q=>q.bookmaker))
+    if(books.size)bookmakersByEvent.set(candidate.eventId,books)
+  }
+  const quotedIds=new Set(bookmakersByEvent.keys())
+  const researchFirst=(a:typeof candidateLegs[number],
     b:typeof candidateLegs[number])=>
-    Number(quotedIds.has(b.pick.eventId))-Number(quotedIds.has(a.pick.eventId))||
     b.rank-a.rank||a.pick.eventId.localeCompare(b.pick.eventId)
-  candidateLegs.sort(priceFirst)
+  candidateLegs.sort(researchFirst)
   // The expert critic can review MORE than five preliminary candidates.
   // An invalid fixture may be rejected and replaced before the final ticket
   // is rendered. Failures in this optional phase retain honest conditional
@@ -350,7 +401,9 @@ export async function evidenceTicket(
       reviewedCandidates=decisions.size
       rejectedCandidates=[...decisions.values()].filter(x=>x.excluded).length
       for(let i=candidateLegs.length-1;i>=0;i--){
-        const row=candidateLegs[i]!,decision=decisions.get(row.pick.eventId)
+        const row=candidateLegs[i]
+        if(!row)continue
+        const decision=decisions.get(row.pick.eventId)
         if(!decision)continue
         if(decision.excluded){candidateLegs.splice(i,1);continue}
         // Explicitly reviewed expert evidence dominates marginal differences
@@ -358,16 +411,29 @@ export async function evidenceTicket(
         row.rank+=decision.priority
         reviewNotes.set(row.pick.eventId,decision.reason.slice(0,180))
       }
-      candidateLegs.sort(priceFirst)
+      candidateLegs.sort(researchFirst)
     }catch{
       // Review not performed. Downstream mandatory specialist check still runs.
       reviewedCandidates=0;rejectedCandidates=0
     }
   }
-  // The diversity selector internally sorts by rank; keep the ESPN-first
-  // preference through that second sort without changing the sports signals.
-  const pricedRanked=candidateLegs.map(c=>({...c,
-    rank:c.rank+(quotedIds.has(c.pick.eventId)?1_000:0)}))
+  // When at least `count` researched events have fresh matching prices, choose
+  // only from that eligible set. Within it, evidence rank remains decisive.
+  // If prices are insufficient, retain the research-ranked slate as an honest
+  // incomplete draft and let the priced-ticket flow report the exact gaps.
+  const quoteEligible=candidateLegs.filter(c=>quotedIds.has(c.pick.eventId))
+  const sameBookPools=[...new Set([...bookmakersByEvent.values()].flatMap(x=>[...x]))]
+    .map(book=>({ book,candidates:candidateLegs.filter(c=>
+      bookmakersByEvent.get(c.pick.eventId)?.has(book))
+      .sort(researchFirst) }))
+    .filter(row=>row.candidates.length>=count)
+    .sort((a,b)=>{
+      const score=(rows:typeof a.candidates)=>rows.slice(0,count)
+        .reduce((sum,row)=>sum+row.rank,0)
+      return score(b.candidates)-score(a.candidates)||a.book.localeCompare(b.book)
+    })
+  const selectionPool=sameBookPools[0]?.candidates??
+    (quoteEligible.length>=count?quoteEligible:candidateLegs)
   const quoteSports=new Set(candidateLegs.filter(c=>
     quotedIds.has(c.pick.eventId)).map(c=>c.pick.sport))
   // Do not deliberately replace a fifth REAL priced leg with an unquoted
@@ -375,8 +441,8 @@ export async function evidenceTicket(
   // diversity reporting when ESPN prices exist only in one discipline.
   const preferDiversity=!singleSport&&
     (quotedIds.size===0||quoteSports.size>=2)
-  const {chosen:selected}=diversifiedSportsPicks(
-    pricedRanked,count,preferDiversity)
+  const { chosen:selected }=diversifiedSportsPicks(
+    selectionPool,count,preferDiversity)
   const multisportSatisfied=singleSport||count<=1||
     new Set(selected.map(x=>x.pick.sport)).size>=2
   const chosen=selected.map(x=>({
@@ -393,7 +459,7 @@ export async function evidenceTicket(
   // preserve it rather than losing a legitimate selected leg from the board.
   const verifiedForBoard=[...scan.events,...selected.map(x=>({
     sport:x.pick.sport,league:x.pick.league,eventId:x.pick.eventId,
-    kickoff:x.kickoff,home:{name:x.home},away:{name:x.away},
+    kickoff:x.kickoff,home:{ name:x.home },away:{ name:x.away },
   }))]
   const dailyResearchBoard=buildDailyResearchBoard(verifiedForBoard,
     selected.filter(x=>x.pick.pick!=='draw').map(x=>({
@@ -406,10 +472,10 @@ export async function evidenceTicket(
     candidatesEvaluated:evaluated,rejectedForEvidence:insufficientEvidence,
     shortlistedCandidates:candidateLegs.length,
     leaguesNotResearched:Math.max(0,shortlist.length-reports.length),
-    scanCoverage:scan.coverage.map(x=>({...x})),
-    fixtureSample:scan.events.slice(0,60).map(x=>({eventId:x.eventId,
+    scanCoverage:scan.coverage.map(x=>({ ...x })),
+    fixtureSample:scan.events.slice(0,60).map(x=>({ eventId:x.eventId,
       sport:x.sport,league:x.league,home:x.home.name,
-      away:x.away.name,kickoff:x.kickoff})),
+      away:x.away.name,kickoff:x.kickoff })),
     researchErrors:reports.flatMap((result,index)=>result.status==='rejected'?[{
       sport:shortlist[index]?.sport??'unknown',
       league:shortlist[index]?.league??'unknown',
@@ -419,7 +485,7 @@ export async function evidenceTicket(
   if(!chosen.length){
     // A zero-leg draft is useful and honest: Kira must not say that a 5-leg
     // wager was prepared when every candidate failed evidence requirements.
-    const card:ChatBlock={component:'sports_ticket_card',version:1,props:{
+    const card:ChatBlock={ component:'sports_ticket_card',version:1,props:{
       title:'PHOENIX · Investigación insuficiente',
       subtitle:'Partidos descubiertos: '+scan.totalEligible+
         ' · candidatos respaldados: 0/'+count,
@@ -432,8 +498,8 @@ export async function evidenceTicket(
         ' fallos históricos. Cero picks NO significa cero partidos. '+
         'No se inventan favoritos, precios ni probabilidades. '+
         dailyResearchBoard.note,
-    }}
-    return{card,complete:false,verifiedEvents:0,candidatesEvaluated:evaluated,
+    } }
+    return{ card,complete:false,verifiedEvents:0,candidatesEvaluated:evaluated,
       researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
       insufficientEvidence,pregameSummariesVerified:0,injuryFeedsVerified:0,
       deepContextChecked:0,newsMatched:0,playerStatsChecked:0,
@@ -443,7 +509,7 @@ export async function evidenceTicket(
       researchStandard:'Sin dirección suficientemente documentada con al menos dos partidos distintos por rival; fuentes y partidos permanecen en discoveryAudit. Deportes evaluados: '+scannedSports+'.'+
         (budgetExhausted?' Búsqueda detenida por presupuesto de tiempo; quedan ligas sin investigar.':''),
       modelProbabilities:false,priced:false,placed:false,discoveryAudit,selections:[],
-      events:[]}
+      events:[] }
   }
   // One bounded memoized HTTP request for a repeated ESPN event summary
   // or league injury feed, even across the two complementary research passes.
@@ -500,17 +566,17 @@ export async function evidenceTicket(
     const reviewer=reviewerAt>=0?rationale.slice(reviewerAt):''
     const core=reviewerAt>=0?rationale.slice(0,reviewerAt):rationale
     const suffix=reviewer+' · '+sourceSummary+audit
-    return {...pick,rationale:(core.slice(0,Math.max(0,480-suffix.length))+
-      suffix).slice(0,480)}
+    return { ...pick,rationale:(core.slice(0,Math.max(0,480-suffix.length))+
+      suffix).slice(0,480) }
   })
   // Final validation must inspect the SAME provider-recorded fixture IDs as
   // scouting. ESPN re-query can omit a game due scoreboard pagination/rotation.
   // Do not weaken integrity: researchTicket still checks exact IDs, kickoff,
   // local date, future 'pre' status and both opponents on saved ESPN snapshots.
-  const verifiedBoards=new Map<string,{events:typeof selected[number]['verifiedEvent'][]}>()
+  const verifiedBoards=new Map<string,{ events:typeof selected[number]['verifiedEvent'][] }>()
   for(const candidate of selected){
     const key=candidate.pick.sport+'|'+candidate.pick.league
-    const board=verifiedBoards.get(key)??{events:[]}
+    const board=verifiedBoards.get(key)??{ events:[] }
     if(!board.events.some(event=>String(event.id)===candidate.pick.eventId))
       board.events.push(candidate.verifiedEvent)
     verifiedBoards.set(key,board)
@@ -539,18 +605,18 @@ export async function evidenceTicket(
       eventId:candidate.pick.eventId,sport:candidate.pick.sport,
       league:candidate.pick.league,home:candidate.home,away:candidate.away,
       kickoff:candidate.kickoff,pick:candidate.pick.pick,
-    },{...leg,
+    },{ ...leg,
       legWinProbabilityPercent:candidate.estimatedPct??null,
       legProbabilitySource:candidate.estimatedPct!==null&&
         candidate.estimatedPct!==undefined?'exploratory-recent-form':'unavailable',
       historicalContext:candidate.historicalContext,
     },context):null
-    const augmented=narrative?{...narrative,
-      globalNews:(gdelt.byEvent[candidate!.pick.eventId]??[]).map(hit=>({
+    const augmented=narrative?{ ...narrative,
+      globalNews:(gdelt.byEvent[candidate?.pick.eventId??'']??[]).map(hit=>({
         publisher:hit.publisher,headline:hit.title,indexedAt:hit.indexedAt,
         articleUrl:hit.articleUrl,status:hit.status,
       })),
-      sources:[...narrative.sources,...(gdelt.byEvent[candidate!.pick.eventId]??[]).map(hit=>({
+      sources:[...narrative.sources,...(gdelt.byEvent[candidate?.pick.eventId??'']??[]).map(hit=>({
         name:'GDELT · '+hit.publisher,status:'partial' as const,url:hit.articleUrl,
       }))],
       externalOpinions:external.slice(0,6).map(hit=>({
@@ -558,16 +624,16 @@ export async function evidenceTicket(
         discoveryUrl:hit.discoveryUrl,status:hit.status,
       })),
       explanationForChat:narrative.explanationForChat+'\nNoticias globales indexadas por GDELT: '+
-        ((gdelt.byEvent[candidate!.pick.eventId]??[]).length?
-          (gdelt.byEvent[candidate!.pick.eventId]??[]).slice(0,2).map(hit=>
+        ((gdelt.byEvent[candidate?.pick.eventId??'']??[]).length?
+          (gdelt.byEvent[candidate?.pick.eventId??'']??[]).slice(0,2).map(hit=>
             hit.title+' · '+hit.articleUrl+' (visto '+(hit.indexedAt??'sin hora')+')').join('; ')+
             '. La fecha indica indexación, no publicación; noticia aún no contrastada.':
-            'sin artículos adicionales verificables.')+'\nOpiniones externas: '+
+          'sin artículos adicionales verificables.')+'\nOpiniones externas: '+
         (external.length?external.slice(0,3).map(hit=>hit.publisher+': '+hit.headline).join('; ')+
           '. Son titulares indexados, NO picks contrastados ni pronósticos de consenso.':
           'sin artículos indexados verificables; no se atribuye consenso a tipsters.'),
     }:null
-    return {...leg,narrative:augmented,
+    return { ...leg,narrative:augmented,
       preliminaryEvidenceTier:candidate?.level??'conditional',
       legWinProbabilityPercent:candidate?.estimatedPct??null,
       legProbabilitySource:candidate?.estimatedPct!==null&&
@@ -576,7 +642,7 @@ export async function evidenceTicket(
         +'no contempla lesiones, alineaciones, rivalidad ni precio.',
     }
   })
-  const card:ChatBlock={...ticket.card,props:{...ticket.card.props,
+  const card:ChatBlock={ ...ticket.card,props:{ ...ticket.card.props,
     discoveryAudit,dailyResearchBoard,legs:enrichedLegs,
     chatNarrative:enrichedLegs.map(x=>x.narrative).filter(Boolean),
     narrativeInstruction:'Kira debe acompañar cada pata en el chat con su análisis documentado, noticias enlazadas, riesgos, estadio, clima y árbitro si realmente están confirmados. Si algo falta, declararlo sin completar con imaginación. Fotografías de la noticia solo con URL HTTPS y fuente atribuida.',
@@ -593,8 +659,8 @@ export async function evidenceTicket(
       'Se evaluaron candidatos adicionales antes de formar el ticket. '+
       'Las probabilidades por pata son exploratorias y NO calibradas. '+
       dailyResearchBoard.note).slice(0,1250),
-  }}
-  return{card,complete:ticket.complete,verifiedEvents:ticket.verifiedEvents,
+  } }
+  return{ card,complete:ticket.complete,verifiedEvents:ticket.verifiedEvents,
     candidatesEvaluated:evaluated,researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
     insufficientEvidence,pregameSummariesVerified,injuryFeedsVerified,
     deepContextChecked,newsMatched,playerStatsChecked,
@@ -605,6 +671,6 @@ export async function evidenceTicket(
       candidatesConditional+' candidatos CONDICIONALES; muestras desde 2 por rival se investigan con incertidumbre; 5 por club (NFL 3) es objetivo de muestra fuerte, NO una puerta de entrada. Se exploraron '+scannedSports+' deportes; seleccionados: '+(selectedSports.join(', ')||'ninguno')+'. Diversidad '+(multisportSatisfied?'cumplida':'NO cumplida')+'. Lesiones, titulares y cuotas siguen sin verificación específica.'+
       (budgetExhausted?' Búsqueda detenida por presupuesto de tiempo; quedan ligas sin investigar.':''),
     modelProbabilities:false,priced:false,placed:false,discoveryAudit,selections:documented,
-    events:selected.map(x=>({eventId:x.pick.eventId,home:x.home,away:x.away,kickoff:x.kickoff,
-      sport:x.pick.sport,league:x.pick.league,pick:x.pick.pick==='home'?'home' as const:'away' as const}))}
+    events:selected.map(x=>({ eventId:x.pick.eventId,home:x.home,away:x.away,kickoff:x.kickoff,
+      sport:x.pick.sport,league:x.pick.league,pick:x.pick.pick==='home'?'home' as const:'away' as const })) }
 }
