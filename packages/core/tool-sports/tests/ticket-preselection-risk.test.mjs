@@ -70,3 +70,15 @@ test('a source outage cannot become false proof of health or calibration',()=>{
   assert.match(risk.reasons.join(' '),/Especialista no disponible/u)
   assert.equal('winProbability' in risk,false)
 })
+
+test('a team-only NBA injury report still lowers risk without claiming opponent health',()=>{
+  const risk=assessPregamePreselectionRisk(fixture(),check({
+    injuryAudit:{home:{matched:false},away:{matched:true}},
+    rosterMatchedInjuries:{home:[],away:[
+      row('A','Out'),row('B','Out'),row('C','Out'),row('D','Out')]},
+    restHours:{home:72,away:24},
+  }),now)
+  assert.ok(risk.priority<=-1)
+  assert.match(risk.reasons.join(' '),/sin parte bilateral/u)
+  assert.equal(risk.needsRecheck,true)
+})
