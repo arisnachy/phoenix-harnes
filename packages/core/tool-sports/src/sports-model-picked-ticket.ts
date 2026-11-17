@@ -7,6 +7,12 @@ import {ticketLeagueOddsKey} from './evidence-priced-ticket.ts'
 export type ModelChosenLeg={
   sport:string;league:string;eventId:string;date:string;
   home:string;away:string;kickoff:string;pick:'home'|'away';reason:string
+  /** Article URLs Kira actually opened, ideally independent publishers. */
+  sourceUrls?:string[]
+  /** Strongest evidence that the selected side could lose. */
+  counterEvidence?:string
+  /** Explicit unresolved critical blockers; [] means reviewed, not proved. */
+  criticalPending?:string[]
 }
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
@@ -23,6 +29,33 @@ const isObserved=(q:MarketOutcome,now:number)=>{
     q.source?.startsWith('ESPN')===true
 }
 type ExactQuote=MarketOutcome
+const sourceHost=(raw:unknown):string|null=>{
+  if(typeof raw!=='string')return null
+  try{
+    const url=new URL(raw)
+    if(url.protocol!=='https:'||url.username||url.password||
+      !url.hostname.includes('.')||url.hostname.endsWith('espncdn.com'))return null
+    return url.hostname.replace(/^www\./u,'')
+  }catch{return null}
+}
+/** Completeness of Kira's documented decision, not independent source verification. */
+export function ticketResearchChecklist(chosen:readonly ModelChosenLeg[]):string[]{
+  const missing:string[]=[]
+  if(chosen.length<5||chosen.length>6)
+    missing.push('El ticket diario final necesita cinco o seis eventos diferentes.')
+  for(const leg of chosen){
+    const name=leg.away+' vs '+leg.home
+    const uniqueHosts=new Set((leg.sourceUrls??[]).map(sourceHost).filter(Boolean))
+    if(uniqueHosts.size<2)missing.push(name+': citar dos publicaciones leídas de editores independientes.')
+    if(!leg.counterEvidence||leg.counterEvidence.trim().length<20)
+      missing.push(name+': falta refutación deportiva del pick.')
+    if(!Array.isArray(leg.criticalPending))
+      missing.push(name+': falta revisión explícita de titulares, bajas y otros riesgos críticos.')
+    else if(leg.criticalPending.length)
+      missing.push(name+': riesgos decisivos abiertos: '+leg.criticalPending.slice(0,3).join('; '))
+  }
+  return missing
+}
 /** Validate selected predictions against exact ESPN event/time/market records.
  * @param chosen - Kira's explicit pregame reasons and source-backed fixtures.
  * @param fetcher - Injected provider for deterministic tests.
@@ -31,7 +64,8 @@ type ExactQuote=MarketOutcome
  */
 export async function quoteKiraChosenTicket(chosen:readonly ModelChosenLeg[],
   fetcher:typeof fetch=fetch,now=Date.now(),
-):Promise<{complete:boolean;priced:boolean;placed:false;bookmaker:string|null;
+):Promise<{complete:boolean;priced:boolean;finalReady:boolean;
+  finalizationMissing:string[];placed:false;bookmaker:string|null;
   quotes:Array<{eventId:string;selection:string;price:number;
     bookmaker:string;source:string;observedAt:string}>;
   missing:string[];uiBlock:{component:'sports_ticket_card';version:1;props:{
@@ -71,6 +105,8 @@ export async function quoteKiraChosenTicket(chosen:readonly ModelChosenLeg[],
   const chosenQuotes=verified.map(rows=>rows.find(q=>q.bookmaker===best)??null)
   const complete=best!==null&&chosenQuotes.every(q=>q!==null)
   const priced=complete
+  const finalizationMissing=ticketResearchChecklist(chosen)
+  const finalReady=complete&&finalizationMissing.length===0
   const missing=chosen.flatMap((leg,i)=>chosenQuotes[i]?[ ]:
     ['Sin cuota ESPN del mismo bookmaker para '+leg.away+' vs '+leg.home+
       ' · selección '+(leg.pick==='home'?leg.home:leg.away)])
@@ -91,15 +127,19 @@ export async function quoteKiraChosenTicket(chosen:readonly ModelChosenLeg[],
   const quotes=chosenQuotes.flatMap((q,i)=>q?[{eventId:chosen[i]!.eventId,
     selection:q.selection,price:q.price,bookmaker:q.bookmaker,
     source:q.source??'ESPN',observedAt:q.observedAt!}]:[])
-  return{complete,priced,placed:false,bookmaker:best,quotes,missing,
+  return{complete,priced,finalReady,finalizationMissing,placed:false,
+    bookmaker:best,quotes,missing,
     uiBlock:{component:'sports_ticket_card',version:1,props:{
-      title:'PHOENIX · Selecciones razonadas por Kira',
-      subtitle:complete?'Ticket cotizado · investigación del modelo':
+      title:finalReady?'PHOENIX · Ticket final de análisis':
+        'PHOENIX · Selecciones razonadas por Kira',
+      subtitle:finalReady?'5–6 selecciones · evidencia documentada y cotizada':
+        complete?'Cotizado, aún NO definitivo · evidencia pendiente':
         'Investigación incompleta · cuotas de mismo operador pendientes',
       source:'ESPN Site/Core · verificación exacta de cuotas por evento',
       requestedLegs:chosen.length,legs,
       combinedOdds:product===null?'No disponible':product.toFixed(3),
-      note:(complete?'BOLETO DE INVESTIGACIÓN, cuotas públicas cotejadas. ':
+      note:(finalReady?'TICKET FINAL DE ANÁLISIS, NO APUESTA ACEPTADA. ':
+        complete?'COTIZADO PERO NO DEFINITIVO: '+finalizationMissing.slice(0,3).join(' | ')+'. ':
         'TICKET INCOMPLETO. '+missing.join(' | ')+'. ')+
         'Kira eligió tras comparar datos; esta función no ordena equipos, '+
         'no evalúa probabilidades ni modifica los picks por el precio. '+
