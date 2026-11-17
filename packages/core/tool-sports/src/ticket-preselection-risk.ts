@@ -65,10 +65,21 @@ export function assessPregamePreselectionRisk(
       reasons.push('Rival con bajas publicadas conciliadas; sin inferir victoria')
     }
   }else if(check.injuryAudit&&
-    check.injuryAudit.status!=='unsupported'&&
-    check.injuryAudit.status!=='unavailable'){
-    reasons.push('Lesiones ESPN consultadas sin conciliación individual con roster; '+
-      'no se penalizan como ausencias confirmadas')
+    (check.injuryAudit.status==='verified'||
+      check.injuryAudit.status==='partial')){
+    // If a full roster cannot be fetched, a cluster of current reported
+    // absences is still an ADVERSE ALERT (not a verified active-roster count).
+    // One loose injury entry cannot demote an otherwise researched favorite.
+    const report=check.injuryAudit[own]
+    const reported=Number.isFinite(kickoff)&&kickoff>now&&report.matched?
+      weighted(report.injuries,now,kickoff):0
+    if(reported>=2){
+      priority-=Math.min(.7,.18*reported)
+      reasons.push('ALERTA PROVISIONAL: '+reported.toFixed(2)+
+        ' bajas recientes del elegido en ESPN sin roster conciliado; '+
+        'contrastarlas con fuente oficial antes de aprobar')
+    }else reasons.push('Lesiones ESPN sin conciliación completa; '+
+      'no se infiere que el equipo esté sano')
     needsRecheck=true
   }
   if(candidate.sport==='basketball'&&check.restHours){
