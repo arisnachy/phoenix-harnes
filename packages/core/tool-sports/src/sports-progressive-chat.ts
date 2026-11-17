@@ -306,11 +306,16 @@ export async function progressiveSportsStage(
       discoverAutonomousSportsSources({home:fixture.home,away:fixture.away},
         query,fetcher,now),readSpecialist(fixture,fetcher,now,env)])
     const reports=check?.newsFindings??[]
-    rows=reports.slice(0,12).map((row,i)=>({
-      label:'Prensa deportiva '+String(i+1),home:text(row.title),
-      away:text(row.publisher+' · '+(row.publishedAt??'sin publicación confirmada')),
-      state:row.status==='indexed-headline-only'?'indexed' as const:'reported' as const,
+    rows=(deep?.headlines??[]).slice(0,8).map((row,i)=>({
+      label:'ESPN News · '+String(i+1),
+      home:text(row.headline),away:text('ESPN · '+row.published),
+      ...(row.articleUrl?{url:row.articleUrl}:{}),state:'reported' as const,
     }))
+    rows.push(...reports.slice(0,8).map((row,i)=>({
+      label:'Otra fuente '+String(i+1),home:text(row.title),
+      away:text(row.publisher+' · '+(row.publishedAt??'sin fecha confirmada')),
+      state:row.status==='indexed-headline-only'?'indexed' as const:'reported' as const,
+    })))
     rows.push(...discovery.articles.slice(0,12).map((article,i)=>({
       label:'Fuente descubierta '+String(i+1),home:text(article.title),
       away:text(article.publisher+' · índice '+article.indexedAt),
@@ -318,7 +323,8 @@ export async function progressiveSportsStage(
     })))
     if(!rows.length)rows=[pair('Noticias y expertos',
       'Sin artículo publicado accesible','Sin artículo contrastado',false)]
-    evidence={question:query,indexedArticles:discovery.articles,
+    evidence={question:query,espnHeadlines:deep?.headlines??[],
+      indexedArticles:discovery.articles,
       publisherNotes:reports,warning:discovery.limitation}
     missing=discovery.status==='unavailable'?[discovery.limitation]:[]
     source='ESPN News · GDELT (cualquier medio público indexado)'
