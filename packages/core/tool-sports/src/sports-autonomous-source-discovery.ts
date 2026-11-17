@@ -95,3 +95,61 @@ export async function discoverAutonomousSportsSources(
         String(error instanceof Error?error.message:error).slice(0,140)}
   }
 }
+
+/** Research targets, NOT verified facts. This plan is used when the local
+ * specialist or ESPN feed cannot close an important pregame question.
+ * The assistant must open and corroborate articles with its available browser.
+ */
+export type IndependentResearchTarget={
+  provider:string;url:string;purpose:string;status:'not-read'
+}
+export type IndependentResearchPlan={
+  queries:string[];targets:IndependentResearchTarget[];
+  mustOpenOriginals:true;fallbackRequired:true;
+  evidenceRule:string
+}
+export function planIndependentSportsFallback(input:{
+  home:string;away:string;league:string;date:string;question:string
+}):IndependentResearchPlan{
+  const home=clean(input.home,70),away=clean(input.away,70)
+  const league=clean(input.league,30).toLowerCase()
+  const date=/^\d{4}-\d{2}-\d{2}$/u.test(input.date)?input.date:''
+  const question=clean(input.question,105)
+  const topic=question||'lesiones titulares y disponibilidad'
+  const queries=[
+    '"'+home+'" "'+away+'" '+date+' '+topic+' official',
+    '"'+home+'" '+date+' '+topic+' lineup',
+    '"'+away+'" '+date+' '+topic+' lineup',
+  ].map(x=>x.trim()).filter(x=>x.length>=8)
+  const target=(provider:string,url:string,purpose:string):IndependentResearchTarget=>({
+    provider,url,purpose,status:'not-read'
+  })
+  const targets:IndependentResearchTarget[]=[]
+  if(league==='nhl'||league==='hockey'){
+    targets.push(target('NHL oficial','https://www.nhl.com/news',
+      'Parte oficial y proyección de alineaciones; buscar por equipos y fecha'))
+    if(date)targets.push(target('Daily Faceoff',
+      'https://www.dailyfaceoff.com/starting-goalies/'+date,
+      'Comprobar confirmado versus probable, hora y fuente del portero'))
+  }else if(league==='nba'||league==='basketball'){
+    targets.push(target('NBA oficial','https://official.nba.com/',
+      'Informe oficial de lesiones, verificando la fecha del PDF'))
+    targets.push(target('NBA noticias','https://www.nba.com/news',
+      'Actualizaciones de quintetos, baja y cuerpo técnico'))
+  }else if(league==='wnba'){
+    targets.push(target('WNBA oficial','https://www.wnba.com/',
+      'Noticias, jugadoras disponibles y titulares de la competición'))
+  }else if(league==='mlb'||league==='baseball'){
+    targets.push(target('MLB alineaciones','https://www.mlb.com/starting-lineups',
+      'Abridores y orden ofensivo; distinguir probable de confirmado'))
+    targets.push(target('MLB noticias','https://www.mlb.com/news',
+      'Reportes oficiales de lesión y bullpen'))
+  }else if(league==='mens-college-basketball'||league==='ncaab'){
+    targets.push(target('NCAA oficial','https://www.ncaa.com/scoreboard/basketball-men/d1',
+      'Cruce universitario, fecha y acceso a equipos y lesiones'))
+  }
+  return {queries,targets,mustOpenOriginals:true,fallbackRequired:true,
+    evidenceRule:'Los enlaces y consultas NO certifican hechos. Abrir páginas originales, '+
+      'cotejar atleta, equipo, fecha, titularidad y segundo proveedor. '+
+      'Un candidato o titular de prensa no es un confirmado. Si no se lee, mantener pendiente.'}
+}
