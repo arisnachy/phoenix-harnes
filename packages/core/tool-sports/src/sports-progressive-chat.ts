@@ -9,7 +9,7 @@ import {investigateEventDeep,type DeepSportsContext} from './sports-deep-context
 import {auditUniversalMatchup} from './universal-matchup-factors.ts'
 import {lookupExactEspnWinner} from './sports-exact-espn-winner.ts'
 import {ticketLeagueOddsKey} from './evidence-priced-ticket.ts'
-import {discoverAutonomousSportsSources} from './sports-autonomous-source-discovery.ts'
+import {discoverAutonomousSportsSources,planIndependentSportsFallback} from './sports-autonomous-source-discovery.ts'
 
 export type ResearchStage='teams'|'rosters'|'availability'|'context'|'news'|'odds'
 type Row={label:string;home:string;away:string;note?:string;url?:string;
@@ -354,8 +354,11 @@ export async function progressiveSportsStage(
       away:text(article.publisher+' · índice '+article.indexedAt),
       url:article.articleUrl,state:'indexed' as const,
     })))
-    if(!rows.length)rows=[pair('Noticias y expertos',
-      'Sin artículo publicado accesible','Sin artículo contrastado',false)]
+    if(!rows.length){
+      rows=[pair('Noticias y expertos',
+        'Sin artículo publicado accesible','Sin artículo contrastado',false)]
+      missing.push('Noticias del encuentro: sin publicación original contrastada')
+    }
     evidence={question:query,espnHeadlines:deep?.headlines??[],
       indexedArticles:discovery.articles,
       publisherNotes:reports,warning:discovery.limitation}
@@ -402,13 +405,27 @@ export async function progressiveSportsStage(
     note:text(note,800),home:clubs.home,away:clubs.away,
     rows:rows.slice(0,64),missing:missingArray(missing.map(x=>text(x,225))),
   }}
+  const unresolved=card.props.missing.length>0||
+    stage==='news'&&!rows.some(row=>row.state==='verified')
+  const sourceEscalation=unresolved&&
+    (stage==='availability'||stage==='context'||stage==='news')?
+    planIndependentSportsFallback({
+      home:fixture.home,away:fixture.away,league:fixture.league,date:fixture.date,
+      question:question?.trim()||card.props.missing[0]||
+        (stage==='availability'?'titulares lesiones y porteros':
+          stage==='context'?'forma y estadísticas locales':'noticias e inactivos'),
+    }):null
   return{uiBlock:card,stage,nextStage:steps[index+1]??null,
+    sourceEscalation,
     evidence,missing:card.props.missing,
     instruction:'Kira: MUESTRA YA esta tabla en el chat y explica comparativamente '+
       'dos o tres observaciones verificadas. Luego continúa a la siguiente etapa '+
       'sin esperar a que todo el ticket termine. Si un dato falta, puedes '+
       'consultar sports_chat_autonomous_sources u otro especialista; no completes '+
-      'vacíos inventando hechos. No atribuyas puntajes ni pesos a jugadores, '+ 
+      'vacíos inventando hechos. Si sourceEscalation está presente, BUSCA en las '+
+      'fuentes externas indicadas y LEE sus originales mediante navegador, no te '+
+      'detengas por fallo de ESPN/GDELT. Compara liga, prensa y segundo proveedor; '+
+      'ningún enlace no leído certifica hechos. No atribuyas puntajes ni pesos a jugadores, '+ 
       'equipos o lesiones. ESPN aporta datos y precios observados; TU razonamiento '+ 
       'selecciona cada pata después de investigar las seis etapas.'}
 }
