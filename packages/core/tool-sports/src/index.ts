@@ -2119,8 +2119,10 @@ export function apply(ctx: Context): void {
           reason:'Seguimiento cloud superó el plazo; el ticket se conserva en el chat.',
         })):{ status:'disabled' as const,issueNumber:null,
           reason:'Sin eventos verificados que puedan enviarse al monitor remoto.' }
+      const {modelComparisonBriefs,selectedBilateralDossiers,
+        modelSelectionRequired,...displayProps}=result.card.props
       return JSON.stringify({ uiBlock:{ ...result.card,
-        props:{ ...result.card.props,cloudFollowUp } },
+        props:{ ...displayProps,cloudFollowUp } },
       cloudFollowUp,reviewedBeforeSelection:result.reviewedBeforeSelection,
       removedConflicts:result.removedConflicts,requestedLegs:args.count,
       elapsedMs:Date.now()-requestedAt,
@@ -2136,8 +2138,8 @@ export function apply(ctx: Context): void {
       missingQuotes:result.missingQuotes,approvedLegs:result.approvedLegs,
       multisportSatisfied:result.multisportSatisfied,sourceAudit:result.sourceAudit,
       specialistChecks:result.specialistChecks,researchedLegs:result.researchedLegs,
-      modelComparisonBriefs:result.card.props.modelComparisonBriefs??[],
-      selectedBilateralDossiers:result.card.props.selectedBilateralDossiers??[],
+      modelComparisonBriefs:modelComparisonBriefs??[],
+      selectedBilateralDossiers:selectedBilateralDossiers??[],
       modelSelectionRequired:true,explicitModelSelectionPending:true,
       researchFixtures:result.researchFixtures,
       modelAudit:result.modelAudit,
