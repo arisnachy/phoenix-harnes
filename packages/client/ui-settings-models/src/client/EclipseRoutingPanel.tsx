@@ -70,7 +70,11 @@ function profileFromValue(value: unknown): EclipseProfile {
   const legacyPlanner = candidate.escalationSensitivity === undefined && candidate.coordinator === undefined
   const coordinator = routeFromValue(candidate.coordinator)
     ?? (legacyPlanner ? routeFromValue(candidate.planner) : undefined)
-  const planner = legacyPlanner ? undefined : routeFromValue(candidate.planner)
+  const priorPlanner = legacyPlanner ? undefined : routeFromValue(candidate.planner)
+  // Show the new automatic planner on reload, keeping explicit hybrid/manual pins intact.
+  const planner = mode === 'automatic' && priorPlanner?.provider === 'openai-codex'
+    && priorPlanner.model === 'gpt-6.1-sol'
+    ? { ...priorPlanner, model: 'gpt-6.2-sol' } : priorPlanner
   const subagent = routeFromValue(candidate.subagent)
   const maxTeammates = typeof candidate.maxTeammates === 'number'
     && Number.isInteger(candidate.maxTeammates) && candidate.maxTeammates >= 0 && candidate.maxTeammates <= 3
