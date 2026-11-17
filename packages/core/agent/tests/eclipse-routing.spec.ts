@@ -27,7 +27,7 @@ describe('Eclipse role routing', () => {
   it('preserves shipped routes in automatic mode or without settings', () => {
     expect(resolveEclipseRoleRoute(undefined, 'coordinator', fallback)).toEqual(fallback)
     expect(resolveEclipseRoleRoute({ ...profile, mode: 'automatic' }, 'planner', fallback)).toMatchObject({
-      provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('medium'),
+      provider: 'openai-codex', model: 'gpt-6.2-sol', reasoningEffort: ReasoningEffortId('medium'),
     })
     expect(resolveEclipseRoleRoute({ ...profile, mode: 'automatic' }, 'coordinator', fallback)).toEqual(fallback)
   })
@@ -73,8 +73,14 @@ describe('Eclipse role routing', () => {
       escalationSensitivity: 'adaptive',
     }
     const sol = resolveEclipseRoleRoute(profile, 'planner', fallback)
-    expect(sol.model).toBe('gpt-6.1-sol')
+    expect(sol.model).toBe('gpt-6.2-sol')
     expect(sol.reasoningEffort).toBe(ReasoningEffortId('medium'))
+    // Manual and hybrid pins continue to honor an explicitly selected older Sol.
+    expect(resolveEclipseRoleRoute({ ...profile, mode: 'manual' }, 'planner', fallback).model)
+      .toBe('gpt-6.1-sol')
+    expect(resolveEclipseRoleRoute({ mode: 'hybrid', planner: {
+      provider: 'openai-codex', model: 'gpt-6.2-sol', reasoningEffort: 'high',
+    } }, 'planner', fallback).model).toBe('gpt-6.2-sol')
     const luna = resolveEclipseRoleRoute(profile, 'coordinator', {
       provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
     })
