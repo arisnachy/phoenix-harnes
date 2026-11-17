@@ -2073,6 +2073,9 @@ export function apply(ctx: Context): void {
           kickoff:{type:'string',required:true},
           pick:{type:'string',required:true,description:'home o away: elección de Kira, no de algoritmo'},
           reason:{type:'string',required:true,description:'Explicar datos reales y contradicciones de roster, forma, lesiones y noticias para cada elección.'},
+          sourceUrls:{type:'array',description:'URLs HTTPS de artículos originales realmente leídos, idealmente dos editores independientes',items:{type:'string'}},
+          counterEvidence:{type:'string',description:'Argumento verificable a favor del adversario: por qué el pick puede perder.'},
+          criticalPending:{type:'array',description:'Riesgos decisivos que siguen sin resolver; [] solo tras revisión explícita de fuentes.',items:{type:'string'}},
         }}},
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
@@ -2081,7 +2084,8 @@ export function apply(ctx: Context): void {
       const report=await quoteKiraChosenTicket(args.legs as ModelChosenLeg[],fetch,Date.now())
       return JSON.stringify({...report,
         userSelectedByAI:true,approvedForBetting:false,
-        instruction:'Este es el ticket de selecciones decididas por Kira, no por un ranking de cuotas. Mantén visibles las tablas, explica razones de CADA pata y qué podría invalidarla. Si alguna no tiene cuota ESPN del mismo bookmaker, informa cuántas patas siguen pendientes, no completes con precio inventado ni otro bookmaker. El precio se confirma al presentarlo en la casa; no se ejecutó ninguna apuesta.'})
+        finalAnalysisOnly:report.finalReady,
+        instruction:'Kira: ticket final de ANÁLISIS solo si finalReady=true (5-6 patas futuras, dos URL editoriales independientes registradas por pata, refutación rival, riesgos críticos revisados y cuotas ESPN frescas de una sola casa). Las URL aportadas por Kira NO son validadas en su contenido por esta herramienta: abre y contrasta los originales antes de citarlas. Si finalReady=false muestra finalizationMissing, investiga sustitutos con sourceEscalation y vuelve a evaluar, sin inventar datos. Nunca declarar apuesta aceptada ni ganar seguro.'})
     },
     presentCall:()=>({card:'generic',title:'Kira · Cotizar selecciones elegidas tras la investigación',kind:'read' as const}),
   }))
