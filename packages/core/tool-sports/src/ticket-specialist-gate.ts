@@ -23,6 +23,12 @@ import {sameEspnTeam} from './sports-exact-espn-winner.ts'
 import {discoverMlbDay,researchMlbCase} from './mlb-evidence-research.ts'
 import {tennisSlate,investigateTennis,type TennisTour} from './tennis-evidence-research.ts'
 
+export type ComparativeTeam={name:string;recentResults:string[];
+  teamStats:Array<{name:string;value:string}>;
+  players:Array<{name:string;role:string;availability:string;
+    starterConfirmed:boolean;stats:Array<{name:string;value:string}>;
+    recent:Array<{name:string;value:string}>;
+    splits:Array<{name:string;value:string}>}>}
 export type SpecialistFixture={
   sport:string;league:string;eventId:string;date:string;
   home:string;away:string;kickoff:string
@@ -45,6 +51,8 @@ export type SpecialistGate={
     away:Array<{athlete:string;status:string;reportedAt:string|null}>}
   /** Rest measured from the researched NBA/WNBA fixture; not an inferred B2B. */
   restHours?:{home:number|null;away:number|null}
+  /** Actual bilateral roster/player statistics for Kira to read, never a score. */
+  teamComparison?:{home:ComparativeTeam;away:ComparativeTeam}
   /** Independent empirical draw-risk assessment, not proof of 1X2 odds. */
   soccerDrawAudit?:SoccerDrawAudit
   /** Official NHL gamecenter starter flags, never inferred from roster. */
@@ -142,6 +150,7 @@ export async function investigateTicketSpecialist(
   let injuryAudit:InjuryBackup|undefined
   let rosterMatchedInjuries:SpecialistGate['rosterMatchedInjuries']
   let restHours:SpecialistGate['restHours']
+  let teamComparison:SpecialistGate['teamComparison']
   let soccerDrawAudit:SoccerDrawAudit|undefined
   let nhlStarterAudit:NhlStarterProbe|undefined
   let nhlScratchAudit:NhlScratchProbe|undefined
@@ -167,6 +176,16 @@ export async function investigateTicketSpecialist(
         ||!closeTime(d.event.scheduledAt,game.kickoff))
         throw Error('NFL: identidad u horario del evento no coinciden')
       level=d.coverage.level
+      const comparative=(side:'home'|'away'):ComparativeTeam=>({
+        name:d.teams[side].name,
+        recentResults:d.teams[side].recent.map(x=>x.date+' '+x.opponent+
+          ' '+x.pts+'-'+x.allowed+' '+x.homeAway),
+        teamStats:d.teams[side].teamStats,
+        players:d.teams[side].roster.map(p=>({name:p.name,role:p.role,
+          availability:p.status,starterConfirmed:p.confirmedOffense||p.confirmedDefense,
+          stats:p.statistics,recent:p.lastGames,splits:[]})),
+      })
+      teamComparison={home:comparative('home'),away:comparative('away')}
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
       steps=['Rosters NFL '+d.coverage.verifiedPlayers+' jugadores',
         'Resultados recientes '+d.coverage.formGames+' observaciones',
@@ -200,6 +219,16 @@ export async function investigateTicketSpecialist(
         throw Error('NBA/WNBA: identidad u horario del evento no coinciden')
       level=d.coverage.level
       restHours={home:d.context.restHours.home,away:d.context.restHours.away}
+      const comparative=(side:'home'|'away'):ComparativeTeam=>({
+        name:d.teams[side].name,
+        recentResults:d.teams[side].lastGames.map(g=>g.date+' '+g.opponent+
+          ' '+g.pts+'-'+g.allowed+' '+g.location),
+        teamStats:d.teams[side].teamStats,
+        players:d.teams[side].roster.map(p=>({name:p.name,role:p.position,
+          availability:p.status,starterConfirmed:p.confirmedStarter,
+          stats:p.stats,recent:p.lastGames,splits:p.splits})),
+      })
+      teamComparison={home:comparative('home'),away:comparative('away')}
       endpointAudit=[
         ...d.sources.map(x=>({url:x.url,status:x.status,checkedAt:x.observedAt,
           detail:x.reason??'ESPN: respuesta y datos clasificados por la fuente'})),
@@ -329,6 +358,19 @@ export async function investigateTicketSpecialist(
         throw Error('NHL: informe de porteros pertenece a otro partido; datos descartados')
       level=d.opportunity.decision==='investigate'?'B':'C'
       teams=d.players.home.length>0&&d.players.away.length>0
+      const comparative=(side:'home'|'away'):ComparativeTeam=>({
+        name:side==='home'?game.home:game.away,
+        recentResults:(d.form[side]?.last10??[]).map(g=>g.date+' '+g.opponent+
+          ' '+g.goalsFor+'-'+g.goalsAgainst+' '+g.location+' '+g.outcome),
+        teamStats:Object.entries(d.officialShots[side]).map(([name,value])=>({
+          name,value:value===null?'no disponible':String(value)})),
+        players:d.players[side].map(p=>({name:p.name,role:p.role,
+          availability:'sin inactivos oficiales confirmados',
+          starterConfirmed:p.starterConfirmed,
+          stats:Object.entries(p.stats).map(([name,value])=>({name,value})),
+          recent:p.last5.map(g=>({name:g.date,value:g.summary})),splits:[]})),
+      })
+      teamComparison={home:comparative('home'),away:comparative('away')}
       nhlGoalieFormAudit={
         home:nhlGoalieEvidence(d.goalieCandidates.home,d.fixture.date),
         away:nhlGoalieEvidence(d.goalieCandidates.away,d.fixture.date),
@@ -592,6 +634,7 @@ export async function investigateTicketSpecialist(
       sourceChecks,checklist,...(injuryAudit?{injuryAudit}:{}),
       ...(rosterMatchedInjuries?{rosterMatchedInjuries}:{}),
       ...(restHours?{restHours}:{}),
+      ...(teamComparison?{teamComparison}:{}),
       ...(soccerDrawAudit?{soccerDrawAudit}:{}),
       ...(nhlStarterAudit?{nhlStarterAudit}:{}),
       ...(nhlScratchAudit?{nhlScratchAudit}:{}),
