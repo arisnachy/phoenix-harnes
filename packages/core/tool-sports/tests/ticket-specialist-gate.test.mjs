@@ -1,7 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {classifySpecialistCoverage,investigateTicketSpecialist,
-  investigateTicketSpecialists,resolveNhlTicketMatch} from '../src/ticket-specialist-gate.ts'
+  investigateTicketSpecialists,resolveNhlTicketMatch,visibleMlbBvpDuels} from '../src/ticket-specialist-gate.ts'
 
 const fixture=(sport,league='nfl',eventId='123')=>({
   sport,league,eventId,date:'2026-11-08',
@@ -153,4 +153,20 @@ test('timed out NBA dossier recovers fresh bilateral injury evidence independent
   assert.equal(result.approvedForBetting,false)
   assert.match(result.pendingSteps.join(' '),/Límite de investigación/)
   assert.ok(result.verifiedSteps.some(x=>/ESPN reporte de lesiones/.test(x)))
+})
+
+test('MLB BvP comparisons distinguish measured AB from candidate pitcher encounters',()=>{
+  const build=(batterId,atBats)=>({batterId,batter:'Batter '+batterId,
+    pitcherId:101,pitcher:'Starter',pitcherRole:'probable-starter',
+    batterSide:'R',pitcherHand:'L',observations:atBats?
+      ['BvP registrado: AB '+atBats+', H 2, K 1, HR 0']:[],
+    bvp:atBats?{atBats:String(atBats),hits:'2'}:null,missing:[],
+    assessment:'requires-review'})
+  const rows=visibleMlbBvpDuels([build(10,5),build(20,0)],
+    new Set([10]),new Set([20]))
+  assert.equal(rows.length,2)
+  assert.equal(rows[0].status,'observed')
+  assert.match(rows[0].detail,/AB 5/)
+  assert.equal(rows[1].status,'candidate')
+  assert.match(rows[1].detail,/sin turnos BvP/)
 })
