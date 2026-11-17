@@ -14,6 +14,14 @@ test('sports ticket compares evidence, validates live ESPN quotes, and ends once
   assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/no permite garantizar un ganador/u)
 })
 
+test('Kira seeks independent missing facts and compares original rosters instead of weighted scores',()=>{
+  assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/sports_chat_autonomous_sources/u)
+  assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/sports_chat_ticket_dossier_recheck/u)
+  assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/modelComparisonBriefs/u)
+  assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/estadísticas originales por jugador/u)
+  assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/puntuaciones artificiales|PUNTUACIONES ARTIFICIALES/u)
+})
+
 test('independent discovery and decisive NBA/NFL pregame checks are mandatory guidance',()=>{
   assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/NUNCA el límite de la búsqueda/u)
   assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/por iniciativa propia fuentes públicas/u)
