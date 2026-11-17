@@ -88,7 +88,7 @@ const playerText=(p:NonNullable<SpecialistGate['teamComparison']>['home']['playe
   text(p.name+' · '+p.role+' · '+(p.starterConfirmed?'titular identificado · ':'')+
     p.stats.slice(0,3).map(s=>s.name+': '+s.value).join('; ')+
     (p.recent.length?' · reciente: '+p.recent.slice(0,2).map(s=>s.name+': '+s.value).join('; '):''),390)
-const state=(ok:boolean):Row['state']=>ok?'verified':'pending'
+const state=(ok:boolean):'verified'|'pending'=>ok?'verified':'pending'
 const pair=(label:string,home:unknown,away:unknown,verified=true):Row=>({
   label:text(label,155),home:text(home),away:text(away),state:state(verified),
 })
@@ -261,7 +261,7 @@ export async function progressiveSportsStage(
       for(const g of context.headToHead.slice(0,5))rows.push(pair(
         'Antecedente directo '+g.date.slice(0,10),
         g.home+' '+text(g.homeScore),g.away+' '+text(g.awayScore),true))
-      const records=(games:typeof context.home.lastGames,location:'home'|'away')=>{
+      const records=(games:Array<Parameters<typeof formatGame>[0]>,location:'home'|'away')=>{
         const subset=games.filter(g=>g.homeAway===location)
         return subset.length?String(subset.filter(g=>g.scored>g.allowed).length)+
           ' victorias / '+String(subset.length)+' juegos':'Sin muestra'
