@@ -4,6 +4,7 @@
 import { evidenceTicket,matchesDailyEspnPrice,type TicketDiscoveryAudit,type TicketPreselectReviewer,type TicketQuotePreselector } from './evidence-ticket.ts'
 import {dailyResearchFetcher} from './sports-daily-preload.ts'
 import {auditTicketDecisions,readDecisionPolicy,ticketIsReadyForReview,type TicketDecisionAudit} from './sports-ticket-decision.ts'
+import {assessPregamePreselectionRisk} from './ticket-preselection-risk.ts'
 import {auditTicketMarketRisk,quoteSideNoVig,type TicketMarketRisk} from './ticket-risk-audit.ts'
 import {investigateTicketSpecialists,type SpecialistGate} from './ticket-specialist-gate.ts'
 import {summarizeTicketSpecialist,needsSelectedSpecialistRecheck} from './ticket-specialist-summary.ts'
@@ -131,12 +132,15 @@ export async function evidencePricedTicket(
     // Six small batches per wave prevent mass concurrent ESPN timeouts.
     // Results already collected survive a subsequent provider failure.
     const preflightStarted=Date.now()
+    const requestedBudget=Number(env.PHOENIX_SPORTS_PREFLIGHT_LEG_MS)
+    const legBudget=Number.isInteger(requestedBudget)&&requestedBudget>=6_000&&
+      requestedBudget<=20_000?requestedBudget:13_000
     for(let i=0;i<batches.length;i+=6){
       // Return the already reviewed evidence before the outer 65-s gate.
-      if(i>0&&Date.now()-preflightStarted>=50_000)break
+      if(i>0&&Date.now()-preflightStarted>=55_000)break
       const wave=await Promise.allSettled(batches.slice(i,i+6).map(batch=>
         boundedPriced(specialistResearcher(batch,researchFetcher,
-          now,env,[],8_000),11_000)))
+          now,env,[],legBudget),Math.min(24_000,legBudget+7_000))))
       attempts.push(...wave)
     }
     const checks=attempts.flatMap(a=>a.status==='fulfilled'?a.value:[])
@@ -158,12 +162,12 @@ export async function evidencePricedTicket(
       const absences=(chosen?.injuries??[]).filter(x=>
         /out|doubtful|questionable|day.to.day|inactive/iu.test(x.status))
         .slice(0,3).map(x=>x.athlete+' ('+x.status+')')
-      // Failed source acquisition is an instruction to run the backup, NOT
-      // evidence that the team is weaker. Only a verified identity conflict
-      // excludes a fixture. Do not lower a sports pick merely because an
-      // HTTP source returned an incomplete roster or injury report.
-      const priority=drawConflict?-0.3:check.checklist?.complete===true?0.30:
-        check.status==='researched'?0.15:0
+      // Score only injury observations reconciled to the current roster and
+      // published before this evaluation; unverified injuries remain warnings.
+      // Do not convert a feed timeout into a healthy team or auto-exclude a pick.
+      const risk=assessPregamePreselectionRisk(fixture,check,now)
+      const priority=(check.checklist?.complete===true?0.30:
+        check.status==='researched'?0.15:0)+risk.priority
       const reason='Especialista '+check.status+
         '; críticos sin cerrar '+pending+
         '; lesiones '+(injury?.status??'sin fuente')+
@@ -171,6 +175,7 @@ export async function evidencePricedTicket(
         (check.soccerDrawAudit?'; empate '+check.soccerDrawAudit.tier+
           ', fuente '+check.soccerDrawAudit.status:'')+
         (drawConflict?'; descartar 1X2 simple: riesgo de empate observado':'')+
+        (risk.reasons.length?'; riesgo previo: '+risk.reasons.join(' | '):'')+
         (conflicts?'; conflicto de identidad':'')
       return[{eventId:fixture.eventId,excluded:conflicts||drawConflict,
         priority,reason}]
@@ -354,6 +359,15 @@ export async function evidencePricedTicket(
     approvedForBetting:false as const,checkedAt:new Date(now).toISOString(),
     }
   })
+  // Use the same point-in-time caution score both before and after quotation.
+  // A severe documented injury/fatigue cluster cannot be renamed a final bet
+  // merely because an ESPN bookmaker price became available.
+  const pregameRiskAt=(index:number):number|null=>{
+    const event=research.events[index],check=specialistChecks[index]
+    return event&&check?assessPregamePreselectionRisk({
+      sport:event.sport,pick:event.pick,kickoff:event.kickoff,
+    },check,now).priority:null
+  }
   const trackingEvents=research.events.map(e=>({
     eventId:e.eventId,sport:e.sport,league:e.league,date:day,
     pick:e.pick,kickoff:e.kickoff,
@@ -392,6 +406,7 @@ export async function evidencePricedTicket(
     criticalPending:specialistChecks[index]?.checklist?.criticalPending??
       ['Expediente especializado no disponible'],
     modelStatus:modelAudit[index]?.status??'unavailable',
+    pregameRiskPriority:pregameRiskAt(index),
   })),decisionPolicy)
   const quoteAccess=[
     keylessEnabled(env)?'OddsHarvester habilitado (sujeto al acceso del sitio)':
@@ -740,6 +755,7 @@ export async function evidencePricedTicket(
       criticalPending:specialistChecks[index]?.checklist?.criticalPending??
         ['Expediente especializado no disponible'],
       modelStatus:modelAudit[index]?.status??'unavailable',
+    pregameRiskPriority:pregameRiskAt(index),
     }
   }),decisionPolicy)
   const conditionalLegs=postQuoteAudit.legs.filter(leg=>
@@ -979,6 +995,7 @@ export async function evidencePricedTicket(
     criticalPending:specialistChecks[index]?.checklist?.criticalPending??
       ['Expediente especializado no disponible'],
     modelStatus:modelAudit[index]?.status??'unavailable',
+    pregameRiskPriority:pregameRiskAt(index),
     exploratoryProbabilityPercent:exploratoryForIndex(index),
   })),decisionPolicy)
   const elevatedMarketRisk=marketRisk.missingQuotes>0||
