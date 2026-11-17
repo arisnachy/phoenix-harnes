@@ -53,6 +53,7 @@ export function SportsResearchTable({value}:{value:SportsResearchTableProps}):Re
                 'Pendiente'}</small>}
             {r.url&&<a href={r.url} rel="noopener noreferrer" target="_blank">
               Ver fuente</a>}
+            {r.note&&<small className={css.sourceState}>{r.note}</small>}
           </th>
           <td>{r.homeImage&&<img className={css.avatar} src={r.homeImage}
             alt="" loading="lazy"/>}{r.home}</td>
