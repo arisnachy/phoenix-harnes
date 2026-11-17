@@ -37,7 +37,7 @@ import { lookupExactEspnWinner } from './sports-exact-espn-winner.ts'
 import { explainOddsEligibility,eligibleOddsForResearch } from './espn-odds-observation-gate.ts'
 import { ensureSportsSourcesStarted,hydrateSportsSources,managedSportsInstallStatus,sportsSourcesHealth } from './sports-source-health.ts'
 import { investigateEventDeep } from './sports-deep-context.ts'
-import { discoverAutonomousSportsSources } from './sports-autonomous-source-discovery.ts'
+import { discoverAutonomousSportsSources,planIndependentSportsFallback } from './sports-autonomous-source-discovery.ts'
 import {progressiveSportsStage,type ResearchStage} from './sports-progressive-chat.ts'
 import {quoteKiraChosenTicket,type ModelChosenLeg} from './sports-model-picked-ticket.ts'
 import { auditUniversalMatchup } from './universal-matchup-factors.ts'
@@ -1096,16 +1096,22 @@ export function apply(ctx: Context): void {
       home:{ type:'string',required:true,description:'Equipo local real del partido previamente verificado.' },
       away:{ type:'string',required:true,description:'Equipo visitante real del partido previamente verificado.' },
       question:{ type:'string',required:true,description:'La pregunta precisa que Kira ha identificado: jugador, lesión, alineación, entrenamiento, táctica, portero, QB, etc.' },
+      league:{type:'string',description:'Liga exacta de ESPN: nhl, nba, wnba, mlb, mens-college-basketball o liga de fútbol.'},
+      date:{type:'string',description:'Fecha del partido en Santo Domingo YYYY-MM-DD.'},
     },
     output:{ schema:{ type:'string' },render:(_a,v)=>[{type:'text' as const,text:v}] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const result=await discoverAutonomousSportsSources({
         home:args.home,away:args.away},args.question,fetch,Date.now())
-      return JSON.stringify({ ...result,
+      const escalationPlan=planIndependentSportsFallback({
+        home:args.home,away:args.away,league:args.league??'',
+        date:args.date??'',question:args.question,
+      })
+      return JSON.stringify({ ...result,escalationPlan,
         nextStep:result.articles.length?
-          'Kira: identifica qué artículo puede resolver tu pregunta y abre la publicación original mediante las herramientas generales de búsqueda/navegación si están disponibles. Contrasta con liga/club oficial u otra fuente; una noticia indexada NO confirma bajas ni titulares. Si no puedes abrirla, deja el dato como pendiente.':
-          'Kira: reformula la pregunta o cambia a fuentes deportivas oficiales mediante las herramientas disponibles; no asumas que ausencia de noticia equivale a equipo sano.',
+          'Kira: OBLIGATORIO abrir el artículo original con navegación/búsqueda web disponible; contrasta liga/club oficial y una segunda fuente, fecha, atleta y equipo. Si no se puede abrir, reporta pendiente y continúa la búsqueda con escalationPlan. Un índice NO prueba disponibilidad.':
+          'Kira: GDELT no resolvió. OBLIGATORIO consultar las fuentes independientes en escalationPlan usando navegador o búsqueda general, reformular por jugador y por club y comprobar la publicación original. Si la fuente bloquea acceso, probar la alternativa; al final documentar la limitación real, sin inventar.' ,
         canSearchOtherPublishers:true,notRestrictedToUserUrls:true,
         sourceVerification:'indexed-only' })
     },
