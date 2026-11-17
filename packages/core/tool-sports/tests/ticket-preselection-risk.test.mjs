@@ -96,3 +96,16 @@ test('four fresh ESPN injury alerts still trigger review when roster endpoint ti
   assert.equal(risk.needsRecheck,true)
   assert.match(risk.reasons.join(' '),/ALERTA PROVISIONAL/u)
 })
+
+test('duplicate reports for one athlete are counted once; later available update supersedes out',()=>{
+  const risk=assessPregamePreselectionRisk(fixture(),check({
+    rosterMatchedInjuries:{home:[],away:[
+      row('A','Out','2026-11-16T14:00:00Z'),
+      row('A','Out','2026-11-16T14:30:00Z'),
+      row('A','Available','2026-11-16T15:00:00Z'),
+      row('B','Out','2026-11-16T14:00:00Z'),
+    ]},
+  }),now)
+  assert.ok(risk.priority>-.5)
+  assert.ok(risk.priority<0)
+})
