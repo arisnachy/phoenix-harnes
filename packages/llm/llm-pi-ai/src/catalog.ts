@@ -148,6 +148,7 @@ export const CHAT_TEMPLATE_VARS = Object.keys(CHAT_TEMPLATE_VAR_GATE) as readonl
 
 const DEEPSEEK_CANONICAL_FLASH_ID = 'deepseek-flash'
 const PHOENIX_CODEX_VISION_IDS = new Set([
+  'gpt-6.2-sol',
   'gpt-6.1-sol',
   'gpt-6-luna',
 ])
@@ -163,7 +164,7 @@ const DEEPSEEK_FLASH_VISION_IDS = new Set([
  * Return vendor-documented input modalities Phoenix must preserve even when a
  * transient upstream catalog under-claims them.
  *
- * GPT-6.1 Sol and GPT-6 Luna are the two concrete routes behind Phoenix Auto;
+ * GPT-6.2 Sol and GPT-6 Luna are the two concrete routes behind Phoenix Auto;
  * both accept image input. Treating either as text-only makes the synthetic
  * router reject images before the request ever reaches Codex.
  *
