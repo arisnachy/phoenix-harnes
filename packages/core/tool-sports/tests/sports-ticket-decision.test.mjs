@@ -114,3 +114,19 @@ test('missing exploratory model cannot be treated as evidence of a cheap favorit
   assert.match(audit.legs[0].reasons.join(' '),/FAVORITO DE CUOTA EXIGENTE/)
   assert.equal(audit.legs[0].exploratoryVsBreakEvenGapPct,null)
 })
+
+test('Nov 16 Ravens regression: missing starting QB blocks a definitive NFL leg',()=>{
+  const audit=auditTicketDecisions([
+    sample('LAC-BAL',.78,{sport:'football',selection:'Baltimore Ravens',
+      quotedPrice:1.30,specialistStatus:'researched',checklistComplete:false,
+      criticalPending:['QB titular no confirmado en lista de inactivos']}),
+    sample('PHI-BKN',.70,{sport:'basketball'}),
+  ],policy)
+  const ravens=audit.legs[0]
+  assert.equal(ravens.verdict,'hold')
+  assert.equal(ravens.alternativeReviewRequired,true)
+  assert.match(ravens.reasons.join(' '),/quarterback titular sin confirmación/u)
+  assert.deepEqual(audit.heldEvents,['LAC-BAL'])
+  assert.ok(audit.scenarios.every(s=>!s.eventIds.includes('LAC-BAL')))
+  assert.equal(audit.approvedForBetting,false)
+})
