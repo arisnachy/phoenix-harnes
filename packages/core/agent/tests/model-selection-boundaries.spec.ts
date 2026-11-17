@@ -83,7 +83,7 @@ describe('continuation admission from replayed routing evidence', () => {
       r.events.push(user(request), answer(1,
         'Plan: Comprobaré si Phoenix Game Studio está disponible en esta sesión '
         + 'y te diré el resultado con la evidencia visible.'))
-      expect(await r.request()).toMatchObject({ model: 'gpt-6.1-sol' })
+      expect(await r.request()).toMatchObject({ model: 'gpt-6.2-sol' })
 
       // A real assistant/message can omit source.model. Do not mistake a plan
       // for successful completion or require another user message to resume.
@@ -159,7 +159,7 @@ describe('continuation admission from replayed routing evidence', () => {
       r.events.push(user('Fix router.ts'))
       for (const step of [1, 1, 2, 3, 4, 5, 6]) { r.events.push(answer(step, 'I will inspect the file next.')); await r.stop() }
       expect(r.messages).toHaveLength(4)
-      expect(await r.request(7)).toMatchObject({ model: 'gpt-6.1-sol' })
+      expect(await r.request(7)).toMatchObject({ model: 'gpt-6.2-sol' })
     } finally { await r.close() }
   })
 
@@ -170,7 +170,7 @@ describe('continuation admission from replayed routing evidence', () => {
       await r.stop(); await r.stop()
       r.events.push(answer(2, 'Done')); await r.stop()
       expect(r.messages).toHaveLength(2)
-      expect(await r.request(3)).toMatchObject({ model: 'gpt-6.1-sol' })
+      expect(await r.request(3)).toMatchObject({ model: 'gpt-6.2-sol' })
     } finally { await r.close() }
   })
 
@@ -186,7 +186,7 @@ describe('continuation admission from replayed routing evidence', () => {
 })
 
 describe('selected routes and assembly ownership', () => {
-  it.each(['gpt-5.6-sol', 'gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-luna'])('uses a same-family conversational worker for %s', async (model) => {
+  it.each(['gpt-5.6-sol', 'gpt-6.1-sol', 'gpt-6.2-sol', 'gpt-6-astra', 'gpt-6-luna'])('uses a same-family conversational worker for %s', async (model) => {
     const r = await router(model)
     try { r.events.push(user('hola')); expect(await r.request()).toMatchObject({ model: model.startsWith('gpt-5.6') ? 'gpt-5.6-luna' : 'gpt-6-luna', reasoningEffort: 'low' }) } finally { await r.close() }
   })
