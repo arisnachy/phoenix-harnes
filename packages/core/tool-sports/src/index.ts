@@ -37,6 +37,7 @@ import { lookupExactEspnWinner } from './sports-exact-espn-winner.ts'
 import { explainOddsEligibility,eligibleOddsForResearch } from './espn-odds-observation-gate.ts'
 import { ensureSportsSourcesStarted,hydrateSportsSources,managedSportsInstallStatus,sportsSourcesHealth } from './sports-source-health.ts'
 import { investigateEventDeep } from './sports-deep-context.ts'
+import { discoverAutonomousSportsSources } from './sports-autonomous-source-discovery.ts'
 import { auditUniversalMatchup } from './universal-matchup-factors.ts'
 import { estimateEvidenceForecast } from './sports-forecast.ts'
 import { extendedEspnRoutes,readExtendedEspn,type ExtendedEspnMode } from './espn-extra-intelligence.ts'
@@ -94,11 +95,11 @@ const boundedDailyTool=<T>(operation:Promise<T>,ms:number):Promise<T>=>{
 }
 const GUIDANCE = [
   SPORTS_OPEN_RESEARCH_GUIDANCE,
-  'RECUPERACIÓN DIRIGIDA: tras sports_chat_ticket_evidence_priced_auto, solo si un dato crítico quedó técnicamente incompleto, usa las researchFixtures EXACTAS en sports_chat_ticket_dossier_recheck una sola vez. No repitas el auto-ticket, el shortlist ni el calendario. Conserva la evidencia y los precios válidos; distingue fallo técnico de dato aún no publicado. Si el dato sigue ausente, documenta fuente, hora y limitación y termina. ',
+  'INVESTIGACIÓN AUTÓNOMA DIRIGIDA: tras sports_chat_ticket_evidence_priced_auto, Kira puede usar sports_chat_ticket_dossier_recheck para recopilar rosters y estadísticas originales de cualquier evento FUTURO verificado en researchFixtures, modelComparisonBriefs o sports_chat_games, incluso sustitutos que ella eligió. Si falta un dato crucial, formula su propia pregunta sobre jugadores, lesiones, entrenadores o táctica y llama sports_chat_autonomous_sources para descubrir medios públicos fuera del catálogo. Si dispone de navegación general, abre y contrasta la publicación con el club/liga oficial; los titulares indexados no prueban el hecho. No repitas la búsqueda de toda la cartelera, conserva las fuentes y no inventes lo que siga sin publicarse. ',
   'AUDITORÍA DE PRECIO: usa 100/cuota y no-vig para describir el precio y los riesgos de mercado, nunca para ordenar equipos como si fueran predicciones. Si existe un modelo calibrado para el mercado exacto, compara su intervalo fuera de muestra con el precio; de lo contrario deja EV y ventaja como no validados. Registra porteros, lesiones, descanso y hora de consulta; no uses el resultado posterior para justificar la selección. ',
   'ESTADO NBA POR PARTIDO: el motor de ticket DEBE exponer researchEvidenceState, researchDetail y pendingEvidence a partir de los pasos reales de specialistChecks; la primera inspección rápida no equivale al expediente final. Cuando existan roster, forma o fuentes consultadas, indicar INVESTIGACIÓN PARCIAL y los datos específicos aún pendientes. No repetir «Sin expediente especializado, lesiones y quintetos verificados para esta pata» en cada juego: «sin expediente» solo si realmente no se obtuvo evidencia; lesiones ESPN verificadas como reporte no equivalen a quinteto confirmado ni a parte oficial definitivo. Si el especialista agota tiempo, informar el timeout concreto sin ocultar datos anteriores. ',
   'CUOTAS UTILIZABLES PARA EL TICKET: acepta una observación ESPN solo si observedAt tiene menos de 15 minutos, el evento sigue futuro y coinciden ID, equipos, inicio, casa, mercado, selección y precio. updatedAt de la casa puede faltar; observedAt indica cuándo PHOENIX leyó ESPN y no confirma aceptación ni vigencia final. No promociones precios antiguos, anónimos, de predictor ni de otro evento. Muestra la hora y fuente, y aclara que la aceptación se confirma manualmente. ',
-  'CARTELERA Y CIERRE: la investigación automática recorre el alcance de ligas admitido y documenta la cobertura disponible. No amplíes a todo internet ni repitas llamadas amplias. Un timeout conserva sus hallazgos como parcial; utiliza las researchFixtures para una sola recuperación dirigida si corresponde. Después presenta el resultado y las limitaciones, sin volver a iniciar el mismo ticket. ',
+  'CARTELERA Y CIERRE: el barrido automático recorre las ligas admitidas; esa lista NO limita la investigación posterior de Kira. Permitir consultas independientes y dirigidas sobre cualquier partido futuro verificado, sus jugadores y fuentes editoriales relevantes. No repetir indiscriminadamente la cartelera ni evadir límites de proveedores. Si falla una consulta, conservar hallazgos, buscar fuente alternativa autorizada y declarar incertidumbres. ',
   'COBERTURA DEL TICKET: sports_chat_ticket_evidence_priced_auto descubre y filtra calendarios ESPN para los deportes solicitados; si no hay filtro, cubre los deportes y ligas activos que el motor admita. No antepongas sports_chat_daily_scan ni exploradores de ligas a una solicitud de ticket. Investiga los candidatos necesarios para cubrir las patas pedidas y revisa reemplazos cuando un partido no supere la investigación o el precio ESPN. Informa qué ligas y fuentes se consultaron y qué quedó inaccesible; no confundas ausencia de datos con dato favorable. ',
   'RUTA ÚNICA DEL TICKET: para generar un ticket usa una vez sports_chat_ticket_evidence_priced_auto: investiga candidatos, compara evidencia deportiva y después verifica precios ESPN. El shortlist diario y las búsquedas de mercados son herramientas independientes, no pasos previos o posteriores de la misma solicitud. Mantén una misma casa en el boleto cotizado. Si no hay suficientes precios frescos de esa casa, conserva la investigación y termina como borrador incompleto; no rellenes con otra fuente. ',
 
@@ -1085,6 +1086,28 @@ export function apply(ctx: Context): void {
         instruction:'Usa rosterPortraits con headshots verificados por ESPN cuando existen; para una tarjeta visual con fotos llama sports_chat_espn_explore(view=team,teamId=ID oficial). Los enlaces de ESPN RD son referencias, no pruebas de lectura. Identifica noticias sobre los dos equipos y coteja bajas con fuentes oficiales; una plantilla NO confirma titulares ni ausencia de lesiones. No atribuyas rendimiento que la fuente no aporta. Contrasta cuotas por separado.' })
     },
     presentCall:()=>({ card:'generic',title:'Investigar noticias, estadísticas y bajas de un evento',kind:'read' as const }),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_autonomous_sources',
+    description:'Kira decide de forma autónoma qué noticia o dato falta (lesiones, titulares, jugadores, viajes, entrenadores, táctica) y busca publicaciones públicas de CUALQUIER medio indexado, más allá de ESPN y las páginas sugeridas. Devuelve enlaces y fechas para contrastar; no interpreta titulares como hechos verificados ni inventa información.',
+    parameters:{
+      home:{ type:'string',required:true,description:'Equipo local real del partido previamente verificado.' },
+      away:{ type:'string',required:true,description:'Equipo visitante real del partido previamente verificado.' },
+      question:{ type:'string',required:true,description:'La pregunta precisa que Kira ha identificado: jugador, lesión, alineación, entrenamiento, táctica, portero, QB, etc.' },
+    },
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{type:'text' as const,text:v}] },
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const result=await discoverAutonomousSportsSources({
+        home:args.home,away:args.away},args.question,fetch,Date.now())
+      return JSON.stringify({ ...result,
+        nextStep:result.articles.length?
+          'Kira: identifica qué artículo puede resolver tu pregunta y abre la publicación original mediante las herramientas generales de búsqueda/navegación si están disponibles. Contrasta con liga/club oficial u otra fuente; una noticia indexada NO confirma bajas ni titulares. Si no puedes abrirla, deja el dato como pendiente.':
+          'Kira: reformula la pregunta o cambia a fuentes deportivas oficiales mediante las herramientas disponibles; no asumas que ausencia de noticia equivale a equipo sano.',
+        canSearchOtherPublishers:true,notRestrictedToUserUrls:true,
+        sourceVerification:'indexed-only' })
+    },
+    presentCall:()=>({card:'generic',title:'Kira · Buscar otras fuentes deportivas',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_matchup_factors',
@@ -2099,9 +2122,9 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_dossier_recheck',
-    description:'RECUPERACIÓN DIRIGIDA DEL TICKET: revisa solo partidos con expediente parcial usando IDs, rivales y hora ESPN ya verificados. No repite el barrido diario ni vuelve a pedir cuotas. Consulta de nuevo lesiones NBA y porteros NHL con plazo suficiente, conserva fuente, checklist y ausencias sin inventar alineaciones.',
+    description:'RECUPERACIÓN DIRIGIDA O INVESTIGACIÓN AUTÓNOMA DE ALTERNATIVAS: Kira solicita datos originales de cualquier partido futuro verificado con ID, ambos equipos y horario ESPN, incluso si no estaba en el primer ticket. Devuelve rosters bilaterales, estadísticas por jugador, calendario, lesiones, evidencia y fuentes sin puntuar equipos. No vuelve a explorar toda la cartelera ni fabrica cuotas.',
     parameters:{
-      fixtures:{ type:'array',required:true,description:'Solo 1-6 fixtures EXACTOS de researchFixtures del ticket anterior con pasos pendientes. Nunca inventar equipos ni IDs.',
+      fixtures:{ type:'array',required:true,description:'De 1 a 6 fixtures VERIFICADOS mediante researchFixtures, modelComparisonBriefs o sports_chat_games; se permiten reemplazos elegidos por Kira, no partidos ni IDs inventados.',
         items:{ type:'object',additionalProperties:false,properties:{
           sport:{ type:'string',required:true,description:'basketball o hockey, entre otras disciplinas soportadas.' },
           league:{ type:'string',required:true,description:'Liga ESPN real: nba, nhl, etc.' },
@@ -2161,6 +2184,10 @@ export function apply(ctx: Context): void {
           pendingSteps:check.pendingSteps.slice(0,18),
           checklist:check.checklist??null,
           injuryAudit:check.injuryAudit??null,
+          rosterMatchedInjuries:check.rosterMatchedInjuries??null,
+          restHours:check.restHours??null,
+          teamComparison:check.teamComparison??null,
+          newsFindings:check.newsFindings??[],
           nhlStarterAudit:check.nhlStarterAudit??null,
           playerHistoryAudit:check.playerHistoryAudit??null,
           endpointAudit:check.endpointAudit?.slice(0,28)??[],
@@ -2171,7 +2198,7 @@ export function apply(ctx: Context): void {
       return JSON.stringify({
         checkedAt:new Date(now).toISOString(),rechecked:reports.length,reports,
         priced:false,placed:false,approvedForBetting:false,
-        instruction:'Estos son expedientes especializados RECUPERADOS para las mismas patas, no nuevas cuotas ni un ticket duplicado. Contrastar con la selección anterior: si una baja/portero confirmado contradice al favorito, avisar y buscar sustitución. Si una alineación aún NO ha sido publicada, distinguir ausencia de publicación de fallo técnico y no afirmar que está verificada. No reejecutar toda la búsqueda del día.',
+        instruction:'Kira: estos son datos originales de ambos equipos y jugadores para comparar por tu cuenta, incluso para ALTERNATIVAS que tú descubriste con IDs ESPN válidos. No conviertas las estadísticas en puntos, penalizaciones ni fórmula para elegir. Si te falta noticia, jugador, estatus o informe, usa sports_chat_autonomous_sources con TU pregunta y contrasta el contenido de una fuente oficial o medio independiente. Diferencia roster, titularidad y lesión; no repitas el barrido del calendario ni inventes cuotas. Elige tú y razona cada pata.',
       })
     },
     presentCall:()=>({ card:'generic',title:'Recuperar datos pendientes de las patas del ticket',kind:'read' as const }),
