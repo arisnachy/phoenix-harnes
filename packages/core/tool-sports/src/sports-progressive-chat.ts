@@ -156,13 +156,12 @@ export async function progressiveSportsStage(
       const athletes=Math.min(46,Math.max(data.home.players.length,data.away.players.length))
       for(let i=0;i<athletes;i++){
         const home=data.home.players[i],away=data.away.players[i]
+        const homeImage=home?rosterPortrait(deep,fixture.home,home.name):undefined
+        const awayImage=away?rosterPortrait(deep,fixture.away,away.name):undefined
         rows.push({label:'Jugador '+String(i+1)+' · filas paralelas',
           home:home?playerText(home):'Sin jugador en esta fila',
           away:away?playerText(away):'Sin jugador en esta fila',
-          ...(home&&rosterPortrait(deep,fixture.home,home.name)?
-            {homeImage:rosterPortrait(deep,fixture.home,home.name)}:{}),
-          ...(away&&rosterPortrait(deep,fixture.away,away.name)?
-            {awayImage:rosterPortrait(deep,fixture.away,away.name)}:{}),
+          ...(homeImage?{homeImage}:{}),...(awayImage?{awayImage}:{}),
           state:'reported'})
       }
     }
