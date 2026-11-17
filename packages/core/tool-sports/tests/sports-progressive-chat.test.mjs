@@ -63,3 +63,14 @@ test('athlete rows expose original stats, verified starter state and home/away s
     'Home PTS: 24','Away PTS: 19','Game 1: 23 PTS'])
     assert.ok(value.includes(expected),'falta '+expected)
 })
+
+test('availability with missing primary data publishes a research escalation',async()=>{
+  const result=await progressiveSportsStage(fixture,'availability',
+    'confirm injury report and starting five',source,now,{})
+  assert.equal(result.stage,'availability')
+  assert.equal(result.uiBlock.component,'sports_research_table')
+  assert.ok(result.sourceEscalation)
+  assert.equal(result.sourceEscalation.mustOpenOriginals,true)
+  assert.ok(result.sourceEscalation.targets.some(x=>x.provider==='NBA oficial'))
+  assert.match(result.instruction,/sourceEscalation/)
+})
