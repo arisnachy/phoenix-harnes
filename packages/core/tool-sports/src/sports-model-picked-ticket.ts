@@ -1,0 +1,109 @@
+/** Kira makes the picks after research; ESPN only verifies their prices.
+ * Never let an odds ranking choose the winner or invent a fifth priced leg.
+ */
+import {getFeed,type MarketOutcome} from './sports.ts'
+import {lookupExactEspnWinner} from './sports-exact-espn-winner.ts'
+import {ticketLeagueOddsKey} from './evidence-priced-ticket.ts'
+export type ModelChosenLeg={
+  sport:string;league:string;eventId:string;date:string;
+  home:string;away:string;kickoff:string;pick:'home'|'away';reason:string
+}
+const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
+  .toLowerCase().replace(/[^a-z0-9]/gu,'')
+const valid=(leg:ModelChosenLeg,now:number)=>/^\d{1,18}$/u.test(leg.eventId)&&
+  /^\d{4}-\d{2}-\d{2}$/u.test(leg.date)&&
+  Number.isFinite(Date.parse(leg.kickoff))&&Date.parse(leg.kickoff)>now&&
+  ['home','away'].includes(leg.pick)&&leg.home.trim().length>2&&
+  leg.away.trim().length>2&&leg.reason.trim().length>=15
+const isObserved=(q:MarketOutcome,now:number)=>{
+  const observed=Date.parse(q.observedAt??'')
+  return typeof q.bookmaker==='string'&&q.bookmaker.trim().length>0&&
+    Number.isFinite(observed)&&observed<=now&&now-observed<=15*60_000&&
+    typeof q.price==='number'&&Number.isFinite(q.price)&&q.price>1&&
+    q.source?.startsWith('ESPN')===true
+}
+type ExactQuote=MarketOutcome
+/** Validate selected predictions against exact ESPN event/time/market records.
+ * @param chosen - Kira's explicit pregame reasons and source-backed fixtures.
+ * @param fetcher - Injected provider for deterministic tests.
+ * @param now - Quote observation moment.
+ * @returns A ticket draft or a properly priced same-bookmaker research ticket.
+ */
+export async function quoteKiraChosenTicket(chosen:readonly ModelChosenLeg[],
+  fetcher:typeof fetch=fetch,now=Date.now(),
+):Promise<{complete:boolean;priced:boolean;placed:false;bookmaker:string|null;
+  quotes:Array<{eventId:string;selection:string;price:number;
+    bookmaker:string;source:string;observedAt:string}>;
+  missing:string[];uiBlock:{component:'sports_ticket_card';version:1;props:{
+    title:string;subtitle:string;source:string;requestedLegs:number;
+    legs:Array<{event:string;selection:string;price:string;bookmaker:string;
+      market:string;sport:string;league:string;eventId:string;eventDate:string;
+      homeTeam:string;awayTeam:string;rationale:string;quoteStatus:'espn-observed'|'unpriced';
+      quoteSource:string;quoteObservedAt:string|null;displayStatus:'research-selection'}>;
+    combinedOdds:string;note:string}}}>{
+  if(chosen.length<1||chosen.length>6||
+    chosen.some(leg=>!valid(leg,now))||
+    new Set(chosen.map(leg=>leg.sport+'|'+leg.league+'|'+leg.eventId)).size!==chosen.length)
+    throw Error('Kira debe aportar 1-6 partidos futuros únicos y justificación propia verificable por pata')
+  const verified=await Promise.all(chosen.map(async leg=>{
+    const key=ticketLeagueOddsKey(leg,'dynamic')
+    if(!key)return [] as ExactQuote[]
+    try{
+      const result=await lookupExactEspnWinner({
+        sportKey:key,eventId:leg.eventId,date:leg.date,
+        home:leg.home,away:leg.away,kickoff:leg.kickoff,
+        ...(leg.sport==='soccer'?{espnLeague:leg.league}:{}),
+      },<T>(url:string)=>getFeed<T>(url,fetcher),now)
+      const selected=leg.pick==='home'?leg.home:leg.away
+      return result.quotes.filter(q=>
+        q.eventId===leg.eventId&&norm(q.home)===norm(leg.home)&&
+        norm(q.away)===norm(leg.away)&&norm(q.selection)===norm(selected)&&
+        (q.market==='h2h'||leg.sport==='soccer'&&
+          (q.market==='1x2'||q.market==='h2h'))&&isObserved(q,now))
+    }catch{return [] as ExactQuote[]}
+  }))
+  const byBook=new Map<string,number>()
+  for(const rows of verified)for(const book of new Set(rows.map(q=>q.bookmaker)))
+    byBook.set(book,(byBook.get(book)??0)+1)
+  // Deterministic alphabetical tie-break, NOT a ranking by odds or favorites.
+  const best=[...byBook.entries()].filter(([,count])=>count===chosen.length)
+    .sort(([a],[b])=>a.localeCompare(b))[0]?.[0]??null
+  const chosenQuotes=verified.map(rows=>rows.find(q=>q.bookmaker===best)??null)
+  const complete=best!==null&&chosenQuotes.every(q=>q!==null)
+  const priced=complete
+  const missing=chosen.flatMap((leg,i)=>chosenQuotes[i]?[ ]:
+    ['Sin cuota ESPN del mismo bookmaker para '+leg.away+' vs '+leg.home+
+      ' · selección '+(leg.pick==='home'?leg.home:leg.away)])
+  const legs=chosen.map((leg,i)=>{
+    const q=chosenQuotes[i],name=leg.pick==='home'?leg.home:leg.away
+    return{event:leg.away+' vs '+leg.home,selection:name,
+      price:q?String(q.price):'No disponible',bookmaker:q?.bookmaker??'Sin precio',
+      market:q?.market??(leg.sport==='soccer'?'1x2':'h2h'),
+      sport:leg.sport,league:leg.league,eventId:leg.eventId,eventDate:leg.date,
+      homeTeam:leg.home,awayTeam:leg.away,rationale:leg.reason.slice(0,475),
+      quoteStatus:q?'espn-observed' as const:'unpriced' as const,
+      quoteSource:q?.source??'ESPN sin oferta cotejada',
+      quoteObservedAt:q?.observedAt??null,
+      displayStatus:'research-selection' as const,
+    }
+  })
+  const product=complete?chosenQuotes.reduce((total,q)=>total*q!.price,1):null
+  const quotes=chosenQuotes.flatMap((q,i)=>q?[{eventId:chosen[i]!.eventId,
+    selection:q.selection,price:q.price,bookmaker:q.bookmaker,
+    source:q.source??'ESPN',observedAt:q.observedAt!}]:[])
+  return{complete,priced,placed:false,bookmaker:best,quotes,missing,
+    uiBlock:{component:'sports_ticket_card',version:1,props:{
+      title:'PHOENIX · Selecciones razonadas por Kira',
+      subtitle:complete?'Ticket cotizado · investigación del modelo':
+        'Investigación incompleta · cuotas de mismo operador pendientes',
+      source:'ESPN Site/Core · verificación exacta de cuotas por evento',
+      requestedLegs:chosen.length,legs,
+      combinedOdds:product===null?'No disponible':product.toFixed(3),
+      note:(complete?'BOLETO DE INVESTIGACIÓN, cuotas públicas cotejadas. ':
+        'TICKET INCOMPLETO. '+missing.join(' | ')+'. ')+
+        'Kira eligió tras comparar datos; esta función no ordena equipos, '+
+        'no evalúa probabilidades ni modifica los picks por el precio. '+
+        'ESPN observado no significa que el bookmaker haya aceptado la apuesta. '+
+        'No se realizó ninguna apuesta ni se garantiza ganar.',
+    }}}
+}
