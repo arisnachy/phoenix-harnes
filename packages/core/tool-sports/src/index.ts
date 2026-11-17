@@ -39,6 +39,7 @@ import { ensureSportsSourcesStarted,hydrateSportsSources,managedSportsInstallSta
 import { investigateEventDeep } from './sports-deep-context.ts'
 import { discoverAutonomousSportsSources } from './sports-autonomous-source-discovery.ts'
 import {progressiveSportsStage,type ResearchStage} from './sports-progressive-chat.ts'
+import {quoteKiraChosenTicket,type ModelChosenLeg} from './sports-model-picked-ticket.ts'
 import { auditUniversalMatchup } from './universal-matchup-factors.ts'
 import { estimateEvidenceForecast } from './sports-forecast.ts'
 import { extendedEspnRoutes,readExtendedEspn,type ExtendedEspnMode } from './espn-extra-intelligence.ts'
@@ -2049,6 +2050,34 @@ export function apply(ctx: Context): void {
         instruction:'PHOENIX renderiza tarjetas nativas. No confundir IDs del scraper con IDs ESPN sin reconciliar nombres/fecha/liga. La cuota refleja un precio observado, no una probabilidad propia ni garantía.' })
     },
     presentCall:()=>({ card:'generic',title:'Investigar cuotas multideporte sin API key',kind:'read' as const }),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_ticket_model_chosen',
+    description:'TICKET FINAL TRAS RAZONAMIENTO: Kira entrega las 5-6 selecciones que ELLA eligió después de ver tablas originales de ambos equipos. La herramienta NO elige favoritos, NO asigna pesos ni calcula probabilidades: busca para cada evento EXACTO las cuotas ESPN de ganador publicadas y solo forma combinada con la MISMA casa. Si falta una cuota, devuelve borrador incompleto y datos faltantes, nunca rellena patas.',
+    parameters:{
+      legs:{type:'array',required:true,
+        description:'1-6 decisiones expresas de Kira con ambos equipos oficiales, ID ESPN y explicación individual fundamentada en investigación; 5-6 para boleto diario.',
+        items:{type:'object',additionalProperties:false,properties:{
+          sport:{type:'string',required:true},
+          league:{type:'string',required:true},
+          eventId:{type:'string',required:true},
+          date:{type:'string',required:true},
+          home:{type:'string',required:true},
+          away:{type:'string',required:true},
+          kickoff:{type:'string',required:true},
+          pick:{type:'string',required:true,description:'home o away: elección de Kira, no de algoritmo'},
+          reason:{type:'string',required:true,description:'Explicar datos reales y contradicciones de roster, forma, lesiones y noticias para cada elección.'},
+        }}},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const report=await quoteKiraChosenTicket(args.legs as ModelChosenLeg[],fetch,Date.now())
+      return JSON.stringify({...report,
+        userSelectedByAI:true,approvedForBetting:false,
+        instruction:'Este es el ticket de selecciones decididas por Kira, no por un ranking de cuotas. Mantén visibles las tablas, explica razones de CADA pata y qué podría invalidarla. Si alguna no tiene cuota ESPN del mismo bookmaker, informa cuántas patas siguen pendientes, no completes con precio inventado ni otro bookmaker. El precio se confirma al presentarlo en la casa; no se ejecutó ninguna apuesta.'})
+    },
+    presentCall:()=>({card:'generic',title:'Kira · Cotizar selecciones elegidas tras la investigación',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_evidence_priced_auto',
