@@ -377,7 +377,9 @@ export async function evidencePricedTicket(
       home:fixture.home,away:fixture.away,kickoff:fixture.kickoff,
       provisionalPick:fixture.pick,provisionalFormRankIsNotSelection:true,
       specialistStatus:check?.status??'unavailable',
-      rosterAndAvailability:review,verifiedFacts:check?.verifiedSteps??[],
+      rosterAndAvailability:review,
+      teamComparison:check?.teamComparison??null,
+      verifiedFacts:check?.verifiedSteps??[],
       pendingFacts:check?.pendingSteps??[],
       checklist:check?.checklist?.steps??[],
       playerHistoryCoverage:check?.playerHistoryAudit??null,
@@ -437,6 +439,7 @@ export async function evidencePricedTicket(
   const preliminaryLegs=Array.isArray(research.card.props.legs)?research.card.props.legs:[]
   const researchCard:ChatBlock={...research.card,props:{...research.card.props,
     discoveryAudit:research.discoveryAudit,
+    modelComparisonBriefs,modelSelectionRequired:true,
     dataCounts:{eventsFound:research.verifiedEvents,quotedLegs:0,researchedLegs,
       candidateLegs:0,
       conditionalLegs:specialistChecks.filter(x=>x.checklist?.complete!==true).length,
@@ -1105,6 +1108,14 @@ export async function evidencePricedTicket(
   const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,modelAudit,marketRisk,decisionAudit,
     modelComparisonBriefs,modelSelectionRequired:true,
+    selectedBilateralDossiers:research.events.map((event,index)=>({
+      eventId:event.eventId,sport:event.sport,league:event.league,
+      selectedSide:event.pick,home:event.home,away:event.away,
+      teamComparison:specialistChecks[index]?.teamComparison??null,
+      qualitativeAvailability:modelReviewAt(index),
+      verifiedFacts:specialistChecks[index]?.verifiedSteps??[],
+      unresolvedFacts:specialistChecks[index]?.pendingSteps??[],
+    })),
     // Retain the five/six verified research fixtures when a quoted ticket
     // replaces the preliminary card; unpriced alternatives are NOT bets.
     dailyResearchBoard:research.card.props.dailyResearchBoard,
