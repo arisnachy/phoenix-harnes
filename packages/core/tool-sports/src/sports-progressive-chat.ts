@@ -198,6 +198,11 @@ export async function progressiveSportsStage(
       rows.push(pair('Porteros titulares oficiales NHL',
         probe?.homeGoalie??'Por confirmar',
         probe?.awayGoalie??'Por confirmar',probe?.state==='confirmed'))
+      const scratches=check?.nhlScratchAudit
+      rows.push(pair('NHL · scratches publicados (no alineación definitiva)',
+        scratches?.state==='observed'?String(scratches.home.length)+' registros':'No publicados',
+        scratches?.state==='observed'?String(scratches.away.length)+' registros':'No publicados',
+        scratches?.state==='observed'))
       const goalies=check?.nhlGoalieFormAudit
       for(let i=0;i<Math.min(3,Math.max(goalies?.home.length??0,
         goalies?.away.length??0));i++){
@@ -211,9 +216,21 @@ export async function progressiveSportsStage(
       }
     }
     if(fixture.sport==='baseball'){
-      rows.push(pair('MLB · abridor / bullpen',
-        'Consultar contexto y abridores probables MLB; titularidad aún por confirmar',
-        'Consultar contexto y abridores probables MLB; titularidad aún por confirmar',false))
+      const pitchers=(side:'home'|'away')=>check?.teamComparison?.[side].players
+        .filter(p=>/(?:pitcher|lanzador|abridor|relief|bullpen)/iu.test(p.role)||
+          ['SP','RP','P'].some(pos=>p.role.toUpperCase().split(/[^A-Z]+/u).includes(pos)))
+        .slice(0,6)??[]
+      const homePitchers=pitchers('home'),awayPitchers=pitchers('away')
+      rows.push(pair('MLB · lanzadores en roster (no abridores confirmados)',
+        homePitchers.length+' perfiles publicados',awayPitchers.length+' perfiles publicados',
+        Boolean(homePitchers.length&&awayPitchers.length)))
+      const describe=(p:typeof homePitchers[number]|undefined)=>p?
+        p.name+' · '+p.role+' · '+p.stats.slice(0,3).map(s=>s.name+': '+s.value).join('; '):
+        'Sin lanzador verificado'
+      for(let i=0;i<Math.min(6,Math.max(homePitchers.length,awayPitchers.length));i++)
+        rows.push(pair('MLB · lanzador '+String(i+1),
+          describe(homePitchers[i]),describe(awayPitchers[i]),false))
+      missing.push('MLB: cotejar los abridores probables y el bullpen en la etapa de contexto')
     }
     evidence={injuryAudit:injury??null,rosterMatchedInjuries:check?.rosterMatchedInjuries,
       goalie:check?.nhlStarterAudit??null,scratches:check?.nhlScratchAudit??null,
@@ -284,10 +301,19 @@ export async function progressiveSportsStage(
         away:text(duel.opponent),note:text(duel.source,340),
         state:duel.status==='observed'?'verified':'pending',
       })
-      for(const starter of context.mlb.probableStarters.slice(0,2))rows.push(pair(
-        'MLB abridor probable · '+starter.team,starter.name,
-        starter.outings.map(s=>s.date+' '+s.inningsPitched+' IP').join('; ')||
-          'Últimas aperturas sin verificar',true))
+      if(fixture.sport==='baseball'){
+        const homeStarter=context.mlb.probableStarters.find(p=>p.team==='home')
+        const awayStarter=context.mlb.probableStarters.find(p=>p.team==='away')
+        rows.push(pair('MLB · abridor probable (MLB StatsAPI)',
+          homeStarter?.name??'No publicado',awayStarter?.name??'No publicado',
+          Boolean(homeStarter&&awayStarter)))
+        const recent=(p:typeof homeStarter)=>p?.outings.length?
+          p.outings.slice(0,3).map(o=>o.date+' · '+o.inningsPitched+
+            ' IP · '+o.earnedRuns+' CL').join('; '):'Sin aperturas comprobadas'
+        rows.push(pair('MLB · últimas aperturas del pitcher probable',
+          recent(homeStarter),recent(awayStarter),
+          Boolean(homeStarter?.outings.length&&awayStarter?.outings.length)))
+      }
     }else rows=[pair('Histórico y comparativa por sede',
       'No publicado','No publicado',false)]
     evidence={matchup:context?{
@@ -338,13 +364,19 @@ export async function progressiveSportsStage(
       ...(fixture.sport==='soccer'?{espnLeague:fixture.league}:{}),
     },<T>(url:string)=>getFeed<T>(url,fetcher),now),20_000):null
     const quotes=result?.quotes??[]
-    rows=quotes.slice(0,28).map(q=>({
-      label:text(q.bookmaker+' · '+q.market,145),
-      home:norm(q.selection)===norm(fixture.home)?String(q.price):'—',
-      away:norm(q.selection)===norm(fixture.away)?String(q.price):'—',
-      note:text(q.selection+' · observado '+(q.observedAt??q.updatedAt),340),
-      state:'verified' as const,
-    }))
+    rows=quotes.slice(0,28).map(q=>{
+      const homeSelected=norm(q.selection)===norm(fixture.home)
+      const awaySelected=norm(q.selection)===norm(fixture.away)
+      const thirdOutcome=!homeSelected&&!awaySelected
+      return{
+        label:text(q.bookmaker+' · '+q.market+(thirdOutcome?' · Tercer resultado':''),145),
+        home:homeSelected?String(q.price):'—',
+        away:awaySelected?String(q.price):'—',
+        note:text(q.selection+' · '+(thirdOutcome?'cuota '+String(q.price)+' · ':'')+
+          'observado '+(q.observedAt??q.updatedAt),340),
+        state:'verified' as const,
+      }
+    })
     if(!rows.length)rows=[pair('Cuotas ESPN por casa', 'Sin precio verificado',
       'Sin precio verificado',false)]
     evidence={quotes,source:result?.source??'ESPN no observado',
