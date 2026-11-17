@@ -1,32 +1,33 @@
-# Agent Note: Sports ticket risk-aware selection and autonomous source discovery
+# Agent Note: Qualitative Kira-led sports ticket selection
 
 Status: proposed
 
 ## Problem
 
-The November 16, 2026 ticket selected Philadelphia, Houston, Golden State, Baltimore and Denver; only Philadelphia won. This is a five-event observation rather than a calibrated failure-rate estimate. The scorer historically ranked wins and point margins while recording reported injuries and key-player availability mostly as text. A successfully quoted selection could then appear as a final research ticket even with severe unresolved player or schedule risk. A late-breaking absence, an NFL quarterback change or back-to-back can invalidate an early favorite.
+The automatic sports-ticket workflow was letting historical form rankings and arbitrary numerical risk penalties preselect winners, then inviting Kira merely to narrate the output. The user instead wants Kira to compare complete rosters and genuine statistics of both teams and independently decide which fixture is defensible. A market price, loss margin, player absence or rest interval should not be assigned fabricated point weights to force the choice.
 
 ## Proposal
 
-Keep verified ESPN fixture identifiers and real matched odds while comparing a wider pool across supported leagues. The preselection specialist now exposes NBA/WNBA rest hours and injury records matched by current athlete IDs to each roster. A timestamp-aware, pure scorer discounts current reported absences against the opponent and the selected team's back-to-back, downranks unconfirmed NFL quarterbacks and NHL goalies, and never turns an unavailable feed into evidence of good health. A sufficiently severe combined screen also marks the final quoted leg as `hold` and requires replacement review. A model prompt instructs Kira to seek additional lawful, independent sources instead of treating user-supplied links or ESPN as a closed catalog.
+Use sports tools as evidence collectors and validators, not as the model that decides winners. The automatic ticket is explicitly a provisional quoted study and exposes `modelComparisonBriefs` across investigated alternatives, plus `selectedBilateralDossiers` for the initially displayed legs. NBA/NFL/NHL specialists now preserve both team rosters and player roles, available individual stats, recent games and team statistics in `teamComparison`. A pure qualitative injury review contains source-dated player reports, roster reconciliation provenance and rest in hours without constructing confidence values, penalties, composite scores or arbitrary risk tiers. Kira independently reviews both teams, seeks contradictory evidence and selects or replaces picks via `sports_chat_ticket_research` with the verified event IDs. Bookmaker quotes remain price observations independent of the team's merit.
 
 ## Alternatives considered
 
-**Select by lowest market price:** would overvalue short-priced favorites and mistake no-vig market share for an independent calibrated estimate. **Hard-exclude all missing injury reports:** would turn every provider outage into a zero-ticket result and falsely imply that missing data predicts a loss. **Hard-code player names:** would grow stale and fail for traded or newly important athletes. The adopted screen uses actual roster joins and issue-level timestamps; unknown risk is documented, not fabricated.
+**Assign numerical weights to every metric.** Rejected: no measured relationship was established between those hand-selected coefficients and future outcomes. **Take the lowest-odds favorites.** Rejected: market price is not an independent reason to believe the team will win. **Accept an automatic shortlist as final and make Kira only explain it.** Rejected: narration does not constitute a fresh, independent selection. **Pretend a model has already reviewed the picks.** Rejected: there must be an actual model step after the evidence is returned.
 
 ## Acceptance criteria
 
-- A selected NBA team with several current, roster-reconciled reported outs and materially worse rest is downranked versus less-compromised candidates.
-- A stale, future-dated, unmatched or undated injury record never enters the numerical risk score.
-- NFL unconfirmed QB remains `hold`; NHL unconfirmed goalie is flagged for a targeted recheck.
-- A severe risk finding cannot become a final reviewable ticket solely because matching bookmaker quotes were found; selected prices and source diagnostics remain visible.
-- Regression tests cover the old five-favorite failure mode, current-versus-stale injury observations, bilateral risk and final ticket status.
-- CI and a point-in-time historical replay using only news available before each kickoff must be reviewed before production claims.
+- Injury data is deduplicated by athlete and publication time, and each side is independently labeled as roster-reconciled or unverified league report.
+- Each investigated NBA, NFL and NHL event can supply bilateral player names, roles, published statistics, recent matches and lineup certainty when those sources actually published them.
+- Qualitative review returns no score, priority, weighted penalty, synthetic probability or expected value; numeric stats and commercial prices are retained as source facts.
+- The preselection reviewer applies a neutral legacy priority rather than adding scoring weights; it may still reject objectively contradictory fixture identity.
+- An automatic quote is presented as a provisional study pending Kira's own comparative reasoning; never mislabel it as a model-approved final ticket.
+- Tests confirm both teams' evidence, duplicate status updates, unavailable sources, NFL QB and NHL goalie uncertainties and non-numeric decision flags.
+- Targeted CI, build, replay and model/tool interaction are required before claiming production success.
 
 ## Risks
 
-Heuristic priority penalties are **not** empirically calibrated win probabilities or expected value. A reported `Out` is not a certified official inactive list, and unknown star impact is never guessed from a name. A lack of roster IDs prevents injury scoring rather than proving an athlete is active. A custom deployment budget may still limit preflight depth and require follow-up on unresolved cases. These changes improve prioritization and safety labeling but do not guarantee a winning five-to-six-leg parlay.
+The legacy slate collector still uses descriptive historical ordering to decide which events receive expensive research first. It is discovery prioritization and is **not** Kira's final selection, but it can bias which alternatives are available. Large rosters increase response volume, so the comparative packet remains bounded. A model can make wrong judgements despite rich data; no five-or-six-leg parlay can be promised to win. This change does not add a new external search permission or bookmaker account.
 
 ## Verification
 
-Added unit regressions in `ticket-preselection-risk.test.mjs` and `sports-ticket-decision.test.mjs`. Existing workflow checks must be inspected per changed file, since unrelated repository-wide lint, translation and documentation failures may coexist. No actual wager is submitted by these workflows.
+Added and updated `ticket-preselection-risk.test.mjs` and `sports-ticket-decision.test.mjs`. Inspect the actual CI and Kira's end-to-end final selection before merging to production.
