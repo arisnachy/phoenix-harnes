@@ -370,6 +370,11 @@ export async function evidencePricedTicket(
       sport:event.sport,pick:event.pick,kickoff:event.kickoff,
     },check,now):null
   }
+  const compactTeam=(team:NonNullable<SpecialistGate['teamComparison']>['home'])=>({
+    ...team,players:team.players.map(player=>({...player,
+      stats:player.stats.slice(0,7),recent:player.recent.slice(0,4),
+      splits:player.splits.slice(0,4)})),
+  })
   const modelComparisonBriefs=[...previewFixtures.values()].map(fixture=>{
     const check=preview.get(fixture.eventId)
     const review=check?assessPregamePreselectionRisk(fixture,check,now):null
@@ -378,7 +383,12 @@ export async function evidencePricedTicket(
       provisionalPick:fixture.pick,provisionalFormRankIsNotSelection:true,
       specialistStatus:check?.status??'unavailable',
       rosterAndAvailability:review,
-      teamComparison:check?.teamComparison??null,
+      teamComparison:check?.teamComparison?{
+        home:compactTeam(check.teamComparison.home),
+        away:compactTeam(check.teamComparison.away),
+      }:null,
+      evidenceDepth:'roster completo; métricas por jugador abreviadas en alternativas; ' +
+        'los seleccionados incluyen estadísticas originales completas',
       quotesObserved:research.preselectedQuotes.filter(q=>q.eventId===fixture.eventId)
         .map(q=>({bookmaker:q.bookmaker,selection:q.selection,
           market:q.market,price:q.price,observedAt:q.observedAt??null,
