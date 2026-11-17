@@ -160,8 +160,9 @@ describe('native sports chat presentation fallback',()=>{
     if(sixGames.some(card=>card===null)||parsedTicket===null)throw Error('Invalid fixture')
     const validatedGames=sixGames.filter((card):card is NonNullable<typeof card>=>card!==null)
     const observed=unrenderedSportsCards([...validatedGames,parsedTicket],['Ticket disponible en la tarjeta.'])
-    expect(observed).toHaveLength(6)
+    expect(observed).toHaveLength(7)
     expect(observed[0]).toEqual(parsedTicket)
+    expect(observed.filter(c=>c.component==='sports_game_card')).toHaveLength(6)
     expect(observed.filter(c=>c.component==='sports_ticket_card')).toHaveLength(1)
   })
   it('deduplicates validated assistant-rendered cards and repeated tool results',()=>{
