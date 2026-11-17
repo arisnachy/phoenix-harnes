@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {discoverAutonomousSportsSources} from '../src/sports-autonomous-source-discovery.ts'
+import {discoverAutonomousSportsSources,planIndependentSportsFallback} from '../src/sports-autonomous-source-discovery.ts'
 const now=Date.parse('2026-11-17T14:00:00Z')
 const teams={home:'Golden State Warriors',away:'New Orleans Pelicans'}
 const article=(title,url,seen='20261117T130000Z',domain='sports.example')=>
@@ -49,4 +49,27 @@ test('invalid question cannot inject external host or request expression',async(
   await assert.rejects(discoverAutonomousSportsSources(teams,'<>',
     async()=>{throw Error('should not request')},now),
   /pregunta deportiva/)
+})
+
+test('when ESPN lacks NHL goalie, plan official and independent external checks',()=>{
+  const result=planIndependentSportsFallback({
+    home:'Minnesota Wild',away:'Nashville Predators',league:'nhl',
+    date:'2026-11-17',question:'goalie starter confirmation',
+  })
+  assert.ok(result.queries.some(q=>q.includes('Minnesota Wild')))
+  assert.ok(result.queries.some(q=>q.includes('Nashville Predators')))
+  assert.ok(result.targets.some(x=>x.provider==='NHL oficial'))
+  assert.ok(result.targets.some(x=>x.url.includes('dailyfaceoff.com/starting-goalies/2026-11-17')))
+  assert.ok(result.targets.every(x=>x.status==='not-read'))
+  assert.equal(result.mustOpenOriginals,true)
+})
+test('when NCAA injury provider has no data, plan a separate league-official search',()=>{
+  const plan=planIndependentSportsFallback({
+    home:'Tennessee Volunteers',away:'Michigan State Spartans',
+    league:'mens-college-basketball',date:'2026-11-17',
+    question:'starting five injuries and lineup',
+  })
+  assert.ok(plan.targets.some(x=>x.provider==='NCAA oficial'))
+  assert.ok(plan.queries.length>=3)
+  assert.match(plan.evidenceRule,/NO certifican hechos/)
 })
