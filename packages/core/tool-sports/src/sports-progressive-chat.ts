@@ -86,7 +86,8 @@ const rosterPortrait=(deep:DeepSportsContext|null,team:string,player:string)=>
     ?.headshot??undefined
 const playerText=(p:NonNullable<SpecialistGate['teamComparison']>['home']['players'][number])=>
   text(p.name+' · '+p.role+' · '+(p.starterConfirmed?'titular identificado · ':'')+
-    p.stats.slice(0,4).map(s=>s.name+': '+s.value).join('; '),390)
+    p.stats.slice(0,3).map(s=>s.name+': '+s.value).join('; ')+
+    (p.recent.length?' · reciente: '+p.recent.slice(0,2).map(s=>s.name+': '+s.value).join('; '):''),390)
 const state=(ok:boolean):Row['state']=>ok?'verified':'pending'
 const pair=(label:string,home:unknown,away:unknown,verified=true):Row=>({
   label:text(label,155),home:text(home),away:text(away),state:state(verified),
@@ -180,8 +181,7 @@ export async function progressiveSportsStage(
       injury?.home.matched?'Equipo reconocido en reporte':'Sin conciliación completa',
       injury?.away.matched?'Equipo reconocido en reporte':'Sin conciliación completa',
       Boolean(injury?.home.matched&&injury?.away.matched))]
-    for(let i=0;i<Math.max(1,Math.min(30,home.length,away.length)||
-      Math.min(30,Math.max(home.length,away.length)));i++){
+    for(let i=0;i<Math.max(1,Math.min(30,Math.max(home.length,away.length)));i++){
       const h=home[i],a=away[i]
       rows.push(pair('Disponibilidad publicada '+String(i+1),
         h?h.athlete+' · '+h.status+' · '+(h.reportedAt??'sin fecha'):'Sin registro verificado',
@@ -193,8 +193,32 @@ export async function progressiveSportsStage(
         s.key+' '+s.title))??[]
     for(const step of starters.slice(0,9))rows.push(pair(
       'Estado: '+step.title,step.detail,step.detail,step.state==='verified'))
+    if(fixture.sport==='hockey'){
+      const probe=check?.nhlStarterAudit
+      rows.push(pair('Porteros titulares oficiales NHL',
+        probe?.homeGoalie??'Por confirmar',
+        probe?.awayGoalie??'Por confirmar',probe?.state==='confirmed'))
+      const goalies=check?.nhlGoalieFormAudit
+      for(let i=0;i<Math.min(3,Math.max(goalies?.home.length??0,
+        goalies?.away.length??0));i++){
+        const h=goalies?.home[i],a=goalies?.away[i]
+        const describe=(g:typeof h)=>g?g.name+' · temporada SV% '+
+          (g.seasonSavePct===null?'no publicado':String(g.seasonSavePct))+
+          ' · últimos registros SV% '+(g.recentSavePct===null?
+            'sin muestra':String(g.recentSavePct)):'Sin registro'
+        rows.push(pair('NHL · candidato a portero '+String(i+1),
+          describe(h),describe(a),false))
+      }
+    }
+    if(fixture.sport==='baseball'){
+      rows.push(pair('MLB · abridor / bullpen',
+        'Consultar contexto y abridores probables MLB; titularidad aún por confirmar',
+        'Consultar contexto y abridores probables MLB; titularidad aún por confirmar',false))
+    }
     evidence={injuryAudit:injury??null,rosterMatchedInjuries:check?.rosterMatchedInjuries,
       goalie:check?.nhlStarterAudit??null,scratches:check?.nhlScratchAudit??null,
+      goalieForm:check?.nhlGoalieFormAudit??null,
+      skaterStats:check?.nhlSkaterImpactAudit??null,
       checklist:check?.checklist??null}
     missing=check?.pendingSteps??['Titulares y bajas sin comprobación especializada']
     note='Roster no es lista de titulares. Questionable y probable NO significan '+ 
@@ -237,10 +261,29 @@ export async function progressiveSportsStage(
       for(const g of context.headToHead.slice(0,5))rows.push(pair(
         'Antecedente directo '+g.date.slice(0,10),
         g.home+' '+text(g.homeScore),g.away+' '+text(g.awayScore),true))
+      const records=(games:typeof context.home.lastGames,location:'home'|'away')=>{
+        const subset=games.filter(g=>g.homeAway===location)
+        return subset.length?String(subset.filter(g=>g.scored>g.allowed).length)+
+          ' victorias / '+String(subset.length)+' juegos':'Sin muestra'
+      }
+      rows.push(pair('Histórico reciente jugando como LOCAL',
+        records(context.home.lastGames,'home'),
+        records(context.away.lastGames,'home'),
+        Boolean(context.home.lastGames.length&&context.away.lastGames.length)))
+      rows.push(pair('Histórico reciente jugando como VISITANTE',
+        records(context.home.lastGames,'away'),
+        records(context.away.lastGames,'away'),
+        Boolean(context.home.lastGames.length&&context.away.lastGames.length)))
       for(let i=0;i<Math.min(6,Math.max(context.home.lastGames.length,
         context.away.lastGames.length));i++)rows.push(pair('Resultado reciente '+String(i+1),
         context.home.lastGames[i]?formatGame(context.home.lastGames[i]):'Sin registro',
         context.away.lastGames[i]?formatGame(context.away.lastGames[i]):'Sin registro',true))
+      for(const duel of (check?.playerMatchups??[]).slice(0,8))rows.push({
+        label:'Cruce jugador-rival · '+(duel.status==='observed'?'histórico':'posible'),
+        home:text(duel.athlete+' · '+duel.detail,380),
+        away:text(duel.opponent),note:text(duel.source,340),
+        state:duel.status==='observed'?'verified':'pending',
+      })
       for(const starter of context.mlb.probableStarters.slice(0,2))rows.push(pair(
         'MLB abridor probable · '+starter.team,starter.name,
         starter.outings.map(s=>s.date+' '+s.inningsPitched+' IP').join('; ')||
@@ -251,7 +294,8 @@ export async function progressiveSportsStage(
       home:context.home,away:context.away,headToHead:context.headToHead,
       stadium:context.stadium,weather:context.weather,mlb:context.mlb,
       coverage:context.coverage,limitations:context.limitations,
-    }:null,checklist:check?.checklist??null}
+    }:null,playerMatchups:check?.playerMatchups??null,
+      checklist:check?.checklist??null}
     missing=context?.limitations??['Históricos y sede no recuperados']
     source='ESPN históricos · Open-Meteo · MLB oficial cuando corresponda'
     note='Balance local/visitante, antecedentes y clima son datos contextuales, NO '+ 
