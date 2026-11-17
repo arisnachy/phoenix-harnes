@@ -397,6 +397,7 @@ export async function evidencePricedTicket(
       pendingFacts:check?.pendingSteps??[],
       checklist:check?.checklist?.steps??[],
       playerHistoryCoverage:check?.playerHistoryAudit??null,
+      newsFindings:check?.newsFindings??[],
       sourceChecks:check?.sourceChecks?.slice(0,5)??[],
     }
   }).slice(0,24)
@@ -1126,6 +1127,7 @@ export async function evidencePricedTicket(
       eventId:event.eventId,sport:event.sport,league:event.league,
       selectedSide:event.pick,home:event.home,away:event.away,
       teamComparison:specialistChecks[index]?.teamComparison??null,
+      newsFindings:specialistChecks[index]?.newsFindings??[],
       qualitativeAvailability:modelReviewAt(index),
       verifiedFacts:specialistChecks[index]?.verifiedSteps??[],
       unresolvedFacts:specialistChecks[index]?.pendingSteps??[],
