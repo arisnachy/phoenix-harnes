@@ -67,6 +67,36 @@ beforeEach(() => {
 })
 
 describe('PiAiAdapter provider routing', () => {
+  it('generates with a true 4K local window despite the SDK fixed 4096-token reserve', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: {
+        'phoenix-local': {
+          api: 'openai-completions',
+          baseURL: `${server.url}/v1`,
+          models: [{ id: 'phoenix-local', contextWindow: 4096, maxTokens: 768 }],
+        },
+      },
+    })
+    expect((await ctx.llm.resolveModelInfo('phoenix-local', 'phoenix-local')).context?.contextWindow).toBe(4096)
+    const result = await assemble(ctx, {
+      provider: 'phoenix-local',
+      model: 'phoenix-local',
+      maxTokens: 768,
+      system: 'Verbose local harness instructions. '.repeat(4000),
+      messages: [createUserMessage({
+        content: [{ type: 'text', text: 'Responde hola en una frase.' }],
+        source: { kind: 'user' },
+      })],
+      tools: [],
+    })
+    expect(server.requests).toHaveLength(1)
+    expect(server.requests[0]).toMatchObject({ model: 'phoenix-local', max_tokens: 768 })
+    expect(result.finish.kind).not.toBe('error')
+  })
+
   it('refreshes and filters the advertised catalog without removing dispatchable models', async () => {
     let providers: Record<string, LlmPiAi.PiAiProviderProfile> = { deepseek: {} }
     const refreshModels = vi.fn(async (provider: string): Promise<readonly string[]> => {
