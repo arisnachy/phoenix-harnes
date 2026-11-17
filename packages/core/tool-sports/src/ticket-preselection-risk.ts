@@ -30,7 +30,7 @@ const weighted=(rows:readonly Injury[],now:number,kickoff:number):number=>{
   for(const row of rows){
     if(!validPregame(row,now,kickoff))continue
     const at=Date.parse(row.reportedAt!)
-    const key=row.athlete.normalize('NFD').replace(/[\\u0300-\\u036f]/gu,'')
+    const key=row.athlete.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
       .trim().toLowerCase()
     const previous=latest.get(key)
     if(previous&&previous.at>at)continue
