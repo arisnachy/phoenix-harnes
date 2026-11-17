@@ -27,6 +27,7 @@
  */
 
 import { createModels, getSupportedThinkingLevels } from '@earendil-works/pi-ai'
+import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy'
 import { openAIResponsesApi } from '@earendil-works/pi-ai/api/openai-responses.lazy'
 import type {
   Api,
@@ -71,7 +72,7 @@ import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { CODEX_PROVIDER } from './codex-live-catalog.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
 import { applyMondayCodexMembrane, normalizeCodexToolSchemas, recoverRejectedCodexFunctionSchema, scopeCodexToolsForPaint, normalizeOpenAiFunctionToolPayload, surfaceRejectedCodexSchemaEvent, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
-import { fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, toPiContext } from './context.ts'
+import { fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, resolvePhoenixLocalMaxOutput, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 import { isNonCodexRecoveryModel } from './provider-recovery.ts'
 
@@ -81,6 +82,13 @@ interface PiAiSnapshot {
   profiles: ReadonlyMap<string, ResolvedPiAiProviderProfile>
   /** Providers for exactly those profiles; never mutated once published. */
   models: Models
+}
+
+/** Request-time capabilities of the model selected in the local Host. */
+export interface PhoenixLocalModelMetadata {
+  selectedModelId: string
+  contextWindow: number
+  maxTokens: number
 }
 
 /** Constructor options for {@link PiAiAdapter}: the two resolution hooks the plugin owns. */
@@ -120,6 +128,8 @@ export interface PiAiAdapterOptions {
    * fixed thinking-level vocabulary.
    */
   reasoningForModel?: (provider: string, model: string) => LlmModelReasoningInfo | undefined
+  /** Resolve the live selection for the built-in loopback route. */
+  resolveLocalModel?: (profile: ResolvedPiAiProviderProfile, signal?: AbortSignal) => Promise<PhoenixLocalModelMetadata | undefined>
   /** Resolve the optional durable attachment service at request time. */
   resolveAttachments?: () => AttachmentStore | undefined
   /**
@@ -361,12 +371,23 @@ export class PiAiAdapter extends LlmAdapter {
   override async resolveModel(
     provider: string,
     model: string,
-    _signal?: AbortSignal,
+    signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
     if (provider === 'nvidia') await this.config.refreshModels?.(provider)
     const selected = this.config.preferredModel?.(provider, model, false) ?? model
     const snapshot = await this.snapshotForModel(provider, selected)
-    return this.modelInfo(snapshot, provider, selected)
+    const localModel = await this.localModelFor(snapshot, provider, selected, signal)
+    return this.modelInfo(snapshot, provider, selected, undefined, localModel)
+  }
+
+  private localModelFor(
+    snapshot: PiAiSnapshot,
+    provider: string,
+    model: string,
+    signal?: AbortSignal,
+  ): Promise<PhoenixLocalModelMetadata | undefined> | undefined {
+    if (provider !== 'phoenix-local' || model !== 'phoenix-local') return undefined
+    return this.config.resolveLocalModel?.(this.profileOf(snapshot, provider), signal)
   }
 
   private modelInfo(
@@ -374,19 +395,20 @@ export class PiAiAdapter extends LlmAdapter {
     provider: string,
     model: string,
     liveReasoning = this.config.reasoningForModel?.(provider, model),
+    localModel?: PhoenixLocalModelMetadata,
   ): LlmResolvedModelInfo {
     const profile = this.profileOf(snapshot, provider)
     const resolvedModel = this.modelOf(snapshot, provider, model)
     const defaultLevel = describableReasoningLevel(resolvedModel, profile.reasoning)
     // Only a cap the deployment configured is a request default; the
     // catalog's `maxTokens` sizes the model and stops there.
-    const configuredMaxTokens = profile.configuredMaxTokens.get(model)
+    const configuredMaxTokens = localModel?.maxTokens ?? profile.configuredMaxTokens.get(model)
     return {
       provider,
       id: model,
       name: resolvedModel.name,
       inputModalities: [...resolvedModel.input],
-      context: { contextWindow: resolvedModel.contextWindow },
+      context: { contextWindow: localModel?.contextWindow ?? resolvedModel.contextWindow },
       ...configuredMaxTokens === undefined ? {} : { defaultMaxTokens: configuredMaxTokens },
       ...liveReasoning === undefined
         ? reasoningInfo(resolvedModel, defaultLevel)
@@ -399,14 +421,17 @@ export class PiAiAdapter extends LlmAdapter {
     }
   }
 
-  override async prepareCall(provider: string, model: string, _signal?: AbortSignal): Promise<PreparedAdapterCall> {
+  override async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall> {
     if (provider === 'nvidia') await this.config.refreshModels?.(provider)
     const selected = this.config.preferredModel?.(provider, model, false) ?? model
     const snapshot = await this.snapshotForModel(provider, selected)
     const liveReasoning = this.config.reasoningForModel?.(provider, selected)
+    const localModel = await this.localModelFor(snapshot, provider, selected, signal)
     return {
-      model: this.modelInfo(snapshot, provider, selected, liveReasoning),
-      stream: options => this.streamWithSnapshot({ ...options, model: selected }, snapshot, liveReasoning),
+      model: this.modelInfo(snapshot, provider, selected, liveReasoning, localModel),
+      stream: options => this.streamWithSnapshot(
+        { ...options, model: selected }, snapshot, liveReasoning, false, false, localModel ?? null,
+      ),
     }
   }
 
@@ -421,6 +446,7 @@ export class PiAiAdapter extends LlmAdapter {
     liveReasoning: LlmModelReasoningInfo | undefined,
     recoveredSchema = false,
     recoveredModel = false,
+    preparedLocalModel?: PhoenixLocalModelMetadata | null,
   ): AsyncIterable<StreamChunk> {
     if (options.stop !== undefined) {
       throw new LlmError('llm-pi-ai does not support GenerateOptions.stop', 'UNSUPPORTED_OPTION')
@@ -447,7 +473,14 @@ export class PiAiAdapter extends LlmAdapter {
     // mid-request builds a separate snapshot, so this request finishes under
     // the one it started with and the next call picks up the new one.
     const profile = this.profileOf(snapshot, options.provider)
-    const model = this.modelOf(snapshot, options.provider, options.model)
+    const descriptor = this.modelOf(snapshot, options.provider, options.model)
+    const localModelLookup = preparedLocalModel === undefined
+      ? this.localModelFor(snapshot, options.provider, options.model, options.signal)
+      : undefined
+    const localModel = localModelLookup === undefined ? preparedLocalModel : await localModelLookup
+    const model = localModel == null
+      ? descriptor
+      : { ...descriptor, contextWindow: localModel.contextWindow, maxTokens: localModel.maxTokens }
     const requestedReasoning = options.reasoningEffort ?? profile.reasoning
     let reasoning: ModelThinkingLevel | undefined
     let codexWireReasoningEffort: string | undefined
@@ -518,8 +551,11 @@ export class PiAiAdapter extends LlmAdapter {
     let emittedChunk = false
 
     try {
-      const desiredMaxOutput = options.maxTokens ?? model.maxTokens
-      const fitted = options.provider === 'phoenix-local'
+      const localCompletions = options.provider === 'phoenix-local' && wireModel.api === 'openai-completions'
+      const desiredMaxOutput = localCompletions
+        ? Math.min(options.maxTokens ?? model.maxTokens, model.maxTokens)
+        : options.maxTokens ?? model.maxTokens
+      const fitted = localCompletions
         ? fitPhoenixLocalTextTurn(options, model.contextWindow, desiredMaxOutput)
         : fitGenerateOptionsToContext(options, model.contextWindow, desiredMaxOutput)
       if (options.provider === 'phoenix-local' && process.env.PHOENIX_TOKEN_AUDIT === '1') {
@@ -545,14 +581,9 @@ export class PiAiAdapter extends LlmAdapter {
       if (fitted.estimatedTokens > fitted.inputBudgetTokens) {
         throw new LlmError(
           options.provider === 'phoenix-local'
-            ? fitted.inputBudgetTokens <= 1
-              ? `Phoenix Local tiene una ventana declarada de ${model.contextWindow} tokens, insuficiente para este adaptador: pi-ai reserva 4096 tokens más espacio para responder y seguridad, y el presupuesto de entrada se reduce a 1. `
-                + `La solicitud aún requiere aproximadamente ${fitted.estimatedTokens} tokens. `
-                + 'No es un error de GPT-6 Luna. Si pretendías usar Luna, selecciona explícitamente OpenAI Codex / GPT-6 Luna y verifica que la ruta no cambie a Phoenix Local. '
-                + 'Para conversaciones locales pequeñas, configura PHOENIX_LOCAL_CONTEXT_TOKENS=16384 solo si el equipo dispone de suficiente memoria y reinicia el Host de PHOENIX; esto no hace caber tareas grandes en el modelo local.'
-              : `Phoenix Local no puede procesar ${fitted.estimatedTokens} tokens con un presupuesto seguro de ${fitted.inputBudgetTokens} (ventana ${model.contextWindow}). `
-                + 'No se eliminarán instrucciones ni resultados de herramientas activos para ocultar el desbordamiento. '
-                + 'Continúa la tarea compleja con el modelo Codex seleccionado, o reduce deliberadamente el alcance para un modelo local; no basta con repetir la misma petición.'
+            ? `Phoenix Local: la solicitud requiere aproximadamente ${fitted.estimatedTokens} tokens de entrada. `
+              + `El modelo seleccionado admite ${fitted.inputBudgetTokens} tokens de entrada para este turno (ventana ${model.contextWindow}). `
+              + 'Reduce el contenido del turno o elige un modelo con una ventana mayor.'
             : `pi-ai request for "${model.id}" still needs ~${fitted.estimatedTokens} input tokens after context fitting; `
               + `the safe input budget is ${fitted.inputBudgetTokens} tokens`,
           CONTEXT_WINDOW_EXCEEDED_CODE,
@@ -622,8 +653,8 @@ export class PiAiAdapter extends LlmAdapter {
           }
           : {},
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
-        ...options.provider === 'phoenix-local'
-          ? { maxTokens: options.maxTokens ?? model.maxTokens }
+        ...localCompletions
+          ? { maxTokens: resolvePhoenixLocalMaxOutput(model.contextWindow, desiredMaxOutput) }
           : options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
         signal: watchdog.signal,
@@ -631,6 +662,7 @@ export class PiAiAdapter extends LlmAdapter {
         // Harness-owned and therefore win collisions.
         headers: {
           ...requestHeaders(profile.provider, profile.headers),
+          ...localModel == null ? {} : { 'x-phoenix-local-model-id': localModel.selectedModelId },
           // Only Phoenix Local gets one native Ollama length continuation.
           // Keep explicit short caps (e.g. 64 tokens) authoritative; agent
           // defaults at model capability are eligible too.
@@ -639,12 +671,15 @@ export class PiAiAdapter extends LlmAdapter {
             ? { 'x-phoenix-local-auto-continue': '1' } : {},
         },
       }
-      const events = platformKeyFallback
-        // The collection dispatches the codex route to the Codex wire no
-        // matter what a model object says, so the fallback calls the platform
-        // Responses implementation directly.
-        ? openAIResponsesApi().streamSimple(wireModel, providerContext, streamOptions)
-        : snapshot.models.streamSimple(wireModel, providerContext, streamOptions)
+      // Phoenix has already reserved context using the actual local model window.
+      // The simple API applies an additional fixed 4096-token reserve.
+      const events = localCompletions
+        ? openAICompletionsApi().stream(wireModel, providerContext, streamOptions)
+        : platformKeyFallback
+          // The collection dispatches Codex routes to the Codex wire, so
+          // platform credentials use the Responses implementation directly.
+          ? openAIResponsesApi().streamSimple(wireModel, providerContext, streamOptions)
+          : snapshot.models.streamSimple(wireModel, providerContext, streamOptions)
       const iterator = toStreamChunks(
         requiresFunctionSchemaProjection ? surfaceRejectedCodexSchemaEvent(events) : events,
         model.contextWindow,
