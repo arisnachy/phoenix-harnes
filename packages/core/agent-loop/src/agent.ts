@@ -775,6 +775,25 @@ export class ReactLoopAgent implements Agent {
       ...contextWindow === undefined ? {} : { contextWindow },
     }
     const previousContext = session.requestContext()
+    if (process.env.PHOENIX_TOKEN_AUDIT === '1'
+      && (previousContext?.provider !== requestContext.provider
+        || previousContext.model !== requestContext.model)) {
+      // Trace provider transitions without logging prompts or credentials.
+      // A Codex -> Local transition is not inferred from separate sessions.
+      console.info('[PHOENIX MODEL ROUTE] ' + JSON.stringify({
+        turn,
+        step,
+        previousProvider: previousContext?.provider ?? null,
+        previousModel: previousContext?.model ?? null,
+        configuredProvider: this.options.provider ?? null,
+        configuredModel: this.options.model ?? null,
+        requestedProvider: requestContext.provider,
+        requestedModel: requestContext.model,
+        contextWindow: requestContext.contextWindow ?? null,
+        providerChanged: previousContext !== undefined
+          && previousContext.provider !== requestContext.provider,
+      }))
+    }
     if (previousContext?.provider !== requestContext.provider
       || previousContext.model !== requestContext.model
       || previousContext.contextWindow !== requestContext.contextWindow) {
