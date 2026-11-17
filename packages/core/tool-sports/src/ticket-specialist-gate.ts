@@ -292,6 +292,17 @@ export async function investigateTicketSpecialist(
         ||!closeTime(d.opportunity.scheduledAt,game.kickoff))
         throw Error('Fútbol: identidad u horario del evento no coinciden')
       level=d.coverage.level
+      const comparativeSoccer=(side:'home'|'away'):ComparativeTeam=>({
+        name:d.teams[side].name,
+        recentResults:d.teams[side].recent.map(g=>g.date+' '+g.opponent+
+          ' '+g.scored+'-'+g.allowed+' '+g.homeAway),
+        teamStats:[{name:'récord publicado',value:d.teams[side].record.join('; ')}],
+        players:d.teams[side].roster.map(p=>({name:p.name,role:p.position,
+          dataStatus:'plantilla publicada; lesiones en informe aparte',
+          starterConfirmed:p.confirmedStarter,
+          stats:p.facts.map(f=>({name:f.label,value:f.value})),recent:[],splits:[]})),
+      })
+      teamComparison={home:comparativeSoccer('home'),away:comparativeSoccer('away')}
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
       steps=['Jugadores disponibles '+d.coverage.players,
         'Resultados recientes '+d.coverage.recentGames,
@@ -468,6 +479,23 @@ export async function investigateTicketSpecialist(
       if(!match)throw Error('MLB: sin correspondencia oficial de ambos equipos y fecha')
       const d=await researchMlbCase(game.date,match.gamePk,fetcher,now,env,quotes)
       level=d.opportunity.state==='investigate'?'B':'C'
+      const comparativeMlb=(side:'home'|'away'):ComparativeTeam=>({
+        name:match[side].name,
+        recentResults:(d.teamForm[side]?.lastResults??[]).map(g=>g.date+' '+
+          g.opponentId+' '+g.scored+'-'+g.allowed+' '+g.side),
+        teamStats:d.seasonRecord[side]?[{name:'season wins',value:String(d.seasonRecord[side]!.wins)},
+          {name:'season losses',value:String(d.seasonRecord[side]!.losses)}]:[],
+        players:d.rosters[side].map(p=>({name:p.name,role:p.role+' '+p.position,
+          dataStatus:p.evidence+'; lesiones y alineación por confirmar',
+          starterConfirmed:p.lineupConfirmed,
+          stats:Object.entries(p.season).map(([name,value])=>({name,value})),
+          recent:[...Object.entries(p.lastFive).map(([name,value])=>({name,value})),
+            ...p.recentStarts.slice(0,3).map(g=>({name:g.date+' start',
+              value:g.innings+' IP; '+g.pitches+' pitches'})),
+            ...p.reliefUsage72h.slice(0,3).map(g=>({name:g.date+' bullpen',
+              value:g.innings+' IP; '+g.pitches+' pitches'}))],splits:[]})),
+      })
+      teamComparison={home:comparativeMlb('home'),away:comparativeMlb('away')}
       teams=d.rosters.home.length>0&&d.rosters.away.length>0
       steps=['Abridores '+Number(d.starters.home!==null&&d.starters.away!==null)+'/1 pareja',
         'Rosters '+(d.rosters.home.length+d.rosters.away.length),
@@ -503,6 +531,19 @@ export async function investigateTicketSpecialist(
       if(!match)throw Error('Tenis: sin encuentro oficial equivalente')
       const d=await investigateTennis(tour,game.date,match.matchId,fetcher,now,env,quotes)
       level=d.coverage.level
+      const comparativeTennis=(index:0|1):ComparativeTeam=>{
+        const player=d.players[index]
+        return{name:player.player.name,
+          recentResults:player.lastMatches.map(g=>g.date+' '+g.opponent+' '+g.result),
+          teamStats:[{name:'ranking',value:String(player.player.ranking??'no verificado')},
+            {name:'superficie',value:match.surface??'no verificada'}],
+          players:[{name:player.player.name,role:'singles',
+            dataStatus:player.profileAvailable?'perfil observado':'perfil incompleto',
+            starterConfirmed:false,stats:player.statistics,recent:player.lastMatches.map(g=>({
+              name:g.date,value:g.opponent+' '+g.result})),splits:[]}],
+        }
+      }
+      teamComparison={home:comparativeTennis(0),away:comparativeTennis(1)}
       teams=d.players.every(x=>x.profileAvailable)
       steps=['Superficie verificada '+String(d.coverage.surfaceObserved),
         'Rankings verificados '+d.coverage.rankCount+'/2',
