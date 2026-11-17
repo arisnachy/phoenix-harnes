@@ -84,7 +84,7 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
       input.exploratoryProbabilityPercent<=100?
         input.exploratoryProbabilityPercent:null
     const quarterbackUnconfirmed=input.sport==='football'&&
-      input.criticalPending.some(step=>/\\bqb\\b|quarterback|mariscal/iu.test(step))
+      input.criticalPending.some(step=>/\bqb\b|quarterback|mariscal/iu.test(step))
     const goalieUnconfirmed=input.sport==='hockey'&&
       input.criticalPending.some(step=>/portero|goalie/iu.test(step))
     const qualitativeReview=input.pregameReviewRequired===true||
