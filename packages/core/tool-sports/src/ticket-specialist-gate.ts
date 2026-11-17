@@ -53,6 +53,9 @@ export type SpecialistGate={
   restHours?:{home:number|null;away:number|null}
   /** Actual bilateral roster/player statistics for Kira to read, never a score. */
   teamComparison?:{home:ComparativeTeam;away:ComparativeTeam}
+  /** Published/indexed headlines; none is verification of the article body. */
+  newsFindings?:Array<{title:string;publisher:string;publishedAt:string|null;
+    status:'reported-headline'|'indexed-headline-only'}>
   /** Independent empirical draw-risk assessment, not proof of 1X2 odds. */
   soccerDrawAudit?:SoccerDrawAudit
   /** Official NHL gamecenter starter flags, never inferred from roster. */
@@ -151,6 +154,7 @@ export async function investigateTicketSpecialist(
   let rosterMatchedInjuries:SpecialistGate['rosterMatchedInjuries']
   let restHours:SpecialistGate['restHours']
   let teamComparison:SpecialistGate['teamComparison']
+  let newsFindings:SpecialistGate['newsFindings']
   let soccerDrawAudit:SoccerDrawAudit|undefined
   let nhlStarterAudit:NhlStarterProbe|undefined
   let nhlScratchAudit:NhlScratchProbe|undefined
@@ -186,6 +190,10 @@ export async function investigateTicketSpecialist(
           stats:p.statistics,recent:p.lastGames,splits:[]})),
       })
       teamComparison={home:comparative('home'),away:comparative('away')}
+      newsFindings=[...d.news.map(x=>({title:x.title,publisher:x.source,
+        publishedAt:x.published,status:'reported-headline' as const})),
+        ...d.editorial.map(x=>({title:x.title,publisher:x.publisher,
+          publishedAt:null,status:'indexed-headline-only' as const}))].slice(0,16)
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
       steps=['Rosters NFL '+d.coverage.verifiedPlayers+' jugadores',
         'Resultados recientes '+d.coverage.formGames+' observaciones',
@@ -229,6 +237,10 @@ export async function investigateTicketSpecialist(
           stats:p.stats,recent:p.lastGames,splits:p.splits})),
       })
       teamComparison={home:comparative('home'),away:comparative('away')}
+      newsFindings=[...d.news.map(x=>({title:x.headline,publisher:x.source,
+        publishedAt:x.published,status:'reported-headline' as const})),
+        ...d.editorial.map(x=>({title:x.headline,publisher:x.publisher,
+          publishedAt:x.date,status:'indexed-headline-only' as const}))].slice(0,16)
       endpointAudit=[
         ...d.sources.map(x=>({url:x.url,status:x.status,checkedAt:x.observedAt,
           detail:x.reason??'ESPN: respuesta y datos clasificados por la fuente'})),
@@ -303,6 +315,10 @@ export async function investigateTicketSpecialist(
           stats:p.facts.map(f=>({name:f.label,value:f.value})),recent:[],splits:[]})),
       })
       teamComparison={home:comparativeSoccer('home'),away:comparativeSoccer('away')}
+      newsFindings=[...d.headlines.map(x=>({title:x.title,publisher:x.source,
+        publishedAt:x.published,status:'reported-headline' as const})),
+        ...d.editorial.map(x=>({title:x.title,publisher:x.publisher,
+          publishedAt:x.published,status:'indexed-headline-only' as const}))].slice(0,16)
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
       steps=['Jugadores disponibles '+d.coverage.players,
         'Resultados recientes '+d.coverage.recentGames,
@@ -496,6 +512,10 @@ export async function investigateTicketSpecialist(
               value:g.innings+' IP; '+g.pitches+' pitches'}))],splits:[]})),
       })
       teamComparison={home:comparativeMlb('home'),away:comparativeMlb('away')}
+      newsFindings=[...d.news.map(x=>({title:x.headline,publisher:x.source,
+        publishedAt:x.published,status:'reported-headline' as const})),
+        ...d.externalHeadlines.map(x=>({title:x.headline,publisher:x.source,
+          publishedAt:x.published,status:'indexed-headline-only' as const}))].slice(0,16)
       teams=d.rosters.home.length>0&&d.rosters.away.length>0
       steps=['Abridores '+Number(d.starters.home!==null&&d.starters.away!==null)+'/1 pareja',
         'Rosters '+(d.rosters.home.length+d.rosters.away.length),
@@ -676,6 +696,7 @@ export async function investigateTicketSpecialist(
       ...(rosterMatchedInjuries?{rosterMatchedInjuries}:{}),
       ...(restHours?{restHours}:{}),
       ...(teamComparison?{teamComparison}:{}),
+      ...(newsFindings?{newsFindings}:{}),
       ...(soccerDrawAudit?{soccerDrawAudit}:{}),
       ...(nhlStarterAudit?{nhlStarterAudit}:{}),
       ...(nhlScratchAudit?{nhlScratchAudit}:{}),
