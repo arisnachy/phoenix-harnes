@@ -48,10 +48,12 @@ describe('Codex automatic live catalog policy', () => {
 
   it('keeps Phoenix Auto Sol/Luna image-capable when Codex live metadata under-claims text-only', () => {
     expect(codexModelsToProfiles([
+      { id: 'gpt-6.2-sol', name: 'GPT-6.2 Sol', inputModalities: ['text'] },
       { id: 'gpt-6.1-sol', name: 'GPT-6.1 Sol', inputModalities: ['text'] },
       { id: 'gpt-6-luna', name: 'GPT-6 Luna', inputModalities: ['text'] },
       { id: 'other-model', name: 'Other', inputModalities: ['text'] },
     ])).toMatchObject([
+      { id: 'gpt-6.2-sol', input: ['text', 'image'] },
       { id: 'gpt-6.1-sol', input: ['text', 'image'] },
       { id: 'gpt-6-luna', input: ['text', 'image'] },
       { id: 'other-model', input: ['text'] },
