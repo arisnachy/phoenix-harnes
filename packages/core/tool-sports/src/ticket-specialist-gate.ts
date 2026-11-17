@@ -20,7 +20,7 @@ import {nhlSlate,investigateNhl,type NhlOfficialShots} from './nhl-evidence-rese
 import {nhlGoalieEvidence,type NhlGoalieForm} from './nhl-goalie-evidence.ts'
 import type {NhlSkaterImpact} from './nhl-skater-impact.ts'
 import {sameEspnTeam} from './sports-exact-espn-winner.ts'
-import {discoverMlbDay,researchMlbCase} from './mlb-evidence-research.ts'
+import {discoverMlbDay,researchMlbCase,type MlbMatchup} from './mlb-evidence-research.ts'
 import {tennisSlate,investigateTennis,type TennisTour} from './tennis-evidence-research.ts'
 
 export type ComparativeTeam={name:string;recentResults:string[];
@@ -84,6 +84,30 @@ const identities=(a:string,b:string,home:string,away:string)=>
 const closeTime=(a:string,b:string)=>
   Number.isFinite(Date.parse(a))&&Number.isFinite(Date.parse(b))&&
   Math.abs(Date.parse(a)-Date.parse(b))<=90*60_000
+
+/** Publish actual historical MLB batter-versus-pitcher results separately from possible duels. */
+export function visibleMlbBvpDuels(duels:readonly MlbMatchup[],
+  homeBatterIds:ReadonlySet<number>,awayBatterIds:ReadonlySet<number>)
+  :NonNullable<SpecialistGate['playerMatchups']>{
+  const evidence=(ids:ReadonlySet<number>)=>{
+    const candidates=duels.filter(d=>ids.has(d.batterId))
+    const observed=candidates.filter(d=>Number(d.bvp?.atBats??0)>0).slice(0,5)
+    const proposed=candidates.filter(d=>d.pitcherRole==='probable-starter'&&
+      !(Number(d.bvp?.atBats??0)>0)).slice(0,2)
+    return [...observed,...proposed].map(d=>{
+      const historical=Number(d.bvp?.atBats??0)>0
+      return{athlete:d.batter,opponent:d.pitcher,
+        detail:historical?
+          d.observations.filter(x=>x.startsWith('BvP registrado:')).join(' · '):
+          'Cruce posible con abridor probable, sin turnos BvP comprobados',
+        status:historical?'observed' as const:'candidate' as const,
+        source:historical?'MLB Stats API · turnos históricos por ID':
+          'MLB Stats API · roster y abridor probable, no enfrentamiento probado',
+      }
+    })
+  }
+  return [...evidence(homeBatterIds),...evidence(awayBatterIds)]
+}
 
 /** The official NHL game ID must identify exactly one matching fixture. */
 export function resolveNhlTicketMatch<T extends {
@@ -539,6 +563,9 @@ export async function investigateTicketSpecialist(
               value:g.innings+' IP; '+g.pitches+' pitches'}))],splits:[]})),
       })
       teamComparison={home:comparativeMlb('home'),away:comparativeMlb('away')}
+      playerMatchups=visibleMlbBvpDuels(d.matchups,
+        new Set(d.rosters.home.filter(p=>p.role==='batter').map(p=>p.id)),
+        new Set(d.rosters.away.filter(p=>p.role==='batter').map(p=>p.id)))
       newsFindings=[...d.news.map(x=>({title:x.headline,publisher:x.source,
         publishedAt:x.published,status:'reported-headline' as const})),
         ...d.externalHeadlines.map(x=>({title:x.headline,publisher:x.source,
