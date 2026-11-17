@@ -205,7 +205,7 @@ type SportsTicketCard = {
     discoveryAudit?:unknown;dataCounts?:Record<string,number>;
     dailyResearchBoard?:TicketDailyResearchBoard;individualQuotes?:unknown[];
     pricePreview?:unknown[];pricePreviewOffers?:number;pricePreviewEvents?:number;
-    presentationStatus?:'final-research'
+    presentationStatus?:'final-research'|'research-selection'
   }
 }
 
@@ -667,7 +667,8 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
   if(p.pricePreview!==undefined&&!ticketPreview(p.pricePreview))return false
   if(p.pricePreviewOffers!==undefined&&!ticketCount(p.pricePreviewOffers))return false
   if(p.pricePreviewEvents!==undefined&&!ticketCount(p.pricePreviewEvents))return false
-  if(p.presentationStatus!==undefined&&p.presentationStatus!=='final-research')return false
+  if(p.presentationStatus!==undefined&&p.presentationStatus!=='final-research'&&
+    p.presentationStatus!=='research-selection')return false
   return isText(p.title) && optionalText(p.subtitle) && isText(p.source,320)
     && isText(p.combinedOdds,40) && optionalText(p.ticketReference,25)
     && (p.ticketReference===undefined||/^[a-zA-Z0-9-]{1,25}$/u.test(p.ticketReference))
