@@ -10,6 +10,13 @@ export const PHOENIX_LOCAL_PROXY_PORT = 17_842
 /** Stable OpenAI-compatible base URL used by the `phoenix-local` provider. */
 export const PHOENIX_LOCAL_PROXY_BASE_URL = `http://127.0.0.1:${String(PHOENIX_LOCAL_PROXY_PORT)}/v1`
 
+/** Internal route metadata header emitted by the Phoenix Local adapter. */
+export const PHOENIX_LOCAL_MODEL_HEADER = 'x-phoenix-local-model-id'
+/** Loopback-only endpoint that reports the selected model without starting it. */
+export const PHOENIX_LOCAL_METADATA_PATH = '/phoenix-local/metadata'
+/** Marker required by the built-in Phoenix Local provider on loopback. */
+export const PHOENIX_LOCAL_PROXY_AUTHORIZATION = 'Bearer phoenix-local'
+
 const MAX_REQUEST_BYTES = 16 * 1024 * 1024
 /** Abort a silent streaming Ollama connection, not an actively generating CPU model. */
 const OLLAMA_STREAM_IDLE_TIMEOUT_MS = 90_000
@@ -36,11 +43,21 @@ function requestHeaders(request: IncomingMessage): Headers {
   const headers = new Headers()
   for (const [name, value] of Object.entries(request.headers)) {
     if (value === undefined) continue
-    if (name.toLowerCase() === 'host' || name.toLowerCase() === 'content-length' || name.toLowerCase() === 'x-phoenix-local-auto-continue') continue
+    if (name.toLowerCase() === 'host' || name.toLowerCase() === 'content-length'
+      || name.toLowerCase() === 'x-phoenix-local-auto-continue'
+      || name.toLowerCase() === PHOENIX_LOCAL_MODEL_HEADER) continue
     if (Array.isArray(value)) value.forEach((item) =>{  headers.append(name, item) })
     else headers.set(name, value)
   }
   return headers
+}
+
+function jsonResponse(response: ServerResponse, statusCode: number, payload: unknown): void {
+  const encoded = Buffer.from(JSON.stringify(payload), 'utf8')
+  response.statusCode = statusCode
+  response.setHeader('content-type', 'application/json; charset=utf-8')
+  response.setHeader('content-length', encoded.byteLength)
+  response.end(encoded)
 }
 
 /**
@@ -115,19 +132,79 @@ async function forward(
 ): Promise<void> {
   let clearIdleTimer: (() => void) | undefined
   try {
-    const backendBaseUrl = await manager.ensureRunning()
     const incomingPath = request.url ?? '/v1'
     const suffix = incomingPath.startsWith('/v1') ? incomingPath.slice(3) : incomingPath
+    // The adapter asks for metadata before fitting a request. Keep this path
+    // independent from the backend lifecycle so a stopped model remains
+    // inspectable and a context switch cannot wake the wrong process.
+    if (request.method === 'GET' && suffix.split('?')[0] === PHOENIX_LOCAL_METADATA_PATH) {
+      if (request.headers.authorization !== PHOENIX_LOCAL_PROXY_AUTHORIZATION) {
+        jsonResponse(response, 401, {
+          error: { message: 'Phoenix Local metadata requires the loopback provider authorization.', type: 'phoenix_local_unauthorized' },
+        })
+        return
+      }
+      const selected = getLocalModel(manager.snapshot().selectedModelId)
+      if (selected === undefined) {
+        jsonResponse(response, 409, { error: { message: 'Phoenix Local no reconoce el modelo seleccionado.' } })
+        return
+      }
+      jsonResponse(response, 200, {
+        selectedModelId: selected.id,
+        contextWindow: selected.contextWindow,
+        maxTokens: selected.maxTokens,
+      })
+      return
+    }
     const body = await readBody(request)
     const runtime = manager.snapshot()
     const selected = getLocalModel(runtime.selectedModelId)
-    const thinking = runtime.thinking === undefined ? false : runtime.thinking
-    const isOllama = selected?.backend === 'ollama'
+    const requestedModel = request.headers[PHOENIX_LOCAL_MODEL_HEADER]
+    const requestedModelId = Array.isArray(requestedModel) ? requestedModel[0] : requestedModel
+    if (requestedModelId !== undefined && requestedModelId !== runtime.selectedModelId) {
+      jsonResponse(response, 409, {
+        error: {
+          message: `Phoenix Local cambió de modelo durante la solicitud. Reintenta con el modelo seleccionado (${runtime.selectedModelId}).`,
+          type: 'phoenix_local_model_mismatch',
+          expected_model: runtime.selectedModelId,
+          requested_model: requestedModelId,
+        },
+      })
+      return
+    }
+    if (selected === undefined) {
+      jsonResponse(response, 409, {
+        error: {
+          message: `Phoenix Local no reconoce el modelo seleccionado: ${runtime.selectedModelId}.`,
+          type: 'phoenix_local_unknown_model',
+        },
+      })
+      return
+    }
+    const backendBaseUrl = await manager.ensureRunning()
+    // Starting a managed backend can await a download/process health check.
+    // Re-read the selection before rewriting or forwarding so a concurrent
+    // Settings switch cannot send a request fitted for the previous model to
+    // the new backend.
+    const startedRuntime = manager.snapshot()
+    if (startedRuntime.selectedModelId !== runtime.selectedModelId) {
+      jsonResponse(response, 409, {
+        error: {
+          message: 'Phoenix Local cambió de modelo mientras se iniciaba. Reintenta la solicitud.',
+          type: 'phoenix_local_model_mismatch',
+          expected_model: startedRuntime.selectedModelId,
+          requested_model: runtime.selectedModelId,
+        },
+      })
+      return
+    }
+    const thinking = startedRuntime.thinking === undefined ? false : startedRuntime.thinking
+    const isOllama = selected.backend === 'ollama'
     // Native Ollama /api/chat is the authoritative way to disable Qwen
     // reasoning. Its /v1 compatibility route has produced 64/64 hidden
     // reasoning tokens with an empty visible answer on some Ollama versions.
     const nativeChat = request.method === 'POST' && suffix.split('?')[0] === '/chat/completions'
-      && selected?.backend === 'ollama'
+      && selected.backend === 'ollama'
       ? toNativeOllamaChat(body, selected, request.headers['x-phoenix-local-auto-continue'] === '1', thinking)
       : undefined
     const forwardedBody = nativeChat === undefined

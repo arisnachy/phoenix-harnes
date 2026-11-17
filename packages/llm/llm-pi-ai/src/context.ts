@@ -30,8 +30,8 @@ const PI_CONTEXT_SAFETY_TOKENS = 4096
 const MAX_RESPONSE_RESERVE_TOKENS = 4096
 const PRESSURE_TOOL_DESCRIPTION_MAX_CHARS = 160
 const PRESSURE_SKILL_CATALOG_MAX_CHARS = 12_000
-/** Conservative text-only fallback room for Ollama Qwen 2B on a 4096-token context. */
-const LOCAL_LITE_MAX_INPUT_TOKENS = 1_024
+/** Bound optional conversation history in the text-only fallback. */
+const LOCAL_LITE_HISTORY_BUDGET_TOKENS = 1_024
 const SCHEMA_DECORATION_KEYS = new Set([
   'description',
   'title',
@@ -394,49 +394,52 @@ function isPlainLocalTextMessage(message: Message): boolean {
 }
 
 /**
- * Fall back to a *text-only* view of the current user request when the full
- * agent prompt exceeds the device model. Never modify the durable session.
- * Full-context agent actions still require an appropriately scoped preset.
- * @param options - Original agent request, including full instructions and tools.
- * @param contextWindow - Local model's actual context window.
- * @param desiredMaxOutput - Requested response budget.
- * @returns The ordinary fit or a bounded, explicitly non-agentic view.
+ * Bound the response sent over the local wire using the selected model's window.
+ * @param contextWindow - Effective context limit of the selected local model.
+ * @param desiredMaxOutput - Response budget requested for the turn.
+ * @returns The output tokens to reserve and allow on the local wire.
  */
-/**
- * pi-ai 0.82.x independently reserves a FIXED 4096 tokens and estimates its
- * context at roughly 3.5 chars/token. The generic budget above instead scales
- * the reserve to 1/8 of the window and estimates at 4 chars/token. On a 16K
- * local model that mismatch let near-full prompts reach pi-ai, which silently
- * clamped maxTokens to as little as 1 despite a requested 768-token answer.
- * Keep a further 512 tokens for chat-format / schema estimator differences.
- */
-function fitPhoenixLocalPiHeadroom(
+export function resolvePhoenixLocalMaxOutput(contextWindow: number, desiredMaxOutput: number): number {
+  return Math.max(1, Math.min(Math.floor(desiredMaxOutput), Math.floor(contextWindow / 4)))
+}
+
+/** Fit the local request before passing it to the OpenAI-compatible transport. */
+function fitPhoenixLocalHeadroom(
   options: GenerateOptions,
   contextWindow: number,
   desiredMaxOutput: number,
   compacted: boolean,
 ): ContextBudgetFit {
   const capacity = Math.max(1, Math.floor(contextWindow))
-  const responseTokens = Math.max(1, Math.floor(desiredMaxOutput))
+  const responseTokens = resolvePhoenixLocalMaxOutput(capacity, desiredMaxOutput)
+  const safetyReserve = Math.min(PI_CONTEXT_SAFETY_TOKENS, Math.floor(capacity / 4))
+  const framingReserve = Math.min(512, Math.floor(capacity / 8))
   return {
     options,
     estimatedTokens: Math.ceil(estimateGenerateOptionsTokens(options) * (ESTIMATED_CHARS_PER_TOKEN / 3.5)),
-    inputBudgetTokens: Math.max(1, capacity - PI_CONTEXT_SAFETY_TOKENS - responseTokens - 512),
+    inputBudgetTokens: Math.max(1, capacity - safetyReserve - framingReserve - responseTokens),
     compacted,
   }
 }
 
+/**
+ * Fit a local turn, using a request-only text projection under context pressure.
+ * @param options - Fully assembled request including the latest user message.
+ * @param contextWindow - Effective context limit of the selected local model.
+ * @param desiredMaxOutput - Response budget requested for the turn.
+ * @returns The fitted request and the safe input budget.
+ */
 export function fitPhoenixLocalTextTurn(
   options: GenerateOptions,
   contextWindow: number,
   desiredMaxOutput: number,
 ): ContextBudgetFit {
   const regular = fitGenerateOptionsToContext(options, contextWindow, desiredMaxOutput)
-  const localRegular = fitPhoenixLocalPiHeadroom(regular.options, contextWindow, desiredMaxOutput, regular.compacted)
+  const localRegular = fitPhoenixLocalHeadroom(regular.options, contextWindow, desiredMaxOutput, regular.compacted)
   if (localRegular.estimatedTokens <= localRegular.inputBudgetTokens) return localRegular
 
   // Keep the full instructions, real tool signatures and user history whenever
-  // a more conservative, request-only projection can still fit the pi-ai cap.
+  // a more conservative, request-only projection can still fit the model window.
   const condensed = compactAuxiliaryContextForPressure(regular.options)
   // A live tool cycle must retain its known tool names, schemas and results.
   // Under pressure fail with a clear context error rather than silently
@@ -450,7 +453,7 @@ export function fitPhoenixLocalTextTurn(
       condensed,
       Math.max(1, Math.floor(localRegular.inputBudgetTokens * 3.5 / ESTIMATED_CHARS_PER_TOKEN)),
     )
-  const localCompacted = fitPhoenixLocalPiHeadroom(selected, contextWindow, desiredMaxOutput, true)
+  const localCompacted = fitPhoenixLocalHeadroom(selected, contextWindow, desiredMaxOutput, true)
   if (localCompacted.estimatedTokens <= localCompacted.inputBudgetTokens) return localCompacted
 
   const messages = options.messages
@@ -480,7 +483,7 @@ export function fitPhoenixLocalTextTurn(
     message.content.some(block => block.type === 'tool-call' || block.type === 'tool-result')
     || message.source.kind === 'tool'
     || message.role === 'assistant'
-    || (message.role === 'user' && !isAuxiliarySkillCatalog(message))
+    || (message.role === 'user' && !isAuxiliarySkillCatalog(message)),
   )) return localCompacted
 
   const reduced: GenerateOptions = {
@@ -489,10 +492,10 @@ export function fitPhoenixLocalTextTurn(
     messages: [currentUser],
     tools: [],
   }
-  let fit = fitPhoenixLocalPiHeadroom(reduced, contextWindow, desiredMaxOutput, true)
+  let fit = fitPhoenixLocalHeadroom(reduced, contextWindow, desiredMaxOutput, true)
   // The current human message is never clipped; if it cannot fit alone,
   // return the original oversized error instead.
-  if (fit.estimatedTokens > Math.min(fit.inputBudgetTokens, LOCAL_LITE_MAX_INPUT_TOKENS)) return localCompacted
+  if (fit.estimatedTokens > fit.inputBudgetTokens) return localCompacted
 
   // Keep only a few complete plain-text messages that fit. Durable history
   // and current model selection are not changed by this request projection.
@@ -504,8 +507,8 @@ export function fitPhoenixLocalTextTurn(
       ...reduced,
       messages: [previous, ...recent, currentUser],
     }
-    const evaluated = fitPhoenixLocalPiHeadroom(candidate, contextWindow, desiredMaxOutput, true)
-    if (evaluated.estimatedTokens > Math.min(evaluated.inputBudgetTokens, LOCAL_LITE_MAX_INPUT_TOKENS)) break
+    const evaluated = fitPhoenixLocalHeadroom(candidate, contextWindow, desiredMaxOutput, true)
+    if (evaluated.estimatedTokens > Math.min(evaluated.inputBudgetTokens, LOCAL_LITE_HISTORY_BUDGET_TOKENS)) break
     recent.unshift(previous)
     fit = evaluated
   }
@@ -791,8 +794,9 @@ function assertLatestHumanImagesRetained(
   projected: readonly Message[],
 ): void {
   const index = original.findLastIndex(message => message.role === 'user' && message.source.kind === 'user')
-  if (index < 0) return
-  const expected = original[index]!.content.filter(block => block.type === 'image')
+  const latestHuman = original[index]
+  if (latestHuman === undefined) return
+  const expected = latestHuman.content.filter(block => block.type === 'image')
     .map(block => String(block.attachment.attachmentId))
   if (expected.length === 0) return
   const actual = projected[index]?.content.filter(block => block.type === 'image')

@@ -67,6 +67,60 @@ beforeEach(() => {
 })
 
 describe('PiAiAdapter provider routing', () => {
+  it('fits a compact Phoenix Local turn using the selected model and keeps reply room on the wire', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    let selection = { selectedModelId: 'qwen-2b', contextWindow: 4_096, maxTokens: 768 }
+    const adapter = new PiAiAdapter({
+      profiles: () => resolveProfiles({
+        'phoenix-local': {
+          api: 'openai-completions',
+          baseURL: server.url,
+          headers: { Authorization: 'Bearer phoenix-local' },
+          compat: { maxTokensField: 'max_tokens', supportsStore: false },
+          models: [{ id: 'phoenix-local', contextWindow: 4_096, maxTokens: 256 }],
+        },
+      }),
+      resolveApiKey: () => Promise.resolve(undefined),
+      resolveLocalModel: () => Promise.resolve(selection),
+      auth: memoryAuth(),
+    })
+    ctx.llm.registerAdapter(['phoenix-local'], adapter)
+
+    const prepared = await adapter.prepareCall('phoenix-local', 'phoenix-local')
+    expect(prepared.model).toMatchObject({ context: { contextWindow: 4_096 }, defaultMaxTokens: 768 })
+
+    const latest = createUserMessage({
+      content: [{ type: 'text', text: 'hola local' }],
+      source: { kind: 'user' },
+    })
+    const result = await assemble(ctx, {
+      provider: 'phoenix-local',
+      model: 'phoenix-local',
+      // Approximate the full harness to exercise the bounded text projection.
+      system: 'Phoenix tools and instructions '.repeat(6_000),
+      tools: [{ name: 'lookup', description: 'lookup', parameters: { type: 'object' } }],
+      messages: [latest],
+    })
+
+    expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
+    expect(result.finish).toEqual({ kind: 'stop' })
+    expect(server.paths).toEqual(['/chat/completions'])
+    expect(server.headers[0]?.['x-phoenix-local-model-id']).toBe('qwen-2b')
+
+    const request = server.requests[0] as { max_tokens?: unknown; messages?: unknown }
+    expect(request.max_tokens).toBe(768)
+    expect(JSON.stringify(request.messages)).toContain('hola local')
+    expect(JSON.stringify(request.messages)).not.toContain('Phoenix tools and instructions')
+
+    selection = { selectedModelId: 'gemma-4-e2b', contextWindow: 131_072, maxTokens: 2_048 }
+    await expect(adapter.resolveModel('phoenix-local', 'phoenix-local')).resolves.toMatchObject({
+      context: { contextWindow: 131_072 },
+      defaultMaxTokens: 2_048,
+    })
+  }, 20_000)
+
   it('refreshes and filters the advertised catalog without removing dispatchable models', async () => {
     let providers: Record<string, LlmPiAi.PiAiProviderProfile> = { deepseek: {} }
     const refreshModels = vi.fn(async (provider: string): Promise<readonly string[]> => {
