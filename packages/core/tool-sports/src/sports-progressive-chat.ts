@@ -295,9 +295,13 @@ export async function progressiveSportsStage(
         records(context.away.lastGames,'away'),
         Boolean(context.home.lastGames.length&&context.away.lastGames.length)))
       for(let i=0;i<Math.min(6,Math.max(context.home.lastGames.length,
-        context.away.lastGames.length));i++)rows.push(pair('Resultado reciente '+String(i+1),
-        context.home.lastGames[i]?formatGame(context.home.lastGames[i]):'Sin registro',
-        context.away.lastGames[i]?formatGame(context.away.lastGames[i]):'Sin registro',true))
+        context.away.lastGames.length));i++){
+        const homeGame=context.home.lastGames[i]
+        const awayGame=context.away.lastGames[i]
+        rows.push(pair('Resultado reciente '+String(i+1),
+          homeGame?formatGame(homeGame):'Sin registro',
+          awayGame?formatGame(awayGame):'Sin registro',true))
+      }
       for(const duel of (check?.playerMatchups??[]).slice(0,8))rows.push({
         label:'Cruce jugador-rival · '+(duel.status==='observed'?'histórico':'posible'),
         home:text(duel.athlete+' · '+duel.detail,380),
