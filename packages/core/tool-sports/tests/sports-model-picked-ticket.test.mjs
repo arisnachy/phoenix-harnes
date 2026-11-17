@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {quoteKiraChosenTicket} from '../src/sports-model-picked-ticket.ts'
+import {quoteKiraChosenTicket,ticketResearchChecklist} from '../src/sports-model-picked-ticket.ts'
 
 const now=Date.parse('2026-11-17T17:00:00Z')
 const leg=(eventId,overrides={})=>({
@@ -35,4 +35,28 @@ test('Kira must explicitly choose home or away without numerical ranking',async(
   const never=async()=>{throw Error('No network expected')}
   await assert.rejects(quoteKiraChosenTicket([leg('40100',{
     pick:'favourite'})],never,now),/justificación/)
+})
+
+test('final research checklist rejects five odds without source-level rebuttals',()=>{
+  const legs=Array.from({length:5},(_,i)=>leg(String(40100+i)))
+  const errors=ticketResearchChecklist(legs)
+  assert.ok(errors.some(x=>/dos publicaciones leídas/.test(x)))
+  assert.ok(errors.some(x=>/falta refutación/.test(x)))
+  assert.ok(errors.some(x=>/riesgos críticos/.test(x)))
+  const withEvidence=legs.map(l=>({...l,
+    sourceUrls:['https://www.nhl.com/news/report','https://www.dailyfaceoff.com/news/report'],
+    counterEvidence:'El adversario dispone de superioridad en el juego reciente.',
+    criticalPending:[],
+  }))
+  assert.deepEqual(ticketResearchChecklist(withEvidence),[])
+  assert.ok(ticketResearchChecklist(withEvidence.slice(0,4))
+    .some(x=>/cinco o seis/.test(x)))
+})
+test('duplicate website citations do not fake a second independent source',()=>{
+  const checked=leg('40100',{
+    sourceUrls:['https://www.nhl.com/news/a','https://www.nhl.com/news/b'],
+    criticalPending:[],
+    counterEvidence:'El adversario puede dominar en situaciones especiales.',
+  })
+  assert.ok(ticketResearchChecklist([checked]).some(x=>/dos publicaciones/.test(x)))
 })
