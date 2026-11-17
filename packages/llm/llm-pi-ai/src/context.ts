@@ -27,6 +27,17 @@ import {
 const ESTIMATED_CHARS_PER_TOKEN = 4
 const ESTIMATED_IMAGE_CHARS = 4800
 const PI_CONTEXT_SAFETY_TOKENS = 4096
+
+/**
+ * pi-ai 0.82 reserves a fixed 4096 tokens independently of the model's
+ * physical context. Give ONLY its SDK accounting this virtual headroom; the
+ * Phoenix fitter and Ollama num_ctx still use the actual allocated window.
+ * This is not an increase in model capacity or a license to truncate input.
+ */
+export function phoenixLocalSdkContextWindow(actualWindow: number): number {
+  if (!Number.isSafeInteger(actualWindow) || actualWindow <= 0) return actualWindow
+  return Math.min(Number.MAX_SAFE_INTEGER, actualWindow + PI_CONTEXT_SAFETY_TOKENS)
+}
 const MAX_RESPONSE_RESERVE_TOKENS = 4096
 const PRESSURE_TOOL_DESCRIPTION_MAX_CHARS = 160
 const PRESSURE_SKILL_CATALOG_MAX_CHARS = 12_000
@@ -403,12 +414,10 @@ function isPlainLocalTextMessage(message: Message): boolean {
  * @returns The ordinary fit or a bounded, explicitly non-agentic view.
  */
 /**
- * pi-ai 0.82.x independently reserves a FIXED 4096 tokens and estimates its
- * context at roughly 3.5 chars/token. The generic budget above instead scales
- * the reserve to 1/8 of the window and estimates at 4 chars/token. On a 16K
- * local model that mismatch let near-full prompts reach pi-ai, which silently
- * clamped maxTokens to as little as 1 despite a requested 768-token answer.
- * Keep a further 512 tokens for chat-format / schema estimator differences.
+ * Use the PHYSICAL model capacity for local requests, independently of the
+ * virtual 4096-token SDK accounting shim. Scale the actual safety margin with
+ * device context (minimum 512) and preserve reply + formatting headroom.
+ * The 3.5-char estimate matches pi-ai's more conservative convention.
  */
 function fitPhoenixLocalPiHeadroom(
   options: GenerateOptions,
@@ -418,10 +427,11 @@ function fitPhoenixLocalPiHeadroom(
 ): ContextBudgetFit {
   const capacity = Math.max(1, Math.floor(contextWindow))
   const responseTokens = Math.max(1, Math.floor(desiredMaxOutput))
+  const physicalSafetyTokens = Math.max(512, Math.min(PI_CONTEXT_SAFETY_TOKENS, Math.floor(capacity / 8)))
   return {
     options,
     estimatedTokens: Math.ceil(estimateGenerateOptionsTokens(options) * (ESTIMATED_CHARS_PER_TOKEN / 3.5)),
-    inputBudgetTokens: Math.max(1, capacity - PI_CONTEXT_SAFETY_TOKENS - responseTokens - 512),
+    inputBudgetTokens: Math.max(1, capacity - physicalSafetyTokens - responseTokens - 512),
     compacted,
   }
 }
