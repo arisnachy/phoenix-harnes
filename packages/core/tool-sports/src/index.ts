@@ -2187,6 +2187,7 @@ export function apply(ctx: Context): void {
           rosterMatchedInjuries:check.rosterMatchedInjuries??null,
           restHours:check.restHours??null,
           teamComparison:check.teamComparison??null,
+          newsFindings:check.newsFindings??[],
           nhlStarterAudit:check.nhlStarterAudit??null,
           playerHistoryAudit:check.playerHistoryAudit??null,
           endpointAudit:check.endpointAudit?.slice(0,28)??[],
