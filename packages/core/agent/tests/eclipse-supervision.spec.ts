@@ -16,7 +16,7 @@ async function fixture() {
       type:'text',text:'Investiga el fallo de producción, corrige el código, ejecuta las pruebas y demuestra el resultado.',
     }]}},
     {type:'assistant/message',data:{turn:1,step:1,message:{
-      source:{kind:'model',model:'gpt-6.1-sol'},content:[{type:'text',
+      source:{kind:'model',model:'gpt-6.2-sol'},content:[{type:'text',
         text:'**Plan:** Verificar causa raíz; ejecutar reparación y pruebas; preservar criterios y entregar evidencia.'}],
     }}},
   ]
@@ -72,14 +72,14 @@ describe('Eclipse Sol plan → Luna execution → Sol supervision',()=>{
       expect(s.steered).toHaveLength(1)
       expect(JSON.stringify(s.steered[0])).toContain('Eclipse supervision')
       const selected=await s.request(3)
-      expect(selected.model).toBe('gpt-6.1-sol')
+      expect(selected.model).toBe('gpt-6.2-sol')
       expect(selected.reasoningEffort).toBeDefined()
       const sections=await s.assemble()
       expect(sections.sections.find(x=>x.name==='phoenix:auto-visible-handoff')?.text)
         .toContain('final supervision pass')
       expect(sections.tools).toHaveLength(0)
       s.events.push({type:'assistant/message',data:{turn:1,step:3,
-        message:{source:{kind:'model',model:'gpt-6.1-sol'},content:[{type:'text',
+        message:{source:{kind:'model',model:'gpt-6.2-sol'},content:[{type:'text',
           text:'Resultado verificado: reparación y pruebas documentadas. Sin validación de producción externa.'}]}}})
       await s.stop()
       expect(s.steered).toHaveLength(1)
@@ -93,7 +93,7 @@ describe('Eclipse Sol plan → Luna execution → Sol supervision',()=>{
         {type:'image',attachment:{attachmentId:'ct-source'}},
       ]}}
       s.events[2]={type:'assistant/message',data:{turn:1,step:1,
-        message:{source:{kind:'model',model:'gpt-6.1-sol'},
+        message:{source:{kind:'model',model:'gpt-6.2-sol'},
           content:[{type:'text',text:
             'En el corte axial de tomografía, el hallazgo sugiere una inflamación apendicular provisional, '+
             'sin confirmar continuidad con el ciego. Crearé una ilustración hiperrealista educativa con la '+

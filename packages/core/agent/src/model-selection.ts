@@ -63,7 +63,9 @@ export function resolveEclipseRoleRoute(
   if (route === undefined || route.provider !== 'openai-codex' || route.model === PHOENIX_CODEX_AUTO_MODEL) return fallback
   return {
     provider: route.provider,
-    model: route.model,
+    // Upgrade saved automatic Sol 6.1 planner pins; manual/hybrid choices remain user-owned.
+    model: role === 'planner' && (profile.mode === undefined || profile.mode === 'automatic')
+      && route.model === 'gpt-6.1-sol' ? PHOENIX_CODEX_AUTO_PLANNER_MODEL : route.model,
     ...route.reasoningEffort === undefined
       ? adaptiveEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(adaptiveEffort) }
       : { reasoningEffort: ReasoningEffortId(route.reasoningEffort) },
@@ -153,8 +155,8 @@ type ModelSelectionHandoffResolver = (selection: ModelSelection | undefined) => 
 
 /** Synthetic selector row that enables Phoenix's adaptive GPT-6 Codex router. */
 export const PHOENIX_CODEX_AUTO_MODEL = 'phoenix-auto'
-/** GPT-6.1 planner/rescue route used by Phoenix Auto. */
-export const PHOENIX_CODEX_AUTO_PLANNER_MODEL = 'gpt-6.1-sol'
+/** GPT-6.2 Sol planner/rescue route used by Phoenix Auto. */
+export const PHOENIX_CODEX_AUTO_PLANNER_MODEL = 'gpt-6.2-sol'
 /** GPT-6 execution route used by Phoenix Auto. */
 export const PHOENIX_CODEX_AUTO_WORKER_MODEL = 'gpt-6-luna'
 /** Native Codex worker whose permission escalations are reviewed by Codex Auto-review. */
@@ -205,7 +207,9 @@ function codexLunaGeneration(model: string): string | undefined {
 
 /** Resolve a concrete selection's conversational worker; Phoenix Auto routes before this helper. */
 function lunaWorkerFor(model: string): string | undefined {
-  if (model === PHOENIX_CODEX_AUTO_PLANNER_MODEL) return PHOENIX_CODEX_AUTO_WORKER_MODEL
+  // Sol 6.2 plans for Luna 6; never invent an unavailable gpt-6.2-luna route.
+  if (model === PHOENIX_CODEX_AUTO_PLANNER_MODEL || model === 'gpt-6.1-sol')
+    return PHOENIX_CODEX_AUTO_WORKER_MODEL
   const plannerGeneration = codexPlannerGeneration(model)
   if (plannerGeneration !== undefined) return `gpt-${plannerGeneration}-luna`
   return codexLunaGeneration(model) === undefined ? undefined : model

@@ -82,6 +82,20 @@ describe('Eclipse model settings', () => {
     expect(existingProfile(undefined, {})).toEqual({ mode: 'automatic', escalationSensitivity: 'adaptive', maxTeammates: 3 })
   })
 
+  it('updates saved automatic Sol 6.1 planning to Sol 6.2 without overwriting Luna or manual pins', () => {
+    const old = {
+      mode: 'automatic', escalationSensitivity: 'adaptive',
+      planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'high' },
+      coordinator: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+    }
+    expect(existingProfile(old).planner).toEqual({
+      provider: 'openai-codex', model: 'gpt-6.2-sol', reasoningEffort: 'high',
+    })
+    expect(existingProfile(old).coordinator).toEqual(old.coordinator)
+    expect(existingProfile({ ...old, mode: 'manual' }).planner).toEqual(old.planner)
+    expect(existingProfile({ ...old, mode: 'hybrid' }).planner).toEqual(old.planner)
+  })
+
   it('preserves every live Codex model across generations and future model families', () => {
     const ids = [
       'gpt-5.6-sol', 'gpt-5.3-codex', 'gpt-6-sol', 'gpt-6.1-sol', 'gpt-5.5',

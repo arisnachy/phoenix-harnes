@@ -307,10 +307,11 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(updater).not.toContain('throw new Error(\'PHOENIX shutdown due to offline')
   })
 
-  it('promotes each green current main SHA to the stable release pointer', () => {
-    expect(stableWorkflow).toContain('Keep stable exactly aligned with main')
-    expect(stableWorkflow).toContain('"$TARGET_SHA:refs/heads/stable"')
-    expect(stableWorkflow).toContain('--force-with-lease="refs/heads/stable:$stable_sha"')
+  it('publishes only a verified stable HEAD without rewriting protected stable from main', () => {
+    expect(stableWorkflow).toContain('target="$(git rev-parse origin/stable)"')
+    expect(stableWorkflow).toContain('Confirm the guarded release is still stable HEAD')
+    expect(stableWorkflow).toContain('git push origin HEAD:phoenix/update-channel')
+    expect(stableWorkflow).not.toContain('--force-with-lease="refs/heads/stable:')
   })
 
   it('shares updater control markers through the common Git directory across worktrees', () => {
