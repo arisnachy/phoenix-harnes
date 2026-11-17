@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -873,5 +873,37 @@ describe('PHOENIX transient stable channel retry', () => {
     expect(isProtectedUpdateStateDuringNetworkRetry({ status: 'error', phase: 'health-check' })).toBe(true)
     expect(isProtectedUpdateStateDuringNetworkRetry({ status: 'checking' })).toBe(false)
     expect(isProtectedUpdateStateDuringNetworkRetry({ status: 'error', phase: 'prepare' })).toBe(false)
+  })
+})
+
+describe('stale updater-owned Git fetch ref recovery', () => {
+  it('quarantines only the invalid temporary ref named by Git, leaving branches intact', () => {
+    const start = updater.indexOf('function repairCorruptUpdateFetchRef(root, stderr) {')
+    const end = updater.indexOf('\nfunction fetchBranchCommit(', start)
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    const renamed = vi.fn()
+    const git = vi.fn((_root: string, args: string[]) => {
+      if (args[0] === 'rev-parse') return { ok: true, stdout: '/checkout/.git/refs/phoenix/update/fetch-1880-stable' }
+      return { ok: false, stdout: '' }
+    })
+    const { repairCorruptUpdateFetchRef } = runInNewContext(
+      updater.slice(start, end) + '\n({ repairCorruptUpdateFetchRef })',
+      {
+        git, resolve, join, relative, isAbsolute,
+        controlDirectory: () => '/checkout/.git',
+        lstatSync: () => ({ isFile: () => true, size: 41 }),
+        readFileSync: () => 'unresolvable-oid',
+        renameSync: renamed,
+        process: { pid: 1880 }, console: { error: () => {} },
+      },
+    ) as { repairCorruptUpdateFetchRef(root: string, stderr: string): boolean }
+    expect(repairCorruptUpdateFetchRef('/checkout',
+      'fatal: bad object refs/phoenix/update/fetch-1880-stable')).toBe(true)
+    expect(renamed).toHaveBeenCalledTimes(1)
+    expect(renamed.mock.calls[0]?.[0]).toBe('/checkout/.git/refs/phoenix/update/fetch-1880-stable')
+    expect(repairCorruptUpdateFetchRef('/checkout', 'fatal: bad object refs/heads/main')).toBe(false)
+    expect(renamed).toHaveBeenCalledTimes(1)
+    expect(updater).toContain('repairCorruptUpdateFetchRef(root, result.stderr)')
   })
 })
