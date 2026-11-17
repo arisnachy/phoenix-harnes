@@ -107,6 +107,7 @@ export async function progressiveSportsStage(
   question:string|undefined,fetcher:typeof fetch=fetch,
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
 ):Promise<{uiBlock:Table;stage:ResearchStage;nextStage:ResearchStage|null;
+  sourceEscalation:ReturnType<typeof planIndependentSportsFallback>|null;
   evidence:unknown;missing:string[];instruction:string}>{
   if(!/^\d{1,18}$/u.test(fixture.eventId)||
     !/^\d{4}-\d{2}-\d{2}$/u.test(fixture.date)||
