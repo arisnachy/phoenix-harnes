@@ -379,13 +379,17 @@ export async function evidencePricedTicket(
       specialistStatus:check?.status??'unavailable',
       rosterAndAvailability:review,
       teamComparison:check?.teamComparison??null,
+      quotesObserved:research.preselectedQuotes.filter(q=>q.eventId===fixture.eventId)
+        .map(q=>({bookmaker:q.bookmaker,selection:q.selection,
+          market:q.market,price:q.price,observedAt:q.observedAt??null,
+          source:q.source})).slice(0,8),
       verifiedFacts:check?.verifiedSteps??[],
       pendingFacts:check?.pendingSteps??[],
       checklist:check?.checklist?.steps??[],
       playerHistoryCoverage:check?.playerHistoryAudit??null,
       sourceChecks:check?.sourceChecks?.slice(0,5)??[],
     }
-  }).slice(0,64)
+  }).slice(0,24)
   const trackingEvents=research.events.map(e=>({
     eventId:e.eventId,sport:e.sport,league:e.league,date:day,
     pick:e.pick,kickoff:e.kickoff,
