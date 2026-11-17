@@ -40,6 +40,11 @@ export type SpecialistGate={
   /** Snapshot of both teams' reported availability; source freshness does not
    * establish starter confirmation or an official pre-tipoff inactive list. */
   injuryAudit?:InjuryBackup
+  /** NBA unavailable reports reconciled by exact athlete ID to both current rosters. */
+  rosterMatchedInjuries?:{home:Array<{athlete:string;status:string;reportedAt:string|null}>;
+    away:Array<{athlete:string;status:string;reportedAt:string|null}>}
+  /** Rest measured from the researched NBA/WNBA fixture; not an inferred B2B. */
+  restHours?:{home:number|null;away:number|null}
   /** Independent empirical draw-risk assessment, not proof of 1X2 odds. */
   soccerDrawAudit?:SoccerDrawAudit
   /** Official NHL gamecenter starter flags, never inferred from roster. */
@@ -135,6 +140,8 @@ export async function investigateTicketSpecialist(
   // matching a real quote to the ESPN fixture and selected outcome.
   const signals:Record<string,StepObservation>={}
   let injuryAudit:InjuryBackup|undefined
+  let rosterMatchedInjuries:SpecialistGate['rosterMatchedInjuries']
+  let restHours:SpecialistGate['restHours']
   let soccerDrawAudit:SoccerDrawAudit|undefined
   let nhlStarterAudit:NhlStarterProbe|undefined
   let nhlScratchAudit:NhlScratchProbe|undefined
@@ -192,6 +199,7 @@ export async function investigateTicketSpecialist(
         ||!closeTime(d.opportunity.scheduledAt,game.kickoff))
         throw Error('NBA/WNBA: identidad u horario del evento no coinciden')
       level=d.coverage.level
+      restHours={home:d.context.restHours.home,away:d.context.restHours.away}
       endpointAudit=[
         ...d.sources.map(x=>({url:x.url,status:x.status,checkedAt:x.observedAt,
           detail:x.reason??'ESPN: respuesta y datos clasificados por la fuente'})),
@@ -510,6 +518,15 @@ export async function investigateTicketSpecialist(
         const verifiedRosterInjuries=rosterIds?injured.filter(x=>
           (injury.home.injuries.includes(x)&&x.athleteId&&rosterIds!.home.has(x.athleteId))||
           (injury.away.injuries.includes(x)&&x.athleteId&&rosterIds!.away.has(x.athleteId))):injured
+        if(rosterIds&&injury.home.matched&&injury.away.matched){
+          const lean=(rows:typeof verifiedRosterInjuries)=>rows.map(x=>({
+            athlete:x.athlete,status:x.status,reportedAt:x.reportedAt,
+          }))
+          rosterMatchedInjuries={
+            home:lean(verifiedRosterInjuries.filter(x=>injury.home.injuries.includes(x))),
+            away:lean(verifiedRosterInjuries.filter(x=>injury.away.injuries.includes(x))),
+          }
+        }
         const note=verifiedRosterInjuries.slice(0,8).map(x=>x.athlete+' ('+x.status+
           ', '+(x.reportedAt??'sin fecha')+')').join('; ')
         const detail='ESPN '+injury.source+'; local '+
@@ -570,6 +587,8 @@ export async function investigateTicketSpecialist(
         checklist.criticalPending.slice(0,3).join('; '))
     return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
       sourceChecks,checklist,...(injuryAudit?{injuryAudit}:{}),
+      ...(rosterMatchedInjuries?{rosterMatchedInjuries}:{}),
+      ...(restHours?{restHours}:{}),
       ...(soccerDrawAudit?{soccerDrawAudit}:{}),
       ...(nhlStarterAudit?{nhlStarterAudit}:{}),
       ...(nhlScratchAudit?{nhlScratchAudit}:{}),
