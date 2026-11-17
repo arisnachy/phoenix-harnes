@@ -1,7 +1,7 @@
 import {test} from 'node:test'
 import {readFileSync} from 'node:fs'
 import assert from 'node:assert/strict'
-import {shortlistDailyMarkets,dailyOddsSportKey,requestedDailyOddsMarkets,espnQuoteNeedsRecheck,planDailyOddsLeagueKeys} from '../src/daily-market-shortlist.ts'
+import {shortlistDailyMarkets,dailyQuoteCompletesMarketTicket,dailyOddsSportKey,requestedDailyOddsMarkets,espnQuoteNeedsRecheck,planDailyOddsLeagueKeys} from '../src/daily-market-shortlist.ts'
 
 test('quote discovery gives each active sport a first-pass league before extra soccer leagues',()=>{
   const games=[
@@ -251,6 +251,36 @@ test('ESPN soccer prices without draw remain rejected even with fresh observatio
   assert.equal(approved.selected.length,1)
 })
 
+test('final ESPN ticket gate requires a fresh exact event, teams, house, market and selection',()=>{
+  const game=fixtures[0]
+  const observedQuotes=pair(0).map(q=>({...q,source:'ESPN Site/Core · DraftKings',
+    observedAt:new Date(now).toISOString(),updatedAt:''}))
+  const candidate=shortlistDailyMarkets([game],observedQuotes,4,now).selected[0]
+  assert.ok(candidate)
+  const [quote]=observedQuotes
+  assert.ok(quote)
+  assert.equal(dailyQuoteCompletesMarketTicket(candidate,game,quote,
+    candidate.selection,candidate.line,candidate.decimalOdds,now),true)
+  assert.equal(dailyQuoteCompletesMarketTicket(candidate,game,
+    {...quote,observedAt:'2026-11-06T16:44:00Z'},candidate.selection,
+    candidate.line,candidate.decimalOdds,now),false)
+  assert.equal(dailyQuoteCompletesMarketTicket(candidate,game,
+    {...quote,eventId:'wrong-event'},candidate.selection,candidate.line,
+    candidate.decimalOdds,now),false)
+  assert.equal(dailyQuoteCompletesMarketTicket(candidate,game,
+    {...quote,bookmaker:'Other Book'},candidate.selection,candidate.line,
+    candidate.decimalOdds,now),false)
+  assert.equal(dailyQuoteCompletesMarketTicket(candidate,game,
+    {...quote,home:'Wrong Team'},candidate.selection,candidate.line,
+    candidate.decimalOdds,now),false)
+  assert.equal(dailyQuoteCompletesMarketTicket(candidate,game,
+    {...quote,selection:'Away 0'},candidate.selection,candidate.line,
+    candidate.decimalOdds,now),false)
+  assert.equal(dailyQuoteCompletesMarketTicket(
+    {...candidate,requiresRecheck:true},game,quote,candidate.selection,
+    candidate.line,candidate.decimalOdds,now),false)
+})
+
 test('genuine sub-1.20 NBA winner prices survive shortlist discovery',()=>{
   const game=fixtures[0]
   const quotes=[
@@ -318,7 +348,7 @@ test('daily shortlist provides independent selected-dossier deadline and visible
   assert.match(route,/requestedDossierBudget:120_000/)
   assert.match(route,/investigateTicketSpecialists\(group,fetch,now,env,quotes,selectedDossierBudget\)/)
   assert.match(route,/for\(let offset=0;offset<candidates.length;offset\+=4\)/)
-  assert.match(route,/shortlistTimingAudit:\{marketEvidenceMs,dossierElapsedMs/)
+  assert.match(route,/shortlistTimingAudit:\{\s*marketEvidenceMs,\s*dossierElapsedMs/)
   assert.match(route,/timedOutDossiers/)
   assert.doesNotMatch(route,/\}\)\),fetch,now,env,quotes\)/,
     'shortlist must not fall back to 20-second generic specialist deadline')

@@ -1,29 +1,90 @@
 /** Cross-check real sportsbook menus with the verified daily slate before research.
  * Market consensus is not a prediction or an expected-value advantage.
  */
-import type {MarketOutcome} from './sports.ts'
-import type {scoutDailySports} from './daily-sports-scout.ts'
+import type { MarketOutcome } from './sports.ts'
+import type { scoutDailySports } from './daily-sports-scout.ts'
+import { eligibleOddsForResearch } from './espn-odds-observation-gate.ts'
 
 type Fixture=Awaited<ReturnType<typeof scoutDailySports>>['events'][number]
 export type DailyMarketCandidate={
-  sport:string;league:string;espnEventId:string;bookmakerEventId:string
-  fixture:string;kickoff:string;bookmaker:string;market:'h2h'|'spreads'|'totals'
-  selection:string;line:number|null;decimalOdds:number;marketNoVigShare:number
-  outcomes:Array<{selection:string;line:number|null;decimalOdds:number;noVigShare:number}>
-  bookmakerOverround:number;quoteUpdatedAt:string;source:string
+  sport:string
+  league:string
+  espnEventId:string
+  bookmakerEventId:string
+  fixture:string
+  kickoff:string
+  bookmaker:string
+  market:'h2h'|'spreads'|'totals'
+  selection:string
+  line:number|null
+  decimalOdds:number
+  marketNoVigShare:number
+  outcomes:Array<{
+    selection:string
+    line:number|null
+    decimalOdds:number
+    noVigShare:number
+  }>
+  bookmakerOverround:number
+  quoteUpdatedAt:string
+  source:string
   /** Public ESPN observation, distinct from a verified bookmaker update. */
-  observedAt:string;timestampSource:'espn-observation'|'bookmaker-update'
+  observedAt:string
+  timestampSource:'espn-observation'|'bookmaker-update'
   assessment:'quote-only-research-pending'
-  /** An older ESPN observation is visible, but needs a new price read before completion. */
-  requiresRecheck?:boolean;observationAgeMinutes?:number
+  /** An ESPN observation older than the ticket freshness window needs a new read. */
+  requiresRecheck?:boolean
+  observationAgeMinutes?:number
 }
 export type DailyMarketShortlist={
-  goal:number;range:[number,number];complete:boolean;bookmaker:string|null
-  matchesInSlate:number;eligibleMarkets:number;selected:DailyMarketCandidate[]
-  alternatives:DailyMarketCandidate[];rejectedQuotes:number;warning:string
-  matchDiagnostics:{invalidQuote:number;unmatchedFixture:number;
-    incompleteMarket:number;timestampConflict:number;invalidMarketSides:number;
-    unsupportedCandidatePrice:number;requiresRefresh:number}
+  goal:number
+  range:[number,number]
+  complete:boolean
+  bookmaker:string|null
+  matchesInSlate:number
+  eligibleMarkets:number
+  selected:DailyMarketCandidate[]
+  alternatives:DailyMarketCandidate[]
+  rejectedQuotes:number
+  warning:string
+  matchDiagnostics:{
+    invalidQuote:number
+    unmatchedFixture:number
+    incompleteMarket:number
+    timestampConflict:number
+    invalidMarketSides:number
+    unsupportedCandidatePrice:number
+    requiresRefresh:number
+  }
+}
+/** Confirm a current ESPN quote against the exact researched fixture and side.
+ * @param candidate - Selected market candidate with its ESPN/provider identity.
+ * @param fixture - Independently verified future ESPN fixture.
+ * @param quote - Published bookmaker quote with its ESPN observation timestamp.
+ * @param selection - Exact researched market outcome.
+ * @param line - Exact market line, or `null` for a moneyline.
+ * @param price - Decimal price selected for the candidate.
+ * @param now - Evaluation instant used for freshness and future-event checks.
+ * @returns Whether the observed quote can complete the final ticket leg.
+ */
+export function dailyQuoteCompletesMarketTicket(
+  candidate:DailyMarketCandidate,fixture:Fixture,quote:MarketOutcome,
+  selection:string,line:number|null,price:number,now=Date.now(),
+):boolean{
+  const kickoff=Date.parse(fixture.kickoff)
+  const quoteKickoff=Date.parse(quote.timeIso??quote.time)
+  return candidate.requiresRecheck!==true&&
+    candidate.sport===fixture.sport&&candidate.league===fixture.league&&
+    candidate.espnEventId===fixture.eventId&&
+    candidate.bookmakerEventId===quote.eventId&&
+    candidate.bookmaker===quote.bookmaker&&candidate.market===quote.market&&
+    quote.selection===selection&&(quote.point??null)===line&&quote.price===price&&
+    quote.source===candidate.source&&
+    normal(fixture.home.name)===normal(quote.home)&&
+    normal(fixture.away.name)===normal(quote.away)&&
+    Number.isFinite(kickoff)&&Number.isFinite(quoteKickoff)&&
+    Math.abs(kickoff-quoteKickoff)<=45*60_000&&
+    eligibleOddsForResearch(quote,now)
 }
 const providerKeys:Readonly<Record<string,string>>={
   'basketball|nba':'basketball_nba',
@@ -57,11 +118,11 @@ export const dailyOddsSportKey=(sport:string,league:string):string|null=>
 export function planDailyOddsLeagueKeys(fixtures:readonly Fixture[],limit=18):string[]{
   if(!Number.isInteger(limit)||limit<1||limit>32)
     throw Error('Límite de 1 a 32 ligas de cuotas')
-  const leagues=new Map<string,{key:string;sport:string;games:number;first:string}>()
+  const leagues=new Map<string,{ key:string;sport:string;games:number;first:string }>()
   for(const fixture of fixtures){
     const key=dailyOddsSportKey(fixture.sport,fixture.league)
     if(!key)continue
-    const entry=leagues.get(key)??{key,sport:fixture.sport,games:0,first:fixture.kickoff}
+    const entry=leagues.get(key)??{ key,sport:fixture.sport,games:0,first:fixture.kickoff }
     entry.games++
     if(fixture.kickoff<entry.first)entry.first=fixture.kickoff
     leagues.set(key,entry)
@@ -109,13 +170,13 @@ const quoteClock=(quote:MarketOutcome):number=>{
   const observed=Date.parse(quote.observedAt??'')
   return Number.isFinite(observed)?observed:Date.parse(quote.updatedAt)
 }
-/** A previous ESPN read may remain visible, but must be refetched by exact
- * event ID before an automatically issued complete research ticket.
+/** An ESPN price must be re-read when its observation is outside the ticket
+ * gate's 15-minute window, before an automatically issued complete ticket.
  */
 export const espnQuoteNeedsRecheck=(quote:MarketOutcome,now=Date.now()):boolean=>{
   if(quote.source?.startsWith('ESPN')!==true)return false
   const observed=Date.parse(quote.observedAt??'')
-  return !Number.isFinite(observed)||observed>now||now-observed>30*60_000
+  return !Number.isFinite(observed)||observed>now||now-observed>15*60_000
 }
 const groupKey=(fixture:Fixture,quote:MarketOutcome):string=>[
   fixture.sport,fixture.league,fixture.eventId,quote.bookmaker,quote.eventId,
@@ -138,10 +199,10 @@ export function shortlistDailyMarkets(
   if(!Number.isInteger(goal)||goal<4||goal>6)throw Error('Objetivo de 4 a 6 patas')
   if(!Number.isInteger(researchPool)||researchPool<goal||researchPool>16)
     throw Error('Reserva de investigación desde objetivo hasta 16 eventos')
-  const groups=new Map<string,{fixture:Fixture;quotes:MarketOutcome[]}>()
+  const groups=new Map<string,{ fixture:Fixture;quotes:MarketOutcome[] }>()
   let rejectedQuotes=0
-  const matchDiagnostics={invalidQuote:0,unmatchedFixture:0,incompleteMarket:0,
-    timestampConflict:0,invalidMarketSides:0,unsupportedCandidatePrice:0,requiresRefresh:0}
+  const matchDiagnostics={ invalidQuote:0,unmatchedFixture:0,incompleteMarket:0,
+    timestampConflict:0,invalidMarketSides:0,unsupportedCandidatePrice:0,requiresRefresh:0 }
   const matchedGames=new Set<string>()
   for(const quote of quotes.slice(0,2000)){
     const time=Date.parse(quote.timeIso??quote.time),at=quoteClock(quote)
@@ -164,25 +225,30 @@ export function shortlistDailyMarkets(
     if(matches.length!==1){
       rejectedQuotes++;matchDiagnostics.unmatchedFixture++;continue
     }
-    const fixture=matches[0]!
+    const fixture=matches[0]
+    if(!fixture)continue
     const key=groupKey(fixture,quote)
-    const group=groups.get(key)??{fixture,quotes:[]}
+    const group=groups.get(key)??{ fixture,quotes:[] }
     const previous=group.quotes.findIndex(q=>
       q.selection===quote.selection&&q.point===quote.point)
     if(previous<0)group.quotes.push(quote)
-    else if(quoteClock(quote)>quoteClock(group.quotes[previous]!))
-      group.quotes[previous]=quote
+    else{
+      const prior=group.quotes[previous]
+      if(prior&&quoteClock(quote)>quoteClock(prior))group.quotes[previous]=quote
+    }
     groups.set(key,group)
     matchedGames.add(fixture.sport+'|'+fixture.league+'|'+fixture.eventId)
   }
   const candidates:DailyMarketCandidate[]=[]
-  for(const {fixture,quotes:rows} of groups.values()){
+  for(const { fixture,quotes:rows } of groups.values()){
     if(rows.length<2||rows.length>3){matchDiagnostics.incompleteMarket++;continue}
     const stamps=rows.map(quoteClock)
     if(Math.max(...stamps)-Math.min(...stamps)>10*60_000){
       matchDiagnostics.timestampConflict++;continue
     }
-    const market=rows[0]!.market
+    const first=rows[0],second=rows[1]
+    if(!first||!second)continue
+    const market=first.market
     const home=normal(fixture.home.name),away=normal(fixture.away.name)
     const labels=rows.map(q=>normal(q.selection))
     const twoTeams=labels.includes(home)&&labels.includes(away)
@@ -197,13 +263,13 @@ export function shortlistDailyMarkets(
         &&typeof rows[0]?.point==='number'&&typeof rows[1]?.point==='number'
         &&rows[0].point===-rows[1].point
     if(market==='totals')
-      valid=rows.length===2&&rows[0]!.point!==null
-        &&rows[0]!.point!==undefined&&rows[0]!.point===rows[1]!.point
+      valid=rows.length===2&&first.point!==null
+        &&first.point!==undefined&&first.point===second.point
         &&labels.includes('over')&&labels.includes('under')
     if(!valid){matchDiagnostics.invalidMarketSides++;continue}
     const inverse=rows.map(q=>1/q.price),sum=inverse.reduce((a,b)=>a+b,0)
     if(!Number.isFinite(sum)||sum<=0)continue
-    const options=rows.map((q,i)=>({quote:q,share:(inverse[i]??0)/sum}))
+    const options=rows.map((q,i)=>({ quote:q,share:(inverse[i]??0)/sum }))
       // Very short genuine favorites remain research candidates; value/risk
       // is assessed later, not silently erased by an arbitrary odds floor.
       .filter(x=>x.quote.price>=1.01&&x.quote.price<=4)
@@ -246,7 +312,6 @@ export function shortlistDailyMarkets(
     const sorted=[...rows].sort((a,b)=>
       Number(a.requiresRecheck)-Number(b.requiresRecheck)||
       marketPriority[a.market]-marketPriority[b.market]||
-      b.marketNoVigShare-a.marketNoVigShare||
       a.kickoff.localeCompare(b.kickoff)||a.fixture.localeCompare(b.fixture))
     const used=new Set<string>(),chosen:DailyMarketCandidate[]=[]
     const take=(p:DailyMarketCandidate)=>{
@@ -277,8 +342,8 @@ export function shortlistDailyMarkets(
   // Historical evidence is gathered ONCE per event before choosing a market,
   // so the user is not restricted to the first bookmaker-favorite selection.
   const eventKey=(p:DailyMarketCandidate)=>p.sport+'|'+p.league+'|'+p.espnEventId
-  const alternatives=selected.flatMap(chosen=>{
-    const eligible=(perBook.get(best!.bookmaker)??[])
+  const alternatives=selected.flatMap((chosen)=>{
+    const eligible=(best?perBook.get(best.bookmaker)??[]:[])
       .filter(x=>eventKey(x)===eventKey(chosen)&&x!==chosen)
       .sort((a,b)=>Number(a.market===chosen.market)-Number(b.market===chosen.market)||
         b.observedAt.localeCompare(a.observedAt)||
@@ -293,9 +358,9 @@ export function shortlistDailyMarkets(
     }
     return extra
   })
-  return {goal,range:[4,6],complete:selected.length>=goal,
+  return { goal,range:[4,6],complete:selected.length>=goal,
     bookmaker:best?.bookmaker??null,matchesInSlate:matchedGames.size,
     eligibleMarkets:candidates.length,selected,alternatives,rejectedQuotes,
     matchDiagnostics,
-    warning:'Las observaciones ESPN antiguas se conservan para estudio, pero requieren nueva lectura antes del boleto final. Solo preselección del mercado: marketNoVigShare procede de cuotas, NO de un modelo de acierto ni de valor esperado. Antes de proponer un ticket final confirma alineaciones, lesiones, titulares, porteros, contexto, reglas y probabilidad calibrada cuando exista. Si hay menos de cuatro ofertas válidas, informa la falta sin fabricar patas. No se ha realizado ninguna apuesta.'}
+    warning:'Las observaciones ESPN antiguas se conservan para estudio, pero requieren nueva lectura antes del boleto final. Solo preselección del mercado: marketNoVigShare procede de cuotas, NO de un modelo de acierto ni de valor esperado. Antes de proponer un ticket final confirma alineaciones, lesiones, titulares, porteros, contexto, reglas y probabilidad calibrada cuando exista. Si hay menos de cuatro ofertas válidas, informa la falta sin fabricar patas. No se ha realizado ninguna apuesta.' }
 }

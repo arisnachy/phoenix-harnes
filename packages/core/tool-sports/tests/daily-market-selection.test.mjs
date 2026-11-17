@@ -66,13 +66,13 @@ test('independently positive market beats negative-value descriptive favorite',(
   assert.equal(result.selected[0].candidate.market,'totals')
 })
 
-test('equally researched moneyline prioritizes stronger market favorite over raw ranking',()=>{
+test('research ranking beats a stronger market favorite when both have equivalent evidence status',()=>{
   const low={...review(21,'h2h','descriptive-support',99),
     selectedOutcome:{selection:'Home 21',line:null,decimalOdds:1.91,noVigShare:.52}}
   const high={...review(22,'h2h','descriptive-support',1),
     selectedOutcome:{selection:'Home 22',line:null,decimalOdds:1.19,noVigShare:.84}}
   const r=selectDailyResearchedMarkets([low,high],5)
-  assert.equal(r.selected[0].candidate.espnEventId,'22')
+  assert.equal(r.selected[0].candidate.espnEventId,'21')
 })
 
 test('daily selection excludes unavailable, contraindicated and negative-value legs before ranking',()=>{

@@ -231,7 +231,7 @@ test('exact NBA+NHL day filter scans neither soccer nor unrelated sports',async(
     'basketball,hockey,evil-source',fetcher,now,{}),/Filtro de deportes/)
 })
 
-test('daily selection replaces unpriced first-five candidate with sixth ESPN-quoted rival',async()=>{
+test('daily selection stays research-ranked when only a lower-ranked sixth rival has an ESPN quote',async()=>{
   const withSixthPrice=async url=>{
     const raw=fixture(url,true),u=String(url)
     if(u.includes('/soccer/eng.1/')&&u.includes('dates=20261028')){
@@ -262,12 +262,13 @@ test('daily selection replaces unpriced first-five candidate with sixth ESPN-quo
   assert.equal(scoreboardLines,3,'home, away and draw are distinct observed outcomes')
   assert.equal(result.quoteObservedCandidates,1)
   assert.equal(result.events.length,5)
-  assert.equal(result.events[0].eventId,'105',
-    'real sixth ESPN-priced candidate replaces an unpriced historical favorite')
-  assert.ok(result.events.some(e=>e.eventId==='105'))
+  assert.ok(!result.events.some(e=>e.eventId==='105'),
+    'a quote alone cannot displace a higher-ranked research candidate')
+  assert.equal(result.quoteObservedCandidates,1,
+    'the observed quote is tracked independently from research ranking')
   assert.equal(result.priced,false,'preselection is not a sportsbook ticket')
 })
-test('price-first never accepts a different event, future timestamp, or partial soccer 1x2',()=>{
+test('daily ESPN quote matching rejects a different event, future timestamp, or partial soccer 1x2',()=>{
   const c={eventId:'105',sport:'soccer',league:'eng.1',home:'Home 105',
     away:'Away 105',kickoff:future,pick:'home',rank:.2,level:'strong'}
   const good={eventId:'105',market:'1x2',point:null,bookmaker:'DraftKings',

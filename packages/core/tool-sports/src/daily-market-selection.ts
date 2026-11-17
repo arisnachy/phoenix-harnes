@@ -1,7 +1,7 @@
 /** Choose one fully quoted market per researched event, after comparing alternatives.
  * Descriptive alignment is not calibrated probability or expected value.
  */
-import type {MarketResearchReview} from './daily-market-evidence.ts'
+import type { MarketResearchReview } from './daily-market-evidence.ts'
 
 export type DailyResearchedSelection={
   selected:MarketResearchReview[]
@@ -30,16 +30,16 @@ const effectiveResearchRank=(r:MarketResearchReview):number=>
   r.priceAudit?.classification==='negative-value'?0:researchRank[r.status]
 const compare=(a:MarketResearchReview,b:MarketResearchReview)=>{
   const ra=effectiveResearchRank(a),rb=effectiveResearchRank(b)
-  // For equally evidenced moneyline picks, prefer the less fragile priced side.
-  // This is relative bookmaker confidence, not a validated predictive edge.
+  // Research strength and source coverage decide first. Price-derived values
+  // can only break a research tie; no-vig share is not a prediction.
   const aShare=a.selectedOutcome?.noVigShare,bShare=b.selectedOutcome?.noVigShare
   const winnerStrength=a.candidate.market==='h2h'&&b.candidate.market==='h2h'
     &&typeof aShare==='number'&&Number.isFinite(aShare)
     &&typeof bShare==='number'&&Number.isFinite(bShare)
-      ?bShare-aShare:0
-  return rb-ra||valueRank(b)-valueRank(a)||winnerStrength||
-    b.rankingScore-a.rankingScore||
+    ?bShare-aShare:0
+  return rb-ra||b.rankingScore-a.rankingScore||
     b.verifiedSources-a.verifiedSources||
+    valueRank(b)-valueRank(a)||winnerStrength||
     (b.candidate.observedAt??b.candidate.quoteUpdatedAt).localeCompare(
       a.candidate.observedAt??a.candidate.quoteUpdatedAt)||
     a.candidate.market.localeCompare(b.candidate.market)||
@@ -76,10 +76,13 @@ export function selectDailyResearchedMarkets(
       const key=eventIdentity(review),options=unique.get(key)??[]
       options.push(review);unique.set(key,options)
     }
-    const best=[...unique.values()].map(options=>[...options].sort(compare)[0]!)
+    const best=[...unique.values()].flatMap((options)=>{
+      const first=[...options].sort(compare)[0]
+      return first?[first]:[]
+    })
       .sort(compare)
     const supported=best.filter(row=>row.status==='descriptive-support').length
-    return{book,unique,best,supported}
+    return{ book,unique,best,supported }
   }).sort((a,b)=>
     Math.min(goal,b.supported)-Math.min(goal,a.supported)||
     Math.min(goal,b.best.length)-Math.min(goal,a.best.length)||
@@ -92,7 +95,8 @@ export function selectDailyResearchedMarkets(
   // unsupported event must never outrank a better documented market.
   const selected:MarketResearchReview[]=[],remaining=[...best]
   while(selected.length<goal&&remaining.length){
-    const bestCandidate=remaining[0]!
+    const bestCandidate=remaining[0]
+    if(!bestCandidate)break
     const diversify=remaining.find(review=>
       compare(review,bestCandidate)===0&&
       !selected.some(x=>x.candidate.sport===review.candidate.sport))
