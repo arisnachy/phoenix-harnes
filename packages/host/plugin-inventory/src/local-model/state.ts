@@ -56,7 +56,7 @@ function normalizeState(value: unknown, migrateLegacyDefault = false): LocalMode
   const rawThinking = record['thinking']
   const thinking = rawThinking === null || typeof rawThinking === 'boolean'
     || (typeof rawThinking === 'string' && rawThinking.length > 0 && rawThinking.length <= 64)
-    ? rawThinking : DEFAULT_STATE.thinking
+    ? rawThinking : (DEFAULT_STATE.thinking ?? false)
   return { mode, selectedModelId, installedModelIds, thinking }
 }
 
