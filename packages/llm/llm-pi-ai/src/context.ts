@@ -393,7 +393,12 @@ function isPlainLocalTextMessage(message: Message): boolean {
     && message.content.every(block => block.type === 'text')
 }
 
-/** Bound the response sent over the local wire using the selected model's window. */
+/**
+ * Bound the response sent over the local wire using the selected model's window.
+ * @param contextWindow - Effective context limit of the selected local model.
+ * @param desiredMaxOutput - Response budget requested for the turn.
+ * @returns The output tokens to reserve and allow on the local wire.
+ */
 export function resolvePhoenixLocalMaxOutput(contextWindow: number, desiredMaxOutput: number): number {
   return Math.max(1, Math.min(Math.floor(desiredMaxOutput), Math.floor(contextWindow / 4)))
 }
@@ -417,7 +422,13 @@ function fitPhoenixLocalHeadroom(
   }
 }
 
-/** Fit a local turn, using a request-only text projection when the full harness exceeds the model window. */
+/**
+ * Fit a local turn, using a request-only text projection under context pressure.
+ * @param options - Fully assembled request including the latest user message.
+ * @param contextWindow - Effective context limit of the selected local model.
+ * @param desiredMaxOutput - Response budget requested for the turn.
+ * @returns The fitted request and the safe input budget.
+ */
 export function fitPhoenixLocalTextTurn(
   options: GenerateOptions,
   contextWindow: number,
