@@ -155,6 +155,8 @@ async function probeInstalledOllamaModel(modelTag: string): Promise<void> {
 /**
  * Query Ollama's authoritative local model metadata without pulling or updating
  * anything. Named reasoning levels must never be invented or inferred.
+ * @param model - Exact local Ollama model tag to inspect.
+ * @returns Advertised thinking choices or undefined on unsupported Ollama versions.
  */
 export async function readOllamaThinkingCapabilities(model: string): Promise<LocalThinkingCapabilities | undefined> {
   const response = await fetch('http://127.0.0.1:11434/api/show', {
