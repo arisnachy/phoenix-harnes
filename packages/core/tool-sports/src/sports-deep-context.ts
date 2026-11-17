@@ -117,7 +117,9 @@ export async function investigateEventDeep(
     team.rosterSample=names.slice(0,12)
     // ESPN Site v2 exposes real headshot.href URLs on roster athlete rows.
     // Missing headshots remain null: do not fabricate a CDN URL from an ID.
-    team.rosterPortraits=athletes.slice(0,12).flatMap(value=>{
+    // Full lineup-scale portrait coverage across NBA/WNBA/NHL/MLB/Soccer; only
+    // images actually published by ESPN are exposed to the chat.
+    team.rosterPortraits=athletes.slice(0,45).flatMap(value=>{
       const athlete=obj(get(value,'athlete')??value)
       const id=digits(athlete.id),name=str(athlete.displayName??athlete.fullName,90)
       if(!id||!name)return []
