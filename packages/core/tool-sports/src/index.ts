@@ -37,6 +37,7 @@ import { lookupExactEspnWinner } from './sports-exact-espn-winner.ts'
 import { explainOddsEligibility,eligibleOddsForResearch } from './espn-odds-observation-gate.ts'
 import { ensureSportsSourcesStarted,hydrateSportsSources,managedSportsInstallStatus,sportsSourcesHealth } from './sports-source-health.ts'
 import { investigateEventDeep } from './sports-deep-context.ts'
+import { discoverAutonomousSportsSources } from './sports-autonomous-source-discovery.ts'
 import { auditUniversalMatchup } from './universal-matchup-factors.ts'
 import { estimateEvidenceForecast } from './sports-forecast.ts'
 import { extendedEspnRoutes,readExtendedEspn,type ExtendedEspnMode } from './espn-extra-intelligence.ts'
@@ -1085,6 +1086,28 @@ export function apply(ctx: Context): void {
         instruction:'Usa rosterPortraits con headshots verificados por ESPN cuando existen; para una tarjeta visual con fotos llama sports_chat_espn_explore(view=team,teamId=ID oficial). Los enlaces de ESPN RD son referencias, no pruebas de lectura. Identifica noticias sobre los dos equipos y coteja bajas con fuentes oficiales; una plantilla NO confirma titulares ni ausencia de lesiones. No atribuyas rendimiento que la fuente no aporta. Contrasta cuotas por separado.' })
     },
     presentCall:()=>({ card:'generic',title:'Investigar noticias, estadísticas y bajas de un evento',kind:'read' as const }),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_autonomous_sources',
+    description:'Kira decide de forma autónoma qué noticia o dato falta (lesiones, titulares, jugadores, viajes, entrenadores, táctica) y busca publicaciones públicas de CUALQUIER medio indexado, más allá de ESPN y las páginas sugeridas. Devuelve enlaces y fechas para contrastar; no interpreta titulares como hechos verificados ni inventa información.',
+    parameters:{
+      home:{ type:'string',required:true,description:'Equipo local real del partido previamente verificado.' },
+      away:{ type:'string',required:true,description:'Equipo visitante real del partido previamente verificado.' },
+      question:{ type:'string',required:true,description:'La pregunta precisa que Kira ha identificado: jugador, lesión, alineación, entrenamiento, táctica, portero, QB, etc.' },
+    },
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{type:'text' as const,text:v}] },
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const result=await discoverAutonomousSportsSources({
+        home:args.home,away:args.away},args.question,fetch,Date.now())
+      return JSON.stringify({ ...result,
+        nextStep:result.articles.length?
+          'Kira: identifica qué artículo puede resolver tu pregunta y abre la publicación original mediante las herramientas generales de búsqueda/navegación si están disponibles. Contrasta con liga/club oficial u otra fuente; una noticia indexada NO confirma bajas ni titulares. Si no puedes abrirla, deja el dato como pendiente.':
+          'Kira: reformula la pregunta o cambia a fuentes deportivas oficiales mediante las herramientas disponibles; no asumas que ausencia de noticia equivale a equipo sano.',
+        canSearchOtherPublishers:true,notRestrictedToUserUrls:true,
+        sourceVerification:'indexed-only' })
+    },
+    presentCall:()=>({card:'generic',title:'Kira · Buscar otras fuentes deportivas',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_matchup_factors',
