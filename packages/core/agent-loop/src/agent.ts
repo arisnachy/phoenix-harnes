@@ -552,6 +552,18 @@ export class ReactLoopAgent implements Agent {
     const { turn, step, abort: { signal } } = this.phase
     signal.throwIfAborted()
     const system = renderCacheFriendlyPrompt(assembly)
+    if (process.env.PHOENIX_TOKEN_AUDIT === '1') {
+      // Section names and sizes reveal accidental prompt bloat without
+      // exposing system instructions, user data or tool schema contents.
+      const largestSections = assembly.sections
+        .map(section => ({ name: section.name, rawChars: section.text.length }))
+        .sort((a, b) => b.rawChars - a.rawChars)
+        .slice(0, 10)
+      console.info('[PHOENIX SYSTEM SECTION SIZES] ' + JSON.stringify({
+        sectionCount: assembly.sections.length,
+        largestSections,
+      }))
+    }
 
     while (true) {
       const derived = this.session.deriveMessages()
@@ -764,6 +776,25 @@ export class ReactLoopAgent implements Agent {
       ...contextWindow === undefined ? {} : { contextWindow },
     }
     const previousContext = session.requestContext()
+    if (process.env.PHOENIX_TOKEN_AUDIT === '1'
+      && (previousContext?.provider !== requestContext.provider
+        || previousContext.model !== requestContext.model)) {
+      // Trace provider transitions without logging prompts or credentials.
+      // A Codex -> Local transition is not inferred from separate sessions.
+      console.info('[PHOENIX MODEL ROUTE] ' + JSON.stringify({
+        turn,
+        step,
+        previousProvider: previousContext?.provider ?? null,
+        previousModel: previousContext?.model ?? null,
+        configuredProvider: this.options.provider ?? null,
+        configuredModel: this.options.model ?? null,
+        requestedProvider: requestContext.provider,
+        requestedModel: requestContext.model,
+        contextWindow: requestContext.contextWindow ?? null,
+        providerChanged: previousContext !== undefined
+          && previousContext.provider !== requestContext.provider,
+      }))
+    }
     if (previousContext?.provider !== requestContext.provider
       || previousContext.model !== requestContext.model
       || previousContext.contextWindow !== requestContext.contextWindow) {

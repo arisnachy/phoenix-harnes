@@ -1045,13 +1045,13 @@ export class ToolRuntime extends Service {
    * `both` renders empty: native calls do execute there, so the rule is false.
    * @returns the section registration.
    */
-  private collapseSection(): { name: string; order: number; text: (context: { scope?: ScopeKey }) => string } {
+  private collapseSection(): { name: string; order: number; text: (context: AssembleContext) => string } {
     return {
       name: 'tools:code-only',
       order: COLLAPSE_SECTION_ORDER,
       // The SAME predicate the executor denies by, so the prompt cannot state
       // a rule the registry does not enforce (see `collapses`).
-      text: context => this.modeFor(context.scope) === 'code' ? CODE_ONLY_INSTRUCTION : '',
+      text: context => context.omitTools === true ? '' : this.modeFor(context.scope) === 'code' ? CODE_ONLY_INSTRUCTION : '',
     }
   }
 
@@ -1077,6 +1077,10 @@ export class ToolRuntime extends Service {
       interpolateVariables: false,
       // Regenerate from the calling scope's visible tools in stable order.
       text: (context) => {
+        // Fast conversational turns omit wire tools. Do not regenerate the
+        // potentially enormous SDK catalog for a tool-free request: sending
+        // it would swamp small local models and contradict the empty tool list.
+        if (context.omitTools === true) return ''
         const mode = this.modeFor(context.scope)
         if (mode === 'native') return ''
         const runtime = this.requireCodeRuntime(mode)
