@@ -18,8 +18,9 @@ export type DecisionInput={
   modelStatus:'support'|'contradiction'|'unavailable'
   /** Derived from last games, NEVER a calibrated probability or edge. */
   exploratoryProbabilityPercent?:number|null
-  /** Source-timestamped injury/fatigue/starter risk screen, not p(win). */
-  pregameRiskPriority?:number|null
+  /** Factual unknowns requiring the model to investigate, no points or weights. */
+  pregameConcerns?:readonly string[]
+  pregameReviewRequired?:boolean
 }
 export type DecisionVerdict='exclude'|'hold'|'caution'|'candidate'
 export type DecisionLeg={
@@ -86,22 +87,17 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
       Number((breakEven-exploratory).toFixed(2)):null
     const largeExploratoryConflict=gap!==null&&gap>=5
     const expensiveFavorite=breakEven!==null&&breakEven>=80
-    const majorPregameRisk=typeof input.pregameRiskPriority==='number'&&
-      Number.isFinite(input.pregameRiskPriority)&&input.pregameRiskPriority<=-.8
+    const qualitativeReview=input.pregameReviewRequired===true||
+      (input.pregameConcerns?.length??0)>0
     const quarterbackUnconfirmed=input.sport==='football'&&
       input.criticalPending.some(step=>/\bqb\b|quarterback|mariscal/iu.test(step))
     const goalieUnconfirmed=input.sport==='hockey'&&
       input.criticalPending.some(step=>/portero|goalie/iu.test(step))
     const alternativeReviewRequired=largeExploratoryConflict||
-      expensiveFavorite||goalieUnconfirmed||quarterbackUnconfirmed||majorPregameRisk
+      expensiveFavorite||goalieUnconfirmed||quarterbackUnconfirmed||qualitativeReview
     const reasons:string[]=[]
     let verdict:DecisionVerdict
-    if(majorPregameRisk){
-      verdict='hold'
-      reasons.push('RETENER: múltiples alertas prepartido verificadas de ' +
-        'disponibilidad, fatiga o titulares del elegido; buscar otra pata y ' +
-        'reexaminar la publicación original antes de incluirla.')
-    }else if(quarterbackUnconfirmed){
+    if(quarterbackUnconfirmed){
       verdict='hold'
       reasons.push('RETENER NFL: quarterback titular sin confirmación en expediente; ' +
         'no cerrar la pata hasta comprobar al titular y revisar las bajas ofensivas.')
@@ -134,6 +130,12 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
     }else{
       verdict='candidate'
       reasons.push('CANDIDATA A COMPARACIÓN: investigación documentada; precio no demuestra valor.')
+    }
+    if(qualitativeReview){
+      reasons.push('REVISIÓN DE KIRA: comparar bilateralmente roster, bajas y descanso '+
+        'sin convertirlos en puntuación. Pendiente: '+
+        (input.pregameConcerns?.join('; ')||'evaluación cualitativa del expediente')+'.')
+      if(verdict==='candidate')verdict='caution'
     }
     if(share!==null&&share<policy.excludeBelow&&
       !reasons.some(reason=>reason.includes('PRECAUCIÓN ALTA')))
