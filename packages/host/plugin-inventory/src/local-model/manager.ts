@@ -101,13 +101,16 @@ class RuntimeManager implements LocalModelRuntimeManager {
 
   /** Probe only Ollama's local /api/show metadata, never assume named thinking levels. */
   async refreshThinking(): Promise<LocalModelRuntimeSnapshot> {
-    const model = getLocalModel(this.persistent.selectedModelId)
+    const selectedModelId = this.persistent.selectedModelId
+    const model = getLocalModel(selectedModelId)
     if (model?.backend !== 'ollama' || this.dependencies.readOllamaThinking === undefined) {
       return this.snapshot()
     }
     try {
       const thinkingCapabilities = await this.dependencies.readOllamaThinking(model.ollamaModel)
-      if (thinkingCapabilities !== undefined) this.publish({ ...this.current, thinkingCapabilities })
+      if (thinkingCapabilities !== undefined && this.persistent.selectedModelId === selectedModelId) {
+        this.publish({ ...this.current, thinkingCapabilities })
+      }
     } catch {
       // Older Ollama installations remain usable without thinking metadata.
     }
@@ -198,6 +201,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
         const installedModelIds = [...new Set([...this.persistent.installedModelIds, modelId])]
         await this.savePersistent({ ...this.persistent, selectedModelId: modelId, installedModelIds })
         this.publishPhase('ready')
+        await this.refreshThinking()
         if (this.current.mode === 'always-on') await this.start()
         return this.snapshot()
       } catch (error) {
@@ -276,6 +280,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
           port: 11_434,
           baseUrl: 'http://127.0.0.1:11434/v1',
         })
+        await this.refreshThinking()
         return this.snapshot()
       } catch (error) {
         const runtimeError = fault(error, 'ollama-unavailable', 'Ollama no está disponible en 127.0.0.1:11434.')
