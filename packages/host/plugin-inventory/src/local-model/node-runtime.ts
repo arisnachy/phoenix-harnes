@@ -3,6 +3,7 @@ import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises
 import { homedir, freemem } from 'node:os'
 import path from 'node:path'
 import net from 'node:net'
+import type { LocalThinkingCapabilities } from './types.js'
 import { createLocalModelPaths } from './paths.js'
 import { createLocalModelStateStore } from './state.js'
 import { downloadVerifiedArtifact } from './download.js'
@@ -152,6 +153,29 @@ async function probeInstalledOllamaModel(modelTag: string): Promise<void> {
 }
 
 /**
+ * Query Ollama's authoritative local model metadata without pulling or updating
+ * anything. Named reasoning levels must never be invented or inferred.
+ */
+export async function readOllamaThinkingCapabilities(model: string): Promise<LocalThinkingCapabilities | undefined> {
+  const response = await fetch('http://127.0.0.1:11434/api/show', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ model }),
+    signal: AbortSignal.timeout(3_000),
+  })
+  if (!response.ok) return undefined
+  const payload = await response.json() as { thinking?: { values?: unknown; default?: unknown } }
+  const raw = payload.thinking
+  if (!Array.isArray(raw?.values)) return undefined
+  const values = raw.values.filter((value): value is boolean | string =>
+    typeof value === 'boolean' || (typeof value === 'string' && value.length > 0 && value.length <= 64))
+  if (values.length === 0 || values.length > 16) return undefined
+  const defaultValue = raw.default
+  const selectedDefault = values.find(value => value === defaultValue) ?? null
+  return { values, default: selectedDefault }
+}
+
+/**
  * Create the production Phoenix Local runtime manager for this Host process.
  * The heavy llama-server receives an ephemeral loopback port and stays hidden
  * behind Phoenix's stable proxy; no model is downloaded until Settings asks.
@@ -180,6 +204,7 @@ export async function createNodeLocalModelRuntimeManager(): Promise<LocalModelRu
     spawnServer: spawnLocalServer,
     probeHealth,
     probeOllamaModel: probeInstalledOllamaModel,
+    readOllamaThinking: readOllamaThinkingCapabilities,
     freeMemoryBytes: freemem,
   })
 }
