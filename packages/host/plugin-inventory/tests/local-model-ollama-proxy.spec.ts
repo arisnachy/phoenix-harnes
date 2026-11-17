@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { getLocalModel } from '../src/local-model/catalog.js'
 import { rewriteOllamaOpenAiBody } from '../src/local-model/proxy.js'
+import { toNativeOllamaChat } from '../src/local-model/ollama-native-chat.js'
 
 const qwen = getLocalModel('qwen3.5-2b-ollama-q4-k-m')
 const native = getLocalModel('gemma-4-e2b-it-q4-0')
@@ -18,6 +19,18 @@ function decode(body: Uint8Array<ArrayBuffer> | undefined): Record<string, unkno
 }
 
 describe('Phoenix Local Ollama proxy', () => {
+  it('honors native off, enabled, model-defined levels and Ollama default', () => {
+    if (qwen?.backend !== 'ollama') throw Error('Missing Ollama test model')
+    const request = encode({ model: 'phoenix-local', messages: [{ role: 'user', content: 'hola' }] })
+    const high = toNativeOllamaChat(request, qwen, false, 'high')
+    expect(high.payload.think).toBe('high')
+    expect((high.payload.options as { num_ctx: number }).num_ctx).toBeLessThanOrEqual(qwen.contextWindow)
+    expect((high.payload.options as { num_ctx: number }).num_ctx).toBeGreaterThanOrEqual(4096)
+    expect(toNativeOllamaChat(request, qwen, false, true).payload.think).toBe(true)
+    expect(toNativeOllamaChat(request, qwen, false, false).payload.think).toBe(false)
+    expect(toNativeOllamaChat(request, qwen, false, null).payload).not.toHaveProperty('think')
+  })
+
   it('maps the generic Phoenix model to the installed tag while preserving tool calls and streaming', () => {
     const tools = [{ type: 'function', function: { name: 'sumar', parameters: { type: 'object' } } }]
     const request = encode({

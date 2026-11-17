@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { LocalModelRuntimeManager } from './manager.js'
 import { getLocalModel } from './catalog.js'
-import type { LocalModelCatalogEntry } from './types.js'
+import type { LocalModelCatalogEntry, LocalThinking } from './types.js'
 import { NativeOllamaChatError, relayNativeOllamaChat, toNativeOllamaChat } from './ollama-native-chat.js'
 
 /** Stable loopback port exposed to the normal Phoenix LLM provider. */
@@ -45,14 +45,15 @@ function requestHeaders(request: IncomingMessage): Headers {
 
 /**
  * Adapt Phoenix's stable provider model name to the model already in Ollama.
- * Disable explicit thinking and cap verbose CPU-first answers, preserving a
- * smaller caller-supplied limit and all tool declarations and streaming flags.
+ * Preserve explicitly configured Ollama thinking levels while capping CPU
+ * replies and retaining caller tool declarations and streaming flags.
  * The rewritten request never leaves 127.0.0.1.
  */
 export function rewriteOllamaOpenAiBody(
   suffix: string,
   body: Uint8Array<ArrayBuffer> | undefined,
   model: LocalModelCatalogEntry | undefined,
+  thinking: LocalThinking = false,
 ): Uint8Array<ArrayBuffer> | undefined {
   if (body === undefined || model?.backend !== 'ollama' || !model.ollamaModel) return body
   const route = suffix.split('?')[0]
@@ -77,11 +78,18 @@ export function rewriteOllamaOpenAiBody(
     // max_completion_tokens. Do not send two conflicting output budgets.
     delete adapted['max_completion_tokens']
     delete adapted['max_output_tokens']
-    adapted['reasoning_effort'] = 'none'
+    if (thinking === false) adapted['reasoning_effort'] = 'none'
+    else if (typeof thinking === 'string') adapted['reasoning_effort'] = thinking
+    else delete adapted['reasoning_effort']
     delete adapted['reasoning']
   } else {
-    adapted['think'] = false
-    adapted['reasoning'] = { effort: 'none' }
+    if (thinking === null) {
+      delete adapted['think']
+      delete adapted['reasoning']
+    } else {
+      adapted['think'] = thinking
+      adapted['reasoning'] = { effort: thinking === false ? 'none' : thinking === true ? 'high' : thinking }
+    }
   }
   const encoded = Buffer.from(JSON.stringify(adapted), 'utf8')
   const copy = new Uint8Array(new ArrayBuffer(encoded.length))
@@ -111,17 +119,19 @@ async function forward(
     const incomingPath = request.url ?? '/v1'
     const suffix = incomingPath.startsWith('/v1') ? incomingPath.slice(3) : incomingPath
     const body = await readBody(request)
-    const selected = getLocalModel(manager.snapshot().selectedModelId)
+    const runtime = manager.snapshot()
+    const selected = getLocalModel(runtime.selectedModelId)
+    const thinking = runtime.thinking === undefined ? false : runtime.thinking
     const isOllama = selected?.backend === 'ollama'
     // Native Ollama /api/chat is the authoritative way to disable Qwen
     // reasoning. Its /v1 compatibility route has produced 64/64 hidden
     // reasoning tokens with an empty visible answer on some Ollama versions.
     const nativeChat = request.method === 'POST' && suffix.split('?')[0] === '/chat/completions'
       && selected?.backend === 'ollama'
-      ? toNativeOllamaChat(body, selected, request.headers['x-phoenix-local-auto-continue'] === '1')
+      ? toNativeOllamaChat(body, selected, request.headers['x-phoenix-local-auto-continue'] === '1', thinking)
       : undefined
     const forwardedBody = nativeChat === undefined
-      ? request.method === 'POST' ? rewriteOllamaOpenAiBody(suffix, body, selected) : body
+      ? request.method === 'POST' ? rewriteOllamaOpenAiBody(suffix, body, selected, thinking) : body
       : (() => {
         const encoded = Buffer.from(JSON.stringify(nativeChat.payload), 'utf8')
         const copy = new Uint8Array(new ArrayBuffer(encoded.length))
