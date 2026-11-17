@@ -1,6 +1,15 @@
 /** Supported Phoenix Local runtime lifecycle policies. */
 export type LocalModelMode = 'off' | 'on-demand' | 'always-on'
 
+/** Exact model-native thinking value; null delegates to the Ollama default. */
+export type LocalThinking = boolean | string | null
+
+/** Only values reported by Ollama /api/show should be offered as named levels. */
+export interface LocalThinkingCapabilities {
+  values: Array<boolean | string>
+  default: LocalThinking
+}
+
 /** Observable lifecycle phases for Phoenix Local. */
 export type LocalModelPhase =
   | 'not-installed'
@@ -54,6 +63,8 @@ export interface LocalModelPersistentState {
   mode: LocalModelMode
   selectedModelId: string
   installedModelIds: string[]
+  /** User choice; existing Qwen installations keep their previous off default. */
+  thinking?: LocalThinking
 }
 
 /** Byte-level progress for a Phoenix Local artifact download. */
@@ -76,4 +87,5 @@ export interface LocalModelRuntimeSnapshot extends LocalModelPersistentState {
   port?: number
   baseUrl?: string
   error?: LocalModelRuntimeError
+  thinkingCapabilities?: LocalThinkingCapabilities
 }

@@ -256,6 +256,7 @@ type PluginInventoryLocalRemote = {
   uninstallLocalModel(request: { modelId: string }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
   setLocalModelMode(request: { mode: PhoenixLocalModelMode }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
   setDefaultLocalModel(request: { modelId: string }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
+  setLocalModelThinking(request: { thinking: boolean | string | null }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
 }
 
 function unwrapPluginInventory<T>(operation: string, result: PluginInventoryRemoteResult<T>): T {
@@ -373,6 +374,7 @@ function localModelClient(ctx: ClientContext): PhoenixLocalModelClient {
     stop: async () => unwrapPluginInventory('stopLocalModel', await remote().stopLocalModel()),
     uninstall: async modelId => unwrapPluginInventory('uninstallLocalModel', await remote().uninstallLocalModel({ modelId })),
     setMode: async mode => unwrapPluginInventory('setLocalModelMode', await remote().setLocalModelMode({ mode })),
+    setThinking: async thinking => unwrapPluginInventory('setLocalModelThinking', await remote().setLocalModelThinking({ thinking })),
     setDefaultModel: async modelId => unwrapPluginInventory(
       'setDefaultLocalModel',
       await remote().setDefaultLocalModel({ modelId }),

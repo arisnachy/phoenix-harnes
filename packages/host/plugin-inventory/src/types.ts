@@ -471,6 +471,7 @@ export interface PhoenixLocalModelCatalogEntry {
   readonly sizeBytes: number
   readonly estimatedRamBytes: number
   readonly contextWindow: number
+  readonly nativeContextWindow?: number
   readonly maxTokens: number
   readonly recommended: boolean
 }
@@ -489,6 +490,8 @@ export interface PhoenixLocalModelError {
 
 /** Complete trusted-client snapshot of Phoenix Local. */
 export interface PhoenixLocalModelSnapshot {
+  readonly thinking?: boolean | string | null
+  readonly thinkingCapabilities?: { readonly values: readonly (boolean | string)[]; readonly default: boolean | string | null }
   readonly mode: PhoenixLocalModelMode
   readonly selectedModelId: string
   readonly installedModelIds: readonly string[]
@@ -506,6 +509,11 @@ export interface PhoenixLocalModelRequest {
 /** Runtime-mode request used by Settings. */
 export interface PhoenixLocalModeRequest {
   readonly mode: PhoenixLocalModelMode
+}
+
+/** Ollama thinking choice; a null value delegates to the model default. */
+export interface PhoenixLocalThinkingRequest {
+  readonly thinking: boolean | string | null
 }
 
 /** Loopback endpoint receipt used internally before local inference. */

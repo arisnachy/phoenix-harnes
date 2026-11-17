@@ -56,6 +56,10 @@ function client(initial = snapshot()): PhoenixLocalModelClient & { calls: Record
       current = snapshot({ ...current, selectedModelId: modelId, installedModelIds: [], phase: 'not-installed' })
       return current
     }),
+    setThinking: vi.fn(async (thinking: boolean | string | null) => {
+      current = snapshot({ ...current, thinking })
+      return current
+    }),
     setMode: vi.fn(async (mode: PhoenixLocalModelSnapshot['mode']) => {
       current = snapshot({ ...current, mode })
       return current
@@ -102,6 +106,27 @@ describe('PhoenixLocalPanel', () => {
     await waitFor(() =>{  expect(local.calls.install).toHaveBeenCalledWith(qwenId) })
     fireEvent.click(await screen.findByRole('button', { name: localEn.disconnectOllama }))
     expect(screen.getByText(localEn.disconnectOllamaQuestion)).toBeTruthy()
+  })
+
+  it('shows only Ollama-supported thinking controls and persists the selection', async () => {
+    const id = 'qwen3.5-2b-ollama-q4-k-m'
+    const local = client(snapshot({
+      selectedModelId: id,
+      thinking: false,
+      thinkingCapabilities: { values: [false, true, 'high'], default: true },
+      catalog: [{ id, backend: 'ollama', displayName: 'Qwen 3.5 2B',
+        sizeBytes: 2_000_000_000, estimatedRamBytes: 3_500_000_000,
+        contextWindow: 16_384, nativeContextWindow: 262_144, maxTokens: 768, recommended: true }],
+    }))
+    render(<PhoenixLocalPanel client={local} t={t} />)
+    expect(await screen.findByLabelText<HTMLSelectElement>(localEn.thinking)).toBeTruthy()
+    const dropdown = screen.getByLabelText<HTMLSelectElement>(localEn.thinking)
+    expect(dropdown.querySelector('option[value="level:low"]')).toBeNull()
+    expect(dropdown.querySelector('option[value="level:high"]')).toBeTruthy()
+    fireEvent.change(dropdown, { target: { value: 'level:high' } })
+    await waitFor(() => { expect(local.calls.setThinking).toHaveBeenCalledWith('high') })
+    fireEvent.change(screen.getByLabelText(localEn.thinking), { target: { value: 'boolean:false' } })
+    await waitFor(() => { expect(local.calls.setThinking).toHaveBeenCalledWith(false) })
   })
 
   it('persists mode changes through the Host client', async () => {

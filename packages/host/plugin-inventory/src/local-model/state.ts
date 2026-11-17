@@ -26,6 +26,7 @@ const DEFAULT_STATE: Readonly<LocalModelPersistentState> = Object.freeze({
   mode: 'on-demand',
   selectedModelId: DEFAULT_LOCAL_MODEL_ID,
   installedModelIds: [],
+  thinking: false,
 })
 
 function isMode(value: unknown): value is LocalModelMode {
@@ -52,7 +53,11 @@ function normalizeState(value: unknown, migrateLegacyDefault = false): LocalMode
     && (unusedLegacyQwen || unusedGemmaDefault)
     ? DEFAULT_STATE.selectedModelId
     : selectedModelIdRaw
-  return { mode, selectedModelId, installedModelIds }
+  const rawThinking = record['thinking']
+  const thinking = rawThinking === null || typeof rawThinking === 'boolean'
+    || (typeof rawThinking === 'string' && rawThinking.length > 0 && rawThinking.length <= 64)
+    ? rawThinking : (DEFAULT_STATE.thinking ?? false)
+  return { mode, selectedModelId, installedModelIds, thinking }
 }
 
 function isMissingFile(error: unknown): boolean {
