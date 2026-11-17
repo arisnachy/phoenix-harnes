@@ -48,14 +48,19 @@ export function assessPregamePreselectionRisk(
     Number.isFinite(kickoff)&&kickoff>now&&check.rosterMatchedInjuries){
     const home=weighted(check.rosterMatchedInjuries[own],now,kickoff)
     const away=weighted(check.rosterMatchedInjuries[rival],now,kickoff)
+    const bothReported=check.injuryAudit===undefined||
+      (check.injuryAudit.home.matched&&check.injuryAudit.away.matched)
     if(home>0){
-      const diff=Math.max(0,home-away)
-      priority-=Math.min(1.15,0.12*home+0.26*diff)
+      // Missing opponent group is UNKNOWN, not zero injuries. Use only own
+      // observed absences when the feeds cannot compare both clubs.
+      const differential=bothReported?Math.max(0,home-away):0
+      priority-=Math.min(1.15,.18*home+.22*differential)
       needsRecheck=true
       reasons.push('Bajas del elegido conciliadas con roster y fechadas: '+
-        home.toFixed(2)+' ponderadas frente a '+away.toFixed(2)+
-        ' del rival; efecto real sobre eficiencia no calibrado')
-    }else if(away>0){
+        home.toFixed(2)+' ponderadas; rival '+
+        (bothReported?away.toFixed(2)+' observadas':'sin parte bilateral')+
+        '. Impacto real en eficiencia no calibrado')
+    }else if(away>0&&bothReported){
       priority+=Math.min(.15,.05*away)
       reasons.push('Rival con bajas publicadas conciliadas; sin inferir victoria')
     }
