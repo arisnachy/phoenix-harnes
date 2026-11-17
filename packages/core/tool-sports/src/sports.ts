@@ -1,9 +1,9 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
 import { fetchPublicEspnOddsDetailed } from './espn-odds.ts'
-import {fetchEspnScoreboardWithFallback} from './espn-nfl-weekly.ts'
-import {fetchEspnWebsiteOdds} from './espn-website-odds.ts'
+import { fetchEspnScoreboardWithFallback } from './espn-nfl-weekly.ts'
+import { fetchEspnWebsiteOdds } from './espn-website-odds.ts'
 import { fetchTheOddsApi } from './free-odds.ts'
-import {fetchTheRundownOdds,fetchSportsGameOdds,rundownSupports,sportsGameSupports} from './open-odds-providers.ts'
+import { fetchTheRundownOdds,fetchSportsGameOdds,rundownSupports,sportsGameSupports } from './open-odds-providers.ts'
 import { keylessEnabled, keylessOdds, type KeylessSport } from './keyless-odds.ts'
 import { saveOddsSnapshot } from './odds-snapshots.ts'
 import { belongsToLeague } from './sports-odds-coverage.ts'
@@ -29,46 +29,46 @@ export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
   'rugby-league':['3'],'australian-football':['afl'],
 }
 // League labels are explicit and stable catalog metadata, never fabricated live results.
-const leaguePresentation: Record<string,{league:string;country?:string}> = {
-  'eng.1':{league:'Premier League',country:'Inglaterra'},
-  'esp.1':{league:'LaLiga',country:'España'},
-  'mex.1':{league:'Liga MX',country:'México'},
-  'usa.1':{league:'MLS',country:'Estados Unidos / Canadá'},
-  'uefa.champions':{league:'UEFA Champions League',country:'Europa'},
-  'uefa.wchampions':{league:'UEFA Champions League femenina',country:'Europa'},
-  'ger.1':{league:'Bundesliga',country:'Alemania'},
-  'ita.1':{league:'Serie A',country:'Italia'},
-  'fra.1':{league:'Ligue 1',country:'Francia'},
-  'por.1':{league:'Primeira Liga',country:'Portugal'},
-  'ned.1':{league:'Eredivisie',country:'Países Bajos'},
-  'bra.1':{league:'Brasileirão Série A',country:'Brasil'},
-  'arg.1':{league:'Liga Profesional',country:'Argentina'},
-  'uefa.europa':{league:'UEFA Europa League',country:'Europa'},
-  'fifa.world':{league:'Copa Mundial',country:'Internacional'},
-  'mlb':{league:'MLB'},'nba':{league:'NBA'},'wnba':{league:'WNBA'},
-  'nfl':{league:'NFL'},'nhl':{league:'NHL'},
+const leaguePresentation: Record<string,{ league:string;country?:string }> = {
+  'eng.1':{ league:'Premier League',country:'Inglaterra' },
+  'esp.1':{ league:'LaLiga',country:'España' },
+  'mex.1':{ league:'Liga MX',country:'México' },
+  'usa.1':{ league:'MLS',country:'Estados Unidos / Canadá' },
+  'uefa.champions':{ league:'UEFA Champions League',country:'Europa' },
+  'uefa.wchampions':{ league:'UEFA Champions League femenina',country:'Europa' },
+  'ger.1':{ league:'Bundesliga',country:'Alemania' },
+  'ita.1':{ league:'Serie A',country:'Italia' },
+  'fra.1':{ league:'Ligue 1',country:'Francia' },
+  'por.1':{ league:'Primeira Liga',country:'Portugal' },
+  'ned.1':{ league:'Eredivisie',country:'Países Bajos' },
+  'bra.1':{ league:'Brasileirão Série A',country:'Brasil' },
+  'arg.1':{ league:'Liga Profesional',country:'Argentina' },
+  'uefa.europa':{ league:'UEFA Europa League',country:'Europa' },
+  'fifa.world':{ league:'Copa Mundial',country:'Internacional' },
+  'mlb':{ league:'MLB' },'nba':{ league:'NBA' },'wnba':{ league:'WNBA' },
+  'nfl':{ league:'NFL' },'nhl':{ league:'NHL' },
 }
-const oddsPresentation:Record<string,{sport:string;country?:string;league?:string}> = {
-  soccer_epl:{sport:'Fútbol',country:'Inglaterra',league:'Premier League'},
-  soccer_spain_la_liga:{sport:'Fútbol',country:'España',league:'LaLiga'},
-  soccer_mexico_ligamx:{sport:'Fútbol',country:'México',league:'Liga MX'},
-  soccer_usa_mls:{sport:'Fútbol',country:'Estados Unidos / Canadá',league:'MLS'},
-  soccer_uefa_champs_league:{sport:'Fútbol',country:'Europa',league:'Champions League'},
-  soccer_uefa_womens_champions_league:{sport:'Fútbol',country:'Europa',league:'Champions League femenina'},
-  baseball_mlb:{sport:'Béisbol',league:'MLB'},
-  basketball_nba:{sport:'Baloncesto',league:'NBA'},
-  basketball_wnba:{sport:'Baloncesto',league:'WNBA'},
-  americanfootball_nfl:{sport:'Fútbol americano',league:'NFL'},
-  icehockey_nhl:{sport:'Hockey',league:'NHL'},
+const oddsPresentation:Record<string,{ sport:string;country?:string;league?:string }> = {
+  soccer_epl:{ sport:'Fútbol',country:'Inglaterra',league:'Premier League' },
+  soccer_spain_la_liga:{ sport:'Fútbol',country:'España',league:'LaLiga' },
+  soccer_mexico_ligamx:{ sport:'Fútbol',country:'México',league:'Liga MX' },
+  soccer_usa_mls:{ sport:'Fútbol',country:'Estados Unidos / Canadá',league:'MLS' },
+  soccer_uefa_champs_league:{ sport:'Fútbol',country:'Europa',league:'Champions League' },
+  soccer_uefa_womens_champions_league:{ sport:'Fútbol',country:'Europa',league:'Champions League femenina' },
+  baseball_mlb:{ sport:'Béisbol',league:'MLB' },
+  basketball_nba:{ sport:'Baloncesto',league:'NBA' },
+  basketball_wnba:{ sport:'Baloncesto',league:'WNBA' },
+  americanfootball_nfl:{ sport:'Fútbol americano',league:'NFL' },
+  icehockey_nhl:{ sport:'Hockey',league:'NHL' },
 }
-const categoryFromSportKey=(sportKey?:string):{sport?:string;country?:string;league?:string}=>{
+const categoryFromSportKey=(sportKey?:string):{ sport?:string;country?:string;league?:string }=>{
   if(!sportKey)return {}
   const known=oddsPresentation[sportKey]
   if(known)return known
   const category=sportKey.split('_')[0]??''
-  const sport:Record<string,string>={soccer:'Fútbol',baseball:'Béisbol',basketball:'Baloncesto',
-    americanfootball:'Fútbol americano',icehockey:'Hockey',tennis:'Tenis',cricket:'Críquet'}
-  return sport[category]?{sport:sport[category]}:{}
+  const sport:Record<string,string>={ soccer:'Fútbol',baseball:'Béisbol',basketball:'Baloncesto',
+    americanfootball:'Fútbol americano',icehockey:'Hockey',tennis:'Tenis',cricket:'Críquet' }
+  return sport[category]?{ sport:sport[category] }:{}
 }
 const title=(v:unknown,max=170):string => {
   const value=typeof v==='string'||typeof v==='number'||typeof v==='boolean'?String(v):'Sin confirmar'
@@ -127,16 +127,16 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
   if(u.protocol!=='https:'||u.username||u.password||!['site.api.espn.com','site.web.api.espn.com','sports.core.api.espn.com','cdn.espn.com','lm-api-reads.fantasy.espn.com','now.core.api.espn.com','statsapi.mlb.com','api-web.nhle.com','api.nhle.com','api.the-odds-api.com','api.open-meteo.com','www.thesportsdb.com','cdn.nba.com','api.openligadb.de','raw.githubusercontent.com'].includes(u.hostname))throw Error('Host no permitido')
   // Restrict unauthenticated ESPN Fantasy player views to 40 candidates.
   // No session cookies, user tokens or private league access.
-  const headers:Record<string,string>={accept:'application/json'}
+  const headers:Record<string,string>={ accept:'application/json' }
   if(u.hostname==='lm-api-reads.fantasy.espn.com'&&u.pathname.endsWith('/players'))
-    headers['X-Fantasy-Filter']=JSON.stringify({players:{limit:40,
-      sortPercOwned:{sortPriority:1,sortAsc:false}}})
+    headers['X-Fantasy-Filter']=JSON.stringify({ players:{ limit:40,
+      sortPercOwned:{ sortPriority:1,sortAsc:false } } })
   // NHL /current and /now issue 307 redirects to the exact season. Resolve
   // at most two hops on the SAME NHL host and under /v1; never follow arbitrary
   // Location headers or allow private-network / cross-provider redirects.
   let next=u.toString(),response:Response|undefined
   for(let hops=0;hops<=2;hops++){
-    response=await fetcher(next,{headers,redirect:u.hostname==='api-web.nhle.com'?'manual':'error',signal:AbortSignal.timeout(9000)})
+    response=await fetcher(next,{ headers,redirect:u.hostname==='api-web.nhle.com'?'manual':'error',signal:AbortSignal.timeout(9000) })
     if(![301,302,303,307,308].includes(response.status))break
     if(hops===2||u.hostname!=='api-web.nhle.com')
       throw Error('Redirección de proveedor no permitida')
@@ -155,7 +155,38 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
   if(text.length>4_000_000)throw Error('Respuesta supera 4 MB')
   return JSON.parse(text) as T
 }
-type FeedEvent = { id?:string|number;date?:string;name?:string;status?:{ type?:{ description?:string;state?:string } };competitions?:Array<{ id?:string|number;venue?:{ fullName?:string;address?:{ city?:string } };competitors?:Array<{ id?:string;homeAway?:string;score?:string|number;team?:{ displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{ href?:string }> };records?:Array<{ summary?:string }>;linescores?:Array<{ value?:number|string;displayValue?:string }>;leaders?:Array<{ name?:string;leaders?:Array<{ athlete?:{ displayName?:string;headshot?:{ href?:string } };displayValue?:string }> }> }>;broadcasts?:Array<{ names?:string[] }> }> }
+type FeedEvent = {
+  id?:string|number
+  date?:string
+  name?:string
+  status?:{ type?:{ description?:string;state?:string } }
+  competitions?:Array<{
+    id?:string|number
+    venue?:{ fullName?:string;address?:{ city?:string } }
+    competitors?:Array<{
+      id?:string
+      homeAway?:string
+      score?:string|number
+      team?:{
+        displayName?:string
+        name?:string
+        id?:string
+        logo?:string
+        logos?:Array<{ href?:string }>
+      }
+      records?:Array<{ summary?:string }>
+      linescores?:Array<{ value?:number|string;displayValue?:string }>
+      leaders?:Array<{
+        name?:string
+        leaders?:Array<{
+          athlete?:{ displayName?:string;headshot?:{ href?:string } }
+          displayValue?:string
+        }>
+      }>
+    }>
+    broadcasts?:Array<{ names?:string[] }>
+  }>
+}
 type MlbGame = { gamePk:number;gameDate?:string;venue?:{ name?:string };seriesDescription?:string;seriesGameNumber?:number;status?:{ detailedState?:string;abstractGameState?:string };teams?:Record<'home'|'away',{ team?:{ id?:number;name?:string };score?:number;probablePitcher?:{ id?:number;fullName?:string } }> }
 /** Safe, minimal sports UI payload; the client validates it before rendering. */
 export type ChatBlock = { component:'sports_game_card'|'sports_schedule_card'|'sports_ticket_card'|'sports_odds_card';version:1;props:Record<string,unknown> }
@@ -178,7 +209,7 @@ export function compactSportsSchedule(games:readonly ChatBlock[],day:string,sour
   const providerLeague=text(first.providerLeague,80)
   const sameLeague=cards.every(card=>card.props.league===first.league)
   const sameSport=cards.every(card=>card.props.sport===first.sport)
-  const events=cards.map(card=>{
+  const events=cards.map((card)=>{
     const p=card.props
     const highlights=Array.isArray(p.highlights)?p.highlights:[]
     const firstHighlight=object(highlights[0])
@@ -187,27 +218,27 @@ export function compactSportsSchedule(games:readonly ChatBlock[],day:string,sour
     const detail=text(firstHighlight.detail,55)
     const favorite=text(p.favorite,170)??text(research.favorite,170)
     return {
-      ...(text(p.eventId,50)?{eventId:text(p.eventId,50)}:{}),
+      ...(text(p.eventId,50)?{ eventId:text(p.eventId,50) }:{}),
       when:text(p.when,80)??'Hora no confirmada',
-      ...(text(p.status,60)?{status:text(p.status,60)}:{}),
-      ...(p.phase==='in'||p.phase==='pre'||p.phase==='post'?{phase:p.phase}:{}),
-      ...(text(p.venue,180)?{venue:text(p.venue,180)}:{}),
+      ...(text(p.status,60)?{ status:text(p.status,60) }:{}),
+      ...(p.phase==='in'||p.phase==='pre'||p.phase==='post'?{ phase:p.phase }:{}),
+      ...(text(p.venue,180)?{ venue:text(p.venue,180) }:{}),
       away:p.away,home:p.home,
-      ...(featured?{featured:featured+(detail?' · '+detail:'')}:{}),
-      ...(favorite&&(text(p.favorite,170)||Array.isArray(research.evidence)&&research.evidence.length>0)?{favorite}:{}),
-      ...(Array.isArray(p.trackedBets)&&p.trackedBets.length?{trackedBets:p.trackedBets.slice(0,12)}:{}),
-      ...(text(p.askPrompt,400)?{askPrompt:text(p.askPrompt,400)}:{}),
+      ...(featured?{ featured:featured+(detail?' · '+detail:'') }:{}),
+      ...(favorite&&(text(p.favorite,170)||Array.isArray(research.evidence)&&research.evidence.length>0)?{ favorite }:{}),
+      ...(Array.isArray(p.trackedBets)&&p.trackedBets.length?{ trackedBets:p.trackedBets.slice(0,12) }:{}),
+      ...(text(p.askPrompt,400)?{ askPrompt:text(p.askPrompt,400) }:{}),
     }
   })
-  return {component:'sports_schedule_card',version:1,props:{
+  return { component:'sports_schedule_card',version:1,props:{
     title:'Cartelera deportiva',
     date:day,
-    ...(sameSport&&sport?{sport}:{}),
-    ...(sameLeague&&league?{league}:{}),
-    ...(providerLeague?{providerLeague}:{}),
+    ...(sameSport&&sport?{ sport }:{}),
+    ...(sameLeague&&league?{ league }:{}),
+    ...(providerLeague?{ providerLeague }:{}),
     source,total:games.length,events,
     note:'La cartelera muestra solo datos públicos verificados. Para profundizar, consulta un encuentro individual.',
-  }}
+  } }
 }
 
 function localTime(dateString?:string):string {
@@ -218,7 +249,7 @@ function localTime(dateString?:string):string {
 }
 function logosEnabled(env:NodeJS.ProcessEnv):boolean{return env.PHOENIX_SPORTS_IMAGES_DISABLED!=='1'}
 /** Numeric identifiers are taken only from the ESPN scoreboard; never fabricate IDs for Core requests. */
-export type EspnGameIdentifiers={eventId:string;competitionId:string;homeTeamId?:string;awayTeamId?:string}
+export type EspnGameIdentifiers={ eventId:string;competitionId:string;homeTeamId?:string;awayTeamId?:string }
 const espnNumericId=(value:unknown):string|undefined=>{
   const id=typeof value==='number'&&Number.isSafeInteger(value)?String(value):typeof value==='string'?value:undefined
   return id&&/^\d{1,16}$/u.test(id)?id:undefined
@@ -231,7 +262,21 @@ const espnNumericId=(value:unknown):string|undefined=>{
  * @param fetcher - Injectable HTTP client for tests.
  * @returns Attributed game cards, result count and date.
  */
-export async function chatGames(sport:string,league:string,requestedDate?:string,env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,compactLive=false):Promise<{ summary:string;items:ChatBlock[];source:string;count:number;date:string;espnIdentifiers:EspnGameIdentifiers[] }> {
+export async function chatGames(
+  sport:string,
+  league:string,
+  requestedDate?:string,
+  env:NodeJS.ProcessEnv=process.env,
+  fetcher:typeof fetch=fetch,
+  compactLive=false,
+):Promise<{
+  summary:string
+  items:ChatBlock[]
+  source:string
+  count:number
+  date:string
+  espnIdentifiers:EspnGameIdentifiers[]
+}> {
   if(!Object.hasOwn(sportsCatalog,sport)||!leagueValid(league))throw Error('Disciplina o liga inválida')
   if(!sportsCatalog[sport]?.includes(league)&&!(await discoverEspnLeagues(sport,env,fetcher)).includes(league))throw Error('Liga no encontrada en el catálogo público de ESPN')
   const day=date(requestedDate),rows:ChatBlock[]=[],espnIdentifiers:EspnGameIdentifiers[]=[]
@@ -255,7 +300,10 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         // Limit deep MLB requests on large game days; the user can drill down any remaining matchup.
         const details=!compactLive&&index<3?await enrichMlbMatch(
           g.gamePk,home?.team?.id??0,away?.team?.id??0,homeName,awayName,
-          { ...(home?.probablePitcher?{ home:home.probablePitcher }:{}),...(away?.probablePitcher?{ away:away.probablePitcher }:{}) },Number(day.slice(0,4)),env,fetcher,
+          {
+            ...(home?.probablePitcher?{ home:home.probablePitcher }:{}),
+            ...(away?.probablePitcher?{ away:away.probablePitcher }:{}),
+          },Number(day.slice(0,4)),env,fetcher,
         ):null
         const research=!compactLive&&index<3?await researchMlbTrend(
           home?.team?.id??0,away?.team?.id??0,Number(day.slice(0,4)),homeName,awayName,fetcher,
@@ -286,7 +334,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
   }else{
     if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración PHOENIX_SPORTS_ESPN_DISABLED=1.')
     const feed=await fetchEspnScoreboardWithFallback(sport,league,day.replaceAll('-',''),
-      uri=>getFeed<{events?:FeedEvent[]}>(uri,fetcher))
+      uri=>getFeed<{ events?:FeedEvent[] }>(uri,fetcher))
     if(!Array.isArray(feed.events))throw Error('Respuesta ESPN no válida')
     for(const e of feed.events.slice(0,25)){
       const comp=e.competitions?.[0],home=comp?.competitors?.find(x=>x.homeAway==='home'),away=comp?.competitors?.find(x=>x.homeAway==='away')
@@ -294,8 +342,8 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
       // Core URLs must use ESPN's actual competition ID, which can differ from eventId.
       if(eventId&&competitionId){
         const homeTeamId=espnNumericId(home?.team?.id),awayTeamId=espnNumericId(away?.team?.id)
-        espnIdentifiers.push({eventId,competitionId,
-          ...(homeTeamId?{homeTeamId}:{}),...(awayTeamId?{awayTeamId}:{})})
+        espnIdentifiers.push({ eventId,competitionId,
+          ...(homeTeamId?{ homeTeamId }:{}),...(awayTeamId?{ awayTeamId }:{}) })
       }
       const side=(c:typeof home)=>{
         const name=title(c?.team?.displayName??c?.team?.name)
@@ -335,7 +383,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
       rows.push({ component:'sports_game_card',version:1,props:{
         title:title(e.name,95),subtitle:(leagueInfo?.league??title(league,45))+' · '+sportLabel,
         league:leagueInfo?.league??title(league,45),
-        ...(leagueInfo?.country?{country:leagueInfo.country}:{}),
+        ...(leagueInfo?.country?{ country:leagueInfo.country }:{}),
         status:scheduleConflict?'Estado por confirmar':title(e.status?.type?.description,55),when:localTime(e.date),
         venue:title(comp?.venue?.fullName),home:side(home),away:side(away),
         source:'ESPN Site API · '+new Date().toISOString(),
@@ -343,8 +391,8 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         phase:e.status?.type?.state==='in'?'in':e.status?.type?.state==='post'?'post':'pre',
         ...(e.id !== undefined && String(e.id).trim() !== '' ? { eventId: String(e.id) } : {}),
         periods, highlights,
-        ...(scheduleConflict?{note:'ESPN sigue indicando programado después del inicio previsto. Estado no verificado: no usar como partido futuro ni ofrecer cuotas prepartido. '+(sport==='basketball'&&league==='nba'?'Jugadores destacados omitidos hasta verificar su pertenencia a las plantillas vigentes.':'')}:
-          sport==='basketball'&&league==='nba'?{note:'Jugadores destacados omitidos hasta verificar su pertenencia a las plantillas vigentes.'}:{}),
+        ...(scheduleConflict?{ note:'ESPN sigue indicando programado después del inicio previsto. Estado no verificado: no usar como partido futuro ni ofrecer cuotas prepartido. '+(sport==='basketball'&&league==='nba'?'Jugadores destacados omitidos hasta verificar su pertenencia a las plantillas vigentes.':'') }:
+          sport==='basketball'&&league==='nba'?{ note:'Jugadores destacados omitidos hasta verificar su pertenencia a las plantillas vigentes.' }:{}),
         ...(comp?.broadcasts?.length?{ broadcast:comp.broadcasts.flatMap(x=>x.names??[]).slice(0,3).join(', ') }:{}),
         askPrompt:'Kira, amplía el análisis verificado del evento '+title(e.id,50)+' de '+league+'. Incluye métricas específicas de '+sport+' con sus fuentes.',
       } })
@@ -355,7 +403,17 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
 /** Unique sportsbook selection identity without an assumed price. */
 export type MarketSelection = { eventId:string;bookmaker:string;market:string;selection:string;point?:number|null }
 /** Time-stamped sportsbook quote tied to a provider event and market. */
-export type MarketOutcome = MarketSelection & { price:number;home:string;away:string;time:string;timeIso?:string;updatedAt:string;observedAt?:string;source?:string;sportKey?:string }
+export type MarketOutcome = MarketSelection & {
+  price:number
+  home:string
+  away:string
+  time:string
+  timeIso?:string
+  updatedAt:string
+  observedAt?:string
+  source?:string
+  sportKey?:string
+}
 /** Read attributed bookmaker quotes, without purchasing or placing any bet.
  * @param sportKey - Provider sports key.
  * @param markets - Approved market categories.
@@ -363,39 +421,58 @@ export type MarketOutcome = MarketSelection & { price:number;home:string;away:st
  * @param fetcher - HTTP adapter for isolated tests.
  * @returns Normalized quotes with bookmaker names and update times.
  */
-export type OddsResearchObservation=MarketOutcome&{reason:'sin_fecha'|'antigua'|'proveedor_sin_nombre'|'fecha_futura';
-  endpointSource?:'scoreboard'|'core'|'summary'|'website';nonCotizable:true}
-export type OddsSourceAttempt={provider:string;status:'observed'|'empty'|'unconfigured'|'error';
-  count:number;detail:string;rawCount?:number;startedOddsEntries?:number;
-  undatedOutcomes?:number;expiredOutcomes?:number}
+export type OddsResearchObservation=MarketOutcome&{
+  reason:'sin_fecha'|'antigua'|'proveedor_sin_nombre'|'fecha_futura'
+  endpointSource?:'scoreboard'|'core'|'summary'|'website'
+  nonCotizable:true
+}
+export type OddsSourceAttempt={
+  provider:string
+  status:'observed'|'empty'|'unconfigured'|'error'
+  count:number
+  detail:string
+  rawCount?:number
+  startedOddsEntries?:number
+  undatedOutcomes?:number
+  expiredOutcomes?:number }
 /** Query independent providers without allowing an empty/failed preferred provider
  * to suppress a healthy fallback. Preserve bookmaker identity and source times.
  */
 export async function marketOddsDetailed(
   sportKey:string,markets='h2h',env:NodeJS.ProcessEnv=process.env,
   fetcher:typeof fetch=fetch,now=Date.now(),
-):Promise<{quotes:MarketOutcome[];sources:OddsSourceAttempt[];
-  observations:OddsResearchObservation[]}>{
+):Promise<{
+  quotes:MarketOutcome[]
+  sources:OddsSourceAttempt[]
+  observations:OddsResearchObservation[]
+}>{
   if(!/^[a-z0-9_]{3,80}$/u.test(sportKey)||
     !/^(h2h|totals|spreads)(,(h2h|totals|spreads))*$/u.test(markets))
     throw Error('Mercado inválido')
-  const requests:Array<{name:string;run:()=>Promise<MarketOutcome[]>}>=[]
+  const requests:Array<{ name:string;run:()=>Promise<MarketOutcome[]> }>=[]
   const sources:OddsSourceAttempt[]=[]
   let espnDetail=''
   const observations:OddsResearchObservation[]=[]
   let espnRawCount=0,espnStarted=0,espnUndated=0,espnExpired=0
-  const names=['The Odds API v4','TheOddsAPI','TheRundown','SportsGameOdds','OddsHarvester','ESPN Site/Core']
+  const names:[string,string,string,string,string,string]=[
+    'The Odds API v4','TheOddsAPI','TheRundown','SportsGameOdds','OddsHarvester','ESPN Site/Core']
   const configured=new Set<string>()
   if(hasSportsPermission('odds',env)){
-    configured.add(names[0]!)
-    requests.push({name:names[0]!,run:async()=>{
+    configured.add(names[0])
+    requests.push({ name:names[0],run:async()=>{
       const u=new URL('https://api.the-odds-api.com/v4/sports/'+sportKey+'/odds')
-      for(const [k,v] of Object.entries({apiKey:env.THE_ODDS_API_KEY??'',regions:'us',
-        markets,oddsFormat:'decimal'}))u.searchParams.set(k,v)
-      const feed=await getFeed<Array<{id:string;home_team:string;away_team:string;
-        commence_time:string;bookmakers?:Array<{key:string;title:string;
-        last_update?:string;markets?:Array<{key:string;last_update?:string;
-          outcomes?:Array<{name:string;price:number;point?:number}>}>}>}>>(
+      for(const [k,v] of Object.entries({ apiKey:env.THE_ODDS_API_KEY??'',regions:'us',
+        markets,oddsFormat:'decimal' }))u.searchParams.set(k,v)
+      const feed=await getFeed<Array<{ id:string
+        home_team:string
+        away_team:string
+        commence_time:string
+        bookmakers?:Array<{ key:string
+          title:string
+          last_update?:string
+          markets?:Array<{ key:string
+            last_update?:string
+            outcomes?:Array<{ name:string;price:number;point?:number }> }> }> }>>(
         u.toString(),fetcher)
       if(!Array.isArray(feed))throw Error('Respuesta de cuotas inválida')
       return feed.flatMap(event=>(event.bookmakers??[]).flatMap(book=>
@@ -408,32 +485,35 @@ export async function marketOddsDetailed(
             updatedAt:title(market.last_update??book.last_update),
             source:'The Odds API',
           }))))).slice(0,500)
-    }})
+    } })
   }
-  if(env.THEODDSAPI_API_KEY?.trim()){
-    configured.add(names[1]!)
-    requests.push({name:names[1]!,run:async()=>{
-      try{return await fetchTheOddsApi(sportKey,markets,env.THEODDSAPI_API_KEY!,fetcher,now)}
+  const theOddsApiKey=env.THEODDSAPI_API_KEY
+  if(theOddsApiKey?.trim()){
+    configured.add(names[1])
+    requests.push({ name:names[1],run:async()=>{
+      try{return await fetchTheOddsApi(sportKey,markets,theOddsApiKey,fetcher,now)}
       catch(error){
         // This provider's Free tier exposes NFL/NBA/MLB h2h, not spreads/totals.
         // Retain authentic available moneylines when premium markets are denied.
         if(markets==='h2h'||!markets.split(',').includes('h2h'))throw error
-        return fetchTheOddsApi(sportKey,'h2h',env.THEODDSAPI_API_KEY!,fetcher,now)
+        return fetchTheOddsApi(sportKey,'h2h',theOddsApiKey,fetcher,now)
       }
-    }})
+    } })
   }
   // Each authenticated fallback uses a fixed HTTPS host, private header key,
   // bounded JSON, fresh per-book timestamp, and source-level diagnostics.
   // Unconfigured free tiers do not trigger network calls or fabricated prices.
-  if(env.THERUNDOWN_API_KEY?.trim()&&rundownSupports(sportKey)){
+  const rundownApiKey=env.THERUNDOWN_API_KEY
+  if(rundownApiKey?.trim()&&rundownSupports(sportKey)){
     configured.add('TheRundown')
-    requests.push({name:'TheRundown',run:()=>fetchTheRundownOdds(
-      sportKey,markets,env.THERUNDOWN_API_KEY!,fetcher,now)})
+    requests.push({ name:'TheRundown',run:()=>fetchTheRundownOdds(
+      sportKey,markets,rundownApiKey,fetcher,now) })
   }
-  if(env.SPORTSGAMEODDS_API_KEY?.trim()&&sportsGameSupports(sportKey)){
+  const sportsGameOddsApiKey=env.SPORTSGAMEODDS_API_KEY
+  if(sportsGameOddsApiKey?.trim()&&sportsGameSupports(sportKey)){
     configured.add('SportsGameOdds')
-    requests.push({name:'SportsGameOdds',run:()=>fetchSportsGameOdds(
-      sportKey,markets,env.SPORTSGAMEODDS_API_KEY!,fetcher,now)})
+    requests.push({ name:'SportsGameOdds',run:()=>fetchSportsGameOdds(
+      sportKey,markets,sportsGameOddsApiKey,fetcher,now) })
   }
   if(keylessEnabled(env)){
     const prefix=sportKey.split('_')[0]
@@ -450,9 +530,9 @@ export async function marketOddsDetailed(
       if(wants.includes('h2h')){
         const market=sport==='football'||sport==='handball'?'1x2':
           sport==='basketball'?'home_away':
-          sport==='tennis'?'match_winner':
-            ['ice-hockey','volleyball','rugby-league','rugby-union','cricket'].includes(sport)?
-              'home_away':'moneyline'
+            sport==='tennis'?'match_winner':
+              ['ice-hockey','volleyball','rugby-league','rugby-union','cricket'].includes(sport)?
+                'home_away':'moneyline'
         chosen.push(market)
       }
       if(wants.includes('totals')&&sport!=='cricket'&&chosen.length<2)
@@ -460,25 +540,25 @@ export async function marketOddsDetailed(
           sport==='volleyball'?'total_points_over_under':'over_under')
       if(chosen.length)configured.add('OddsHarvester')
       for(const market of chosen){
-        requests.push({name:'OddsHarvester',run:async()=>{
+        requests.push({ name:'OddsHarvester',run:async()=>{
           const rows=await keylessOdds(sport,market,undefined,env,now)
           return rows.filter(q=>sportKey===sport||belongsToLeague(sportKey,q))
-            .map(q=>({...q,sportKey,time:localTime(q.time),timeIso:q.time}))
-        }})
+            .map(q=>({ ...q,sportKey,time:localTime(q.time),timeIso:q.time }))
+        } })
       }
     }
   }
   if(hasSportsPermission('espn',env)){
     configured.add('ESPN Site/Core')
-    requests.push({name:'ESPN Site/Core',run:async()=>{
-      const {quotes,diagnostics,observations:resultObservations}=await fetchPublicEspnOddsDetailed(sportKey,markets,
-        <T>(url:string)=>getFeed<T>(url,fetcher),{now,cache:fetcher===fetch})
+    requests.push({ name:'ESPN Site/Core',run:async()=>{
+      const { quotes,diagnostics,observations:resultObservations }=await fetchPublicEspnOddsDetailed(sportKey,markets,
+        <T>(url:string)=>getFeed<T>(url,fetcher),{ now,cache:fetcher===fetch })
       // Provider-name/future-timestamp anomalies remain references. A recent
       // ESPN observation need not have a last price-change timestamp.
       for(const observation of resultObservations){
-        observations.push({...observation,sportKey,
+        observations.push({ ...observation,sportKey,
           source:'ESPN '+(observation.endpointSource??'public')+' · referencia no cotizable',
-          nonCotizable:true})
+          nonCotizable:true })
       }
       espnRawCount=diagnostics.rawOddsEntries+diagnostics.startedOddsEntries
       espnStarted=diagnostics.startedOddsEntries
@@ -493,18 +573,20 @@ export async function marketOddsDetailed(
         diagnostics.undatedOutcomes+' resultados sin fecha',
         diagnostics.expiredOutcomes+' precios con última modificación antigua',diagnostics.failures+' fallos parciales',
         ...diagnostics.notes.slice(0,2)].join(' · ')
-      return quotes.map(quote=>({...quote,sportKey,source:'ESPN Site/Core (sin clave)'}))
-    }})
+      return quotes.map(quote=>({ ...quote,sportKey,source:'ESPN Site/Core (sin clave)' }))
+    } })
   }
   const done=await Promise.allSettled(requests.map(x=>x.run()))
   const merged:MarketOutcome[]=[]
   const identity=new Set<string>()
   for(const [i,result] of done.entries()){
-    const provider=requests[i]!.name
+    const request=requests[i]
+    if(!request)continue
+    const provider=request.name
     if(result.status==='rejected'){
       const error=result.reason instanceof Error?result.reason.message:'Error del proveedor'
-      sources.push({provider,status:'error',count:0,
-        detail:error.replace(/apiKey=[^&\s]+/giu,'apiKey=[redactado]').slice(0,700)})
+      sources.push({ provider,status:'error',count:0,
+        detail:error.replace(/apiKey=[^&\s]+/giu,'apiKey=[redactado]').slice(0,700) })
       continue
     }
     let count=0
@@ -514,16 +596,16 @@ export async function marketOddsDetailed(
       const key=[q.sportKey??sportKey,q.eventId,q.bookmaker,q.market,q.selection,q.point??''].join('|')
       if(identity.has(key))continue
       identity.add(key)
-      merged.push({...q,observedAt:q.observedAt??new Date(now).toISOString()});count++
+      merged.push({ ...q,observedAt:q.observedAt??new Date(now).toISOString() });count++
       if(merged.length>=1500)break
     }
-    sources.push({provider,status:count?'observed':'empty',count,
+    sources.push({ provider,status:count?'observed':'empty',count,
       detail:(provider==='ESPN Site/Core'&&espnDetail?espnDetail:
         count?'Cuotas del proveedor con casa y mercado':
-        'Sin ofertas en la consulta (no implica que todos los mercados estén cerrados)').slice(0,340),
-      ...(provider==='ESPN Site/Core'?{rawCount:espnRawCount,
+          'Sin ofertas en la consulta (no implica que todos los mercados estén cerrados)').slice(0,340),
+      ...(provider==='ESPN Site/Core'?{ rawCount:espnRawCount,
         startedOddsEntries:espnStarted,undatedOutcomes:espnUndated,
-        expiredOutcomes:espnExpired}:{})})
+        expiredOutcomes:espnExpired }:{}) })
   }
   // Last-resort public ESPN Website reader: only structured, sportsbook-named
   // markets reconciled to the official future event become observable odds.
@@ -541,32 +623,32 @@ export async function marketOddsDetailed(
           quote.market,quote.selection,quote.point??''].join('|')
         if(identity.has(key))continue
         identity.add(key)
-        merged.push({...quote,sportKey,source:'ESPN Website (HTML cotejado)',
-          observedAt:web.checkedAt})
+        merged.push({ ...quote,sportKey,source:'ESPN Website (HTML cotejado)',
+          observedAt:web.checkedAt })
         count++
       }
-      sources.push({provider:'ESPN Website',count,
+      sources.push({ provider:'ESPN Website',count,
         status:count?'observed':web.status==='blocked'||web.status==='unavailable'?
           'error':'empty',
-        detail:(web.detail+' · '+(web.url??'')).slice(0,340)})
+        detail:(web.detail+' · '+(web.url??'')).slice(0,340) })
     }catch(error){
-      sources.push({provider:'ESPN Website',count:0,status:'error',
-        detail:String(error instanceof Error?error.message:error).slice(0,340)})
+      sources.push({ provider:'ESPN Website',count:0,status:'error',
+        detail:String(error instanceof Error?error.message:error).slice(0,340) })
     }
   }
   for(const name of names)if(!configured.has(name)){
-    sources.push({provider:name,status:'unconfigured',count:0,
+    sources.push({ provider:name,status:'unconfigured',count:0,
       detail:name==='OddsHarvester'?'Instalación/configuración o permiso pendiente':
         name==='ESPN Site/Core'?'ESPN deshabilitado':
-        name==='TheRundown'?'THERUNDOWN_API_KEY ausente o liga no cubierta':
-        name==='SportsGameOdds'?'SPORTSGAMEODDS_API_KEY ausente o liga no cubierta':
-        'Clave no configurada'})
+          name==='TheRundown'?'THERUNDOWN_API_KEY ausente o liga no cubierta':
+            name==='SportsGameOdds'?'SPORTSGAMEODDS_API_KEY ausente o liga no cubierta':
+              'Clave no configurada' })
   }
   if(merged.length&&fetcher===fetch){
     try{await saveOddsSnapshot(sportKey,merged,env,now)}
     catch{/* disk write failure cannot remove real live quotes */}
   }
-  return{quotes:merged,sources,observations:observations.slice(0,120)}
+  return{ quotes:merged,sources,observations:observations.slice(0,120) }
 }
 /** Compatibility facade for all existing betting tools. */
 export async function marketOdds(
@@ -586,15 +668,23 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
   let combined=1
   const used=new Set<string>(),events=new Set<string>()
   const legs=selections.map((sel)=>{
-    const matches=quotes.filter(o=>o.eventId===sel.eventId&&o.bookmaker===sel.bookmaker&&o.market===sel.market&&o.selection===sel.selection&&(o.point??null)===(sel.point??null))
+    const matches=quotes.filter(o=>o.eventId===sel.eventId&&
+      o.bookmaker===sel.bookmaker&&o.market===sel.market&&
+      o.selection===sel.selection&&(o.point??null)===(sel.point??null))
     const match=matches[0]
     if(matches.length!==1||!match)throw Error('Selección no verificable en cuotas actuales; no se crea ticket ficticio.')
     const identity=[match.sportKey??'',sel.eventId,sel.market,sel.selection,sel.point??''].join('|')
     if(used.has(identity))throw Error('Selección duplicada')
     used.add(identity);events.add([match.sportKey??'',sel.eventId].join('|'));combined*=match.price
     const taxonomy=categoryFromSportKey(match.sportKey)
-    return { event:match.away+' vs '+match.home,selection:match.selection+(match.point==null?'':' '+match.point),
-      bookmaker:match.bookmaker,price:match.price.toFixed(2),when:match.time,market:match.market,...taxonomy }
+    const bookmakerUpdated=Date.parse(match.updatedAt)
+    return { event:match.away+' vs '+match.home,
+      selection:match.selection+(match.point==null?'':' '+match.point),
+      bookmaker:match.bookmaker,price:match.price.toFixed(2),when:match.time,
+      market:match.market,source:match.source??null,
+      observedAt:match.observedAt??null,
+      bookmakerUpdatedAt:Number.isFinite(bookmakerUpdated)?match.updatedAt:null,
+      quoteAcceptedByBookmaker:false,...taxonomy }
   })
   if(new Set(legs.map(leg=>leg.bookmaker)).size!==1)throw Error('Una combinada necesita cotización aceptada de una misma casa; no mezclar bancas')
   if(events.size!==legs.length)throw Error('No se admite combinar por producto cuotas correlacionadas del mismo encuentro; requiere precio SGP ofrecido por la casa')
@@ -605,8 +695,8 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
     source:quotes.some(q=>q.source?.includes('OddsHarvester'))?
       'OddsHarvester/OddsPortal · cuotas públicas observadas':
       quotes.some(q=>q.source?.includes('ESPN'))?'ESPN Site/Core (precios públicos observados; aceptación no confirmada)':
-      quotes.some(q=>q.source==='TheOddsAPI')?'TheOddsAPI · cuotas de casas identificadas':
-      'The Odds API · precios de las casas indicadas',note:
+        quotes.some(q=>q.source==='TheOddsAPI')?'TheOddsAPI · cuotas de casas identificadas':
+          'The Odds API · precios de las casas indicadas',note:
       (quotes.some(q=>q.source?.startsWith('ESPN Site/Core'))?
         'ESPN: CUOTAS PUBLICADAS CONSULTADAS, UTILIZABLES PARA ARMAR EL TICKET SIN updatedAt DE LA CASA. '+
         'La aceptación definitiva se comprueba al presentar la apuesta en la casa. ':

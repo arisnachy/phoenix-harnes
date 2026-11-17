@@ -666,7 +666,7 @@ test('ESPN quote from another event ID cannot be assigned just by same participa
   assert.equal(result.card.props.legs[0].price,'Por verificar')
 })
 
-test('full-slate ESPN discovery replaces an unpriced top-five leg with a quoted sixth',async()=>{
+test('full-slate ESPN discovery does not let a quoted sixth replace a better-researched top five',async()=>{
   const read=async url=>{
     const raw=board(url),u=String(url)
     if(u.includes('/soccer/eng.1/')){
@@ -705,21 +705,15 @@ test('full-slate ESPN discovery replaces an unpriced top-five leg with a quoted 
   },read,undefined,'winner',stubSpecialists,p=>snapshots.push(p))
   assert.equal(snapshots[0].stage,'research-screened')
   assert.equal(snapshots[0].verifiedEvents,5)
-  assert.equal(snapshots[0].quotedLegs,1)
-  assert.equal(snapshots[0].card.props.legs[0].price,'1.90909')
-  assert.equal(snapshots[0].card.props.legs[0].bookmaker,'DraftKings')
+  assert.equal(snapshots[0].quotedLegs,0)
   assert.equal(snapshots[0].card.props.combinedOdds,'No disponible')
-  assert.equal(snapshots[0].researchFixtures[0].eventId,'505')
-  assert.ok(snapshots.some(p=>p.stage==='quoted'))
+  assert.ok(!snapshots[0].researchFixtures.some(x=>x.eventId==='505'))
   assert.equal(result.verifiedEvents,5)
   assert.ok(result.discoveryAudit.discoveredEvents>=6)
-  assert.ok(result.researchFixtures.some(x=>x.eventId==='505'))
-  assert.equal(result.card.props.legs[0].eventId,'505')
-  assert.equal(result.card.props.legs[0].bookmaker,'DraftKings')
-  assert.equal(result.card.props.legs[0].quoteStatus,'espn-observed')
-  assert.ok(Math.abs(Number(result.card.props.legs[0].price)-1.90909)<0.001)
-  assert.equal(result.quotedLegs,1)
-  assert.equal(result.missingQuotes,4)
+  assert.ok(!result.researchFixtures.some(x=>x.eventId==='505'))
+  assert.ok(result.card.props.legs.every(x=>x.eventId!=='505'))
+  assert.equal(result.quotedLegs,0)
+  assert.equal(result.missingQuotes,5)
   assert.equal(result.priced,false)
   assert.equal(result.approvedLegs,0)
   assert.match(result.card.props.note,/Cartelera completa:/)

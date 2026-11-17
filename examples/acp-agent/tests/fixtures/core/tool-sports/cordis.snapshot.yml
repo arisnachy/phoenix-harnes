@@ -1,0 +1,20 @@
+- id: base
+  name: '@phoenix-ai/cordis-plugin-include'
+  config:
+    path: ../../../../cordis.yml
+    patches:
+      - id: llm-deepseek
+        name: '@phoenix-ai/dsh-llm-deepseek'
+        disabled: true
+      - insert:
+          - id: tool-sports
+            name: '@phoenix-ai/dsh-tool-sports'
+          - id: llm-replay
+            name: '@phoenix-ai/dsh-llm-replay'
+            config:
+              providers:
+                - id: deepseek-official
+                  name: DeepSeek
+                  models:
+                    - id: deepseek-v4-flash
+                    - id: deepseek-v4-pro

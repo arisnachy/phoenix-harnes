@@ -1,0 +1,8 @@
+- id: base
+  name: '@phoenix-ai/cordis-plugin-include'
+  config:
+    path: ../../../../cordis.yml
+    patches:
+      - insert:
+          - id: tool-sports
+            name: '@phoenix-ai/dsh-tool-sports'
