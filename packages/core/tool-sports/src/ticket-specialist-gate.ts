@@ -273,12 +273,6 @@ export async function investigateTicketSpecialist(
         opponent:x.opponents.slice(0,3).map(p=>p.name).join(', '),detail:x.note,
         status:'candidate' as const,
         source:'Duelo de roster NBA/WNBA, no histórico directo documentado'}))
-      playerMatchups=d.matchups.slice(0,18).map(x=>({athlete:x.batter,
-        opponent:x.pitcher,detail:x.bvp?Object.entries(x.bvp).map(([key,value])=>
-          key+': '+value).join('; '):x.observations.slice(0,2).join('; '),
-        status:x.bvp?'observed' as const:'candidate' as const,
-        source:x.bvp?'MLB Stats API · enfrentamiento BvP observado':
-          'Cruce de rol bateador-lanzador, historial BvP no disponible'}))
       newsFindings=[...d.news.map(x=>({title:x.headline,publisher:x.source,
         publishedAt:x.published,status:'reported-headline' as const})),
         ...d.editorial.map(x=>({title:x.headline,publisher:x.publisher,
@@ -563,6 +557,12 @@ export async function investigateTicketSpecialist(
               value:g.innings+' IP; '+g.pitches+' pitches'}))],splits:[]})),
       })
       teamComparison={home:comparativeMlb('home'),away:comparativeMlb('away')}
+      playerMatchups=d.matchups.slice(0,18).map(x=>({athlete:x.batter,
+        opponent:x.pitcher,detail:x.bvp?Object.entries(x.bvp).map(([key,value])=>
+          key+': '+value).join('; '):x.observations.slice(0,2).join('; '),
+        status:x.bvp?'observed' as const:'candidate' as const,
+        source:x.bvp?'MLB Stats API · enfrentamiento BvP observado':
+          'Cruce de rol bateador-lanzador, historial BvP no disponible'}))
       playerMatchups=visibleMlbBvpDuels(d.matchups,
         new Set(d.rosters.home.filter(p=>p.role==='batter').map(p=>p.id)),
         new Set(d.rosters.away.filter(p=>p.role==='batter').map(p=>p.id)))
