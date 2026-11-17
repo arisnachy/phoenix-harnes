@@ -84,9 +84,12 @@ const officialLogos=(fixture:SpecialistFixture,deep:DeepSportsContext|null)=>({
 const rosterPortrait=(deep:DeepSportsContext|null,team:string,player:string)=>
   sideOf(deep,team)?.rosterPortraits.find(row=>norm(row.name)===norm(player))
     ?.headshot??undefined
-const playerText=(p:NonNullable<SpecialistGate['teamComparison']>['home']['players'][number])=>
-  text(p.name+' · '+p.role+' · '+(p.starterConfirmed?'titular identificado · ':'')+
-    p.stats.slice(0,3).map(s=>s.name+': '+s.value).join('; ')+
+/** Source-bound roster summary with role, availability uncertainty and venue splits. */
+export const summarizeSportsPlayer=(p:NonNullable<SpecialistGate['teamComparison']>['home']['players'][number])=>
+  text(p.name+' · '+p.role+' · '+(p.starterConfirmed?'titular identificado':'titular sin confirmar')+
+    ' · '+text(p.dataStatus,80)+
+    (p.stats.length?' · temporada: '+p.stats.slice(0,5).map(s=>s.name+': '+s.value).join('; '):'')+
+    (p.splits.length?' · local/visita: '+p.splits.slice(0,2).map(s=>s.name+': '+s.value).join('; '):'')+
     (p.recent.length?' · reciente: '+p.recent.slice(0,2).map(s=>s.name+': '+s.value).join('; '):''),390)
 const state=(ok:boolean):'verified'|'pending'=>ok?'verified':'pending'
 const pair=(label:string,home:unknown,away:unknown,verified=true):Row=>({
@@ -160,8 +163,8 @@ export async function progressiveSportsStage(
         const homeImage=home?rosterPortrait(deep,fixture.home,home.name):undefined
         const awayImage=away?rosterPortrait(deep,fixture.away,away.name):undefined
         rows.push({label:'Jugador '+String(i+1)+' · filas paralelas',
-          home:home?playerText(home):'Sin jugador en esta fila',
-          away:away?playerText(away):'Sin jugador en esta fila',
+          home:home?summarizeSportsPlayer(home):'Sin jugador en esta fila',
+          away:away?summarizeSportsPlayer(away):'Sin jugador en esta fila',
           ...(homeImage?{homeImage}:{}),...(awayImage?{awayImage}:{}),
           state:'reported'})
       }
