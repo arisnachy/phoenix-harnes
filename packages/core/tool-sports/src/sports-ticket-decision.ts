@@ -18,6 +18,8 @@ export type DecisionInput={
   modelStatus:'support'|'contradiction'|'unavailable'
   /** Derived from last games, NEVER a calibrated probability or edge. */
   exploratoryProbabilityPercent?:number|null
+  /** Source-timestamped injury/fatigue/starter risk screen, not p(win). */
+  pregameRiskPriority?:number|null
 }
 export type DecisionVerdict='exclude'|'hold'|'caution'|'candidate'
 export type DecisionLeg={
@@ -84,15 +86,22 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
       Number((breakEven-exploratory).toFixed(2)):null
     const largeExploratoryConflict=gap!==null&&gap>=5
     const expensiveFavorite=breakEven!==null&&breakEven>=80
+    const majorPregameRisk=typeof input.pregameRiskPriority==='number'&&
+      Number.isFinite(input.pregameRiskPriority)&&input.pregameRiskPriority<=-.8
     const quarterbackUnconfirmed=input.sport==='football'&&
       input.criticalPending.some(step=>/\bqb\b|quarterback|mariscal/iu.test(step))
     const goalieUnconfirmed=input.sport==='hockey'&&
       input.criticalPending.some(step=>/portero|goalie/iu.test(step))
     const alternativeReviewRequired=largeExploratoryConflict||
-      expensiveFavorite||goalieUnconfirmed||quarterbackUnconfirmed
+      expensiveFavorite||goalieUnconfirmed||quarterbackUnconfirmed||majorPregameRisk
     const reasons:string[]=[]
     let verdict:DecisionVerdict
-    if(quarterbackUnconfirmed){
+    if(majorPregameRisk){
+      verdict='hold'
+      reasons.push('RETENER: múltiples alertas prepartido verificadas de ' +
+        'disponibilidad, fatiga o titulares del elegido; buscar otra pata y ' +
+        'reexaminar la publicación original antes de incluirla.')
+    }else if(quarterbackUnconfirmed){
       verdict='hold'
       reasons.push('RETENER NFL: quarterback titular sin confirmación en expediente; ' +
         'no cerrar la pata hasta comprobar al titular y revisar las bajas ofensivas.')
