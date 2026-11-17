@@ -518,7 +518,10 @@ export async function investigateTicketSpecialist(
         const verifiedRosterInjuries=rosterIds?injured.filter(x=>
           (injury.home.injuries.includes(x)&&x.athleteId&&rosterIds!.home.has(x.athleteId))||
           (injury.away.injuries.includes(x)&&x.athleteId&&rosterIds!.away.has(x.athleteId))):injured
-        if(rosterIds&&injury.home.matched&&injury.away.matched){
+        // Injury feeds often omit a healthy/opponent team entirely. Preserve
+        // independently matched rows for either side; a missing team group is
+        // NOT proof that the opponent has zero injuries.
+        if(rosterIds&&(injury.home.matched||injury.away.matched)){
           const lean=(rows:typeof verifiedRosterInjuries)=>rows.map(x=>({
             athlete:x.athlete,status:x.status,reportedAt:x.reportedAt,
           }))
