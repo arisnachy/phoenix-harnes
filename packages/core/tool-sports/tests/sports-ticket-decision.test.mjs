@@ -142,26 +142,25 @@ test('held quoted picks keep their research record but are not a final reviewabl
   assert.equal(hold.legs[0].verdict,'hold')
 })
 
-test('multiple current injuries and back-to-back hold a previously priced NBA favorite',()=>{
+test('qualitative injury doubts call for Kira review without an invented score',()=>{
   const audit=auditTicketDecisions([
     sample('Warriors',.71,{sport:'basketball',quotedPrice:1.62,
-      pregameRiskPriority:-1.36}),
+      pregameReviewRequired:true,
+      pregameConcerns:['Cuatro titulares reportados fuera; verificar roster']}),
     sample('76ers',.68,{sport:'basketball',quotedPrice:1.45,
-      pregameRiskPriority:-.15}),
+      pregameReviewRequired:false,pregameConcerns:[]}),
   ],policy)
-  assert.equal(audit.legs[0].verdict,'hold')
+  assert.equal(audit.legs[0].verdict,'caution')
   assert.equal(audit.legs[0].alternativeReviewRequired,true)
-  assert.ok(audit.heldEvents.includes('Warriors'))
-  assert.equal(ticketIsReadyForReview(audit),false)
-  assert.match(audit.legs[0].reasons.join(' '),/múltiples alertas prepartido/u)
+  assert.match(audit.legs[0].reasons.join(' '),/REVISIÓN DE KIRA/u)
+  assert.ok(!audit.heldEvents.includes('Warriors'))
   assert.notEqual(audit.legs[1].verdict,'hold')
-  assert.ok(audit.scenarios.every(s=>!s.eventIds.includes('Warriors')))
 })
-test('unobserved risk never becomes a fabricated predictive probability',()=>{
+test('unknown injury reports never become numeric probability or arbitrary risk priority',()=>{
   const audit=auditTicketDecisions([
-    sample('Denver',.65,{pregameRiskPriority:null}),
+    sample('Denver',.65,{pregameConcerns:['Parte bilateral sin verificar']}),
   ],policy)
-  assert.notEqual(audit.legs[0].verdict,'hold')
   assert.equal(audit.legs[0].modelProbabilityPct,null)
   assert.equal(audit.legs[0].expectedValue,null)
+  assert.equal(audit.legs[0].alternativeReviewRequired,true)
 })
