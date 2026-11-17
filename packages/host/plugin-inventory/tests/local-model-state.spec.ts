@@ -26,6 +26,7 @@ describe('Phoenix Local state', () => {
       mode: 'on-demand',
       selectedModelId: 'qwen3.5-2b-ollama-q4-k-m',
       installedModelIds: [],
+      thinking: false,
     })
   })
 
@@ -46,6 +47,7 @@ describe('Phoenix Local state', () => {
       mode: 'on-demand',
       selectedModelId: 'qwen3.5-2b-ollama-q4-k-m',
       installedModelIds: [],
+      thinking: false,
     })
   })
 
@@ -104,6 +106,7 @@ describe('Phoenix Local state', () => {
       mode: 'on-demand',
       selectedModelId: 'qwen3.5-4b-q4-k-m',
       installedModelIds: [],
+      thinking: false,
     })
   })
 
@@ -124,6 +127,7 @@ describe('Phoenix Local state', () => {
       mode: 'on-demand',
       selectedModelId: 'qwen3.5-4b-q4-k-m',
       installedModelIds: ['qwen3.5-4b-q4-k-m'],
+      thinking: false,
     })
   })
 
