@@ -38,6 +38,7 @@ import { explainOddsEligibility,eligibleOddsForResearch } from './espn-odds-obse
 import { ensureSportsSourcesStarted,hydrateSportsSources,managedSportsInstallStatus,sportsSourcesHealth } from './sports-source-health.ts'
 import { investigateEventDeep } from './sports-deep-context.ts'
 import { discoverAutonomousSportsSources } from './sports-autonomous-source-discovery.ts'
+import {progressiveSportsStage,type ResearchStage} from './sports-progressive-chat.ts'
 import { auditUniversalMatchup } from './universal-matchup-factors.ts'
 import { estimateEvidenceForecast } from './sports-forecast.ts'
 import { extendedEspnRoutes,readExtendedEspn,type ExtendedEspnMode } from './espn-extra-intelligence.ts'
@@ -1108,6 +1109,33 @@ export function apply(ctx: Context): void {
         sourceVerification:'indexed-only' })
     },
     presentCall:()=>({card:'generic',title:'Kira · Buscar otras fuentes deportivas',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_research_stage',
+    description:'INVESTIGACIÓN VISIBLE EN CHAT, UNA ETAPA POR LLAMADA: muestra una TABLA COMPARATIVA SIN TARJETA de ambos equipos, logos y avatares ESPN publicados. Las 6 etapas son teams (equipos/sede), rosters (plantillas completas y estadísticas individuales), availability (lesiones, porteros, pitchers, quintetos y onces), context (forma local/visita, H2H, clima, estadio y umpires cuando se publiquen), news (prensa y expertos, con enlaces y advertencias), odds (cuotas ESPN auténticas cotejadas). Kira narra lo investigado de cada tabla ANTES de pedir la siguiente etapa; ella decide al terminar, no la función.',
+    parameters:{
+      sport:{type:'string',required:true,description:'basketball, baseball, hockey, soccer o football: ESPN verificado.'},
+      league:{type:'string',required:true,description:'NBA= nba, WNBA=wnba, MLB=mlb, NHL=nhl; fútbol liga ESPN identificada.'},
+      eventId:{type:'string',required:true,description:'ID exacto de partido ESPN, nunca ID de banca.'},
+      date:{type:'string',required:true,description:'Fecha AAAA-MM-DD local.'},
+      home:{type:'string',required:true,description:'Nombre oficial equipo local.'},
+      away:{type:'string',required:true,description:'Nombre oficial equipo visitante.'},
+      kickoff:{type:'string',required:true,description:'Inicio ISO original verificado de ESPN.'},
+      stage:{type:'string',required:true,description:'teams | rosters | availability | context | news | odds'},
+      question:{type:'string',description:'Solo para news: pregunta autónoma de Kira sobre lesión, estrellas, opiniones, entrenadores, portero, estadio, etc.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const env=await sportsEnv(ctx)
+      const fixture={sport:args.sport,league:args.league,eventId:args.eventId,
+        date:args.date,home:args.home,away:args.away,kickoff:args.kickoff}
+      const result=await progressiveSportsStage(fixture,args.stage as ResearchStage,
+        args.question,fetch,Date.now(),env)
+      return JSON.stringify({...result,provenance:'ESPN/ligas oficiales y prensa pública',
+        researchIsSequential:true,modelOwnDecisionRequired:true,placed:false})
+    },
+    presentCall:()=>({card:'generic',title:'Kira · Comparativa de investigación deportiva',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_matchup_factors',
