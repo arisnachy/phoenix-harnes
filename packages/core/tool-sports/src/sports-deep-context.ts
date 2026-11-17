@@ -34,7 +34,7 @@ const numeric=(n:unknown)=>{
 export type DeepSportsContext={
   eventId:string;sport:string;league:string;scannedAt:string
   sources:Array<{name:string;status:'verified'|'unavailable';records:number}>
-  teams:Array<{id:string;name:string;abbreviation:string;rosterSample:string[];
+  teams:Array<{id:string;name:string;abbreviation:string;logo:string|null;rosterSample:string[];
     rosterPortraits:Array<{id:string;name:string;position:string;headshot:string|null}>}>
   headlines:Array<{headline:string;published:string;source:'ESPN News';articleUrl?:string|null;imageUrl?:string|null}>
   injuries:Array<{team:string;athlete:string;status:string;source:'ESPN Injuries'}>
@@ -89,7 +89,9 @@ export async function investigateEventDeep(
   const teams=competitors.slice(0,2).map(team=>{
     const r=obj(team),t=obj(r.team),id=digits(t.id??r.id)
     return{id,name:str(t.displayName??t.name,110),
-      abbreviation:str(t.abbreviation,8),rosterSample:[] as string[],
+      abbreviation:str(t.abbreviation,8),
+      logo:safeEspnUrl(t.logo??get(arr(t.logos)[0],'href'),true),
+      rosterSample:[] as string[],
       rosterPortraits:[] as Array<{id:string;name:string;position:string;headshot:string|null}>}
   }).filter(t=>t.id&&t.name)
   const teamIDs=new Set(teams.map(t=>t.id))
