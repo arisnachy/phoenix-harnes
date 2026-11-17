@@ -3,7 +3,7 @@
  */
 import { evidenceTicket,matchesDailyEspnPrice,type TicketDiscoveryAudit,type TicketPreselectReviewer,type TicketQuotePreselector } from './evidence-ticket.ts'
 import {dailyResearchFetcher} from './sports-daily-preload.ts'
-import {auditTicketDecisions,readDecisionPolicy,type TicketDecisionAudit} from './sports-ticket-decision.ts'
+import {auditTicketDecisions,readDecisionPolicy,ticketIsReadyForReview,type TicketDecisionAudit} from './sports-ticket-decision.ts'
 import {auditTicketMarketRisk,quoteSideNoVig,type TicketMarketRisk} from './ticket-risk-audit.ts'
 import {investigateTicketSpecialists,type SpecialistGate} from './ticket-specialist-gate.ts'
 import {summarizeTicketSpecialist,needsSelectedSpecialistRecheck} from './ticket-specialist-summary.ts'
@@ -1080,7 +1080,9 @@ export async function evidencePricedTicket(
     // The research ticket is displayable even with genuine warnings. Its
     // visible title must not imply bookmaker acceptance or betting approval.
     presentationStatus:'final-research',
-    subtitle:'TICKET FINAL DE INVESTIGACIÓN · '+count+'/'+count+' selecciones · '+
+    subtitle:(ticketIsReadyForReview(decisionAudit)?
+      'TICKET FINAL DE INVESTIGACIÓN · ':'BOLETO RETENIDO DE INVESTIGACIÓN · ')+
+      count+'/'+count+' selecciones · '+
       (espnOnlyObserved?'precios observados en ESPN':'cuotas cotejadas')+
       ' · '+best.book+' · '+(checklistComplete&&!elevatedMarketRisk?
         'expediente documentado':'advertencias pendientes'),
@@ -1112,7 +1114,7 @@ export async function evidencePricedTicket(
     quotedLegs:count,missingQuotes:0,sourceAudit,approvedLegs:0,
     // Candidate = priced review opportunity; approvedLegs remains 0 because
     // this is not a calibrated betting recommendation or actual placement.
-    candidateLegs:count,ticketReadyForReview:true,
+    candidateLegs:count,ticketReadyForReview:ticketIsReadyForReview(decisionAudit),
     conditionalLegs:decisionAudit.legs.filter(x=>
       x.verdict==='hold'||x.verdict==='caution').length,
     approvedForBetting:false,
