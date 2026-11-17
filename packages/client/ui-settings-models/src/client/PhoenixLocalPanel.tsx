@@ -20,11 +20,14 @@ export interface PhoenixLocalModelCatalogEntry {
   readonly sizeBytes: number
   readonly estimatedRamBytes: number
   readonly contextWindow: number
+  readonly nativeContextWindow?: number
   readonly maxTokens: number
   readonly recommended: boolean
 }
 
 export interface PhoenixLocalModelSnapshot {
+  readonly thinking?: boolean | string | null
+  readonly thinkingCapabilities?: { readonly values: readonly (boolean | string)[]; readonly default: boolean | string | null }
   readonly mode: PhoenixLocalModelMode
   readonly selectedModelId: string
   readonly installedModelIds: readonly string[]
@@ -43,6 +46,7 @@ export interface PhoenixLocalModelClient {
   uninstall(modelId: string): Promise<PhoenixLocalModelSnapshot>
   setMode(mode: PhoenixLocalModelMode): Promise<PhoenixLocalModelSnapshot>
   setDefaultModel(modelId: string): Promise<PhoenixLocalModelSnapshot>
+  setThinking(value: boolean | string | null): Promise<PhoenixLocalModelSnapshot>
 }
 
 export interface PhoenixLocalPanelProps {
@@ -112,6 +116,12 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
   const installed = snapshot !== undefined && selected !== undefined
     && snapshot.installedModelIds.includes(selected.id)
   const percent = snapshot === undefined ? undefined : progressPercent(snapshot)
+  const modes = snapshot?.thinkingCapabilities?.values ?? []
+  const activeThinking = snapshot?.thinking ?? null
+  const thinkingKey = activeThinking === null ? 'default'
+    : typeof activeThinking === 'boolean' ? `boolean:${String(activeThinking)}` : `level:${activeThinking}`
+  const supportedKeys = new Set(modes.map(value => typeof value === 'boolean'
+    ? `boolean:${String(value)}` : `level:${value}`))
 
   const run = useCallback(async (
     operation: () => Promise<PhoenixLocalModelSnapshot>,
@@ -215,7 +225,37 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
       )}
 
       {selected?.backend === 'ollama' ? (
-        <p className={styles['muted']}>{t('ollamaLiteMode')}</p>
+        <>
+          <label className={styles['field']}>
+            <span className={styles['label']}>{t('thinking')}</span>
+            <select
+              value={supportedKeys.has(thinkingKey) ? thinkingKey : 'default'}
+              disabled={busy || modes.length === 0}
+              onChange={event => {
+                const key = event.currentTarget.value
+                const value = key === 'default' ? null
+                  : key === 'boolean:true' ? true
+                    : key === 'boolean:false' ? false : key.slice('level:'.length)
+                void run(() => client.setThinking(value))
+              }}
+            >
+              <option value="default">{t('thinkingDefault')}</option>
+              {modes.map(value => (
+                <option key={String(value)} value={typeof value === 'boolean'
+                  ? `boolean:${String(value)}` : `level:${value}`}>
+                  {value === true ? t('thinkingOn') : value === false ? t('thinkingOff') : value}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className={styles['muted']}>
+            {modes.length === 0 ? t('thinkingUnavailable') : t('thinkingDetected')}
+          </p>
+          {selected.nativeContextWindow !== undefined ? (
+            <p className={styles['muted']}>{t('nativeContext')}: {selected.nativeContextWindow.toLocaleString()} tokens</p>
+          ) : null}
+          <p className={styles['muted']}>{t('ollamaLiteMode')}</p>
+        </>
       ) : null}
 
       {snapshot.phase === 'installing' && snapshot.progress !== undefined ? (
