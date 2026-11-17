@@ -437,7 +437,10 @@ class RuntimeManager implements LocalModelRuntimeManager {
     if (this.current.phase === 'running' || this.server !== undefined) await this.stop()
     await this.savePersistent({ ...this.persistent, selectedModelId: modelId, thinking: null })
     const phase = this.persistent.installedModelIds.includes(modelId) ? 'ready' : 'not-installed'
-    this.publish({ ...this.current, phase, thinkingCapabilities: undefined })
+    // exactOptionalPropertyTypes: removing an optional capability is not the
+    // same as assigning undefined to its property.
+    const { thinkingCapabilities: _oldCapabilities, ...withoutCapabilities } = this.current
+    this.publish({ ...withoutCapabilities, phase })
     if (this.persistent.mode === 'always-on' && phase === 'ready') return this.start()
     return this.snapshot()
   }
