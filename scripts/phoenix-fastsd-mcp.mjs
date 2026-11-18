@@ -98,13 +98,13 @@ async function ensureInstalled() {
   const root = fastsdRoot()
   const python = join(root, 'env', process.platform === 'win32' ? 'Scripts' : 'bin',
     process.platform === 'win32' ? 'python.exe' : 'python')
-  if (existsSync(python)) return python
+  if (existsSync(python) && existsSync(join(root, '.phoenix-fastsd-ready'))) return python
   if (process.platform !== 'win32' || process.env.PHOENIX_FASTSD_AUTOINSTALL === '0') {
     throw new Error('FastSD CPU no está instalado. En Windows: powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\phoenix-fastsd-setup.ps1')
   }
   await run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
     join(PROJECT_ROOT, 'scripts', 'phoenix-fastsd-setup.ps1')], PROJECT_ROOT, 15 * 60_000)
-  if (!existsSync(python)) throw new Error('El instalador no produjo un entorno Python FastSD válido.')
+  if (!existsSync(python) || !existsSync(join(root, '.phoenix-fastsd-ready'))) throw new Error('La instalación FastSD no se pudo verificar.')
   return python
 }
 
@@ -127,6 +127,7 @@ async function startBackend() {
       if (childError || backend.exitCode !== null) break
       await new Promise(resolveDelay => setTimeout(resolveDelay, 750))
     }
+    if (backend?.exitCode === null) backend.kill()
     throw new Error('FastSD CPU OpenVINO no inició en 127.0.0.1:' + PORT +
       (childError ? ' (' + childError.message + ')' : '. Verifica Python, RAM y el modelo instalado.'))
   })()
