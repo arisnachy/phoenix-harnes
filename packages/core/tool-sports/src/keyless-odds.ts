@@ -265,7 +265,11 @@ export function recoverScraperRows(stdout:unknown,output:unknown):unknown[]{
  * exposing environment variables, authorization headers or a raw shell command.
  * @param error - Untrusted transport error to sanitize before displaying.
  */
-/** Separate empty fixture slates from genuine runtime/market failures. */
+/**
+ * Distinguish an empty fixture slate from transport, browser, and market failures.
+ * @param error - Untrusted scraper failure containing optional code and diagnostic text.
+ * @returns A normalized failure category for safe downstream handling.
+ */
 export function classifyScraperFailure(error:unknown):
   'no-events'|'invalid-market'|'missing-executable'|'timeout'|
   'missing-playwright-browser'|'site-blocked-or-limited'|'scraper-exit-error'{
