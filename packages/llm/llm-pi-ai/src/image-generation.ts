@@ -208,7 +208,7 @@ export function clinicalRasterPrompt(prompt: string, sourceAttached = false): st
       'FUENTE VISUAL OBLIGATORIA: imagen del estudio original adjunta como entrada de imagen a imagen; revisar sus pixeles en lugar de sintetizar una imagen desde una descripcion textual.',
       'FIDELIDAD: conservar el plano del corte (axial/sagital/coronal), orientacion R/L y anterior/posterior, forma y volumen aparente de organos, topografia, ramas arteriales y venosas, bifurcaciones, calibre aparente y relaciones espaciales VISIBLES. No invertir lateralidad ni reconstruir anatomia que quede fuera del campo.',
       'Mantener literalmente abreviaturas, flechas y rotulos ya visibles; no inventar su expansion si es ambigua ni asignarles otro vaso. Conservar el estudio original como referencia visual de contraste.',
-      'No deducir tamano real, longitud, diametro en mm ni escala a partir de un JPG o captura sin pixel spacing DICOM o calibracion verificada. No redimensionar tejidos ni desplazar vasos para mejorar composicion.',
+      'No deducir tamano real, longitud, diametro en mm ni escala a partir de un JPG o captura sin pixel spacing DICOM o calibracion verificada. Respetar la relacion de aspecto de la fuente; si se necesita un lienzo mas grande, usar margenes y nunca recortar el corte ni redimensionar tejidos o desplazar vasos para mejorar composicion.',
       'Inervacion y microvasos no visibles en el estudio NO son hallazgos observados. Si se piden nervios, añadirlos solo en panel de atlas SEPARADO, marcados Anatomia de referencia NO visible en el estudio; no superponerlos como vasos o nervios comprobados del paciente.',
       'Separar FUENTE OBSERVADA, ANOTACION DEL ESTUDIO y ATLAS EDUCATIVO; cualquier estructura inferida debe identificarse como no verificada. La imagen sintetica no sustituye ni diagnostica el estudio original.',
       'Si no puedes leer la fuente ni preservar de forma fiable ramas, etiquetas y morfologia, declara la limitacion y prefiere conservar la imagen original; nunca afirmar una replica clinica exacta.',
@@ -389,6 +389,15 @@ export function clinicalSourceBackendOrder(
   }
   if (requested === 'codex' || requested === 'local') return [requested]
   return ['codex', 'local']
+}
+
+/** Preserve the source study's aspect class; never force a square CT into a wide cinematic crop. */
+export function clinicalSourceCanvas(width: number, height: number): ImageSize {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    throw new Error('image_generation: missing image dimensions for the source study')
+  }
+  const ratio = width / height
+  return ratio > 1.15 ? '1536x1024' : ratio < 0.87 ? '1024x1536' : '1024x1024'
 }
 
 /**
@@ -1436,9 +1445,11 @@ export function installCodexImageGeneration(ctx: Context): void {
       if (prompt.length > 32_000) throw new Error('image_generation: prompt exceeds the 32,000-character safety bound')
 
       const events = exec.agent?.session?.events
-      const profileReference = events === undefined ? undefined : latestProfileReference(events)
+      const rawProfileReference = events === undefined ? undefined : latestProfileReference(events)
       const requestText = events === undefined ? '' : latestUserText(events)
-      if (requestsProfileLikeness(requestText) && profileReference === undefined) {
+      const wantsProfile = requestsProfileLikeness(requestText)
+      const profileReference = wantsProfile ? rawProfileReference : undefined
+      if (wantsProfile && profileReference === undefined) {
         throw new Error('Para hacer una imagen tuya, activa la referencia de foto en Perfil y vuelve a pedirla.')
       }
       const clinicalSourceRequested = profileReference === undefined
@@ -1467,11 +1478,13 @@ export function installCodexImageGeneration(ctx: Context): void {
       ) || /\b(?:tipo|estilo)\s+(?:(?:de|del|al)\s+)?(?:equipo\s+)?kira\b/iu.test(prompt)
       const basePrompt = wantsKira ? prompt + '\n' + KIRA_TEAM_STYLE : prompt
       const styledPrompt = clinicalRasterPrompt(basePrompt, clinicalReference !== undefined)
-      const visualArgs: ImageGenerationArgs = styledPrompt === basePrompt ? args : {
-        ...args,
-        size: args.size === undefined || args.size === 'auto' ? '1536x1024' : args.size,
-        quality: args.quality === undefined || args.quality === 'auto' ? 'high' : args.quality,
-      }
+      const visualArgs: ImageGenerationArgs = clinicalReference !== undefined && photo !== undefined
+        ? { ...args, size: clinicalSourceCanvas(photo.ref.width, photo.ref.height), quality: 'high' }
+        : styledPrompt === basePrompt ? args : {
+          ...args,
+          size: args.size === undefined || args.size === 'auto' ? '1536x1024' : args.size,
+          quality: args.quality === undefined || args.quality === 'auto' ? 'high' : args.quality,
+        }
       const failures: string[] = []
       for (const backend of backends) {
         let image: ImageGenerationValue
