@@ -733,7 +733,7 @@
         cwd: !!js process.cwd()
         failOnStartupError: false
         startupTimeoutMs: 1500
-        toolCallTimeoutMs: 1200000
+        toolCallTimeoutMs: 1800000
         reconnect:
           enabled: true
           initialDelayMs: 1000
