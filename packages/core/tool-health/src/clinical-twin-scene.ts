@@ -135,16 +135,17 @@ export function planClinicalTwinScene(input:ClinicalTwinSceneInput){
     ...(completeness!=='complete'?['No mostrar extensión ni ausencia de enfermedad fuera del material revisado']:[]),
   ]
   const prompt=permitted?[
-    'Ilustración clínica HIPERREALISTA tipo atlas docente; NO es reconstrucción del paciente.',
+    'LÁMINA ANATÓMICA FIJA hiperrealista (imagen raster 2D, preferiblemente 1536×1024); NO render 3D, malla poligonal ni reconstrucción del paciente.',
     'Modalidad: '+study.label+'. Vista: '+view.title+'.',
     'Mostrar anatomía de referencia correctamente orientada y rotulada en español: '+view.anatomy.join(', ')+'.',
+    'Mantener lateralidad anatómica, proporciones de atlas, relación con tejidos vecinos, capas, pleuras, fascias y trayectos reales; mostrar aporte arterial, retorno venoso y nervios regionales pertinentes en cortes de disección, sin fingir medidas del paciente.',
     'Señalar claramente '+affectedStructure+' en '+sourceLocation+'.',
     'Representar únicamente el siguiente hallazgo, calificado como '+evidenceLabel+': '+finding+'.',
     ...(vascularAllowed?['Visualizar vasculatura afectada SOLO según la descripción aportada: '+vascularFinding+
       '. Diferenciar arterias rojas y venas azules, respetando recorrido anatómico.']:[
       'Mostrar vasos anatómicos solo como referencia normal, sin fingir alteración vascular.']),
     ...(neuralAllowed?['Mostrar compromiso neural solo como esquema ilustrativo: '+neuralFinding+'.']:[]),
-    'Rotular la estructura, lesión/hallazgo y estado de certeza. Priorizar precisión anatómica y legibilidad.',
+    'Rotular la estructura, lesión/hallazgo y estado de certeza, con flechas precisas y una leyenda legible. Priorizar topografía, vascularización, inervación, proporciones y relaciones anatómicas sobre efectos visuales.',
     'No inventar valores, escala, tamaño, topografía, vasos culpables ni extensión.',
     'Prohibiciones: '+modalityRestrictions.join('; ')+'.',
     'Debe figurar la leyenda discreta: Ilustración educativa basada en hallazgos referidos; no constituye imagen del paciente.',
@@ -154,6 +155,7 @@ export function planClinicalTwinScene(input:ClinicalTwinSceneInput){
     scene:view,source:{type:sourceKind,reviewAsserted:input.sourceReviewed,
       completeness,evidenceKind,sourceLocation:sourceLocation||null},
     annotations,vascularChangeDepicted:vascularAllowed,neuralChangeDepicted:neuralAllowed,
+    recommendedOutput:'image/png',recommendedImageTool:'image_generation',
     imageGenerationRequested:false,imageGenerated:false,patientSpecificAnatomy:false,
     patientSpecificGeometryValidated:false,diagnosticAccuracyValidated:false,
     requiresClinicianReview:true,renderPrompt:prompt,forbiddenClaims:modalityRestrictions,
