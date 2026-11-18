@@ -8,8 +8,8 @@ $base = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'PHOENIX' } else { 
 $destination = if ($env:PHOENIX_FASTSD_HOME) { $env:PHOENIX_FASTSD_HOME } else { Join-Path $base 'fastsdcpu' }
 $venv = Join-Path $destination 'env'
 $py = Join-Path $venv 'Scripts\python.exe'
-function Invoke-Checked([string]$exe, [string[]]$args) {
-  & $exe @args
+function Invoke-Checked([string]$exe, [string[]]$arguments) {
+  & $exe @arguments
   if ($LASTEXITCODE -ne 0) { throw "$exe exited with $LASTEXITCODE" }
 }
 $ready = Join-Path $destination '.phoenix-fastsd-ready'
