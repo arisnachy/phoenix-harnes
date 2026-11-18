@@ -74,3 +74,16 @@ test('availability with missing primary data publishes a research escalation',as
   assert.ok(result.sourceEscalation.targets.some(x=>x.provider==='NBA oficial'))
   assert.match(result.instruction,/sourceEscalation/)
 })
+
+test('an empty NBA player dossier is explicitly pending and escalates outside ESPN',async()=>{
+  const result=await progressiveSportsStage(fixture,'rosters',
+    'get both teams season stats and gamelogs',source,now,{})
+  const rows=result.uiBlock.props.rows
+  assert.equal(result.stage,'rosters')
+  assert.equal(rows[1]?.label,'Jugadores con estadísticas individuales observadas')
+  assert.equal(rows[1]?.state,'pending')
+  assert.ok(result.missing.some(x=>/Estadísticas individuales/u.test(x)))
+  assert.ok(result.sourceEscalation?.mustOpenOriginals)
+  assert.ok(result.sourceEscalation?.targets.length>0)
+  assert.equal(result.nextStage,'availability')
+})
