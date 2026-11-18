@@ -19,7 +19,7 @@ vi.mock('../src/local-image-direct.ts', async (importOriginal) => ({
 const savedEnabled = process.env.PHOENIX_FASTSD_ENABLE
 beforeEach(() => {
   delete process.env.PHOENIX_FASTSD_ENABLE
-  mockWorker.resetAllMocks()
+  mockWorker.mockReset()
   mockWorker.mockResolvedValue('![Imagen generada localmente](/local-images/0123456789abcdef0123456789abcdef.jpg)')
 })
 afterEach(() => {
@@ -103,7 +103,6 @@ describe('Direct local-image request isolation', () => {
       .toMatchObject({ provider: 'fastsd-local', model: 'sd-turbo-openvino' })
     expect(agent.session.events.filter(event => event.type === 'turn/end').at(-1)?.data.reason)
       .toEqual({ kind: 'completed' })
-    await ctx.dispose()
   })
 
   it('surfaces real generator failures in the chat without falling back to the local LLM', async () => {
@@ -117,7 +116,6 @@ describe('Direct local-image request isolation', () => {
     const response = agent.session.events.find(event => event.type === 'assistant/message')
     expect(response?.type === 'assistant/message' && response.data.message.content)
       .toEqual([{ type: 'text', text: 'No se pudo generar la imagen local con SD Turbo OpenVINO: FastSD CPU sin modelo descargado' }])
-    await ctx.dispose()
   })
 
   it('leaves context-dependent requests on the ordinary agent route', async () => {
@@ -128,6 +126,5 @@ describe('Direct local-image request isolation', () => {
     await agent.whenIdle()
     expect(mockWorker).not.toHaveBeenCalled()
     expect(adapter.requests).toHaveLength(1)
-    await ctx.dispose()
   })
 })
