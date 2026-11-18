@@ -272,16 +272,17 @@ export async function collectDirectEspnStats(
                 if(athlete.splits.length)
                   athlete.verifiedSources.push('splits:season='+seasonYear)
               })
-              if(!early&&priority(person)!==0){
-                add(uri+'gamelog'+explicitSeason,'athlete_gamelog_season',data=>{
-                  athlete.lastGames=parseEspnGameLog(data,now,20)
-                  recorded('gamelog'+explicitSeason,data,athlete.lastGames.length)
-                  if(athlete.lastGames.length){
-                    athlete.verifiedSources.push('gamelog:season='+seasonYear)
-                    splitFallback.set(athlete,data)
-                  }
-                })
-              }
+              add(uri+'gamelog'+explicitSeason,'athlete_gamelog_season',data=>{
+                const recovered=parseEspnGameLog(data,now,20)
+                recorded('gamelog'+explicitSeason,data,recovered.length)
+                // Preserve a verified unscoped log when both respond. A
+                // blank retry must never erase an already sourced history.
+                if(recovered.length&&!athlete.lastGames.length){
+                  athlete.lastGames=recovered
+                  athlete.verifiedSources.push('gamelog:season='+seasonYear)
+                  splitFallback.set(athlete,data)
+                }
+              })
             }
             recorded('stats'+explicitSeason,season,correct?metrics.length:0)
           })
