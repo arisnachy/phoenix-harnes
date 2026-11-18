@@ -718,6 +718,28 @@
     # current connection and public-tool generation through this shared registry.
     - id: mcp-connector-registry
       name: '@phoenix-ai/dsh-mcp-connector-registry'
+    # Native local image generation. Kira invokes this tool only on an explicit
+    # image request; the separate OpenVINO Python worker starts on demand and
+    # unloads after two idle minutes. Ollama/Eclipse are not modified.
+    - id: mcp-fastsd-images
+      name: '@phoenix-ai/dsh-mcp-client'
+      disabled: !!js process.env.PHOENIX_FASTSD_ENABLE === '0'
+      config:
+        serverName: fastsd
+        transport: stdio
+        command: node
+        args:
+          - scripts/phoenix-fastsd-mcp.mjs
+        cwd: !!js process.cwd()
+        failOnStartupError: false
+        startupTimeoutMs: 1500
+        toolCallTimeoutMs: 1200000
+        reconnect:
+          enabled: true
+          initialDelayMs: 1000
+          maxDelayMs: 30000
+          maxAttempts: 6
+
 
     # Game-development connector pack. It is zero-cost while disabled and
     # becomes live only when the workstation opts in. Blender is pinned to the
