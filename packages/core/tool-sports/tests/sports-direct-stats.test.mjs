@@ -261,7 +261,8 @@ test('NBA roster players recover current-season statistics and game logs when un
       u.endsWith('/athletes/104/splits?season=2027'))
       payload={displayNames:['PTS'],splitCategories:[{name:'Location',splits:[
         {name:'Home',stats:['27']},{name:'Away',stats:['22']}]}]}
-    else if(u.endsWith('/athletes/104/gamelog?season=2027'))
+    else if(u.endsWith('/athletes/101/gamelog?season=2027')||
+      u.endsWith('/athletes/104/gamelog?season=2027'))
       payload={events:{'401555001':{date:'2026-11-15T00:00:00Z',name:'Prior NBA game'}},
         seasonTypes:[{categories:[{labels:['PTS'],events:[
           {eventId:'401555001',stats:['28']}]}]}]}
@@ -275,6 +276,8 @@ test('NBA roster players recover current-season statistics and game logs when un
   const stale=athletes.find(p=>p.id==='102')
   assert.equal(current.stats[0]?.value,'25.4')
   assert.ok(current.splits.some(s=>/Home/.test(s.name)))
+  assert.ok(current.lastGames.some(x=>/PTS: 28/.test(x.value)),
+    'the first player recovers season gamelog even if unscoped feed is blank')
   assert.equal(later.stats[0]?.value,'25.4')
   assert.ok(later.lastGames.some(x=>/PTS: 28/.test(x.value)),
     'the fourth athlete also gets a recovered season game log')
