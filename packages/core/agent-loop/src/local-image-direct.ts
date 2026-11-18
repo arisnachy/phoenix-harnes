@@ -15,7 +15,7 @@ const WORKER_TIMEOUT_MS = 30 * 60_000
 const IMAGE_MARKDOWN = /^!\[Imagen generada localmente\]\(\/local-images\/[a-f0-9]{32}\.jpg\)$/u
 const COMMAND = /^(?:(?:hey\s+)?kira[\s,:-]*)?(?:(?:por\s+favor|puedes|podrias|could\s+you|please)[\s,:-]*)?(?:genera(?:me)?|crea(?:me)?|haz(?:me)?|dibuja(?:me)?|renderiza|generate|create|make|draw|render)\s+(?:una?\s+|an?\s+)?(?:imagen|foto(?:grafia)?|ilustracion|image|picture|photo|illustration)(?:\s+local)?(?:\s+(?:de|del|of))?\s*/iu
 const ENGINE_SUFFIX = /\s+(?:usando|con|using|with)\s+(?:(?:el|the)\s+)?(?:(?:modelo|model)\s+)?(?:sd[\s-]*turbo(?:[\s-]*openvino)?|fastsd(?:[\s-]*cpu)?)\s*[.!?]*$/iu
-const REFERENCE = /\b(?:anterior|anteriores|previous|above|adjunta|adjunto|attached|subida|subido|uploaded|esta\s+foto|esta\s+imagen|that\s+image|same\s+image|la\s+misma|como\s+antes|edit(?:ar|a|a)?|modifica|retoca)\b/iu
+const REFERENCE = /\b(?:anterior|anteriores|previous|above|adjunta|adjunto|attached|subida|subido|uploaded|esta\s+foto|esta\s+imagen|that\s+image|same\s+image|la\s+misma|como\s+antes|edit(?:ar|a)?|modifica|retoca)\b/iu
 
 /**
  * Return precisely the requested image subject or decline the fastpath.
@@ -33,7 +33,7 @@ export function localImageDirectPrompt(message: UserMessage | undefined): string
   if (REFERENCE.test(normalized)) return undefined
   const command = COMMAND.exec(normalized)
   if (command === null || command.index !== 0) return undefined
-  const subject = normalized.slice(command[0].length).replace(ENGINE_SUFFIX, '').trim()
+  const subject = original.slice(command[0].length).replace(ENGINE_SUFFIX, '').trim()
   if (subject.length < 2 || subject.length > 2800) return undefined
   return subject
 }
