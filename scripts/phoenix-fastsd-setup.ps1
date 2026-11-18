@@ -12,9 +12,14 @@ function Invoke-Checked([string]$exe, [string[]]$args) {
   & $exe @args
   if ($LASTEXITCODE -ne 0) { throw "$exe exited with $LASTEXITCODE" }
 }
+$ready = Join-Path $destination '.phoenix-fastsd-ready'
 if (Test-Path -LiteralPath $py) {
-  Write-Host '[PHOENIX FastSD] Python environment already exists; no installation performed.'
-  exit 0
+  & $py -c 'import openvino, torch, fastapi, uvicorn'
+  if ($LASTEXITCODE -eq 0) {
+    Set-Content -LiteralPath $ready -Value $commit -Encoding Ascii
+    Write-Host '[PHOENIX FastSD] Python environment verified.'
+    exit 0
+  }
 }
 foreach ($program in @('git', 'uv')) {
   if (-not (Get-Command $program -ErrorAction SilentlyContinue)) {
@@ -36,9 +41,10 @@ $checked = (& git -C $destination rev-parse HEAD).Trim()
 if ($checked -ne $commit) { throw 'No se pudo verificar el commit fijado de FastSD CPU.' }
 Write-Host '[PHOENIX FastSD] Instalando Python 3.11.6 en entorno separado...'
 Invoke-Checked 'uv' @('python', 'install', '3.11.6')
-Invoke-Checked 'uv' @('venv', '--python', '3.11.6', $venv)
+if (-not (Test-Path -LiteralPath $py)) { Invoke-Checked 'uv' @('venv', '--python', '3.11.6', $venv) }
 if (-not (Test-Path -LiteralPath $py)) { throw 'No se encontró el ejecutable Python de FastSD.' }
 Invoke-Checked 'uv' @('pip', 'install', '--python', $py, 'torch==2.8.0', '--index-url', 'https://download.pytorch.org/whl/cpu')
 Invoke-Checked 'uv' @('pip', 'install', '--python', $py, '-r', (Join-Path $destination 'requirements.txt'))
 Invoke-Checked $py @('-c', 'import openvino, torch, fastapi, uvicorn; print("FastSD CPU OpenVINO dependencies ready")')
+Set-Content -LiteralPath $ready -Value $commit -Encoding Ascii
 Write-Host '[PHOENIX FastSD] Instalación preparada. El modelo se descargará bajo demanda en la primera generación.'
