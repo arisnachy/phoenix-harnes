@@ -11,6 +11,7 @@ import {
   resolveNativeCodexImageLauncher,
   codexDoctorSupportsImageGeneration,
   imageGenerationToolDescription,
+  clinicalRasterPrompt,
   imageGenerationBackendOrder,
   profileImageBackendOrder,
   latestProfileReference,
@@ -226,6 +227,18 @@ describe('Codex image generation bridge', () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+  it('requires accurate medical stills instead of low-poly 3D output', () => {
+    const prompt = clinicalRasterPrompt('Ilustración de neumotórax derecho con pleura, vasos y nervios intercostales')
+    expect(prompt).toContain('IMAGEN FIJA RASTER')
+    expect(prompt).toContain('HEMITORAX DERECHO')
+    expect(prompt).toContain('surco costal')
+    expect(prompt).toContain('No mostrar desviacion mediastinica')
+    expect(prompt).toContain('no una escena 3D interactiva')
+    expect(clinicalRasterPrompt('Photograph of a vintage bicycle')).toBe('Photograph of a vintage bicycle')
+    expect(imageGenerationToolDescription).toContain('MEDICAL ANATOMY ROUTING')
+    expect(imageGenerationToolDescription).toContain('CALL image_generation')
+  })
+
   it('recognizes the current Codex doctor JSON shape with ChatGPT auth and image generation enabled', () => {
     expect(codexDoctorSupportsImageGeneration(JSON.stringify({
       checks: {
