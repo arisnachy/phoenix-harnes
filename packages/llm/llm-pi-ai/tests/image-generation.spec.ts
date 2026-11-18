@@ -232,7 +232,7 @@ describe('source-fidelity clinical image bridge', () => {
     vi.stubGlobal('fetch',vi.fn(async(url:RequestInfo|URL,init?:RequestInit)=>{
       const address=typeof url==='string'?url:url instanceof URL?url.href:url.url
       if(!(init?.body instanceof FormData))throw Error('Must forward study pixels as multipart')
-      calls.push({url:address,body:init.body,redirect:init.redirect})
+      calls.push({url:address,body:init.body,redirect:init.redirect ?? 'follow'})
       return new Response(JSON.stringify({data:[{b64_json:png.toString('base64')}]}),{
         status:200,headers:{'content-type':'application/json'},
       })
