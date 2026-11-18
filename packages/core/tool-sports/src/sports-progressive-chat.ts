@@ -147,9 +147,18 @@ export async function progressiveSportsStage(
   }else if(stage==='rosters'){
     const check=await readSpecialist(fixture,fetcher,now,env)
     const data=check?.teamComparison
-    rows=[pair('Plantilla y estadísticas individuales',
-      data?String(data.home.players.length)+' jugadores publicados':'Sin plantilla',
-      data?String(data.away.players.length)+' jugadores publicados':'Sin plantilla',Boolean(data))]
+    const measured=(side:'home'|'away')=>data?.[side].players.filter(p=>
+      p.stats.length>0||p.recent.length>0||p.splits.length>0).length??0
+    rows=[
+      pair('Jugadores en plantilla (no confirman participación)',
+        data?String(data.home.players.length)+' jugadores':'Sin plantilla',
+        data?String(data.away.players.length)+' jugadores':'Sin plantilla',
+        Boolean(data?.home.players.length&&data.away.players.length)),
+      pair('Jugadores con estadísticas individuales observadas',
+        String(measured('home'))+' de '+String(data?.home.players.length??0),
+        String(measured('away'))+' de '+String(data?.away.players.length??0),
+        Boolean(measured('home')&&measured('away'))),
+    ]
     if(data){
       const stats=[...new Set([...data.home.teamStats.map(x=>x.name),
         ...data.away.teamStats.map(x=>x.name)])].slice(0,8)
@@ -173,6 +182,9 @@ export async function progressiveSportsStage(
     evidence={teamComparison:data??null,checkedAt:check?.checkedAt,
       playerHistoryAudit:check?.playerHistoryAudit??null}
     missing=check?.pendingSteps??['El especialista no publicó su expediente']
+    if(!measured('home')||!measured('away'))
+      missing.push('Estadísticas individuales de uno o ambos rosters no recuperadas: '+
+        'consultar temporada explícita y fuentes originales independientes')
     source=check?.specialist??'Investigación especializada no disponible'
     note='Las filas de jugadores son paralelas y NO constituyen emparejamientos directos. '+
       'Se preservan las estadísticas completas en el expediente para Kira; las '+
@@ -409,11 +421,12 @@ export async function progressiveSportsStage(
   const unresolved=card.props.missing.length>0||
     stage==='news'&&!rows.some(row=>row.state==='verified')
   const sourceEscalation=unresolved&&
-    (stage==='availability'||stage==='context'||stage==='news')?
+    (stage==='rosters'||stage==='availability'||stage==='context'||stage==='news')?
     planIndependentSportsFallback({
       home:fixture.home,away:fixture.away,league:fixture.league,date:fixture.date,
       question:question?.trim()||card.props.missing[0]||
-        (stage==='availability'?'titulares lesiones y porteros':
+        (stage==='rosters'?'estadísticas individuales temporada y últimos partidos':
+        stage==='availability'?'titulares lesiones y porteros':
           stage==='context'?'forma y estadísticas locales':'noticias e inactivos'),
     }):null
   return{uiBlock:card,stage,nextStage:steps[index+1]??null,
