@@ -21,10 +21,25 @@ if (Test-Path -LiteralPath $py) {
     exit 0
   }
 }
-foreach ($program in @('git', 'uv')) {
-  if (-not (Get-Command $program -ErrorAction SilentlyContinue)) {
-    throw "Falta $program. Instala Git y uv (https://docs.astral.sh/uv/) antes de activar FastSD CPU."
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+  throw 'Git no está instalado. Instala Git for Windows para preparar el repositorio FastSD.'
+}
+# Bootstrap uv in the current user's Python environment, never system-wide.
+if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+  $systemPython = if (Get-Command py -ErrorAction SilentlyContinue) { 'py' }
+    elseif (Get-Command python -ErrorAction SilentlyContinue) { 'python' }
+    else { $null }
+  if ($systemPython) {
+    $prefix = if ($systemPython -eq 'py') { @('-3') } else { @() }
+    & $systemPython @prefix -m pip install --user uv
+    if ($LASTEXITCODE -eq 0) {
+      $userBase = (& $systemPython @prefix -c 'import site; print(site.USER_BASE)').Trim()
+      if ($userBase) { $env:PATH = (Join-Path $userBase 'Scripts') + ';' + $env:PATH }
+    }
   }
+}
+if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+  throw 'No se pudo instalar uv automáticamente. Instala uv desde https://docs.astral.sh/uv/ y reintenta.'
 }
 New-Item -ItemType Directory -Force -Path $destination | Out-Null
 if (-not (Test-Path -LiteralPath (Join-Path $destination '.git'))) {
