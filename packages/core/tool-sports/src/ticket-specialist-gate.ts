@@ -20,9 +20,15 @@ import {nhlSlate,investigateNhl,type NhlOfficialShots} from './nhl-evidence-rese
 import {nhlGoalieEvidence,type NhlGoalieForm} from './nhl-goalie-evidence.ts'
 import type {NhlSkaterImpact} from './nhl-skater-impact.ts'
 import {sameEspnTeam} from './sports-exact-espn-winner.ts'
-import {discoverMlbDay,researchMlbCase} from './mlb-evidence-research.ts'
+import {discoverMlbDay,researchMlbCase,type MlbMatchup} from './mlb-evidence-research.ts'
 import {tennisSlate,investigateTennis,type TennisTour} from './tennis-evidence-research.ts'
 
+export type ComparativeTeam={name:string;recentResults:string[];
+  teamStats:Array<{name:string;value:string}>;
+  players:Array<{name:string;role:string;dataStatus:string;
+    starterConfirmed:boolean;stats:Array<{name:string;value:string}>;
+    recent:Array<{name:string;value:string}>;
+    splits:Array<{name:string;value:string}>}>}
 export type SpecialistFixture={
   sport:string;league:string;eventId:string;date:string;
   home:string;away:string;kickoff:string
@@ -40,6 +46,19 @@ export type SpecialistGate={
   /** Snapshot of both teams' reported availability; source freshness does not
    * establish starter confirmation or an official pre-tipoff inactive list. */
   injuryAudit?:InjuryBackup
+  /** NBA unavailable reports reconciled by exact athlete ID to both current rosters. */
+  rosterMatchedInjuries?:{home:Array<{athlete:string;status:string;reportedAt:string|null}>;
+    away:Array<{athlete:string;status:string;reportedAt:string|null}>}
+  /** Rest measured from the researched NBA/WNBA fixture; not an inferred B2B. */
+  restHours?:{home:number|null;away:number|null}
+  /** Actual bilateral roster/player statistics for Kira to read, never a score. */
+  teamComparison?:{home:ComparativeTeam;away:ComparativeTeam}
+  /** Published/indexed headlines; none is verification of the article body. */
+  newsFindings?:Array<{title:string;publisher:string;publishedAt:string|null;
+    status:'reported-headline'|'indexed-headline-only'}>
+  /** Opponent-specific evidence: potential positional duels are NOT historical matchups. */
+  playerMatchups?:Array<{athlete:string;opponent:string;detail:string;
+    status:'observed'|'candidate';source:string}>
   /** Independent empirical draw-risk assessment, not proof of 1X2 odds. */
   soccerDrawAudit?:SoccerDrawAudit
   /** Official NHL gamecenter starter flags, never inferred from roster. */
@@ -65,6 +84,30 @@ const identities=(a:string,b:string,home:string,away:string)=>
 const closeTime=(a:string,b:string)=>
   Number.isFinite(Date.parse(a))&&Number.isFinite(Date.parse(b))&&
   Math.abs(Date.parse(a)-Date.parse(b))<=90*60_000
+
+/** Publish actual historical MLB batter-versus-pitcher results separately from possible duels. */
+export function visibleMlbBvpDuels(duels:readonly MlbMatchup[],
+  homeBatterIds:ReadonlySet<number>,awayBatterIds:ReadonlySet<number>)
+  :NonNullable<SpecialistGate['playerMatchups']>{
+  const evidence=(ids:ReadonlySet<number>)=>{
+    const candidates=duels.filter(d=>ids.has(d.batterId))
+    const observed=candidates.filter(d=>Number(d.bvp?.atBats??0)>0).slice(0,5)
+    const proposed=candidates.filter(d=>d.pitcherRole==='probable-starter'&&
+      !(Number(d.bvp?.atBats??0)>0)).slice(0,2)
+    return [...observed,...proposed].map(d=>{
+      const historical=Number(d.bvp?.atBats??0)>0
+      return{athlete:d.batter,opponent:d.pitcher,
+        detail:historical?
+          d.observations.filter(x=>x.startsWith('BvP registrado:')).join(' · '):
+          'Cruce posible con abridor probable, sin turnos BvP comprobados',
+        status:historical?'observed' as const:'candidate' as const,
+        source:historical?'MLB Stats API · turnos históricos por ID':
+          'MLB Stats API · roster y abridor probable, no enfrentamiento probado',
+      }
+    })
+  }
+  return [...evidence(homeBatterIds),...evidence(awayBatterIds)]
+}
 
 /** The official NHL game ID must identify exactly one matching fixture. */
 export function resolveNhlTicketMatch<T extends {
@@ -135,6 +178,11 @@ export async function investigateTicketSpecialist(
   // matching a real quote to the ESPN fixture and selected outcome.
   const signals:Record<string,StepObservation>={}
   let injuryAudit:InjuryBackup|undefined
+  let rosterMatchedInjuries:SpecialistGate['rosterMatchedInjuries']
+  let restHours:SpecialistGate['restHours']
+  let teamComparison:SpecialistGate['teamComparison']
+  let newsFindings:SpecialistGate['newsFindings']
+  let playerMatchups:SpecialistGate['playerMatchups']
   let soccerDrawAudit:SoccerDrawAudit|undefined
   let nhlStarterAudit:NhlStarterProbe|undefined
   let nhlScratchAudit:NhlScratchProbe|undefined
@@ -160,6 +208,24 @@ export async function investigateTicketSpecialist(
         ||!closeTime(d.event.scheduledAt,game.kickoff))
         throw Error('NFL: identidad u horario del evento no coinciden')
       level=d.coverage.level
+      const comparative=(side:'home'|'away'):ComparativeTeam=>({
+        name:d.teams[side].name,
+        recentResults:d.teams[side].recent.map(x=>x.date+' '+x.opponent+
+          ' '+x.pts+'-'+x.allowed+' '+x.homeAway),
+        teamStats:d.teams[side].teamStats,
+        players:d.teams[side].roster.map(p=>({name:p.name,role:p.role,
+          dataStatus:p.status,starterConfirmed:p.confirmedOffense||p.confirmedDefense,
+          stats:p.statistics,recent:p.lastGames,splits:[]})),
+      })
+      teamComparison={home:comparative('home'),away:comparative('away')}
+      playerMatchups=d.matchups.slice(0,16).map(x=>({athlete:x.attacker,
+        opponent:x.against,detail:'Duelo posicional posible: '+
+          x.candidates.slice(0,3).map(p=>p.name+' ('+p.role+')').join(', '),
+        status:'candidate' as const,source:'Roster NFL; sin jugadas directas confirmadas'}))
+      newsFindings=[...d.news.map(x=>({title:x.title,publisher:x.source,
+        publishedAt:x.published,status:'reported-headline' as const})),
+        ...d.editorial.map(x=>({title:x.title,publisher:x.publisher,
+          publishedAt:null,status:'indexed-headline-only' as const}))].slice(0,16)
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
       steps=['Rosters NFL '+d.coverage.verifiedPlayers+' jugadores',
         'Resultados recientes '+d.coverage.formGames+' observaciones',
@@ -192,6 +258,25 @@ export async function investigateTicketSpecialist(
         ||!closeTime(d.opportunity.scheduledAt,game.kickoff))
         throw Error('NBA/WNBA: identidad u horario del evento no coinciden')
       level=d.coverage.level
+      restHours={home:d.context.restHours.home,away:d.context.restHours.away}
+      const comparative=(side:'home'|'away'):ComparativeTeam=>({
+        name:d.teams[side].name,
+        recentResults:d.teams[side].lastGames.map(g=>g.date+' '+g.opponent+
+          ' '+g.pts+'-'+g.allowed+' '+g.location),
+        teamStats:d.teams[side].teamStats,
+        players:d.teams[side].roster.map(p=>({name:p.name,role:p.position,
+          dataStatus:p.status,starterConfirmed:p.confirmedStarter,
+          stats:p.stats,recent:p.lastGames,splits:p.splits})),
+      })
+      teamComparison={home:comparative('home'),away:comparative('away')}
+      playerMatchups=d.matchups.slice(0,16).map(x=>({athlete:x.attacker,
+        opponent:x.opponents.slice(0,3).map(p=>p.name).join(', '),detail:x.note,
+        status:'candidate' as const,
+        source:'Duelo de roster NBA/WNBA, no histórico directo documentado'}))
+      newsFindings=[...d.news.map(x=>({title:x.headline,publisher:x.source,
+        publishedAt:x.published,status:'reported-headline' as const})),
+        ...d.editorial.map(x=>({title:x.headline,publisher:x.publisher,
+          publishedAt:x.date,status:'indexed-headline-only' as const}))].slice(0,16)
       endpointAudit=[
         ...d.sources.map(x=>({url:x.url,status:x.status,checkedAt:x.observedAt,
           detail:x.reason??'ESPN: respuesta y datos clasificados por la fuente'})),
@@ -255,6 +340,25 @@ export async function investigateTicketSpecialist(
         ||!closeTime(d.opportunity.scheduledAt,game.kickoff))
         throw Error('Fútbol: identidad u horario del evento no coinciden')
       level=d.coverage.level
+      const comparativeSoccer=(side:'home'|'away'):ComparativeTeam=>({
+        name:d.teams[side].name,
+        recentResults:d.teams[side].recent.map(g=>g.date+' '+g.opponent+
+          ' '+g.scored+'-'+g.allowed+' '+g.homeAway),
+        teamStats:[{name:'récord publicado',value:d.teams[side].record.join('; ')}],
+        players:d.teams[side].roster.map(p=>({name:p.name,role:p.position,
+          dataStatus:'plantilla publicada; lesiones en informe aparte',
+          starterConfirmed:p.confirmedStarter,
+          stats:p.facts.map(f=>({name:f.label,value:f.value})),recent:[],splits:[]})),
+      })
+      teamComparison={home:comparativeSoccer('home'),away:comparativeSoccer('away')}
+      playerMatchups=d.duels.slice(0,16).map(x=>({athlete:x.attacker,
+        opponent:x.opponents.slice(0,3).map(p=>p.name).join(', '),
+        detail:x.limitations.slice(0,2).join('; '),status:'candidate' as const,
+        source:'Fútbol: formación de roster, sin enfrentamiento directo comprobado'}))
+      newsFindings=[...d.headlines.map(x=>({title:x.title,publisher:x.source,
+        publishedAt:x.published,status:'reported-headline' as const})),
+        ...d.editorial.map(x=>({title:x.title,publisher:x.publisher,
+          publishedAt:x.published,status:'indexed-headline-only' as const}))].slice(0,16)
       teams=d.teams.home.roster.length>0&&d.teams.away.roster.length>0
       steps=['Jugadores disponibles '+d.coverage.players,
         'Resultados recientes '+d.coverage.recentGames,
@@ -321,6 +425,24 @@ export async function investigateTicketSpecialist(
         throw Error('NHL: informe de porteros pertenece a otro partido; datos descartados')
       level=d.opportunity.decision==='investigate'?'B':'C'
       teams=d.players.home.length>0&&d.players.away.length>0
+      const comparative=(side:'home'|'away'):ComparativeTeam=>({
+        name:side==='home'?game.home:game.away,
+        recentResults:(d.form[side]?.last10??[]).map(g=>g.date+' '+g.opponent+
+          ' '+g.goalsFor+'-'+g.goalsAgainst+' '+g.location+' '+g.outcome),
+        teamStats:Object.entries(d.officialShots[side]).map(([name,value])=>({
+          name,value:value===null?'no disponible':String(value)})),
+        players:d.players[side].map(p=>({name:p.name,role:p.role,
+          dataStatus:'estadísticas de roster; disponibilidad física no inferida',
+          starterConfirmed:p.starterConfirmed,
+          stats:Object.entries(p.stats).map(([name,value])=>({name,value})),
+          recent:p.last5.map(g=>({name:g.date,value:g.summary})),splits:[]})),
+      })
+      teamComparison={home:comparative('home'),away:comparative('away')}
+      playerMatchups=d.possibleMatchups.slice(0,14).map(x=>({
+        athlete:x.attacker,opponent:x.againstGoalies.join(', '),
+        detail:'Candidatos según roster; sin enfrentamiento histórico publicado',
+        status:'candidate' as const,source:'NHL roster · no implica portero titular',
+      }))
       nhlGoalieFormAudit={
         home:nhlGoalieEvidence(d.goalieCandidates.home,d.fixture.date),
         away:nhlGoalieEvidence(d.goalieCandidates.away,d.fixture.date),
@@ -418,6 +540,36 @@ export async function investigateTicketSpecialist(
       if(!match)throw Error('MLB: sin correspondencia oficial de ambos equipos y fecha')
       const d=await researchMlbCase(game.date,match.gamePk,fetcher,now,env,quotes)
       level=d.opportunity.state==='investigate'?'B':'C'
+      const comparativeMlb=(side:'home'|'away'):ComparativeTeam=>({
+        name:match[side].name,
+        recentResults:(d.teamForm[side]?.lastResults??[]).map(g=>g.date+' '+
+          g.opponentId+' '+g.scored+'-'+g.allowed+' '+g.side),
+        teamStats:d.seasonRecord[side]?[{name:'season wins',value:String(d.seasonRecord[side]!.wins)},
+          {name:'season losses',value:String(d.seasonRecord[side]!.losses)}]:[],
+        players:d.rosters[side].map(p=>({name:p.name,role:p.role+' '+p.position,
+          dataStatus:p.evidence+'; lesiones y alineación por confirmar',
+          starterConfirmed:p.lineupConfirmed,
+          stats:Object.entries(p.season).map(([name,value])=>({name,value})),
+          recent:[...Object.entries(p.lastFive).map(([name,value])=>({name,value})),
+            ...p.recentStarts.slice(0,3).map(g=>({name:g.date+' start',
+              value:g.innings+' IP; '+g.pitches+' pitches'})),
+            ...p.reliefUsage72h.slice(0,3).map(g=>({name:g.date+' bullpen',
+              value:g.innings+' IP; '+g.pitches+' pitches'}))],splits:[]})),
+      })
+      teamComparison={home:comparativeMlb('home'),away:comparativeMlb('away')}
+      playerMatchups=d.matchups.slice(0,18).map(x=>({athlete:x.batter,
+        opponent:x.pitcher,detail:x.bvp?Object.entries(x.bvp).map(([key,value])=>
+          key+': '+value).join('; '):x.observations.slice(0,2).join('; '),
+        status:x.bvp?'observed' as const:'candidate' as const,
+        source:x.bvp?'MLB Stats API · enfrentamiento BvP observado':
+          'Cruce de rol bateador-lanzador, historial BvP no disponible'}))
+      playerMatchups=visibleMlbBvpDuels(d.matchups,
+        new Set(d.rosters.home.filter(p=>p.role==='batter').map(p=>p.id)),
+        new Set(d.rosters.away.filter(p=>p.role==='batter').map(p=>p.id)))
+      newsFindings=[...d.news.map(x=>({title:x.headline,publisher:x.source,
+        publishedAt:x.published,status:'reported-headline' as const})),
+        ...d.externalHeadlines.map(x=>({title:x.headline,publisher:x.source,
+          publishedAt:x.published,status:'indexed-headline-only' as const}))].slice(0,16)
       teams=d.rosters.home.length>0&&d.rosters.away.length>0
       steps=['Abridores '+Number(d.starters.home!==null&&d.starters.away!==null)+'/1 pareja',
         'Rosters '+(d.rosters.home.length+d.rosters.away.length),
@@ -453,6 +605,19 @@ export async function investigateTicketSpecialist(
       if(!match)throw Error('Tenis: sin encuentro oficial equivalente')
       const d=await investigateTennis(tour,game.date,match.matchId,fetcher,now,env,quotes)
       level=d.coverage.level
+      const comparativeTennis=(index:0|1):ComparativeTeam=>{
+        const player=d.players[index]
+        return{name:player.player.name,
+          recentResults:player.lastMatches.map(g=>g.date+' '+g.opponent+' '+g.result),
+          teamStats:[{name:'ranking',value:String(player.player.ranking??'no verificado')},
+            {name:'superficie',value:match.surface??'no verificada'}],
+          players:[{name:player.player.name,role:'singles',
+            dataStatus:player.profileAvailable?'perfil observado':'perfil incompleto',
+            starterConfirmed:false,stats:player.statistics,recent:player.lastMatches.map(g=>({
+              name:g.date,value:g.opponent+' '+g.result})),splits:[]}],
+        }
+      }
+      teamComparison={home:comparativeTennis(0),away:comparativeTennis(1)}
       teams=d.players.every(x=>x.profileAvailable)
       steps=['Superficie verificada '+String(d.coverage.surfaceObserved),
         'Rankings verificados '+d.coverage.rankCount+'/2',
@@ -510,6 +675,18 @@ export async function investigateTicketSpecialist(
         const verifiedRosterInjuries=rosterIds?injured.filter(x=>
           (injury.home.injuries.includes(x)&&x.athleteId&&rosterIds!.home.has(x.athleteId))||
           (injury.away.injuries.includes(x)&&x.athleteId&&rosterIds!.away.has(x.athleteId))):injured
+        // Injury feeds often omit a healthy/opponent team entirely. Preserve
+        // independently matched rows for either side; a missing team group is
+        // NOT proof that the opponent has zero injuries.
+        if(rosterIds&&(injury.home.matched||injury.away.matched)){
+          const lean=(rows:typeof verifiedRosterInjuries)=>rows.map(x=>({
+            athlete:x.athlete,status:x.status,reportedAt:x.reportedAt,
+          }))
+          rosterMatchedInjuries={
+            home:lean(verifiedRosterInjuries.filter(x=>injury.home.injuries.includes(x))),
+            away:lean(verifiedRosterInjuries.filter(x=>injury.away.injuries.includes(x))),
+          }
+        }
         const note=verifiedRosterInjuries.slice(0,8).map(x=>x.athlete+' ('+x.status+
           ', '+(x.reportedAt??'sin fecha')+')').join('; ')
         const detail='ESPN '+injury.source+'; local '+
@@ -570,6 +747,11 @@ export async function investigateTicketSpecialist(
         checklist.criticalPending.slice(0,3).join('; '))
     return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
       sourceChecks,checklist,...(injuryAudit?{injuryAudit}:{}),
+      ...(rosterMatchedInjuries?{rosterMatchedInjuries}:{}),
+      ...(restHours?{restHours}:{}),
+      ...(teamComparison?{teamComparison}:{}),
+      ...(newsFindings?{newsFindings}:{}),
+      ...(playerMatchups?{playerMatchups}:{}),
       ...(soccerDrawAudit?{soccerDrawAudit}:{}),
       ...(nhlStarterAudit?{nhlStarterAudit}:{}),
       ...(nhlScratchAudit?{nhlScratchAudit}:{}),

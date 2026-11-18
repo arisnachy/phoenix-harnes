@@ -240,3 +240,49 @@ test('twenty NBA roster athletes can be requested and first-party reads run in b
   assert.ok(team.athletes.every(p=>p.status==='unavailable'),
     'an empty ESPN 200 may not become fabricated athlete statistics')
 })
+
+test('NBA roster players recover current-season statistics and game logs when unscoped ESPN 200 is empty',async()=>{
+  const now=Date.parse('2026-11-18T15:00:00Z')
+  const calls=[]
+  const transport=async url=>{
+    const u=String(url);calls.push(u)
+    let payload={}
+    if(u.endsWith('/teams/5/roster'))payload={athletes:[{items:
+      Array.from({length:4},(_,i)=>({id:String(101+i),
+        displayName:'Player '+i,position:{abbreviation:'F'}}))}]}
+    else if(u.endsWith('/athletes/101/stats?season=2027')||
+      u.endsWith('/athletes/104/stats?season=2027'))
+      payload={filters:[{name:'season',value:'2027'}],
+        categories:[{stats:[{displayName:'Points per game',displayValue:'25.4'}]}]}
+    else if(u.endsWith('/athletes/102/stats?season=2027'))
+      payload={filters:[{name:'season',value:'2026'}],
+        categories:[{stats:[{displayName:'Old season PPG',displayValue:'99.9'}]}]}
+    else if(u.endsWith('/athletes/101/splits?season=2027')||
+      u.endsWith('/athletes/104/splits?season=2027'))
+      payload={displayNames:['PTS'],splitCategories:[{name:'Location',splits:[
+        {name:'Home',stats:['27']},{name:'Away',stats:['22']}]}]}
+    else if(u.endsWith('/athletes/101/gamelog?season=2027')||
+      u.endsWith('/athletes/104/gamelog?season=2027'))
+      payload={events:{'401555001':{date:'2026-11-15T00:00:00Z',name:'Prior NBA game'}},
+        seasonTypes:[{categories:[{labels:['PTS'],events:[
+          {eventId:'401555001',stats:['28']}]}]}]}
+    return Response.json(payload)
+  }
+  const dossier=await collectDirectEspnStats('basketball','nba',
+    [{id:'5',name:'Verified NBA Team'}],transport,now,4)
+  const athletes=dossier.teams[0].athletes
+  const current=athletes.find(p=>p.id==='101')
+  const later=athletes.find(p=>p.id==='104')
+  const stale=athletes.find(p=>p.id==='102')
+  assert.equal(current.stats[0]?.value,'25.4')
+  assert.ok(current.splits.some(s=>/Home/.test(s.name)))
+  assert.ok(current.lastGames.some(x=>/PTS: 28/.test(x.value)),
+    'the first player recovers season gamelog even if unscoped feed is blank')
+  assert.equal(later.stats[0]?.value,'25.4')
+  assert.ok(later.lastGames.some(x=>/PTS: 28/.test(x.value)),
+    'the fourth athlete also gets a recovered season game log')
+  assert.deepEqual(stale.stats,[],'prior-season metrics must not masquerade as current')
+  assert.ok(later.coverage.some(x=>x.endpoint==='stats?season=2027'&&x.status==='available'))
+  assert.ok(calls.some(x=>x.endsWith('/athletes/104/gamelog?season=2027')))
+  assert.ok(calls.every(x=>!x.includes('undefined')))
+})

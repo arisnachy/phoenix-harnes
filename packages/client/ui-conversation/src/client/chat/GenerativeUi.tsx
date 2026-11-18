@@ -24,6 +24,7 @@ import {importSportsForecast} from './SportsForecastAutoLink.ts'
 export {sportsFavoriteSide} from './SportsMarkedMatch.tsx'
 import { SportsNewsPanel } from './SportsNewsPanel.tsx'
 import { SportsOddsDisplay } from './SportsOddsDisplay.tsx'
+import {SportsResearchTable,type SportsResearchTableProps} from './SportsResearchTable.tsx'
 
 const MAX_UI_BLOCKS = 6
 const MAX_TEXT = 1200
@@ -140,6 +141,9 @@ type SportsEspnDashboard = {
   }
 }
 
+type SportsResearchTableBlock = {component:'sports_research_table';version:1;
+  props:SportsResearchTableProps}
+
 type SportsOddsCard = {
   component: 'sports_odds_card'; version: 1
   props: { title:string;source:string;subtitle?:string;note:string
@@ -201,7 +205,7 @@ type SportsTicketCard = {
     discoveryAudit?:unknown;dataCounts?:Record<string,number>;
     dailyResearchBoard?:TicketDailyResearchBoard;individualQuotes?:unknown[];
     pricePreview?:unknown[];pricePreviewOffers?:number;pricePreviewEvents?:number;
-    presentationStatus?:'final-research'
+    presentationStatus?:'final-research'|'research-selection'
   }
 }
 
@@ -220,7 +224,7 @@ type AgentLineBlock = {
 }
 const supportedTones: readonly PhoenixStatusTone[] = ['positive', 'warning', 'negative', 'info', 'neutral']
 
-export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | SportsGameCard | SportsScheduleCard | SportsTicketCard | SportsTicketBundleCard | SportsOddsCard | SportsEspnDashboard
+export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | SportsGameCard | SportsScheduleCard | SportsTicketCard | SportsTicketBundleCard | SportsOddsCard | SportsEspnDashboard | SportsResearchTableBlock
   | CanvasSpec | VisualIntelligenceSpec | ScaleFormSpec | SmartFormSpec | SmartLibrarySpec | SpreadsheetSpec | GeoMapSpec | SceneMapSpec | DiagramSpec | StatusPillBlock | AgentLineBlock
 
 export type GenerativeUiSegment =
@@ -407,6 +411,30 @@ const sportsEspnDashboard=(v:Record<string,unknown>):v is SportsEspnDashboard=>{
         && trustedPortrait(x.image) && espnArticleLink(x.href)
         && (x.action===undefined||(isRecord(x.action)&&hasOnlyKeys(x.action,['label','prompt'])
           && isText(x.action.label,80)&&isText(x.action.prompt,400)))))
+}
+
+/** Validate source-only progressive tables without accepting HTML or remote trackers. */
+const sportsResearchTable=(value:Record<string,unknown>):value is SportsResearchTableBlock=>{
+  if(!isRecord(value.props)||!hasOnlyKeys(value.props,[
+    'sport','league','eventId','stage','title','checkedAt','source','note',
+    'home','away','rows','missing']))return false
+  const p=value.props
+  const side=(v:unknown)=>isRecord(v)&&hasOnlyKeys(v,['name','logo'])&&
+    isText(v.name,145)&&trustedPortrait(v.logo)
+  const webLink=(v:unknown)=>v===undefined||safeSportsLink(v)
+  return isText(p.sport,40)&&isText(p.league,90)&&isText(p.eventId,40)&&
+    ['teams','rosters','availability','context','news','odds'].includes(String(p.stage))&&
+    isText(p.title,260)&&isText(p.checkedAt,50)&&
+    isText(p.source,230)&&isText(p.note,900)&&side(p.home)&&side(p.away)&&
+    Array.isArray(p.rows)&&p.rows.length>0&&p.rows.length<=64&&
+    p.rows.every(row=>isRecord(row)&&
+      hasOnlyKeys(row,['label','home','away','note','url','homeImage','awayImage','state'])&&
+      isText(row.label,155)&&isText(row.home,400)&&isText(row.away,400)&&
+      optionalText(row.note,450)&&webLink(row.url)&&
+      trustedPortrait(row.homeImage)&&trustedPortrait(row.awayImage)&&
+      (row.state===undefined||['verified','reported','pending','indexed'].includes(String(row.state))))&&
+    Array.isArray(p.missing)&&p.missing.length<=18&&
+    p.missing.every(row=>isText(row,240))
 }
 
 const sportsOdds = (v:Record<string,unknown>):v is SportsOddsCard => {
@@ -639,7 +667,8 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
   if(p.pricePreview!==undefined&&!ticketPreview(p.pricePreview))return false
   if(p.pricePreviewOffers!==undefined&&!ticketCount(p.pricePreviewOffers))return false
   if(p.pricePreviewEvents!==undefined&&!ticketCount(p.pricePreviewEvents))return false
-  if(p.presentationStatus!==undefined&&p.presentationStatus!=='final-research')return false
+  if(p.presentationStatus!==undefined&&p.presentationStatus!=='final-research'&&
+    p.presentationStatus!=='research-selection')return false
   return isText(p.title) && optionalText(p.subtitle) && isText(p.source,320)
     && isText(p.combinedOdds,40) && optionalText(p.ticketReference,25)
     && (p.ticketReference===undefined||/^[a-zA-Z0-9-]{1,25}$/u.test(p.ticketReference))
@@ -729,6 +758,7 @@ export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null
     || typeof value.component !== 'string') return null
 
   switch (value.component) {
+    case 'sports_research_table': return sportsResearchTable(value) ? value : null
     case 'sports_espn_dashboard': return sportsEspnDashboard(value) ? value : null
     case 'sports_game_card': return sportsGame(value) ? value : null
     case 'sports_schedule_card': return sportsSchedule(value) ? value : null
@@ -1523,6 +1553,8 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         </footer>
       </ForecastTicketScope></section>
     }
+    case 'sports_research_table':
+      return <SportsResearchTable value={block.props}/>
     case 'event_card': {
       const { title, subtitle, badge, left, center, right, footer } = block.props
       return (

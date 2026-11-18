@@ -34,11 +34,11 @@ export function isFirstPartySportsTool(name: unknown): boolean {
   return /^sports_chat_[a-z][a-z0-9_]{0,80}$/u.test(direct)
 }
 const ALLOWED_COMPONENTS = new Set([
-  'sports_game_card','sports_schedule_card','sports_ticket_card','sports_odds_card','sports_espn_dashboard','comparison','smart_card',
+  'sports_game_card','sports_schedule_card','sports_ticket_card','sports_odds_card','sports_espn_dashboard','sports_research_table','comparison','smart_card',
 ])
 const MAX_TEXT_BYTES = 1_000_000
-const MAX_SPORTS_CARDS = 6
-const MAX_NODES = 128
+const MAX_SPORTS_CARDS = 96
+const MAX_NODES = 768
 
 /** Distinguish a validated first-party sports card from arbitrary model JSON. */
 function verifiedCard(value: unknown): GenerativeUiBlock | null {
@@ -62,7 +62,7 @@ export function sportsCardsFromToolResult(root: unknown): GenerativeUiBlock[] {
     visited++
     if(!isRecord(tool))continue
     if(depth<10){
-      for(const child of unknownArray(tool.subCalls).slice(0,24).reverse()){
+      for(const child of unknownArray(tool.subCalls).slice(0,96).reverse()){
         if(isRecord(child))stack.push([child,depth+1])
       }
     }
@@ -109,7 +109,11 @@ export function unrenderedSportsCards(
   const added=new Set<string>(),output:GenerativeUiBlock[]=[]
   // The requested ticket must never disappear behind six earlier fixtures
   // from the same research round. Preserve original order inside each tier.
-  const prioritized=[...cards].sort((a,b)=>
+  // When Kira is publishing the six evidence stages, preserve their
+  // chronological research order; the final ticket belongs AFTER the tables.
+  // Ordinary quick-ticket responses retain legacy ticket-first behavior.
+  const hasProgressiveStages=cards.some(card=>card.component==='sports_research_table')
+  const prioritized=hasProgressiveStages?[...cards]:[...cards].sort((a,b)=>
     Number(b.component==='sports_ticket_card')-Number(a.component==='sports_ticket_card'))
   for(const card of prioritized){
     if(output.length>=MAX_SPORTS_CARDS)break
