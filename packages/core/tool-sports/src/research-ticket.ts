@@ -201,11 +201,17 @@ export async function autoResearchTicket(
   if(!validDay(requestedDate))throw Error('Fecha de ticket inválida (AAAA-MM-DD)')
   if(!Number.isInteger(count)||count<1||count>6)throw Error('Indica entre 1 y 6 patas')
 
-  const leagues=[
+  // Cartelera deportiva completa: un experto humano revisa toda la oferta del día
+  // (hasta 20 ligas activas) para no perder oportunidades en ligas no consultadas.
+  const leagues: ReadonlyArray<readonly [string, string]> = [
     ['basketball','nba'],['football','nfl'],['hockey','nhl'],
     ['soccer','eng.1'],['soccer','esp.1'],['soccer','uefa.champions'],
     ['baseball','mlb'],['basketball','wnba'],
-  ] as const
+    ['soccer','ger.1'],['soccer','ita.1'],['soccer','fra.1'],
+    ['soccer','mex.1'],['soccer','usa.1'],['soccer','por.1'],
+    ['soccer','ned.1'],['soccer','bra.1'],['soccer','arg.1'],
+    ['soccer','uefa.europa'],['tennis','atp'],['tennis','wta'],
+  ]
   const boards=new Map<string,EspnBoard>()
   const candidates:Array<{leg:ResearchTicketLeg;edge:number}>=[]
   const jobs=await Promise.allSettled(leagues.map(async([sport,league])=>{
@@ -241,8 +247,9 @@ export async function autoResearchTicket(
       const hp=(h.wins+1)/(h.wins+h.losses+2)
       const ap=(a.wins+1)/(a.wins+a.losses+2)
       const difference=hp-ap
-      // A tied NBA record must not hide a meaningful recent-form divergence.
-      if(Math.abs(difference)<0.055&&!(sport==='basketball'&&league==='nba'))continue
+      // Un experto deportivo analiza toda la cartelera sin descartar arbitrariamente
+      // solo porque los records sean parejos en una muestra temprana.
+      if(Math.abs(difference)<0.02&&!(sport==='basketball'&&league==='nba'))continue
       const winner=difference>0?h:a
       const loser=difference>0?a:h
       candidates.push({

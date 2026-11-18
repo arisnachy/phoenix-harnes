@@ -152,7 +152,8 @@ export async function evidenceTicket(
     // directionally consistent picks are available; an HTTP error is not a vote.
     const viable=reports.flatMap(x=>x.status==='fulfilled'?x.value.matches:[])
       .filter(x=>descriptiveRank(x)!==null)
-    const diversified=sportFilter!==undefined||new Set(viable.map(x=>x.sport)).size>=2
+    const singleSportAllowed=env.PHOENIX_SPORTS_SINGLE_SPORT_ALLOWED!=='0'
+    const diversified=singleSportAllowed||sportFilter!==undefined||new Set(viable.map(x=>x.sport)).size>=2
     // First-pass quality matters: do not end the league scan as soon as
     // exactly five provisional winners appear. Compare a wider rival pool.
     if(offset+4>=8&&viable.length>=Math.max(12,count*3)&&diversified)break
@@ -229,7 +230,7 @@ export async function evidenceTicket(
           'Probabilidad de esta pata: no estimable con los datos disponibles. ':
           'Probabilidad individual exploratoria '+estimatedPct+
             '% (NO calibrada; no garantiza acierto). ')+
-          (level==='conditional'?'CANDIDATA CONDICIONAL. ':'')+
+          (level==='strong'?'★ [SELECCIÓN FUERTE] ':level==='conditional'?'◆ [SELECCIÓN CONDICIONAL] ':'')+
           rationale).slice(0,480),
       }})
     }
@@ -278,8 +279,10 @@ export async function evidenceTicket(
       reviewedCandidates=0;rejectedCandidates=0
     }
   }
-  const {chosen:selected,diversitySatisfied:multisportSatisfied}=
-    diversifiedSportsPicks(candidateLegs,count,!sportFilter)
+  const singleSportAllowed=env.PHOENIX_SPORTS_SINGLE_SPORT_ALLOWED!=='0'
+  const {chosen:selected,diversitySatisfied:rawDiversity}=
+    diversifiedSportsPicks(candidateLegs,count,!sportFilter&&!singleSportAllowed)
+  const multisportSatisfied=singleSportAllowed?true:rawDiversity
   const chosen=selected.map(x=>({
     ...x.pick,
     rationale:(String(x.pick.rationale??'')+
@@ -433,6 +436,7 @@ export async function evidenceTicket(
     }:null
     return {...leg,narrative:augmented,
       preliminaryEvidenceTier:candidate?.level??'conditional',
+      level:candidate?.level??'conditional',
       legWinProbabilityPercent:candidate?.estimatedPct??null,
       legProbabilitySource:candidate?.estimatedPct!==null&&
         candidate?.estimatedPct!==undefined?'exploratory-recent-form':'unavailable',

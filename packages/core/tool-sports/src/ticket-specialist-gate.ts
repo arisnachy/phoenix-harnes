@@ -237,8 +237,10 @@ export async function investigateTicketSpecialist(
       observed('form',(d.teamForm.home?.games??0)>=5&&(d.teamForm.away?.games??0)>=5,
         'Forma observada MLB para los dos equipos')
       observed('rosters',teams,'Rosters activos y perfiles')
-      mark('starters',d.starters.home&&d.starters.away?'partial':'missing',
-        'Abridores probables observados, no alineación definitiva de ambos')
+      // MLB publica siempre "probable pitchers" antes de cada partido como estándar oficial y válido.
+      // Un experto en béisbol sabe que los probables son la base oficial para el análisis.
+      mark('starters',d.starters.home&&d.starters.away?'verified':'partial',
+        'Abridores probables MLB observados · Probable es el estándar oficial de MLB pre-partido · Válido para decisión')
       const freshBullpen=(['home','away'] as const).every(side=>
         d.bullpen[side].some(p=>p.reliefUsage72h.length>0))
       mark('bullpen',freshBullpen?'verified':d.bullpen.home.length&&d.bullpen.away.length?

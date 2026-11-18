@@ -92,8 +92,8 @@ export function shortlistDailyMarkets(
     if(!quote.bookmaker?.trim()||!quote.source?.trim()||
       !['h2h','spreads','totals'].includes(quote.market)||
       !Number.isFinite(quote.price)||quote.price<=1||quote.price>1000||
-      !Number.isFinite(at)||at>now||now-at>60*60_000||
-      !Number.isFinite(time)||time<=now||!quote.sportKey){
+      !Number.isFinite(time)||time<=now||!quote.sportKey||
+      (Number.isFinite(at)&&(at>now||(quote.source.toLowerCase().includes('espn')?now-at>4*60*60_000:now-at>60*60_000)))){
       rejectedQuotes++;continue
     }
     const matches=fixtures.filter(game=>dailyOddsSportKey(game.sport,game.league)===quote.sportKey

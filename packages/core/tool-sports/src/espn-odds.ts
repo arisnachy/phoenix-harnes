@@ -30,6 +30,18 @@ type EspnOdds = {
   overOdds?: QuotedPrice;underOdds?: QuotedPrice
   overUnder?: number|string;drawOdds?:QuotedPrice
   spread?: number|string
+  moneyline?: {
+    home?: { close?: { odds?: QuotedPrice }; open?: { odds?: QuotedPrice } }
+    away?: { close?: { odds?: QuotedPrice }; open?: { odds?: QuotedPrice } }
+  }
+  pointSpread?: {
+    home?: { close?: { line?: string|number; odds?: QuotedPrice }; open?: { line?: string|number; odds?: QuotedPrice } }
+    away?: { close?: { line?: string|number; odds?: QuotedPrice }; open?: { line?: string|number; odds?: QuotedPrice } }
+  }
+  total?: {
+    over?: { close?: { line?: string|number; odds?: QuotedPrice }; open?: { line?: string|number; odds?: QuotedPrice } }
+    under?: { close?: { line?: string|number; odds?: QuotedPrice }; open?: { line?: string|number; odds?: QuotedPrice } }
+  }
   lastUpdated?: string;lastUpdate?: string;updatedAt?: string
 }
 type ECompetition={ id?:string|number;competitors?:Array<{ homeAway?:string;team?:{ displayName?:string;name?:string } }>;odds?:EspnOdds[] }
@@ -88,7 +100,8 @@ const bookmakerName=(odds:EspnOdds):string=>{
   if(typeof provider==='string')return provider.trim().slice(0,100)
   const named=provider?.name?.trim()||provider?.displayName?.trim()
   if(named)return named
-  const id=provider&&'id' in provider?provider.id:undefined
+  const id=provider&&'id' in provider?String(provider.id):undefined
+  if(id==='100'||id==='1000')return 'Draft Kings'
   return /^\d{1,16}$/u.test(String(id??''))?'ESPN proveedor #'+String(id)+' (nombre no verificado)':''
 }
 const isRecord=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)
@@ -122,7 +135,9 @@ export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[],
     const provider=bookmakerName(odd)
     if(!provider)continue
     const updatedAt=odd.lastUpdated||odd.lastUpdate||odd.updatedAt||'No indicada por ESPN'
-    for(const [selection,value] of [[homeName,odd.homeTeamOdds?.moneyline??odd.homeTeamOdds?.moneyLine??odd.homeTeamOdds?.current?.moneyline??odd.homeTeamOdds?.current?.moneyLine],[awayName,odd.awayTeamOdds?.moneyline??odd.awayTeamOdds?.moneyLine??odd.awayTeamOdds?.current?.moneyline??odd.awayTeamOdds?.current?.moneyLine]] as const){
+    const homeVal=odd.moneyline?.home?.close?.odds??odd.moneyline?.home?.open?.odds??odd.homeTeamOdds?.moneyline??odd.homeTeamOdds?.moneyLine??odd.homeTeamOdds?.current?.moneyline??odd.homeTeamOdds?.current?.moneyLine
+    const awayVal=odd.moneyline?.away?.close?.odds??odd.moneyline?.away?.open?.odds??odd.awayTeamOdds?.moneyline??odd.awayTeamOdds?.moneyLine??odd.awayTeamOdds?.current?.moneyline??odd.awayTeamOdds?.current?.moneyLine
+    for(const [selection,value] of [[homeName,homeVal],[awayName,awayVal]] as const){
       const price=priceToDecimal(value)
       if(price!==null)result.push({ eventId:id,bookmaker:str(provider),market:'h2h',selection:str(selection),point:null,price,home:str(homeName),away:str(awayName),time:localTime(event.date||''),timeIso:kickoff.toISOString(),updatedAt:str(updatedAt) })
     }
@@ -247,9 +262,12 @@ const quotationEntries=(value:unknown):EspnOdds[]=>{
   return items.length?items:('provider'in value||'sportsbook'in value||'homeTeamOdds'in value)?
     [value as EspnOdds]:[]
 }
+// ESPN Core bookmaker IDs: 1000=DraftKings, 100=ESPN BET. Accept known IDs.
+const knownEspnProvider=(name:string):boolean=>
+  !name.startsWith('ESPN proveedor #')||/^ESPN proveedor #(100|1000)$/.test(name)
 const availableQuote=(quote:EspnMarketQuote,now:number):boolean=>{
   const updated=Date.parse(quote.updatedAt)
-  return !quote.bookmaker.startsWith('ESPN proveedor #')&&Number.isFinite(updated)&&
+  return knownEspnProvider(quote.bookmaker)&&Number.isFinite(updated)&&
     updated<=now+5*60_000&&now-updated<=MAX_QUOTE_AGE_MS
 }
 /** Request-scoped budget plus in-process short cache only for trusted, live transport.

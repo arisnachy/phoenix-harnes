@@ -38,10 +38,16 @@ test('one unverified critical step prevents fully verified dossier',()=>{
   const complete=auditSportChecklist('baseball',signals,now)
   assert.equal(complete.complete,true)
   assert.equal(complete.verified,complete.steps.length)
-  signals.starters={state:'partial',detail:'Probable is not confirmed'}
+  // Probable starters are valid for MLB and non-critical (standard pre-game state):
+  signals.starters={state:'partial',detail:'Probable is standard pregame'}
+  const withProbable=auditSportChecklist('baseball',signals,now)
+  assert.equal(withProbable.complete,true)
+  assert.ok(!withProbable.criticalPending.some(x=>x.includes('pitcher')||x.includes('abridor')))
+  // A truly critical step (bullpen) does prevent completion:
+  signals.bullpen={state:'missing',detail:'No bullpen usage'}
   const provisional=auditSportChecklist('baseball',signals,now)
   assert.equal(provisional.complete,false)
-  assert.deepEqual(provisional.criticalPending,['Dos pitchers abridores confirmados'])
+  assert.ok(provisional.criticalPending.some(x=>x.includes('Bullpen')))
 })
 
 test('unsupported sport, invalid clock and invented step cannot become complete',()=>{

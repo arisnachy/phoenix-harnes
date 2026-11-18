@@ -78,7 +78,7 @@ const ticket=await stage('02-historical-candidates-specialists-odds-critic',
     PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0',
     PHOENIX_SPORTS_FREE_BACKUPS_DISABLED:'0',
     PHOENIX_SPORTS_DAILY_PRELOAD_AUTO:'0',
-  },fetcher,async()=>[],'winner'))
+  },fetcher,undefined,'winner'))
 if(ticket)report.diagnostic.ticket={
   researchedBeforeFinalChoice:ticket.reviewedBeforeSelection,
   removedIdentityConflicts:ticket.removedConflicts,

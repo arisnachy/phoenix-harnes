@@ -27,7 +27,7 @@ export type DecisionLeg={
   specialistStatus:DecisionInput['specialistStatus']
   criticalPending:string[];modelStatus:DecisionInput['modelStatus']
 }
-export type DecisionScenario={count:3|4|5;eventIds:string[];marketProductPct:number|null}
+export type DecisionScenario={count:4|5|6;eventIds:string[];marketProductPct:number|null}
 export type TicketDecisionAudit={
   legs:DecisionLeg[];excludedEvents:string[];heldEvents:string[]
   alternativesNeeded:number;scenarios:DecisionScenario[]
@@ -108,8 +108,8 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
   const candidates=legs.filter(l=>l.verdict!=='exclude')
     .filter(l=>l.marketNoVigPct!==null)
     .sort((a,b)=>b.marketNoVigPct!-a.marketNoVigPct!)
-  const scenarios:DecisionScenario[]=[3,4,5].map(n=>{
-    const count=n as 3|4|5,core=candidates.slice(0,count)
+  const scenarios:DecisionScenario[]=[4,5,6].map(n=>{
+    const count=n as 4|5|6,core=candidates.slice(0,count)
     return{count,eventIds:core.map(x=>x.eventId),
       marketProductPct:core.length===count?Number((core.reduce((p,x)=>
         p*x.marketNoVigPct!/100,1)*100).toFixed(2)):null}

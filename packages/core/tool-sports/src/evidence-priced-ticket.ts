@@ -349,7 +349,7 @@ export async function evidencePricedTicket(
     const doubleChance=event.sport==='soccer'&&marketPreference==='double_chance'
     const expectedMarket=doubleChance?'double_chance':event.sport==='soccer'?'1x2':'h2h'
     return all.filter(q=>{
-      const updated=Date.parse(q.updatedAt),quoteKickoff=Date.parse(q.time)
+      const updated=Date.parse(q.updatedAt),quoteKickoff=Date.parse(q.timeIso||q.time)
       const source=q.source==='TheRundown'||q.source==='SportsGameOdds'
       const observedAt=Date.parse(q.observedAt??'')
       const snapshotValid=source&&Number.isFinite(observedAt)&&
@@ -577,7 +577,10 @@ export async function evidencePricedTicket(
       ?estimate as Record<string,unknown>:{}
     const pricedRow=row&&typeof row==='object'&&!Array.isArray(row)
       ?row as Record<string,unknown>:{}
+    const isStrong=prior.preliminaryEvidenceTier==='strong'||prior.level==='strong'||String(prior.rationale??'').includes('[SELECCIÓN FUERTE]')
+    const tierBadge=isStrong?'★ [SELECCIÓN FUERTE] ':'◆ [SELECCIÓN CONDICIONAL] '
     return {...pricedRow,
+      evidenceTier:isStrong?'strong':'conditional',
       narrative:enrichSpecialistNarrative(
         prior.narrative as TicketNarrative|null|undefined,specialistChecks[index],
         marketRisk.legs[index]?.noVigPercent,modelAudit[index]),
@@ -604,11 +607,11 @@ export async function evidencePricedTicket(
         .map(k=>[k,prior[k]])),
       rationale:marketRisk.legs[index]?.noVigPercent!==null&&
         marketRisk.legs[index]?.noVigPercent!==undefined?
-          ('Probabilidad individual implícita del mercado sin margen: '+
+          (tierBadge+'Probabilidad individual implícita del mercado sin margen: '+
           marketRisk.legs[index]!.noVigPercent+'% (NO pronóstico calibrado). '+
           String(prior.rationale??'').replace(
-            /^Probabilidad individual exploratoria[^.]*\.\s*/u,'')).slice(0,480):
-          String(prior.rationale??'').slice(0,480),
+            /^Probabilidad individual exploratoria[^.]*\.\s*/u,'').replace(/^[★◆]\s*\[SELECCIÓN (FUERTE|CONDICIONAL)\]\s*/u,'')).slice(0,480):
+          (tierBadge+String(prior.rationale??'').replace(/^[★◆]\s*\[SELECCIÓN (FUERTE|CONDICIONAL)\]\s*/u,'')).slice(0,480),
       ...(quote?{price:String(quote.price),bookmaker:quote.bookmaker,
         ...(quote.market==='double_chance'?{selection:quote.selection==='1X'
           ?'1X · Local o empate':'X2 · Visita o empate',
@@ -622,12 +625,13 @@ export async function evidencePricedTicket(
               /^Probabilidad individual exploratoria[^.]*\.\s*/u,'').slice(0,340)+
             ' · Cubre empate; verificar precio, riesgo vigente.').slice(0,480)}:{})}:{})}
   })
-  const card:ChatBlock={...priced.card,props:{
+    const strongCount=legs.filter(l=>l.evidenceTier==='strong'||String(l.rationale??'').includes('[SELECCIÓN FUERTE]')).length
+    const subtitle='TICKET DE INVESTIGACIÓN · '+legs.length+' patas ('+strongCount+' FUERTES, '+(legs.length-strongCount)+' CONDICIONALES) · '+best.book+' (https://www.espn.com/sports-betting/odds)'
+    const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,modelAudit,marketRisk,decisionAudit,
     chatNarrative:legs.map(x=>x.narrative).filter(Boolean),
     narrativeInstruction:'Kira debe explicar cada selección DEBAJO del ticket con datos favorables, datos contrarios, fecha y enlaces de noticias, sede, clima, árbitro verificado o no y porcentaje con origen; jamás resumir cinco patas en una sola frase.',
-    subtitle:(checklistComplete&&!elevatedMarketRisk?'Investigación especializada':'TICKET CONDICIONAL')+
-      ' · cuotas verificadas · '+best.book+' · forma histórica ESPN',
+    subtitle,
     note:(checklistComplete&&!elevatedMarketRisk?'COTIZACIÓN INVESTIGADA':
       'TICKET CONDICIONAL: faltan datos especializados. Se muestran solo cuotas reales.')+
       ' NO ES APUESTA APROBADA NI GANADORA. '+(marketPreference==='double_chance'

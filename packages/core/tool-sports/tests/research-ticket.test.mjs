@@ -119,7 +119,8 @@ test('automatic research discovers five unique real ESPN fixtures without synthe
   assert.equal(result.card.props.legs[0].homeTeam,'Home 301')
   assert.equal(result.card.props.legs[0].awayTeam,'Away 301')
   assert.equal(result.card.props.legs[0].price,'Por verificar')
-  assert.equal(urls.length,23)
+  // 20 ligas deportivas investigadas en la cartelera completa + 15 peticiones históricas NBA = 35
+  assert.equal(urls.length,35)
   assert.equal(urls.filter(u=>u.includes('/basketball/nba/')).length,16)
 })
 test('automatic research marks 2 of 5 as incomplete instead of claiming success',async()=>{

@@ -42,7 +42,7 @@ const definitions:Readonly<Record<string,readonly Requirement[]>>={
     {key:'injuries',title:'Lesiones, scratches y suspensiones actuales',critical:true}],
   baseball:[...common,
     {key:'rosters',title:'Rosters activos de ambos equipos',critical:true},
-    {key:'starters',title:'Dos pitchers abridores confirmados',critical:true},
+    {key:'starters',title:'Pitchers abridores probables (MLB publica "probable", nunca "confirmed" antes del juego)',critical:false},
     {key:'bullpen',title:'Bullpen y carga de relevistas',critical:true},
     {key:'matchups',title:'Bateadores versus abridores y forma de equipos',critical:true},
     {key:'weather',title:'Parque, techo, viento y clima en el horario',critical:true},
@@ -97,7 +97,7 @@ const specialistSources:Record<string,Record<string,string[]>>={
   },
   baseball:{
     rosters:['MLB Stats API roster','ESPN baseball/mlb roster'],
-    starters:['MLB Stats API schedule hydrate probablePitcher','MLB boxscore lineup'],
+    starters:['MLB Stats API schedule hydrate probablePitcher (probable es el estándar válido de MLB)','MLB boxscore lineup cuando esté disponible'],
     bullpen:['MLB Stats API boxscore/game logs (últimas 72h)'],
     matchups:['MLB Stats API batter/pitcher splits','ESPN summary'],
     weather:['MLB schedule venue','Open-Meteo temperatura y viento'],

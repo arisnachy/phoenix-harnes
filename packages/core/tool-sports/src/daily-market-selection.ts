@@ -28,14 +28,19 @@ const effectiveResearchRank=(r:MarketResearchReview):number=>
   r.priceAudit?.classification==='negative-value'?0:researchRank[r.status]
 const compare=(a:MarketResearchReview,b:MarketResearchReview)=>{
   const ra=effectiveResearchRank(a),rb=effectiveResearchRank(b)
-  // For equally evidenced moneyline picks, prefer the less fragile priced side.
-  // This is relative bookmaker confidence, not a validated predictive edge.
+  // La investigación deportiva manda: picks con apoyo descriptivo de investigación
+  // siempre van antes que los inciertos o no investigados.
+  if(rb!==ra)return rb-ra
+  const va=valueRank(a),vb=valueRank(b)
+  if(vb!==va)return vb-va
+  // Entre selecciones igualmente fundamentadas por investigación, priorizar la que
+  // tenga mayor posibilidad estimada/respaldo de victoria para maximizar el acierto del ticket.
   const aShare=a.selectedOutcome?.noVigShare,bShare=b.selectedOutcome?.noVigShare
   const winnerStrength=a.candidate.market==='h2h'&&b.candidate.market==='h2h'
     &&typeof aShare==='number'&&Number.isFinite(aShare)
     &&typeof bShare==='number'&&Number.isFinite(bShare)
       ?bShare-aShare:0
-  return rb-ra||valueRank(b)-valueRank(a)||winnerStrength||
+  return winnerStrength||
     b.rankingScore-a.rankingScore||
     b.verifiedSources-a.verifiedSources||
     b.candidate.quoteUpdatedAt.localeCompare(a.candidate.quoteUpdatedAt)||
@@ -45,7 +50,7 @@ const compare=(a:MarketResearchReview,b:MarketResearchReview)=>{
 
 /** Select the strongest descriptive, authentic market for each game.
  * @param reviews - Alternate real market offers reviewed against one dossier/event.
- * @param goal - Desired number of games, 5–6.
+ * @param goal - Desired number of games, 4–6.
  * @returns A bounded, independently reviewable shortlist; never a winning guarantee.
  */
 export function selectDailyResearchedMarkets(
