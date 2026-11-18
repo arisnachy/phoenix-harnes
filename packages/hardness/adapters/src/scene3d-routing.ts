@@ -26,6 +26,13 @@ export function choosePhoenixDesignMedium(request:string):DesignMedium{
   const staticImage=/\b(?:png|jpg|jpeg|fotograf\w*|foto|poster|flyer|banner|portada|imagen|render|ilustracion)\b/u.test(text)
   const data=/\b(?:grafic\w*|grafica|dashboard|analitic\w*|estadistic\w*|diagrama\s+de\s+barras|velas|pie\s+chart)\b/u.test(text)
   const ui=/\b(?:formulario|login|tabla|panel\s+de\s+control|botones|pagina\s+web|pagina\s+de\s+inicio)\b/u.test(text)
+  // A negated 3D mention is a rejection, never positive spatial intent.
+  // Medical atlas/still-image requests must not turn into primitive anatomical meshes.
+  const clinical = /\b(?:anatom\w*|medic\w*|clinic\w*|pleur\w*|neumotorax|pneumothorax|pulmon\w*|pulmonary|thorax|torax|cavidad\s+toracica|bronqu\w*|corazon|cardiac\w*|arteri\w*|venas|venos\w*|inervac\w*|irrigac\w*|organos|higado|rinon|cerebro|nervi\w*)\b/u.test(text)
+  const reject3D = /\b(?:no|sin|evitar|evita|en\s+vez\s+de|en\s+lugar\s+de)\s+(?:(?:un|el|la|modelo|render|escena|visualizacion)\s+){0,3}(?:3d|tridimensional)\b/u.test(text)
+  const positive3D = /\b(?:3d|tridimensional|glb|gltf)\b/u.test(text) && !reject3D
+  const medicalStill = staticImage || /\b(?:lamina|atlas|hiperrealista|hiperrealismo)\b/u.test(text)
+  if (clinical && (reject3D || (medicalStill && !positive3D))) return 'image'
   // The explicit data/UI intent wins over incidental "3D" unless a spatial model is requested.
   if(data&&!interactive)return 'chart'
   if(staticImage&&!interactive&&!(app&&appSpatial))return 'image'
@@ -41,6 +48,7 @@ export const PHOENIX_3D_ROUTING_PROTOCOL =
   'Use phoenix_3d when a request needs orbit/zoom/rotation, spatial volume, a walkable/showroom/product configurator, '+
   'reusable 3D assets in an application, or explicit .gltf/.glb; use native portable scene geometry, not image_generation. '+
   'For a still photograph, poster, concept render or moodboard use image generation; for graphs use phoenix_visualize; '+
+  'For medical anatomy, HealthIA, pleural air and pathology atlas requests, prefer the true image_generation raster backend: 2D hyperrealistic stills with accurate anatomy, relative scale, arteries, veins, innervation and evidenced findings. Never interpret "no 3D" as a request for phoenix_3d. Keep patient-specific findings bounded to reviewed sources, not invented geometry. Use interactive phoenix_3d for clinical anatomy only when the user explicitly requests a manipulable spatial model. '+
   'for normal forms, dashboards and web UI use phoenix_canvas or UI tools. Never add 3D to ordinary apps merely because it looks impressive. '+
   'For architecture/product/room/vehicle apps, propose or create a 3D viewer when interaction conveys spatial value. '+
   'For original, named or recognizable human/cartoon characters, use a real Studio character asset/mesh and rig; a 24-primitive assembly is only a low-poly draft. '+
