@@ -79,8 +79,9 @@ describe('Direct local-image request isolation', () => {
     const ctx = await harness(adapter)
     const agent = ctx.agentLoop.create(SessionId('fastsd-direct-large-history'), { provider: 'mock', model: 'mock' })
     const steps: number[] = []
-    ctx.on('agent/pre-step', ({ agent: owner }) => {
+    ctx.on('agent/pre-step', ({ agent: owner }, next) => {
       if (owner === agent) steps.push(1)
+      return next()
     })
     send(agent, 'analiza lo siguiente: ' + 'token '.repeat(12000))
     await agent.whenIdle()
