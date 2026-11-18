@@ -1,7 +1,7 @@
 /** Choose one fully quoted market per researched event, after comparing alternatives.
  * Descriptive alignment is not calibrated probability or expected value.
  */
-import type {MarketResearchReview} from './daily-market-evidence.ts'
+import type { MarketResearchReview } from './daily-market-evidence.ts'
 
 export type DailyResearchedSelection={
   selected:MarketResearchReview[]
@@ -39,7 +39,7 @@ const compare=(a:MarketResearchReview,b:MarketResearchReview)=>{
   const winnerStrength=a.candidate.market==='h2h'&&b.candidate.market==='h2h'
     &&typeof aShare==='number'&&Number.isFinite(aShare)
     &&typeof bShare==='number'&&Number.isFinite(bShare)
-      ?bShare-aShare:0
+    ?bShare-aShare:0
   return winnerStrength||
     b.rankingScore-a.rankingScore||
     b.verifiedSources-a.verifiedSources||

@@ -3,17 +3,17 @@
  * probability model. Event existence and kickoff are re-verified by researchTicket.
  */
 import { getFeed,hasSportsPermission, type ChatBlock } from './sports.ts'
-import {estimateEvidenceForecast} from './sports-forecast.ts'
+import { estimateEvidenceForecast } from './sports-forecast.ts'
 import { researchSport } from './multi-sport-research.ts'
 import { researchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { investigatePregame } from './pregame-investigation.ts'
 import { investigateEventDeep } from './sports-deep-context.ts'
 import { diversifiedSportsPicks,diversifiedSportsShortlist } from './sports-diversity.ts'
-import {composeTicketLegNarrative} from './sports-ticket-narrative.ts'
-import {discoverEditorialResearch} from './sports-editorial-discovery.ts'
-import {discoverGdeltTicketNews,type GdeltReport} from './sports-gdelt-editorial.ts'
+import { composeTicketLegNarrative } from './sports-ticket-narrative.ts'
+import { discoverEditorialResearch } from './sports-editorial-discovery.ts'
+import { discoverGdeltTicketNews,type GdeltReport } from './sports-gdelt-editorial.ts'
 export type TicketPreselectCandidate={
-  eventId:string;sport:string;league:string;home:string;away:string;
+  eventId:string;sport:string;league:string;home:string;away:string
   kickoff:string;pick:'home'|'away'|'draw';rank:number;level:'strong'|'conditional'
 }
 export type TicketPreselectVerdict={
@@ -40,8 +40,8 @@ export function boundedTicket<T>(task:Promise<T>,ms:number):Promise<T>{
     if(timer!==undefined)clearTimeout(timer)
   })
 }
-const dayNow=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
-  year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
+const dayNow=()=>new Intl.DateTimeFormat('en-CA',{ timeZone:'America/Santo_Domingo',
+  year:'numeric',month:'2-digit',day:'2-digit' }).format(new Date())
 const validDate=(day:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(day)
   &&Number.isFinite(Date.parse(day+'T00:00:00Z'))
   &&new Date(day+'T00:00:00Z').toISOString().slice(0,10)===day
@@ -69,7 +69,7 @@ const descriptiveRank=(match:Awaited<ReturnType<typeof researchSport>>['matches'
  * NEVER promoted to strong findings or calibrated recommendations.
  */
 const conditionalRank=(match:Awaited<ReturnType<typeof researchSport>>['matches'][number])=>{
-  const {home,away,sport}=match
+  const { home,away,sport }=match
   const min=sport==='football'?3:5
   if(match.evidence!=='descriptive'||home.completedGames<min||
     away.completedGames<min||home.averageMargin===null||
@@ -88,13 +88,13 @@ export async function evidenceTicket(
   count:number,date=dayNow(),sportFilter?:string,fetcher:typeof fetch=fetch,
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
   reviewCandidates?:TicketPreselectReviewer,
-):Promise<{card:ChatBlock;complete:boolean;verifiedEvents:number;
-  candidatesEvaluated:number;researchLeagues:number;modelProbabilities:false;priced:false;placed:false;
-  insufficientEvidence:number;researchStandard:string;
-  pregameSummariesVerified:number;injuryFeedsVerified:number;
-  deepContextChecked:number;newsMatched:number;playerStatsChecked:number;
-  multisportSatisfied:boolean;scannedSports:number;selectedSports:string[];
-  selections:ResearchTicketLeg[];events:Array<{eventId:string;home:string;away:string;kickoff:string;sport:string;league:string;pick:'home'|'away'}>}>{
+):Promise<{ card:ChatBlock;complete:boolean;verifiedEvents:number
+  candidatesEvaluated:number;researchLeagues:number;modelProbabilities:false;priced:false;placed:false
+  insufficientEvidence:number;researchStandard:string
+  pregameSummariesVerified:number;injuryFeedsVerified:number
+  deepContextChecked:number;newsMatched:number;playerStatsChecked:number
+  multisportSatisfied:boolean;scannedSports:number;selectedSports:string[]
+  selections:ResearchTicketLeg[];events:Array<{ eventId:string;home:string;away:string;kickoff:string;sport:string;league:string;pick:'home'|'away' }> }>{
   if(!Number.isInteger(count)||count<1||count>6)throw Error('El ticket requiere entre 1 y 6 patas')
   if(!validDate(date))throw Error('Fecha de ticket inválida')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por el operador')
@@ -102,26 +102,26 @@ export async function evidenceTicket(
   if(!leagues.length)throw Error('Disciplina sin cobertura para ticket automático')
   // Keep historical screening separate from full specialist investigations.
   // A stalled provider must not block the ticket; failures retain their state.
-  const slate:Array<PromiseSettledResult<{sport:string;league:string;active:number}>>=[]
+  const slate:Array<PromiseSettledResult<{ sport:string;league:string;active:number }>>=[]
   for(let offset=0;offset<leagues.length;offset+=8){
     const batch=await Promise.allSettled(leagues.slice(offset,offset+8).map(async([sport,league])=>{
     // Search both ESPN UTC date partitions for the requested local (RD) day.
-    const next=new Date(Date.parse(date+'T00:00:00Z')+86_400_000)
-      .toISOString().slice(0,10).replaceAll('-','')
-    const partitions=await Promise.allSettled([date.replaceAll('-',''),next].map(day=>
-      boundedTicket(getFeed<{events?:Array<{id?:string|number;date?:string;status?:{type?:{state?:string}}}>}>(
-        'https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+
+      const next=new Date(Date.parse(date+'T00:00:00Z')+86_400_000)
+        .toISOString().slice(0,10).replaceAll('-','')
+      const partitions=await Promise.allSettled([date.replaceAll('-',''),next].map(day=>
+        boundedTicket(getFeed<{ events?:Array<{ id?:string|number;date?:string;status?:{ type?:{ state?:string } } }> }>(
+          'https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+
         '/scoreboard?dates='+day,fetcher),4_000)))
-    const observed=partitions.flatMap(x=>x.status==='fulfilled'&&Array.isArray(x.value.events)
-      ?x.value.events:[])
-    if(!partitions.some(x=>x.status==='fulfilled'&&Array.isArray(x.value.events)))
-      throw Error('Cartelera no verificada')
-    const active=new Set(observed.filter(e=>{
-      const at=Date.parse(e.date??'')
-      return Number.isFinite(at)&&at>now&&localDay(at)===date
+      const observed=partitions.flatMap(x=>x.status==='fulfilled'&&Array.isArray(x.value.events)
+        ?x.value.events:[])
+      if(!partitions.some(x=>x.status==='fulfilled'&&Array.isArray(x.value.events)))
+        throw Error('Cartelera no verificada')
+      const active=new Set(observed.filter((e)=>{
+        const at=Date.parse(e.date??'')
+        return Number.isFinite(at)&&at>now&&localDay(at)===date
         &&(e.status?.type?.state??'pre')==='pre'
-    }).map(e=>String(e.id??'')).filter(id=>/^\d{1,20}$/u.test(id))).size
-    return{sport,league,active}
+      }).map(e=>String(e.id??'')).filter(id=>/^\d{1,20}$/u.test(id))).size
+      return{ sport,league,active }
     }))
     slate.push(...batch)
   }
@@ -137,15 +137,15 @@ export async function evidenceTicket(
   for(let offset=0;offset<shortlist.length;offset+=4){
     if(offset>0&&Date.now()-researchStarted>=34_000){budgetExhausted=true;break}
     const allowance=Math.max(750,34_000-(Date.now()-researchStarted))
-    const batch=await Promise.allSettled(shortlist.slice(offset,offset+4).map(({sport,league})=>{
+    const batch=await Promise.allSettled(shortlist.slice(offset,offset+4).map(({ sport,league })=>{
       const deadline=AbortSignal.timeout(Math.min(8_500,allowance))
       const guarded:typeof fetch=(input,init)=>{
         const signal=init?.signal?AbortSignal.any([init.signal,deadline]):deadline
-        return fetcher(input,{...init,signal})
+        return fetcher(input,{ ...init,signal })
       }
       return boundedTicket(researchSport(sport,league,date,guarded,now,env,
         sport==='football'?35:sport==='soccer'?56:sport==='tennis'?42:28),
-        Math.min(8_500,allowance))
+      Math.min(8_500,allowance))
     }))
     reports.push(...batch)
     // Stop costly expansion only after enough independently researched,
@@ -158,12 +158,12 @@ export async function evidenceTicket(
     // exactly five provisional winners appear. Compare a wider rival pool.
     if(offset+4>=8&&viable.length>=Math.max(12,count*3)&&diversified)break
   }
-  const candidateLegs:Array<{pick:ResearchTicketLeg;rank:number;home:string;away:string;
-    kickoff:string;verifiedEvent:Awaited<ReturnType<typeof researchSport>>['matches'][number]['verifiedEvent'];
-    level:'strong'|'conditional';estimatedPct:number|null;
-    historicalContext:{opponentGames:number;opponentWins:number;opponentLosses:number;
-      venueName:string;venueGames:number;venueWins:number;venueLosses:number;
-      scannedRecent:number}}> = []
+  const candidateLegs:Array<{ pick:ResearchTicketLeg;rank:number;home:string;away:string
+    kickoff:string;verifiedEvent:Awaited<ReturnType<typeof researchSport>>['matches'][number]['verifiedEvent']
+    level:'strong'|'conditional';estimatedPct:number|null
+    historicalContext:{ opponentGames:number;opponentWins:number;opponentLosses:number
+      venueName:string;venueGames:number;venueWins:number;venueLosses:number
+      scannedRecent:number } }> = []
   let evaluated=0
   let insufficientEvidence=0
   for(const report of reports){
@@ -196,12 +196,12 @@ export async function evidenceTicket(
         '; descanso '+(favorite.restHours??'?')+'h. '+
         'POR VERIFICAR: '+(sportRisks[match.sport]??'titulares')+
         ' y cuota; sin probabilidad validada.').slice(0,395)
-      const forecast=estimateEvidenceForecast({sport:match.sport,phase:'pre',
+      const forecast=estimateEvidenceForecast({ sport:match.sport,phase:'pre',
         eventDate:match.date,
-        home:{name:home.name,lastGames:home.lastResults.map(g=>({
-          date:g.date,scored:g.scored,allowed:g.allowed}))},
-        away:{name:away.name,lastGames:away.lastResults.map(g=>({
-          date:g.date,scored:g.scored,allowed:g.allowed}))},
+        home:{ name:home.name,lastGames:home.lastResults.map(g=>({
+          date:g.date,scored:g.scored,allowed:g.allowed })) },
+        away:{ name:away.name,lastGames:away.lastResults.map(g=>({
+          date:g.date,scored:g.scored,allowed:g.allowed })) },
       },now)
       const selectedProbability=rank>0?forecast.probabilityHome:forecast.probabilityAway
       const estimatedPct=forecast.status==='exploratory'&&
@@ -214,25 +214,25 @@ export async function evidenceTicket(
         match.verifiedEvent.competitions?.[0]?.venue?.name??'').trim().slice(0,100)
       const previousAtVenue=currentVenue?favorite.lastResults.filter(g=>
         canonical(g.venue??'')===canonical(currentVenue)):[]
-      const history={opponentGames:previousVsOpponent.length,
+      const history={ opponentGames:previousVsOpponent.length,
         opponentWins:previousVsOpponent.filter(g=>g.scored>g.allowed).length,
         opponentLosses:previousVsOpponent.filter(g=>g.scored<g.allowed).length,
         venueName:currentVenue,venueGames:previousAtVenue.length,
         venueWins:previousAtVenue.filter(g=>g.scored>g.allowed).length,
         venueLosses:previousAtVenue.filter(g=>g.scored<g.allowed).length,
-        scannedRecent:favorite.lastResults.length}
-      candidateLegs.push({rank:Math.abs(rank),level,estimatedPct,historicalContext:history,
+        scannedRecent:favorite.lastResults.length }
+      candidateLegs.push({ rank:Math.abs(rank),level,estimatedPct,historicalContext:history,
         verifiedEvent:match.verifiedEvent,
         home:home.name,away:away.name,kickoff:match.date,pick:{
-        sport:match.sport,league:match.league,eventId:match.eventId,
-        pick:rank>0?'home':'away',
-        rationale:((estimatedPct===null?
-          'Probabilidad de esta pata: no estimable con los datos disponibles. ':
-          'Probabilidad individual exploratoria '+estimatedPct+
+          sport:match.sport,league:match.league,eventId:match.eventId,
+          pick:rank>0?'home':'away',
+          rationale:((estimatedPct===null?
+            'Probabilidad de esta pata: no estimable con los datos disponibles. ':
+            'Probabilidad individual exploratoria '+estimatedPct+
             '% (NO calibrada; no garantiza acierto). ')+
           (level==='strong'?'★ [SELECCIÓN FUERTE] ':level==='conditional'?'◆ [SELECCIÓN CONDICIONAL] ':'')+
           rationale).slice(0,480),
-      }})
+        } })
     }
   }
   candidateLegs.sort((a,b)=>b.rank-a.rank||a.pick.eventId.localeCompare(b.pick.eventId))
@@ -280,7 +280,7 @@ export async function evidenceTicket(
     }
   }
   const singleSportAllowed=env.PHOENIX_SPORTS_SINGLE_SPORT_ALLOWED!=='0'
-  const {chosen:selected,diversitySatisfied:rawDiversity}=
+  const { chosen:selected,diversitySatisfied:rawDiversity }=
     diversifiedSportsPicks(candidateLegs,count,!sportFilter&&!singleSportAllowed)
   const multisportSatisfied=singleSportAllowed?true:rawDiversity
   const chosen=selected.map(x=>({
@@ -295,14 +295,14 @@ export async function evidenceTicket(
   if(!chosen.length){
     // A zero-leg draft is useful and honest: Kira must not say that a 5-leg
     // wager was prepared when every candidate failed evidence requirements.
-    const card:ChatBlock={component:'sports_ticket_card',version:1,props:{
+    const card:ChatBlock={ component:'sports_ticket_card',version:1,props:{
       title:'PHOENIX · Investigación insuficiente',
       subtitle:'No hay selecciones respaldadas para completar el ticket',
       requestedLegs:count,legs:[],combinedOdds:'No disponible',
       source:'ESPN Site API · resultados comprobados '+new Date(now).toISOString(),
       note:'TICKET INCOMPLETO: 0 de '+count+' eventos superaron la auditoría de muestra, coherencia y disponibilidad. No se inventan favoritos, precios ni probabilidades. Verificar otra fecha o ampliar ligas antes de apostar.',
-    }}
-    return{card,complete:false,verifiedEvents:0,candidatesEvaluated:evaluated,
+    } }
+    return{ card,complete:false,verifiedEvents:0,candidatesEvaluated:evaluated,
       researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
       insufficientEvidence,pregameSummariesVerified:0,injuryFeedsVerified:0,
       deepContextChecked:0,newsMatched:0,playerStatsChecked:0,
@@ -310,7 +310,7 @@ export async function evidenceTicket(
       researchStandard:'Sin candidatos con cinco partidos distintos por equipo (NFL tres) y tendencia contrastable. Deportes evaluados: '+scannedSports+'.'+
         (budgetExhausted?' Búsqueda detenida por presupuesto de tiempo; quedan ligas sin investigar.':''),
       modelProbabilities:false,priced:false,placed:false,selections:[],
-      events:[]}
+      events:[] }
   }
   // One bounded memoized HTTP request for a repeated ESPN event summary
   // or league injury feed, even across the two complementary research passes.
@@ -367,17 +367,17 @@ export async function evidenceTicket(
     const reviewer=reviewerAt>=0?rationale.slice(reviewerAt):''
     const core=reviewerAt>=0?rationale.slice(0,reviewerAt):rationale
     const suffix=reviewer+' · '+sourceSummary+audit
-    return {...pick,rationale:(core.slice(0,Math.max(0,480-suffix.length))+
-      suffix).slice(0,480)}
+    return { ...pick,rationale:(core.slice(0,Math.max(0,480-suffix.length))+
+      suffix).slice(0,480) }
   })
   // Final validation must inspect the SAME provider-recorded fixture IDs as
   // scouting. ESPN re-query can omit a game due scoreboard pagination/rotation.
   // Do not weaken integrity: researchTicket still checks exact IDs, kickoff,
   // local date, future 'pre' status and both opponents on saved ESPN snapshots.
-  const verifiedBoards=new Map<string,{events:typeof selected[number]['verifiedEvent'][]}>()
+  const verifiedBoards=new Map<string,{ events:typeof selected[number]['verifiedEvent'][] }>()
   for(const candidate of selected){
     const key=candidate.pick.sport+'|'+candidate.pick.league
-    const board=verifiedBoards.get(key)??{events:[]}
+    const board=verifiedBoards.get(key)??{ events:[] }
     if(!board.events.some(event=>String(event.id)===candidate.pick.eventId))
       board.events.push(candidate.verifiedEvent)
     verifiedBoards.set(key,board)
@@ -406,13 +406,13 @@ export async function evidenceTicket(
       eventId:candidate.pick.eventId,sport:candidate.pick.sport,
       league:candidate.pick.league,home:candidate.home,away:candidate.away,
       kickoff:candidate.kickoff,pick:candidate.pick.pick,
-    },{...leg,
+    },{ ...leg,
       legWinProbabilityPercent:candidate.estimatedPct??null,
       legProbabilitySource:candidate.estimatedPct!==null&&
         candidate.estimatedPct!==undefined?'exploratory-recent-form':'unavailable',
       historicalContext:candidate.historicalContext,
     },context):null
-    const augmented=narrative?{...narrative,
+    const augmented=narrative?{ ...narrative,
       globalNews:(gdelt.byEvent[candidate!.pick.eventId]??[]).map(hit=>({
         publisher:hit.publisher,headline:hit.title,indexedAt:hit.indexedAt,
         articleUrl:hit.articleUrl,status:hit.status,
@@ -429,12 +429,12 @@ export async function evidenceTicket(
           (gdelt.byEvent[candidate!.pick.eventId]??[]).slice(0,2).map(hit=>
             hit.title+' · '+hit.articleUrl+' (visto '+(hit.indexedAt??'sin hora')+')').join('; ')+
             '. La fecha indica indexación, no publicación; noticia aún no contrastada.':
-            'sin artículos adicionales verificables.')+'\nOpiniones externas: '+
+          'sin artículos adicionales verificables.')+'\nOpiniones externas: '+
         (external.length?external.slice(0,3).map(hit=>hit.publisher+': '+hit.headline).join('; ')+
           '. Son titulares indexados, NO picks contrastados ni pronósticos de consenso.':
           'sin artículos indexados verificables; no se atribuye consenso a tipsters.'),
     }:null
-    return {...leg,narrative:augmented,
+    return { ...leg,narrative:augmented,
       preliminaryEvidenceTier:candidate?.level??'conditional',
       level:candidate?.level??'conditional',
       legWinProbabilityPercent:candidate?.estimatedPct??null,
@@ -444,7 +444,7 @@ export async function evidenceTicket(
         +'no contempla lesiones, alineaciones, rivalidad ni precio.',
     }
   })
-  const card:ChatBlock={...ticket.card,props:{...ticket.card.props,
+  const card:ChatBlock={ ...ticket.card,props:{ ...ticket.card.props,
     legs:enrichedLegs,
     chatNarrative:enrichedLegs.map(x=>x.narrative).filter(Boolean),
     narrativeInstruction:'Kira debe acompañar cada pata en el chat con su análisis documentado, noticias enlazadas, riesgos, estadio, clima y árbitro si realmente están confirmados. Si algo falta, declararlo sin completar con imaginación. Fotografías de la noticia solo con URL HTTPS y fuente atribuida.',
@@ -454,8 +454,8 @@ export async function evidenceTicket(
       'Las probabilidades por pata son exploratorias y NO calibradas. '+
       'Candidatos revisados antes de elegir: '+reviewedCandidates+
       ', descartados por contraindicación: '+rejectedCandidates+'.').slice(0,1250),
-  }}
-  return{card,complete:ticket.complete,verifiedEvents:ticket.verifiedEvents,
+  } }
+  return{ card,complete:ticket.complete,verifiedEvents:ticket.verifiedEvents,
     candidatesEvaluated:evaluated,researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
     insufficientEvidence,pregameSummariesVerified,injuryFeedsVerified,
     deepContextChecked,newsMatched,playerStatsChecked,
@@ -464,6 +464,6 @@ export async function evidenceTicket(
       candidatesConditional+' candidatos CONDICIONALES; historial mínimo 5 por club (NFL 3). Se exploraron '+scannedSports+' deportes; seleccionados: '+(selectedSports.join(', ')||'ninguno')+'. Diversidad '+(multisportSatisfied?'cumplida':'NO cumplida')+'. Lesiones, titulares y cuotas siguen sin verificación específica.'+
       (budgetExhausted?' Búsqueda detenida por presupuesto de tiempo; quedan ligas sin investigar.':''),
     modelProbabilities:false,priced:false,placed:false,selections:documented,
-    events:selected.map(x=>({eventId:x.pick.eventId,home:x.home,away:x.away,kickoff:x.kickoff,
-      sport:x.pick.sport,league:x.pick.league,pick:x.pick.pick==='home'?'home' as const:'away' as const}))}
+    events:selected.map(x=>({ eventId:x.pick.eventId,home:x.home,away:x.away,kickoff:x.kickoff,
+      sport:x.pick.sport,league:x.pick.league,pick:x.pick.pick==='home'?'home' as const:'away' as const })) }
 }

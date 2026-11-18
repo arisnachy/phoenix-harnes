@@ -27,7 +27,7 @@ export type DecisionLeg={
   specialistStatus:DecisionInput['specialistStatus']
   criticalPending:string[];modelStatus:DecisionInput['modelStatus']
 }
-export type DecisionScenario={count:4|5|6;eventIds:string[];marketProductPct:number|null}
+export type DecisionScenario={ count:4|5|6;eventIds:string[];marketProductPct:number|null }
 export type TicketDecisionAudit={
   legs:DecisionLeg[];excludedEvents:string[];heldEvents:string[]
   alternativesNeeded:number;scenarios:DecisionScenario[]
@@ -45,7 +45,7 @@ export function readDecisionPolicy(env:NodeJS.ProcessEnv):DecisionPolicy{
   if(!Number.isFinite(excludeBelow)||excludeBelow<0.5||excludeBelow>0.7||
     !Number.isFinite(cautionBelow)||cautionBelow<excludeBelow||cautionBelow>0.9)
     throw Error('Umbrales de auditoría deportiva inválidos: revisar SCREEN_EXCLUDE/CAUTION_BELOW')
-  return{excludeBelow,cautionBelow}
+  return{ excludeBelow,cautionBelow }
 }
 /** Pure, auditable challenge pass. Abstention is preferable to manufacturing
  * a fifth leg or claiming value when an independent calibrated model is absent.
@@ -61,7 +61,7 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
       throw Error('Identificador de evento duplicado o ausente en la auditoría')
     seen.add(input.eventId)
   }
-  const legs=inputs.map(input=>{
+  const legs=inputs.map((input)=>{
     const share=validShare(input.noVigShare)?input.noVigShare:null
     const price=input.quotedPrice
     const breakEven=typeof price==='number'&&Number.isFinite(price)&&price>1&&price<1000
@@ -98,21 +98,21 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
     if(breakEven!==null&&share!==null)
       reasons.push('Equilibrio por cuota '+breakEven+'%; mercado sin margen '+pct(share)+
         '%. La diferencia es margen de la casa, NO edge predictivo.')
-    return{eventId:input.eventId,selection:input.selection,sport:input.sport,
+    return{ eventId:input.eventId,selection:input.selection,sport:input.sport,
       verdict,reasons,bookmakerBreakEvenPct:breakEven,
       marketNoVigPct:share===null?null:pct(share),
       modelProbabilityPct:null,expectedValue:null,edgePct:null,
       specialistStatus:input.specialistStatus,
-      criticalPending:[...input.criticalPending],modelStatus:input.modelStatus}
+      criticalPending:[...input.criticalPending],modelStatus:input.modelStatus }
   })
   const candidates=legs.filter(l=>l.verdict!=='exclude')
     .filter(l=>l.marketNoVigPct!==null)
     .sort((a,b)=>b.marketNoVigPct!-a.marketNoVigPct!)
-  const scenarios:DecisionScenario[]=[4,5,6].map(n=>{
+  const scenarios:DecisionScenario[]=[4,5,6].map((n)=>{
     const count=n as 4|5|6,core=candidates.slice(0,count)
-    return{count,eventIds:core.map(x=>x.eventId),
+    return{ count,eventIds:core.map(x=>x.eventId),
       marketProductPct:core.length===count?Number((core.reduce((p,x)=>
-        p*x.marketNoVigPct!/100,1)*100).toFixed(2)):null}
+        p*x.marketNoVigPct!/100,1)*100).toFixed(2)):null }
   })
   const excludedEvents=legs.filter(l=>l.verdict==='exclude').map(l=>l.eventId)
   const heldEvents=legs.filter(l=>l.verdict==='hold').map(l=>l.eventId)
@@ -123,10 +123,10 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
     heldEvents.length?'Revisar '+heldEvents.length+
       ' pata(s) condicionadas antes de proponer el boleto final.':
       'Comparar las candidatas con otros partidos; ninguna queda aprobada para apostar.'
-  return{legs,excludedEvents,heldEvents,alternativesNeeded,scenarios,
+  return{ legs,excludedEvents,heldEvents,alternativesNeeded,scenarios,
     calibrated:false,approvedForBetting:false,marketOnly:true,
     warning:'Filtro heurístico del mercado (configurable), no modelo predictivo calibrado. '+
       'Productos combinados suponen independencia, no corrigen correlaciones ni demuestran EV. '+
       'Una candidata fuerte puede tener cuota desfavorable. No ejecutar apuestas.',
-    recommendation}
+    recommendation }
 }

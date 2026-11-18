@@ -1,15 +1,15 @@
 /** Cross-check real sportsbook menus with the verified daily slate before research.
  * Market consensus is not a prediction or an expected-value advantage.
  */
-import type {MarketOutcome} from './sports.ts'
-import type {scoutDailySports} from './daily-sports-scout.ts'
+import type { MarketOutcome } from './sports.ts'
+import type { scoutDailySports } from './daily-sports-scout.ts'
 
 type Fixture=Awaited<ReturnType<typeof scoutDailySports>>['events'][number]
 export type DailyMarketCandidate={
   sport:string;league:string;espnEventId:string;bookmakerEventId:string
   fixture:string;kickoff:string;bookmaker:string;market:'h2h'|'spreads'|'totals'
   selection:string;line:number|null;decimalOdds:number;marketNoVigShare:number
-  outcomes:Array<{selection:string;line:number|null;decimalOdds:number;noVigShare:number}>
+  outcomes:Array<{ selection:string;line:number|null;decimalOdds:number;noVigShare:number }>
   bookmakerOverround:number;quoteUpdatedAt:string;source:string
   assessment:'quote-only-research-pending'
 }
@@ -84,7 +84,7 @@ export function shortlistDailyMarkets(
   if(!Number.isInteger(goal)||goal<4||goal>6)throw Error('Objetivo de 4 a 6 patas')
   if(!Number.isInteger(researchPool)||researchPool<goal||researchPool>16)
     throw Error('Reserva de investigación desde objetivo hasta 16 eventos')
-  const groups=new Map<string,{fixture:Fixture;quotes:MarketOutcome[]}>()
+  const groups=new Map<string,{ fixture:Fixture;quotes:MarketOutcome[] }>()
   let rejectedQuotes=0
   const matchedGames=new Set<string>()
   for(const quote of quotes.slice(0,2000)){
@@ -103,14 +103,14 @@ export function shortlistDailyMarkets(
     if(matches.length!==1){rejectedQuotes++;continue}
     const fixture=matches[0]!
     const key=groupKey(fixture,quote)
-    const group=groups.get(key)??{fixture,quotes:[]}
+    const group=groups.get(key)??{ fixture,quotes:[] }
     if(!group.quotes.some(q=>q.selection===quote.selection&&q.point===quote.point))
       group.quotes.push(quote)
     groups.set(key,group)
     matchedGames.add(fixture.sport+'|'+fixture.league+'|'+fixture.eventId)
   }
   const candidates:DailyMarketCandidate[]=[]
-  for(const {fixture,quotes:rows} of groups.values()){
+  for(const { fixture,quotes:rows } of groups.values()){
     if(rows.length<2||rows.length>3)continue
     const stamps=rows.map(q=>Date.parse(q.updatedAt))
     if(Math.max(...stamps)-Math.min(...stamps)>10*60_000)continue
@@ -135,7 +135,7 @@ export function shortlistDailyMarkets(
     if(!valid)continue
     const inverse=rows.map(q=>1/q.price),sum=inverse.reduce((a,b)=>a+b,0)
     if(!Number.isFinite(sum)||sum<=0)continue
-    const options=rows.map((q,i)=>({quote:q,share:(inverse[i]??0)/sum}))
+    const options=rows.map((q,i)=>({ quote:q,share:(inverse[i]??0)/sum }))
       .filter(x=>x.quote.price>=1.20&&x.quote.price<=4)
       .sort((a,b)=>b.share-a.share||a.quote.selection.localeCompare(b.quote.selection))
     const choice=options[0]
@@ -198,7 +198,7 @@ export function shortlistDailyMarkets(
   // Historical evidence is gathered ONCE per event before choosing a market,
   // so the user is not restricted to the first bookmaker-favorite selection.
   const eventKey=(p:DailyMarketCandidate)=>p.sport+'|'+p.league+'|'+p.espnEventId
-  const alternatives=selected.flatMap(chosen=>{
+  const alternatives=selected.flatMap((chosen)=>{
     const eligible=(perBook.get(best!.bookmaker)??[])
       .filter(x=>eventKey(x)===eventKey(chosen)&&x!==chosen)
       .sort((a,b)=>Number(a.market===chosen.market)-Number(b.market===chosen.market)||
@@ -214,8 +214,8 @@ export function shortlistDailyMarkets(
     }
     return extra
   })
-  return {goal,range:[4,6],complete:selected.length>=goal,
+  return { goal,range:[4,6],complete:selected.length>=goal,
     bookmaker:best?.bookmaker??null,matchesInSlate:matchedGames.size,
     eligibleMarkets:candidates.length,selected,alternatives,rejectedQuotes,
-    warning:'Solo preselección del mercado: marketNoVigShare procede de cuotas, NO de un modelo de acierto ni de valor esperado. Antes de proponer un ticket final confirma alineaciones, lesiones, titulares, porteros, contexto, reglas y probabilidad calibrada cuando exista. Si hay menos de cuatro ofertas válidas, informa la falta sin fabricar patas. No se ha realizado ninguna apuesta.'}
+    warning:'Solo preselección del mercado: marketNoVigShare procede de cuotas, NO de un modelo de acierto ni de valor esperado. Antes de proponer un ticket final confirma alineaciones, lesiones, titulares, porteros, contexto, reglas y probabilidad calibrada cuando exista. Si hay menos de cuatro ofertas válidas, informa la falta sin fabricar patas. No se ha realizado ninguna apuesta.' }
 }

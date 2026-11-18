@@ -2,28 +2,28 @@
  * A successful fetch is not proof of a starting lineup, calibrated edge, or permission
  * to describe a leg as approved. Absent/partial specialist research fails closed.
  */
-import type {MarketOutcome} from './sports.ts'
-import {crosscheckFreeFixture,type BackupFinding} from './free-sports-source-audit.ts'
-import {auditSportChecklist,type SportChecklist,type StepObservation} from './daily-specialist-checklist.ts'
-import {fetchEspnInjuryBackup,type InjuryBackup} from './espn-injury-backup.ts'
-import {investigateNfl} from './nfl-evidence-research.ts'
-import {researchBasketballCase} from './basketball-evidence-dossier.ts'
-import {auditBasketballGranularEvidence} from './basketball-granular-evidence.ts'
-import {nflDeepSignals,nhlDeepSignals,mlbDeepSignals,
-  soccerDeepSignals,tennisDeepSignals} from './sports-granular-bridge.ts'
-import {investigateSoccer} from './soccer-worldwide-dossier.ts'
-import {nhlSlate,investigateNhl} from './nhl-evidence-research.ts'
-import {discoverMlbDay,researchMlbCase} from './mlb-evidence-research.ts'
-import {tennisSlate,investigateTennis,type TennisTour} from './tennis-evidence-research.ts'
+import type { MarketOutcome } from './sports.ts'
+import { crosscheckFreeFixture,type BackupFinding } from './free-sports-source-audit.ts'
+import { auditSportChecklist,type SportChecklist,type StepObservation } from './daily-specialist-checklist.ts'
+import { fetchEspnInjuryBackup,type InjuryBackup } from './espn-injury-backup.ts'
+import { investigateNfl } from './nfl-evidence-research.ts'
+import { researchBasketballCase } from './basketball-evidence-dossier.ts'
+import { auditBasketballGranularEvidence } from './basketball-granular-evidence.ts'
+import { nflDeepSignals,nhlDeepSignals,mlbDeepSignals,
+  soccerDeepSignals,tennisDeepSignals } from './sports-granular-bridge.ts'
+import { investigateSoccer } from './soccer-worldwide-dossier.ts'
+import { nhlSlate,investigateNhl } from './nhl-evidence-research.ts'
+import { discoverMlbDay,researchMlbCase } from './mlb-evidence-research.ts'
+import { tennisSlate,investigateTennis,type TennisTour } from './tennis-evidence-research.ts'
 
 export type SpecialistFixture={
-  sport:string;league:string;eventId:string;date:string;
+  sport:string;league:string;eventId:string;date:string
   home:string;away:string;kickoff:string
 }
 export type SpecialistGate={
-  sport:string;league:string;eventId:string;specialist:string;
+  sport:string;league:string;eventId:string;specialist:string
   status:'researched'|'incomplete'|'unavailable'
-  verifiedSteps:string[];pendingSteps:string[];
+  verifiedSteps:string[];pendingSteps:string[]
   /** No existing specialist currently supplies calibrated betting approval. */
   approvedForBetting:false;checkedAt:string
   /** Mandatory per-sport steps; an API response is not a completed step. */
@@ -48,12 +48,12 @@ export function classifySpecialistCoverage(
   steps:readonly string[],pending:readonly string[],
 ):Pick<SpecialistGate,'status'|'verifiedSteps'|'pendingSteps'|'approvedForBetting'>{
   const reviewed=(level==='A'||level==='B')&&hasTeamEvidence&&steps.length>=2
-  return{status:reviewed?'researched':'incomplete',
+  return{ status:reviewed?'researched':'incomplete',
     verifiedSteps:[...steps],
     pendingSteps:reviewed?[...pending]:[
       'Investigación especializada insuficiente: se requiere expediente individual de ambos rivales',
       ...pending],
-    approvedForBetting:false}
+    approvedForBetting:false }
 }
 const errorResult=(game:SpecialistFixture,message:string):SpecialistGate=>({
   sport:game.sport,league:game.league,eventId:game.eventId,
@@ -70,7 +70,7 @@ export async function investigateTicketSpecialist(
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
   quotes:MarketOutcome[]=[],
 ):Promise<SpecialistGate>{
-  const base={sport:game.sport,league:game.league,eventId:game.eventId}
+  const base={ sport:game.sport,league:game.league,eventId:game.eventId }
   const eligible=game.sport==='soccer'||game.sport==='football'&&game.league==='nfl'
     ||game.sport==='basketball'&&['nba','wnba'].includes(game.league)
     ||game.sport==='hockey'&&game.league==='nhl'
@@ -84,7 +84,7 @@ export async function investigateTicketSpecialist(
   const signals:Record<string,StepObservation>={}
   let injuryAudit:InjuryBackup|undefined
   const mark=(key:string,state:StepObservation['state'],detail:string)=>{
-    signals[key]={state,detail}
+    signals[key]={ state,detail }
   }
   const observed=(key:string,yes:boolean,detail:string)=>{
     mark(key,yes?'verified':'missing',detail)
@@ -116,7 +116,7 @@ export async function investigateTicketSpecialist(
       mark('qb',qb?'verified':
         (['home','away'] as const).every(side=>d.teams[side].roster.some(p=>p.role==='quarterback'))
           ?'partial':'missing',
-        'QB en roster no implica titular confirmado para hoy')
+      'QB en roster no implica titular confirmado para hoy')
       mark('matchups',d.matchups.length?'partial':'missing',
         d.matchups.length+' enfrentamientos de candidatos; disponibilidad actual por confirmar')
       mark('weather',d.weather?.timestamp?'partial':'missing',
@@ -293,7 +293,7 @@ export async function investigateTicketSpecialist(
         // inactive list, starting lineup or availability at tipoff/kickoff.
         mark('injuries',injury.status==='verified'&&injury.home.matched&&
           injury.away.matched?'verified':'partial',
-          'ESPN reporte bilateral '+injury.status+
+        'ESPN reporte bilateral '+injury.status+
           ' · '+(injury.feedUpdatedAt??'sin hora')+
           ' · local '+injury.home.injuries.length+' y visitante '+
           injury.away.injuries.length+' registros; sin confirmar quinteto final')
@@ -330,9 +330,9 @@ export async function investigateTicketSpecialist(
       pending.push('Pasos obligatorios sin cerrar ('+
         checklist.criticalPending.length+'): '+
         checklist.criticalPending.slice(0,3).join('; '))
-    return{...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
-      sourceChecks,checklist,...(injuryAudit?{injuryAudit}:{}),
-      checkedAt:new Date(now).toISOString()}
+    return{ ...base,specialist,...classifySpecialistCoverage(level,teams,steps,pending),
+      sourceChecks,checklist,...(injuryAudit?{ injuryAudit }:{}),
+      checkedAt:new Date(now).toISOString() }
   }catch(error){
     return errorResult(game,(error instanceof Error?error.message:String(error)))
   }
@@ -352,12 +352,12 @@ export async function investigateTicketSpecialists(
     // Preserve the provider's own timeout AND the ticket-wide leg budget.
     const guardedFetch:typeof fetch=(input,init)=>{
       const signal=init?.signal?AbortSignal.any([init.signal,controller.signal]):controller.signal
-      return fetcher(input,{...init,signal})
+      return fetcher(input,{ ...init,signal })
     }
     try{
       return await Promise.race([
         investigateTicketSpecialist(game,guardedFetch,now,env,quotes),
-        new Promise<SpecialistGate>(resolve=>{
+        new Promise<SpecialistGate>((resolve)=>{
           timer=setTimeout(()=>{
             controller.abort()
             resolve(errorResult(game,'Límite de investigación ('+deadlineMs+
