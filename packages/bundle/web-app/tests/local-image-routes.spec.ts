@@ -92,7 +92,7 @@ describe('FastSD local image storage and loopback route', () => {
     const app = register()
     expect(app.handler).toBeTypeOf('function')
     expect(app.effect).toHaveBeenCalledOnce()
-    const dispose = app.effect.mock.calls[0]?.[0] as () => () => void
+    const dispose = (app.effect as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]?.[0] as () => () => void
     expect(dispose()).toBe(app.unmount)
   })
 
@@ -128,8 +128,15 @@ describe('FastSD local image storage and loopback route', () => {
     expect((await capture(handler)).status).toBe(404)
     await writeFile(file, Buffer.alloc(64))
     expect((await capture(handler)).status).toBe(404)
+    for (const position of [0, 1, 66, 67]) {
+      const corrupted = jpeg()
+      corrupted[position] = 0
+      await writeFile(file, corrupted)
+      expect((await capture(handler)).status).toBe(404)
+    }
     const expected = jpeg()
     await writeFile(file, expected)
+    expect((await capture(handler, { address: '::1' })).status).toBe(200)
     const result = await capture(handler, { address: '::ffff:127.0.0.1' })
     expect(result.status).toBe(200)
     expect(result.headers['content-type']).toBe('image/jpeg')
