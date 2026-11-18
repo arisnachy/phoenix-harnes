@@ -11,8 +11,6 @@ export type DailyResearchedSelection={
   supportedLegs:number
   conditionalLegs:number
   completed:boolean
-  /** All selected legs belong to exactly one source bookmaker. */
-  selectedBookmaker:string|null
 }
 
 const eventIdentity=(r:MarketResearchReview)=>[
@@ -30,25 +28,29 @@ const effectiveResearchRank=(r:MarketResearchReview):number=>
   r.priceAudit?.classification==='negative-value'?0:researchRank[r.status]
 const compare=(a:MarketResearchReview,b:MarketResearchReview)=>{
   const ra=effectiveResearchRank(a),rb=effectiveResearchRank(b)
-  // Research strength and source coverage decide first. Price-derived values
-  // can only break a research tie; no-vig share is not a prediction.
+  // La investigación deportiva manda: picks con apoyo descriptivo de investigación
+  // siempre van antes que los inciertos o no investigados.
+  if(rb!==ra)return rb-ra
+  const va=valueRank(a),vb=valueRank(b)
+  if(vb!==va)return vb-va
+  // Entre selecciones igualmente fundamentadas por investigación, priorizar la que
+  // tenga mayor posibilidad estimada/respaldo de victoria para maximizar el acierto del ticket.
   const aShare=a.selectedOutcome?.noVigShare,bShare=b.selectedOutcome?.noVigShare
   const winnerStrength=a.candidate.market==='h2h'&&b.candidate.market==='h2h'
     &&typeof aShare==='number'&&Number.isFinite(aShare)
     &&typeof bShare==='number'&&Number.isFinite(bShare)
     ?bShare-aShare:0
-  return rb-ra||b.rankingScore-a.rankingScore||
+  return winnerStrength||
+    b.rankingScore-a.rankingScore||
     b.verifiedSources-a.verifiedSources||
-    valueRank(b)-valueRank(a)||winnerStrength||
-    (b.candidate.observedAt??b.candidate.quoteUpdatedAt).localeCompare(
-      a.candidate.observedAt??a.candidate.quoteUpdatedAt)||
+    b.candidate.quoteUpdatedAt.localeCompare(a.candidate.quoteUpdatedAt)||
     a.candidate.market.localeCompare(b.candidate.market)||
     a.candidate.fixture.localeCompare(b.candidate.fixture)
 }
 
 /** Select the strongest descriptive, authentic market for each game.
  * @param reviews - Alternate real market offers reviewed against one dossier/event.
- * @param goal - Desired number of games, 5–6.
+ * @param goal - Desired number of games, 4–6.
  * @returns A bounded, independently reviewable shortlist; never a winning guarantee.
  */
 export function selectDailyResearchedMarkets(
@@ -60,43 +62,20 @@ export function selectDailyResearchedMarkets(
   const eligible=reviews.filter(review=>
     (review.status==='descriptive-support'||review.status==='uncertain')&&
     review.priceAudit?.classification!=='negative-value')
-  // Auxiliary providers may quote different houses; that is NOT a reason to
-  // discard the independent successful ESPN slate. Never mix bookstores:
-  // choose the single house with the most independently supported events,
-  // then replenish from the next researched event in THAT house.
-  const byBook=new Map<string,MarketResearchReview[]>()
+  const books=new Set(eligible.map(review=>review.candidate.bookmaker))
+  if(books.size>1)throw Error('No combinar casas diferentes en un solo ticket')
+  const unique=new Map<string,MarketResearchReview[]>()
   for(const review of eligible){
-    const book=review.candidate.bookmaker.trim()
-    if(!book)continue
-    byBook.set(book,[...(byBook.get(book)??[]),review])
+    const key=eventIdentity(review),candidates=unique.get(key)??[]
+    candidates.push(review);unique.set(key,candidates)
   }
-  const perBook=[...byBook.entries()].map(([book,rows])=>{
-    const unique=new Map<string,MarketResearchReview[]>()
-    for(const review of rows){
-      const key=eventIdentity(review),options=unique.get(key)??[]
-      options.push(review);unique.set(key,options)
-    }
-    const best=[...unique.values()].flatMap((options)=>{
-      const first=[...options].sort(compare)[0]
-      return first?[first]:[]
-    })
-      .sort(compare)
-    const supported=best.filter(row=>row.status==='descriptive-support').length
-    return{ book,unique,best,supported }
-  }).sort((a,b)=>
-    Math.min(goal,b.supported)-Math.min(goal,a.supported)||
-    Math.min(goal,b.best.length)-Math.min(goal,a.best.length)||
-    (a.best[0]&&b.best[0]?compare(a.best[0],b.best[0]):0)||
-    a.book.localeCompare(b.book))
-  const chosenBook=perBook[0]??null
-  const unique=chosenBook?.unique??new Map<string,MarketResearchReview[]>()
-  const best=chosenBook?.best??[]
+  const best=[...unique.values()].map(rows=>[...rows].sort(compare)[0]!)
+    .sort(compare)
   // Priority is supported evidence; a fresh sport can break a tie, but an
   // unsupported event must never outrank a better documented market.
   const selected:MarketResearchReview[]=[],remaining=[...best]
   while(selected.length<goal&&remaining.length){
-    const bestCandidate=remaining[0]
-    if(!bestCandidate)break
+    const bestCandidate=remaining[0]!
     const diversify=remaining.find(review=>
       compare(review,bestCandidate)===0&&
       !selected.some(x=>x.candidate.sport===review.candidate.sport))
@@ -105,13 +84,11 @@ export function selectDailyResearchedMarkets(
     selected.push(chosen)
   }
   const supportedLegs=selected.filter(r=>r.status==='descriptive-support'&&
-    r.candidate.requiresRecheck!==true&&
     r.priceAudit?.classification!=='negative-value').length
   return {
     selected,eventChoices:unique.size,marketsReviewed:reviews.length,
     alternativesCompared:Math.max(0,reviews.length-unique.size),
     supportedLegs,conditionalLegs:selected.length-supportedLegs,
     completed:selected.length>=goal&&supportedLegs>=goal,
-    selectedBookmaker:chosenBook?.book??null,
   }
 }

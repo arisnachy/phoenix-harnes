@@ -30,14 +30,11 @@ test('team explorer produces responsive cards with only actual roster, news, log
   assert.ok(data.sections.some(s=>s.heading==='Estadísticas individuales consultadas'&&s.items.some(a=>a.label==='Verified Player A')))
   assert.equal(data.uiBlock.component,'sports_espn_dashboard')
   assert.ok(data.sections.some(s=>s.heading==='Plantilla verificada'&&s.items[0].label==='Verified Player A'))
-  assert.ok(data.sections.some(s=>s.heading==='Plantilla verificada'&&s.items[0].image===
-    'https://a.espncdn.com/i/headshots/nba/players/full/1.png'))
   assert.ok(data.sections.some(s=>s.heading==='Noticias del equipo'&&s.items[0].label==='City A injury update'))
   assert.ok(data.sections.some(s=>s.heading==='Noticias del equipo'&&s.items[0].href?.startsWith('https://www.espn.com/')))
   assert.ok(urls.some(u=>u.includes('/athletes/991/stats')))
   assert.ok(urls.some(u=>u.includes('/athletes/991/gamelog')))
-  // A blank season-stats response does not justify extra empty split queries.
-  assert.ok(!urls.some(u=>u.includes('/athletes/991/splits')))
+  assert.ok(urls.some(u=>u.includes('/athletes/991/splits')))
   assert.equal(data.sources.filter(s=>s.status==='available').length,4)
   assert.ok(data.sections.some(s=>s.heading.includes('Disponibilidad')&&s.items[0].value==='Day-to-day'))
 })
@@ -80,31 +77,6 @@ test('odds references and empty 200 are not published as prices or facts',async(
   assert.equal(d.sources.filter(x=>x.status==='available').length,0)
   assert.ok(!d.sections.some(s=>s.heading.includes('Cuotas publicadas')))
   assert.ok(d.sections.some(s=>s.heading==='Disponibilidad'))
-})
-test('event view uses the same request instant to label a fresh ESPN Core price eligible',async()=>{
-  const now=Date.now(),kickoff=new Date(now+2*60*60_000).toISOString()
-  const eventId='99887766',urls=[]
-  const fetcher=async url=>{
-    const u=String(url);urls.push(u)
-    if(u.includes('/summary?event='))return new Response(JSON.stringify({
-      header:{shortName:'Boston Celtics at Miami Heat',competitions:[{
-        id:eventId,date:kickoff,competitors:[
-          {homeAway:'home',team:{displayName:'Miami Heat'}},
-          {homeAway:'away',team:{displayName:'Boston Celtics'}},
-        ]},]},
-    }),{status:200})
-    if(u.includes('/odds?'))return new Response(JSON.stringify({items:[{
-      provider:{id:'41',name:'DraftKings'},
-      homeTeamOdds:{moneyLine:-120},awayTeamOdds:{moneyLine:105},
-    }]}),{status:200})
-    return new Response(JSON.stringify({count:0,items:[]}),{status:200})
-  }
-  const result=await exploreEspn({sport:'basketball',league:'nba',view:'event',eventId},
-    fetcher,{},now)
-  const odds=result.sections.find(section=>section.heading==='Cuotas y mercados')
-  assert.ok(odds)
-  assert.ok(odds.items.some(row=>/aceptación\/vigencia en la casa no confirmada/u.test(row.detail)))
-  assert.ok(urls.some(url=>url.includes('/events/'+eventId+'/competitions/'+eventId+'/odds')))
 })
 test('validation rejects injected segments and disables transport before HTTP',async()=>{
   let calls=0

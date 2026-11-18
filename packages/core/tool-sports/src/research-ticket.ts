@@ -1,6 +1,5 @@
 /** Ticket de pronósticos con encuentros verificables aunque falten cuotas comerciales. */
 import { getFeed, hasSportsPermission, sportsCatalog, type ChatBlock } from './sports.ts'
-import {fetchEspnScoreboardWithFallback} from './espn-nfl-weekly.ts'
 import { researchNbaSlate } from './nba-research.ts'
 
 /** Selección propuesta por Kira, independiente de cualquier precio de apuestas. */
@@ -14,8 +13,8 @@ export type ResearchTicketLeg = {
 
 type EspnTeam = {
   homeAway?:string
-  team?:{ displayName?:string;name?:string;logo?:string;logos?:Array<{href?:string}> }
-  records?:Array<{summary?:string}>
+  team?:{ displayName?:string;name?:string;logo?:string;logos?:Array<{ href?:string }> }
+  records?:Array<{ summary?:string }>
 }
 type EspnEvent = {
   id?:string|number
@@ -40,7 +39,6 @@ const leagueInfo:Record<string,{ sport:string;country?:string;league:string }>={
   'mex.1':{ sport:'Fútbol',country:'México',league:'Liga MX' },
   'usa.1':{ sport:'Fútbol',country:'Estados Unidos / Canadá',league:'MLS' },
   'uefa.champions':{ sport:'Fútbol',country:'Europa',league:'Champions League' },
-  'uefa.wchampions':{ sport:'Fútbol',country:'Europa',league:'Champions League femenina' },
   'mlb':{ sport:'Béisbol',league:'MLB' },
   'nba':{ sport:'Baloncesto',league:'NBA' },
   'wnba':{ sport:'Baloncesto',league:'WNBA' },
@@ -93,9 +91,7 @@ export async function researchTicket(
     const { sport,league,eventId,pick }=selection
     if(typeof sport!=='string'||typeof league!=='string'||typeof eventId!=='string'||typeof pick!=='string'
       || !Object.hasOwn(sportsCatalog,sport) || !/^[a-z0-9][a-z0-9._-]{0,79}$/u.test(league)
-      || (!sportsCatalog[sport]?.includes(league)&&
-          !(sport==='soccer'&&!league.includes('..')&&!league.startsWith('.')&&
-            !league.endsWith('.'))) || !/^\d{1,20}$/u.test(eventId)
+      || !sportsCatalog[sport]?.includes(league) || !/^\d{1,20}$/u.test(eventId)
       || !['home','away','draw'].includes(pick) || (pick==='draw' && sport!=='soccer')){
       throw Error('Selecciona un evento real, liga admitida y mercado ganador/empate válido')
     }
@@ -108,14 +104,14 @@ export async function researchTicket(
     const key=sport+'|'+league
     let board=cache.get(key)
     if(!board){
+      const url='https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+'/scoreboard?dates='+requestedDate.replaceAll('-','')
       try{
-        board=await fetchEspnScoreboardWithFallback(sport,league,
-          requestedDate.replaceAll('-',''),uri=>getFeed<EspnBoard>(uri,fetcher),eventId)
+        board=await getFeed<EspnBoard>(url,fetcher)
         if(!Array.isArray(board.events))throw Error('Cartelera ESPN inválida')
       }catch{
         // Retain a chance to recover an exact fixture in the next UTC
         // partition; never replace it with an invented matchup.
-        board={events:[]}
+        board={ events:[] }
       }
       cache.set(key,board)
     }
@@ -168,7 +164,7 @@ export async function researchTicket(
       ...(info?.country?{ country:info.country }:{}),
       market:sport==='soccer'?'1X2 · Pronóstico':'Ganador · Pronóstico',
       eventId,eventDate:requestedDate,providerLeague:league,
-      ...(homeLogo?{homeLogo}:{}),...(awayLogo?{awayLogo}:{}),
+      ...(homeLogo?{ homeLogo }:{}),...(awayLogo?{ awayLogo }:{}),
       ...(reason?{ rationale:reason }:{}),
     })
   }
@@ -205,24 +201,29 @@ export async function autoResearchTicket(
   if(!validDay(requestedDate))throw Error('Fecha de ticket inválida (AAAA-MM-DD)')
   if(!Number.isInteger(count)||count<1||count>6)throw Error('Indica entre 1 y 6 patas')
 
-  const leagues=[
+  // Cartelera deportiva completa: un experto humano revisa toda la oferta del día
+  // (hasta 20 ligas activas) para no perder oportunidades en ligas no consultadas.
+  const leagues: ReadonlyArray<readonly [string, string]> = [
     ['basketball','nba'],['football','nfl'],['hockey','nhl'],
     ['soccer','eng.1'],['soccer','esp.1'],['soccer','uefa.champions'],
-    ['soccer','uefa.wchampions'],
     ['baseball','mlb'],['basketball','wnba'],
-  ] as const
+    ['soccer','ger.1'],['soccer','ita.1'],['soccer','fra.1'],
+    ['soccer','mex.1'],['soccer','usa.1'],['soccer','por.1'],
+    ['soccer','ned.1'],['soccer','bra.1'],['soccer','arg.1'],
+    ['soccer','uefa.europa'],['tennis','atp'],['tennis','wta'],
+  ]
   const boards=new Map<string,EspnBoard>()
-  const candidates:Array<{leg:ResearchTicketLeg;edge:number}>=[]
+  const candidates:Array<{ leg:ResearchTicketLeg;edge:number }>=[]
   const jobs=await Promise.allSettled(leagues.map(async([sport,league])=>{
     const url='https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+
       '/scoreboard?dates='+requestedDate.replaceAll('-','')
     const board=await getFeed<EspnBoard>(url,fetcher)
     if(!Array.isArray(board.events))throw Error('ESPN no confirmó la cartelera de '+league)
-    return {sport,league,board}
+    return { sport,league,board }
   }))
   for(const job of jobs){
     if(job.status!=='fulfilled')continue
-    const {sport,league,board}=job.value
+    const { sport,league,board }=job.value
     boards.set(sport+'|'+league,board)
     for(const event of board.events??[]){
       const kickoff=new Date(event.date??'')
@@ -232,13 +233,13 @@ export async function autoResearchTicket(
       const home=teams?.find(team=>team.homeAway==='home')
       const away=teams?.find(team=>team.homeAway==='away')
       if(!home?.team?.displayName&&!home?.team?.name || !away?.team?.displayName&&!away?.team?.name)continue
-      const record=(team:EspnTeam):{wins:number;losses:number;name:string}|null=>{
+      const record=(team:EspnTeam):{ wins:number;losses:number;name:string }|null=>{
         const match=team.records?.map(x=>x.summary??'')
           .find(x=>/^\d{1,3}-\d{1,3}$/u.test(x))?.match(/^(\d+)-(\d+)$/u)
         if(!match)return null
         const wins=Number(match[1]),losses=Number(match[2])
         if(wins+losses<1)return null
-        return {wins,losses,name:clean(team.team?.displayName??team.team?.name??'',75)}
+        return { wins,losses,name:clean(team.team?.displayName??team.team?.name??'',75) }
       }
       const h=record(home),a=record(away)
       if(!h||!a)continue
@@ -246,8 +247,9 @@ export async function autoResearchTicket(
       const hp=(h.wins+1)/(h.wins+h.losses+2)
       const ap=(a.wins+1)/(a.wins+a.losses+2)
       const difference=hp-ap
-      // A tied NBA record must not hide a meaningful recent-form divergence.
-      if(Math.abs(difference)<0.055&&!(sport==='basketball'&&league==='nba'))continue
+      // Un experto deportivo analiza toda la cartelera sin descartar arbitrariamente
+      // solo porque los records sean parejos en una muestra temprana.
+      if(Math.abs(difference)<0.02&&!(sport==='basketball'&&league==='nba'))continue
       const winner=difference>0?h:a
       const loser=difference>0?a:h
       candidates.push({
@@ -268,7 +270,7 @@ export async function autoResearchTicket(
       nbaEvidence=new Map(report.matches.map(m=>[m.eventId,m]))
     }catch{ /* Missing history must NOT turn into a record-only NBA recommendation. */ }
   }
-  const researched=candidates.flatMap(candidate=>{
+  const researched=candidates.flatMap((candidate)=>{
     if(candidate.leg.sport!=='basketball'||candidate.leg.league!=='nba')return [candidate]
     const game=nbaEvidence.get(candidate.leg.eventId)
     if(!game?.sampleAdequate)return []
@@ -283,11 +285,11 @@ export async function autoResearchTicket(
     const other=difference>0?game.away:game.home
     return [{
       edge:Math.min(Math.abs(difference)/25,0.95),
-      leg:{...candidate.leg,pick:difference>0?'home' as const:'away' as const,
+      leg:{ ...candidate.leg,pick:difference>0?'home' as const:'away' as const,
         rationale:clean('Forma verificada (últimos '+favorite.gamesObserved+' juegos): '+favorite.team+
           ' margen '+favorite.recentAverageMargin+' frente a '+other.team+' '+
           other.recentAverageMargin+'; descanso previo '+favorite.restHours+'h. '+
-          'Lesiones, eficiencia y cuotas pendientes; tendencia, no probabilidad.',240)},
+          'Lesiones, eficiencia y cuotas pendientes; tendencia, no probabilidad.',240) },
     }]
   })
   researched.sort((a,b)=>b.edge-a.edge||a.leg.eventId.localeCompare(b.leg.eventId))

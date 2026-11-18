@@ -2,46 +2,24 @@
 import { getFeed, hasSportsPermission, sportsCatalog, discoverEspnLeagues } from './sports.ts'
 import { queryEspnCore } from './espn-core-intelligence.ts'
 import { sportsEventInsights } from './sports-event-intelligence.ts'
-import { collectDirectEspnStats,type DirectTeam } from './sports-direct-stats.ts'
+import {collectDirectEspnStats,type DirectTeam} from './sports-direct-stats.ts'
 
 type Row = Record<string, unknown>
 type View = 'team'|'player'|'event'|'standings'|'news'|'leaders'|'search'
-type Item = { label:string; value?:string; detail?:string; image?:string; href?:string; action?:{ label:string;prompt:string } }
+type Item = { label:string; value?:string; detail?:string; image?:string; href?:string; action?:{label:string;prompt:string} }
 type Section = { heading:string; kind:'metrics'|'list'|'articles'; items:Item[] }
 type Source = { name:string; status:'available'|'unavailable'; records:number }
 export type EspnExplorerInput = {
-  sport:string
-  league:string
-  view:View
-  teamId?:string
-  athleteId?:string
-  eventId?:string
-  season?:number
-  query?:string
+  sport:string; league:string; view:View; teamId?:string; athleteId?:string;
+  eventId?:string; season?:number; query?:string
 }
 export type EspnExplorerResult = {
-  view:View
-  title:string
-  subtitle:string
-  source:string
-  checkedAt:string
-  sections:Section[]
-  sources:Source[]
-  limitations:string[]
-  uiBlock:{
-    component:'sports_espn_dashboard'
-    version:1
-    props:{
-      view:View
-      title:string
-      subtitle:string
-      source:string
-      checkedAt:string
-      image?:string
-      sections:Section[]
-      note:string
-    }
-  }
+  view:View; title:string; subtitle:string; source:string; checkedAt:string;
+  sections:Section[]; sources:Source[]; limitations:string[];
+  uiBlock:{component:'sports_espn_dashboard';version:1;props:{
+    view:View;title:string;subtitle:string;source:string;checkedAt:string;
+    image?:string;sections:Section[];note:string
+  }}
 }
 const row=(x:unknown):Row=>x!==null&&typeof x==='object'&&!Array.isArray(x)?x as Row:{}
 const array=(x:unknown):unknown[]=>Array.isArray(x)?x:[]
@@ -74,7 +52,7 @@ const label=(x:unknown)=>txt(row(x).displayName||row(x).fullName||row(x).name||x
 const item=(labelText:unknown,value?:unknown,detail?:unknown,image?:unknown):Item|null=>{
   const title=txt(labelText,180);if(!title)return null
   const v=txt(value,180),d=txt(detail,240),photo=img(image)
-  return { label:title,...(v?{ value:v }:{}),...(d?{ detail:d }:{}),...(photo?{ image:photo }:{}) }
+  return {label:title,...(v?{value:v}:{}),...(d?{detail:d}:{}),...(photo?{image:photo}:{})}
 }
 const section=(heading:string,kind:Section['kind'],values:Array<Item|null>,max=16):Section|null=>{
   const seen=new Set<string>(),items:Item[]=[]
@@ -84,7 +62,7 @@ const section=(heading:string,kind:Section['kind'],values:Array<Item|null>,max=1
     seen.add(key);items.push(value)
     if(items.length>=max)break
   }
-  return items.length?{ heading,kind,items }:null
+  return items.length?{heading,kind,items}:null
 }
 /** Ref-only lists, page metadata and 200 {} are not source evidence. */
 const nonempty=(v:unknown,depth=0):boolean=>{
@@ -95,11 +73,11 @@ const nonempty=(v:unknown,depth=0):boolean=>{
     .some(([,x])=>nonempty(x,depth+1))
   return typeof v==='string'?v.trim().length>0:true
 }
-const cache=new Map<string,{ until:number;value:unknown }>()
+const cache=new Map<string,{until:number;value:unknown}>()
 const saveCache=(url:string,value:unknown,ttl:number)=>{
   cache.delete(url)
   if(cache.size>=160)cache.delete(cache.keys().next().value??'')
-  cache.set(url,{ until:Date.now()+ttl,value })
+  cache.set(url,{until:Date.now()+ttl,value})
 }
 /** Cache successes and negative results; never cache indefinitely and bound total memory. */
 async function read(url:string,fetcher:typeof fetch,ttlMs:number):Promise<unknown>{
@@ -121,7 +99,7 @@ async function read(url:string,fetcher:typeof fetch,ttlMs:number):Promise<unknow
  * @returns Compact, bounded rows with season/game/split provenance.
  */
 function directPlayerRows(teams:readonly DirectTeam[]):Item[]{
-  return teams.flatMap(team=>team.athletes.map((player)=>{
+  return teams.flatMap(team=>team.athletes.map(player=>{
     const text=[...player.stats.slice(0,4).map(s=>s.name+': '+s.value),
       ...player.lastGames.slice(0,2).map(s=>s.name+': '+s.value)]
     return item(player.name,player.position+' · '+(text.join(' · ')||'Estadísticas no publicadas'),
@@ -130,7 +108,7 @@ function directPlayerRows(teams:readonly DirectTeam[]):Item[]{
   })).filter((x):x is Item=>x!==null)
 }
 const source=(name:string,data:unknown,records=nonempty(data)?1:0):Source=>({
-  name,status:records>0?'available':'unavailable',records,
+  name,status:records>0?'available':'unavailable',records
 })
 const valid=(v:EspnExplorerInput):void=>{
   if(!Object.hasOwn(sportsCatalog,v.sport)||!slug(v.sport)||!slug(v.league))
@@ -148,12 +126,10 @@ const valid=(v:EspnExplorerInput):void=>{
 }
 /** Discover validated stats by category, not by taking unrelated numbers from the payload. */
 function metrics(data:unknown,max=18):Item[]{
-  const values:Item[]=[],queue:Array<{ node:unknown;depth:number }>=[{ node:data,depth:0 }]
+  const values:Item[]=[],queue:Array<{node:unknown;depth:number}>=[{node:data,depth:0}]
   let seen=0
   while(queue.length&&seen++<180&&values.length<max){
-    const next=queue.shift()
-    if(!next)break
-    const v=row(next.node)
+    const next=queue.shift()!;const v=row(next.node)
     if(!Object.keys(v).length)continue
     const cats=array(v.stats).length?array(v.stats):array(v.statistics)
     for(const s of cats.slice(0,24)){
@@ -172,8 +148,8 @@ function metrics(data:unknown,max=18):Item[]{
     for(const k of ['categories','statistics','stats','splits','records','items','seasonTypes']){
       const field=v[k]
       if(Array.isArray(field)){
-        for(const child of field.slice(0,15))if(child!==null&&typeof child==='object')queue.push({ node:child,depth:next.depth+1 })
-      }else if(field!==null&&typeof field==='object')queue.push({ node:field,depth:next.depth+1 })
+        for(const child of field.slice(0,15))if(child!==null&&typeof child==='object')queue.push({node:child,depth:next.depth+1})
+      }else if(field!==null&&typeof field==='object')queue.push({node:field,depth:next.depth+1})
     }
   }
   return values.slice(0,max)
@@ -181,20 +157,20 @@ function metrics(data:unknown,max=18):Item[]{
 function stories(data:unknown):Item[]{
   const d=row(data),articles=array(d.articles).length?array(d.articles):
     array(d.items)
-  return articles.slice(0,20).map((article)=>{
+  return articles.slice(0,20).map(article=>{
     const a=row(article),base=item(a.headline??a.title,
       a.published??a.lastModified??a.publishedAt,
       a.description??a.story,
       array(a.images)[0])
     const url=newsLink(row(row(a.links).web).href??a.link)
-    return base&&url?{ ...base,href:url }:base
+    return base&&url?{...base,href:url}:base
   }).filter((x):x is Item=>x!==null)
 }
 function roster(data:unknown):Item[]{
-  const groups=array(row(data).athletes),individuals=groups.flatMap((g)=>{
+  const groups=array(row(data).athletes),individuals=groups.flatMap(g=>{
     const r=row(g);return array(r.items).length?array(r.items):[g]
   })
-  return individuals.slice(0,65).map((a)=>{
+  return individuals.slice(0,65).map(a=>{
     const p=row(a),person=row(p.athlete),x=Object.keys(person).length?person:p
     const base=item(x.displayName??x.fullName??x.name,
       row(x.position).displayName??row(x.position).abbreviation,
@@ -206,11 +182,11 @@ function roster(data:unknown):Item[]{
 
 /** Injury status appears on some roster rows; it is not a starter confirmation. */
 function rosterInjuries(data:unknown):Item[]{
-  return array(row(data).athletes).flatMap((group)=>{
+  return array(row(data).athletes).flatMap(group=>{
     const g=row(group);return array(g.items).length?array(g.items):[group]
-  }).flatMap((value)=>{
+  }).flatMap(value=>{
     const athlete=row(value),injuries=array(athlete.injuries)
-    return injuries.slice(0,2).map((v)=>{
+    return injuries.slice(0,2).map(v=>{
       const i=row(v),status=txt(i.status??row(i.type).description,100)
       return status?item(athlete.displayName??athlete.fullName,status,i.date):null
     })
@@ -253,16 +229,16 @@ function gamelog(data:unknown):Item[]{
   }
   return out
 }
-function summaryFacts(data:unknown):{ heading:string;items:Item[];image?:string }{
+function summaryFacts(data:unknown):{heading:string;items:Item[];image?:string}{
   const d=row(data),h=row(d.header),comp=row(array(h.competitions)[0])
   const competitors=array(comp.competitors)
-  const teams=competitors.slice(0,4).map((x)=>{
+  const teams=competitors.slice(0,4).map(x=>{
     const c=row(x),t=row(c.team)
     const final=row(row(h.status).type).state==='post'||row(row(comp.status).type).state==='post'
     const markedWinner=final&&c.winner===true
     return item(t.displayName??t.name,c.score!==undefined?
       ((markedWinner?'Ganador · ':'Marcador: ')+txt(c.score,25)):c.homeAway,
-    array(c.records).map(r=>txt(row(r).summary,45)).filter(Boolean).join(' · '),t.logo??t.logos)
+      array(c.records).map(r=>txt(row(r).summary,45)).filter(Boolean).join(' · '),t.logo??t.logos)
   }).filter((x):x is Item=>x!==null)
   const venue=row(comp.venue)
   const evidence=(field:string,value:unknown):Item|null=>{
@@ -272,13 +248,13 @@ function summaryFacts(data:unknown):{ heading:string;items:Item[];image?:string 
   const facts=[evidence('Estado',row(row(h.status).type).description??row(h.status).displayClock),
     evidence('Sede',venue.fullName),evidence('Fecha',comp.date??h.date),
     ...teams].filter((x):x is Item=>x!==null)
-  return { heading:'Partido y participantes',items:facts }
+  return {heading:'Partido y participantes',items:facts}
 }
 function eventLeaders(data:unknown):Item[]{
   const d=row(data),bs=row(d.boxscore)
-  return array(bs.players).flatMap(group=>array(row(group).statistics).flatMap((s)=>{
+  return array(bs.players).flatMap(group=>array(row(group).statistics).flatMap(s=>{
     const st=row(s),names=array(st.labels)
-    return array(st.athletes).slice(0,5).map((athlete)=>{
+    return array(st.athletes).slice(0,5).map(athlete=>{
       const a=row(athlete),p=row(a.athlete),values=array(a.stats)
       return item(p.displayName,
         names.slice(0,4).map((name,i)=>txt(name,22)+': '+txt(values[i],24)).join(' · '),
@@ -291,7 +267,7 @@ function searchResults(data:unknown):Item[]{
   const hits=groups.flatMap(g=>array(row(g).items).map(hit=>({
     hit,category:txt(row(g).type??row(g).name,40).toLowerCase(),
   })))
-  return hits.slice(0,30).map(({ hit,category })=>{
+  return hits.slice(0,30).map(({hit,category})=>{
     const x=row(hit),result=item(x.displayName??x.name??x.title,
       x.subtitle??x.type,x.description,x.image??x.logo)
     const entityId=id(x.id)
@@ -299,8 +275,8 @@ function searchResults(data:unknown):Item[]{
     const player=/athlete|player|jugador/u.test(kind),team=/team|equipo|club/u.test(kind)
     if(!result)return null
     if(!entityId||!player&&!team)return result
-    return { ...result,value:result.value??('ID ESPN: '+entityId),
-      detail:(result.detail??'')+' · '+(player?'Atleta':'Equipo')+' · ESPN '+entityId }
+    return {...result,value:result.value??('ID ESPN: '+entityId),
+      detail:(result.detail??'')+' · '+(player?'Atleta':'Equipo')+' · ESPN '+entityId}
   }).filter((x):x is Item=>x!==null)
 }
 /** Explores one ESPN entity with bounded optional evidence and a reusable adaptive UI.
@@ -315,13 +291,13 @@ export async function exploreEspn(
   if(!sportsCatalog[input.sport]?.includes(input.league)
      &&!(await discoverEspnLeagues(input.sport,env,fetcher)).includes(input.league))
     throw Error('La liga no figura en el catálogo de ESPN')
-  const { sport,league,view }=input
+  const {sport,league,view}=input
   const site='https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+'/'
   const web='https://site.web.api.espn.com/apis/common/v3/sports/'+sport+'/'+league+'/'
   const core='https://sports.core.api.espn.com/v2/sports/'+sport+'/leagues/'+league+'/'
   const qs=input.season?'?season='+input.season:''
-  const jobs:Array<{ name:string;url:string;ttl:number }>=[]
-  const add=(name:string,url:string,ttl=300_000)=>jobs.push({ name,url,ttl })
+  const jobs:Array<{name:string;url:string;ttl:number}>=[]
+  const add=(name:string,url:string,ttl=300_000)=>jobs.push({name,url,ttl})
   if(view==='team'){
     add('Perfil del equipo',site+'teams/'+input.teamId)
     add('Plantilla',site+'teams/'+input.teamId+'/roster',900_000)
@@ -348,22 +324,19 @@ export async function exploreEspn(
     add('Líderes de liga',web+'statistics/byathlete'+qs,1_800_000)
     add('Estadísticas generales',site+'statistics',1_800_000)
   }else if(view==='search'){
-    add('Buscador ESPN','https://site.web.api.espn.com/apis/search/v2?query='+
-      encodeURIComponent((input.query??'').trim())+'&limit=20',300_000)
+    add('Buscador ESPN','https://site.web.api.espn.com/apis/search/v2?query='+encodeURIComponent(input.query!.trim())+'&limit=20',300_000)
   }
   const settled=await Promise.allSettled(jobs.map(j=>read(j.url,fetcher,j.ttl)))
   const data=new Map<string,unknown>(),sources:Source[]=[]
   settled.forEach((result,i)=>{
-    const job=jobs[i]
-    if(!job)return
-    const name=job.name
+    const name=jobs[i]!.name
     const value=result.status==='fulfilled'?result.value:null
     data.set(name,value);sources.push(source(name,value))
   })
   const blocks:Section[]=[],put=(b:Section|null)=>{if(b&&blocks.length<8)blocks.push(b)}
   let title='ESPN · '+league.toUpperCase()
-  let subtitle=({ team:'Equipo',player:'Jugador',event:'Encuentro',standings:'Clasificación',
-    news:'Noticias',leaders:'Líderes estadísticos',search:'Resultados de búsqueda' } satisfies Record<View,string>)[view]
+  let subtitle=({team:'Equipo',player:'Jugador',event:'Encuentro',standings:'Clasificación',
+    news:'Noticias',leaders:'Líderes estadísticos',search:'Resultados de búsqueda'} satisfies Record<View,string>)[view]
   let image:string|undefined
   if(view==='team'){
     const t=row(row(data.get('Perfil del equipo')).team)
@@ -378,7 +351,7 @@ export async function exploreEspn(
     // Read stats/gamelogs/splits directly, not through buttons that ask Kira
     // to issue another prompt. No athlete is accepted outside this team roster.
     const teamId=id(input.teamId)
-    const details=await collectDirectEspnStats(sport,league,[{ id:teamId,name:title }],
+    const details=await collectDirectEspnStats(sport,league,[{id:teamId,name:title}],
       fetcher,now,20)
     const verified=details.teams[0]
     put(section('Plantilla verificada','list',roster(data.get('Plantilla')),30))
@@ -390,12 +363,12 @@ export async function exploreEspn(
     put(section('Disponibilidad reportada en plantilla','list',rosterInjuries(data.get('Plantilla'))))
     const schedule=row(data.get('Calendario del equipo'))
     put(section('Próximos encuentros y resultados','list',
-      array(schedule.events).slice(0,16).map((g)=>{const e=row(g)
+      array(schedule.events).slice(0,16).map(g=>{const e=row(g)
         const base=item(e.shortName??e.name,e.date,row(row(e.status).type).description)
         return base})))
     put(section('Noticias del equipo','articles',stories(data.get('Noticias del equipo'))))
     const tx=data.get('Movimientos del equipo')
-    put(section('Movimientos oficiales','list',array(row(tx).transactions).slice(0,12).map((m)=>{
+    put(section('Movimientos oficiales','list',array(row(tx).transactions).slice(0,12).map(m=>{
       const e=row(m);return item(e.description??e.type,e.date)
     })))
   }else if(view==='player'){
@@ -424,20 +397,18 @@ export async function exploreEspn(
     // Never equate competitionId and eventId. ESPN publishes both IDs independently.
     const competitionId=id(competition.id)
     let coreQuotes:unknown[]=[],coreProjection:unknown=null
-    let coreObservedAt:string|undefined
     if(competitionId&&input.eventId){
       const [oddsResult,projectionResult]=await Promise.allSettled([
-        queryEspnCore({ mode:'odds',sport,league,eventId:input.eventId,
-          competitionId,limit:8 },<T>(url:string)=>getFeed<T>(url,fetcher),{ now }),
-        queryEspnCore({ mode:'predictor',sport,league,eventId:input.eventId,
-          competitionId,limit:5 },<T>(url:string)=>getFeed<T>(url,fetcher),
-        { resolveRefs:false,now }),
+        queryEspnCore({mode:'odds',sport,league,eventId:input.eventId,
+          competitionId,limit:8},<T>(url:string)=>getFeed<T>(url)),
+        queryEspnCore({mode:'predictor',sport,league,eventId:input.eventId,
+          competitionId,limit:5},<T>(url:string)=>getFeed<T>(url),
+          {resolveRefs:false}),
       ])
       if(oddsResult.status==='fulfilled'){
         const report=oddsResult.value
         sources.push(source('Mercados y precios',report.state==='data'?report:null,
           report.state==='data'?report.count:0))
-        coreObservedAt=report.observedAt
         if(report.state==='data')coreQuotes=report.items.length?report.items:
           report.details?[report.details]:[]
       }
@@ -450,13 +421,11 @@ export async function exploreEspn(
       // The probabilities endpoint is optional and returns HTTP 400 on some
       // leagues. Do not repeatedly retry it or block the valid predictor.
       sources.push(source('Probabilidades publicadas no verificadas',
-        { availability:'optional',competitionId,notQueried:true },0))
+        {availability:'optional',competitionId,notQueried:true},0))
     }
-    const eventId=input.eventId
-    if(!eventId)throw Error('Falta un ID real para la vista solicitada')
     const insights=sportsEventInsights({
-      eventId,summary:overview,coreOdds:coreQuotes,
-      predictor:coreProjection,now,...(coreObservedAt?{ observedAt:coreObservedAt }:{}),
+      eventId:input.eventId!,summary:overview,coreOdds:coreQuotes,
+      predictor:coreProjection,now,
     })
     // Fetch season statistics for the actual participants, never inferred
     // from league averages or from an event with a similar team name.
@@ -483,7 +452,7 @@ export async function exploreEspn(
     // investigation. Not deferred to another chatbot prompt/tool click.
     if(seasonTeams.length===2){
       const details=await collectDirectEspnStats(sport,league,
-        seasonTeams.map(t=>({ id:t.teamId,name:t.name })),fetcher,now,10)
+        seasonTeams.map(t=>({id:t.teamId,name:t.name})),fetcher,now,10)
       const players=directPlayerRows(details.teams)
       put(section('Jugadores · estadísticas directas','list',players,24))
       sources.push(source('Jugadores Web v3 consultados',players.length?players:null,
@@ -495,7 +464,7 @@ export async function exploreEspn(
     put(section('Encuentro y participantes','list',match.items))
     put(section('Líderes del partido','list',eventLeaders(overview)))
     const plays=array(row(overview).plays)
-    put(section('Jugadas publicadas','list',plays.slice(-18).reverse().map((x)=>{
+    put(section('Jugadas publicadas','list',plays.slice(-18).reverse().map(x=>{
       const p=row(x);return item(p.text??p.description,p.clock?txt(row(p.clock).displayValue):undefined)
     })))
   }else if(view==='standings'){
@@ -506,7 +475,7 @@ export async function exploreEspn(
     const leader=data.get('Líderes de liga')??data.get('Estadísticas generales')
     put(section('Líderes y estadísticas publicadas','metrics',metrics(leader,18)))
     const entries=array(row(leader).athletes)
-    put(section('Jugadores destacados','list',entries.slice(0,20).map((p)=>{
+    put(section('Jugadores destacados','list',entries.slice(0,20).map(p=>{
       const a=row(p);return item(a.displayName??row(a.athlete).displayName,
         a.displayValue??a.value,undefined,a.headshot)
     })))
@@ -525,11 +494,11 @@ export async function exploreEspn(
   const checkedAt=new Date(now).toISOString()
   const note=sources.filter(s=>s.status==='available').length+' de '+sources.length+
     ' fuentes con datos · Las cifras y las imágenes proceden de ESPN; disponibilidad variable.'
-  return{ view,title,subtitle,source:'ESPN Site / Core / Common v3',checkedAt,
+  return{view,title,subtitle,source:'ESPN Site / Core / Common v3',checkedAt,
     sections:blocks,sources,limitations,
-    uiBlock:{ component:'sports_espn_dashboard',version:1,props:{
+    uiBlock:{component:'sports_espn_dashboard',version:1,props:{
       view,title,subtitle,source:'ESPN Site / Core / Common v3',checkedAt,
-      ...(image?{ image }:{}),sections:blocks,note,
-    } },
+      ...(image?{image}:{}),sections:blocks,note,
+    }},
   }
 }

@@ -62,18 +62,14 @@ export function assessDailyMarketEvidence(
   const minGames=candidate.sport==='football'?3:5
   const missing:string[]=[]
   const verified=evidence.coverage.filter(c=>c.status==='verified').length
-  const sampleCoverage=Math.min(1,Math.min(h.games,a.games)/minGames)
-  const partialSample=sampleCoverage<1
-  if(partialSample)
-    missing.push('MUESTRA REDUCIDA: '+h.games+'/'+a.games+
-      ' juegos verificados; '+minGames+' por rival es objetivo de respaldo fuerte, '+
-      'NO requisito para investigar. Cualquier dirección queda condicional.')
+  if(h.games<minGames||a.games<minGames)
+    missing.push('Historial insuficiente: se requieren '+minGames+' resultados finalizados de cada equipo')
   if(evidence.rosterNewsInjuries===null)
     missing.push('Noticias, plantillas y lesiones sin confirmación')
   else missing.push('Las bajas ESPN no sustituyen el último informe oficial ni confirman el once')
   const core=[h.scoredPerGame,h.allowedPerGame,a.scoredPerGame,a.allowedPerGame]
   const valid=core.every(v=>v!==null&&Number.isFinite(v))
-    &&h.games>=2&&a.games>=2
+    &&h.games>=minGames&&a.games>=minGames
   let home:number|null=null,away:number|null=null,total:number|null=null,diff:number|null=null
   let variability:number|null=null
   let side:DailyMarketCandidate['outcomes'][number]|null=null
@@ -117,8 +113,8 @@ export function assessDailyMarketEvidence(
       side=options.find(x=>normalize(x.selection)===label)??null
       direction=side?side.selection+' favorecido por producción reciente':'ganador no resuelto por forma reciente'
     }
-    status=side&&!partialSample?'descriptive-support':'uncertain'
-  }else missing.push('No hay al menos dos partidos independientes y medias de ataque/defensa verificadas para este mercado')
+    status=side?'descriptive-support':'uncertain'
+  }else missing.push('No hay medias de ataque/defensa suficientemente verificadas para este mercado')
   const old=normalize(candidate.selection)
   if(status==='descriptive-support'&&side&&normalize(side.selection)!==old)
     missing.push('La dirección de la investigación difiere del favorito inicial por precio; selección corregida')
@@ -182,35 +178,6 @@ export function assessDailyMarketEvidence(
         'consistentemente el mismo hándicap/total a esta línea.')
     }
   }
-  // A poor last-ten record can hide a material *recent* recovery. This is a
-  // retrospective audit trigger (3 vs 10 games), not a validated NHL edge.
-  // A selected favorite must be compared with alternatives when its opponent
-  // won at least two of its last three despite winning four or fewer of ten.
-  if(candidate.sport==='hockey'&&candidate.market==='h2h'&&side&&
-    status==='descriptive-support'){
-    const opponent=normalize(side.selection)===normalize(evidence.home.name)?
-      evidence.away:evidence.home
-    const games=opponent.lastGames.slice(0,10).filter(g=>
-      Number.isFinite(g.scored)&&Number.isFinite(g.allowed))
-    if(games.length>=8){
-      const recent=games.slice(0,3)
-      const wins10=games.filter(g=>g.scored>g.allowed).length
-      const wins3=recent.filter(g=>g.scored>g.allowed).length
-      if(recent.length===3&&wins10<=4&&wins3>=2){
-        status='uncertain'
-        missing.push('ALERTA DE REPUNTE NHL: '+opponent.name+
-          ' ganó '+wins3+'/3 recientes pese a solo '+wins10+'/'+
-          games.length+' en la muestra; revisar alineaciones, porteros, '+
-          'calidad de los rivales y mercado antes de elegir el favorito.')
-        direction='Rival con repunte reciente: la muestra de diez partidos '+
-          'no justifica sola esta elección.'
-      }
-    }
-  }
-  if(candidate.requiresRecheck){
-    status='uncertain'
-    missing.push('Precio ESPN observado anteriormente: requiere nueva lectura del mercado exacto antes de considerar el boleto completo.')
-  }
   const priceAudit=auditMarketPrice(candidate,side)
   if(priceAudit.breakEvenPercent!==null)
     missing.push('Cuota de la selección exige '+priceAudit.breakEvenPercent+
@@ -242,9 +209,9 @@ export function assessDailyMarketEvidence(
   // a market-specific probability distribution.
   const relativeSignal=lineDistance!==null&&variability!==null?
     round(lineDistance/Math.max(1,variability)):null
-  const rankingScore=side&&valid?round((
+  const rankingScore=side&&valid?round(
     4*Math.min(8,relativeSignal??0)+Math.min(verified,8)/10+
-    Math.min(h.games+a.games,20)/100)*sampleCoverage):0
+    Math.min(h.games+a.games,20)/100):0
   const report:MarketResearchReview={
     candidate,researchedAt:evidence.checkedAt,status,
     scoreDifference:diff,projectedHome:home,projectedAway:away,projectedTotal:total,

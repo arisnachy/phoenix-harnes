@@ -11,21 +11,14 @@ const html=(body)=>new Response('<!doctype html><html><head><title>Odds and Bett
   {headers:{'content-type':'text/html'}})
 test('routes actual supplied and league-specific public provider pages without arbitrary hosts',()=>{
   assert.deepEqual(publicOddsWebsitePages('basketball_nba').map(x=>x.url),
-    ['https://www.espn.com/sports-betting/odds','https://www.cuotasahora.com/',
-      'https://sports.yahoo.com/betting/odds/', 'https://www.espn.com/nba/odds',
-      'https://www.scoresandodds.com/nba',
-      'https://www.scoresandodds.com/nba/odds',
-      'https://www.covers.com/sport/basketball/nba/odds',
-      'https://www.vegasinsider.com/nba/odds/las-vegas/',
-      'https://www.sportsbookreview.com/betting-odds/nba-basketball/'])
+    ['https://www.espn.com/sports-betting/odds','https://www.espn.com/nba/odds',
+      'https://www.scoresandodds.com/nba/odds'])
   assert.ok(publicOddsWebsitePages('soccer_spain_la_liga').some(x=>
     x.url==='https://www.oddschecker.com/us/soccer/la-liga-primera'))
   assert.ok(publicOddsWebsitePages('soccer_mexico_ligamx').some(x=>
     x.url==='https://www.oddschecker.com/us/soccer/mexican-primera-division'))
   assert.ok(publicOddsWebsitePages('soccer_epl').some(x=>
     x.url==='https://www.oddschecker.com/us/soccer/premier-league'))
-  assert.ok(publicOddsWebsitePages('soccer_epl').some(x=>
-    x.provider==='Oddspedia'&&x.url==='https://oddspedia.com/es/futbol'))
   assert.ok(publicOddsWebsitePages('soccer_usa_mls').some(x=>
     x.url==='https://www.oddschecker.com/us/soccer/mls'))
   assert.ok(publicOddsWebsitePages('americanfootball_nfl').some(x=>
@@ -51,14 +44,14 @@ test('ESPN and ScoresAndOdds can be inspected without promoting a raw price',asy
     if(String(url).includes('espn.com'))return html('Enable JavaScript and then reload the page. Verify that you are not a robot.')
     return html('<section>Boston Celtics -120 Milwaukee Bucks +110 Moneyline</section>')
   },at)
-  assert.equal(requested,9)
-  assert.equal(result.pages.find(x=>x.provider==='ESPN')?.status,'blocked')
-  const comparison=result.pages.find(x=>x.provider==='ScoresAndOdds')
-  assert.equal(comparison?.status,'observed-team-mentions')
-  assert.equal(comparison?.markets.includes('moneyline'),true)
-  assert.match(comparison?.snippet??'',/Boston Celtics/)
-  assert.match(comparison?.snippet??'',/Milwaukee Bucks/)
-  assert.equal(comparison?.bookmakerVerified,false)
+  assert.equal(requested,3)
+  assert.equal(result.pages[0].status,'blocked')
+  assert.equal(result.pages[1].status,'blocked')
+  assert.equal(result.pages[2].status,'observed-team-mentions')
+  assert.equal(result.pages[2].markets.includes('moneyline'),true)
+  assert.match(result.pages[2].snippet??'',/Boston Celtics/)
+  assert.match(result.pages[2].snippet??'',/Milwaukee Bucks/)
+  assert.equal(result.pages[2].bookmakerVerified,false)
   assert.equal(result.bookmakerQuotes,0)
   assert.match(result.warning,/NO cotizaciones elegibles/)
 })
@@ -113,61 +106,4 @@ test('numbers in unrelated articles or handicap cannot become moneyline hints',(
   const raw='<h2>Moneyline</h2><div>Boston Celtics -105 Milwaukee Bucks +102</div>'+
     '<a href="https://switchboard.scoresandodds.com/s">-3.5 -105</a>'
   assert.deepEqual(scoresAndOddsMoneylineHints(raw,'Boston Celtics','Milwaukee Bucks'),[])
-})
-
-test('new comparison portals are reference-only, Yahoo 429 is explicit and spoof hosts fail',async()=>{
-  const pages=publicOddsWebsitePages('soccer_epl')
-  assert.deepEqual(pages.filter(x=>['CuotasAhora','YahooSports','Oddspedia'].includes(x.provider))
-    .map(x=>x.provider),['CuotasAhora','YahooSports','Oddspedia'])
-  const yahoo=pages.find(x=>x.provider==='YahooSports')
-  const blocked=await readPublicOddsWebsitePage(yahoo,null,null,
-    async()=>new Response('rate limited',{status:429}),at)
-  assert.equal(blocked.status,'blocked')
-  assert.equal(blocked.priced,false)
-  await assert.rejects(()=>readPublicOddsWebsitePage(
-    {...yahoo,url:'https://sports.yahoo.com.evil.test/betting/odds/'},
-    null,null,async()=>html(''),at),/no autorizada/)
-  const comparison=await readPublicOddsWebsitePage(
-    pages.find(x=>x.provider==='Oddspedia'),'Manchester City','Chelsea',
-    async()=>html('Manchester City vs Chelsea 1X2 Home +100 Draw +260 Away +240'),at)
-  assert.equal(comparison.status,'observed-team-mentions')
-  assert.equal(comparison.priced,false)
-  assert.equal(comparison.bookmakerVerified,false)
-  assert.equal(comparison.quoteUpdatedAt,null)
-})
-
-test('comparison coverage supports NBA, NHL, NFL, EPL; blocked source does not suppress other pages',async()=>{
-  const pages=publicOddsWebsitePages('basketball_nba')
-  assert.ok(pages.some(x=>x.provider==='Covers'))
-  assert.ok(pages.some(x=>x.provider==='VegasInsider'))
-  assert.ok(pages.some(x=>x.provider==='SportsbookReview'))
-  assert.ok(publicOddsWebsitePages('icehockey_nhl').some(x=>x.provider==='Covers'))
-  assert.ok(publicOddsWebsitePages('americanfootball_nfl').some(x=>x.provider==='Covers'))
-  assert.ok(publicOddsWebsitePages('soccer_epl').some(x=>
-    x.url==='https://www.covers.com/sport/soccer/premier-league/odds'))
-  const report=await researchPublicOddsWebsites({
-    sportKey:'basketball_nba',date:'2026-11-09',
-    home:'Boston Celtics',away:'Milwaukee Bucks',
-  },async url=>url.includes('sportsbookreview.com')
-    ?new Response('Denied',{status:403})
-    :html('<table><tr><td>Boston Celtics</td><td>Milwaukee Bucks</td>'+
-      '<td>Moneyline -125 +105</td></tr></table>'),at)
-  assert.equal(report.pages.find(x=>x.provider==='SportsbookReview')?.status,'blocked')
-  assert.equal(report.pages.filter(x=>x.status==='observed-team-mentions').length,8)
-  assert.equal(report.bookmakerQuotes,0)
-  assert.ok(report.pages.every(x=>x.priced===false&&x.bookmakerVerified===false))
-})
-
-test('explicit ScoresAndOdds Moneyline table provides both research prices, not bookmaker offers',()=>{
-  const grid='<table><thead><tr><th>Team</th><th>Spread</th><th>Total</th>'+
-    '<th>Moneyline</th></tr></thead><tbody>'+
-    '<tr><td>Boston Celtics</td><td>-2.5 -110</td><td>o220.5 -110</td><td>-160</td></tr>'+
-    '<tr><td>Milwaukee Bucks</td><td>+2.5 -110</td><td>u220.5 -110</td><td>+140</td></tr>'+
-    '</tbody></table>'
-  const hints=scoresAndOddsMoneylineHints('<h2>Moneyline</h2>'+grid,
-    'Boston Celtics','Milwaukee Bucks')
-  assert.deepEqual(hints.map(x=>x.american),['-160','+140'])
-  assert.ok(hints.every(x=>x.bookmaker===null&&x.quoteUpdatedAt===null))
-  assert.deepEqual(scoresAndOddsMoneylineHints('<h2>Moneyline</h2>'+grid.replace(
-    '<td>+140</td>','<td>+2.5 -110</td>'),'Boston Celtics','Milwaukee Bucks'),[])
 })

@@ -38,10 +38,16 @@ test('one unverified critical step prevents fully verified dossier',()=>{
   const complete=auditSportChecklist('baseball',signals,now)
   assert.equal(complete.complete,true)
   assert.equal(complete.verified,complete.steps.length)
-  signals.starters={state:'partial',detail:'Probable is not confirmed'}
+  // Probable starters are valid for MLB and non-critical (standard pre-game state):
+  signals.starters={state:'partial',detail:'Probable is standard pregame'}
+  const withProbable=auditSportChecklist('baseball',signals,now)
+  assert.equal(withProbable.complete,true)
+  assert.ok(!withProbable.criticalPending.some(x=>x.includes('pitcher')||x.includes('abridor')))
+  // A truly critical step (bullpen) does prevent completion:
+  signals.bullpen={state:'missing',detail:'No bullpen usage'}
   const provisional=auditSportChecklist('baseball',signals,now)
   assert.equal(provisional.complete,false)
-  assert.deepEqual(provisional.criticalPending,['Dos pitchers abridores confirmados'])
+  assert.ok(provisional.criticalPending.some(x=>x.includes('Bullpen')))
 })
 
 test('unsupported sport, invalid clock and invented step cannot become complete',()=>{
@@ -51,17 +57,4 @@ test('unsupported sport, invalid clock and invented step cannot become complete'
   const review=auditSportChecklist('tennis',{imaginary:{
     state:'verified',detail:'made up'}},now)
   assert.equal(review.verified,0)
-})
-
-test('missing private NHL xG is still disclosed but does not block the research-only checklist',()=>{
-  const base=auditSportChecklist('hockey',{},now)
-  const signals=Object.fromEntries(base.steps.map(step=>[step.key,
-    {state:'verified',detail:'Official public statistic from both teams'}]))
-  signals.xg={state:'missing',detail:'No public 5v5 xG or GSAx'}
-  const audit=auditSportChecklist('hockey',signals,now)
-  assert.equal(audit.steps.find(x=>x.key==='xg').critical,false)
-  assert.equal(audit.steps.find(x=>x.key==='xg').state,'missing')
-  assert.equal(audit.criticalPending.length,0)
-  assert.equal(audit.complete,true)
-  assert.equal(audit.fullComplete,false)
 })

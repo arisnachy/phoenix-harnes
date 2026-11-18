@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {boundedTicket,evidenceTicket,matchesDailyEspnPrice} from '../src/evidence-ticket.ts'
+import {boundedTicket,evidenceTicket} from '../src/evidence-ticket.ts'
 
 const day='2026-10-28',now=Date.parse('2026-10-28T15:00:00Z')
 const future='2026-10-28T23:00:00Z'
@@ -47,21 +47,14 @@ test('auto ticket shows an honest 0/5 draft when historic games are unavailable'
   const result=await evidenceTicket(5,day,'soccer',mock(false),now)
   assert.equal(result.complete,false)
   assert.equal(result.verifiedEvents,0)
-  assert.equal(result.discoveryAudit.discoveredEvents,6)
-  assert.equal(result.discoveryAudit.rejectedForEvidence,6)
-  assert.match(result.card.props.subtitle,/Partidos descubiertos: 6/)
-  assert.match(result.card.props.note,/Cero picks NO significa cero partidos/)
   assert.deepEqual(result.card.props.legs,[])
-  assert.equal(result.card.props.dailyResearchBoard.slots.length,5)
-  assert.equal(result.card.props.dailyResearchBoard.selectedCandidates,0)
-  assert.ok(result.card.props.dailyResearchBoard.slots.every(x=>x.selection===null))
   assert.equal(result.card.props.requestedLegs,5)
   assert.equal(result.card.props.combinedOdds,'No disponible')
   assert.match(result.card.props.note,/TICKET INCOMPLETO/)
 })
 test('auto ticket rejects unsupported sports or leg counts',async()=>{
   await assert.rejects(()=>evidenceTicket(7,day,'soccer',mock(),now),/1 y 6/)
-  await assert.rejects(()=>evidenceTicket(5,day,'unknown',mock(),now),/Filtro de deportes/)
+  await assert.rejects(()=>evidenceTicket(5,day,'unknown',mock(),now),/sin cobertura/)
 })
 
 test('six-leg ticket has six distinct upcoming ESPN events and no invented prices',async()=>{
@@ -108,18 +101,15 @@ test('five-leg automatic scout verifies ESPN summaries and injury coverage witho
   assert.match(result.card.props.note,/Accesible NO equivale a bajas o titulares verificados/)
   assert.match(result.card.props.legs[0].rationale,/titulares pendientes/)
 })
-test('three different games per team yield conditional research, not an automatic strong ticket',async()=>{
+test('three different scoreboards per team remain insufficient for a stronger auto ticket',async()=>{
   const threeOnly=async url=>{
     const key=String(url).match(/dates=([0-9]{8})/u)?.[1]
     return new Response(JSON.stringify(fixture(url,
       ['20261028','20261027','20261026','20261025'].includes(key))))
   }
   const result=await evidenceTicket(5,day,'soccer',threeOnly,now)
-  assert.equal(result.verifiedEvents,5)
-  assert.ok(result.discoveryAudit.discoveredEvents>=5)
-  assert.ok(result.card.props.legs.every(x=>/MUESTRA REDUCIDA/.test(x.rationale)))
-  assert.ok(result.card.props.legs.every(x=>!/Probabilidad individual exploratoria/.test(x.rationale)))
-  assert.equal(result.modelProbabilities,false)
+  assert.equal(result.complete,false)
+  assert.equal(result.verifiedEvents,0)
 })
 
 test('a failed expert dossier is excluded before five-leg selection and replaced with the next real game',async()=>{
@@ -173,113 +163,4 @@ test('individual ESPN research stages cannot remain in Running forever',async()=
   const started=Date.now()
   await assert.rejects(()=>boundedTicket(new Promise(()=>{}),35),/Tiempo de investigación excedido/)
   assert.ok(Date.now()-started<500)
-})
-
-test('women Champions League enters automated ticket research after calendar discovery',async()=>{
-  const requested=[]
-  const womenOnly=async url=>{
-    const raw=String(url);requested.push(raw)
-    const source=raw.includes('/soccer/uefa.wchampions/')?
-      fixture(raw.replace('/soccer/uefa.wchampions/','/soccer/eng.1/')):{events:[]}
-    return new Response(JSON.stringify(source),{status:200})
-  }
-  const result=await evidenceTicket(5,day,'soccer',womenOnly,now)
-  assert.ok(requested.some(url=>url.includes('/soccer/uefa.wchampions/')))
-  assert.equal(result.verifiedEvents,5)
-  assert.ok(result.events.every(x=>x.league==='uefa.wchampions'))
-  assert.equal(result.priced,false)
-  assert.equal(result.card.props.combinedOdds,'No disponible')
-})
-
-test('one verified historical game per rival never invents a winner',async()=>{
-  const oneOnly=async url=>{
-    const key=String(url).match(/dates=([0-9]{8})/u)?.[1]
-    return new Response(JSON.stringify(fixture(url,
-      ['20261028','20261027'].includes(key))))
-  }
-  const result=await evidenceTicket(5,day,'soccer',oneOnly,now)
-  assert.equal(result.discoveryAudit.discoveredEvents,6)
-  assert.equal(result.verifiedEvents,0)
-  assert.equal(result.selections.length,0)
-})
-
-
-test('exact NBA+NHL day filter scans neither soccer nor unrelated sports',async()=>{
-  const urls=[]
-  const game=(id,day)=>({id,date:day+'T23:00:00Z',
-    status:{type:{state:'pre'}},competitions:[{competitors:[
-      {homeAway:'home',team:{id:'20',displayName:'Home Team'}},
-      {homeAway:'away',team:{id:'28',displayName:'Away Team'}},
-    ]}]})
-  const fetcher=async url=>{
-    const s=String(url);urls.push(s)
-    const live=s.includes('dates=20261028')&&s.includes('/scoreboard')
-    return new Response(JSON.stringify(live?{
-      events:[game(s.includes('/hockey/')?'2000':'1000','2026-10-28')]
-    }:{events:[]}),{status:200})
-  }
-  const r=await evidenceTicket(5,day,'basketball,hockey',fetcher,now,{})
-  // NBA, WNBA and NCAA are all catalogued basketball leagues. This mock
-  // creates one fixture in each plus NHL: four verified discovered events.
-  assert.equal(r.discoveryAudit.discoveredEvents,4)
-  assert.equal(r.discoveryAudit.scanCoverage.filter(x=>x.sport==='nba').length,0)
-  assert.ok(r.discoveryAudit.scanCoverage.every(x=>
-    ['basketball','hockey'].includes(x.sport)))
-  assert.ok(!urls.some(x=>x.includes('/soccer/')||x.includes('/baseball/')
-    ||x.includes('/football/')||x.includes('/tennis/')))
-  await assert.rejects(()=>evidenceTicket(5,day,
-    'basketball,hockey,evil-source',fetcher,now,{}),/Filtro de deportes/)
-})
-
-test('daily selection stays research-ranked when only a lower-ranked sixth rival has an ESPN quote',async()=>{
-  const withSixthPrice=async url=>{
-    const raw=fixture(url,true),u=String(url)
-    if(u.includes('/soccer/eng.1/')&&u.includes('dates=20261028')){
-      const sixth=raw.events.find(e=>String(e.id)==='105')
-      sixth.competitions[0].odds=[{provider:{name:'DraftKings'},
-        homeTeamOdds:{moneyLine:-140},awayTeamOdds:{moneyLine:+115},
-        drawOdds:+290}]
-    }
-    return new Response(JSON.stringify(raw),{status:200})
-  }
-  let screened=0,scoreboardLines=0
-  const preselector=async(candidates,quotes)=>{
-    screened=candidates.length
-    scoreboardLines=quotes.length
-    return quotes.map(q=>({
-      eventId:q.eventId,bookmaker:q.bookmaker,
-      market:'1x2',selection:q.selection,point:null,price:q.price,
-      home:q.home,away:q.away,time:q.timeIso,updatedAt:q.updatedAt,
-      observedAt:q.observedAt,source:'ESPN Site/Core (cartelera)',
-      sportKey:'soccer_epl',
-    }))
-  }
-  const result=await evidenceTicket(5,day,'soccer',withSixthPrice,now,{},undefined,
-    preselector)
-  assert.equal(result.discoveryAudit.discoveredEvents,6)
-  assert.equal(result.quoteScreenedCandidates,6)
-  assert.equal(screened,6,'price screening must inspect all candidates')
-  assert.equal(scoreboardLines,3,'home, away and draw are distinct observed outcomes')
-  assert.equal(result.quoteObservedCandidates,1)
-  assert.equal(result.events.length,5)
-  assert.ok(!result.events.some(e=>e.eventId==='105'),
-    'a quote alone cannot displace a higher-ranked research candidate')
-  assert.equal(result.quoteObservedCandidates,1,
-    'the observed quote is tracked independently from research ranking')
-  assert.equal(result.priced,false,'preselection is not a sportsbook ticket')
-})
-test('daily ESPN quote matching rejects a different event, future timestamp, or partial soccer 1x2',()=>{
-  const c={eventId:'105',sport:'soccer',league:'eng.1',home:'Home 105',
-    away:'Away 105',kickoff:future,pick:'home',rank:.2,level:'strong'}
-  const good={eventId:'105',market:'1x2',point:null,bookmaker:'DraftKings',
-    selection:'Home 105',home:'Home 105',away:'Away 105',price:1.8,
-    time:future,updatedAt:'No indicada por ESPN',observedAt:new Date(now).toISOString(),
-    source:'ESPN Site/Core (cartelera)',sportKey:'soccer_epl'}
-  const draw={...good,selection:'Draw',price:3.5}
-  assert.equal(matchesDailyEspnPrice(c,good,now,[good,draw]),true)
-  assert.equal(matchesDailyEspnPrice(c,{...good,eventId:'106'},now,[good,draw]),false)
-  assert.equal(matchesDailyEspnPrice(c,good,now,[good]),false)
-  assert.equal(matchesDailyEspnPrice(c,{...good,bookmaker:'ESPN proveedor #12'},now,[good,draw]),false)
-  assert.equal(matchesDailyEspnPrice(c,{...good,observedAt:new Date(now+1).toISOString()},now,[good,draw]),false)
-  assert.equal(matchesDailyEspnPrice(c,{...good,home:'Other Home'},now,[good,draw]),false)
 })

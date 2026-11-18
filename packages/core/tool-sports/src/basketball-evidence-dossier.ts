@@ -2,7 +2,6 @@
  * No fabricated scores, probabilities, athlete participation or betting recommendations.
  */
 import {type MarketOutcome} from './sports.ts'
-import {espnAthleteId} from './espn-public-roster.ts'
 import {collectDirectEspnStats,type DirectTeam} from './sports-direct-stats.ts'
 import {readHistoricalScoreboard} from './sports-historical-scoreboard.ts'
 import {isVerifiedRegularSeason} from './sports-regular-season.ts'
@@ -28,7 +27,6 @@ export type BasketballCase={
       pts:number;allowed:number;location:'home'|'away'}>;
     wins:number;losses:number;homeRecord:string;awayRecord:string;
     roster:BasketballAthlete[];teamStats:Array<{name:string;value:string}>;
-    depthChart?:DirectTeam['depthChart'];
     quintetConfirmed:boolean;sourceCoverage:DirectTeam['coverage']}>;
   matchups:BasketballDuel[];injuries:Array<{teamId:string;name:string;playerId:string;
     status:string;source:string}>;
@@ -92,17 +90,9 @@ function confirmedStarters(summary:unknown,teamId:string,roster:BasketballAthlet
   return true
 }
 function resolvePlayers(team:DirectTeam):BasketballAthlete[]{
-  // Keep EVERY player from ESPN's verified team roster. The full player
-  // list must not disappear merely because only 12 expensive stats requests
-  // are budgeted. Uninspected players retain explicit unavailable metrics.
-  const sampled=new Map(team.athletes.map(p=>[p.id,p]))
-  return team.roster.map(person=>{
-    const stats=sampled.get(person.id)
-    return{id:person.id,name:person.name,teamId:team.id,
-      position:person.position,status:stats?.status??'unavailable' as const,
-      confirmedStarter:false,stats:stats?.stats??[],
-      lastGames:stats?.lastGames??[],splits:stats?.splits??[]}
-  })
+  return team.athletes.map(x=>({id:x.id,name:x.name,teamId:team.id,
+    position:x.position,status:x.status,confirmedStarter:false,
+    stats:x.stats,lastGames:x.lastGames,splits:x.splits}))
 }
 const category=(position:string)=>{
   const p=position.toUpperCase()
@@ -167,11 +157,6 @@ function panel(d:Omit<BasketballCase,'uiBlock'>):BasketballCase['uiBlock']{
       value:p.confirmedStarter?'Titular oficial verificado':'Roster (no titular confirmado)',
       detail:p.position+' · '+p.stats.slice(0,3).map(f=>f.name+': '+f.value).join(' · ')+
         ' · recientes: '+p.lastGames.slice(0,2).map(f=>f.name+': '+f.value).join(' · ')}))))
-  add('Profundidad publicada por ESPN (NO quinteto confirmado)',
-    (['home','away'] as const).flatMap(side=>
-      (d.teams[side].depthChart??[]).slice(0,22).map(x=>({
-        label:d.teams[side].name+' · '+x.name,value:x.value,
-        detail:'Jerarquía indicativa del equipo, no prueba de presencia o titularidad'}))))
   add('Descanso y enfrentamientos',[
     {label:'Descanso local',value:d.context.restHours.home===null?'No verificado':
       d.context.restHours.home.toFixed(1)+' horas',
@@ -217,7 +202,7 @@ function panel(d:Omit<BasketballCase,'uiBlock'>):BasketballCase['uiBlock']{
 }
 export async function researchBasketballCase(league:BasketballLeague,date:string,eventId:string,
   fetcher:typeof fetch=fetch,now=Date.now(),env:NodeJS.ProcessEnv=process.env,
-  quotes:MarketOutcome[]=[],maxPlayers=20):Promise<BasketballCase>{
+  quotes:MarketOutcome[]=[],maxPlayers=15):Promise<BasketballCase>{
   if(!id(eventId))throw Error('ID de partido no verificable')
   if(!Number.isInteger(maxPlayers)||maxPlayers<1||maxPlayers>20)
     throw Error('Límite de jugadores inválido')
@@ -229,7 +214,7 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
   const root='https://site.api.espn.com/apis/site/v2/sports/basketball/'+league+'/'
   const sources=board.sources
   const day0=Date.parse(date+'T12:00:00Z')
-  const [summary,historyReport,injuriesData,newsData,players,editorial]=await Promise.all([
+  const [summary,historyReport,injuriesData,newsData,players]=await Promise.all([
     basketballRead<unknown>(root+'summary?event='+eventId,fetcher,sources,now),
     readHistoricalScoreboard(root,new Date(day0-42*86_400_000).toISOString().slice(0,10),
       new Date(day0-86_400_000).toISOString().slice(0,10),
@@ -240,8 +225,6 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
     collectDirectEspnStats('basketball',league,[
       {id:fixture.home.id,name:fixture.home.name},{id:fixture.away.id,name:fixture.away.name}
     ],fetcher,now,maxPlayers),
-    discoverEditorialResearch(fixture.home.name+' '+
-      fixture.away.name,['covers','vegasinsider'],fetcher,now),
   ])
   const history={events:historyReport.events}
   const build=(side:'home'|'away')=>{
@@ -255,7 +238,7 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
       g.filter(x=>x.pts<x.allowed).length
     return{id:team.id,name:team.name,record:team.record,lastGames:games,
       wins:win,losses:lose,homeRecord:fmt(home),awayRecord:fmt(away),
-      roster,teamStats:raw?.stats??[],depthChart:raw?.depthChart??[],quintetConfirmed:confirmedStarters(summary,team.id,roster),
+      roster,teamStats:raw?.stats??[],quintetConfirmed:confirmedStarters(summary,team.id,roster),
       sourceCoverage:raw?.coverage??[]}
   }
   const teams={home:build('home'),away:build('away')}
@@ -265,7 +248,7 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
     const side=tid===fixture.home.id?teams.home:tid===fixture.away.id?teams.away:null
     if(!side)return []
     return values(group.injuries??group.items).flatMap(y=>{
-      const entry=record(y),pid=id(espnAthleteId(entry.athlete,entry))
+      const entry=record(y),pid=id(record(entry.athlete).id??entry.athleteId)
       const athlete=side.roster.find(p=>p.id===pid)
       const status=label(entry.status??entry.description)
       return athlete&&status?[{teamId:side.id,name:athlete.name,playerId:pid,
@@ -278,6 +261,8 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
       teamKey(headline+' '+description).includes(teamKey(name))))return []
     return[{headline,published:label(n.published,60),source:'ESPN News · titular público'}]
   }).slice(0,16)
+  const editorial=await discoverEditorialResearch(fixture.home.name+' '+
+    fixture.away.name,['covers','vegasinsider'],fetcher,now)
   const headings=editorial.hits.map(x=>({headline:x.headline,publisher:x.publisher,
     date:x.publishedAt,verifiedPick:false as const}))
   const rest=(side:'home'|'away')=>{

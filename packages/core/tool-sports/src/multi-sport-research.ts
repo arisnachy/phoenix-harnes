@@ -3,7 +3,6 @@
  * This provides descriptive features, NOT calibrated odds or win probabilities.
  */
 import { getFeed, hasSportsPermission, sportsCatalog } from './sports.ts'
-import {fetchEspnScoreboardWithFallback} from './espn-nfl-weekly.ts'
 import {readHistoricalScoreboard} from './sports-historical-scoreboard.ts'
 import {isVerifiedRegularSeason} from './sports-regular-season.ts'
 
@@ -103,9 +102,10 @@ export async function researchSport(
   if(!Number.isInteger(lookbackDays)||lookbackDays<1||lookbackDays>62)
     throw Error('Ventana histórica requiere entre 1 y 62 días')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por el operador')
+  const url=(day:string)=>'https://site.api.espn.com/apis/site/v2/sports/'+
+    sport+'/'+league+'/scoreboard?dates='+day.replaceAll('-','')
   const retrieve=async(day:string):Promise<Scoreboard>=>{
-    const board=await fetchEspnScoreboardWithFallback(sport,league,
-      day.replaceAll('-',''),uri=>getFeed<Scoreboard>(uri,fetcher))
+    const board=await getFeed<Scoreboard>(url(day),fetcher)
     if(!Array.isArray(board.events))throw Error('ESPN devolvió eventos inválidos')
     return board
   }
@@ -127,10 +127,7 @@ export async function researchSport(
       (e.status?.type?.state!==undefined&&e.status.type.state!=='pre'))return false
     known.add(id)
     return true
-  })
-  // Evaluate every ESPN fixture on the chosen local day, not just the first 12.
-  // One league-level historical lookup is shared across all its matchups;
-  // request and time budgets remain inside readHistoricalScoreboard.
+  }).slice(0,12)
   if(!upcoming.length)throw Error('No hay encuentros futuros verificables')
   const starting=Date.parse(date+'T12:00:00Z')
   const first=new Date(starting-lookbackDays*86_400_000).toISOString().slice(0,10)
@@ -153,15 +150,12 @@ export async function researchSport(
     const {home,away}=sides(event)
     if(!home||!away||!pid(home)||!pid(away)||!pname(home)||!pname(away))return []
     const kickoff=Date.parse(event.date??'')
-    // A provider's premature "post" flag must never reveal a result whose
-    // scheduled date is still in the future at observation time.
-    const historyCutoff=Math.min(kickoff,now)
-    const homeForm=form(home,archived,historyCutoff,sport)
-    const awayForm=form(away,archived,historyCutoff,sport)
+    const homeForm=form(home,archived,kickoff,sport),awayForm=form(away,archived,kickoff,sport)
     const requiredGames=sport==='football'?3:5
-    // Five distinct games (NFL three) support the richer descriptive tier,
-    // but fewer verified results still inform explicitly conditional research.
-    // A shortfall never removes the verified future fixture itself.
+    // Research reports a preliminary minimum, while the automatic-ticket
+    // promotion layer requires five distinct games per team (NFL: three).
+    // Coverage shortfalls are recorded, but do not invalidate a sufficient
+    // sample of DISTINCT verified matches for BOTH teams.
     const sufficient=archive.status!=='unavailable'&&
       homeForm.completedGames>=requiredGames&&awayForm.completedGames>=requiredGames
     const result:ResearchMatch={eventId:String(event.id??''),date:event.date??'',sport,league,
@@ -169,9 +163,7 @@ export async function researchSport(
       home:homeForm,away:awayForm,source:'ESPN Site API',evidence:sufficient?'descriptive':'insufficient',
       coverageDays:lookbackDays,successfulDays,
       limitations:[
-        ...(!sufficient?['Historial parcial '+homeForm.completedGames+'/' +
-          awayForm.completedGames+' partidos distintos; objetivo descriptivo '+
-          requiredGames+' por rival'+
+        ...(!sufficient?['Muestra inferior a '+requiredGames+' partidos distintos por equipo'+
           ((sport==='basketball'||sport==='football')?' de temporada regular verificada':'')]:[]),
         ...(archive.status!=='verified'?['Cobertura ESPN parcial: '+archive.explanation]:[]),
         'Lesiones/ausencias y alineaciones pendientes de verificación',

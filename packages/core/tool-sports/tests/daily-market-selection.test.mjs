@@ -41,12 +41,9 @@ test('no fabricated completeness when only conditional research remains',()=>{
   assert.equal(result.conditionalLegs,2)
   assert.equal(result.completed,false)
 })
-test('mixed provider books stay isolated instead of aborting a valid ESPN research draft',()=>{
-  const result=selectDailyResearchedMarkets([
-    review(11),review(12,'h2h','descriptive-support',2,'Book B')],5)
-  assert.equal(result.selected.length,1)
-  assert.equal(new Set(result.selected.map(x=>x.candidate.bookmaker)).size,1)
-  assert.equal(result.completed,false)
+test('rejects mixed bookmakers rather than creating a false commercial parlay',()=>{
+  assert.throws(()=>selectDailyResearchedMarkets([
+    review(11),review(12,'h2h','descriptive-support',2,'Book B')],5),/casas/)
 })
 test('never invents more games than the actual slate and validates goal',()=>{
   const result=selectDailyResearchedMarkets([review(1),review(1,'spreads'),review(2)],6)
@@ -66,13 +63,13 @@ test('independently positive market beats negative-value descriptive favorite',(
   assert.equal(result.selected[0].candidate.market,'totals')
 })
 
-test('research ranking beats a stronger market favorite when both have equivalent evidence status',()=>{
+test('equally researched moneyline prioritizes stronger market favorite over raw ranking',()=>{
   const low={...review(21,'h2h','descriptive-support',99),
     selectedOutcome:{selection:'Home 21',line:null,decimalOdds:1.91,noVigShare:.52}}
   const high={...review(22,'h2h','descriptive-support',1),
     selectedOutcome:{selection:'Home 22',line:null,decimalOdds:1.19,noVigShare:.84}}
   const r=selectDailyResearchedMarkets([low,high],5)
-  assert.equal(r.selected[0].candidate.espnEventId,'21')
+  assert.equal(r.selected[0].candidate.espnEventId,'22')
 })
 
 test('daily selection excludes unavailable, contraindicated and negative-value legs before ranking',()=>{
@@ -97,35 +94,4 @@ test('disqualified quotes from unrelated bookmakers cannot invalidate an otherwi
   const invalid={...review(3,'h2h','contraindicated',88,'Other Book')}
   const chosen=selectDailyResearchedMarkets([review(1),review(2),invalid],5)
   assert.equal(chosen.selected.length,2)
-})
-
-test('automatically replenishes a disqualified leg with the next researched game',()=>{
-  const rejected={...review(1,'h2h','contraindicated',99)}
-  const candidates=[rejected,...[2,3,4,5,6,7].map(n=>review(n))]
-  const result=selectDailyResearchedMarkets(candidates,5)
-  assert.equal(result.selected.length,5)
-  assert.equal(result.supportedLegs,5)
-  assert.equal(result.selectedBookmaker,'Book A')
-  assert.equal(result.completed,true)
-  assert.ok(result.selected.every(x=>x.candidate.espnEventId!=='1'))
-  assert.ok(result.selected.some(x=>x.candidate.espnEventId==='6'))
-})
-test('five verified selections from one provider survive two opposing auxiliary houses',()=>{
-  const five=[1,2,3,4,5].map(n=>review(n,'h2h','descriptive-support',2,'ESPN · DraftKings'))
-  const other=[review(11,'h2h','descriptive-support',4,'Bet B'),
-    review(12,'h2h','descriptive-support',5,'Bet C')]
-  const result=selectDailyResearchedMarkets([...five,...other],5)
-  assert.equal(result.selectedBookmaker,'ESPN · DraftKings')
-  assert.equal(result.selected.length,5)
-  assert.equal(result.completed,true)
-})
-
-test('older ESPN quote can be investigated but not complete final supported ticket',()=>{
-  const reviews=[1,2,3,4,5].map(n=>({
-    ...review(n),candidate:{...candidate(n),requiresRecheck:n===1},
-  }))
-  const result=selectDailyResearchedMarkets(reviews,5)
-  assert.equal(result.selected.length,5)
-  assert.equal(result.supportedLegs,4)
-  assert.equal(result.completed,false)
 })

@@ -7,8 +7,6 @@
  * Failures are reported per endpoint, never converted into fictional stats.
  */
 import {getFeed,sportsCatalog} from './sports.ts'
-import {recoverEspnRoster,type EspnRosterPerson} from './espn-public-roster.ts'
-import {parseEspnGameLog,parseEspnSplits,parseEspnVenueSplitsFromGameLog} from './espn-player-history.ts'
 
 type Obj=Record<string,unknown>
 const obj=(x:unknown):Obj=>x!==null&&typeof x==='object'&&!Array.isArray(x)?x as Obj:{}
@@ -22,20 +20,22 @@ export type DirectAthlete={
   id:string;name:string;teamId:string;position:string;jersey:string;headshot:string|null
   stats:DirectMetric[];lastGames:DirectMetric[];splits:DirectMetric[]
   status:'verified'|'partial'|'unavailable';verifiedSources:string[]
-  /** Per-athlete fetch state; empty 200 differs from unavailable endpoint. */
-  coverage:Array<{endpoint:string;url:string;status:'available'|'empty'|'unavailable'}>
 }
 export type DirectTeam={
   id:string;name:string;athleteCount:number;selectedCount:number
   stats:DirectMetric[];depthChart:DirectMetric[];athletes:DirectAthlete[]
-  /** Entire verified team roster; costly stats are fetched for a bounded subset. */
-  roster:EspnRosterPerson[]
   coverage:Array<{endpoint:string;status:'available'|'empty'|'unavailable'}>
 }
 export type DirectDossier={
   source:'ESPN public Site/Common v3';checkedAt:string;sport:string;league:string
   teams:DirectTeam[];requests:number;errors:number
   limitations:string[]
+}
+const safePhoto=(x:unknown)=>{
+  const raw=word(x,480)
+  try{const url=new URL(raw);return url.protocol==='https:'&&
+    url.hostname==='a.espncdn.com'&&!url.username&&!url.password?url.toString():null}
+  catch{return null}
 }
 const extract=(raw:unknown,max=10):DirectMetric[]=>{
   const found:DirectMetric[]=[]
@@ -87,47 +87,51 @@ const extract=(raw:unknown,max=10):DirectMetric[]=>{
   }
   return found
 }
-/** ESPN depth charts are positional player tables, NOT numeric team statistics.
- * Keep each rank and name explicitly; ranks are projected depth, never starters.
- * Site API may publish depthchart (NBA) or depthCharts (NFL).
+/** A gamelog is a sequence of event-level observations, not generic
+ * season totals. Preserve the event/date and the provider's stat labels.
+ * @param raw - ESPN Common v3 athlete gamelog response.
+ * @returns Up to eight actual event stat rows with source labels.
  */
-export const parseEspnDepthChart=(raw:unknown,max=60):DirectMetric[]=>{
-  const root=obj(raw),rows:DirectMetric[]=[],seen=new Set<string>()
-  const cap=Math.max(1,Math.min(100,max))
-  const charts=[...arr(root.depthCharts),...arr(root.depthcharts),
-    ...arr(root.depthchart),...arr(root.depthChart)]
-  if(root.depthchart&&!Array.isArray(root.depthchart))charts.push(root.depthchart)
-  if(root.depthChart&&!Array.isArray(root.depthChart))charts.push(root.depthChart)
-  if(!charts.length)charts.push(root)
-  const explore=(data:unknown,depth:number):void=>{
-    if(depth>3||rows.length>=cap)return
-    const chart=obj(data)
-    const positions=chart.positions
-    const slots=Array.isArray(positions)?
-      positions.map((v,i):[string,unknown]=>[String(i),v]):
-      Object.entries(obj(positions))
-    for(const [key,rawSlot] of slots){
-      const slot=obj(rawSlot),p=obj(slot.position)
-      const position=word(p.abbreviation??p.name??slot.abbreviation??
-        slot.displayName??key,35)
-      const athletes=arr(slot.athletes??slot.players??slot.items)
-      for(const [index,value] of athletes.entries()){
-        const item=obj(value),athlete=obj(item.athlete??item.player??value)
-        const name=word(athlete.displayName??athlete.fullName??athlete.name,90)
-        const rank=word(item.rank??item.depth??index+1,5)
-        const label=(position+(rank?' #'+rank:'')).slice(0,45)
-        const unique=label+'|'+name
-        if(name&&!seen.has(unique)&&rows.length<cap){
-          seen.add(unique);rows.push({name:label,value:name})
-        }
-      }
+function gameLog(raw:unknown):DirectMetric[]{
+  const root=obj(raw),events=obj(root.events)
+  const results:DirectMetric[]=[]
+  const queue:Array<{v:unknown;depth:number}>=[{v:raw,depth:0}]
+  let examined=0
+  while(queue.length&&examined++<70&&results.length<8){
+    const next=queue.shift()!,node=obj(next.v),labels=arr(node.labels)
+    for(const event of arr(node.events).slice(0,12)){
+      const e=obj(event),values=arr(e.stats),eventId=id(e.eventId)
+      if(!eventId||!values.length||labels.length!==values.length)continue
+      const game=obj(events[eventId])
+      const title=word(game.shortName??game.name??e.displayName??eventId,90)
+      const facts=labels.slice(0,6).map((label,i)=>
+        word(label,18)+': '+word(values[i],18)).join(' · ')
+      if(title&&facts)results.push({name:title,value:facts.slice(0,175)})
+      if(results.length>=8)break
     }
-    for(const child of arr(chart.items))explore(child,depth+1)
-    for(const child of arr(chart.depthCharts??chart.depthcharts))explore(child,depth+1)
+    if(next.depth>=4)continue
+    for(const field of ['seasonTypes','categories','tables'])
+      for(const child of arr(node[field]).slice(0,15))queue.push({v:child,depth:next.depth+1})
   }
-  for(const chart of charts)explore(chart,0)
-  // Older payloads can contain an explicit displayName/displayValue table.
-  return rows.length?rows:extract(raw,10)
+  // No event-specific observations means no verified gamelog; season averages
+  // MUST NOT be relabeled as last games.
+  return results
+}
+function rosterRows(raw:unknown):Array<{id:string;name:string;position:string;jersey:string;headshot:string|null}>{
+  const listed=arr(obj(raw).athletes).flatMap(group=>{
+    const r=obj(group)
+    return arr(r.items).length?arr(r.items):[group]
+  })
+  const seen=new Set<string>()
+  return listed.flatMap(entry=>{
+    const row=obj(entry),athlete=obj(row.athlete),person=Object.keys(athlete).length?athlete:row
+    const athleteId=id(person.id??row.id),name=word(person.displayName??person.fullName??person.name,90)
+    if(!athleteId||!name||seen.has(athleteId))return []
+    seen.add(athleteId)
+    return [{id:athleteId,name,position:word(obj(person.position).abbreviation??
+      obj(person.position).displayName??person.position,35),
+      jersey:word(person.jersey,8),headshot:safePhoto(obj(person.headshot).href??person.headshot)}]
+  }).slice(0,55)
 }
 type Task={url:string;destination:(value:unknown|null)=>void;type:string}
 const cache=new Map<string,{at:number;value:unknown|null}>()
@@ -163,13 +167,13 @@ export async function collectDirectEspnStats(
     throw Error('IDs ESPN o presupuesto de atletas inválidos')
   const site='https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+'/'
   const web='https://site.web.api.espn.com/apis/common/v3/sports/'+sport+'/'+league+'/'
-  const result:DirectTeam[]=[],jobs:Task[]=[],splitFallback=new Map<DirectAthlete,unknown>()
+  const result:DirectTeam[]=[],jobs:Task[]=[]
   let requests=0,errors=0
   const add=(url:string,type:string,destination:(value:unknown|null)=>void)=>
     jobs.push({url,type,destination})
-  await Promise.all(teams.map(async t=>{
+  for(const t of teams){
     const team:DirectTeam={id:t.id,name:word(t.name),athleteCount:0,
-      selectedCount:0,stats:[],depthChart:[],athletes:[],roster:[],coverage:[]}
+      selectedCount:0,stats:[],depthChart:[],athletes:[],coverage:[]}
     result.push(team)
     const root=site+'teams/'+t.id+'/'
     add(root+'statistics','team_statistics',value=>{
@@ -184,40 +188,16 @@ export async function collectDirectEspnStats(
         status:value===null?'unavailable':team.stats.length?'available':'empty'})
     })
     add(root+'depthcharts','team_depthcharts',value=>{
-      team.depthChart=parseEspnDepthChart(value,60)
+      team.depthChart=extract(value,10)
       team.coverage.push({endpoint:'team_depthcharts',
         status:value===null?'unavailable':team.depthChart.length?'available':'empty'})
-      if(league==='nba'&&!team.depthChart.length){
-        // Depth-chart is not a confirmed starting five. Try ESPN Core for
-        // the SAME verified team/season; an unresolved $ref is not coverage.
-        const observed=new Date(now)
-        const season=observed.getUTCFullYear()+(observed.getUTCMonth()>=6?1:0)
-        const backup='https://sports.core.api.espn.com/v2/sports/basketball/'+
-          'leagues/nba/seasons/'+season+'/teams/'+t.id+'/depthcharts'
-        add(backup,'team_depthcharts_core',core=>{
-          const structured=parseEspnDepthChart(core,60)
-          const found=structured.length?structured:extract(core,12)
-          if(found.length)team.depthChart=found
-          team.coverage.push({endpoint:'team_depthcharts_core',
-            status:core===null?'unavailable':found.length?'available':'empty'})
-        })
-      }
     })
-    // Resolve only the verified scoreboard team ID. When ESPN returns an empty
-    // numeric roster, ask the SAME team's metadata for its abbreviation and
-    // retry /teams/{abbreviation}/roster (NBA, NHL, NFL, MLB, WNBA, soccer).
-    const recovered=await recoverEspnRoster(sport,league,t,async url=>{
-      const value=await fetchBounded(url,fetcher,now)
-      requests++
-      if(value===null)errors++
-      return value
-    })
-    const people=recovered.people
-    team.roster=[...people]
+    // Rosters are fetched first: unverified athlete IDs never reach Web v3.
+    const roster=await fetchBounded(root+'roster',fetcher,now);requests++
+    const people=rosterRows(roster)
     team.athleteCount=people.length
-    for(const [i,attempt] of recovered.attempts.entries())
-      team.coverage.push({endpoint:i===0?'team_roster':attempt.url,
-        status:attempt.status})
+    team.coverage.push({endpoint:'team_roster',status:roster===null?'unavailable':
+      people.length?'available':'empty'})
     // Goalies/pitchers/QBs before generic roster order; do NOT call them
     // confirmed starters solely because of position.
     const priority=(a:typeof people[number])=>
@@ -227,7 +207,7 @@ export async function collectDirectEspnStats(
     team.selectedCount=chosen.length
     for(const person of chosen){
       const athlete:DirectAthlete={...person,teamId:t.id,stats:[],lastGames:[],
-        splits:[],status:'unavailable',verifiedSources:[],coverage:[]}
+        splits:[],status:'unavailable',verifiedSources:[]}
       team.athletes.push(athlete)
       const uri=web+'athletes/'+person.id+'/'
       // Avoid 60-100 redundant player endpoints when ESPN returns empty
@@ -235,81 +215,31 @@ export async function collectDirectEspnStats(
       // for athletes whose first probe yields actual records or the top three
       // whose gamelog may exist independently of season stats.
       const early=team.athletes.length<=3
-      // The explicit ESPN season is a safety-net for incomplete Common-v3
-      // defaults. NBA and NHL use season-ending years; summer WNBA uses the
-      // calendar year. A prior season is NOT silently labeled current form.
-      const observed=new Date(now)
-      const calendarYear=observed.getUTCFullYear()
-      const seasonYear=calendarYear+
-        (((league==='nba'||league==='nhl')&&observed.getUTCMonth()>=6)?1:0)
-      const explicitSeason='?season='+seasonYear
-      const recorded=(path:string,value:unknown|null,found:number)=>
-        athlete.coverage.push({endpoint:path,url:uri+path,
-          status:value===null?'unavailable':found?'available':'empty'})
       add(uri+'stats','athlete_stats',value=>{
         athlete.stats=extract(value,12)
-        recorded('stats',value,athlete.stats.length)
         if(athlete.stats.length)athlete.verifiedSources.push('stats')
-        // NHL Common v3 frequently replies 404 for gamelog. NHL's official
-        // player/{NHL-id}/game-log endpoint is handled by investigateNhl()
-        // using the NHL roster namespace; never pass an ESPN ID there.
-        if(league!=='nhl'&&(athlete.stats.length||early||priority(person)===0)){
+        if(athlete.stats.length||early||priority(person)===0){
           add(uri+'gamelog','athlete_gamelog',data=>{
-            athlete.lastGames=parseEspnGameLog(data,now,20)
-            recorded('gamelog',data,athlete.lastGames.length)
-            if(athlete.lastGames.length){
-              athlete.verifiedSources.push('gamelog')
-              splitFallback.set(athlete,data)
-            }
-            else if(early&&athlete.stats.length) {
-              // Retry only a bounded roster-verified sample. Never use season
-              // averages as a substitute for event-specific player histories.
-              add(uri+'gamelog'+explicitSeason,'athlete_gamelog_season',season=>{
-                athlete.lastGames=parseEspnGameLog(season,now,20)
-                recorded('gamelog'+explicitSeason,season,athlete.lastGames.length)
-                if(athlete.lastGames.length){
-                  athlete.verifiedSources.push('gamelog:season='+seasonYear)
-                  splitFallback.set(athlete,season)
-                }
-              })
-            }
+            athlete.lastGames=gameLog(data)
+            if(athlete.lastGames.length)athlete.verifiedSources.push('gamelog')
           })
         }
-        // Common v3 defaults may silently select last season. Always request
-        // the season matching the date first; then try the unscoped feed only
-        // as a historical fallback when the season-scoped rows are absent.
-        // Do not issue two split requests for an empty season-stat probe.
-        // ESPN otherwise amplifies a blank roster into redundant traffic.
-        if(athlete.stats.length&&(priority(person)===0||early)){
-          add(uri+'splits'+explicitSeason,'athlete_splits_season',season=>{
-            const scoped=parseEspnSplits(season,48)
-            const filter=arr(obj(season).filters).map(obj)
-              .find(v=>v.name==='season')
-            const published=word(filter?.value,8)
-            const correct=!published||published===String(seasonYear)
-            athlete.splits=correct?scoped:[]
-            recorded('splits'+explicitSeason,season,athlete.splits.length)
-            if(athlete.splits.length)
-              athlete.verifiedSources.push('splits:season='+seasonYear)
-            else add(uri+'splits','athlete_splits',data=>{
-              athlete.splits=parseEspnSplits(data,48)
-              recorded('splits',data,athlete.splits.length)
-              const published=word(arr(obj(data).filters).map(obj)
-                .find(v=>v.name==='season')?.value,8)
-              if(athlete.splits.length)
-                athlete.verifiedSources.push(published&&published!==String(seasonYear)?
-                  'splits:historical-season='+published:'splits')
-            })
+        // ESPN may publish splits even when season totals are empty. Probe
+        // the first three roster-verified athletes, but never all 30+ players
+        // solely because a provider returned an empty stats payload.
+        if(athlete.stats.length&&(priority(person)===0||early)||early){
+          add(uri+'splits','athlete_splits',data=>{
+            athlete.splits=extract(data,6)
+            if(athlete.splits.length)athlete.verifiedSources.push('splits')
           })
         }
       })
     }
-  }))
-  // Six bounded parallel first-party GETs shorten NBA all-player collection;
-  // per-endpoint deadlines, roster ID checks and provider-failure tracking
-  // remain intact. Do not run the dozens of gamelogs serially after a 45s gate.
+  }
+  // Strict maximum of five concurrent first-party GET operations, no arbitrary
+  // redirects or URLs provided by the model.
   let cursor=0
-  await Promise.all(Array.from({length:Math.min(6,jobs.length)},async()=>{
+  await Promise.all(Array.from({length:Math.min(3,jobs.length)},async()=>{
     while(cursor<jobs.length){
       const task=jobs[cursor++]!
       const response=await fetchBounded(task.url,fetcher,now)
@@ -319,18 +249,6 @@ export async function collectDirectEspnStats(
     }
   }))
   for(const team of result)for(const person of team.athletes){
-    const historical=person.verifiedSources.some(x=>x.startsWith('splits:historical-season='))
-    if((!person.splits.length||historical)&&splitFallback.has(person)){
-      const observed=parseEspnVenueSplitsFromGameLog(splitFallback.get(person),now)
-      if(observed.length){
-        person.splits=observed
-        if(historical)person.verifiedSources=person.verifiedSources.filter(x=>
-          !x.startsWith('splits:historical-season='))
-        person.verifiedSources.push('splits:venue-tagged-gamelog')
-        person.coverage.push({endpoint:'splits_from_gamelog',
-          url:'ESPN game log (observed homeAway/atVs)',status:'available'})
-      }
-    }
     const count=person.verifiedSources.length
     person.status=count===0?'unavailable':count>=2?'verified':'partial'
   }

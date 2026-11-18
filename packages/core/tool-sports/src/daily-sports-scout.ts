@@ -1,43 +1,25 @@
 /** Bounded daily multi-sport discovery. Scheduling availability is NOT a prediction. */
 import { getFeed,hasSportsPermission,sportsCatalog } from './sports.ts'
-import {fetchEspnScoreboardWithFallback} from './espn-nfl-weekly.ts'
-import {normalizeEspnMarkets,type EspnMarketQuote} from './espn-odds.ts'
 
 type Side = { homeAway?:string, team?:{id?:string|number,displayName?:string,name?:string},
   athlete?:{id?:string|number,displayName?:string,name?:string} }
 type Event = { id?:string|number, date?:string,
   status?:{type?:{state?:string}},
-  competitions?:Array<{competitors?:Side[];odds?:unknown}> }
+  competitions?:Array<{competitors?:Side[]}> }
 type Board = { events?:Event[] }
-/** Cache is scoped to a transport, exact league and UTC partition; never
- * promote yesterday's fixtures or a different adapter into live ESPN data. */
-const scoreboardCache=new WeakMap<typeof fetch,Map<string,{at:number;board:Board}>>()
-const SCOREBOARD_CACHE_MS=5*60_000
-
 type Schedule = {sport:string,league:string}
 const schedule:Schedule[]=[
   {sport:'basketball',league:'nba'}, {sport:'basketball',league:'wnba'},
-  {sport:'basketball',league:'mens-college-basketball'},
-  {sport:'baseball',league:'mlb'}, {sport:'baseball',league:'dominican-winter-league'},
-  {sport:'football',league:'nfl'}, {sport:'football',league:'college-football'},
-  {sport:'hockey',league:'nhl'},
-  {sport:'tennis',league:'atp'}, {sport:'tennis',league:'wta'},
-  ...(sportsCatalog.soccer??[]).map(league=>({sport:'soccer',league})),
+  {sport:'baseball',league:'mlb'}, {sport:'football',league:'nfl'},
+  {sport:'hockey',league:'nhl'}, {sport:'tennis',league:'atp'},
+  {sport:'tennis',league:'wta'}, {sport:'soccer',league:'eng.1'},
+  {sport:'soccer',league:'esp.1'}, {sport:'soccer',league:'mex.1'},
+  {sport:'soccer',league:'usa.1'}, {sport:'soccer',league:'uefa.champions'},
+  {sport:'soccer',league:'ger.1'}, {sport:'soccer',league:'ita.1'},
+  {sport:'soccer',league:'fra.1'}, {sport:'soccer',league:'por.1'},
+  {sport:'soccer',league:'ned.1'}, {sport:'soccer',league:'bra.1'},
+  {sport:'soccer',league:'arg.1'}, {sport:'soccer',league:'uefa.europa'},
 ]
-/** Accept user-facing league names without broadening an explicit league selection. */
-function normalizeDailySelection(value:string):{sport:string;league:string|null}|null{
-  const input=value.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
-    .trim().toLowerCase().replace(/\s+/gu,' ')
-  const sportAlias:Readonly<Record<string,string>>={
-    futbol:'soccer',futbolamericano:'football','futbol americano':'football',
-    basquetbol:'basketball',baloncesto:'basketball',beisbol:'baseball',
-    tenis:'tennis','ice hockey':'hockey',
-  }
-  const name=sportAlias[input]??input
-  if(schedule.some(item=>item.sport===name))return{sport:name,league:null}
-  const league=schedule.find(item=>item.league===name)
-  return league?{sport:league.sport,league:league.league}:null
-}
 const dateValid=(s:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(s)
   &&Number.isFinite(Date.parse(s+'T00:00:00Z'))
   &&new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s
@@ -74,13 +56,12 @@ type DailySportsEvent = {
 type DailySportsCoverage = {
   sport:string,league:string,status:'available'|'empty'|'unavailable',
   futureEvents:number,reason:string
-  rawEvents:number;pregameOnDate:number;failedPartitions:number
 }
 
 /**
  * Scan a limited set of known ESPN leagues cheaply before expensive matchup research.
  * @param date - Target date, YYYY-MM-DD in the ESPN request.
- * @param limit - Maximum diverse future fixtures to return, from 1 to 512.
+ * @param limit - Maximum diverse future fixtures to return, from 1 to 36.
  * @param fetcher - Injected HTTP adapter for deterministic tests.
  * @param now - Observation time; only fixtures with kickoffs after now survive.
  * @param env - Provider permissions, including ESPN opt-out.
@@ -89,57 +70,22 @@ type DailySportsCoverage = {
 export async function scoutDailySports(
   date=dayNow(),limit=30,fetcher:typeof fetch=fetch,
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
-  onlySports:readonly string[]|undefined=undefined,
 ):Promise<{date:string,checkedAt:string,events:DailySportsEvent[],
-  totalEligible:number;truncated:boolean;eligibleBySport:Record<string,number>;
-  /** Fresh, named ESPN scoreboard moneylines across the full discovered slate. */
-  espnQuotes:EspnMarketQuote[];
-  coverage:DailySportsCoverage[],
+  totalEligible:number,coverage:DailySportsCoverage[],
   diagnostics:{elapsedMs:number;requestTimeoutMs:number;requestedPartitions:number;
-    partialLeagues:number;unavailableLeagues:number;cachedPartitions:number},
+    partialLeagues:number;unavailableLeagues:number},
   warning:string}>{
   if(!dateValid(date))throw Error('Fecha inválida, usar AAAA-MM-DD')
-  if(!Number.isInteger(limit)||limit<1||limit>512)throw Error('Límite de 1 a 512 eventos')
+  if(!Number.isInteger(limit)||limit<1||limit>36)throw Error('Límite de 1 a 36 eventos')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración')
-  const requested=onlySports?.map(value=>typeof value==='string'?
-    normalizeDailySelection(value):null)
-  if(onlySports!==undefined&&(!Array.isArray(onlySports)||!onlySports.length||
-    requested?.some(item=>item===null)))
-    throw Error('Deportes solicitados fuera del calendario conocido')
-  const scanPlan=requested? schedule.filter(item=>requested.some(selected=>
-    selected?.sport===item.sport&&(selected.league===null||selected.league===item.league))):schedule
   const startedAt=Date.now()
-  // Only the requested sports are scanned when known; keep UTC partitions for local late games.
+  // 20 leagues x 2 UTC partitions; avoid serial waits through five long waves.
   // Optional shorter budget is useful for operators and deterministic tests.
   const requestedMs=Number(env.PHOENIX_SPORTS_SCAN_TIMEOUT_MS)
   const requestTimeoutMs=Number.isInteger(requestedMs)&&requestedMs>=30&&requestedMs<=6000
     ?requestedMs:4_500
-  const cache=scoreboardCache.get(fetcher)??new Map<string,{at:number;board:Board}>()
-  scoreboardCache.set(fetcher,cache)
-  const readPartition=async(item:Schedule,partition:string)=>{
-    const key=item.sport+'|'+item.league+'|'+partition
-    try{
-      const board=await settleWithin(fetchEspnScoreboardWithFallback(
-        item.sport,item.league,partition,
-        uri=>getFeed<Board>(uri,fetcher)),requestTimeoutMs)
-      if(Array.isArray(board.events)){
-        // Keep only a bounded set of recent, same-provider partitions.
-        if(cache.size>=100)cache.delete(cache.keys().next().value!)
-        cache.set(key,{at:now,board})
-      }
-      return{board,cached:false}
-    }catch(error){
-      const prior=cache.get(key)
-      if(prior&&now>=prior.at&&now-prior.at<=SCOREBOARD_CACHE_MS)
-        return{board:prior.board,cached:true}
-      throw error
-    }
-  }
   const coverage:DailySportsCoverage[]=[]
   const all:DailySportsEvent[]=[]
-  const espnQuotes:EspnMarketQuote[]=[]
-  const observedOdds=new Set<string>()
-  let cachedPartitions=0
   const seen=new Set<string>()
   // The target is a Santo Domingo calendar day (UTC-4). Late local games
   // can fall on the following UTC date, so query both ESPN date partitions.
@@ -150,39 +96,34 @@ export async function scoutDailySports(
   // Eight leagues concurrently; both date partitions are independent and
   // cannot block the other. Four-digit league groups and timeout budget remain
   // visible in diagnostics instead of silently returning an empty slate.
-  for(let offset=0;offset<scanPlan.length;offset+=8){
-    const batch=scanPlan.slice(offset,offset+8)
+  for(let offset=0;offset<schedule.length;offset+=8){
+    const batch=schedule.slice(offset,offset+8)
     const reports=await Promise.allSettled(batch.map(async item=>{
       if(!sportsCatalog[item.sport]?.includes(item.league))throw Error('Liga fuera del catálogo')
-      return Promise.allSettled(partitions.map(day=>readPartition(item,day)))
+      return Promise.allSettled(partitions.map(day=>settleWithin(getFeed<Board>(
+        'https://site.api.espn.com/apis/site/v2/sports/'
+        +item.sport+'/'+item.league+'/scoreboard?dates='+day,fetcher),
+        requestTimeoutMs)))
     }))
     for(let i=0;i<batch.length;i++){
       const item=batch[i]
       const report=reports[i]
       if(!item||!report)continue
       const partitionsRead=report.status==='fulfilled'?report.value:[]
-      const failedPartitions=partitionsRead.filter(x=>x.status==='rejected').length+
-        (report.status==='rejected'?partitions.length:0)
-      const boards=partitionsRead.filter((partition):partition is PromiseFulfilledResult<{
-        board:Board;cached:boolean
-      }>=>
-        partition.status==='fulfilled'&&Array.isArray(partition.value.board.events))
-      cachedPartitions+=boards.filter(board=>board.value.cached).length
+      const boards=partitionsRead.filter((partition):partition is PromiseFulfilledResult<Board>=>
+        partition.status==='fulfilled'&&Array.isArray(partition.value.events))
       if(!boards.length){
         coverage.push({...item,status:'unavailable',futureEvents:0,
-          rawEvents:0,pregameOnDate:0,failedPartitions,
           reason:'Sin cartelera verificable desde ESPN en ambos días UTC'})
         continue
       }
-      let valid=0,rawEvents=0,pregameOnDate=0
-      for(const board of boards)for(const event of (board.value.board.events??[]).slice(0,512)){
-        rawEvents++
+      let valid=0
+      for(const board of boards)for(const event of (board.value.events??[]).slice(0,150)){
         if(event.status?.type?.state!=='pre')continue
         const at=Date.parse(event.date??'')
         const id=String(event.id??'')
-        if(!Number.isFinite(at)||at<=now||localDay(new Date(at))!==date)continue
-        pregameOnDate++
-        if(!/^\d{1,20}$/u.test(id))continue
+        if(!Number.isFinite(at)||at<=now||!/^\d{1,20}$/u.test(id)
+          ||localDay(new Date(at))!==date)continue
         const sides=event.competitions?.[0]?.competitors
         if(!Array.isArray(sides))continue
         const home=participant(sides.find(s=>s.homeAway==='home'))
@@ -194,42 +135,11 @@ export async function scoutDailySports(
         valid++
         all.push({...item,eventId:id,kickoff:new Date(at).toISOString(),
           home,away,source:'ESPN Site API',status:'scheduled'})
-        // The same fresh scoreboard read can contain named bookmaker quotes.
-        // Do not promote fallback CACHE prices, guesses or unknown providers.
-        const odds=event.competitions?.[0]?.odds
-        if(!board.value.cached&&Array.isArray(odds)&&odds.length){
-          // Provider arrays may contain null or malformed entries. A broken
-          // bookmaker object cannot invalidate a real official game listing.
-          const entries=odds.filter(x=>x!==null&&typeof x==='object'&&
-            !Array.isArray(x))
-          let current:EspnMarketQuote[]=[]
-          try{
-            current=normalizeEspnMarkets(
-              event as Parameters<typeof normalizeEspnMarkets>[0],
-              entries as Parameters<typeof normalizeEspnMarkets>[1],{now})
-          }catch{current=[]}
-          for(const q of current){
-            if(q.market!=='h2h'||q.point!==null||q.eventId!==id||
-              !q.bookmaker.trim()||q.bookmaker.startsWith('ESPN proveedor #')||
-              !Number.isFinite(q.price)||q.price<=1||q.price>=1000||
-              Date.parse(q.updatedAt)>now+5*60_000)continue
-            const unique=[item.sport,item.league,q.eventId,q.bookmaker,
-              q.selection,q.price].join('|')
-            if(observedOdds.has(unique))continue
-            observedOdds.add(unique)
-            espnQuotes.push({...q,observedAt:new Date(now).toISOString(),
-              endpointSource:'scoreboard'})
-          }
-        }
       }
       const full=boards.length===partitions.length
-      const cached=boards.some(x=>x.value.cached)
-      coverage.push({...item,status:valid?'available':full&&!cached?'empty':'unavailable',
-        futureEvents:valid,rawEvents,pregameOnDate,failedPartitions,reason:cached?
-          'Cobertura parcial: partición recuperada de caché local menor a 5 minutos; requiere revalidación en ESPN':
-          full?(valid?'Participantes y evento futuro confirmados':
-            'Sin futuros verificables: '+rawEvents+' registros ESPN; '+
-            pregameOnDate+' prepartido del día local'):
+      coverage.push({...item,status:valid?'available':full?'empty':'unavailable',
+        futureEvents:valid,reason:full?
+          (valid?'Participantes y evento futuro confirmados':'Sin futuros verificables'):
           'Cobertura parcial: falta una partición UTC; los partidos recuperados sí se conservan'})
     }
   }
@@ -251,19 +161,12 @@ export async function scoutDailySports(
     }
     if(!progressed)break
   }
-  const returned=new Set(events.map(e=>e.eventId+'|'+e.home.name+'|'+e.away.name))
-  const visibleQuotes=espnQuotes.filter(q=>returned.has(q.eventId+'|'+q.home+'|'+q.away))
-  return{date,checkedAt:new Date(now).toISOString(),events,
-    espnQuotes:visibleQuotes,totalEligible:all.length,
-    truncated:events.length<all.length,
-    eligibleBySport:Object.fromEntries(sports.map(sport=>[sport,all.filter(event=>event.sport===sport).length])),
+  return{date,checkedAt:new Date(now).toISOString(),events,totalEligible:all.length,
     coverage,diagnostics:{elapsedMs:Date.now()-startedAt,requestTimeoutMs,
-      requestedPartitions:scanPlan.length*partitions.length,
+      requestedPartitions:schedule.length*partitions.length,
       partialLeagues:coverage.filter(x=>x.reason.startsWith('Cobertura parcial')).length,
-      unavailableLeagues:coverage.filter(x=>x.status==='unavailable').length,
-      cachedPartitions},
+      unavailableLeagues:coverage.filter(x=>x.status==='unavailable').length},
     warning:'Lista de partidos verificables, NO ranking de ganancias ni probabilidades. '
-      +'Se inspeccionan todos los eventos ESPN accesibles hasta el límite visible; '
-      +'las ligas sin respuesta y los recortes se informan por separado. '
-      +'Las cotizaciones observadas en ESPN no prueban aceptación en la casa.'}
+      +'Investiga estadísticas, bajas, titulares, noticias y cuotas por mercado solo para '
+      +'los candidatos priorizados. Sin precio fechado no hay selección cotizada.'}
 }

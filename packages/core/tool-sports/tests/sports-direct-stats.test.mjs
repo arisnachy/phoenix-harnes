@@ -5,7 +5,6 @@ import {collectDirectEspnStats} from '../src/sports-direct-stats.ts'
 const now=Date.parse('2026-11-02T18:00:00Z')
 const site='https://site.api.espn.com/apis/site/v2/sports/basketball/nba/'
 const web='https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/'
-const core='https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/'
 test('directly fetches ESPN player stats, gamelog and splits without a prompt action',async()=>{
   const calls=[]
   const fetcher=async url=>{
@@ -41,7 +40,7 @@ test('directly fetches ESPN player stats, gamelog and splits without a prompt ac
   assert.match(player.lastGames[0].value,/Points: 26.*Assists: 7/)
   assert.equal(player.splits[0].value,'27.0')
   assert.ok(player.verifiedSources.includes('gamelog'))
-  assert.ok(calls.every(u=>u.startsWith(site)||u.startsWith(web)||u.startsWith(core)))
+  assert.ok(calls.every(u=>u.startsWith(site)||u.startsWith(web)))
   assert.ok(calls.every(u=>!u.includes('undefined')))
 })
 test('does not invent metrics from blank endpoints or athlete names not on team roster',async()=>{
@@ -110,133 +109,4 @@ test('live ESPN results and singular depthchart objects are not discarded',async
   assert.ok(result.teams[0].coverage.some(x=>x.endpoint==='team_statistics'
     &&x.status==='available'))
   assert.ok(calls.some(x=>x.endsWith('/teams/18/statistics')))
-})
-
-
-test('preserves ALL 17 roster identities while probing only two players to save traffic',async()=>{
-  const payload={athletes:Array.from({length:17},(_,i)=>({
-    id:String(310000+i),displayName:'Verified Player '+i,
-    position:{abbreviation:i%2?'F':'G'}}))}
-  const transport=async url=>new Response(JSON.stringify(
-    String(url).endsWith('/roster')?payload:{}))
-  const result=await collectDirectEspnStats('basketball','nba',
-    [{id:'20',name:'Philadelphia 76ers'}],transport,now,2)
-  const team=result.teams[0]
-  assert.equal(team.athleteCount,17)
-  assert.equal(team.roster.length,17)
-  assert.equal(team.athletes.length,2)
-  assert.equal(team.roster[16].id,'310016')
-  assert.equal(team.roster[16].name,'Verified Player 16')
-  assert.ok(team.roster.every(x=>/^3100/.test(x.id)))
-  assert.equal(team.athletes[0].status,'unavailable')
-})
-
-test('NBA depthchart carries players and ranks instead of being misclassified as empty',async()=>{
-  const fetcher=async url=>{
-    const u=String(url)
-    const payload=u.endsWith('/roster')?{athletes:[{id:'101',displayName:'Starter'}]}:
-      u.endsWith('/depthcharts')?{depthchart:{positions:{pointGuard:{
-        position:{abbreviation:'PG'},athletes:[
-          {rank:1,athlete:{id:'101',displayName:'Starter'}},
-          {rank:2,athlete:{id:'102',displayName:'Reserve'}}]}}}}:{}
-    return new Response(JSON.stringify(payload),{status:200})
-  }
-  const d=await collectDirectEspnStats('basketball','nba',
-    [{id:'18',name:'NBA Team'}],fetcher,now,1)
-  assert.deepEqual(d.teams[0].depthChart,[
-    {name:'PG #1',value:'Starter'},{name:'PG #2',value:'Reserve'}])
-  assert.ok(d.teams[0].coverage.some(c=>
-    c.endpoint==='team_depthcharts'&&c.status==='available'))
-})
-
-test('NFL grouped depthCharts expose QB candidates without inventing confirmed starters',async()=>{
-  const calls=[]
-  const fetcher=async url=>{
-    const u=String(url);calls.push(u)
-    const payload=u.endsWith('/roster')?{athletes:[{position:'Quarterback',
-      items:[{id:'3054211',displayName:'Quarterback A',position:{abbreviation:'QB'}}]}]}:
-      u.endsWith('/depthcharts')?{depthCharts:[{name:'Offense',positions:{
-        quarterback:{position:{name:'Quarterback',abbreviation:'QB'},
-          athletes:[{rank:1,athlete:{id:'3054211',displayName:'Quarterback A'}},
-            {rank:2,athlete:{id:'4360310',displayName:'Quarterback B'}}]}}}]}:{}
-    return new Response(JSON.stringify(payload),{status:200})
-  }
-  const d=await collectDirectEspnStats('football','nfl',
-    [{id:'6',name:'Dallas Cowboys'}],fetcher,now,1)
-  assert.deepEqual(d.teams[0].depthChart,[
-    {name:'QB #1',value:'Quarterback A'},{name:'QB #2',value:'Quarterback B'}])
-  assert.equal(d.teams[0].athletes.length,1)
-  assert.ok(calls.includes('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/6/depthcharts'))
-})
-
-
-test('real live ESPN depthchart array delivers NBA and NFL ranked player entries',async()=>{
-  for(const [sport,league] of [['basketball','nba'],['football','nfl']]){
-    const base='https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league
-    const fetcher=async url=>{
-      const u=String(url)
-      return new Response(JSON.stringify(
-        u.endsWith('/roster')?{athletes:[{id:'4431678',displayName:'Player One'}]}:
-        u.endsWith('/depthcharts')?{depthchart:[{id:'1',name:'Depth Chart',
-          positions:{pg:{athletes:[
-            {id:'4431678',displayName:'Player One'},
-            {id:'4351851',displayName:'Player Two'}],
-            position:{abbreviation:'PG',displayName:'Point Guard'}}}}]}:{}
-      ),{status:200})
-    }
-    const dossier=await collectDirectEspnStats(sport,league,
-      [{id:'20',name:'Demo Team'}],fetcher,now,1)
-    assert.equal(dossier.teams[0].depthChart.length,2)
-    assert.deepEqual(dossier.teams[0].depthChart[0],
-      {name:'PG #1',value:'Player One'})
-    assert.equal(dossier.teams[0].coverage.find(x=>x.endpoint==='team_depthcharts')?.status,'available')
-  }
-})
-
-test('NBA Core depthcharts fallback is used only after empty Site response',async()=>{
-  const attempts=[]
-  const transport=async url=>{
-    const u=String(url);attempts.push(u)
-    const payload=u.endsWith('/roster')?
-      {athletes:[{id:'101',displayName:'Known Player'}]}:
-      u.includes('sports.core.api.espn.com')?
-      {depthchart:{items:[{displayName:'PG rotation',
-        displayValue:'Player X (not confirmed starter)'}]}}:{}
-    return new Response(JSON.stringify(payload),{status:200})
-  }
-  const result=await collectDirectEspnStats('basketball','nba',
-    [{id:'27',name:'Washington Wizards'}],transport,now,1)
-  const team=result.teams[0]
-  assert.equal(team.depthChart[0]?.name,'PG rotation')
-  assert.equal(team.coverage.find(x=>x.endpoint==='team_depthcharts')?.status,'empty')
-  assert.equal(team.coverage.find(x=>x.endpoint==='team_depthcharts_core')?.status,'available')
-  assert.ok(attempts.includes('https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/seasons/2027/teams/27/depthcharts'))
-})
-
-test('twenty NBA roster athletes can be requested and first-party reads run in bounded parallel',async()=>{
-  const root='https://site.api.espn.com/apis/site/v2/sports/basketball/nba/'
-  let active=0,peak=0
-  const fetcher=async url=>{
-    active++;peak=Math.max(active,peak)
-    await new Promise(resolve=>setTimeout(resolve,2))
-    active--
-    const u=String(url)
-    const payload=u.endsWith('/roster')?{athletes:[{items:
-      Array.from({length:20},(_,i)=>({
-        id:String(900001+i),displayName:'Player '+i,
-        position:{abbreviation:'G'}})),
-    }]}:{}
-    return Response.json(payload)
-  }
-  const result=await collectDirectEspnStats('basketball','nba',
-    [{id:'5',name:'Boston Celtics'}],fetcher,
-    Date.parse('2026-11-16T20:00:00Z'),20)
-  const team=result.teams[0]
-  assert.equal(team.roster.length,20)
-  assert.equal(team.selectedCount,20)
-  assert.equal(team.athletes.length,20)
-  assert.ok(peak>=4,'player endpoints must not all wait serially')
-  assert.ok(peak<=6,'source concurrency is bounded despite full roster')
-  assert.ok(team.athletes.every(p=>p.status==='unavailable'),
-    'an empty ESPN 200 may not become fabricated athlete statistics')
 })

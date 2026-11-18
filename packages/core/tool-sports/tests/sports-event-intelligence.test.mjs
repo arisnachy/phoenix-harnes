@@ -16,31 +16,17 @@ test('compact dossier displays real team stats, prices and independent reference
  const quote={provider:{name:'Sportsbook A'},lastUpdated:'2026-11-01T19:55:00Z',
    homeTeamOdds:{moneyLine:-120},awayTeamOdds:{moneyLine:105},overUnder:220.5}
  const input={eventId:'876',summary,coreOdds:[quote],
-   predictor:{homeTeam:{gameProjection:0.63},awayTeam:{gameProjection:0.37}},now,
-   observedAt:'2026-11-01T19:59:00Z'}
+   predictor:{homeTeam:{gameProjection:0.63},awayTeam:{gameProjection:0.37}},now}
  const result=sportsEventInsights(input)
  assert.equal(result.quotes,2)
  assert.equal(result.projected,true)
  assert.ok(result.sections.some(s=>s.heading==='Estadísticas verificadas'&&
    s.items.some(i=>i.value==='45')))
  assert.ok(result.sections.some(s=>s.heading==='Cuotas y mercados'&&
-   s.items.some(i=>i.value.startsWith('1.83')&&/aceptación\/vigencia.*no confirmada/u.test(i.detail))))
+   s.items.some(i=>i.value.startsWith('1.83'))))
  assert.ok(result.sections.some(s=>s.heading==='Proyección de referencia'&&
    s.items.some(i=>i.value==='63.0%')))
  assert.ok(result.sections.every(s=>s.items.every(i=>!i.label.includes('Sportsbook A'))))
-})
-test('event view labels stale or unobserved ESPN odds as ineligible for a ticket',()=>{
- const quote={provider:{name:'Sportsbook A'},lastUpdated:'2026-11-01T19:55:00Z',
-   homeTeamOdds:{moneyLine:-120},awayTeamOdds:{moneyLine:105}}
- const stale=sportsEventInsights({eventId:'876',summary,coreOdds:[quote],
-   predictor:{},now,observedAt:'2026-11-01T19:30:00Z'})
- const noReadTime=sportsEventInsights({eventId:'876',summary,coreOdds:[quote],
-   predictor:{},now})
- for(const result of [stale,noReadTime]){
-   const market=result.sections.find(s=>s.heading==='Cuotas y mercados')
-   assert.ok(market)
-   assert.ok(market.items.every(item=>/no elegible para ticket/u.test(item.detail)))
- }
 })
 test('empty Core references and partial summary never invent an available market',()=>{
  const result=sportsEventInsights({eventId:'876',summary,coreOdds:[{$ref:'https://sports.core.api.espn.com/reference'}],

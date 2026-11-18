@@ -26,11 +26,9 @@ const fetcher=async url=>{
 test('one bounded daily scan covers the real leagues and diversifies sports',async()=>{
   calls.length=0
   const report=await scoutDailySports(day,5,fetcher,now)
-  assert.ok(calls.length>=report.coverage.length*2)
+  assert.equal(calls.length,40)
   assert.equal(report.totalEligible,7)
   assert.equal(report.events.length,5)
-  assert.ok(report.coverage.find(x=>x.league==='nba').rawEvents>=3)
-  assert.ok(report.coverage.find(x=>x.league==='nba').pregameOnDate>=3)
   assert.equal(new Set(report.events.map(x=>x.sport)).size,4)
   assert.ok(report.events.every(x=>x.status==='scheduled'&&x.source==='ESPN Site API'))
   assert.ok(report.events.every(x=>x.home.id&&x.away.id&&x.eventId))
@@ -60,7 +58,7 @@ test('unconfirmed games, started games, malformed IDs and incomplete participant
 
 test('provider permission and malformed scan controls are enforced',async()=>{
   await assert.rejects(()=>scoutDailySports('2026-02-30',5,fetcher,now),/Fecha inválida/)
-  await assert.rejects(()=>scoutDailySports(day,513,fetcher,now),/1 a 512/)
+  await assert.rejects(()=>scoutDailySports(day,37,fetcher,now),/1 a 36/)
   await assert.rejects(()=>scoutDailySports(day,5,fetcher,now,{PHOENIX_SPORTS_ESPN_DISABLED:'1'}),/ESPN deshabilitado/)
 })
 
@@ -72,7 +70,6 @@ test('one provider error cannot be promoted as an empty or verified league',asyn
   const report=await scoutDailySports(day,3,partial,now)
   assert.equal(report.events.length,0)
   assert.equal(report.coverage.find(x=>x.league==='eng.1')?.status,'unavailable')
-  assert.equal(report.coverage.find(x=>x.league==='eng.1')?.failedPartitions,2)
   assert.equal(report.coverage.find(x=>x.league==='nba')?.status,'empty')
 })
 test('daily market search keeps as many as 36 real upcoming candidates, not only 12',async()=>{
@@ -93,24 +90,6 @@ test('daily market search keeps as many as 36 real upcoming candidates, not only
   assert.ok(report.events.every(x=>Date.parse(x.kickoff)===Date.parse(kickoff)))
 })
 
-test('full slate inventory keeps more than 36 NBA/NHL candidates before ranking',async()=>{
-  const provider=async url=>{
-    const u=String(url)
-    const events=u.includes('/basketball/nba/')?
-      Array.from({length:55},(_,i)=>game(300+i)):
-      u.includes('/hockey/nhl/')?
-        Array.from({length:40},(_,i)=>game(400+i)):[]
-    return new Response(JSON.stringify({events}),{status:200})
-  }
-  const report=await scoutDailySports(day,120,provider,now)
-  assert.equal(report.totalEligible,95)
-  assert.equal(report.events.length,95)
-  assert.equal(report.truncated,false)
-  assert.equal(report.eligibleBySport.basketball,55)
-  assert.equal(report.eligibleBySport.hockey,40)
-  assert.ok(report.events.some(e=>e.league==='nba'&&e.eventId==='354'))
-  assert.ok(report.events.some(e=>e.league==='nhl'&&e.eventId==='439'))
-})
 test('the requested day is Santo Domingo local, including games after UTC midnight',async()=>{
   const boundary=async url=>{
     const events=String(url).includes('/basketball/nba/')?[
@@ -137,7 +116,7 @@ test('late Santo Domingo kickoff is found even when ESPN returns it only in the 
   assert.deepEqual(report.events.map(e=>e.eventId),['71'])
   assert.equal(report.events[0].kickoff,'2026-11-03T02:45:00.000Z')
   assert.equal(report.totalEligible,1)
-  assert.ok(calls.length>=report.coverage.length*2)
+  assert.equal(calls.length,40)
 })
 test('one failed UTC partition cannot masquerade as full empty league coverage',async()=>{
   const partial=async url=>{
@@ -165,7 +144,7 @@ test('a permanently stalled ESPN endpoint cannot freeze the daily scan',async()=
   assert.equal(report.coverage.find(x=>x.league==='nba')?.status,'unavailable')
   assert.ok(report.events.some(e=>e.league==='nfl'&&e.eventId==='908'))
   assert.equal(report.diagnostics.requestTimeoutMs,45)
-  assert.equal(report.diagnostics.requestedPartitions,report.coverage.length*2)
+  assert.equal(report.diagnostics.requestedPartitions,40)
   assert.ok(report.diagnostics.unavailableLeagues>=1)
 })
 test('a partial ESPN date timeout preserves verified events and reports incomplete coverage',async()=>{
@@ -183,139 +162,4 @@ test('a partial ESPN date timeout preserves verified events and reports incomple
   assert.equal(league?.status,'available')
   assert.match(league?.reason??'',/Cobertura parcial/)
   assert.ok(result.diagnostics.partialLeagues>=1)
-})
-
-test('calendar-first scan limits calls to requested sports and recognizes womens Champions League',async()=>{
-  const seen=[]
-  const targeted=async url=>{
-    const value=String(url);seen.push(value)
-    const events=value.includes('/soccer/uefa.wchampions/')?
-      [game(992,'team',kickoff)]:[]
-    return new Response(JSON.stringify({events}))
-  }
-  const report=await scoutDailySports(day,5,targeted,now,{},['soccer'])
-  assert.equal(seen.length,report.coverage.length*2)
-  assert.ok(seen.every(url=>url.includes('/soccer/')))
-  assert.ok(report.events.some(x=>x.eventId==='992'&&x.league==='uefa.wchampions'))
-  assert.equal(report.diagnostics.requestedPartitions,report.coverage.length*2)
-  await assert.rejects(()=>scoutDailySports(day,5,targeted,now,{},['bad-sport']),
-    /fuera del calendario/)
-})
-
-test('same-provider short cache restores only the exact failed ESPN partition, with disclosure',async()=>{
-  let fail=false
-  const flaky=async url=>{
-    if(fail)throw Error('ESPN temporarily unavailable')
-    return new Response(JSON.stringify({events:
-      String(url).includes('/basketball/nba/')&&String(url).includes('dates=20261102')
-        ?[game(845)]:[]}))
-  }
-  const first=await scoutDailySports(day,5,flaky,now,{},['basketball'])
-  assert.ok(first.events.some(x=>x.eventId==='845'))
-  assert.equal(first.diagnostics.cachedPartitions,0)
-  fail=true
-  const recovered=await scoutDailySports(day,5,flaky,now+30_000,{},['basketball'])
-  assert.ok(recovered.events.some(x=>x.eventId==='845'))
-  assert.ok(recovered.diagnostics.cachedPartitions>=1)
-  assert.match(recovered.coverage.find(x=>x.league==='nba').reason,/caché local/)
-  const expired=await scoutDailySports(day,5,flaky,now+360_000,{},['basketball'])
-  assert.ok(!expired.events.some(x=>x.eventId==='845'))
-  assert.equal(expired.coverage.find(x=>x.league==='nba').status,'unavailable')
-})
-
-test('league names and Spanish sports normalize without discarding the intended fixtures',async()=>{
-  const seen=[]
-  const request=async url=>{
-    const target=String(url)
-    seen.push(target)
-    const active=target.includes('/basketball/nba/')||
-      target.includes('/hockey/nhl/')||target.includes('/tennis/atp/')
-    return new Response(JSON.stringify({events:active?[game(802)]:[]}))
-  }
-  const result=await scoutDailySports(day,6,request,now,{},['NBA','NHL','ATP'])
-  assert.equal(result.coverage.length,3)
-  assert.ok(seen.every(url=>/\/(?:basketball\/nba|hockey\/nhl|tennis\/atp)\//u.test(url)))
-  assert.deepEqual(new Set(result.events.map(e=>e.league)),new Set(['nba','nhl','atp']))
-  const soccer=await scoutDailySports(day,5,request,now,{},['fútbol'])
-  assert.ok(soccer.coverage.every(row=>row.sport==='soccer'))
-  await assert.rejects(()=>scoutDailySports(day,5,request,now,{},['NBA','crypto']),
-    /fuera del calendario/u)
-})
-
-test('whole daily slate includes 200 fixtures without the previous 120-game cutoff',async()=>{
-  const large=async url=>{
-    const u=String(url)
-    const events=u.includes('/basketball/nba/')?
-      Array.from({length:105},(_,i)=>game(1000+i)):
-      u.includes('/hockey/nhl/')?
-        Array.from({length:95},(_,i)=>game(2000+i)):[]
-    return new Response(JSON.stringify({events}))
-  }
-  const scan=await scoutDailySports(day,512,large,now)
-  assert.equal(scan.totalEligible,200)
-  assert.equal(scan.events.length,200)
-  assert.equal(scan.truncated,false)
-  assert.equal(new Set(scan.events.map(e=>e.sport+'|'+e.league+'|'+e.eventId)).size,200)
-})
-test('ESPN embedded moneylines are captured across the full slate without bookmaker updatedAt',async()=>{
-  const withOdds=async url=>{
-    const u=String(url)
-    const events=u.includes('/basketball/nba/')?[game(90),game(91)]:[]
-    if(events.length){
-      events[1].competitions[0].odds=[{provider:{name:'DraftKings'},
-        homeTeamOdds:{moneyLine:-135},awayTeamOdds:{moneyLine:115}}]
-    }
-    return new Response(JSON.stringify({events}))
-  }
-  const scan=await scoutDailySports(day,512,withOdds,now)
-  assert.equal(scan.events.length,2)
-  const lines=scan.espnQuotes.filter(q=>q.eventId==='91')
-  assert.equal(lines.length,2)
-  assert.equal(lines[0].bookmaker,'DraftKings')
-  assert.equal(Date.parse(lines[0].timeIso),Date.parse(kickoff))
-  assert.equal(lines[0].observedAt,new Date(now).toISOString())
-  assert.ok(lines.some(q=>q.price>1))
-})
-test('unnamed ESPN provider cannot be promoted as a preselected bookmaker',async()=>{
-  const unnamed=async url=>{
-    const events=String(url).includes('/hockey/nhl/')?[game(103)]:[]
-    if(events.length)events[0].competitions[0].odds=[{
-      provider:{id:123},homeTeamOdds:{moneyLine:-150}}]
-    return new Response(JSON.stringify({events}))
-  }
-  const scan=await scoutDailySports(day,512,unnamed,now)
-  assert.equal(scan.totalEligible,1)
-  assert.equal(scan.espnQuotes.length,0)
-})
-
-test('full-slate discovery includes NCAA basketball, college football and LIDOM',async()=>{
-  const provider=async url=>{
-    const u=String(url)
-    const events=u.includes('/basketball/mens-college-basketball/')?[game(610)]:
-      u.includes('/football/college-football/')?[game(611)]:
-      u.includes('/baseball/dominican-winter-league/')?[game(612)]:[]
-    return Response.json({events})
-  }
-  const result=await scoutDailySports(day,512,provider,now)
-  assert.equal(result.totalEligible,3)
-  assert.ok(result.events.some(e=>e.league==='mens-college-basketball'))
-  assert.ok(result.events.some(e=>e.league==='college-football'))
-  assert.ok(result.events.some(e=>e.league==='dominican-winter-league'))
-  assert.equal(result.truncated,false)
-})
-
-test('malformed ESPN bookmaker rows cannot erase a future fixture',async()=>{
-  const provider=async url=>{
-    const events=String(url).includes('/hockey/nhl/')?[game(930)]:[]
-    if(events.length)events[0].competitions[0].odds=[
-      null,'provider broken',{provider:{name:'DraftKings'},
-        homeTeamOdds:{moneyLine:-150}},
-    ]
-    return Response.json({events})
-  }
-  const scan=await scoutDailySports(day,512,provider,now)
-  assert.equal(scan.totalEligible,1)
-  assert.equal(scan.events[0].eventId,'930')
-  assert.equal(scan.espnQuotes.length,1)
-  assert.equal(scan.espnQuotes[0].bookmaker,'DraftKings')
 })

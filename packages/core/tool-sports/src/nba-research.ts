@@ -41,7 +41,6 @@ export type NbaResearchReport = {
   sport: 'basketball'; league: 'nba'; date: string
   source: string; observedAt: string; lookbackDays: number; daysRetrieved: number
   matches: NbaMatchResearch[]
-  sourceAudit: Array<{url:string;status:'verified'|'empty'|'error';checkedAt:string;detail:string}>
   note: string
 }
 const dayValid = (day: string): boolean => /^\d{4}-\d{2}-\d{2}$/u.test(day)
@@ -106,20 +105,10 @@ export async function researchNbaSlate(
   if(!Number.isInteger(lookbackDays)||lookbackDays<1||lookbackDays>21)throw Error('Ventana NBA fuera de rango')
   if(!Number.isInteger(maxMatches)||maxMatches<1||maxMatches>25)throw Error('Cantidad de encuentros NBA fuera de rango')
   const root='https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates='
-  const sourceAudit:NbaResearchReport['sourceAudit']=[]
   const getBoard=async(day:string):Promise<Board>=>{
-    const url=root+day.replaceAll('-','')
-    try{
-      const board=await getFeed<Board>(url,fetcher)
-      if(!Array.isArray(board.events))throw Error('ESPN devolvió una cartelera NBA inválida')
-      sourceAudit.push({url,status:board.events.length?'verified':'empty',
-        checkedAt:new Date(now).toISOString(),detail:board.events.length+' eventos ESPN'})
-      return board
-    }catch(error){
-      sourceAudit.push({url,status:'error',checkedAt:new Date(now).toISOString(),
-        detail:(error instanceof Error?error.message:String(error)).slice(0,180)})
-      throw error
-    }
+    const board=await getFeed<Board>(root+day.replaceAll('-',''),fetcher)
+    if(!Array.isArray(board.events))throw Error('ESPN devolvió una cartelera NBA inválida')
+    return board
   }
   const board=await getBoard(date)
   const pending=board.events?.filter(e=>{
@@ -139,10 +128,8 @@ export async function researchNbaSlate(
     const {home,away}=sides(event)
     if(!home||!away||!teamId(home)||!teamId(away)||!teamName(home)||!teamName(away))return []
     const kickoff=Date.parse(event.date??'')
-    // Guard against future results marked post before they could have finished.
-    const historyCutoff=Math.min(kickoff,now)
-    const homeReport=summarize(home,completed,historyCutoff)
-    const awayReport=summarize(away,completed,historyCutoff)
+    const homeReport=summarize(home,completed,kickoff)
+    const awayReport=summarize(away,completed,kickoff)
     const enough=daysRetrieved===lookbackDays&&homeReport.gamesObserved>=3&&awayReport.gamesObserved>=3
     const missing=[
       ...(!enough?['Muestra histórica insuficiente o fechas no accesibles: solo temporada regular verificada']:[]),
@@ -158,6 +145,5 @@ export async function researchNbaSlate(
   if(!matches.length)throw Error('ESPN no identificó correctamente a los equipos de los próximos partidos')
   return {sport:'basketball',league:'nba',date,source:'ESPN Site API · scoreboards históricos',
     observedAt:new Date(now).toISOString(),lookbackDays,daysRetrieved,matches,
-    sourceAudit:sourceAudit.sort((a,b)=>a.url.localeCompare(b.url)),
     note:'Los márgenes y descansos se derivan solo de marcadores completos. Son tendencias descriptivas, no predicciones. Antes de recomendar una apuesta Kira debe comprobar lesiones oficiales, alineaciones, eficiencia, mercados, frescura y correlación. No atribuir jugadores sin corroborar su equipo actual.'}
 }

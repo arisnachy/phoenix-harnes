@@ -94,25 +94,3 @@ test('authentication and site blocking do not trigger a misleading market alias'
     }),/401/)
   assert.equal(attempted,1)
 })
-
-test('researchSport evaluates the 13th through 26th future fixture instead of silently dropping them',async()=>{
-  const many=async url=>{
-    const u=String(url)
-    if(u.includes('/soccer/por.1/scoreboard?dates=20261109')){
-      return Response.json({events:Array.from({length:26},(_,i)=>({
-        id:String(700+i),date:kickoff,status:{type:{state:'pre'}},
-        competitions:[{competitors:[
-          {homeAway:'home',team:{id:String(1000+i*2),displayName:'Home '+i}},
-          {homeAway:'away',team:{id:String(1001+i*2),displayName:'Away '+i}},
-        ]}],
-      }))})
-    }
-    return Response.json({events:[]})
-  }
-  const out=await researchSport('soccer','por.1',day,many,now,{},3)
-  assert.equal(out.matches.length,26)
-  assert.equal(out.matches[12].eventId,'712')
-  assert.equal(out.matches[25].eventId,'725')
-  assert.ok(out.matches.every(m=>m.evidence==='insufficient'))
-  assert.ok(out.matches.every(m=>m.limitations.length>0))
-})

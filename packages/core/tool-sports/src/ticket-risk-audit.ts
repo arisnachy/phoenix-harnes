@@ -48,7 +48,7 @@ export function auditTicketMarketRisk(inputs:readonly TicketMarketLeg[]):TicketM
  */
 export type MarketSideOffer={
   eventId:string;bookmaker:string;market:string;selection:string;price:number
-  home:string;away:string;time:string;updatedAt:string;source:string;observedAt?:string
+  home:string;away:string;time:string;updatedAt:string;source:string
 }
 const normal=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
@@ -58,18 +58,12 @@ export function quoteSideNoVig(
   const outcomes=['h2h','home_away','moneyline','match_winner'].includes(offered.market)?2:
     offered.market==='1x2'?3:0
   if(!outcomes)return null
-  const isEspn=offered.source.startsWith('ESPN ')
-  const observed=Date.parse(offered.observedAt??'')
-  const at=Number.isFinite(observed)?observed:Date.parse(offered.updatedAt)
-  const kickoff=Date.parse(offered.time)
-  if(!Number.isFinite(at)||!Number.isFinite(kickoff)||at>now||kickoff<=now||
-    (Number.isFinite(observed)?now-at>15*60_000:isEspn))return null
+  const at=Date.parse(offered.updatedAt),kickoff=Date.parse(offered.time)
+  if(!Number.isFinite(at)||!Number.isFinite(kickoff)||at>now||kickoff<=now)return null
   const validLabels=[normal(offered.home),normal(offered.away),
     ...(outcomes===3?['draw']:[])]
   const selected=quotes.filter(q=>{
-    const observation=Date.parse(q.observedAt??'')
-    const stamp=Number.isFinite(observation)?observation:Date.parse(q.updatedAt)
-    const start=Date.parse(q.time)
+    const stamp=Date.parse(q.updatedAt),start=Date.parse(q.time)
     const selection=normal(q.selection)
     return q.eventId===offered.eventId&&q.bookmaker===offered.bookmaker&&
       q.market===offered.market&&q.source===offered.source&&

@@ -56,23 +56,11 @@ test('moneyline is not confused with odds-implied selection',()=>{
   assert.equal(review.selectedOutcome.selection,'Away')
   assert.equal(review.status,'descriptive-support')
 })
-test('two verified games produce a conditional market direction with an uncertainty warning',()=>{
+test('short histories produce uncertainty rather than an artificial pick',()=>{
   const review=assessDailyMarketEvidence(market(),evidence(111,96,2))
-  assert.equal(review.status,'uncertain')
-  assert.equal(review.selectedOutcome.selection,'Under')
-  assert.match(review.warnings.join(' '),/MUESTRA REDUCIDA/)
-  assert.ok(review.rankingScore>0)
-  assert.ok(review.rankingScore<assessDailyMarketEvidence(market(),evidence()).rankingScore)
-})
-test('one historical match cannot fabricate a directional pick',()=>{
-  const review=assessDailyMarketEvidence(market(),evidence(111,96,1))
   assert.equal(review.status,'unavailable')
   assert.equal(review.selectedOutcome,null)
-})
-test('stale ESPN price stays in research but never becomes a fully supported recommendation',()=>{
-  const review=assessDailyMarketEvidence({...market(),requiresRecheck:true},evidence())
-  assert.notEqual(review.status,'descriptive-support')
-  assert.match(review.warnings.join(' '),/nueva lectura/)
+  assert.match(review.warnings.join(' '),/Historial insuficiente/)
 })
 test('wrong fixture cannot reuse another game evidence',()=>{
   assert.throws(()=>assessDailyMarketEvidence(market(),{...evidence(),eventId:'991'}),/no corresponde/)
@@ -169,35 +157,4 @@ test('consistent NBA over is still descriptive, with separate line audit and no 
   assert.equal(review.status,'descriptive-support')
   assert.equal(review.marketOutcomeDiagnostic.eligibleForEV,false)
   assert.equal(review.priceAudit.expectedValuePercent,null)
-})
-
-test('Nov 15 Nashville scenario: weak last-ten rival that rebounded 2 of last 3 must be investigated',()=>{
-  const original=market('h2h','Home',null)
-  const candidate={...original,sport:'hockey',league:'nhl',
-    outcomes:[
-      {selection:'Home',line:null,decimalOdds:1.58824,noVigShare:.6},
-      {selection:'Away',line:null,decimalOdds:2.45,noVigShare:.4},
-    ]}
-  const base=evidence()
-  const opponentGames=[
-    {scored:4,allowed:2},{scored:3,allowed:1},
-    {scored:2,allowed:3},{scored:2,allowed:1},
-    ...Array.from({length:6},()=>({scored:2,allowed:4})),
-  ]
-  const matchup={...base,sport:'hockey',league:'nhl',
-    home:{name:'Home',form:{games:10,scoredPerGame:3.5,allowedPerGame:2.1},
-      lastGames:Array.from({length:10},()=>({scored:4,allowed:2}))},
-    away:{name:'Away',form:{games:10,scoredPerGame:2.3,allowedPerGame:3.1},
-      lastGames:opponentGames}}
-  const review=assessDailyMarketEvidence(candidate,matchup)
-  assert.equal(review.selectedOutcome.selection,'Home')
-  assert.equal(review.status,'uncertain')
-  assert.match(review.warnings.join(' '),/ALERTA DE REPUNTE NHL/)
-  assert.match(review.warnings.join(' '),/ganó 2\/3 recientes/)
-  assert.equal(review.priceAudit.modelProbabilityPercent,null)
-  // Same ten-game wins but NO recent recovery: don't manufacture this signal.
-  const stable={...matchup,away:{...matchup.away,
-    lastGames:[...opponentGames.slice(4),...opponentGames.slice(0,4)]}}
-  const control=assessDailyMarketEvidence(candidate,stable)
-  assert.ok(!control.warnings.some(x=>x.includes('ALERTA DE REPUNTE NHL')))
 })

@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {boundedPriced,evidencePricedTicket,ticketLeagueOddsKey} from '../src/evidence-priced-ticket.ts'
+import {boundedPriced,evidencePricedTicket} from '../src/evidence-priced-ticket.ts'
 
 const date='2026-10-28',now=Date.parse('2026-10-28T15:00:00Z')
 const kick='2026-10-28T23:00:00Z'
@@ -67,18 +67,11 @@ test('six-legged evidence path quotes only same bookmaker and preserves the requ
   const complete=await withSpecialists(5,date,'soccer',100,now,enabled,feed,mkQuotes())
   assert.equal(complete.complete,true)
   assert.equal(complete.priced,true)
-  assert.equal(complete.card.props.presentationStatus,'final-research')
-  assert.match(complete.card.props.subtitle,/TICKET FINAL DE INVESTIGACIÓN/)
-  assert.doesNotMatch(complete.card.props.subtitle,/hold|CONDICIONAL/i)
   assert.equal(complete.approvedLegs,0,'uncalibrated specialists cannot approve bets')
-  assert.equal(complete.candidateLegs,5)
-  assert.ok(complete.discoveredEvents>=5)
-  assert.ok(complete.discoveryAudit.eligibleLeagues>=1)
-  assert.equal(complete.ticketReadyForReview,true)
   assert.equal(complete.researchedLegs,5)
   assert.equal(complete.decisionAudit.legs.length,5)
-  assert.ok(complete.decisionAudit.legs.every(x=>x.verdict==='caution'))
-  assert.equal(complete.card.props.legs[0].decisionReview.verdict,'caution')
+  assert.ok(complete.decisionAudit.legs.every(x=>x.verdict==='hold'))
+  assert.equal(complete.card.props.legs[0].decisionReview.verdict,'hold')
   assert.equal(complete.card.props.decisionAudit.approvedForBetting,false)
   assert.equal(complete.card.props.legs.length,5)
   assert.equal(complete.card.props.legs[0].legProbabilitySource,'exploratory-recent-form')
@@ -270,7 +263,7 @@ test('soccer two-outcome API prices cannot be mislabeled 1X2 without a draw outc
   assert.equal(result.priced,false)
   assert.equal(result.quotedLegs,0)
 })
-test('old bookmaker last-change time does not reject a quote fetched during this request',async()=>{
+test('stale bookmaker quotes do not receive a fresh ticket label',async()=>{
   const stale=async url=>{
     if(String(url).includes('api.the-odds-api.com'))return new Response(JSON.stringify(
       Array.from({length:5},(_,i)=>({
@@ -282,10 +275,8 @@ test('old bookmaker last-change time does not reject a quote fetched during this
   }
   const result=await withSpecialists(5,date,'soccer',100,now,
     {THE_ODDS_API_KEY:'mock-secret'},stale)
-  assert.equal(result.priced,true)
-  assert.equal(result.missingQuotes,0)
-  assert.equal(result.quotedLegs,5)
-  assert.equal(result.placed,false)
+  assert.equal(result.priced,false)
+  assert.equal(result.missingQuotes,5)
 })
 
 test('a four-of-five slate still audits real provider prices and cannot be called a priced parlay',async()=>{
@@ -341,10 +332,8 @@ test('missing specialist data creates a visible conditional ticket when ESPN and
   assert.equal(result.specialistChecks.length,5)
   assert.ok(result.specialistChecks.some(x=>x.status!=='researched'))
   assert.ok(result.card.props.legs.every(x=>x.researchStatus==='conditional'))
-  assert.match(result.card.props.subtitle,/TICKET FINAL DE INVESTIGACIÓN/)
-  assert.match(result.explanation,/ADVERTENCIA DE INVESTIGACIÓN/)
-  assert.equal(result.candidateLegs,5)
-  assert.equal(result.ticketReadyForReview,true)
+  assert.match(result.card.props.subtitle,/TICKET CONDICIONAL/)
+  assert.match(result.explanation,/TICKET CONDICIONAL/)
 })
 test('explicit team identity conflict still blocks attaching odds to the wrong fixture',async()=>{
   const wrongTeams=async games=>games.map(game=>({
@@ -379,15 +368,10 @@ test('one missing lineup remains conditional; four researched legs are retained'
 })
 
 
-test('fresh ESPN odds without lastUpdated complete an observed same-bookmaker research ticket',async()=>{
-  let optionalApiCalls=0
+test('undated ESPN prices decorate the research ticket but NEVER complete its quotation',async()=>{
   const read=async url=>{
     const raw=board(url)
     const u=String(url)
-    if(u.includes('api.the-odds-api.com')){
-      optionalApiCalls++
-      throw Error('Optional paid provider must not be queried when ESPN covers the ticket')
-    }
     if(u.includes('/scoreboard?dates=20261028')){
       raw.events=raw.events.map((e,i)=>({...e,competitions:e.competitions.map(c=>({
         ...c,id:e.id,
@@ -400,25 +384,16 @@ test('fresh ESPN odds without lastUpdated complete an observed same-bookmaker re
   }
   const result=await evidencePricedTicket(5,date,'soccer',0,now,
     {PHOENIX_SPORTS_ESPN_DISABLED:'0',
-      PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0',
-      THE_ODDS_API_KEY:'configured-but-unneeded'},read,
+      PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'},read,
     undefined,'winner',stubSpecialists)
   assert.equal(result.verifiedEvents,5)
-  assert.equal(result.quotedLegs,5)
-  assert.equal(result.priced,true)
-  assert.equal(result.researchFixtures.length,5)
-  assert.equal(result.researchFixtures[0].eventId,'500')
-  assert.equal(result.researchFixtures[0].home,'Home 0')
-  assert.equal(result.researchFixtures[0].away,'Away 0')
-  assert.equal(result.researchFixtures[0].kickoff,kick)
+  assert.equal(result.quotedLegs,0)
+  assert.equal(result.priced,false)
   assert.equal(result.card.props.legs.length,5)
-  assert.ok(Number(result.card.props.combinedOdds)>1)
-  assert.ok(result.card.props.legs.every(x=>x.bookmaker==='ESPN Reference Book'))
-  assert.match(result.card.props.subtitle,/precios observados en ESPN/)
-  assert.equal(optionalApiCalls,0)
-  assert.equal(result.sourceAudit.find(row=>row.source==='The Odds API v4').status,
-    'not-applicable')
-  assert.match(result.card.props.note,/El precio definitivo se comprueba al presentar la apuesta en la casa/)
+  assert.equal(result.card.props.combinedOdds,'No disponible')
+  assert.ok(result.card.props.legs.every(x=>x.referenceOdds?.nonCotizable===true))
+  assert.match(result.card.props.legs[0].rationale,/NO cotizable/)
+  assert.match(result.card.props.subtitle,/TICKET DE INVESTIGACIÓN/)
   assert.equal(result.placed,false)
 })
 
@@ -442,293 +417,4 @@ test('optional quote sources have an independent finite deadline',async()=>{
   const started=Date.now()
   await assert.rejects(()=>boundedPriced(new Promise(()=>{}),35),/Fuente de cuotas: plazo agotado/)
   assert.ok(Date.now()-started<500)
-})
-
-test('partial 4/5 ticket recomputes market evidence and separate counts after quote fetch',async()=>{
-  const four=async()=> (await mkQuotes()()).slice(0,4)
-  const result=await withSpecialists(5,date,'soccer',0,now,enabled,feed,four)
-  assert.equal(result.verifiedEvents,5)
-  assert.equal(result.eventsFound,5)
-  assert.equal(result.quotedLegs,4)
-  assert.equal(result.approvedForBetting,false)
-  assert.equal(result.priced,false)
-  assert.equal(result.decisionAudit.legs.filter(x=>
-    x.bookmakerBreakEvenPct!==null).length,4)
-  assert.equal(result.decisionAudit.legs[4].bookmakerBreakEvenPct,null)
-  assert.deepEqual(result.card.props.dataCounts,{
-    eventsFound:5,quotedLegs:4,researchedLegs:5,
-    candidateLegs:4,conditionalLegs:5,approvedForBetting:0,
-  })
-  assert.deepEqual(result.card.props.decisionAudit,result.decisionAudit)
-})
-
-test('matched bookmaker price closes only the compact market step on second pass',async()=>{
-  const partialMarket=async games=>(await stubSpecialists(games)).map(g=>({
-    ...g,pendingSteps:['Pasos obligatorios sin cerrar (1): Cuota y mercado'],
-    checklist:{...g.checklist,verified:1,partial:1,
-      steps:[...g.checklist.steps,{key:'market',title:'Cuota y mercado',
-        critical:true,state:'partial',detail:'Investigación anterior a cuotas',
-        sources:['ESPN']}],
-      criticalPending:['Cuota y mercado'],complete:false},
-  }))
-  const result=await evidencePricedTicket(5,date,'soccer',0,now,enabled,feed,
-    mkQuotes(),'winner',partialMarket)
-  assert.equal(result.quotedLegs,5)
-  assert.equal(result.dossierComplete,true)
-  assert.equal(result.eventsFound,5)
-  assert.ok(result.specialistChecks.every(x=>x.checklist.steps.some(step=>
-    step.key==='market'&&step.state==='verified')))
-  assert.ok(result.specialistChecks.every(x=>
-    x.checklist.criticalPending.length===0))
-  assert.equal(result.card.props.dataCounts.quotedLegs,5)
-  assert.equal(result.approvedLegs,0)
-})
-
-test('complete ESPN-style 1X2 menu prices market but does not certify draw review',async()=>{
-  const withFullSoccer=async()=>(await mkQuotes()()).flatMap(q=>[
-    q,{...q,selection:q.away,price:2.40},
-    {...q,selection:'Draw',price:3.50},
-  ])
-  const reviewer=async games=>(await stubSpecialists(games)).map(x=>({
-    ...x,checklist:{...x.checklist,verified:1,partial:2,complete:false,
-      steps:[...x.checklist.steps,
-        {key:'market',title:'Cuota y mercado',critical:true,state:'partial',
-          detail:'Pendiente hasta cotejar casa',sources:['ESPN']},
-        {key:'draw',title:'Empate y liquidación 90 minutos',critical:true,
-          state:'partial',detail:'Falta 1X2 íntegro',sources:['ESPN']}],
-      criticalPending:['Cuota y mercado','Empate y liquidación 90 minutos']},
-  }))
-  const result=await evidencePricedTicket(5,date,'soccer',0,now,enabled,feed,
-    withFullSoccer,'winner',reviewer)
-  assert.equal(result.quotedLegs,5)
-  assert.ok(result.specialistChecks.every(x=>x.checklist.steps.some(s=>
-    s.key==='draw'&&s.state==='partial')))
-  assert.equal(result.approvedForBetting,false)
-  assert.equal(result.approvedLegs,0)
-})
-
-test('final five-leg research ticket remains visible when provisional lineups are noted',async()=>{
-  const pending=async games=>(await stubSpecialists(games)).map(g=>({
-    ...g,status:'incomplete',
-    checklist:{...g.checklist,complete:false,
-      criticalPending:['Quintetos o titulares no confirmados']},
-    pendingSteps:['Quintetos o titulares no confirmados'],
-  }))
-  const result=await evidencePricedTicket(5,date,'soccer',0,now,enabled,feed,
-    mkQuotes(),'winner',pending)
-  assert.equal(result.priced,true)
-  assert.equal(result.quotedLegs,5)
-  assert.equal(result.candidateLegs,5)
-  assert.equal(result.ticketReadyForReview,true)
-  assert.equal(result.approvedForBetting,false)
-  assert.equal(result.card.props.presentationStatus,'final-research')
-  assert.match(result.card.props.subtitle,/TICKET FINAL DE INVESTIGACIÓN/)
-  assert.ok(result.card.props.legs.every(x=>
-    x.displayStatus==='research-selection'&&
-    x.pendingEvidence.some(note=>note.includes('titulares'))))
-  assert.equal(result.decisionAudit.approvedForBetting,false)
-  assert.equal(result.decisionAudit.legs.length,5)
-})
-
-test('empty ranked slate preserves verified fixtures and does not query odds',async()=>{
-  let oddsCalls=0
-  const noHistory=async url=>{
-    const u=String(url)
-    if(u.includes('api.the-odds-api.com')||u.includes('/odds?'))oddsCalls++
-    if(/dates=202610(?!28)/u.test(u))return new Response(JSON.stringify({events:[]}))
-    return feed(url)
-  }
-  const report=await withSpecialists(5,date,'soccer',0,now,enabled,noHistory,
-    async()=>{oddsCalls++;return []})
-  assert.equal(report.verifiedEvents,0)
-  assert.ok(report.discoveredEvents>=5)
-  assert.equal(report.quotedLegs,0)
-  assert.equal(oddsCalls,0)
-  assert.match(report.explanation,/No se consultaron casas ni cuotas/)
-  assert.ok(report.sourceAudit.some(x=>x.source==='ESPN Site/Core'&&x.status==='not-applicable'))
-})
-
-test('zero ranked picks still probe official ESPN event odds without inventing legs',async()=>{
-  const noHistory=async url=>{
-    const u=String(url)
-    if(/dates=202610(?!28)/u.test(u))
-      return new Response(JSON.stringify({events:[]}))
-    return feed(url)
-  }
-  const report=await withSpecialists(5,date,'soccer',0,now,enabled,noHistory)
-  assert.equal(report.verifiedEvents,0)
-  assert.ok(report.discoveredEvents>=5)
-  assert.ok(report.card.props.pricePreviewEvents>0)
-  assert.ok(report.card.props.pricePreview.every(x=>x.eventId&&x.home&&x.away))
-  assert.equal(report.quotedLegs,0)
-  assert.equal(report.priced,false)
-  assert.equal(report.approvedLegs,0)
-  assert.match(report.explanation,/Se consultaron/)
-  assert.equal(report.sourceAudit.find(x=>x.source==='ESPN Site/Core').status,'empty')
-})
-
-
-test('a complete 1X2 price never marks draw-risk analytical verification as complete',async()=>{
-  const specialists=async games=>(await stubSpecialists(games)).map(g=>({
-    ...g,
-    checklist:{sport:'soccer',checkedAt:new Date(now).toISOString(),
-      steps:[
-        {key:'fixture',title:'Identity',critical:true,state:'verified',detail:'match'},
-        {key:'market',title:'Quoted price',critical:true,state:'partial',detail:'pending'},
-        {key:'draw',title:'Empate y 90 minutos',critical:true,state:'partial',
-          detail:'No hay muestras local/visitante suficientes'},
-      ],verified:1,partial:2,missing:0,complete:false,
-      criticalPending:['Quoted price','Empate y 90 minutos']},
-  }))
-  const prices=async()=>Array.from({length:5},(_,i)=>[
-    {selection:'Home '+i,price:1.8},
-    {selection:'Away '+i,price:4},
-    {selection:'Draw',price:3.6},
-  ].map(x=>({
-    eventId:'scraper-'+i,bookmaker:'Book A',market:'1x2',
-    selection:x.selection,price:x.price,point:null,
-    home:'Home '+i,away:'Away '+i,
-    time:kick,updatedAt:'2026-10-28T14:30:00Z',
-    source:'Mock bookmaker',sportKey:'football',
-  }))).flat()
-  const r=await evidencePricedTicket(5,date,'soccer',0,now,enabled,feed,prices,
-    'winner',specialists)
-  assert.equal(r.priced,true)
-  assert.equal(r.conditional,true)
-  assert.ok(r.specialistChecks.every(c=>
-    c.checklist.steps.find(s=>s.key==='draw').state==='partial'))
-  assert.ok(r.specialistChecks.every(c=>
-    c.checklist.steps.find(s=>s.key==='market').state==='verified'))
-  assert.ok(r.specialistChecks.every(c=>c.checklist.criticalPending.some(x=>
-    x.includes('Empate'))))
-})
-
-test('ESPN 1/5 partial ticket preserves actual price, bookmaker and source in visible leg',async()=>{
-  const read=async url=>{
-    const data=board(url),u=String(url)
-    if(u.includes('/soccer/eng.1/scoreboard?dates=20261028')){
-      data.events=data.events.map((event,i)=>i===0?{
-        ...event,competitions:event.competitions.map(comp=>({
-          ...comp,id:event.id,
-          odds:[{provider:{name:'DraftKings'},homeTeamOdds:{moneyLine:-125},
-            awayTeamOdds:{moneyLine:+110},drawOdds:+260}],
-        })),
-      }:event)
-    }
-    return new Response(JSON.stringify(data),{status:200})
-  }
-  const result=await evidencePricedTicket(5,date,'soccer',0,now,{
-    PHOENIX_SPORTS_ESPN_DISABLED:'0',
-    PHOENIX_SPORTS_ESPN_WEB_DISABLED:'1',
-    PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0',
-    PHOENIX_SPORTS_OPTIONAL_ODDS_FALLBACK:'0',
-  },read,undefined,'winner',stubSpecialists)
-  assert.equal(result.verifiedEvents,5)
-  assert.equal(result.quotedLegs,1)
-  assert.equal(result.missingQuotes,4)
-  assert.equal(result.priced,false)
-  assert.equal(result.card.props.combinedOdds,'No disponible')
-  assert.equal(result.card.props.legs[0].price,'1.8')
-  assert.equal(result.card.props.legs[0].bookmaker,'DraftKings')
-  assert.equal(result.card.props.legs[0].quoteStatus,'espn-observed')
-  assert.match(result.card.props.legs[0].quoteSource,/ESPN/)
-  assert.equal(result.card.props.legs[0].quoteAcceptedByBookmaker,false)
-  assert.equal(result.card.props.legs[1].price,'Por verificar')
-  assert.equal(result.card.props.individualQuotes[0].price,'1.8')
-  assert.equal(result.card.props.individualQuotes.filter(q=>q.status==='unpriced').length,4)
-  assert.match(result.card.props.subtitle,/1\/5 cuotas verificadas/)
-  assert.equal(result.approvedLegs,0)
-})
-test('1/5 explicitly provided bookmaker quote remains visible even without a parlay',async()=>{
-  const onlyOne=async()=>[{
-    eventId:'scraper-0',bookmaker:'Book A',market:'1x2',selection:'Home 0',
-    price:1.72,point:null,home:'Home 0',away:'Away 0',time:kick,
-    updatedAt:'2026-10-28T14:15:00Z',source:'OddsHarvester/OddsPortal (sin API key)',
-    sportKey:'football',
-  }]
-  const result=await withSpecialists(5,date,'soccer',100,now,enabled,feed,onlyOne)
-  assert.equal(result.quotedLegs,1)
-  assert.equal(result.card.props.legs[0].price,'1.72')
-  assert.equal(result.card.props.legs[0].bookmaker,'Book A')
-  assert.equal(result.card.props.legs[0].quoteStatus,'provider-observed')
-  assert.equal(result.card.props.legs[1].price,'Por verificar')
-  assert.equal(result.priced,false)
-})
-test('ESPN quote from another event ID cannot be assigned just by same participants and kickoff',async()=>{
-  const dishonest=async()=>[{
-    eventId:'999999',bookmaker:'DraftKings',market:'1x2',selection:'Home 0',
-    price:1.72,point:null,home:'Home 0',away:'Away 0',time:kick,
-    updatedAt:'No indicada por ESPN',observedAt:new Date(now).toISOString(),
-    source:'ESPN Site/Core (evento exacto, sin clave)',sportKey:'football',
-  }]
-  const result=await withSpecialists(5,date,'soccer',0,now,enabled,feed,dishonest)
-  assert.equal(result.quotedLegs,0)
-  assert.equal(result.card.props.legs[0].price,'Por verificar')
-})
-
-test('full-slate ESPN discovery does not let a quoted sixth replace a better-researched top five',async()=>{
-  const read=async url=>{
-    const raw=board(url),u=String(url)
-    if(u.includes('/soccer/eng.1/')){
-      const part=u.match(/dates=(\d{6,8})/u)?.[1]
-      if(part==='20261028'){
-        raw.events.push({
-          id:'505',date:kick,status:{type:{state:'pre'}},
-          competitions:[{id:'505',competitors:[
-            {homeAway:'home',team:{id:'51',displayName:'Home 5'}},
-            {homeAway:'away',team:{id:'52',displayName:'Away 5'}},
-          ],odds:[{provider:{name:'DraftKings'},
-            homeTeamOdds:{moneyLine:-110},awayTeamOdds:{moneyLine:105},
-            drawOdds:325}]}],
-        })
-      }else if(part==='202610'||['20261027','20261026','20261025',
-        '20261024','20261023'].includes(part??'')){
-        const hist=part==='202610'?['20261027','20261026','20261025',
-          '20261024','20261023']:[part]
-        for(const stamp of hist){
-          raw.events.push({id:String(505+Number(stamp.slice(-2))*1000),
-            date:'2026-'+stamp.slice(4,6)+'-'+stamp.slice(6,8)+'T21:00:00Z',
-            status:{type:{state:'post'}},competitions:[{competitors:[
-              {homeAway:'home',team:{id:'51',displayName:'Home 5'},score:'3'},
-              {homeAway:'away',team:{id:'52',displayName:'Away 5'},score:'0'},
-            ]}]})
-        }
-      }
-    }
-    return Response.json(raw)
-  }
-  const snapshots=[]
-  const result=await evidencePricedTicket(5,date,'soccer',0,now,{
-    PHOENIX_SPORTS_ESPN_DISABLED:'0',
-    PHOENIX_SPORTS_OPTIONAL_ODDS_FALLBACK:'0',
-    PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0',
-  },read,undefined,'winner',stubSpecialists,p=>snapshots.push(p))
-  assert.equal(snapshots[0].stage,'research-screened')
-  assert.equal(snapshots[0].verifiedEvents,5)
-  assert.equal(snapshots[0].quotedLegs,0)
-  assert.equal(snapshots[0].card.props.combinedOdds,'No disponible')
-  assert.ok(!snapshots[0].researchFixtures.some(x=>x.eventId==='505'))
-  assert.equal(result.verifiedEvents,5)
-  assert.ok(result.discoveryAudit.discoveredEvents>=6)
-  assert.ok(!result.researchFixtures.some(x=>x.eventId==='505'))
-  assert.ok(result.card.props.legs.every(x=>x.eventId!=='505'))
-  assert.equal(result.quotedLegs,0)
-  assert.equal(result.missingQuotes,5)
-  assert.equal(result.priced,false)
-  assert.equal(result.approvedLegs,0)
-  assert.match(result.card.props.note,/Cartelera completa:/)
-})
-
-test('NCAA uses ESPN college markets; Dominican winter baseball cannot inherit MLB odds',()=>{
-  assert.equal(ticketLeagueOddsKey({sport:'basketball',league:'mens-college-basketball'}),
-    'basketball_ncaab')
-  assert.equal(ticketLeagueOddsKey({sport:'football',league:'college-football'}),
-    'americanfootball_ncaaf')
-  assert.equal(ticketLeagueOddsKey({sport:'baseball',league:'dominican-winter-league'}),
-    undefined)
-  assert.equal(ticketLeagueOddsKey({sport:'baseball',league:'mlb'}),'baseball_mlb')
-  assert.equal(ticketLeagueOddsKey({sport:'football',league:'nfl'}),
-    'americanfootball_nfl')
-  assert.equal(ticketLeagueOddsKey({sport:'soccer',league:'uru.1'},'dynamic'),
-    'soccer_espn_dynamic')
 })
