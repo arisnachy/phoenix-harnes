@@ -73,3 +73,8 @@ A user question is not assumed to have a meaningful probability. One-off geopoli
 - Source agreement/contradiction panel, version library and due-outcome review queue.
 
 All first-party UI is schema-bounded and rendered through PHOENIX GenerativeCanvas; untrusted source HTML is never executed.
+
+## Known Limitations and Deferred Work
+
+- Forecasts require independently validated, representative source data; without it, probabilities and outcomes remain unverified.
+Forecasts depend on the quality, timing, and representativeness of observed evidence. Historical error bands are not calibrated guarantees, and outcomes reported by users are not independently verified. External source availability, standardized domain-specific validation, automated outcome reconciliation, and scheduled monitoring remain outside this module's current guarantees. The system must abstain or show uncertainty when reliable inputs are missing.

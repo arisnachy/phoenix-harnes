@@ -710,17 +710,11 @@
       ]
     },
     "packages/core/tool-oracle": {
-      "entry": [
-        "src/index.ts"
-      ],
       "project": [
         "src/**/*.ts"
       ]
     },
     "packages/health/healthia": {
-      "entry": [
-        "src/index.ts"
-      ],
       "project": [
         "src/**/*.ts"
       ]
