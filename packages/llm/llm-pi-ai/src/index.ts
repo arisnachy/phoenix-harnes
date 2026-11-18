@@ -153,7 +153,7 @@ async function resolvePhoenixLocalModel(
     }
     const metadata = await response.json() as Partial<PhoenixLocalModelMetadata> | null
     if (metadata === null || typeof metadata.selectedModelId !== 'string'
-      || !/^[a-z0-9][a-z0-9-]*$/u.test(metadata.selectedModelId)
+      || !/^[a-z0-9][a-z0-9.-]*$/u.test(metadata.selectedModelId)
       || typeof metadata.contextWindow !== 'number' || !Number.isSafeInteger(metadata.contextWindow)
       || metadata.contextWindow < 4_096
       || typeof metadata.maxTokens !== 'number' || !Number.isSafeInteger(metadata.maxTokens)
