@@ -198,7 +198,7 @@ describe('source-fidelity clinical image bridge', () => {
     expect(prompt).toContain('FUENTE VISUAL OBLIGATORIA')
     expect(prompt).toContain('bifurcaciones')
     expect(prompt).toContain('abreviaturas')
-    expect(prompt).toContain('Pixel')
+    expect(prompt).toContain('pixel spacing DICOM')
     expect(prompt).toContain('ATLAS')
     expect(prompt).toContain('no visible')
     expect(prompt).toContain('AHD, AHI, TC, AGI y AE')
