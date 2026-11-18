@@ -250,6 +250,42 @@ export async function collectDirectEspnStats(
         athlete.stats=extract(value,12)
         recorded('stats',value,athlete.stats.length)
         if(athlete.stats.length)athlete.verifiedSources.push('stats')
+        // ESPN Common-v3 can return HTTP 200 with empty unscoped season
+        // statistics even when the requested NBA/WNBA season has data.
+        // Recover against the roster-verified athlete ID, never infer an
+        // unavailable stat from the player's name or an old season.
+        if(!athlete.stats.length&&(league==='nba'||league==='wnba')){
+          add(uri+'stats'+explicitSeason,'athlete_stats_season',season=>{
+            const published=word(arr(obj(season).filters).map(obj)
+              .find(v=>v.name==='season')?.value,8)
+            const metrics=extract(season,12)
+            const correct=!published||published===String(seasonYear)
+            if(correct&&metrics.length){
+              athlete.stats=metrics
+              athlete.verifiedSources.push('stats:season='+seasonYear)
+              // This second pass must trigger per-player histories too;
+              // otherwise recovered season stats still leave every split
+              // and all but the first 3 game logs blank.
+              add(uri+'splits'+explicitSeason,'athlete_splits_season',data=>{
+                athlete.splits=parseEspnSplits(data,48)
+                recorded('splits'+explicitSeason,data,athlete.splits.length)
+                if(athlete.splits.length)
+                  athlete.verifiedSources.push('splits:season='+seasonYear)
+              })
+              if(!early&&priority(person)!==0){
+                add(uri+'gamelog'+explicitSeason,'athlete_gamelog_season',data=>{
+                  athlete.lastGames=parseEspnGameLog(data,now,20)
+                  recorded('gamelog'+explicitSeason,data,athlete.lastGames.length)
+                  if(athlete.lastGames.length){
+                    athlete.verifiedSources.push('gamelog:season='+seasonYear)
+                    splitFallback.set(athlete,data)
+                  }
+                })
+              }
+            }
+            recorded('stats'+explicitSeason,season,correct?metrics.length:0)
+          })
+        }
         // NHL Common v3 frequently replies 404 for gamelog. NHL's official
         // player/{NHL-id}/game-log endpoint is handled by investigateNhl()
         // using the NHL roster namespace; never pass an ESPN ID there.
