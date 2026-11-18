@@ -103,10 +103,15 @@ export function parseEspnSplits(raw:unknown,limit=48):HistoryMetric[]{
       arr(node.displayNames).length?arr(node.displayNames):arr(node.names)
     const values=arr(node.totals).length?arr(node.totals):
       arr(node.displayValues).length?arr(node.displayValues):
-      arr(node.values)
-    if(labels.length&&labels.length===values.length){
+      arr(node.values).length?arr(node.values):arr(node.stats)
+    // ESPN sometimes supplies statistical labels at the response root and
+    // primitive split values under each Home/Away row's `stats` array.
+    // Pair only equal-length arrays; never infer a missing metric label.
+    const scopedLabels=labels.length?labels:
+      arr(root.displayNames).length?arr(root.displayNames):arr(root.labels)
+    if(scopedLabels.length&&scopedLabels.length===values.length){
       for(let i=0;i<labels.length&&out.length<max;i++){
-        const stat=word(labels[i],45),value=scalar(values[i])
+        const stat=word(scopedLabels[i],45),value=scalar(values[i])
         const name=(path+' · '+stat).slice(0,110)
         if(stat&&value&&!used.has(name)){
           out.push({name,value});used.add(name)
