@@ -186,10 +186,37 @@ export async function materializeGeneratedImageInWorkspace(
  * Model-facing policy. Keeping the routing rule in the schema description makes
  * the capability visible to every model that sees the normal tool catalog.
  */
+/**
+ * Enforce anatomical fidelity instructions on real image-generation prompts.
+ * This never reconstructs an individual patient from 2D imagery or reports.
+ */
+export function clinicalRasterPrompt(prompt: string): string {
+  const normalized = prompt.normalize('NFD').replace(/[\u0300-\u036f]/gu,'').toLowerCase()
+  const clinical = /\b(?:anatom\w*|pleur\w*|pulmon\w*|pulmonary|lung\w*|neumotorax|pneumothorax|torax|thorax|thoracic|vascular\w*|irrigac\w*|arteri\w*|venos\w*|nervi\w*|bronqui\w*|cardiac\w*|coronar\w*|ecg|ekg|histolog\w*|citolog\w*|medical|clinico|clinica)\b/u.test(normalized)
+  if (!clinical) return prompt
+  const pleuralAir = /neumotorax|pneumothorax|aire\s+pleural|pleural\s+air/u.test(normalized)
+  const rightSide = /\b(?:derech[oa]|right)\b/u.test(normalized)
+  return [
+    prompt,
+    'REQUISITO DE SALIDA MEDICA: producir una IMAGEN FIJA RASTER hiperrealista, estilo atlas de anatomia clinica, no una escena 3D interactiva, malla low-poly, iconos, siluetas primitivas, SVG ni canvas.',
+    'Priorizar topografia anatomica verosimil, orientacion derecha/izquierda explicita, relaciones espaciales, escala relativa de organos, profundidad tisular, texturas realistas y luz de estudio, con vista en corte o diseccion didactica cuando ayude a revelar estructuras.',
+    'Representar huesos, musculos, fascias, organos, pleuras o membranas, arbol arterial y venoso, irrigacion y drenaje, nervios y estructuras vecinas RELEVANTES para la region; diferenciar correctamente arterias, venas y nervios sin superponer trayectos imposibles.',
+    'Crear una lamina limpia con rotulos en espanol, flechas precisas y leyenda lateral legible. No inventar tamanos numericos, anomalias vasculares, lesiones, desplazamientos ni hallazgos que no aparezcan en la evidencia aportada. Proporciones de atlas, no medidas del paciente.',
+    'Si existe imagen o informe clinico revisado, separar hallazgo observado, impresion informada e hipotesis y respetar sus limites; si no existe estudio, declarar claramente Atlas anatomico educativo, no reconstruccion del paciente.',
+    'Comprobar la coherencia topografica de los rotulos antes de presentar la imagen. Nunca afirmar exactitud anatomica perfecta o validacion diagnostica automatica.',
+    ...(pleuralAir ? [
+      'NEUMOTORAX / AIRE PLEURAL: ilustrar el aire en el espacio pleural entre pleura parietal y visceral, mostrar pulmon y pared toracica en sus relaciones reales, hilio, bronquios y vasos pulmonares dentro de la anatomia correspondiente; nervio y vasos intercostales siguen el surco costal. No dibujar aire dentro del pulmon como si fuera aire pleural.',
+      'No mostrar desviacion mediastinica, tension, colapso completo, tamanos ni lesiones asociadas si no estan documentados.',
+      ...(rightSide ? ['La alteracion ilustrada corresponde al HEMITORAX DERECHO anatomico; no invertir lateralidad por la perspectiva del observador.'] : []),
+    ] : []),
+  ].join('\n')
+}
+
 export const imageGenerationToolDescription =
   'Generate one actual, high-quality raster image with PHOENIX. Never satisfy an image, photo, hero, logo, banner, poster, cover, illustration, mockup, thumbnail, or visual-asset request with SVG, HTML, CSS, canvas drawing, emoji, ASCII art, a placeholder, or an anthropomorphic mascot unless the user explicitly requested that style. '
   + 'Use this whenever the user explicitly asks to create, draw, design, render, visualize, or generate an image, and when a project materially requires real imagery. '
   + 'For educational explanations of anatomical structures, brain pathways, biochemical cascades and other spatial or causal mechanisms, consider one accurately labeled explanatory diagram when it would materially improve understanding, even when the user naturally asks to understand the mechanism rather than explicitly saying "draw an image". Do not generate decorative illustrations for basic definition requests, do not invent data labels or source attribution, and never delay the substantive text explanation on image creation. '
+  + 'MEDICAL ANATOMY ROUTING: for any requested clinical or anatomical image, including pleural air, pneumothorax, organs, vessels, nerves, pathology or educational atlases, CALL image_generation for an actual photorealistic 2D raster image, not a generated scene3d JSON, low-poly 3D model, voxel, GLB, HTML/CSS/SVG illustration or pseudo-anatomical shapes. Preserve correct side, anatomical scale and relationships. Label pertinent arterial supply, venous drainage, nerves, adjacent structures and evidenced abnormality. When source imaging or reports exist, inspect them first and never fabricate patient-specific pathology or measurements. If no real raster provider succeeds, say so explicitly instead of creating a 3D substitute. '
   + 'Do not reject consensual adult-oriented art, romance, or nude studies solely because they concern adult sexuality; submit eligible user-initiated requests to image_generation when the selected provider supports that content. Do not claim this tool overrides provider policies; do not depict minors sexually or produce non-consensual intimate images of identifiable people. '
   + 'When a user supplies an X-ray, ECG, clinical photograph, imaging study or diagnostic report and requests an explanatory image/3D model, first read the original source with a capable vision/document route and answer its actual findings and any written impression in text; separate directly observed evidence, reported diagnosis, provisional hypothesis and limitations. Never substitute generic normal anatomy for the requested abnormality, hallucinate a patient-specific lesion or advertise a 3D reconstruction of a single projection. A conceptual 3D atlas must be labelled illustrative and must match the supported findings. If the source is unreadable, state the specific limitation instead of silently generating a patient-diagnosis illustration. '
   + 'For game work, use it for production sprites, character sheets, tiles, backgrounds, portraits, textures, and other raster assets when appropriate; prefer transparent backgrounds for sprite/character assets when supported, then inspect the generated local path with read_image before shipping or importing it. '
@@ -1373,7 +1400,13 @@ export function installCodexImageGeneration(ctx: Context): void {
       const wantsKira = /\b(?:tipo|estilo|como)\s+(?:(?:de|del|al)\s+)?(?:equipo\s+)?kira\b/iu.test(
         requestText.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, ''),
       ) || /\b(?:tipo|estilo)\s+(?:(?:de|del|al)\s+)?(?:equipo\s+)?kira\b/iu.test(prompt)
-      const styledPrompt = wantsKira ? prompt + '\n' + KIRA_TEAM_STYLE : prompt
+      const basePrompt = wantsKira ? prompt + '\n' + KIRA_TEAM_STYLE : prompt
+      const styledPrompt = clinicalRasterPrompt(basePrompt)
+      const visualArgs: ImageGenerationArgs = styledPrompt === basePrompt ? args : {
+        ...args,
+        size: args.size === undefined || args.size === 'auto' ? '1536x1024' : args.size,
+        quality: args.quality === undefined || args.quality === 'auto' ? 'high' : args.quality,
+      }
       const failures: string[] = []
       for (const backend of backends) {
         let image: ImageGenerationValue
@@ -1384,13 +1417,13 @@ export function installCodexImageGeneration(ctx: Context): void {
             try {
               const source = join(dir, 'profile-original' + extension)
               await writeFile(source, photo.data, { flag: 'wx' })
-              image = await generateWithCodexProvider(ctx, args, styledPrompt, exec.signal, source)
+              image = await generateWithCodexProvider(ctx, visualArgs, styledPrompt, exec.signal, source)
             } finally {
               await rm(dir, { recursive: true, force: true })
             }
-          } else if (backend === 'codex') image = await generateWithCodexProvider(ctx, args, styledPrompt, exec.signal)
-          else if (backend === 'local') image = await generateWithLocalProvider(ctx, args, styledPrompt, exec.signal, photo)
-          else image = await generateWithFreeProvider(ctx, args, styledPrompt, exec.signal)
+          } else if (backend === 'codex') image = await generateWithCodexProvider(ctx, visualArgs, styledPrompt, exec.signal)
+          else if (backend === 'local') image = await generateWithLocalProvider(ctx, visualArgs, styledPrompt, exec.signal, photo)
+          else image = await generateWithFreeProvider(ctx, visualArgs, styledPrompt, exec.signal)
         } catch (error) {
           exec.signal.throwIfAborted()
           if (requestedBackend !== 'auto') throw error
