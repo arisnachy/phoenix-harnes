@@ -41,11 +41,24 @@ export function localImageDirectPrompt(message: UserMessage | undefined): string
 /**
  * Execute exactly one prompt through the isolated FastSD CLI worker. The
  * worker receives only this text over stdin (never a session snapshot).
- * @param prompt - User-requested standalone image content.
- * @param signal - Current agent turn cancellation signal.
- * @returns Trusted markdown pointing to the generated private local JPEG.
+ * A single worker runs at a time across sessions on this Host.
  */
-export async function runLocalImageDirect(prompt: string, signal: AbortSignal): Promise<string> {
+let directImageQueue: Promise<void> = Promise.resolve()
+
+/**
+ * Serialize standalone image generations across concurrently active sessions:
+ * no second Host worker can interrupt another worker's owned FastSD process.
+ * @param prompt - Image description from the current human message only.
+ * @param signal - Turn cancellation, including while waiting for the queue.
+ * @returns The single generated image markdown reference.
+ */
+export function runLocalImageDirect(prompt: string, signal: AbortSignal): Promise<string> {
+  const generation = directImageQueue.then(() => spawnDirectImageWorker(prompt, signal))
+  directImageQueue = generation.then(() => undefined, () => undefined)
+  return generation
+}
+
+async function spawnDirectImageWorker(prompt: string, signal: AbortSignal): Promise<string> {
   signal.throwIfAborted()
   return new Promise<string>((resolveResult, rejectResult) => {
     const child = spawn(process.execPath, [WORKER, '--generate-once'], {
