@@ -5,12 +5,12 @@ import type { Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import Loader from '@phoenix-ai/cordis-plugin-loader'
 import Include from '@phoenix-ai/cordis-plugin-include'
 import LlmRuntime from '@phoenix-ai/dsh-llm'
-import * as LlmPiAi from '@phoenix-ai/dsh-llm-pi-ai'
+import * as LlmPiAi from '../src/index.ts'
 import { assemble } from './assemble.ts'
 import { textEvents } from './mock-server.ts'
 
@@ -21,14 +21,19 @@ let localServer: Server | undefined
 afterEach(async () => {
   await context?.fiber.dispose()
   context = undefined
-  if (localServer !== undefined) {
+  const server = localServer
+  if (server !== undefined) {
     await new Promise<void>((resolve, reject) => {
-      localServer!.close((error) =>{  error === undefined ? resolve() : reject(error) })
+      server.close((error) => {
+        if (error === undefined) resolve()
+        else reject(error)
+      })
     })
     localServer = undefined
   }
   if (root !== undefined) await rm(root, { recursive: true, force: true })
   root = undefined
+  vi.unstubAllGlobals()
 })
 
 async function loadBareModelRuntime(): Promise<Context> {
@@ -90,7 +95,35 @@ describe('llm-pi-ai built-in route lifecycle', () => {
     expect(authorization).toBe(LlmPiAi.PHOENIX_LOCAL_AUTHORIZATION)
   })
 
+  it('uses Host capabilities for the selected qwen3.5 catalog identifier', async () => {
+    const selected = {
+      selectedModelId: 'qwen3.5-2b-ollama-q4-k-m',
+      contextWindow: 16_384,
+      maxTokens: 768,
+    }
+    const metadataUrl = `${LlmPiAi.PHOENIX_LOCAL_BASE_URL}/phoenix-local/metadata`
+    const fetchMetadata = vi.fn<typeof fetch>(input => Promise.resolve(
+      input === metadataUrl ? Response.json(selected) : new Response(null, { status: 404 }),
+    ))
+    vi.stubGlobal('fetch', fetchMetadata)
+    const ctx = await loadBareModelRuntime()
+
+    const info = await ctx.llm.resolveModelInfo(
+      LlmPiAi.PHOENIX_LOCAL_PROVIDER,
+      LlmPiAi.PHOENIX_LOCAL_MODEL,
+    )
+    expect(fetchMetadata).toHaveBeenCalledWith(
+      metadataUrl,
+      expect.objectContaining({ headers: { Authorization: LlmPiAi.PHOENIX_LOCAL_AUTHORIZATION } }),
+    )
+    expect(info).toMatchObject({
+      context: { contextWindow: 16_384 },
+      defaultMaxTokens: 768,
+    })
+  })
+
   it('registers Phoenix Local and OpenCode Free without image-only runtime services', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 404 })))
     const ctx = await loadBareModelRuntime()
 
     expect(ctx.llm.listProviders().map(provider => provider.id).sort()).toEqual([
