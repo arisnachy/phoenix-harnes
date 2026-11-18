@@ -12,6 +12,10 @@ import {
   codexDoctorSupportsImageGeneration,
   imageGenerationToolDescription,
   clinicalRasterPrompt,
+  clinicalSourceCanvas,
+  clinicalSourceBackendOrder,
+  latestClinicalSourceReference,
+  requestsMedicalSourceFidelity,
   imageGenerationBackendOrder,
   profileImageBackendOrder,
   latestProfileReference,
@@ -156,6 +160,130 @@ describe('current-turn private photo binding for Codex image tools', () => {
     expect(KIRA_TEAM_STYLE).toContain('futuristic city')
     expect(KIRA_TEAM_STYLE).toContain('holograms')
     expect(KIRA_TEAM_STYLE).toContain('NOT')
+  })
+})
+
+describe('source-fidelity clinical image bridge', () => {
+  const study = {
+    attachmentId: 'sha256:medical-scan-illustrative',
+    mediaType: 'image/png',
+    width: 448,
+    height: 447,
+    bytes: 101,
+    name: 'tc-axial-arterias.png',
+  }
+  const userMessage = { type: 'user/message', data: {
+    source: { kind: 'user' },
+    content: [
+      { type: 'text', text: 'Genera una imagen fiel a este estudio de TC axial, con las ramas arteriales observadas.' },
+      { type: 'image', attachment: study },
+    ],
+  } }
+  it('binds only an image in the current human turn and never a previous scan or profile photo', () => {
+    expect(latestClinicalSourceReference([
+      { type:'turn/start', data:{} }, userMessage, { type:'tool/call', data:{} },
+    ])).toEqual(study)
+    expect(latestClinicalSourceReference([
+      userMessage, { type:'turn/start', data:{} }, { type:'user/message', data:{ source:{kind:'user'}, content:[] } },
+    ])).toBeUndefined()
+    expect(latestClinicalSourceReference([{ type:'turn/start', data:{} }, { type:'user/message', data:{
+      source:{kind:'user'},content:[{type:'image',attachment:{...study,name:'referencia-original-del-usuario.webp'}}],
+    } }])).toBeUndefined()
+    expect(latestClinicalSourceReference([{type:'turn/start',data:{}},{type:'user/message',data:{
+      source:{kind:'tool'},content:[{type:'image',attachment:study}],
+    }}])).toBeUndefined()
+  })
+  it('recognizes abdominal CT vessel briefs and preserves image plane, labels and scale limits',()=>{
+    const prompt = clinicalRasterPrompt('TC axial del abdomen: arterias hepáticas AHD, AHI, TC, AGI y AE',true)
+    expect(prompt).toContain('FUENTE VISUAL OBLIGATORIA')
+    expect(prompt).toContain('bifurcaciones')
+    expect(prompt).toContain('abreviaturas')
+    expect(prompt).toContain('pixel spacing DICOM')
+    expect(prompt).toContain('ATLAS')
+    expect(prompt).toContain('no visible')
+    expect(prompt).toContain('AHD, AHI, TC, AGI y AE')
+    expect(requestsMedicalSourceFidelity('Sé fiel a esta imagen del estudio','Imagen de vasos hepáticos')).toBe(true)
+    expect(requestsMedicalSourceFidelity('Genera una imagen anatómica genérica','Lámina del corazón')).toBe(false)
+    expect(requestsMedicalSourceFidelity('Igual a la imagen adjunta','Una bicicleta roja')).toBe(false)
+    expect(clinicalSourceCanvas(448,447)).toBe('1024x1024')
+    expect(clinicalSourceCanvas(1200,700)).toBe('1536x1024')
+    expect(clinicalSourceCanvas(500,900)).toBe('1024x1536')
+    expect(()=>clinicalSourceCanvas(0,500)).toThrow(/dimensions/)
+    expect(clinicalSourceBackendOrder('auto')).toEqual(['codex','local'])
+    expect(clinicalSourceBackendOrder('local')).toEqual(['local'])
+    expect(()=>clinicalSourceBackendOrder('free')).toThrow(/solo texto/)
+  })
+  it('passes the ORIGINAL current-turn CT pixels to local image edits without text-only fallback',async()=>{
+    const folder=await mkdtemp(join(tmpdir(),'phoenix-clinical-img-test-'))
+    const urlWas=process.env.PHOENIX_IMAGE_LOCAL_BASE_URL
+    const modelWas=process.env.PHOENIX_IMAGE_LOCAL_MODEL
+    process.env.PHOENIX_IMAGE_LOCAL_BASE_URL='http://127.0.0.1:9898/v1'
+    process.env.PHOENIX_IMAGE_LOCAL_MODEL='clinical-edit-fixture'
+    const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l0cAAAAASUVORK5CYII=','base64')
+    const ref={...study,bytes:png.length}
+    const events=[{type:'turn/start',data:{}},{type:'user/message',data:{
+      source:{kind:'user'},content:[
+        {type:'image',attachment:ref},
+        {type:'text',text:'Genera imagen fiel al estudio adjunto de TC axial con vasos hepáticos y etiquetas AHD AHI TC AGI AE'},
+      ],
+    }}]
+    let tool:CapturedImageTool | undefined
+    const calls:Array<{url:string,body:FormData,redirect?:RequestRedirect}>=[]
+    vi.stubGlobal('fetch',vi.fn(async(url:RequestInfo|URL,init?:RequestInit)=>{
+      const address=typeof url==='string'?url:url instanceof URL?url.href:url.url
+      if(!(init?.body instanceof FormData))throw Error('Must forward study pixels as multipart')
+      calls.push({url:address,body:init.body,redirect:init.redirect ?? 'follow'})
+      return new Response(JSON.stringify({data:[{b64_json:png.toString('base64')}]}),{
+        status:200,headers:{'content-type':'application/json'},
+      })
+    }))
+    try{
+      const context={
+        tools:{register(d:CapturedImageTool){tool=d;return()=>{}}},
+        subprocess:{async resolveExecutable(){throw Error('Codex must not be launched for local-only reference test')}},
+        attachments:{
+          async readImage(attachment:{attachmentId:string}){
+            return {ref:attachment.attachmentId===ref.attachmentId?ref:{...ref,attachmentId:'sha256:generated'},data:png}
+          },
+          async saveImage(){return {...ref,attachmentId:'sha256:generated',name:'clinical-result.png'}}
+        }
+      } as unknown as Context
+      installCodexImageGeneration(context)
+      if(tool===undefined)throw Error('Image tool not registered')
+      const execution={
+        signal:new AbortController().signal,
+        agent:{options:{provider:'phoenix-local'},session:{header:{cwd:folder},events}},
+      }
+      const generated=await tool.execute({prompt:'Ilustración fiel de TC axial abdominal con arterias hepáticas',backend:'local'},execution)
+      expect(generated).toMatchObject({provider:'local'})
+      expect(calls).toHaveLength(1)
+      expect(calls[0]?.url).toBe('http://127.0.0.1:9898/v1/images/edits')
+      expect(calls[0]?.redirect).toBe('error')
+      expect(calls[0]?.body.get('size')).toBe('1024x1024')
+      expect(String(calls[0]?.body.get('prompt'))).toContain('FUENTE VISUAL OBLIGATORIA')
+      const forwarded=calls[0]?.body.get('image')
+      expect(forwarded).toBeInstanceOf(Blob)
+      expect(Buffer.from(await (forwarded as Blob).arrayBuffer())).toEqual(png)
+      expect((forwarded as File).name).toBe('clinical-study.png')
+      await expect(tool.execute({prompt:'TC axial, arterias hepáticas',backend:'free'},execution))
+        .rejects.toThrow(/solo texto/)
+      expect(calls).toHaveLength(1)
+      await expect(tool.execute({prompt:'TC axial, arterias hepáticas',backend:'local'},{
+        ...execution,agent:{...execution.agent,session:{...execution.agent.session,events:[
+          {type:'turn/start',data:{}},{type:'user/message',data:{
+            source:{kind:'user'},content:[{type:'text',text:'Hazlo fiel al estudio adjunto de TC axial'}],
+          }},
+        ]}},
+      })).rejects.toThrow(/adjunta el estudio medico original/)
+      expect(calls).toHaveLength(1)
+    }finally{
+      vi.unstubAllGlobals()
+      if(urlWas===undefined)delete process.env.PHOENIX_IMAGE_LOCAL_BASE_URL
+      else process.env.PHOENIX_IMAGE_LOCAL_BASE_URL=urlWas
+      if(modelWas===undefined)delete process.env.PHOENIX_IMAGE_LOCAL_MODEL
+      else process.env.PHOENIX_IMAGE_LOCAL_MODEL=modelWas
+      await rm(folder,{recursive:true,force:true})
+    }
   })
 })
 

@@ -190,9 +190,9 @@ export async function materializeGeneratedImageInWorkspace(
  * Enforce anatomical fidelity instructions on real image-generation prompts.
  * This never reconstructs an individual patient from 2D imagery or reports.
  */
-export function clinicalRasterPrompt(prompt: string): string {
+export function clinicalRasterPrompt(prompt: string, sourceAttached = false): string {
   const normalized = prompt.normalize('NFD').replace(/[\u0300-\u036f]/gu,'').toLowerCase()
-  const clinical = /\b(?:anatom\w*|pleur\w*|pulmon\w*|pulmonary|lung\w*|neumotorax|pneumothorax|torax|thorax|thoracic|vascular\w*|irrigac\w*|arteri\w*|venos\w*|nervi\w*|bronqui\w*|cardiac\w*|coronar\w*|ecg|ekg|histolog\w*|citolog\w*|medical|clinico|clinica)\b/u.test(normalized)
+  const clinical = /\b(?:anatom\w*|pleur\w*|pulmon\w*|pulmonary|lung\w*|neumotorax|pneumothorax|torax|thorax|thoracic|vascular\w*|irrigac\w*|arteri\w*|venos\w*|vasos?|nervi\w*|bronqui\w*|cardiac\w*|corazon|coronar\w*|ecg|ekg|histolog\w*|citolog\w*|medical|medic\w*|clinic\w*|hepatic\w*|higad\w*|esplen\w*|splen\w*|celiac\w*|aort\w*|angiograf\w*|angio.?tc|tomograf\w*|resonancia|radiograf\w*|ecograf\w*|dicom|corte\s+axial|ct\s+scan)\b/u.test(normalized)
   if (!clinical) return prompt
   const pleuralAir = /neumotorax|pneumothorax|aire\s+pleural|pleural\s+air/u.test(normalized)
   const rightSide = /\b(?:derech[oa]|right)\b/u.test(normalized)
@@ -204,6 +204,15 @@ export function clinicalRasterPrompt(prompt: string): string {
     'Crear una lamina limpia con rotulos en espanol, flechas precisas y leyenda lateral legible. No inventar tamanos numericos, anomalias vasculares, lesiones, desplazamientos ni hallazgos que no aparezcan en la evidencia aportada. Proporciones de atlas, no medidas del paciente.',
     'Si existe imagen o informe clinico revisado, separar hallazgo observado, impresion informada e hipotesis y respetar sus limites; si no existe estudio, declarar claramente Atlas anatomico educativo, no reconstruccion del paciente.',
     'Comprobar la coherencia topografica de los rotulos antes de presentar la imagen. Nunca afirmar exactitud anatomica perfecta o validacion diagnostica automatica.',
+    ...(sourceAttached ? [
+      'FUENTE VISUAL OBLIGATORIA: imagen del estudio original adjunta como entrada de imagen a imagen; revisar sus pixeles en lugar de sintetizar una imagen desde una descripcion textual.',
+      'FIDELIDAD: conservar el plano del corte (axial/sagital/coronal), orientacion R/L y anterior/posterior, forma y volumen aparente de organos, topografia, ramas arteriales y venosas, bifurcaciones, calibre aparente y relaciones espaciales VISIBLES. No invertir lateralidad ni reconstruir anatomia que quede fuera del campo.',
+      'Mantener literalmente abreviaturas, flechas y rotulos ya visibles; no inventar su expansion si es ambigua ni asignarles otro vaso. Conservar el estudio original como referencia visual de contraste.',
+      'No deducir tamano real, longitud, diametro en mm ni escala a partir de un JPG o captura sin pixel spacing DICOM o calibracion verificada. Respetar la relacion de aspecto de la fuente; si se necesita un lienzo mas grande, usar margenes y nunca recortar el corte ni redimensionar tejidos o desplazar vasos para mejorar composicion.',
+      'Inervacion y microvasos no visibles en el estudio NO son hallazgos observados. Si se piden nervios, añadirlos solo en panel de atlas SEPARADO, marcados Anatomia de referencia NO visible en el estudio; no superponerlos como vasos o nervios comprobados del paciente.',
+      'Separar FUENTE OBSERVADA, ANOTACION DEL ESTUDIO y ATLAS EDUCATIVO; cualquier estructura inferida debe identificarse como no verificada. La imagen sintetica no sustituye ni diagnostica el estudio original.',
+      'Si no puedes leer la fuente ni preservar de forma fiable ramas, etiquetas y morfologia, declara la limitacion y prefiere conservar la imagen original; nunca afirmar una replica clinica exacta.',
+    ] : []),
     ...(pleuralAir ? [
       'NEUMOTORAX / AIRE PLEURAL: ilustrar el aire en el espacio pleural entre pleura parietal y visceral, mostrar pulmon y pared toracica en sus relaciones reales, hilio, bronquios y vasos pulmonares dentro de la anatomia correspondiente; nervio y vasos intercostales siguen el surco costal. No dibujar aire dentro del pulmon como si fuera aire pleural.',
       'No mostrar desviacion mediastinica, tension, colapso completo, tamanos ni lesiones asociadas si no estan documentados.',
@@ -219,6 +228,7 @@ export const imageGenerationToolDescription =
   + 'MEDICAL ANATOMY ROUTING: for any requested clinical or anatomical image, including pleural air, pneumothorax, organs, vessels, nerves, pathology or educational atlases, CALL image_generation for an actual photorealistic 2D raster image, not a generated scene3d JSON, low-poly 3D model, voxel, GLB, HTML/CSS/SVG illustration or pseudo-anatomical shapes. Preserve correct side, anatomical scale and relationships. Label pertinent arterial supply, venous drainage, nerves, adjacent structures and evidenced abnormality. When source imaging or reports exist, inspect them first and never fabricate patient-specific pathology or measurements. If no real raster provider succeeds, say so explicitly instead of creating a 3D substitute. '
   + 'Do not reject consensual adult-oriented art, romance, or nude studies solely because they concern adult sexuality; submit eligible user-initiated requests to image_generation when the selected provider supports that content. Do not claim this tool overrides provider policies; do not depict minors sexually or produce non-consensual intimate images of identifiable people. '
   + 'When a user supplies an X-ray, ECG, clinical photograph, imaging study or diagnostic report and requests an explanatory image/3D model, first read the original source with a capable vision/document route and answer its actual findings and any written impression in text; separate directly observed evidence, reported diagnosis, provisional hypothesis and limitations. Never substitute generic normal anatomy for the requested abnormality, hallucinate a patient-specific lesion or advertise a 3D reconstruction of a single projection. A conceptual 3D atlas must be labelled illustrative and must match the supported findings. If the source is unreadable, state the specific limitation instead of silently generating a patient-diagnosis illustration. '
+  + 'SOURCE-EXACT MEDICAL IMAGE CONTRACT: when an actual clinical image is supplied in the current turn, bind its image attachment as image-to-image reference. Preserve visibly observed vascular branching, organ silhouettes, imaging plane, sidedness and original label abbreviations; do not invent invisible nerves, microvessels, or millimetric measurements without calibrated DICOM metadata. Separate source-observed features from atlas-only inferred anatomy, which must appear in a separately labelled educational panel. Never fall back to a text-only generator when original study pixels were requested. A generative illustration is not pixel-perfect diagnostic reconstruction. '
   + 'For game work, use it for production sprites, character sheets, tiles, backgrounds, portraits, textures, and other raster assets when appropriate; prefer transparent backgrounds for sprite/character assets when supported, then inspect the generated local path with read_image before shipping or importing it. '
   + 'Normally use backend=auto. Auto is independent of the active text-model provider: it tries the locally authenticated OpenAI Codex/ChatGPT built-in image generator first, then a configured local image endpoint with no hosted quota, then configured allocation-backed providers: Cloudflare Workers AI first and Hugging Face free credits second. '
   + 'Do not claim that only an external connector such as Higgsfield is available until image_generation itself has actually been attempted. Do not silently switch to a separately billed OpenAI API. '
@@ -368,6 +378,26 @@ export function profileImageBackendOrder(
   }
   if (requested === 'codex' || requested === 'local') return [requested]
   return ['codex', 'local']
+}
+
+/** A fidelity-anchored clinical source must reach a real image-to-image editor. */
+export function clinicalSourceBackendOrder(
+  requested: ImageGenerationBackend | undefined,
+): readonly ('codex' | 'local')[] {
+  if (requested === 'free') {
+    throw new Error('image_generation: la referencia clinica requiere edicion imagen-a-imagen; los proveedores solo texto no preservan ramas vasculares, corte ni organos.')
+  }
+  if (requested === 'codex' || requested === 'local') return [requested]
+  return ['codex', 'local']
+}
+
+/** Preserve the source study's aspect class; never force a square CT into a wide cinematic crop. */
+export function clinicalSourceCanvas(width: number, height: number): ImageSize {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    throw new Error('image_generation: missing image dimensions for the source study')
+  }
+  const ratio = width / height
+  return ratio > 1.15 ? '1536x1024' : ratio < 0.87 ? '1024x1536' : '1024x1024'
 }
 
 /**
@@ -556,6 +586,7 @@ async function generateWithLocalProvider(
   prompt: string,
   signal: AbortSignal,
   reference?: StoredImageAttachment,
+  referenceKind: 'profile' | 'clinical' = 'profile',
 ): Promise<ImageGenerationValue> {
   const endpoint = localImageEndpoint()
   if (endpoint === undefined) {
@@ -595,7 +626,7 @@ async function generateWithLocalProvider(
       form.append('n', '1')
       form.append('response_format', 'b64_json')
       if (args.size !== undefined && args.size !== 'auto') form.append('size', args.size)
-      form.append('image', new Blob([Buffer.from(reference.data)], { type: reference.ref.mediaType }), 'profile-original' + extension)
+      form.append('image', new Blob([Buffer.from(reference.data)], { type: reference.ref.mediaType }), (referenceKind === 'clinical' ? 'clinical-study' : 'profile-original') + extension)
       return form
     })()
   const response = await fetch(`${endpoint.baseURL}/images/${reference === undefined ? 'generations' : 'edits'}`, {
@@ -981,6 +1012,30 @@ export function latestProfileReference(events: readonly { type: string; data: un
   }
   return undefined
 }
+/** Current human turn only: source study is separate from opted-in profile likeness. */
+export function latestClinicalSourceReference(
+  events: readonly { type: string; data: unknown }[],
+): ImageAttachmentRef | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i]
+    if (event?.type === 'turn/start') return undefined
+    if (event?.type !== 'user/message' || typeof event.data !== 'object' || event.data === null) continue
+    const msg = event.data as { source?: { kind?: string }; content?: readonly ContentBlock[] }
+    if (msg.source?.kind !== 'user' || !Array.isArray(msg.content)) continue
+    const picture = msg.content.find(item =>
+      item.type === 'image' && item.attachment.name !== 'referencia-original-del-usuario.webp')
+    return picture?.type === 'image' ? picture.attachment : undefined
+  }
+  return undefined
+}
+
+/** Does the current user intend a source-faithful clinical image rather than a generic atlas? */
+export function requestsMedicalSourceFidelity(requestText: string, visualPrompt: string): boolean {
+  if (clinicalRasterPrompt(visualPrompt) === visualPrompt) return false
+  const text = requestText.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  return /\b(?:adjunt\w*|estudio|tomografia|radiografia|resonancia|captura|referencia|original|esta\s+imagen|este\s+corte|igual\s+a|igual\s+que|fiel\s+a|basad[ao]\s+en|a\s+partir\s+de|segun\s+(?:la|el)|source|reference|attached|scan|study|provided\s+image)\b/u.test(text)
+}
+
 function latestUserText(events: readonly { type: string; data: unknown }[]): string {
   for (let i = events.length - 1; i >= 0; i--) {
     const event = events[i]
@@ -1014,6 +1069,7 @@ function generationPrompt(
   quality: string,
   background: string,
   referencePath?: string,
+  referenceKind: 'profile' | 'clinical' = 'profile',
 ): string {
   return [
     'You are the PHOENIX image worker.',
@@ -1027,7 +1083,12 @@ function generationPrompt(
     `Requested quality guidance: ${quality}.`,
     `Requested background guidance: ${background}.`,
     `Image request: ${highQualityPrompt(prompt)}`,
-    ...(referencePath === undefined ? [] : [
+    ...(referencePath === undefined ? [] : referenceKind === 'clinical' ? [
+      `MANDATORY medical source image is ATTACHED VISUALLY via Codex --image: ${basename(referencePath)}`,
+      'Use the actual study pixels as image-to-image input. Preserve the imaging plane, R/L orientation, organ contours, visible vascular branches, bifurcations and exact original abbreviation labels.',
+      'Do not invent invisible nerves, hidden vessels or physical sizes. Do not infer ambiguous abbreviations or flip laterality.',
+      'An edited image is illustrative, NEVER a verified diagnostic duplicate. If the source cannot be loaded into image_gen, STOP rather than fabricating matching anatomy.',
+    ] : [
       `MANDATORY source photograph is ATTACHED VISUALLY via Codex --image: ${basename(referencePath)}`,
       'Use the already attached photograph as input to the built-in image_gen tool, preserving facial identity.',
       'This is IMAGE-TO-IMAGE. Include the source pixels as input to image_gen, preserving actual likeness; never invent a different face.',
@@ -1138,6 +1199,7 @@ async function generateWithCodexProvider(
   prompt: string,
   signal: AbortSignal,
   referencePath?: string,
+  referenceKind: 'profile' | 'clinical' = 'profile',
 ): Promise<ImageGenerationValue> {
   // A writable sandbox is needed for recent Codex builds to save generated
   // rasters under cwd/generated_images. Never grant workspace-write over the
@@ -1176,6 +1238,7 @@ async function generateWithCodexProvider(
         args.quality ?? 'auto',
         args.background ?? 'auto',
         referencePath,
+        referenceKind,
       ), signal, workerDirectory)
     } catch (error) {
       signal.throwIfAborted()
@@ -1382,17 +1445,30 @@ export function installCodexImageGeneration(ctx: Context): void {
       if (prompt.length > 32_000) throw new Error('image_generation: prompt exceeds the 32,000-character safety bound')
 
       const events = exec.agent?.session?.events
-      const reference = events === undefined ? undefined : latestProfileReference(events)
+      const rawProfileReference = events === undefined ? undefined : latestProfileReference(events)
       const requestText = events === undefined ? '' : latestUserText(events)
-      if (requestsProfileLikeness(requestText) && reference === undefined) {
+      const wantsProfile = requestsProfileLikeness(requestText)
+      const profileReference = wantsProfile ? rawProfileReference : undefined
+      if (wantsProfile && profileReference === undefined) {
         throw new Error('Para hacer una imagen tuya, activa la referencia de foto en Perfil y vuelve a pedirla.')
       }
+      const clinicalSourceRequested = profileReference === undefined
+        && requestsMedicalSourceFidelity(requestText, prompt)
+      const clinicalReference = clinicalSourceRequested && events !== undefined
+        ? latestClinicalSourceReference(events) : undefined
+      if (clinicalSourceRequested && clinicalReference === undefined) {
+        throw new Error('image_generation: adjunta el estudio medico original en este turno para conservar su anatomia; no se fabricara una replica desde texto.')
+      }
+      const reference = profileReference ?? clinicalReference
+      const referenceKind: 'profile' | 'clinical' = clinicalReference === undefined ? 'profile' : 'clinical'
       const requestedBackend = args.backend ?? 'auto'
       // Validate private reference and routing before invoking any paid or remote
       // provider. The same verified normalized bytes are used for all attempts.
-      const backends = reference === undefined
-        ? imageGenerationBackendOrder(requestedBackend, exec.agent?.options.provider)
-        : profileImageBackendOrder(requestedBackend)
+      const backends = clinicalReference !== undefined
+        ? clinicalSourceBackendOrder(requestedBackend)
+        : reference === undefined
+          ? imageGenerationBackendOrder(requestedBackend, exec.agent?.options.provider)
+          : profileImageBackendOrder(requestedBackend)
       const photo = reference === undefined
         ? undefined
         : await servicesOf(ctx).attachments.readImage(reference, exec.signal)
@@ -1401,28 +1477,30 @@ export function installCodexImageGeneration(ctx: Context): void {
         requestText.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, ''),
       ) || /\b(?:tipo|estilo)\s+(?:(?:de|del|al)\s+)?(?:equipo\s+)?kira\b/iu.test(prompt)
       const basePrompt = wantsKira ? prompt + '\n' + KIRA_TEAM_STYLE : prompt
-      const styledPrompt = clinicalRasterPrompt(basePrompt)
-      const visualArgs: ImageGenerationArgs = styledPrompt === basePrompt ? args : {
-        ...args,
-        size: args.size === undefined || args.size === 'auto' ? '1536x1024' : args.size,
-        quality: args.quality === undefined || args.quality === 'auto' ? 'high' : args.quality,
-      }
+      const styledPrompt = clinicalRasterPrompt(basePrompt, clinicalReference !== undefined)
+      const visualArgs: ImageGenerationArgs = clinicalReference !== undefined && photo !== undefined
+        ? { ...args, size: clinicalSourceCanvas(photo.ref.width, photo.ref.height), quality: 'high' }
+        : styledPrompt === basePrompt ? args : {
+          ...args,
+          size: args.size === undefined || args.size === 'auto' ? '1536x1024' : args.size,
+          quality: args.quality === undefined || args.quality === 'auto' ? 'high' : args.quality,
+        }
       const failures: string[] = []
       for (const backend of backends) {
         let image: ImageGenerationValue
         try {
           if (backend === 'codex' && photo !== undefined) {
             const extension = codexProfileReferenceExtension(photo)
-            const dir = await mkdtemp(join(tmpdir(), 'phoenix-user-photo-'))
+            const dir = await mkdtemp(join(tmpdir(), referenceKind === 'clinical' ? 'phoenix-clinical-source-' : 'phoenix-user-photo-'))
             try {
-              const source = join(dir, 'profile-original' + extension)
+              const source = join(dir, (referenceKind === 'clinical' ? 'clinical-study' : 'profile-original') + extension)
               await writeFile(source, photo.data, { flag: 'wx' })
-              image = await generateWithCodexProvider(ctx, visualArgs, styledPrompt, exec.signal, source)
+              image = await generateWithCodexProvider(ctx, visualArgs, styledPrompt, exec.signal, source, referenceKind)
             } finally {
               await rm(dir, { recursive: true, force: true })
             }
           } else if (backend === 'codex') image = await generateWithCodexProvider(ctx, visualArgs, styledPrompt, exec.signal)
-          else if (backend === 'local') image = await generateWithLocalProvider(ctx, visualArgs, styledPrompt, exec.signal, photo)
+          else if (backend === 'local') image = await generateWithLocalProvider(ctx, visualArgs, styledPrompt, exec.signal, photo, referenceKind)
           else image = await generateWithFreeProvider(ctx, visualArgs, styledPrompt, exec.signal)
         } catch (error) {
           exec.signal.throwIfAborted()
