@@ -11,6 +11,11 @@ import type {} from '@phoenix-ai/dsh-host-webserver'
 const MAX_IMAGE_BYTES = 12_000_000
 const FILE_PATTERN = /^\/local-images\/([a-f0-9]{32})\.jpg$/u
 
+/**
+ * Resolve the private local directory for generated raster images.
+ * @param env - Current process environment or a test-provided override.
+ * @returns Absolute user-scoped image storage directory.
+ */
 export function localImageRoot(env: NodeJS.ProcessEnv = process.env): string {
   const base = env.LOCALAPPDATA
     ? join(env.LOCALAPPDATA, 'PHOENIX')
@@ -18,6 +23,11 @@ export function localImageRoot(env: NodeJS.ProcessEnv = process.env): string {
   return resolve(env.PHOENIX_LOCAL_IMAGE_HOME || join(base, 'images'))
 }
 
+/**
+ * Register a loopback-only GET route for previously generated JPEG files.
+ * @param ctx - Host context owning the HTTP route lifecycle.
+ * @returns Nothing; the registered route is disposed with its owner.
+ */
 export function registerLocalImageRoutes(ctx: Context): void {
   if (ctx.webServer.host !== '127.0.0.1') {
     ctx.logger.warn('Local image delivery only supports the private 127.0.0.1 bind.')
