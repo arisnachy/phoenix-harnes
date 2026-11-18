@@ -1,0 +1,44 @@
+# One-time, user-scoped FastSD CPU setup for PHOENIX on Windows.
+# Triggered only on the first explicit local image request; never at normal startup.
+# Uses an exact audited upstream commit rather than an uncontrolled floating branch.
+$ErrorActionPreference = 'Stop'
+$upstream = 'https://github.com/rupeshs/fastsdcpu.git'
+$commit = '10ed947f16cd35479a1d202be4e1309e243fd767'
+$base = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'PHOENIX' } else { Join-Path $HOME '.phoenix' }
+$destination = if ($env:PHOENIX_FASTSD_HOME) { $env:PHOENIX_FASTSD_HOME } else { Join-Path $base 'fastsdcpu' }
+$venv = Join-Path $destination 'env'
+$py = Join-Path $venv 'Scripts\python.exe'
+function Invoke-Checked([string]$exe, [string[]]$args) {
+  & $exe @args
+  if ($LASTEXITCODE -ne 0) { throw "$exe exited with $LASTEXITCODE" }
+}
+if (Test-Path -LiteralPath $py) {
+  Write-Host '[PHOENIX FastSD] Python environment already exists; no installation performed.'
+  exit 0
+}
+foreach ($program in @('git', 'uv')) {
+  if (-not (Get-Command $program -ErrorAction SilentlyContinue)) {
+    throw "Falta $program. Instala Git y uv (https://docs.astral.sh/uv/) antes de activar FastSD CPU."
+  }
+}
+New-Item -ItemType Directory -Force -Path $destination | Out-Null
+if (-not (Test-Path -LiteralPath (Join-Path $destination '.git'))) {
+  Invoke-Checked 'git' @('-C', $destination, 'init')
+  Invoke-Checked 'git' @('-C', $destination, 'remote', 'add', 'origin', $upstream)
+}
+$origin = (& git -C $destination remote get-url origin 2>$null).Trim()
+if ($LASTEXITCODE -ne 0 -or $origin -ne $upstream) {
+  throw 'El directorio FastSD usa un origen Git distinto; no se modificará.'
+}
+Invoke-Checked 'git' @('-C', $destination, 'fetch', '--depth', '1', 'origin', $commit)
+Invoke-Checked 'git' @('-C', $destination, 'checkout', '--detach', 'FETCH_HEAD')
+$checked = (& git -C $destination rev-parse HEAD).Trim()
+if ($checked -ne $commit) { throw 'No se pudo verificar el commit fijado de FastSD CPU.' }
+Write-Host '[PHOENIX FastSD] Instalando Python 3.11.6 en entorno separado...'
+Invoke-Checked 'uv' @('python', 'install', '3.11.6')
+Invoke-Checked 'uv' @('venv', '--python', '3.11.6', $venv)
+if (-not (Test-Path -LiteralPath $py)) { throw 'No se encontró el ejecutable Python de FastSD.' }
+Invoke-Checked 'uv' @('pip', 'install', '--python', $py, 'torch==2.8.0', '--index-url', 'https://download.pytorch.org/whl/cpu')
+Invoke-Checked 'uv' @('pip', 'install', '--python', $py, '-r', (Join-Path $destination 'requirements.txt'))
+Invoke-Checked $py @('-c', 'import openvino, torch, fastapi, uvicorn; print("FastSD CPU OpenVINO dependencies ready")')
+Write-Host '[PHOENIX FastSD] Instalación preparada. El modelo se descargará bajo demanda en la primera generación.'
