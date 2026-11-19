@@ -63,6 +63,7 @@ export const PHOENIX_3D_ROUTING_PROTOCOL =
   'Use torus for wheels and rings, mesh for organic forms, and keyframe animations for named parts. '+
   'Use phoenix_3d preset:pelican only for an isolated bird without any companion object. '+
   'Use scene material presets, camera and environment. GLB/glTF import and export controls exist in the 3D viewer; '+
+  'STUDIO 3D PUBLISHING: when a high-quality/professional/animated/fidelity 3D model is requested, the model MUST first create a genuine detailed GLB inside its workspace using available coding tools or Blender. Then call phoenix_studio3d with model_path to run the trusted Blender Cycles pipeline and publish the verified Blender project, GLB, raster render and optional MP4 in chat. Native phoenix_3d is for rough blockouts ONLY. Do not submit invented paths or lower quality silently. If Blender is absent, clearly report missing PHOENIX_BLENDER_PATH or installation; never claim production output. '+
   'For studio-grade animated characters, robots, vehicles and architecture, load blender-studio skill when listed and route to official Blender Lab MCP tools when connected. '+
   'Blender Lab is a curated user-activated connector in Phoenix Settings; missing tools in this turn do NOT prove that Blender is not installed. '+
   'Inspect MCP server blender status, exported tool names, local Blender executable and uvx before giving a specific missing-dependency diagnosis. '+
