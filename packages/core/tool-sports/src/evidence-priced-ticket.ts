@@ -1133,12 +1133,17 @@ export async function evidencePricedTicket(
   const pricedRows=Array.isArray(priced.card.props.legs)?priced.card.props.legs:[]
   const legs=pricedRows.map((row,index)=>{
     const estimate=original[index],quote=best.choices[index]
+    const fixture=researchFixtures[index]
     const noVigPercent=marketRisk.legs[index]?.noVigPercent
     const prior=estimate&&typeof estimate==='object'&&!Array.isArray(estimate)
       ?estimate as Record<string,unknown>:{}
     const pricedRow=row&&typeof row==='object'&&!Array.isArray(row)
       ?row as Record<string,unknown>:{}
-    return { ...pricedRow,
+    const [observedRow]=presentObservedTicketLegs([pricedRow],[quote?[quote]:[]])
+    return { ...observedRow,
+      ...(fixture?{
+        eventId:fixture.eventId,eventDate:fixture.date,providerLeague:fixture.league,
+      }:{}),
       narrative:enrichSpecialistNarrative(
         prior.narrative as TicketNarrative|null|undefined,specialistChecks[index],
         marketRisk.legs[index]?.noVigPercent,modelAudit[index]),

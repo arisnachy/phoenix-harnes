@@ -404,6 +404,10 @@ test('selected transient dossier failures get one bounded rescue without changin
   assert.equal(calls.get('500'),2)
   assert.equal(calls.get('501'),2)
   assert.equal(result.card.props.combinedOdds,'25.419')
+  assert.deepEqual(result.card.props.legs.map(leg=>leg.eventId),
+    result.researchFixtures.map(fixture=>fixture.eventId))
+  assert.ok(result.card.props.legs.every(leg=>
+    leg.quoteEventId.startsWith('scraper-')&&leg.quoteSource&&leg.quoteAcceptedByBookmaker===false))
 })
 
 
@@ -442,6 +446,8 @@ test('fresh ESPN odds without lastUpdated complete an observed same-bookmaker re
   assert.equal(result.card.props.legs.length,5)
   assert.ok(Number(result.card.props.combinedOdds)>1)
   assert.ok(result.card.props.legs.every(x=>x.bookmaker==='ESPN Reference Book'))
+  assert.ok(result.card.props.legs.every(x=>
+    x.quoteEventId===x.eventId&&x.quoteSource.startsWith('ESPN')&&x.quoteObservedAt))
   assert.match(result.card.props.subtitle,/precios observados en ESPN/)
   assert.equal(optionalApiCalls,0)
   assert.equal(result.sourceAudit.find(row=>row.source==='The Odds API v4').status,
