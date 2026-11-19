@@ -283,3 +283,22 @@ test('daily ESPN quote matching rejects a different event, future timestamp, or 
   assert.equal(matchesDailyEspnPrice(c,{...good,observedAt:new Date(now+1).toISOString()},now,[good,draw]),false)
   assert.equal(matchesDailyEspnPrice(c,{...good,home:'Other Home'},now,[good,draw]),false)
 })
+test('a transient league research rejection is retried without losing its verified candidates',async()=>{
+  let targetReads=0
+  const flaky=async url=>{
+    const raw=String(url)
+    if(raw.includes('/soccer/eng.1/')&&raw.includes('dates=20261028')){
+      targetReads++
+      // The first read belongs to the daily inventory. Fail the target-day
+      // read of the first research attempt, then let the bounded retry recover.
+      if(targetReads===2)
+        return new Response('{}',{status:503})
+    }
+    return mock()(url)
+  }
+  const result=await evidenceTicket(5,day,'soccer',flaky,now,{})
+  assert.equal(result.complete,true)
+  assert.equal(result.verifiedEvents,5)
+  assert.ok(targetReads>=3)
+  assert.equal(result.discoveryAudit.researchErrors.length,0)
+})

@@ -2,7 +2,7 @@
  * Parse event/category shapes independently of season averages; never infer
  * a played game, opponent or venue from totals. Pure, bounded and testable.
  */
-export type HistoryMetric={name:string;value:string}
+export type HistoryMetric={ name:string;value:string }
 type Row=Record<string,unknown>
 const obj=(x:unknown):Row=>x!==null&&typeof x==='object'&&!Array.isArray(x)?x as Row:{}
 const arr=(x:unknown):unknown[]=>Array.isArray(x)?x:[]
@@ -24,7 +24,7 @@ const matchedLabels=(node:Row,root:Row,count:number):string[]=>{
   }
   return []
 }
-type GameRow={id:string;stamp:number;name:string;stats:Map<string,string>}
+type GameRow={ id:string;stamp:number;name:string;stats:Map<string,string> }
 const validValue=(v:unknown):string=>word(v,24)
 function addGame(rows:Map<string,GameRow>,raw:unknown,headers:Row,root:Row,
   metadata:Row,now:number):void{
@@ -42,7 +42,7 @@ function addGame(rows:Map<string,GameRow>,raw:unknown,headers:Row,root:Row,
     [stamp?new Date(stamp).toISOString().slice(0,10):'',against?'vs '+against:''].filter(Boolean).join(' ')||
     'ESPN game '+eid
   let row=rows.get(eid)
-  if(!row){row={id:eid,stamp,name:gameName,stats:new Map()};rows.set(eid,row)}
+  if(!row){row={ id:eid,stamp,name:gameName,stats:new Map() };rows.set(eid,row)}
   if(stamp>row.stamp){row.stamp=stamp;row.name=gameName}
   for(let i=0;i<labels.length;i++){
     const label=labels[i]??'',value=validValue(values[i])
@@ -87,29 +87,41 @@ const scalar=(v:unknown):string=>{
 export function parseEspnSplits(raw:unknown,limit=48):HistoryMetric[]{
   const root=obj(raw),out:HistoryMetric[]=[],used=new Set<string>()
   const max=Math.max(1,Math.min(limit,80))
-  const queue:Array<{data:unknown;path:string;depth:number}>=[
-    ...arr(root.categories).map(x=>({data:x,path:'',depth:0})),
-    ...arr(root.splitCategories).map(x=>({data:x,path:'',depth:0})),
-    ...arr(root.splits).map(x=>({data:x,path:'',depth:0})),
+  // Live ESPN Common v3 keeps labels at the ROOT, while Home/Road has
+  // only a stats[] array of strings nested under splitCategories[].splits[].
+  const rootLabels=arr(root.displayNames).length?arr(root.displayNames):
+    arr(root.labels).length?arr(root.labels):arr(root.names)
+  const queue:Array<{ data:unknown;path:string;depth:number }>=[
+    ...arr(root.categories).map(x=>({ data:x,path:'',depth:0 })),
+    ...arr(root.splitCategories).map(x=>({ data:x,path:'',depth:0 })),
+    ...arr(root.splits).map(x=>({ data:x,path:'',depth:0 })),
   ]
-  if(!queue.length)queue.push({data:root,path:'',depth:0})
+  if(!queue.length)queue.push({ data:root,path:'',depth:0 })
   let visited=0
   while(queue.length&&visited++<150&&out.length<max){
-    const next=queue.shift()!,node=obj(next.data)
+    const next=queue.shift()
+    if(!next)break
+    const node=obj(next.data)
     const title=categoryName(node)
     const path=next.path?title?next.path+' · '+title:next.path:
       title||'Total'
-    const labels=arr(node.labels).length?arr(node.labels):
-      arr(node.displayNames).length?arr(node.displayNames):arr(node.names)
     const values=arr(node.totals).length?arr(node.totals):
       arr(node.displayValues).length?arr(node.displayValues):
-      arr(node.values)
+        arr(node.values).length?arr(node.values):
+        // Numeric ESPN split rows use stats[]; the row objects below are
+        // handled separately and are never treated as scalar statistics.
+          arr(node.stats).every(x=>typeof x==='string'||typeof x==='number')?
+            arr(node.stats):[]
+    const labels=arr(node.labels).length===values.length&&values.length?arr(node.labels):
+      arr(node.displayNames).length===values.length&&values.length?arr(node.displayNames):
+        arr(node.names).length===values.length&&values.length?arr(node.names):
+          rootLabels.length===values.length?rootLabels:[]
     if(labels.length&&labels.length===values.length){
       for(let i=0;i<labels.length&&out.length<max;i++){
         const stat=word(labels[i],45),value=scalar(values[i])
         const name=(path+' · '+stat).slice(0,110)
         if(stat&&value&&!used.has(name)){
-          out.push({name,value});used.add(name)
+          out.push({ name,value });used.add(name)
         }
       }
     }
@@ -120,25 +132,24 @@ export function parseEspnSplits(raw:unknown,limit=48):HistoryMetric[]{
       const value=scalar(item.displayValue??item.value)
       const name=(path+' · '+metric).slice(0,110)
       if(metric&&value&&!used.has(name)&&out.length<max){
-        out.push({name,value});used.add(name)
+        out.push({ name,value });used.add(name)
       }
     }
     if(next.depth>=4)continue
     for(const key of ['splits','categories','splitCategories','items','statistics']){
       for(const child of arr(node[key]).slice(0,35))
-        queue.push({data:child,path,depth:next.depth+1})
+        queue.push({ data:child,path,depth:next.depth+1 })
     }
   }
   return out
 }
-
 /** Compute home/away season splits from individually played games ONLY when
  * ESPN identifies the venue for that athlete/game. No "vs" name guessing,
  * no fabricated home flag, and no season averages passed off as game logs.
  */
 export function parseEspnVenueSplitsFromGameLog(raw:unknown,now=Date.now()):HistoryMetric[]{
   const root=obj(raw),metadata=obj(root.events)
-  type VenueRow={venue:'Home'|'Away';stats:Map<string,number>}
+  type VenueRow={ venue:'Home'|'Away';stats:Map<string,number> }
   const rows=new Map<string,VenueRow>()
   const allowed=/^(?:PTS|REB|AST|STL|BLK|TO|OREB|DREB|FGA|FGM|FTA|FTM|3PA|3PM|PF)$/u
   const add=(input:unknown,headers:Row)=>{
@@ -150,7 +161,7 @@ export function parseEspnVenueSplitsFromGameLog(raw:unknown,now=Date.now()):Hist
       e.homeAway??e.homeRoadFlag??e.atVs,15).toLowerCase()
     const venue:VenueRow['venue']|null=
       ['home','h','vs'].includes(tag)?'Home':
-      ['away','a','r','at','@'].includes(tag)?'Away':null
+        ['away','a','r','at','@'].includes(tag)?'Away':null
     if(!venue)return
     const values=arr(e.stats??e.statistics),labels=matchedLabels(headers,root,values.length)
     if(!labels.length)return
@@ -165,7 +176,7 @@ export function parseEspnVenueSplitsFromGameLog(raw:unknown,now=Date.now()):Hist
     const existing=rows.get(eid)
     if(existing&&existing.venue!==venue)return // conflicting venue: never guess
     if(existing)for(const [key,val] of metrics)existing.stats.set(key,val)
-    else rows.set(eid,{venue,stats:metrics})
+    else rows.set(eid,{ venue,stats:metrics })
   }
   for(const item of arr(root.events).slice(0,180))add(item,root)
   for(const season of arr(root.seasonTypes).slice(0,6))
@@ -176,18 +187,21 @@ export function parseEspnVenueSplitsFromGameLog(raw:unknown,now=Date.now()):Hist
   const away=[...rows.values()].filter(r=>r.venue==='Away')
   if(!home.length||!away.length)return []
   const out:HistoryMetric[]=[
-    {name:'Home · GP',value:String(home.length)},
-    {name:'Away · GP',value:String(away.length)},
+    { name:'Home · GP',value:String(home.length) },
+    { name:'Away · GP',value:String(away.length) },
   ]
   for(const key of ['PTS','REB','AST','STL','BLK','TO','OREB','DREB','FGA','FGM','FTA','FTM','3PA','3PM','PF']){
     const avg=(games:VenueRow[]):string|null=>{
-      const values=games.flatMap(r=>r.stats.has(key)?[r.stats.get(key)!]:[])
+      const values=games.flatMap((r)=>{
+        const value=r.stats.get(key)
+        return value===undefined?[]:[value]
+      })
       return values.length===games.length?
         String(Number((values.reduce((a,b)=>a+b,0)/values.length).toFixed(2))):null
     }
     const h=avg(home),a=avg(away)
     if(h!==null&&a!==null){
-      out.push({name:'Home · '+key,value:h},{name:'Away · '+key,value:a})
+      out.push({ name:'Home · '+key,value:h },{ name:'Away · '+key,value:a })
     }
   }
   return out.length>2?out:[]
@@ -205,13 +219,13 @@ export function parseNhlLast5(raw:unknown,now=Date.now()):HistoryMetric[]{
     const game=word(row.gameDate??row.date,20)
     const opponent=word(row.opponentAbbrev??obj(row.opponent).abbrev,16)
     const pairs=['goals','assists','points','shots','saves','shotsAgainst',
-      'savePctg','goalsAgainst','timeOnIce','decision'].flatMap(key=>{
+      'savePctg','goalsAgainst','timeOnIce','decision'].flatMap((key)=>{
       const v=scalar(row[key])
       return v?[key+': '+v]:[]
     })
     if(!game||!pairs.length)continue
-    output.push({name:(game+(opponent?' vs '+opponent:'')).slice(0,90),
-      value:pairs.slice(0,9).join(' · ').slice(0,370)})
+    output.push({ name:(game+(opponent?' vs '+opponent:'')).slice(0,90),
+      value:pairs.slice(0,9).join(' · ').slice(0,370) })
   }
   return output.slice(0,5)
 }

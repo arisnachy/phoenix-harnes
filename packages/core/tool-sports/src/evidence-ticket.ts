@@ -121,6 +121,17 @@ export function boundedTicket<T>(task:Promise<T>,ms:number):Promise<T>{
     if(timer!==undefined)clearTimeout(timer)
   })
 }
+type LeagueResearchReport={
+  sport:string
+  league:string
+  attempt:number
+  result:PromiseSettledResult<Awaited<ReturnType<typeof researchSport>>>
+}
+const researchTimeout=(env:NodeJS.ProcessEnv):number=>{
+  const configured=Number(env.PHOENIX_SPORTS_RESEARCH_LEAGUE_TIMEOUT_MS)
+  return Number.isInteger(configured)&&configured>=10_000&&configured<=45_000?
+    configured:15_000
+}
 const dayNow=()=>new Intl.DateTimeFormat('en-CA',{ timeZone:'America/Santo_Domingo',
   year:'numeric',month:'2-digit',day:'2-digit' }).format(new Date())
 const validDate=(day:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(day)
@@ -223,30 +234,57 @@ export async function evidenceTicket(
   // when their evidence is weak: expand into verified Portugal/Italy/etc slates.
   // Only verified, future ESPN event IDs can become selections.
   const shortlist=singleSport?eligible:diversifiedSportsShortlist(eligible,eligible.length)
-  const reports:Array<PromiseSettledResult<Awaited<ReturnType<typeof researchSport>>>>=[]
+  const reports:LeagueResearchReport[]=[]
   const researchStarted=Date.now()
   const budgetInput=Number(env.PHOENIX_SPORTS_FULL_SLATE_BUDGET_MS)
   const researchBudget=Number.isInteger(budgetInput)&&budgetInput>=20_000&&
     budgetInput<=300_000?budgetInput:115_000
+  const perLeagueTimeout=researchTimeout(env)
   let budgetExhausted=false
+  const runResearch=async(
+    item:{ sport:string;league:string },allowance:number,attempt:number,
+  ):Promise<LeagueResearchReport>=>{
+    const timeout=Math.max(750,Math.min(perLeagueTimeout,allowance))
+    const deadline=AbortSignal.timeout(timeout)
+    const guarded:typeof fetch=(input,init)=>{
+      const signal=init?.signal?AbortSignal.any([init.signal,deadline]):deadline
+      return fetcher(input,{ ...init,signal })
+    }
+    const result=await Promise.allSettled([boundedTicket(
+      researchSport(item.sport,item.league,date,guarded,now,env,
+        item.sport==='football'?35:item.sport==='soccer'?56:item.sport==='tennis'?42:28),
+      timeout)])
+    const settled=result[0]
+    if(!settled)throw Error('No se obtuvo resultado de investigación de liga')
+    return{ ...item,attempt,result:settled }
+  }
   for(let offset=0;offset<shortlist.length;offset+=4){
     if(offset>0&&Date.now()-researchStarted>=researchBudget){budgetExhausted=true;break}
     const allowance=Math.max(750,researchBudget-(Date.now()-researchStarted))
-    const batch=await Promise.allSettled(shortlist.slice(offset,offset+4).map(({ sport,league })=>{
-      const deadline=AbortSignal.timeout(Math.min(8_500,allowance))
-      const guarded:typeof fetch=(input,init)=>{
-        const signal=init?.signal?AbortSignal.any([init.signal,deadline]):deadline
-        return fetcher(input,{ ...init,signal })
-      }
-      return boundedTicket(researchSport(sport,league,date,guarded,now,env,
-        sport==='football'?35:sport==='soccer'?56:sport==='tennis'?42:28),
-      Math.min(8_500,allowance))
-    }))
+    const batch=await Promise.all(shortlist.slice(offset,offset+4).map(item=>
+      runResearch(item,allowance,1)))
     reports.push(...batch)
     // Never stop merely because five or twelve historical favorites appeared.
     // Every still-active sport/league must have an opportunity to compete
     // within the explicit research budget; incomplete coverage is reported.
   }
+  // A slow or transient ESPN history read must not discard an otherwise
+  // verified future league. Retry only rejected leagues, once, with the same
+  // exact event/date constraints and the remaining global budget. A successful
+  // first pass is never replaced by a retry, and a retry cannot invent a leg.
+  const rejected=[...new Map(reports.filter(x=>x.result.status==='rejected')
+    .map(x=>[x.sport+'|'+x.league,x])).values()]
+  for(let offset=0;offset<rejected.length;offset+=4){
+    if(Date.now()-researchStarted>=researchBudget){budgetExhausted=true;break}
+    const allowance=Math.max(750,researchBudget-(Date.now()-researchStarted))
+    const batch=await Promise.all(rejected.slice(offset,offset+4).map(item=>
+      runResearch(item,allowance,2)))
+    reports.push(...batch)
+  }
+  // Keep only the last attempt for each league. This makes retries recover a
+  // transient failure without double-counting matches or successful leagues.
+  const finalReports=[...new Map(reports.map(report=>[
+    report.sport+'|'+report.league,report])).values()]
   const candidateLegs:Array<{ pick:ResearchTicketLeg
     rank:number
     home:string
@@ -265,9 +303,9 @@ export async function evidenceTicket(
       scannedRecent:number } }> = []
   let evaluated=0
   let insufficientEvidence=0
-  for(const report of reports){
-    if(report.status!=='fulfilled')continue
-    for(const match of report.value.matches){
+  for(const report of finalReports){
+    if(report.result.status!=='fulfilled')continue
+    for(const match of report.result.value.matches){
       evaluated++
       // Historical thresholds classify strength, not access to research.
       // Two independent completed games per opponent allow a LOW-CONFIDENCE
@@ -468,18 +506,18 @@ export async function evidenceTicket(
     })),count,now)
   const discoveryAudit:TicketDiscoveryAudit={
     discoveredEvents:scan.totalEligible,eligibleLeagues:eligible.length,
-    researchedLeagues:reports.filter(x=>x.status==='fulfilled').length,
+    researchedLeagues:finalReports.filter(x=>x.result.status==='fulfilled').length,
     candidatesEvaluated:evaluated,rejectedForEvidence:insufficientEvidence,
     shortlistedCandidates:candidateLegs.length,
-    leaguesNotResearched:Math.max(0,shortlist.length-reports.length),
+    leaguesNotResearched:Math.max(0,shortlist.length-finalReports.length),
     scanCoverage:scan.coverage.map(x=>({ ...x })),
     fixtureSample:scan.events.slice(0,60).map(x=>({ eventId:x.eventId,
       sport:x.sport,league:x.league,home:x.home.name,
       away:x.away.name,kickoff:x.kickoff })),
-    researchErrors:reports.flatMap((result,index)=>result.status==='rejected'?[{
-      sport:shortlist[index]?.sport??'unknown',
-      league:shortlist[index]?.league??'unknown',
-      reason:String(result.reason).slice(0,180),
+    researchErrors:finalReports.flatMap(report=>report.result.status==='rejected'?[{
+      sport:report.sport,
+      league:report.league,
+      reason:String(report.result.reason).slice(0,180),
     }]:[]),
   }
   if(!chosen.length){
@@ -500,7 +538,7 @@ export async function evidenceTicket(
         dailyResearchBoard.note,
     } }
     return{ card,complete:false,verifiedEvents:0,candidatesEvaluated:evaluated,
-      researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
+      researchLeagues:finalReports.filter(r=>r.result.status==='fulfilled').length,
       insufficientEvidence,pregameSummariesVerified:0,injuryFeedsVerified:0,
       deepContextChecked:0,newsMatched:0,playerStatsChecked:0,
       multisportSatisfied,scannedSports,selectedSports,
@@ -661,7 +699,7 @@ export async function evidenceTicket(
       dailyResearchBoard.note).slice(0,1250),
   } }
   return{ card,complete:ticket.complete,verifiedEvents:ticket.verifiedEvents,
-    candidatesEvaluated:evaluated,researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
+    candidatesEvaluated:evaluated,researchLeagues:finalReports.filter(r=>r.result.status==='fulfilled').length,
     insufficientEvidence,pregameSummariesVerified,injuryFeedsVerified,
     deepContextChecked,newsMatched,playerStatsChecked,
     multisportSatisfied,scannedSports,selectedSports,
