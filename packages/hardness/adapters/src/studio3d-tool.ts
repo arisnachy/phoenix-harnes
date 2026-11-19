@@ -5,8 +5,8 @@
  */
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, openSync, readSync, closeSync, realpathSync, statSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { existsSync, mkdirSync, openSync, readSync, closeSync, realpathSync, statSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import { PHOENIX_STUDIO3D_MIME, inspectStudio3DAsset,
   publishStudio3DAssets, resolveStudio3DWorkspaceFile } from './studio3d-bundle.ts'
@@ -47,6 +47,17 @@ export function inspectStudio3DModel(file: string): Studio3DModelAudit {
   const materials=Array.isArray(root.materials)?root.materials:[]
   const skins=Array.isArray(root.skins)?root.skins:[]
   const animations=Array.isArray(root.animations)?root.animations:[]
+  // GLB is self-contained: never let Blender import arbitrary remote/local dependencies.
+  const buffers=Array.isArray(root.buffers)?root.buffers:[]
+  const images=Array.isArray(root.images)?root.images:[]
+  if (buffers.some(v=>v!==null&&typeof v==='object'&&typeof (v as {uri?:unknown}).uri==='string')) {
+    throw Error('GLB Studio: no se admiten buffers externos.')
+  }
+  if (images.some(v=>{
+    const uri=v!==null&&typeof v==='object'?(v as {uri?:unknown}).uri:undefined
+    return typeof uri==='string'&&!/^data:image\/(?:png|jpeg|webp);base64,[a-z0-9+/]+={0,2}$/iu.test(uri)
+  })) throw Error('GLB Studio: texturas deben estar incrustadas en el GLB.')
+
   let triangles=0
   for (const item of meshes) {
     if (item===null || typeof item!=='object') continue
@@ -82,6 +93,26 @@ export function studio3DBlenderScript(root:string):string {
   if (found===undefined) throw Error('Studio 3D: falta scripts/phoenix-3d-studio.py. Configura PHOENIX_STUDIO3D_SCRIPT con la ruta de instalación.')
   return realpathSync(found)
 }
+/** Discover Blender installed under common Windows paths without shell execution. */
+export function studio3DBlenderExecutable(): string {
+  const configured=process.env.PHOENIX_BLENDER_PATH?.trim()
+  if (configured) return configured
+  if (process.platform==='win32') {
+    const roots=[process.env.ProgramFiles,process.env['ProgramFiles(x86)']]
+    for (const programFiles of roots) {
+      if (!programFiles) continue
+      const foundation=join(programFiles,'Blender Foundation')
+      if (!existsSync(foundation)) continue
+      const versions=readdirSync(foundation).filter(name=>/^Blender(?:\s+\d[\d.]*)?$/u.test(name)).sort().reverse()
+      for (const version of versions) {
+        const exe=join(foundation,version,'blender.exe')
+        if (existsSync(exe)) return exe
+      }
+    }
+  }
+  return 'blender'
+}
+
 export interface Studio3DRunInput {
   readonly modelPath:string
   readonly outputDir:string
@@ -94,7 +125,7 @@ export interface Studio3DRunInput {
 }
 /** Invoke one trusted repository script with fixed argument positions; no shell, no arbitrary Python. */
 export async function renderStudio3D(input:Studio3DRunInput):Promise<void> {
-  const blender=process.env.PHOENIX_BLENDER_PATH?.trim() || 'blender'
+  const blender=studio3DBlenderExecutable()
   const script=studio3DBlenderScript(input.workspace)
   const argv=[
     '--background','--factory-startup','--python',script,'--',
