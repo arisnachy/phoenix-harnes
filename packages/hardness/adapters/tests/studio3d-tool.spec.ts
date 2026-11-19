@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, realpathSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from 'node:fs'
 import { tmpdir, homedir } from 'node:os'
 import { join } from 'node:path'
 import { inspectStudio3DModel, createPhoenixStudio3DTool } from '../src/studio3d-tool.ts'
 import { inspectStudio3DAsset, mountStudio3DAssets, publishStudio3DAssets,
-  resolveStudio3DWorkspaceFile, serveStudio3DAsset } from '../src/studio3d-bundle.ts'
+  resolveStudio3DWorkspaceFile } from '../src/studio3d-bundle.ts'
 
 const dirs:string[]=[]
 function folder():string {
