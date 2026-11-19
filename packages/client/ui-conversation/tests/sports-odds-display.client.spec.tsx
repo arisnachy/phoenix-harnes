@@ -18,7 +18,7 @@ const base = {
   ],
 }
 
-describe('PHOENIX compact American odds display', () => {
+describe('PHOENIX inline comparison odds table', () => {
   it('converts original decimal quotes without mutating them', () => {
     expect(decimalToAmericanOdds('1.35')).toBe('-286')
     expect(decimalToAmericanOdds('3.31')).toBe('+231')
@@ -30,18 +30,22 @@ describe('PHOENIX compact American odds display', () => {
     expect(base.rows[0]?.price).toBe('3.31')
   })
 
-  it('shows two compact side-by-side prices with American odds selected by default', () => {
+  it('shows one flat comparison table with both team columns and the original prices', () => {
     const { container } = render(<SportsOddsDisplay {...base} />)
-    expect(container.querySelector('table')).toBeNull()
-    expect(container.querySelectorAll('article')).toHaveLength(1)
+    expect(container.querySelectorAll('table')).toHaveLength(1)
+    expect(container.querySelector('article')).toBeNull()
+    expect(screen.getByRole('columnheader', { name: 'Dato investigado' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'LA Clippers' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Oklahoma City Thunder' })).toBeTruthy()
+    expect(screen.getByRole('rowheader', { name: /Ganador · ML/ })).toBeTruthy()
     expect(container.querySelectorAll('[data-market-favorite="true"]')).toHaveLength(1)
     expect(screen.getByText('-286')).toBeTruthy()
     expect(screen.getByText('+231')).toBeTruthy()
     expect(screen.getByText('Decimal 1.35')).toBeTruthy()
     expect(screen.getByText('Favorito por cuota')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Americano' }).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByText('DraftKings')).toBeTruthy()
-    expect(screen.getByText('Fuente, vigencia y advertencias')).toBeTruthy()
+    expect(screen.getByText(/Casa: DraftKings/)).toBeTruthy()
+    expect(screen.getByText(/Cuotas observadas, no probabilidades estimadas/)).toBeTruthy()
   })
 
   it('switches between American and decimal while retaining provider price', () => {
@@ -54,12 +58,24 @@ describe('PHOENIX compact American odds display', () => {
     expect(screen.getByLabelText('Cuota -286')).toBeTruthy()
   })
 
+  it('retains all three 1X2 outcomes, including a draw, in an accessible comparison table', () => {
+    render(<SportsOddsDisplay {...base} rows={[
+      { event: base.title, market: '1x2', selection: 'Local', bookmaker: 'DraftKings', price: '1.85' },
+      { event: base.title, market: '1x2', selection: 'Empate', bookmaker: 'DraftKings', price: '3.20' },
+      { event: base.title, market: '1x2', selection: 'Visitante', bookmaker: 'DraftKings', price: '4.70' },
+    ]} />)
+    expect(screen.getAllByRole('columnheader')).toHaveLength(4)
+    expect(screen.getByRole('columnheader', { name: 'Empate' })).toBeTruthy()
+    expect(screen.getByRole('rowheader', { name: /Resultado · 1X2/ })).toBeTruthy()
+    expect(screen.getByLabelText('Cuota +220')).toBeTruthy()
+  })
+
   it('does not declare a favorite from incomparable or missing prices', () => {
     const { container } = render(<SportsOddsDisplay {...base} rows={[
       { ...base.rows[0]!, price: 'Por verificar' },
       { ...base.rows[1]!, bookmaker: 'Otra casa' },
     ]} />)
-    expect(container.querySelectorAll('article')).toHaveLength(2)
+    expect(container.querySelectorAll('table')).toHaveLength(2)
     expect(container.querySelector('[data-market-favorite="true"]')).toBeNull()
     expect(screen.getByText('Por verificar')).toBeTruthy()
   })
