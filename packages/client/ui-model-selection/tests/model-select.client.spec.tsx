@@ -58,6 +58,27 @@ function state(overrides: Partial<ModelDirectoryState> = {}): ModelDirectoryStat
 
 afterEach(cleanup)
 
+describe('ModelSelect root menu', () => {
+  it('offers model and reasoning controls without the standalone AI Team link', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state())
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /DeepSeek V4 Flash/ }))
+    expect(screen.getByRole('menuitem', { name: /模型/ })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: /推理等级/ })).toBeTruthy()
+    expect(screen.getAllByRole('menuitem')).toHaveLength(2)
+    expect(screen.queryByText('Equipo IA · AI Team')).toBeNull()
+    expect(screen.queryByText('Supervisado')).toBeNull()
+  })
+})
+
 describe('ModelSelect reasoning effort', () => {
   it('renders adapter metadata and submits the effort as part of the session selection', async () => {
     const directory = createSnapshotStore<ModelDirectoryState>(state())
