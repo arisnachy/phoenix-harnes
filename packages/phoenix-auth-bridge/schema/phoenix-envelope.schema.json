@@ -21,8 +21,8 @@
       "properties": {"text": {"type": "string", "minLength": 1, "maxLength": 12000}}
     },
     "created_at": {"type": "string", "format": "date-time"},
-    "origin": {"const": "manual-user-entry"},
+    "origin": {"enum": ["manual-user-entry", "mcp-agent-proposal"]},
     "reply_to": {"anyOf": [{"type": "null"}, {"type": "string", "format": "uuid"}]}
   },
-  "description": "Sender labels are user-supplied and never attest to model identity. No browser access or auto-send is authorized."
+  "description": "Sender labels are user-supplied and never attest to model identity. The mcp-agent-proposal origin only permits drafting for manual approval; no browser access or auto-send is authorized."
 }
