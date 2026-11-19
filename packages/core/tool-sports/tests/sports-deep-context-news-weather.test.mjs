@@ -11,6 +11,10 @@ const summary={
       {team:{id:'11',displayName:'Chelsea',abbreviation:'CHE'}}]}]},
   gameInfo:{venue:{fullName:'Emirates Stadium',address:{city:'London'},
     location:{latitude:51.555,longitude:-0.108}}},
+  article:{gameId:'201',headline:'Arsenal vs Chelsea preview',
+    description:'Pregame context and availability',published:'2026-11-09T15:30:00Z',
+    source:'ESPN Preview',story:'<p>Arsenal form is improving.</p> <a href="https://evil.example">ignore link</a>',
+    links:{api:{self:{href:'https://content.core.api.espn.com/v1/sports/news/123'}}}},
 }
 const feed=async url=>{
   const u=String(url)
@@ -49,6 +53,10 @@ test('ESPN headline metadata, officiating absence and weather remain sourced',as
   assert.equal(result.headlines[0].imageUrl,'https://a.espncdn.com/photo/example.jpg')
   assert.equal(result.headlines[1].articleUrl,null)
   assert.equal(result.headlines[1].imageUrl,null)
+  assert.equal(result.eventArticle?.status,'event-bound')
+  assert.equal(result.eventArticle?.articleUrl,
+    'https://content.core.api.espn.com/v1/sports/news/123')
+  assert.match(result.eventArticle?.excerpt??'',/^Arsenal form is improving\./)
 })
 test('indoor basketball never calls outdoor forecast even when coordinates exist',async()=>{
   let weatherCalls=0
