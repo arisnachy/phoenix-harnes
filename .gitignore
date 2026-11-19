@@ -77,3 +77,15 @@ packages/typert/protocol/src/*.js
 packages/typert/protocol/src/*.js.map
 packages/typert/protocol/src/*.d.ts
 packages/typert/protocol/src/*.d.ts.map
+
+# PHOENIX public distribution: local-only auth bridge state and account files
+packages/phoenix-auth-bridge/.venv/
+packages/phoenix-auth-bridge/**/__pycache__/
+packages/phoenix-auth-bridge/**/*.pyc
+packages/phoenix-auth-bridge/**/.env
+packages/phoenix-auth-bridge/**/.env.*.local
+packages/phoenix-auth-bridge/**/settings.json
+packages/phoenix-auth-bridge/**/state.db*
+packages/phoenix-auth-bridge/**/state_snapshot.json
+packages/phoenix-auth-bridge/**/state.json
+packages/phoenix-auth-bridge/**/*.bak.*

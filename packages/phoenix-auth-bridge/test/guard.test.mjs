@@ -2,19 +2,19 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { approve, emptyState, markDelivered, metadata, prepare, reject, relayText, resume, stop, validateEnvelope } from '../src/guard.mjs';
 
-const ready = () => { const s = emptyState(); resume(s, 'arisnachy'); return s; };
+const ready = () => { const s = emptyState(); resume(s, 'local-operator'); return s; };
 
 test('fail closed, manual approval, delivery and audit without payloads', () => {
   const s = emptyState();
   assert.throws(() => prepare(s, { sender: 'chatgpt', recipient: 'gemini', text: 'hello' }), /STOPPED/);
-  resume(s, 'arisnachy');
+  resume(s, 'local-operator');
   const e = prepare(s, { sender: 'chatgpt', recipient: 'gemini', text: 'secret-sample-string' });
   assert.equal(validateEnvelope(e), true);
   assert.throws(() => relayText(s, e.message_id), /approved/);
   assert.throws(() => approve(s, e.message_id, 'gemini'), /user approval/);
-  approve(s, e.message_id, 'arisnachy');
+  approve(s, e.message_id, 'local-operator');
   assert.match(relayText(s, e.message_id), /secret-sample-string/);
-  markDelivered(s, e.message_id, 'arisnachy');
+  markDelivered(s, e.message_id, 'local-operator');
   assert.throws(() => relayText(s, e.message_id), /approved/);
   assert.equal(JSON.stringify(metadata(s)).includes('secret-sample-string'), false);
   assert.equal(s.messages[0].status, 'delivered');
@@ -23,20 +23,20 @@ test('fail closed, manual approval, delivery and audit without payloads', () => 
 test('stop revokes approvals, and restart requires new approval', () => {
   const s = ready();
   const e = prepare(s, { sender: 'gemini', recipient: 'chatgpt', text: 'hello' });
-  approve(s, e.message_id, 'arisnachy');
-  stop(s, 'arisnachy');
+  approve(s, e.message_id, 'local-operator');
+  stop(s, 'local-operator');
   assert.throws(() => relayText(s, e.message_id), /STOPPED/);
-  resume(s, 'arisnachy');
+  resume(s, 'local-operator');
   assert.throws(() => relayText(s, e.message_id), /approved/);
-  reject(s, e.message_id, 'arisnachy');
-  assert.throws(() => approve(s, e.message_id, 'arisnachy'), /not pending/);
+  reject(s, e.message_id, 'local-operator');
+  assert.throws(() => approve(s, e.message_id, 'local-operator'), /not pending/);
 });
 
 test('reply chains reject wrong direction, duplicate replies, and unconfirmed delivery', () => {
   const s = ready();
   const first = prepare(s, { sender: 'chatgpt', recipient: 'gemini', text: 'one' });
   assert.throws(() => prepare(s, { sender: 'gemini', recipient: 'chatgpt', text: 'two', replyTo: first.message_id }), /delivered/);
-  approve(s, first.message_id, 'arisnachy'); markDelivered(s, first.message_id, 'arisnachy');
+  approve(s, first.message_id, 'local-operator'); markDelivered(s, first.message_id, 'local-operator');
   assert.throws(() => prepare(s, { sender: 'chatgpt', recipient: 'gemini', text: 'bad', replyTo: first.message_id }), /Reply sender/);
   const second = prepare(s, { sender: 'gemini', recipient: 'chatgpt', text: 'two', replyTo: first.message_id });
   assert.equal(second.thread_id, first.thread_id);
@@ -51,10 +51,10 @@ test('size, extras, and turn limit cannot bypass validation', () => {
   assert.throws(() => validateEnvelope({ ...e, dangerous: true }), /fields/);
   let last = e;
   for (let turn = 2; turn <= 12; turn++) {
-    approve(s, last.message_id, 'arisnachy'); markDelivered(s, last.message_id, 'arisnachy');
+    approve(s, last.message_id, 'local-operator'); markDelivered(s, last.message_id, 'local-operator');
     last = prepare(s, { sender: last.recipient, recipient: last.sender, text: `turn ${turn}`, replyTo: last.message_id });
   }
-  approve(s, last.message_id, 'arisnachy'); markDelivered(s, last.message_id, 'arisnachy');
+  approve(s, last.message_id, 'local-operator'); markDelivered(s, last.message_id, 'local-operator');
   assert.throws(() => prepare(s, { sender: last.recipient, recipient: last.sender, text: '13', replyTo: last.message_id }), /Turn out of range/);
 });
 
@@ -63,4 +63,13 @@ test('MCP draft origins are legal but arbitrary web-session origins are blocked'
   const e = prepare(s, { sender: 'chatgpt', recipient: 'gemini', text: 'hello' });
   assert.equal(validateEnvelope({ ...e, origin: 'mcp-agent-proposal' }), true);
   assert.throws(() => validateEnvelope({ ...e, origin: 'web-session' }), /Origin/);
+});
+
+test('portable user identity and non-operator labels are rejected', () => {
+  const s = ready();
+  const item = prepare(s, { sender: 'user', recipient: 'gemini', text: 'request' });
+  assert.equal(item.sender, 'user');
+  assert.throws(() => approve(s, item.message_id, 'user'), /user approval/);
+  approve(s, item.message_id, 'local-operator');
+  assert.match(relayText(s, item.message_id), /request/);
 });
