@@ -1,7 +1,7 @@
-"""Optional SQLite-backed PHOENIX manual relay. No network or browser access.
+"""Single SQLite authority for the PHOENIX manual relay. No network/browser access.
 
-This is a separate backend from the earlier Node JSON prototype. Never run them
-as if they shared a STOP/approval state. The MCP and Tk UI below use THIS backend.
+Node CLI delegates to this store; MCP and Windows UI use the same STOP and approvals.
+Read-only snapshots are advisory and NEVER authorize a message.
 """
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 import re
 import hashlib
 import json
+import os
+import tempfile
 from pathlib import Path
 import sqlite3
 from typing import Any
@@ -55,9 +57,10 @@ class PhoenixSQLiteStore:
     """Transactions serialize approvals, STOP and message queue operations."""
 
     def __init__(self, path: Path | str | None = None):
-        self.path = Path(path) if path else Path.home() / ".phoenix" / "auth-bridge" / "sqlite" / "state.db"
+        self.path = Path(path) if path else Path(os.environ.get("PHOENIX_BRIDGE_HOME", str(Path.home() / ".phoenix" / "auth-bridge"))) / "sqlite" / "state.db"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
+        self._publish_snapshot()
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path, timeout=15, isolation_level=None)
@@ -122,6 +125,53 @@ class PhoenixSQLiteStore:
             raise
         finally:
             conn.close()
+        # Projection is advisory; DB commit has already succeeded.
+        self._publish_snapshot()
+
+    def _publish_snapshot(self) -> None:
+        """Serialize cross-process snapshot writers and atomically replace metadata only.
+
+        This file can briefly lag SQLite after COMMIT; never use it as authorization.
+        """
+        lock_path = self.path.with_name("snapshot.lock")
+        snapshot_path = self.path.with_name("state_snapshot.json")
+        with open(lock_path, "a+b") as lock_file:
+            lock_file.seek(0, 2)
+            if lock_file.tell() == 0:
+                lock_file.write(b"0")
+                lock_file.flush()
+            lock_file.seek(0)
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                with self._connection() as conn:
+                    row = conn.execute("SELECT value FROM system_state WHERE key='stopped'").fetchone()
+                    turns = conn.execute("SELECT message_id, thread_id, turn, sender, recipient, intent, status, created_at, digest FROM envelopes ORDER BY thread_id, turn").fetchall()
+                    snapshot = {"authority": "sqlite_wal", "advisory_only": True,
+                                "generated_at": now_iso(), "stop_active": row is None or row["value"] != "0",
+                                "turns": [dict(r) for r in turns]}
+                fd, tmp = tempfile.mkstemp(prefix=".snapshot-", suffix=".tmp", dir=self.path.parent)
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as target:
+                        json.dump(snapshot, target, ensure_ascii=False, sort_keys=True, indent=2)
+                        target.flush()
+                        os.fsync(target.fileno())
+                    os.replace(tmp, snapshot_path)
+                    if os.name != "nt":
+                        os.chmod(snapshot_path, 0o600)
+                finally:
+                    if os.path.exists(tmp):
+                        os.unlink(tmp)
+            finally:
+                lock_file.seek(0)
+                if os.name == "nt":
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
     @staticmethod
     def _active(conn: sqlite3.Connection) -> None:
