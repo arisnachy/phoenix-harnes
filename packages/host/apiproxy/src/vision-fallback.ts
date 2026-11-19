@@ -81,6 +81,8 @@ const DESCRIPTION_SYSTEM_PROMPT = [
 /** Whether a request needs focused medical-image reading. Empty text is
  * conservatively treated as potentially medical; the specialist still has to
  * recognize the image rather than assuming it is a clinical study.
+ * @param text - User request accompanying the image.
+ * @returns Whether a focused clinical reader is warranted.
  */
 export function requiresFocusedClinicalVision(text:string):boolean {
   const s=text.trim()
@@ -96,6 +98,9 @@ export function requiresFocusedClinicalVision(text:string):boolean {
  * higher effort; never silently use Terra as the ONLY clinical reader.
  * Non-Codex image readers stay eligible if they are the only documented
  * non-Terra vision option, without claiming a clinical validation.
+ * @param models - Provider-advertised model capabilities.
+ * @param current - Model already selected for the turn.
+ * @returns An eligible image reader with supported reasoning effort, if any.
  */
 export function pickFocusedVisionReader(
   models:readonly LlmResolvedModelInfo[],current:ModelSelection,
