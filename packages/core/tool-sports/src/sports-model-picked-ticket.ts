@@ -1,9 +1,10 @@
 /** Kira makes the picks after research; ESPN only verifies their prices.
  * Never let an odds ranking choose the winner or invent a fifth priced leg.
  */
-import { getFeed,type MarketOutcome } from './sports.ts'
+import { getFeed,type ChatBlock,type MarketOutcome } from './sports.ts'
 import { lookupExactEspnWinner,sameEspnTeam } from './sports-exact-espn-winner.ts'
 import { ticketLeagueOddsKey } from './evidence-priced-ticket.ts'
+/** One pregame selection researched by the active model. */
 export type ModelChosenLeg={
   sport:string
   league:string
@@ -43,7 +44,11 @@ const sourceHost=(raw:unknown):string|null=>{
     return url.hostname.replace(/^www\./u,'')
   }catch{return null}
 }
-/** Completeness of Kira's documented decision, not independent source verification. */
+/**
+ * Check whether Kira documented each decision.
+ * @param chosen - The model's event picks and cited evidence.
+ * @returns Missing documentation or unresolved decisive evidence for each pick.
+ */
 export function ticketResearchChecklist(chosen:readonly ModelChosenLeg[]):string[]{
   const missing:string[]=[]
   if(chosen.length<5||chosen.length>6)
@@ -61,6 +66,26 @@ export function ticketResearchChecklist(chosen:readonly ModelChosenLeg[]):string
   }
   return missing
 }
+
+type ModelChosenTicket = {
+  complete: boolean
+  priced: boolean
+  finalReady: boolean
+  finalizationMissing: string[]
+  placed: false
+  bookmaker: string | null
+  quotes: Array<{
+    eventId: string
+    selection: string
+    price: number
+    bookmaker: string
+    source: string
+    observedAt: string
+  }>
+  missing: string[]
+  uiBlock: ChatBlock
+}
+
 /** Validate selected predictions against exact ESPN event/time/market records.
  * @param chosen - Kira's explicit pregame reasons and source-backed fixtures.
  * @param fetcher - Injected provider for deterministic tests.
@@ -70,7 +95,7 @@ export function ticketResearchChecklist(chosen:readonly ModelChosenLeg[]):string
  */
 export async function quoteKiraChosenTicket(chosen:readonly ModelChosenLeg[],
   fetcher:typeof fetch=fetch,now=Date.now(),requestedCount=chosen.length,
-){
+):Promise<ModelChosenTicket>{
   if(!Number.isInteger(requestedCount)||requestedCount<1||requestedCount>6||
     chosen.length<1||chosen.length>requestedCount||
     chosen.some(leg=>!valid(leg,now))||
