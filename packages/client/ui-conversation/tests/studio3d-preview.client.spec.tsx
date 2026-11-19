@@ -3,6 +3,7 @@ import { cleanup,render,screen } from '@testing-library/react'
 import { afterEach,describe,expect,it } from 'vitest'
 import { Studio3DPreview,parseStudio3DArtifact } from '../src/client/chat/Studio3DPreview.tsx'
 import { HardnessArtifactBody } from '../src/client/chat/HardnessArtifactBody.tsx'
+import { normalizeHardnessArtifact } from '../src/client/artifact.ts'
 
 const token='b'.repeat(48)
 const root='/phoenix-studio3d/assets/'+token+'/'
@@ -14,6 +15,14 @@ const artifact={
 }
 afterEach(cleanup)
 describe('Blender Studio chat artifact',()=>{
+  it('classifies studio assets as a native visual instead of raw JSON',()=>{
+    const result=normalizeHardnessArtifact({
+      id:'studio-fixture',title:'Studio',mime:'application/vnd.phoenix.studio3d+json',
+      data:artifact,executable:false,
+    })
+    expect(result.kind).toBe('visual')
+    expect(result.executable).toBe(false)
+  })
   it('shows the verified Cycles render and actual GLB, blend and MP4 links',()=>{
     render(<HardnessArtifactBody mime="application/vnd.phoenix.studio3d+json"
       data={artifact} expanded={false} title="Modelo de producción"/>)
