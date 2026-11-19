@@ -31,6 +31,11 @@ const numeric=(n:unknown)=>{
   const val=Number(n)
   return Number.isFinite(val)?val:null
 }
+// ESPN and the NHL public API use a few different abbreviations for the same
+// club (for example ESPN publishes Los Angeles as `LA`, NHL as `LAK`). Keep
+// this normalization local to the official cross-check; never compare names
+// or a loose substring that could match the wrong fixture.
+const nhlApiCode=(code:string)=>({LA:'LAK',NJ:'NJD',TB:'TBL',SJ:'SJS'}[code]??code)
 export type DeepSportsContext={
   eventId:string;sport:string;league:string;scannedAt:string
   sources:Array<{name:string;status:'verified'|'unavailable';records:number}>
@@ -210,13 +215,26 @@ export async function investigateEventDeep(
     const day=date.slice(0,10)
     try{
       if(sport==='hockey'&&league==='nhl'){
-        const scores=await getFeed<unknown>('https://api-web.nhle.com/v1/score/'+day,fetcher)
-        const teamCodes=teams.map(t=>t.abbreviation.toUpperCase())
-        independentFixtureVerified=teamCodes.every(Boolean)&&
-          arr(get(scores,'games')).some(game=>{
-            const g=obj(game),h=str(get(g.homeTeam,'abbrev')),a=str(get(g.awayTeam,'abbrev'))
+        const teamCodes=teams.map(t=>nhlApiCode(t.abbreviation.toUpperCase()))
+        // ESPN timestamps are UTC while the NHL score feed is keyed by the
+        // league's local calendar day. A game near midnight UTC therefore
+        // legitimately appears on the preceding NHL date. Try the adjacent
+        // date only after the exact date, stopping on the first team match.
+        const dates=[day]
+        for(const offset of [-1,1]){
+          const shifted=new Date(Date.parse(day+'T00:00:00Z')+offset*86_400_000)
+          if(Number.isFinite(shifted.getTime()))dates.push(shifted.toISOString().slice(0,10))
+        }
+        for(const candidate of dates){
+          const scores=await getFeed<unknown>('https://api-web.nhle.com/v1/score/'+candidate,fetcher)
+          if(!teamCodes.every(Boolean))continue
+          const found=arr(get(scores,'games')).some(game=>{
+            const g=obj(game),h=nhlApiCode(str(get(g.homeTeam,'abbrev')).toUpperCase()),
+              a=nhlApiCode(str(get(g.awayTeam,'abbrev')).toUpperCase())
             return teamCodes.includes(h)&&teamCodes.includes(a)
           })
+          if(found){independentFixtureVerified=true;break}
+        }
       }else if(sport==='baseball'&&league==='mlb'){
         const schedule=await getFeed<unknown>(
           'https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+day+
