@@ -1,8 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+// Legacy in-memory demonstration only: 'local-operator' is a user-supplied label,
+// NOT authentication. Never use these helpers as a remote authorization boundary;
+// production STOP/approvals live in the local SQLite operator.
 export const MAX_TURNS = 12;
 export const MAX_TEXT = 12_000;
-const AGENTS = new Set(['chatgpt', 'gemini', 'arisnachy']);
+const AGENTS = new Set(['chatgpt', 'gemini', 'user']);
 const INTENTS = new Set(['proposal', 'code_review', 'research', 'verdict', 'general']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
@@ -57,14 +60,14 @@ function find(state, id) {
 
 export function resume(state, actor) {
   validateState(state);
-  check(actor === 'arisnachy', 'Explicit local user action required');
+  check(actor === 'local-operator', 'Explicit local user action required');
   state.paused = false;
   event(state, 'resume');
 }
 
 export function stop(state, actor) {
   validateState(state);
-  check(actor === 'arisnachy', 'Explicit local user action required');
+  check(actor === 'local-operator', 'Explicit local user action required');
   state.paused = true;
   for (const row of state.messages) if (row.status === 'approved') {
     row.status = 'pending';
@@ -100,7 +103,7 @@ export function prepare(state, { sender, recipient, intent = 'general', text, re
 export function approve(state, id, actor) {
   validateState(state);
   check(!state.paused, 'Bridge is STOPPED');
-  check(actor === 'arisnachy', 'Explicit local user approval required');
+  check(actor === 'local-operator', 'Explicit local user approval required');
   const row = find(state, id);
   check(row.status === 'pending', 'Message not pending');
   row.status = 'approved';
@@ -120,7 +123,7 @@ export function relayText(state, id) {
 export function markDelivered(state, id, actor) {
   validateState(state);
   check(!state.paused, 'Bridge is STOPPED');
-  check(actor === 'arisnachy', 'Explicit local user action required');
+  check(actor === 'local-operator', 'Explicit local user action required');
   const row = find(state, id);
   check(row.status === 'approved', 'Message not approved');
   row.status = 'delivered';
@@ -129,7 +132,7 @@ export function markDelivered(state, id, actor) {
 
 export function reject(state, id, actor) {
   validateState(state);
-  check(actor === 'arisnachy', 'Explicit local user action required');
+  check(actor === 'local-operator', 'Explicit local user action required');
   const row = find(state, id);
   check(['pending', 'approved'].includes(row.status), 'Cannot reject delivered message');
   row.status = 'rejected';
