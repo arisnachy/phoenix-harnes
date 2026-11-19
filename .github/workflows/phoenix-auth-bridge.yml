@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - packages/phoenix-auth-bridge/**
+      - apps/web/public/phoenix-team.html
+      - packages/client/ui-model-selection/src/client/ModelSelect.tsx
       - .github/workflows/phoenix-auth-bridge.yml
   push:
     branches: [main, stable]
@@ -38,7 +40,7 @@ jobs:
         run: |
           python -m pip install -r packages/phoenix-auth-bridge/gemini_bridge/requirements-mcp.txt
       - name: Run Node validation tests
-        run: node --test packages/phoenix-auth-bridge/test/guard.test.mjs
+        run: node --test packages/phoenix-auth-bridge/test/guard.test.mjs packages/phoenix-auth-bridge/test/team-workspace.test.mjs
       - name: Run SQLite, Node/Python and actual MCP stdio integration
         working-directory: packages/phoenix-auth-bridge
         run: python -m unittest discover -s test -p 'test_*.py' -v
@@ -47,7 +49,7 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          foreach ($script in @('configure-gemini-cli.ps1', 'verify-gemini-cli-windows.ps1')) {
+          foreach ($script in @('configure-gemini-cli.ps1', 'verify-gemini-cli-windows.ps1', 'setup-team.ps1')) {
             $path = Join-Path 'packages/phoenix-auth-bridge' $script
             $tokens = $null
             $syntaxErrors = $null
