@@ -118,3 +118,28 @@ Do NOT introduce a bearer token header in a public SPA or unauthenticated
 control panel must be implemented within PHOENIX's existing authenticated
 host session with per-action CSRF/origin checks and command-level access
 control, then tested before release to stable.
+
+## PHOENIX Equipo IA (supervised workspace; feature opt-in)
+
+A separate **Equipo IA · AI Team** item in the composer model-menu root opens
+`/phoenix-team.html`. It intentionally **does not change the active Host model
+or pretend to invoke any other subscription**. The page is a memory-only,
+human-mediated project transcript/copy/export workspace, with no network calls,
+MCP authority, cookies or hidden browser automation. Use the local Tk operator
+for the real SQLite approval and STOP controls; browser drafts do not authorize
+messages. This is a first usable supervised surface, **not yet an autonomous
+multi-CLI team**.
+
+Windows: run `packages/phoenix-auth-bridge/setup-team.ps1` first for a
+read-only dependency preview. `-Apply` creates the local venv and installs
+the bridge requirements. `-RegisterGemini` opt-in registers the MCP server
+with a settings backup; `-InstallClients` explicitly allows installing missing
+official Codex and Gemini CLI packages from npm. Neither sign-in nor web
+subscriptions are impersonated. The official CLI authentication and Windows
+acceptance still require human interaction.
+
+**Release note:** the selector entry is a separate workspace launcher, not a
+fabricated model id; persistent operator controls cannot be embedded in an
+unauthenticated web surface. Do not advertise autonomous collaboration or
+automatic model-to-model delivery until the authenticated Host controls and
+official CLI integrations are built and verified.
