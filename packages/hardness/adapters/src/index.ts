@@ -68,6 +68,8 @@ import { createPhoenixGameTool } from './game-tool.ts'
 import { createPhoenixComicTool } from './comic-tool.ts'
 import { mountGodotWebRoute, type GameWebRouteHost } from './godot-web-bundle.ts'
 import { createPhoenix3DTool } from './scene3d-tool.ts'
+import { createPhoenixStudio3DTool } from './studio3d-tool.ts'
+import { mountStudio3DAssets } from './studio3d-bundle.ts'
 import { createResearchPublishTool } from './research-publish-tool.ts'
 import { createResearchPlanTool } from './research-plan-tool.ts'
 import { createResearchSourceVerifierTool } from './research-source-verifier.ts'
@@ -159,6 +161,8 @@ export { createPhoenixCanvasTool, PHOENIX_CANVAS_MIME } from './canvas-tool.ts'
 export { createPhoenixGameTool, PHOENIX_GAME_MIME } from './game-tool.ts'
 export { createPhoenixComicTool, PHOENIX_COMIC_MIME } from './comic-tool.ts'
 export { createPhoenix3DTool, PHOENIX_SCENE3D_MIME, tropicalVillaScene } from './scene3d-tool.ts'
+export { createPhoenixStudio3DTool } from './studio3d-tool.ts'
+export { mountStudio3DAssets, PHOENIX_STUDIO3D_MIME } from './studio3d-bundle.ts'
 export { choosePhoenixDesignMedium, PHOENIX_3D_ROUTING_PROTOCOL } from './scene3d-routing.ts'
 export { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 export { createEvolutionStatusTool } from './evolution-status-tool.ts'
@@ -375,6 +379,20 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     }))
     disposers.push(() => { removeGodotRoute?.() })
   }
+  if (!modelTools) {
+    // The Host serves verified Blender assets; agents can publish but cannot register HTTP routes.
+    let removeStudioRoute: (() => void) | undefined
+    const attachStudioRoute = (): void => {
+      if (removeStudioRoute !== undefined) return
+      const service = (ctx.get as unknown as (name: string) => unknown)('webServer') as GameWebRouteHost | undefined
+      if (service?.register !== undefined) removeStudioRoute = mountStudio3DAssets(service)
+    }
+    attachStudioRoute()
+    disposers.push(ctx.on('internal/service', name => {
+      if (name === 'webServer') attachStudioRoute()
+    }))
+    disposers.push(() => { removeStudioRoute?.() })
+  }
   const binance = acquireBinancePaperAutomation(binancePaperLedgerPath())
   const secretProvider = ctx.get('credentials') as CredentialProvider | undefined
   // A Cloud runner is independent from local PAPER, and is never silently
@@ -501,7 +519,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       // Capability projections and the mission/proactivity runtimes are host-owned.
       // Do not repeat them when several sessions mount full presets in one process.
       disposers.push(indexOpenClawExtensions(hardness))
-      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'hardness_evolution_status', 'phoenix_visualize', 'phoenix_scene_map', 'phoenix_geo_map', 'phoenix_diagram', 'phoenix_canvas', 'phoenix_game', 'phoenix_comic'] }))
+      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'hardness_evolution_status', 'phoenix_visualize', 'phoenix_scene_map', 'phoenix_geo_map', 'phoenix_diagram', 'phoenix_canvas', 'phoenix_game', 'phoenix_comic', 'phoenix_studio3d'] }))
       disposers.push(await indexSkills(skills, hardness))
     } else if (authorization !== undefined || mcpConnectors !== undefined) {
       // A preset contributes only its scoped connector inventory/discovery
@@ -544,6 +562,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(ctx.tools.register(createPhoenixGameTool()))
       disposers.push(ctx.tools.register(createPhoenixComicTool()))
       disposers.push(ctx.tools.register(createPhoenix3DTool()))
+      disposers.push(ctx.tools.register(createPhoenixStudio3DTool()))
       disposers.push(ctx.tools.register(createResearchPlanTool()))
       disposers.push(ctx.tools.register(createResearchSourceVerifierTool()))
       disposers.push(ctx.tools.register(createInstitutionRulesTool(approval)))

@@ -5,6 +5,7 @@ import type { RenderMessageImages } from '../contract/slots.ts'
 import styles from './HardnessArtifactNodeView.module.css'
 import { PhoenixVisualizer, supportsPhoenixVisual } from './PhoenixVisualizer.tsx'
 import { Scene3DView } from './Scene3DView.tsx'
+import { Studio3DPreview } from './Studio3DPreview.tsx'
 import { GeoMap, parseGeoMapSpec } from './GeoMap.tsx'
 import { SceneMap, parseSceneMapSpec } from './SceneMap.tsx'
 import { DiagramSurface, parseDiagramSpec } from './DiagramSurface.tsx'
@@ -744,6 +745,7 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
       </div>
     )
   }
+  if (mime === 'application/vnd.phoenix.studio3d+json') return <Studio3DPreview value={record} title={title} />
   if (mime === 'application/vnd.phoenix.scene3d+json') return <Scene3DView spec={record} expanded={expanded} />
   if (mime === 'application/vnd.phoenix.scene-map+json' || record.component === 'scene_map') {
     const map = parseSceneMapSpec(record)
