@@ -88,7 +88,7 @@ const oneOf=(value:unknown,allowed:readonly string[],label:string)=>{
  * @param input - Untrusted, de-identified clinical source metadata.
  * @returns A gated illustration specification; never a patient reconstruction.
  */
-export function planClinicalTwinScene(input:ClinicalTwinSceneInput){
+function planClinicalTwinSceneImpl(input:ClinicalTwinSceneInput){
   const study=diagnosticInputById(input.modality)
   if(!study)throw new Error('Modalidad médica no reconocida')
   if(typeof input.sourceReviewed!=='boolean')throw new Error('Revisión fuente no declarada')
@@ -183,4 +183,13 @@ export function planClinicalTwinScene(input:ClinicalTwinSceneInput){
       !hasLocation?'Identificar estructura y localización antes de señalar una lesión.':
       'Ejecutar generador raster disponible y comprobar su salida visual; marcar como atlas docente y cotejar anatomía, rótulos y lesión con la fuente.',
   }
+}
+
+/**
+ * Prepare a source-bounded educational scene without diagnosing or rendering.
+ * @param input - Untrusted, de-identified clinical source metadata.
+ * @returns A gated illustration specification; never a patient reconstruction.
+ */
+export function planClinicalTwinScene(input:ClinicalTwinSceneInput):ReturnType<typeof planClinicalTwinSceneImpl>{
+  return planClinicalTwinSceneImpl(input)
 }
