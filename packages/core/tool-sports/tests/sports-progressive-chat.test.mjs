@@ -94,6 +94,18 @@ test('news stage exposes the verified event-bound ESPN preview excerpt',async()=
     'https://content.core.api.espn.com/v1/sports/news/99')
 })
 
+test('NCAA roster stage recovers exact ESPN team IDs without NBA specialist',async()=>{
+  const ncaaFixture={...fixture,sport:'basketball',league:'mens-college-basketball'}
+  const result=await progressiveSportsStage(ncaaFixture,'rosters',undefined,source,now,{})
+  assert.equal(result.uiBlock.props.source,'ESPN public Site/Common v3 · fallback NCAA')
+  assert.equal(result.uiBlock.props.rows[0].home,'1 jugadores')
+  assert.equal(result.uiBlock.props.rows[0].away,'1 jugadores')
+  assert.equal(result.evidence.directEspnDossier.teams.length,2)
+  assert.equal(result.evidence.teamComparison.home.players.length,1)
+  assert.equal(result.nextPlayerOffset,null)
+  assert.ok(result.missing.some(x=>/muestra acotada/u.test(x)))
+})
+
 test('an empty NBA player dossier is explicitly pending and escalates outside ESPN',async()=>{
   const result=await progressiveSportsStage(fixture,'rosters',
     'get both teams season stats and gamelogs',source,now,{})
