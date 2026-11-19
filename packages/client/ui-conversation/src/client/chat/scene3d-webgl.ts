@@ -21,7 +21,7 @@ interface Pipeline {
   readonly light: WebGLUniformLocation | null
 }
 const pipelines = new WeakMap<HTMLCanvasElement,Pipeline>()
-const vertexShader = \`#version 300 es
+const vertexShader = `#version 300 es
 precision highp float;
 in vec3 aPosition;
 in vec3 aNormal;
@@ -56,8 +56,8 @@ void main(){
   vColor=aColor;
   vMaterial=aMaterial;
   vEmissive=aEmissive;
-}\`
-const fragmentShader = \`#version 300 es
+}`
+const fragmentShader = `#version 300 es
 precision highp float;
 in vec4 vColor;
 in vec3 vNormal;
@@ -84,7 +84,7 @@ void main(){
     +reflection*specular*(1.0-roughness)*1.5
     +vec3(.16)*coat*clearcoat;
   fragColor=vec4(pow(clamp(lit+pow(vEmissive,vec3(2.2)),0.0,1.0),vec3(1.0/2.2)),vColor.a);
-}\`
+}`
 
 function pipeline(canvas: HTMLCanvasElement): Pipeline | undefined {
   const previous=pipelines.get(canvas)
