@@ -78,6 +78,7 @@ import { nflSlate,investigateNfl } from './nfl-evidence-research.ts'
 import { nhlSlate,investigateNhl } from './nhl-evidence-research.ts'
 import { compactNhlChatDossier,nhlAbortableFetch,withNhlDeadline,
   NHL_CHAT_ODDS_BUDGET_MS,NHL_CHAT_RESEARCH_BUDGET_MS } from './nhl-chat-performance.ts'
+import { projectPricedTicketForModel } from './ticket-output-projection.ts'
 
 import { tennisSlate,investigateTennis,type TennisTour } from './tennis-evidence-research.ts'
 
@@ -2159,35 +2160,20 @@ export function apply(ctx: Context): void {
           reason:'Seguimiento cloud superó el plazo; el ticket se conserva en el chat.',
         })):{ status:'disabled' as const,issueNumber:null,
           reason:'Sin eventos verificados que puedan enviarse al monitor remoto.' }
-      const { modelComparisonBriefs,selectedBilateralDossiers,
-        modelSelectionRequired,...displayProps }=result.card.props
-      return JSON.stringify({ uiBlock:{ ...result.card,
-        props:{ ...displayProps,cloudFollowUp } },
-      cloudFollowUp,reviewedBeforeSelection:result.reviewedBeforeSelection,
-      removedConflicts:result.removedConflicts,requestedLegs:args.count,
-      elapsedMs:Date.now()-requestedAt,
-      complete:result.complete,priced:result.priced,placed:false,
-      conditional:result.conditional,dossierComplete:result.dossierComplete,
-      verifiedEvents:result.verifiedEvents,eventsFound:result.eventsFound,
-      discoveredEvents:result.discoveredEvents,
-      discoveryAudit:result.discoveryAudit,
-      candidateLegs:result.candidateLegs,
-      ticketReadyForReview:result.ticketReadyForReview,
-      quotedLegs:result.quotedLegs,conditionalLegs:result.conditionalLegs,
-      approvedForBetting:result.approvedForBetting,
-      missingQuotes:result.missingQuotes,approvedLegs:result.approvedLegs,
-      multisportSatisfied:result.multisportSatisfied,sourceAudit:result.sourceAudit,
-      specialistChecks:result.specialistChecks,researchedLegs:result.researchedLegs,
-      modelComparisonBriefs:modelComparisonBriefs??[],
-      selectedBilateralDossiers:selectedBilateralDossiers??[],
-      modelSelectionRequired:modelSelectionRequired!==false,
-      explicitModelSelectionPending:true,
-      researchFixtures:result.researchFixtures,
-      modelAudit:result.modelAudit,
-      decisionAudit:result.decisionAudit,marketRisk:result.marketRisk,
-      explanation:result.explanation,
-      chatNarrative:result.card.props.chatNarrative??[],
-      instruction:'ATENCIÓN: lista de candidatos PROVISIONAL, NO selección definitiva del motor. Kira debe analizar personalmente modelComparisonBriefs y selectedBilateralDossiers: comparativa bilateral de todos los jugadores y estadísticas disponibles, altas/bajas fechadas, titulares verificables, duelo táctico, descanso y calidad rival. Ninguna cifra funciona como peso ni puntuación para escoger. Cuestiona a cada favorito, verifica noticias externas cuando están disponibles y escoge o sustituye con un argumento propio por partido. Después de comparar ganadores directos, usa sports_chat_ticket_model_chosen con requestedCount igual al número original, tus selecciones y fuentes comprobadas. Si el mercado es doble oportunidad, conserva las cotizaciones exactas 1X/X2 del resultado y el estado provisional; el cotizador de ganador no sirve para ese mercado. Usa sports_chat_ticket_research solo para un pronóstico sin cuotas. Si faltan pruebas, indicar borrador parcial y faltantes; no presentar como TICKET FINAL un ranking automático ni repetir barridos. El precio comercial no confirma apuesta aceptada y no hay garantía.' })
+      const projection=projectPricedTicketForModel(result)
+      return JSON.stringify({ ...projection,
+        uiBlock:{ ...projection.uiBlock,props:{ ...projection.uiBlock.props,cloudFollowUp } },
+        cloudFollowUp,requestedLegs:args.count,elapsedMs:Date.now()-requestedAt,
+        complete:result.complete,priced:result.priced,placed:false,
+        conditional:result.conditional,dossierComplete:result.dossierComplete,
+        verifiedEvents:result.verifiedEvents,eventsFound:result.eventsFound,
+        discoveredEvents:result.discoveredEvents,candidateLegs:result.candidateLegs,
+        ticketReadyForReview:result.ticketReadyForReview,quotedLegs:result.quotedLegs,
+        conditionalLegs:result.conditionalLegs,approvedForBetting:false,
+        missingQuotes:result.missingQuotes,approvedLegs:result.approvedLegs,
+        multisportSatisfied:result.multisportSatisfied,researchedLegs:result.researchedLegs,
+        modelSelectionRequired:true,explicitModelSelectionPending:true,
+        instruction:'Lista provisional. Compara las patas con specialistChecks y usa sports_chat_ticket_dossier_recheck para abrir el expediente de un partido decisivo o sustituto verificado. No repitas el barrido. Para ganadores directos usa sports_chat_ticket_model_chosen con requestedCount igual al número original, tus selecciones y fuentes contrastadas. Para doble oportunidad conserva los precios 1X/X2 observados y el estado provisional. Indica el conteo y los faltantes. No afirmes que la casa aceptó la apuesta.' })
     },
     presentCall:()=>({ card:'generic',title:'Investigar ticket cotizado de 5 o 6 patas',kind:'read' as const }),
   }))
