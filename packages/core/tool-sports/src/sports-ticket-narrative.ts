@@ -231,17 +231,44 @@ export function enrichSpecialistNarrative(
   const availabilityUnknown=!injuries||!selectedSide||!opponentSide||
     injuries.status==='stale'||injuries.status==='unavailable'||
     injuries.status==='unsupported'||!injuries.home.matched||!injuries.away.matched
-  const injuryWarnings=[
-    ...(ownInjuries.length?[
-      'Bajas o dudas del elegido ('+prior.selected+'): '+ownInjuries.slice(0,3).join('; '),
-    ]:[]),
-    ...(availabilityUnknown?[
-      'Disponibilidad bilateral incompleta: fuente parcial o antigua; sin prueba de plantilla sana',
-    ]:[]),
+  const injuryWarnings=ownInjuries.length?[
+    'Bajas o dudas del elegido ('+prior.selected+'): '+ownInjuries.slice(0,3).join('; '),
+  ]:[]
+  const homeName=check?.teamComparison?.home.name??injuries?.home.name
+  const awayName=check?.teamComparison?.away.name??injuries?.away.name
+  const ownSide=homeName&&identity(prior.selected)===identity(homeName)?'home':
+    awayName&&identity(prior.selected)===identity(awayName)?'away':null
+  const scratch=check?.nhlScratchAudit
+  const starter=check?.nhlStarterAudit
+  const scratchWarnings=ownSide&&scratch?.state==='observed'&&scratch[ownSide].length?
+    ['Scratches NHL observados en el equipo elegido: '+
+      scratch[ownSide].slice(0,5).map(player=>clean(player.name,65)).join(', ')+
+      ' · planilla final pendiente.']:[]
+  const rest=check?.restHours
+  const selectedRest=ownSide?rest?.[ownSide]:null
+  const restNotes=rest&&typeof selectedRest==='number'&&selectedRest<26?[
+    'Horas entre inicios programados: local '+(rest.home?.toFixed(1)??'sin dato')+
+    ' h · visitante '+(rest.away?.toFixed(1)??'sin dato')+' h.',
+  ]:[]
+  const nhlSources:TicketNarrative['sources']=[
+    ...(starter?.state==='confirmed'?[{
+      name:'NHL · porteros titulares · '+clean(starter.checkedAt,40),
+      status:'verified' as const,url:https(starter.url,['nhl.com','nhle.com']),
+    }]:[]),
+    ...(scratch?.state==='observed'?[{
+      name:'NHL · scratches observados · '+clean(scratch.checkedAt,40),
+      status:'partial' as const,url:https(scratch.url,['nhl.com','nhle.com']),
+    }]:[]),
   ]
   // Put concrete injury risks ahead of general specialist gaps so the
   // selected team's missing stars cannot disappear behind 12 generic warnings.
-  const contradictions=uniq([...injuryWarnings,...prior.contradictions,...pending,...conflicts],12)
+  const contradictions=uniq([
+    ...injuryWarnings,...scratchWarnings,...restNotes,
+    ...(availabilityUnknown?[
+      'Disponibilidad bilateral incompleta: fuente parcial o antigua; sin prueba de plantilla sana',
+    ]:[]),
+    ...prior.contradictions,...pending,...conflicts,
+  ],12)
   const hasPrice=typeof marketNoVigPercent==='number'&&
     Number.isFinite(marketNoVigPercent)&&marketNoVigPercent>=0&&marketNoVigPercent<=100
   const percentage:TicketNarrative['percentage']=hasPrice?{
@@ -304,15 +331,22 @@ export function enrichSpecialistNarrative(
           opponentInjuries.slice(0,3).join('; '),
       ]:[]),
       ...prior.favorable,
+      ...(starter?.state==='confirmed'?[
+        'Porteros titulares publicados por NHL: local '+clean(starter.homeGoalie,80)+
+        ' · visitante '+clean(starter.awayGoalie,80)+'.',
+      ]:[]),
       ...evidence.filter(x=>!/lesion|baja|injur/iu.test(x)).slice(0,2)
         .map(x=>'Datos especialistas: '+x),
     ],6),
-    sources:injuries?[
-      ...prior.sources,
+    sources:[
+      ...nhlSources,
+      ...(injuries?[
       {name:'ESPN lesiones de ambos equipos · reporte no definitivo',
         status:injuries.status==='verified'?'verified' as const:
           injuries.status==='partial'?'partial' as const:'missing' as const,
         url:https(injuries.source,['espn.com'])},
-    ]:prior.sources,
+      ]:[]),
+      ...prior.sources,
+    ].slice(0,16),
     explanationForChat}
 }
