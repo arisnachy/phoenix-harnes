@@ -2,7 +2,7 @@
  * No remotely loaded scripts, shader strings from the model, or unsafe textures.
  */
 type Vector = readonly [number,number,number]
-interface Face { readonly vertices: readonly Vector[]; readonly color: string; readonly alpha: number; readonly smoothNormals?: readonly Vector[] }
+interface Face { readonly vertices: readonly Vector[]; readonly color: string; readonly alpha: number; readonly smoothNormals?: readonly Vector[]; readonly material?: { readonly roughness?: number; readonly metallic?: number; readonly clearcoat?: number; readonly emissive?: string } }
 interface Bounds { readonly center: Vector; readonly radius: number }
 interface Pipeline {
   readonly gl: WebGL2RenderingContext
@@ -11,6 +11,8 @@ interface Pipeline {
   readonly position: number
   readonly normal: number
   readonly color: number
+  readonly material: number
+  readonly emissive: number
   readonly center: WebGLUniformLocation | null
   readonly rotation: WebGLUniformLocation | null
   readonly distance: WebGLUniformLocation | null
@@ -19,11 +21,13 @@ interface Pipeline {
   readonly light: WebGLUniformLocation | null
 }
 const pipelines = new WeakMap<HTMLCanvasElement,Pipeline>()
-const vertexShader = `#version 300 es
+const vertexShader = \`#version 300 es
 precision highp float;
 in vec3 aPosition;
 in vec3 aNormal;
 in vec4 aColor;
+in vec3 aMaterial;
+in vec3 aEmissive;
 uniform vec3 uCenter;
 uniform vec2 uRotation;
 uniform float uDistance;
@@ -32,6 +36,8 @@ uniform mat4 uProjection;
 uniform vec3 uLight;
 out vec4 vColor;
 out vec3 vNormal;
+out vec3 vMaterial;
+out vec3 vEmissive;
 void main(){
   vec3 p=aPosition-uCenter;
   float cy=cos(uRotation.x),sy=sin(uRotation.x);
@@ -41,20 +47,44 @@ void main(){
   float y2=cp*p.y-sp*z1;
   float z2=sp*p.y+cp*z1;
   gl_Position=uProjection*vec4(x1+uPan.x,y2+uPan.y,z2-uDistance,1.0);
-  vNormal=aNormal;
+  // Rotate the normals with the geometry. Previously the surface rotated
+  // while its lighting normals remained fixed in world coordinates.
+  vec3 n=aNormal;
+  float nx=cy*n.x-sy*n.z;
+  float nz=sy*n.x+cy*n.z;
+  vNormal=normalize(vec3(nx,cp*n.y-sp*nz,sp*n.y+cp*nz));
   vColor=aColor;
-}`
-const fragmentShader = `#version 300 es
+  vMaterial=aMaterial;
+  vEmissive=aEmissive;
+}\`
+const fragmentShader = \`#version 300 es
 precision highp float;
 in vec4 vColor;
 in vec3 vNormal;
+in vec3 vMaterial;
+in vec3 vEmissive;
 uniform vec3 uLight;
 out vec4 fragColor;
 void main(){
-  float diffuse=max(dot(normalize(vNormal),normalize(uLight)),0.0);
-  float shade=0.48+diffuse*0.52;
-  fragColor=vec4(vColor.rgb*shade,vColor.a);
-}`
+  vec3 n=normalize(vNormal);
+  vec3 key=normalize(uLight);
+  vec3 fill=normalize(vec3(.72,.22,-.51));
+  vec3 viewDir=vec3(0.0,0.0,1.0);
+  float roughness=clamp(vMaterial.x,.04,1.0);
+  float metallic=clamp(vMaterial.y,0.0,1.0);
+  float clearcoat=clamp(vMaterial.z,0.0,1.0);
+  float diffuseKey=max(dot(n,key),0.0);
+  float diffuseFill=max(dot(n,fill),0.0);
+  float exponent=mix(160.0,4.0,roughness);
+  float specular=pow(max(dot(n,normalize(key+viewDir)),0.0),exponent);
+  float coat=pow(max(dot(n,normalize(fill+viewDir)),0.0),100.0);
+  vec3 base=pow(vColor.rgb,vec3(2.2));
+  vec3 reflection=mix(vec3(.04),base,metallic);
+  vec3 lit=base*(.28+.57*diffuseKey+.18*diffuseFill)*(1.0-.7*metallic)
+    +reflection*specular*(1.0-roughness)*1.5
+    +vec3(.16)*coat*clearcoat;
+  fragColor=vec4(pow(clamp(lit+pow(vEmissive,vec3(2.2)),0.0,1.0),vec3(1.0/2.2)),vColor.a);
+}\`
 
 function pipeline(canvas: HTMLCanvasElement): Pipeline | undefined {
   const previous=pipelines.get(canvas)
@@ -81,6 +111,8 @@ function pipeline(canvas: HTMLCanvasElement): Pipeline | undefined {
     position:gl.getAttribLocation(program,'aPosition'),
     normal:gl.getAttribLocation(program,'aNormal'),
     color:gl.getAttribLocation(program,'aColor'),
+    material:gl.getAttribLocation(program,'aMaterial'),
+    emissive:gl.getAttribLocation(program,'aEmissive'),
     center:gl.getUniformLocation(program,'uCenter'),
     rotation:gl.getUniformLocation(program,'uRotation'),
     distance:gl.getUniformLocation(program,'uDistance'),
@@ -104,6 +136,11 @@ function geometry(faces:readonly Face[]):Float32Array{
     if(a===undefined)continue
     const hex=face.color
     const rgb=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255)
+    const material=face.material
+    const pbr=[material?.roughness??.72,material?.metallic??0,material?.clearcoat??0]
+    const emissive=material?.emissive??'#000000'
+    const emission=/^#[0-9a-f]{6}$/iu.test(emissive)
+      ?[1,3,5].map(i=>parseInt(emissive.slice(i,i+2),16)/255):[0,0,0]
     for(let index=1;index+1<face.vertices.length;index++){
       const b=face.vertices[index]!,c=face.vertices[index+1]!
       const normal=surfaceNormal(a,b,c)
@@ -111,7 +148,7 @@ function geometry(faces:readonly Face[]):Float32Array{
       const normals = smooth?.length===face.vertices.length
         ? [smooth[0]!,smooth[index]!,smooth[index+1]!] : [normal,normal,normal]
       for(const [i,vertex] of [a,b,c].entries())numbers.push(
-        ...vertex,...normals[i]!,rgb[0]!,rgb[1]!,rgb[2]!,face.alpha)
+        ...vertex,...normals[i]!,rgb[0]!,rgb[1]!,rgb[2]!,face.alpha,...pbr,...emission)
     }
   }
   return new Float32Array(numbers)
@@ -143,9 +180,9 @@ export function drawWebGLScene(canvas:HTMLCanvasElement,faces:readonly Face[],
   gl.useProgram(p.program)
   gl.bindBuffer(gl.ARRAY_BUFFER,p.buffer)
   gl.bufferData(gl.ARRAY_BUFFER,data,gl.DYNAMIC_DRAW)
-  const stride=10*4
+  const stride=16*4
   const attributes: ReadonlyArray<readonly [number,number,number]> = [
-    [p.position,3,0],[p.normal,3,12],[p.color,4,24],
+    [p.position,3,0],[p.normal,3,12],[p.color,4,24],[p.material,3,40],[p.emissive,3,52],
   ]
   for(const [slot,size,offset] of attributes){
     if(slot<0)continue
@@ -163,6 +200,6 @@ export function drawWebGLScene(canvas:HTMLCanvasElement,faces:readonly Face[],
   const panScale=bounds.radius*2/height
   gl.uniform2f(p.pan,pan[0]*panScale,-pan[1]*panScale)
   gl.uniform3f(p.light,-.32,.85,.42)
-  gl.drawArrays(gl.TRIANGLES,0,data.length/10)
+  gl.drawArrays(gl.TRIANGLES,0,data.length/16)
   return true
 }
