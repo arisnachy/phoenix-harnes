@@ -10,6 +10,22 @@ const leg={rationale:'Montreal 7V-3D ante rivales recientes en muestra ESPN.',
   historicalContext:{opponentGames:2,opponentWins:1,opponentLosses:1,
     venueName:'Bell Centre',venueGames:3,venueWins:2,venueLosses:1,scannedRecent:5}}
 
+test('NHL observed scratches and short rest take priority over generic gaps',()=>{
+  const prior=composeTicketLegNarrative(event,leg)
+  const report=enrichSpecialistNarrative(prior,{
+    eventId:event.eventId,
+    teamComparison:{home:{name:event.home},away:{name:event.away}},
+    restHours:{home:23,away:50},
+    nhlScratchAudit:{state:'observed',home:[{name:'Titular local'}],away:[{name:'Visitante'}],
+      url:'https://api-web.nhle.com/report',checkedAt:'2026-11-10T21:00:00Z'},
+  })
+  assert.match(report.contradictions[0],/Titular local.*planilla final pendiente/)
+  assert.doesNotMatch(report.contradictions[0],/Visitante/)
+  assert.match(report.contradictions[1],/local 23.0 h · visitante 50.0 h/)
+  assert.equal(report.sources[0].status,'partial')
+  assert.equal(report.sources[0].url,'https://api-web.nhle.com/report')
+})
+
 test('narrative shows measured venue / H2H samples, not invented referee favor',()=>{
   const result=composeTicketLegNarrative(event,leg)
   assert.equal(result.selected,'Montreal Canadiens')

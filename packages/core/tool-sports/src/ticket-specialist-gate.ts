@@ -425,12 +425,17 @@ export async function investigateTicketSpecialist(
         throw Error('NHL: informe de porteros pertenece a otro partido; datos descartados')
       level=d.opportunity.decision==='investigate'?'B':'C'
       teams=d.players.home.length>0&&d.players.away.length>0
+      restHours={home:d.form.home?.restHours??null,away:d.form.away?.restHours??null}
       const comparative=(side:'home'|'away'):ComparativeTeam=>({
         name:side==='home'?game.home:game.away,
         recentResults:(d.form[side]?.last10??[]).map(g=>g.date+' '+g.opponent+
           ' '+g.goalsFor+'-'+g.goalsAgainst+' '+g.location+' '+g.outcome),
-        teamStats:Object.entries(d.officialShots[side]).map(([name,value])=>({
-          name,value:value===null?'no disponible':String(value)})),
+        teamStats:[
+          {name:'Power play %',value:String(d.specialTeams[side].powerPlayPct??'no disponible')},
+          {name:'Penalty kill %',value:String(d.specialTeams[side].penaltyKillPct??'no disponible')},
+          ...Object.entries(d.officialShots[side]).map(([name,value])=>({
+            name,value:value===null?'no disponible':String(value)})),
+        ],
         players:d.players[side].map(p=>({name:p.name,role:p.role,
           dataStatus:'estadísticas de roster; disponibilidad física no inferida',
           starterConfirmed:p.starterConfirmed,

@@ -1137,6 +1137,9 @@ export async function evidencePricedTicket(
     const noVigPercent=marketRisk.legs[index]?.noVigPercent
     const prior=estimate&&typeof estimate==='object'&&!Array.isArray(estimate)
       ?estimate as Record<string,unknown>:{}
+    const rationale=String(prior.rationale??'')
+      .replace(/^Probabilidad individual exploratoria \d+(?:[.,]\d+)?% \(NO calibrada; no garantiza acierto\)\.\s*/u,'')
+      .replace(/^Probabilidad de esta pata: no estimable con los datos disponibles\.\s*/u,'')
     const pricedRow=row&&typeof row==='object'&&!Array.isArray(row)
       ?row as Record<string,unknown>:{}
     const [observedRow]=presentObservedTicketLegs([pricedRow],[quote?[quote]:[]])
@@ -1186,8 +1189,7 @@ export async function evidencePricedTicket(
         marketRisk.legs[index]?.noVigPercent!==undefined?
         ('Probabilidad individual implícita del mercado sin margen: '+
           noVigPercent+'% (NO pronóstico calibrado). '+
-          String(prior.rationale??'').replace(
-            /^Probabilidad individual exploratoria[^.]*\.\s*/u,'')).slice(0,480):
+          rationale).slice(0,480):
         String(prior.rationale??'').slice(0,480),
       ...(quote?{ price:String(quote.price),bookmaker:quote.bookmaker,
         ...(quote.market==='double_chance'?{ selection:quote.selection==='1X'
@@ -1198,8 +1200,7 @@ export async function evidencePricedTicket(
           'Probabilidad implícita específica del mercado 1X/X2: '+
               noVigPercent+'% (NO calibrada). ':
           'Probabilidad específica de doble oportunidad: no estimable. ')+
-            String(prior.rationale??'').replace(
-              /^Probabilidad individual exploratoria[^.]*\.\s*/u,'').slice(0,340)+
+            rationale.slice(0,340)+
             ' · Cubre empate; verificar precio, riesgo vigente.').slice(0,480) }:{}) }:{}) }
   })
   const espnOnlyObserved=best.choices.some(q=>q.source?.startsWith('ESPN Site/Core'))
