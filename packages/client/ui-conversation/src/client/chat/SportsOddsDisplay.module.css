@@ -1,70 +1,29 @@
-/* Pearl Light sports prices — compact, readable and theme-token aware. */
-.root{
-  box-sizing:border-box;width:100%;max-width:740px;min-width:0;margin:8px 0 12px;
-  padding:14px 15px 11px;border-radius:15px;
-  border:1px solid var(--dsw-alias-border-subtle,rgba(110,125,149,.22));
-  background:var(--dsw-alias-bg-primary,#fff);
-  color:var(--dsw-alias-label-primary,#242b35);
-  box-shadow:0 3px 15px rgba(35,49,71,.045);font:inherit;
-}
-.header{display:flex;justify-content:space-between;align-items:flex-start;gap:9px 14px;flex-wrap:wrap}
-.heading{min-width:0;flex:1 1 260px}
-.eyebrow{display:flex;gap:9px;align-items:center;flex-wrap:wrap;font-size:10px;letter-spacing:.035em;font-weight:700}
-.brand{color:#356cc8;letter-spacing:.13em;font-weight:850}
-.observed{color:var(--dsw-alias-label-secondary,#707a89);font-weight:600}
-.heading h3{margin:4px 0 0;font-size:clamp(15px,2vw,18px);font-weight:780;line-height:1.25}
-.heading p{margin:4px 0 0;font-size:11px;line-height:1.35;color:var(--dsw-alias-label-secondary,#677080)}
-.formats{display:flex;gap:2px;padding:3px;border-radius:10px;align-items:center;
-  background:var(--dsw-alias-interactive-bg-hover,rgba(96,114,147,.07));
-  border:1px solid var(--dsw-alias-border-subtle,rgba(110,125,149,.15))}
-.formats button{cursor:pointer;border:0;border-radius:7px;background:transparent;color:inherit;
-  padding:6px 9px;font:inherit;font-size:10px;font-weight:700;white-space:nowrap}
-.formats button[aria-pressed="true"]{background:var(--dsw-alias-bg-primary,#fff);
-  box-shadow:0 1px 4px rgba(25,39,61,.1);color:var(--dsw-alias-label-primary,#273141)}
-.formats button:focus-visible,.details summary:focus-visible{outline:2px solid #427ee2;outline-offset:2px}
-.fixtures{display:grid;gap:8px;margin-top:11px}
-.fixture{border:1px solid var(--dsw-alias-border-subtle,rgba(110,125,149,.15));
-  border-radius:11px;padding:10px;background:var(--dsw-alias-bg-primary,#fff);min-width:0}
-.fixtureTop{display:flex;gap:7px;justify-content:space-between;align-items:center;
-  flex-wrap:wrap;margin-bottom:8px}
-.fixtureIdentity{display:flex;gap:7px;align-items:center;flex-wrap:wrap;min-width:0}
-.fixtureName{font-size:12px;line-height:1.3}
-.market{font-size:10px;font-weight:700;color:var(--dsw-alias-label-secondary,#687383)}
-.bookmaker{font-size:10px;font-weight:650;color:var(--dsw-alias-label-secondary,#687383)}
-.choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.choice{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;padding:10px;
-  border:1px solid var(--dsw-alias-border-subtle,rgba(116,131,153,.15));
-  border-radius:10px;background:var(--dsw-alias-interactive-bg-hover,rgba(109,126,151,.045))}
-.choice[data-market-favorite="true"]{border-color:rgba(59,112,201,.33);
-  background:var(--dsw-alias-interactive-bg-hover,rgba(80,132,217,.065))}
-.team{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
-.monogram{width:29px;height:29px;flex:0 0 29px;display:grid;place-items:center;
-  border:1px solid var(--dsw-alias-border-subtle,rgba(108,126,160,.2));border-radius:50%;
-  color:var(--dsw-alias-label-primary,#384960);background:var(--dsw-alias-bg-primary,#fff);
-  font-size:10px;font-weight:800;letter-spacing:-.035em}
-.teamName{min-width:0;display:flex;flex-direction:column;gap:2px}
-.teamName strong{font-size:11px;line-height:1.28;overflow-wrap:anywhere}
-.teamName small,.favourite{font-size:9px;line-height:1.25;color:var(--dsw-alias-label-secondary,#687383)}
-.favourite{color:#356bb5;font-weight:700}
-.priceBlock{flex:0 0 auto;text-align:right;display:flex;flex-direction:column;gap:0;align-items:flex-end}
-.price{font-variant-numeric:tabular-nums;font-size:clamp(18px,2.7vw,23px);font-weight:850;line-height:1.16}
-.priceBlock small{font-size:9px;color:var(--dsw-alias-label-secondary,#758094);font-variant-numeric:tabular-nums}
-.footer{display:grid;gap:6px;margin-top:9px;border-top:1px solid var(--dsw-alias-border-subtle,rgba(110,125,149,.15));padding-top:8px}
-.attribution{display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;
-  color:var(--dsw-alias-label-secondary,#677080);font-size:9px}
-.details{font-size:10px;color:var(--dsw-alias-label-secondary,#677080)}
-.details summary{cursor:pointer;display:inline-block;font-weight:700}
-.details p{margin:5px 0 0;line-height:1.45}
-@media(max-width:540px){
-  .root{padding:10px;border-radius:12px}
-  .fixture{padding:8px}
-  .choice{padding:8px 6px;gap:5px;align-items:flex-start}
-  .team{gap:5px;align-items:flex-start}
-  .monogram{width:22px;height:22px;flex-basis:22px;font-size:8px}
-  .teamName strong{font-size:10px}
-  .price{font-size:17px}
-}
-@media(max-width:340px){
-  .choices{grid-template-columns:1fr}
-  .choice{align-items:center}
-}
+/* PHOENIX inline odds research: same flat, full-width comparison style as the research stages. */
+.root{width:100%;max-width:100%;min-width:0;margin:12px 0 22px;color:var(--dsw-alias-label-primary,inherit);font:inherit}
+.header{margin-bottom:10px}
+.step{display:flex;justify-content:space-between;gap:12px;font-size:11px;color:var(--dsw-alias-label-secondary,#777);font-weight:650;letter-spacing:.04em}
+.step small{font-size:11px;font-weight:500;letter-spacing:0}
+.header h3{font-size:15px;font-weight:650;margin:6px 0 0;line-height:1.4}
+.subtitle{margin:4px 0 8px;font-size:11px;color:var(--dsw-alias-label-secondary,#777)}
+.formats{display:inline-flex;gap:12px;margin-top:8px;align-items:center;font-size:11px}
+.formats button{padding:3px 0;border:0;border-bottom:2px solid transparent;background:none;color:var(--dsw-alias-label-secondary,#777);cursor:pointer;font:inherit}
+.formats button[aria-pressed="true"]{border-bottom-color:var(--dsw-alias-label-primary,#333);font-weight:700;color:var(--dsw-alias-label-primary,#333)}
+.formats button:focus-visible{outline:2px solid var(--dsw-alias-border-focus,#427ee2);outline-offset:3px}
+.fixtures{display:grid;gap:12px}
+.fixture{min-width:0}
+.fixture:not(:first-child){padding-top:10px;border-top:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.18))}
+.fixtureName{margin:0 0 7px;font-size:12px;font-weight:650}
+.scroll{width:100%;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}
+.table{width:100%;min-width:480px;border-collapse:collapse;font-size:12px}
+.table th,.table td{border-bottom:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.18));padding:9px 11px;vertical-align:top;text-align:left;overflow-wrap:anywhere}
+.table thead th{background:var(--dsw-alias-surface-secondary,transparent);font-size:12px;font-weight:650}
+.table thead th:first-child{width:29%}
+.table tbody th{font-weight:550;color:var(--dsw-alias-label-secondary,#777)}
+.fact{display:block;color:var(--dsw-alias-label-primary,inherit)}
+.meta{display:block;margin-top:3px;color:var(--dsw-alias-label-secondary,#777);font-size:10px;font-weight:450}
+.price{display:block;font-size:16px;font-weight:750;font-variant-numeric:tabular-nums;white-space:nowrap}
+.alternate,.favourite{display:block;font-size:10px;line-height:1.4;color:var(--dsw-alias-label-secondary,#777);font-variant-numeric:tabular-nums}
+.favourite{color:var(--dsw-alias-label-accent,#356bb5);font-weight:650}
+.footer{margin-top:9px;color:var(--dsw-alias-label-secondary,#777);font-size:10px;overflow-wrap:anywhere}
+.footer p{margin:4px 0;line-height:1.45}
+@media(max-width:540px){.table{min-width:440px}.table th,.table td{padding:7px 8px}}
