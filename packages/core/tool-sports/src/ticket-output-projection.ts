@@ -7,6 +7,8 @@ type TicketChatProjection = {
   uiBlock: ChatBlock
   researchFixtures: Fields[]
   modelComparisonBriefs: Fields[]
+  /** Bounded bilateral evidence for the fixtures the model must actually choose between. */
+  selectedResearchBriefs: Fields[]
   specialistChecks: Fields[]
   sourceAudit: Fields[]
 }
@@ -32,6 +34,61 @@ const legFields = {
 const snippets=(value:unknown,count:number)=>Array.isArray(value)?
   value.filter((item):item is string=>typeof item==='string'&&item.trim().length>0)
     .slice(0,count).map(item=>item.slice(0,120)):[]
+
+const rows=(value:unknown,count:number,fields:Readonly<Record<string,number>>):Fields[]=>
+  Array.isArray(value)?value.slice(0,count).map(item => textFields(item,fields)):[]
+
+const boundedTeamEvidence=(value:unknown):Fields=>{
+  const team=record(value)
+  // A full roster can contain dozens of athletes and long game logs. Keep
+  // only coverage counts here; the complete roster is fetched page-by-page by
+  // the visible rosters stage, not copied into the quick draft.
+  const players=Array.isArray(team.players)?team.players:[]
+  const metricPlayers=players.filter((item) => {
+    const player=record(item)
+    return [player.stats,player.recent,player.splits].some(value=>
+      Array.isArray(value)&&value.length>0)
+  }).length
+  return {
+    ...textFields(team, { name:120 }),
+    rosterCount:players.length,
+    playersWithMetrics:metricPlayers,
+    recentResults:snippets(team.recentResults,2),
+    teamStats:rows(team.teamStats,4, { name:100,value:140 }),
+    facts:[...snippets(team.recentResults,1),
+      ...rows(team.teamStats,1, { name:100,value:140 }).map(item=>
+        Object.entries(item).map(([key,value])=>key+': '+String(value)).join(' · '))].slice(0,2),
+  }
+}
+
+/**
+ * Keep the selected event's evidence in the model-facing response. The old
+ * projection kept only alternative IDs, so the model saw a price card but no
+ * bilateral roster or player facts and had to guess whether a recheck was
+ * needed. Full provider payloads stay in the engine; this bounded view keeps
+ * roster/metric coverage counts and team-level facts while leaving deep logs
+ * through sports_chat_ticket_dossier_recheck.
+ */
+const selectedDossierBrief=(value:unknown):Fields=>{
+  const dossier=record(value)
+  const selectedSide=dossier.selectedSide
+  const [source]=rows(dossier.endpointAudit,1, { url:400 })
+  return {
+    ...textFields(dossier,fixtureFields),
+    ...(selectedSide==='home'||selectedSide==='away'?{ selectedSide } : {}),
+    fullDossierAvailable:true,
+    teamComparison:{
+      home:boundedTeamEvidence(record(dossier.teamComparison).home),
+      away:boundedTeamEvidence(record(dossier.teamComparison).away),
+    },
+    verifiedFacts:snippets(dossier.verifiedFacts,4),
+    unresolvedFacts:snippets(dossier.unresolvedFacts,4),
+    newsFindings:rows(dossier.newsFindings,1, { title:160,publisher:80,publishedAt:40 }),
+    ...(source?.url?{ sourceUrl:source.url }:{}),
+    recheckTool:'sports_chat_ticket_dossier_recheck',
+    recheckInstruction:'Si falta una estadística, lesión, titular o noticia decisiva, reabre el expediente de este eventId antes de elegir; no completes el hueco con una inferencia.',
+  }
+}
 
 const fixtureFields={
   eventId:20,sport:25,league:65,date:10,home:100,away:100,kickoff:55,
@@ -61,6 +118,11 @@ export function projectPricedTicketForModel(result: PricedTicket): TicketChatPro
       ...textFields(item,fixtureFields),
       ...textFields(item,{ provisionalPick:10,specialistStatus:25 }),
     }))
+  const selectedIdsForBrief=new Set(researchFixtures.map(item=>String(record(item).eventId)))
+  const selectedResearchBriefs=(Array.isArray(props.selectedBilateralDossiers)?
+    props.selectedBilateralDossiers:[])
+    .filter(item=>selectedIdsForBrief.has(String(record(item).eventId)))
+    .slice(0,6).map(selectedDossierBrief)
   return {
     uiBlock:{
       ...card,
@@ -72,6 +134,7 @@ export function projectPricedTicketForModel(result: PricedTicket): TicketChatPro
     },
     researchFixtures:researchFixtures.slice(0,6).map(item=>textFields(item,fixtureFields)),
     modelComparisonBriefs:alternatives,
+    selectedResearchBriefs,
     specialistChecks:specialistChecks.slice(0,6).map(check=>({
       eventId:check.eventId,status:check.status,
       verifiedSteps:snippets(check.verifiedSteps,2),

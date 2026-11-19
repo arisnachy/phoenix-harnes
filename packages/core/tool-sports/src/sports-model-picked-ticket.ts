@@ -21,7 +21,23 @@ export type ModelChosenLeg={
   counterEvidence?:string
   /** Explicit unresolved critical blockers; [] means reviewed, not proved. */
   criticalPending?:string[]
+  /**
+   * Receipt that the model actually read the bilateral dossier before making
+   * this decision. Counts and stages are descriptive evidence, never scores
+   * or weights; deep player logs remain recoverable by eventId.
+   */
+  researchEvidence?:ExpertResearchEvidence
 }
+
+export type ExpertResearchEvidence={
+  eventId:string
+  homeRosterCount:number
+  awayRosterCount:number
+  reviewedStages:string[]
+  observedFacts:string[]
+}
+/** Runtime-owned stage observations from research tools; never model-authored. */
+export type TrustedResearchStageReader=(leg:ModelChosenLeg)=>readonly string[]|undefined
 const valid=(leg:ModelChosenLeg,now:number)=>/^\d{1,18}$/u.test(leg.eventId)&&
   /^\d{4}-\d{2}-\d{2}$/u.test(leg.date)&&
   Number.isFinite(Date.parse(leg.kickoff))&&Date.parse(leg.kickoff)>now&&
@@ -67,11 +83,59 @@ export function ticketResearchChecklist(chosen:readonly ModelChosenLeg[]):string
   return missing
 }
 
+const REQUIRED_EXPERT_STAGES=['teams','rosters','availability','context','news'] as const
+
+/**
+ * Enforce that the model's final pick came after a bilateral dossier read.
+ * This is intentionally qualitative: the receipt records coverage only and
+ * never contributes a numerical winner score or probability.
+ */
+export function ticketExpertEvidenceChecklist(
+  chosen:readonly ModelChosenLeg[],
+  observedStages?:TrustedResearchStageReader,
+  requireTrusted=false,
+):string[]{
+  const missing:string[]=[]
+  for(const leg of chosen){
+    const name=leg.away+' vs '+leg.home
+    const evidence=leg.researchEvidence
+    if(!evidence||typeof evidence!=='object'){
+      missing.push(name+': falta comprobante de expediente bilateral leído.')
+      continue
+    }
+    if(evidence.eventId!==leg.eventId)
+      missing.push(name+': el comprobante bilateral no corresponde al eventId elegido.')
+    if(!Number.isInteger(evidence.homeRosterCount)||evidence.homeRosterCount<1||
+      !Number.isInteger(evidence.awayRosterCount)||evidence.awayRosterCount<1)
+      missing.push(name+': el comprobante no contiene roster observado de ambos rivales.')
+    const stages=new Set(evidence.reviewedStages)
+    const absent=REQUIRED_EXPERT_STAGES.filter(stage=>!stages.has(stage))
+    if(absent.length)
+      missing.push(name+': etapas bilaterales no leídas: '+absent.join(', ')+'.')
+    if(!Array.isArray(evidence.observedFacts)||
+      evidence.observedFacts.filter(x=>typeof x==='string'&&x.trim().length>=12).length<3)
+      missing.push(name+': el comprobante necesita al menos tres hechos observados, no cálculos.')
+    let observed:readonly string[]|undefined
+    try{observed=observedStages?.(leg)}catch{observed=undefined}
+    if(requireTrusted&&!observed){
+      missing.push(name+': falta evidencia de etapas confiable producida por las herramientas.')
+    }else if(observed){
+      const observedStageSet=new Set(observed)
+      const absent=REQUIRED_EXPERT_STAGES.filter(stage=>!observedStageSet.has(stage))
+      if(absent.length)
+        missing.push(name+': las herramientas no verificaron estas etapas: '+absent.join(', ')+'.')
+    }
+  }
+  return missing
+}
+
 type ModelChosenTicket = {
   complete: boolean
   priced: boolean
   finalReady: boolean
   finalizationMissing: string[]
+  /** The receipt is supplied by the model; source content remains separately audited. */
+  researchEvidenceStatus: 'trusted'|'self-reported'
   placed: false
   bookmaker: string | null
   quotes: Array<{
@@ -91,10 +155,13 @@ type ModelChosenTicket = {
  * @param fetcher - Injected provider for deterministic tests.
  * @param now - Quote observation moment.
  * @param requestedCount - Original ticket size, even if fewer picks were justified.
+ * @param observedStages - Runtime-owned stage reader; absent stages keep the
+ * ticket self-reported and not final-ready.
  * @returns A ticket draft or a properly priced same-bookmaker research ticket.
  */
 export async function quoteKiraChosenTicket(chosen:readonly ModelChosenLeg[],
   fetcher:typeof fetch=fetch,now=Date.now(),requestedCount=chosen.length,
+  observedStages?:TrustedResearchStageReader,
 ):Promise<ModelChosenTicket>{
   if(!Number.isInteger(requestedCount)||requestedCount<1||requestedCount>6||
     chosen.length<1||chosen.length>requestedCount||
@@ -127,8 +194,13 @@ export async function quoteKiraChosenTicket(chosen:readonly ModelChosenLeg[],
   const chosenQuotes=verified.map(rows=>rows.find(q=>q.bookmaker===best)??null)
   const complete=chosen.length===requestedCount&&best!==null&&chosenQuotes.every(q=>q!==null)
   const priced=complete
-  const finalizationMissing=ticketResearchChecklist(chosen)
+  const finalizationMissing=[...ticketResearchChecklist(chosen),
+    ...ticketExpertEvidenceChecklist(chosen,observedStages,true)]
   const finalReady=complete&&finalizationMissing.length===0
+  const trustedComplete=chosen.every((leg) => {
+    try{return REQUIRED_EXPERT_STAGES.every(stage=>
+      observedStages?.(leg)?.includes(stage)===true)}catch{return false}
+  })
   const missing=chosen.flatMap((leg,i)=>chosenQuotes[i]?[ ]:
     ['Sin cuota ESPN del mismo bookmaker para '+leg.away+' vs '+leg.home+
       ' · selección '+(leg.pick==='home'?leg.home:leg.away)])
@@ -151,7 +223,9 @@ export async function quoteKiraChosenTicket(chosen:readonly ModelChosenLeg[],
     selection:q.selection,price:q.price,bookmaker:q.bookmaker,
     source:q.source??'ESPN',observedAt:q.observedAt }]:[])
   const product=complete?quotes.reduce((total,q)=>total*q.price,1):null
-  return{ complete,priced,finalReady,finalizationMissing,placed:false as const,
+  return{ complete,priced,finalReady,finalizationMissing,
+    researchEvidenceStatus:trustedComplete?'trusted' as const:'self-reported' as const,
+    placed:false as const,
     bookmaker:best,quotes,missing,
     uiBlock:{ component:'sports_ticket_card' as const,version:1 as const,props:{
       title:finalReady?'PHOENIX · Ticket final de análisis':
@@ -168,6 +242,7 @@ export async function quoteKiraChosenTicket(chosen:readonly ModelChosenLeg[],
         'Kira eligió tras comparar datos; esta función no ordena equipos, '+
         'no evalúa probabilidades ni modifica los picks por el precio. '+
         'ESPN observado no significa que el bookmaker haya aceptado la apuesta. '+
+        'El comprobante de etapas es autodeclarado por Kira; las URL deben abrirse y contrastarse. ' +
         'No se realizó ninguna apuesta ni se garantiza ganar.',
     } } }
 }
