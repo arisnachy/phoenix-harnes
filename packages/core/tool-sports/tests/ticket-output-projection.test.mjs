@@ -46,11 +46,26 @@ test('model projection retains bounded bilateral evidence for selected fixtures'
     card:{component:'sports_ticket_card',version:1,props:{
       title:'Ticket',source:'ESPN',requestedLegs:1,combinedOdds:'1.6',note:'n',
       dataCounts:{eventsFound:1,quotedLegs:1,researchedLegs:1,approvedForBetting:0},
-      legs:[],modelComparisonBriefs:[],selectedBilateralDossiers:[{
+      legs:[{
+        eventId:fixture.eventId,price:'1.14286',
+        rationale:'Forma reciente. '.repeat(16)+'Contexto completo.',
+        decisionReview:{verdict:'hold',bookmakerBreakEvenPct:87.5},
+        narrative:{
+          eventId:fixture.eventId,selectionWhy:'Comparación bilateral.',
+          favorable:['Mejor defensa'],contradictions:['Dos titulares ausentes'],
+          explanationForChat:'Expediente extenso '.repeat(1000),
+        },
+      }],modelComparisonBriefs:[],selectedBilateralDossiers:[{
         eventId:fixture.eventId,sport:fixture.sport,league:fixture.league,
         home:fixture.home,away:fixture.away,kickoff:fixture.kickoff,
         selectedSide:'home',verifiedFacts:['roster loaded','form loaded'],
         unresolvedFacts:['official lineup pending'],
+        qualitativeAvailability:{
+          selectedAvailability:[{athlete:'Home Star',status:'Out',
+            reportedAt:'2026-11-19T17:00:00Z',source:'roster-reconciled'}],
+          rest:{selectedHours:22,opposingHours:48},
+          criticalUnknowns:['official lineup pending'],
+        },
         teamComparison:{
           home:{name:fixture.home,recentResults:['win'],teamStats:[{name:'wins',value:'8'}],
             players:[{name:'Home Star',role:'guard',dataStatus:'observed',starterConfirmed:true,
@@ -75,4 +90,12 @@ test('model projection retains bounded bilateral evidence for selected fixtures'
   assert.deepEqual(brief.unresolvedFacts,['official lineup pending'])
   assert.equal('playerMatchups' in brief,false)
   assert.equal(brief.fullDossierAvailable,true)
+  const [leg]=report.uiBlock.props.legs
+  assert.ok(leg.rationale.endsWith('Contexto completo.'))
+  assert.equal(leg.bookmakerBreakEvenPct,87.5)
+  assert.equal(leg.decisionVerdict,'hold')
+  assert.deepEqual(leg.narrative.contradictions,['Dos titulares ausentes'])
+  assert.equal(leg.narrative.explanationForChat,'Comparación bilateral.')
+  assert.equal(brief.availability.selected[0].athlete,'Home Star')
+  assert.equal(brief.availability.rest.selectedHours,22)
 })

@@ -186,6 +186,8 @@ type SportsTicketCard = {
       eventId?:string;eventDate?:string;providerLeague?:string;trackedBet?:SportsTrackedPick;
       narrative?:SportsTicketNarrative;legWinProbabilityPercent?:number|null;
       legProbabilitySource?:string;marketNoVigPercent?:number|null;
+      bookmakerBreakEvenPct?:number;
+      decisionVerdict?:'hold'|'exclude'|'caution'|'candidate';
       researchStatus?:string;pendingEvidence?:string[];
       referenceOdds?:{bookmaker:string;price:number;reason:string;source?:string;
         nonCotizable:true};
@@ -687,6 +689,8 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
       && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player','rationale',
       'homeLogo','awayLogo','homeTeam','awayTeam','eventId','eventDate','providerLeague','trackedBet',
       'narrative','legWinProbabilityPercent','legProbabilitySource','legProbabilityWarning','marketNoVigPercent',
+      'bookmakerBreakEvenPct',
+      'decisionVerdict',
       'marketRiskTier','decisionReview','specialistResearch','researchStatus','pendingEvidence',
       'preliminaryEvidenceTier','referenceOdds','webOddsResearch','oddsReferenceNote','displayStatus','riskNotes',
       'quoteStatus','quoteSource','quoteSelection','quoteMarket','quoteEventId',
@@ -712,6 +716,11 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
        && (x.marketNoVigPercent===undefined||x.marketNoVigPercent===null||
          typeof x.marketNoVigPercent==='number'&&Number.isFinite(x.marketNoVigPercent)&&
          x.marketNoVigPercent>=0&&x.marketNoVigPercent<=100)
+       && (x.bookmakerBreakEvenPct===undefined||
+         typeof x.bookmakerBreakEvenPct==='number'&&Number.isFinite(x.bookmakerBreakEvenPct)&&
+         x.bookmakerBreakEvenPct>=0&&x.bookmakerBreakEvenPct<=100)
+       && (x.decisionVerdict===undefined||
+         ['hold','exclude','caution','candidate'].includes(String(x.decisionVerdict)))
        && optionalText(x.legProbabilitySource,90)&&optionalText(x.researchStatus,50)
        && (x.referenceOdds===undefined||(isRecord(x.referenceOdds)&&
          hasOnlyKeys(x.referenceOdds,['bookmaker','price','reason','source','nonCotizable'])&&
@@ -1384,6 +1393,13 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
       const unpriced = p.combinedOdds === 'No disponible'
       const quotedLegs=p.dataCounts?.quotedLegs??(unpriced?0:p.legs.length)
       const receipt=Boolean(p.ticketReference)
+      const narrativeForLeg=(leg:typeof p.legs[number])=>leg.narrative??p.chatNarrative?.find(n=>
+        Boolean(leg.eventId)&&n.eventId===leg.eventId)
+      const legsWithoutNarrative=p.legs.filter(leg=>!narrativeForLeg(leg))
+      // Each matched dossier is rendered beside its leg. Keep only orphaned
+      // narratives here so the same explanation is never shown twice.
+      const unmatchedNarratives=(p.chatNarrative??[]).filter(n=>
+        !p.legs.some(leg=>Boolean(leg.eventId)&&leg.eventId===n.eventId))
       if(receipt)return <SportsTicketLiveTracker props={p}/>
       // Keep only attributed competition taxonomy; do not infer unnamed leagues.
       const groups = new Map<string,typeof p.legs>()
@@ -1422,8 +1438,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             <div className={css.sportsLegs}>{legs.map(leg=>{
               const legQuoted=Number.isFinite(Number(leg.price))&&Number(leg.price)>1&&
                 Number(leg.price)<1000&&leg.bookmaker!=='Sin casa confirmada'
-              const narrative=leg.narrative??p.chatNarrative?.find(n=>
-                Boolean(leg.eventId)&&n.eventId===leg.eventId)
+              const narrative=narrativeForLeg(leg)
               return <article key={p.legs.indexOf(leg)} className={css.sportsLeg}>
               <span className={css.sportsTicketLegNumber}>{String(p.legs.indexOf(leg)+1).padStart(2,'0')}</span>
               <div className={css.sportsTicketLegMain}>
@@ -1438,6 +1453,16 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                 </div>
                 <small>{[leg.market,leg.player?'Jugador · '+leg.player:undefined,
                   legQuoted||receipt?leg.bookmaker:undefined].filter(Boolean).join(' · ')}</small>
+                {leg.decisionVerdict&&<p className={css.sportsTicketNarrativeCaution}>
+                  <strong>Estado de revisión:</strong>{' '}
+                  {leg.decisionVerdict==='hold'?'Mantener en revisión':
+                    leg.decisionVerdict==='exclude'?'Excluir de la combinada':
+                    leg.decisionVerdict==='caution'?'Precaución · requiere corroboración':'Candidata condicional'}
+                </p>}
+                {typeof leg.bookmakerBreakEvenPct==='number'&&<p className={css.sportsTicketNarrativeCaution}>
+                  <strong>Umbral de equilibrio:</strong>{' '}{leg.bookmakerBreakEvenPct.toFixed(1)}%
+                  {' '}· probabilidad mínima para cubrir esta cuota.
+                </p>}
                 {leg.referenceOdds&&<p className={css.sportsTicketNarrativeCaution}>
                   <strong>ESPN Core · {leg.referenceOdds.bookmaker}:
                     {' '}{leg.referenceOdds.price.toFixed(2)} decimal</strong>
@@ -1495,10 +1520,10 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
               <small> · {item.notes.slice(0,2).join(' · ')}</small>}
           </li>:null)}</ul>
         </details>:null}
-        {p.chatNarrative?.length? <section className={css.sportsTicketNarrative}
-          aria-label="Justificación de Kira para cada pata">
-          <h4>Kira · Por qué elegí cada selección</h4>
-          {p.chatNarrative.map((n,i)=>{
+        {unmatchedNarratives.length? <section className={css.sportsTicketNarrative}
+          aria-label="Justificaciones de Kira sin partido enlazado">
+          <h4>Kira · Revisión adicional</h4>
+          {unmatchedNarratives.map((n,i)=>{
             const leg=p.legs.find(x=>Boolean(x.eventId)&&x.eventId===n.eventId)
             const picture=n.news.find(x=>x.imageUrl&&x.articleUrl)
             return <div key={n.eventId+'-'+i} className={css.sportsTicketNarrativeContext}>
@@ -1522,10 +1547,10 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             </div>
           })}
         </section>:null}
-        {!p.chatNarrative?.length&&<section className={css.sportsTicketNarrative}
+        {legsWithoutNarrative.length>0&&<section className={css.sportsTicketNarrative}
           aria-label="Explicación pendiente por selección">
           <h4>Kira · Revisión individual de las selecciones</h4>
-          {p.legs.map((leg,i)=><div key={leg.eventId??i}
+          {legsWithoutNarrative.map(leg=>{const i=p.legs.indexOf(leg); return <div key={leg.eventId??i}
             className={css.sportsTicketNarrativeContext}>
             <strong>{String(i+1).padStart(2,'0')} · {leg.selection}</strong>
             <p>{leg.rationale? sportsDisplayText(leg.rationale):
@@ -1533,7 +1558,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             <p><strong>Investigación por completar:</strong> {leg.pendingEvidence?.length?
               leg.pendingEvidence.slice(0,5).map(sportsDisplayText).join(' · '):
               'No hay expediente completo de lesiones, titulares, forma y contradicciones asociado a esta pata.'}</p>
-          </div>)}
+          </div>})}
         </section>}
         {receipt?<div className={css.sportsTicketTotal}>
           <div><small>Estado del boleto</small><strong>Recibo aportado · sin liquidación confirmada</strong></div>

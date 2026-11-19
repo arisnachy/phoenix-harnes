@@ -62,7 +62,7 @@ const dossier={
 }
 describe('actual ESPN observation and transparent step-by-step research',()=>{
   it('renders verified injury stats, per-step sources and an undated ESPN price',()=>{
-    show(ticket([{...leg,narrative:dossier,referenceOdds:{
+    show(ticket([{...leg,narrative:dossier,decisionVerdict:'caution',bookmakerBreakEvenPct:70.4,referenceOdds:{
       bookmaker:'DraftKings',price:1.09,reason:'sin_fecha',source:'core',
       nonCotizable:true,
     },webOddsResearch:[{
@@ -76,7 +76,11 @@ describe('actual ESPN observation and transparent step-by-step research',()=>{
     expect(screen.getByText(/4 bajas de Cleveland/)).toBeTruthy()
     expect(screen.getByText('A favor de esta elección')).toBeTruthy()
     expect(screen.getByText('Historial verificado')).toBeTruthy()
-    expect(screen.getByRole('link',{name:'ESPN NBA · resumen'}).getAttribute('href'))
+    expect(screen.getByText('Estado de revisión:')).toBeTruthy()
+    expect(screen.getByText(/Precaución · requiere corroboración/)).toBeTruthy()
+    const threshold=screen.getByText('Umbral de equilibrio:')
+    expect(threshold.parentElement?.textContent).toContain('70.4%')
+    expect(screen.getAllByRole('link',{name:'ESPN NBA · resumen'})[0]?.getAttribute('href'))
       .toBe('https://www.espn.com/nba/')
   })
 })

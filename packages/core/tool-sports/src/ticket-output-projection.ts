@@ -25,7 +25,7 @@ const textFields = (value: unknown, limits: Readonly<Record<string,number>>): Fi
 const legFields = {
   event:160,selection:140,price:32,bookmaker:100,when:85,
   homeTeam:100,awayTeam:100,homeLogo:300,awayLogo:300,image:300,
-  sport:60,league:100,country:100,market:70,rationale:200,
+  sport:60,league:100,country:100,market:70,rationale:480,
   eventId:20,eventDate:10,providerLeague:80,researchStatus:50,
   displayStatus:40,quoteStatus:40,quoteEventId:24,quoteSource:120,
   quoteSelection:140,quoteMarket:70,quoteObservedAt:55,bookmakerUpdatedAt:55,
@@ -37,6 +37,29 @@ const snippets=(value:unknown,count:number)=>Array.isArray(value)?
 
 const rows=(value:unknown,count:number,fields:Readonly<Record<string,number>>):Fields[]=>
   Array.isArray(value)?value.slice(0,count).map(item => textFields(item,fields)):[]
+
+const compactNarrative=(value:unknown,eventId:unknown)=>{
+  const narrative=record(value)
+  if(typeof eventId!=='string'||narrative.eventId!==eventId||
+    typeof narrative.selectionWhy!=='string'||!narrative.selectionWhy.trim())return undefined
+  // The native card uses structured sections. The long chat explanation
+  // repeats those sections and expands the entire research checklist.
+  const {researchSteps:_researchSteps,explanationForChat:_explanationForChat,...sections}=narrative
+  return {...sections,explanationForChat:narrative.selectionWhy}
+}
+
+const boundedAvailability=(value:unknown)=>{
+  const review=record(value),rest=record(review.rest)
+  const fields={athlete:100,status:60,reportedAt:48,source:35}
+  const hours=(value:unknown)=>typeof value==='number'&&
+    Number.isFinite(value)&&value>=0?value:null
+  return{
+    selected:rows(review.selectedAvailability,6,fields),
+    opposing:rows(review.opposingAvailability,6,fields),
+    rest:{selectedHours:hours(rest.selectedHours),opposingHours:hours(rest.opposingHours)},
+    criticalUnknowns:snippets(review.criticalUnknowns,5),
+  }
+}
 
 const boundedTeamEvidence=(value:unknown):Fields=>{
   const team=record(value)
@@ -83,7 +106,9 @@ const selectedDossierBrief=(value:unknown):Fields=>{
     },
     verifiedFacts:snippets(dossier.verifiedFacts,4),
     unresolvedFacts:snippets(dossier.unresolvedFacts,4),
-    newsFindings:rows(dossier.newsFindings,1, { title:160,publisher:80,publishedAt:40 }),
+    newsFindings:rows(dossier.newsFindings,3,
+      { title:160,publisher:80,publishedAt:40,status:30 }),
+    availability:boundedAvailability(dossier.qualitativeAvailability),
     ...(source?.url?{ sourceUrl:source.url }:{}),
     recheckTool:'sports_chat_ticket_dossier_recheck',
     recheckInstruction:'Si falta una estadística, lesión, titular o noticia decisiva, reabre el expediente de este eventId antes de elegir; no completes el hueco con una inferencia.',
@@ -105,10 +130,18 @@ export function projectPricedTicketForModel(result: PricedTicket): TicketChatPro
   const props=card.props
   const legs=(Array.isArray(props.legs)?props.legs:[]).slice(0,6).map((item)=>{
     const source=record(item)
+    const review=record(source.decisionReview)
+    const threshold=review.bookmakerBreakEvenPct
+    const narrative=compactNarrative(source.narrative,source.eventId)
     return {
       ...textFields(source,legFields),
       ...(source.quoteAcceptedByBookmaker===false?{ quoteAcceptedByBookmaker:false }:{}),
-      pendingEvidence:snippets(source.pendingEvidence,2),
+      ...(typeof threshold==='number'&&Number.isFinite(threshold)&&threshold>0&&threshold<=100?
+        {bookmakerBreakEvenPct:threshold}:{}),
+      ...(['hold','exclude','caution','candidate'].includes(String(review.verdict))?
+        {decisionVerdict:review.verdict}:{}),
+      ...(narrative?{narrative}:{}),
+      pendingEvidence:snippets(source.pendingEvidence,5),
     }
   })
   const selectedIds=new Set(researchFixtures.map(item=>item.eventId))
