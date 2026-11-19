@@ -1,0 +1,72 @@
+name: PHOENIX AUTH BRIDGE · zero-bypass tests
+on:
+  pull_request:
+    paths:
+      - packages/phoenix-auth-bridge/**
+      - apps/web/public/phoenix-team.html
+      - packages/client/ui-model-selection/src/client/ModelSelect.tsx
+      - .github/workflows/phoenix-auth-bridge.yml
+  push:
+    branches: [main, stable]
+    paths:
+      - packages/phoenix-auth-bridge/**
+      - .github/workflows/phoenix-auth-bridge.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bridge-cross-platform:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      PYTHONUTF8: "1"
+      PHOENIX_BRIDGE_PYTHON: python
+      PHOENIX_REQUIRE_MCP: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install bridge-only requirements
+        run: |
+          python -m pip install -r packages/phoenix-auth-bridge/gemini_bridge/requirements-mcp.txt
+      - name: Run Node validation tests
+        run: node --test packages/phoenix-auth-bridge/test/guard.test.mjs packages/phoenix-auth-bridge/test/team-workspace.test.mjs
+      - name: Run SQLite, Node/Python and actual MCP stdio integration
+        working-directory: packages/phoenix-auth-bridge
+        run: python -m unittest discover -s test -p 'test_*.py' -v
+      - name: Verify Gemini CLI settings preview, explicit install and PowerShell 5.1 syntax
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($script in @('configure-gemini-cli.ps1', 'verify-gemini-cli-windows.ps1', 'setup-team.ps1')) {
+            $path = Join-Path 'packages/phoenix-auth-bridge' $script
+            $tokens = $null
+            $syntaxErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path).Path, [ref]$tokens, [ref]$syntaxErrors)
+            if ($syntaxErrors) { throw "$script PowerShell syntax failure: $syntaxErrors" }
+          }
+          $path = Join-Path $env:RUNNER_TEMP 'phoenix-gemini-settings.json'
+          $pythonPath = (Get-Command python).Source
+          $script = './packages/phoenix-auth-bridge/configure-gemini-cli.ps1'
+          & $script -Python $pythonPath -SettingsPath $path
+          if ($LASTEXITCODE -ne 0 -or (Test-Path $path)) { throw 'Preview must not write settings' }
+          & $script -Apply -Python $pythonPath -SettingsPath $path
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $path)) { throw 'Opt-in installation failed' }
+          $cfg = Get-Content $path -Raw | ConvertFrom-Json
+          $server = $cfg.mcpServers.'phoenix-auth-bridge'
+          if ($server.trust -ne $false) { throw 'Gemini MCP trust must be false' }
+          if ($server.args[1] -ne 'gemini_bridge.mcp_server') { throw 'MCP module mismatch' }
+          if ($server.includeTools.Count -ne 2) { throw 'Unexpected server tool exposure' }
+      - name: Confirm Python source compiles
+        run: python -m compileall -q packages/phoenix-auth-bridge/gemini_bridge packages/phoenix-auth-bridge/test
