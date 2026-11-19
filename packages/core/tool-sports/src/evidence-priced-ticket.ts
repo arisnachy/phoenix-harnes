@@ -352,6 +352,49 @@ export async function evidencePricedTicket(
   }))
   const retried=attempts.flatMap(a=>a.status==='fulfilled'?a.value:[])
   const byId=new Map(retried.map(x=>[x.eventId,x]))
+  // A selected non-NBA/NHL dossier can be explicitly marked incomplete after
+  // the short preflight, so it never enters pendingGames. Recover only
+  // transient failures (timeouts, aborted/failed requests, or no dossier),
+  // once and in a small wave. Legitimate gaps such as an unpublished lineup
+  // remain conditional and are not retried blindly.
+  const transientFailure=(check:SpecialistGate|undefined):boolean=>{
+    if(!check||!['unavailable','incomplete'].includes(check.status))return false
+    return /l[ií]mite|timeout|abort|failed|fall[oó]|error|sin expediente|no disponible|http\s*\d{3}/iu
+      .test(check.pendingSteps.join(' '))
+  }
+  const failedBatchIds=new Set(attempts.flatMap((attempt,index)=>
+    attempt.status==='rejected'?(batches[index]??[]).map(game=>game.eventId):[]))
+  const recoveryCandidates=research.events.filter(event=>{
+    const latest=byId.get(event.eventId),previous=preview.get(event.eventId)
+    if(latest)return transientFailure(latest)
+    if(failedBatchIds.has(event.eventId))return true
+    if(previous)return transientFailure(previous)
+    // No final result after a selected retry is itself recoverable. The
+    // candidate was already verified by evidenceTicket; this call only seeks
+    // a dossier and cannot create a fixture or quote.
+    return pendingGames.some(game=>game.eventId===event.eventId)
+  }).slice(0,3).map(event=>({sport:event.sport,league:event.league,
+    eventId:event.eventId,date:day,home:event.home,away:event.away,
+    kickoff:event.kickoff}))
+  if(recoveryCandidates.length){
+    const requested=Number(env.PHOENIX_SPORTS_SELECTED_RECOVERY_MS)
+    const recoveryBudget=Number.isInteger(requested)&&requested>=6_000&&
+      requested<=20_000?requested:12_000
+    const recovery=await Promise.allSettled([boundedPriced(
+      specialistResearcher(recoveryCandidates,researchFetcher,now,env,[],
+        recoveryBudget),recoveryBudget+3_000)])
+    const quality=(check:SpecialistGate)=>check.status==='researched'?2:
+      check.status==='incomplete'?1:0
+    for(const check of recovery.flatMap(result=>
+      result.status==='fulfilled'?result.value:[])){
+      if(!recoveryCandidates.some(game=>game.eventId===check.eventId))continue
+      const previous=byId.get(check.eventId)
+      if(!previous||quality(check)>quality(previous)||
+        quality(check)===quality(previous)&&
+        check.verifiedSteps.length>previous.verifiedSteps.length)
+        byId.set(check.eventId,check)
+    }
+  }
   const specialistChecks:SpecialistGate[]=research.events.map(e=>{
     const previous=preview.get(e.eventId),latest=byId.get(e.eventId)
     // A failed retry cannot erase actual evidence from the preliminary read.
