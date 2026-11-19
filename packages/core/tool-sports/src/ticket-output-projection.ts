@@ -1,7 +1,15 @@
 import type { evidencePricedTicket } from './evidence-priced-ticket.ts'
+import type { ChatBlock } from './sports.ts'
 
 type PricedTicket = Awaited<ReturnType<typeof evidencePricedTicket>>
 type Fields = Record<string, unknown>
+type TicketChatProjection = {
+  uiBlock: ChatBlock
+  researchFixtures: Fields[]
+  modelComparisonBriefs: Fields[]
+  specialistChecks: Fields[]
+  sourceAudit: Fields[]
+}
 
 const record = (value: unknown): Fields =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Fields : {}
@@ -35,7 +43,7 @@ const fixtureFields={
  * @param result - The complete research result, retained by the engine.
  * @returns Compact, serializable chat data.
  */
-export function projectPricedTicketForModel(result: PricedTicket) {
+export function projectPricedTicketForModel(result: PricedTicket): TicketChatProjection {
   const { card, researchFixtures, specialistChecks }=result
   const props=card.props
   const legs=(Array.isArray(props.legs)?props.legs:[]).slice(0,6).map((item)=>{
