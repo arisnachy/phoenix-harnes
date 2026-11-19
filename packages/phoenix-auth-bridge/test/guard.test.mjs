@@ -57,3 +57,10 @@ test('size, extras, and turn limit cannot bypass validation', () => {
   approve(s, last.message_id, 'arisnachy'); markDelivered(s, last.message_id, 'arisnachy');
   assert.throws(() => prepare(s, { sender: last.recipient, recipient: last.sender, text: '13', replyTo: last.message_id }), /Turn out of range/);
 });
+
+test('MCP draft origins are legal but arbitrary web-session origins are blocked', () => {
+  const s = ready();
+  const e = prepare(s, { sender: 'chatgpt', recipient: 'gemini', text: 'hello' });
+  assert.equal(validateEnvelope({ ...e, origin: 'mcp-agent-proposal' }), true);
+  assert.throws(() => validateEnvelope({ ...e, origin: 'web-session' }), /Origin/);
+});
