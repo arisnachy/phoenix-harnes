@@ -21,7 +21,7 @@ test('public distribution has a neutral default user and portable schema', () =>
 
 test('bridge does not ship embedded credentials or fixed Windows profiles', () => {
   for (const source of [html, schemaText, guardText, installerText, settingsText]) {
-    assert.doesNotMatch(source, /C:\\\\Users\\\\[^\\\\]+/i);
+    assert.doesNotMatch(source, /C:\\Users\\[^\\]+/i);
     assert.doesNotMatch(source, /sk-[a-z0-9_-]{24,}/i);
     assert.doesNotMatch(source, /gh[pousr]_[a-z0-9]{30,}/i);
     assert.doesNotMatch(source, /AIza[0-9A-Za-z_-]{35}/);
