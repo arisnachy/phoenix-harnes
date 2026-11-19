@@ -110,3 +110,30 @@ test('NBA deep research returns verified ESPN roster headshots without guessing 
   assert.equal(report.teams.find(x=>x.id==='15')?.rosterPortraits.length,1)
   assert.deepEqual(report.injuries,[])
 })
+
+test('NHL fixture cross-check tolerates ESPN UTC date rolling into the local NHL date',async()=>{
+  const fixtureWithUtcRollover={
+    header:{competitions:[{date:'2026-10-30T00:00:00Z',competitors:[
+      {team:{id:'1',displayName:'Toronto Maple Leafs',abbreviation:'TOR'}},
+      {team:{id:'2',displayName:'Los Angeles Kings',abbreviation:'LA'}},
+    ]}]},
+  }
+  const calls=[]
+  const fetcher=async url=>{
+    const u=String(url);calls.push(u)
+    if(u===root+'summary?event=1234')
+      return new Response(JSON.stringify(fixtureWithUtcRollover))
+    if(u.endsWith('/teams/1/roster'))
+      return new Response(JSON.stringify({athletes:[{id:'101',displayName:'Jet'}]}))
+    if(u.endsWith('/teams/2/roster'))
+      return new Response(JSON.stringify({athletes:[{id:'102',displayName:'Bolt'}]}))
+    if(u==='https://api-web.nhle.com/v1/score/2026-10-30')
+      return new Response(JSON.stringify({games:[]}))
+    if(u==='https://api-web.nhle.com/v1/score/2026-10-29')
+      return new Response(JSON.stringify({games:[{homeTeam:{abbrev:'TOR'},awayTeam:{abbrev:'LAK'}}]}))
+    return new Response(JSON.stringify({}))
+  }
+  const report=await investigateEventDeep('hockey','nhl','1234',fetcher,now)
+  assert.equal(report.independentFixtureVerified,true)
+  assert.ok(calls.includes('https://api-web.nhle.com/v1/score/2026-10-29'))
+})
