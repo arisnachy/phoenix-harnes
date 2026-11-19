@@ -44,11 +44,6 @@ function marketLabel(market: string): string {
   }
 }
 
-function initials(selection: string): string {
-  return selection.trim().split(/\s+/u).filter(Boolean).slice(0, 2)
-    .map(word => word.slice(0, 1)).join('').toLocaleUpperCase() || '•'
-}
-
 function marketGroups(rows: readonly OddsRow[]) {
   const grouped = new Map<string, { event: string; market: string; bookmaker: string; rows: OddsRow[] }>()
   for (const row of rows) {
@@ -61,19 +56,19 @@ function marketGroups(rows: readonly OddsRow[]) {
   return [...grouped.entries()]
 }
 
-/** Compact, source-attributed market viewer; this never selects or places bets. */
+/** Source-attributed, inline comparison table; this never selects or places bets. */
 export function SportsOddsDisplay({ title, source, subtitle, note, rows }: Props) {
   const [format, setFormat] = useState<'american' | 'decimal'>('american')
   const groups = marketGroups(rows)
   return <section className={css.root} data-generative-ui="sports_odds_card"
     aria-label={'Cuotas observadas · ' + title}>
     <header className={css.header}>
-      <div className={css.heading}>
-        <div className={css.eyebrow}><span className={css.brand}>PHOENIX</span>
-          <span className={css.observed}>Cuotas observadas</span></div>
-        <h3>{title}</h3>
-        {subtitle && <p>{subtitle}</p>}
+      <div className={css.step}>
+        <span>INVESTIGACIÓN · CUOTAS</span>
+        <small>Mercados observados</small>
       </div>
+      <h3>Cuotas observadas · {title}</h3>
+      {subtitle && <p className={css.subtitle}>{subtitle}</p>}
       <div className={css.formats} role="group" aria-label="Formato de cuotas">
         <button type="button" aria-pressed={format === 'american'}
           onClick={() => setFormat('american')}>Americano</button>
@@ -89,48 +84,49 @@ export function SportsOddsDisplay({ title, source, subtitle, note, rows }: Props
         const allPriced = group.rows.length >= 2 && prices.every(value => value !== null)
         const lowest = allPriced ? Math.min(...prices as number[]) : null
         const uniqueLowest = lowest !== null && prices.filter(value => value === lowest).length === 1
-        return <article className={css.fixture} key={key}>
-          <div className={css.fixtureTop}>
-            <div className={css.fixtureIdentity}>
-              {showEvent && <strong className={css.fixtureName}>{group.event}</strong>}
-              <span className={css.market}>{marketLabel(group.market)}</span>
-            </div>
-            <span className={css.bookmaker}>{group.bookmaker}</span>
+        return <div className={css.fixture} key={key}>
+          {showEvent && <h4 className={css.fixtureName}>{group.event}</h4>}
+          <div className={css.scroll}>
+            <table className={css.table} aria-label={marketLabel(group.market) + ' · ' + group.bookmaker}>
+              <thead>
+                <tr>
+                  <th scope="col">Dato investigado</th>
+                  {group.rows.map((row, i) => <th scope="col" key={i}>{row.selection}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">
+                    <span className={css.fact}>{marketLabel(group.market)}</span>
+                    <small className={css.meta}>Casa: {group.bookmaker}</small>
+                    <small className={css.meta}>Cuota observada; disponibilidad por confirmar</small>
+                  </th>
+                  {group.rows.map((row, i) => {
+                    const american = decimalToAmericanOdds(row.price)
+                    const favorite = winnerMarket && uniqueLowest && prices[i] === lowest
+                    const shown = format === 'american' ? american ?? row.price : row.price
+                    return <td key={i} data-market-favorite={favorite ? 'true' : undefined}>
+                      <strong className={css.price} aria-label={'Cuota ' + shown}>{shown}</strong>
+                      {american && <small className={css.alternate}>
+                        {format === 'american' ? 'Decimal ' + row.price : 'Americana ' + american}
+                      </small>}
+                      {row.point && <small className={css.meta}>Línea {row.point}</small>}
+                      {favorite && <small className={css.favourite}>Favorito por cuota</small>}
+                    </td>
+                  })}
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <div className={css.choices}>
-            {group.rows.map((row, i) => {
-              const american = decimalToAmericanOdds(row.price)
-              const favorite = winnerMarket && uniqueLowest && prices[i] === lowest
-              const shown = format === 'american' ? american ?? row.price : row.price
-              return <div className={css.choice} data-market-favorite={favorite ? 'true' : undefined}
-                key={i}>
-                <div className={css.team}>
-                  <span className={css.monogram} aria-hidden="true">{initials(row.selection)}</span>
-                  <div className={css.teamName}>
-                    <strong>{row.selection}</strong>
-                    {row.point && <small>Línea {row.point}</small>}
-                    {favorite && <span className={css.favourite}>Favorito por cuota</span>}
-                  </div>
-                </div>
-                <div className={css.priceBlock}>
-                  <strong className={css.price} aria-label={'Cuota ' + shown}>{shown}</strong>
-                  {american && <small>{format === 'american' ? 'Decimal ' + row.price : 'Americana ' + american}</small>}
-                </div>
-              </div>
-            })}
-          </div>
-        </article>
+        </div>
       })}
     </div>
     <footer className={css.footer}>
-      <div className={css.attribution}><span>Fuente: {source}</span><span>Precios sujetos a cambios</span></div>
-      <details className={css.details}>
-        <summary>Fuente, vigencia y advertencias</summary>
-        <p>{note}</p>
-        <p>Cuotas observadas, no probabilidad estimada ni apuesta aceptada.
-          Sin hora de actualización confirmada, comprueba disponibilidad y precio en la casa.
-          «Favorito» solo señala la cuota más baja dentro del mismo mercado y operador.</p>
-      </details>
+      <p>Fuente: {source} · Precios sujetos a cambios.</p>
+      <p>{note}</p>
+      <p>Cuotas observadas, no probabilidades estimadas ni apuesta aceptada.
+        Sin confirmación del precio actual, comprueba la disponibilidad en la casa.
+        «Favorito» solo identifica la menor cuota dentro del mismo mercado y operador.</p>
     </footer>
   </section>
 }
