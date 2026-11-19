@@ -13,38 +13,12 @@ const MAX_USER_CHARS = 3000
 const MAX_REPLY_CHARS = 8192
 const WORKER_TIMEOUT_MS = 30 * 60_000
 const IMAGE_MARKDOWN = /^!\[Imagen generada localmente\]\(\/local-images\/[a-f0-9]{32}\.jpg\)$/u
-const COMMAND = new RegExp([
-  String.raw`^(?:(?:hey\s+)?kira[\s,:-]*)?`,
-  String.raw`(?:(?:por\s+favor|puedes|podrias|could\s+you|please)[\s,:-]*)?`,
-  String.raw`(?:genera(?:me)?|crea(?:me)?|haz(?:me)?|dibuja(?:me)?|renderiza|generate|create|make|draw|render)\s+`,
-  String.raw`(?:una?\s+|an?\s+)?(?:imagen|foto(?:grafia)?|ilustracion|image|picture|photo|illustration)`,
-  String.raw`(?:\s+local)?(?:\s+(?:de|del|of))?\s*`,
-].join(''), 'iu')
-const ENGINE_SUFFIX = new RegExp([
-  String.raw`\s+(?:usando|con|using|with)\s+`,
-  String.raw`(?:(?:el|the)\s+)?(?:(?:modelo|model)\s+)?`,
-  String.raw`(?:sd[\s-]*turbo(?:[\s-]*openvino)?|fastsd(?:[\s-]*cpu)?)\s*[.!?]*/**
- * Deterministic local-image ingress. Recognize only self-contained requests
- * targeting the local FastSD engine; no LLM, history, prompts, tools or memory
- * are assembled before this branch. Ambiguous follow-ups stay with Kira.
- * @module dsh-agent-loop/local-image-direct
- */
-import { spawn } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
-import type { UserMessage } from '@phoenix-ai/dsh-session'
-
-const WORKER = fileURLToPath(new URL('../../../../scripts/phoenix-fastsd-mcp.mjs', import.meta.url))
-const MAX_USER_CHARS = 3000
-const MAX_REPLY_CHARS = 8192
-const WORKER_TIMEOUT_MS = 30 * 60_000
-const IMAGE_MARKDOWN = /^!\[Imagen generada localmente\]\(\/local-images\/[a-f0-9]{32}\.jpg\)$/u
-,
-].join(''), 'iu')
-const REFERENCE = new RegExp([
-  String.raw`\b(?:anterior|anteriores|previous|above|adjunta|adjunto|attached|subida|subido|uploaded|`,
-  String.raw`esta\s+foto|esta\s+imagen|that\s+image|same\s+image|la\s+misma|como\s+antes|`,
-  String.raw`edit(?:ar|a)?|modifica|retoca)\b`,
-].join(''), 'iu')
+// oxlint-disable-next-line @stylistic/max-len -- Intent is a single verified, language-specific expression.
+const COMMAND = /^(?:(?:hey\s+)?kira[\s,:-]*)?(?:(?:por\s+favor|puedes|podrias|could\s+you|please)[\s,:-]*)?(?:genera(?:me)?|crea(?:me)?|haz(?:me)?|dibuja(?:me)?|renderiza|generate|create|make|draw|render)\s+(?:una?\s+|an?\s+)?(?:imagen|foto(?:grafia)?|ilustracion|image|picture|photo|illustration)(?:\s+local)?(?:\s+(?:de|del|of))?\s*/iu
+// oxlint-disable-next-line @stylistic/max-len -- Intent is a single verified, language-specific expression.
+const ENGINE_SUFFIX = /\s+(?:usando|con|using|with)\s+(?:(?:el|the)\s+)?(?:(?:modelo|model)\s+)?(?:sd[\s-]*turbo(?:[\s-]*openvino)?|fastsd(?:[\s-]*cpu)?)\s*[.!?]*$/iu
+// oxlint-disable-next-line @stylistic/max-len -- Intent is a single verified, language-specific expression.
+const REFERENCE = /\b(?:anterior|anteriores|previous|above|adjunta|adjunto|attached|subida|subido|uploaded|esta\s+foto|esta\s+imagen|that\s+image|same\s+image|la\s+misma|como\s+antes|edit(?:ar|a)?|modifica|retoca)\b/iu
 
 /**
  * Return precisely the requested image subject or decline the fastpath.
