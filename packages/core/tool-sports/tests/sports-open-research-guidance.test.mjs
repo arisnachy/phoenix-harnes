@@ -7,7 +7,7 @@ test('sports ticket compares evidence, validates live ESPN quotes, and ends once
   assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/favorable, evidencia en contra/u)
   assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/observedAt/u)
   assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/menos de 15 minutos/u)
-  assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/sports_chat_ticket_evidence_priced_auto una sola vez/u)
+  assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/teams, rosters, availability, context, news y odds/u)
   assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/No encadenes barridos diarios/u)
   assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/sin bucles infinitos/u)
   assert.match(SPORTS_OPEN_RESEARCH_GUIDANCE,/sports_ticket_card/u)
