@@ -37,3 +37,25 @@ Install Python 3 and requirements **in the same interpreter Gemini CLI launches*
 Run `gemini mcp list` and `/mcp list` from a **trusted working directory**, keeping `trust: false` for per-tool confirmations. Run the Tk operator station with `launch-operator.ps1`. Test STOP → resume (operator only) → MCP draft (pending) → inbox empty → approve via Tk → inbox contains one → STOP via Tk → inbox blocked. Perform an OS network/listener inspection if required: `Get-NetTCPConnection` is **TCP only**; UDP must be checked separately with `Get-NetUDPEndpoint`. Server stdio itself binds neither transport, but the client process can have independent network activity; attribute sockets to the **server PID**, not the whole Gemini CLI process. No sub-second latency guarantee is claimed.
 
 **Release gates:** CI green on Ubuntu and Windows, manual Gemini CLI handshake on Windows, authorized PHOENIX host UI integration with tests, and review of local plaintext SQLite/ACL policy. Until then, don't merge to `stable` as a finished feature.
+
+
+## Opt-in Gemini CLI setup automation (no browser/session access)
+
+Run `configure-gemini-cli.ps1` in the bridge directory to preview a valid
+`mcpServers` entry for the **real** `gemini_bridge.mcp_server` module. Only
+`-Apply` writes `%USERPROFILE%\.gemini\settings.json`, preserving other
+entries and creating a backup. `-ReplaceExisting` is explicit when needed.
+The installer configures `trust: false` and exactly two MCP tools, which
+excludes operator approval, resume/STOP and delivered transitions.
+Use `verify-gemini-cli-windows.ps1 -ListGeminiMcp -InspectNetwork` while the
+CLI is running to inspect its MCP registration and server process sockets.
+The test is not an automated proof of Gemini's authorization state or the
+provider's policies; human confirmation is required for the E2E checklist.
+
+**Do not implement Gemini's suggestion to inject `PHOENIX_SESSION_NONCE`
+into an untrusted browser page as sufficient authorization.** In a web
+architecture, loopback binding and a token are defense-in-depth only. Any
+privileged control endpoint must be attached to PHOENIX's actual session
+security and protected against same-origin script compromise, CSRF and
+unauthorized local processes. Until that exists, the Tk operator UI is the
+only privileged interface. The snapshot page will stay read-only.
