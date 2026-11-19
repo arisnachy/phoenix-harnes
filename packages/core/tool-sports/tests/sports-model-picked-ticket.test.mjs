@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {quoteKiraChosenTicket,ticketResearchChecklist} from '../src/sports-model-picked-ticket.ts'
+import {quoteKiraChosenTicket,ticketResearchChecklist,ticketExpertEvidenceChecklist} from '../src/sports-model-picked-ticket.ts'
 
 const now=Date.parse('2026-11-17T17:00:00Z')
 const leg=(eventId,overrides={})=>({
@@ -59,6 +59,45 @@ test('duplicate website citations do not fake a second independent source',()=>{
     counterEvidence:'El adversario puede dominar en situaciones especiales.',
   })
   assert.ok(ticketResearchChecklist([checked]).some(x=>/dos publicaciones/.test(x)))
+})
+
+test('expert gate requires a read bilateral dossier before a final decision',()=>{
+  const legs=Array.from({length:5},(_,i)=>leg(String(40100+i),{
+    sourceUrls:['https://www.nba.com/news/report','https://www.espn.com/nba/report'],
+    counterEvidence:'El adversario puede castigar la defensa interior y el descanso corto.',
+    criticalPending:[],
+  }))
+  assert.ok(ticketExpertEvidenceChecklist(legs).some(x=>/expediente bilateral leído/.test(x)))
+  const evidence={eventId:'40100',homeRosterCount:13,awayRosterCount:14,
+    reviewedStages:['teams','rosters','availability','context','news'],
+    observedFacts:['forma reciente contrastada','roles y estadísticas contrastadas','noticias contrastadas']}
+  const checked=legs.map((item,index)=>({...item,researchEvidence:{...evidence,
+    eventId:String(40100+index)}}))
+  assert.deepEqual(ticketExpertEvidenceChecklist(checked),[])
+})
+
+test('a model-declared receipt cannot claim final readiness without trusted runtime evidence',async()=>{
+  const baseEvidence={homeRosterCount:13,awayRosterCount:14,
+    reviewedStages:['teams','rosters','availability','context','news'],
+    observedFacts:['forma contrastada de ambos','roles y estadísticas observadas','noticias fechadas contrastadas']}
+  const chosen=Array.from({length:5},(_,index)=>leg(String(40150+index),{
+    sourceUrls:['https://www.nba.com/news/report','https://www.espn.com/nba/report'],
+    counterEvidence:'El rival tiene mejor rebote y puede aprovechar la rotación corta.',
+    criticalPending:[],
+    researchEvidence:{...baseEvidence,eventId:String(40150+index)},
+  }))
+  const fetcher=async input=>{
+    const events=chosen.map(item=>({id:item.eventId,date:item.kickoff,
+      competitions:[{id:item.eventId,competitors:[
+        {homeAway:'home',team:{displayName:item.home}},
+        {homeAway:'away',team:{displayName:item.away}},
+      ],odds:[{provider:{name:'DraftKings'},homeTeamOdds:{moneyLine:'-155'},
+        awayTeamOdds:{moneyLine:'+132'}}]}]}))
+    return Response.json({events,items:[]})
+  }
+  const result=await quoteKiraChosenTicket(chosen,fetcher,now,5)
+  assert.equal(result.finalReady,false)
+  assert.match(result.finalizationMissing.join(' '),/evidencia de etapas confiable/u)
 })
 
 test('keeps usable same-book prices and the original six-leg target when one pick or quote is missing',async()=>{
