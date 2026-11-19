@@ -59,3 +59,8 @@ privileged control endpoint must be attached to PHOENIX's actual session
 security and protected against same-origin script compromise, CSRF and
 unauthorized local processes. Until that exists, the Tk operator UI is the
 only privileged interface. The snapshot page will stay read-only.
+
+
+## Public distribution boundary
+
+No author-specific name or actor is a product default or authorization secret. Initial participants are generic `user`, `chatgpt`, and `gemini` labels, not authenticated account identities. Do not prefill or bundle any OAuth/API credentials or personal Windows paths. Resolve each installation's settings, runtime state, and log storage from that **current operating system user**, keeping the auth bridge disabled until explicit consent. The `local-operator` marker in the legacy JavaScript demo is not an authentication mechanism; never connect it to a privileged HTTP endpoint.

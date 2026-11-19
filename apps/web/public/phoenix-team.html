@@ -34,9 +34,9 @@ ul{padding-left:20px}li{margin-bottom:9px}
 <section class="panel">
 <h2>Conversación de trabajo</h2><div id="turns" class="turns" role="log" aria-live="polite"><div class="muted" id="empty">Todavía no hay turnos. Escribe el objetivo del proyecto.</div></div>
 <label for="speaker">¿Quién aporta este mensaje?</label>
-<select id="speaker"><option value="Arisnachy">Arisnachy · Director</option><option value="OpenAI">OpenAI · Desarrollo</option><option value="Gemini">Gemini · Revisión</option><option value="Kira">Kira · Coordinación</option></select>
+<select id="speaker"><option value="user">Usuario · Tú</option><option value="OpenAI">OpenAI · Desarrollo</option><option value="Gemini">Gemini · Revisión</option><option value="Kira">Kira · Coordinación</option></select>
 <label for="draft">Propuesta o respuesta (introducida manualmente)</label>
-<textarea id="draft" maxlength="12000" placeholder="Ej.: Diseñen juntos un módulo de HEALTHIA..."></textarea>
+<textarea id="draft" maxlength="12000" placeholder="Ej.: Diseñen juntos una nueva funcionalidad para mi proyecto..."></textarea>
 <div class="actions"><button class="primary" id="add" type="button">Añadir al historial</button><button id="copy" type="button">Copiar mensaje</button><button id="export" type="button">Exportar historial JSON</button><button id="clear" type="button">Vaciar</button></div>
 <div id="status" role="status"></div>
 </section>

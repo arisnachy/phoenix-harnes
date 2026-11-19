@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/arisnachy/phoenix-harnes/blob/main/packages/phoenix-auth-bridge/schema/phoenix-envelope.schema.json",
+  "$id": "urn:phoenix:auth-bridge:envelope:v1",
   "title": "PhoenixEnvelope v1 (manual relay only)",
   "type": "object",
   "additionalProperties": false,
@@ -11,8 +11,8 @@
     "message_id": {"type": "string", "format": "uuid"},
     "thread_id": {"type": "string", "format": "uuid"},
     "turn": {"type": "integer", "minimum": 1, "maximum": 12},
-    "sender": {"enum": ["chatgpt", "gemini", "arisnachy"]},
-    "recipient": {"enum": ["chatgpt", "gemini", "arisnachy"]},
+    "sender": {"enum": ["chatgpt", "gemini", "user"]},
+    "recipient": {"enum": ["chatgpt", "gemini", "user"]},
     "intent": {"enum": ["proposal", "code_review", "research", "verdict", "general"]},
     "payload": {
       "type": "object",

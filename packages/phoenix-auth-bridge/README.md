@@ -29,7 +29,7 @@ node packages/phoenix-auth-bridge/src/cli.mjs stop
 
 The first `status` is STOPPED by default. The bridge requires explicit user `resume`, per-message `approve`, and manual confirmation `delivered`; a `stop` revokes previously approved, undelivered messages. Replies require confirmed previous delivery, strict alternation, no forks, and a maximum of 12 turns per thread. There is no polling or background service.
 
-Single source of truth is `%USERPROFILE%\.phoenix\auth-bridge\sqlite\state.db` (override `PHOENIX_BRIDGE_HOME` for testing). The legacy `state.json` file is deliberately ignored, never silently migrated, and must not be operated in parallel. `sqlite/state_snapshot.json` is a metadata-only, atomically replaced, **advisory** projection: it can briefly lag a committed STOP, so **only live SQLite reads authorize actions**. The database contains plaintext message bodies: **do not include credentials or medical/personal-sensitive content**. On shared Windows machines, verify filesystem ACLs; Unix modes alone are not a Windows security guarantee. The audit reported by `status` has metadata and SHA-256 digests only, not message bodies; this is not a cryptographically tamper-proof audit log. This demo trusts a user with direct local shell access; the `arisnachy` actor label is NOT authentication. A future HTTP/UI/MCP service MUST add real authentication, CSRF controls, origin validation, access checks and rate limits before exposing these functions.
+Single source of truth is `%USERPROFILE%\.phoenix\auth-bridge\sqlite\state.db` (override `PHOENIX_BRIDGE_HOME` for testing). The legacy `state.json` file is deliberately ignored, never silently migrated, and must not be operated in parallel. `sqlite/state_snapshot.json` is a metadata-only, atomically replaced, **advisory** projection: it can briefly lag a committed STOP, so **only live SQLite reads authorize actions**. The database contains plaintext message bodies: **do not include credentials or medical/personal-sensitive content**. On shared Windows machines, verify filesystem ACLs; Unix modes alone are not a Windows security guarantee. The audit reported by `status` has metadata and SHA-256 digests only, not message bodies; this is not a cryptographically tamper-proof audit log. This demo trusts a user with direct local shell access; the `local-operator` actor label is NOT authentication. A future HTTP/UI/MCP service MUST add real authentication, CSRF controls, origin validation, access checks and rate limits before exposing these functions.
 
 ## Test
 
@@ -51,7 +51,7 @@ Use `schema/phoenix-envelope.schema.json`; preserve `origin: manual-user-entry`,
 
 ## Phase 3 — Cross-platform stdio MCP test and read-only PHOENIX panel asset
 
-The isolated MCP client test `test/test_mcp_stdio.py` performs a real SDK `stdio` handshake, discovers exactly the two unprivileged MCP tools, verifies STOP blocks all drafts, then checks that a draft is invisible until local operator approval and revoked immediately upon a subsequent STOP. It **never** invokes ChatGPT/Gemini accounts. The test requires `mcp>=1.28,<2` and runs on both Ubuntu and Windows using `.github/workflows/phoenix-auth-bridge.yml` with `PHOENIX_REQUIRE_MCP=1` (no accidental skipping in CI). CI checks are distinct from a manual Gemini CLI session on Arisnachy's computer.
+The isolated MCP client test `test/test_mcp_stdio.py` performs a real SDK `stdio` handshake, discovers exactly the two unprivileged MCP tools, verifies STOP blocks all drafts, then checks that a draft is invisible until local operator approval and revoked immediately upon a subsequent STOP. It **never** invokes ChatGPT/Gemini accounts. The test requires `mcp>=1.28,<2` and runs on both Ubuntu and Windows using `.github/workflows/phoenix-auth-bridge.yml` with `PHOENIX_REQUIRE_MCP=1` (no accidental skipping in CI). CI checks are distinct from a manual Gemini CLI session on the end user's computer.
 
 For Windows, install the optional MCP dependencies in the actual interpreter used by Gemini CLI:
 
@@ -98,7 +98,7 @@ Once Gemini CLI is open from a trusted folder, inspect `/mcp` and the server's
 two exposed tools. Launch `launch-operator.ps1` separately. Test: STOP initially
 ON → operator resumes → MCP drafts are pending → inbox empty → operator approves
 → inbox lists approved message → operator stops → inbox BLOCKED and approval
-revoked. Actual Gemini CLI usage on Arisnachy's Windows remains a **manual
+revoked. Actual Gemini CLI usage on the end user's Windows remains a **manual
 acceptance gate**, not a result established by GitHub Actions.
 
 Optional host network check (while Gemini CLI's MCP worker is running):
@@ -143,3 +143,11 @@ fabricated model id; persistent operator controls cannot be embedded in an
 unauthenticated web surface. Do not advertise autonomous collaboration or
 automatic model-to-model delivery until the authenticated Host controls and
 official CLI integrations are built and verified.
+
+## Public downloads and account isolation
+
+PHOENIX is a public, multi-user application. The default participant is `user`, not the author's identity. No distributor account, API key, OAuth refresh token, credential file, or Windows profile path may be shipped, seeded, logged, or bundled. Each user signs in to the official CLIs independently. `PHOENIX_BRIDGE_HOME` defaults to that OS account's home directory and stores local SQLite state there; never add this directory to version control or application release artifacts.
+
+The legacy in-memory `guard.mjs` actor string `local-operator` is only a test/demo label, **not** authorization. The actual privileged operations are explicitly local Python/SQLite operator actions and must never be exposed on a network endpoint without session-bound authorization. The v1 message sender label was changed from an author-specific identity to `user`; old local threads bearing an unsupported sender label should be exported read-only and restarted, never silently rewritten or mixed between installations. `STOP` remains active until each user explicitly resumes it.
+
+Do not interpret this source-only review as proof that all repository history, CI artifacts, published binaries or local user profiles have been scanned for leaked credentials. If any real credential was ever committed, revoke and rotate it at its issuer, examine historical exposure and purge it from release artifacts; deleting HEAD alone is insufficient.

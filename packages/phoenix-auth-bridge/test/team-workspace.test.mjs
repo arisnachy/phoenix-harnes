@@ -5,6 +5,7 @@ const page = readFileSync(new URL('../../../apps/web/public/phoenix-team.html', 
 const installer = readFileSync(new URL('../setup-team.ps1', import.meta.url), 'utf8');
 test('team workspace never impersonates an authenticated model', () => {
   assert.match(page, /supervisado/);
+  assert.match(page, /<option value="user">Usuario/);
   assert.match(page, /No es un modelo nuevo/);
   assert.match(page, /No se ha enviado/);
   assert.doesNotMatch(page, /fetch\s*\(/);
