@@ -382,6 +382,33 @@ test('one missing lineup remains conditional; four researched legs are retained'
   assert.ok(result.card.props.legs.some(x=>x.pendingEvidence.includes('starting XI not published')))
   assert.equal(result.approvedLegs,0)
 })
+test('selected transient dossier failures get one bounded rescue without changing price completion',async()=>{
+  const transientIds=new Set(['500','501'])
+  const calls=new Map()
+  const specialists=async games=>(await stubSpecialists(games)).map(check=>{
+    const seen=(calls.get(check.eventId)??0)+1
+    calls.set(check.eventId,seen)
+    if(transientIds.has(check.eventId)&&seen===1)
+      return{...check,status:'incomplete',pendingSteps:[
+        'Límite de investigación alcanzado; reintentar expediente',
+      ],checklist:{...check.checklist,complete:false,
+        criticalPending:['Límite de investigación alcanzado']}}
+    return check
+  })
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,
+    mkQuotes(),'winner',specialists)
+  assert.equal(result.complete,true)
+  assert.equal(result.priced,true)
+  assert.equal(result.quotedLegs,5)
+  assert.equal(result.researchedLegs,5)
+  assert.equal(calls.get('500'),2)
+  assert.equal(calls.get('501'),2)
+  assert.equal(result.card.props.combinedOdds,'25.419')
+  assert.deepEqual(result.card.props.legs.map(leg=>leg.eventId),
+    result.researchFixtures.map(fixture=>fixture.eventId))
+  assert.ok(result.card.props.legs.every(leg=>
+    leg.quoteEventId.startsWith('scraper-')&&leg.quoteSource&&leg.quoteAcceptedByBookmaker===false))
+})
 
 
 test('fresh ESPN odds without lastUpdated complete an observed same-bookmaker research ticket',async()=>{
@@ -419,6 +446,8 @@ test('fresh ESPN odds without lastUpdated complete an observed same-bookmaker re
   assert.equal(result.card.props.legs.length,5)
   assert.ok(Number(result.card.props.combinedOdds)>1)
   assert.ok(result.card.props.legs.every(x=>x.bookmaker==='ESPN Reference Book'))
+  assert.ok(result.card.props.legs.every(x=>
+    x.quoteEventId===x.eventId&&x.quoteSource.startsWith('ESPN')&&x.quoteObservedAt))
   assert.match(result.card.props.subtitle,/precios observados en ESPN/)
   assert.equal(optionalApiCalls,0)
   assert.equal(result.sourceAudit.find(row=>row.source==='The Odds API v4').status,
