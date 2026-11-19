@@ -25,6 +25,10 @@ test('mounted sports guidance covers evidence and ESPN odds only for sports requ
   assert.match(sportsGuidance, /INVESTIGACIÓN POR PATA/u)
   assert.match(sportsGuidance, /VALIDACIÓN ESPN ODDS/u)
   assert.match(sportsGuidance, /sports_chat_ticket_evidence_priced_auto/u)
+  assert.match(sportsGuidance, /solicitud normal de ticket, inicia con sports_chat_ticket_evidence_priced_auto una sola vez/u)
+  assert.match(sportsGuidance, /número exacto pedido, 5 si no se especifica/u)
+  assert.match(sportsGuidance, /pide ver la investigación paso a paso, usa MODO TABLAS VISIBLES/u)
+  assert.doesNotMatch(sportsGuidance, /solo cuando se solicite un atajo rápido/u)
   assert.match(sportsGuidance, /no permite garantizar un ganador/u)
 
   assert.equal(section.text({

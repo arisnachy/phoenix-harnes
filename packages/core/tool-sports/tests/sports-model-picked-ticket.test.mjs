@@ -60,3 +60,34 @@ test('duplicate website citations do not fake a second independent source',()=>{
   })
   assert.ok(ticketResearchChecklist([checked]).some(x=>/dos publicaciones/.test(x)))
 })
+
+test('keeps usable same-book prices and the original six-leg target when one pick or quote is missing',async()=>{
+  const chosen=Array.from({length:5},(_,i)=>leg(String(40110+i),{
+    sourceUrls:['https://www.nba.com/news/report','https://www.espn.com/nba/report'],
+    counterEvidence:'El adversario mostró mejor rendimiento defensivo en los últimos juegos.',
+    criticalPending:[],
+  }))
+  const fetcher=(splitBook=false)=>async input=>{
+    const events=chosen.map((pick,index)=>({
+      id:pick.eventId,date:pick.kickoff,
+      competitions:[{id:pick.eventId,competitors:[
+        {homeAway:'home',team:{displayName:pick.home}},
+        {homeAway:'away',team:{displayName:pick.away}},
+      ],odds:[{provider:{name:splitBook&&index===4?'FanDuel':'DraftKings'},
+        homeTeamOdds:{moneyLine:'-155'},awayTeamOdds:{moneyLine:'+132'}}]}],
+    }))
+    return Response.json(String(input).includes('scoreboard?dates=20261118')?{events}:{items:[]})
+  }
+  const short=await quoteKiraChosenTicket(chosen,fetcher(),now,6)
+  assert.equal(short.uiBlock.props.requestedLegs,6)
+  assert.equal(short.quotes.length,5)
+  assert.equal(short.finalReady,false)
+  assert.equal(short.complete,false)
+  assert.equal(short.uiBlock.props.combinedOdds,'No disponible')
+
+  const split=await quoteKiraChosenTicket(chosen,fetcher(true),now,5)
+  assert.equal(split.quotes.length,4)
+  assert.equal(split.bookmaker,'DraftKings')
+  assert.equal(split.missing.length,1)
+  assert.equal(split.complete,false)
+})

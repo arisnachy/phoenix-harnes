@@ -38,8 +38,8 @@ import { explainOddsEligibility,eligibleOddsForResearch } from './espn-odds-obse
 import { ensureSportsSourcesStarted,hydrateSportsSources,managedSportsInstallStatus,sportsSourcesHealth } from './sports-source-health.ts'
 import { investigateEventDeep } from './sports-deep-context.ts'
 import { discoverAutonomousSportsSources,planIndependentSportsFallback } from './sports-autonomous-source-discovery.ts'
-import {progressiveSportsStage,type ResearchStage} from './sports-progressive-chat.ts'
-import {quoteKiraChosenTicket,type ModelChosenLeg} from './sports-model-picked-ticket.ts'
+import { progressiveSportsStage,type ResearchStage } from './sports-progressive-chat.ts'
+import { quoteKiraChosenTicket,type ModelChosenLeg } from './sports-model-picked-ticket.ts'
 import { auditUniversalMatchup } from './universal-matchup-factors.ts'
 import { estimateEvidenceForecast } from './sports-forecast.ts'
 import { extendedEspnRoutes,readExtendedEspn,type ExtendedEspnMode } from './espn-extra-intelligence.ts'
@@ -102,11 +102,11 @@ const GUIDANCE = [
   'ESTADO NBA POR PARTIDO: el motor de ticket DEBE exponer researchEvidenceState, researchDetail y pendingEvidence a partir de los pasos reales de specialistChecks; la primera inspección rápida no equivale al expediente final. Cuando existan roster, forma o fuentes consultadas, indicar INVESTIGACIÓN PARCIAL y los datos específicos aún pendientes. No repetir «Sin expediente especializado, lesiones y quintetos verificados para esta pata» en cada juego: «sin expediente» solo si realmente no se obtuvo evidencia; lesiones ESPN verificadas como reporte no equivalen a quinteto confirmado ni a parte oficial definitivo. Si el especialista agota tiempo, informar el timeout concreto sin ocultar datos anteriores. ',
   'CUOTAS UTILIZABLES PARA EL TICKET: acepta una observación ESPN solo si observedAt tiene menos de 15 minutos, el evento sigue futuro y coinciden ID, equipos, inicio, casa, mercado, selección y precio. updatedAt de la casa puede faltar; observedAt indica cuándo PHOENIX leyó ESPN y no confirma aceptación ni vigencia final. No promociones precios antiguos, anónimos, de predictor ni de otro evento. Muestra la hora y fuente, y aclara que la aceptación se confirma manualmente. ',
   'CARTELERA Y CIERRE: el barrido automático recorre las ligas admitidas; esa lista NO limita la investigación posterior de Kira. Permitir consultas independientes y dirigidas sobre cualquier partido futuro verificado, sus jugadores y fuentes editoriales relevantes. No repetir indiscriminadamente la cartelera ni evadir límites de proveedores. Si falla una consulta, conservar hallazgos, buscar fuente alternativa autorizada y declarar incertidumbres. ',
-  'COBERTURA DEL TICKET: en MODO VISIBLE, iniciar con sports_chat_daily_scan (una vez, ligas NBA WNBA MLB NHL soccer y demás solicitadas), escoger eventos verificables y compararlos mediante sports_chat_research_stage, con sus seis tablas en orden. El atajo sports_chat_ticket_evidence_priced_auto sirve para un BORRADOR rápido cuando el usuario lo pida expresamente; nunca sustituye la elección de Kira ni impide la búsqueda independiente. Anotar ligas inaccesibles, fuentes faltantes y alternativas. No confundir ausencia de datos con dato favorable. ',
-  'RUTA VISUAL DEL TICKET: en modo investigación visible para NBA, WNBA, MLB, NHL y fútbol, realiza UN barrido sports_chat_daily_scan (o sports_chat_games para un evento), extrae IDs y hora ESPN y llama sports_chat_research_stage con teams, rosters, availability, context, news y odds por evento. Explica cada tabla en el chat ANTES de avanzar. Si falta evidencia, busca por iniciativa propia mediante sports_chat_autonomous_sources u otros especialistas. Kira decide y usa sports_chat_ticket_model_chosen para sus picks; este último coteja cuotas ESPN y una casa idéntica. sports_chat_ticket_evidence_priced_auto queda como atajo opcional de borrador rápido, NO como juez de la selección; nunca ocultar tablas ni inventar precios. ',
+  'COBERTURA DEL TICKET: la solicitud normal empieza con el acopio automático multideporte y conserva el conteo, la fecha y el mercado solicitados. Reserva el flujo de seis tablas secuenciales para quien pida ver el progreso por etapas. Anota las ligas inaccesibles, las fuentes faltantes y las alternativas. ',
+  'RUTA VISUAL DEL TICKET: cuando se pida una investigación visible, ejecuta un barrido sports_chat_daily_scan o sports_chat_games, extrae IDs y horas ESPN y usa sports_chat_research_stage con teams, rosters, availability, context, news y odds. Explica cada tabla antes de avanzar. ',
 
   'SEGUIMIENTO CLOUD: al crear un ticket de investigación, registrar automáticamente solo si PHOENIX_SPORTS_CLOUD_TRACKING_ENABLED=1 y las credenciales GitHub/AES están en la bóveda. Devolver cloudFollowUp con su estado real, no afirmar que habrá correo cuando status sea disabled, needs-configuration o error. El cifrado mantiene ocultos los eventos en un issue público, pero los metadatos de issue sí son visibles. Cuando los encuentros terminen, un workflow remoto revisará marcadores y enviará correo únicamente si RESEND_API_KEY, correo destinatario, remitente y clave AES están configurados en GitHub Actions. Nunca afirmar que la banca confirmó pago ni que un correo salió sin prueba. ',
-  'SELECCIÓN DE KIRA SIN PUNTOS: las herramientas devuelven estadísticas originales por equipo y jugador, observaciones de porteros, pitchers, rotaciones, últimas actuaciones, localía, clima y fuentes; no dan puntos para elegir. Kira investiga DOS rosters, noticias, duelos y contradicciones y expone paso a paso sus comparaciones. Antes de recomendar nada usa sports_chat_research_stage en cada etapa y deportes solicitados, descubre fuentes externas relevantes cuando falta un dato y termina en sports_chat_ticket_model_chosen con las decisiones explicadas. La cuota es un precio y nunca elige al ganador; una baja no recibe penalización numérica arbitraria. ',
+  'SELECCIÓN DE KIRA SIN PUNTOS: usa los expedientes del flujo elegido para comparar ambos equipos y buscar contradicciones. Si falta un dato decisivo, investiga ese partido o un sustituto verificado. Cotiza las selecciones justificadas con sports_chat_ticket_model_chosen. La cuota es un precio y una baja no recibe penalizaciones arbitrarias. ',
   'CREDENCIALES DEPORTIVAS AUTOMÁTICAS: si un proveedor necesario devuelve 401/403, invalid-key, necesita API key o está sin configurar, consulta sports_chat_research_provider_status, identifica la referencia EXACTA de ese proveedor y usa sports_chat_credential_ask(action=request,ref=...). Ask solicita consentimiento, NO el valor. Si el usuario acepta, indica que debe pegar su clave en Conectores > APIs deportivas (pestaña sports-api-keys, formulario tipo password), donde el Host la guarda en su bóveda y devuelve solo el estado. No pedir jamás el valor en el chat ni en una respuesta Ask. No preguntar por claves de fuentes que no intervienen en la tarea ni repetir solicitudes silenciadas o recientes; si dice no volver a preguntar, mute o mute-all, y si dice ahora no, pausa 30 días. Reintenta el proveedor tras guardar, en una nueva operación, sin reiniciar PHOENIX. Mientras no exista una clave válida, continuar con ESPN/NHL/MLB y fuentes públicas, entregando el ticket de investigación cuando existan candidatos; no quedarse bloqueada ni prometer cuota vigente no acreditada. ',
   'CLAVES Y FUENTES SIN BLOQUEOS: para saber qué conectores faltan llama sports_chat_research_provider_status. No pidas que peguen una clave en mensajes normales del modelo ni la aceptes como argumento de herramientas. Si el usuario quiere añadirla, indica el comando humano seguro /secret set NOMBRE VALOR, interceptado por el Host antes del agente y con recordInput=false, o la interfaz de credenciales segura disponible. Pedir permiso y una sola clave pertinente. No bloquear investigación ni tickets por claves ausentes; usa fuentes públicas, respaldo y caché. Tener clave NO equivale a fuente activa ni a datos comprobados. ',
 
@@ -151,9 +151,9 @@ const GUIDANCE = [
   'CUOTAS ESPN COMO EVIDENCIA: si ESPN Core/scoreboard publica homeTeamOdds.current.moneyLine y awayTeamOdds.current.moneyLine con proveedor identificado, úsalo como PRECIO OBSERVADO real de ESPN para comparar la elección, incluso si no publica lastUpdated; no lo ocultes como cero cuotas. El sello observedAt de una consulta reciente a ESPN acredita el PRECIO OBSERVADO y habilita su utilización en el ticket de investigación sin updatedAt; no atribuir a DraftKings la hora de observación ni afirmar aceptación o vigencia en Juancito. Muestra al usuario ESPN/mercado/proveedor/cuota/estatus de vigencia, separa otras casas y conserva el riesgo del equipo elegido. ',
   'CHECKLIST VISIBLE POR PATA: al recibir chatNarrative, reproduce researchSteps por deporte: estado verificado/parcial/no obtenido, detalle observado, fuentes principales y respaldos, nombre de lesionados y situación propia y rival. Cada paso debe exhibir los números efectivamente recolectados, no solo una frase genérica. Si la ruta principal falla o es vacía, ejecuta las rutas de respaldo del plan antes de concluir que la data no existe, sin usar endpoints ficticios. El ticket visual muestra el mismo checklist para que el usuario pueda auditarlo. ',
   'TICKET NARRADO CON EVIDENCIA POR PATA: tras sports_chat_ticket_evidence_priced_auto o sports_chat_ticket_evidence_auto, reproduce en el chat los campos chatNarrative en orden y con explicación INDIVIDUAL de por qué se escogió, datos a favor, en contra, noticias fechadas con enlace, contexto del estadio, clima y oficiales. Las fotos solo se ofrecen con URL del medio y atribución; una noticia no confirma titularidad ni consenso experto. No decir que un árbitro favorece a un equipo por tasas brutas o anécdotas. La probabilidad de mercado sin margen no es pronóstico propio y la exploratoria no está calibrada.',
-  'TICKET DIARIO DE 5 A 6 PATAS: escanear la cartelera multideporte real una vez y NO preseleccionar a los favoritos simplemente por precio. Investigar comparativamente cada candidato con las SEIS etapas visibles; tras cada etapa poner en pantalla la tabla y la observación actual de Kira, sin esconder el progreso. Comparar ambos rosters, jugadores y porteros/abridores, lesiones, forma, descansos, H2H y estadio, local/visitante, opiniones atribuibles y clima solo cuando las fuentes los publiquen. Kira puede abrir nuevos eventos verificados y buscar medios fuera del catálogo. Cuando termine, cotizar SUS cinco o seis picks con sports_chat_ticket_model_chosen usando ESPN; conservar borrador si faltan datos reales. ',
+  'TICKET DIARIO DE 5 A 6 PATAS: en la ruta automática analiza primero los expedientes bilaterales que se obtuvieron una vez para la cartelera. Usa las selecciones provisionales y alternativas verificadas como candidatos. Compara por deporte los titulares o participantes publicados, bajas, forma, descanso, localía y datos contrarios. Revisa en profundidad las faltas que puedan cambiar una selección y conserva un borrador cuando la evidencia o las cuotas no permitan cerrar. ',
   'Para explorar una cartelera o mercados sin pedir ticket, usa sports_chat_daily_scan o sports_chat_daily_market_shortlist como herramientas independientes. Para generar el ticket completo, usa la ruta automática de investigación y precio una vez; no encadenes ambas rutas. La preselección no equivale a una probabilidad predictiva. ',
-  'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
+  'NO abras pantallas independientes ni crees entradas de menú. Para una cartelera sola llama sports_chat_games. Para tickets sigue la ruta que corresponda al pedido. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'INVESTIGACIÓN NBA: el expediente NBA del ticket automático consulta fuentes y devuelve verificaciones y pendientes por partido; no lo dupliques con sports_chat_nba_research dentro de la misma solicitud. Usa sports_chat_nba_research cuando el usuario pida un análisis NBA independiente. Contrasta marcadores finales, márgenes, descanso, lesión oficial, rotaciones y métricas avanzadas que sí se hayan publicado. Lo ausente permanece SIN VERIFICAR; la forma no es probabilidad calibrada.',
   'INVESTIGAR OTROS DEPORTES: para un análisis sin ticket, usa sports_chat_research con el deporte y liga pedidos; añade pitchers/bullpen en MLB, goles y bajas en fútbol, superficie y fatiga en tenis, o portero y métricas defensivas en hockey. El ticket automático ya integra los chequeos pertinentes y debe ejecutarse una sola vez. Los históricos SportsbookReview sirven para backtest, no como cuotas actuales; las opiniones públicas son una fuente secundaria separada.',
   'Si la primera auto-instalación falla o se queda en retry-cooldown, llama sports_chat_sources_repair a petición del usuario; nunca solicites claves para OddsHarvester. Avisa cuando esté instalando y vuelve a verificar el manifest antes de buscar cuotas. ',
@@ -163,13 +163,13 @@ const GUIDANCE = [
   'ESPN CORE EXTENDIDO SIN CLAVES: si sports_chat_odds reporta cero precios pero Core devuelve registros (rawCount > 0), explica que ESPN SÍ publicó entradas, diferenciando precios sin marca de actualización, precios antiguos y líneas actuales; NO digas que ESPN está desconectado. Con un eventId real suministrado o del scoreboard consulta sports_chat_espn_core(mode=odds) para investigar incluso partidos históricos sin atribuirles vigencia. Cuando el usuario pida ATS, futuros, rendimiento según cuotas, movimiento de precios, histórico de casas, probabilidad ESPN o predictor usa sports_chat_espn_core_catalog y sports_chat_espn_core con los IDs ESPN verificados. Modos odds, provider, movement, head_to_heads, ats, futures, past_performances, odds_records, probabilities, predictor y providers. No conviertas predicciones, ATS, históricos o futuros en moneylines para apostar hoy; odds sin proveedor ni partido exacto no acredita una oferta válida; updatedAt no es obligatorio para cotizaciones ESPN recientemente observadas. Core lista $ref que se resuelven solo si son del dominio ESPN permitido, con límite de peticiones. Ante HTTP 404/403 o lista vacía, dilo claramente sin declarar que el endpoint universalmente funciona. ',
   'Antes de declarar sin cuotas, llama sports_chat_sources_health para distinguir proveedor deshabilitado, CLI no instalado, histórico no cargado y precio no disponible. No confundas fuente configurada con consulta efectiva ni marcador con titular confirmado. Los 3 proyectos GitHub acordados NO son 3 feeds vivos: solo OddsHarvester puede consultar cuotas actuales cuando está activo y accesible; SportsbookReview y MLB son históricos. ',
   'Para cuotas gratuitas por scraping (sin API key) consulta sports_chat_odds_keyless si el host habilitó OddsHarvester. No prometas consultas ilimitadas ni uses cuotas históricas como cotizaciones vigentes. El motor debe investigar todas las disciplinas disponibles, no solo NBA, y contrastar historial, lesionados, alineaciones, rendimiento, localía, cuota y fuentes externas cuando existan. Las votaciones y picks de otras personas son una referencia secundaria, no estimaciones propias ni garantía.',
-  'PROCEDIMIENTO DE INVESTIGACIÓN: primero identificación oficial de juegos, después etapas teams, rosters, availability, context, news y odds de sports_chat_research_stage. Producir una tabla por etapa y partido en el chat, resaltando hechos favorables, adversos y ausentes sin un score de riesgo. Los especialistas aportan NFL QB, NHL porteros, MLB pitchers/bullpen, NBA/WNBA quintetos y fútbol once/empate; el modelo decide por sí mismo si necesita otra búsqueda. Finalizar con sports_chat_ticket_model_chosen tras cotejar precios ESPN y el mismo bookmaker, sin valor esperado inventado, sin reiniciar barridos ni convertir ausencia de datos en equipo sano. ',
+  'PROCEDIMIENTO DE INVESTIGACIÓN: en modo visible presenta teams, rosters, availability, context, news y odds. En el flujo normal el motor reúne esos datos por candidato. En ambos conserva hechos favorables, adversos y ausentes antes de cotizar las selecciones que Kira elija. ',
   'EN VIVO SIN TOKENS: cuando el usuario pida juegos en vivo, marcadores actuales o seguimiento de los partidos de su ticket, llama sports_chat_games con liveOnly=true por cada liga incluida (o team/eventId para un partido). Conserva los nombres y liga del ticket sin inventar equivalencias. La cartelera y las tarjetas consultan ESPN directamente desde el navegador de manera compartida y periódica mientras están visibles, sin llamadas adicionales al modelo. Las situaciones de MLB incluyen bases/outs/conteo cuando ESPN los publica; NBA ofrece período, reloj, parciales y última jugada; NFL, NHL, fútbol y otras disciplinas muestran sus datos disponibles. No afirmes transmisión de video ni tiempo real garantizado: informa si la fuente se retrasa o no publica detalles.',
   'Cuando el usuario pida una cartelera, deja que sports_chat_games entregue una sola cartelera compacta en el chat con hasta 25 encuentros reales. Para un partido, cruce o equipo concreto, pasa team, opponent o eventId a sports_chat_games: así se mantiene la sports_game_card detallada existente. No cambies el menú, la página ni la caja del chat. Nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes.',
   'MERCADOS MÚLTIPLES: usa sports_chat_market_intelligence y sports_chat_event_market_menu para solicitudes de comparación de mercados independientes del ticket. La ruta automática de ganador ya compara evidencia del evento y valida su precio; no añadas estas consultas por cada pata del mismo boleto. 1/cuota representa expectativa de mercado, NO una probabilidad propia calibrada. No trates titulares, porteros ni jugadores mencionados en noticias como confirmados si la fuente no lo dice. ',
   'DOBLE OPORTUNIDAD: si el usuario quiere 1X/X2, indica marketPreference=double_chance en sports_chat_ticket_evidence_priced_auto para encuentros de fútbol; elige solo cuotas auténticas del mismo bookmaker. 1X cubre local o empate; X2, visita o empate. No transformes ganador directo en doble oportunidad sin consultar ese mercado. El usuario puede pedir 5 o 6 selecciones y debe ver razones y riesgos, no una promesa de acierto.',
   'CONTRATO DE PATAS: el ticket DIARIO tiene meta de 5 a 6 patas. En solicitudes explícitas de análisis individual o borradores de 1 a 4 encuentros, respetar esos expedientes sin titularlos ticket diario completo. Cuando el usuario pide 5 patas, el resultado DEBE contener exactamente cinco selecciones verificadas; jamás presentes 1 de 5 como ticket completo. Si faltan datos, muestra explícitamente el número conseguido y el número pendiente como borrador incompleto. Respeta igualmente cualquier otro número de 1 a 6. No afirmes que una combinada ganará.',
-  'Si se pide un ticket y no hay cuotas, conservar las tablas sports_chat_research_stage y ejecutar sports_chat_ticket_model_chosen SOLO con picks justificados; la herramienta devuelve INCOMPLETO si ESPN no ofrece una cuota de la misma casa. No fabricar precios, retorno ni patas ni repetir barridos; el atajo sports_chat_ticket_evidence_priced_auto existe como alternativa explícita de borrador rápido. ',
+  'Si el ticket queda sin cuotas, conserva la evidencia y solicita una comprobación dirigida de los mercados exactos para selecciones justificadas. Si ESPN sigue sin ofrecer precios de una misma casa, muestra cuántas patas faltan y por qué. ',
   'Usa ESPN Site/Core como proveedor público para marcadores y moneylines cuando se publiquen. Hay DOS proveedores comerciales distintos, opcionales: TheOddsAPI (api.theoddsapi.com, THEODDSAPI_API_KEY, acceso gratuito con cupo) y The Odds API v4 (api.the-odds-api.com, THE_ODDS_API_KEY); no confundas claves, endpoints ni formatos. Si ambos están configurados, consulta ambos de forma independiente y conserva la fuente de cada cuota. Si ESPN no presenta cuotas, no inventes precios: sports_chat_ticket_research ofrece un ticket de pronósticos sin cotización basado en encuentros futuros verificados. sports_chat_ticket es un ticket COTIZADO y solo puede usar precios del proveedor consultados en ese momento. El boleto cotizado es una propuesta comercial no aceptada por la casa; no hay garantía de acierto. Identifica correlaciones y ausencia de predicción calibrada.',
   'Los datos deben indicar su fuente, fecha y zona horaria, y adaptar el detalle a cada deporte. Cuando el usuario pida favoritos, muestra primero los encuentros reales con escudos, horarios, país y liga (si son conocidos), y solo después una tendencia propia sustentada en investigación verificable; una cuota baja no prueba cuál equipo es favorito de tu modelo. En tickets separa visualmente por deporte, país y liga y, si hay un mercado de jugador respaldado por el proveedor, muestra también el jugador; no inventes nombres, mercados ni fotos. Los tickets heredan el tema claro/oscuro de Phoenix. Nunca presentes porcentajes de ESPN como estimaciones propias ni afirmes un porcentaje sin calibración.',
 ].join(' ')
@@ -1096,14 +1096,14 @@ export function apply(ctx: Context): void {
       home:{ type:'string',required:true,description:'Equipo local real del partido previamente verificado.' },
       away:{ type:'string',required:true,description:'Equipo visitante real del partido previamente verificado.' },
       question:{ type:'string',required:true,description:'La pregunta precisa que Kira ha identificado: jugador, lesión, alineación, entrenamiento, táctica, portero, QB, etc.' },
-      league:{type:'string',description:'Liga exacta de ESPN: nhl, nba, wnba, mlb, mens-college-basketball o liga de fútbol.'},
-      date:{type:'string',description:'Fecha del partido en Santo Domingo YYYY-MM-DD.'},
+      league:{ type:'string',description:'Liga exacta de ESPN: nhl, nba, wnba, mlb, mens-college-basketball o liga de fútbol.' },
+      date:{ type:'string',description:'Fecha del partido en Santo Domingo YYYY-MM-DD.' },
     },
-    output:{ schema:{ type:'string' },render:(_a,v)=>[{type:'text' as const,text:v}] },
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const result=await discoverAutonomousSportsSources({
-        home:args.home,away:args.away},args.question,fetch,Date.now())
+        home:args.home,away:args.away },args.question,fetch,Date.now())
       const escalationPlan=planIndependentSportsFallback({
         home:args.home,away:args.away,league:args.league??'',
         date:args.date??'',question:args.question,
@@ -1115,34 +1115,34 @@ export function apply(ctx: Context): void {
         canSearchOtherPublishers:true,notRestrictedToUserUrls:true,
         sourceVerification:'indexed-only' })
     },
-    presentCall:()=>({card:'generic',title:'Kira · Buscar otras fuentes deportivas',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Kira · Buscar otras fuentes deportivas',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_research_stage',
     description:'INVESTIGACIÓN VISIBLE EN CHAT, UNA ETAPA POR LLAMADA: muestra una TABLA COMPARATIVA SIN TARJETA de ambos equipos, logos y avatares ESPN publicados. Las 6 etapas son teams (equipos/sede), rosters (plantillas completas y estadísticas individuales), availability (lesiones, porteros, pitchers, quintetos y onces), context (forma local/visita, H2H, clima, estadio y umpires cuando se publiquen), news (prensa y expertos, con enlaces y advertencias), odds (cuotas ESPN auténticas cotejadas). Kira narra lo investigado de cada tabla ANTES de pedir la siguiente etapa; ella decide al terminar, no la función.',
     parameters:{
-      sport:{type:'string',required:true,description:'basketball, baseball, hockey, soccer o football: ESPN verificado.'},
-      league:{type:'string',required:true,description:'NBA= nba, WNBA=wnba, MLB=mlb, NHL=nhl; fútbol liga ESPN identificada.'},
-      eventId:{type:'string',required:true,description:'ID exacto de partido ESPN, nunca ID de banca.'},
-      date:{type:'string',required:true,description:'Fecha AAAA-MM-DD local.'},
-      home:{type:'string',required:true,description:'Nombre oficial equipo local.'},
-      away:{type:'string',required:true,description:'Nombre oficial equipo visitante.'},
-      kickoff:{type:'string',required:true,description:'Inicio ISO original verificado de ESPN.'},
-      stage:{type:'string',required:true,description:'teams | rosters | availability | context | news | odds'},
-      question:{type:'string',description:'Solo para news: pregunta autónoma de Kira sobre lesión, estrellas, opiniones, entrenadores, portero, estadio, etc.'},
+      sport:{ type:'string',required:true,description:'basketball, baseball, hockey, soccer o football: ESPN verificado.' },
+      league:{ type:'string',required:true,description:'NBA= nba, WNBA=wnba, MLB=mlb, NHL=nhl; fútbol liga ESPN identificada.' },
+      eventId:{ type:'string',required:true,description:'ID exacto de partido ESPN, nunca ID de banca.' },
+      date:{ type:'string',required:true,description:'Fecha AAAA-MM-DD local.' },
+      home:{ type:'string',required:true,description:'Nombre oficial equipo local.' },
+      away:{ type:'string',required:true,description:'Nombre oficial equipo visitante.' },
+      kickoff:{ type:'string',required:true,description:'Inicio ISO original verificado de ESPN.' },
+      stage:{ type:'string',required:true,description:'teams | rosters | availability | context | news | odds' },
+      question:{ type:'string',description:'Solo para news: pregunta autónoma de Kira sobre lesión, estrellas, opiniones, entrenadores, portero, estadio, etc.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const env=await sportsEnv(ctx)
-      const fixture={sport:args.sport,league:args.league,eventId:args.eventId,
-        date:args.date,home:args.home,away:args.away,kickoff:args.kickoff}
+      const fixture={ sport:args.sport,league:args.league,eventId:args.eventId,
+        date:args.date,home:args.home,away:args.away,kickoff:args.kickoff }
       const result=await progressiveSportsStage(fixture,args.stage as ResearchStage,
         args.question,fetch,Date.now(),env)
-      return JSON.stringify({...result,provenance:'ESPN/ligas oficiales y prensa pública',
-        researchIsSequential:true,modelOwnDecisionRequired:true,placed:false})
+      return JSON.stringify({ ...result,provenance:'ESPN/ligas oficiales y prensa pública',
+        researchIsSequential:true,modelOwnDecisionRequired:true,placed:false })
     },
-    presentCall:()=>({card:'generic',title:'Kira · Comparativa de investigación deportiva',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Kira · Comparativa de investigación deportiva',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_matchup_factors',
@@ -2061,39 +2061,40 @@ export function apply(ctx: Context): void {
     name:'sports_chat_ticket_model_chosen',
     description:'TICKET FINAL TRAS RAZONAMIENTO: Kira entrega las 5-6 selecciones que ELLA eligió después de ver tablas originales de ambos equipos. La herramienta NO elige favoritos, NO asigna pesos ni calcula probabilidades: busca para cada evento EXACTO las cuotas ESPN de ganador publicadas y solo forma combinada con la MISMA casa. Si falta una cuota, devuelve borrador incompleto y datos faltantes, nunca rellena patas.',
     parameters:{
-      legs:{type:'array',required:true,
+      requestedCount:{ type:'integer',description:'Conteo original solicitado. Pásalo aunque hayas justificado menos selecciones.' },
+      legs:{ type:'array',required:true,
         description:'1-6 decisiones expresas de Kira con ambos equipos oficiales, ID ESPN y explicación individual fundamentada en investigación; 5-6 para boleto diario.',
-        items:{type:'object',additionalProperties:false,properties:{
-          sport:{type:'string',required:true},
-          league:{type:'string',required:true},
-          eventId:{type:'string',required:true},
-          date:{type:'string',required:true},
-          home:{type:'string',required:true},
-          away:{type:'string',required:true},
-          kickoff:{type:'string',required:true},
-          pick:{type:'string',required:true,description:'home o away: elección de Kira, no de algoritmo'},
-          reason:{type:'string',required:true,description:'Explicar datos reales y contradicciones de roster, forma, lesiones y noticias para cada elección.'},
-          sourceUrls:{type:'array',description:'URLs HTTPS de artículos originales realmente leídos, idealmente dos editores independientes',items:{type:'string'}},
-          counterEvidence:{type:'string',description:'Argumento verificable a favor del adversario: por qué el pick puede perder.'},
-          criticalPending:{type:'array',description:'Riesgos decisivos que siguen sin resolver; [] solo tras revisión explícita de fuentes.',items:{type:'string'}},
-        }}},
+        items:{ type:'object',additionalProperties:false,properties:{
+          sport:{ type:'string',required:true },
+          league:{ type:'string',required:true },
+          eventId:{ type:'string',required:true },
+          date:{ type:'string',required:true },
+          home:{ type:'string',required:true },
+          away:{ type:'string',required:true },
+          kickoff:{ type:'string',required:true },
+          pick:{ type:'string',required:true,description:'home o away: elección de Kira, no de algoritmo' },
+          reason:{ type:'string',required:true,description:'Explicar datos reales y contradicciones de roster, forma, lesiones y noticias para cada elección.' },
+          sourceUrls:{ type:'array',description:'URLs HTTPS de artículos originales realmente leídos, idealmente dos editores independientes',items:{ type:'string' } },
+          counterEvidence:{ type:'string',description:'Argumento verificable a favor del adversario: por qué el pick puede perder.' },
+          criticalPending:{ type:'array',description:'Riesgos decisivos que siguen sin resolver; [] solo tras revisión explícita de fuentes.',items:{ type:'string' } },
+        } } },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
-      const report=await quoteKiraChosenTicket(args.legs as ModelChosenLeg[],fetch,Date.now())
-      return JSON.stringify({...report,
+      const report=await quoteKiraChosenTicket(args.legs as ModelChosenLeg[],fetch,Date.now(),args.requestedCount)
+      return JSON.stringify({ ...report,
         userSelectedByAI:true,approvedForBetting:false,
         finalAnalysisOnly:report.finalReady,
-        instruction:'Kira: ticket final de ANÁLISIS solo si finalReady=true (5-6 patas futuras, dos URL editoriales independientes registradas por pata, refutación rival, riesgos críticos revisados y cuotas ESPN frescas de una sola casa). Las URL aportadas por Kira NO son validadas en su contenido por esta herramienta: abre y contrasta los originales antes de citarlas. Si finalReady=false muestra finalizationMissing, investiga sustitutos con sourceEscalation y vuelve a evaluar, sin inventar datos. Nunca declarar apuesta aceptada ni ganar seguro.'})
+        instruction:'Kira: ticket final de ANÁLISIS solo si finalReady=true (5-6 patas futuras, dos URL editoriales independientes registradas por pata, refutación rival, riesgos críticos revisados y cuotas ESPN frescas de una sola casa). Las URL aportadas por Kira NO son validadas en su contenido por esta herramienta: abre y contrasta los originales antes de citarlas. Si finalReady=false muestra finalizationMissing, investiga sustitutos con sourceEscalation y vuelve a evaluar, sin inventar datos. Nunca declarar apuesta aceptada ni ganar seguro.' })
     },
-    presentCall:()=>({card:'generic',title:'Kira · Cotizar selecciones elegidas tras la investigación',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Kira · Cotizar selecciones elegidas tras la investigación',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_evidence_priced_auto',
-    description:'Herramienta de ACOPIO de datos para 1-6 patas: descubre candidatos, recoge expedientes bilaterales de rosters y estadísticas y coteja cuotas. La lista automática es PROVISIONAL; Kira compara los datos y determina su propia elección, sin puntuar o sumar factores. Deja modelComparisonBriefs y selectedBilateralDossiers para su juicio; una elección final puede expresarse con sports_chat_ticket_research por IDs. Nunca constituye apuesta aceptada.',
+    description:'Herramienta de ACOPIO de datos para 1-6 patas: descubre candidatos, recoge expedientes bilaterales de rosters y estadísticas y coteja cuotas. La lista automática es PROVISIONAL; Kira compara los datos y determina su propia elección, sin puntuar o sumar factores. Deja modelComparisonBriefs y selectedBilateralDossiers para su juicio; valida las selecciones finales de un ticket cotizado con sports_chat_ticket_model_chosen; usa sports_chat_ticket_research para un pronóstico sin cuotas. Nunca constituye apuesta aceptada.',
     parameters:{
-      count:{ type:'integer',required:true,description:'Patas deseadas: objetivo diario 5, rango preferente 4-6 (admite 1 a 6).' },
+      count:{ type:'integer',required:true,description:'Número exacto solicitado: 5 o 6 en un ticket diario, o 1 a 4 si el usuario pide un borrador corto.' },
       date:{ type:'string',description:'Fecha AAAA-MM-DD; por defecto hoy.' },
       sport:{ type:'string',description:'Limita a soccer, baseball, basketball, football, hockey o tennis; omite para varios deportes.' },
       stake:{ type:'number',description:'Monto de simulación; 0 por defecto. No compra apuestas.' },
@@ -2158,8 +2159,8 @@ export function apply(ctx: Context): void {
           reason:'Seguimiento cloud superó el plazo; el ticket se conserva en el chat.',
         })):{ status:'disabled' as const,issueNumber:null,
           reason:'Sin eventos verificados que puedan enviarse al monitor remoto.' }
-      const {modelComparisonBriefs,selectedBilateralDossiers,
-        modelSelectionRequired,...displayProps}=result.card.props
+      const { modelComparisonBriefs,selectedBilateralDossiers,
+        modelSelectionRequired,...displayProps }=result.card.props
       return JSON.stringify({ uiBlock:{ ...result.card,
         props:{ ...displayProps,cloudFollowUp } },
       cloudFollowUp,reviewedBeforeSelection:result.reviewedBeforeSelection,
@@ -2186,7 +2187,7 @@ export function apply(ctx: Context): void {
       decisionAudit:result.decisionAudit,marketRisk:result.marketRisk,
       explanation:result.explanation,
       chatNarrative:result.card.props.chatNarrative??[],
-      instruction:'ATENCIÓN: lista de candidatos PROVISIONAL, NO selección definitiva del motor. Kira debe analizar personalmente modelComparisonBriefs y selectedBilateralDossiers: comparativa bilateral de todos los jugadores y estadísticas disponibles, altas/bajas fechadas, titulares verificables, duelo táctico, descanso y calidad rival. Ninguna cifra funciona como peso ni puntuación para escoger. Cuestiona a cada favorito, verifica noticias externas cuando están disponibles y escoge o sustituye con un argumento propio por partido. Tras razonar cada partido, usa siempre sports_chat_ticket_research con sus eventId verificados para crear el ticket que TÚ elegiste, aunque coincidas con los provisionales; cotejar el precio de esa selección por el mercado auténtico. Si faltan pruebas, indicar borrador parcial y faltantes; no presentar como TICKET FINAL un ranking automático ni repetir barridos. El precio comercial no confirma apuesta aceptada y no hay garantía.' })
+      instruction:'ATENCIÓN: lista de candidatos PROVISIONAL, NO selección definitiva del motor. Kira debe analizar personalmente modelComparisonBriefs y selectedBilateralDossiers: comparativa bilateral de todos los jugadores y estadísticas disponibles, altas/bajas fechadas, titulares verificables, duelo táctico, descanso y calidad rival. Ninguna cifra funciona como peso ni puntuación para escoger. Cuestiona a cada favorito, verifica noticias externas cuando están disponibles y escoge o sustituye con un argumento propio por partido. Después de comparar ganadores directos, usa sports_chat_ticket_model_chosen con requestedCount igual al número original, tus selecciones y fuentes comprobadas. Si el mercado es doble oportunidad, conserva las cotizaciones exactas 1X/X2 del resultado y el estado provisional; el cotizador de ganador no sirve para ese mercado. Usa sports_chat_ticket_research solo para un pronóstico sin cuotas. Si faltan pruebas, indicar borrador parcial y faltantes; no presentar como TICKET FINAL un ranking automático ni repetir barridos. El precio comercial no confirma apuesta aceptada y no hay garantía.' })
     },
     presentCall:()=>({ card:'generic',title:'Investigar ticket cotizado de 5 o 6 patas',kind:'read' as const }),
   }))
