@@ -425,6 +425,21 @@ export function ModelSelect(
                   <IconChevronRightOutline14 className={css.cellChevron} />
                 </button>
               )}
+              <button
+                ref={itemRef()}
+                type="button"
+                role="menuitem"
+                className={css.cell}
+                onClick={() => {
+                  close(true)
+                  // Team IA is a separately supervised workspace, not an invented Host model route.
+                  window.open('/phoenix-team.html', '_blank', 'noopener,noreferrer')
+                }}
+              >
+                <span className={css.cellLabel}>Equipo IA · AI Team</span>
+                <span className={css.cellValue}>Supervisado</span>
+                <IconChevronRightOutline14 className={css.cellChevron} />
+              </button>
             </>
           )}
 
