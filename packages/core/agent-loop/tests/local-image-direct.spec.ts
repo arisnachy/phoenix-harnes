@@ -11,7 +11,7 @@ import { localImageDirectPrompt } from '../src/local-image-direct.ts'
 
 const mockWorker = vi.hoisted(() => vi.fn())
 
-vi.mock('../src/local-image-direct.ts', async (importOriginal) => ({
+vi.mock('../src/local-image-direct.ts', async importOriginal => ({
   ...await importOriginal<typeof import('../src/local-image-direct.ts')>(),
   runLocalImageDirect: mockWorker,
 }))
