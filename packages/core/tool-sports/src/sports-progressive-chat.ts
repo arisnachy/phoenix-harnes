@@ -3,8 +3,9 @@
  * until the automatic ticket has finished. Real statistics stay unweighted.
  */
 import { getFeed } from './sports.ts'
-import { investigateTicketSpecialist,type SpecialistFixture,type SpecialistGate }
+import { investigateTicketSpecialist,type ComparativeTeam,type SpecialistFixture,type SpecialistGate }
   from './ticket-specialist-gate.ts'
+import { collectDirectEspnStats,type DirectDossier } from './sports-direct-stats.ts'
 import { investigateEventDeep,type DeepSportsContext } from './sports-deep-context.ts'
 import { auditUniversalMatchup } from './universal-matchup-factors.ts'
 import { lookupExactEspnWinner } from './sports-exact-espn-winner.ts'
@@ -55,6 +56,7 @@ type ResearchCache={
   observedAt:number
   deep?:Promise<DeepSportsContext|null>
   specialist?:Promise<SpecialistGate|null>
+  ncaaDirect?:Promise<DirectDossier|null>
   context?:Promise<Awaited<ReturnType<typeof auditUniversalMatchup>>|null>
 }
 const cache=new Map<string,ResearchCache>()
@@ -88,6 +90,35 @@ const readSpecialist=(fixture:SpecialistFixture,fetcher:typeof fetch,now:number,
   record.specialist??=fresh(()=>investigateTicketSpecialist(fixture,fetcher,now,env),
     fixture.sport==='basketball'?125_000:90_000)
   return record.specialist
+}
+const readNcaaDirect=(fixture:SpecialistFixture,deep:DeepSportsContext|null,
+  fetcher:typeof fetch,now:number)=>{
+  const home=sideOf(deep,fixture.home),away=sideOf(deep,fixture.away)
+  if(fixture.sport!=='basketball'||fixture.league!=='mens-college-basketball'||
+    !home?.id||!away?.id)return Promise.resolve<DirectDossier|null>(null)
+  const record=fetcher===fetch?getCache(fixture,now):{
+    observedAt:now,ncaaDirect:undefined as Promise<DirectDossier|null>|undefined }
+  record.ncaaDirect??=fresh(()=>collectDirectEspnStats(fixture.sport,fixture.league,
+    [{ id:home.id,name:home.name },{ id:away.id,name:away.name }],fetcher,now,20),110_000)
+  return record.ncaaDirect
+}
+const directTeamComparison=(dossier:DirectDossier,deep:DeepSportsContext|null,
+  fixture:SpecialistFixture):{ home:ComparativeTeam;away:ComparativeTeam }|null=>{
+  const make=(name:string)=>{
+    const verified=sideOf(deep,name)
+    const team=dossier.teams.find(row=>row.id===verified?.id)
+    if(!team)return null
+    const players=team.roster.map((person)=>{
+      const measured=team.athletes.find(row=>row.id===person.id)
+      return{ name:person.name,role:person.position||'Jugador',
+        dataStatus:measured?('ESPN '+measured.status):'Roster ESPN; métricas no consultadas',
+        starterConfirmed:false,stats:measured?.stats??[],recent:measured?.lastGames??[],
+        splits:measured?.splits??[] }
+    })
+    return{ name:team.name,recentResults:[],teamStats:team.stats,players }
+  }
+  const home=make(fixture.home),away=make(fixture.away)
+  return home&&away?{ home,away }:null
 }
 const readContext=(fixture:SpecialistFixture,fetcher:typeof fetch,now:number,
   env:NodeJS.ProcessEnv)=>{
@@ -199,7 +230,12 @@ export async function progressiveSportsStage(
       'El clima exterior no afecta automáticamente a recintos cubiertos.'
   }else if(stage==='rosters'){
     const check=await readSpecialist(fixture,fetcher,now,env)
-    const data=check?.teamComparison
+    let data=check?.teamComparison
+    let ncaaDirect:DirectDossier|null=null
+    if(!data&&fixture.sport==='basketball'&&fixture.league==='mens-college-basketball'){
+      ncaaDirect=await readNcaaDirect(fixture,deep,fetcher,now)
+      if(ncaaDirect)data=directTeamComparison(ncaaDirect,deep,fixture)??undefined
+    }
     const pageSize=fullPlayerHistory?1:6
     const page=(players:readonly SportsPlayer[])=>{
       const selected=players.slice(playerOffset,playerOffset+pageSize)
@@ -243,12 +279,16 @@ export async function progressiveSportsStage(
       home:{ name:data.home.name,players:page(data.home.players) },
       away:{ name:data.away.name,players:page(data.away.players) },
     }:null,playerOffset,nextPlayerOffset,fullPlayerHistory,checkedAt:check?.checkedAt,
-    playerHistoryAudit:check?.playerHistoryAudit??null }
+    playerHistoryAudit:check?.playerHistoryAudit??null,
+    ...(ncaaDirect?{ directEspnDossier:ncaaDirect }:{} ) }
     missing=[...(check?.pendingSteps??['El especialista no publicó su expediente'])]
+    if(ncaaDirect)missing=missing.filter(x=>!x.includes('Sin especialista integrado'))
     if(!data||measured('home')<data.home.players.length||measured('away')<data.away.players.length)
       missing.push('Estadísticas individuales de uno o ambos rosters incompletas: '+
         'consultar temporada explícita y fuentes originales independientes')
-    source=check?.specialist??'Investigación especializada no disponible'
+    if(ncaaDirect)missing.push('NCAA: estadísticas individuales consultadas para una muestra acotada de hasta 20 atletas por equipo; el roster restante conserva métricas no consultadas')
+    source=ncaaDirect?'ESPN public Site/Common v3 · fallback NCAA':
+      check?.specialist??'Investigación especializada no disponible'
     note='Las filas de jugadores son paralelas y NO constituyen emparejamientos directos. '+
       'Se preservan las estadísticas completas en el expediente para Kira; las '+
       'cifras visibles son un resumen, sin pesos ni puntuación sintética. '+
