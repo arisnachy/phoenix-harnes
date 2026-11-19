@@ -2,7 +2,7 @@
 
 This module incorporates the useful design from Gemini's pasted Python proposal while correcting conflicts with the **actual** PHOENIX `PhoenixEnvelope v1` schema. It uses UUID `message_id`/`thread_id`, integer `turn`, `reply_to`, `payload.text`, `origin`, and strict turn-chain rules; it never silently skips schema validation.
 
-**Important:** This is an *alternative* SQLite-backed prototype, not a migration of the existing Node `state.json`. The Node CLI and Python MCP/UI do NOT share approval/STOP state. **Use one backend per deployment**. Python MCP and Windows operator UI both use this SQLite backend; they are interoperable with each other. Do not run the Node CLI and Python MCP/UI as if they were the same inbox. Full PHOENIX host/UI integration and any state migration still require separate work and review.
+**Important:** This is now the **single** SQLite authority for Node CLI, MCP and Tk UI. It is NOT a migration of the legacy Node `state.json`; that file is ignored without deletion. Python MCP, Windows operator UI and Node CLI all use this SQLite backend. Metadata-only JSON snapshot is advisory and never authorizes a message. Do not run the Node CLI and Python MCP/UI as if they were the same inbox. Full PHOENIX host/UI integration and any state migration still require separate work and review.
 
 ### Install and test (Windows PowerShell)
 
