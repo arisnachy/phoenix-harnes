@@ -63,3 +63,58 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\launch-operator.ps1
 ```
 
 See [PHOENIX UI integration contract](PHOENIX_UI_INTEGRATION.md) for the correct `gemini_bridge.mcp_server` module path, exact `settings.json` example, and Windows interactive test sequence. `apps/web/public/phoenix-auth-bridge.html` adds a **read-only** local file-selected snapshot inspector to the PHOENIX web asset tree. **It is not wired to the main navigation or PHOENIX host authentication**, and cannot approve/stop/send messages. The operator's actual controls remain in the Windows Tk window, which talks directly to SQLite; full native host/UI integration remains an explicit release gate.
+
+
+## Gemini CLI per-user registration (explicit opt-in; Windows PowerShell 5.1)
+
+Use **only** a Python virtual environment for this bridge. From
+`packages\phoenix-auth-bridge` (do NOT run these commands from an unrelated
+working directory):
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r .\gemini_bridge\requirements-mcp.txt
+powershell.exe -NoProfile -File .\configure-gemini-cli.ps1
+# The previous command only PREVIEWS the settings. Read the paths before applying.
+powershell.exe -NoProfile -File .\configure-gemini-cli.ps1 -Apply
+powershell.exe -NoProfile -File .\verify-gemini-cli-windows.ps1 -ListGeminiMcp
+```
+
+The installer merges **only** the `phoenix-auth-bridge` entry into your *per-user*
+`%USERPROFILE%\.gemini\settings.json`. It preserves unrelated Gemini settings,
+refuses to overwrite an existing bridge entry without `-ReplaceExisting`, makes
+an on-disk backup, and uses an atomic file replacement. No credentials or
+provider session cookies are accessed or copied. If you have a custom bridge
+home, pass the SAME `-BridgeHome` directory as your Windows operator uses via
+`PHOENIX_BRIDGE_HOME`. `-SettingsPath` is supported for isolated testing.
+
+The generated server uses the actual Python module `gemini_bridge.mcp_server`,
+`trust: false`, and an exact allowlist of the two non-privileged MCP tools. This
+does **not** override every possible Gemini CLI approval mode or guarantee
+prompts on every call: retain explicit PHOENIX approval in SQLite regardless.
+Gemini CLI and PHOENIX must never access or reuse one another's web sessions.
+
+Once Gemini CLI is open from a trusted folder, inspect `/mcp` and the server's
+two exposed tools. Launch `launch-operator.ps1` separately. Test: STOP initially
+ON → operator resumes → MCP drafts are pending → inbox empty → operator approves
+→ inbox lists approved message → operator stops → inbox BLOCKED and approval
+revoked. Actual Gemini CLI usage on Arisnachy's Windows remains a **manual
+acceptance gate**, not a result established by GitHub Actions.
+
+Optional host network check (while Gemini CLI's MCP worker is running):
+
+```powershell
+powershell.exe -NoProfile -File .\verify-gemini-cli-windows.ps1 -InspectNetwork
+```
+
+The check reports listening TCP and bound UDP sockets for the **MCP Python
+server process**, not for Gemini CLI. A zero-listener check alone cannot prove
+account-policy compliance, nor can it undo text that was already copied.
+
+**Main PHOENIX panel:** the existing static viewer is read-only; operator
+controls currently remain in the local Tk window, not PHOENIX's web shell.
+Do NOT introduce a bearer token header in a public SPA or unauthenticated
+`localhost` endpoint and call it "production authentication". A true web
+control panel must be implemented within PHOENIX's existing authenticated
+host session with per-action CSRF/origin checks and command-level access
+control, then tested before release to stable.
