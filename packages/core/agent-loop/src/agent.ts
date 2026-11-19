@@ -48,6 +48,7 @@ import { RuntimeContextProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
 import { DEFAULT_AUTO_CONTINUE_MAX_SEGMENTS, DEFAULT_AUTO_CONTINUE_PROVIDERS, DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'
 import { isExplicitUserStop } from './user-stop.ts'
+import { localImageDirectPrompt, runLocalImageDirect } from './local-image-direct.ts'
 
 // Provider-side caching is automatic; track repeatable prefixes without retaining text.
 const systemPrefixObserver = new SystemPrefixObserver()
@@ -422,6 +423,49 @@ export class ReactLoopAgent implements Agent {
     let turnEnds: TurnEndReason | null = null
     let target: InboxTarget = 'next-turn'
     try {
+      // Local image commands have no dependency on the LLM. Dispatch before
+      // systemPrompt.assemble() and session.deriveMessages(), the two sources
+      // of oversized Phoenix Local context. Never consume an injected step
+      // or a context-dependent/attachment-bearing user request here.
+      const imagePrompt = this.inbox.nextStep.length === 0
+        ? localImageDirectPrompt(this.inbox.nextTurn[0])
+        : undefined
+      if (imagePrompt !== undefined) {
+        const [user] = this.inbox.claim('next-turn', turn)
+        if (user === undefined) throw new Error('Local image fastpath lost its queued user message')
+        const step = 1
+        this.session.append('step/start', { turn, step })
+        phase.step = step
+        try {
+          this.session.append('user/message', user, this.runtimeContext.surfaceIntent(user))
+          let imageText: string
+          try {
+            imageText = await runLocalImageDirect(imagePrompt, signal)
+            signal.throwIfAborted()
+          } catch (error: unknown) {
+            if (signal.aborted) throw error
+            const reason = error instanceof Error ? error.message : 'Error desconocido en FastSD CPU.'
+            imageText = 'No se pudo generar la imagen local con SD Turbo OpenVINO: ' + reason
+          }
+          this.session.append('assistant/message', {
+            turn, step,
+            message: createAssistantMessage({
+              content: [{ type: 'text', text: imageText }],
+              source: { provider: 'fastsd-local', model: 'sd-turbo-openvino' },
+            }),
+          }, { surfaceOp: 'append', sourceEventSeqs: [] })
+          turnEnds = { kind: 'completed' }
+        } finally {
+          this.session.append('step/end', { turn, step })
+        }
+        if (this.inbox.hasPending) {
+          phase.abort = new AbortController()
+          phase.wakeRequested = false
+          phase.step = 0
+          return true
+        }
+        return false
+      }
       while (true) {
         signal.throwIfAborted()
         const step = phase.step + 1
@@ -830,7 +874,7 @@ export class ReactLoopAgent implements Agent {
         model: config.model,
         reasoningEffort: config.reasoningEffort,
         ...auditInput,
-      reusedSystemPrefixChars,
+        reusedSystemPrefixChars,
       }))
     }
     return { request, ...preparedCall === undefined ? {} : { preparedCall } }

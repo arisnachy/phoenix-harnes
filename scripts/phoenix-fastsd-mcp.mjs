@@ -252,15 +252,41 @@ async function message(request) {
 
 const entry = process.argv[1] && resolve(process.argv[1]) === THIS
 if (entry) {
-  const lines = createInterface({ input: process.stdin, crlfDelay: Infinity })
-  for await (const line of lines) {
+  if (process.argv.includes('--generate-once')) {
+    // This isolated worker is invoked before Kira assembles any model context.
+    // The stdin JSON carries exactly one fresh user image prompt, not a session.
+    let input = ''
     try {
-      const result = await message(JSON.parse(line))
-      if (result) process.stdout.write(JSON.stringify(result) + '\n')
-    } catch {
-      // Never emit unframed text on an MCP stdio transport.
+      for await (const part of process.stdin) {
+        input += part.toString('utf8')
+        if (input.length > 4096) throw new Error('La petición local excede 4096 caracteres.')
+      }
+      const payload = JSON.parse(input)
+      if (!payload || typeof payload !== 'object' || typeof payload.prompt !== 'string') {
+        throw new Error('Prompt de imagen local inválido.')
+      }
+      const result = await generate(payload.prompt)
+      process.stdout.write(JSON.stringify({ ok: true, markdown: result.markdown }) + '\n')
+    } catch (error) {
+      process.stdout.write(JSON.stringify({
+        ok: false, error: error instanceof Error ? error.message.slice(0, 280) : 'Error de imagen local',
+      }) + '\n')
+      process.exitCode = 1
+    } finally {
+      clearTimeout(idleTimer)
+      if (backend?.exitCode === null) backend.kill()
     }
+  } else {
+    const lines = createInterface({ input: process.stdin, crlfDelay: Infinity })
+    for await (const line of lines) {
+      try {
+        const result = await message(JSON.parse(line))
+        if (result) process.stdout.write(JSON.stringify(result) + '\n')
+      } catch {
+        // Never emit unframed text on an MCP stdio transport.
+      }
+    }
+    clearTimeout(idleTimer)
+    if (backend?.exitCode === null) backend.kill()
   }
-  clearTimeout(idleTimer)
-  if (backend?.exitCode === null) backend.kill()
 }
