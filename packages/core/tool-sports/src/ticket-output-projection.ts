@@ -72,6 +72,7 @@ const boundedTeamEvidence=(value:unknown):Fields=>{
 const selectedDossierBrief=(value:unknown):Fields=>{
   const dossier=record(value)
   const selectedSide=dossier.selectedSide
+  const [source]=rows(dossier.endpointAudit,1, { url:400 })
   return {
     ...textFields(dossier,fixtureFields),
     ...(selectedSide==='home'||selectedSide==='away'?{ selectedSide } : {}),
@@ -80,10 +81,10 @@ const selectedDossierBrief=(value:unknown):Fields=>{
       home:boundedTeamEvidence(record(dossier.teamComparison).home),
       away:boundedTeamEvidence(record(dossier.teamComparison).away),
     },
-    verifiedFacts:snippets(dossier.verifiedFacts,10),
-    unresolvedFacts:snippets(dossier.unresolvedFacts,10),
-    newsFindings:rows(dossier.newsFindings,8, { title:160,publisher:80,publishedAt:40 }),
-    playerMatchups:rows(dossier.playerMatchups,8, { athlete:110,opponent:110,detail:180,source:140 }),
+    verifiedFacts:snippets(dossier.verifiedFacts,4),
+    unresolvedFacts:snippets(dossier.unresolvedFacts,4),
+    newsFindings:rows(dossier.newsFindings,1, { title:160,publisher:80,publishedAt:40 }),
+    ...(source?.url?{ sourceUrl:source.url }:{}),
     recheckTool:'sports_chat_ticket_dossier_recheck',
     recheckInstruction:'Si falta una estadística, lesión, titular o noticia decisiva, reabre el expediente de este eventId antes de elegir; no completes el hueco con una inferencia.',
   }

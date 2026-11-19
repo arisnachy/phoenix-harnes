@@ -73,5 +73,6 @@ test('model projection retains bounded bilateral evidence for selected fixtures'
   assert.equal(brief.teamComparison.away.rosterCount,1)
   assert.equal(brief.teamComparison.away.playersWithMetrics,1)
   assert.deepEqual(brief.unresolvedFacts,['official lineup pending'])
+  assert.equal('playerMatchups' in brief,false)
   assert.equal(brief.fullDossierAvailable,true)
 })
