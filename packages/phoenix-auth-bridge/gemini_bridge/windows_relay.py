@@ -30,8 +30,8 @@ class OperatorWindow:
         input_row = ttk.Frame(self.root, padding=12)
         input_row.pack(fill="x")
         for col, (label, var, choices) in enumerate([
-            ("Declared sender", self.sender, ("chatgpt", "gemini", "arisnachy")),
-            ("Recipient", self.recipient, ("chatgpt", "gemini", "arisnachy")),
+            ("Declared sender", self.sender, ("chatgpt", "gemini", "user")),
+            ("Recipient", self.recipient, ("chatgpt", "gemini", "user")),
             ("Intent", self.intent, ("proposal", "code_review", "research", "verdict", "general")),
         ]):
             f = ttk.Frame(input_row)
