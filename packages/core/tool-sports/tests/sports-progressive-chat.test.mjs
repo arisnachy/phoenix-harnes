@@ -75,6 +75,37 @@ test('availability with missing primary data publishes a research escalation',as
   assert.match(result.instruction,/sourceEscalation/)
 })
 
+test('news stage exposes the verified event-bound ESPN preview excerpt',async()=>{
+  const newsSource=async input=>{
+    const url=String(input),response=await source(input)
+    if(!url.includes('/summary?'))return response
+    const body=await response.json()
+    body.article={gameId:fixture.eventId,headline:'Event preview',
+      description:'Bilateral pregame context',published:'2026-11-17T14:00:00Z',
+      source:'ESPN Preview',story:'<p>Recent form and injuries are discussed.</p>',
+      links:{api:{self:{href:'https://content.core.api.espn.com/v1/sports/news/99'}}}}
+    return Response.json(body)
+  }
+  const result=await progressiveSportsStage(fixture,'news','injury report',newsSource,now,{})
+  assert.equal(result.evidence.eventArticle.status,'event-bound')
+  assert.equal(result.uiBlock.props.rows[0].label,'ESPN · artículo vinculado al evento')
+  assert.match(result.uiBlock.props.rows[0].note,/Recent form and injuries/)
+  assert.equal(result.uiBlock.props.rows[0].url,
+    'https://content.core.api.espn.com/v1/sports/news/99')
+})
+
+test('NCAA roster stage recovers exact ESPN team IDs without NBA specialist',async()=>{
+  const ncaaFixture={...fixture,sport:'basketball',league:'mens-college-basketball'}
+  const result=await progressiveSportsStage(ncaaFixture,'rosters',undefined,source,now,{})
+  assert.equal(result.uiBlock.props.source,'ESPN public Site/Common v3 · fallback NCAA')
+  assert.equal(result.uiBlock.props.rows[0].home,'1 jugadores')
+  assert.equal(result.uiBlock.props.rows[0].away,'1 jugadores')
+  assert.equal(result.evidence.directEspnDossier.teams.length,2)
+  assert.equal(result.evidence.teamComparison.home.players.length,1)
+  assert.equal(result.nextPlayerOffset,null)
+  assert.ok(result.missing.some(x=>/muestra acotada/u.test(x)))
+})
+
 test('an empty NBA player dossier is explicitly pending and escalates outside ESPN',async()=>{
   const result=await progressiveSportsStage(fixture,'rosters',
     'get both teams season stats and gamelogs',source,now,{})
@@ -86,4 +117,31 @@ test('an empty NBA player dossier is explicitly pending and escalates outside ES
   assert.ok(result.sourceEscalation?.mustOpenOriginals)
   assert.ok(result.sourceEscalation?.targets.length>0)
   assert.equal(result.nextStage,'availability')
+})
+
+test('roster pages preserve all recovered player identities and do not advance early',async()=>{
+  const rosterSource=async input=>{
+    if(String(input).includes('/scoreboard?'))return Response.json({events:[{
+      id:fixture.eventId,date:fixture.kickoff,
+      status:{type:{state:'pre'}},
+      competitions:[{id:fixture.eventId,date:fixture.kickoff,competitors:[
+        {homeAway:'home',team:{id:'1',displayName:fixture.home}},
+        {homeAway:'away',team:{id:'2',displayName:fixture.away}},
+      ]}],
+    }]})
+    const team=String(input).match(/\/teams\/(1|2)\/roster/u)?.[1]
+    if(!team)return source(input)
+    return Response.json({athletes:[{items:Array.from({length:8},(_,i)=>({
+      id:team+String(i),displayName:'Player '+team+' '+String(i+1),
+      position:{abbreviation:'F'},
+    }))}]})
+  }
+  const first=await progressiveSportsStage(fixture,'rosters',undefined,rosterSource,now,{})
+  assert.equal(first.nextStage,'rosters')
+  assert.equal(first.nextPlayerOffset,6)
+  assert.equal(first.evidence.teamComparison.home.players.length,6)
+  const last=await progressiveSportsStage(fixture,'rosters',undefined,rosterSource,now,{},6)
+  assert.equal(last.nextStage,'availability')
+  assert.equal(last.nextPlayerOffset,null)
+  assert.deepEqual(last.evidence.teamComparison.home.players.map(p=>p.name),['Player 1 7','Player 1 8'])
 })

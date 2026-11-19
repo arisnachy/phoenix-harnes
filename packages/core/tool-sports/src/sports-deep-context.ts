@@ -31,18 +31,25 @@ const numeric=(n:unknown)=>{
   const val=Number(n)
   return Number.isFinite(val)?val:null
 }
+// ESPN and the NHL public API use a few different abbreviations for the same
+// club (for example ESPN publishes Los Angeles as `LA`, NHL as `LAK`). Keep
+// this normalization local to the official cross-check; never compare names
+// or a loose substring that could match the wrong fixture.
+const nhlApiCode=(code:string)=>({ LA:'LAK',NJ:'NJD',TB:'TBL',SJ:'SJS' }[code]??code)
 export type DeepSportsContext={
   eventId:string;sport:string;league:string;scannedAt:string
-  sources:Array<{name:string;status:'verified'|'unavailable';records:number}>
-  teams:Array<{id:string;name:string;abbreviation:string;logo:string|null;rosterSample:string[];
-    rosterPortraits:Array<{id:string;name:string;position:string;headshot:string|null}>}>
-  headlines:Array<{headline:string;published:string;source:'ESPN News';articleUrl?:string|null;imageUrl?:string|null}>
-  injuries:Array<{team:string;athlete:string;status:string;source:'ESPN Injuries'}>
-  playerStats:Array<{athlete:string;stat:string;value:string;source:'ESPN Boxscore'}>
+  sources:Array<{ name:string;status:'verified'|'unavailable';records:number }>
+  teams:Array<{ id:string;name:string;abbreviation:string;logo:string|null;rosterSample:string[]
+    rosterPortraits:Array<{ id:string;name:string;position:string;headshot:string|null }> }>
+  headlines:Array<{ headline:string;published:string;source:'ESPN News';articleUrl?:string|null;imageUrl?:string|null }>
+  eventArticle?:{ headline:string;description:string;published:string;source:string;
+    articleUrl:string;excerpt:string;status:'event-bound' }
+  injuries:Array<{ team:string;athlete:string;status:string;source:'ESPN Injuries' }>
+  playerStats:Array<{ athlete:string;stat:string;value:string;source:'ESPN Boxscore' }>
   independentFixtureVerified:boolean
-  venue?:{name:string;city:string}
-  officials?:Array<{name:string;role:string}>
-  weather?:{status:'verified'|'unavailable'|'not-applicable';description:string}
+  venue?:{ name:string;city:string }
+  officials?:Array<{ name:string;role:string }>
+  weather?:{ status:'verified'|'unavailable'|'not-applicable';description:string }
   limitations:string[]
 }
 const sourceNote=(name:string,available:boolean,records:number)=>({
@@ -75,24 +82,40 @@ export async function investigateEventDeep(
   }
   const officialRows=arr(get(summary.gameInfo,'officials')).length?
     arr(get(summary.gameInfo,'officials')):arr(comp.officials)
-  const officials=officialRows.slice(0,8).flatMap(raw=>{
+  const officials=officialRows.slice(0,8).flatMap((raw)=>{
     const row=obj(raw)
     const name=str(row.fullName??row.displayName??get(row.official,'displayName'),100)
-    return name?[{name,role:str(row.position??row.role,65)}]:[]
+    return name?[{ name,role:str(row.position??row.role,65) }]:[]
   })
   const venuePoint=obj(venueRow.location)
   const latitude=numeric(venuePoint.latitude??venuePoint.lat??venueRow.latitude)
   const longitude=numeric(venuePoint.longitude??venuePoint.lon??
     venuePoint.lng??venueRow.longitude)
   const date=str(comp.date??header.date,40)
+  const rawArticle=obj(summary.article)
+  const articleGameId=digits(rawArticle.gameId)
+  const articlePublished=str(rawArticle.published??rawArticle.originallyPosted,45)
+  const articleTime=Date.parse(articlePublished)
+  const articleLink=safeEspnUrl(
+    get(get(get(rawArticle.links,'api'),'self'),'href')??
+    get(get(rawArticle.links,'web'),'href'))
+  const articleStory=str(rawArticle.story,3600)
+    .replace(/<script[\s\S]*?<\/script>/giu,' ')
+    .replace(/<[^>]*>/gu,' ').replace(/\s+/gu,' ').trim().slice(0,1800)
+  const eventArticle=articleGameId===eventId&&articleLink&&articleStory&&
+    Number.isFinite(articleTime)&&articleTime<=now+60_000?
+    { headline:str(rawArticle.headline??rawArticle.title,180),
+      description:str(rawArticle.description,420),published:articlePublished,
+      source:str(rawArticle.source,100)||'ESPN event preview',articleUrl:articleLink,
+      excerpt:articleStory,status:'event-bound' as const }:undefined
   const competitors=arr(comp.competitors)
-  const teams=competitors.slice(0,2).map(team=>{
+  const teams=competitors.slice(0,2).map((team)=>{
     const r=obj(team),t=obj(r.team),id=digits(t.id??r.id)
-    return{id,name:str(t.displayName??t.name,110),
+    return{ id,name:str(t.displayName??t.name,110),
       abbreviation:str(t.abbreviation,8),
       logo:safeEspnUrl(t.logo??get(arr(t.logos)[0],'href'),true),
       rosterSample:[] as string[],
-      rosterPortraits:[] as Array<{id:string;name:string;position:string;headshot:string|null}>}
+      rosterPortraits:[] as Array<{ id:string;name:string;position:string;headshot:string|null }> }
   }).filter(t=>t.id&&t.name)
   const teamIDs=new Set(teams.map(t=>t.id))
   const rosterResults=await Promise.allSettled(teams.map(t=>
@@ -106,7 +129,7 @@ export async function investigateEventDeep(
     const rr=rosterResults[i]
     if(rr?.status!=='fulfilled')return
     const values=arr(get(rr.value,'athletes'))
-    const athletes=values.flatMap(g=>{
+    const athletes=values.flatMap((g)=>{
       const nested=arr(get(g,'items'))
       return nested.length?nested:[g]
     })
@@ -119,33 +142,33 @@ export async function investigateEventDeep(
     // Missing headshots remain null: do not fabricate a CDN URL from an ID.
     // Full lineup-scale portrait coverage across NBA/WNBA/NHL/MLB/Soccer; only
     // images actually published by ESPN are exposed to the chat.
-    team.rosterPortraits=athletes.slice(0,45).flatMap(value=>{
+    team.rosterPortraits=athletes.slice(0,45).flatMap((value)=>{
       const athlete=obj(get(value,'athlete')??value)
       const id=digits(athlete.id),name=str(athlete.displayName??athlete.fullName,90)
       if(!id||!name)return []
-      return[{id,name,position:str(get(athlete.position,'abbreviation')??get(athlete.position,'displayName'),32),
-        headshot:safeEspnUrl(get(athlete.headshot,'href'),true)}]
+      return[{ id,name,position:str(get(athlete.position,'abbreviation')??get(athlete.position,'displayName'),32),
+        headshot:safeEspnUrl(get(athlete.headshot,'href'),true) }]
     })
     rosterCount+=names.length
   })
   const news=newsResult.status==='fulfilled'?arr(get(newsResult.value,'articles')):[]
   const mentions=teams.map(t=>nameKey(t.name))
-  const headlineRows=news.flatMap(article=>{
+  const headlineRows=news.flatMap((article)=>{
     const a=obj(article),headline=str(a.headline,180),description=str(a.description,400)
     const text=nameKey(headline+' '+description)
     if(!headline||!mentions.some(team=>team&&text.includes(team)))return []
-    return[{headline,published:str(a.published,45),source:'ESPN News' as const,
+    return[{ headline,published:str(a.published,45),source:'ESPN News' as const,
       articleUrl:safeEspnUrl(get(a.links,'web')?get(get(a.links,'web'),'href'):a.link),
-      imageUrl:safeEspnUrl(get(arr(a.images)[0],'url')??get(arr(a.images)[0],'href'),true)}]
+      imageUrl:safeEspnUrl(get(arr(a.images)[0],'url')??get(arr(a.images)[0],'href'),true) }]
   }).slice(0,8)
   // Forecast only for a future, outdoor, coordinate-verified venue. Do not
   // geocode an ambiguous team city, apply an outside forecast to indoor games,
   // or claim historical conditions from the current forecast.
-  let weather:{status:'verified'|'unavailable'|'not-applicable';description:string}={
-    status:'unavailable',description:'Ubicación exacta y previsión de la hora sin cotejar'}
+  let weather:{ status:'verified'|'unavailable'|'not-applicable';description:string }={
+    status:'unavailable',description:'Ubicación exacta y previsión de la hora sin cotejar' }
   const indoor=venueRow.indoor===true||sport==='basketball'||sport==='hockey'
   if(indoor){
-    weather={status:'not-applicable',description:'Recinto cubierto; clima exterior no aplicado al modelo'}
+    weather={ status:'not-applicable',description:'Recinto cubierto; clima exterior no aplicado al modelo' }
   }else if(latitude!==null&&longitude!==null&&Math.abs(latitude)<=90&&
     Math.abs(longitude)<=180&&Number.isFinite(Date.parse(date))){
     const start=Date.parse(date)
@@ -166,22 +189,22 @@ export async function investigateEventDeep(
         const wind=numeric(arr(hourly.wind_speed_10m)[index])
         const rain=numeric(arr(hourly.precipitation_probability)[index])
         if(index>=0&&temp!==null&&wind!==null&&rain!==null){
-          weather={status:'verified',
+          weather={ status:'verified',
             description:'Pronóstico Open-Meteo para la sede y hora: '+
               temp.toFixed(1)+' °C; viento '+wind.toFixed(1)+
-              ' km/h; prob. precipitación '+rain.toFixed(0)+'% (no observación real)'}
+              ' km/h; prob. precipitación '+rain.toFixed(0)+'% (no observación real)' }
         }
       }catch{ /* Un fallo meteorológico nunca fabrica un pronóstico. */ }
     }
   }
   const injuryGroups=injuryResult.status==='fulfilled'
     ?arr(get(injuryResult.value,'injuries')):[]
-  const injuryRows=injuryGroups.flatMap(group=>{
+  const injuryRows=injuryGroups.flatMap((group)=>{
     const g=obj(group),team=obj(g.team),id=digits(team.id??g.id)
     const matched=teams.find(t=>t.id===id)
     if(!matched||!teamIDs.has(id))return []
     const items=arr(g.injuries).length?arr(g.injuries):arr(g.items)
-    return items.flatMap(item=>{
+    return items.flatMap((item)=>{
       const v=obj(item),a=obj(v.athlete),athlete=str(a.displayName??v.displayName,90)
       const athleteId=digits(a.id??v.athleteId)
       const ids=verifiedAthletes.get(id),names=verifiedNames.get(id)
@@ -189,19 +212,19 @@ export async function investigateEventDeep(
       const belongs=athleteId?ids?.has(athleteId)===true:
         athlete.length>0&&names?.has(nameKey(athlete))===true
       const status=str(v.status??v.type??v.description,110)
-      return athlete&&status&&belongs?[{team:matched.name,athlete,status,source:'ESPN Injuries' as const}]:[]
+      return athlete&&status&&belongs?[{ team:matched.name,athlete,status,source:'ESPN Injuries' as const }]:[]
     })
   }).slice(0,16)
   const boxscore=obj(summary.boxscore)
   const boxPlayers=arr(boxscore.players)
-  const playerStats=boxPlayers.flatMap(group=>arr(get(group,'statistics')).flatMap(s=>{
+  const playerStats=boxPlayers.flatMap(group=>arr(get(group,'statistics')).flatMap((s)=>{
     const row=obj(s),labels=arr(row.labels),athletes=arr(row.athletes)
-    return athletes.slice(0,5).flatMap(a=>{
+    return athletes.slice(0,5).flatMap((a)=>{
       const v=obj(a),athlete=str(get(v.athlete,'displayName'),95)
       const stats=arr(v.stats)
       return athlete&&labels.length>0&&stats.length>0?
-        [{athlete,stat:str(labels[0],60),value:str(stats[0],40),
-          source:'ESPN Boxscore' as const}]:[]
+        [{ athlete,stat:str(labels[0],60),value:str(stats[0],40),
+          source:'ESPN Boxscore' as const }]:[]
     })
   })).slice(0,12)
   let independentFixtureVerified=false
@@ -210,19 +233,32 @@ export async function investigateEventDeep(
     const day=date.slice(0,10)
     try{
       if(sport==='hockey'&&league==='nhl'){
-        const scores=await getFeed<unknown>('https://api-web.nhle.com/v1/score/'+day,fetcher)
-        const teamCodes=teams.map(t=>t.abbreviation.toUpperCase())
-        independentFixtureVerified=teamCodes.every(Boolean)&&
-          arr(get(scores,'games')).some(game=>{
-            const g=obj(game),h=str(get(g.homeTeam,'abbrev')),a=str(get(g.awayTeam,'abbrev'))
+        const teamCodes=teams.map(t=>nhlApiCode(t.abbreviation.toUpperCase()))
+        // ESPN timestamps are UTC while the NHL score feed is keyed by the
+        // league's local calendar day. A game near midnight UTC therefore
+        // legitimately appears on the preceding NHL date. Try the adjacent
+        // date only after the exact date, stopping on the first team match.
+        const dates=[day]
+        for(const offset of [-1,1]){
+          const shifted=new Date(Date.parse(day+'T00:00:00Z')+offset*86_400_000)
+          if(Number.isFinite(shifted.getTime()))dates.push(shifted.toISOString().slice(0,10))
+        }
+        for(const candidate of dates){
+          const scores=await getFeed<unknown>('https://api-web.nhle.com/v1/score/'+candidate,fetcher)
+          if(!teamCodes.every(Boolean))continue
+          const found=arr(get(scores,'games')).some((game)=>{
+            const g=obj(game),h=nhlApiCode(str(get(g.homeTeam,'abbrev')).toUpperCase()),
+              a=nhlApiCode(str(get(g.awayTeam,'abbrev')).toUpperCase())
             return teamCodes.includes(h)&&teamCodes.includes(a)
           })
+          if(found){independentFixtureVerified=true;break}
+        }
       }else if(sport==='baseball'&&league==='mlb'){
         const schedule=await getFeed<unknown>(
           'https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+day+
           '&hydrate=probablePitcher',fetcher)
         const dates=arr(get(schedule,'dates'))
-        independentFixtureVerified=dates.some(entry=>arr(get(entry,'games')).some(game=>{
+        independentFixtureVerified=dates.some(entry=>arr(get(entry,'games')).some((game)=>{
           const t=obj(get(game,'teams'))
           const home=str(get(get(t.home,'team'),'name')),away=str(get(get(t.away,'team'),'name'))
           const actual=teams.map(team=>nameKey(team.name))
@@ -238,11 +274,11 @@ export async function investigateEventDeep(
     sourceNote('ESPN league news tied to teams',headlineRows.length>0,headlineRows.length),
     sourceNote('ESPN injuries tied to confirmed team IDs',injuryRows.length>0,injuryRows.length),
     sourceNote('ESPN individual boxscore statistics',playerStats.length>0,playerStats.length),
-    {name:sport==='hockey'?'NHL public API':sport==='baseball'?'MLB StatsAPI':
-      'External league fixture cross-check not available',status:crossCheckStatus,records:independentFixtureVerified?1:0},
+    { name:sport==='hockey'?'NHL public API':sport==='baseball'?'MLB StatsAPI':
+      'External league fixture cross-check not available',status:crossCheckStatus,records:independentFixtureVerified?1:0 },
   ]
-  return{eventId,sport,league,scannedAt:new Date(now).toISOString(),sources,teams,
-    headlines:headlineRows,injuries:injuryRows,playerStats,independentFixtureVerified,
+  return{ eventId,sport,league,scannedAt:new Date(now).toISOString(),sources,teams,
+    headlines:headlineRows,...(eventArticle?{eventArticle}:{}),injuries:injuryRows,playerStats,independentFixtureVerified,
     venue,officials,weather,
     limitations:[
       'Un informe médico de liga vacío no demuestra que los jugadores estén sanos.',
@@ -253,5 +289,5 @@ export async function investigateEventDeep(
       'Sin modelos calibrados ni precios de mercado verificables no hay probabilidad ni valor esperado comprobado.',
       'Árbitros nombrados no demuestran favoritismo; falta rendimiento histórico ajustado por equipos y contexto.',
       'Sede confirmada no implica que exista una estadística histórica local/visitante en ese estadio.',
-    ]}
+    ] }
 }
