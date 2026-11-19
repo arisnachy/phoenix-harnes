@@ -26,7 +26,7 @@ export function validateEnvelope(msg) {
     && msg.payload.text.trim().length > 0 && msg.payload.text.length <= MAX_TEXT, 'Payload invalid');
   check(typeof msg.created_at === 'string' && ISO.test(msg.created_at)
     && !Number.isNaN(Date.parse(msg.created_at)), 'Timestamp invalid');
-  check(msg.origin === 'manual-user-entry', 'Origin must be manual-user-entry');
+  check(['manual-user-entry', 'mcp-agent-proposal'].includes(msg.origin), 'Origin must be manual-user-entry or mcp-agent-proposal');
   check(msg.reply_to === null || (typeof msg.reply_to === 'string' && UUID.test(msg.reply_to)), 'Reply reference invalid');
   check((msg.turn === 1) === (msg.reply_to === null), 'First turn must not have a reply; later turns must');
   return true;
