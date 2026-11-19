@@ -8,6 +8,7 @@ const schemaText = read('../schema/phoenix-envelope.schema.json');
 const guardText = read('../src/guard.mjs');
 const installerText = read('../setup-team.ps1');
 const settingsText = read('../gemini_bridge/configure_gemini_cli.py');
+const operatorText = read('../gemini_bridge/windows_relay.py');
 
 test('public distribution has a neutral default user and portable schema', () => {
   const schema = JSON.parse(schemaText);
@@ -17,10 +18,11 @@ test('public distribution has a neutral default user and portable schema', () =>
   assert.match(html, /<option value="user">Usuario/);
   assert.match(guardText, /new Set\(\['chatgpt', 'gemini', 'user'\]\)/);
   assert.match(guardText, /actor === 'local-operator'/);
+  assert.equal((operatorText.match(/\("chatgpt", "gemini", "user"\)/g) || []).length, 2);
 });
 
 test('bridge does not ship embedded credentials or fixed Windows profiles', () => {
-  for (const source of [html, schemaText, guardText, installerText, settingsText]) {
+  for (const source of [html, schemaText, guardText, installerText, settingsText, operatorText]) {
     assert.doesNotMatch(source, /C:\\Users\\[^\\]+/i);
     assert.doesNotMatch(source, /sk-[a-z0-9_-]{24,}/i);
     assert.doesNotMatch(source, /gh[pousr]_[a-z0-9]{30,}/i);
