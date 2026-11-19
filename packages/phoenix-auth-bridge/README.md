@@ -48,3 +48,18 @@ Use `schema/phoenix-envelope.schema.json`; preserve `origin: manual-user-entry`,
 ## Gemini Python contribution (authoritative backend)
 
 `gemini_bridge/` implements a SQLite-backed, stdio-only MCP proposal/inbox adapter and a human operator Windows Tk interface. Node CLI, MCP and Windows operator UI now share the same live SQLite STOP flag and approval decisions. The legacy `state.json` is not imported and no longer used for relay operations; manual migration of legacy threads requires a separate review. The schema supports explicit `origin: mcp-agent-proposal` drafts, which still require human approval. See [Gemini bridge README](gemini_bridge/README.md).
+
+## Phase 3 — Cross-platform stdio MCP test and read-only PHOENIX panel asset
+
+The isolated MCP client test `test/test_mcp_stdio.py` performs a real SDK `stdio` handshake, discovers exactly the two unprivileged MCP tools, verifies STOP blocks all drafts, then checks that a draft is invisible until local operator approval and revoked immediately upon a subsequent STOP. It **never** invokes ChatGPT/Gemini accounts. The test requires `mcp>=1.28,<2` and runs on both Ubuntu and Windows using `.github/workflows/phoenix-auth-bridge.yml` with `PHOENIX_REQUIRE_MCP=1` (no accidental skipping in CI). CI checks are distinct from a manual Gemini CLI session on Arisnachy's computer.
+
+For Windows, install the optional MCP dependencies in the actual interpreter used by Gemini CLI:
+
+```powershell
+cd packages/phoenix-auth-bridge
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r gemini_bridge\requirements-mcp.txt
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\launch-operator.ps1
+```
+
+See [PHOENIX UI integration contract](PHOENIX_UI_INTEGRATION.md) for the correct `gemini_bridge.mcp_server` module path, exact `settings.json` example, and Windows interactive test sequence. `apps/web/public/phoenix-auth-bridge.html` adds a **read-only** local file-selected snapshot inspector to the PHOENIX web asset tree. **It is not wired to the main navigation or PHOENIX host authentication**, and cannot approve/stop/send messages. The operator's actual controls remain in the Windows Tk window, which talks directly to SQLite; full native host/UI integration remains an explicit release gate.
