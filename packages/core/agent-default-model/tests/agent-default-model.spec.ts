@@ -58,6 +58,25 @@ describe('AgentDefaultModelConfig', () => {
     await bench.ctx.fiber.dispose()
   })
 
+  it('persists Codex speed across new conversations and picker restoration', async () => {
+    const bench = await boot()
+    const selected = {
+      provider: 'openai-codex', model: 'gpt-6.2-sol',
+      reasoningEffort: ReasoningEffortId('high'), serviceTier: 'fast' as const,
+    }
+    await bench.defaultModel.saveWebSelection(selected, selected)
+    expect(bench.defaultModel.currentSelection()).toEqual(selected)
+    expect(bench.defaultModel.preferredSelection()).toEqual(selected)
+
+    await bench.defaultModel.saveWebSelection(
+      { ...selected, serviceTier: 'default' },
+      { ...selected, serviceTier: 'default' },
+    )
+    expect(bench.defaultModel.currentSelection().serviceTier).toBe('default')
+    expect(bench.defaultModel.preferredSelection().serviceTier).toBe('default')
+    await bench.ctx.fiber.dispose()
+  })
+
   it('clears a stored effort when the saved selection has none', async () => {
     const bench = await boot()
     await bench.defaultModel.saveSelection({

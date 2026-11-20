@@ -35,7 +35,7 @@ import {
 import css from './ModelSelect.module.css'
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
-type Pane = 'root' | 'model' | 'effort'
+type Pane = 'root' | 'model' | 'effort' | 'speed'
 
 /** One dynamic effort row; undefined means preserve the provider default. */
 interface EffortChoice {
@@ -143,6 +143,9 @@ export function ModelSelect(
   const currentChoice = choices[selectedIndex]
   const reasoning = currentChoice?.model.reasoning
   const effectiveEffort = state.current?.reasoningEffort ?? reasoning?.defaultEffort
+  const codexSpeedAvailable = state.current?.provider === 'openai-codex'
+  const activeSpeed = state.current?.serviceTier ?? 'default'
+  const speedLabel = activeSpeed === 'fast' ? t('speed.fast') : t('speed.standard')
   const effortLabel = reasoning === undefined
     ? undefined
     : effectiveEffort === undefined
@@ -305,9 +308,17 @@ export function ModelSelect(
       provider: state.current.provider,
       model: state.current.model,
       ...effort === undefined ? {} : { reasoningEffort: effort },
+      ...state.current.serviceTier === undefined ? {} : { serviceTier: state.current.serviceTier },
     }
     lastActionRef.current = 'select'
     void select(selection).then(settleSelection)
+  }
+
+  const chooseSpeed = (serviceTier: 'default' | 'fast'): void => {
+    if (state.current === null || state.current.provider !== 'openai-codex') return
+    if ((state.current.serviceTier ?? 'default') === serviceTier) { close(true); return }
+    lastActionRef.current = 'select'
+    void select({ ...state.current, serviceTier }).then(settleSelection)
   }
 
   const selectedEffortChoice = effortChoices.find(level => level.effort === effectiveEffort)
@@ -390,6 +401,7 @@ export function ModelSelect(
       >
         <span className={css.triggerLabel}>{modelLabel}</span>
         {effortLabel !== undefined && <span className={css.triggerEffort}>{effortLabel}</span>}
+        {codexSpeedAvailable && activeSpeed === 'fast' && <span className={css.triggerEffort}>{speedLabel}</span>}
         <IconChevronDownOutline14 className={clsx(css.chevron, open && css.chevronOpen)} />
       </button>
 
@@ -400,6 +412,7 @@ export function ModelSelect(
             css.menu,
             pane === 'model' && css.modelMenu,
             pane === 'effort' && css.effortMenu,
+            pane === 'speed' && css.effortMenu,
           )}
           role="menu"
           style={{
@@ -422,6 +435,13 @@ export function ModelSelect(
                 <button ref={itemRef()} type="button" role="menuitem" className={css.cell} onClick={() => { setPane('effort') }}>
                   <span className={css.cellLabel}>{t('menu.effort')}</span>
                   <span className={css.cellValue}>{effortLabel}</span>
+                  <IconChevronRightOutline14 className={css.cellChevron} />
+                </button>
+              )}
+              {codexSpeedAvailable && (
+                <button ref={itemRef()} type="button" role="menuitem" className={css.cell} onClick={() => { setPane('speed') }}>
+                  <span className={css.cellLabel}>{t('menu.speed')}</span>
+                  <span className={css.cellValue}>{speedLabel}</span>
                   <IconChevronRightOutline14 className={css.cellChevron} />
                 </button>
               )}
@@ -498,7 +518,10 @@ export function ModelSelect(
                             className={clsx(css.option, css.modelOption, selected && css.selected)}
                             key={model.id}
                             disabled={busy}
-                            onClick={() => { choose({ provider: group.id, model: model.id }) }}
+                            onClick={() => { choose({ provider: group.id, model: model.id,
+                              ...group.id === 'openai-codex' && state.current?.provider === 'openai-codex'
+                                && state.current.serviceTier !== undefined ? { serviceTier: state.current.serviceTier } : {},
+                            }) }}
                           >
                             <ProviderLogo providerId={group.id} providerName={group.name} />
                             <span className={css.optionCopy}>
@@ -525,6 +548,29 @@ export function ModelSelect(
               {state.status === 'ready' && choices.length === 0 && (
                 <div className={css.empty}>{t('empty.models')}</div>
               )}
+            </>
+          )}
+
+          {pane === 'speed' && codexSpeedAvailable && (
+            <>
+              {(['default', 'fast'] as const).map(tier => (
+                <button
+                  key={tier}
+                  ref={itemRef()}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={activeSpeed === tier}
+                  className={clsx(css.option, activeSpeed === tier && css.selected)}
+                  disabled={busy}
+                  onClick={() => { chooseSpeed(tier) }}
+                >
+                  <span className={css.optionCopy}>
+                    <span className={css.modelName}>{t(tier === 'fast' ? 'speed.fast' : 'speed.standard')}</span>
+                    <span className={css.description}>{t(tier === 'fast' ? 'speed.fastDetail' : 'speed.standardDetail')}</span>
+                  </span>
+                  <span className={css.check}>{activeSpeed === tier ? <IconCheckOutline16 /> : null}</span>
+                </button>
+              ))}
             </>
           )}
 

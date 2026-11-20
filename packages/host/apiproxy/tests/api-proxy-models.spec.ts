@@ -796,6 +796,24 @@ describe('Web session model selection', () => {
     }
   })
 
+  it('rejects Codex Fast tier when a non-Codex provider is selected', async () => {
+    const { ctx, sessionId } = await harness()
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+    try {
+      const response = await api.sessions.selectModel(request({
+        sessionId, provider: 'deepseek-official', model: 'deepseek-reasoner', serviceTier: 'fast',
+      }))
+      expect(response.result.ok).toBe(false)
+      if (response.result.ok) throw new Error('Fast must never cross a non-Codex adapter')
+      expect(response.result.error.message).toContain('Only OpenAI Codex')
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('saves an accepted selection as the default and survives a storage failure', async () => {
     const { ctx, sessionId } = await harness()
     const saved: unknown[] = []

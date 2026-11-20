@@ -590,6 +590,28 @@ describe('PiAiAdapter provider routing', () => {
     })
   })
 
+  it('sends Codex Fast on the final Responses wire without changing reasoning or other providers', async () => {
+    const server = await mockServer([
+      { status: 401, body: JSON.stringify({ error: { message: 'fast captured' } }) },
+      { status: 401, body: JSON.stringify({ error: { message: 'standard captured' } }) },
+    ])
+    const providers: Record<string, LlmPiAi.PiAiProviderProfile> = {
+      'openai-codex': { baseURL: server.url, models: [{ id: 'gpt-6.2-sol' }], transport: 'sse' },
+    }
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['openai-codex'], new PiAiAdapter({
+      profiles: () => resolveProfiles(providers),
+      resolveApiKey: () => Promise.resolve('test-key'),
+      auth: memoryAuth(),
+    }))
+    await assemble(ctx, { provider: 'openai-codex', model: 'gpt-6.2-sol', messages: [], serviceTier: 'fast' })
+    expect(server.requests[0]).toMatchObject({ service_tier: 'priority' })
+    await assemble(ctx, { provider: 'openai-codex', model: 'gpt-6.2-sol', messages: [], serviceTier: 'default' })
+    expect(server.requests[1]).not.toHaveProperty('service_tier')
+    expect(server.paths).toEqual(['/responses', '/responses'])
+  })
+
   it('keeps the low-level adapter platform-key fallback available to explicit embedders', async () => {
     const server = await mockServer([{ status: 401, body: JSON.stringify({ error: { message: 'expected mock failure' } }) }])
     const providers: Record<string, LlmPiAi.PiAiProviderProfile> = {

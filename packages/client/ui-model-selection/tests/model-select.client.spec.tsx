@@ -79,6 +79,34 @@ describe('ModelSelect root menu', () => {
   })
 })
 
+describe('ModelSelect Codex serving speed', () => {
+  it('shows Instant · Fast as a serving tier and retains manual reasoning', async () => {
+    const codex = {
+      provider: 'openai-codex', model: 'gpt-6.2-sol', reasoningEffort: 'high',
+    }
+    const catalog = [{
+      id: 'openai-codex', name: 'OpenAI Codex',
+      models: [{ id: 'gpt-6.2-sol', name: 'GPT-6.2 Sol', reasoning: codexReasoning }],
+    }]
+    const directory = createSnapshotStore<ModelDirectoryState>(state({ current: codex, groups: catalog }))
+    const select = vi.fn(async (selection: ModelSelection) => {
+      directory.set(state({ current: selection, groups: catalog }))
+      return true
+    })
+    render(<ModelSelect
+      locked={false} available directory={directory} load={vi.fn()} select={select} t={t}
+    />)
+    fireEvent.click(screen.getByRole('button', { name: /GPT-6.2 Sol/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /速度/ }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Instant · Fast/ }))
+    await waitFor(() => {
+      expect(select).toHaveBeenCalledWith({
+        provider: 'openai-codex', model: 'gpt-6.2-sol', reasoningEffort: 'high', serviceTier: 'fast',
+      })
+    })
+  })
+})
+
 describe('ModelSelect reasoning effort', () => {
   it('renders adapter metadata and submits the effort as part of the session selection', async () => {
     const directory = createSnapshotStore<ModelDirectoryState>(state())
