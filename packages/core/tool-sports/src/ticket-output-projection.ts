@@ -1,5 +1,7 @@
 import type { evidencePricedTicket } from './evidence-priced-ticket.ts'
 import type { ChatBlock } from './sports.ts'
+import type { ComparativeTeam, SpecialistFixture, SpecialistGate } from './ticket-specialist-gate.ts'
+import { summarizeTicketSpecialist } from './ticket-specialist-summary.ts'
 
 type PricedTicket = Awaited<ReturnType<typeof evidencePricedTicket>>
 type Fields = Record<string, unknown>
@@ -117,6 +119,59 @@ const selectedDossierBrief=(value:unknown):Fields=>{
 
 const fixtureFields={
   eventId:20,sport:25,league:65,date:10,home:100,away:100,kickoff:55,
+}
+
+/** Project event-bound findings to the actual research widget and a small model result. */
+export function projectDirectedTicketResearch(fixture:SpecialistFixture,check:SpecialistGate){
+  const summary=summarizeTicketSpecialist(check,fixture.sport)
+  const side=(team:ComparativeTeam|undefined)=>{
+    const players=team?.players??[]
+    return{
+      recent:snippets(team?.recentResults,5),
+      teamStats:(team?.teamStats??[]).slice(0,4).map(x=>x.name+': '+x.value),
+      rosterCount:players.length,
+      starters:players.filter(x=>x.starterConfirmed).length,
+      players:players.filter(x=>x.stats.length||x.recent.length).slice(0,4).map(x=>
+        x.name+' · '+x.stats.slice(0,2).map(m=>m.name+': '+m.value).join(', ')),
+    }
+  }
+  const view={home:side(check.teamComparison?.home),away:side(check.teamComparison?.away)}
+  const injuries=check.injuryAudit
+  const availability=(key:'home'|'away')=>{
+    if(!injuries||injuries.status==='stale'||injuries.status==='unavailable')return []
+    return injuries[key].injuries.slice(0,5).map(x=>
+      x.athlete+' · '+x.status+(x.reportedAt?' · '+x.reportedAt:'')).map(x=>x.slice(0,140))
+  }
+  const cell=(facts:string[])=>facts.join(' · ').slice(0,360)||'Sin datos verificados'
+  const source=injuries?.source?.startsWith('https://site.api.espn.com/')?injuries.source:undefined
+  const rows=[
+    {label:'Resultados recientes',home:cell(view.home.recent),away:cell(view.away.recent)},
+    {label:'Estadísticas del equipo',home:cell(view.home.teamStats),away:cell(view.away.teamStats)},
+    {label:'Jugadores con estadísticas',home:cell(view.home.players),away:cell(view.away.players)},
+    {label:'Plantilla recuperada',home:String(view.home.rosterCount),away:String(view.away.rosterCount)},
+    {label:'Titulares confirmados',
+      home:view.home.starters?String(view.home.starters):'Sin confirmar',
+      away:view.away.starters?String(view.away.starters):'Sin confirmar'},
+    {label:'Disponibilidad reportada',home:cell(availability('home')),away:cell(availability('away')),
+      state:'reported',...(source?{url:source}:{})},
+  ]
+  const rest=check.restHours
+  if(rest&&(rest.home!==null||rest.away!==null))rows.push({label:'Horas entre inicios',
+    home:rest.home===null?'Sin datos verificados':rest.home.toFixed(1),
+    away:rest.away===null?'Sin datos verificados':rest.away.toFixed(1)})
+  const missing=snippets(summary.pendingEvidence,5)
+  const uiBlock={component:'sports_research_table' as const,version:1 as const,props:{
+    ...textFields(fixture,{eventId:20,sport:25,league:65}),
+    stage:'context',title:fixture.away+' vs '+fixture.home,checkedAt:check.checkedAt,
+    source:'ESPN · expediente por partido',
+    note:'La plantilla y el parte de disponibilidad se revisan por separado de los titulares.',
+    home:{name:fixture.home},away:{name:fixture.away},rows,missing,
+  }}
+  return{
+    uiBlock,eventId:fixture.eventId,sport:fixture.sport,league:fixture.league,
+    state:summary.state,complete:check.checklist?.complete===true,
+    pendingSteps:missing,verifiedSteps:snippets(check.verifiedSteps,4),
+  }
 }
 
 /**
