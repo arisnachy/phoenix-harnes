@@ -253,7 +253,7 @@ export async function investigateTicketSpecialist(
     }else if(game.sport==='basketball'&&(game.league==='nba'||game.league==='wnba')){
       specialist='NBA/WNBA: jugadores, quintetos, eficiencia y bajas'
       const d=await researchBasketballCase(game.league,game.date,game.eventId,
-        fetcher,now,env,quotes)
+        fetcher,now,env,quotes,12,18_000)
       if(!identities(d.fixture.home.name,d.fixture.away.name,game.home,game.away)
         ||!closeTime(d.opportunity.scheduledAt,game.kickoff))
         throw Error('NBA/WNBA: identidad u horario del evento no coinciden')

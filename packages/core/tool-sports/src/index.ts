@@ -71,14 +71,14 @@ import { mlbResearch } from './mlb-evidence-research.ts'
 import { reviewMlbResearch } from './mlb-market-research-review.ts'
 import { soccerLeagueCatalog,soccerDailySlate,soccerWorldPage } from './soccer-worldwide-scout.ts'
 import { investigateSoccer } from './soccer-worldwide-dossier.ts'
-import { basketballSlate,type BasketballLeague } from './basketball-research-core.ts'
+import { basketballSlate,teamKey,type BasketballLeague } from './basketball-research-core.ts'
 import { researchBasketballCase } from './basketball-evidence-dossier.ts'
 
 import { nflSlate,investigateNfl } from './nfl-evidence-research.ts'
 import { nhlSlate,investigateNhl } from './nhl-evidence-research.ts'
 import { compactNhlChatDossier,nhlAbortableFetch,withNhlDeadline,
   NHL_CHAT_ODDS_BUDGET_MS,NHL_CHAT_RESEARCH_BUDGET_MS } from './nhl-chat-performance.ts'
-import { projectPricedTicketForModel } from './ticket-output-projection.ts'
+import { projectDirectedTicketResearch,projectPricedTicketForModel } from './ticket-output-projection.ts'
 
 import { tennisSlate,investigateTennis,type TennisTour } from './tennis-evidence-research.ts'
 
@@ -176,6 +176,24 @@ const GUIDANCE = [
 ].join(' ')
 
 export function apply(ctx: Context): void {
+  type DirectedResearchEntry={
+    result:Promise<Awaited<ReturnType<typeof investigateTicketSpecialists>>[number]|undefined>
+  }
+  const ticketTurnResearch=new WeakMap<object,{
+    requestIndex:number
+    scans:Set<string>
+    dossiers:Map<string,DirectedResearchEntry>
+  }>()
+  const researchForRequest=(session:NonNullable<import('@phoenix-ai/dsh-tools').ToolExecution['agent']>['session'])=>{
+    const requestIndex=session.events.findLastIndex(event=>
+      event.type==='user/message'&&event.data.source.kind==='user')
+    if(requestIndex<0)return undefined
+    const existing=ticketTurnResearch.get(session)
+    if(existing?.requestIndex===requestIndex)return existing
+    const state={requestIndex,scans:new Set<string>(),dossiers:new Map<string,DirectedResearchEntry>()}
+    ticketTurnResearch.set(session,state)
+    return state
+  }
   const stageAudit=new WeakMap<object,Map<string,{
     stages:Set<ResearchStage>
     nextPlayerOffset:number
@@ -2146,11 +2164,19 @@ export function apply(ctx: Context): void {
     },
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
-    async execute(args){
+    async execute(args,exec){
       const preference=args.marketPreference??'winner'
       if(preference!=='winner'&&preference!=='double_chance')throw Error('Mercado de ticket inválido')
       const env=await sportsEnv(ctx)
       const requestedAt=Date.now()
+      const session=exec.agent?.session
+      const scans=session?researchForRequest(session)?.scans:undefined
+      const scanKey=JSON.stringify([args.date??santoDomingoDay(requestedAt),args.sport??'',preference])
+      if(scans?.has(scanKey))return JSON.stringify({
+        status:'research-already-run',
+        instruction:'Usa la investigación de este turno. Entrega los hallazgos por partido y el estado del ticket.',
+      })
+      scans?.add(scanKey)
       let result:Awaited<ReturnType<typeof evidencePricedTicket>>
       let lastSnapshot:TicketPricedProgress|null=null
       // Research runs long by design: screening the *whole* local slate,
@@ -2237,7 +2263,7 @@ export function apply(ctx: Context): void {
     },
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
-    async execute(args){
+    async execute(args,exec){
       if(!Array.isArray(args.fixtures)||args.fixtures.length<1||args.fixtures.length>6)
         throw Error('Revisión dirigida: entre 1 y 6 partidos con IDs verificados')
       const now=Date.now(),env=await sportsEnv(ctx)
@@ -2250,7 +2276,19 @@ export function apply(ctx: Context): void {
       const feed=dailyResearchFetcher(fetch,env)
       // Each event gets its OWN specialist budget; all incomplete events run
       // concurrently so a slow provider cannot delay the rest of the slate.
-      const attempts=await Promise.allSettled(args.fixtures.map(async (fixture)=>{
+      const session=exec.agent?.session
+      const cached=session?researchForRequest(session)?.dossiers:undefined
+      const canonicalFixtures=await Promise.all(args.fixtures.map(async fixture=>{
+        if(fixture.sport!=='basketball'||(fixture.league!=='nba'&&fixture.league!=='wnba'))return fixture
+        const slate=await basketballSlate(fixture.league,fixture.date,feed,now,env).catch(()=>null)
+        const verified=slate?.games.find(game=>game.eventId===fixture.eventId)
+        if(!verified||Date.parse(verified.start)!==Date.parse(fixture.kickoff))return fixture
+        const key=(name:string)=>teamKey(name).replace(/^la(?=lakers|clippers)/u,'losangeles')
+        const pair=[key(fixture.home),key(fixture.away)].sort()
+        if(pair.join('|')!==[key(verified.home.name),key(verified.away.name)].sort().join('|'))return fixture
+        return {...fixture,home:verified.home.name,away:verified.away.name}
+      }))
+      const attempts=await Promise.allSettled(canonicalFixtures.map(async (fixture)=>{
         if(!Number.isFinite(Date.parse(fixture.kickoff))||
           Date.parse(fixture.kickoff)<=now)
           throw Error('Partido iniciado o fecha inválida: no reconstruir un informe prepartido')
@@ -2260,12 +2298,17 @@ export function apply(ctx: Context): void {
         const requested=Number(env.PHOENIX_SPORTS_DOSSIER_BUDGET_MS)
         const dossierBudget=Number.isInteger(requested)&&
           requested>=20_000&&requested<=240_000?requested:180_000
-        const found=await boundedDailyTool(investigateTicketSpecialists(
-          [fixture],feed,now,env,[],dossierBudget),dossierBudget+12_000)
-        return found[0]
+        const key=fixtureKey(fixture)
+        const previous=cached?.get(key)
+        if(previous)return previous.result
+        const result=boundedDailyTool(investigateTicketSpecialists(
+          [fixture],feed,now,env,[],dossierBudget),dossierBudget+12_000).then(([found])=>found)
+        if(cached&&cached.size<48)cached.set(key,{result})
+        return result
       }))
+      const uiBlocks:Array<ReturnType<typeof projectDirectedTicketResearch>['uiBlock']>=[]
       const reports=attempts.map((attempt,index)=>{
-        const fixture=args.fixtures[index]
+        const fixture=canonicalFixtures[index]
         if(!fixture)return{
           eventId:'',sport:'unknown',state:'technical-error',complete:false,
           reason:'Fixture ausente en la respuesta de revisión dirigida',
@@ -2276,29 +2319,19 @@ export function apply(ctx: Context): void {
           reason:String(attempt.status==='rejected'?attempt.reason:
             'El investigador no devolvió un informe').slice(0,240),
         }
-        const check=attempt.value,summary=summarizeTicketSpecialist(check,fixture.sport)
-        return{
-          eventId:check.eventId,sport:check.sport,league:check.league,
-          state:summary.state,complete:check.checklist?.complete===true,
-          evidence:summary,verifiedSteps:check.verifiedSteps.slice(0,22),
-          pendingSteps:check.pendingSteps.slice(0,18),
-          checklist:check.checklist??null,
-          injuryAudit:check.injuryAudit??null,
-          rosterMatchedInjuries:check.rosterMatchedInjuries??null,
-          restHours:check.restHours??null,
-          teamComparison:check.teamComparison??null,
-          newsFindings:check.newsFindings??[],
-          nhlStarterAudit:check.nhlStarterAudit??null,
-          playerHistoryAudit:check.playerHistoryAudit??null,
-          endpointAudit:check.endpointAudit?.slice(0,28)??[],
-          sourceChecks:check.sourceChecks?.slice(0,10)??[],
-          freeInjuryChecks:check.freeInjuryChecks?.slice(0,6)??[],
-        }
+        const {uiBlock,...report}=projectDirectedTicketResearch(fixture,attempt.value)
+        uiBlocks.push(uiBlock)
+        return report
       })
       return JSON.stringify({
-        checkedAt:new Date(now).toISOString(),rechecked:reports.length,reports,
+        checkedAt:new Date(now).toISOString(),rechecked:reports.length,reports,uiBlocks,
         priced:false,placed:false,approvedForBetting:false,
-        instruction:'Kira: estos son datos originales de ambos equipos y jugadores para comparar por tu cuenta, incluso para ALTERNATIVAS que tú descubriste con IDs ESPN válidos. No conviertas las estadísticas en puntos, penalizaciones ni fórmula para elegir. Si te falta noticia, jugador, estatus o informe, usa sports_chat_autonomous_sources con TU pregunta y contrasta el contenido de una fuente oficial o medio independiente. Diferencia roster, titularidad y lesión; no repitas el barrido del calendario ni inventes cuotas. Elige tú y razona cada pata.',
+        instruction:[
+          'Entrega ya la investigación por partido usando los datos visibles de uiBlocks, inclusive si el ticket queda incompleto.',
+          'Distingue hechos, riesgos y pendientes. No repitas esta recuperación para los mismos partidos en el turno.',
+          'Para un dato decisivo usa una consulta concreta a la fuente original o investiga un sustituto verificado.',
+          'Cotiza al final una sola vez. Si quedan menos selecciones sustentadas, devuelve el análisis parcial y su motivo.',
+        ].join(' '),
       })
     },
     presentCall:()=>({ card:'generic',title:'Recuperar datos pendientes de las patas del ticket',kind:'read' as const }),
