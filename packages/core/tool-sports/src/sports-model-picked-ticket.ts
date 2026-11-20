@@ -133,6 +133,7 @@ type ModelChosenTicket = {
   complete: boolean
   priced: boolean
   finalReady: boolean
+  ticketStatus: 'documented'|'quoted-conditional'|'research-draft'
   finalizationMissing: string[]
   /** The receipt is supplied by the model; source content remains separately audited. */
   researchEvidenceStatus: 'trusted'|'self-reported'
@@ -197,6 +198,7 @@ export async function quoteKiraChosenTicket(chosen:readonly ModelChosenLeg[],
   const finalizationMissing=[...ticketResearchChecklist(chosen),
     ...ticketExpertEvidenceChecklist(chosen,observedStages,true)]
   const finalReady=complete&&finalizationMissing.length===0
+  const ticketStatus=finalReady?'documented':complete?'quoted-conditional':'research-draft'
   const trustedComplete=chosen.every((leg) => {
     try{return REQUIRED_EXPERT_STAGES.every(stage=>
       observedStages?.(leg)?.includes(stage)===true)}catch{return false}
@@ -216,6 +218,10 @@ export async function quoteKiraChosenTicket(chosen:readonly ModelChosenLeg[],
       quoteStatus:q?'espn-observed' as const:'unpriced' as const,
       quoteSource:q?.source??'ESPN sin oferta cotejada',
       quoteObservedAt:q?.observedAt??null,
+      ...(q?{bookmakerBreakEvenPct:Number((100/q.price).toFixed(2)),
+        quoteEventId:leg.eventId,quoteSelection:name,quoteMarket:q.market,
+        quoteAcceptedByBookmaker:false as const}:{}),
+      pendingEvidence:leg.criticalPending?.slice(0,5).map(item=>item.slice(0,240))??[],
       displayStatus:'research-selection' as const,
     }
   })
@@ -223,18 +229,22 @@ export async function quoteKiraChosenTicket(chosen:readonly ModelChosenLeg[],
     selection:q.selection,price:q.price,bookmaker:q.bookmaker,
     source:q.source??'ESPN',observedAt:q.observedAt }]:[])
   const product=complete?quotes.reduce((total,q)=>total*q.price,1):null
-  return{ complete,priced,finalReady,finalizationMissing,
+  return{ complete,priced,finalReady,finalizationMissing,ticketStatus,
     researchEvidenceStatus:trustedComplete?'trusted' as const:'self-reported' as const,
     placed:false as const,
     bookmaker:best,quotes,missing,
     uiBlock:{ component:'sports_ticket_card' as const,version:1 as const,props:{
-      title:finalReady?'PHOENIX · Ticket final de análisis':
-        'PHOENIX · Selecciones razonadas por Kira',
+      title:finalReady?'PHOENIX · Ticket final de análisis':complete?
+        'PHOENIX · Ticket cotizado condicional':'PHOENIX · Ticket de investigación incompleto',
       subtitle:finalReady?'5–6 selecciones · evidencia documentada y cotizada':
-        complete?'Cotizado, aún NO definitivo · evidencia pendiente':
+        complete?`${chosen.length}/${requestedCount} selecciones · ${best} · evidencia pendiente`:
           'Investigación incompleta · selecciones o cuotas de un mismo operador pendientes',
       source:'ESPN Site/Core · verificación exacta de cuotas por evento',
       requestedLegs:requestedCount,legs,
+      presentationStatus:finalReady?'final-research':'research-selection',
+      dataCounts:{eventsFound:chosen.length,quotedLegs:quotes.length,
+        researchedLegs:finalReady?chosen.length:0,candidateLegs:chosen.length,
+        conditionalLegs:finalReady?0:chosen.length,approvedForBetting:0},
       combinedOdds:product===null?'No disponible':product.toFixed(3),
       note:(finalReady?'TICKET FINAL DE ANÁLISIS, NO APUESTA ACEPTADA. ':
         complete?'COTIZADO PERO NO DEFINITIVO: '+finalizationMissing.slice(0,3).join(' | ')+'. ':

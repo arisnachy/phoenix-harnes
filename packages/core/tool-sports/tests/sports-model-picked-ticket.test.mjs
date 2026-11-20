@@ -129,4 +129,19 @@ test('keeps usable same-book prices and the original six-leg target when one pic
   assert.equal(split.bookmaker,'DraftKings')
   assert.equal(split.missing.length,1)
   assert.equal(split.complete,false)
+
+  const conditional=await quoteKiraChosenTicket(chosen.map(item=>({
+    ...item,criticalPending:['Quinteto final sin publicar'],
+  })),fetcher(),now,5)
+  assert.equal(conditional.ticketStatus,'quoted-conditional')
+  assert.equal(conditional.finalReady,false)
+  assert.equal(conditional.priced,true)
+  assert.equal(conditional.placed,false)
+  assert.equal(conditional.uiBlock.props.dataCounts.approvedForBetting,0)
+  assert.equal(conditional.uiBlock.props.dataCounts.quotedLegs,5)
+  assert.equal(conditional.uiBlock.props.legs.length,5)
+  assert.notEqual(conditional.uiBlock.props.combinedOdds,'No disponible')
+  assert.match(conditional.uiBlock.props.title,/cotizado condicional/u)
+  assert.deepEqual(conditional.uiBlock.props.legs[0].pendingEvidence,['Quinteto final sin publicar'])
+  assert.equal(split.ticketStatus,'research-draft')
 })
