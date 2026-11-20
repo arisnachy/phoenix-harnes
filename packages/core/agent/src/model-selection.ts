@@ -1582,12 +1582,14 @@ export function installModelSelection(
     async (_payload, next): Promise<LlmCallConfig> => {
       const inherited = await next()
       const selected = selection.assembled ?? effectiveSelection(agentCtx.agent)
+      // No override means no snapshot change: preserve the original object
+      // identity for callers and existing waterfall contracts.
+      if (selected === undefined) return inherited
       // Service speed is independent of planning effort and survives every
       // Sol/Luna handoff. Never leak a Codex speed setting to other providers.
       const { serviceTier: _oldServiceTier, ...base } = inherited
       const resolved: LlmCallConfig = selected?.provider === 'openai-codex' && selected.serviceTier !== undefined
         ? { ...base, serviceTier: selected.serviceTier } : base
-      if (selected === undefined) return resolved
       const scopedAgent = agentCtx.agent
       if (scopedAgent !== undefined && latestModelSelectionPreference(scopedAgent.session) === undefined) {
         persistModelSelectionPreference(scopedAgent.session, selected, 'default')
