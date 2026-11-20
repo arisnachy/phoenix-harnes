@@ -89,7 +89,9 @@ function selectionOf(state: ModelDirectoryState, id: string): ModelSelection | u
 
 const NS = 'model'
 
-export const inject = ['commandUi', 'connection', 'locale', 'sessions', 'slots', 'remote']
+// The composer model seat is essential even when the optional /model command
+// registry is unavailable. Its own ctx.inject(['commandUi', ...]) mounts later.
+export const inject = ['connection', 'locale', 'sessions', 'slots', 'remote']
 
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, es }), 'ui-model-selection: dictionaries')
