@@ -121,8 +121,24 @@ const fixtureFields={
   eventId:20,sport:25,league:65,date:10,home:100,away:100,kickoff:55,
 }
 
-/** Project event-bound findings to the actual research widget and a small model result. */
-export function projectDirectedTicketResearch(fixture:SpecialistFixture,check:SpecialistGate){
+type DirectedTicketResearch={
+  uiBlock:{component:'sports_research_table';version:1;props:Fields}
+  eventId:string
+  sport:string
+  league:string
+  state:ReturnType<typeof summarizeTicketSpecialist>['state']
+  complete:boolean
+  pendingSteps:string[]
+  verifiedSteps:string[]
+}
+
+/**
+ * Project event-bound findings into a compact native research table.
+ * @param fixture - Verified matchup and provider identity.
+ * @param check - Specialist evidence collected for the fixture.
+ * @returns Native table and the model-facing research status.
+ */
+export function projectDirectedTicketResearch(fixture:SpecialistFixture,check:SpecialistGate):DirectedTicketResearch{
   const summary=summarizeTicketSpecialist(check,fixture.sport)
   const side=(team:ComparativeTeam|undefined)=>{
     const players=team?.players??[]
