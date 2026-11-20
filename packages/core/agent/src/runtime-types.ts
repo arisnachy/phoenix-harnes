@@ -30,6 +30,8 @@ export interface AgentOptions {
   maxTokens?: number
   /** Explicit adapter reasoning level for this Agent's requests. */
   reasoningEffort?: ReasoningEffortId
+  /** Codex-only serving speed; other providers do not receive it. */
+  serviceTier?: 'default' | 'fast'
 }
 
 /** Options for {@link Agent.cancel}. */
