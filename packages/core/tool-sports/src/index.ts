@@ -2249,11 +2249,12 @@ export function apply(ctx: Context): void {
         multisportSatisfied:result.multisportSatisfied,researchedLegs:result.researchedLegs,
         modelSelectionRequired:true,explicitModelSelectionPending:true,
         instruction:[
-          'Entrega ya la tarjeta. quoted-conditional significa ticket completo en tamaño y precio con investigación pendiente.',
+          'Entrega ya la tarjeta de este resultado. quoted-conditional significa ticket completo en patas y cuotas con investigación pendiente.',
           'approvedLegs=0 describe aprobación de apuesta. Usa quotedLegs y ticketStatus para describir el ticket.',
           'Da por pata evidencia favorable, principal objeción, fuente, cuota, umbral de equilibrio y pendientes.',
           'Si cambias una selección o las cuotas vencen, cotiza los eventos exactos al cierre con sports_chat_ticket_model_chosen para ganadores directos.',
-          'Conserva 1X/X2 auténticos como observaciones condicionales. No repitas el barrido ni afirmes aceptación de la casa.',
+          'Incluso con alertas, si hay 5/5 cuotas vigentes da el ticket completo condicional. Evita volver a listar la cartelera.',
+          'Conserva 1X/X2 auténticos como observaciones condicionales y deja la aceptación de la casa sin confirmar.',
         ].join(' ') })
     },
     presentCall:()=>({ card:'generic',title:'Investigar ticket cotizado de 5 o 6 patas',kind:'read' as const }),
