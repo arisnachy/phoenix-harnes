@@ -119,6 +119,8 @@ export interface ModelSelection {
   model: string
   /** Adapter-owned reasoning effort; absence preserves adapter/provider default behavior. */
   reasoningEffort?: string
+  /** Codex-only serving speed; missing value preserves standard behavior. */
+  serviceTier?: 'default' | 'fast'
 }
 
 /** One adapter-owned reasoning effort displayed for an exact model route. */
@@ -321,6 +323,7 @@ export interface SessionsApi {
     provider: string
     model: string
     reasoningEffort?: string
+    serviceTier?: 'default' | 'fast'
   }>):
   Promise<RpcResponse<{ selected: ModelSelection }>>
 
