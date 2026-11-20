@@ -31,12 +31,16 @@ export interface LastPickerSelection {
   model: string
   /** Selected effort, when managed explicitly by the picker. */
   reasoningEffort?: string
+  /** Codex serving tier; independent of the selected reasoning effort. */
+  serviceTier?: 'default' | 'fast'
   /** Provider-native route this picker choice corresponded to. */
   runtimeProvider: string
   /** Provider-native model id (never the synthetic Eclipse selector). */
   runtimeModel: string
   /** Native reasoning effort, if any. */
   runtimeReasoningEffort?: string
+  /** Serving tier of the native model route. */
+  runtimeServiceTier?: 'default' | 'fast'
 }
 
 /** Stored and composed default model selection. */
@@ -47,6 +51,8 @@ export interface AgentDefaultModelSettings {
   model: string
   /** Adapter-owned reasoning effort, or provider/default behavior when absent. */
   reasoningEffort?: string
+  /** Codex serving speed for future conversations. */
+  serviceTier?: 'default' | 'fast'
   /** Eclipse orchestration preferences, never interpreted as a model id. */
   eclipse?: EclipseRoutingSettings
   /** Most recently accepted Web picker choice, kept separate from the executable route. */
@@ -119,9 +125,11 @@ const lastPickerSelectionSchema: z<LastPickerSelection> = z.object({
   provider: z.string().required(),
   model: z.string().required(),
   reasoningEffort: z.string().required(false),
+  serviceTier: z.union(['default', 'fast']).required(false),
   runtimeProvider: z.string().required(),
   runtimeModel: z.string().required(),
   runtimeReasoningEffort: z.string().required(false),
+  runtimeServiceTier: z.union(['default', 'fast']).required(false),
 })
 
 /** Schema of the default Agent model settings section. */
@@ -129,6 +137,7 @@ export const AGENT_DEFAULT_MODEL_SETTINGS_SCHEMA: z<AgentDefaultModelSettings> =
   provider: z.string().required(),
   model: z.string().required(),
   reasoningEffort: z.string().required(false),
+  serviceTier: z.union(['default', 'fast']).required(false),
   lastPickerSelection: lastPickerSelectionSchema.default(undefined as unknown as LastPickerSelection),
   eclipse: eclipseRoutingSettingsSchema.default(undefined as unknown as EclipseRoutingSettings),
 })
@@ -149,6 +158,7 @@ function selection(settings: AgentDefaultModelSettings): ModelSelection {
     ...settings.reasoningEffort === undefined
       ? {}
       : { reasoningEffort: ReasoningEffortId(settings.reasoningEffort) },
+    ...settings.serviceTier === undefined ? {} : { serviceTier: settings.serviceTier },
   }
 }
 
@@ -202,13 +212,15 @@ export class AgentDefaultModelConfig extends Service {
     if (latest === undefined) return this.currentSelection()
     const runtime = this.currentSelection()
     if (latest.runtimeProvider !== runtime.provider || latest.runtimeModel !== runtime.model
-      || (latest.runtimeReasoningEffort ?? '') !== String(runtime.reasoningEffort ?? '')) {
+      || (latest.runtimeReasoningEffort ?? '') !== String(runtime.reasoningEffort ?? '')
+      || (latest.runtimeServiceTier ?? 'default') !== (runtime.serviceTier ?? 'default')) {
       return runtime
     }
     return {
       provider: latest.provider,
       model: latest.model,
       ...latest.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(latest.reasoningEffort) },
+      ...latest.serviceTier === undefined ? {} : { serviceTier: latest.serviceTier },
     }
   }
 
@@ -243,13 +255,16 @@ export class AgentDefaultModelConfig extends Service {
       provider: runtime.provider,
       model: runtime.model,
       ...runtime.reasoningEffort === undefined ? {} : { reasoningEffort: String(runtime.reasoningEffort) },
+      ...runtime.serviceTier === undefined ? {} : { serviceTier: runtime.serviceTier },
       lastPickerSelection: {
         provider: selected.provider,
         model: selected.model,
         ...selected.reasoningEffort === undefined ? {} : { reasoningEffort: String(selected.reasoningEffort) },
+        ...selected.serviceTier === undefined ? {} : { serviceTier: selected.serviceTier },
         runtimeProvider: runtime.provider,
         runtimeModel: runtime.model,
         ...runtime.reasoningEffort === undefined ? {} : { runtimeReasoningEffort: String(runtime.reasoningEffort) },
+        ...runtime.serviceTier === undefined ? {} : { runtimeServiceTier: runtime.serviceTier },
       },
       ...current.eclipse === undefined ? {} : { eclipse: current.eclipse },
     })
@@ -264,6 +279,7 @@ export class AgentDefaultModelConfig extends Service {
       provider: next.provider,
       model: next.model,
       ...next.reasoningEffort === undefined ? {} : { reasoningEffort: String(next.reasoningEffort) },
+      ...next.serviceTier === undefined ? {} : { serviceTier: next.serviceTier },
       ...this.source().eclipse === undefined ? {} : { eclipse: this.source().eclipse },
       ...this.source().lastPickerSelection === undefined ? {} : { lastPickerSelection: this.source().lastPickerSelection },
     })
