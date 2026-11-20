@@ -146,17 +146,26 @@ const errorResult=(game:SpecialistFixture,message:string):SpecialistGate=>({
 /** Run the real discipline-specific researcher for a previously verified ESPN fixture.
  * Official NHL/MLB IDs are resolved by BOTH teams and kickoff, never reused as ESPN IDs.
  */
+/**
+ * Identify fixtures with a dedicated bilateral research path.
+ * @param game - Sport and provider league of the fixture.
+ * @returns Whether a specialist supports the matchup.
+ */
+export function ticketSpecialistSupported(game:Pick<SpecialistFixture,'sport'|'league'>):boolean{
+  return game.sport==='soccer'||game.sport==='football'&&game.league==='nfl'
+    ||game.sport==='basketball'&&['nba','wnba'].includes(game.league)
+    ||game.sport==='hockey'&&game.league==='nhl'
+    ||game.sport==='baseball'&&game.league==='mlb'
+    ||game.sport==='tennis'&&['atp','wta'].includes(game.league)
+}
+
 export async function investigateTicketSpecialist(
   game:SpecialistFixture,fetcher:typeof fetch=fetch,
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
   quotes:MarketOutcome[]=[],
 ):Promise<SpecialistGate>{
   const base={sport:game.sport,league:game.league,eventId:game.eventId}
-  const eligible=game.sport==='soccer'||game.sport==='football'&&game.league==='nfl'
-    ||game.sport==='basketball'&&['nba','wnba'].includes(game.league)
-    ||game.sport==='hockey'&&game.league==='nhl'
-    ||game.sport==='baseball'&&game.league==='mlb'
-    ||game.sport==='tennis'&&['atp','wta'].includes(game.league)
+  const eligible=ticketSpecialistSupported(game)
   // Source verification overlaps the specialist: no serial network waterfall.
   // Failures are isolated; absence in a small feed cannot negate an ESPN game.
   const sourceTask:Promise<BackupFinding[]>=eligible

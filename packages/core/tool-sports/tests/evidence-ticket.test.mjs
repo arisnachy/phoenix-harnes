@@ -150,6 +150,17 @@ test('expert priority can replace weaker historical ranking before verifying the
   assert.ok(report.selections.some(x=>/Revisión de alternativas/.test(x.rationale??'')))
 })
 
+test('verified bilateral coverage takes precedence over the historical candidate order',async()=>{
+  const inspected=[]
+  const report=await evidenceTicket(5,day,'soccer',mock(),now,process.env,async pool=>{
+    inspected.push(...pool)
+    return [{eventId:pool[5].eventId,excluded:false,priority:0,bilateralEvidence:true,
+      reason:'Datos bilaterales observados'}]
+  })
+  assert.equal(report.verifiedEvents,5)
+  assert.equal(report.events[0].eventId,inspected[5].eventId)
+})
+
 test('a verified NBA/soccer fixture survives a later rotating or paginated ESPN scoreboard',async()=>{
   let dailyFetches=0
   const mutating=async url=>{

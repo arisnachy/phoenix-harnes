@@ -447,7 +447,12 @@ export function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
           flow.push({ kind: 'healthia', key: 'healthia:' + node.key, blocks: healthCards })
         }
         sportsCards.push(...sportsCardsFromToolResult(result))
-        sportsCards = sportsCards.slice(-12)
+        // Fixture drills can return a dozen cards after a quote tool settles.
+        // Preserve the latest ticket ahead of those supplemental cards.
+        const latestTicket=sportsCards.findLast(card=>card.component==='sports_ticket_card')
+        const recent=sportsCards.slice(-12)
+        sportsCards=latestTicket&&!recent.includes(latestTicket)?
+          [latestTicket,...recent.slice(1)]:recent
         // A settled Binance result owns its native dashboard immediately.
         // Do not depend on the assistant generating JSON or a special fence.
         const trading = tradingRequested ? tradingDashboardFromToolResult(result) : undefined
@@ -523,6 +528,8 @@ export function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
     // User-owned trading launch guarantees a truthful visor even if Kira's
     // assistant response forgets to emit a visual artifact/tool call.
     if (node.kind === 'user' || node.kind === 'steering') {
+      const ticket=sportsCards.findLast(card=>card.component==='sports_ticket_card')
+      if(ticket)flow.splice(flow.length-1,0,{kind:'sports',key:'sports:before:'+node.key,blocks:[ticket]})
       sportsCards = []
       // Previous game analyses belong to their own turns. Reusing the same
       // 'analysis:active' identity across users' turns replaced a card far
@@ -539,6 +546,8 @@ export function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
   }
 
   flush()
+  const lastTicket=sportsCards.findLast(card=>card.component==='sports_ticket_card')
+  if(lastTicket)flow.push({kind:'sports',key:'sports:pending-ticket',blocks:[lastTicket]})
   return flow
 }
 
