@@ -150,11 +150,12 @@ async function fetchBounded(url:string,fetcher:typeof fetch,now:number):Promise<
  * @param fetcher - Injectable network adapter for CI and runtime.
  * @param now - Evidence observation time.
  * @param maxPlayers - Maximum individually queried athletes per team (1..20).
+ * @param athleteBudgetMs - Optional deadline for individual enrichment.
  * @returns Team and player metric payloads, plus per-endpoint coverage.
  */
 export async function collectDirectEspnStats(
   sport:string,league:string,teams:readonly {id:string;name:string}[],
-  fetcher:typeof fetch=fetch,now=Date.now(),maxPlayers=12,
+  fetcher:typeof fetch=fetch,now=Date.now(),maxPlayers=12,athleteBudgetMs?:number,
 ):Promise<DirectDossier>{
   if(!Object.hasOwn(sportsCatalog,sport)||!sportsCatalog[sport]?.includes(league)
     ||!validSlug(sport)||!validSlug(league)||teams.length<1||teams.length>2
@@ -164,6 +165,10 @@ export async function collectDirectEspnStats(
   const site='https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+'/'
   const web='https://site.web.api.espn.com/apis/common/v3/sports/'+sport+'/'+league+'/'
   const result:DirectTeam[]=[],jobs:Task[]=[],splitFallback=new Map<DirectAthlete,unknown>()
+  const athleteBudget=athleteBudgetMs===undefined?null:AbortSignal.timeout(athleteBudgetMs)
+  const athleteFetch:typeof fetch=athleteBudget?((url,options)=>fetcher(url,{
+    ...options,signal:options?.signal?AbortSignal.any([options.signal,athleteBudget]):athleteBudget,
+  })):fetcher
   let requests=0,errors=0
   const add=(url:string,type:string,destination:(value:unknown|null)=>void)=>
     jobs.push({url,type,destination})
@@ -345,11 +350,14 @@ export async function collectDirectEspnStats(
   // Six bounded parallel first-party GETs shorten NBA all-player collection;
   // per-endpoint deadlines, roster ID checks and provider-failure tracking
   // remain intact. Do not run the dozens of gamelogs serially after a 45s gate.
+  jobs.sort((a,b)=>Number(b.type.startsWith('team_'))-Number(a.type.startsWith('team_')))
   let cursor=0
   await Promise.all(Array.from({length:Math.min(6,jobs.length)},async()=>{
     while(cursor<jobs.length){
       const task=jobs[cursor++]!
-      const response=await fetchBounded(task.url,fetcher,now)
+      const teamTask=task.type.startsWith('team_')
+      if(!teamTask&&athleteBudget?.aborted)continue
+      const response=await fetchBounded(task.url,teamTask?fetcher:athleteFetch,now)
       requests++
       if(response===null)errors++
       task.destination(response)

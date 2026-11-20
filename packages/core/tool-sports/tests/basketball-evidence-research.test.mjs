@@ -20,7 +20,7 @@ const squad=(tid)=>Array.from({length:5},(_,i)=>({
 const history=(league)=>({events:[{
   id:'600100',date:'2026-10-29T22:00:00Z',season:{type:2},
   status:{type:{state:'post',completed:true}},competitions:[{competitors:[
-    {homeAway:'home',team:{id:league==='nba'?'10':'30',displayName:'Prior Home'},score:'110'},
+    {homeAway:'home',team:{id:league==='nba'?'10':'30',displayName:'Prior Home'},score:{value:110,displayValue:'110'}},
     {homeAway:'away',team:{id:league==='nba'?'20':'40',displayName:'Prior Away'},score:'102'},
   ]}]
 }]})
@@ -98,6 +98,8 @@ test('research case verifies 5-on-5 IDs, injury identity and same-book timestamp
   ],5)
   assert.equal(casefile.regulationMinutes,48)
   assert.equal(casefile.teams.home.roster.length,5)
+  assert.equal(casefile.teams.home.lastGames[0]?.pts,110)
+  assert.equal(casefile.teams.away.lastGames[0]?.pts,102)
   assert.equal(casefile.teams.away.roster.length,5)
   assert.equal(casefile.teams.home.quintetConfirmed,true)
   assert.equal(casefile.teams.away.quintetConfirmed,true)
