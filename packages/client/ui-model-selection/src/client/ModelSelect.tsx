@@ -518,7 +518,10 @@ export function ModelSelect(
                             className={clsx(css.option, css.modelOption, selected && css.selected)}
                             key={model.id}
                             disabled={busy}
-                            onClick={() => { choose({ provider: group.id, model: model.id }) }}
+                            onClick={() => { choose({ provider: group.id, model: model.id,
+                              ...group.id === 'openai-codex' && state.current?.provider === 'openai-codex'
+                                && state.current.serviceTier !== undefined ? { serviceTier: state.current.serviceTier } : {},
+                            }) }}
                           >
                             <ProviderLogo providerId={group.id} providerName={group.name} />
                             <span className={css.optionCopy}>
