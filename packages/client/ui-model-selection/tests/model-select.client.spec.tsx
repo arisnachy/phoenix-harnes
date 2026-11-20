@@ -77,7 +77,7 @@ describe('ModelSelect root menu', () => {
     expect(picker.textContent).toContain('low')
     fireEvent.click(picker)
     expect(screen.getByRole('menuitem', { name: /模型/ })).toBeTruthy()
-    expect(screen.getByRole('menuitem', { name: /推理等级/ })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: /推理等级/ })).toBeNull()
   })
 
   it('offers model and reasoning controls without the standalone AI Team link', () => {
