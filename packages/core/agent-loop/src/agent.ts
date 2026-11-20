@@ -767,6 +767,10 @@ export class ReactLoopAgent implements Agent {
         && persistedHeader?.adapterDefaults?.reasoningEffort !== true
         ? persistedConfig.reasoningEffort
         : undefined)
+    const serviceTier = route.provider === 'openai-codex'
+      ? this.options.serviceTier ?? (persistedConfig?.provider === route.provider
+        && persistedConfig.model === route.model ? persistedConfig.serviceTier : undefined)
+      : undefined
     const maxTokens = this.options.maxTokens
     const seedConfig = deepFreeze(structuredClone(
       this.requestHeaderLogged
@@ -775,6 +779,7 @@ export class ReactLoopAgent implements Agent {
         : {
           ...route,
           ...reasoningEffort === undefined ? {} : { reasoningEffort },
+          ...serviceTier === undefined ? {} : { serviceTier },
           ...maxTokens === undefined ? {} : { maxTokens },
         },
     ))
