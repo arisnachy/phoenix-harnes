@@ -2712,6 +2712,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                 : { reasoningEffort: ReasoningEffortId(reasoningEffort) },
               ...serviceTier === undefined ? {} : { serviceTier },
             }
+            if (serviceTier !== undefined && serviceTier !== 'default' && serviceTier !== 'fast') {
+              throw new Error('Unsupported Codex serving speed')
+            }
             if (serviceTier !== undefined && provider !== 'openai-codex') {
               throw new Error('Only OpenAI Codex supports serving speed selection')
             }
