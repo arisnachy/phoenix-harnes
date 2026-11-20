@@ -416,12 +416,21 @@ describe('chat tool activity grouping', () => {
     const node={...settledTool('ticket-auto-'+count),seq:3,time:3000,
       call:{name:'sports_chat_ticket_research_auto',argsRaw:JSON.stringify({count})},
       content:[{type:'text' as const,text:JSON.stringify({uiBlock:ticket})}]}
-    renderChat([user(1,'Dame un ticket de '+count+' pronósticos'),node,assistantWithReasoning(4)])
+    const gameCards=Array.from({length:13},(_,i)=>({component:'sports_game_card',version:1,props:{
+      title:'Cruce '+i,when:'8:00 p. m.',home:{label:'Local '+i},
+      away:{label:'Visitante '+i},source:'ESPN Site API',
+    }}))
+    const lookup={...settledTool('ticket-follow-up-'+count),seq:4,time:4000,
+      call:{name:'sports_chat_games',argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({uiBlocks:gameCards})}]}
+    const nodes:ConversationNode[]=[user(1,'Dame un ticket de '+count+' pronósticos'),node,lookup]
+    if(count===5)nodes.push(assistantWithReasoning(5))
+    renderChat(nodes)
     const sports=screen.getByRole('region',{name:'Panel deportivo de Kira'})
     expect(sports.querySelector('[data-generative-ui="sports_ticket_card"]')).toBeTruthy()
     expect(sports.textContent).toContain(count+' / '+count)
     expect(sports.textContent).toContain('Visitante '+(count-1))
-    expect(sports.querySelectorAll('article')).toHaveLength(count)
+    expect(sports.querySelectorAll('[data-generative-ui="sports_ticket_card"] article')).toHaveLength(count)
     expect(sports.querySelectorAll('img').length).toBeGreaterThanOrEqual(count)
     expect(screen.getAllByText('Ver fundamento')).toHaveLength(count)
     expect(screen.getByRole('button',{name:'Tools'}).getAttribute('aria-expanded')).toBe('false')

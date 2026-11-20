@@ -15,6 +15,7 @@ import { composeTicketLegNarrative } from './sports-ticket-narrative.ts'
 import { discoverEditorialResearch } from './sports-editorial-discovery.ts'
 import { discoverGdeltTicketNews,type GdeltReport } from './sports-gdelt-editorial.ts'
 import { sameEspnTeam } from './sports-exact-espn-winner.ts'
+import { ticketSpecialistSupported } from './ticket-specialist-gate.ts'
 import type { KeylessQuote } from './keyless-odds.ts'
 import type { EspnMarketQuote } from './espn-odds.ts'
 export type TicketPreselectCandidate={
@@ -33,6 +34,7 @@ export type TicketPreselectVerdict={
   excluded:boolean
   priority:number
   reason:string
+  bilateralEvidence?:boolean
 }
 /** Distinguish provider-confirmed fixtures from fully ranked research legs. */
 export type TicketDiscoveryAudit={
@@ -399,9 +401,13 @@ export async function evidenceTicket(
     if(books.size)bookmakersByEvent.set(candidate.eventId,books)
   }
   const quotedIds=new Set(bookmakersByEvent.keys())
+  const bilateralEvidence=new Set<string>()
+  const coverage=(row:typeof candidateLegs[number])=>
+    bilateralEvidence.has(row.pick.eventId)?2:
+      reviewCandidates&&ticketSpecialistSupported(row.pick)?1:0
   const researchFirst=(a:typeof candidateLegs[number],
     b:typeof candidateLegs[number])=>
-    b.rank-a.rank||a.pick.eventId.localeCompare(b.pick.eventId)
+    coverage(b)-coverage(a)||b.rank-a.rank||a.pick.eventId.localeCompare(b.pick.eventId)
   candidateLegs.sort(researchFirst)
   // The expert critic can review MORE than five preliminary candidates.
   // An invalid fixture may be rejected and replaced before the final ticket
@@ -444,6 +450,7 @@ export async function evidenceTicket(
         const decision=decisions.get(row.pick.eventId)
         if(!decision)continue
         if(decision.excluded){candidateLegs.splice(i,1);continue}
+        if(decision.bilateralEvidence===true)bilateralEvidence.add(row.pick.eventId)
         // Explicitly reviewed expert evidence dominates marginal differences
         // in historical form; unrated pool candidates stay at descriptive tier.
         row.rank+=decision.priority
@@ -466,9 +473,13 @@ export async function evidenceTicket(
       .sort(researchFirst) }))
     .filter(row=>row.candidates.length>=count)
     .sort((a,b)=>{
+      const compareCoverage=(tier:number)=>
+        b.candidates.slice(0,count).filter(row=>coverage(row)>=tier).length-
+        a.candidates.slice(0,count).filter(row=>coverage(row)>=tier).length
       const score=(rows:typeof a.candidates)=>rows.slice(0,count)
         .reduce((sum,row)=>sum+row.rank,0)
-      return score(b.candidates)-score(a.candidates)||a.book.localeCompare(b.book)
+      return compareCoverage(2)||compareCoverage(1)||score(b.candidates)-score(a.candidates)||
+        a.book.localeCompare(b.book)
     })
   const selectionPool=sameBookPools[0]?.candidates??
     (quoteEligible.length>=count?quoteEligible:candidateLegs)
@@ -479,8 +490,12 @@ export async function evidenceTicket(
   // diversity reporting when ESPN prices exist only in one discipline.
   const preferDiversity=!singleSport&&
     (quotedIds.size===0||quoteSports.size>=2)
-  const { chosen:selected }=diversifiedSportsPicks(
-    selectionPool,count,preferDiversity)
+  const selected=([2,1,0] as const).reduce<typeof candidateLegs>((chosen,tier)=>{
+    const remaining=count-chosen.length
+    if(remaining===0)return chosen
+    const candidates=selectionPool.filter(row=>coverage(row)===tier)
+    return [...chosen,...diversifiedSportsPicks(candidates,remaining,preferDiversity).chosen]
+  },[])
   const multisportSatisfied=singleSport||count<=1||
     new Set(selected.map(x=>x.pick.sport)).size>=2
   const chosen=selected.map(x=>({
