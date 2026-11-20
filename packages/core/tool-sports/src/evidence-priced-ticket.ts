@@ -210,7 +210,10 @@ export async function evidencePricedTicket(
         (review.criticalUnknowns.length?'; por confirmar: '+
           review.criticalUnknowns.join(' | '):'')+
         (conflicts?'; conflicto de identidad':'')
-      return[{ eventId:fixture.eventId,excluded:conflicts,
+      const bilateralEvidence=check.teamComparison!==undefined&&
+        [check.teamComparison.home,check.teamComparison.away].every(side=>
+          side.recentResults.length>0||side.teamStats.length>0||side.players.some(player=>player.stats.length>0))
+      return[{ eventId:fixture.eventId,excluded:conflicts,bilateralEvidence,
         priority,reason }]
     })
   }
