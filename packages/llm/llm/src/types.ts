@@ -357,6 +357,8 @@ export interface GenerateOptions {
   model: string
   /** Adapter-owned reasoning effort selected for this exact model. */
   reasoningEffort?: ReasoningEffortId
+  /** Opt-in Codex response latency tier; absent means provider default. */
+  serviceTier?: 'default' | 'fast'
   /**
    * Ordered conversation messages, exactly as the provider sees them (after
    * the `system` slot). A loop-built request assembles them as
