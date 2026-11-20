@@ -22,6 +22,12 @@ export function formatDailyReport(ticket,{date,slot='morning',checkedAt,goal=5,e
       home:clean(leg.homeTeam??leg.home,100),
       away:clean(leg.awayTeam??leg.away,100),
       selection:clean(leg.selection,130),
+      market:clean(leg.market??leg.marketType,80),
+      line:clean(leg.line??leg.marketLine,80),
+      period:clean(leg.period??leg.marketPeriod,80),
+      settlementRules:clean(leg.settlementRules??leg.marketRules,240),
+      observedAt:clean(leg.observedAt??leg.priceObservedAt??leg.quoteObservedAt,50),
+      priceSource:clean(leg.priceSource??leg.oddsSource,120),
       bookmaker:clean(leg.bookmaker,90),
       price:Number.isFinite(raw)&&raw>1&&raw<1000?raw:null,
       probabilitySource:clean(leg.legProbabilitySource,80),
@@ -88,6 +94,12 @@ export function dailyReportMarkdown(report){
       'Selección: '+(leg.selection||'No cotizada')+' · Casa: '+
       (leg.bookmaker||'No identificada')+' · Cuota observada: '+
       (leg.price??'No disponible'),
+      'Mercado: '+(leg.market||'No identificado')+' · Línea: '+
+      (leg.line||'No identificada')+' · Período: '+
+      (leg.period||'No identificado'),
+      'Reglas: '+(leg.settlementRules||'No verificadas')+
+      ' · Cuota observada: '+(leg.observedAt||'Sin hora individual')+
+      ' · Fuente: '+(leg.priceSource||'No identificada'),
       'Estado: '+leg.researchStatus+' · Origen de porcentaje: '+
       (leg.probabilitySource||'No calibrado'),
       leg.rationale||'Sin análisis suficiente para recomendar',...leg.risks.map(x=>'Riesgo: '+x),'')
