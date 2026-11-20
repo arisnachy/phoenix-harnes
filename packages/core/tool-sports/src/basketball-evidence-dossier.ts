@@ -62,14 +62,16 @@ function recentGames(raw:unknown,fixture:BasketballFixture,teamId:string){
     allowed:number;location:'home'|'away'}>=[]
   for(const x of values(record(raw).events)){
     const e=record(x),d=Date.parse(label(e.date))
-    const status=record(record(e.status).type)
+    const competition=record(values(e.competitions)[0])
+    const status=record(record(e.status??competition.status).type)
     if(!Number.isFinite(d)||d>=cutoff||!isVerifiedRegularSeason(e)||
       (status.state!=='post'&&status.completed!==true))continue
-    const participants=values(record(values(e.competitions)[0]).competitors).map(record)
+    const participants=values(competition.competitors).map(record)
     const me=participants.find(t=>id(record(t.team).id)===teamId)
     const other=participants.find(t=>id(record(t.team).id)!==teamId)
     if(!me||!other||!['home','away'].includes(label(me.homeAway)))continue
-    const pts=amount(me.score),allowed=amount(other.score)
+    const pts=amount(record(me.score).value??me.score)
+    const allowed=amount(record(other.score).value??other.score)
     if(pts===null||allowed===null||pts<0||allowed<0)continue
     out.push({eventId:id(e.id),date:label(e.date,45),
       opponent:label(record(other.team).displayName),pts,allowed,
@@ -217,7 +219,7 @@ function panel(d:Omit<BasketballCase,'uiBlock'>):BasketballCase['uiBlock']{
 }
 export async function researchBasketballCase(league:BasketballLeague,date:string,eventId:string,
   fetcher:typeof fetch=fetch,now=Date.now(),env:NodeJS.ProcessEnv=process.env,
-  quotes:MarketOutcome[]=[],maxPlayers=20):Promise<BasketballCase>{
+  quotes:MarketOutcome[]=[],maxPlayers=20,athleteBudgetMs?:number):Promise<BasketballCase>{
   if(!id(eventId))throw Error('ID de partido no verificable')
   if(!Number.isInteger(maxPlayers)||maxPlayers<1||maxPlayers>20)
     throw Error('Límite de jugadores inválido')
@@ -229,17 +231,30 @@ export async function researchBasketballCase(league:BasketballLeague,date:string
   const root='https://site.api.espn.com/apis/site/v2/sports/basketball/'+league+'/'
   const sources=board.sources
   const day0=Date.parse(date+'T12:00:00Z')
+  const teamIds=[fixture.home.id,fixture.away.id]
+  const readHistory=async()=>{
+    const schedules=await Promise.all(teamIds.map(teamId=>basketballRead<{events?:unknown[]}>(
+      root+'teams/'+teamId+'/schedule?limit=250',fetcher,sources,now)))
+    const byId=new Map(schedules.flatMap(schedule=>values(schedule?.events))
+      .map(event=>[id(record(event).id),event] as const).filter(([eventId])=>eventId))
+    const events=[...byId.values()]
+    if(teamIds.every(teamId=>recentGames({events},fixture,teamId).length>=5))
+      return {events,status:'verified',explanation:'Resultados verificados en ambos calendarios ESPN'}
+    const fallback=await readHistoricalScoreboard(root,
+      new Date(day0-42*86_400_000).toISOString().slice(0,10),
+      new Date(day0-86_400_000).toISOString().slice(0,10),
+      url=>basketballRead<{events?:unknown[]}>(url,fetcher,sources,now),teamIds)
+    for(const event of fallback.events)byId.set(id(record(event).id),event)
+    return {...fallback,events:[...byId.values()]}
+  }
   const [summary,historyReport,injuriesData,newsData,players,editorial]=await Promise.all([
     basketballRead<unknown>(root+'summary?event='+eventId,fetcher,sources,now),
-    readHistoricalScoreboard(root,new Date(day0-42*86_400_000).toISOString().slice(0,10),
-      new Date(day0-86_400_000).toISOString().slice(0,10),
-      url=>basketballRead<{events?:unknown[]}>(url,fetcher,sources,now),
-      [fixture.home.id,fixture.away.id]),
+    readHistory(),
     basketballRead<unknown>(root+'injuries',fetcher,sources,now),
     basketballRead<unknown>(root+'news?limit=30',fetcher,sources,now),
     collectDirectEspnStats('basketball',league,[
       {id:fixture.home.id,name:fixture.home.name},{id:fixture.away.id,name:fixture.away.name}
-    ],fetcher,now,maxPlayers),
+    ],fetcher,now,maxPlayers,athleteBudgetMs),
     discoverEditorialResearch(fixture.home.name+' '+
       fixture.away.name,['covers','vegasinsider'],fetcher,now),
   ])

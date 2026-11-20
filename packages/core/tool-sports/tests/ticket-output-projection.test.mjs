@@ -1,6 +1,28 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { projectPricedTicketForModel } from '../src/ticket-output-projection.ts'
+import { projectDirectedTicketResearch,projectPricedTicketForModel } from '../src/ticket-output-projection.ts'
+
+test('directed recovery publishes bilateral findings when the dossier stays partial',()=>{
+  const fixture={eventId:'401909308',sport:'basketball',league:'nba',date:'2026-11-20',
+    home:'Detroit Pistons',away:'Toronto Raptors',kickoff:'2026-11-21T00:30:00Z'}
+  const team=(name,result)=>({name,recentResults:[result],teamStats:[],players:[]})
+  const injury={athlete:'Cade Cunningham',status:'Questionable',reportedAt:'2026-11-20T18:08:00Z'}
+  const report=projectDirectedTicketResearch(fixture,{
+    ...fixture,status:'incomplete',checkedAt:'2026-11-20T18:30:00Z',
+    verifiedSteps:['Resultados ESPN'],pendingSteps:[],
+    teamComparison:{home:team(fixture.home,'109–102'),away:team(fixture.away,'101–113')},
+    injuryAudit:{status:'partial',source:'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries',
+      home:{injuries:[injury]},away:{injuries:[]}},
+  })
+  assert.equal(report.complete,false)
+  assert.equal(report.state,'partial')
+  assert.equal(report.uiBlock.component,'sports_research_table')
+  assert.deepEqual(report.uiBlock.props.rows[0],{
+    label:'Resultados recientes',home:'109–102',away:'101–113',
+  })
+  assert.match(report.uiBlock.props.rows.find(row=>row.label==='Disponibilidad reportada').home,
+    /Cade Cunningham.*Questionable/)
+})
 
 test('six-leg model output preserves verified prices, evidence, and alternatives without full dossiers',()=>{
   const huge='Información extensa '.repeat(2000)
