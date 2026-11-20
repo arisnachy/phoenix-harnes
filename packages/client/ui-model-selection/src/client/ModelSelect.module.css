@@ -89,32 +89,35 @@
 }
 
 .effortMenu {
-  width: min(320px, calc(100vw - 32px));
+  width: min(344px, calc(100vw - 32px));
   min-width: min(280px, calc(100vw - 32px));
-  max-width: min(320px, calc(100vw - 32px));
+  max-width: min(344px, calc(100vw - 32px));
   max-height: none;
   padding: 0;
-  border-radius: 16px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 18px;
 }
 
 .effortSelector {
-  --effort-blue: var(--dsw-static-blue-600, #2563eb);
-  --effort-blue-soft: var(--dsw-static-blue-100, #dbeafe);
-  padding: 14px 18px 16px;
+  /* Shared light/dark PHOENIX palette: never pin a blue Codex color. */
+  --effort-accent: var(--dsw-specific-phoenix-accent);
+  --effort-accent-soft: color-mix(in srgb, var(--effort-accent) 18%, var(--dsw-specific-selector));
+  padding: 16px 18px 18px;
   background: var(--dsw-specific-menu);
+  color: var(--dsw-alias-label-primary);
 }
 
 .effortHeader {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 26px;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
   align-items: center;
-  min-height: 26px;
+  min-height: 28px;
 }
 
 .effortIcon {
-  width: 18px;
-  height: 18px;
-  color: var(--effort-blue);
+  width: 20px;
+  height: 20px;
+  color: var(--effort-accent);
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -128,10 +131,11 @@
   justify-content: center;
   min-width: 0;
   gap: 4px;
-  color: var(--effort-blue);
-  font-size: 16px;
-  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 18px;
+  line-height: 24px;
   font-weight: 650;
+  letter-spacing: -0.02em;
 }
 
 .effortValue {
@@ -145,13 +149,14 @@
   flex: 0 0 auto;
   width: 13px;
   height: 13px;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .effortReset {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -168,11 +173,11 @@
 .effortReset:hover:not(:disabled),
 .effortReset:focus-visible {
   background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--effort-blue);
+  color: var(--effort-accent);
 }
 
 .effortReset:focus-visible {
-  outline: 2px solid var(--effort-blue);
+  outline: 2px solid var(--effort-accent);
   outline-offset: 1px;
 }
 
@@ -182,10 +187,10 @@
 }
 
 .effortModel {
-  margin-top: 2px;
+  margin-top: 4px;
   overflow: hidden;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
   line-height: 18px;
   text-align: center;
   text-overflow: ellipsis;
@@ -194,8 +199,8 @@
 
 .effortSlider {
   position: relative;
-  height: 36px;
-  margin-top: 12px;
+  height: 40px;
+  margin-top: 16px;
 }
 
 .effortTrack,
@@ -207,23 +212,24 @@
 }
 
 .effortTrack {
-  top: 4px;
-  height: 28px;
+  top: 5px;
+  height: 30px;
   overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
-  background: var(--effort-blue-soft);
+  background: var(--dsw-specific-selector);
 }
 
 .effortTrackFill {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--effort-blue);
-  transition: width 100ms ease;
+  background: var(--effort-accent);
+  transition: width 140ms ease;
 }
 
 .effortStops {
-  top: 15px;
+  top: 17px;
   height: 6px;
   pointer-events: none;
 }
@@ -235,23 +241,24 @@
   height: 6px;
   transform: translateX(-50%);
   border-radius: 50%;
-  background: var(--dsw-alias-bg-layer-1, #fff);
-  opacity: 0.42;
+  background: var(--dsw-alias-bg-layer-3);
+  opacity: 0.64;
 }
 
 .effortStopActive {
-  opacity: 0.72;
+  opacity: 0.92;
 }
 
 .effortRange {
   top: 0;
   width: 100%;
-  height: 36px;
+  height: 40px;
   margin: 0;
   appearance: none;
   outline: none;
   background: transparent;
   cursor: pointer;
+  touch-action: pan-y;
 }
 
 .effortRange:disabled {
@@ -259,38 +266,38 @@
 }
 
 .effortRange::-webkit-slider-runnable-track {
-  height: 28px;
+  height: 30px;
   background: transparent;
 }
 
 .effortRange::-moz-range-track {
-  height: 28px;
+  height: 30px;
   background: transparent;
 }
 
 .effortRange::-webkit-slider-thumb {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   margin-top: -4px;
   appearance: none;
-  border: 1px solid var(--dsw-alias-border-l3);
+  border: 2px solid var(--dsw-alias-bg-layer-3);
   border-radius: 50%;
-  background: var(--dsw-alias-bg-layer-1, #fff);
-  box-shadow: 0 2px 6px rgb(15 23 42 / 14%);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 2px 10px rgb(43 35 26 / 16%), 0 0 0 1px var(--dsw-alias-border-l2);
 }
 
 .effortRange::-moz-range-thumb {
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--dsw-alias-border-l3);
+  width: 38px;
+  height: 38px;
+  border: 2px solid var(--dsw-alias-bg-layer-3);
   border-radius: 50%;
-  background: var(--dsw-alias-bg-layer-1, #fff);
-  box-shadow: 0 2px 6px rgb(15 23 42 / 14%);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 2px 10px rgb(43 35 26 / 16%), 0 0 0 1px var(--dsw-alias-border-l2);
 }
 
 .effortRange:focus-visible::-webkit-slider-thumb,
 .effortRange:focus-visible::-moz-range-thumb {
-  outline: 3px solid var(--effort-blue-soft);
+  outline: 3px solid var(--effort-accent-soft);
   outline-offset: 2px;
 }
 
@@ -469,7 +476,7 @@
 }
 
 .selected {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: color-mix(in srgb, var(--dsw-specific-phoenix-accent) 10%, var(--dsw-specific-menu));
 }
 
 .option:disabled {
@@ -560,7 +567,7 @@
   display: grid;
   place-items: center;
   flex: 0 0 18px;
-  color: var(--dsw-alias-label-primary);
+  color: var(--dsw-specific-phoenix-accent);
 }
 
 .cell {
@@ -604,4 +611,11 @@
 .cellChevron {
   flex: 0 0 auto;
   color: var(--dsw-alias-label-tertiary);
+}
+
+/* Keep feedback immediate for reduced-motion users. */
+@media (prefers-reduced-motion: reduce) {
+  .effortTrackFill {
+    transition: none;
+  }
 }
