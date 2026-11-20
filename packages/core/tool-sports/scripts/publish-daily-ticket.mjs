@@ -31,7 +31,10 @@ await writeFile('phoenix-sports-daily-ticket.md',markdown)
 if(env.GITHUB_STEP_SUMMARY)await appendFile(env.GITHUB_STEP_SUMMARY,markdown.slice(0,18000)+'\n')
 const recipient=env.PHOENIX_SPORTS_NOTIFY_TO?.trim()
 const sender=env.PHOENIX_SPORTS_NOTIFY_FROM?.trim()
-const mailReady=Boolean(env.RESEND_API_KEY&&recipient&&sender&&
+// Only complete, fully quoted tickets may be emailed as the final daily ticket.
+// Partial research remains available as workflow artifacts and summary.
+const mailReady=Boolean(report.complete===true&&report.legs.length===count&&
+  env.RESEND_API_KEY&&recipient&&sender&&
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(recipient)&&
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(sender))
 let delivery='artifact-only'
