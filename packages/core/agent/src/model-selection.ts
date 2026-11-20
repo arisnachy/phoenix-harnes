@@ -17,6 +17,8 @@ export interface ModelSelection {
   model: string
   /** Adapter-owned reasoning effort, or provider/default behavior when absent. */
   reasoningEffort?: ReasoningEffortId
+  /** Codex serving speed; standard is the default. */
+  serviceTier?: 'default' | 'fast'
 }
 
 /** Model routing preferences belong to Eclipse, not to visible teammate identities. */
@@ -119,12 +121,14 @@ export function persistModelSelectionPreference(
 ): boolean {
   const prior = latestModelSelectionPreference(session)
   if (prior?.source === source && prior.selection.provider === selection.provider
-    && prior.selection.model === selection.model && prior.selection.reasoningEffort === selection.reasoningEffort) return false
+    && prior.selection.model === selection.model && prior.selection.reasoningEffort === selection.reasoningEffort
+    && prior.selection.serviceTier === selection.serviceTier) return false
   session.append('agent/model-selection', {
     selection: {
       provider: selection.provider,
       model: selection.model,
       ...selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort },
+      ...selection.serviceTier === undefined ? {} : { serviceTier: selection.serviceTier },
     },
     source,
   })
@@ -1475,6 +1479,9 @@ export function installModelSelection(
         scopedAgent.options.model = selected.model
         if (selected.reasoningEffort === undefined) delete scopedAgent.options.reasoningEffort
         else scopedAgent.options.reasoningEffort = selected.reasoningEffort
+        if (selected.provider === 'openai-codex' && selected.serviceTier !== undefined)
+          scopedAgent.options.serviceTier = selected.serviceTier
+        else delete scopedAgent.options.serviceTier
       }
     }
     const assembled = await next()
@@ -1573,9 +1580,16 @@ export function installModelSelection(
   const disposeRequest = agentCtx.on(
     'agent/request',
     async (_payload, next): Promise<LlmCallConfig> => {
-      const resolved = await next()
+      const inherited = await next()
       const selected = selection.assembled ?? effectiveSelection(agentCtx.agent)
-      if (selected === undefined) return resolved
+      // No override means no snapshot change: preserve the original object
+      // identity for callers and existing waterfall contracts.
+      if (selected === undefined) return inherited
+      // Service speed is independent of planning effort and survives every
+      // Sol/Luna handoff. Never leak a Codex speed setting to other providers.
+      const { serviceTier: _oldServiceTier, ...base } = inherited
+      const resolved: LlmCallConfig = selected?.provider === 'openai-codex' && selected.serviceTier !== undefined
+        ? { ...base, serviceTier: selected.serviceTier } : base
       const scopedAgent = agentCtx.agent
       if (scopedAgent !== undefined && latestModelSelectionPreference(scopedAgent.session) === undefined) {
         persistModelSelectionPreference(scopedAgent.session, selected, 'default')
