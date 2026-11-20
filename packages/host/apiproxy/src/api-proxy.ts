@@ -1262,6 +1262,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       provider: selected.provider,
       model: selected.model,
       ...selected.reasoningEffort === undefined ? {} : { reasoningEffort: selected.reasoningEffort },
+      ...selected.serviceTier === undefined ? {} : { serviceTier: selected.serviceTier },
     }
   }
   type WebModelSelectionRef = ModelSelectionRef & { current: ModelSelection; accept(next: ModelSelection): Promise<void> }
@@ -1332,6 +1333,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           ...logged.reasoningEffort === undefined
             ? {}
             : { reasoningEffort: logged.reasoningEffort },
+          ...logged.serviceTier === undefined ? {} : { serviceTier: logged.serviceTier },
         }
       },
       async accept(next: ModelSelection): Promise<void> {
@@ -2697,7 +2699,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       },
 
       async selectModel(request) {
-        const { sessionId, provider, model, reasoningEffort } = request.payload
+        const { sessionId, provider, model, reasoningEffort, serviceTier } = request.payload
         const found = await agentFor(sessionId)
         if ('error' in found) return err(request, found.error)
         return serializeImageAdmission(found.agent, async () => {
@@ -2708,6 +2710,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               ...reasoningEffort === undefined
                 ? {}
                 : { reasoningEffort: ReasoningEffortId(reasoningEffort) },
+              ...serviceTier === undefined ? {} : { serviceTier },
+            }
+            if (serviceTier !== undefined && provider !== 'openai-codex') {
+              throw new Error('Only OpenAI Codex supports serving speed selection')
             }
             let selected: ModelSelection
             let liveRoute: ModelSelection
@@ -2730,13 +2736,15 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               if (planner.provider !== 'openai-codex' || worker.provider !== 'openai-codex') {
                 throw new Error('Phoenix Auto requires OpenAI Codex GPT-6.1 Sol and GPT-6 Luna routes')
               }
-              selected = { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }
+              selected = { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL,
+                ...serviceTier === undefined ? {} : { serviceTier } }
               liveRoute = {
                 provider: worker.provider,
                 model: worker.model,
                 ...worker.reasoningEffort === undefined
                   ? {}
                   : { reasoningEffort: worker.reasoningEffort },
+                ...serviceTier === undefined ? {} : { serviceTier },
               }
             } else {
               const resolved = await ctx.llm.resolveCallConfig(requested)
@@ -2746,6 +2754,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                 ...resolved.reasoningEffort === undefined
                   ? {}
                   : { reasoningEffort: resolved.reasoningEffort },
+                ...resolved.serviceTier === undefined ? {} : { serviceTier: resolved.serviceTier },
               }
               liveRoute = selected
             }
@@ -2766,6 +2775,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             } else {
               found.agent.options.reasoningEffort = liveRoute.reasoningEffort
             }
+            if (liveRoute.serviceTier === undefined) delete found.agent.options.serviceTier
+            else found.agent.options.serviceTier = liveRoute.serviceTier
             try {
               // Persist the picker identity, not the provider-native execution route.
               // Phoenix Auto is a durable user preference: agentOptions() seeds
