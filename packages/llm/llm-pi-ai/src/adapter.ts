@@ -622,7 +622,9 @@ export class PiAiAdapter extends LlmAdapter {
         ? normalizeOpenAiFunctionToolPayload(context, requiresMondayMembrane) as typeof context
         : context
       const auditLocalWire = options.provider === 'phoenix-local' && process.env.PHOENIX_TOKEN_AUDIT === '1'
-      const needsPayloadProjection = requiresFunctionSchemaProjection || codexWireReasoningEffort !== undefined || auditLocalWire
+      // Codex /fast selects a serving tier, not a model or reasoning level.
+      const codexFast = options.provider === CODEX_PROVIDER && options.serviceTier === 'fast'
+      const needsPayloadProjection = requiresFunctionSchemaProjection || codexWireReasoningEffort !== undefined || auditLocalWire || codexFast
       const streamOptions: SimpleStreamOptions = {
         ...profileOptions(profile, reasoning, apiKey),
         ...needsPayloadProjection
@@ -634,9 +636,12 @@ export class PiAiAdapter extends LlmAdapter {
               const wire = codexWireReasoningEffort === undefined
                 ? projected
                 : withCodexReasoningEffort(projected, codexWireReasoningEffort)
+              const accelerated = codexFast && typeof wire === 'object' && wire !== null && !Array.isArray(wire)
+                ? { ...wire, service_tier: 'priority' }
+                : wire
               if (auditLocalWire) {
                 // Only token counts, never the actual prompt, response or tool schemas.
-                const fields = wire as Record<string, unknown>
+                const fields = accelerated as Record<string, unknown>
                 console.info('[PHOENIX LOCAL WIRE BUDGET] ' + JSON.stringify({
                   provider: options.provider,
                   model: options.model,
@@ -649,7 +654,7 @@ export class PiAiAdapter extends LlmAdapter {
                   compacted: fitted.compacted,
                 }))
               }
-              return wire
+              return accelerated
             },
           }
           : {},
