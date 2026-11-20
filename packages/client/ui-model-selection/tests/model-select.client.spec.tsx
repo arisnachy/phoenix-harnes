@@ -59,6 +59,27 @@ function state(overrides: Partial<ModelDirectoryState> = {}): ModelDirectoryStat
 afterEach(cleanup)
 
 describe('ModelSelect root menu', () => {
+  it('keeps the selected model picker visible if the catalog temporarily fails', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'openai-codex', model: 'gpt-6.2-sol', reasoningEffort: 'low' },
+      groups: [],
+      status: 'error',
+      error: 'offline',
+    }))
+    render(<ModelSelect
+      locked={false} available directory={directory} load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)} t={t}
+    />)
+    const picker = screen.getByRole('button', {
+      name: '选择模型，当前 GPT-6.2 Sol，推理等级 low',
+    })
+    expect(picker.textContent).toContain('GPT-6.2 Sol')
+    expect(picker.textContent).toContain('low')
+    fireEvent.click(picker)
+    expect(screen.getByRole('menuitem', { name: /模型/ })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: /推理等级/ })).toBeNull()
+  })
+
   it('offers model and reasoning controls without the standalone AI Team link', () => {
     const directory = createSnapshotStore<ModelDirectoryState>(state())
     render(<ModelSelect

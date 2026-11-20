@@ -342,16 +342,25 @@ export function ModelSelect(
     if (choice !== undefined) setEffortDraftKey(choice.key)
   }
 
+  // The current host selection is authoritative even while the provider
+  // catalog is loading, empty, or temporarily unavailable. Do not erase the
+  // model's visible identity and make the control look like it disappeared.
+  const displayedRoute = state.current
   const modelLabel = currentChoice === undefined
-    ? t('trigger.fallback')
+    ? displayedRoute === null
+      ? t('trigger.fallback')
+      : isPhoenixAutoRouting(displayedRoute.model, displayedRoute.model)
+        ? t('trigger.auto')
+        : presentModel(displayedRoute.model).displayName
     : isPhoenixAutoRouting(currentChoice.model.id, currentChoice.model.name)
       ? t('trigger.auto')
       : presentModel(currentChoice.model.name).displayName
-  const triggerAria = currentChoice === undefined
+  const visibleEffort = effortLabel ?? displayedRoute?.reasoningEffort
+  const triggerAria = displayedRoute === null
     ? t('trigger.selectAria')
-    : effortLabel === undefined
+    : visibleEffort === undefined
       ? t('trigger.aria', { model: modelLabel })
-      : t('trigger.ariaEffort', { model: modelLabel, effort: effortLabel })
+      : t('trigger.ariaEffort', { model: modelLabel, effort: visibleEffort })
   itemRefs.current = []
   let itemIndex = 0
   const itemRef = () => {
@@ -400,7 +409,7 @@ export function ModelSelect(
         }}
       >
         <span className={css.triggerLabel}>{modelLabel}</span>
-        {effortLabel !== undefined && <span className={css.triggerEffort}>{effortLabel}</span>}
+        {visibleEffort !== undefined && <span className={css.triggerEffort}>{visibleEffort}</span>}
         {codexSpeedAvailable && activeSpeed === 'fast' && <span className={css.triggerEffort}>{speedLabel}</span>}
         <IconChevronDownOutline14 className={clsx(css.chevron, open && css.chevronOpen)} />
       </button>
