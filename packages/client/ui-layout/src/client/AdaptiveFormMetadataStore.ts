@@ -51,8 +51,9 @@ export function saveAdaptiveForm(
   form: AdaptiveFormDraft, store: Store | undefined = currentStore(),
 ): AdaptiveFormDraft {
   if (!store) throw new Error('ADAPTIVE_FORM_STORAGE_UNAVAILABLE')
-  if (!validateAdaptiveDraft(form) || !/^app-[a-z0-9-]{1,45}$/u.test(form.appId)
-    ) throw new Error('ADAPTIVE_INVALID_FORM')
+  if (!validateAdaptiveDraft(form) || !/^app-[a-z0-9-]{1,45}$/u.test(form.appId)) {
+    throw new Error('ADAPTIVE_INVALID_FORM')
+  }
   const current = load(store)
   const previous = current.find(item => item.appId === form.appId && item.templateId === form.templateId)
   if (previous && form.revision !== previous.revision + 1) throw new Error('ADAPTIVE_FORM_REVISION_CONFLICT')
