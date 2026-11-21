@@ -2,6 +2,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import css from './HealthiaWorkspace.module.css'
 import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
+import { probeClinicalSession, type ClinicalRouteStatus } from './HealthiaClinicalBridge.ts'
 import {
   addAdaptiveField, removeAdaptiveField, describeAdaptiveApp, isBindingConnected,
   HEALTHIA_DOCTOR_FORM,
@@ -62,6 +63,17 @@ export function HealthiaWorkspace({
   const [destination, setDestination] = useState<AdaptiveDestination>('local')
   const [output, setOutput] = useState<AdaptiveOutput>('inline')
   const [draftError, setDraftError] = useState('')
+  const [clinical, setClinical] = useState<ClinicalRouteStatus>({
+    status:'unavailable',role:null,patientPortal:'not-enabled',
+  })
+  const [clinicalRefresh, setClinicalRefresh] = useState(0)
+  useEffect(() => {
+    let mounted = true
+    void probeClinicalSession().then(status => {
+      if (mounted) setClinical(status)
+    })
+    return () => { mounted = false }
+  }, [clinicalRefresh])
   const capabilities = describeAdaptiveApp('healthia')?.capabilities ?? []
   const addField = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
@@ -115,9 +127,22 @@ export function HealthiaWorkspace({
         </div>
       </div>
       <div className={css.body}>
+        <div className={css.draftHeader}>
+          <span className={css.notice}>{isPatient
+            ? 'La selección de Paciente no concede acceso al expediente; falta el portal autenticado.'
+            : clinical.status === 'authenticated'
+              ? `Sesión real verificada en /health · rol: ${clinical.role}. Sin exponer el expediente al chat.`
+              : 'La vista adaptable no inicia sesión ni conserva credenciales clínicas.'}</span>
+          <button className={css.action} type="button" onClick={() => setClinicalRefresh(v => v + 1)}>
+            Verificar sesión clínica
+          </button>
+        </div>
         <div className={css.titleRow}>
           <div><span className={css.eyebrow}>PHOENIX / HEALTHIA</span><h2>{HEALTHIA_NAV[role].find(item => item.id === active)?.label}</h2></div>
-          <span className={css.status}>{isPatient ? 'Portal no activado' : 'Backend clínico separado'}</span>
+          <span className={css.status}>{isPatient ? 'Portal de pacientes no activado'
+            : clinical.status === 'authenticated' ? 'Sesión clínica autenticada'
+            : clinical.status === 'locked' ? 'Inicio de sesión requerido'
+            : 'Servicio clínico no disponible'}</span>
         </div>
         <nav className={css.tabs} aria-label="Secciones Healthia">
           {HEALTHIA_NAV[role].map(item => <button key={item.id} type="button" aria-current={item.id === active ? 'page' : undefined} className={item.id === active ? css.activeTab : css.tab} onClick={() => onSectionChange(item.id)}>{item.label}</button>)}
