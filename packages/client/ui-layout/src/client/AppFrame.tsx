@@ -16,6 +16,7 @@ import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@phoenix-ai/dsh
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT } from './columns.ts'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
+import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from './HealthiaWorkspace.tsx'
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
@@ -159,6 +160,36 @@ export function AppFrame({
   })
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
+  const [adaptiveApp, setAdaptiveApp] = useState<'general' | 'healthia'>('general')
+  const [healthiaRole, setHealthiaRole] = useState<HealthiaRole>('doctor')
+  const [healthiaSection, setHealthiaSection] = useState('overview')
+  const [appMenuOpen, setAppMenuOpen] = useState(false)
+
+  // UI state only. This channel cannot grant access to medical records.
+  useEffect(() => {
+    const onWorkspace = (event: Event): void => {
+      const request = (event as CustomEvent<{ app?: string; role?: string; section?: string }>).detail
+      if (!request) return
+      if (request.app === 'general') { setAdaptiveApp('general'); setAppMenuOpen(false); return }
+      if (request.app !== 'healthia') return
+      setAdaptiveApp('healthia')
+      setAppMenuOpen(false)
+      if (request.role === 'doctor' || request.role === 'patient') {
+        setHealthiaRole(request.role)
+        setHealthiaSection(HEALTHIA_NAV[request.role].some(v => v.id === request.section) ? request.section! : 'overview')
+      } else if (request.section && HEALTHIA_NAV[healthiaRole].some(v => v.id === request.section)) {
+        setHealthiaSection(request.section)
+      }
+    }
+    window.addEventListener('phoenix:adaptive-workspace', onWorkspace)
+    return () => window.removeEventListener('phoenix:adaptive-workspace', onWorkspace)
+  }, [healthiaRole])
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace-state', {
+      detail: { app: adaptiveApp, role: healthiaRole, section: healthiaSection },
+    }))
+  }, [adaptiveApp, healthiaRole, healthiaSection])
+
 
   const lastSession = useRef(detailsSession)
   useLayoutEffect(() => {
@@ -272,6 +303,23 @@ export function AppFrame({
       </div>
       <>
         <CenterColumn>
+          <div className={css.appLauncher}>
+            <button type="button" className={css.appLauncherButton} aria-label="Aplicaciones PHOENIX" aria-expanded={appMenuOpen} onClick={() => setAppMenuOpen(open => !open)}>
+              <span aria-hidden="true">▦</span> Apps
+            </button>
+            {appMenuOpen && <div className={css.appLauncherMenu} role="menu" aria-label="Aplicaciones instaladas">
+              <button type="button" role="menuitem" onClick={() => { setAdaptiveApp('general'); setAppMenuOpen(false) }}>PHOENIX · General</button>
+              <button type="button" role="menuitem" onClick={() => { setAdaptiveApp('healthia'); setHealthiaRole('doctor'); setHealthiaSection('overview'); setAppMenuOpen(false) }}>Healthia · Médico</button>
+              <button type="button" role="menuitem" onClick={() => { setAdaptiveApp('healthia'); setHealthiaRole('patient'); setHealthiaSection('overview'); setAppMenuOpen(false) }}>Healthia · Paciente (vista preliminar)</button>
+            </div>}
+          </div>
+          {adaptiveApp === 'healthia' && (
+            <HealthiaWorkspace role={healthiaRole} section={healthiaSection}
+              onRoleChange={role => { setHealthiaRole(role); setHealthiaSection('overview') }}
+              onSectionChange={setHealthiaSection}
+              onReturn={() => { setAdaptiveApp('general'); setAppMenuOpen(false) }}
+            />
+          )}
           <div data-shell-overlay>{renderSlot('shell.overlay', {})}</div>
           <SurfaceBoundary name="conversation" resetKey={currentSession ?? 'none'}>
             <SurfaceRender render={() => renderSlot('conversation', {})} />
