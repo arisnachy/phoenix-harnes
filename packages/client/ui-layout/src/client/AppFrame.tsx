@@ -196,7 +196,7 @@ export function AppFrame({
   const [appMenuOpen, setAppMenuOpen] = useState(false)
   const [missionError, setMissionError] = useState(false)
   const [search, setSearch] = useState<{ term: string; results: readonly AdaptiveDiscovery[] } | null>(null)
-  const [paletteRevision, setPaletteRevision] = useState(0)
+  const [, setPaletteRevision] = useState(0)
   // Explicit two-stage chat request. The client can only alter local UI
   // metadata; events do not constitute permission for clinical/API actions.
   useEffect(() => {
@@ -526,7 +526,7 @@ export function AppFrame({
           <SurfaceBoundary name="adaptive" resetKey={adaptiveApp}>
             {activeBlueprint && (
               <AdaptiveAppPreview key={activeBlueprint.id} app={activeBlueprint} section={customSection}
-                palette={readAdaptivePalette(activeBlueprint.id)} paletteRevision={paletteRevision}
+                palette={readAdaptivePalette(activeBlueprint.id)}
                 onSectionChange={setCustomSection} onReturn={() => setAdaptiveApp('general')} />
             )}
             {adaptiveApp === 'healthia' && (
