@@ -15,6 +15,12 @@ A medical assistant needs patient and clinician experiences without forking PHOE
 - An authenticated clinical service link for medical workflows. No patient-login claim for the preliminary patient view.
 - Metadata-only request/receipt contract with fixed purpose, scope and output types, bounded expiry and no transfer capability.
 
+## Declarative application contract
+
+A bounded capability catalog now declares a stable application ID, roles, advertised surfaces, connection/readiness state and user-visible explanation. Its static entries are not equivalent to introspection of an installed provider or permission grant. The form metadata editor accepts fixed field and output types with bounded labels and revisions. It rejects arbitrary properties, network destinations and executable JS, leaves non-local API/Chat/AI bindings disconnected, forbids deletion of protected fields, and can revert an invalid proposed update to the last safe draft. These are reversible UI draft operations only; clinical form publishing requires a protected backend and explicit approval.
+
+Fast preloading should load *manifests* and validated shell components without eagerly loading every connector or model into the context window. A future runtime registry needs bounded snapshots of active, health-checked adapters with provenance, readiness, cost, role scope and permission requirements. The AI receives only a minimal, permission-filtered capability summary; it cannot inspect secrets, operating-system internals or patient records by claiming to know its own body.
+
 ## Fabric trust boundary
 
 The proposal contract is not an authorization check, signature verifier, patient lookup or transport. `subjectToken` is an opaque backend-issued capability reference, never a cédula, telephone or chat session ID. Browser events carry only workspace role and section; no patient material should appear in them. All cross-instance exchange remains **disabled** until the clinical service implements recipient authentication, patient/authorized-representative consent, professional relationship and legal basis, minimum-necessary filters, protected output generation, delivery encryption, signatures, idempotency, audit receipts, revocation and clinical data residency.
