@@ -1,0 +1,29 @@
+# Agent Note: Guided model provider settings in Pearl Light
+
+Status: implemented
+
+English | [中文](2026-11-21-guided-model-provider-settings.zh.md)
+
+## Problem
+
+Settings → Models exposed all provider profiles as long technical rows with repeated edit, reorder and delete controls. API keys, account authorization and advanced model catalogs appeared together, even though some providers offer only one connection method. The presentation differed from the rest of Phoenix and made an ordinary provider change feel like editing a configuration file.
+
+## Decision
+
+`ModelsSection` presents configured providers in a theme-token-based, searchable, responsive catalog. The explicit Organize action exposes the ordering context; the existing persisted `user-profile.modelProviderOrder` remains the source of truth. The same editor continues to serve both configured providers and adopted dormant providers, now using three guided steps: available connection methods, configuration, and review with an optional model-discovery check. `CustomProviderCard` uses identification, configuration and review steps. Editing a provider does not require recreating it.
+
+Connection choices are derived from the account authorization flows registered by the Host. OpenAI Codex remains account-only and ChatGPT Web remains browser-backed; the UI does not invent an OAuth option for API-only providers. The API key remains a write-only credential handled by `credentials.set`, never stored in settings values. A successful account connection may remove a user-layer `apiKeyEnv` override without deleting the credential itself. The review screen distinguishes model discovery from a guaranteed end-to-end request: discovery failure does not erase a valid draft.
+
+`ProviderEditor` and `CustomProviderCard` keep the existing direct editor posture when `guided` is absent. Settings opens them with guidance, while onboarding and other specialized consumers retain their current controls. The UI uses existing `--dsw-alias-*` tokens, avoiding theme-specific hardcoded colors.
+
+## Alternatives considered
+
+**Replace the settings and credential services.** Rejected: the current stores already protect secret values, accept revision-guarded mutations, and support model discovery.
+
+**Require a model-discovery success to save.** Rejected: some adapters do not expose readable catalogs, and an endpoint may refuse discovery while still accepting inference requests.
+
+**Apply one authentication method to every provider.** Rejected: API-key-only, account-only and local routes have different supported paths.
+
+## Consequences
+
+Users can choose a provider before dealing with keys and advanced configuration, and the same steps guide edits. Credential values remain outside settings snapshots. The final review offers a non-destructive connection probe, but saving alone is not presented as proof that inference works. The focused UI regression test checks navigation without writes.
