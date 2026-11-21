@@ -7,6 +7,7 @@ import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
 import type {} from '@phoenix-ai/dsh-client-ui-theme/client'
 import type { PanelActions } from './service.ts'
 import { AppFrame } from './AppFrame.tsx'
+import { inspectAdaptiveLiveSlots } from './AdaptiveLiveSlots.ts'
 import { createLayoutStore } from './stores.ts'
 import { LayoutController } from './service.ts'
 import { ThemePresenter } from './theme-presenter.ts'
@@ -78,7 +79,9 @@ export function apply(ctx: ClientContext): void {
       store: createLayoutStore,
       inject: (actions: PanelActions) => {
         layout.attachPanels(actions)
-        return {}
+        return {
+          inspectRuntime: () => inspectAdaptiveLiveSlots(name => ctx.slots.entries(name).length),
+        }
       },
     }, AppFrame)
     return () => {
