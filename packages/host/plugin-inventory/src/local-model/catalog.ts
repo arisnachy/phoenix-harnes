@@ -92,6 +92,66 @@ const LOCAL_MODEL_CATALOG: readonly LocalModelCatalogEntry[] = Object.freeze([
   QWEN_35_4B_Q4_K_M,
 ])
 
+/** Live Ollama models are discovered through the loopback daemon, never
+ * through a fabricated cloud list. This registry is private to the Host. */
+export interface OllamaDiscoveredModel {
+  tag: string
+  sizeBytes: number
+  estimatedRamBytes: number
+  contextWindow: number
+  nativeContextWindow?: number
+  maxTokens: number
+}
+
+const ollamaDiscovered = new Map<string, LocalModelCatalogEntry>()
+
+export function validOllamaTag(tag: string): boolean {
+  return tag.length > 0 && tag.length <= 160
+    && /^[a-zA-Z0-9][a-zA-Z0-9._-]*(?:\/[a-zA-Z0-9][a-zA-Z0-9._-]*)*(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$/u.test(tag)
+}
+
+export function registerOllamaCandidate(tag: string, metadata?: OllamaDiscoveredModel): LocalModelCatalogEntry {
+  if (!validOllamaTag(tag)) throw new Error('Invalid local Ollama model tag')
+  const existing = LOCAL_MODEL_CATALOG.find(entry => entry.backend === 'ollama' && entry.ollamaModel === tag)
+  if (existing !== undefined) return existing
+  const id = `ollama:${tag}`
+  const previous = ollamaDiscovered.get(id)
+  const capacity = metadata?.contextWindow ?? previous?.contextWindow ?? 4_096
+  const entry: LocalModelCatalogEntry = {
+    id, displayName: `${tag} · Ollama`, backend: 'ollama', ollamaModel: tag,
+    sizeBytes: metadata?.sizeBytes ?? previous?.sizeBytes ?? 0,
+    estimatedRamBytes: metadata?.estimatedRamBytes ?? previous?.estimatedRamBytes ?? 0,
+    contextWindow: capacity,
+    ...(metadata?.nativeContextWindow === undefined
+      ? previous?.nativeContextWindow === undefined ? {} : { nativeContextWindow: previous.nativeContextWindow }
+      : { nativeContextWindow: metadata.nativeContextWindow }),
+    maxTokens: metadata?.maxTokens ?? previous?.maxTokens ?? 512,
+    recommended: false,
+  }
+  ollamaDiscovered.set(id, entry)
+  return entry
+}
+
+/** A refresh also evicts models physically removed outside PHOENIX. */
+export function synchronizeOllamaCatalog(models: readonly OllamaDiscoveredModel[]): string[] {
+  const active = new Set<string>()
+  const installed: string[] = []
+  for (const metadata of models.slice(0, 128)) {
+    if (!validOllamaTag(metadata.tag)) continue
+    const entry = registerOllamaCandidate(metadata.tag, metadata)
+    active.add(entry.id)
+    installed.push(entry.id)
+  }
+  for (const id of ollamaDiscovered.keys()) {
+    if (!active.has(id)) ollamaDiscovered.delete(id)
+  }
+  return installed
+}
+
+export function forgetOllamaCandidate(modelId: string): void {
+  ollamaDiscovered.delete(modelId)
+}
+
 /** Stable id of the model Phoenix Local selects on first use. */
 export const DEFAULT_LOCAL_MODEL_ID = QWEN_35_2B_OLLAMA.id
 
@@ -100,7 +160,7 @@ export const DEFAULT_LOCAL_MODEL_ID = QWEN_35_2B_OLLAMA.id
  * @returns The supported Phoenix Local model catalog.
  */
 export function getLocalModelCatalog(): readonly LocalModelCatalogEntry[] {
-  return LOCAL_MODEL_CATALOG
+  return [...LOCAL_MODEL_CATALOG, ...ollamaDiscovered.values()]
 }
 
 /**
@@ -109,7 +169,7 @@ export function getLocalModelCatalog(): readonly LocalModelCatalogEntry[] {
  * @returns The matching catalog entry, when supported.
  */
 export function getLocalModel(modelId: string): LocalModelCatalogEntry | undefined {
-  return LOCAL_MODEL_CATALOG.find(entry => entry.id === modelId)
+  return LOCAL_MODEL_CATALOG.find(entry => entry.id === modelId) ?? ollamaDiscovered.get(modelId)
 }
 
 /**
