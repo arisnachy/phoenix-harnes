@@ -517,7 +517,7 @@ export function apply(ctx: Context): void {
 
   ctx.tools.register(defineTool({
     name: 'living_act',
-    description: 'Execute one action declared by a connected creation. The call fails when the creation is offline or the action was not declared.',
+    description: 'Legacy Living action entry. Enforces the same explicit human confirmation and clinical safety boundary as adaptive_app_execute_approved; no direct unapproved execution.',
     parameters: {
       id: { type: 'string', required: true }, action: { type: 'string', required: true },
       input_json: { type: 'string', required: true, description: 'JSON value passed to the creation action.' },
@@ -526,9 +526,14 @@ export function apply(ctx: Context): void {
       schema: { type: 'object', additionalProperties: false, properties: { result_json: { type: 'string', required: true } } },
       render: (_args, value) => [{ type: 'text' as const, text: value.result_json }],
     },
-    async execute(args) {
-      const result = await ctx.living.act(LivingCreationId(args.id), args.action, parseInput(args.input_json))
-      return { result_json: JSON.stringify(result) }
+    async execute(args,exec) {
+      // Do not preserve a bypass around the one-time human confirmation.
+      const guarded=ctx.tools.get('adaptive_app_execute_approved')
+      if (!guarded) return {result_json:JSON.stringify({
+        status:'denied',executed:false,reason:'APPROVAL_GATE_UNAVAILABLE',
+      })}
+      const result=await guarded.execute(args,exec)
+      return {result_json:typeof result==='string'?result:JSON.stringify(result)}
     },
     presentCall: args => present(`Living action: ${args.action}`, args.id),
   }))
