@@ -176,6 +176,7 @@ export function AppFrame({
     // UI intent only. The conversation plugin owns session creation and submission.
     setAdaptiveApp('general')
     setAppMenuOpen(false)
+    setMissionError(false)
     window.dispatchEvent(new CustomEvent('phoenix:adaptive-app-mission', {
       detail: { intent: 'new-app' },
     }))
@@ -183,6 +184,12 @@ export function AppFrame({
   const [healthiaRole, setHealthiaRole] = useState<HealthiaRole>('doctor')
   const [healthiaSection, setHealthiaSection] = useState('overview')
   const [appMenuOpen, setAppMenuOpen] = useState(false)
+  const [missionError, setMissionError] = useState(false)
+  useEffect(() => {
+    const onFailure = (): void => { setMissionError(true) }
+    window.addEventListener('phoenix:adaptive-app-mission-failed', onFailure)
+    return () => window.removeEventListener('phoenix:adaptive-app-mission-failed', onFailure)
+  }, [])
 
   // UI state only. This channel cannot grant access to medical records.
   useEffect(() => {
@@ -347,6 +354,12 @@ export function AppFrame({
               <button type="button" role="menuitem" onClick={launchAppMission}>+ Crear nueva aplicación con Kira</button>}
             </div>}
           </div>
+          {missionError && (
+            <div className={css.appMissionError} role="alert">
+              No se pudo crear la conversación de App Studio. Comprueba la conexión de PHOENIX y vuelve a intentarlo.
+              <button type="button" onClick={() => setMissionError(false)} aria-label="Cerrar aviso de App Studio">×</button>
+            </div>
+          )}
           <SurfaceBoundary name="adaptive" resetKey={adaptiveApp}>
             {activeBlueprint && (
               <AdaptiveAppPreview key={activeBlueprint.id} app={activeBlueprint} section={customSection}
