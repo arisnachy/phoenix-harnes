@@ -233,6 +233,7 @@ function youtubeId(raw: string | undefined): string | undefined {
 export function MiniBrowser({
   sessionId, requested = false, active = true, initialTabId, sourceUrl, onActivate, autoScroll = true,
   onPageChange, onSecureLoginRequest, onSavedAccessNotice, secureLoginRequestEpoch = 0,
+  pinned = false, onPinChange, onClose,
 }: {
   sessionId: string
   requested?: boolean
@@ -248,11 +249,17 @@ export function MiniBrowser({
   onSavedAccessNotice?: (notice: SavedAccessNotice | null) => void
   /** Parent generation; changing it invalidates an in-flight manual request. */
   secureLoginRequestEpoch?: number
+  /** A pinned browser survives the end of the agent task. */
+  pinned?: boolean
+  onPinChange?: (pinned: boolean) => void
+  /** Close the UI AND release this session's Chromium from the Host. */
+  onClose?: () => void
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(BLANK)
   const [enabled, setEnabled] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  const [advanced, setAdvanced] = useState(false)
   const [dismissed, setDismissed] = useState(false)
   const [address, setAddress] = useState('')
   const [typed, setTyped] = useState('')
@@ -884,20 +891,33 @@ export function MiniBrowser({
   const viewer = (
     <section className={css.browser} data-mini-browser data-expanded={expanded ? 'true' : undefined} aria-label="Navegador de Kira">
       <div className={css.titlebar}>
-        <span className={css.brand}><PhoenixLogo size={18} /> <span>Navegador de Kira</span></span>
-        <span className={css.status} data-state={!active ? 'inactive' : hasPage ? 'live' : connectionError ? 'error' : 'connecting'}>
-          {!active ? 'Vista conservada' : hasPage ? 'Chrome · Página activa' : 'Chrome · Preparando página'}
+        <span className={css.brand}><PhoenixLogo size={17} />
+          <span title={snapshot.title || snapshot.url || 'Navegador'}>{snapshot.title || 'Navegador'}</span>
         </span>
-        {!active && <button type="button" title="Reactivar esta página" onClick={() => { onActivate?.() }}>↻ Reactivar</button>}
+        <span className={css.status}
+          data-state={!active ? 'inactive' : hasPage ? 'live' : connectionError ? 'error' : 'connecting'}>
+          {!active ? 'En pausa' : hasPage ? 'En uso' : 'Abriendo'}
+        </span>
         <span className={css.grow} />
-        <button type="button" title={expanded ? 'Volver al chat' : 'Ampliar navegador'} onClick={() => { setExpanded(value => !value); setCollapsed(false) }}>
-          {expanded ? '↙ Volver al chat' : '⛶ Ampliar'}
+        <button type="button" title="Herramientas de navegación" aria-label="Más herramientas del navegador"
+          aria-expanded={advanced} onClick={() => setAdvanced(value => !value)}>⋯</button>
+        {onPinChange && <button type="button" title={pinned ? 'Soltar navegador' : 'Fijar navegador'}
+          aria-pressed={pinned} onClick={() => onPinChange(!pinned)}>
+          {pinned ? 'Fijado' : 'Fijar'}
+        </button>}
+        <button type="button" title={expanded ? 'Volver al chat' : 'Ampliar navegador'}
+          onClick={() => { setExpanded(value => !value); setCollapsed(false) }}>
+          {expanded ? 'Reducir' : 'Ampliar'}
         </button>
-        {!expanded && <button type="button" title={collapsed ? 'Mostrar navegador' : 'Contraer navegador'} onClick={() => { setCollapsed(value => !value) }}>{collapsed ? '▢' : '−'}</button>}
-        <button type="button" title="Ocultar microventana" onClick={() => { setDismissed(true); setEnabled(false); setCollapsed(true); setExpanded(false) }}>×</button>
+        <button type="button" aria-label="Cerrar navegador y volver al chat"
+          title="Cerrar navegador y liberar recursos"
+          onClick={() => {
+            setDismissed(true); setEnabled(false); setCollapsed(true); setExpanded(false)
+            onClose?.()
+          }}>×</button>
       </div>
       {!collapsed && <>
-        <div className={css.tabs} role="tablist" aria-label="Pestañas">
+        {advanced && <div className={css.tabs} role="tablist" aria-label="Pestañas">
           {snapshot.tabs.map(tab => (
             <div className={css.tabWrap} key={tab.id}>
               <button type="button" role="tab" aria-selected={tab.id === snapshot.tabId}
@@ -908,8 +928,8 @@ export function MiniBrowser({
             </div>
           ))}
           <button type="button" title="Nueva pestaña" onClick={() => { void run({ type: 'new-tab', url: 'https://www.google.com' }) }}>+</button>
-        </div>
-        <form className={css.toolbar} onSubmit={(event) => { event.preventDefault(); void run({ type: 'open', url: address }) }}>
+        </div>}
+        {advanced && <form className={css.toolbar} onSubmit={(event) => { event.preventDefault(); void run({ type: 'open', url: address }) }}>
           <button type="button" aria-label="Atrás" onClick={() => { void run({ type: 'back' }) }}>←</button>
           <button type="button" aria-label="Adelante" onClick={() => { void run({ type: 'forward' }) }}>→</button>
           <button type="button" aria-label="Recargar" onClick={() => { void run({ type: 'reload' }) }}>↻</button>
@@ -921,7 +941,7 @@ export function MiniBrowser({
             aria-label="Abrir acceso seguro" title="Acceso seguro de Kira debajo del navegador"
             onClick={() => { const currentTab = snapshot.tabId; if (currentTab) void requestSecureLogin(siteOrigin, currentTab) }}>
             🔐 Acceso seguro</button>}
-        </form>
+        </form>}
         {snapshot.available ? (
           <div className={css.viewport}>
             {!hasPage ? <div className={css.loading} role="status">MiniBrowser de esta conversación iniciado. Todavía no se ha comprobado ninguna página. Kira no debe afirmar que la abrió hasta verificarla.</div> : (
@@ -948,7 +968,7 @@ export function MiniBrowser({
             {initialTargetTabId === undefined && <button type="button" onClick={() => { void run({ type: 'start' }) }}>Conectar navegador</button>}
           </div>
         )}
-        <div className={css.mediaBar}>
+        {advanced && <div className={css.mediaBar}>
           {videoId && <>
             <button type="button" onClick={() => { setVideoSurface(true); setPlayingVideo(true) }}>
               ▶ Reproducir con audio
@@ -971,28 +991,28 @@ export function MiniBrowser({
             Si Chrome impide capturar el audio, puedes autorizar aquí una grabación de hasta 30 segundos:
             Chrome solicitará seleccionar la pestaña y activar «Compartir audio».
           </span>
-        </div>
+        </div>}
         {mediaCaptureMessage && <p className={css.captureStatus} role="status">{mediaCaptureMessage}</p>}
-        {siteOrigin && snapshot.tabId && onSecureLoginRequest && <button type="button"
+        {advanced && siteOrigin && snapshot.tabId && onSecureLoginRequest && <button type="button"
           className={css.secureShortcut}
           onClick={() => { void requestSecureLogin(siteOrigin, snapshot.tabId as string) }}>
           🔐 Solicitar acceso seguro
         </button>}
-        <form className={css.typeRow} onSubmit={(event) => { event.preventDefault(); if (typed) { void run({ type: 'text', text: typed }); setTyped(''); focusRef.current?.focus() } }}>
+        {advanced && <form className={css.typeRow} onSubmit={(event) => { event.preventDefault(); if (typed) { void run({ type: 'text', text: typed }); setTyped(''); focusRef.current?.focus() } }}>
           <input aria-label="Escribir en la página" placeholder="Escribe en el campo seleccionado…" value={typed} onChange={(event) => { setTyped(event.currentTarget.value) }} />
           <button type="submit" disabled={!snapshot.available || !typed}>Escribir</button>
           <button type="button" disabled={!snapshot.available} title="Pegar texto en el campo enfocado (no contraseñas)" onClick={() => { void pasteIntoPage() }}>Pegar</button>
           <button type="button" disabled={!snapshot.available} onClick={() => { void run({ type: 'key', key: 'Enter' }) }}>Enter</button>
           <button type="button" disabled={!snapshot.available} onClick={() => { void run({ type: 'key', key: 'Tab' }) }}>Tab</button>
-        </form>
+        </form>}
         {captureError && active && <p className={css.error} role="status">
           La página está abierta, pero su imagen todavía no está disponible: {captureError}. Phoenix reintentará la captura automáticamente.
         </p>}
         {connectionError && <p className={css.error} role="status">Conexión del navegador: {connectionError}</p>}
         {error && <p className={css.error} role="alert">{error}</p>}
-        <p className={css.hint}>Haz clic en la imagen para interactuar. «Ampliar» conserva la pestaña y la sesión.</p>
+        {advanced && <p className={css.hint}>Usa la vista para interactuar con Chromium. La sesión se conserva al ampliar.</p>}
       </>}
-      {snapshot.available && <div className={css.externalActions}>
+      {advanced && snapshot.available && <div className={css.externalActions}>
         <button type="button" title="Abrir esta página en Chrome completo" onClick={() => { void run({ type: 'open-external' }) }}>
           ↗ Abrir navegador completo
         </button>
