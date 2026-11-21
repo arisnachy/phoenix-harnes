@@ -1133,7 +1133,7 @@ function BrowserWorkspace({
     <div className={css.browserWorkspace} data-browser-floating="true" data-browser-workspace={live ? '' : undefined}
       data-activity-open={showSidecar ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
-        <MiniBrowser key={sessionId} sessionId={sessionId} requested active={selected}
+        <MiniBrowser key={sessionId} sessionId={sessionId} requested active={selected} compact
           pinned={pinned} onPinChange={onPinChange} onClose={onClose}
           {...sourceUrl === undefined ? {} : { sourceUrl }}
           {...tabId === undefined ? {} : { initialTabId: tabId }}
@@ -1336,7 +1336,10 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
                 pinned={pinnedBrowserKey === item.userKey}
                 onPinChange={value => {
                   setPinnedBrowserKey(value ? item.userKey : undefined)
-                  if (!value) setManualBrowserKey(undefined)
+                  if (!value) {
+                    setManualBrowserKey(undefined)
+                    if (!activeBrowserTurn) void releaseMiniBrowserSession(sessionId)
+                  }
                 }}
                 onClose={() => {
                   setPinnedBrowserKey(undefined)
