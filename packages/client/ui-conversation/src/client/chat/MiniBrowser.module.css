@@ -392,3 +392,59 @@
 
 /* Open the protected ASK in the activity sidecar, never in the browser card. */
 .secureShortcut { margin: 8px 12px; padding: 7px 11px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: transparent; color: inherit; cursor: pointer; }
+
+
+/* PHOENIX Smart Browser: restrained Pearl Light chrome.
+   Browser controls and captures are user-initiated and opt-in under ⋯. */
+.browser {
+  border-radius: 15px;
+  border-color: var(--dsw-alias-border-l2);
+  box-shadow: 0 5px 24px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 10%, transparent);
+}
+.titlebar {
+  min-height: 42px;
+  padding: 5px 10px;
+  border-top-width: 0;
+  background: var(--dsw-alias-bg-layer-1);
+  gap: 7px;
+}
+.brand {
+  flex: 0 1 auto;
+  max-width: min(48%, 350px);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  font-weight: 650;
+}
+.brand span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status { padding: 4px 8px; border: 0; background: transparent; font-size: 10px; }
+.titlebar button { min-height: 29px; font-size: 11px; font-weight: 600; padding-inline: 9px; }
+.titlebar button[aria-pressed='true'] {
+  color: var(--mini-action);
+  background: color-mix(in srgb, var(--mini-accent) 10%, var(--mini-surface-raised));
+}
+.toolbar, .tabs, .typeRow, .mediaBar {
+  background: var(--dsw-alias-bg-layer-1);
+  border-color: var(--dsw-alias-border-l2);
+}
+.viewport { border-radius: 0 0 11px 11px; }
+.browser:not([data-expanded='true']) .screen {
+  width: 100%;
+  max-height: clamp(190px, 46vh, 520px);
+  object-fit: contain;
+  background: var(--dsw-alias-bg-base);
+}
+.browser:not([data-expanded='true']) .loading,
+.browser:not([data-expanded='true']) .empty {
+  min-height: clamp(180px, 30vh, 290px);
+}
+.mediaBar span { display: none; }
+.hint { font-size: 10px; }
+@media(max-width:650px) {
+  .status { display: none; }
+  .brand { max-width: 35%; }
+  .titlebar button { padding-inline: 6px; }
+  .browser:not([data-expanded='true']) .screen { max-height: 34vh; }
+}
+@media(prefers-reduced-motion: reduce) {
+  .browser, .titlebar, .viewport { transition: none !important; }
+}
