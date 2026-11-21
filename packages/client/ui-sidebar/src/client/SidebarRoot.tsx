@@ -73,7 +73,7 @@ export function SidebarRoot({
         app: detail.app,
         role: detail.role === 'patient' ? 'patient' : 'doctor',
         section: typeof detail.section === 'string' ? detail.section : 'overview',
-        title: typeof detail.title === 'string' ? detail.title.slice(0, 60) : undefined,
+        ...(typeof detail.title === 'string' ? {title:detail.title.slice(0,60)} : {}),
         palette: ['pearl','ocean','sage','iris','amber'].includes(detail.palette ?? '')
           ? detail.palette as 'pearl'|'ocean'|'sage'|'iris'|'amber' : 'pearl',
         sections,
