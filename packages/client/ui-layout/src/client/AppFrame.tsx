@@ -17,6 +17,7 @@ import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAU
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from './HealthiaWorkspace.tsx'
+import { ADAPTIVE_APP_PRESETS } from './AdaptiveAppCatalog.ts'
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
@@ -305,12 +306,15 @@ export function AppFrame({
         <CenterColumn>
           <div className={css.appLauncher}>
             <button type="button" className={css.appLauncherButton} aria-label="Aplicaciones PHOENIX" aria-expanded={appMenuOpen} onClick={() => setAppMenuOpen(open => !open)}>
-              <span aria-hidden="true">▦</span> Apps
+              <span aria-hidden="true">▦</span> {adaptiveApp === 'healthia' ? 'Healthia' : 'Apps'}
             </button>
             {appMenuOpen && <div className={css.appLauncherMenu} role="menu" aria-label="Aplicaciones instaladas">
               <button type="button" role="menuitem" onClick={() => { setAdaptiveApp('general'); setAppMenuOpen(false) }}>PHOENIX · General</button>
               <button type="button" role="menuitem" onClick={() => { setAdaptiveApp('healthia'); setHealthiaRole('doctor'); setHealthiaSection('overview'); setAppMenuOpen(false) }}>Healthia · Médico</button>
               <button type="button" role="menuitem" onClick={() => { setAdaptiveApp('healthia'); setHealthiaRole('patient'); setHealthiaSection('overview'); setAppMenuOpen(false) }}>Healthia · Paciente (vista preliminar)</button>
+              {ADAPTIVE_APP_PRESETS.filter(app => app.readiness === 'preview-only').map(app => (
+                <button key={app.id} type="button" role="menuitem" disabled title="Plantilla disponible en el catálogo; no es una aplicación conectada">{app.label} · Sin conectar</button>
+              ))}
             </div>}
           </div>
           {adaptiveApp === 'healthia' && (
