@@ -6,7 +6,7 @@ const response = (status:number, value:unknown):Response => new Response(JSON.st
 })
 describe('Healthia readonly authenticated bridge', () => {
   it('projects only the authenticated role, never CSRF or patient identity', async () => {
-    const fetcher=vi.fn(async()=>response(200,{
+    const fetcher=vi.fn(async (_input: RequestInfo | URL)=>response(200,{
       actor:{username:'private-clinician',org:'private-hospital',role:'clinician'},
       csrf:'SENSITIVE_SENTINEL',patient:{name:'private-patient'},
     }))
