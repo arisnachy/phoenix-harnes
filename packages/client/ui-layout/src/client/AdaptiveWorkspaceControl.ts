@@ -174,7 +174,8 @@ export function preflightAdaptiveControl(command: AdaptiveControlCommand, apps: 
 }
 
 export function applyAdaptiveFieldEdit(command: AdaptiveControlCommand, store: StorageLike | undefined = storeOrUndefined()): AdaptiveFormDraft {
-  const state = preflightAdaptiveControl(command)
+  const state = preflightAdaptiveControl(command, readAdaptiveApps(store),
+    (app, section) => readAdaptiveForm(app, section, store))
   if (!state.valid || !['rename-field','remove-field','set-binding'].includes(command.operation)) throw new Error('ADAPTIVE_PREFLIGHT_FAILED_'+state.reason)
   const form = readAdaptiveForm(command.appId,command.sectionId!,store)
   if (!form) throw new Error('ADAPTIVE_FORM_MISSING')
