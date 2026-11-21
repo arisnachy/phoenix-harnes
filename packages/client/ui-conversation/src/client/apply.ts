@@ -24,7 +24,7 @@ import type { IConversation } from './service.ts'
 import { ComposerBlockRegistry } from './input/blocks.ts'
 import type { ComposerBlock } from './input/blocks.ts'
 import { InputHub } from './input/hub.ts'
-import { ADAPTIVE_MISSION_EVENT, isAdaptiveMissionEvent, newAdaptiveAppMission } from './adaptive-app-mission.ts'
+import { ADAPTIVE_MISSION_EVENT, isAdaptiveMissionEvent, startAdaptiveAppConversation } from './adaptive-app-mission.ts'
 import { ComposerSubmissionPolicy } from './input/submission-policy.ts'
 import { InputBar } from './skeleton/InputBar.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
@@ -291,19 +291,16 @@ export function apply(ctx: Context): void {
       launching = true
       void (async () => {
         try {
-          const active = sessions.list.getSnapshot().current
-          const workspace = workspaces.list.getSnapshot()
-          const target = (active === undefined ? undefined : workspace.items.find(
-            item => item.sessionIds.includes(active),
-          )?.workspaceId) ?? workspace.recentWorkspaceId
-          const sessionId = await sessions.create(target === undefined ? {} : { workspaceId: target })
-          if (disposed) return
-          sessions.open(sessionId)
-          const input = inputHub.shell(sessionId)
-          input.actions.setDraft(newAdaptiveAppMission())
-          // Submit through the same input path as the user's Enter key.
-          // Host model availability and failure recovery remain authoritative.
-          input.actions.submit()
+          await startAdaptiveAppConversation({
+            current: () => sessions.list.getSnapshot().current,
+            workspaces: () => workspaces.list.getSnapshot(),
+            create: options => sessions.create(options),
+            open: id => { if (!disposed) sessions.open(id) },
+            input: id => {
+              if (disposed) throw new Error('ADAPTIVE_MISSION_DISPOSED')
+              return inputHub.shell(id).actions
+            },
+          })
         } catch {
           if (!disposed) window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
         } finally {
