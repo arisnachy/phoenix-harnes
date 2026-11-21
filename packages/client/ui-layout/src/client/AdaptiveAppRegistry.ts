@@ -94,3 +94,22 @@ export function removeAdaptiveApp(appId: string, store: Store | undefined = brow
   try { store.setItem(BACKUP, updated) } catch { /* primary already committed */ }
   return next
 }
+
+/** Append a menu item without editing application code, preserving its ID. */
+export function appendAdaptiveSection(
+  appId: string, label: string, store: Store | undefined = browserStore(),
+): AdaptiveAppBlueprint {
+  if (!store) throw new Error('ADAPTIVE_STORAGE_UNAVAILABLE')
+  const current = readAdaptiveApps(store)
+  const app = current.find(item => item.id === appId)
+  if (!app) throw new Error('ADAPTIVE_UNKNOWN_APP')
+  const changed = createAdaptiveAppBlueprint(app.title, [...app.sections.map(s => s.label), label])
+  if (changed.id !== app.id) throw new Error('ADAPTIVE_ID_MISMATCH')
+  const next = current.map(item => item.id === app.id ? changed : item)
+  const serialized = JSON.stringify({version:1,apps:next})
+  if (serialized.length > MAX_BYTES) throw new Error('ADAPTIVE_APP_LIMIT')
+  store.setItem(BACKUP, JSON.stringify({version:1,apps:current}))
+  store.setItem(CURRENT, serialized)
+  try { store.setItem(BACKUP, serialized) } catch { /* old backup remains */ }
+  return changed
+}
