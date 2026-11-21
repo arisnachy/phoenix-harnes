@@ -120,16 +120,22 @@ async function sendReminderWithVerifiedGmail(
  * @param ctx - Authenticated host context exposing the local HTTP service.
  */
 export function registerHealthRoutes(ctx:Context):void {
-  if(process.env.PHOENIX_HEALTH_ENABLED!=='1')return
+  // Register the safe loopback entry point automatically; explicit '0' can disable.
+  if(process.env.PHOENIX_HEALTH_ENABLED==='0')return
   if(ctx.webServer.host!=='127.0.0.1'){
     ctx.logger.warn('Health Engine requiere PHOENIX en 127.0.0.1; no se expone en LAN.')
     return
   }
-  const store=new HealthClinicStore(dshHomePath('health','clinic.sqlite'))
+  // Lazy open: ordinary chats never start experimental node:sqlite or create
+  // patient records. Only visiting /health on loopback initializes the store.
+  let clinicStore:HealthClinicStore|undefined
+  const getStore=():HealthClinicStore=>clinicStore??=new HealthClinicStore(dshHomePath('health','clinic.sqlite'))
   const failures=new Map<string,{ count:number;until:number }>()
   const patientPortal=createPatientPortalHandler(store)
   const route=ctx.webServer.register({ kind:'prefix',path:'/health',handler:async(req,res)=>{
     if(!peer(req)){reply(res,403,{ error:'Acceso local requerido' });return}
+    // Authenticated clinical methods still require login, session and CSRF.
+    const store=getStore()
     // On a shared browser, opening the patient portal invalidates any
     // professional login token. Patient mode must never inherit clinician rights.
     const pathForIsolation=new URL(req.url??'/','http://127.0.0.1').pathname
@@ -424,6 +430,6 @@ export function registerHealthRoutes(ctx:Context):void {
     }
   } })
   ctx.effect(()=>()=>{
-    route();store.close();failures.clear()
+    route();clinicStore?.close();clinicStore=undefined;failures.clear()
   },'PHOENIX Health: local encrypted clinic and session cleanup')
 }
