@@ -30,3 +30,4 @@ None; this package neither assembles nor sends a provider request.
 - **The desktop visual rail is intentionally bounded** — Cordis uses a compact right-side rail rather than a freely resizable fourth shell column; a future multi-pane workspace may add independent resizing without changing the named-occupant lifecycle.
 - **Concession-chain auto-close derives a zero width without touching the preferred width** — the panel restores itself when the window widens; consumers must not read the stored details width as the rendered truth.
 - **No scroll anchoring during squeeze reflow** — layout changes may move the reader's viewport.
+- **Adaptive catalog is a static allowlist, not universal self-inspection** — runtime discovery, signed third-party manifests, persistent clinical form publishing, input-to-API dispatch, authenticated patient portal and full state recovery remain separate verified work. The current safe fallback is to switch back to PHOENIX General.
