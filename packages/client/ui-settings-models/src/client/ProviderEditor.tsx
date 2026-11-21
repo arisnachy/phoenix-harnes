@@ -57,6 +57,8 @@ export interface ProviderEditorProps {
   displayName: string
   /** Hide the title row (the add card renders its own provider select). */
   hideTitle?: boolean
+  /** Present connection, configuration and verification as guided steps. */
+  guided?: boolean
   /**
    * Whether the adapter reports this route as hand-declared — absent from its
    * installed catalog. Such a route carries its own wire protocol, chosen when
@@ -182,6 +184,13 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const [keyDraft, setKeyDraft] = useState('')
   const [keyState, setKeyState] = useState<CredentialView | undefined>(undefined)
   const [busy, setBusy] = useState(false)
+  const [wizardStep, setWizardStep] = useState<0 | 1 | 2>(0)
+  const [preferredMethod, setPreferredMethod] = useState<'api-key' | 'oauth'>(
+    () => props.provider === 'openai-codex' ? 'oauth' : 'api-key',
+  )
+  const [authorizedDuringEdit, setAuthorizedDuringEdit] = useState(false)
+  const [probeBusy, setProbeBusy] = useState(false)
+  const [probeFeedback, setProbeFeedback] = useState<string | undefined>()
   const [failure, setFailure] = useState<string | undefined>(undefined)
   // A settings success advances both retry baselines immediately. Keeping the
   // derived fields in the draft prevents a pushed namespace refresh from
@@ -203,10 +212,19 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const oauth = props.oauth
   /** An account-only flow replaces the key field with its sign-in buttons. */
   const isCodex = props.provider === 'openai-codex'
+  const supportsAccount = isCodex || oauth?.methods.some(method => method.id === 'oauth') === true
+  const supportsApiKey = !isCodex && !isChatGptWeb
+    && (oauth === undefined || oauth.methods.some(method => method.id === 'api-key'))
+  const selectedMethod = supportsApiKey
+    ? (supportsAccount ? preferredMethod : 'api-key')
+    : 'oauth'
   const oauthOnly = isCodex || (oauth !== undefined && !oauth.methods.some(method => method.id === 'api-key'))
+    || (props.guided === true && selectedMethod === 'oauth')
+  const accountReady = oauth?.connected === true || authorizedDuringEdit
   const { attempt, answer, setAnswer, failure: authFailure, begin, submitAnswer, cancel } =
     useAuthorizationAttempt(api.authorization, () => {
       setAuthRefresh(current => current + 1)
+      setAuthorizedDuringEdit(true)
       props.onAuthorized?.()
     })
   // The same schema read the create card makes, so the choices offered here
@@ -257,12 +275,14 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   // The model list is validated by the same per-row checker for both families,
   // so a bad row is named by its position rather than by a blanket message.
   const modelFailure = validateDeepSeekModels(schema.getPath(draft, ['models']))
-  const keyFailure = apiKeyFailure(keyDraft)
+  const keyFailure = props.guided === true && selectedMethod === 'oauth'
+    ? undefined
+    : apiKeyFailure(keyDraft)
   // What a probe or a write must carry: the typed key with paste whitespace
   // removed. A blank field yields an empty string, which both call sites read
   // as "no key supplied" rather than as a key — that is how a card whose
   // provider already has a stored key is edited without re-entering it.
-  const keyValue = keyDraft.trim()
+  const keyValue = props.guided === true && selectedMethod === 'oauth' ? '' : keyDraft.trim()
   const credentialRequiredFailure = props.credentialRequired === true
     && keyDraft.length > 0 && keyValue.length === 0
     ? 'keyRequired' as const
@@ -291,10 +311,16 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     const ns = namespace.ns
     // A pi-ai profile names the conventional reference only when this page is
     // about to store a key. Otherwise the provider keeps its native auth path.
-    const next = layout === 'pi-ai' && stringAt(draft, 'apiKeyEnv') === undefined
-      && stringAt(fallback, 'apiKeyEnv') === undefined && keyValue.length > 0
-      ? schema.setPath(draft, ['apiKeyEnv'], keyRef)
+    // A verified account route no longer points to the old API-key reference.
+    // The credential itself is not deleted: other profiles may still use it.
+    const authDraft = props.guided === true && selectedMethod === 'oauth'
+      && supportsAccount && accountReady && layout === 'pi-ai'
+      ? schema.deletePath(draft, ['apiKeyEnv'])
       : draft
+    const next = layout === 'pi-ai' && stringAt(authDraft, 'apiKeyEnv') === undefined
+      && stringAt(fallback, 'apiKeyEnv') === undefined && keyValue.length > 0
+      ? schema.setPath(authDraft, ['apiKeyEnv'], keyRef)
+      : authDraft
     if (props.credentialOnly !== true) {
       // The same checker gates the submit button, so a card cannot reach this
       // with a bad row; it stays because the schema check below would refuse
@@ -337,6 +363,21 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     }
     setKeyDraft('')
     return undefined
+  }
+
+  const checkConnection = async (): Promise<void> => {
+    setProbeBusy(true)
+    setProbeFeedback(undefined)
+    try {
+      const response = await api.llm.discoverModels(probe)
+      setProbeFeedback(response.result.ok
+        ? t('wizardTestOK').replace('{count}', String(response.result.value.models.length))
+        : t('wizardTestFailed').replace('{error}', response.result.error.message))
+    } catch (error) {
+      setProbeFeedback(t('wizardTestFailed').replace('{error}', messageOf(error)))
+    } finally {
+      setProbeBusy(false)
+    }
   }
 
   const apply = async (): Promise<void> => {
@@ -424,7 +465,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             an inline sign-in that never routes an OAuth grant through the
             API-key input. An account-only flow (no api-key method) is the
             whole credential story, so the key field below steps aside. */}
-        {oauth === undefined ? (isCodex ? (
+        {props.guided === true && selectedMethod !== 'oauth' ? null : oauth === undefined ? (isCodex ? (
           <p role="status" className={styles['advancedHint']}>{t('accountUnavailable')}</p>
         ) : null) : (
           <div className={styles['field']}>
@@ -587,9 +628,68 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
               : null}
           </div>
         )}
-      {layout === 'unknown'
-        ? <p className={styles['advancedHint']}>{`${t('advancedHint')} (${namespace.ns})`}</p>
-        : curatedFields(layout)}
+      {props.guided === true ? (
+        <>
+          <ol className={styles['wizardSteps']} aria-label={t('wizardConnection')}>
+            {(['wizardConnection', 'wizardOptions', 'wizardVerify'] as const).map((stepName, index) => (
+              <li key={stepName} className={index === wizardStep ? styles['wizardStepActive'] : styles['wizardStep']}>
+                <span className={styles['wizardStepNumber']}>{String(index + 1)}</span>
+                {t(stepName)}
+              </li>
+            ))}
+          </ol>
+          {wizardStep === 0 ? (
+            <fieldset className={styles['wizardMethods']}>
+              <legend className={styles['wizardHeading']}>{t('wizardChooseMethod')}</legend>
+              {supportsApiKey ? (
+                <label className={styles['wizardMethodCard']}>
+                  <input type="radio" name={`method-${props.provider}`} value="api-key"
+                    checked={selectedMethod === 'api-key'}
+                    disabled={disabled}
+                    onChange={() => { setPreferredMethod('api-key'); setProbeFeedback(undefined) }} />
+                  <span><strong>{t('wizardApi')}</strong><small>{t('wizardApiDesc')}</small></span>
+                </label>
+              ) : null}
+              {supportsAccount ? (
+                <label className={styles['wizardMethodCard']}>
+                  <input type="radio" name={`method-${props.provider}`} value="oauth"
+                    checked={selectedMethod === 'oauth'}
+                    disabled={disabled || !supportsApiKey}
+                    onChange={() => { setPreferredMethod('oauth'); setProbeFeedback(undefined) }} />
+                  <span><strong>{t('wizardAuth')}</strong><small>{t('wizardAuthDesc')}</small></span>
+                </label>
+              ) : null}
+              {!supportsApiKey && !supportsAccount ? (
+                <p className={styles['advancedHint']}>{t('wizardAutomatic')}</p>
+              ) : null}
+            </fieldset>
+          ) : null}
+        </>
+      ) : null}
+      <div hidden={props.guided === true && wizardStep !== 1}>
+        {layout === 'unknown'
+          ? <p className={styles['advancedHint']}>{`${t('advancedHint')} (${namespace.ns})`}</p>
+          : curatedFields(layout)}
+      </div>
+      {props.guided === true && wizardStep === 2 ? (
+        <section className={styles['wizardReview']} aria-label={t('wizardVerify')}>
+          <p className={styles['advancedHint']}>{t('wizardReviewHint')}</p>
+          <div className={styles['wizardReviewSummary']}>
+            <strong>{props.displayName}</strong>
+            <span>{supportsAccount && selectedMethod === 'oauth' ? t('wizardAuth') : supportsApiKey ? t('wizardApi') : t('wizardAutomatic')}</span>
+          </div>
+          {supportsAccount && selectedMethod === 'oauth' && !accountReady
+            ? <p role="alert" className={styles['error']}>{t('wizardRequiresSignIn')}</p>
+            : null}
+          <button type="button" className={styles['secondaryButton']} disabled={disabled || probeBusy}
+            onClick={() => { void checkConnection() }}>
+            {probeBusy ? t('wizardTesting') : t('wizardTest')}
+          </button>
+          {probeFeedback === undefined
+            ? <p className={styles['advancedHint']}>{t('wizardCheckOptional')}</p>
+            : <p role="status" className={styles['advancedHint']}>{probeFeedback}</p>}
+        </section>
+      ) : null}
       {failure !== undefined ? <p className={styles['error']}>{failure}</p> : null}
       {props.credentialOnly === true || modelFailure === undefined
         ? null
@@ -598,12 +698,30 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             {`${t('model')} ${String(modelFailure.index + 1)}: ${t(modelFailure.key)}`}
           </p>
         )}
+      {props.guided === true && wizardStep < 2 ? (
+        <div className={styles['wizardNav']}>
+          {wizardStep > 0 ? (
+            <button type="button" className={styles['secondaryButton']}
+              onClick={() => { setWizardStep(0) }}>{t('wizardBack')}</button>
+          ) : null}
+          <button type="button" className={styles['secondaryButton']}
+            onClick={() => { setWizardStep(wizardStep === 0 ? 1 : 2) }}>{t('wizardNext')}</button>
+          <button type="button" className={styles['secondaryButton']}
+            onClick={() => { props.onClose(false) }}>{t('cancel')}</button>
+        </div>
+      ) : null}
+      {props.guided === true && wizardStep === 2 ? (
+        <button type="button" className={styles['secondaryButton']}
+          disabled={busy} onClick={() => { setWizardStep(1) }}>{t('wizardBack')}</button>
+      ) : null}
+      <div hidden={props.guided === true && wizardStep !== 2}>
       <EditorFooter
         t={t}
         busy={busy}
         submitDisabled={disabled || layout === 'unknown'
           || (props.credentialOnly !== true && modelFailure !== undefined)
           || shownKeyFailure !== undefined
+          || (props.guided === true && supportsAccount && selectedMethod === 'oauth' && !accountReady)
           // An account-only flow has no key field to satisfy: the blank-key
           // apply (ambient authentication) is exactly the intended submit.
           || (props.credentialRequired === true && ! oauthOnly && keyValue.length === 0)}
@@ -613,6 +731,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
         onCancel={() => { props.onClose(false) }}
         onSubmit={() => { void apply() }}
       />
+      </div>
     </div>
   )
 }

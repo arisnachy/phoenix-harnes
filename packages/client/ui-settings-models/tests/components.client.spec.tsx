@@ -230,6 +230,24 @@ async function mountDeepSeekCard(overrides: Parameters<typeof scriptedFace>[0] =
 }
 
 describe('ModelsSection', () => {
+  it('filters provider cards and guides an edit through connection, settings and review', async () => {
+    const { mutate } = await mountSection()
+    const search = screen.getByRole('searchbox', { name: en.searchProviders }) as HTMLInputElement
+    fireEvent.change(search, { target: { value: 'openai' } })
+    expect(screen.queryByText('DeepSeek')).toBeNull()
+    fireEvent.change(search, { target: { value: '' } })
+
+    fireEvent.click(screen.getByRole('button', { name: openaiCopy(en.editProvider) }))
+    expect(screen.getByText(en.wizardChooseMethod)).toBeTruthy()
+    expect(screen.getByText(en.wizardApiDesc)).toBeTruthy()
+    fireEvent.click(screen.getByText(en.wizardNext))
+    expect(screen.getByLabelText(en.keyInput)).toBeTruthy()
+    fireEvent.click(screen.getByText(en.wizardNext))
+    expect(screen.getByText(en.wizardReviewHint)).toBeTruthy()
+    expect(screen.getByText(en.wizardTest)).toBeTruthy()
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
   it('renders nothing before the slot injects its dependencies', () => {
     const uninjected = {} as ModelsSectionProps
     render(<ModelsSection {...uninjected} />)
