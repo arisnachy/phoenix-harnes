@@ -76,6 +76,9 @@ export function installAdaptiveApp(app: AdaptiveAppBlueprint, store: Store | und
   // CURRENT intact or BACKUP recoverable; no state is promoted on error.
   store.setItem(BACKUP, JSON.stringify({ version: 1, apps: previous }))
   store.setItem(CURRENT, serialized)
+  // A fully written snapshot becomes the new last-good copy. A backup
+  // quota failure after primary success is non-fatal; previous backup survives.
+  try { store.setItem(BACKUP, serialized) } catch { /* primary already committed */ }
   return next
 }
 
@@ -86,6 +89,8 @@ export function removeAdaptiveApp(appId: string, store: Store | undefined = brow
   if (!previous.some(app => app.id === appId)) throw new Error('ADAPTIVE_UNKNOWN_APP')
   const next = previous.filter(app => app.id !== appId)
   store.setItem(BACKUP, JSON.stringify({ version: 1, apps: previous }))
-  store.setItem(CURRENT, JSON.stringify({ version: 1, apps: next }))
+  const updated = JSON.stringify({ version: 1, apps: next })
+  store.setItem(CURRENT, updated)
+  try { store.setItem(BACKUP, updated) } catch { /* primary already committed */ }
   return next
 }
