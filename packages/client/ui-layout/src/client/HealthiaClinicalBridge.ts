@@ -6,7 +6,7 @@
 export type ClinicalRouteStatus = {
   readonly status: 'authenticated'|'locked'|'unavailable'
   readonly role: 'admin'|'clinician'|'psychologist'|'nurse'|'reception'|'lab'|'radiology'|'pharmacy'|'billing'|null
-  readonly patientPortal: 'not-enabled'
+  readonly patientPortal: 'not-verified'
 }
 const ROLES = [
   'admin','clinician','psychologist','nurse','reception','lab',
@@ -14,17 +14,17 @@ const ROLES = [
 ] as const
 /** Probe existing authority; never infer authentication from the UI role selector. */
 export async function probeClinicalSession(fetcher?:typeof fetch):Promise<ClinicalRouteStatus> {
-  const locked: ClinicalRouteStatus = {status:'locked',role:null,patientPortal:'not-enabled'}
+  const locked: ClinicalRouteStatus = {status:'locked',role:null,patientPortal:'not-verified'}
   try {
     const request = fetcher ?? (typeof fetch === 'function' ? fetch : undefined)
-    if (!request) return {status:'unavailable',role:null,patientPortal:'not-enabled'}
+    if (!request) return {status:'unavailable',role:null,patientPortal:'not-verified'}
     const response = await request('/health/api/session',{
       method:'GET',cache:'no-store',credentials:'same-origin',
       headers:{accept:'application/json'},
       signal:AbortSignal.timeout(3000),
     })
     if (response.status === 404 || response.status === 503) return {
-      status:'unavailable',role:null,patientPortal:'not-enabled',
+      status:'unavailable',role:null,patientPortal:'not-verified',
     }
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return locked
     const body:unknown = await response.json()
@@ -35,6 +35,6 @@ export async function probeClinicalSession(fetcher?:typeof fetch):Promise<Clinic
     if (typeof role !== 'string' || !ROLES.some(value => value===role)) return locked
     // Explicit whitelist: the Host also returns a CSRF token; discard it and
     // all names/org/session metadata before returning to the nonclinical UI.
-    return {status:'authenticated',role:role as ClinicalRouteStatus['role'],patientPortal:'not-enabled'}
-  } catch {return {status:'unavailable',role:null,patientPortal:'not-enabled'}}
+    return {status:'authenticated',role:role as ClinicalRouteStatus['role'],patientPortal:'not-verified'}
+  } catch {return {status:'unavailable',role:null,patientPortal:'not-verified'}}
 }
