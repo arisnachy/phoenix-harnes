@@ -16,16 +16,30 @@ import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@phoenix-ai/dsh
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT } from './columns.ts'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
+import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from './HealthiaWorkspace.tsx'
+import { ADAPTIVE_APP_PRESETS, createAdaptiveAppBlueprint, type AdaptiveAppBlueprint } from './AdaptiveAppCatalog.ts'
+import { appendAdaptiveSection, renameAdaptiveSection, removeAdaptiveSection, restorePreviousAdaptiveApps, installAdaptiveApp, readAdaptiveApps } from './AdaptiveAppRegistry.ts'
+import { applyAdaptiveFormFields, restorePreviousAdaptiveForms } from './AdaptiveFormMetadataStore.ts'
+import {
+  parseAdaptiveControl, preflightAdaptiveControl, findAdaptiveMetadata,
+  saveAdaptivePalette, readAdaptivePalette, applyAdaptiveFieldEdit, applyAdaptiveVisualEdit, applyAdaptiveAiFieldEdit,
+  type AdaptiveDiscovery,
+} from './AdaptiveWorkspaceControl.ts'
+import { isVisualOperation, restoreVisualBoard, readVisualBoard } from './AdaptiveVisualKit.ts'
+import { AdaptiveAppPreview } from './AdaptiveAppPreview.tsx'
+import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
   & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay' | 'shell.workspace'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
+  & { readonly inspectRuntime?: (() => AdaptiveLiveSnapshot) | undefined }
 
 interface SurfaceBoundaryProps {
-  readonly name: 'conversation' | 'workspace' | 'details'
+  readonly name: 'conversation' | 'workspace' | 'details' | 'adaptive'
   readonly resetKey: string
+  readonly onRestore?: () => void
   readonly children: ReactNode
 }
 
@@ -40,7 +54,7 @@ interface SurfaceBoundaryState {
  * failure stays contained behind a small retry control instead of leaving a
  * white screen that requires restarting the Host.
  */
-class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoundaryState> {
+export class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoundaryState> {
   override state: SurfaceBoundaryState = { failed: false, autoRetried: false }
 
   static getDerivedStateFromError(): Partial<SurfaceBoundaryState> {
@@ -48,7 +62,18 @@ class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoundarySta
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error(`PHOENIX ${this.props.name} surface render failed:`, error, info.componentStack)
+    // Adaptive forms may ultimately handle clinical content: never send exception
+    // messages or component props to generic console/telemetry on that surface.
+    if (this.props.name === 'adaptive') {
+      console.error('PHOENIX adaptive surface render failed (details withheld)')
+    } else {
+      console.error(`PHOENIX ${this.props.name} surface render failed:`, error, info.componentStack)
+    }
+    if (this.props.name === 'adaptive' && this.state.autoRetried) {
+      // Two consecutive crashes: leave the compromised optional app and
+      // restore PHOENIX General. Core conversation stays mounted.
+      this.props.onRestore?.()
+    }
     this.setState(state => state.autoRetried
       ? null
       : { failed: false, autoRetried: true })
@@ -70,6 +95,8 @@ class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoundarySta
       <div className={css.surfaceRecovery} role="alert" data-surface-recovery={this.props.name}>
         <span>PHOENIX isolated a rendering error in this view.</span>
         <button type="button" onClick={this.retry}>Retry view</button>
+        {this.props.name === 'adaptive' && this.props.onRestore &&
+          <button type="button" onClick={this.props.onRestore}>Volver a PHOENIX General</button>}
       </div>
     )
   }
@@ -150,6 +177,7 @@ export function AppFrame({
   useSessions,
   actions,
   renderSlot,
+  inspectRuntime,
 }: AppFrameProps) {
   const panels = useStore(s => s)
   const currentSession = useSessions(s => s.current)
@@ -159,6 +187,220 @@ export function AppFrame({
   })
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
+  const [adaptiveApp, setAdaptiveApp] = useState<string>('general')
+  const [customApps, setCustomApps] = useState<readonly AdaptiveAppBlueprint[]>(readAdaptiveApps)
+  const [customSection, setCustomSection] = useState('overview')
+  const activeBlueprint = customApps.find(app => app.id === adaptiveApp)
+  const launchAppMission = (): void => {
+    // UI intent only. The conversation plugin owns session creation and submission.
+    setAdaptiveApp('general')
+    setAppMenuOpen(false)
+    setMissionError(false)
+    window.dispatchEvent(new CustomEvent('phoenix:adaptive-app-mission', {
+      detail: { intent: 'new-app' },
+    }))
+  }
+  const [healthiaRole, setHealthiaRole] = useState<HealthiaRole>('doctor')
+  const [healthiaSection, setHealthiaSection] = useState('overview')
+  const [appMenuOpen, setAppMenuOpen] = useState(false)
+  const [missionError, setMissionError] = useState(false)
+  const [search, setSearch] = useState<{ term: string; results: readonly AdaptiveDiscovery[] } | null>(null)
+  const [paletteRevision, setPaletteRevision] = useState(0)
+  // Explicit two-stage chat request. The client can only alter local UI
+  // metadata; events do not constitute permission for clinical/API actions.
+  useEffect(() => {
+    const onControl = (event: Event): void => {
+      const detail = (event as CustomEvent<unknown>).detail
+      if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return
+      const request = detail as Record<string, unknown>
+      if (Object.keys(request).some(key => !['requestId','phase','command'].includes(key))
+        || typeof request.requestId !== 'string' || request.requestId.length > 90
+        || (request.phase !== 'preflight' && request.phase !== 'apply')) return
+      const command = parseAdaptiveControl(request.command)
+      let ok = false
+      let reason = 'INVALID_COMMAND'
+      try {
+        if (command) {
+          const gate = preflightAdaptiveControl(command)
+          ok = gate.valid
+          reason = gate.reason
+          if (gate.valid && request.phase === 'apply') {
+            if (command.operation === 'open') {
+              if (command.appId === 'general') setAdaptiveApp('general')
+              else if (command.appId === 'healthia') {
+                setAdaptiveApp('healthia')
+                if (command.sectionId && HEALTHIA_NAV[healthiaRole].some(item => item.id === command.sectionId)) {
+                  setHealthiaSection(command.sectionId)
+                } else setHealthiaSection('overview')
+              } else {
+                const app = readAdaptiveApps().find(item => item.id === command.appId)
+                if (!app) throw new Error('UNKNOWN_APP')
+                setAdaptiveApp(app.id)
+                setCustomSection(command.sectionId ?? app.sections[0]?.id ?? 'inicio')
+              }
+              setSearch(null)
+            } else if (command.operation === 'find') {
+              const matches = findAdaptiveMetadata(command.query!)
+              setSearch({ term: command.query!, results: matches })
+              reason = matches.length ? `Se encontraron ${matches.length} componentes.` : 'No hay coincidencias en el catálogo de aplicaciones.'
+            } else if (command.operation === 'palette') {
+              saveAdaptivePalette(command.appId,command.palette!)
+              setPaletteRevision(value => value + 1)
+              setAdaptiveApp(command.appId)
+            } else if (command.operation === 'add-section') {
+              const app = appendAdaptiveSection(command.appId,command.label!)
+              setCustomApps(readAdaptiveApps())
+              setAdaptiveApp(app.id)
+              setCustomSection(app.sections[app.sections.length - 1]?.id ?? 'inicio')
+              setSearch(null)
+            } else if (command.operation === 'rename-section' || command.operation === 'remove-section') {
+              const app = command.operation === 'rename-section'
+                ? renameAdaptiveSection(command.appId,command.sectionId!,command.label!)
+                : removeAdaptiveSection(command.appId,command.sectionId!)
+              setCustomApps(readAdaptiveApps())
+              setAdaptiveApp(app.id)
+              setCustomSection(command.operation === 'remove-section' ? app.sections[0]?.id ?? 'inicio' : command.sectionId!)
+              setSearch(null)
+            } else if (command.operation === 'set-field-ai') {
+              applyAdaptiveAiFieldEdit(command)
+              setAdaptiveApp(command.appId)
+              setCustomSection(command.sectionId!)
+              window.dispatchEvent(new CustomEvent('phoenix:adaptive-ai-field-config-refreshed',{
+                detail:{appId:command.appId,sectionId:command.sectionId,fieldId:command.fieldId},
+              }))
+            } else if (isVisualOperation(command.operation)) {
+              applyAdaptiveVisualEdit(command)
+              setAdaptiveApp(command.appId)
+              setCustomSection(command.sectionId!)
+              window.dispatchEvent(new CustomEvent('phoenix:adaptive-visual-refreshed', {
+                detail:{appId:command.appId,sectionId:command.sectionId},
+              }))
+            } else {
+              applyAdaptiveFieldEdit(command)
+              setAdaptiveApp(command.appId)
+              setCustomSection(command.sectionId!)
+              window.dispatchEvent(new CustomEvent('phoenix:adaptive-form-refreshed', {
+                detail:{appId:command.appId,sectionId:command.sectionId},
+              }))
+            }
+          }
+        }
+      } catch {
+        ok = false
+        reason = 'VALIDATION_OR_STORAGE_FAILED'
+      }
+      window.dispatchEvent(new CustomEvent('phoenix:adaptive-control-result', {
+        detail:{requestId:request.requestId,phase:request.phase,ok,reason},
+      }))
+    }
+    window.addEventListener('phoenix:adaptive-control-request',onControl)
+    return () => window.removeEventListener('phoenix:adaptive-control-request',onControl)
+  }, [healthiaRole])
+
+  // A chat-authored form diff is inert until the user explicitly applies it.
+  // The target must be a locally installed generic app, never Healthia EHR.
+  useEffect(() => {
+    const onFormInstall = (event: Event): void => {
+      const value = (event as CustomEvent<unknown>).detail
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return
+      const request = value as Record<string, unknown>
+      if (typeof request.requestId !== 'string' || request.requestId.length > 80) return
+      let ok = false
+      try {
+        if (Object.keys(request).some(k => !['requestId','appId','sectionId','fields'].includes(k))
+          || typeof request.appId !== 'string' || typeof request.sectionId !== 'string') throw new Error('INVALID_REQUEST')
+        const installed = readAdaptiveApps().find(app => app.id === request.appId)
+        if (!installed || !installed.sections.some(item => item.id === request.sectionId)) throw new Error('UNKNOWN_APP')
+        applyAdaptiveFormFields(installed.id, request.sectionId, request.fields)
+        setCustomApps(readAdaptiveApps())
+        setAdaptiveApp(installed.id)
+        setCustomSection(request.sectionId)
+        window.dispatchEvent(new CustomEvent('phoenix:adaptive-form-refreshed', {
+          detail: { appId: installed.id, sectionId: request.sectionId },
+        }))
+        ok = true
+      } catch {
+        // Invalid, stale or unauthenticated proposals never mutate app views.
+      }
+      window.dispatchEvent(new CustomEvent('phoenix:adaptive-form-install-result', {
+        detail: { requestId: request.requestId, ok },
+      }))
+    }
+    window.addEventListener('phoenix:adaptive-form-install', onFormInstall)
+    return () => window.removeEventListener('phoenix:adaptive-form-install', onFormInstall)
+  }, [])
+
+  // The model may propose a structure; only a user-clicked, bounded app
+  // proposal can reach this configuration-only installation handler.
+  useEffect(() => {
+    const onInstall = (event: Event): void => {
+      const detail = (event as CustomEvent<unknown>).detail
+      if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return
+      const proposal = detail as Record<string, unknown>
+      if (Object.keys(proposal).some(key => !['requestId','title','sections'].includes(key))
+        || typeof proposal.requestId !== 'string' || proposal.requestId.length > 80
+        || typeof proposal.title !== 'string' || !Array.isArray(proposal.sections)
+        || proposal.sections.some(section => typeof section !== 'string')) return
+      let ok = false
+      try {
+        const blueprint = createAdaptiveAppBlueprint(proposal.title, proposal.sections)
+        const installed = installAdaptiveApp(blueprint)
+        setCustomApps(installed)
+        setAdaptiveApp(blueprint.id)
+        setCustomSection(blueprint.sections[0]?.id ?? 'inicio')
+        setAppMenuOpen(false)
+        ok = true
+      } catch {
+        // Storage unavailable, duplicate, malicious manifest or invalid name.
+        // Never modify the active workspace on failure.
+      }
+      window.dispatchEvent(new CustomEvent('phoenix:adaptive-app-install-result', {
+        detail: { requestId: proposal.requestId, ok },
+      }))
+    }
+    window.addEventListener('phoenix:adaptive-app-install', onInstall)
+    return () => window.removeEventListener('phoenix:adaptive-app-install', onInstall)
+  }, [])
+  useEffect(() => {
+    const onFailure = (): void => { setMissionError(true) }
+    window.addEventListener('phoenix:adaptive-app-mission-failed', onFailure)
+    return () => window.removeEventListener('phoenix:adaptive-app-mission-failed', onFailure)
+  }, [])
+
+  // UI state only. This channel cannot grant access to medical records.
+  useEffect(() => {
+    const onWorkspace = (event: Event): void => {
+      const request = (event as CustomEvent<{ app?: string; role?: string; section?: string }>).detail
+      if (!request) return
+      if (request.app === 'general') { setAdaptiveApp('general'); setAppMenuOpen(false); return }
+      if (request.app !== 'healthia') {
+        const custom = customApps.find(app => app.id === request.app)
+        if (!custom) return
+        setAdaptiveApp(custom.id)
+        setCustomSection(custom.sections.some(item => item.id === request.section) ? request.section! : custom.sections[0]?.id ?? 'inicio')
+        setAppMenuOpen(false)
+        return
+      }
+      setAdaptiveApp('healthia')
+      setAppMenuOpen(false)
+      if (request.role === 'doctor' || request.role === 'patient') {
+        setHealthiaRole(request.role)
+        setHealthiaSection(HEALTHIA_NAV[request.role].some(v => v.id === request.section) ? request.section! : 'overview')
+      } else if (request.section && HEALTHIA_NAV[healthiaRole].some(v => v.id === request.section)) {
+        setHealthiaSection(request.section)
+      }
+    }
+    window.addEventListener('phoenix:adaptive-workspace', onWorkspace)
+    return () => window.removeEventListener('phoenix:adaptive-workspace', onWorkspace)
+  }, [healthiaRole, customApps])
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace-state', {
+      detail: { app: adaptiveApp, role: healthiaRole, section: activeBlueprint ? customSection : healthiaSection,
+        sections: activeBlueprint?.sections ?? undefined, title: activeBlueprint?.title ?? undefined,
+        palette: activeBlueprint ? readAdaptivePalette(activeBlueprint.id) : 'pearl' },
+    }))
+  }, [adaptiveApp, healthiaRole, healthiaSection, customSection, activeBlueprint, paletteRevision])
+
 
   const lastSession = useRef(detailsSession)
   useLayoutEffect(() => {
@@ -272,6 +514,98 @@ export function AppFrame({
       </div>
       <>
         <CenterColumn>
+          <div className={css.appLauncher}>
+            <button type="button" className={css.appLauncherButton} aria-label="Aplicaciones PHOENIX" aria-expanded={appMenuOpen} onClick={() => setAppMenuOpen(open => !open)}>
+              <span aria-hidden="true">▦</span> {adaptiveApp === 'general' ? 'Apps / Espacios' : adaptiveApp === 'healthia' ? 'Healthia / Apps' : 'Apps / Espacios'}
+            </button>
+            {appMenuOpen && <div className={css.appLauncherMenu} role="menu" aria-label="Aplicaciones instaladas">
+              <button type="button" role="menuitem" onClick={() => { setAdaptiveApp('general'); setAppMenuOpen(false) }}>PHOENIX · General</button>
+              <button type="button" role="menuitem" onClick={() => { setAdaptiveApp('healthia'); setHealthiaRole('doctor'); setHealthiaSection('overview'); setAppMenuOpen(false) }}>Healthia · Médico</button>
+              <button type="button" role="menuitem" onClick={() => { setAdaptiveApp('healthia'); setHealthiaRole('patient'); setHealthiaSection('overview'); setAppMenuOpen(false) }}>Healthia · Paciente (vista preliminar)</button>
+              {ADAPTIVE_APP_PRESETS.filter(app => app.readiness === 'preview-only').map(app => (
+                <button key={app.id} type="button" role="menuitem" disabled title="Plantilla disponible en el catálogo; no es una aplicación conectada">{app.label} · Sin conectar</button>
+              ))}
+              {customApps.map(app => <button key={app.id} type="button" role="menuitem" onClick={() => {
+                setAdaptiveApp(app.id); setCustomSection(app.sections[0]?.id ?? 'inicio'); setAppMenuOpen(false)
+              }}>{app.title} · Borrador</button>)}
+              <button type="button" role="menuitem" onClick={launchAppMission}>+ Crear nueva aplicación con Kira</button>
+              <button type="button" role="menuitem" onClick={() => {
+                // Explicit user action, bounded UI metadata only. Slots describe
+                // registrations, not authentication or connector readiness.
+                const slots = (() => {
+                  try { return inspectRuntime?.().slots.map(slot => ({id:slot.id,state:slot.state})) ?? [] }
+                  catch { return [] }
+                })()
+                window.dispatchEvent(new CustomEvent('phoenix:adaptive-self-inspect', {detail:{
+                  activeApp:adaptiveApp,
+                  apps:customApps.slice(0,12).map(app => ({
+                    id:app.id,title:app.title,
+                    sections:app.sections.slice(0,8).map(item => {
+                      const board=readVisualBoard(app.id,item.id)
+                      return {id:item.id,label:item.label,visual:{revision:board.revision,total:board.widgets.length,
+                        widgets:board.widgets.slice(0,10).map(widget=>({
+                          id:widget.id,kind:widget.kind,title:widget.title,span:widget.span,
+                        }))}}
+                    }),
+                  })),
+                  declared:ADAPTIVE_APP_PRESETS.map(app => ({
+                    id:app.id,label:app.label,readiness:app.readiness,
+                  })),
+                  slots,
+                }}))
+                setAppMenuOpen(false)
+              }}>Inspeccionar capacidades con Kira</button>
+            </div>}
+          </div>
+          {search && (
+            <div className={css.adaptiveSearch} aria-label="Búsqueda en aplicaciones">
+              <div className={css.adaptiveSearchHeader}>
+                <strong>Resultados: {search.term}</strong>
+                <button type="button" onClick={() => setSearch(null)} aria-label="Cerrar resultados">×</button>
+              </div>
+              {search.results.length ? search.results.map((item,index) => (
+                <button type="button" key={index} className={css.adaptiveSearchItem}
+                  onClick={() => {
+                    setAdaptiveApp(item.appId)
+                    if (item.sectionId) setCustomSection(item.sectionId)
+                    setSearch(null)
+                  }}>
+                  {item.label} <span>{item.kind} · {item.appId}</span>
+                </button>
+              )) : <p>No se encontraron componentes en aplicaciones genéricas.</p>}
+            </div>
+          )}
+          {missionError && (
+            <div className={css.appMissionError} role="alert">
+              No se pudo crear la conversación de App Studio. Comprueba la conexión de PHOENIX y vuelve a intentarlo.
+              <button type="button" onClick={() => setMissionError(false)} aria-label="Cerrar aviso de App Studio">×</button>
+            </div>
+          )}
+          <SurfaceBoundary name="adaptive" resetKey={adaptiveApp}
+            onRestore={() => {
+              // Only restore local structural manifests. Clinical stores, chat,
+              // credentials, model settings and PHOENIX Core are never touched.
+              try { restorePreviousAdaptiveApps() } catch { /* General remains available */ }
+              try { restorePreviousAdaptiveForms() } catch { /* Schema is quarantined */ }
+              if (activeBlueprint) try { restoreVisualBoard(activeBlueprint.id, customSection) } catch { /* Optional UI metadata */ }
+              setCustomApps(readAdaptiveApps())
+              setAdaptiveApp('general')
+              setSearch(null)
+              setAppMenuOpen(false)
+            }}>
+            {activeBlueprint && (
+              <AdaptiveAppPreview key={activeBlueprint.id} app={activeBlueprint} section={customSection}
+                palette={readAdaptivePalette(activeBlueprint.id)}
+                onSectionChange={setCustomSection} onReturn={() => setAdaptiveApp('general')} />
+            )}
+            {adaptiveApp === 'healthia' && (
+              <HealthiaWorkspace role={healthiaRole} section={healthiaSection} inspectRuntime={inspectRuntime}
+                onRoleChange={role => { setHealthiaRole(role); setHealthiaSection('overview') }}
+                onSectionChange={setHealthiaSection}
+                onReturn={() => { setAdaptiveApp('general'); setAppMenuOpen(false) }}
+              />
+            )}
+          </SurfaceBoundary>
           <div data-shell-overlay>{renderSlot('shell.overlay', {})}</div>
           <SurfaceBoundary name="conversation" resetKey={currentSession ?? 'none'}>
             <SurfaceRender render={() => renderSlot('conversation', {})} />

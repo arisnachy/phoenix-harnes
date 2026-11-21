@@ -8,6 +8,7 @@ import { evaluateStudyEvidence } from './health-diagnostic-evidence.ts'
 import type { DatabaseSync } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { localInterviewPlan, type ClinicalInterviewGuide } from './health-interview.ts'
+import { composeProtectedClinicalNote, type ClinicalNoteProposal } from './health-note-draft.ts'
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { DEFAULT_PATIENT_INTAKE, parsePatientIntakeTemplate, patientIntakeValues, patientIdentityMatch, validatePatientDocument } from './health-patient-intake.ts'
 import type { CandidateIdentity, PatientIntakeTemplate } from './health-patient-intake.ts'
@@ -24,6 +25,7 @@ type Row = { id:string; org:string; kind:Kind|'attachment'|'draft'|'study-interp
 type AttachmentRow = Omit<Row,'kind'|'updated_at'> & { patient_id:string; encounter_id:string|null; uploaded_by:string }
 type Staff = { username:string; org:string; role:Role; salt:string; digest:string }
 type Session = { actor:Actor; expires:number; csrf:string }
+type PatientPortalSession = {accountId:string;org:string;patientId:string;csrf:string;expires:number}
 const TYPES = new Set<Kind>(['patients','encounters','appointments','orders','prescriptions','inventory','invoices','followups','observations'])
 const ROLES = new Set<Role>(['admin','clinician','psychologist','nurse','reception','lab','radiology','pharmacy','billing'])
 const READ:Record<Kind,readonly Role[]> = {
@@ -75,6 +77,7 @@ export class HealthClinicStore {
   private readonly dbPath:string
   private key:Buffer|undefined
   private readonly sessions=new Map<string,Session>()
+  private readonly patientSessions=new Map<string,PatientPortalSession>()
   constructor(dbPath:string) {
     if(typeof dbPath!=='string'||dbPath===':memory:')fail('La clínica requiere una ruta persistente privada')
     this.dbPath=dbPath
@@ -97,13 +100,165 @@ export class HealthClinicStore {
       'CREATE INDEX IF NOT EXISTS health_attachments_patient ON health_attachments(org,patient_id,created_at);'+
       'CREATE TABLE IF NOT EXISTS health_study_interpretations (id TEXT PRIMARY KEY, org TEXT NOT NULL, patient_id TEXT NOT NULL, source_attachment_id TEXT NOT NULL, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, authored_by TEXT NOT NULL);'+
       'CREATE INDEX IF NOT EXISTS health_study_interpretations_patient ON health_study_interpretations(org,patient_id,created_at);'+
-      'CREATE TABLE IF NOT EXISTS health_drafts (id TEXT PRIMARY KEY, org TEXT NOT NULL, username TEXT NOT NULL, scope TEXT NOT NULL, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);',
+      'CREATE TABLE IF NOT EXISTS health_drafts (id TEXT PRIMARY KEY, org TEXT NOT NULL, username TEXT NOT NULL, scope TEXT NOT NULL, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);'+
+      'CREATE TABLE IF NOT EXISTS health_patient_portal_invites (digest TEXT PRIMARY KEY, org TEXT NOT NULL, patient_id TEXT NOT NULL, expires_ms INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);'+
+      'CREATE INDEX IF NOT EXISTS health_patient_portal_invite_expiration ON health_patient_portal_invites(expires_ms);'+
+      'CREATE TABLE IF NOT EXISTS health_patient_portal_accounts (account_id TEXT PRIMARY KEY, org TEXT NOT NULL, patient_id TEXT NOT NULL, salt TEXT NOT NULL, digest TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, UNIQUE(org,patient_id));'+
+      'CREATE TABLE IF NOT EXISTS health_patient_portal_publications (org TEXT NOT NULL, patient_id TEXT NOT NULL, kind TEXT NOT NULL, record_id TEXT NOT NULL, published_by TEXT NOT NULL, at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(org,patient_id,kind,record_id));',
     )
   }
   /**
    * Perform close within the isolated clinical workflow.
    */
-  close():void {this.sessions.clear();this.key?.fill(0);this.key=undefined;this.db.close()}
+  close():void {this.sessions.clear();this.patientSessions.clear();this.key?.fill(0);this.key=undefined;this.db.close()}
+
+  /**
+   * Patient portal pilot is an independent, default-disabled authorization
+   * domain. Patient credentials NEVER grant a staff role or access to list().
+   * Deliver invitations out-of-band, never into the general PHOENIX chat.
+   */
+  issuePatientPortalInvite(actor:Actor,patientId:string):{invite:string;expiresAt:string} {
+    if(actor.role!=='admin'&&actor.role!=='clinician')fail('Permiso clínico insuficiente')
+    this.encryptionKey()
+    this.find(actor,'patients',str(patientId,'Paciente',80))
+    const invite=randomBytes(32).toString('hex')
+    const digest=createHash('sha256').update(invite).digest('hex')
+    const expires=Date.now()+15*60_000
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.db.prepare('INSERT INTO health_patient_portal_invites VALUES (?,?,?,?,0)')
+        .run(digest,actor.org,patientId,expires)
+      this.audit(actor,'patient.portal.invite',patientId)
+      this.db.exec('COMMIT')
+    }catch(e){this.db.exec('ROLLBACK');throw e}
+    return {invite,expiresAt:new Date(expires).toISOString()}
+  }
+
+  /** Exchange a single-use, short-lived invitation for independent patient credentials. */
+  redeemPatientPortalInvite(invite:unknown,password:unknown):{accountId:string} {
+    if(typeof invite!=='string'||!/^[a-f0-9]{64}$/u.test(invite))fail('Invitación inválida o caducada')
+    const pass=safePassword(password)
+    this.encryptionKey()
+    const digest=createHash('sha256').update(invite).digest('hex')
+    const record=this.db.prepare('SELECT org,patient_id AS patientId,expires_ms AS expiresMs,used FROM health_patient_portal_invites WHERE digest=?')
+      .get(digest) as {org:string;patientId:string;expiresMs:number;used:number}|undefined
+    if(!record||record.used!==0||record.expiresMs<=Date.now())fail('Invitación inválida o caducada')
+    const accountId=randomBytes(16).toString('hex')
+    const salt=randomBytes(16).toString('hex')
+    const digestPassword=hash(pass,salt)
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const consumed=this.db.prepare('UPDATE health_patient_portal_invites SET used=1 WHERE digest=? AND used=0 AND expires_ms>?')
+        .run(digest,Date.now())
+      if(Number(consumed.changes)!==1)fail('Invitación inválida o caducada')
+      this.db.prepare('DELETE FROM health_patient_portal_accounts WHERE org=? AND patient_id=?')
+        .run(record.org,record.patientId)
+      this.db.prepare('INSERT INTO health_patient_portal_accounts VALUES (?,?,?,?,?,1)')
+        .run(accountId,record.org,record.patientId,salt,digestPassword)
+      this.audit({username:'patient-portal',role:'reception',org:record.org},'patient.portal.redeem',record.patientId)
+      this.db.exec('COMMIT')
+    }catch(e){this.db.exec('ROLLBACK');throw e}
+    // Existing sessions cannot outlive credential rotation.
+    for(const [token,s] of this.patientSessions) {
+      if(s.org===record.org&&s.patientId===record.patientId)this.patientSessions.delete(token)
+    }
+    return {accountId}
+  }
+
+  /** Patient account authentication is intentionally independent from staff login. */
+  loginPatientPortal(accountId:unknown,password:unknown):{cookie:string;csrf:string} {
+    if(typeof accountId!=='string'||!/^[a-f0-9]{32}$/u.test(accountId))fail('Credenciales incorrectas')
+    const pass=str(password,'Contraseña',256)
+    this.encryptionKey()
+    const row=this.db.prepare('SELECT * FROM health_patient_portal_accounts WHERE account_id=?')
+      .get(accountId) as {account_id:string;org:string;patient_id:string;salt:string;digest:string;enabled:number}|undefined
+    const actual=hash(pass,row?.salt??'00000000000000000000000000000000')
+    if(!row||row.enabled!==1||!eq(actual,row.digest))fail('Credenciales incorrectas')
+    this.verifyAudit()
+    for(const [token,s] of this.patientSessions)if(s.expires<=Date.now())this.patientSessions.delete(token)
+    if(this.patientSessions.size>=64)fail('Demasiadas sesiones de pacientes activas')
+    const cookie=randomBytes(32).toString('hex')
+    const csrf=randomBytes(24).toString('hex')
+    this.patientSessions.set(cookie,{accountId,org:row.org,patientId:row.patient_id,csrf,expires:Date.now()+4*3600_000})
+    this.audit({username:'patient-portal',role:'reception',org:row.org},'patient.portal.login',row.patient_id)
+    return {cookie,csrf}
+  }
+
+  /** Internal-only identity. HTTP responses must not echo patient IDs or session secrets. */
+  patientPortalSession(cookie:string|undefined,csrf?:string,write=false):{csrf:string} {
+    const session=cookie?this.patientSessions.get(cookie):undefined
+    if(!session||Date.now()>=session.expires||!this.key)fail('Sesión del paciente caducada')
+    if(write&&(!csrf||csrf!==session.csrf))fail('Protección CSRF: solicitud rechazada')
+    const active=this.db.prepare('SELECT 1 FROM health_patient_portal_accounts WHERE account_id=? AND org=? AND patient_id=? AND enabled=1')
+      .get(session.accountId,session.org,session.patientId)
+    if(!active)fail('Cuenta del paciente revocada')
+    return {csrf:session.csrf}
+  }
+
+  logoutPatientPortal(cookie:string|undefined):void {
+    if(cookie)this.patientSessions.delete(cookie)
+  }
+
+  /** Only explicitly released appointments/prescriptions, never entire EHR or notes. */
+  patientPortalFeed(cookie:string|undefined):readonly RecordData[] {
+    this.patientPortalSession(cookie)
+    const session=this.patientSessions.get(cookie!)!
+    const released=this.db.prepare(
+      'SELECT kind,record_id AS recordId FROM health_patient_portal_publications WHERE org=? AND patient_id=? AND active=1 ORDER BY at DESC LIMIT 80',
+    ).all(session.org,session.patientId) as {kind:string;recordId:string}[]
+    const result:RecordData[]=[]
+    for(const release of released) {
+      if(release.kind!=='appointments'&&release.kind!=='prescriptions')continue
+      const row=this.db.prepare('SELECT * FROM health_records WHERE id=? AND org=? AND kind=?')
+        .get(release.recordId,session.org,release.kind) as Row|undefined
+      if(!row)continue
+      const value=this.open(row)
+      if(value.patientId!==session.patientId)continue
+      if(release.kind==='appointments') {
+        result.push({kind:'appointment',at:value.startsAt,status:value.status,practitioner:value.practitioner})
+      }else if(value.status==='prescribed'){
+        result.push({kind:'prescription',medication:value.medication,directions:value.directions,status:'prescribed'})
+      }
+    }
+    return result
+  }
+
+  /** Publish narrowly reviewed records, with real care relationship + audit. */
+  publishPatientPortalItem(actor:Actor,kind:string,recordId:string):void {
+    if(actor.role!=='clinician'||!['appointments','prescriptions'].includes(kind))
+      fail('Permiso profesional requerido')
+    const item=this.find(actor,kind as Kind,str(recordId,'Registro',80)).data
+    const patientId=str(item.patientId,'Paciente',80)
+    this.find(actor,'patients',patientId)
+    if(kind==='appointments'&&item.practitioner!==actor.username)
+      fail('Solo el profesional responsable puede publicar la cita')
+    if(kind==='prescriptions'&&(item.signedBy!==actor.username||item.status!=='prescribed'))
+      fail('Solo la receta firmada por su profesional puede publicarse')
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.db.prepare('INSERT INTO health_patient_portal_publications VALUES (?,?,?,?,?,?,1) ON CONFLICT(org,patient_id,kind,record_id) DO UPDATE SET active=1,published_by=excluded.published_by,at=excluded.at')
+        .run(actor.org,patientId,kind,recordId,actor.username,new Date().toISOString())
+      this.audit(actor,'patient.portal.publish',recordId)
+      this.db.exec('COMMIT')
+    }catch(e){this.db.exec('ROLLBACK');throw e}
+  }
+
+  /** Revocation invalidates portal credentials, pending invites and all releases. */
+  revokePatientPortalAccess(actor:Actor,patientId:string):void {
+    if(actor.role!=='admin'&&actor.role!=='clinician')fail('Permiso clínico insuficiente')
+    this.find(actor,'patients',str(patientId,'Paciente',80))
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.db.prepare('DELETE FROM health_patient_portal_accounts WHERE org=? AND patient_id=?').run(actor.org,patientId)
+      this.db.prepare('DELETE FROM health_patient_portal_invites WHERE org=? AND patient_id=?').run(actor.org,patientId)
+      this.db.prepare('UPDATE health_patient_portal_publications SET active=0 WHERE org=? AND patient_id=?').run(actor.org,patientId)
+      this.audit(actor,'patient.portal.revoke',patientId)
+      this.db.exec('COMMIT')
+    }catch(e){this.db.exec('ROLLBACK');throw e}
+    for(const [token,s] of this.patientSessions)
+      if(s.org===actor.org&&s.patientId===patientId)this.patientSessions.delete(token)
+  }
+
   private meta(name:string):string|undefined {
     return (this.db.prepare('SELECT value FROM health_meta WHERE name=?').get(name) as { value:string }|undefined)?.value
   }
@@ -404,6 +559,30 @@ export class HealthClinicStore {
       attachments,timeline:ordered.slice(0,400),
       pending:{orders:pendingOrders.length,followups:pendingFollowups.length,
         attachments:attachments.filter(item=>item.reviewStatus==='pending').length}}
+  }
+
+  /**
+   * Explicit clinician request for a clinical narrative suggestion.
+   * No model, chat, persistence or external connector is involved. The output
+   * may be used only inside the same authenticated /health clinical session.
+   */
+  suggestClinicalNote(actor:Actor,id:string):ClinicalNoteProposal & {readonly encounterId:string;readonly encounterVersion:number;readonly mayUseLocalModel:boolean} {
+    if(actor.role!=='clinician'&&actor.role!=='psychologist')
+      fail('Profesional clínico requerido')
+    const target=this.find(actor,'encounters',str(id,'Consulta',80))
+    const encounter=target.data
+    if(encounter.practitioner!==actor.username)fail('Consulta ajena al profesional')
+    if(encounter.status==='signed')fail('Consulta firmada: se requiere adenda')
+    const draft=composeProtectedClinicalNote({
+      complaint:encounter.complaint as string,
+      answers:encounter.interviewAnswers??{},
+      history:encounter.history??'',
+      exam:encounter.exam??'',
+      assessment:encounter.assessment??'',
+      plan:encounter.plan??'',
+    })
+    return {...draft,encounterId:target.row.id,encounterVersion:target.row.version,
+      mayUseLocalModel:encounter.confidentialPsychotherapy!==true&&actor.role==='clinician'}
   }
 
   /** Build an authorized deterministic Kira questionnaire without a model call or PHI export. */

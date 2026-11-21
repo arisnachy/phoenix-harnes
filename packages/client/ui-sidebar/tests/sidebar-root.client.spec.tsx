@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type {
   SidebarFooterActionOwnerProps, SidebarRootComponentProps, SidebarSectionOwnerProps,
@@ -82,6 +82,37 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
 }
 
 describe('SidebarRoot shell', () => {
+
+  it('switches contextual navigation without losing the original PHOENIX menu', () => {
+    mountShell()
+    const intents: Array<{app?: string; role?: string; section?: string}> = []
+    const onIntent = (event: Event) => { intents.push((event as CustomEvent<{app?: string; role?: string; section?: string}>).detail) }
+    window.addEventListener('phoenix:adaptive-workspace', onIntent)
+    try {
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace-state', {
+          detail: { app: 'healthia', role: 'doctor', section: 'overview' },
+        }))
+      })
+      expect(screen.getByRole('navigation', { name: 'Navegación Healthia' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Capacidades' })).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Scheduled tasks' })).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Capacidades' }))
+      expect(intents.at(-1)).toEqual({ app: 'healthia', role: 'doctor', section: 'capabilities' })
+      fireEvent.click(screen.getByRole('button', { name: 'PHOENIX · General' }))
+      expect(intents.at(-1)?.app).toBe('general')
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace-state', {
+          detail: { app: 'general', role: 'doctor', section: 'overview' },
+        }))
+      })
+      expect(screen.getByRole('button', { name: 'Scheduled tasks' })).toBeTruthy()
+    } finally {
+      window.removeEventListener('phoenix:adaptive-workspace', onIntent)
+    }
+  })
+
+
   it('routes primary navigation to focused action surfaces instead of Settings navigation', () => {
     const b = mountShell()
     const features: Array<{ destination: string; label: string }> = []
@@ -206,4 +237,29 @@ describe('SidebarRoot shell', () => {
     expect(b.regionOwner().wide).toBe(false)
     expect(screen.getByRole('button', { name: 'Open sidebar' })).toBeTruthy()
   })
+  it('keeps custom adaptive app identity when selecting a section and returns to General', () => {
+    mountShell()
+    const navigations: Array<{ app: string; role: string; section: string }> = []
+    const onNavigate = (event: Event) => {
+      navigations.push((event as CustomEvent<{ app: string; role: string; section: string }>).detail)
+    }
+    window.addEventListener('phoenix:adaptive-workspace', onNavigate)
+    try {
+      act(() => window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace-state', {
+        detail: {
+          app: 'inventory',
+          role: 'doctor',
+          section: 'overview',
+          sections: [{ id: 'stock', label: 'Stock' }],
+        },
+      })))
+      fireEvent.click(screen.getByRole('button', { name: 'Stock' }))
+      expect(navigations.at(-1)).toEqual({ app: 'inventory', role: 'doctor', section: 'stock' })
+      fireEvent.click(screen.getByRole('button', { name: 'Volver a PHOENIX General' }))
+      expect(navigations.at(-1)?.app).toBe('general')
+    } finally {
+      window.removeEventListener('phoenix:adaptive-workspace', onNavigate)
+    }
+  })
+
 })

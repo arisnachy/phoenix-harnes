@@ -24,6 +24,7 @@ import type { IConversation } from './service.ts'
 import { ComposerBlockRegistry } from './input/blocks.ts'
 import type { ComposerBlock } from './input/blocks.ts'
 import { InputHub } from './input/hub.ts'
+import { ADAPTIVE_MISSION_EVENT, isAdaptiveMissionEvent, isAdaptiveFormInspection, formatAdaptiveInspection, isAdaptiveWorkspaceInspection, formatAdaptiveWorkspaceInspection, parseAdaptiveFormActionDraft, formatAdaptiveFormActionDraft, isAdaptiveFormMissionEvent, newAdaptiveFormMission, startAdaptiveAppConversation } from './adaptive-app-mission.ts'
 import { ComposerSubmissionPolicy } from './input/submission-policy.ts'
 import { InputBar } from './skeleton/InputBar.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
@@ -278,6 +279,146 @@ export function apply(ctx: Context): void {
   // The per-session input machine registry (SessionInputResolver face; published as
   // ctx.conversation.input by the service below sharing this one instance).
   const inputHub = new InputHub(ctx, t)
+
+  // App Studio and form editing run through regular sessions, prompts, tools,
+  // approvals and model routing. Browser events carry only fixed identifiers.
+  ctx.effect(() => {
+    let disposed = false
+    let launching = false
+    const launch = (prompt?: string): void => {
+      if (launching || disposed) return
+      launching = true
+      void (async () => {
+        try {
+          await startAdaptiveAppConversation({
+            current: () => sessions.list.getSnapshot().current,
+            workspaces: () => workspaces.list.getSnapshot(),
+            create: options => {
+              const current = workspaces.list.getSnapshot()
+              const target = options.workspaceId ?? current.recentWorkspaceId ?? current.items[0]?.workspaceId
+              if (target === undefined) throw new Error('ADAPTIVE_NO_WORKSPACE_AVAILABLE')
+              return workspaces.connectWorkspace(target)
+            },
+            open: id => { if (!disposed) sessions.open(id) },
+            input: id => {
+              if (disposed) throw new Error('ADAPTIVE_MISSION_DISPOSED')
+              return inputHub.shell(id).actions
+            },
+          }, prompt)
+        } catch {
+          if (!disposed) window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
+        } finally { launching = false }
+      })()
+    }
+    const onNewApp = (event: Event): void => {
+      if (isAdaptiveMissionEvent((event as CustomEvent<unknown>).detail)) launch()
+    }
+    const onForm = (event: Event): void => {
+      const detail = (event as CustomEvent<unknown>).detail
+      if (!isAdaptiveFormMissionEvent(detail)) return
+      launch(newAdaptiveFormMission(detail.appId, detail.sectionId))
+    }
+    window.addEventListener(ADAPTIVE_MISSION_EVENT, onNewApp)
+    const onInspectForm = (event: Event): void => {
+      const detail = (event as CustomEvent<unknown>).detail
+      if (!isAdaptiveFormInspection(detail)) return
+      const id = sessions.list.getSnapshot().current
+      if (id === undefined) {
+        // Without a selected chat there is no safe composer to overwrite.
+        window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
+        return
+      }
+      try {
+        const shell = inputHub.shell(id)
+        if (shell.snapshot.draft.trim() || shell.snapshot.imageIds.length) {
+          shell.notify('info', 'Tu mensaje sin enviar permanece intacto. Envía o borra el borrador antes de compartir la estructura.')
+          return
+        }
+        shell.actions.setDraft(formatAdaptiveInspection(detail))
+      } catch {
+        window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
+      }
+    }
+    const onInspectWorkspace = (event: Event): void => {
+      const detail = (event as CustomEvent<unknown>).detail
+      if (!isAdaptiveWorkspaceInspection(detail)) return
+      const id = sessions.list.getSnapshot().current
+      if (id === undefined) {
+        window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
+        return
+      }
+      try {
+        const shell = inputHub.shell(id)
+        if (shell.snapshot.draft.trim() || shell.snapshot.imageIds.length) {
+          shell.notify('info','Hay un mensaje sin enviar; conserva tu borrador antes de compartir el inventario.')
+          return
+        }
+        shell.actions.setDraft(formatAdaptiveWorkspaceInspection(detail))
+      } catch {
+        window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
+      }
+    }
+    const onAiFieldDraft = (event: Event): void => {
+      const detail:unknown=(event as CustomEvent<unknown>).detail
+      if(!detail||typeof detail!=='object'||Array.isArray(detail))return
+      const value=detail as Record<string,unknown>
+      if(Object.keys(value).some(key=>!['appId','sectionId','fieldId','requestId','prompt'].includes(key))
+        ||typeof value.appId!=='string'||!/^app-[a-z0-9-]{1,45}$/u.test(value.appId)
+        ||typeof value.sectionId!=='string'||!/^[a-z][a-z0-9-]{0,47}$/u.test(value.sectionId)
+        ||typeof value.fieldId!=='string'||!/^[a-z][a-z0-9-]{0,47}$/u.test(value.fieldId)
+        ||typeof value.requestId!=='string'||!/^[a-z0-9-]{12,90}$/iu.test(value.requestId)
+        ||typeof value.prompt!=='string'||value.prompt.length>6000||!value.prompt.trim())return
+      let ok=false
+      try{
+        const id=sessions.list.getSnapshot().current
+        if(id!==undefined){
+          const shell=inputHub.shell(id)
+          if(shell.snapshot.draft.trim()||shell.snapshot.imageIds.length){
+            shell.notify('info','Hay un mensaje pendiente. Consérvalo o envíalo antes de generar desde el campo.')
+          }else{
+            shell.actions.setDraft(value.prompt)
+            ok=true
+          }
+        }
+      }catch{/* No draft change on failed admission. */}
+      window.dispatchEvent(new CustomEvent('phoenix:adaptive-ai-field-draft-ack',{
+        detail:{requestId:value.requestId,ok},
+      }))
+    }
+    const onActionDraft = (event: Event): void => {
+      const draft = parseAdaptiveFormActionDraft((event as CustomEvent<unknown>).detail)
+      if (!draft) return
+      const id = sessions.list.getSnapshot().current
+      if (id === undefined) {
+        window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
+        return
+      }
+      try {
+        const shell = inputHub.shell(id)
+        if (shell.snapshot.draft.trim() || shell.snapshot.imageIds.length) {
+          shell.notify('info','Hay un borrador o imagen pendiente: no se sobrescribió. Envíalo o bórralo antes de continuar.')
+          return
+        }
+        shell.actions.setDraft(formatAdaptiveFormActionDraft(draft))
+      } catch {
+        window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
+      }
+    }
+    window.addEventListener('phoenix:adaptive-form-action-draft', onActionDraft)
+    window.addEventListener('phoenix:adaptive-ai-field-draft', onAiFieldDraft)
+    window.addEventListener('phoenix:adaptive-self-inspect', onInspectWorkspace)
+    window.addEventListener('phoenix:adaptive-form-inspect', onInspectForm)
+    window.addEventListener('phoenix:adaptive-form-mission', onForm)
+    return () => {
+      disposed = true
+      window.removeEventListener(ADAPTIVE_MISSION_EVENT, onNewApp)
+      window.removeEventListener('phoenix:adaptive-form-mission', onForm)
+      window.removeEventListener('phoenix:adaptive-form-inspect', onInspectForm)
+      window.removeEventListener('phoenix:adaptive-self-inspect', onInspectWorkspace)
+      window.removeEventListener('phoenix:adaptive-form-action-draft', onActionDraft)
+      window.removeEventListener('phoenix:adaptive-ai-field-draft', onAiFieldDraft)
+    }
+  }, 'ui-conversation: adaptive app and form chat missions')
 
   // The composer-block registry: a plugin that knows a session cannot send —
   // ui-model-selection, when no adapter serves the session's route — raises a block

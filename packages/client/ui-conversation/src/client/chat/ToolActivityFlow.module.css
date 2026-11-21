@@ -217,3 +217,87 @@
 .icon { width: 15px; height: 15px; }
 .receipt { padding-left: 21px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
 .body { padding-left: 21px; }
+
+
+/* PHOENIX Smart Browser is an overlay surface, not a tall chat-history row.
+   It reserves NO history height, so opening/sizing it cannot move the composer
+   or cause ChatView's bottom follower to scroll into an empty region. */
+.browserWorkspace[data-browser-floating='true'] {
+  position: fixed;
+  z-index: 70;
+  top: clamp(62px, 10vh, 104px);
+  right: clamp(12px, 2.2vw, 34px);
+  bottom: calc(max(152px, var(--dsh-composer-height, 152px)) + 12px);
+  width: min(940px, calc(100vw - 42px));
+  max-width: none;
+  height: auto;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+  padding: 10px;
+  overflow: auto;
+  background: var(--dsw-alias-bg-layer-1);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 20px;
+  box-shadow: 0 20px 75px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 27%, transparent);
+  overscroll-behavior: contain;
+}
+.browserWorkspace[data-browser-floating='true'][data-activity-open='true'] {
+  grid-template-columns: minmax(0, 1.65fr) minmax(220px, .85fr);
+}
+.browserWorkspace[data-browser-floating='true'] .browserPane {
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+}
+.browserWorkspace[data-browser-floating='true'] .activityPane {
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+}
+.browserReceipt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: min(100%, 620px);
+  min-height: 35px;
+  margin-block: 4px;
+  padding: 5px 11px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 11px;
+  background: var(--dsw-alias-bg-layer-1);
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+}
+.browserReceipt button {
+  flex: none;
+  padding: 6px 9px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-specific-phoenix-accent);
+  cursor: pointer;
+}
+.browserReceipt button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.browserReceipt button:focus-visible { outline: 2px solid var(--dsw-specific-phoenix-accent); outline-offset: 2px; }
+@media (max-width: 950px) {
+  .browserWorkspace[data-browser-floating='true'] {
+    top: 60px;
+    right: 10px;
+    width: calc(100vw - 20px);
+    bottom: calc(max(115px, var(--dsh-composer-height, 115px)) + 8px);
+    padding: 7px;
+    border-radius: 14px;
+  }
+  .browserWorkspace[data-browser-floating='true'][data-activity-open='true'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .browserWorkspace[data-browser-floating='true'] .activityPane {
+    max-height: min(24vh, 170px);
+  }
+}

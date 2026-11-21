@@ -7,11 +7,13 @@ import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
 import type {} from '@phoenix-ai/dsh-client-ui-theme/client'
 import type { PanelActions } from './service.ts'
 import { AppFrame } from './AppFrame.tsx'
+import { inspectAdaptiveLiveSlots } from './AdaptiveLiveSlots.ts'
 import { createLayoutStore } from './stores.ts'
 import { LayoutController } from './service.ts'
 import { ThemePresenter } from './theme-presenter.ts'
 
 export { LayoutController } from './service.ts'
+export { HEALTHIA_NAV } from './HealthiaWorkspace.tsx'
 export type { ILayout, WorkspaceOccupancy, WorkspaceOccupant, WorkspaceSide } from './service.ts'
 
 declare module '@phoenix-ai/cordis' {
@@ -77,7 +79,15 @@ export function apply(ctx: ClientContext): void {
       store: createLayoutStore,
       inject: (actions: PanelActions) => {
         layout.attachPanels(actions)
-        return {}
+        return {
+          inspectRuntime: () => inspectAdaptiveLiveSlots(name => {
+            // Root layout has a narrower SlotMap. Conversation-owned child slots
+            // cannot be read through this parent registration. Report unknown
+            // as zero instead of inventing an active registration.
+            if (name === 'conversation.composer.bar' || name === 'conversation.view') return 0
+            return ctx.slots.entries(name).length
+          }),
+        }
       },
     }, AppFrame)
     return () => {
