@@ -1126,24 +1126,31 @@ async function execute(action,id){
   if(result.status==="sent")notice("Kira confirmó el envío del recordatorio con Gmail.");
   return;
  }
- if(action==="prepareClinicalNote"){
+ if(action==="prepareClinicalNote"||action==="prepareClinicalAi"){
+  const useModel=action==="prepareClinicalAi";
   const encounter=data.encounters?.find(x=>x.id===id);
   if(!encounter||current?.kind!=="soap"||current.encounterId!==id||encounter.status==="signed")
     throw Error("Consulta protegida no disponible");
-  const response=await api("clinical-note-proposal/"+encodeURIComponent(id),"POST",{});
+  if(useModel&&!confirm("La redacción será procesada por el modelo configurado en Ollama, en este equipo. El servicio de modelos es distinto del expediente clínico. Verifica consentimiento, modelo instalado y políticas de privacidad antes de continuar. ¿Autorizar esta solicitud concreta?"))return;
+  const response=useModel
+    ?await api("clinical-note-ai/"+encodeURIComponent(id),"POST",{action:"refine",confirmLocalProcessing:true})
+    :await api("clinical-note-proposal/"+encodeURIComponent(id),"POST",{});
   const proposal=response.proposal;
-  if(!proposal||proposal.source!=="local-recorded-facts"
+  if(!proposal||(useModel?proposal.source!=="ollama-local-unverified":proposal.source!=="local-recorded-facts")
     ||proposal.encounterVersion!==encounter.version||proposal.encounterId!==id)
     throw Error("La revisión del episodio cambió; vuelve a abrir la consulta");
   clinicalNoteProposal=proposal;
   const prior=document.getElementById("clinical-note-proposal-preview");if(prior)prior.remove();
   const missing=(proposal.missingInformation||[]).map(x=>"<li>"+safe(x)+"</li>").join("");
+  const numeric=(proposal.numericWarnings||[]).map(x=>"<li>"+safe(x)+"</li>").join("");
   document.getElementById("view").insertAdjacentHTML("beforeend",
-    '<div id="clinical-note-proposal-preview">'+box("Propuesta local · enfermedad actual",
-      '<p class="notice"><strong>Sin modelo IA:</strong> redacción estructurada desde respuestas registradas, sin diagnósticos ni hallazgos inventados. Verifica todo antes de conservarla.</p>'+
+    '<div id="clinical-note-proposal-preview">'+box(useModel?"Propuesta IA local · pendiente de validación":"Propuesta local · enfermedad actual",
+      (useModel?'<p class="notice"><strong>Texto generado por modelo local '+safe(proposal.model||"")+" (sin verificar):</strong> puede contener errores, omisiones o información inventada. Contrasta cada hecho con el expediente antes de aceptar.</p>':
+      '<p class="notice"><strong>Sin modelo IA:</strong> redacción estructurada desde respuestas registradas, sin diagnósticos ni hallazgos inventados. Verifica todo antes de conservarla.</p>')+
       '<label>Motivo registrado</label><p>'+safe(proposal.suggestedComplaint)+'</p>'+
       '<label>HEA propuesta para revisión</label><textarea readonly rows="9">'+safe(proposal.suggestedHistory)+'</textarea>'+
       (missing?'<p class="notice">Información por completar: <ul>'+missing+'</ul></p>':'')+
+      (numeric?'<p class="notice warning">Cifras no observadas en el texto fuente: <ul>'+numeric+'</ul></p>':'')+
       '<details><summary>Vista previa de historia completa documentada</summary>'+
       '<p><strong>S:</strong> '+safe(proposal.note.history||"No documentado")+'</p>'+
       '<p><strong>O:</strong> '+safe(proposal.note.exam||"No documentado")+'</p>'+
@@ -1188,6 +1195,7 @@ async function execute(action,id){
     section("assessment","A · Evaluación y razonamiento clínico",encounter.assessment)+
     section("plan","P · Plan diagnóstico y terapéutico",encounter.plan)+
     '<button class="secondary" data-act="prepareClinicalNote" data-id="'+safe(id)+'">Proponer HEA desde entrevista</button> '+
+    '<button class="secondary" data-act="prepareClinicalAi" data-id="'+safe(id)+'">Mejorar con IA local (opcional)</button> '+
     '<button class="primary" data-act="saveDocument" data-id="'+safe(id)+'">Guardar borrador cifrado</button>'));
   restoreView();return;
  }
