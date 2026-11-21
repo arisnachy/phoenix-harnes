@@ -37,7 +37,7 @@ export interface AdaptiveMissionTransport<Session extends string, Workspace exte
   readonly current: () => Session | undefined
   readonly workspaces: () => {
     readonly items: readonly { readonly workspaceId: Workspace; readonly sessionIds: readonly Session[] }[]
-    readonly recentWorkspaceId?: Workspace
+    readonly recentWorkspaceId?: Workspace | undefined
   }
   readonly create: (options: { workspaceId?: Workspace }) => Promise<Session>
   readonly open: (id: Session) => void
