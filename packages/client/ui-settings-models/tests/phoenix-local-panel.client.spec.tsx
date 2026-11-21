@@ -88,6 +88,7 @@ describe('PhoenixLocalPanel', () => {
     const qwenId = 'qwen3.5-2b-ollama-q4-k-m'
     const local = client(snapshot({
       selectedModelId: qwenId,
+      ollamaInstalledModelIds: [qwenId],
       catalog: [{
         id: qwenId,
         displayName: 'Qwen 3.5 2B Q4_K_M · Ollama',
@@ -159,5 +160,39 @@ describe('PhoenixLocalPanel', () => {
     expect(screen.getByText(localEn.uninstallQuestion)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: localEn.uninstallConfirm }))
     await waitFor(() =>{  expect(local.calls.uninstall).toHaveBeenCalledWith('gemma-4-e2b-it-q4-0') })
+  })
+
+  it('shows separate input/output allocations and supports explicit Ollama downloads', async () => {
+    const local = client()
+    render(<PhoenixLocalPanel client={local} t={t} />)
+    await screen.findByText(localEn.title)
+    expect(screen.getByText(`${localEn.inputBudget}:`)).toBeTruthy()
+    expect(screen.getByText(`${localEn.outputBudget}:`)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText(localEn.ollamaTag), { target: { value: 'gemma4:e2b' } })
+    fireEvent.click(screen.getByRole('button', { name: localEn.ollamaPull }))
+    await waitFor(() => { expect(local.calls.install).toHaveBeenCalledWith('ollama:gemma4:e2b') })
+  })
+
+  it('requires confirmation before physical deletion and never equates unlinking with removal', async () => {
+    const id = 'ollama:gemma4:e2b'
+    const local = client(snapshot({
+      selectedModelId: id,
+      installedModelIds: [id],
+      ollamaInstalledModelIds: [id],
+      phase: 'ready',
+      catalog: [{ id, displayName: 'gemma4:e2b · Ollama', backend: 'ollama',
+        sizeBytes: 2_000, estimatedRamBytes: 5_000, contextWindow: 8_192,
+        nativeContextWindow: 131_072, maxTokens: 1_024, recommended: true }],
+    }))
+    const removeFromOllama = vi.fn(async () => snapshot())
+    local.removeFromOllama = removeFromOllama
+    render(<PhoenixLocalPanel client={local} t={t} />)
+    await screen.findByText(localEn.title)
+    fireEvent.click(screen.getByRole('button', { name: localEn.ollamaDelete }))
+    expect(removeFromOllama).not.toHaveBeenCalled()
+    expect(screen.getByText(localEn.ollamaDeleteQuestion.replace('{model}', 'gemma4:e2b · Ollama'))).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: localEn.ollamaDeleteConfirm }))
+    await waitFor(() => { expect(removeFromOllama).toHaveBeenCalledWith(id) })
+    expect(local.calls.uninstall).not.toHaveBeenCalled()
   })
 })

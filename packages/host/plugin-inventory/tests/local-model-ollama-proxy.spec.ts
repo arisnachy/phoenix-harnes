@@ -93,4 +93,14 @@ describe('Phoenix Local Ollama proxy', () => {
     expect(rewriteOllamaOpenAiBody('/chat/completions', raw, native)).toBe(raw)
     expect(rewriteOllamaOpenAiBody('/models', raw, qwen)).toBe(raw)
   })
+
+  it('fails loudly before sending an oversized prompt to Ollama instead of silently clipping it', () => {
+    if (qwen?.backend !== 'ollama') throw Error('Missing local Ollama model')
+    const small = { ...qwen, contextWindow: 4_096, maxTokens: 512 }
+    const payload = encode({
+      model: 'phoenix-local', max_tokens: 512,
+      messages: [{ role: 'user', content: 'This is long. '.repeat(8_000) }],
+    })
+    expect(() => toNativeOllamaChat(payload, small, false, false)).toThrow(/tokens/)
+  })
 })
