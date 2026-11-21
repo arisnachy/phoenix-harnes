@@ -1,6 +1,7 @@
 /** Model-facing controls and standing policy for Universal Living Creations. @module @phoenix-ai/dsh-tool-living */
 
 import { randomBytes } from 'node:crypto'
+import { inspectSystemEnvironment } from './system-proprioception.ts'
 import type { Context } from '@phoenix-ai/cordis'
 import {
   LivingCreationId, createLivingControlResource, livingControlForManifest,
@@ -275,6 +276,20 @@ function assertTargetReached(snapshot: LivingCreationSnapshot): void {
 /** Register the universal living-creation policy and model controls. */
 export function apply(ctx: Context): void {
   ctx.systemPrompt.section({ name: 'tool:living', order: 115, text: LIVING_CREATION_POLICY })
+  ctx.tools.register(defineTool({
+    name: 'system_environment_inspect',
+    description: 'Read current PHOENIX Host, Windows/macOS/Linux identification, aggregate CPU/RAM/GPU, PC/laptop classification and allowlisted software/tool presence. Use only for user-requested device/OS/tool availability questions or app capability planning. Read-only; detected does NOT mean authorized, usable, healthy, or installed. No paths, secrets, serials, process lists or patient data.',
+    parameters: {},
+    output: {
+      schema: { type: 'string' },
+      render: (_args, value) => [{ type: 'text' as const, text: value }],
+    },
+    isConcurrencySafe: () => true,
+    async execute() {
+      return JSON.stringify(inspectSystemEnvironment())
+    },
+    presentCall: () => ({ card:'generic', title:'PHOENIX · Inspeccionar entorno y capacidades', kind:'read' as const }),
+  }))
 
   ctx.tools.register(defineTool({
     name: 'living_register_creation',
