@@ -18,7 +18,7 @@ import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from './HealthiaWorkspace.tsx'
 import { ADAPTIVE_APP_PRESETS, createAdaptiveAppBlueprint, type AdaptiveAppBlueprint } from './AdaptiveAppCatalog.ts'
-import { appendAdaptiveSection, installAdaptiveApp, readAdaptiveApps } from './AdaptiveAppRegistry.ts'
+import { appendAdaptiveSection, renameAdaptiveSection, removeAdaptiveSection, restorePreviousAdaptiveApps, installAdaptiveApp, readAdaptiveApps } from './AdaptiveAppRegistry.ts'
 import { applyAdaptiveFormFields } from './AdaptiveFormMetadataStore.ts'
 import {
   parseAdaptiveControl, preflightAdaptiveControl, findAdaptiveMetadata,
@@ -251,6 +251,14 @@ export function AppFrame({
               setCustomApps(readAdaptiveApps())
               setAdaptiveApp(app.id)
               setCustomSection(app.sections[app.sections.length - 1].id)
+              setSearch(null)
+            } else if (command.operation === 'rename-section' || command.operation === 'remove-section') {
+              const app = command.operation === 'rename-section'
+                ? renameAdaptiveSection(command.appId,command.sectionId!,command.label!)
+                : removeAdaptiveSection(command.appId,command.sectionId!)
+              setCustomApps(readAdaptiveApps())
+              setAdaptiveApp(app.id)
+              setCustomSection(command.operation === 'remove-section' ? app.sections[0].id : command.sectionId!)
               setSearch(null)
             } else {
               applyAdaptiveFieldEdit(command)
