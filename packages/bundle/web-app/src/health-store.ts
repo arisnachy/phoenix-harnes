@@ -8,6 +8,7 @@ import { evaluateStudyEvidence } from './health-diagnostic-evidence.ts'
 import type { DatabaseSync } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { localInterviewPlan, type ClinicalInterviewGuide } from './health-interview.ts'
+import { composeProtectedClinicalNote, type ClinicalNoteProposal } from './health-note-draft.ts'
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { DEFAULT_PATIENT_INTAKE, parsePatientIntakeTemplate, patientIntakeValues, patientIdentityMatch, validatePatientDocument } from './health-patient-intake.ts'
 import type { CandidateIdentity, PatientIntakeTemplate } from './health-patient-intake.ts'
@@ -558,6 +559,29 @@ export class HealthClinicStore {
       attachments,timeline:ordered.slice(0,400),
       pending:{orders:pendingOrders.length,followups:pendingFollowups.length,
         attachments:attachments.filter(item=>item.reviewStatus==='pending').length}}
+  }
+
+  /**
+   * Explicit clinician request for a clinical narrative suggestion.
+   * No model, chat, persistence or external connector is involved. The output
+   * may be used only inside the same authenticated /health clinical session.
+   */
+  suggestClinicalNote(actor:Actor,id:string):ClinicalNoteProposal & {readonly encounterId:string;readonly encounterVersion:number} {
+    if(actor.role!=='clinician'&&actor.role!=='psychologist')
+      fail('Profesional clínico requerido')
+    const target=this.find(actor,'encounters',str(id,'Consulta',80))
+    const encounter=target.data
+    if(encounter.practitioner!==actor.username)fail('Consulta ajena al profesional')
+    if(encounter.status==='signed')fail('Consulta firmada: se requiere adenda')
+    const draft=composeProtectedClinicalNote({
+      complaint:encounter.complaint as string,
+      answers:encounter.interviewAnswers??{},
+      history:encounter.history??'',
+      exam:encounter.exam??'',
+      assessment:encounter.assessment??'',
+      plan:encounter.plan??'',
+    })
+    return {...draft,encounterId:target.row.id,encounterVersion:target.row.version}
   }
 
   /** Build an authorized deterministic Kira questionnaire without a model call or PHI export. */
