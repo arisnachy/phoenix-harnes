@@ -48,7 +48,8 @@
     "@phoenix-ai/dsh-client-ui-theme": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^",
-    "@phoenix-ai/dsh-client-ui-primitives": "workspace:^"
+    "@phoenix-ai/dsh-client-ui-primitives": "workspace:^",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-client-locale": "workspace:^",
@@ -59,7 +60,9 @@
     "@types/react": "~18.3.1",
     "@phoenix-ai/cordis": "workspace:^",
     "react": "^18.2.0",
-    "@phoenix-ai/dsh-client-ui-primitives": "workspace:^"
+    "@phoenix-ai/dsh-client-ui-primitives": "workspace:^",
+    "@types/react-dom": "~18.3.0",
+    "react-dom": "^18.2.0"
   },
   "files": [
     "lib/index.js",
